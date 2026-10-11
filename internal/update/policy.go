@@ -142,6 +142,14 @@ func serverClock(serverDate, checkedAt, now time.Time, maxElapsed time.Duration)
 	return serverDate.Add(min(max(now.Sub(checkedAt), 0), maxElapsed)), true
 }
 
+// GitHubClock is serverClock over s, for the CLI: the clock the daemon
+// measures soaks and the pending deadline against, at now, with interval the
+// effective check_interval. doctor and `update --check` read the same state,
+// so on a machine whose clock is off they still say what the daemon decides.
+func (s State) GitHubClock(now time.Time, interval time.Duration) (time.Time, bool) {
+	return serverClock(s.ServerDate, s.CheckedAt, now, scheduleSlack(interval))
+}
+
 // soaked reports whether r is at least minAge old at clock (GitHub's). A zero
 // minAge is no soak; with a soak, an unknown (zero) clock soaks nothing.
 func soaked(r Release, clock time.Time, minAge time.Duration) bool {

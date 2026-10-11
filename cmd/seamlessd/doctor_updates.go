@@ -156,11 +156,10 @@ func (v updateView) backoff(now time.Time) *update.Backoff {
 // release an automatic update installs now, and the newest one it takes once
 // that one's soak is over.
 //
-// The daemon measures the soak on GitHub's clock (the last Date header plus
-// the time since), which only it keeps; the CLI has this machine's clock. A
-// soak that ends within the gap between the two clocks can read as over here
-// a little before the daemon agrees, which is why every soak is also printed
-// as the time it ends.
+// The daemon measures the soak and the pending deadline on GitHub's clock
+// (the last Date header plus the time since), and so does this view, from the
+// same record (State.GitHubClock): a machine clock that is days off cannot
+// make a soak read as over here while the daemon still waits it out.
 type autoTarget struct {
 	now   update.Release
 	nowOK bool
@@ -169,13 +168,21 @@ type autoTarget struct {
 	// soakEnd when its soak is over.
 	nextOK  bool
 	soakEnd time.Time
+	// clock is GitHub's clock at now as the daemon estimates it, or now when
+	// no check has carried a Date: what soakEnd and the pending deadline are
+	// compared with.
+	clock time.Time
 }
 
 // target applies update.Target to the recorded release list, blocks and hold.
 func (v updateView) target(cur update.Version, now time.Time) autoTarget {
 	st, minAge := v.state, v.settings.MinAge
 	var t autoTarget
-	t.now, t.nowOK = update.Target(st.Releases, cur, now, minAge, st.Blocks, st.Hold)
+	t.clock = now
+	if c, ok := st.GitHubClock(now, v.settings.CheckInterval); ok {
+		t.clock = c
+	}
+	t.now, t.nowOK = update.Target(st.Releases, cur, t.clock, minAge, st.Blocks, st.Hold)
 	// No soak: a zero minimum age soaks every release whatever the clock.
 	t.next, t.nextOK = update.Target(st.Releases, cur, time.Time{}, 0, st.Blocks, st.Hold)
 	if t.nextOK {
@@ -486,13 +493,13 @@ func (v updateView) autoRow(cur update.Version, newest update.Release, checked s
 			b.Until.Local().Format(timeLayout), whenText(b.Until, now), update.Plural(int64(b.Count), "failure"), b.Version)
 	case t.nowOK:
 		text += fmt.Sprintf("installs v%s once no agent session is live, or at a lull in requests %s",
-			t.now.Version, v.deadlineText(cur, now))
+			t.now.Version, v.deadlineText(cur, t.clock))
 		if t.next.Version != t.now.Version {
 			text += fmt.Sprintf("; then v%s, once it is %s old (at %s)", t.next.Version, update.SpanWords(v.settings.MinAge), t.soakEnd.Local().Format(timeLayout))
 		}
 	default:
 		text += fmt.Sprintf("installs v%s once it is %s old (at %s, %s)",
-			t.next.Version, update.SpanWords(v.settings.MinAge), t.soakEnd.Local().Format(timeLayout), whenText(t.soakEnd, now))
+			t.next.Version, update.SpanWords(v.settings.MinAge), t.soakEnd.Local().Format(timeLayout), whenText(t.soakEnd, t.clock))
 	}
 	if !skips {
 		return updatesRow{statusInfo, text, ""}
@@ -506,15 +513,16 @@ func (v updateView) autoRow(cur update.Version, newest update.Release, checked s
 
 // deadlineText says when the lull path opens for the running version: the
 // recorded pending deadline (pending since, plus max_defer), or the wait the
-// daemon starts at its next look when it has not recorded one yet.
-func (v updateView) deadlineText(cur update.Version, now time.Time) string {
+// daemon starts at its next look when it has not recorded one yet. clock is
+// autoTarget.clock, the clock the deadline was recorded on.
+func (v updateView) deadlineText(cur update.Version, clock time.Time) string {
 	p := v.state.Pending
 	if p == nil || p.Running != cur {
 		return "after waiting " + update.SpanWords(v.settings.MaxDefer)
 	}
 	deadline := p.Since.Add(v.settings.MaxDefer)
-	if deadline.After(now) {
-		return fmt.Sprintf("from %s (%s)", deadline.Local().Format(timeLayout), whenText(deadline, now))
+	if deadline.After(clock) {
+		return fmt.Sprintf("from %s (%s)", deadline.Local().Format(timeLayout), whenText(deadline, clock))
 	}
 	return fmt.Sprintf("now that its deadline (%s) has passed", deadline.Local().Format(timeLayout))
 }
@@ -785,8 +793,8 @@ func (v updateView) targetRows(w io.Writer, cur update.Version, now time.Time) {
 		switch {
 		case v.settings.MinAge <= 0:
 			return "no soak"
-		case end.After(now):
-			return fmt.Sprintf("soaks until %s, %s", end.Local().Format(timeLayout), whenText(end, now))
+		case end.After(t.clock):
+			return fmt.Sprintf("soaks until %s, %s", end.Local().Format(timeLayout), whenText(end, t.clock))
 		default:
 			return "soaked since " + end.Local().Format(timeLayout)
 		}
@@ -819,8 +827,8 @@ func (v updateView) targetRows(w io.Writer, cur update.Version, now time.Time) {
 	if p := v.state.Pending; p != nil && p.Running == cur {
 		deadline := p.Since.Add(v.settings.MaxDefer)
 		due := "passed"
-		if deadline.After(now) {
-			due = whenText(deadline, now)
+		if deadline.After(t.clock) {
+			due = whenText(deadline, t.clock)
 		}
 		fieldRowTo(w, "pending", fmt.Sprintf("since %s; deadline %s (%s)", p.Since.Local().Format(timeLayout), deadline.Local().Format(timeLayout), due)+
 			dim(" -- installs once no agent session is live, or at a lull in requests after the deadline"))

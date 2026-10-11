@@ -253,6 +253,29 @@ func TestUpdatesCheck_Automatic(t *testing.T) {
 			status: statusInfo, want: []string{"installs v0.7.3 once it is 24h old (at " + at(now.Add(22*time.Hour)) + ", in 22h)"},
 		},
 		{
+			// This machine's clock runs two days ahead: the daemon checked a
+			// minute ago by it, and GitHub's Date said two days earlier. The
+			// soak runs on GitHub's clock, so it is not over.
+			name: "soaking, on a machine clock two days ahead",
+			state: autoRecord(now, func(s *update.State) {
+				s.CheckedAt = now.Add(-time.Minute)
+				s.ServerDate = now.Add(-48*time.Hour - time.Minute)
+				s.Releases = append(s.Releases, signed(v073, now.Add(-50*time.Hour)))
+			}),
+			status: statusInfo, want: []string{"installs v0.7.3 once it is 24h old (at " + at(now.Add(-26*time.Hour)) + ", in 22h)"},
+			not: []string{"once no agent session is live"},
+		},
+		{
+			name: "a pending deadline, on a machine clock two days ahead",
+			state: autoRecord(now, func(s *update.State) {
+				s.CheckedAt = now.Add(-time.Minute)
+				s.ServerDate = now.Add(-48*time.Hour - time.Minute)
+				s.Releases = append(s.Releases, signed(v073, now.Add(-96*time.Hour)))
+				s.Pending = &update.Pending{Running: v072, Since: now.Add(-49 * time.Hour)}
+			}),
+			status: statusInfo, want: []string{"or at a lull in requests from " + at(now.Add(-25*time.Hour)) + " (in 23h)"},
+		},
+		{
 			name: "a soaked target, and a newer one soaking",
 			state: autoRecord(now, func(s *update.State) {
 				s.Releases = append(s.Releases, signed(v073, now.Add(-48*time.Hour)), signed(v074, now.Add(-time.Hour)))
@@ -660,6 +683,30 @@ func TestUpdateCheckRows_Automatic(t *testing.T) {
 	}
 	require.NotContains(t, out, "v0.7.1 (", "a block at or below the running version is inert")
 	require.NotContains(t, out, "fix ", "only an update that applied with warnings needs install-hooks")
+}
+
+// TestUpdateCheckRows_SkewedClock: on a machine whose clock runs two days
+// ahead of GitHub's, `update --check` measures the soak and the pending
+// deadline on GitHub's clock, as the daemon does, so a soak the daemon still
+// waits out never reads as over.
+func TestUpdateCheckRows_SkewedClock(t *testing.T) {
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	at := func(t time.Time) string { return t.Local().Format(timeLayout) }
+	dir := t.TempDir()
+	require.NoError(t, update.SaveState(dir, autoRecord(now, func(s *update.State) {
+		s.CheckedAt = now.Add(-time.Minute)
+		s.ServerDate = now.Add(-48*time.Hour - time.Minute)
+		s.Releases = append(s.Releases, signed(v073, now.Add(-96*time.Hour)), signed(v074, now.Add(-50*time.Hour)))
+		s.Pending = &update.Pending{Running: v072, Since: now.Add(-49 * time.Hour)}
+	})))
+
+	cfg := config.Defaults()
+	cfg.DataDir = dir
+	var buf bytes.Buffer
+	updateCheckRows(&buf, loadUpdateView(context.Background(), cfg, nil), now)
+	out := buf.String()
+	require.Contains(t, out, "target   v0.7.3 (soaked since "+at(now.Add(-72*time.Hour))+"); then v0.7.4 (soaks until "+at(now.Add(-26*time.Hour))+", in 22h)")
+	require.Contains(t, out, "pending  since "+at(now.Add(-49*time.Hour))+"; deadline "+at(now.Add(-25*time.Hour))+" (in 23h)")
 }
 
 // TestUpdateCheckRows_GateRefusal: a gate refusal that still concerns this
