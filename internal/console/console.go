@@ -137,6 +137,7 @@ func New(cfg Config) (*Service, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	logger = slog.New(clientGoneHandler{logger.Handler()})
 	baseName := cfg.Level
 	if baseName == "" {
 		baseName = config.Defaults().Console.Level

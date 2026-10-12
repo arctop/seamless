@@ -720,7 +720,8 @@ func (s *Service) notFound(w http.ResponseWriter, r *http.Request, msg string) {
 }
 
 // serverError logs and reports a 500 in the caller's preferred format. The
-// browser page stays generic (the detail is in the log, not the response).
+// browser page stays generic (the detail is in the log, not the response). A
+// failure that is only the browser giving up logs at debug (clientGoneHandler).
 func (s *Service) serverError(w http.ResponseWriter, r *http.Request, err error) {
 	s.logger.Error("console: request failed", "path", r.URL.Path, "error", err)
 	if wantsJSON(r) {
