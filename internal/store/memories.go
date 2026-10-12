@@ -216,6 +216,31 @@ func MemoryByNameIncludingInvalid(ctx context.Context, db *sql.DB, project, name
 	return mems[0], true, nil
 }
 
+// ProjectsWithMemoryNamed returns every scope holding an active memory with
+// this exact name, sorted ("" is the global scope). It backs memory_read's
+// wrong-project hint, so it answers only where the name lives; the caller
+// decides which of those scopes it may name.
+func ProjectsWithMemoryNamed(ctx context.Context, db *sql.DB, name string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT DISTINCT project FROM memories_index
+		WHERE name = ? AND invalid_at IS NULL ORDER BY project`, name)
+	if err != nil {
+		return nil, fmt.Errorf("store.ProjectsWithMemoryNamed: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, fmt.Errorf("store.ProjectsWithMemoryNamed: %w", err)
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store.ProjectsWithMemoryNamed: %w", err)
+	}
+	return out, nil
+}
+
 // MemoryByID returns the memory with the given id. found is false when absent.
 func MemoryByID(ctx context.Context, db *sql.DB, id string) (core.Memory, bool, error) {
 	rows, err := db.QueryContext(ctx, `SELECT `+memoryCols+`

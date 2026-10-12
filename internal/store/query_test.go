@@ -101,6 +101,25 @@ func TestMemoryByNameAndID(t *testing.T) {
 	require.Equal(t, "alpha", byIDs["01A"].Name)
 }
 
+func TestProjectsWithMemoryNamed(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	now := core.FormatTime(time.Now().UTC())
+	insertMemory(t, db, "01A", "gotcha", "shared", "d", "web", "body", now, "")
+	insertMemory(t, db, "01B", "gotcha", "shared", "d", "", "body", now, "")
+	insertMemory(t, db, "01C", "gotcha", "shared", "d", "api", "body", now, "")
+	insertMemory(t, db, "01D", "gotcha", "shared", "d", "retired", "body", now, now) // inactive
+	insertMemory(t, db, "01E", "gotcha", "other", "d", "ops", "body", now, "")
+
+	got, err := ProjectsWithMemoryNamed(ctx, db, "shared")
+	require.NoError(t, err)
+	require.Equal(t, []string{"", "api", "web"}, got)
+
+	none, err := ProjectsWithMemoryNamed(ctx, db, "missing")
+	require.NoError(t, err)
+	require.Empty(t, none)
+}
+
 func TestFTSSearchHyphenSafe(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()

@@ -6841,7 +6841,7 @@ Edit an existing memory in place with exact search/replace, instead of resending
 
 ## memory_read {#memory_read}
 
-Read a memory by name within the current project (falling back to a global memory of the same name), or directly by id.
+Read a memory by name within the current project (falling back to a global memory of the same name), or directly by id. It reads Seamless memories only -- a name listed in your client's own MEMORY.md (Claude Code's file-based auto-memory) is a local file, not a Seamless memory: open it with your file tools.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|

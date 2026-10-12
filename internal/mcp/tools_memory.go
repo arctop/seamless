@@ -396,7 +396,7 @@ func stageHeaderHint(kind core.MemoryKind, body string) string {
 
 func memoryReadTool() mcp.Tool {
 	return mcp.NewTool("memory_read", hintRead(),
-		mcp.WithDescription("Read a memory by name within the current project (falling back to a global memory of the same name), or directly by id."),
+		mcp.WithDescription("Read a memory by name within the current project (falling back to a global memory of the same name), or directly by id. It reads Seamless memories only -- "+clientMemoryNote+"."),
 		mcp.WithString("name", mcp.Description("memory name; pass exactly one of name or id")),
 		mcp.WithString("project", mcp.Description("project slug; defaults to the bound session's project")),
 		mcp.WithString("id", mcp.Description("memory id (ULID), as carried by events, recall results, and gardener proposals; bypasses name/project resolution")),
@@ -452,8 +452,7 @@ func (s *Server) handleMemoryRead(ctx context.Context, req mcp.CallToolRequest) 
 				return errResult("memory_read", err)
 			}
 			if !found {
-				return errResult("memory_read", s.scopedNotFound(ctx, "memory", project, name,
-					memoryReadMissHelp, memoryReadMissHelpSealed))
+				return errResult("memory_read", s.memoryReadMiss(ctx, project, name))
 			}
 		}
 	}
@@ -570,11 +569,19 @@ func (s *Server) handleMemoryDelete(ctx context.Context, req mcp.CallToolRequest
 	return jsonResult(map[string]any{"status": "deleted", "id": idx.ID, "name": name, "project": idx.Project})
 }
 
+// clientMemoryNote is the boundary between Seamless memories and the agent
+// client's own file-based memory. Claude Code injects its MEMORY.md index of
+// local memory files at session start, and agents read a name out of that index
+// and asked memory_read for it -- four of the five misses behind a gardener
+// recurring-error task (2026-10). The tool description and the miss tail render
+// the same string so the two cannot drift.
+const clientMemoryNote = "a name listed in your client's own MEMORY.md (Claude Code's file-based auto-memory) is a local file, not a Seamless memory: open it with your file tools"
+
 // The by-name miss tails, paired: the plain form, and the same advice with the
 // global scope struck out for a session that cannot reach it.
 const (
-	memoryReadMissHelp       = "; check the name, pass project=<slug> or project=global, read by id=<ULID>, or use recall to search by text"
-	memoryReadMissHelpSealed = "; check the name, read by id=<ULID>, or use recall to search by text"
+	memoryReadMissHelp       = "; check the name, pass project=<slug> or project=global, read by id=<ULID>, or use recall to search by text; " + clientMemoryNote
+	memoryReadMissHelpSealed = "; check the name, read by id=<ULID>, or use recall to search by text; " + clientMemoryNote
 
 	memoryAppendMissHelp       = "; create it first with memory_write, or pass project=<slug> / project=global"
 	memoryAppendMissHelpSealed = "; create it first with memory_write"
@@ -607,6 +614,56 @@ func (s *Server) scopedNotFound(ctx context.Context, kind, project, name, help, 
 			kind, name, project, core.IsolationSealed, sealedHelp)
 	}
 	return fmt.Errorf("no %s named %q in project %q (also searched global)%s", kind, name, project, help)
+}
+
+// memoryReadMiss explains a by-name memory_read miss. When the name is an active
+// memory in other projects this caller may read, the agent knew the memory but
+// not its scope, so the tail names those projects instead of the generic advice.
+// Each one is judged by store.CanRead, so a fenced project's names never surface
+// here; the global scope is never named, because it was either searched already
+// or is closed to this caller.
+func (s *Server) memoryReadMiss(ctx context.Context, project, name string) error {
+	elsewhere, err := s.readableScopesWithMemory(ctx, project, name)
+	if err != nil {
+		// The miss is already decided; a failed hint lookup must not turn it into
+		// a different error, so the tail falls back to the generic advice.
+		s.logger.Warn("mcp: memory_read miss hint", "name", name, "error", err)
+	}
+	if len(elsewhere) == 0 {
+		return s.scopedNotFound(ctx, "memory", project, name, memoryReadMissHelp, memoryReadMissHelpSealed)
+	}
+	var help string
+	if len(elsewhere) == 1 {
+		help = fmt.Sprintf("; it is in project %s: pass project=%s", elsewhere[0], elsewhere[0])
+	} else {
+		help = fmt.Sprintf("; that name is in projects %s: pass project=<slug> for the one you mean",
+			strings.Join(elsewhere, ", "))
+	}
+	return s.scopedNotFound(ctx, "memory", project, name, help, help)
+}
+
+// readableScopesWithMemory lists the projects other than searched holding an
+// active memory with this name that the caller may read.
+func (s *Server) readableScopesWithMemory(ctx context.Context, searched, name string) ([]string, error) {
+	scopes, err := store.ProjectsWithMemoryNamed(ctx, s.cfg.DB, name)
+	if err != nil {
+		return nil, err
+	}
+	caller := s.callerScope(ctx)
+	var out []string
+	for _, p := range scopes {
+		if p == "" || p == searched {
+			continue
+		}
+		ok, err := store.CanRead(ctx, s.cfg.DB, caller, p)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 // memoryName canonicalizes a caller-supplied memory name to the kebab-case form

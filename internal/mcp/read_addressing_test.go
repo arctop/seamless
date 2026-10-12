@@ -4,7 +4,10 @@ import (
 	"context"
 	"testing"
 
+	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/stretchr/testify/require"
+
+	"github.com/arctop/seamless/internal/core"
 )
 
 // memory_read accepts id as an alternative address: agents legitimately hold
@@ -40,6 +43,66 @@ func TestMemoryRead_ByID(t *testing.T) {
 	isErr, txt = callErr(t, ctx, cli, "memory_read", map[string]any{})
 	require.True(t, isErr)
 	require.Contains(t, txt, "name or id is required")
+}
+
+// A by-name miss answers the two causes behind the gardener's recurring
+// memory_read error: a memory the agent knew but asked for in the wrong project
+// gets that project named, and any other miss says that a name out of the
+// client's own MEMORY.md is a local file, not a Seamless memory.
+func TestMemoryRead_MissNamesTheProjectThatHasIt(t *testing.T) {
+	ctx := context.Background()
+	url, db := newServer(t)
+	isolate(t, ctx, db, "client-work", core.IsolationConfidential)
+	isolate(t, ctx, db, "vault", core.IsolationSealed)
+
+	only := map[string]string{"site": "alpha", "docs": "beta", "client-work": "gamma", "vault": "delta"}
+	clients := map[string]*mcpclient.Client{}
+	for p, name := range only {
+		w := bindClient(t, ctx, db, url, p)
+		clients[p] = w
+		callJSON(t, ctx, w, "memory_write", map[string]any{
+			"name": name, "kind": "gotcha", "description": "d", "body": "b",
+		})
+		callJSON(t, ctx, w, "memory_write", map[string]any{
+			"name": "everywhere", "kind": "gotcha", "description": "d", "body": "b",
+		})
+	}
+
+	cli := bindClient(t, ctx, db, url, "raise")
+
+	isErr, txt := callErr(t, ctx, cli, "memory_read", map[string]any{"name": "alpha"})
+	require.True(t, isErr)
+	require.Contains(t, txt, `no memory named "alpha" in project "raise"`)
+	require.Contains(t, txt, "it is in project site: pass project=site")
+	require.NotContains(t, txt, "MEMORY.md", "a found scope is the whole answer")
+	require.Equal(t, "site", callJSON(t, ctx, cli, "memory_read",
+		map[string]any{"name": "alpha", "project": "site"})["project"])
+
+	isErr, txt = callErr(t, ctx, cli, "memory_read", map[string]any{"name": "everywhere"})
+	require.True(t, isErr)
+	require.Contains(t, txt, "that name is in projects docs, site: pass project=<slug>")
+
+	// A fenced project's names never surface: from outside, its memory reads
+	// as a plain miss with the generic advice.
+	for _, fenced := range []string{"client-work", "vault"} {
+		isErr, txt = callErr(t, ctx, cli, "memory_read", map[string]any{"name": only[fenced]})
+		require.True(t, isErr)
+		require.NotContains(t, txt, fenced, txt)
+		require.Contains(t, txt, "MEMORY.md", txt)
+	}
+
+	// A name that is nowhere gets the client-memory hint.
+	isErr, txt = callErr(t, ctx, cli, "memory_read", map[string]any{"name": "two-claude-accounts-design-on-3k"})
+	require.True(t, isErr)
+	require.Contains(t, txt, "check the name")
+	require.Contains(t, txt, "a name listed in your client's own MEMORY.md (Claude Code's file-based auto-memory) is a local file, not a Seamless memory")
+
+	// A sealed caller reads nothing outside itself, so it is never pointed out.
+	isErr, txt = callErr(t, ctx, clients["vault"], "memory_read", map[string]any{"name": "alpha"})
+	require.True(t, isErr)
+	require.NotContains(t, txt, "project=site", txt)
+	require.NotContains(t, txt, "project=global", txt)
+	require.Contains(t, txt, "MEMORY.md", txt)
 }
 
 // query= on memory_read is an agent trying to search; the rejection points at
