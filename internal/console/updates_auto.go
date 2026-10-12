@@ -149,6 +149,10 @@ type updatesApplying struct {
 	To, From string // "v0.7.3"
 	// Stage says what the updater is doing, in words.
 	Stage string
+	// Confirming is set once this daemon runs To and the updater is only
+	// confirming it (update.Status.Confirming): the badge reads confirming,
+	// not in progress.
+	Confirming bool
 	// Why says who started it ("automatic", "Update now").
 	Why string
 	// Since is when this daemon started it; Heard, the updater's latest word,
@@ -157,13 +161,21 @@ type updatesApplying struct {
 	Since, Heard time.Time
 }
 
-// applyingRow builds the Updating now row.
-func applyingRow(a update.Applying) *updatesApplying {
-	return &updatesApplying{
+// applyingRow builds the Updating now row from st, whose Applying is set.
+// While it is confirming, the stage is said from this daemon's side: the
+// record may still name the install the new version came up in.
+func applyingRow(st update.Status) *updatesApplying {
+	a := st.Applying
+	r := &updatesApplying{
 		To: "v" + a.To.String(), From: "v" + a.From.String(),
 		Stage: stageWords(a.Stage), Why: whyWords(a.Why),
 		Since: a.SpawnedAt, Heard: a.HeartbeatAt,
 	}
+	if st.Confirming() {
+		r.Confirming = true
+		r.Stage = "the new version is serving; the updater is confirming it"
+	}
+	return r
 }
 
 // updatesAttempt is the Last attempt row. Error and LogPath appear here and
@@ -305,8 +317,8 @@ type updatesAction struct {
 // autoRows fills the panel's automatic-update rows and buttons from st.
 func autoRows(p *updatesPanel, st update.Status, now time.Time) {
 	p.SelfUpdating = selfUpdating(st)
-	if a := st.Applying; a != nil {
-		p.Applying = applyingRow(*a)
+	if st.Applying != nil {
+		p.Applying = applyingRow(st)
 	}
 	if a := st.LastAttempt; a != nil {
 		p.LastAttempt = attemptRow(*a)

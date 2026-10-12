@@ -226,7 +226,7 @@ func newestWait(r Release, clock time.Time, minAge time.Duration, blocks []Block
 		return WaitSoak, fmt.Sprintf("v%s waits out its %s soak; GitHub's clock is not known yet", r.Version, SpanWords(minAge))
 	default:
 		return WaitSoak, fmt.Sprintf("v%s waits out its %s soak, about %s to go", r.Version, SpanWords(minAge),
-			compactAge(r.PublishedAt.Add(minAge).Sub(clock)))
+			UntilWords(r.PublishedAt.Add(minAge).Sub(clock)))
 	}
 }
 
@@ -306,7 +306,7 @@ func Decide(in DecideInput) Decision {
 		return waitFor(WaitInProgress, "an update is in progress")
 	case in.Now.Before(in.BackoffUntil):
 		return waitFor(WaitBackoff, fmt.Sprintf("an earlier attempt failed; trying again in %s",
-			compactAge(in.BackoffUntil.Sub(in.Now))))
+			UntilWords(in.BackoffUntil.Sub(in.Now))))
 	}
 	noneInFlight := in.Activity && in.InFlight == 0
 	quiet := noneInFlight && in.Now.Sub(in.LastActivity) >= quietFor
@@ -327,12 +327,12 @@ func Decide(in DecideInput) Decision {
 	// Waiting: name the next thing that has to change.
 	latest := ""
 	if in.Pending < in.MaxDefer {
-		latest = fmt.Sprintf(", or at a lull in requests in %s", compactAge(in.MaxDefer-in.Pending))
+		latest = fmt.Sprintf(", or at a lull in requests in %s", UntilWords(in.MaxDefer-in.Pending))
 	}
 	switch {
 	case !in.Activity:
 		return waitFor(WaitActivity, fmt.Sprintf("request activity is not tracked, so it installs once it has waited %s (in %s)",
-			SpanWords(overdue), compactAge(overdue-in.Pending)))
+			SpanWords(overdue), UntilWords(overdue-in.Pending)))
 	case in.InFlight > 0 && (idle || in.Pending >= in.MaxDefer):
 		return waitFor(WaitInFlight, fmt.Sprintf("waiting for %s in flight to finish", Plural(in.InFlight, "request")))
 	case in.Pending >= in.MaxDefer:

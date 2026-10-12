@@ -207,7 +207,7 @@ func TestUpdatesSection_Renders(t *testing.T) {
 				`<span class="mono">seamlessd update</span>`,
 				`<strong class="mono">v0.7.2</strong>`, "published 2026-10-01", `<span class="badge ok">up to date</span>`,
 				`href="https://github.com/arctop/seamless/releases/tag/v0.7.2"`,
-				"4m ago", "next check in 5h",
+				"4m ago", "next check in 5h 30m",
 				`<form method="post" action="/console/settings/updates" aria-label="Check for updates">`,
 				"Turn update checks off", `<input type="hidden" name="check" value="off">`,
 			},
@@ -377,7 +377,7 @@ func TestUpdatesSave_StoresTheSwitch(t *testing.T) {
 
 		param, msg = locationOf(t, postForm(mux, "/console/settings/updates", "check=on"))
 		require.Equal(t, "notice", param)
-		require.Equal(t, "Update checks turned on. The next check runs in 5h.", msg)
+		require.Equal(t, "Update checks turned on. The next check runs in 5h 30m.", msg)
 		o, _ = storedOverride(t, db)
 		require.Equal(t, config.UpdateOverride{Check: boolPtr(true)}, o)
 		require.True(t, fake.Status().Settings.Check)
@@ -823,8 +823,12 @@ func TestIntervalAndUntilPhrases(t *testing.T) {
 		{now.Add(-time.Hour), "within a minute"},
 		{now.Add(30 * time.Second), "within a minute"},
 		{now.Add(22 * time.Minute), "in 22m"},
-		{now.Add(5*time.Hour + 30*time.Minute), "in 5h"},
-		{now.Add(50 * time.Hour), "in 2d"},
+		{now.Add(22*time.Minute - time.Second), "in 22m"}, // rounded up, never sooner than it is
+		{now.Add(5*time.Hour + 30*time.Minute), "in 5h 30m"},
+		{now.Add(8*time.Hour + 58*time.Minute), "in 8h 58m"},
+		{now.Add(9 * time.Hour), "in 9h"},
+		{now.Add(48 * time.Hour), "in 2d"},
+		{now.Add(50 * time.Hour), "in 2d 2h"},
 	} {
 		require.Equal(t, tc.want, untilPhrase(tc.at, now))
 	}

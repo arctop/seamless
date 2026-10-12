@@ -293,7 +293,7 @@ func TestDecide_WaitWords(t *testing.T) {
 	in.InFlight = 3
 	require.Equal(t, "waiting for 3 requests in flight to finish", Decide(in).Wait)
 	in = DecideInput{Now: now, MaxDefer: 24 * time.Hour, BackoffUntil: now.Add(90 * time.Minute)}
-	require.Equal(t, "an earlier attempt failed; trying again in 1h", Decide(in).Wait)
+	require.Equal(t, "an earlier attempt failed; trying again in 1h 30m", Decide(in).Wait)
 }
 
 func TestNewestWait(t *testing.T) {

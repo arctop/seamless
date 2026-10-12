@@ -296,6 +296,62 @@ func TestAuto_InstallsWhenIdle(t *testing.T) {
 	require.Len(t, a.m.spawned(), 1)
 }
 
+// TestAuto_PollsFoldTheUpdateBeforeTheTick: while an update is under way the
+// loop also polls its record, so the new daemon stops reporting it as under
+// way within seconds of the updater confirming it, not at the next minute
+// tick; once it settles the polls stop.
+func TestAuto_PollsFoldTheUpdateBeforeTheTick(t *testing.T) {
+	a := newAutoHarness(t)
+	a.soakedList()
+	a.start()
+	_, err := a.c.Refresh(context.Background())
+	require.NoError(t, err)
+	require.Zero(t, a.polling.Load(), "nothing under way: no polls")
+
+	a.firstCheck()
+	req := a.m.spawned()[0]
+	require.EqualValues(t, 1, a.polling.Load(), "the spawn starts the polls")
+
+	// A poll picks up the updater's progress between ticks.
+	a.writeAttempt(a.recordFor(req, StageVerify))
+	a.polls <- a.clock.Now()
+	require.Eventually(t, func() bool {
+		ap := a.c.Status().Applying
+		return ap != nil && ap.Stage == StageVerify
+	}, 5*time.Second, time.Millisecond)
+	require.False(t, a.c.Status().Confirming(), "v0.7.2 still runs")
+
+	// The installer restarts the daemon on v0.7.3 while the updater confirms
+	// it: the new daemon polls from the start.
+	a.clock.Add(time.Minute)
+	a.writeAttempt(a.recordFor(req, StageConfirm))
+	a.stop()
+	require.Zero(t, a.polling.Load(), "the stopped loop stopped its polls")
+	a.deps.Version = "0.7.3"
+	a.start()
+	require.True(t, a.c.Status().Confirming(), "v0.7.3 runs; the updater is confirming it")
+	_, err = a.c.Refresh(context.Background())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, a.polling.Load())
+
+	// Confirmed ten seconds later: a poll folds it, with no tick and no command.
+	a.clock.Add(10 * time.Second)
+	a.writeAttempt(a.finish(a.recordFor(req, StageConfirm), StageDone, true, false))
+	a.polls <- a.clock.Now()
+	require.Eventually(t, func() bool { return a.c.Status().Applying == nil }, 5*time.Second, time.Millisecond)
+	st := a.c.Status()
+	require.Equal(t, OutcomeApplied, st.LastAttempt.Outcome)
+	require.Equal(t, req.AttemptID, st.LastAttempt.ID)
+	require.False(t, st.Confirming())
+	require.Nil(t, a.state().Spawn, "settled on disk too")
+
+	_, err = a.c.Refresh(context.Background())
+	require.NoError(t, err)
+	require.Zero(t, a.polling.Load(), "settled: the polls stop")
+	require.Len(t, a.m.spawned(), 1)
+	require.Equal(t, 1, a.list.count(), "a poll never asks GitHub")
+}
+
 // TestAuto_AppliedButStillOnTheOldVersionBacksOff: an attempt reported
 // applied while this daemon still runs the version it replaced cannot happen
 // with one daemon per data dir; if it ever did, the target would still be

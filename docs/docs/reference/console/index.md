@@ -987,7 +987,11 @@ When a newer release is out, the Home health strip's version fact turns into
 `v0.7.2 -- v0.7.3 available` and links here - its hover says whether it installs
 by itself, and when - and a toast announces it if the console is open when the
 daemon finds it. While an update runs, the fact reads `v0.7.2 -- updating to
-v0.7.3`. For a day after the daemon starts on a new version, every page carries
+v0.7.3`, and once v0.7.3 is serving and the updater is only confirming it,
+`v0.7.3 -- confirming the update` (**Updating now** says **confirming** too).
+The daemon re-reads the updater's record every few seconds while an update
+runs, so both clear soon after it is confirmed. For a day after the daemon
+starts on a new version, every page carries
 a banner - "Seamless updated to v0.7.3 (from v0.7.2)" - with the release notes
 and **Got it**, which hides it for that tab. It also says when Codex's hooks
 changed with the update (re-approve them in Codex's `/hooks`) or the installer

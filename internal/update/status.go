@@ -170,6 +170,20 @@ func (s Status) Mode() (Mode, string) {
 // version is not a clean release (a dev or snapshot build).
 func (s Status) Current() (Version, bool) { return Parse(s.Version) }
 
+// Confirming reports whether the update under way has already put its
+// version in place: this daemon runs Applying.To, and the updater is only
+// confirming that it answers (not rolling it back). The surfaces then say
+// the update is being confirmed, not that the version it replaced is
+// updating.
+func (s Status) Confirming() bool {
+	a := s.Applying
+	if a == nil || a.Stage == StageRollback {
+		return false
+	}
+	cur, ok := s.Current()
+	return ok && cur == a.To
+}
+
 // Notice renders the one briefing line about updates for a session on host
 // ("" or localHost is the daemon's own machine), or "" when there is nothing
 // to say. At most one line, first match wins:
@@ -280,7 +294,8 @@ func (s Status) troubleNotice(remote bool, now time.Time) string {
 }
 
 // compactAge renders a duration the way the briefing does elsewhere: "45m",
-// "5h", "3d". Anything under a minute is "1m".
+// "5h", "3d". Anything under a minute is "1m". It floors, which suits an age;
+// a span still to go is UntilWords'.
 func compactAge(d time.Duration) string {
 	switch {
 	case d < time.Hour:

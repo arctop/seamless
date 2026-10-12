@@ -110,11 +110,12 @@ func (s *Service) updateChrome(now time.Time) (*updateBanner, *updateAlert) {
 // versionFact is the health strip's version statement. With no update check in
 // this process it is today's plain build version, linked to Your setup. With
 // one it links to Settings > Updates and says the one thing the owner may want
-// to know: an update under way, else a newer release while checks are on --
-// warn when installing it is the owner's call, neutral when this install
-// installs it by itself or the owner's own hold skips it -- else an upgrade
-// within the last day (ok), else the plain version. ok is false when there is
-// no version to state at all.
+// to know: an update under way -- confirming (ok) once this daemon already
+// runs its version -- else a newer release while checks are on -- warn when
+// installing it is the owner's call, neutral when this install installs it by
+// itself or the owner's own hold skips it -- else an upgrade within the last
+// day (ok), else the plain version. ok is false when there is no version to
+// state at all.
 func (s *Service) versionFact(now time.Time) (healthFact, bool) {
 	version := strings.TrimSpace(s.cfg.Version)
 	if s.cfg.Updates == nil {
@@ -124,6 +125,13 @@ func (s *Service) versionFact(now time.Time) (healthFact, bool) {
 		return healthFact{Icon: "info", Text: "version " + version, Href: "/console/settings?s=setup"}, true
 	}
 	st := s.cfg.Updates.Status()
+	if a := st.Applying; a != nil && st.Confirming() {
+		return healthFact{
+			Icon: "refresh-cw", Tone: "ok", Href: updatesSectionHref,
+			Text:  "v" + a.To.String() + " -- confirming the update",
+			Title: "Updated from v" + a.From.String() + "; the updater is confirming that v" + a.To.String() + " answers",
+		}, true
+	}
 	if a := st.Applying; a != nil {
 		return healthFact{
 			Icon: "refresh-cw", Href: updatesSectionHref,
@@ -296,19 +304,14 @@ func countPhrase(n int, unit string) string {
 	return fmt.Sprintf("%d %ss", n, unit)
 }
 
-// untilPhrase is ago() looking forward: "in 22m", "in 5h", "in 3d". A time
-// already reached, or under a minute away, is "within a minute": the
-// checker's one-minute tick picks a due check up by then.
+// untilPhrase is ago() looking forward, rounded up rather than floored (see
+// update.UntilWords): "in 22m", "in 8h 58m", "in 3d 4h". A time already
+// reached, or under a minute away, is "within a minute": the checker's
+// one-minute tick picks a due check up by then.
 func untilPhrase(t, now time.Time) string {
 	d := t.Sub(now)
-	switch {
-	case d <= time.Minute:
+	if d <= time.Minute {
 		return "within a minute"
-	case d < time.Hour:
-		return fmt.Sprintf("in %dm", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("in %dh", int(d.Hours()))
-	default:
-		return fmt.Sprintf("in %dd", int(d.Hours()/24))
 	}
+	return "in " + update.UntilWords(d)
 }

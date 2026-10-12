@@ -132,7 +132,7 @@ ambient line included, rather than the briefing as it looked one step earlier.
 
 ```text
 Automatic update trace
-Checker · every minute Fold, target, decide Settle the updater's last record; pick the newest release that has soaked by GitHub's clock, carries signed checksums and is neither blocked nor held; wait for an idle daemon or a lull past max_defer .
+Checker · every minute Fold, target, decide Settle the updater's last record (re-read every few seconds while an update runs); pick the newest release that has soaked by GitHub's clock, carries signed checksums and is neither blocked nor held; wait for an idle daemon or a lull past max_defer .
 Spawn Record, then hand off Re-check a release list older than a minute; save the spawn and record update.started ; the OS spawner starts seamlessd update --auto outside the service.
 Updater Verify, back up, install Take update.lock ; re-run the gates; verify the release's installer and checksums against its exact tag; prove the rollback; archive the instance; run the installer, which restarts the service.
 Confirm Observe, or roll back A new daemon of the new release, the same one ten seconds later; otherwise put the database back if it was migrated and reinstall the old release. The record goes to attempt.json for the new daemon to fold.

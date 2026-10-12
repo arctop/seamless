@@ -161,7 +161,7 @@ func (c *Checker) evaluate(ctx context.Context, now time.Time, s Settings, cur V
 		c.view.decision = waitFor(WaitInProgress, "an updater is already running")
 	case c.stale(now) && now.Before(c.state.RecheckAt):
 		c.view.decision = waitFor(WaitRecheck, fmt.Sprintf("re-checking the release list in %s before installing v%s",
-			compactAge(c.state.RecheckAt.Sub(now)), target.Version))
+			UntilWords(c.state.RecheckAt.Sub(now)), target.Version))
 	}
 	return changed
 }

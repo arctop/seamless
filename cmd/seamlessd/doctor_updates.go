@@ -999,15 +999,17 @@ func trustRemedy(err error, cfg config.Config) string {
 	}
 }
 
-// whenText renders a scheduled time relative to now: "in 3h", or "now" once due.
+// whenText renders a scheduled time relative to now, rounded up so it never
+// reads as sooner than it is: "in 8h 58m", or "now" once due.
 func whenText(t, now time.Time) string {
 	if t.IsZero() || !t.After(now) {
 		return "now"
 	}
-	return "in " + humanDuration(t.Sub(now))
+	return "in " + update.UntilWords(t.Sub(now))
 }
 
-// humanDuration renders a duration compactly: "45s", "12m", "5h", "3d".
+// humanDuration renders an elapsed duration compactly: "45s", "12m", "5h",
+// "3d". It floors, which suits an age; a time still ahead is whenText's.
 func humanDuration(d time.Duration) string {
 	switch {
 	case d < time.Minute:

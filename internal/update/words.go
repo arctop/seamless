@@ -103,6 +103,33 @@ func SpanWords(d time.Duration) string {
 	}
 }
 
+// UntilWords renders the time left before something due -- a soak's end, a
+// deadline, a retry -- for prose after "in" or before "to go": rounded up to
+// the minute, so it never reads as sooner than it is, and keeping the next
+// unit down above an hour, so 8h58m is not "8h": "22m", "8h 58m", "9h",
+// "3d 4h". Anything under a minute, or already due, is "1m". It is the
+// forward counterpart of the briefing's floored "5h ago".
+func UntilWords(d time.Duration) string {
+	mins := max(1, int64((d+time.Minute-1)/time.Minute))
+	switch {
+	case mins < 60:
+		return fmt.Sprintf("%dm", mins)
+	case mins < 24*60:
+		return unitPair(mins/60, "h", mins%60, "m")
+	default:
+		hours := (mins + 59) / 60
+		return unitPair(hours/24, "d", hours%24, "h")
+	}
+}
+
+// unitPair renders "8h 58m", or "9h" when the smaller unit is zero.
+func unitPair(big int64, bigUnit string, small int64, smallUnit string) string {
+	if small == 0 {
+		return fmt.Sprintf("%d%s", big, bigUnit)
+	}
+	return fmt.Sprintf("%d%s %d%s", big, bigUnit, small, smallUnit)
+}
+
 // Plural renders a count of a regular noun: "1 request", "3 requests".
 func Plural(n int64, noun string) string {
 	if n == 1 {

@@ -123,7 +123,7 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 			want: []string{
 				"<dt>Next update</dt>", `<strong class="mono">v0.7.3</strong>`,
 				"<span>installs by itself: waiting for 2 live agent sessions to go idle, or at a lull in requests in 19h</span>",
-				"pending since", "5h ago", "deadline in 18h",
+				"pending since", "5h ago", "deadline in 19h",
 				`onsubmit="return confirm('Install v0.7.3 now? The daemon restarts to finish, so agent sessions lose Seamless for a moment. This skips the soak and does not wait for agents to go idle.');"`,
 				"Update to v0.7.3 now</button>",
 			},
@@ -158,6 +158,23 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				`disabled title="An update is in progress"`,
 			},
 			absent: []string{"<dt>Next update</dt>", "confirm("},
+		},
+		{
+			// The installer restarted the daemon on v0.7.3 before the record
+			// moved past install: the row speaks from the new version's side.
+			name: "confirming",
+			base: autoBase,
+			mutate: func(st *update.Status) {
+				withNewer(st, now)
+				st.Version, st.Available = "0.7.3", false
+				st.Applying = &update.Applying{From: ver(0, 7, 2), To: ver(0, 7, 3), Why: update.WhyAuto,
+					Stage: update.StageInstall, SpawnedAt: now.Add(-2 * time.Minute)}
+			},
+			want: []string{
+				"<dt>Updating now</dt>", `<span class="badge ok">confirming</span>`, "v0.7.2 &rarr; v0.7.3",
+				"<span>the new version is serving; the updater is confirming it</span>", "started 2m ago",
+			},
+			absent: []string{`<span class="badge accent">in progress</span>`, "running the installer"},
 		},
 		{
 			name: "rolled back, blocked",
@@ -223,7 +240,7 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 			want: []string{
 				`<span class="badge warn">interrupted</span>`, "v0.7.2 still runs.",
 				"<dt>Next try</dt>", "The attempt on v0.7.3 was interrupted (2 in a row); automatic updates try again",
-				">in 39m</span>.",
+				">in 40m</span>.",
 			},
 		},
 		{
@@ -933,6 +950,15 @@ func TestHealthStrip_VersionFactUnderAutomaticUpdates(t *testing.T) {
 		{name: "updating", mutate: func(st *update.Status) {
 			st.Applying = &update.Applying{From: ver(0, 7, 2), To: ver(0, 7, 3), Why: update.WhyNow, Stage: update.StageInstall, SpawnedAt: now}
 		}, wantText: "v0.7.2 -- updating to v0.7.3", wantTitle: "Updating to v0.7.3: running the installer"},
+		{name: "confirming: the new version already runs", mutate: func(st *update.Status) {
+			st.Version, st.Available = "0.7.3", false
+			st.Applying = &update.Applying{From: ver(0, 7, 2), To: ver(0, 7, 3), Why: update.WhyAuto, Stage: update.StageConfirm, SpawnedAt: now}
+		}, wantText: "v0.7.3 -- confirming the update", wantTone: "ok",
+			wantTitle: "Updated from v0.7.2; the updater is confirming that v0.7.3 answers"},
+		{name: "rolling back from the new version is no confirmation", mutate: func(st *update.Status) {
+			st.Version, st.Available = "0.7.3", false
+			st.Applying = &update.Applying{From: ver(0, 7, 2), To: ver(0, 7, 3), Why: update.WhyAuto, Stage: update.StageRollback, SpawnedAt: now}
+		}, wantText: "v0.7.2 -- updating to v0.7.3", wantTitle: "Updating to v0.7.3: rolling back"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			st := autoStatus(now)

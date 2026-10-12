@@ -139,6 +139,25 @@ func TestCompactAge(t *testing.T) {
 	require.Equal(t, "3d", compactAge(3*24*time.Hour+time.Hour))
 }
 
+// Confirming: the update under way already runs here, and only the updater's
+// confirmation is left -- not while the replaced version runs, and not while
+// the updater rolls back.
+func TestStatus_Confirming(t *testing.T) {
+	s := Status{Version: "0.7.3"}
+	require.False(t, s.Confirming(), "nothing under way")
+	s.Applying = &Applying{From: ver("0.7.2"), To: ver("0.7.3"), Why: WhyAuto, Stage: StageConfirm}
+	require.True(t, s.Confirming())
+	s.Applying.Stage = StageInstall
+	require.True(t, s.Confirming(), "the installer restarted the daemon before the record moved on")
+	s.Applying.Stage = StageRollback
+	require.False(t, s.Confirming(), "rolling back, not confirming")
+	s.Applying.Stage = StageConfirm
+	s.Version = "0.7.2"
+	require.False(t, s.Confirming(), "the version it replaces still runs")
+	s.Version = "0.7.3-dev"
+	require.False(t, s.Confirming(), "a build that is not a clean release")
+}
+
 // autoStatus is an installer install of v0.7.2 that updates itself.
 func autoStatus(now time.Time) Status {
 	s := noticeStatus(now)

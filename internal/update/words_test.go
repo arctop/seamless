@@ -50,6 +50,31 @@ func TestSpanWords(t *testing.T) {
 	}
 }
 
+// A span still to go rounds up, so it never reads as sooner than it is, and
+// keeps the next unit down above an hour: a soak with 8h58m left once read
+// "in 8h".
+func TestUntilWords(t *testing.T) {
+	for d, want := range map[time.Duration]string{
+		-time.Minute:                 "1m", // already due
+		0:                            "1m",
+		10 * time.Second:             "1m",
+		time.Minute:                  "1m",
+		time.Minute + time.Second:    "2m",
+		22 * time.Minute:             "22m",
+		59*time.Minute + time.Second: "1h",
+		90 * time.Minute:             "1h 30m",
+		8*time.Hour + 57*time.Minute + 30*time.Second: "8h 58m",
+		9 * time.Hour:                 "9h",
+		23*time.Hour + 59*time.Minute: "23h 59m",
+		24 * time.Hour:                "1d",
+		24*time.Hour + time.Minute:    "1d 1h",
+		50 * time.Hour:                "2d 2h",
+		7 * 24 * time.Hour:            "7d",
+	} {
+		require.Equal(t, want, UntilWords(d), d.String())
+	}
+}
+
 // The refusal words, pinned like the rest: the console's Last attempt row and
 // banner and the CLI's doctor row render them. Each action ends in the
 // command to run; a refusal this release does not know reads as a plain

@@ -147,6 +147,17 @@ func TestHumanDuration(t *testing.T) {
 	require.Equal(t, "3d", humanDuration(80*time.Hour))
 }
 
+// A time still ahead rounds up, so a soak with 8h58m left does not read "in
+// 8h".
+func TestWhenText(t *testing.T) {
+	now := time.Date(2026, 10, 10, 19, 49, 0, 0, time.UTC)
+	require.Equal(t, "now", whenText(time.Time{}, now))
+	require.Equal(t, "now", whenText(now.Add(-time.Minute), now))
+	require.Equal(t, "in 1m", whenText(now.Add(30*time.Second), now))
+	require.Equal(t, "in 8h 58m", whenText(now.Add(8*time.Hour+58*time.Minute), now))
+	require.Equal(t, "in 3d 4h", whenText(now.Add(76*time.Hour), now))
+}
+
 func ptr[T any](v T) *T { return &v }
 
 // Versions the automatic-update fixtures name.

@@ -37,6 +37,11 @@ const (
 	// short, so a laptop that slept through a check catches up within a
 	// minute of waking -- a long monotonic timer would stall instead.
 	tickInterval = time.Minute
+
+	// pollInterval is how often the loop also re-reads the record of an
+	// update under way, between ticks, so the status stops saying "updating"
+	// within seconds of the updater finishing rather than at the next tick.
+	pollInterval = 5 * time.Second
 )
 
 // Errors CheckNow returns.
@@ -115,8 +120,12 @@ type Deps struct {
 
 	Now   func() time.Time                  // nil: time.Now
 	Ticks func() (<-chan time.Time, func()) // nil: a tickInterval ticker
-	Rand  func(n int64) int64               // uniform in [0, n); nil: math/rand/v2
-	Log   *slog.Logger                      // nil: slog.Default()
+	// Polls is the faster ticker the loop runs only while an update is under
+	// way, started when one begins and stopped when it settles. nil: a
+	// pollInterval ticker.
+	Polls func() (<-chan time.Time, func())
+	Rand  func(n int64) int64 // uniform in [0, n); nil: math/rand/v2
+	Log   *slog.Logger        // nil: slog.Default()
 }
 
 // Checker is the background update check. One goroutine (the loop) owns the
@@ -187,6 +196,12 @@ func New(d Deps) *Checker {
 	if d.Ticks == nil {
 		d.Ticks = func() (<-chan time.Time, func()) {
 			t := time.NewTicker(tickInterval)
+			return t.C, t.Stop
+		}
+	}
+	if d.Polls == nil {
+		d.Polls = func() (<-chan time.Time, func()) {
+			t := time.NewTicker(pollInterval)
 			return t.C, t.Stop
 		}
 	}
@@ -415,9 +430,10 @@ func (c *Checker) scheduleFirst(now time.Time) {
 	c.state.NextCheckAt = now.Add(firstCheckDelay + time.Duration(c.d.Rand(int64(firstCheckJitter))))
 }
 
-// loop is the checker's goroutine. A panic in it is recovered and logged:
-// the daemon keeps serving, the status reports the checker stopped, and Wait
-// returns.
+// loop is the checker's goroutine: it takes the ticks, the commands and,
+// while an update is under way, the polls. A panic in it is recovered and
+// logged: the daemon keeps serving, the status reports the checker stopped,
+// and Wait returns.
 func (c *Checker) loop(ctx context.Context) {
 	defer close(c.done)
 	defer func() {
@@ -432,16 +448,37 @@ func (c *Checker) loop(ctx context.Context) {
 
 	ticks, stop := c.d.Ticks()
 	defer stop()
+	var polls <-chan time.Time // nil, so never ready, while no update is under way
+	stopPolls := func() {}
+	defer func() { stopPolls() }()
 	for {
+		switch under := c.applying != nil; {
+		case under && polls == nil:
+			polls, stopPolls = c.d.Polls()
+		case !under && polls != nil:
+			stopPolls()
+			polls, stopPolls = nil, func() {}
+		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticks:
 			c.tick(ctx)
+		case <-polls:
+			c.poll(ctx)
 		case cmd := <-c.cmds:
 			cmd.reply <- c.handle(ctx, cmd)
 		}
 	}
+}
+
+// poll re-reads the record of the update under way between ticks: the
+// automatic-update step with neither a check nor a spawn, so a finished
+// attempt is folded within pollInterval of the updater's last write.
+func (c *Checker) poll(ctx context.Context) {
+	s := c.settings(ctx)
+	c.step(ctx, s, false)
+	c.publish(s)
 }
 
 // tick checks when the saved deadline has passed and checks are on, then

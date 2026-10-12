@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -135,6 +136,11 @@ type harness struct {
 	c      *Checker
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	// polls is the loop's poll channel, and polling counts the poll tickers
+	// it runs: 1 while an update is under way, 0 otherwise.
+	polls   chan time.Time
+	polling atomic.Int32
 }
 
 func newHarness(t *testing.T) *harness {
@@ -143,6 +149,7 @@ func newHarness(t *testing.T) *harness {
 		t:     t,
 		clock: &fakeClock{t: t0},
 		ticks: make(chan time.Time),
+		polls: make(chan time.Time),
 		fetch: &fakeFetcher{},
 		rec:   &fakeRecorder{},
 		dir:   t.TempDir(),
@@ -161,7 +168,11 @@ func newHarness(t *testing.T) *harness {
 		Events:       h.rec,
 		Now:          h.clock.Now,
 		Ticks:        func() (<-chan time.Time, func()) { return h.ticks, func() {} },
-		Rand:         func(int64) int64 { return 0 },
+		Polls: func() (<-chan time.Time, func()) {
+			h.polling.Add(1)
+			return h.polls, func() { h.polling.Add(-1) }
+		},
+		Rand: func(int64) int64 { return 0 },
 	}
 	return h
 }
