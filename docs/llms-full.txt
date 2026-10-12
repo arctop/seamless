@@ -1963,6 +1963,19 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.7.2 {#v0-7-2}
+
+Released 2026-10-12 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.7.2)
+
+### Fixes
+
+- fix(mcp): a notes_read miss names the project that has the note, or the plan
+- fix(gardener): settle a proposal whose memory went inactive while it waited
+- fix(console): a request the browser abandoned logs at debug, not as a 500
+- fix(hooks): a subagent that left no transcript is not a warning
+- fix(mcp): a memory_read miss names the project that has it, or the MEMORY.md boundary
+- fix(update): doctor and update --check measure the soak on GitHub's clock
+
 ## v0.7.1 {#v0-7-1}
 
 Released 2026-10-10 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.7.1)
