@@ -75,7 +75,7 @@ func (s *Server) handleNotesCreate(ctx context.Context, req mcp.CallToolRequest)
 
 func notesReadTool() mcp.Tool {
 	return mcp.NewTool("notes_read", hintRead(),
-		mcp.WithDescription("Read a note by id, or by slug within the current project (falling back to a global note of the same slug)."),
+		mcp.WithDescription("Read a note by id, or by slug within the current project (falling back to a global note of the same slug). A plan's slug is not a note's: a miss on one names the plan's narrative note."),
 		mcp.WithString("id", mcp.Description("note id (ULID); pass exactly one of id or slug")),
 		mcp.WithString("slug", mcp.Description("note slug, as briefings, plan compositions, and notes_create responses name notes (alias: name)")),
 		mcp.WithString("project", mcp.Description("project slug for the slug lookup; defaults to the bound session's project")),
@@ -505,9 +505,56 @@ func (s *Server) loadNoteBySlug(ctx context.Context, req mcp.CallToolRequest, sl
 		}
 	}
 	if !ok {
-		return core.Note{}, s.scopedNotFound(ctx, "note", project, slug, noteReadMissHelp, noteReadMissHelpSealed)
+		return core.Note{}, s.noteReadMiss(ctx, project, slug)
 	}
 	return s.cfg.Files.Store().ReadNote(idx.FilePath)
+}
+
+// noteReadMiss explains a by-slug notes_read miss, the twin of memoryReadMiss:
+// a slug that names a note in other projects the caller may read gets those
+// projects named. Failing that, a PLAN's slug -- which agents hold from
+// briefings and tasks, and try as a note slug -- gets the plan's narrative
+// note named, when the caller may read its project.
+func (s *Server) noteReadMiss(ctx context.Context, project, slug string) error {
+	help, err := s.noteReadMissHint(ctx, project, slug)
+	if err != nil {
+		// The miss is already decided; a failed hint lookup must not turn it into
+		// a different error, so the tail falls back to the generic advice.
+		s.logger.Warn("mcp: notes_read miss hint", "slug", slug, "error", err)
+	}
+	if help == "" {
+		return s.scopedNotFound(ctx, "note", project, slug, noteReadMissHelp, noteReadMissHelpSealed)
+	}
+	return s.scopedNotFound(ctx, "note", project, slug, help, help)
+}
+
+// noteReadMissHint is noteReadMiss's pointer, or "" when there is none to give.
+func (s *Server) noteReadMissHint(ctx context.Context, project, slug string) (string, error) {
+	scopes, err := store.ProjectsWithNoteSlug(ctx, s.cfg.DB, slug)
+	if err != nil {
+		return "", err
+	}
+	elsewhere, err := s.readableElsewhere(ctx, project, scopes)
+	if err != nil {
+		return "", err
+	}
+	if len(elsewhere) > 0 {
+		return elsewhereHelp(elsewhere), nil
+	}
+	primary, _, ok, err := plans.Composition(ctx, s.cfg.DB, slug)
+	if err != nil || !ok {
+		return "", err
+	}
+	readable, err := store.CanRead(ctx, s.cfg.DB, s.callerScope(ctx), primary.Project)
+	if err != nil || !readable {
+		return "", err
+	}
+	arg := "slug=" + primary.Slug
+	if primary.Project != "" && primary.Project != project {
+		arg += " project=" + primary.Project
+	}
+	return fmt.Sprintf("; that is a plan's slug, not a note's: read the plan's narrative with %s, and its steps with tasks_list plan=%s",
+		arg, slug), nil
 }
 
 // The by-name miss tails for notes_read, paired like the memory ones: the plain

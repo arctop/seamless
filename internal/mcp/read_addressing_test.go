@@ -105,6 +105,54 @@ func TestMemoryRead_MissNamesTheProjectThatHasIt(t *testing.T) {
 	require.Contains(t, txt, "MEMORY.md", txt)
 }
 
+// A by-slug notes_read miss points the way memory_read's does: a note that is
+// in another project the caller may read gets that project named, and a plan's
+// slug -- held from a briefing, tried as a note -- gets the plan's narrative.
+func TestNotesRead_MissNamesTheProjectOrThePlan(t *testing.T) {
+	ctx := context.Background()
+	url, db := newServer(t)
+	isolate(t, ctx, db, "client-work", core.IsolationConfidential)
+
+	for p, title := range map[string]string{"series-b": "Kickoff Plan", "client-work": "Client Notes"} {
+		callJSON(t, ctx, bindClient(t, ctx, db, url, p), "notes_create", map[string]any{
+			"title": title, "body": "b",
+		})
+	}
+	tools := bindClient(t, ctx, db, url, "tools")
+	callJSON(t, ctx, tools, "notes_create", map[string]any{
+		"title": "Move The Repo To Its New Home", "body": "the narrative", "tags": []string{"plan:move-home"},
+	})
+	callJSON(t, ctx, tools, "notes_create", map[string]any{
+		"title": "Supporting research", "body": "later", "tags": []string{"plan:move-home"},
+	})
+
+	cli := bindClient(t, ctx, db, url, "ops")
+
+	isErr, txt := callErr(t, ctx, cli, "notes_read", map[string]any{"slug": "kickoff-plan"})
+	require.True(t, isErr)
+	require.Contains(t, txt, `no note named "kickoff-plan" in project "ops"`)
+	require.Contains(t, txt, "it is in project series-b: pass project=series-b")
+
+	isErr, txt = callErr(t, ctx, cli, "notes_read", map[string]any{"slug": "move-home"})
+	require.True(t, isErr)
+	require.Contains(t, txt, "that is a plan's slug, not a note's: read the plan's narrative with "+
+		"slug=move-the-repo-to-its-new-home project=tools, and its steps with tasks_list plan=move-home")
+	require.Contains(t, callJSON(t, ctx, cli, "notes_read", map[string]any{
+		"slug": "move-the-repo-to-its-new-home", "project": "tools",
+	})["body"], "the narrative")
+
+	// Inside the plan's own project the pointer needs no project.
+	isErr, txt = callErr(t, ctx, tools, "notes_read", map[string]any{"slug": "move-home"})
+	require.True(t, isErr)
+	require.Contains(t, txt, "read the plan's narrative with slug=move-the-repo-to-its-new-home, and")
+
+	// A fenced project's notes never surface.
+	isErr, txt = callErr(t, ctx, cli, "notes_read", map[string]any{"slug": "client-notes"})
+	require.True(t, isErr)
+	require.NotContains(t, txt, "client-work", txt)
+	require.Contains(t, txt, "check the slug")
+}
+
 // query= on memory_read is an agent trying to search; the rejection points at
 // recall instead of leaving it to guess which parameter to respell.
 func TestMemoryRead_QueryRedirectsToRecall(t *testing.T) {

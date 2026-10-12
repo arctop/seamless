@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -116,6 +117,27 @@ func TestProjectsWithMemoryNamed(t *testing.T) {
 	require.Equal(t, []string{"", "api", "web"}, got)
 
 	none, err := ProjectsWithMemoryNamed(ctx, db, "missing")
+	require.NoError(t, err)
+	require.Empty(t, none)
+}
+
+func TestProjectsWithNoteSlug(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	now := core.FormatTime(time.Now().UTC())
+	for i, project := range []string{"web", "", "api"} {
+		_, err := db.ExecContext(ctx, `
+			INSERT INTO notes_index (id, title, slug, project, file_path, content_hash, created_at, updated_at)
+			VALUES (?, 'Shared', 'shared', ?, ?, 'h', ?, ?)`,
+			fmt.Sprintf("01N%d", i), project, "notes/"+dirOf(project)+"/shared.md", now, now)
+		require.NoError(t, err)
+	}
+
+	got, err := ProjectsWithNoteSlug(ctx, db, "shared")
+	require.NoError(t, err)
+	require.Equal(t, []string{"", "api", "web"}, got)
+
+	none, err := ProjectsWithNoteSlug(ctx, db, "missing")
 	require.NoError(t, err)
 	require.Empty(t, none)
 }

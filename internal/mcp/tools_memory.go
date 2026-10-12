@@ -619,11 +619,12 @@ func (s *Server) scopedNotFound(ctx context.Context, kind, project, name, help, 
 // memoryReadMiss explains a by-name memory_read miss. When the name is an active
 // memory in other projects this caller may read, the agent knew the memory but
 // not its scope, so the tail names those projects instead of the generic advice.
-// Each one is judged by store.CanRead, so a fenced project's names never surface
-// here; the global scope is never named, because it was either searched already
-// or is closed to this caller.
 func (s *Server) memoryReadMiss(ctx context.Context, project, name string) error {
-	elsewhere, err := s.readableScopesWithMemory(ctx, project, name)
+	scopes, err := store.ProjectsWithMemoryNamed(ctx, s.cfg.DB, name)
+	var elsewhere []string
+	if err == nil {
+		elsewhere, err = s.readableElsewhere(ctx, project, scopes)
+	}
 	if err != nil {
 		// The miss is already decided; a failed hint lookup must not turn it into
 		// a different error, so the tail falls back to the generic advice.
@@ -632,23 +633,16 @@ func (s *Server) memoryReadMiss(ctx context.Context, project, name string) error
 	if len(elsewhere) == 0 {
 		return s.scopedNotFound(ctx, "memory", project, name, memoryReadMissHelp, memoryReadMissHelpSealed)
 	}
-	var help string
-	if len(elsewhere) == 1 {
-		help = fmt.Sprintf("; it is in project %s: pass project=%s", elsewhere[0], elsewhere[0])
-	} else {
-		help = fmt.Sprintf("; that name is in projects %s: pass project=<slug> for the one you mean",
-			strings.Join(elsewhere, ", "))
-	}
+	help := elsewhereHelp(elsewhere)
 	return s.scopedNotFound(ctx, "memory", project, name, help, help)
 }
 
-// readableScopesWithMemory lists the projects other than searched holding an
-// active memory with this name that the caller may read.
-func (s *Server) readableScopesWithMemory(ctx context.Context, searched, name string) ([]string, error) {
-	scopes, err := store.ProjectsWithMemoryNamed(ctx, s.cfg.DB, name)
-	if err != nil {
-		return nil, err
-	}
+// readableElsewhere narrows the scopes a name lives in to the projects other
+// than searched that the caller may read: the ones a by-name miss can point
+// at. Each is judged by store.CanRead, so a fenced project's names never
+// surface; the global scope is never named, because it was either searched
+// already or is closed to this caller.
+func (s *Server) readableElsewhere(ctx context.Context, searched string, scopes []string) ([]string, error) {
 	caller := s.callerScope(ctx)
 	var out []string
 	for _, p := range scopes {
@@ -664,6 +658,15 @@ func (s *Server) readableScopesWithMemory(ctx context.Context, searched, name st
 		}
 	}
 	return out, nil
+}
+
+// elsewhereHelp is the miss tail naming the projects that hold the name.
+func elsewhereHelp(elsewhere []string) string {
+	if len(elsewhere) == 1 {
+		return fmt.Sprintf("; it is in project %s: pass project=%s", elsewhere[0], elsewhere[0])
+	}
+	return fmt.Sprintf("; that name is in projects %s: pass project=<slug> for the one you mean",
+		strings.Join(elsewhere, ", "))
 }
 
 // memoryName canonicalizes a caller-supplied memory name to the kebab-case form

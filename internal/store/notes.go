@@ -108,6 +108,31 @@ func NoteBySlug(ctx context.Context, db *sql.DB, project, slug string) (core.Not
 	return notes[0], true, nil
 }
 
+// ProjectsWithNoteSlug returns every scope holding a note with this exact slug,
+// sorted ("" is the global scope). It backs notes_read's wrong-project hint, the
+// twin of ProjectsWithMemoryNamed: it answers only where the slug lives, and the
+// caller decides which of those scopes it may name.
+func ProjectsWithNoteSlug(ctx context.Context, db *sql.DB, slug string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT DISTINCT project FROM notes_index
+		WHERE slug = ? ORDER BY project`, slug)
+	if err != nil {
+		return nil, fmt.Errorf("store.ProjectsWithNoteSlug: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, fmt.Errorf("store.ProjectsWithNoteSlug: %w", err)
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store.ProjectsWithNoteSlug: %w", err)
+	}
+	return out, nil
+}
+
 // NotesByTag returns the notes carrying an exact tag, newest-updated first,
 // optionally scoped to a project ("" = every project). Tags are stored as a
 // JSON array, so the match runs through json_each rather than LIKE.

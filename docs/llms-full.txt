@@ -6985,7 +6985,7 @@ Create a work note -- a research finding, decision record, meeting summary, or a
 
 ## notes_read {#notes_read}
 
-Read a note by id, or by slug within the current project (falling back to a global note of the same slug).
+Read a note by id, or by slug within the current project (falling back to a global note of the same slug). A plan's slug is not a note's: a miss on one names the plan's narrative note.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
