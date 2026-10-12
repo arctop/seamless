@@ -174,6 +174,10 @@ func (s *Service) RunOnce(ctx context.Context) (PassResult, error) {
 	// honest -- the only reliable close for these, since no hook fires on a kill.
 	s.reapStaleSessions(ctx)
 
+	// Settle the pending proposals whose memory went inactive by another route
+	// since they were raised, so the queue only holds what can still be applied.
+	s.settleMootProposals(ctx)
+
 	existing, err := loadSeen(ctx, s.db)
 	if err != nil {
 		return PassResult{}, err

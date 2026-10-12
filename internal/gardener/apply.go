@@ -33,10 +33,12 @@ var Decisions = []string{DecisionApply, DecisionDismiss, DecisionHide}
 // on the kind: an archive retires the memory (invalid, but still readable), a
 // merge supersedes the "drop" memory by the "keep" memory, a digest writes the
 // summary as a note, a memory_wanted opens a task to write the missing
-// knowledge, and a rekind reclassifies the memory's kind in place. If the
-// effect cannot be carried out (e.g. a referenced memory has since been
-// deleted), the proposal is left pending and an error is returned, so the
-// owner can retry or dismiss.
+// knowledge, and a rekind reclassifies the memory's kind in place. A proposal
+// whose memory went inactive since it was raised is moot: it is settled as a
+// dismissal instead, and the result says so under "settled" (see moot.go). If
+// the effect cannot be carried out for another reason (e.g. a referenced memory
+// has since been deleted), the proposal is left pending and an error is
+// returned, so the owner can retry or dismiss.
 func (s *Service) Apply(ctx context.Context, id string) (map[string]any, error) {
 	p, ok, err := store.ProposalByID(ctx, s.db, id)
 	if err != nil {
@@ -47,6 +49,17 @@ func (s *Service) Apply(ctx context.Context, id string) (map[string]any, error) 
 	}
 	if p.Status != store.ProposalPending {
 		return nil, fmt.Errorf("proposal %q is already %s", id, p.Status)
+	}
+	reason, err := s.mootReason(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	if reason != "" {
+		if err := s.settleMoot(ctx, p, reason); err != nil {
+			return nil, err
+		}
+		return map[string]any{"status": store.ProposalDismissed, "kind": p.Kind,
+			"settled": reason + " -- nothing left to apply"}, nil
 	}
 	now := s.now().UTC()
 

@@ -395,6 +395,8 @@ func gardenerSummary(p map[string]any) string {
 		return "applied " + work
 	case "dismiss":
 		return "dismissed a proposal"
+	case "settle":
+		return "settled a moot proposal: " + payloadStr(p, "reason")
 	case "hide":
 		return "hid a proposal forever"
 	case "unhide":

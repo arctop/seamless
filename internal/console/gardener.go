@@ -1159,9 +1159,14 @@ func (s *Service) gardenerApply(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	next := s.nextSelection(r)
-	if _, err := s.cfg.Gardener.Apply(r.Context(), id); err != nil {
+	res, err := s.cfg.Gardener.Apply(r.Context(), id)
+	if err != nil {
 		s.logger.Warn("console: gardener apply", "id", id, "error", err)
 		gardenerRedirect(w, r, id, "error", err.Error())
+		return
+	}
+	if settled := payloadStr(res, "settled"); settled != "" {
+		gardenerRedirect(w, r, next, "notice", "Settled the proposal: "+settled+".")
 		return
 	}
 	gardenerRedirect(w, r, next, "notice", "Applied the proposal.")
@@ -1479,18 +1484,27 @@ func (s *Service) gardenerApplyPlan(w http.ResponseWriter, r *http.Request) {
 		redirectFlash(w, r, "no pending proposals in that plan")
 		return
 	}
-	applied, firstErr := 0, ""
+	applied, settled, firstErr := 0, 0, ""
 	for _, p := range batch {
-		if _, aerr := s.cfg.Gardener.Apply(r.Context(), p.ID); aerr != nil {
+		res, aerr := s.cfg.Gardener.Apply(r.Context(), p.ID)
+		switch {
+		case aerr != nil:
 			if firstErr == "" {
 				firstErr = aerr.Error()
 			}
-			continue
+		case payloadStr(res, "settled") != "":
+			settled++
+		default:
+			applied++
 		}
-		applied++
 	}
 	if firstErr != "" {
 		redirectFlash(w, r, fmt.Sprintf("applied %d of %d -- first error: %s", applied, len(batch), firstErr))
+		return
+	}
+	if settled > 0 {
+		redirectNotice(w, r, fmt.Sprintf("Applied %d proposal(s) in %s; settled %d whose memory had already gone inactive.",
+			applied, slug, settled))
 		return
 	}
 	redirectNotice(w, r, fmt.Sprintf("Applied all %d proposal(s) in %s.", applied, slug))

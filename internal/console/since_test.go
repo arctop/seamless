@@ -92,5 +92,7 @@ func TestGardenerSummary_CoversEveryProposalKind(t *testing.T) {
 	require.Equal(t, "proposed archiving a memory", gardenerSummary(map[string]any{"action": "propose", "kind": "archive"}))
 	require.Equal(t, "armed utility ranking for orbital", gardenerSummary(map[string]any{"action": "utility_armed", "project": "orbital"}))
 	require.Equal(t, "dismissed a proposal", gardenerSummary(map[string]any{"action": "dismiss"}))
+	require.Equal(t, "settled a moot proposal: memory seamless/x is already inactive",
+		gardenerSummary(map[string]any{"action": "settle", "reason": "memory seamless/x is already inactive"}))
 	require.Equal(t, "applied a brand new proposal", gardenerSummary(map[string]any{"action": "apply", "kind": "brand_new"}))
 }
