@@ -1,12 +1,15 @@
 package hooks
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,6 +33,27 @@ type captureEnv struct {
 	mgr      *files.Manager
 	rec      *events.Recorder
 	plansDir string
+	logs     *logBuffer
+}
+
+// logBuffer collects the handler's log output, debug level included. The
+// handler writes from its request goroutine, which the race detector cannot
+// order against the test reading after the HTTP response, hence the lock.
+type logBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *logBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *logBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 func newCaptureEnv(t *testing.T, pc config.PlanCapture) *captureEnv {
@@ -49,15 +73,17 @@ func newCaptureEnv(t *testing.T, pc config.PlanCapture) *captureEnv {
 
 	rec := events.NewRecorder(db)
 	ret := retrieve.New(db, nil, config.Budgets{MaxBriefingTokens: 1500, RecallBudgetTokens: 1000}, nil)
+	logs := &logBuffer{}
 	h := NewHandler(Config{
 		DB: db, Retrieve: ret, Events: rec, Files: mgr,
 		APIKey: testKey, PlanCapture: pc, PlansDir: plansDir,
+		Logger: slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	})
 	mux := http.NewServeMux()
 	h.Register(mux)
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
-	return &captureEnv{ts: ts, db: db, mgr: mgr, rec: rec, plansDir: plansDir}
+	return &captureEnv{ts: ts, db: db, mgr: mgr, rec: rec, plansDir: plansDir, logs: logs}
 }
 
 // startSession creates the ambient session the capture correlates against.

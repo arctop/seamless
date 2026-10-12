@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -155,9 +156,22 @@ func (h *Handler) captureSubagent(ctx context.Context, p subagentPayload) {
 	if !planning && p.PermissionMode != "plan" {
 		return
 	}
-	prompt, report := h.awaitSubagentReport(ctx, subagentTranscriptPath(p), p.AgentID)
+	path := subagentTranscriptPath(p)
+	// Claude Code also fires SubagentStop for agents that never write a
+	// transcript: no SubagentStart, no file anywhere, at turn cadence for as
+	// long as a plan stays unapproved (204 of them across two sessions on the
+	// machine this was diagnosed on). There is nothing to capture, and a WARN per
+	// stop buried the log, so only a transcript that exists and yields nothing
+	// earns a warning.
+	if _, err := os.Stat(path); path != "" && errors.Is(err, fs.ErrNotExist) {
+		h.logger.Debug("hooks: subagent left no transcript; nothing to capture",
+			"agent_id", p.AgentID, "agent_type", p.AgentType)
+		return
+	}
+	prompt, report := h.awaitSubagentReport(ctx, path, p.AgentID)
 	if prompt == "" && report == "" {
-		h.logger.Warn("hooks: subagent transcript unreadable or empty", "agent_id", p.AgentID)
+		h.logger.Warn("hooks: subagent transcript unreadable or empty",
+			"agent_id", p.AgentID, "agent_type", p.AgentType, "path", path)
 		return
 	}
 
@@ -290,13 +304,18 @@ func subagentSpawnPrompt(client Client, p subagentPayload) string {
 	return ""
 }
 
-// subagentTranscriptPath resolves the subagent's JSONL transcript: the payload
+// subagentTranscriptPath resolves the subagent's JSONL transcript: the
+// agent_transcript_path Claude Code's SubagentStop names, else the payload
 // transcript_path when it already names a subagents/agent-*.jsonl file, else
 // constructed from the main transcript path and agent id (the verified layout:
-// <proj-dir>/<session-id>/subagents/agent-<agent_id>.jsonl). An agent id
-// carrying path separators or ".." is rejected rather than joined into the
-// path -- it is a filename fragment, never a path.
+// <proj-dir>/<session-id>/subagents/agent-<agent_id>.jsonl; SubagentStart
+// carries no agent_transcript_path). An agent id carrying path separators or
+// ".." is rejected rather than joined into the path -- it is a filename
+// fragment, never a path.
 func subagentTranscriptPath(p subagentPayload) string {
+	if p.AgentTranscriptPath != "" {
+		return p.AgentTranscriptPath
+	}
 	if p.TranscriptPath == "" {
 		return ""
 	}

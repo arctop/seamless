@@ -190,10 +190,10 @@ type toolPayload struct {
 
 // subagentPayload is the normalized SubagentStart/SubagentStop shape. Both
 // clients name session_id as the PARENT session on both events; the child is
-// identified separately by agent_id. Codex SubagentStop also distinguishes the parent rollout
-// (transcript_path) from the child rollout (agent_transcript_path). Claude Code's
-// smaller SubagentStop payload decodes into the same shape with the Codex-only
-// fields left empty, preserving its plan-capture path.
+// identified separately by agent_id. Both clients' SubagentStop distinguishes the
+// parent transcript (transcript_path) from the child's (agent_transcript_path);
+// Claude Code's smaller payload leaves the Codex-only fields (turn_id, model)
+// empty, preserving its plan-capture path.
 type subagentPayload struct {
 	ParentSessionID      string       `json:"session_id"`
 	TurnID               string       `json:"turn_id"`

@@ -161,6 +161,11 @@ func TestSubagentBeforePlanAdoptedIntoComposition(t *testing.T) {
 	require.Nil(t, e.sessionPlanMeta(t)["pending_agents"])
 }
 
+// Claude Code fires SubagentStop for agents that never write a transcript, at
+// turn cadence while a plan is unapproved. Nothing is captured and nothing is
+// warned: the 204 WARNs those stops produced were the bulk of the daemon log.
+// (A transcript that exists but yields nothing is still a warning; exercising
+// it here would spend the full settle wait.)
 func TestSubagentCaptureMissingTranscriptFailsOpen(t *testing.T) {
 	e := newCaptureEnv(t, config.PlanCapture{Enabled: true, AutoTask: true})
 	e.startSession(t)
@@ -176,6 +181,32 @@ func TestSubagentCaptureMissingTranscriptFailsOpen(t *testing.T) {
 	_, found := e.loadNote(t, "cc-agent-ghost1")
 	require.False(t, found)
 	require.Empty(t, eventsOfKind(t, e.rec, core.EventSubagentCaptured))
+	require.NotContains(t, e.logs.String(), "level=WARN", e.logs.String())
+	require.Contains(t, e.logs.String(), "subagent left no transcript")
+	require.Contains(t, e.logs.String(), "agent_type=Explore")
+}
+
+// Claude Code's SubagentStop names the child transcript itself
+// (agent_transcript_path); that wins over the layout derived from the parent's
+// transcript_path, which here points nowhere.
+func TestSubagentCaptureUsesAgentTranscriptPath(t *testing.T) {
+	e := newCaptureEnv(t, config.PlanCapture{Enabled: true, AutoTask: true})
+	e.startSession(t)
+
+	path := e.writePlanFile(t, "clever-stallman", "# My Plan\n\nDo it.\n")
+	e.planWrite(t, "Write", path)
+
+	main := placeSubagentTranscript(t, "named1")
+	e.subagentStop(t, map[string]any{
+		"session_id": testSID, "cwd": "/work/demo", "permission_mode": "default",
+		"transcript_path":       filepath.Join(t.TempDir(), "elsewhere.jsonl"),
+		"agent_transcript_path": filepath.Join(strings.TrimSuffix(main, ".jsonl"), "subagents", "agent-named1.jsonl"),
+		"agent_id":              "named1", "agent_type": "Explore",
+	})
+
+	note, found := e.loadNote(t, "cc-agent-named1")
+	require.True(t, found)
+	require.Contains(t, note.Body, "## Report\n\nFinal report: the gardener has three passes.")
 }
 
 // Codex SubagentStop shares the parent session_id but is not a Claude planning
