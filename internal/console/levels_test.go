@@ -669,7 +669,7 @@ func TestLevelPost_RequiresSameOriginForCookies(t *testing.T) {
 
 // Settings -> Your setup: the facts a Basic owner can check and act on.
 func TestSetupSection_Facts(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	now := time.Now().UTC()

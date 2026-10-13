@@ -207,7 +207,7 @@ func TestOverview_StylesStayScopedAndStackResponsively(t *testing.T) {
 // the given level, over a fresh DB.
 func newHealthConsole(t *testing.T, lvl string, emb EmbeddingRuntime) (*sql.DB, *http.ServeMux) {
 	t.Helper()
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	svc, err := New(Config{
@@ -282,7 +282,7 @@ func TestOverview_AdvancedKeepsTheAnalyticsAndAQuietHealthLine(t *testing.T) {
 // An unknown fact is omitted, never printed as a zero: a fresh install with no
 // clients, no briefing, no version, and no embedder report shows no strip.
 func TestOverview_HealthStripOmitsUnknownFacts(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	svc, err := New(Config{DB: db, APIKey: testKey})

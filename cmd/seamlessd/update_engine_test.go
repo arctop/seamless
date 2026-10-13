@@ -694,7 +694,7 @@ func TestOutsideServiceCheck(t *testing.T) {
 
 func TestAutoUpdateAllowed(t *testing.T) {
 	dataDir := t.TempDir()
-	db, err := store.Open(filepath.Join(dataDir, "seam.db"))
+	db, err := updateTestDB(t, filepath.Join(dataDir, "seam.db"))
 	require.NoError(t, err)
 	off := false
 	cfg := config.Defaults()

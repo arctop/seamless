@@ -128,7 +128,7 @@ func releaseStatus(now time.Time) update.Status {
 // update block the fake's Refresh merges the stored override over.
 func newUpdatesConsole(t *testing.T, base config.Update, st *update.Status) (*sql.DB, *http.ServeMux, *fakeUpdates) {
 	t.Helper()
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	cfg := Config{DB: db, Events: events.NewRecorder(db), APIKey: testKey, Level: "basic", Version: "0.7.2"}

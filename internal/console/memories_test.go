@@ -16,7 +16,6 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
-	"github.com/arctop/seamless/internal/store"
 )
 
 // newConsoleWithFiles builds a console backed by a real files.Manager over a
@@ -26,7 +25,7 @@ import (
 func newConsoleWithFiles(t *testing.T) (*sql.DB, *files.Manager, *http.ServeMux) {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := openFreshDB(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

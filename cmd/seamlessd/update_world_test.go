@@ -31,7 +31,6 @@ import (
 
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
-	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/update"
 )
 
@@ -178,7 +177,7 @@ func newWorld(t *testing.T, goos, goarch, from string) *world {
 	require.NoError(t, os.WriteFile(w.exe, []byte("seamlessd "+from+"\n"), 0o755))
 
 	// The daemon's database, migrated by "the running release".
-	db, err := store.Open(filepath.Join(w.dataDir, "seam.db"))
+	db, err := updateTestDB(t, filepath.Join(w.dataDir, "seam.db"))
 	require.NoError(t, err)
 	require.NoError(t, db.Close())
 

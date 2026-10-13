@@ -31,7 +31,7 @@ func (e fixedEmbedder) Embed(context.Context, string) ([]float32, error) { retur
 // the semantic leg live.
 func newSemanticConsole(t *testing.T, vec []float32) (*sql.DB, *http.ServeMux) {
 	t.Helper()
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

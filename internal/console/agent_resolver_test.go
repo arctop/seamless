@@ -20,7 +20,7 @@ import (
 // exercise unexported methods directly rather than going through the mux.
 func newTestService(t *testing.T) (*sql.DB, *Service) {
 	t.Helper()
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	svc, err := New(Config{
