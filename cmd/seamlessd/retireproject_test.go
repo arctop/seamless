@@ -93,6 +93,42 @@ func TestRetireProject_RefusesWhileInUse(t *testing.T) {
 	}
 }
 
+// The remedy printed for another host's mapping names a --host/--path pair that
+// unmap-repo accepts and finds, whichever OS this daemon runs and whichever OS
+// the client does: each path is shown as the client sent it, and resolves as
+// shown.
+func TestRetireProject_RemoteRemediesResolve(t *testing.T) {
+	db := openRetireTestDB(t)
+	ctx := context.Background()
+	sent := map[string]string{
+		"beta":   "/elsewhere/app",
+		"winbox": `C:\repos\app`,
+		"uncbox": `\\srv\share\app`,
+	}
+	for _, host := range []string{"beta", "winbox", "uncbox"} {
+		slug, _, err := store.RegisterProjectForCWD(ctx, db, store.CWDIdentity{
+			Host: host, CWD: sent[host], RepoRoot: sent[host],
+		}, "alpha")
+		require.NoError(t, err)
+		require.Equal(t, "app", slug, "the same repo on another device joins the project")
+	}
+
+	var out bytes.Buffer
+	err := retireProject(ctx, db, &out, "app", false, true, time.Now())
+	require.ErrorIs(t, err, errProjectInUse)
+	rows, err := store.RepoMapRows(ctx, db)
+	require.NoError(t, err)
+	require.Len(t, rows, len(sent))
+	for _, r := range rows {
+		require.Equal(t, sent[r.Host], r.Path, "stored as the client sent it")
+		require.Contains(t, out.String(), "seamlessd unmap-repo --host "+r.Host+" --path "+r.Path+"`")
+		targets, err := unmapTargets(ctx, db, r.Path, false, r.Host)
+		require.NoError(t, err, r.Path)
+		require.Len(t, targets, 1)
+		require.Equal(t, r.Host, targets[0].Host)
+	}
+}
+
 func TestRetireProject_RetireAndUndo(t *testing.T) {
 	db := openRetireTestDB(t)
 	ctx := context.Background()

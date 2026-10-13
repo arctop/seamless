@@ -149,17 +149,16 @@ jobs:
           skip=
           if [ "$RUNNER_OS" = Windows ]; then
             # Tests that fail on every Windows host for a reason unrelated to
-            # the OS code above, found by the 2026-10-09 pre-flight of this
-            # job (Windows 11, go1.26.9). Delete a name when its fix lands; a
-            # name left here after its fix just stays skipped.
-            known_windows_failures=(
-              # A product bug, not a test bug: a Windows daemon rewrites another
-              # host's POSIX path (/elsewhere/app becomes \elsewhere\app) and
-              # unmap-repo --host refuses it as not absolute.
-              TestRetireProject_RefusesWhileInUse
-              TestUnmapTargets
-            )
-            skip=$(IFS='|'; printf '^(%s)$' "${known_windows_failures[*]}")
+            # the OS code above, each with that reason. Delete a name when its
+            # fix lands; a name left here after its fix just stays skipped.
+            # Empty since the last two from the 2026-10-09 pre-flight of this
+            # job (Windows 11, go1.26.9) were fixed: a Windows daemon now
+            # keeps another host's POSIX paths as they are. An empty list
+            # skips nothing, exactly like the macOS run.
+            known_windows_failures=()
+            if [ "${#known_windows_failures[@]}" -gt 0 ]; then
+              skip=$(IFS='|'; printf '^(%s)$' "${known_windows_failures[*]}")
+            fi
           fi
           go test -count=1 -skip "$skip" ./cmd/seamlessd ./internal/update ./internal/agentproc
 

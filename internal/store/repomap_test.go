@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"os"
+	pathpkg "path"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -384,6 +386,153 @@ func TestPathHasPrefix_BothSeparators(t *testing.T) {
 	require.True(t, pathHasPrefix("/a/b", "/a/b"))
 	require.False(t, pathHasPrefix("/a/bc", "/a/b"))
 	require.False(t, pathHasPrefix(`C:\a\bc`, `C:\a\b`))
+}
+
+// normPath follows the path's shape, so another host's path keeps its own form
+// whichever OS the daemon runs. The Windows-shaped normalizer is the one that
+// used to turn a POSIX client's "/elsewhere/app" into "\elsewhere\app".
+func TestNormPathWith_PathShapes(t *testing.T) {
+	// windowsClean stands in for filepath.Clean on a Windows daemon, for the
+	// backslash-free paths normPathWith hands it: cleaned, with forward slashes
+	// turned into backslashes.
+	windowsClean := func(p string) string { return strings.ReplaceAll(pathpkg.Clean(p), "/", `\`) }
+	posixClean := pathpkg.Clean // filepath.Clean on a POSIX daemon
+
+	for _, tc := range []struct {
+		name, in, posix, windows string
+	}{
+		{"empty", "", "", ""},
+		{"blank", "   ", "", ""},
+		{"POSIX path", "/elsewhere/app", "/elsewhere/app", "/elsewhere/app"},
+		{"POSIX trailing slash", "/elsewhere/app/", "/elsewhere/app", "/elsewhere/app"},
+		{"POSIX unclean", " /elsewhere//x/../app ", "/elsewhere/app", "/elsewhere/app"},
+		{"POSIX root", "/", "/", "/"},
+		{"Windows drive path", `C:\repos\app\`, `C:\repos\app`, `C:\repos\app`},
+		{"UNC path", `\\srv\share\app\`, `\\srv\share\app`, `\\srv\share\app`},
+		{"drive path, forward slashes", "C:/repos/app/", "C:/repos/app", `C:\repos\app`},
+		{"relative", "a/b/", "a/b", `a\b`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.posix, normPathWith(posixClean, tc.in), "POSIX daemon")
+			require.Equal(t, tc.windows, normPathWith(windowsClean, tc.in), "Windows daemon")
+		})
+	}
+
+	// And through this daemon's real filepath.Clean, whatever OS runs the test.
+	require.Equal(t, "/elsewhere/app", NormRepoPath("/elsewhere/app/"))
+	require.Equal(t, `C:\repos\app`, NormRepoPath(`C:\repos\app\`))
+}
+
+// IsAbsRepoPath answers for whichever OS the path came from, not this one's.
+func TestIsAbsRepoPath(t *testing.T) {
+	for in, want := range map[string]bool{
+		"/elsewhere/app":   true,
+		" /elsewhere/app ": true,
+		`C:\repos\app`:     true,
+		"c:/repos/app":     true,
+		`\\srv\share\app`:  true,
+		"//srv/share/app":  true,
+		"/":                true,
+		"":                 false,
+		"elsewhere/app":    false,
+		`elsewhere\app`:    false,
+		`\repos\app`:       false, // driveless: relative to a current drive
+		"C:repos":          false, // drive-relative
+		"C:":               false,
+		`1:\repos`:         false,
+		"~/app":            false,
+	} {
+		require.Equal(t, want, IsAbsRepoPath(in), in)
+	}
+}
+
+// A POSIX client's paths are stored and matched as POSIX paths on every daemon,
+// including a Windows one.
+func TestRegisterProjectForCWD_RemotePOSIXPathKeepsItsShape(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	require.NoError(t, AdoptLocalHost(ctx, db, "alpha"))
+
+	slug, _, err := RegisterProjectForCWD(ctx, db, CWDIdentity{
+		Host: "beta", CWD: "/elsewhere/app/pkg", RepoRoot: "/elsewhere/app/",
+	}, "alpha")
+	require.NoError(t, err)
+	require.Equal(t, "app", slug)
+
+	rows, err := RepoMapRows(ctx, db)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "/elsewhere/app", rows[0].Path)
+
+	got, err := ResolveProjectForCWD(ctx, db, "beta", "/elsewhere/app/pkg/sub")
+	require.NoError(t, err)
+	require.Equal(t, "app", got)
+
+	removed, err := RemoveHostRepoMappings(ctx, db, "beta", []string{"/elsewhere/app/"})
+	require.NoError(t, err)
+	require.Len(t, removed, 1)
+}
+
+// A Windows daemon before the normPath fix stored a POSIX client's
+// "/elsewhere/app" as "\elsewhere\app". Adoption gives such rows their slashes
+// back, so the client's next session resolves its project instead of minting
+// app-2. Only another host's single-leading-backslash rows are touched: a
+// Windows client's drive and UNC paths, and every row of this machine's own,
+// stay as they are.
+func TestAdoptLocalHost_ReshapesMangledPOSIXRows(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	require.NoError(t, AdoptLocalHost(ctx, db, "alpha"))
+	ts := core.FormatTime(time.Now().UTC())
+	insert := func(host, path, slug, origin string) {
+		t.Helper()
+		_, err := db.ExecContext(ctx, `
+			INSERT INTO repo_map (host, path, slug, origin, created_at)
+			VALUES (?, ?, ?, ?, ?)`, host, path, slug, origin, ts)
+		require.NoError(t, err)
+	}
+	insert("beta", `\elsewhere\app`, "app", "git@github.com:acme/app.git")
+	insert("beta", `\`, "root", "")
+	// The same repo in both shapes: the row already in the right shape wins.
+	insert("gamma", `\srv\api`, "api-old", "")
+	insert("gamma", "/srv/api", "api", "")
+	// A Windows client's paths, and this machine's own rows, are not mangled.
+	insert("winbox", `C:\repos\win`, "win", "")
+	insert("winbox", `\\srv\share\unc`, "unc", "")
+	insert("alpha", `\local\odd`, "local-odd", "")
+	insert("", `\unnamed\odd`, "unnamed-odd", "") // re-homed to alpha, then left alone
+
+	type hp struct{ host, path, slug, origin string }
+	want := []hp{
+		{"alpha", `\local\odd`, "local-odd", ""},
+		{"alpha", `\unnamed\odd`, "unnamed-odd", ""},
+		{"beta", "/", "root", ""},
+		{"beta", "/elsewhere/app", "app", "git@github.com:acme/app.git"},
+		{"gamma", "/srv/api", "api", ""},
+		{"winbox", `C:\repos\win`, "win", ""},
+		{"winbox", `\\srv\share\unc`, "unc", ""},
+	}
+	check := func() {
+		t.Helper()
+		rows, err := RepoMapRows(ctx, db)
+		require.NoError(t, err)
+		got := make([]hp, len(rows))
+		for i, r := range rows {
+			got[i] = hp{r.Host, r.Path, r.Slug, r.Origin}
+		}
+		require.Equal(t, want, got)
+	}
+	require.NoError(t, AdoptLocalHost(ctx, db, "alpha"))
+	check()
+	require.NoError(t, AdoptLocalHost(ctx, db, "alpha"))
+	check() // idempotent
+
+	slug, _, err := RegisterProjectForCWD(ctx, db, CWDIdentity{
+		Host: "beta", CWD: "/elsewhere/app/pkg", RepoRoot: "/elsewhere/app",
+	}, "alpha")
+	require.NoError(t, err)
+	require.Equal(t, "app", slug, "the reshaped row resolves; nothing is minted")
+	check()
 }
 
 // RemoveRepoMappings drops the local row AND its mirror entry, and the removal

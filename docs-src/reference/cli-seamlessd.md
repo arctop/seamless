@@ -523,7 +523,7 @@ exactly one of the two.
 |---|---|---|
 | `--path` | - | The repo root whose mapping to remove. Unmapped on this machine is an error, and nothing is removed. |
 | `--stale` | `false` | Remove every local mapping whose path is gone. Only a clean "does not exist" counts; a path that cannot be stat'd for another reason is kept. |
-| `--host` | this machine | With `--path`: remove that host's mapping instead. The path must be absolute. Not valid with `--stale`. |
+| `--host` | this machine | With `--path`: remove that host's mapping instead. The path must be absolute on that host, whatever this machine runs: `/home/me/app`, `C:\repos\app` and `\\server\share\app` all work. Not valid with `--stale`. |
 | `--dry-run` | `false` | Print what would be removed and change nothing. |
 
 Only the route goes. The project stays, with its memories, notes and tasks,

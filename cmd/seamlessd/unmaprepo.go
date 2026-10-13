@@ -137,19 +137,23 @@ func unmapTargets(ctx context.Context, db *sql.DB, path string, stale bool, host
 
 // remoteUnmapTargets is unmapTargets for another host. The path is that
 // machine's, so it must already be absolute: resolving a relative one against
-// this machine's working directory would name a path on the wrong disk.
+// this machine's working directory would name a path on the wrong disk. That
+// machine's OS need not be this one's, so absolute means absolute on some OS
+// (store.IsAbsRepoPath), and paths compare through the store's own
+// normalization: filepath judges and cleans by this machine's rules, which
+// refuse "/home/me/app" on Windows and "C:\repos\app" elsewhere.
 func remoteUnmapTargets(ctx context.Context, db *sql.DB, host, path string) ([]store.RepoMapRow, error) {
-	if !filepath.IsAbs(path) {
+	if !store.IsAbsRepoPath(path) {
 		return nil, fmt.Errorf("--path must be absolute with --host: %q is a path on %s, not here", path, host)
 	}
-	want := filepath.Clean(path)
+	want := store.NormRepoPath(path)
 	rows, err := store.RepoMapRows(ctx, db)
 	if err != nil {
 		return nil, err
 	}
 	var out []store.RepoMapRow
 	for _, r := range rows {
-		if r.Host == host && filepath.Clean(r.Path) == want {
+		if r.Host == host && store.NormRepoPath(r.Path) == want {
 			out = append(out, r)
 		}
 	}

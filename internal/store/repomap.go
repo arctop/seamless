@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -107,12 +108,14 @@ type repoMapExecutor interface {
 // same bucket. It runs at startup, after store.Open and before anything reads
 // the map, and is idempotent.
 //
-// Three things happen, in order: sessions still carrying the empty host become
+// Four things happen, in order: sessions still carrying the empty host become
 // this machine's; repo_map rows in the unnamed bucket are re-homed here (a
 // mapping written by a seeder or a `map-repo` that ran before the daemon ever
-// did); and the legacy repo_project_map JSON is imported as this host's rows.
-// The mirror is then rewritten from those rows, so the console and doctor --
-// which still read the JSON until Phase 2 -- see exactly the local view.
+// did); other hosts' POSIX paths that an older Windows daemon stored with
+// backslashes get their slashes back (reshapeMangledPOSIXRows); and the legacy
+// repo_project_map JSON is imported as this host's rows. The mirror is then
+// rewritten from those rows, so the console and doctor -- which still read the
+// JSON until Phase 2 -- see exactly the local view.
 //
 // An empty host (an unreadable hostname) adopts nothing and re-homes nothing:
 // "" already IS the unnamed bucket, and claiming rows for a machine that cannot
@@ -143,6 +146,9 @@ func AdoptLocalHost(ctx context.Context, db *sql.DB, host string) error {
 			return fmt.Errorf("store.AdoptLocalHost: re-home cleanup: %w", err)
 		}
 	}
+	if err := reshapeMangledPOSIXRows(ctx, tx, host); err != nil {
+		return fmt.Errorf("store.AdoptLocalHost: %w", err)
+	}
 
 	mirror, err := repoMapMirror(ctx, tx)
 	if err != nil {
@@ -169,6 +175,35 @@ func AdoptLocalHost(ctx context.Context, db *sql.DB, host string) error {
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("store.AdoptLocalHost: commit: %w", err)
+	}
+	return nil
+}
+
+// mangledPOSIXRow selects another host's row whose path is a POSIX path a
+// Windows daemon rewrote with backslashes: until 2026-10 normPath ran every
+// backslash-free path through filepath.Clean, so a Linux or macOS client's
+// "/home/me/app" was stored as "\home\me\app". The shape cannot come from a
+// client -- a POSIX one sends "/...", a Windows one a drive or UNC path -- so a
+// single leading backslash is the mangling and nothing else. "" and the local
+// host are excluded: those rows are this machine's own, never a client's.
+const mangledPOSIXRow = `host NOT IN ('', ?) AND substr(path, 1, 1) = '\' AND substr(path, 2, 1) <> '\'`
+
+// reshapeMangledPOSIXRows turns every mangledPOSIXRow back into the POSIX path
+// its client sent. Left alone, such a row never matches that client's cwd again
+// (normPath now keeps "/home/me/app" as it is), so its next session would mint a
+// -N project beside the one it already has. Idempotent: a reshaped row no longer
+// matches. INSERT OR IGNORE first, like the re-home, so a row already stored in
+// the right shape keeps its own slug and origin.
+func reshapeMangledPOSIXRows(ctx context.Context, tx *sql.Tx, localHost string) error {
+	if _, err := tx.ExecContext(ctx, `
+		INSERT OR IGNORE INTO repo_map (host, path, slug, origin, created_at)
+		     SELECT host, replace(path, '\', '/'), slug, origin, created_at
+		       FROM repo_map WHERE `+mangledPOSIXRow, localHost); err != nil {
+		return fmt.Errorf("reshape POSIX paths: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM repo_map WHERE `+mangledPOSIXRow, localHost); err != nil {
+		return fmt.Errorf("reshape POSIX paths: cleanup: %w", err)
 	}
 	return nil
 }
@@ -683,14 +718,52 @@ func pathHasPrefix(path, prefix string) bool {
 	return false
 }
 
-// normPath is filepath.Clean for a path shaped like this daemon's own, and a
-// trailing-separator trim for one that is not. A Windows path arriving at a
-// POSIX daemon must not be run through filepath.Clean: it would leave the
-// backslashes alone while treating the whole string as one segment, which is
-// worse than not normalizing at all. Case is NOT folded -- Windows path
-// comparison is case-insensitive and this is not, which is a known Phase 1 limit
-// rather than an oversight.
-func normPath(p string) string {
+// NormRepoPath is the normalization every repo-map comparison and every stored
+// row goes through. It is exported so a caller matching a path against
+// RepoMapRows (unmap-repo --host) compares exactly as the store does instead of
+// restating the rules.
+func NormRepoPath(p string) string { return normPath(p) }
+
+// IsAbsRepoPath reports whether p is absolute on SOME operating system: a POSIX
+// path ("/home/me/app"), a Windows drive path ("C:\repos\app", "C:/repos/app")
+// or a UNC path ("\\srv\share\app"). It is the test for a path naming a
+// directory on another machine, which filepath.IsAbs cannot make: that judges by
+// this machine's rules, so a Windows daemon refuses "/home/me/app" and a POSIX
+// one refuses "C:\repos\app". A driveless "\repos\app" is relative to a current
+// drive, and is refused like any relative path.
+func IsAbsRepoPath(p string) bool {
+	p = strings.TrimSpace(p)
+	switch {
+	case strings.HasPrefix(p, "/"), strings.HasPrefix(p, `\\`):
+		return true
+	case len(p) >= 3 && p[1] == ':' && (p[2] == '\\' || p[2] == '/'):
+		c := p[0] | 0x20 // ASCII lower case
+		return c >= 'a' && c <= 'z'
+	}
+	return false
+}
+
+// normPath puts a repo path in its one comparable form. The rule follows the
+// path's own shape, not just this daemon's OS, because a shared daemon stores
+// paths from machines that are not it:
+//
+//   - A POSIX absolute path ("/home/me/app") is path.Clean'd, on every daemon.
+//     filepath.Clean on a Windows daemon would rewrite it to "\home\me\app", a
+//     path that exists on no machine.
+//   - A path containing a backslash is a Windows client's ("C:\repos\app",
+//     "\\srv\share\app"), and only loses its trailing separators. filepath.Clean
+//     on a POSIX daemon would keep the backslashes while treating the whole
+//     string as one segment, which is worse than not normalizing at all.
+//   - Anything else -- "C:/repos/app", a "//srv/share" UNC path, a relative
+//     path -- is shaped like this daemon's own and is filepath.Clean'd.
+//
+// Case is NOT folded -- Windows path comparison is case-insensitive and this is
+// not, which is a known Phase 1 limit rather than an oversight.
+func normPath(p string) string { return normPathWith(filepath.Clean, p) }
+
+// normPathWith is normPath with this daemon's own Clean injected, so a test on
+// any OS can run the rules as a Windows daemon applies them.
+func normPathWith(ownClean func(string) string, p string) string {
 	p = strings.TrimSpace(p)
 	if p == "" {
 		return ""
@@ -701,7 +774,10 @@ func normPath(p string) string {
 		}
 		return p
 	}
-	return filepath.Clean(p)
+	if p[0] == '/' && !strings.HasPrefix(p, "//") {
+		return pathpkg.Clean(p)
+	}
+	return ownClean(p)
 }
 
 // lastSegment is the final path element of p, splitting on BOTH separators so a

@@ -58,6 +58,25 @@ func TestUnmapTargets(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrRepoMappingNotFound)
 	_, err = unmapTargets(ctx, db, "elsewhere/app", false, "beta")
 	require.ErrorContains(t, err, "must be absolute")
+
+	// Absolute means absolute on THAT host's OS, whatever this one runs: a
+	// Windows client's drive and UNC paths are accepted and found here too. A
+	// driveless "\repos\app" is relative to a current drive, so it is refused.
+	for _, root := range []string{`C:\repos\app`, `\\srv\share\app`} {
+		_, _, err = store.RegisterProjectForCWD(ctx, db, store.CWDIdentity{
+			Host: "winbox", CWD: root, RepoRoot: root,
+		}, "alpha")
+		require.NoError(t, err)
+	}
+	for _, p := range []string{`C:\repos\app`, `C:\repos\app\`, `\\srv\share\app`} {
+		targets, err = unmapTargets(ctx, db, p, false, "winbox")
+		require.NoError(t, err, p)
+		require.Len(t, targets, 1, p)
+		require.Equal(t, "winbox", targets[0].Host)
+	}
+	_, err = unmapTargets(ctx, db, `\repos\app`, false, "winbox")
+	require.ErrorContains(t, err, "must be absolute")
+
 	targets, err = unmapTargets(ctx, db, present, false, "alpha")
 	require.NoError(t, err)
 	require.Len(t, targets, 1)
