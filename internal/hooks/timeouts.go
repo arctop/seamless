@@ -19,10 +19,12 @@ const anyHTTPSBaseURL = "https://localhost"
 //
 // It exists for the seam CLI's test, like CommandHookEndpoints. The CLI sets
 // how long each hook re-dials a daemon it cannot dial, per event and client
-// (cmd/seam/hook.go hookEvents and hookClientDialBudgets), and cannot import
-// this package to read the timeouts that budget must fit inside, so its test
-// pins each client's budget at or under half of that client's timeout here: a
-// hook whose dials are all refused then fails open on its own, well before its
+// (cmd/seam/hook.go hookEvents and hookClientDialBudgets), and when it gives
+// up altogether (each event's deadline), and cannot import this package to
+// read the timeouts both must fit inside. So its tests pin each client's
+// budget at or under half of that client's timeout here, and each deadline at
+// least hookDeadlineMargin under it: a hook whose daemon cannot be reached,
+// whether its dials are refused or hang, then fails open on its own before its
 // client kills it.
 func CommandHookTimeouts(client Client) (map[string]time.Duration, error) {
 	_, profile, err := resolveHookProfile(client)

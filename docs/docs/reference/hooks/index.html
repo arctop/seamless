@@ -493,7 +493,11 @@ failure. Only a bad bearer key (401) or an unknown <code>?client=</code> discrim
 <p>The same contract runs client-side. <code>seam hook &lt;event&gt;</code> reports a failure to
 stderr and exits 0 - a server that is down, a config that will not load, an
 unreadable stdin, all produce exit 0. Only a misconfigured event name or
-<code>--client</code> value (an install bug, not a runtime condition) is a hard error.</p>
+<code>--client</code> value (an install bug, not a runtime condition) is a hard error.
+Each hook also gives up 1s before its client would kill it - at 4s on
+<code>UserPromptSubmit</code>, 9s on the rest - so a server that never answers, such as
+one on a LAN the laptop has left, where a dial hangs rather than being
+refused, still ends in a quiet exit 0 rather than a hook-timeout warning.</p>
 <p>Plan and subagent capture are best-effort under the same rule: a capture problem
 is logged and the hook still acks 200.</p>
 <p>The consequence is that <strong>hook failure is silent</strong>. A stopped daemon, a bad key,

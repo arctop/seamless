@@ -23,12 +23,14 @@ import (
 // fakeClock stands in for dialRetry's clock. wait returns at once and moves now
 // forward by the wait it was asked for, so a test spends none of a real budget.
 // onWait runs inside the n-th wait (1-based): the moment a test brings a daemon
-// back.
+// back. deadline is the real deadline of the context the last wait ran under,
+// zero for none: the request's own, which the fake clock does not move.
 type fakeClock struct {
-	mu     sync.Mutex
-	t      time.Time
-	waits  []time.Duration
-	onWait func(n int)
+	mu       sync.Mutex
+	t        time.Time
+	waits    []time.Duration
+	deadline time.Time
+	onWait   func(n int)
 }
 
 func (c *fakeClock) now() time.Time {
@@ -41,6 +43,7 @@ func (c *fakeClock) wait(ctx context.Context, d time.Duration) error {
 	c.mu.Lock()
 	c.t = c.t.Add(d)
 	c.waits = append(c.waits, d)
+	c.deadline, _ = ctx.Deadline()
 	n := len(c.waits)
 	c.mu.Unlock()
 	if c.onWait != nil {
@@ -61,6 +64,12 @@ func (c *fakeClock) recorded() []time.Duration {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return append([]time.Duration(nil), c.waits...)
+}
+
+func (c *fakeClock) lastDeadline() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.deadline
 }
 
 func (c *fakeClock) waited() time.Duration {

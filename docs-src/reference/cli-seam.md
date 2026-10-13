@@ -474,12 +474,17 @@ Two behaviours matter if you are debugging a hook:
 
 - **Failures do not block the session.** A missing config, an unreachable
   daemon, or an unreadable stdin is reported on stderr and exits 0. A daemon
-  that cannot be dialed - restarting after an update - is retried first, inside
-  the hook's 10s overall deadline: for up to 5s, or 1s on `user-prompt-submit`,
-  `stop` and Codex's `subagent-stop`, where losing one to a restart costs a
-  single prompt's recall or a heartbeat the next turn repeats. A payload that
-  may already have reached it is never sent twice. An unknown event name or present-but-invalid `--client` value is an install/configuration
-  bug and exits 1; it never silently becomes Claude Code.
+  that cannot be dialed - restarting after an update - is retried first: for up
+  to 5s, or 1s on `user-prompt-submit`, `stop` and Codex's `subagent-stop`,
+  where losing one to a restart costs a single prompt's recall or a heartbeat
+  the next turn repeats. A payload that may already have reached it is never
+  sent twice. Whatever the network does - a dial that hangs because the
+  server's host drops packets, a daemon that accepts the request and never
+  answers - the hook gives up 1s inside the timeout its client gives it: at 4s
+  on `user-prompt-submit`, which Codex, and Claude Code on an https install,
+  kill at 5s, and at 9s on every other event. An unknown event name or
+  present-but-invalid `--client` value is an install/configuration bug and
+  exits 1; it never silently becomes Claude Code.
 - **`post-tool-use` pre-filters locally.** It fires machine-wide on every
   `Write`/`Edit`, so the CLI drops everything that is not an `ExitPlanMode`
   approval or a write to a file directly under `~/.claude/plans` before loading

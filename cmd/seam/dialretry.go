@@ -60,7 +60,8 @@ var errNotSent = errors.New("request not sent")
 type dialRetry struct {
 	// budget is how long after the first attempt a retry may still START. An
 	// attempt in flight when it runs out ends on its own dial timeout
-	// (config.DialTimeout); a refused dial ends at once.
+	// (config.DialTimeout) or at the request context's deadline, whichever
+	// comes first; a refused dial ends at once.
 	budget time.Duration
 	// backoff is the wait before retry n (1-based), cut to what is left of the
 	// budget.

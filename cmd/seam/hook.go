@@ -13,6 +13,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -30,13 +31,17 @@ import (
 )
 
 // hookEvent is one event seam forwards: the `seam hook` argument, the endpoint
-// it posts to, and how long it re-dials a daemon it cannot dial.
+// it posts to, how long it re-dials a daemon it cannot dial, and how long the
+// whole hook may take.
 type hookEvent struct {
 	event    string
 	endpoint string
 	// dialBudget is hookFullDialBudget or hookShortDialBudget: every client's,
 	// unless hookClientDialBudgets overrides it for one (see dialBudgetFor).
 	dialBudget time.Duration
+	// deadline is hookDeadline or hookPromptDeadline, for every client: each
+	// gives an event the same timeout.
+	deadline time.Duration
 }
 
 // hookEvents is every event seam forwards. A slice rather than a map: it is the
@@ -47,9 +52,9 @@ type hookEvent struct {
 // CLI cannot import that package -- it would drag the store, the retriever, and
 // SQLite into a binary whose job is one HTTP POST -- so hook_test.go pins this
 // copy against them instead: each endpoint against the one the installer wires,
-// and each client's dial budget against the timeout that client gives the hook.
-// That pin is load-bearing: because a hook fails open, drift here is a silent
-// no-op rather than an error.
+// and each client's dial budget and each deadline against the timeout that
+// client gives the hook. That pin is load-bearing: because a hook fails open,
+// drift here is a silent no-op rather than an error.
 //
 // user-prompt-submit is the one event whose shape follows the transport: on an
 // http base URL the installer wires it as an http hook (reliable mid-turn), and
@@ -57,16 +62,16 @@ type hookEvent struct {
 // lands in settings.json. seam has always accepted the command form, so it stays
 // either way.
 var hookEvents = []hookEvent{
-	{"session-start", "/api/hooks/session-start", hookFullDialBudget},
-	{"user-prompt-submit", "/api/hooks/user-prompt-submit", hookShortDialBudget},
-	{"session-end", "/api/hooks/session-end", hookFullDialBudget},
-	{"post-tool-use", "/api/hooks/post-tool-use", hookFullDialBudget},
-	{"subagent-start", "/api/hooks/subagent-start", hookFullDialBudget},
-	{"subagent-stop", "/api/hooks/subagent-stop", hookFullDialBudget},
-	{"permission-request", "/api/hooks/permission-request", hookFullDialBudget},
+	{"session-start", "/api/hooks/session-start", hookFullDialBudget, hookDeadline},
+	{"user-prompt-submit", "/api/hooks/user-prompt-submit", hookShortDialBudget, hookPromptDeadline},
+	{"session-end", "/api/hooks/session-end", hookFullDialBudget, hookDeadline},
+	{"post-tool-use", "/api/hooks/post-tool-use", hookFullDialBudget, hookDeadline},
+	{"subagent-start", "/api/hooks/subagent-start", hookFullDialBudget, hookDeadline},
+	{"subagent-stop", "/api/hooks/subagent-stop", hookFullDialBudget, hookDeadline},
+	{"permission-request", "/api/hooks/permission-request", hookFullDialBudget, hookDeadline},
 	// Codex-only: its per-turn end signal (heartbeat + provisional harvest). Codex
 	// has no SessionEnd, so the codex install profile wires `seam hook stop`.
-	{"stop", "/api/hooks/stop", hookShortDialBudget},
+	{"stop", "/api/hooks/stop", hookShortDialBudget, hookDeadline},
 }
 
 // hookClientDialBudget gives one client its own dial budget for one event.
@@ -150,14 +155,37 @@ var hookClients = []string{hookClientClaudeCode, hookClientCodex}
 // for.
 var hookIdentityParams = []string{"host", "repo_root", "main_root", "origin", "agent_process"}
 
-// hookTimeout bounds a hook's whole forward: every attempt, the waits between
-// them, and relaying the reply. It was the one attempt's whole-request deadline
-// before the dial retry existed, and it is still the hook's worst case: the
-// retry spends from it rather than adding to it. A client may kill a hook
-// sooner -- Codex, and Claude Code on an https install, kill
-// user-prompt-submit at 5s -- which is why the dial budgets below are sized
-// against each client's timeout rather than this one.
-const hookTimeout = 10 * time.Second
+// The deadlines: how long a hook may take in all, whatever the network does,
+// before it gives up and fails open. A client kills a hook that outlives the
+// timeout it gives it -- a timeout warning in place of a quiet fail-open, on
+// every prompt in user-prompt-submit's case -- so each deadline sits
+// hookDeadlineMargin under the timeout every client gives that event
+// (hook_test.go pins it against internal/hooks): 10s for every command hook
+// but user-prompt-submit, which Codex, and Claude Code on an https install,
+// kill at 5s.
+//
+// A deadline covers everything the hook does from the moment it knows its
+// event: reading the payload, loading config, every attempt and the waits
+// between them, and relaying the reply. The retry spends from it rather than
+// adding to it. The dial budgets below cannot stand in for it, because a budget
+// bounds when the last attempt may START. A dial to a host that drops packets
+// -- a client machine away from the LAN its server is on -- hangs until
+// config.DialTimeout (5s) unless the deadline ends the request first, and a
+// daemon that accepts and then says nothing hangs for as long as it likes. At
+// the deadline the request returns; net/http lets a dial still in flight run on
+// in the background, detached from the request, and this process's exit ends
+// it.
+//
+// The margin is the part of the client's clock the deadline cannot see:
+// starting this process before runHook runs, and exiting it after. Measured on
+// macOS, that is about 10ms, and 0.2s more the first time a new binary runs (as
+// it does after an update), so a second leaves room for a loaded machine and
+// for a Codex hook's shell.
+const (
+	hookDeadlineMargin = time.Second
+	hookDeadline       = 10*time.Second - hookDeadlineMargin
+	hookPromptDeadline = 5*time.Second - hookDeadlineMargin
+)
 
 // The dial budgets: how long a hook re-dials a daemon that cannot be dialed
 // (dialretry.go) before it fails open. Each event takes one in hookEvents, and
@@ -180,8 +208,11 @@ const hookTimeout = 10 * time.Second
 //
 // Each budget is at most half the timeout its client gives that hook
 // (hook_test.go pins it against internal/hooks), so a hook whose dials are all
-// refused gives up well before its client kills it, and an attempt that
-// connects at the end of the budget still has the other half to be served.
+// refused -- a daemon that is down on a host that answers -- fails open well
+// before its deadline. A dial that hangs is the deadline's to end, not the
+// budget's. An attempt that connects at the end of its budget still has the
+// rest of its deadline, at least 3s, to be served: more than the 2s the daemon
+// gives itself to assemble a briefing or a recall.
 const (
 	hookFullDialBudget  = 5 * time.Second
 	hookShortDialBudget = time.Second
@@ -195,6 +226,11 @@ type hookOpts struct {
 	// retry builds the dial-retry policy for the event's budget. Not a flag: nil
 	// is newDialRetry; tests pass a fake clock's policy.
 	retry func(budget time.Duration) *dialRetry
+	// httpClient builds the client the payload is sent through. Not a flag: nil
+	// is cfg.HTTPClient(0), the one constructor for a dial that carries the
+	// bearer key (constraint seamless-http-client-is-config-httpclient); a test
+	// replaces that client's dialer with one that hangs.
+	httpClient func(cfg config.Config) (*http.Client, error)
 }
 
 // bindHook registers --config and --client. install-hooks writes --config into
@@ -218,7 +254,9 @@ func bindHook(fs *flag.FlagSet) *hookOpts {
 // that parse error at 1 too: exit 2 would block the agent session.
 var hookCmd = spec("hook", groupHooks, "forward the stdin hook payload to seamlessd",
 	atLeast(0, "EVENT"), bindHook, runHook).
-	withLong("events: " + hookEventNames() + "\ndial retry: " + hookDialBudgetsHelp() + `
+	withLong("events: " + hookEventNames() +
+		"\ndial retry: " + hookDurationsHelp(hookEvent.dialBudgetFor) +
+		"\ndeadline: " + hookDurationsHelp(func(h hookEvent, _ string) time.Duration { return h.deadline }) + `
 
 Your agent client (Claude Code or Codex) invokes this; it is not run by hand.
 post-tool-use is Claude Code only and fires machine-wide
@@ -229,36 +267,40 @@ A runtime failure (unreadable stdin, no config, server down) is reported on
 stderr and exits 0 -- a hook must never block the session it serves. A daemon
 that cannot be dialed (restarting after an update) is retried first, for the
 event's dial-retry budget above, which depends on --client where the line
-names one; a payload that may have reached it is never sent twice. An unknown
+names one; a payload that may have reached it is never sent twice. Whatever
+the network does (a dial that hangs, a daemon that never answers), the hook
+gives up at the event's deadline above, which sits inside the timeout its
+client gives it, so it fails open before its client kills it. An unknown
 event or client is an install/configuration bug and exits 1, never 2.`)
 
-// hookDialBudgetsHelp renders the dial budgets for the help text, longest
-// first, each followed by the events that spend it in table order. An event
-// whose budget depends on the client appears under each of its budgets, naming
-// the clients that spend it there. It asks dialBudgetFor about every event and
-// client, so the page cannot drift from what runs.
-func hookDialBudgetsHelp() string {
+// hookDurationsHelp renders one per-event, per-client duration for the help
+// text (of is dialBudgetFor, or the deadline), longest first, each followed by
+// the events that take it in table order. An event whose duration depends on
+// the client appears under each of its durations, naming the clients that take
+// it there. It asks of about every event and client, so the page cannot drift
+// from what runs.
+func hookDurationsHelp(of func(h hookEvent, client string) time.Duration) string {
 	events := map[time.Duration][]string{}
 	for _, h := range hookEvents {
 		clients := map[time.Duration][]string{}
 		for _, c := range hookClients {
-			b := h.dialBudgetFor(c)
-			clients[b] = append(clients[b], c)
+			d := of(h, c)
+			clients[d] = append(clients[d], c)
 		}
-		// One entry per budget for this event, so each list stays in table order
-		// whatever order the map yields its keys in.
-		for b, cs := range clients {
+		// One entry per duration for this event, so each list stays in table
+		// order whatever order the map yields its keys in.
+		for d, cs := range clients {
 			name := h.event
 			if len(cs) < len(hookClients) {
 				name += " (" + strings.Join(cs, ", ") + ")"
 			}
-			events[b] = append(events[b], name)
+			events[d] = append(events[d], name)
 		}
 	}
-	budgets := slices.SortedFunc(maps.Keys(events), func(a, b time.Duration) int { return cmp.Compare(b, a) })
-	parts := make([]string, len(budgets))
-	for i, b := range budgets {
-		parts[i] = b.String() + " for " + strings.Join(events[b], ", ")
+	durations := slices.SortedFunc(maps.Keys(events), func(a, b time.Duration) int { return cmp.Compare(b, a) })
+	parts := make([]string, len(durations))
+	for i, d := range durations {
+		parts[i] = d.String() + " for " + strings.Join(events[d], ", ")
 	}
 	return strings.Join(parts, "; ")
 }
@@ -275,6 +317,14 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 		return fmt.Errorf("unknown hook event %q: valid values are %s", event, hookEventNames())
 	}
 	ep := h.endpoint
+
+	// One deadline over everything from here on (see hookDeadline). It starts
+	// now rather than at the forward because the client's clock started when it
+	// spawned this process: the payload read, the config load and
+	// session-start's git reads spend from it too. Cancelling the parent ctx
+	// still ends a retry wait at once.
+	ctx, cancel := context.WithTimeout(ctx, h.deadline)
+	defer cancel()
 
 	// A stdin failure leaves nothing to forward. Report it and exit 0: a hook
 	// must never block the agent (the same contract as every failure below).
@@ -318,10 +368,6 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 	if len(q) > 0 {
 		ep += "?" + q.Encode()
 	}
-	// One deadline over the whole forward, retries and the relay included (see
-	// hookTimeout); cancelling the parent ctx still ends a retry wait at once.
-	ctx, cancel := context.WithTimeout(ctx, hookTimeout)
-	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.ServerURL()+ep, bytes.NewReader(payload))
 	if err != nil {
 		fmt.Fprintln(e.stderr, "seam hook:", err)
@@ -332,7 +378,11 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 
 	// No per-request timeout on the client: ctx carries the hook's deadline, and
 	// a client timeout would start over on every retry.
-	client, err := cfg.HTTPClient(0)
+	newClient := o.httpClient
+	if newClient == nil {
+		newClient = func(cfg config.Config) (*http.Client, error) { return cfg.HTTPClient(0) }
+	}
+	client, err := newClient(cfg)
 	if err != nil {
 		// Same degradation as a transport failure: a hook must never block the
 		// agent, so the reason goes to stderr and the turn continues.
@@ -349,6 +399,12 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 	// twice.
 	resp, err := retry(h.dialBudgetFor(o.client)).do(client, req)
 	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			// The error says only that a deadline passed; name which one, so a
+			// hook that keeps hitting it reads as a network that hangs, not a bug.
+			fmt.Fprintf(e.stderr, "seam hook: %s gave up at its %s deadline: %v\n", event, h.deadline, err)
+			return nil
+		}
 		fmt.Fprintln(e.stderr, "seam hook:", err)
 		return nil
 	}

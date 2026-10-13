@@ -573,12 +573,17 @@ daemon selects its payload adapter.</p>
 <ul>
 <li><strong>Failures do not block the session.</strong> A missing config, an unreachable
 daemon, or an unreadable stdin is reported on stderr and exits 0. A daemon
-that cannot be dialed - restarting after an update - is retried first, inside
-the hook's 10s overall deadline: for up to 5s, or 1s on <code>user-prompt-submit</code>,
-<code>stop</code> and Codex's <code>subagent-stop</code>, where losing one to a restart costs a
-single prompt's recall or a heartbeat the next turn repeats. A payload that
-may already have reached it is never sent twice. An unknown event name or present-but-invalid <code>--client</code> value is an install/configuration
-bug and exits 1; it never silently becomes Claude Code.</li>
+that cannot be dialed - restarting after an update - is retried first: for up
+to 5s, or 1s on <code>user-prompt-submit</code>, <code>stop</code> and Codex's <code>subagent-stop</code>,
+where losing one to a restart costs a single prompt's recall or a heartbeat
+the next turn repeats. A payload that may already have reached it is never
+sent twice. Whatever the network does - a dial that hangs because the
+server's host drops packets, a daemon that accepts the request and never
+answers - the hook gives up 1s inside the timeout its client gives it: at 4s
+on <code>user-prompt-submit</code>, which Codex, and Claude Code on an https install,
+kill at 5s, and at 9s on every other event. An unknown event name or
+present-but-invalid <code>--client</code> value is an install/configuration bug and
+exits 1; it never silently becomes Claude Code.</li>
 <li><strong><code>post-tool-use</code> pre-filters locally.</strong> It fires machine-wide on every
 <code>Write</code>/<code>Edit</code>, so the CLI drops everything that is not an <code>ExitPlanMode</code>
 approval or a write to a file directly under <code>~/.claude/plans</code> before loading

@@ -3,9 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -237,9 +241,10 @@ func TestRunHook_RidesOutARestartWithinItsBudget(t *testing.T) {
 // A daemon that is down for good costs each hook exactly its budget for that
 // event and client on the production backoff, and then the hook fails open --
 // the reason on stderr, nothing on stdout, exit 0. The full budget is nine
-// refused dials over 5s, the short one five over 1s. Every event runs under
-// every --client value, an absent one included.
-func TestRunHook_DialBudgetFollowsTheEventAndClient(t *testing.T) {
+// refused dials over 5s, the short one five over 1s. The retries run under the
+// event's own deadline, counted from when runHook started. Every event runs
+// under every --client value, an absent one included.
+func TestRunHook_BudgetAndDeadlineFollowTheEventAndClient(t *testing.T) {
 	ms := time.Millisecond
 	spend := map[time.Duration]struct {
 		waits []time.Duration
@@ -267,11 +272,19 @@ func TestRunHook_DialBudgetFollowsTheEventAndClient(t *testing.T) {
 				clk := &fakeClock{}
 				e, out, errb := hookEnvAt(deadAddr(t))
 				o := &hookOpts{client: client, retry: clk.policy}
+				start := time.Now()
 				require.NoError(t, runHook(context.Background(), e, o, []string{h.event}))
+				end := time.Now()
 				require.Empty(t, out.String())
 				require.Contains(t, errb.String(), want.msg)
 				require.Equal(t, want.waits, clk.recorded())
 				require.Equal(t, budget, clk.waited())
+
+				deadline := clk.lastDeadline()
+				require.False(t, deadline.IsZero(), "the retries ran without a deadline")
+				require.False(t, deadline.Before(start.Add(h.deadline)) || deadline.After(end.Add(h.deadline)),
+					"%s: the retries ran under a deadline %s after runHook started, not %s",
+					h.event, deadline.Sub(start).Round(time.Millisecond), h.deadline)
 			})
 		}
 	}
@@ -293,13 +306,122 @@ func TestRunHook_NeverResendsAfterSending(t *testing.T) {
 	require.Empty(t, clk.recorded())
 }
 
+// hangingDials is a hookOpts.httpClient: the production client with its dialer
+// replaced. The first refused dials are refused as a closed port refuses them;
+// every later one hangs, as a dial to a host that drops packets does, until the
+// test ends -- longer than config.DialTimeout, so only the hook's deadline can
+// end the request. dials counts them.
+func hangingDials(t *testing.T, refused int32, dials *atomic.Int32) func(config.Config) (*http.Client, error) {
+	t.Helper()
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	return func(cfg config.Config) (*http.Client, error) {
+		c, err := cfg.HTTPClient(0)
+		if err != nil {
+			return nil, err
+		}
+		tr, ok := c.Transport.(*http.Transport)
+		if !ok {
+			return nil, fmt.Errorf("config.HTTPClient's transport is a %T", c.Transport)
+		}
+		tr.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+			if dials.Add(1) <= refused {
+				return nil, &net.OpError{Op: "dial", Net: network, Err: errors.New("connect: connection refused")}
+			}
+			// net/http dials under a context detached from the request's deadline:
+			// at the deadline the request returns and the dial runs on. The test's
+			// end is what releases it.
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-release:
+				return nil, &net.OpError{Op: "dial", Net: network, Err: os.ErrDeadlineExceeded}
+			}
+		}
+		return c, nil
+	}
+}
+
+// Whatever the network does, a hook gives up at its deadline and fails open
+// before its client kills it: Codex, and Claude Code on an https install, kill
+// user-prompt-submit at 5s. Under the one 10s deadline every event had before,
+// refused dials for the 1s budget followed by one that hung ran to about 6s,
+// because the budget only stops a new attempt from starting and a hanging dial
+// runs to config.DialTimeout. A daemon that accepts the request and never
+// answers is the same failure one step later, and the payload it has is not
+// sent again. On the real clock, because the deadline is a real context
+// deadline; the cases run in parallel.
+func TestRunHook_GivesUpAtItsDeadlineWhateverTheNetworkDoes(t *testing.T) {
+	t.Parallel()
+	const event = "user-prompt-submit"
+	h, ok := lookupHookEvent(event)
+	require.True(t, ok)
+	kill, err := hooks.CommandHookTimeouts(hooks.ClientCodex)
+	require.NoError(t, err)
+	require.Equal(t, 5*time.Second, kill[event], "the timeout this test is about")
+
+	for _, tc := range []struct {
+		name    string
+		refused int32 // dials refused before they start to hang; -1 dials for real
+		dials   int32 // dials the hook makes, all told
+		sent    bool  // whether the daemon read the payload
+		msg     string
+	}{
+		{"every dial hangs", 0, 1, false, "request not sent: Post "},
+		{"refused, then a dial hangs", 4, 5, false, "request not sent after 5 attempts over "},
+		{"the daemon accepts and never answers", -1, 0, true, "Post "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var dials, hits atomic.Int32
+			addr := "127.0.0.1:9" // never dialed: hangingDials replaces the dialer
+			o := &hookOpts{client: hookClientCodex}
+			if tc.refused < 0 {
+				release := make(chan struct{})
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_, _ = io.Copy(io.Discard, r.Body)
+					hits.Add(1)
+					select {
+					case <-r.Context().Done(): // the hook hung up at its deadline
+					case <-release:
+					}
+				}))
+				t.Cleanup(srv.Close)
+				t.Cleanup(func() { close(release) }) // runs first: Close waits on the handler
+				addr = strings.TrimPrefix(srv.URL, "http://")
+			} else {
+				o.httpClient = hangingDials(t, tc.refused, &dials)
+			}
+			e, out, errb := hookEnvAt(addr)
+
+			start := time.Now()
+			require.NoError(t, runHook(context.Background(), e, o, []string{event}))
+			took := time.Since(start)
+
+			require.GreaterOrEqual(t, took, h.deadline, "the hook gave up before its deadline")
+			require.Less(t, took, kill[event], "the hook outlived the %s its client gives it", kill[event])
+			require.Empty(t, out.String())
+			require.Contains(t, errb.String(), "seam hook: "+event+" gave up at its "+h.deadline.String()+" deadline: ")
+			require.Contains(t, errb.String(), tc.msg)
+			require.Contains(t, errb.String(), context.DeadlineExceeded.Error())
+			require.Equal(t, tc.dials, dials.Load())
+			if tc.sent {
+				require.NotContains(t, errb.String(), errNotSent.Error(), "the payload was sent")
+				require.Equal(t, int32(1), hits.Load(), "the daemon must see the payload once")
+			}
+		})
+	}
+}
+
 // The owner's split (2026-10-09): the full budget spans an update's restart for
 // the hooks that are costly to lose, the short one only a blip for those whose
 // loss is one prompt's recall or one heartbeat. subagent-stop is split by
 // client: Claude Code's caches a planning subagent's report, Codex's only
 // heartbeats. Pinned whole, every event under every client, so no event or
-// client joins without a decision about its budget; each also leaves half of
-// hookTimeout for an attempt that connects at the end of its budget.
+// client joins without a decision about its budget. Each budget also leaves at
+// least 3s of the event's deadline for an attempt that connects at the end of
+// it: more than the 2s the daemon gives itself for a briefing or a recall
+// (internal/hooks handler.go hookTimeout).
 func TestHookDialBudgets_ByClientAndEvent(t *testing.T) {
 	const full, short = 5 * time.Second, time.Second
 	want := map[string]map[string]time.Duration{
@@ -329,7 +451,7 @@ func TestHookDialBudgets_ByClientAndEvent(t *testing.T) {
 		got[client] = map[string]time.Duration{}
 		for _, h := range hookEvents {
 			got[client][h.event] = h.dialBudgetFor(client)
-			require.LessOrEqual(t, got[client][h.event], hookTimeout/2,
+			require.GreaterOrEqual(t, h.deadline-got[client][h.event], 3*time.Second,
 				"%s/%s: an attempt that connects at the end of the budget must still have time to be served", client, h.event)
 		}
 	}
@@ -376,10 +498,11 @@ func TestHookEvent_AbsentClientTakesClaudeCodeOverrides(t *testing.T) {
 
 // Every budget fits inside the timeout its client gives that hook with half to
 // spare, for every client and every command hook its profile wires, on either
-// transport. Past half, a daemon that is down for good runs a hook into its
-// client's kill: a timeout warning in place of a quiet fail-open, on every
-// prompt in user-prompt-submit's case. A test-only import, like the event pin
-// below.
+// transport. Past half, a daemon that is down for good would hold a hook for
+// most of what its client allows, on every prompt in user-prompt-submit's case,
+// and leave an attempt that connects at the end of the budget little time to be
+// served. What keeps a hook inside its client's kill is the deadline, pinned
+// next. A test-only import, like the event pin below.
 func TestHookDialBudgets_FitInsideEveryClientTimeout(t *testing.T) {
 	for _, client := range hooks.HookClients {
 		timeouts, err := hooks.CommandHookTimeouts(client)
@@ -400,12 +523,63 @@ func TestHookDialBudgets_FitInsideEveryClientTimeout(t *testing.T) {
 	require.Equal(t, 5*time.Second, cc["user-prompt-submit"])
 }
 
-// The help names each budget from the table, never by hand, and marks the
-// event whose budget depends on the client with the clients that spend each.
-func TestHookCmd_HelpDerivesTheDialBudgets(t *testing.T) {
-	require.Contains(t, commandHelp(hookCmd), "\ndial retry: 5s for session-start, session-end, post-tool-use, "+
+// Every deadline ends the hook at least hookDeadlineMargin before its client
+// kills it, for every client and every command hook its profile wires, on
+// either transport. The budget pin above holds only for dials that are
+// refused; this one holds whatever the network does, because the deadline
+// bounds the whole forward. Past it, a dial that hangs (a server whose host
+// drops packets) or a daemon that never answers runs a hook into its client's
+// kill: a timeout warning in place of a quiet fail-open, on every prompt in
+// user-prompt-submit's case.
+func TestHookDeadlines_EndBeforeEveryClientKillsTheHook(t *testing.T) {
+	for _, client := range hooks.HookClients {
+		timeouts, err := hooks.CommandHookTimeouts(client)
+		require.NoError(t, err)
+		require.NotEmpty(t, timeouts, "%s", client)
+		for arg, timeout := range timeouts {
+			h, ok := lookupHookEvent(arg)
+			require.True(t, ok, "%s wires `seam hook %s`, which this CLI rejects", client, arg)
+			require.LessOrEqual(t, h.deadline, timeout-hookDeadlineMargin,
+				"%s kills `seam hook %s` at %s, so its %s deadline must end %s before that",
+				client, arg, timeout, h.deadline, hookDeadlineMargin)
+			require.Less(t, h.dialBudgetFor(string(client)), h.deadline,
+				"%s/%s: a retry must be able to start before the hook gives up", client, arg)
+		}
+	}
+}
+
+// The deadlines by event, pinned whole so no event joins without one: a second
+// under the 10s every client gives a command hook, and under the 5s Codex, and
+// Claude Code on an https install, give user-prompt-submit.
+func TestHookDeadlines_ByEvent(t *testing.T) {
+	const s = time.Second
+	want := map[string]time.Duration{
+		"session-start":      9 * s,
+		"user-prompt-submit": 4 * s,
+		"session-end":        9 * s,
+		"post-tool-use":      9 * s,
+		"subagent-start":     9 * s,
+		"subagent-stop":      9 * s,
+		"permission-request": 9 * s,
+		"stop":               9 * s,
+	}
+	got := map[string]time.Duration{}
+	for _, h := range hookEvents {
+		got[h.event] = h.deadline
+	}
+	require.Equal(t, want, got)
+}
+
+// The help names each budget and each deadline from the table, never by hand,
+// and marks the event whose budget depends on the client with the clients that
+// spend each.
+func TestHookCmd_HelpDerivesTheDialBudgetsAndDeadlines(t *testing.T) {
+	help := commandHelp(hookCmd)
+	require.Contains(t, help, "\ndial retry: 5s for session-start, session-end, post-tool-use, "+
 		"subagent-start, subagent-stop (claude-code), permission-request; "+
 		"1s for user-prompt-submit, subagent-stop (codex), stop\n")
+	require.Contains(t, help, "\ndeadline: 9s for session-start, session-end, post-tool-use, "+
+		"subagent-start, subagent-stop, permission-request, stop; 4s for user-prompt-submit\n")
 }
 
 // The pin that keeps the CLI's copy of the event table honest against the
