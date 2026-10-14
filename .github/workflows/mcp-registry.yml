@@ -1,0 +1,124 @@
+name: MCP Registry
+
+# Publish server.json to the official MCP registry
+# (registry.modelcontextprotocol.io) as io.github.arctop/seamless, which
+# PulseMCP and the other aggregators index downstream from. release.yml calls
+# this once a v* tag's release is published and its signatures verified. Run it
+# by hand to publish a release the automatic run missed:
+# `gh workflow run mcp-registry.yml -f tag=vX.Y.Z`.
+#
+# Auth is GitHub Actions OIDC, so there is no secret to keep or rotate:
+# `mcp-publisher login github-oidc` trades this job's short-lived ID token for a
+# registry JWT, and the registry grants io.github.<repository_owner>/* from the
+# token's repository_owner claim. That is why it works for an org namespace
+# where the interactive `login github` (a GitHub App) does not
+# (modelcontextprotocol/registry#1468).
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to publish (vX.Y.Z)
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish (vX.Y.Z)
+        required: true
+        type: string
+
+# id-token: write is the OIDC token above; nothing here writes to the repo.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    # A fork's OIDC token names the fork's owner, which the registry refuses
+    # for io.github.arctop/*, so a fork would only ever fail here.
+    if: github.repository == 'arctop/seamless'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Third-party actions are pinned to full commit SHAs, as in release.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+
+      # Decide whether to publish. The tag reaches the script through env:,
+      # never as an expression inside run:, so no input text is spliced into
+      # shell source.
+      #  - server.json's version must be the tag's: the prep commit bumps it
+      #    (docs-check keeps the agent and server cards in step), and a release
+      #    cut without the bump must fail loudly, not publish the old version.
+      #  - Only a published, non-prerelease release goes out. The registry
+      #    ranks versions by semver, so a v0.8.0-rc.1 would become its latest;
+      #    and marking a release prerelease is how a bad one is yanked
+      #    (release.yml), which must keep it out of the registry too.
+      #  - A version the registry already serves is skipped, not re-sent (the
+      #    registry refuses a duplicate), so re-running this is safe.
+      - name: Check the release and the registry
+        id: gate
+        env:
+          TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "$TAG" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::tag must be vX.Y.Z, got $TAG"; exit 1 ;;
+          esac
+          name=$(jq -r .name server.json)
+          version=$(jq -r .version server.json)
+          if [ "$version" != "${TAG#v}" ]; then
+            echo "::error::server.json version is $version at $TAG; the prep commit must bump it to ${TAG#v}"
+            exit 1
+          fi
+          state=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease -q '"\(.isDraft) \(.isPrerelease)"')
+          if [ "$state" != "false false" ]; then
+            echo "::notice::$TAG is a draft or prerelease (isDraft isPrerelease = $state); not publishing it"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          url="https://registry.modelcontextprotocol.io/v0/servers/$(jq -rn --arg n "$name" '$n|@uri')/versions/$version"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --retry 5 --retry-all-errors "$url" || true)
+          case "$code" in
+            200) echo "::notice::the registry already serves $name $version"; echo "publish=false" >> "$GITHUB_OUTPUT" ;;
+            404) echo "publish=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::registry lookup for $name $version returned HTTP $code"; exit 1 ;;
+          esac
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Pinned to a release and checked against the sha256 that release
+      # publishes for this tarball (registry_<ver>_checksums.txt). Dependabot
+      # cannot see this pin: bump the version and the hash together.
+      - name: Install mcp-publisher
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          MCP_PUBLISHER_VERSION: v1.8.1
+          MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+        run: |
+          tarball=mcp-publisher_linux_amd64.tar.gz
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/$tarball" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/$MCP_PUBLISHER_VERSION/$tarball"
+          echo "$MCP_PUBLISHER_SHA256  $RUNNER_TEMP/$tarball" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" mcp-publisher
+
+      # Login and publish back to back: the registry JWT expires within
+      # minutes. publish reads server.json from the checkout.
+      - name: Publish
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          "$RUNNER_TEMP/mcp-publisher" login github-oidc
+          "$RUNNER_TEMP/mcp-publisher" publish
+
+      - name: Verify the registry serves it
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          URL: ${{ steps.gate.outputs.url }}
+          VERSION: ${{ steps.gate.outputs.version }}
+        run: curl -fsS --retry 5 --retry-all-errors "$URL" | jq -e --arg v "$VERSION" '.server.version == $v'

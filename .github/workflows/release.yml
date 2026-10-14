@@ -5,7 +5,9 @@ name: Release
 # and publishes the cross-platform archives (binaries plus maintained
 # Claude Code/Codex skills), signed checksums, installer bundles, and changelog
 # as a GitHub release; the last step re-verifies the published checksums
-# signatures against this tag's exact signing identity.
+# signatures against this tag's exact signing identity. Once that passes, the
+# mcp-registry job publishes server.json to the MCP registry
+# (mcp-registry.yml).
 on:
   push:
     tags: ["v*"]
@@ -176,3 +178,18 @@ jobs:
             --certificate-identity "$identity" \
             --certificate-oidc-issuer "$issuer" \
             "$dir/checksums.txt"
+
+  # Publish this version to the MCP registry, only after the release above is
+  # published and its signatures verified: a release that fails that verify is
+  # being yanked and must not be listed. It holds only the OIDC token the
+  # registry login needs, not this workflow's contents: write. A failure here
+  # leaves the release itself intact; fix the cause and run
+  # `gh workflow run mcp-registry.yml -f tag=<tag>`.
+  mcp-registry:
+    needs: goreleaser
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/mcp-registry.yml
+    with:
+      tag: ${{ github.ref_name }}
