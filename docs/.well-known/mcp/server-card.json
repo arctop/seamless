@@ -2,7 +2,7 @@
   "name": "io.github.arctop/seamless",
   "title": "Seamless",
   "description": "Local-first shared memory and task coordination for AI coding agents. Go daemon plus headless CLI. The MCP endpoint is per-install: each Seamless daemon serves streamable HTTP locally on the machine it runs on; there is no hosted remote.",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "websiteUrl": "https://thereisnospoon.org",
   "repository": {
     "url": "https://github.com/arctop/seamless",
@@ -10,7 +10,7 @@
   },
   "serverInfo": {
     "name": "Seamless",
-    "version": "0.7.2"
+    "version": "0.7.3"
   },
   "url": "http://127.0.0.1:8081/api/mcp",
   "transport": {
