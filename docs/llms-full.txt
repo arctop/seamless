@@ -1963,6 +1963,16 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.7.3 {#v0-7-3}
+
+Released 2026-10-14 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.7.3)
+
+### Fixes
+
+- fix(store): a Windows daemon keeps another host's POSIX repo paths as sent
+- fix(seam): a hook gives up before its client kills it, even on a hanging dial
+- fix(update): say confirming, not updating, once the new version serves
+
 ## v0.7.2 {#v0-7-2}
 
 Released 2026-10-12 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.7.2)
