@@ -10237,14 +10237,17 @@ The console shows activity without asking to be read. The line along the
 sidebar's edge - the Seam - carries each event from the live stream as a spark
 that travels to the section it belongs to and lights that section's icon:
 cyan for context reaching an agent, green for knowledge written, coral for
-something wrong, indigo for everything else. The sky behind the pages and the
-daemon's dot in the sidebar brighten and breathe faster with the recent event
-rate, and settle when the fleet is idle. Headline numbers count up when a page
+something wrong, indigo for everything else. Each event also rings the daemon's
+dot in the sidebar and the page's live dots once, and the sky behind the pages
+brightens with the recent event rate and settles when the fleet is idle; the
+dot dims while the live stream is down. Headline numbers count up when a page
 opens; agents working right now carry a slow orbit of light on the Now screen.
 
 All of it is decoration over data the page already states: nothing here changes
 a number, and `prefers-reduced-motion` stills every part of it (the Seam sends no
-sparks, numbers render at their value).
+sparks, numbers render at their value). Between events the sky and the sidebar
+hold still, so a console left open on the Overview draws nothing while the
+fleet is idle.
 
 ## Choose how much you see
 
@@ -10417,7 +10420,8 @@ The landing page and the health check. It carries:
   the rim belt holds memories that have never surfaced. Colour is kind; size is
   demand (the query-gated utility score, so a big star is one agents pull, not
   one the briefing merely shows). Hollow stars have never surfaced, a ring marks
-  a starred memory, spikes mark one written today, and today's stars twinkle.
+  a starred memory, spikes mark one written today, and today's stars twinkle as
+  the chart appears.
   Beside the chart, a readout states the same picture as text: each ring's
   count, the going-stale count (always equal to the attention card's), and every
   scope with its ring mix as a bar. Point at a star for its name and description

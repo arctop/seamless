@@ -244,21 +244,23 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* The sky. Three slow light pools drift behind everything; their brightness
-   follows --activity (the fleet's recent event rate, set by shell.js), so a
-   busy fleet reads as a brighter sky and an idle one settles to a dim glow.
-   Gradients only -- no filter: blur -- and the drift is a transform, so the
-   compositor carries it. The grain is a fixed, tiled noise layer above it. */
+/* The sky. Three light pools rest behind everything; their brightness follows
+   --activity (the fleet's recent event rate, set by shell.js), so a busy fleet
+   reads as a brighter sky and an idle one settles to a dim glow. Gradients
+   only -- no filter: blur -- and the pools hold still: they used to drift on a
+   layer bled 25vmax past every edge, which at 6K was a 270 MB layer that kept
+   the whole console drawing 60 frames a second. Each centre is that drift's
+   resting point, carried over from the old bleed box (X% of a box offset by
+   -25vmax and widened by 50vmax is X% + (X/2 - 25)vmax of the viewport). The
+   grain is a fixed, tiled noise layer above it. */
 body::before {
-  content: ""; position: fixed; inset: -25vmax; z-index: -2; pointer-events: none;
+  content: ""; position: fixed; inset: 0; z-index: -2; pointer-events: none;
   background:
-    radial-gradient(42vmax 26vmax at 68% 16%, var(--aurora-a), transparent 70%),
-    radial-gradient(30vmax 24vmax at 30% 42%, var(--aurora-b), transparent 70%),
-    radial-gradient(38vmax 26vmax at 86% 88%, var(--aurora-c), transparent 72%);
+    radial-gradient(42vmax 26vmax at calc(68% + 9vmax) calc(16% - 17vmax), var(--aurora-a), transparent 70%),
+    radial-gradient(30vmax 24vmax at calc(30% - 10vmax) calc(42% - 4vmax), var(--aurora-b), transparent 70%),
+    radial-gradient(38vmax 26vmax at calc(86% + 18vmax) calc(88% + 19vmax), var(--aurora-c), transparent 72%);
   opacity: calc(0.62 + var(--activity) * 0.38);
   transition: opacity 2.4s var(--ease-in-out);
-  animation: sky-drift 70s var(--ease-in-out) infinite alternate;
-  will-change: transform;
 }
 /* Star dust: three sparse tiled layers of pinpoint light at the sky's depth. */
 html::after {
@@ -271,18 +273,11 @@ html::after {
     radial-gradient(1.4px 1.4px at 283px 213px, var(--ink), transparent 60%),
     radial-gradient(1px 1px at 331px 127px, var(--ink), transparent 60%);
   background-size: 360px 260px;
-  animation: stars-breathe 9s var(--ease-in-out) infinite alternate;
 }
-@keyframes stars-breathe { from { opacity: var(--stars-opacity, 0); } to { opacity: calc(var(--stars-opacity, 0) * 0.55); } }
 body::after {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   opacity: var(--grain-opacity);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.4 -0.2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-@keyframes sky-drift {
-  0%   { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
-  50%  { transform: translate3d(3vmax, -2vmax, 0) rotate(6deg) scale(1.06); }
-  100% { transform: translate3d(-2vmax, 2vmax, 0) rotate(-4deg) scale(1.02); }
 }
 
 a { color: var(--brand); text-decoration: none; transition: color var(--dur-fast) var(--ease-out); }
@@ -321,10 +316,10 @@ h1, h2, h3 { text-wrap: balance; }
 .sidebar {
   width: var(--sidebar-width);
   flex: 0 0 var(--sidebar-width);
+  /* Dense enough to need no backdrop blur: a blur behind the one frame that is
+     always on screen re-ran on the GPU whenever anything behind it changed. */
   background:
-    linear-gradient(180deg, color-mix(in oklab, var(--surface-solid) 76%, transparent), color-mix(in oklab, var(--surface-solid) 58%, transparent));
-  -webkit-backdrop-filter: blur(22px) saturate(150%);
-  backdrop-filter: blur(22px) saturate(150%);
+    linear-gradient(180deg, color-mix(in oklab, var(--surface-solid) 90%, transparent), color-mix(in oklab, var(--surface-solid) 82%, transparent));
   border-right: 1px solid var(--border);
   z-index: 20;
   padding: 16px 12px 14px;
@@ -362,18 +357,22 @@ a.brand {
 }
 a.brand:hover { text-decoration: none; }
 .brand-word { overflow: hidden; white-space: nowrap; }
-/* The daemon's heart: a luminous orb whose halo breathes faster as the fleet
-   gets busier (--activity), and dims when the stream drops. */
+/* The daemon's heart: a luminous orb that rings once for each event the stream
+   carries (shell.js sets .ping), rests between events, and dims while the
+   stream is down (.off, set by layout.html). It used to pulse and halo
+   forever, which kept every page drawing frames with nothing to say. */
 a.brand .dot {
   position: relative; width: 11px; height: 11px; border-radius: 50%; flex: none;
   background: radial-gradient(circle at 35% 35%, #fff 0 12%, var(--live) 45%, color-mix(in oklab, var(--live) 70%, #000) 100%);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--live) 16%, transparent), 0 0 14px color-mix(in oklab, var(--live) 70%, transparent);
+  transition: opacity var(--dur-med) var(--ease-out);
 }
+a.brand .dot.off { opacity: 0.4; }
 a.brand .dot::after {
   content: ""; position: absolute; inset: -5px; border-radius: 50%;
   border: 1px solid color-mix(in oklab, var(--live) 55%, transparent); opacity: 0;
 }
-a.brand .dot.on::after { animation: orb-halo calc(2.8s - var(--activity) * 1.6s) var(--ease-out) infinite; }
+a.brand .dot.on.ping::after { animation: orb-halo 1.6s var(--ease-out); }
 @keyframes orb-halo { 0% { opacity: .9; transform: scale(.6); } 100% { opacity: 0; transform: scale(1.9); } }
 .brand-by { padding: 0 10px 14px 30px; font-size: var(--text-2xs); color: var(--faint); white-space: nowrap; overflow: hidden; letter-spacing: 0.02em; }
 .brand-by span { font-family: var(--font-mono); font-weight: 500; color: var(--muted); }
@@ -442,14 +441,23 @@ a.brand .dot.on::after { animation: orb-halo calc(2.8s - var(--activity) * 1.6s)
 .nav a.active .count { color: var(--brand); }
 .nav .count[data-zero] { opacity: .55; }
 
-/* A spark landed here: the section's icon takes the spark's colour and glows
-   for a beat (shell.js sets --land and restarts the class). */
-.nav a.landed .ico { animation: nav-land 1s var(--ease-out); }
-@keyframes nav-land {
-  0%   { color: var(--land, var(--brand)); filter: drop-shadow(0 0 0 transparent); transform: scale(1); }
-  25%  { color: var(--land, var(--brand)); filter: drop-shadow(0 0 8px var(--land, var(--brand))); transform: scale(1.22); }
-  100% { filter: drop-shadow(0 0 0 transparent); transform: scale(1); }
+/* A spark landed here: the section's icon pops and a glow in the spark's
+   colour blooms over it for a beat (shell.js sets --land and restarts the
+   class). Transform on the icon and opacity on the glow only, so the
+   compositor plays it: the icon's animated colour and drop-shadow ran on the
+   main thread, and under a busy fleet every landing re-laid the whole page
+   out (the star chart included) on every frame for a second. The glow is the
+   link's ::before, centred on the 16px icon 10px in (on the collapsed rail,
+   the link's centre). */
+.nav a::before {
+  content: ""; position: absolute; left: 0; top: 50%; width: 36px; height: 36px; margin-top: -18px;
+  border-radius: 50%; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle, color-mix(in oklab, var(--land, var(--brand)) 55%, transparent), transparent 68%);
 }
+.nav a.landed::before { animation: nav-land-glow 1s var(--ease-out); }
+.nav a.landed .ico { animation: nav-land 1s var(--ease-out); }
+@keyframes nav-land { 25% { transform: scale(1.22); } }
+@keyframes nav-land-glow { 25% { opacity: 1; } }
 
 /* ---- The Seam ---------------------------------------------------------------
    A thread of light down the sidebar's edge. Each recorded event travels it as
@@ -494,6 +502,7 @@ a.brand .dot.on::after { animation: orb-halo calc(2.8s - var(--activity) * 1.6s)
 :root[data-sidebar="collapsed"] .side-toggle .ico { transform: scaleX(-1); }
 :root[data-sidebar="collapsed"] .side-search { justify-content: center; padding: 6px 0; margin-top: 10px; }
 :root[data-sidebar="collapsed"] .nav a { justify-content: center; padding: 9px 0; }
+:root[data-sidebar="collapsed"] .nav a::before { left: 50%; margin-left: -18px; }
 :root[data-sidebar="collapsed"] .nav a.active::after { right: -10px; }
 :root[data-sidebar="collapsed"] .nav-label {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -944,10 +953,7 @@ details > summary { font-family: var(--font-display); }
    =========================================================================== */
 .pre, .ix-raw { font-family: var(--font-mono); font-size: var(--text-xs); white-space: pre-wrap; word-break: break-word; background: var(--surface-2); border-radius: var(--radius-sm); padding: 12px; margin: 0; max-height: 320px; overflow: auto; line-height: 1.6; }
 
-.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--live); display: inline-block; margin-right: 5px; animation: seam-pulse 2s var(--ease-in-out) infinite; flex: none; }
-
-/* The wordmark dot pulses while the SSE stream is connected. */
-a.brand .dot.on { animation: seam-pulse 2s var(--ease-in-out) infinite; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--live); display: inline-block; margin-right: 5px; flex: none; }
 
 /* Enter animation for elements an in-place data refresh inserts (the shared
    navigation morph tags them .live-in and strips the class after play).
@@ -1143,6 +1149,7 @@ a.brand .dot.on { animation: seam-pulse 2s var(--ease-in-out) infinite; }
   :root[data-sidebar="collapsed"] .account-dot { display: revert; }
   :root[data-sidebar="collapsed"] .side-search { justify-content: flex-start; padding: 6px 8px 6px 10px; margin-top: 0; }
   :root[data-sidebar="collapsed"] .nav a { justify-content: flex-start; padding: 9px 10px; }
+  :root[data-sidebar="collapsed"] .nav a::before { left: 0; margin-left: 0; }
   :root[data-sidebar="collapsed"] .nav-label { position: static; width: auto; height: auto; margin: 0; clip: auto; clip-path: none; }
   :root[data-sidebar="collapsed"] .nav-sec { height: auto; padding: 14px 12px 4px; margin: 0; background: none; color: var(--faint); }
   :root[data-sidebar="collapsed"] .account { flex-direction: row; padding: 6px 7px; border-color: var(--border); background: var(--surface); }
@@ -1825,7 +1832,8 @@ tr:hover .copy-btn, tr:focus-within .copy-btn,
 }
 .ix-more[hidden] { display: none; }
 .ix-more .btn { min-height: 31px; }
-.live.off .live-dot { animation: none; background: var(--faint); }
+.live.off .live-dot { background: var(--faint); }
+.live.off .live-dot::after { animation: none; }
 
 /* Highlights strip: the key fields as compact chips, so the important context
    reads without hunting through the payload. */
@@ -5450,7 +5458,12 @@ a.checkin-chip:hover { border-color: var(--brand); color: var(--brand); text-dec
 }
 /* The flashlight: hovering a panel lights it from the pointer (shell.js keeps
    --mx/--my current). Layered into the panel's own background, so there is no
-   pseudo-element to collide with a panel's existing decoration. */
+   pseudo-element to collide with a panel's existing decoration. The two are
+   registered as non-inheriting: only the panel reads them, and an inherited
+   custom property restyles every descendant on every pointer frame -- for the
+   sky's panel, the whole star chart. */
+@property --mx { syntax: "*"; inherits: false; }
+@property --my { syntax: "*"; inherits: false; }
 :is(.ov2-vital, .project-summary-card, .ov2-panel, .card, .now-zone, .context-scope-card, .retrieval-panel, .search-results):hover {
   background:
     radial-gradient(440px circle at var(--mx, 50%) var(--my, -40%), color-mix(in oklab, var(--brand) 10%, transparent), transparent 62%),
@@ -5702,7 +5715,9 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
 /* Stars. Position rides the inline transform, so a star the morph moves (a
    memory that just surfaced) glides to its new ring. Never-surfaced stars are
    hollow; stale ones dim; a halo marks high demand; a ring, a star; spikes, a
-   memory written today; today's stars twinkle. */
+   memory written today; today's stars twinkle twice on arrival (or when they
+   turn warm) and then rest -- a perpetual twinkle on hundreds of stars kept
+   the compositor busy for as long as the Overview stayed open. */
 .sky-stars .st { transition: transform 1.4s var(--ease-in-out), opacity var(--dur-slow) var(--ease-out); }
 .st[data-k="gotcha"]     { --c: var(--k-gotcha); }
 .st[data-k="constraint"] { --c: var(--k-constraint); }
@@ -5719,7 +5734,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
 .st .halo { pointer-events: none; }
 .st .ring { fill: none; stroke: var(--ink); stroke-opacity: 0.65; stroke-width: 1px; vector-effect: non-scaling-stroke; }
 .st .spk { fill: none; stroke: var(--c, var(--muted)); stroke-width: 1px; stroke-linecap: round; opacity: 0.85; vector-effect: non-scaling-stroke; }
-.st.warm .dot { animation: sky-twinkle 4.2s var(--ease-in-out) infinite; animation-delay: var(--d, 0s); }
+.st.warm .dot { animation: sky-twinkle 4.2s var(--ease-in-out) 2; animation-delay: var(--d, 0s); }
 @keyframes sky-twinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 /* Arrival lights the sky from the core outwards; the morph's generic live-in
    would translate a star away from its position, so the sky opts out of it. */
@@ -5978,16 +5993,20 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
 }
 
 /* ---- Liveness ---------------------------------------------------------------
-   What is live looks live: live dots ping, live sessions keep a heartbeat, and
-   an agent mid-flight on Now has light orbiting its card (amber and slower once
-   it cools; nothing once it is quiet). */
+   What is live looks live: a live dot rings once for each event the stream
+   carries (shell.js sets .ping), live sessions keep a heartbeat, and an agent
+   mid-flight on Now has light orbiting its card (amber and slower once it
+   cools; nothing once it is quiet). The ring scales and fades -- transform and
+   opacity only -- so the compositor plays it alone and the page goes still
+   again; it used to grow a box-shadow forever, a main-thread repaint of every
+   frame on every page. */
 .live-dot { position: relative; }
 .live-dot::after {
   content: ""; position: absolute; inset: -1px; border-radius: 50%; pointer-events: none;
-  box-shadow: 0 0 0 0 color-mix(in oklab, var(--live) 60%, transparent);
-  animation: live-ping 2.4s var(--ease-out) infinite;
+  box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--live) 55%, transparent); opacity: 0;
 }
-@keyframes live-ping { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--live) 55%, transparent); } 100% { box-shadow: 0 0 0 8px transparent; } }
+.live-dot.ping::after { animation: live-ping 1.2s var(--ease-out); }
+@keyframes live-ping { from { opacity: 0.9; transform: scale(1); } to { opacity: 0; transform: scale(2.6); } }
 .sess-state.live { animation: heartbeat 1.8s var(--ease-in-out) infinite; }
 @keyframes heartbeat {
   0%, 100% { box-shadow: 0 0 0 4px var(--ok-soft), 0 0 0 0 transparent; }

@@ -44,6 +44,10 @@
   }
   var filterSheet = sheet('sky-filter-state');
   var lightSheet = sheet('sky-light-state');
+  // A rewritten sheet is re-parsed and re-matched against the whole chart, so
+  // unchanged rules are not written again: moving from star to star inside one
+  // wedge used to rewrite the same light on every move.
+  function setSheet(el, text) { if (el.textContent !== text) el.textContent = text; }
 
   function sky() { return document.getElementById('sky'); }
   function part(sel) { var r = sky(); return r ? r.querySelector(sel) : null; }
@@ -137,7 +141,7 @@
     }
     if (filtering(state)) css.push('#sky .sky-summary{display:none}');
     if (offscreen) css.push('#sky .st .dot{animation-play-state:paused}');
-    filterSheet.textContent = css.join('\n');
+    setSheet(filterSheet, css.join('\n'));
   }
 
   // paintLight lights one wedge -- the focused scope, else the one under the
@@ -154,7 +158,7 @@
       css.push('#sky .sky-label[data-w="' + w + '"]{opacity:1;fill:var(--ink)}');
       css.push('#sky .sky-label:not(.tight):not([data-w="' + w + '"]){opacity:.22}');
     }
-    lightSheet.textContent = css.join('\n');
+    setSheet(lightSheet, css.join('\n'));
   }
 
   /* ---- Effects layer: reticles, beams, flares ------------------------- */
@@ -266,9 +270,29 @@
   function surfaced(s) { return s.t ? 'surfaced ' + ago(s.t) : 'never surfaced'; }
   function count(n) { return Number(n).toLocaleString(); }
 
+  // The chart's screen transform, cached: getScreenCTM() forces a synchronous
+  // style and layout pass, and pointermove used to ask for it on every frame.
+  // A scroll, a resize, a re-render, or the pointer leaving the chart drops
+  // it, and it is re-read at most every half second while the pointer stays,
+  // so a layout shift nothing announces (the rail toggled from the keyboard)
+  // cannot leave it stale for long.
+  var ctm = null, ctmInv = null, ctmAt = 0;
+  function screenCTM() {
+    var now = performance.now();
+    if (!ctm || now - ctmAt > 500) {
+      var svg = part('.sky-svg');
+      ctm = (svg && svg.getScreenCTM()) || null;
+      ctmInv = ctm && ctm.inverse();
+      ctmAt = now;
+    }
+    return ctm;
+  }
+  function dropCTM() { ctm = ctmInv = null; }
+  window.addEventListener('resize', dropCTM);
+  document.addEventListener('scroll', dropCTM, { capture: true, passive: true });
+
   function screenPoint(x, y) {
-    var svg = part('.sky-svg');
-    var m = svg && svg.getScreenCTM();
+    var m = screenCTM();
     if (!m) return null;
     return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f, scale: m.a };
   }
@@ -297,10 +321,9 @@
   /* ---- Pointer ------------------------------------------------------------ */
 
   function toUser(clientX, clientY) {
-    var svg = part('.sky-svg');
-    var m = svg && svg.getScreenCTM();
+    var m = screenCTM();
     if (!m) return null;
-    var inv = m.inverse();
+    var inv = ctmInv;
     return { x: inv.a * clientX + inv.c * clientY + inv.e, y: inv.b * clientX + inv.d * clientY + inv.f, scale: m.a };
   }
 
@@ -348,6 +371,7 @@
   document.addEventListener('pointermove', function (e) {
     var inChart = e.target && e.target.closest && e.target.closest('#sky .sky-svg');
     if (!inChart) {
+      dropCTM();
       if ((hover || hoverWedge >= 0) && cursor < 0) setHover(null, -1);
       return;
     }
@@ -760,6 +784,7 @@
   }
 
   function refresh(initial) {
+    dropCTM();
     collect();
     if (known && !initial && !document.hidden && !calm()) {
       var fresh = stars.filter(function (s) { return !known[s.id]; });

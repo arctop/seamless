@@ -409,10 +409,11 @@
 
   // Every event the SSE stream carries (layout.html re-dispatches it as
   // seam:event) becomes a spark that runs down the Seam from the daemon's orb
-  // to the section it belongs to, and lights that section's icon. The same
-  // events feed --activity, a decaying event rate the sky and the orb breathe
-  // with. Purely ambient: nothing here changes data, and reduced motion or a
-  // hidden tab skips the sparks (the activity level still settles).
+  // to the section it belongs to, and lights that section's icon, and it rings
+  // the orb and the live dots once. The same events feed --activity, a
+  // decaying event rate the sky brightens with. Purely ambient: nothing here
+  // changes data, and reduced motion or a hidden tab skips the sparks and the
+  // rings (the activity level still settles). Between events nothing moves.
   var seam = document.getElementById('seam');
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
   var ROUTES = [
@@ -491,9 +492,28 @@
     };
   }
 
+  // The rings are CSS (transform and opacity only, so the compositor plays
+  // them alone). An event that lands mid-ring is absorbed by it; the class
+  // comes off when the ring ends or is cut short.
+  function ping() {
+    if (document.hidden || (reduce && reduce.matches)) return;
+    document.querySelectorAll('a.brand .dot.on, .live-dot').forEach(function (el) {
+      if (!el.closest('.live.off')) el.classList.add('ping');
+    });
+  }
+  function unping(e) {
+    if (e.animationName === 'orb-halo' || e.animationName === 'live-ping') e.target.classList.remove('ping');
+  }
+  document.addEventListener('animationend', unping);
+  document.addEventListener('animationcancel', unping);
+
   // --activity: events decay with a ~20s half-life; the rate maps onto 0..1
-  // so a steady trickle glows faintly and a burst lights the sky.
-  var rate = 0, rateAt = Date.now();
+  // so a steady trickle glows faintly and a burst lights the sky. It lives on
+  // :root, where every write restyles the whole document (~16 ms on a full
+  // Overview), so the level is quantised to twentieths and written only when
+  // it changes: a few writes as each event settles, not one every 3 seconds.
+  // The consumers' opacity transitions smooth the steps.
+  var rate = 0, rateAt = Date.now(), level = '0.00';
   function decay() {
     var now = Date.now();
     rate *= Math.pow(0.5, (now - rateAt) / 20000);
@@ -501,13 +521,17 @@
   }
   function publish() {
     decay();
-    root.style.setProperty('--activity', (1 - Math.exp(-rate / 6)).toFixed(3));
+    var next = (Math.round((1 - Math.exp(-rate / 6)) * 20) / 20).toFixed(2);
+    if (next === level) return;
+    level = next;
+    root.style.setProperty('--activity', next);
   }
   document.addEventListener('seam:event', function (e) {
     decay();
     rate += 1;
     publish();
     spark(e.detail && e.detail.kind);
+    ping();
   });
   setInterval(publish, 3000);
 

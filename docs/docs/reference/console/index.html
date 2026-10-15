@@ -578,13 +578,16 @@ destination page early; both degrade to a plain navigation.</p>
 sidebar's edge - the Seam - carries each event from the live stream as a spark
 that travels to the section it belongs to and lights that section's icon:
 cyan for context reaching an agent, green for knowledge written, coral for
-something wrong, indigo for everything else. The sky behind the pages and the
-daemon's dot in the sidebar brighten and breathe faster with the recent event
-rate, and settle when the fleet is idle. Headline numbers count up when a page
+something wrong, indigo for everything else. Each event also rings the daemon's
+dot in the sidebar and the page's live dots once, and the sky behind the pages
+brightens with the recent event rate and settles when the fleet is idle; the
+dot dims while the live stream is down. Headline numbers count up when a page
 opens; agents working right now carry a slow orbit of light on the Now screen.</p>
 <p>All of it is decoration over data the page already states: nothing here changes
 a number, and <code>prefers-reduced-motion</code> stills every part of it (the Seam sends no
-sparks, numbers render at their value).</p>
+sparks, numbers render at their value). Between events the sky and the sidebar
+hold still, so a console left open on the Overview draws nothing while the
+fleet is idle.</p>
 <h2 id="choose-how-much-you-see">Choose how much you see</h2>
 <p>The console has three <strong>experience levels</strong>. They change what the console shows
 you and nothing else: your agents get the same briefing, the same MCP tools, the
@@ -995,7 +998,8 @@ fresh and stale lines the memory reader and the &quot;going stale&quot; card use
 the rim belt holds memories that have never surfaced. Colour is kind; size is
 demand (the query-gated utility score, so a big star is one agents pull, not
 one the briefing merely shows). Hollow stars have never surfaced, a ring marks
-a starred memory, spikes mark one written today, and today's stars twinkle.
+a starred memory, spikes mark one written today, and today's stars twinkle as
+the chart appears.
 Beside the chart, a readout states the same picture as text: each ring's
 count, the going-stale count (always equal to the attention card's), and every
 scope with its ring mix as a bar. Point at a star for its name and description

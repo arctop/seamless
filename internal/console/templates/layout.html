@@ -201,8 +201,10 @@
   var toast = document.getElementById('live-toast');
   // Both wordmarks carry the orb, and the phone bar's comes first in the
   // document (hidden on desktop), so light them all rather than the first match.
+  // The orb rests while connected, so a dropped stream shows as .off (dimmed)
+  // rather than as the absence of motion.
   var orbs = document.querySelectorAll('a.brand .dot');
-  function setOrb(on) { orbs.forEach(function (o) { o.classList.toggle('on', on); }); }
+  function setOrb(on) { orbs.forEach(function (o) { o.classList.toggle('on', on); o.classList.toggle('off', !on); }); }
 
   var n = 0;            // qualifying events since the last applied refresh
   var pending = false;  // a refresh is due but was deferred to a safe moment
