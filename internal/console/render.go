@@ -588,13 +588,39 @@ func (s *Service) render(w http.ResponseWriter, r *http.Request, page string, pd
 		s.serverError(w, r, fmt.Errorf("console: no such page %q", page))
 		return
 	}
+	layout := "layout"
+	if patchRequest(r) {
+		layout = "patch"
+	}
 	var buf bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&buf, "layout", pd); err != nil {
+	if err := tmpl.ExecuteTemplate(&buf, layout, pd); err != nil {
 		s.serverError(w, r, fmt.Errorf("console: render %s: %w", page, err))
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if layout == "patch" {
+		// A patch is not a page. It must never be stored: a back or forward
+		// navigation may reuse a stale cache entry for the same URL, and would
+		// render the patch instead of the page.
+		w.Header().Set("Cache-Control", "no-store")
+	}
 	_, _ = buf.WriteTo(w)
+}
+
+// The console's own fetches of a page it is showing -- the live refresh in
+// layout.html and the in-place loads in static/navigation.js -- carry one of
+// these headers. Both morph only the view and the sidebar's nav and account
+// copy into the open document, so they are answered with the "patch" layout:
+// just those parts, without the head, the shell, the dialogs, or the scripts.
+const (
+	liveHeader    = "X-Seam-Live"
+	partialHeader = "X-Seam-Partial"
+)
+
+// patchRequest reports whether r is one of the console's own fetches of a page
+// it is showing.
+func patchRequest(r *http.Request) bool {
+	return r.Header.Get(liveHeader) == "1" || r.Header.Get(partialHeader) == "1"
 }
 
 // wantsJSON reports whether the request prefers a JSON response (the seam CLI

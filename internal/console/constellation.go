@@ -31,12 +31,18 @@ import (
 // ring still reads as a ring), which keeps the density even: a busy core does
 // not pile up and a sparse belt does not sprawl. Inside a ring, a scope's stars
 // take slots on a golden-ratio lattice keyed by memory id, so a star keeps its
-// place while its scope and ring are unchanged. A live morph therefore moves
-// only the stars whose standing changed -- a memory that just surfaced glides
-// into the core -- instead of reshuffling the sky.
+// place while its scope and ring are unchanged. Ring boundaries and wedge
+// shares move in steps (skyAreaStep, skyShares), not with every count: an
+// exact share would shift every ring or wedge a little whenever one memory
+// surfaced or was written, and with it hundreds of stars. A live morph
+// therefore moves only the stars whose standing changed -- a memory that just
+// surfaced glides into the core -- instead of reshuffling the sky.
 //
 // The SVG is the picture; the panel beside it (overview.html) states the same
 // numbers as text, and static/sky.js adds search, filters, and the live beams.
+// The chart is drawn as keyed, fingerprinted pieces (skyChart), so a live
+// refresh sends a page only the pieces that changed since the chart it holds
+// (skyLedger).
 
 const (
 	skyBox      = 600.0              // square viewBox edge
@@ -45,6 +51,8 @@ const (
 	skyCore     = 38.0               // the "now" core
 	skyGutter   = 16 * math.Pi / 180 // the ring-label gutter at 12 o'clock
 	skyEvenArea = 0.28               // share of the field split evenly between rings; the rest follows their counts
+	skyAreaStep = 0.02               // ring boundaries snap to this share of the field's area
+	skyShares   = 150                // wedges share the circle in about this many units of memories
 	skyLoad     = 0.78               // target occupancy of a cell's slot lattice
 	skyHaloAt   = 0.75               // utility from which a star wears a halo
 	skyGlyph    = 7.0                // advance of one rim-label glyph (10-unit mono, tracked), in viewBox units
@@ -176,6 +184,20 @@ type skyData struct {
 	Bands     []skyBandRow
 	Scopes    []skyScopeRow
 	Kinds     []kindCount
+
+	// Version names this panel's content for the live protocol (skyLedger).
+	// Base is set when the answer goes to a page that holds an earlier panel
+	// this daemon remembers: Keep means that page already holds Version, and
+	// otherwise SVG is a delta against Base, with KeepReadout and KeepKinds
+	// saying which template-drawn parts it can keep as they are.
+	Version     string
+	Base        string
+	Keep        bool
+	KeepReadout bool
+	KeepKinds   bool
+
+	chart *skyChart
+	mark  *skyMark
 }
 
 // skyBandRow is one ring in the readout. W is the bar length relative to the
@@ -273,12 +295,14 @@ func buildSky(mems []core.Memory, stats map[string]store.RetrievalStat, now time
 		}
 	}
 
+	chart := renderSky(scopes, radii, bandN, total)
 	d := &skyData{
-		SVG:       renderSky(scopes, radii, bandN, total),
+		SVG:       chart.full(),
 		Total:     total,
 		Stale:     stale,
 		StaleDays: staleSurfacedDays,
 		Kinds:     skyKinds(kinds),
+		chart:     chart,
 	}
 	fullest := slices.Max(bandN[:])
 	for b := range skyBands {
@@ -300,21 +324,40 @@ func buildSky(mems []core.Memory, stats map[string]store.RetrievalStat, now time
 		}
 		d.Scopes = append(d.Scopes, row)
 	}
+	// The readout and the kind legend are drawn by the template from these
+	// rows, so the rows stand in for their markup in the fingerprint.
+	d.mark = chart.mark(
+		skySum(fmt.Sprint(d.Bands, d.Stale, d.StaleDays, d.Scopes)),
+		skySum(fmt.Sprint(d.Kinds)))
+	d.Version = d.mark.version
 	return d
 }
 
 // layoutWedges gives each scope its span. Every scope gets a floor so a scope
 // of one memory is still a visible, hoverable wedge; the rest of the circle is
 // shared by count, which keeps star density even across scopes.
+//
+// The count is taken in whole units of about 1/skyShares of all memories (at
+// least one unit per scope), not star by star. Every wedge after a scope that
+// grows moves round by its growth, so an exact share would turn each newly
+// written memory into a small move of nearly every star; in units, the wedges
+// hold still until a scope has grown or shrunk by a unit.
 func layoutWedges(scopes []*skyScope, total int) {
 	n := float64(len(scopes))
 	gap := math.Min(0.9*degree, 36*degree/n)
 	avail := 2*math.Pi - skyGutter - (n-1)*gap
 	floor := math.Min(2.2*degree, 0.5*avail/n)
 	flex := avail - n*floor
+	unit := max(1, math.Round(float64(total)/skyShares))
+	units := make([]float64, len(scopes))
+	sum := 0.0
+	for i, sc := range scopes {
+		units[i] = max(1, math.Round(float64(sc.n)/unit))
+		sum += units[i]
+	}
 	a := skyGutter / 2
-	for _, sc := range scopes {
-		w := floor + flex*float64(sc.n)/float64(total)
+	for i, sc := range scopes {
+		w := floor + flex*units[i]/sum
 		sc.a0, sc.a1 = a, a+w
 		a += w + gap
 	}
@@ -322,7 +365,11 @@ func layoutWedges(scopes []*skyScope, total int) {
 
 // ringRadii returns the ring boundaries, core outwards: radii[b] is ring b's
 // inner edge and radii[b+1] its outer one. Area, not radius, is what a star
-// needs, so the boundaries are placed on cumulative area shares.
+// needs, so the boundaries are placed on cumulative area shares, snapped to
+// steps of skyAreaStep: an exact boundary would move whenever one memory
+// changed ring, and with it every star in the rings on either side of it.
+// Every ring's floor (skyEvenArea) is far wider than a step, so snapping never
+// closes a ring.
 func ringRadii(bandN [skyBands]int, total int) [skyBands + 1]float64 {
 	var radii [skyBands + 1]float64
 	radii[0] = skyCore
@@ -330,7 +377,8 @@ func ringRadii(bandN [skyBands]int, total int) [skyBands + 1]float64 {
 	cum := 0.0
 	for b := range skyBands {
 		cum += skyEvenArea/float64(skyBands) + (1-skyEvenArea)*float64(bandN[b])/float64(total)
-		radii[b+1] = math.Sqrt(inner + math.Min(cum, 1)*(outer-inner))
+		snapped := math.Round(math.Min(cum, 1)/skyAreaStep) * skyAreaStep
+		radii[b+1] = math.Sqrt(inner + snapped*(outer-inner))
 	}
 	radii[skyBands] = skyRim
 	return radii
@@ -389,52 +437,57 @@ func skySlots(n int) int {
 	return s
 }
 
-// renderSky draws the chart. Stars come last and in id order: the morph keys
-// them by id, and a stable order means it only ever inserts or removes one,
-// never re-seats the rest (a moved node would drop its glide transition).
-func renderSky(scopes []*skyScope, radii [skyBands + 1]float64, bandN [skyBands]int, total int) template.HTML {
-	var b strings.Builder
-	b.Grow(total*420 + 8192)
-
+// renderSky draws the chart as keyed pieces: the svg start tag, the frame
+// layers in document order, then the stars. Stars come last and in id order:
+// the morph keys them by id, and a stable order means it only ever inserts or
+// removes one, never re-seats the rest (a moved node would drop its glide
+// transition).
+func renderSky(scopes []*skyScope, radii [skyBands + 1]float64, bandN [skyBands]int, total int) *skyChart {
 	alt := fmt.Sprintf("Knowledge sky: %d active memories in %d scopes, placed by when each last surfaced to an agent: "+
 		"%d in the last 24 hours, %d within %d days, %d within %d days, %d longer ago, %d never.",
 		total, len(scopes), bandN[bandDay], bandN[bandWeek], staleSurfacedOKDays,
 		bandN[bandMonth], staleSurfacedDays, bandN[bandStale], bandN[bandNever])
-	fmt.Fprintf(&b, `<svg class="sky-svg" viewBox="0 0 %g %g" preserveAspectRatio="xMidYMid meet" role="img" aria-label="%s" data-c="%g" data-core="%g" data-rim="%g">`,
-		skyBox, skyBox, template.HTMLEscapeString(alt), skyC, skyCore, skyRim)
+	c := &skyChart{
+		open: fmt.Sprintf(`<svg class="sky-svg" viewBox="0 0 %g %g" preserveAspectRatio="xMidYMid meet" role="img" aria-label="%s" data-c="%g" data-core="%g" data-rim="%g">`,
+			skyBox, skyBox, template.HTMLEscapeString(alt), skyC, skyCore, skyRim),
+	}
 
 	// Gradients: the core's glow, and one halo per kind (a gradient cannot
-	// inherit a colour from the star that uses it).
-	b.WriteString(`<defs><radialGradient id="sky-core-glow"><stop offset="0" class="sky-core-stop0"/><stop offset=".6" class="sky-core-stop1"/><stop offset="1" class="sky-core-stop2"/></radialGradient>`)
+	// inherit a colour from the star that uses it). The rim labels' arcs live
+	// here too, beside the text that is set on them.
+	var defs, labels strings.Builder
+	defs.WriteString(`<defs id="sky-defs"><radialGradient id="sky-core-glow"><stop offset="0" class="sky-core-stop0"/><stop offset=".6" class="sky-core-stop1"/><stop offset="1" class="sky-core-stop2"/></radialGradient>`)
 	for _, kd := range core.MemoryKinds {
-		fmt.Fprintf(&b, `<radialGradient id="sky-h-%s"><stop offset="0" style="stop-color:var(--k-%s);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-%s);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-%s);stop-opacity:0"/></radialGradient>`,
+		fmt.Fprintf(&defs, `<radialGradient id="sky-h-%s"><stop offset="0" style="stop-color:var(--k-%s);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-%s);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-%s);stop-opacity:0"/></radialGradient>`,
 			kd, kd, kd, kd)
 	}
-	var labels strings.Builder
+	labels.WriteString(`<g class="sky-labels" id="sky-labels">`)
 	for i, lb := range placeRimLabels(scopes) {
 		cls := "sky-label"
 		if lb.tight {
 			cls += " tight"
 		}
-		fmt.Fprintf(&b, `<path id="sky-lp-%d" d="%s"/>`, i, lb.path)
+		fmt.Fprintf(&defs, `<path id="sky-lp-%d" d="%s"/>`, i, lb.path)
 		fmt.Fprintf(&labels, `<text class="%s" data-w="%d"><textPath href="#sky-lp-%d" startOffset="50%%" text-anchor="middle">%s<tspan class="sky-count" dx="5">%d</tspan></textPath></text>`,
 			cls, i, i, template.HTMLEscapeString(scopes[i].name()), scopes[i].n)
 	}
-	b.WriteString(`</defs>`)
+	defs.WriteString(`</defs>`)
+	labels.WriteString(`</g>`)
 
 	// The grid: the field, the stale ring's warm tint and the never belt, the
 	// ring lines, the rim, and the spokes between scopes.
-	b.WriteString(`<g class="sky-grid">`)
-	fmt.Fprintf(&b, `<circle class="sky-field" cx="%g" cy="%g" r="%g"/>`, skyC, skyC, skyRim)
+	var grid strings.Builder
+	grid.WriteString(`<g class="sky-grid" id="sky-grid">`)
+	fmt.Fprintf(&grid, `<circle class="sky-field" cx="%g" cy="%g" r="%g"/>`, skyC, skyC, skyRim)
 	for _, band := range []skyBand{bandStale, bandNever} {
 		ri, ro := radii[band], radii[band+1]
-		fmt.Fprintf(&b, `<circle class="sky-tint" data-b="%d" cx="%g" cy="%g" r="%s" stroke-width="%s"/>`,
+		fmt.Fprintf(&grid, `<circle class="sky-tint" data-b="%d" cx="%g" cy="%g" r="%s" stroke-width="%s"/>`,
 			band, skyC, skyC, f1((ri+ro)/2), f1(ro-ri))
 	}
 	for band := bandDay; band < bandNever; band++ {
-		fmt.Fprintf(&b, `<circle class="sky-ring" data-b="%d" cx="%g" cy="%g" r="%s"/>`, band, skyC, skyC, f1(radii[band+1]))
+		fmt.Fprintf(&grid, `<circle class="sky-ring" data-b="%d" cx="%g" cy="%g" r="%s"/>`, band, skyC, skyC, f1(radii[band+1]))
 	}
-	fmt.Fprintf(&b, `<circle class="sky-rim" cx="%g" cy="%g" r="%g"/>`, skyC, skyC, skyRim)
+	fmt.Fprintf(&grid, `<circle class="sky-rim" cx="%g" cy="%g" r="%g"/>`, skyC, skyC, skyRim)
 	// A spoke runs core to rim where it bounds a wedge wide enough to read as
 	// a territory; between two slivers it shrinks to a tick on the rim, so a
 	// run of small scopes reads as a graduated edge rather than a dense fan.
@@ -455,31 +508,40 @@ func renderSky(scopes []*skyScope, radii [skyBands + 1]float64, bandN [skyBands]
 	}
 	last := scopes[len(scopes)-1] // never empty: buildSky returns nil first
 	edge(last.a1, last.a1-last.a0 >= wideWedge)
-	fmt.Fprintf(&b, `<path class="sky-spokes" d="%s"/>`, spokes.String())
-	b.WriteString(`</g>`)
+	fmt.Fprintf(&grid, `<path class="sky-spokes" d="%s"/>`, spokes.String())
+	grid.WriteString(`</g>`)
 
 	// Wedges: invisible until hovered or focused; the page script lights them.
-	b.WriteString(`<g class="sky-wedges">`)
+	var wedges strings.Builder
+	wedges.WriteString(`<g class="sky-wedges" id="sky-wedges">`)
 	for i, sc := range scopes {
-		fmt.Fprintf(&b, `<path id="sky-w-%d" class="sky-wedge" data-w="%d" data-p="%s" data-a0="%.4f" data-a1="%.4f" d="%s"/>`,
+		fmt.Fprintf(&wedges, `<path id="sky-w-%d" class="sky-wedge" data-w="%d" data-p="%s" data-a0="%.4f" data-a1="%.4f" d="%s"/>`,
 			i, i, template.HTMLEscapeString(sc.slug), sc.a0, sc.a1, sectorPath(skyCore, skyRim, sc.a0, sc.a1))
 	}
-	b.WriteString(`</g>`)
+	wedges.WriteString(`</g>`)
 
-	// Ring ticks in the gutter, then the rim labels.
-	b.WriteString(`<g class="sky-ticks">`)
+	// Ring ticks in the gutter; the rim labels follow them.
+	var ticks strings.Builder
+	ticks.WriteString(`<g class="sky-ticks" id="sky-ticks">`)
 	for band := bandDay; band < bandStale; band++ {
-		fmt.Fprintf(&b, `<text class="sky-tick" data-b="%d" x="%g" y="%s">%s</text>`, band, skyC, f1(skyC-radii[band+1]), band.tick())
+		fmt.Fprintf(&ticks, `<text class="sky-tick" data-b="%d" x="%g" y="%s">%s</text>`, band, skyC, f1(skyC-radii[band+1]), band.tick())
 	}
-	fmt.Fprintf(&b, `<text class="sky-tick" data-b="%d" x="%g" y="%s">never</text>`, bandNever, skyC, f1(skyC-(radii[bandNever]+skyRim)/2))
-	b.WriteString(`</g><g class="sky-labels">`)
-	b.WriteString(labels.String())
-	b.WriteString(`</g>`)
+	fmt.Fprintf(&ticks, `<text class="sky-tick" data-b="%d" x="%g" y="%s">never</text>`, bandNever, skyC, f1(skyC-(radii[bandNever]+skyRim)/2))
+	ticks.WriteString(`</g>`)
 
 	// The core: what reached an agent in the last day.
-	fmt.Fprintf(&b, `<g class="sky-core" data-sky-core><circle class="sky-core-glow" cx="%g" cy="%g" r="%g"/><circle class="sky-core-ring" cx="%g" cy="%g" r="%g"/>`+
+	coreG := fmt.Sprintf(`<g class="sky-core" id="sky-core" data-sky-core><circle class="sky-core-glow" cx="%g" cy="%g" r="%g"/><circle class="sky-core-ring" cx="%g" cy="%g" r="%g"/>`+
 		`<text class="sky-core-n" x="%g" y="%g">%d</text><text class="sky-core-l" x="%g" y="%g">last 24h</text></g>`,
 		skyC, skyC, skyCore*1.9, skyC, skyC, skyCore-6, skyC, skyC+3, bandN[bandDay], skyC, skyC+16)
+
+	c.frame = []skyPiece{
+		newSkyPiece("defs", "sky-defs", defs.String()),
+		newSkyPiece("g", "sky-grid", grid.String()),
+		newSkyPiece("g", "sky-wedges", wedges.String()),
+		newSkyPiece("g", "sky-ticks", ticks.String()),
+		newSkyPiece("g", "sky-labels", labels.String()),
+		newSkyPiece("g", "sky-core", coreG),
+	}
 
 	// The stars.
 	var stars []*skyStar
@@ -487,14 +549,14 @@ func renderSky(scopes []*skyScope, radii [skyBands + 1]float64, bandN [skyBands]
 		stars = append(stars, sc.stars...)
 	}
 	slices.SortFunc(stars, func(a, c *skyStar) int { return cmp.Compare(a.ID, c.ID) })
-	b.WriteString(`<g class="sky-stars">`)
+	c.stars = make([]skyPiece, 0, len(stars))
+	var star strings.Builder
 	for _, s := range stars {
-		writeStar(&b, s)
+		star.Reset()
+		writeStar(&star, s)
+		c.stars = append(c.stars, newSkyPiece("g", "s-"+s.ID, star.String()))
 	}
-	// The effects layer (hover and selection reticles, beams, flares) belongs
-	// to the page script; the morph leaves it alone.
-	b.WriteString(`</g><g class="sky-fx" data-live-skip></g></svg>`)
-	return template.HTML(b.String())
+	return c
 }
 
 // writeStar emits one star: a group carrying the position and the facts the

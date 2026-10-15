@@ -42,7 +42,7 @@
          field-shaped trigger rather than hiding behind a shortcut. On Search it
          carries the active marker the old nav row did. */}}
     <button type="button" class="side-search{{if eq .Active "search"}} active{{end}}" data-cmdk-open data-tip="Search" aria-label="Search or jump to (Cmd+K)"><span class="side-search-ico">{{icon "search"}}</span><span class="side-search-label">Search or jump to&hellip;</span><kbd class="kbd-hint">&#8984;K</kbd></button>
-    {{/* Rendered from the screen registry (screens.go), which decides the order,
+    {{block "chrome-nav" .}}{{/* Rendered from the screen registry (screens.go), which decides the order,
          the groups, and what this level and feature state offer: grouped by the
          owner's job, not by table -- what is happening (Live), what the fleet
          knows and how it circulates (Knowledge), what is being done (Work).
@@ -60,11 +60,11 @@
            Settings sections this level offers. Inside the nav so they change
            with it; search.js reads them as Jump to entries. */}}
       <div class="nav-jumps" hidden>{{range .Jumps}}<a href="{{.Href}}" data-jump="{{.Title}}"{{with .Hint}} data-hint="{{.}}"{{end}} tabindex="-1">{{icon .Icon}}</a>{{end}}</div>
-    </nav>
+    </nav>{{end}}
     <div class="side-foot">
       <div class="account">
         <span class="account-dot" aria-hidden="true"></span>
-        <span class="account-copy"><strong>Owner</strong><small title="{{.Host}}"><a class="account-level" href="/console/settings?s=experience" title="Console level: {{.Level.Label}}. Change it in Settings." aria-label="Console level: {{.Level.Label}}">{{.Level.Label}}</a> &middot; {{.Host}}</small></span>
+        {{block "chrome-account" .}}<span class="account-copy"><strong>Owner</strong><small title="{{.Host}}"><a class="account-level" href="/console/settings?s=experience" title="Console level: {{.Level.Label}}. Change it in Settings." aria-label="Console level: {{.Level.Label}}">{{.Level.Label}}</a> &middot; {{.Host}}</small></span>{{end}}
         {{/* Icon-only, fixed width: the old buttons carried their state as text
              ("Light theme" / "Dark theme"), so every theme flip resized the
              sidebar footer under the cursor that had just clicked it. */}}
@@ -80,7 +80,7 @@
        event the SSE stream carries down it as a spark that lands on the section
        it belongs to. Decorative: aria-hidden, and still under reduced motion. */}}
   <div class="seam" id="seam" aria-hidden="true"></div>
-  <main class="main" id="main" tabindex="-1">
+  {{block "chrome-main" .}}<main class="main" id="main" tabindex="-1">
     {{/* For a day after the daemon upgraded, every page says so. A banner, not
          a toast: the tab's live stream is reconnecting right after the
          restart. Built from parsed versions and the constant release URL only
@@ -126,7 +126,7 @@
     {{if .Notice}}<div class="section notice" role="status" data-flash="ok">{{.Notice}}</div>{{end}}
     {{if .FlashErr}}<div class="section login-err" role="alert" data-flash="error">{{.FlashErr}}</div>{{end}}
     {{template "content" .}}
-  </main>
+  </main>{{end}}
 </div>
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
@@ -239,7 +239,11 @@
   function apply() {
     if (busy) { again = true; return; }
     busy = true;
-    fetch(location.href, { credentials: 'same-origin', headers: { 'X-Seam-Live': '1' } })
+    // The page names the server-versioned views it holds (the Overview's sky),
+    // so the answer carries only what changed in them.
+    var headers = { 'X-Seam-Live': '1' };
+    if (window.SeamConsole) window.SeamConsole.heldViews(headers);
+    fetch(location.href, { credentials: 'same-origin', headers: headers })
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
       .then(function (html) {
         var doc = new DOMParser().parseFromString(html, 'text/html');
@@ -258,7 +262,12 @@
           document.querySelectorAll('.live-in, nav.nav .count.bump').forEach(function (el) { el.classList.remove('live-in', 'bump'); });
         }, 600);
       })
-      .catch(function () { pending = true; showPill(); }) // transient failure: leave the manual affordance
+      .catch(function (error) {
+        // The page did not hold what the answer was drawn against; it has
+        // forgotten its held views, so the next refresh is answered whole.
+        if (window.SeamConsole && window.SeamConsole.stale(error)) { again = true; return; }
+        pending = true; showPill(); // transient failure: leave the manual affordance
+      })
       .finally(function () { busy = false; if (again) { again = false; schedule(); } });
   }
   function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
@@ -539,6 +548,28 @@
 })();
 </script>
 {{block "scripts" .}}{{end}}
+</body>
+</html>
+{{end}}
+
+{{/* The patch layout answers the console's own fetches of a page it is
+     showing (render.go, patchRequest): the live refresh above and the in-place
+     loads in static/navigation.js. They morph only the view, the sidebar's nav
+     and the account copy into the open document, and the live refresh takes
+     a reply without a .sidebar for the login page, so this is all a patch
+     carries. The three parts are the blocks the full layout renders in place. */}}
+{{define "patch"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{.Title}} &middot; Seamless</title>
+</head>
+<body>
+<aside class="sidebar">
+{{template "chrome-nav" .}}
+<div class="side-foot"><div class="account">{{template "chrome-account" .}}</div></div>
+</aside>
+{{template "chrome-main" .}}
 </body>
 </html>
 {{end}}

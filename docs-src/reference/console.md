@@ -313,9 +313,12 @@ The landing page and the health check. It carries:
   to preview it. When an injection or a read lands on the live stream, each
   memory it names sends a beam into the core, and the refresh that follows
   glides the star to its new ring; a newly written memory appears with a flare.
-  A star keeps its place while its scope and ring are unchanged, so a refresh
-  moves only what changed, and search, filters, and the selection survive it.
-  It is HTML only - the JSON answer carries no sky.
+  A star keeps its place while its scope and ring are unchanged, and the rings
+  and wedges resize in steps rather than with every memory, so a refresh moves
+  only what changed, and search, filters, and the selection survive it. The
+  refresh downloads only what changed, too: the stars that changed, arrived, or
+  left since the chart the page holds, and nothing of the sky when nothing in
+  it did. It is HTML only - the JSON answer carries no sky.
 - **Recent activity** - the last twelve events, each linking to its detail page.
 
 The four judged vitals at the top (memory reach, knowledge continuity, context

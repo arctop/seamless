@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/arctop/seamless/internal/core"
@@ -14,6 +15,42 @@ import (
 // injected, or read before the Retrieval page flags it as stale. It mirrors the
 // gardener's default staleness horizon.
 const staleWindowDays = 90
+
+// statsDecayWindow is how long the console lets retrieval stats stand when no
+// injection or read has been recorded since the last rebuild. Only the utility
+// decay's anchor moves in that time, and with a 14-day half-life ten minutes
+// shifts a score by well under a thousandth.
+const statsDecayWindow = 10 * time.Minute
+
+// statsGate remembers what the console's last retrieval-stats rebuild read.
+type statsGate struct {
+	mu     sync.Mutex
+	inputs string    // store.RetrievalStatsInputs at that rebuild
+	at     time.Time // when it ran
+}
+
+// freshRetrievalStats brings retrieval_stats up to date with the event log
+// for a screen about to read it. A rebuild replays every injection and read
+// ever recorded, and the screens that read the stats re-render on every live
+// event, so it runs only when the events it reads have changed since the last
+// one here, or statsDecayWindow has passed. The lock makes concurrent renders
+// wait for one rebuild instead of each running their own. A failure is logged
+// and the screen renders the stats as they stand.
+func (s *Service) freshRetrievalStats(ctx context.Context) {
+	s.stats.mu.Lock()
+	defer s.stats.mu.Unlock()
+	inputs, err := store.RetrievalStatsInputs(ctx, s.cfg.DB)
+	if err != nil {
+		s.logger.Warn("console: retrieval stats inputs", "error", err)
+	} else if inputs == s.stats.inputs && time.Since(s.stats.at) < statsDecayWindow {
+		return
+	}
+	if err := store.RebuildRetrievalStats(ctx, s.cfg.DB); err != nil {
+		s.logger.Warn("console: rebuild retrieval stats", "error", err)
+		return
+	}
+	s.stats.inputs, s.stats.at = inputs, time.Now()
+}
 
 // retrievalData is the payload for the Retrieval page. The reach funnel, by-kind,
 // trend, and top lists are all computed over the selected window; Stale is
@@ -80,9 +117,7 @@ type retrievalData struct {
 
 func (s *Service) retrieval(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if err := store.RebuildRetrievalStats(ctx, s.cfg.DB); err != nil {
-		s.logger.Warn("console: rebuild retrieval stats", "error", err)
-	}
+	s.freshRetrievalStats(ctx)
 
 	now := time.Now()
 	win := store.ResolveRetrievalWindow(r.URL.Query().Get("w"), now)

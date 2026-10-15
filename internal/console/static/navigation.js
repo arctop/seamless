@@ -14,8 +14,45 @@
   var toastTimer = null;
   var currentViewURL = new URL(location.href);
 
+  /* Held views. A server-versioned island names its version in data-live-v
+     (the Overview's knowledge sky). A fetch of the page sends back the
+     versions it holds (heldViews), and the server answers with only what
+     changed since, using four markers the morph below understands:
+
+       data-live-base   the version the answer was drawn against; it applies
+                        only to a page still holding exactly that version.
+       data-live-keep   this keyed node is unchanged: keep the current one.
+       data-live-patch  only the listed keyed children changed: upsert them in
+                        id order and leave the other children alone.
+       data-live-gone   (a child of a patch) remove the child with this id.
+
+     The markers describe the answer, never the page: none is copied onto the
+     document. A page that turns out not to hold what the answer assumed
+     throws StaleView; patchPage then forgets every held version, so the next
+     fetch asks for the whole view. */
+  var MARKERS = ['data-live-base', 'data-live-keep', 'data-live-patch', 'data-live-gone'];
+  var MARKED = '[' + MARKERS.join('], [') + ']';
+  function StaleView() { this.name = 'StaleView'; }
+  function stale(error) { return error instanceof StaleView; }
+  function marker(name) { return MARKERS.indexOf(name) >= 0; }
+  function marked(node) {
+    return node.nodeType === 1 && (node.matches(MARKED) || !!node.querySelector(MARKED));
+  }
+
+  function heldViews(headers) {
+    var sky = document.querySelector('.main #sky[data-live-v]');
+    if (sky) headers['X-Seam-Sky'] = sky.getAttribute('data-live-v');
+    return headers;
+  }
+  function forgetHeldViews() {
+    document.querySelectorAll('.main [data-live-v]').forEach(function (el) { el.removeAttribute('data-live-v'); });
+  }
+
   function imported(node) { return document.importNode(node, true); }
   function inserted(node) {
+    // An answer drawn against a held view only ever refers to nodes the page
+    // has; one this page lacks means it does not hold that view.
+    if (marked(node)) throw new StaleView();
     var copy = imported(node);
     if (copy.nodeType === 1) copy.classList.add('live-in');
     return copy;
@@ -30,6 +67,7 @@
     var attr;
     for (i = 0; i < targetAttrs.length; i++) {
       attr = targetAttrs[i];
+      if (marker(attr.name)) continue;
       if (from.getAttribute(attr.name) !== attr.value) from.setAttribute(attr.name, attr.value);
     }
     for (i = currentAttrs.length - 1; i >= 0; i--) {
@@ -60,9 +98,43 @@
       return;
     }
     if (from.hasAttribute('data-live-skip')) return;
+    if (to.hasAttribute('data-live-base') && to.getAttribute('data-live-base') !== from.getAttribute('data-live-v')) throw new StaleView();
+    if (to.hasAttribute('data-live-keep') || to.hasAttribute('data-live-patch')) {
+      // A stub must land on the node it names, never on whatever unkeyed
+      // node happens to stand in its place.
+      if (keyOf(from) !== keyOf(to)) throw new StaleView();
+      if (to.hasAttribute('data-live-keep')) return;
+      syncAttrs(from, to);
+      patchChildren(from, to);
+      return;
+    }
     syncAttrs(from, to);
     morphChildren(from, to);
     syncControl(from, to);
+  }
+  // patchChildren applies a data-live-patch answer: every child it carries is
+  // keyed; a gone stub removes its namesake, a known child morphs in place,
+  // and a new one goes in id order (the order the server keeps them in). The
+  // children it does not mention are unchanged and stay as they are.
+  function patchChildren(from, to) {
+    for (var fresh = to.firstElementChild; fresh; fresh = fresh.nextElementSibling) {
+      if (!fresh.id) throw new StaleView();
+      var current = document.getElementById(fresh.id);
+      if (current && current.parentNode !== from) throw new StaleView();
+      if (fresh.hasAttribute('data-live-gone')) {
+        if (current) from.removeChild(current);
+      } else if (current) {
+        morphNode(current, fresh);
+      } else {
+        from.insertBefore(inserted(fresh), childAfter(from, fresh.id));
+      }
+    }
+  }
+  function childAfter(parent, id) {
+    for (var child = parent.firstElementChild; child; child = child.nextElementSibling) {
+      if (child.id > id) return child;
+    }
+    return null;
   }
   function morphChildren(from, to) {
     var keyed = {};
@@ -171,6 +243,14 @@
     try {
       morphNode(currentMain, freshMain);
     } catch (error) {
+      // An answer drawn against a held view cannot stand in for the page: if
+      // it does not apply, forget the held views and let the caller fetch the
+      // whole view. The morph may have stopped part way, which that fetch
+      // repairs.
+      if (stale(error) || marked(freshMain)) {
+        forgetHeldViews();
+        throw stale(error) ? error : new StaleView();
+      }
       // A morph edge case still stays inside this document. Replace only the
       // view contents with the fully rendered response; never reload the page.
       var children = Array.prototype.slice.call(freshMain.childNodes).map(function (node) { return imported(node); });
@@ -243,6 +323,9 @@
     setBusy(true);
 
     var headers = { Accept: 'text/html', 'X-Seam-Partial': '1' };
+    // A mutation is answered whole: a stale answer is retried, and a POST
+    // must never be sent twice.
+    if (!mutation) heldViews(headers);
     return fetch(target.href, {
       method: method,
       body: method === 'GET' || method === 'HEAD' ? undefined : options.body,
@@ -279,6 +362,15 @@
       });
     }).catch(function (error) {
       if (error && error.name === 'AbortError') return false;
+      if (stale(error) && !mutation && !options.whole) {
+        // patchPage has forgotten the held views, so this fetch is answered
+        // whole.
+        var whole = { whole: true };
+        for (var key in options) {
+          if (Object.prototype.hasOwnProperty.call(options, key)) whole[key] = options[key];
+        }
+        return load(rawURL, whole);
+      }
       flash('Could not update this view. The current data is unchanged.', 'error');
       document.dispatchEvent(new CustomEvent('seam:content-error', { detail: { error: error } }));
       return false;
@@ -377,9 +469,11 @@
 
   window.SeamConsole = {
     flash: flash,
+    heldViews: heldViews,
     load: load,
     morph: morphNode,
     needsView: needsView,
-    patchPage: patchPage
+    patchPage: patchPage,
+    stale: stale
   };
 })();

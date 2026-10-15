@@ -30,7 +30,8 @@ func TestOverview_RendersKnowledgeSky(t *testing.T) {
 	page := getPeek(t, mux, "/console/")
 	require.Equal(t, http.StatusOK, page.Code)
 	body := page.Body.String()
-	require.Contains(t, body, `<section class="ov2-panel sky-panel" id="sky" aria-label="Knowledge sky">`)
+	require.Regexp(t, `<section class="ov2-panel sky-panel" id="sky" aria-label="Knowledge sky" data-live-v="[0-9a-f]{16}">`, body,
+		"a whole panel names its chart, for the page's live refreshes to send back")
 	require.Contains(t, body, `class="sky-svg"`)
 	require.Contains(t, body, `id="s-`+a.ID+`"`)
 	require.Contains(t, body, `id="s-`+b.ID+`"`)

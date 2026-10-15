@@ -84,9 +84,7 @@ type memoriesData struct {
 // memoriesPage assembles the grouped memories list for the given sort + filter.
 func (s *Service) memoriesPage(ctx context.Context, sortKey, query string) (memoriesData, error) {
 	q := strings.ToLower(query)
-	if err := store.RebuildRetrievalStats(ctx, s.cfg.DB); err != nil {
-		s.logger.Warn("console: rebuild retrieval stats", "error", err)
-	}
+	s.freshRetrievalStats(ctx)
 	mems, err := store.AllMemoriesIncludingInvalid(ctx, s.cfg.DB)
 	if err != nil {
 		return memoriesData{}, err

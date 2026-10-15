@@ -121,9 +121,17 @@
        The readout beside it states the same numbers as text; static/sky.js adds
        search, filters, the selection card, and the live beams. Everything the
        script creates lives in the data-live-skip nodes, so a live morph updates
-       the chart and the counts without wiping what the owner is doing. */}}
+       the chart and the counts without wiping what the owner is doing.
+
+       data-live-v names the chart; a page's live and in-place fetches send it
+       back, and the answer carries only what changed since (sky_live.go): a
+       keep stub for the whole panel, or the panel with every unchanged part a
+       keep stub and only the changed stars, its data-live-base naming the
+       chart it was drawn against. */}}
   {{with .Sky}}
-  <section class="ov2-panel sky-panel" id="sky" aria-label="Knowledge sky">
+  {{if .Keep}}<section class="ov2-panel sky-panel" id="sky" data-live-keep data-live-base="{{.Base}}"></section>
+  {{else}}
+  <section class="ov2-panel sky-panel" id="sky" aria-label="Knowledge sky" data-live-v="{{.Version}}"{{with .Base}} data-live-base="{{.}}"{{end}}>
     <header class="ov2-panel-head">
       <h2>Knowledge sky</h2>
       <span class="sky-sub">{{.Total}} active memor{{if eq .Total 1}}y{{else}}ies{{end}}, each placed by when it last reached an agent</span>
@@ -139,7 +147,8 @@
           <label class="sky-search">{{icon "search"}}<input type="search" data-sky-q placeholder="Find a memory" autocomplete="off" spellcheck="false" aria-label="Find a memory by name, description, tag, or scope"></label>
         </div>
         <div class="sky-view" data-live-skip aria-live="polite"></div>
-        <div class="sky-summary">
+        {{if .KeepReadout}}<div class="sky-summary" id="sky-summary" data-live-keep></div>{{else}}
+        <div class="sky-summary" id="sky-summary">
           <h3 class="sky-eyebrow">Last surfaced to an agent</h3>
           <div class="sky-bands">
             {{range .Bands}}
@@ -166,22 +175,27 @@
             </button>
             {{end}}
           </div>
-        </div>
+        </div>{{end}}
       </aside>
     </div>
     <footer class="sky-legend">
-      <div class="sky-kinds" role="group" aria-label="Show only these kinds">
+      {{if .KeepKinds}}<div class="sky-kinds" id="sky-kinds" data-live-keep></div>{{else}}
+      <div class="sky-kinds" id="sky-kinds" role="group" aria-label="Show only these kinds">
         {{range .Kinds}}<button type="button" class="sky-kind" data-sky-kind="{{.Kind}}" aria-pressed="false"><i class="kdot" data-kind="{{.Kind}}"></i>{{.Kind}}<b>{{.N}}</b></button>{{end}}
-      </div>
-      <div class="sky-key" aria-hidden="true">
+      </div>{{end}}
+      {{/* The key and the icons never change while the daemon runs, so an
+           answer drawn against a held chart keeps them as they are. */}}
+      {{if .Base}}<div class="sky-key" id="sky-key" data-live-keep></div>{{else}}
+      <div class="sky-key" id="sky-key" aria-hidden="true">
         <span><svg viewBox="-9 -6 18 12"><circle class="k-dot" cx="-5" r="1.6"/><circle class="k-dot" cx="3" r="3.8"/></svg>bigger: agents pull it more</span>
         <span><svg viewBox="-6 -6 12 12"><circle class="k-hollow" r="3.2"/></svg>never surfaced</span>
         <span><svg viewBox="-6 -6 12 12"><circle class="k-dot" r="2.2"/><circle class="k-ring" r="4.8"/></svg>starred</span>
         <span><svg viewBox="-6 -6 12 12"><circle class="k-dot" r="1.8"/><path class="k-spk" d="M-5 0H5M0 -5V5"/></svg>new today</span>
-      </div>
+      </div>{{end}}
     </footer>
-    <template id="sky-icons">{{icon "x"}}{{icon "arrow-right"}}{{icon "star"}}{{icon "timer"}}{{icon "folder-open"}}</template>
+    {{if .Base}}<template id="sky-icons" data-live-keep></template>{{else}}<template id="sky-icons">{{icon "x"}}{{icon "arrow-right"}}{{icon "star"}}{{icon "timer"}}{{icon "folder-open"}}</template>{{end}}
   </section>
+  {{end}}
   {{end}}
 
   {{if $.Level.AtLeast "standard"}}

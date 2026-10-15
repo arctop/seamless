@@ -129,6 +129,12 @@ type Service struct {
 	// baseLevel is cfg.Level parsed once: the level in force when no stored
 	// row overrides it.
 	baseLevel level
+	// sky remembers the Overview's last few knowledge-sky charts, so a live
+	// refresh sends a page only what changed in the chart it holds.
+	sky skyLedger
+	// stats gates the retrieval-stats rebuild the analytics screens ask for
+	// on every render (freshRetrievalStats).
+	stats statsGate
 }
 
 // New builds a console Service, parsing its templates once.
@@ -794,10 +800,11 @@ func coverageRows(c store.SessionCoverage, research bool) []coverageRow {
 func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	// Freshen retrieval stats so the numbers match the live event log.
-	if err := store.RebuildRetrievalStats(ctx, s.cfg.DB); err != nil {
-		s.logger.Warn("console: rebuild retrieval stats", "error", err)
-	}
-	sum, err := store.GetUsageSummary(ctx, s.cfg.DB)
+	s.freshRetrievalStats(ctx)
+	// Only the counts: the summary's event-log aggregates (the all-time
+	// funnel above all) appear nowhere on this page, which re-renders on
+	// every live event.
+	sum, err := store.GetUsageCounts(ctx, s.cfg.DB)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -944,7 +951,8 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 // knowledgeSky builds the Overview's constellation. It is decoration over data
 // the page already states elsewhere, so a failed read degrades to no sky (with
 // a warning) rather than failing the whole status page. JSON callers never pay
-// for it: the panel is HTML-only.
+// for it: the panel is HTML-only. A live or in-place fetch from a page that
+// already holds a chart gets only what changed since (sky_live.go).
 func (s *Service) knowledgeSky(ctx context.Context, now time.Time, r *http.Request) *skyData {
 	if wantsJSON(r) {
 		return nil
@@ -959,7 +967,11 @@ func (s *Service) knowledgeSky(ctx context.Context, now time.Time, r *http.Reque
 		s.logger.Warn("console: knowledge sky: retrieval stats", "error", err)
 		return nil
 	}
-	return buildSky(mems, stats, now)
+	sky := buildSky(mems, stats, now)
+	if sky != nil {
+		s.sky.answer(sky, heldSky(r))
+	}
+	return sky
 }
 
 // memorySpotlight assembles the momentum memory-of-the-month panel: nil while
