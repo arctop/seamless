@@ -70,3 +70,41 @@ func TestGetUsageSummary_FunnelBySurface(t *testing.T) {
 	require.Equal(t, 1, sub.ItemsRead)
 	require.Equal(t, 100, sub.ReadRate)
 }
+
+// The counts are the summary minus its event-log aggregates: the console
+// Overview re-renders on every live event and shows none of those, the
+// all-time funnel least of all.
+func TestGetUsageCounts_IsTheSummaryWithoutTheEventAggregates(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	seedMemoryRow(t, db, "m1", "alpha", now)
+	seedMemoryRow(t, db, "m2", "beta", now)
+	require.NoError(t, CreateSession(ctx, db, core.Session{
+		ID: "s1", Name: "cc/a", Status: core.SessionCompleted, Findings: "x", CreatedAt: now, UpdatedAt: now,
+	}))
+	_, err := CreateProposal(ctx, db, ProposalArchive, map[string]any{"key": "archive:m1"})
+	require.NoError(t, err)
+	insertEvent(t, db, core.EventInjected, "", `{"hook":"session-start","item_ids":["m1","m2"]}`, now)
+	insertEvent(t, db, core.EventMemoryRead, "m1", "{}", now)
+	require.NoError(t, RebuildRetrievalStats(ctx, db))
+
+	sum, err := GetUsageSummary(ctx, db)
+	require.NoError(t, err)
+	counts, err := GetUsageCounts(ctx, db)
+	require.NoError(t, err)
+
+	require.Equal(t, sum.Memories, counts.Memories)
+	require.Equal(t, sum.Notes, counts.Notes)
+	require.Equal(t, sum.Sessions, counts.Sessions)
+	require.Equal(t, sum.Tasks, counts.Tasks)
+	require.Equal(t, sum.GardenerPending, counts.GardenerPending)
+	require.Equal(t, sum.Retrieval.TopInjected, counts.Retrieval.TopInjected)
+
+	require.NotEmpty(t, sum.Retrieval.FunnelBySurface)
+	require.Empty(t, counts.Retrieval.FunnelBySurface)
+	require.Empty(t, counts.EventsByKind)
+	require.Empty(t, counts.Retrieval.TopUtility)
+	require.Zero(t, counts.Retrieval.Injections)
+}

@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -102,14 +101,9 @@ func ReadAfterInjectFunnel(ctx context.Context, db *sql.DB, since time.Time, fol
 				pull(itemID, ts)
 			}
 		case core.EventInjected:
-			var p injectedPayload
-			if payload != "" && payload != "{}" {
-				if err := json.Unmarshal([]byte(payload), &p); err != nil {
-					p = injectedPayload{}
-				}
-			}
+			p, _ := decodeInjectedPayload(payload)
 			if p.Source == "recall" {
-				for _, id := range injectedItemIDs(itemID, payload) {
+				for _, id := range injectedItemIDs(itemID, p) {
 					pull(id, ts)
 				}
 				continue
@@ -119,7 +113,7 @@ func ReadAfterInjectFunnel(ctx context.Context, db *sql.DB, since time.Time, fol
 				continue // prompt-recall and other non-briefing injections
 			}
 			st := states[idx]
-			for _, id := range injectedItemIDs(itemID, payload) {
+			for _, id := range injectedItemIDs(itemID, p) {
 				st.injections++
 				st.lastInject[id] = ts
 			}

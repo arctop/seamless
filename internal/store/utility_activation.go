@@ -148,17 +148,15 @@ func UtilityDemandByProject(ctx context.Context, db *sql.DB, now time.Time, wind
 		var ids []string
 		switch core.EventKind(kind) {
 		case core.EventInjected:
-			var p injectedPayload
-			if payload != "" && payload != "{}" {
-				if err := json.Unmarshal([]byte(payload), &p); err != nil {
-					continue
-				}
+			p, ok := decodeInjectedPayload(payload)
+			if !ok {
+				continue
 			}
 			if _, class = injectedUtilityWeight(p); class == "" {
 				continue // passive exposure, not demand
 			}
-			session = injectedSessionKey(sessionID, payload)
-			ids = injectedItemIDs(itemID, payload)
+			session = injectedSessionKey(sessionID, p)
+			ids = injectedItemIDs(itemID, p)
 		case core.EventMemoryRead:
 			if itemID == "" {
 				continue

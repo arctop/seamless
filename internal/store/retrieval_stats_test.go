@@ -210,3 +210,49 @@ func TestStaleMemories(t *testing.T) {
 	}
 	require.Equal(t, []string{"old"}, names)
 }
+
+// An injection whose payload does not parse still counts through its item_id
+// column; it just cannot be classified for utility or tied to a session.
+func TestRebuildRetrievalStats_UnparseablePayloadCountsByItemID(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	base := time.Now().UTC().Add(-time.Hour)
+
+	insertEvent(t, db, core.EventInjected, "A", `{"source":"recall","item_ids":["B"]`, base)
+	insertEvent(t, db, core.EventInjected, "", `not json`, base)
+	require.NoError(t, RebuildRetrievalStats(ctx, db))
+
+	a := getStat(t, db, "A")
+	require.Equal(t, 1, a.InjectCount)
+	require.Zero(t, a.Utility, "an unparseable payload carries no demand class")
+	_, ok, err := GetRetrievalStat(ctx, db, "B")
+	require.NoError(t, err)
+	require.False(t, ok, "ids inside an unparseable payload are not trusted")
+}
+
+// The inputs fingerprint moves with exactly the events a rebuild reads, so a
+// caller can skip a rebuild that would replay the same log.
+func TestRetrievalStatsInputs_FollowTheEventsARebuildReads(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	at := time.Now().UTC().Add(-time.Minute)
+
+	empty, err := RetrievalStatsInputs(ctx, db)
+	require.NoError(t, err)
+
+	insertEvent(t, db, core.EventToolCall, "", "{}", at)
+	insertEvent(t, db, core.EventMemoryWritten, "A", "{}", at)
+	same, err := RetrievalStatsInputs(ctx, db)
+	require.NoError(t, err)
+	require.Equal(t, empty, same, "events a rebuild never reads leave the inputs alone")
+
+	for _, kind := range []core.EventKind{core.EventInjected, core.EventMemoryRead, core.EventNoteRead} {
+		before, err := RetrievalStatsInputs(ctx, db)
+		require.NoError(t, err)
+		// An older timestamp than the newest: the count still moves.
+		insertEvent(t, db, kind, "A", `{"item_ids":["A"]}`, at.Add(-time.Hour))
+		after, err := RetrievalStatsInputs(ctx, db)
+		require.NoError(t, err)
+		require.NotEqual(t, before, after, "a %s event is an input", kind)
+	}
+}

@@ -112,7 +112,8 @@ func windowVitals(ctx context.Context, db *sql.DB, project string, byProject boo
 		if err := rows.Scan(&sessionID, &itemID, &payload); err != nil {
 			return v, fmt.Errorf("scan injection: %w", err)
 		}
-		ids := injectedItemIDs(itemID, payload)
+		p, _ := decodeInjectedPayload(payload)
+		ids := injectedItemIDs(itemID, p)
 		cost := injectedTokenCost(payload)
 		if !byProject {
 			// All-scope cost counts each event once, matching
@@ -142,7 +143,7 @@ func windowVitals(ctx context.Context, db *sql.DB, project string, byProject boo
 			v.InjectedTokens += int(float64(cost)*float64(countedIDs)/float64(len(ids)) + 0.5)
 		}
 		if counted {
-			if s := injectedSessionKey(sessionID, payload); s != "" {
+			if s := injectedSessionKey(sessionID, p); s != "" {
 				sessions[s] = struct{}{}
 			}
 		}

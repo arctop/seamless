@@ -208,21 +208,16 @@ func BuildRetrievalReport(ctx context.Context, db *sql.DB, w RetrievalWindow, to
 			continue
 		}
 
-		var p injectedPayload
-		if payload != "" && payload != "{}" {
-			if err := json.Unmarshal([]byte(payload), &p); err != nil {
-				p = injectedPayload{}
-			}
-		}
+		p, _ := decodeInjectedPayload(payload)
 		_, class := injectedUtilityWeight(p)
 		if class == "prompt" {
 			rep.PromptMatches++
 		}
-		sess := injectedSessionKey(sessionID, payload)
+		sess := injectedSessionKey(sessionID, p)
 		if sess != "" {
 			sessions[sess] = struct{}{}
 		}
-		ids := injectedItemIDs(itemID, payload)
+		ids := injectedItemIDs(itemID, p)
 		cost := injectedTokenCost(payload)
 		rep.InjectedTokens += cost
 		for _, id := range ids {
@@ -473,7 +468,8 @@ func ProjectRetrievalTrend(ctx context.Context, db *sql.DB, w RetrievalWindow, p
 		if err != nil {
 			return nil, fmt.Errorf("store.ProjectRetrievalTrend: parse ts: %w", err)
 		}
-		for _, id := range injectedItemIDs(itemID, payload) {
+		p, _ := decodeInjectedPayload(payload)
+		for _, id := range injectedItemIDs(itemID, p) {
 			if m, ok := meta[id]; !ok || m.project != project {
 				continue
 			}
@@ -494,21 +490,14 @@ func ProjectRetrievalTrend(ctx context.Context, db *sql.DB, w RetrievalWindow, p
 // session_id column when set, else the payload's external client + historical
 // claude_session_id. Older payloads without the client retain their original
 // id-only fallback; new cross-client ids can no longer collapse together.
-func injectedSessionKey(sessionID, payload string) string {
+func injectedSessionKey(sessionID string, p injectedPayload) string {
 	if sessionID != "" {
 		return sessionID
 	}
-	if payload == "" || payload == "{}" {
-		return ""
+	if p.ExternalClient != "" && p.ClaudeSessionID != "" {
+		return p.ExternalClient + "\x00" + p.ClaudeSessionID
 	}
-	var p injectedPayload
-	if err := json.Unmarshal([]byte(payload), &p); err == nil {
-		if p.ExternalClient != "" && p.ClaudeSessionID != "" {
-			return p.ExternalClient + "\x00" + p.ClaudeSessionID
-		}
-		return p.ClaudeSessionID
-	}
-	return ""
+	return p.ClaudeSessionID
 }
 
 // injectedTokenPayload is the cost-relevant slice of a retrieval.injected
@@ -729,17 +718,14 @@ func DemandItemIDsSince(ctx context.Context, db *sql.DB, since time.Time) (map[s
 		}
 		switch core.EventKind(kind) {
 		case core.EventInjected:
-			var p injectedPayload
-			if payload == "" || payload == "{}" {
-				continue
-			}
-			if err := json.Unmarshal([]byte(payload), &p); err != nil {
+			p, ok := decodeInjectedPayload(payload)
+			if !ok {
 				continue
 			}
 			if _, class := injectedUtilityWeight(p); class == "" {
 				continue
 			}
-			for _, id := range injectedItemIDs(itemID, payload) {
+			for _, id := range injectedItemIDs(itemID, p) {
 				out[id] = struct{}{}
 			}
 		case core.EventMemoryRead:
@@ -955,17 +941,11 @@ func BriefingExposureSince(ctx context.Context, db *sql.DB, since time.Time) (ma
 		if err := rows.Scan(&itemID, &payload); err != nil {
 			return nil, fmt.Errorf("store.BriefingExposureSince: scan: %w", err)
 		}
-		if payload == "" || payload == "{}" {
+		p, ok := decodeInjectedPayload(payload)
+		if !ok || p.Hook != "session-start" {
 			continue
 		}
-		var p injectedPayload
-		if err := json.Unmarshal([]byte(payload), &p); err != nil {
-			continue
-		}
-		if p.Hook != "session-start" {
-			continue
-		}
-		for _, id := range injectedItemIDs(itemID, payload) {
+		for _, id := range injectedItemIDs(itemID, p) {
 			out[id]++
 		}
 	}

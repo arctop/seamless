@@ -162,17 +162,10 @@ func rebuildRetrievalStats(ctx context.Context, db *sql.DB, now time.Time) error
 		}
 		switch core.EventKind(kind) {
 		case core.EventInjected:
-			var p injectedPayload
-			if payload != "" && payload != "{}" {
-				// Best-effort: an unparseable payload still counts via the
-				// item_id column below, it just cannot classify for utility.
-				if err := json.Unmarshal([]byte(payload), &p); err != nil {
-					p = injectedPayload{}
-				}
-			}
+			p, _ := decodeInjectedPayload(payload)
 			weight, class := injectedUtilityWeight(p)
-			session := injectedSessionKey(sessionID, payload)
-			for _, id := range injectedItemIDs(itemID, payload) {
+			session := injectedSessionKey(sessionID, p)
+			for _, id := range injectedItemIDs(itemID, p) {
 				s := stat(id)
 				s.InjectCount++
 				t := ts
@@ -213,22 +206,56 @@ func rebuildRetrievalStats(ctx context.Context, db *sql.DB, now time.Time) error
 
 // injectedItemIDs returns every item id an injection event refers to: the
 // item_id column (when set) plus the payload's item_ids array (recall's form).
-func injectedItemIDs(itemID, payload string) []string {
+func injectedItemIDs(itemID string, p injectedPayload) []string {
 	var ids []string
 	if itemID != "" {
 		ids = append(ids, itemID)
 	}
-	if payload != "" && payload != "{}" {
-		var p injectedPayload
-		if err := json.Unmarshal([]byte(payload), &p); err == nil {
-			for _, id := range p.ItemIDs {
-				if id != "" {
-					ids = append(ids, id)
-				}
-			}
+	for _, id := range p.ItemIDs {
+		if id != "" {
+			ids = append(ids, id)
 		}
 	}
 	return ids
+}
+
+// decodeInjectedPayload decodes a retrieval.injected payload. Decoding is
+// best-effort: an empty or unparseable payload is the zero payload (ok false),
+// so the event still counts through its item_id column, it just cannot be
+// classified for utility or tied to a session.
+//
+// A reader decodes each payload once and hands the result to
+// injectedUtilityWeight, injectedSessionKey and injectedItemIDs: a hook
+// injection's payload carries the verbatim context it injected, kilobytes per
+// event, and the readers replay every injection in their window on each
+// console render.
+func decodeInjectedPayload(payload string) (p injectedPayload, ok bool) {
+	if payload == "" || payload == "{}" {
+		return injectedPayload{}, false
+	}
+	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+		return injectedPayload{}, false
+	}
+	return p, true
+}
+
+// RetrievalStatsInputs fingerprints the event-log rows RebuildRetrievalStats
+// reads: how many there are, and the newest one's timestamp. While the
+// fingerprint holds, a rebuild would read the same events and only move the
+// utility decay's anchor, so a caller that rebuilds on demand can skip it.
+// Events are append-only and an import rebuilds by itself (archive.Merge), so
+// a change to the inputs always moves one half or the other.
+func RetrievalStatsInputs(ctx context.Context, db *sql.DB) (string, error) {
+	var (
+		n      int
+		newest sql.NullString
+	)
+	err := db.QueryRowContext(ctx, `SELECT COUNT(*), MAX(ts) FROM events WHERE kind IN (?, ?, ?)`,
+		string(core.EventInjected), string(core.EventMemoryRead), string(core.EventNoteRead)).Scan(&n, &newest)
+	if err != nil {
+		return "", fmt.Errorf("store.RetrievalStatsInputs: %w", err)
+	}
+	return fmt.Sprintf("%d@%s", n, newest.String), nil
 }
 
 // replaceRetrievalStats atomically swaps the retrieval_stats table for the given

@@ -48,6 +48,34 @@ type UsageSummary struct {
 // GetUsageSummary computes the usage roll-up. It reads current retrieval_stats;
 // callers wanting fresh numbers should RebuildRetrievalStats first.
 func GetUsageSummary(ctx context.Context, db *sql.DB) (UsageSummary, error) {
+	u, err := GetUsageCounts(ctx, db)
+	if err != nil {
+		return u, err
+	}
+	if u.EventsByKind, err = countBy(ctx, db, `SELECT kind, COUNT(*) FROM events GROUP BY kind`); err != nil {
+		return u, err
+	}
+	if err = db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(inject_count), 0), COALESCE(SUM(read_count), 0) FROM retrieval_stats`).
+		Scan(&u.Retrieval.Injections, &u.Retrieval.Reads); err != nil {
+		return u, fmt.Errorf("store.GetUsageSummary: retrieval totals: %w", err)
+	}
+	if u.Retrieval.TopUtility, err = topUtility(ctx, db, 5); err != nil {
+		return u, err
+	}
+	if u.Retrieval.FunnelBySurface, err = ReadAfterInjectFunnel(ctx, db, time.Time{}, 0); err != nil {
+		return u, err
+	}
+	return u, nil
+}
+
+// GetUsageCounts is the inexpensive part of GetUsageSummary: the memory, note,
+// session, task and pending-proposal counts and the most-injected memories. It
+// leaves the event-log aggregates zero -- events by kind, retrieval totals, top
+// utility and the all-time read-after-inject funnel, which replays every
+// injection's payload -- for a caller that renders none of them on every
+// refresh (the console Overview).
+func GetUsageCounts(ctx context.Context, db *sql.DB) (UsageSummary, error) {
 	var u UsageSummary
 
 	var err error
@@ -59,7 +87,7 @@ func GetUsageSummary(ctx context.Context, db *sql.DB) (UsageSummary, error) {
 		u.Memories.Active += n
 	}
 	if err = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM notes_index`).Scan(&u.Notes); err != nil {
-		return u, fmt.Errorf("store.GetUsageSummary: notes: %w", err)
+		return u, fmt.Errorf("store.GetUsageCounts: notes: %w", err)
 	}
 	if u.Sessions, err = countBy(ctx, db, `SELECT status, COUNT(*) FROM sessions GROUP BY status`); err != nil {
 		return u, err
@@ -71,22 +99,7 @@ func GetUsageSummary(ctx context.Context, db *sql.DB) (UsageSummary, error) {
 		`SELECT kind, COUNT(*) FROM gardener_proposals WHERE status = 'pending' GROUP BY kind`); err != nil {
 		return u, err
 	}
-	if u.EventsByKind, err = countBy(ctx, db, `SELECT kind, COUNT(*) FROM events GROUP BY kind`); err != nil {
-		return u, err
-	}
-
-	if err = db.QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(inject_count), 0), COALESCE(SUM(read_count), 0) FROM retrieval_stats`).
-		Scan(&u.Retrieval.Injections, &u.Retrieval.Reads); err != nil {
-		return u, fmt.Errorf("store.GetUsageSummary: retrieval totals: %w", err)
-	}
 	if u.Retrieval.TopInjected, err = topInjected(ctx, db, 5); err != nil {
-		return u, err
-	}
-	if u.Retrieval.TopUtility, err = topUtility(ctx, db, 5); err != nil {
-		return u, err
-	}
-	if u.Retrieval.FunnelBySurface, err = ReadAfterInjectFunnel(ctx, db, time.Time{}, 0); err != nil {
 		return u, err
 	}
 	return u, nil

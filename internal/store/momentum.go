@@ -254,18 +254,13 @@ func MemorySpotlight(ctx context.Context, db *sql.DB, since, now time.Time) (Spo
 		}
 		switch core.EventKind(kind) {
 		case core.EventInjected:
-			var p injectedPayload
-			if payload != "" && payload != "{}" {
-				if err := json.Unmarshal([]byte(payload), &p); err != nil {
-					p = injectedPayload{}
-				}
-			}
+			p, _ := decodeInjectedPayload(payload)
 			weight, class := injectedUtilityWeight(p)
 			if weight == 0 {
 				continue
 			}
-			session := injectedSessionKey(sessionID, payload)
-			for _, id := range injectedItemIDs(itemID, payload) {
+			session := injectedSessionKey(sessionID, p)
+			for _, id := range injectedItemIDs(itemID, p) {
 				g := get(id)
 				g.injects++
 				credit(g, id, class, session, weight, ts)
