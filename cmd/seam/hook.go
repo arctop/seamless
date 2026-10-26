@@ -166,7 +166,7 @@ var hookIdentityParams = []string{"host", "repo_root", "main_root", "origin", "a
 //
 // A deadline covers everything the hook does from the moment it knows its
 // event: reading the payload, loading config, every attempt and the waits
-// between them, and relaying the reply. The retry spends from it rather than
+// between them, and reading the reply. The retry spends from it rather than
 // adding to it. The dial budgets below cannot stand in for it, because a budget
 // bounds when the last attempt may START. A dial to a host that drops packets
 // -- a client machine away from the LAN its server is on -- hangs until
@@ -268,10 +268,12 @@ stderr and exits 0 -- a hook must never block the session it serves. A daemon
 that cannot be dialed (restarting after an update) is retried first, for the
 event's dial-retry budget above, which depends on --client where the line
 names one; a payload that may have reached it is never sent twice. Whatever
-the network does (a dial that hangs, a daemon that never answers), the hook
-gives up at the event's deadline above, which sits inside the timeout its
-client gives it, so it fails open before its client kills it. An unknown
-event or client is an install/configuration bug and exits 1, never 2.`)
+the network does (a dial that hangs, a daemon that never answers or stops
+partway through its reply), the hook gives up at the event's deadline above,
+which sits inside the timeout its client gives it, so it fails open before its
+client kills it. A reply reaches stdout only once all of it has arrived: whole,
+or not at all. An unknown event or client is an install/configuration bug and
+exits 1, never 2.`)
 
 // hookDurationsHelp renders one per-event, per-client duration for the help
 // text (of is dialBudgetFor, or the deadline), longest first, each followed by
@@ -398,6 +400,18 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 	// again: session-start, a plan capture, a prompt record would each be applied
 	// twice.
 	resp, err := retry(h.dialBudgetFor(o.client)).do(client, req)
+	var reply []byte
+	if err == nil {
+		defer func() { _ = resp.Body.Close() }()
+		// The whole reply is read before any of it is written. The client parses
+		// this process's stdout as the hook's output, so a reply cut off partway
+		// -- by the deadline, or by a daemon that dies mid-write -- would reach it
+		// as truncated JSON; writing nothing is a clean fail-open instead. Replies
+		// are small (a briefing is the largest), so holding one costs nothing.
+		if reply, err = io.ReadAll(resp.Body); err != nil {
+			err = fmt.Errorf("read reply: %w", err)
+		}
+	}
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			// The error says only that a deadline passed; name which one, so a
@@ -408,10 +422,9 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 		fmt.Fprintln(e.stderr, "seam hook:", err)
 		return nil
 	}
-	defer func() { _ = resp.Body.Close() }()
-	// Relay whatever arrived; a copy failure means stdout is gone, and a hook
+	// One write of the whole reply; a failure means stdout is gone, and a hook
 	// must never block the agent by failing here.
-	_, _ = io.Copy(e.stdout, resp.Body) //nolint:errcheck // a hook must not fail on a broken stdout
+	_, _ = e.stdout.Write(reply) //nolint:errcheck // a hook must not fail on a broken stdout
 	return nil
 }
 

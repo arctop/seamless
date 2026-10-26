@@ -145,7 +145,9 @@ unreadable stdin, all produce exit 0. Only a misconfigured event name or
 Each hook also gives up 1s before its client would kill it - at 4s on
 `UserPromptSubmit`, 9s on the rest - so a server that never answers, such as
 one on a LAN the laptop has left, where a dial hangs rather than being
-refused, still ends in a quiet exit 0 rather than a hook-timeout warning.
+refused, still ends in a quiet exit 0 rather than a hook-timeout warning. A
+reply reaches stdout only once all of it has arrived: one the deadline or a
+dying server cuts off partway is dropped, never relayed as truncated JSON.
 
 Plan and subagent capture are best-effort under the same rule: a capture problem
 is logged and the hook still acks 200.

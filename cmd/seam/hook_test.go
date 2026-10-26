@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -156,6 +157,10 @@ func TestRunHook_NoClientFlagOmitsQueryParam(t *testing.T) {
 // filter passes an ExitPlanMode call, and the other events forward any body.
 // Its cwd is outside any repository, so session-start's git reads find nothing.
 const anyEventPayload = `{"session_id":"s","cwd":"/w","prompt":"hi","tool_name":"ExitPlanMode"}`
+
+// hookReply is a whole reply as the daemon gives one, for the tests that cut it
+// short.
+const hookReply = `{"continue":true,"suppressOutput":true}`
 
 // hookEnvAt is a stub env whose config points seam hook at addr, with
 // anyEventPayload on stdin.
@@ -306,6 +311,26 @@ func TestRunHook_NeverResendsAfterSending(t *testing.T) {
 	require.Empty(t, clk.recorded())
 }
 
+// The client parses the hook's stdout as its output, so a reply is written
+// whole or not at all. One that ends short -- a daemon that dies halfway through
+// it -- writes nothing, and the hook fails open with the reason on stderr. A
+// reply cut off by the deadline is the same, pinned with the deadline below.
+func TestRunHook_WritesNothingOfAReplyCutShort(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		// Writing less than the declared length makes the server close the
+		// connection once the handler returns.
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Length", strconv.Itoa(len(hookReply)))
+		_, _ = io.WriteString(w, hookReply[:len(hookReply)/2])
+	}))
+	t.Cleanup(srv.Close)
+	e, out, errb := hookEnvAt(strings.TrimPrefix(srv.URL, "http://"))
+	require.NoError(t, runHook(context.Background(), e, &hookOpts{}, []string{"session-start"}))
+	require.Empty(t, out.String())
+	require.Equal(t, "seam hook: read reply: "+io.ErrUnexpectedEOF.Error()+"\n", errb.String())
+}
+
 // hangingDials is a hookOpts.httpClient: the production client with its dialer
 // replaced. The first refused dials are refused as a closed port refuses them;
 // every later one hangs, as a dial to a host that drops packets does, until the
@@ -349,8 +374,10 @@ func hangingDials(t *testing.T, refused int32, dials *atomic.Int32) func(config.
 // because the budget only stops a new attempt from starting and a hanging dial
 // runs to config.DialTimeout. A daemon that accepts the request and never
 // answers is the same failure one step later, and the payload it has is not
-// sent again. On the real clock, because the deadline is a real context
-// deadline; the cases run in parallel.
+// sent again. One that sends half its reply and then stalls is the same failure
+// a step later still, and the half it sent never reaches stdout: the client
+// would parse it as the hook's output. On the real clock, because the deadline
+// is a real context deadline; the cases run in parallel.
 func TestRunHook_GivesUpAtItsDeadlineWhateverTheNetworkDoes(t *testing.T) {
 	t.Parallel()
 	const event = "user-prompt-submit"
@@ -365,11 +392,13 @@ func TestRunHook_GivesUpAtItsDeadlineWhateverTheNetworkDoes(t *testing.T) {
 		refused int32 // dials refused before they start to hang; -1 dials for real
 		dials   int32 // dials the hook makes, all told
 		sent    bool  // whether the daemon read the payload
+		half    bool  // whether the daemon sends half its reply before it stalls
 		msg     string
 	}{
-		{"every dial hangs", 0, 1, false, "request not sent: Post "},
-		{"refused, then a dial hangs", 4, 5, false, "request not sent after 5 attempts over "},
-		{"the daemon accepts and never answers", -1, 0, true, "Post "},
+		{"every dial hangs", 0, 1, false, false, "request not sent: Post "},
+		{"refused, then a dial hangs", 4, 5, false, false, "request not sent after 5 attempts over "},
+		{"the daemon accepts and never answers", -1, 0, true, false, "Post "},
+		{"the daemon sends half its reply and stalls", -1, 0, true, true, "read reply: "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -381,6 +410,16 @@ func TestRunHook_GivesUpAtItsDeadlineWhateverTheNetworkDoes(t *testing.T) {
 				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					_, _ = io.Copy(io.Discard, r.Body)
 					hits.Add(1)
+					if tc.half {
+						// The headers promise the whole reply; the flush puts
+						// them and half of it on the wire.
+						w.Header().Set("Content-Type", "application/json")
+						w.Header().Set("Content-Length", strconv.Itoa(len(hookReply)))
+						_, _ = io.WriteString(w, hookReply[:len(hookReply)/2])
+						if err := http.NewResponseController(w).Flush(); err != nil {
+							t.Errorf("flush half the reply: %v", err)
+						}
+					}
 					select {
 					case <-r.Context().Done(): // the hook hung up at its deadline
 					case <-release:
