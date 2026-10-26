@@ -417,8 +417,9 @@ the script refuses root unless you insist.</p>
 </span></span></code></pre></div>
 <p>Every release publishes a cask to the <code>arctop/homebrew-tap</code> tap, on macOS and
 Linux alike. It delivers the <strong>binaries only</strong> - <code>seamlessd</code> and <code>seam</code> on your
-PATH, with the Gatekeeper quarantine attribute stripped on macOS (the release
-binaries are unsigned). It does not wire clients or register a service, so
+PATH, with the Gatekeeper quarantine attribute stripped on macOS (a fallback:
+the binaries are notarized, but an offline first launch could still be
+refused). It does not wire clients or register a service, so
 finish with the two commands the cask's caveats print:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd install-hooks   <span class="c1"># bearer key on first run, hooks, MCP, skills</span>
 </span></span><span class="line"><span class="cl">seamlessd serve           <span class="c1"># or set up the service yourself</span>

@@ -454,9 +454,11 @@ uninstall-git-hooks:
 # token that only exists inside the release workflow. Off a runner it falls back
 # to an interactive browser flow, so a local dry-run would hang instead of
 # validating the build. Signing is exercised for real on a v* tag.
+# Needs goreleaser v2.19.0+: older versions refuse the cask's
+# hooks.post.install_steps ("field install_steps not found").
 release-snapshot:
 	@command -v goreleaser >/dev/null \
-	    || { echo "ERROR: goreleaser not found (brew install goreleaser)"; exit 1; }
+	    || { echo "ERROR: goreleaser not found (brew install goreleaser, v2.19.0+)"; exit 1; }
 	goreleaser release --snapshot --clean --skip=sign
 
 tidy:

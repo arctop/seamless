@@ -56,8 +56,9 @@ builds:
 #   signing identity. An adhoc-signed binary is a new item on every update,
 #   which posts a "seamlessd can run in the background" notice each time; only
 #   a Team ID identity stays the same (lab detached-updater-os-spikes).
-# - Notarized binaries pass Gatekeeper wherever they are quarantined, which is
-#   what the Homebrew cask's quarantine strip below works around today.
+# - Notarized binaries pass Gatekeeper when they are quarantined. The Homebrew
+#   cask's quarantine strip (homebrew_casks below) stays as a fallback for
+#   the cases notarization does not cover.
 # It runs only when the signing secret is non-empty: release.yml passes the
 # five secrets (an unset secret arrives as an empty string, which isEnvSet
 # would still call set), and a fork or a local `make release-snapshot` without
@@ -234,28 +235,31 @@ homebrew_casks:
       Then start the daemon (it bootstraps config + key on first run):
         seamlessd serve
       Quickstart: https://thereisnospoon.org/docs/quickstart/
-    # The release binaries are not signed/notarized, and Homebrew always
-    # quarantines cask downloads on macOS, so Gatekeeper would refuse to run
-    # them; strip the attribute after install, as the goreleaser cask docs
-    # prescribe for unsigned binaries. This is a declarative postflight_steps
-    # stanza, not hooks.post.install: that renders a Ruby `postflight` block,
-    # which Homebrew 7 deprecates with a warning on every install, and
-    # goreleaser (through v2.18.3) has no steps option yet -- see
-    # goreleaser/goreleaser#6870; move this to hooks.post.install_steps once
-    # PR #6873 ships. custom_block is pasted verbatim at the top of the cask
-    # (Homebrew loads it there; only `brew style` would reorder it), and the
-    # rendered cask goes through goreleaser's template engine again, so
-    # Homebrew's {{staged_path}} token is spelled {{ "{{staged_path}}" }}.
-    # must_succeed: false keeps the old hook's never-fail-the-install
-    # behaviour (xattr -dr exits 0 when the attribute is already absent).
-    custom_block: |
-      postflight_steps do
-        on_macos do
-          run "/usr/bin/xattr",
-              args:         ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/seamlessd", "{{ "{{staged_path}}" }}/seam"],
-              must_succeed: false
-        end
-      end
+    # Homebrew quarantines every cask download on macOS; strip the attribute
+    # after install. A release's darwin binaries are notarized (notarize:
+    # above), but the strip stays as a fallback for what that cannot cover:
+    # - A bare Mach-O cannot carry a stapled ticket, so Gatekeeper checks a
+    #   quarantined binary with Apple online at first launch, and an offline
+    #   first run can still be refused.
+    # - Snapshot and fork builds without the signing secrets skip notarize
+    #   and ship adhoc-signed binaries.
+    # Drop it only after a clean-Mac test of the notarized cask.
+    # install_steps (goreleaser v2.19.0+, goreleaser/goreleaser#6873) writes
+    # Homebrew 7's declarative postflight_steps in normal stanza order;
+    # hooks.post.install would write a Ruby `postflight` block, which
+    # Homebrew 7 deprecates with a warning on every install. The body is
+    # Homebrew's install-steps DSL, not Ruby, and the .StagedPath field
+    # renders as Homebrew's staged_path token. must_succeed: false keeps the
+    # strip from ever failing the install (xattr -dr already exits 0 when the
+    # attribute is absent).
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr",
+                args:         ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/seamlessd", "{{ .StagedPath }}/seam"],
+                must_succeed: false
+          end
 
 changelog:
   sort: asc

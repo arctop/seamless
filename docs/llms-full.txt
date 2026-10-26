@@ -1323,8 +1323,9 @@ brew install arctop/tap/seamless
 
 Every release publishes a cask to the `arctop/homebrew-tap` tap, on macOS and
 Linux alike. It delivers the **binaries only** - `seamlessd` and `seam` on your
-PATH, with the Gatekeeper quarantine attribute stripped on macOS (the release
-binaries are unsigned). It does not wire clients or register a service, so
+PATH, with the Gatekeeper quarantine attribute stripped on macOS (a fallback:
+the binaries are notarized, but an offline first launch could still be
+refused). It does not wire clients or register a service, so
 finish with the two commands the cask's caveats print:
 
 ```bash
