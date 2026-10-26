@@ -15,6 +15,7 @@ import (
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/plans"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 func writePlanNote(t *testing.T, mgr *files.Manager, slug, planSlug, title, status string, updated time.Time) core.Note {
@@ -37,7 +38,7 @@ func writePlanNoteBody(t *testing.T, mgr *files.Manager, slug, planSlug, title, 
 func TestStalePlanProposeAndApply(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
 	mgr, err := files.NewManager(dir, db, slog.Default())
@@ -99,7 +100,7 @@ func TestStalePlanProposeAndApply(t *testing.T) {
 func TestStalePlanShipEvidence(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
 	mgr, err := files.NewManager(dir, db, slog.Default())
@@ -191,7 +192,7 @@ func TestStalePlanShipEvidence(t *testing.T) {
 func TestShipPlanApplyGuardsApprovedPlans(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
 	mgr, err := files.NewManager(dir, db, slog.Default())
@@ -218,7 +219,7 @@ func TestShipPlanApplyGuardsApprovedPlans(t *testing.T) {
 func TestAbandonPlanApplyGuardsApprovedPlans(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
 	mgr, err := files.NewManager(dir, db, slog.Default())

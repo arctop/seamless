@@ -12,6 +12,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 func TestRecord_ArmedRecorderMintsMilestoneOnce(t *testing.T) {
@@ -50,7 +51,7 @@ func TestRecord_ArmedRecorderMintsMilestoneOnce(t *testing.T) {
 // settlement's own re-entrant pass latches the first-plan-shipped milestone --
 // no caller anywhere calls a plan-shipped API explicitly.
 func TestRecord_TaskTransitionMintsPlanShippedOnce(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	r := NewRecorder(db)

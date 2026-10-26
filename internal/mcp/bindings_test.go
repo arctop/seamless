@@ -14,6 +14,7 @@ import (
 
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // fakeClientSession satisfies mcpserver.ClientSession so tests can stamp a
@@ -29,7 +30,7 @@ func (f fakeClientSession) SessionID() string                                   
 // config for the binding paths (DB + key).
 func newBindingsServer(t *testing.T) (*Server, *sql.DB) {
 	t.Helper()
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	return New(Config{DB: db, APIKey: "test-key"}), db

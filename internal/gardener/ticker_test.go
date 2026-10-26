@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // Regression: the daemon must be able to drain the gardener goroutine before it
@@ -17,7 +17,7 @@ import (
 // stops it; before this contract existed the loop was fire-and-forget and a
 // mid-shutdown pass could race the DB close.
 func TestStartWait_DrainsOnCancel(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

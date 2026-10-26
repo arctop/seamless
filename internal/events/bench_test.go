@@ -17,12 +17,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/core"
-	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 func openBenchRecorder(b *testing.B) *Recorder {
 	b.Helper()
-	db, err := store.Open(filepath.Join(b.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(b, filepath.Join(b.TempDir(), "seam.db"))
 	require.NoError(b, err)
 	b.Cleanup(func() { _ = db.Close() })
 	return NewRecorder(db)

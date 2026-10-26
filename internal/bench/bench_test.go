@@ -14,6 +14,7 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/demokit"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 func TestScenarios_TableShape(t *testing.T) {
@@ -136,6 +137,20 @@ func kindsOf(names ...string) map[string]core.MemoryKind {
 	return out
 }
 
+// newSeeder is demokit.New over a data dir whose database is already a
+// storetest.OpenFresh copy, so each seed opens a migrated file instead of
+// running every migration itself. What these tests check is the seeded state,
+// not how the database came to exist.
+func newSeeder(t *testing.T, dataDir string) *demokit.Seeder {
+	t.Helper()
+	db, err := storetest.OpenFresh(t, filepath.Join(dataDir, "seam.db"))
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+	s, err := demokit.New(dataDir)
+	require.NoError(t, err)
+	return s
+}
+
 func TestSeeds_State(t *testing.T) {
 	expects := []seedExpect{
 		{
@@ -207,8 +222,7 @@ func TestSeeds_State(t *testing.T) {
 			dataDir := t.TempDir()
 			repo := t.TempDir()
 
-			s, err := demokit.New(dataDir)
-			require.NoError(t, err)
+			s := newSeeder(t, dataDir)
 			sc, ok := ScenarioByName(want.scenario)
 			require.True(t, ok)
 			require.NoError(t, sc.Seed(s, repo))
@@ -326,8 +340,7 @@ func TestSeeds_State(t *testing.T) {
 // The "" repo path skips the mapping -- what newScenarioRunDir relies on.
 func TestSeed_NoRepoMapping(t *testing.T) {
 	dataDir := t.TempDir()
-	s, err := demokit.New(dataDir)
-	require.NoError(t, err)
+	s := newSeeder(t, dataDir)
 	sc, ok := ScenarioByName(cookieHardeningName)
 	require.True(t, ok)
 	require.NoError(t, sc.Seed(s, ""))

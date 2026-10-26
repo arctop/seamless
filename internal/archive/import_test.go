@@ -18,6 +18,7 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // ---------------------------------------------------------------------------
@@ -82,7 +83,7 @@ func seedIndexedInto(t *testing.T, dir string, s instanceSpec) {
 	t.Helper()
 	ctx := context.Background()
 
-	db, err := store.Open(filepath.Join(dir, DBName))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, DBName))
 	require.NoError(t, err)
 	defer func() { require.NoError(t, db.Close()) }()
 

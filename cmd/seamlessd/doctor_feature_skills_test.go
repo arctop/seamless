@@ -10,6 +10,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	agentskills "github.com/arctop/seamless/internal/skills"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // The skill install is client-side, so it can outlive the feature it documents:
@@ -25,7 +26,7 @@ func TestFeatureSkillsCheck_InfoOnlyWhenAnInstalledSkillOutlivesItsFeature(t *te
 	t.Setenv("CODEX_HOME", codexHome)
 	t.Setenv("SEAMLESS_NO_RESEARCH_SKILL", "")
 
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
@@ -81,7 +82,7 @@ func TestFeatureSkillsCheck_InfoOnlyWhenAnInstalledSkillOutlivesItsFeature(t *te
 // is failure-soft everywhere else, but here "cannot tell" is its own answer.
 func TestFeatureSkillsCheck_UnreadableOverrideWarns(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

@@ -15,6 +15,7 @@ import (
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/llm"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // newSplitGardener builds a gardener with the given chat output and seeds three
@@ -24,7 +25,7 @@ func newSplitGardener(t *testing.T, chatOut string) (context.Context, *sql.DB, *
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	mgr, err := files.NewManager(dir, db, slog.Default())

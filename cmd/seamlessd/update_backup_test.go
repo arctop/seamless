@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 func TestBackupName_RoundTrips(t *testing.T) {
@@ -53,7 +54,7 @@ func TestPruneBackups_KeepsTheNewestTwoAndNothingElse(t *testing.T) {
 func backupDataDir(t *testing.T) (dataDir, exe string) {
 	t.Helper()
 	dataDir = filepath.Join(t.TempDir(), "data")
-	db, err := updateTestDB(t, filepath.Join(dataDir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dataDir, "seam.db"))
 	require.NoError(t, err)
 	require.NoError(t, db.Close())
 	mem := filepath.Join(dataDir, "memory", "proj", "a.md")

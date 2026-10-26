@@ -11,6 +11,7 @@ import (
 
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // The package exists so the tag spellings cannot drift apart across the four
@@ -172,7 +173,7 @@ func TestNoteDescription(t *testing.T) {
 
 func newPlansDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	return db

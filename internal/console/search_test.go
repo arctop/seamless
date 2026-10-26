@@ -17,6 +17,7 @@ import (
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // fixedEmbedder returns the same vector for every text (retrieve's tests keep a
@@ -31,7 +32,7 @@ func (e fixedEmbedder) Embed(context.Context, string) ([]float32, error) { retur
 // the semantic leg live.
 func newSemanticConsole(t *testing.T, vec []float32) (*sql.DB, *http.ServeMux) {
 	t.Helper()
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

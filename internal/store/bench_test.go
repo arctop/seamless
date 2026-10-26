@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -70,10 +69,7 @@ func benchVector(seed uint64, dims int) []float32 {
 
 func openBenchStore(b *testing.B) *sql.DB {
 	b.Helper()
-	db, err := Open(filepath.Join(b.TempDir(), "seam.db"))
-	require.NoError(b, err)
-	b.Cleanup(func() { _ = db.Close() })
-	return db
+	return openTestDB(b)
 }
 
 // seedSearchCorpus inserts n synthetic memories -- an index row, an fts row,

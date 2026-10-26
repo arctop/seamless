@@ -25,6 +25,7 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/llm"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 const (
@@ -90,7 +91,7 @@ func (e benchEmbedder) Embed(_ context.Context, text string) ([]float32, error) 
 
 func setupBenchDB(b *testing.B) *sql.DB {
 	b.Helper()
-	db, err := store.Open(filepath.Join(b.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(b, filepath.Join(b.TempDir(), "seam.db"))
 	require.NoError(b, err)
 	b.Cleanup(func() { _ = db.Close() })
 	return db

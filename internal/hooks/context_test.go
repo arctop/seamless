@@ -20,6 +20,7 @@ import (
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 func TestPrepareHookContext_ClientAwareThreshold(t *testing.T) {
@@ -132,7 +133,7 @@ func TestWriteContextResponse_CodexEventsShareCapAndExactTelemetry(t *testing.T)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+			db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, db.Close()) })
 			h := NewHandler(Config{DB: db, Events: events.NewRecorder(db)})
@@ -170,7 +171,7 @@ func TestWriteContextResponse_CodexEventsShareCapAndExactTelemetry(t *testing.T)
 }
 
 func TestSessionStart_CodexCapsPinnedContextAfterAmbientLine(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	ctx := context.Background()
@@ -355,7 +356,7 @@ func TestSubagentStart_CodexRelevantSectionUnderCap(t *testing.T) {
 // SessionStart must be emitted whole, byte-for-byte, with no truncation
 // telemetry.
 func TestSessionStart_ClaudeEmitsOversizedBriefingUncapped(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	ctx := context.Background()

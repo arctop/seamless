@@ -19,6 +19,7 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 	"github.com/arctop/seamless/internal/update"
 	"github.com/stretchr/testify/require"
 )
@@ -65,7 +66,7 @@ func newWiringRig(t *testing.T, list string) *wiringRig {
 	client := srv.Client()
 	client.CheckRedirect = update.HTTPSOnlyRedirect
 
-	db, err := updateTestDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	t.Setenv("CODEX_HOME", t.TempDir())
@@ -247,7 +248,7 @@ const soakedSignedRelease = `[{"tag_name":"v0.7.3","published_at":"2025-01-08T00
 // checker, so the real spawner is built and never used.
 func TestUpdateWiring_SpawnerOnlyOnAReleaseBuild(t *testing.T) {
 	t.Setenv("CODEX_HOME", t.TempDir())
-	db, err := updateTestDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	installer := update.Install{Kind: update.KindInstaller, Hint: update.Hint(update.KindInstaller)}

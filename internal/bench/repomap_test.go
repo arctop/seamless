@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/arctop/seamless/internal/demokit"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -43,8 +42,7 @@ func TestScenarioSeed_BindsRepoThroughASymlinkedPath(t *testing.T) {
 			// Seed through the LOGICAL path, which is what a harness that did
 			// not resolve its base dir would hand the seeder.
 			dataDir := t.TempDir()
-			s, err := demokit.New(dataDir)
-			require.NoError(t, err)
+			s := newSeeder(t, dataDir)
 			require.NoError(t, sc.Seed(s, logical))
 			require.NoError(t, s.Close())
 

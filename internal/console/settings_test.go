@@ -20,10 +20,11 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 func TestSettingsPage(t *testing.T) {
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
@@ -173,7 +174,7 @@ func TestBuildWorkspaceRegistry_JoinsSourcesAndPreservesReferences(t *testing.T)
 }
 
 func TestSettingsFamilyCreateUpdateAndDelete(t *testing.T) {
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
@@ -243,7 +244,7 @@ func TestSettingsFamilyCreateUpdateAndDelete(t *testing.T) {
 }
 
 func TestSettingsBriefingSaveAndReset(t *testing.T) {
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -334,7 +335,7 @@ func TestSettingsBriefingSaveAndReset(t *testing.T) {
 // The per-project force endpoint flips a scope's activation override and the
 // Settings payload reflects it; garbage force values flash instead of saving.
 func TestSettingsUtilityForce(t *testing.T) {
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -436,7 +437,7 @@ func TestUtilityRemaining(t *testing.T) {
 // no longer writes.
 func TestSettingsEmbeddingsPanel(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "seam.db")
-	db, err := openFreshDB(t, dbPath)
+	db, err := storetest.OpenFresh(t, dbPath)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
@@ -512,7 +513,7 @@ func TestSettingsEmbeddingsPanel(t *testing.T) {
 // A daemon that started disabled by the override reports the disabled state
 // and, once the switch is cleared, a pending restart to re-enable.
 func TestSettingsEmbeddingsDisabledStates(t *testing.T) {
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
@@ -567,7 +568,7 @@ func (s stubEmbedder) Embed(context.Context, string) ([]float32, error) {
 // POSTing the re-embed trigger starts the background pass and reports it.
 func TestSettingsEmbeddingsReembedTrigger(t *testing.T) {
 	dir := t.TempDir()
-	db, err := openFreshDB(t, filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
@@ -612,7 +613,7 @@ func TestSettingsEmbeddingsReembedTrigger(t *testing.T) {
 // A daemon whose embedder fell back to disabled (no key or model) surfaces the
 // cause on the page rather than silently degrading.
 func TestSettingsEmbeddingsFallbackReason(t *testing.T) {
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -811,7 +812,7 @@ func TestSettingsSections_SaveBarAndLegacyAnchors(t *testing.T) {
 // server marks the preset the effective values equal (else Custom), and the
 // Customize form is open by default only at Advanced.
 func TestBriefingSection_PresetsAndCustomize(t *testing.T) {
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	svc, err := New(Config{DB: db, APIKey: testKey, BriefingCfg: config.Defaults().Briefing, Level: "standard"})

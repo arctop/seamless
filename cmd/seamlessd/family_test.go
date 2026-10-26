@@ -11,12 +11,13 @@ import (
 
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // familyTestDB registers one open project and one project per fenced state.
 func familyTestDB(t *testing.T) (context.Context, *sql.DB) {
 	t.Helper()
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()

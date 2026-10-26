@@ -14,6 +14,7 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/llm"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // TestEmbedderSemanticSearch is an opt-in end-to-end check that the files + llm +
@@ -36,7 +37,7 @@ func TestEmbedderSemanticSearch(t *testing.T) {
 	t.Logf("embedding provider=%s model=%s", cfg.LLM.Provider, embedder.Model())
 
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	m, err := NewManager(dir, db, nil)

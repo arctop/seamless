@@ -14,7 +14,7 @@ import (
 	"github.com/arctop/seamless/internal/bench"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
-	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 func TestGitSnapshotRestoreDiff(t *testing.T) {
@@ -61,7 +61,7 @@ func TestGitSnapshotRestoreDiff(t *testing.T) {
 func TestDumpEvents(t *testing.T) {
 	ctx := context.Background()
 	dataDir := t.TempDir()
-	db, err := store.Open(filepath.Join(dataDir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dataDir, "seam.db"))
 	require.NoError(t, err)
 	rec := events.NewRecorder(db)
 	base := time.Now().UTC().Truncate(time.Second)
@@ -160,7 +160,7 @@ func TestCapture_WritesTheFrozenLayout(t *testing.T) {
 	a.snapshot = f.head
 
 	// A seeded data dir and a transcript, as a finished run would have left.
-	db, err := store.Open(filepath.Join(a.dataDir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(a.dataDir, "seam.db"))
 	require.NoError(t, err)
 	require.NoError(t, db.Close())
 	projects := filepath.Join(a.configDir, "projects", "-fixture")
@@ -198,7 +198,7 @@ func TestCapture_PreservesTheWriteAheadLogTail(t *testing.T) {
 	require.NoError(t, err)
 	a.snapshot = f.head
 
-	db, err := store.Open(filepath.Join(a.dataDir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(a.dataDir, "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	rec := events.NewRecorder(db)

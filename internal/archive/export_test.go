@@ -19,6 +19,7 @@ import (
 
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // ---------------------------------------------------------------------------
@@ -40,7 +41,7 @@ func seedInstance(t *testing.T) string {
 	dir := t.TempDir()
 	ctx := context.Background()
 
-	db, err := store.Open(filepath.Join(dir, DBName))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, DBName))
 	require.NoError(t, err)
 
 	_, err = store.EnsureProject(ctx, db, "seam", "Seam")
@@ -157,7 +158,7 @@ func entryByName(t *testing.T, entries []tarEntry, name string) tarEntry {
 func TestVacuumIntoAcceptsABoundParameter(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, DBName)
-	db, err := store.Open(dbPath)
+	db, err := storetest.OpenFresh(t, dbPath)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

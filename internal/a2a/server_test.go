@@ -17,7 +17,7 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/retrieve"
-	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 const testKey = "test-key"
@@ -314,7 +314,7 @@ func eventRows(t *testing.T, db *sql.DB, kind core.EventKind) []map[string]any {
 // (source "recall", so utility scoring counts it as query-gated demand) and
 // recall.miss on a zero-hit -- each tagged transport "a2a" for attribution.
 func TestMessageSend_RecordsRecallTelemetry(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

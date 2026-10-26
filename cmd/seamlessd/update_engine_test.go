@@ -16,6 +16,7 @@ import (
 
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 	"github.com/arctop/seamless/internal/update"
 )
 
@@ -694,7 +695,7 @@ func TestOutsideServiceCheck(t *testing.T) {
 
 func TestAutoUpdateAllowed(t *testing.T) {
 	dataDir := t.TempDir()
-	db, err := updateTestDB(t, filepath.Join(dataDir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dataDir, "seam.db"))
 	require.NoError(t, err)
 	off := false
 	cfg := config.Defaults()

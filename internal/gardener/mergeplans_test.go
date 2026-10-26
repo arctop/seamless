@@ -14,6 +14,7 @@ import (
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/plans"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // mergeEnv is one gardener wired to a throwaway DB and files manager, plus the
@@ -27,7 +28,7 @@ type mergeEnv struct {
 func newMergeEnv(t *testing.T) *mergeEnv {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	mgr, err := files.NewManager(dir, db, slog.Default())

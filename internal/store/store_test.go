@@ -47,10 +47,7 @@ func TestOpen_FreshDB_PragmasAndMigration(t *testing.T) {
 // would pass even if the planner ignored it, so this checks the plan instead --
 // which is what caught the partial-index form silently degrading to a scan.
 func TestTasksClaimedByIndex(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "seam.db")
-	db, err := Open(dbPath)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
+	db := openTestDB(t)
 
 	rows, err := db.Query(`EXPLAIN QUERY PLAN SELECT `+taskCols+` FROM tasks
 		WHERE claimed_by = ? ORDER BY created_at ASC, id ASC`, "01KXKE2XZNQEA9R0EQEXMGP9C9")
@@ -98,12 +95,9 @@ func TestForeignKeys_Enforced(t *testing.T) {
 }
 
 func TestFTS_InsertMatchDelete(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "seam.db")
-	db, err := Open(dbPath)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
+	db := openTestDB(t)
 
-	_, err = db.Exec(
+	_, err := db.Exec(
 		`INSERT INTO fts(item_id, kind, project, title, name, description, body)
 		 VALUES(?,?,?,?,?,?,?)`,
 		"01ABC", "memory", "seam", "", "chroma-boot-race",
@@ -130,10 +124,7 @@ func TestFTS_InsertMatchDelete(t *testing.T) {
 }
 
 func TestTableCount(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "seam.db")
-	db, err := Open(dbPath)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
+	db := openTestDB(t)
 
 	n, err := TableCount(db)
 	require.NoError(t, err)

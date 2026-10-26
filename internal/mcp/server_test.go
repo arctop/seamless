@@ -26,6 +26,7 @@ import (
 	mcpserver "github.com/arctop/seamless/internal/mcp"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 const testKey = "test-bearer-key"
@@ -50,7 +51,7 @@ func newServerCfg(t *testing.T, tune func(*mcpserver.Config)) (string, *sql.DB) 
 func newServerFiles(t *testing.T, tune func(*mcpserver.Config)) (string, *sql.DB, *files.Manager, string) {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/core"
-	"github.com/arctop/seamless/internal/demokit"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/llm"
 	"github.com/arctop/seamless/internal/store"
@@ -493,8 +492,7 @@ func newScenarioRunDir(t *testing.T, fx scenarioFixture, cond Condition, files m
 func seedRunDataDir(t *testing.T, dir string, fx scenarioFixture, shape runShape) {
 	t.Helper()
 	dataDir := filepath.Join(dir, DataDirName)
-	s, err := demokit.New(dataDir)
-	require.NoError(t, err)
+	s := newSeeder(t, dataDir)
 	sc, ok := ScenarioByName(fx.scenario)
 	require.True(t, ok)
 	require.NoError(t, sc.Seed(s, ""))

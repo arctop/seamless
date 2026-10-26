@@ -19,6 +19,7 @@ import (
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 const testKey = "test-key-abc123"
@@ -52,7 +53,7 @@ func newConsoleFeatures(t *testing.T, feats config.Features) (*sql.DB, *http.Ser
 // optional-feature base and file/env console level base.
 func newConsoleLevel(t *testing.T, feats config.Features, lvl string) (*sql.DB, *http.ServeMux) {
 	t.Helper()
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -272,7 +273,7 @@ func TestSafeNext(t *testing.T) {
 }
 
 func TestGetNavCounts_EmptyDB(t *testing.T) {
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	n, err := store.GetNavCounts(context.Background(), db)
@@ -326,7 +327,7 @@ func TestOverview_CoverageTrendEmptyWhenNoSessions(t *testing.T) {
 // Secure, and the logout that deletes it must carry the same attribute or the
 // browser may keep the original in place.
 func TestSecureCookiesUnderTLS(t *testing.T) {
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	svc, err := New(Config{DB: db, APIKey: testKey, SecureCookies: true})
@@ -364,7 +365,7 @@ func TestSecureCookiesUnderTLS(t *testing.T) {
 // The sidebar names the SERVER, not "this machine": the console may be open on
 // a different device than the daemon.
 func TestSidebarNamesTheServerHost(t *testing.T) {
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	svc, err := New(Config{DB: db, APIKey: testKey})

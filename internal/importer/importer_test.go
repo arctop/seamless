@@ -13,6 +13,7 @@ import (
 
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // writeV1 lays out a synthetic v1 source dir (notes tree + seam.db) and returns
@@ -133,7 +134,7 @@ func writeV1DB(t *testing.T, path string) {
 func newV2(t *testing.T) (*files.Manager, *sql.DB) {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	m, err := files.NewManager(dir, db, nil)

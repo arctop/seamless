@@ -13,6 +13,7 @@ import (
 
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 	"github.com/arctop/seamless/internal/update"
 	"github.com/stretchr/testify/require"
 )
@@ -95,7 +96,7 @@ func TestUpdatesCheck_ConsoleOverrideIsRead(t *testing.T) {
 	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
 	dir := t.TempDir()
 	require.NoError(t, update.SaveState(dir, releaseRecord(now, nil)))
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
 	off := false

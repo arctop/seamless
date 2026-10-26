@@ -15,7 +15,7 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/hooks"
-	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -89,7 +89,7 @@ func TestCodexChecksExactDefinitionsAndMCPStillWarnsTrust(t *testing.T) {
 	installDoctorCodexHooks(t, cfg, seamBin)
 	installDoctorClaudeHooks(t, cfg, seamBin)
 
-	db, err := store.Open(cfg.DBPath())
+	db, err := storetest.OpenFresh(t, cfg.DBPath())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
@@ -255,7 +255,7 @@ func TestCodexObservedActivityCannotMaskStaleDefinition(t *testing.T) {
 	handler["command_windows"] = strings.ReplaceAll(handler["command_windows"].(string), " --client codex", "")
 	writeDoctorHookSettings(t, path, settings)
 
-	db, err := store.Open(cfg.DBPath())
+	db, err := storetest.OpenFresh(t, cfg.DBPath())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	observedAt := time.Date(2026, 7, 20, 7, 0, 0, 0, time.UTC)

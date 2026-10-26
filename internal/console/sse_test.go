@@ -14,10 +14,11 @@ import (
 
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 func TestSSE_StreamsRecordedEvents(t *testing.T) {
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	rec := events.NewRecorder(db)
@@ -61,7 +62,7 @@ func TestSSE_StreamsRecordedEvents(t *testing.T) {
 }
 
 func TestSSE_InteractionsFeedFiltersKinds(t *testing.T) {
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	rec := events.NewRecorder(db)

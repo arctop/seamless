@@ -9,6 +9,7 @@ import (
 
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // TestGardenerRequestScope pins the token-to-scope mapping at the boundary.
@@ -25,7 +26,7 @@ import (
 // ambiguous requests" directive finally reaching the last tool that ignored it.
 func TestGardenerRequestScope(t *testing.T) {
 	ctx := context.Background()
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	s := New(Config{DB: db, APIKey: "test-key"})

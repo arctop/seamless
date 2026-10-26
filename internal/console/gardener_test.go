@@ -21,6 +21,7 @@ import (
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/llm"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // stubChat is a canned llm.Chat: it returns a fixed completion regardless of the
@@ -50,7 +51,7 @@ func (c *seqChat) Complete(context.Context, string, string) (string, error) {
 func newConsoleWithGardener(t *testing.T) (context.Context, *sql.DB, *files.Manager, *http.ServeMux) {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := openFreshDB(t, filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	dataDir := filepath.Join(dir, "data")
@@ -291,7 +292,7 @@ func newConsoleWithChat(t *testing.T, chatOut string) (context.Context, *sql.DB,
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := openFreshDB(t, filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	dataDir := filepath.Join(dir, "data")
@@ -358,7 +359,7 @@ func newConsoleForSplit(t *testing.T, chat llm.Chat) (context.Context, *sql.DB, 
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := openFreshDB(t, filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	dataDir := filepath.Join(dir, "data")

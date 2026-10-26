@@ -19,6 +19,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // throwawayInstance builds a data dir with a migrated seam.db and two markdown
@@ -31,7 +32,7 @@ func throwawayInstance(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	ctx := context.Background()
 	_, err = store.EnsureProject(ctx, db, "seam", "Seam")

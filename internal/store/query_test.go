@@ -13,12 +13,20 @@ import (
 	"github.com/arctop/seamless/internal/core"
 )
 
-// openTestDB opens a fresh migrated database in a temp dir.
-func openTestDB(t *testing.T) *sql.DB {
-	t.Helper()
-	db, err := Open(filepath.Join(t.TempDir(), "seam.db"))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
+// OpenFresh is storetest.OpenFresh, which freshdb_test.go installs from the
+// external store_test package because storetest imports store. Exported only
+// so that file can set it; it exists in test builds alone.
+var OpenFresh func(tb testing.TB, path string) (*sql.DB, error)
+
+// openTestDB opens a fresh migrated database in a temp dir: a copy of the
+// test binary's migrated template, not a migration of its own. A test about
+// migrating or reopening calls Open.
+func openTestDB(tb testing.TB) *sql.DB {
+	tb.Helper()
+	require.NotNil(tb, OpenFresh, "freshdb_test.go installs OpenFresh")
+	db, err := OpenFresh(tb, filepath.Join(tb.TempDir(), "seam.db"))
+	require.NoError(tb, err)
+	tb.Cleanup(func() { _ = db.Close() })
 	return db
 }
 

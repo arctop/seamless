@@ -16,6 +16,7 @@ import (
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // insertUtilityEvent writes a raw event row with an explicit timestamp,
@@ -47,7 +48,7 @@ func writeMemID(t *testing.T, mgr *files.Manager, name, project string, kind cor
 func TestProposeDeadWeight(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
 	mgr, err := files.NewManager(dir, db, slog.Default())
@@ -102,7 +103,7 @@ func TestProposeDeadWeight(t *testing.T) {
 func TestEvaluateUtilityActivation(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
 

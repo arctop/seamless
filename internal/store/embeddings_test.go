@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
-	"path/filepath"
 	"slices"
 	"sort"
 	"testing"
@@ -19,10 +18,7 @@ import (
 
 func newEmbedDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := Open(filepath.Join(t.TempDir(), "seam.db"))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	return db
+	return openTestDB(t)
 }
 
 func TestEncodeDecodeVector(t *testing.T) {

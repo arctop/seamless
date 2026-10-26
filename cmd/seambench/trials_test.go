@@ -26,6 +26,7 @@ import (
 	mcpserver "github.com/arctop/seamless/internal/mcp"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 const throwawayKey = "throwaway-bearer-key"
@@ -35,7 +36,7 @@ const throwawayKey = "throwaway-bearer-key"
 func throwawayInstance(t *testing.T) (string, *sql.DB) {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

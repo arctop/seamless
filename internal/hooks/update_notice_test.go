@@ -18,6 +18,7 @@ import (
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // testUpdateNotice is the example notice from the update plan's design: parsed
@@ -32,7 +33,7 @@ const testUpdateNotice = "Seamless v0.7.3 is available (running v0.7.2). Owner a
 // The hook also hands the provider the host it resolved for the session, which
 // for a local agent on a daemon that has named its machine is that name, not "".
 func TestSessionStart_CodexCapKeepsUpdateNoticeAndAmbientLine(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	ctx := context.Background()

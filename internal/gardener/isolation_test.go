@@ -15,6 +15,7 @@ import (
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // isolate registers a project and fences it. The row has to exist before a
@@ -45,7 +46,7 @@ func briefName(t *testing.T, payload map[string]any, field string) string {
 func TestProposeMerges_SkipsPairsSpanningAnIsolatedProject(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
 

@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,10 +13,7 @@ import (
 
 func newTaskDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := Open(filepath.Join(t.TempDir(), "seam.db"))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	return db
+	return openTestDB(t)
 }
 
 // addTask inserts an open task and returns its id. createdAt is offset by seq so

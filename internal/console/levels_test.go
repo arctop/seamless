@@ -19,6 +19,7 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // A level change reads as one ledger line in Activity, like a features toggle;
@@ -669,7 +670,7 @@ func TestLevelPost_RequiresSameOriginForCookies(t *testing.T) {
 
 // Settings -> Your setup: the facts a Basic owner can check and act on.
 func TestSetupSection_Facts(t *testing.T) {
-	db, err := openFreshDB(t, filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	now := time.Now().UTC()

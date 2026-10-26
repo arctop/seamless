@@ -21,6 +21,7 @@ import (
 	"github.com/arctop/seamless/internal/hooks"
 	agentskills "github.com/arctop/seamless/internal/skills"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // The skills step is an optional convenience layer: an unwritable skill root
@@ -787,7 +788,7 @@ func TestEffectiveFeatures_ReadsWithoutMigrating(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dataDir := t.TempDir()
 			dbPath := filepath.Join(dataDir, "seam.db")
-			db, err := store.Open(dbPath)
+			db, err := storetest.OpenFresh(t, dbPath)
 			require.NoError(t, err)
 			if tt.setup != nil {
 				tt.setup(t, db)
@@ -845,7 +846,7 @@ func TestRunInstallHooks_UpgradeFromBefore022KeepsResearchWithoutMigrating(t *te
 	t.Setenv("CODEX_HOME", codexHome)
 
 	dbPath := filepath.Join(dataDir, "seam.db")
-	db, err := store.Open(dbPath)
+	db, err := storetest.OpenFresh(t, dbPath)
 	require.NoError(t, err)
 	addTrial(t, db)
 	rewindSchema(t, db, featuresGrandfatherVersion-4)

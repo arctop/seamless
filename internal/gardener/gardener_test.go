@@ -16,6 +16,7 @@ import (
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // fakeEmbedder returns a one-hot unit vector along an axis encoded in the text as
@@ -66,7 +67,7 @@ func mustID(t *testing.T) string {
 
 func TestPruneToolEvents_OnlyOldTransport(t *testing.T) {
 	ctx := context.Background()
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	rec := events.NewRecorder(db)
@@ -112,7 +113,7 @@ func TestPruneToolEvents_OnlyOldTransport(t *testing.T) {
 
 func TestReapStaleSessions(t *testing.T) {
 	ctx := context.Background()
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	rec := events.NewRecorder(db)
@@ -172,7 +173,7 @@ func TestReapStaleSessions(t *testing.T) {
 
 func TestReapStaleSessions_ConfiguredIdleTTL(t *testing.T) {
 	ctx := context.Background()
-	db, err := store.Open(filepath.Join(t.TempDir(), "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -202,7 +203,7 @@ func TestReapStaleSessions_ConfiguredIdleTTL(t *testing.T) {
 func TestRunOnce_ProducesAllThreeProposalKinds(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
 
@@ -273,7 +274,7 @@ func TestRunOnce_ProducesAllThreeProposalKinds(t *testing.T) {
 func TestRunOnce_UnreadableBodyBlocksArchivesRatherThanFalselyProposing(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
 
@@ -308,7 +309,7 @@ func TestRunOnce_UnreadableBodyBlocksArchivesRatherThanFalselyProposing(t *testi
 // The counts are only trustworthy when every pass ran; a healthy run says so.
 func TestRunOnce_OKWhenEveryPassRuns(t *testing.T) {
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
 
@@ -330,7 +331,7 @@ func TestRunOnce_OKWhenEveryPassRuns(t *testing.T) {
 func TestRunOnce_DegradesWithoutEmbedderOrChat(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "seam.db"))
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
 	mgr, err := files.NewManager(dir, db, slog.Default())

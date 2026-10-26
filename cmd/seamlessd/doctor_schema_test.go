@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // setSchemaVersion opens a fresh migrated database in a temp dir and rewrites
@@ -18,7 +19,7 @@ import (
 func setSchemaVersion(t *testing.T, applied int) string {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "seam.db")
-	db, err := store.Open(dbPath)
+	db, err := storetest.OpenFresh(t, dbPath)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, db.Close()) }()
 
