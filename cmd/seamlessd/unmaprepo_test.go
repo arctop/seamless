@@ -60,7 +60,8 @@ func TestUnmapTargets(t *testing.T) {
 	require.ErrorContains(t, err, "must be absolute")
 
 	// Absolute means absolute on THAT host's OS, whatever this one runs: a
-	// Windows client's drive and UNC paths are accepted and found here too. A
+	// Windows client's drive and UNC paths are accepted and found here too, a
+	// drive path in either separator spelling, since Windows takes both. A
 	// driveless "\repos\app" is relative to a current drive, so it is refused.
 	for _, root := range []string{`C:\repos\app`, `\\srv\share\app`} {
 		_, _, err = store.RegisterProjectForCWD(ctx, db, store.CWDIdentity{
@@ -68,7 +69,9 @@ func TestUnmapTargets(t *testing.T) {
 		}, "alpha")
 		require.NoError(t, err)
 	}
-	for _, p := range []string{`C:\repos\app`, `C:\repos\app\`, `\\srv\share\app`} {
+	for _, p := range []string{
+		`C:\repos\app`, `C:\repos\app\`, "C:/repos/app", "C:/repos/app/", `C:\repos/app`, `\\srv\share\app`,
+	} {
 		targets, err = unmapTargets(ctx, db, p, false, "winbox")
 		require.NoError(t, err, p)
 		require.Len(t, targets, 1, p)

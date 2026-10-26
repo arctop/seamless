@@ -686,19 +686,47 @@ func uniqueProjectSlug(base, host, main string, rows []RepoMapRow) string {
 // matchProjectPath returns the slug of the longest key that is a path-prefix of
 // cwd, or "" when none matches. Prefixes must align on a path separator, so
 // "/a/foo" never matches key "/a/foobar".
+//
+// Two keys can normalize to the same path. A POSIX daemon stored a Windows
+// client's "C:/repos/app" as sent until normPath spelled drive paths with
+// backslashes, and the seam hook sends "C:\repos\app", so one repo can hold a
+// row in each spelling -- under two slugs, when the second registration missed
+// the first and minted. The key already in normal form wins that tie: it is the
+// hook's spelling, so hook-driven sessions keep the project they resolved to
+// before. The smaller key breaks any tie left, so map order never decides.
 func matchProjectPath(cwd string, m map[string]string) string {
 	if cwd == "" || len(m) == 0 {
 		return ""
 	}
 	cwd = normPath(cwd)
-	best, bestSlug := "", ""
-	for prefix, slug := range m {
-		p := normPath(prefix)
-		if pathHasPrefix(cwd, p) && len(p) > len(best) {
-			best, bestSlug = p, slug
+	found := false
+	best, bestKey, bestSlug := "", "", ""
+	for key, slug := range m {
+		p := normPath(key)
+		if !pathHasPrefix(cwd, p) {
+			continue
 		}
+		if found {
+			if len(p) < len(best) {
+				continue
+			}
+			// Two prefixes of cwd with one length are one path.
+			if len(p) == len(best) && !keyWinsTie(key, bestKey, p) {
+				continue
+			}
+		}
+		found, best, bestKey, bestSlug = true, p, key, slug
 	}
 	return bestSlug
+}
+
+// keyWinsTie reports whether key beats other, two raw keys that both normalize
+// to p: the one already spelled as p first, then the smaller.
+func keyWinsTie(key, other, p string) bool {
+	if (key == p) != (other == p) {
+		return key == p
+	}
+	return key < other
 }
 
 // pathHasPrefix reports whether path is prefix itself or lies beneath it, with
@@ -733,14 +761,18 @@ func NormRepoPath(p string) string { return normPath(p) }
 // drive, and is refused like any relative path.
 func IsAbsRepoPath(p string) bool {
 	p = strings.TrimSpace(p)
-	switch {
-	case strings.HasPrefix(p, "/"), strings.HasPrefix(p, `\\`):
-		return true
-	case len(p) >= 3 && p[1] == ':' && (p[2] == '\\' || p[2] == '/'):
-		c := p[0] | 0x20 // ASCII lower case
-		return c >= 'a' && c <= 'z'
+	return strings.HasPrefix(p, "/") || strings.HasPrefix(p, `\\`) || isDrivePath(p)
+}
+
+// isDrivePath reports whether p starts at a Windows drive root: an ASCII letter,
+// a colon and either separator ("C:\repos", "c:/repos"). A drive-relative "C:x"
+// does not.
+func isDrivePath(p string) bool {
+	if len(p) < 3 || p[1] != ':' || (p[2] != '\\' && p[2] != '/') {
+		return false
 	}
-	return false
+	c := p[0] | 0x20 // ASCII lower case
+	return c >= 'a' && c <= 'z'
 }
 
 // normPath puts a repo path in its one comparable form. The rule follows the
@@ -750,12 +782,20 @@ func IsAbsRepoPath(p string) bool {
 //   - A POSIX absolute path ("/home/me/app") is path.Clean'd, on every daemon.
 //     filepath.Clean on a Windows daemon would rewrite it to "\home\me\app", a
 //     path that exists on no machine.
+//   - A Windows drive path is spelled with backslashes on every daemon, so
+//     "C:/repos/app" and "C:\repos/app" are "C:\repos\app": Windows takes either
+//     separator, and a backslash is what the seam hook sends. Only a path whose
+//     first byte is a letter is folded, and a POSIX absolute path starts with
+//     "/", so no POSIX path changes shape. Rows stored in the forward-slash
+//     spelling before this rule are not rewritten: every comparison normalizes
+//     both sides, so they still match (see matchProjectPath for a tie).
 //   - A path containing a backslash is a Windows client's ("C:\repos\app",
 //     "\\srv\share\app"), and only loses its trailing separators. filepath.Clean
 //     on a POSIX daemon would keep the backslashes while treating the whole
 //     string as one segment, which is worse than not normalizing at all.
-//   - Anything else -- "C:/repos/app", a "//srv/share" UNC path, a relative
-//     path -- is shaped like this daemon's own and is filepath.Clean'd.
+//   - Anything else -- a "//srv/share" UNC path, a relative path -- is shaped
+//     like this daemon's own and is filepath.Clean'd. "//srv/share" is not
+//     folded like a drive path: to a POSIX client it is "/srv/share".
 //
 // Case is NOT folded -- Windows path comparison is case-insensitive and this is
 // not, which is a known Phase 1 limit rather than an oversight.
@@ -767,6 +807,9 @@ func normPathWith(ownClean func(string) string, p string) string {
 	p = strings.TrimSpace(p)
 	if p == "" {
 		return ""
+	}
+	if isDrivePath(p) {
+		p = strings.ReplaceAll(p, "/", `\`)
 	}
 	if strings.ContainsRune(p, '\\') {
 		for len(p) > 1 && (p[len(p)-1] == '\\' || p[len(p)-1] == '/') {

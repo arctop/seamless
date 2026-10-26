@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -100,7 +101,8 @@ func retireProject(ctx context.Context, db *sql.DB, w io.Writer, slug string, un
 		fmt.Fprintf(w, "project %q is already retired (since %s)\n", slug, core.FormatTime(*p.RetiredAt))
 		return nil
 	}
-	blockers, err := retireBlockers(ctx, db, slug)
+	quote := shellQuoter(runtime.GOOS)
+	blockers, err := retireBlockers(ctx, db, slug, quote)
 	if err != nil {
 		return err
 	}
@@ -118,16 +120,17 @@ func retireProject(ctx context.Context, db *sql.DB, w io.Writer, slug string, un
 	if err := store.RetireProject(ctx, db, slug, now); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "retired project %q (undo: seamlessd retire-project --project %s --undo)\n", slug, slug)
+	fmt.Fprintf(w, "retired project %q (undo: seamlessd retire-project --project %s --undo)\n", slug, quote(slug))
 	return nil
 }
 
 // retireBlockers lists what keeps slug from being retired, one line per blocker
 // naming its remedy; none means it is safe. Every mapping gets the exact command
-// that clears it. Another host's row lives in this database, so it is dropped
-// from here with unmap-repo --host; that host's own unmap-repo edits its own
-// database and could never reach it.
-func retireBlockers(ctx context.Context, db *sql.DB, slug string) ([]string, error) {
+// that clears it, each argument passed through quote so the line can be pasted
+// as printed. Another host's row lives in this database, so it is dropped from
+// here with unmap-repo --host; that host's own unmap-repo edits its own database
+// and could never reach it.
+func retireBlockers(ctx context.Context, db *sql.DB, slug string, quote func(string) string) ([]string, error) {
 	local, err := store.LocalRepoMappings(ctx, db)
 	if err != nil {
 		return nil, err
@@ -150,12 +153,12 @@ func retireBlockers(ctx context.Context, db *sql.DB, slug string) ([]string, err
 		if isLocal[hostPath{r.Host, r.Path}] {
 			out = append(out, fmt.Sprintf(
 				"%s still maps here: move it with `seamlessd map-repo --path %s --project <slug>`, or drop it with `seamlessd unmap-repo --path %s`",
-				r.Path, r.Path, r.Path))
+				r.Path, quote(r.Path), quote(r.Path)))
 			continue
 		}
 		out = append(out, fmt.Sprintf(
 			"%s on host %q still maps here: drop it with `seamlessd unmap-repo --host %s --path %s`",
-			r.Path, r.Host, r.Host, r.Path))
+			r.Path, r.Host, quote(r.Host), quote(r.Path)))
 	}
 
 	c, err := store.GetProjectCounts(ctx, db, slug)
@@ -185,4 +188,76 @@ func countOf(n int, one, many string) string {
 		return "1 " + one
 	}
 	return fmt.Sprintf("%d %s", n, many)
+}
+
+// shellQuoter returns how a printed command quotes an argument for the shell an
+// owner on goos pastes it into. retire-project opens this machine's database,
+// so it runs where the daemon does and goos is runtime.GOOS: a remedy can name
+// another machine's path, but it is run here.
+//
+//   - Everywhere but Windows, POSIX single quotes (posixShellArg), which sh,
+//     bash and zsh all read literally -- so a Windows client's "C:\repos\app"
+//     keeps its backslashes and a path with a space stays one argument.
+//   - On Windows, PowerShell single quotes (powerShellArg). PowerShell is the
+//     default shell there and the one the Windows installer runs in, and its
+//     single-quoted string is its only literal one: a double-quoted string
+//     expands "$name" and backtick escapes, which a path can carry
+//     ("\\srv\c$\repos", any POSIX client's path). cmd.exe shares no quoting
+//     with PowerShell, so a quoted word is PowerShell-only.
+//
+// Either way a word made only of characters every such shell, cmd.exe
+// included, reads literally stays bare, so a plain path prints as it is.
+func shellQuoter(goos string) func(string) string {
+	if goos == "windows" {
+		return powerShellArg
+	}
+	return posixShellArg
+}
+
+// posixShellArg quotes s for a POSIX shell: bare when it is all letters, digits
+// and punctuation no shell reads specially anywhere in a word, else in single
+// quotes, each embedded quote closing them, escaped, and reopening them. "=" and
+// "~" are not bare: zsh expands a word starting with "=", and a leading "~" is a
+// home directory.
+func posixShellArg(s string) string {
+	if isBareWord(s, "_@%+:,./-") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// powerShellQuotes escapes the inside of a PowerShell single-quoted string.
+// PowerShell reads the typographic single quotes U+2018-U+201B as "'" too, and a
+// doubled quote of any of them is that one character.
+var powerShellQuotes = strings.NewReplacer(
+	"'", "''",
+	"\u2018", "\u2018\u2018", "\u2019", "\u2019\u2019",
+	"\u201a", "\u201a\u201a", "\u201b", "\u201b\u201b",
+)
+
+// powerShellArg quotes s for PowerShell: bare when it is all letters, digits and
+// punctuation PowerShell and cmd.exe both read literally, else in single quotes.
+func powerShellArg(s string) string {
+	if isBareWord(s, `\/.:_-`) {
+		return s
+	}
+	return "'" + powerShellQuotes.Replace(s) + "'"
+}
+
+// isBareWord reports whether s is non-empty and made only of ASCII letters,
+// digits and bytes in punct.
+func isBareWord(s, punct string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case strings.IndexByte(punct, c) >= 0:
+		default:
+			return false
+		}
+	}
+	return true
 }

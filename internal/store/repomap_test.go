@@ -409,7 +409,16 @@ func TestNormPathWith_PathShapes(t *testing.T) {
 		{"POSIX root", "/", "/", "/"},
 		{"Windows drive path", `C:\repos\app\`, `C:\repos\app`, `C:\repos\app`},
 		{"UNC path", `\\srv\share\app\`, `\\srv\share\app`, `\\srv\share\app`},
-		{"drive path, forward slashes", "C:/repos/app/", "C:/repos/app", `C:\repos\app`},
+		// A drive path is spelled with backslashes on every daemon, so either
+		// separator finds the same row.
+		{"drive path, forward slashes", "C:/repos/app/", `C:\repos\app`, `C:\repos\app`},
+		{"drive path, mixed separators", `c:\repos/app/`, `c:\repos\app`, `c:\repos\app`},
+		{"drive root, forward slash", "C:/", "C:", "C:"},
+		{"drive root, backslash", `C:\`, "C:", "C:"},
+		// Not a drive path: a drive-relative path, and a POSIX path whose later
+		// segment merely looks like a drive.
+		{"drive-relative", "C:repos/app", "C:repos/app", `C:repos\app`},
+		{"POSIX path with a drive-like segment", "/mnt/C:/app/", "/mnt/C:/app", "/mnt/C:/app"},
 		{"relative", "a/b/", "a/b", `a\b`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -421,6 +430,97 @@ func TestNormPathWith_PathShapes(t *testing.T) {
 	// And through this daemon's real filepath.Clean, whatever OS runs the test.
 	require.Equal(t, "/elsewhere/app", NormRepoPath("/elsewhere/app/"))
 	require.Equal(t, `C:\repos\app`, NormRepoPath(`C:\repos\app\`))
+	require.Equal(t, `C:\repos\app`, NormRepoPath("C:/repos/app"))
+}
+
+// A Windows client's drive path names one repo in either separator spelling:
+// a forward-slash root is stored with backslashes, and every spelling resolves,
+// re-registers and removes that one row.
+func TestRepoMap_DrivePathSpellingsAreOneRepo(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	require.NoError(t, AdoptLocalHost(ctx, db, "alpha"))
+
+	slug, _, err := RegisterProjectForCWD(ctx, db, CWDIdentity{
+		Host: "winbox", CWD: "C:/repos/app/pkg", RepoRoot: "C:/repos/app/",
+	}, "alpha")
+	require.NoError(t, err)
+	require.Equal(t, "app", slug)
+	rows, err := RepoMapRows(ctx, db)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, `C:\repos\app`, rows[0].Path)
+
+	for _, cwd := range []string{`C:\repos\app\pkg`, "C:/repos/app/pkg", `C:\repos/app`} {
+		got, err := ResolveProjectForCWD(ctx, db, "winbox", cwd)
+		require.NoError(t, err)
+		require.Equal(t, "app", got, cwd)
+	}
+	slug, _, err = RegisterProjectForCWD(ctx, db, CWDIdentity{
+		Host: "winbox", CWD: `C:\repos\app`, RepoRoot: `C:\repos\app`,
+	}, "alpha")
+	require.NoError(t, err)
+	require.Equal(t, "app", slug, "the backslash spelling is the same repo, not a collision")
+	rows, err = RepoMapRows(ctx, db)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+
+	removed, err := RemoveHostRepoMappings(ctx, db, "winbox", []string{"C:/repos/app"})
+	require.NoError(t, err)
+	require.Len(t, removed, 1)
+	require.Equal(t, `C:\repos\app`, removed[0].Path)
+}
+
+// A POSIX daemon stored a forward-slash drive path as sent before normPath
+// folded it. Such a row is not rewritten, and is not orphaned: the backslash
+// spelling finds it, registers into it and removes it. Where the two spellings
+// split one repo across two slugs, the row already in normal form -- the hook's
+// spelling -- wins every time rather than whichever map order offers first.
+func TestRepoMap_LegacyForwardSlashDriveRows(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	require.NoError(t, AdoptLocalHost(ctx, db, "alpha"))
+	ts := core.FormatTime(time.Now().UTC())
+	for _, r := range []struct{ path, slug string }{
+		{"C:/repos/solo", "solo"},
+		{"C:/repos/app", "app"},
+		{`C:\repos\app`, "app-2"},
+	} {
+		_, err := db.ExecContext(ctx, `
+			INSERT INTO repo_map (host, path, slug, origin, created_at)
+			VALUES ('winbox', ?, ?, '', ?)`, r.path, r.slug, ts)
+		require.NoError(t, err)
+	}
+
+	got, err := ResolveProjectForCWD(ctx, db, "winbox", `C:\repos\solo\pkg`)
+	require.NoError(t, err)
+	require.Equal(t, "solo", got)
+	slug, _, err := RegisterProjectForCWD(ctx, db, CWDIdentity{
+		Host: "winbox", CWD: `C:\repos\solo\pkg`, RepoRoot: `C:\repos\solo`,
+	}, "alpha")
+	require.NoError(t, err)
+	require.Equal(t, "solo", slug, "the legacy row is found, nothing is minted")
+
+	// Go randomizes map order on every iteration: 50 agreeing answers are not luck.
+	for range 50 {
+		for _, cwd := range []string{`C:\repos\app\pkg`, "C:/repos/app/pkg"} {
+			got, err := ResolveProjectForCWD(ctx, db, "winbox", cwd)
+			require.NoError(t, err)
+			require.Equal(t, "app-2", got, cwd)
+		}
+	}
+
+	removed, err := RemoveHostRepoMappings(ctx, db, "winbox", []string{`C:\repos\solo`})
+	require.NoError(t, err)
+	require.Len(t, removed, 1)
+	require.Equal(t, "C:/repos/solo", removed[0].Path, "deleted by the spelling it is stored in")
+	// Both rows of the split are one path, so unmapping that path drops both.
+	removed, err = RemoveHostRepoMappings(ctx, db, "winbox", []string{"C:/repos/app"})
+	require.NoError(t, err)
+	require.Len(t, removed, 2)
+	rows, err := RepoMapRows(ctx, db)
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }
 
 // IsAbsRepoPath answers for whichever OS the path came from, not this one's.
