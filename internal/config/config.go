@@ -71,6 +71,9 @@ type Config struct {
 	Capture     Capture     `yaml:"capture"`
 	PlanCapture PlanCapture `yaml:"plan_capture"`
 	Update      Update      `yaml:"update"`
+	// PeerAuth is peer-user authentication over a Unix socket (peerauth.go).
+	// Off by default; off is exactly the pre-peer_auth behavior.
+	PeerAuth PeerAuth `yaml:"peer_auth"`
 
 	// sourcePath records which config file was loaded (empty = defaults only).
 	sourcePath string `yaml:"-"`
@@ -624,7 +627,8 @@ func LoadFrom(path string) (Config, error) {
 
 	// The TLS material is read by path like data_dir is, so it expands the same
 	// way: a `~/certs/...` that silently failed to open would look like a
-	// missing certificate rather than an unexpanded path.
+	// missing certificate rather than an unexpanded path. The peer_auth socket
+	// is a path the daemon binds, and expands for the same reason.
 	for _, p := range []struct {
 		key string
 		dst *string
@@ -632,6 +636,7 @@ func LoadFrom(path string) (Config, error) {
 		{"tls.cert_file", &cfg.TLS.CertFile},
 		{"tls.key_file", &cfg.TLS.KeyFile},
 		{"tls.ca_file", &cfg.TLS.CAFile},
+		{"peer_auth.socket.path", &cfg.PeerAuth.Socket.Path},
 	} {
 		v, perr := expandHome(*p.dst)
 		if perr != nil {
@@ -779,6 +784,9 @@ func (c Config) Validate() error {
 		return err
 	}
 	if err := c.Update.Validate(); err != nil {
+		return err
+	}
+	if err := c.validatePeerAuth(); err != nil {
 		return err
 	}
 	if c.Briefing.HardCapMultiplier > 0 && c.Budgets.MaxBriefingTokens > math.MaxInt/c.Briefing.HardCapMultiplier {
@@ -939,6 +947,16 @@ func (c *Config) applyEnv() error {
 	if err := envDuration("SEAMLESS_UPDATE_MIN_AGE", &c.Update.MinAge); err != nil {
 		return err
 	}
+	// peer_auth: the scalar keys only. The users map stays file-only -- a map of
+	// lists has no honest single-variable spelling, and the account-to-project
+	// map is the one part of the policy that must be read in one place.
+	if err := envBool("SEAMLESS_PEER_AUTH_ENABLED", &c.PeerAuth.Enabled); err != nil {
+		return err
+	}
+	envStr("SEAMLESS_PEER_AUTH_OWNER", &c.PeerAuth.Owner)
+	envStr("SEAMLESS_PEER_AUTH_SOCKET_PATH", &c.PeerAuth.Socket.Path)
+	envStr("SEAMLESS_PEER_AUTH_SOCKET_MODE", &c.PeerAuth.Socket.Mode)
+	envStr("SEAMLESS_PEER_AUTH_SOCKET_GROUP", &c.PeerAuth.Socket.Group)
 	return nil
 }
 

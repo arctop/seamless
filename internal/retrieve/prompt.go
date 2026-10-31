@@ -2,6 +2,7 @@ package retrieve
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -131,7 +133,12 @@ func (s *Service) PromptRecall(ctx context.Context, host, cwd, prompt string) (s
 	if len(tokens) == 0 {
 		return "", nil, nil
 	}
-	project, err := store.ResolveProjectForCWD(ctx, s.db, host, cwd)
+	project, err := s.cwdProject(ctx, host, cwd)
+	if errors.Is(err, access.ErrNotReachable) {
+		// The owner prompting inside a repository sealed to another OS account:
+		// nothing to recall from here, which is not a failure of the hook.
+		return "", nil, nil
+	}
 	if err != nil {
 		return "", nil, err
 	}

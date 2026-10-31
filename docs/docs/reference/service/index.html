@@ -156,6 +156,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
         
+        <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
+        
         <li><a href="../../guides/troubleshooting/">Troubleshooting</a></li>
         
       </ul>
@@ -249,7 +251,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#control-it-from-anywhere">Control it from anywhere</a></li><li class="lvl-2"><a href="#the-service-on-your-os">The service on your OS</a></li><li class="lvl-2"><a href="#the-updater">The updater on your OS</a></li><li class="lvl-3"><a href="#updater-recovery">When an update goes wrong</a></li><li class="lvl-2"><a href="#where-things-live">Where things live</a></li><li class="lvl-2"><a href="#removing-the-service-by-hand">Removing the service by hand</a></li>
+      <li class="lvl-2"><a href="#control-it-from-anywhere">Control it from anywhere</a></li><li class="lvl-2"><a href="#the-service-on-your-os">The service on your OS</a></li><li class="lvl-2"><a href="#the-updater">The updater on your OS</a></li><li class="lvl-3"><a href="#updater-recovery">When an update goes wrong</a></li><li class="lvl-2"><a href="#peer-auth-daemon">A system service for peer_auth</a></li><li class="lvl-2"><a href="#where-things-live">Where things live</a></li><li class="lvl-2"><a href="#removing-the-service-by-hand">Removing the service by hand</a></li>
     </ul>
   </details>
   <p>The installer registers <code>seamlessd</code> as a per-user service, so the daemon
@@ -466,6 +468,57 @@ populated one it merges). Run <code>seamlessd stop</code>, then move <code>~/.se
 <code>seamlessd import --from ~/.seamless.broken/backups/pre-update-v&lt;old&gt;-&lt;time&gt;.tar.gz</code>,
 then <code>seamlessd start</code>.</li>
 </ul>
+<h2 id="peer-auth-daemon">A system service for peer_auth</h2>
+<p><a href="../../guides/peer-auth/">Sealing projects to OS accounts</a> needs the daemon to run as
+an account of its own, so the per-user service above cannot host it. On macOS it
+is a LaunchDaemon that names the account; it runs whether or not anyone is
+logged in. Install it as <code>/Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist</code>
+(<code>root:wheel</code>, <code>0644</code>):</p>
+<div class="code-block" data-lang="xml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="cp">&lt;?xml version=&#34;1.0&#34; encoding=&#34;UTF-8&#34;?&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="cp">&lt;!DOCTYPE plist PUBLIC &#34;-//Apple//DTD PLIST 1.0//EN&#34; &#34;http://www.apple.com/DTDs/PropertyList-1.0.dtd&#34;&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="nt">&lt;plist</span> <span class="na">version=</span><span class="s">&#34;1.0&#34;</span><span class="nt">&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="nt">&lt;dict&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>Label<span class="nt">&lt;/key&gt;</span>             <span class="nt">&lt;string&gt;</span>org.thereisnospoon.seamless.daemon<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>UserName<span class="nt">&lt;/key&gt;</span>          <span class="nt">&lt;string&gt;</span>_seamless<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>GroupName<span class="nt">&lt;/key&gt;</span>         <span class="nt">&lt;string&gt;</span>_seamless<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>InitGroups<span class="nt">&lt;/key&gt;</span>        <span class="nt">&lt;true/&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>ProgramArguments<span class="nt">&lt;/key&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;array&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;string&gt;</span>/opt/seamless/bin/seamlessd<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;string&gt;</span>serve<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;/array&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>EnvironmentVariables<span class="nt">&lt;/key&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;dict&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;key&gt;</span>SEAMLESS_CONFIG<span class="nt">&lt;/key&gt;</span> <span class="nt">&lt;string&gt;</span>/opt/seamless/etc/seamless.yaml<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;key&gt;</span>HOME<span class="nt">&lt;/key&gt;</span>            <span class="nt">&lt;string&gt;</span>/opt/seamless/home<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;/dict&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>Umask<span class="nt">&lt;/key&gt;</span>             <span class="nt">&lt;integer&gt;</span>63<span class="nt">&lt;/integer&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>RunAtLoad<span class="nt">&lt;/key&gt;</span>         <span class="nt">&lt;true/&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>KeepAlive<span class="nt">&lt;/key&gt;</span>         <span class="nt">&lt;true/&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>ThrottleInterval<span class="nt">&lt;/key&gt;</span>  <span class="nt">&lt;integer&gt;</span>10<span class="nt">&lt;/integer&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>StandardOutPath<span class="nt">&lt;/key&gt;</span>   <span class="nt">&lt;string&gt;</span>/opt/seamless/data/seamlessd.log<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>StandardErrorPath<span class="nt">&lt;/key&gt;</span> <span class="nt">&lt;string&gt;</span>/opt/seamless/data/seamlessd.log<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="nt">&lt;/dict&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="nt">&lt;/plist&gt;</span>
+</span></span></code></pre></div>
+<p><code>Umask</code> 63 is <code>077</code>. The controls are the system domain's, all with <code>sudo</code>:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo plutil -lint /Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist
+</span></span><span class="line"><span class="cl">sudo launchctl bootstrap system /Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist
+</span></span><span class="line"><span class="cl">sudo launchctl kickstart -k system/org.thereisnospoon.seamless.daemon   <span class="c1"># restart</span>
+</span></span><span class="line"><span class="cl">sudo launchctl print system/org.thereisnospoon.seamless.daemon          <span class="c1"># state, pid, last exit</span>
+</span></span><span class="line"><span class="cl">sudo launchctl bootout system/org.thereisnospoon.seamless.daemon        <span class="c1"># stop and unload</span>
+</span></span></code></pre></div>
+<p><code>seamlessd start|stop|restart|status</code> manage the per-user service, not this one.
+Before loading it, stop and remove the per-user service, or it starts again at
+your next login: <code>seamlessd stop</code>, then
+<code>launchctl bootout gui/$(id -u)/org.thereisnospoon.seamless</code> and delete
+<code>~/Library/LaunchAgents/org.thereisnospoon.seamless.plist</code>.</p>
+<p>On Linux the same daemon is a system unit with <code>User=</code> and <code>Group=</code> set to the
+account, <code>UMask=0077</code>, <code>Environment=SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml</code>
+and <code>ExecStart=/opt/seamless/bin/seamlessd serve</code>, enabled with
+<code>sudo systemctl enable --now</code>.</p>
+<p>Automatic updates do not manage this install (the daemon only notifies): replace
+the binaries in <code>/opt/seamless/bin</code> with <code>sudo</code> and restart it.</p>
 <h2 id="where-things-live">Where things live</h2>
 <p>Every <code>~</code> path resolves under <code>%USERPROFILE%</code> on Windows - the daemon searches
 the same relative locations on every OS.</p>
@@ -559,7 +612,7 @@ you are cleaning by hand, the native teardown is:</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#control-it-from-anywhere">Control it from anywhere</a></li><li class="lvl-2"><a href="#the-service-on-your-os">The service on your OS</a></li><li class="lvl-2"><a href="#the-updater">The updater on your OS</a></li><li class="lvl-3"><a href="#updater-recovery">When an update goes wrong</a></li><li class="lvl-2"><a href="#where-things-live">Where things live</a></li><li class="lvl-2"><a href="#removing-the-service-by-hand">Removing the service by hand</a></li>
+      <li class="lvl-2"><a href="#control-it-from-anywhere">Control it from anywhere</a></li><li class="lvl-2"><a href="#the-service-on-your-os">The service on your OS</a></li><li class="lvl-2"><a href="#the-updater">The updater on your OS</a></li><li class="lvl-3"><a href="#updater-recovery">When an update goes wrong</a></li><li class="lvl-2"><a href="#peer-auth-daemon">A system service for peer_auth</a></li><li class="lvl-2"><a href="#where-things-live">Where things live</a></li><li class="lvl-2"><a href="#removing-the-service-by-hand">Removing the service by hand</a></li>
     </ul>
   </aside>
   

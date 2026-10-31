@@ -54,7 +54,7 @@ func (s *Service) favoriteToggle(w http.ResponseWriter, r *http.Request) {
 	case "project":
 		_, found, perr := store.ProjectBySlug(ctx, s.cfg.DB, id)
 		if perr == nil && found {
-			perr = store.SetProjectFavorite(ctx, s.cfg.DB, id, fav)
+			perr = store.SetProjectFavorite(ctx, s.writeDB(), id, fav)
 		} else if perr == nil {
 			perr = errFavoriteNotFound
 		}
@@ -62,13 +62,13 @@ func (s *Service) favoriteToggle(w http.ResponseWriter, r *http.Request) {
 	case "task":
 		t, terr := store.TaskByID(ctx, s.cfg.DB, id)
 		if terr == nil {
-			terr = store.SetTaskFavorite(ctx, s.cfg.DB, id, fav)
+			terr = store.SetTaskFavorite(ctx, s.writeDB(), id, fav)
 		}
 		project, itemID, err = t.ProjectSlug, id, terr
 	case "session":
 		sess, found, serr := store.SessionByID(ctx, s.cfg.DB, id)
 		if serr == nil && found {
-			serr = store.SetSessionFavorite(ctx, s.cfg.DB, id, fav)
+			serr = store.SetSessionFavorite(ctx, s.writeDB(), id, fav)
 		} else if serr == nil {
 			serr = errFavoriteNotFound
 		}
@@ -76,7 +76,7 @@ func (s *Service) favoriteToggle(w http.ResponseWriter, r *http.Request) {
 	case "trial":
 		tr, found, terr := store.TrialByID(ctx, s.cfg.DB, id)
 		if terr == nil && found {
-			terr = store.SetTrialFavorite(ctx, s.cfg.DB, id, fav)
+			terr = store.SetTrialFavorite(ctx, s.writeDB(), id, fav)
 		} else if terr == nil {
 			terr = errFavoriteNotFound
 		}

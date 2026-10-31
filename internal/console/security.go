@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/arctop/seamless/internal/access"
 )
 
 // This file holds the console's browser-boundary defenses from the 2026-07-19
@@ -60,8 +62,15 @@ const (
 	credCookie
 )
 
-// classify reports which credential authenticated the request, if any.
+// classify reports which credential authenticated the request, if any. A
+// peer_auth socket request the kernel already authenticated counts as the
+// bearer path: no browser can reach a Unix socket, so it carries no CSRF risk.
+// Whether that caller may use the console at all is auth's question
+// (access.OwnerOnly), not this one's.
 func (s *Service) classify(r *http.Request) credential {
+	if access.PeerAuthenticated(r.Context()) {
+		return credBearer
+	}
 	key := s.cfg.APIKey
 	if key == "" {
 		return credNone

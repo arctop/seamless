@@ -589,7 +589,7 @@ func (s *Service) settingsUtilityForce(w http.ResponseWriter, r *http.Request) {
 		st.Forced = force
 	}
 	activation.Projects[project] = st
-	if err := store.SetUtilityActivation(ctx, s.cfg.DB, activation); err != nil {
+	if err := store.SetUtilityActivation(ctx, s.writeDB(), activation); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -610,7 +610,7 @@ func (s *Service) settingsBriefingSave(w http.ResponseWriter, r *http.Request) {
 		settingsBriefingFlash(w, r, err.Error())
 		return
 	}
-	if err := store.SetBriefingConfig(r.Context(), s.cfg.DB, b); err != nil {
+	if err := store.SetBriefingConfig(r.Context(), s.writeDB(), b); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -725,7 +725,7 @@ func (s *Service) settingsFeaturesSave(w http.ResponseWriter, r *http.Request) {
 			on = append(on, f.Label)
 		}
 	}
-	if err := store.SetFeaturesConfig(r.Context(), s.cfg.DB, cfg); err != nil {
+	if err := store.SetFeaturesConfig(r.Context(), s.writeDB(), cfg); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -770,7 +770,7 @@ func (s *Service) settingsLevelSave(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	prev := s.consoleLevel(ctx).Level
-	if err := store.SetConsoleLevel(ctx, s.cfg.DB, next.String(), store.ConsoleLevelChosen); err != nil {
+	if err := store.SetConsoleLevel(ctx, s.writeDB(), next.String(), store.ConsoleLevelChosen); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -796,7 +796,7 @@ func (s *Service) settingsLevelReset(w http.ResponseWriter, r *http.Request) {
 			"Already following the file and environment ("+before.Level.Label()+")."), http.StatusSeeOther)
 		return
 	}
-	if err := store.ClearConsoleLevel(ctx, s.cfg.DB); err != nil {
+	if err := store.ClearConsoleLevel(ctx, s.writeDB()); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -808,7 +808,7 @@ func (s *Service) settingsLevelReset(w http.ResponseWriter, r *http.Request) {
 // settingsLevelWelcome dismisses the Home welcome card without changing the
 // level. It lands back where it was posted from, with nothing to announce.
 func (s *Service) settingsLevelWelcome(w http.ResponseWriter, r *http.Request) {
-	if err := store.MarkConsoleWelcomed(r.Context(), s.cfg.DB); err != nil {
+	if err := store.MarkConsoleWelcomed(r.Context(), s.writeDB()); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -854,7 +854,7 @@ func (s *Service) recordLevelChange(ctx context.Context, from, to level, reset b
 // keys there, means every optional feature is off again. Nothing is deleted:
 // the feature's data is untouched either way.
 func (s *Service) settingsFeaturesReset(w http.ResponseWriter, r *http.Request) {
-	if err := store.ClearFeaturesConfig(r.Context(), s.cfg.DB); err != nil {
+	if err := store.ClearFeaturesConfig(r.Context(), s.writeDB()); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -872,7 +872,7 @@ func (s *Service) settingsFeaturesReset(w http.ResponseWriter, r *http.Request) 
 // settingsBriefingReset clears the runtime override row, reverting the
 // effective briefing knobs to the file/env configuration.
 func (s *Service) settingsBriefingReset(w http.ResponseWriter, r *http.Request) {
-	if err := store.ClearBriefingConfig(r.Context(), s.cfg.DB); err != nil {
+	if err := store.ClearBriefingConfig(r.Context(), s.writeDB()); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -966,7 +966,7 @@ func (s *Service) settingsEmbeddingsMode(w http.ResponseWriter, r *http.Request)
 			mode, store.EmbedderModeAuto, store.EmbedderModeOff))
 		return
 	}
-	if err := store.SetEmbedderMode(r.Context(), s.cfg.DB, mode); err != nil {
+	if err := store.SetEmbedderMode(r.Context(), s.writeDB(), mode); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -1098,7 +1098,7 @@ func (s *Service) settingsFamilySave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = store.SaveProjectFamily(r.Context(), s.cfg.DB, previousName, name, members)
+	_, err = store.SaveProjectFamily(r.Context(), s.writeDB(), previousName, name, members)
 	switch {
 	case errors.Is(err, store.ErrFamilyExists):
 		settingsRegistryFlash(w, r, fmt.Sprintf("A family named %q already exists.", name))
@@ -1128,7 +1128,7 @@ func (s *Service) settingsFamilyDelete(w http.ResponseWriter, r *http.Request) {
 		settingsRegistryFlash(w, r, "Family name: "+err.Error())
 		return
 	}
-	_, err := store.RemoveFamilyMembers(r.Context(), s.cfg.DB, name, nil)
+	_, err := store.RemoveFamilyMembers(r.Context(), s.writeDB(), name, nil)
 	switch {
 	case errors.Is(err, store.ErrFamilyNotFound):
 		settingsRegistryFlash(w, r, fmt.Sprintf("Family %q no longer exists.", name))

@@ -273,7 +273,7 @@ func (s *Service) settingsUpdatesSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	o.Check = &on
-	if err := store.SetUpdateOverride(ctx, s.cfg.DB, o); err != nil {
+	if err := store.SetUpdateOverride(ctx, s.writeDB(), o); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -325,7 +325,7 @@ func (s *Service) settingsUpdatesAuto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	o.Auto = &on
-	if err := store.SetUpdateOverride(ctx, s.cfg.DB, o); err != nil {
+	if err := store.SetUpdateOverride(ctx, s.writeDB(), o); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -414,7 +414,7 @@ func (s *Service) settingsUpdatesReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	if err := store.ClearUpdateOverride(ctx, s.cfg.DB); err != nil {
+	if err := store.ClearUpdateOverride(ctx, s.writeDB()); err != nil {
 		s.serverError(w, r, err)
 		return
 	}

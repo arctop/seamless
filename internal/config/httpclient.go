@@ -10,6 +10,7 @@ package config
 // decision could quietly differ from the others.
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -52,6 +53,21 @@ const DialTimeout = 5 * time.Second
 // requires be kept (llm-degradation-remote-vs-local, same rule). The error names
 // the config key, because the repair is in this machine's file and nowhere else.
 func (c Config) HTTPClient(timeout time.Duration) (*http.Client, error) {
+	if sock := c.SocketPath(); sock != "" {
+		// server_url names the daemon's peer_auth socket: every request goes to
+		// it whatever its URL says, and the kernel -- not a bearer key --
+		// authenticates the caller. No proxy ever applies (an HTTP proxy would
+		// move the dial off the socket and with it the peer identity), and there
+		// is no TLS to trust: the socket never leaves this machine.
+		dialer := &net.Dialer{Timeout: DialTimeout}
+		tr := &http.Transport{
+			Proxy: nil,
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return dialer.DialContext(ctx, "unix", sock)
+			},
+		}
+		return &http.Client{Timeout: timeout, Transport: tr}, nil
+	}
 	tr := &http.Transport{
 		Proxy:       http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{Timeout: DialTimeout}).DialContext,

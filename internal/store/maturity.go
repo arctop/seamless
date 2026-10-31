@@ -143,6 +143,12 @@ type StageCrossing struct {
 // stage. A momentum-only surface: callers gate on the feature, so a disabled
 // install neither computes nor latches.
 func EvaluateProjectStages(ctx context.Context, db *sql.DB, rows []ProjectBoardRow, now time.Time) (map[string]ProjectStageInfo, []StageCrossing, error) {
+	return EvaluateProjectStagesWith(ctx, db, db, rows, now)
+}
+
+// EvaluateProjectStagesWith is EvaluateProjectStages reading through db and
+// writing the latch document through cacheDB (see CaptureStreakWith).
+func EvaluateProjectStagesWith(ctx context.Context, db, cacheDB *sql.DB, rows []ProjectBoardRow, now time.Time) (map[string]ProjectStageInfo, []StageCrossing, error) {
 	doc, err := loadProjectStages(ctx, db)
 	if err != nil {
 		return nil, nil, err
@@ -195,7 +201,7 @@ func EvaluateProjectStages(ctx context.Context, db *sql.DB, rows []ProjectBoardR
 		if err != nil {
 			return nil, nil, fmt.Errorf("store.EvaluateProjectStages: encode: %w", err)
 		}
-		if err := SetSetting(ctx, db, SettingProjectStages, string(raw)); err != nil {
+		if err := SetSetting(ctx, cacheDB, SettingProjectStages, string(raw)); err != nil {
 			return nil, nil, err
 		}
 	}

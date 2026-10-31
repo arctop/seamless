@@ -465,7 +465,7 @@ func (s *Service) planApprove(w http.ResponseWriter, r *http.Request) {
 			"basename": plans.Basename(note.Slug), "plan_slug": slug, "by": "console",
 		})
 	}
-	task, created, err := plans.EnsureTask(ctx, s.cfg.DB, note, slug, "console")
+	task, created, err := plans.EnsureTask(ctx, s.writeDB(), note, slug, "console")
 	if err != nil {
 		s.serverError(w, r, err)
 		return

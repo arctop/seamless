@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/agentguide"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
@@ -48,11 +49,23 @@ type BriefingInput struct {
 // funnel -- the same telemetry the recall tool emits.
 func (s *Service) Briefing(ctx context.Context, in BriefingInput) (string, []string, error) {
 	cfg := s.effectiveBriefing(ctx)
-	project, err := store.ResolveProjectForCWD(ctx, s.db, in.Host, in.CWD)
+	project, err := s.cwdProject(ctx, in.Host, in.CWD)
 	if err != nil {
 		return "", nil, err
 	}
 	return s.briefingFor(ctx, project, in, cfg)
+}
+
+// cwdProject resolves the project a cwd places an agent in, under the caller's
+// peer_auth reach: a configured OS account working outside its own projects is
+// placed in its own project, and the owner in a repository sealed to another
+// account gets the refusal (access.ErrNotReachable) rather than that project.
+func (s *Service) cwdProject(ctx context.Context, host, cwd string) (string, error) {
+	project, err := store.ResolveProjectForCWD(ctx, s.db, host, cwd)
+	if err != nil {
+		return "", err
+	}
+	return access.SessionScope(ctx, project)
 }
 
 // ProjectBriefing is Briefing for a project the caller already resolved, so the
@@ -87,6 +100,12 @@ func (s *Service) BriefingBudget(cfg config.Briefing) (budget, hardCap int) {
 
 // briefingFor is Briefing past project resolution, under explicit knobs.
 func (s *Service) briefingFor(ctx context.Context, project string, in BriefingInput, cfg config.Briefing) (string, []string, error) {
+	// peer_auth: the one funnel every briefing (hook, session_start, console
+	// preview) passes through refuses a project the caller's OS account may not
+	// read, before anything is loaded.
+	if !access.Visible(ctx, project) {
+		return "", nil, access.Refusal(ctx, project)
+	}
 	// Isolation is resolved once per briefing, for the header line that tells the
 	// agent which world it is in. The narrowing itself is not decided here: the
 	// scope query (scopedActiveMemories) and every family surface (familyPeers)

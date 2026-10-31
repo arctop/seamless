@@ -32,7 +32,11 @@ cmd/seambench/     agent-scenario benchmark: `run` (headless scenario x conditio
                    `make seambench`; see cmd/seambench/README.md
 docs-src/          docs site markdown + nav.yaml (source; docs/docs/ is output)
 internal/core/     domain types: Project, Memory, Session, Task, Trial, Event
-internal/config/   single YAML + env config (static key, budgets, briefing tunables, llm)
+internal/config/   single YAML + env config (static key, budgets, briefing tunables, llm,
+                   peer_auth)
+internal/access/   peer_auth policy: who a request speaks for (the owner on TCP, a
+                   kernel-named uid on the Unix socket) and which projects it may
+                   reach (View); Unix-socket peer credentials. Foundation layer
 internal/store/    SQLite: schema, FTS5, embeddings (BLOB + cosine), migrations;
                    index_work.go mirrors the DB-native work record (tasks,
                    trials, session findings) into the same fts table the files
@@ -55,7 +59,8 @@ internal/gardener/ the propose-only passes (dedup, staleness, stale-stage,
                    canonical list is RunOnce), plus the request- and
                    split-driven proposals                                  [P4]
 internal/plans/    captured CC plan vocabulary: tags, statuses, tracking task
-internal/mcp/      MCP tools (streamable HTTP, static bearer key); see ToolCount [P2+]
+internal/mcp/      MCP tools (streamable HTTP, static bearer key or the peer_auth
+                   socket); see ToolCount [P2+]
 internal/hooks/    session hooks + CC plan-mode capture (PostToolUse etc.) [P2/P3]
 internal/console/  server-rendered observability UI (html/template + SSE)  [P5]
 internal/capture/  SSRF-safe URL fetch                                     [P4]
@@ -139,7 +144,7 @@ make seambench  # the AGENT-SCENARIO benchmark: runs a real `claude` over the
 | Vectors | float32 BLOBs in SQLite + brute-force cosine (no ChromaDB) |
 | LLM/embeddings | OpenAI (default, first-class), Ollama, Anthropic |
 | IDs | ULID (`oklog/ulid/v2`), never UUID |
-| Auth | single static bearer key, localhost bind (no JWT) |
+| Auth | single static bearer key, localhost bind (no JWT); optional peer_auth Unix socket that names each caller by its kernel-reported uid |
 | Console | `html/template` + vanilla JS + SSE (no node/React) |
 | Tests | testify/require, table-driven, fresh/in-memory SQLite |
 
@@ -160,7 +165,10 @@ max_defer, min_age) drives the update check and automatic updates; its console
 override (Settings -> Updates) merges the other way round: `check: false` or
 `auto: false` in the file/env is final and locks its toggle (false check means
 no update traffic at all). Durations are `config.Duration` ("6h"; a bare
-number other than 0 is refused).
+number other than 0 is refused). The `peer_auth:` block (off by default; see
+docs-src/guides/peer-auth.md) adds a Unix-socket listener whose callers are
+named by the kernel's peer uid and maps OS accounts to the projects they may
+reach; a client of it sets `server_url: unix:///path.sock` and needs no key.
 
 ## Storage layout
 
@@ -179,6 +187,11 @@ number other than 0 is refused).
 Files are the source of truth for durable knowledge; the DB is the record for
 high-churn state (sessions, tasks, trials, events, telemetry) and a rebuildable
 index for the files.
+
+Under `peer_auth` the data dir belongs to the daemon's own OS account instead
+(the guide's layout: `/opt/seamless/data`, 0700), and serve refuses to start
+when it, the socket's directory, the config file or the binary could be
+rewritten by another account.
 
 ## Memory frontmatter
 

@@ -102,7 +102,8 @@ func runInstallHooks(args []string) error {
 			fmt.Printf("%s generated mcp.api_key %s\n", green("first run:"), dim("-> "+tildePath(wrote)))
 		}
 	}
-	if strings.TrimSpace(cfg.MCP.APIKey) == "" {
+	// A peer_auth socket client needs no key: the daemon names it by its uid.
+	if strings.TrimSpace(cfg.MCP.APIKey) == "" && cfg.SocketPath() == "" {
 		src := cfg.SourcePath()
 		if src == "" {
 			src = "the environment (SEAMLESS_MCP_API_KEY)"
@@ -111,7 +112,14 @@ func runInstallHooks(args []string) error {
 	}
 	baseURL := *urlFlag
 	if baseURL == "" {
-		baseURL = cfg.ServerURL()
+		baseURL = cfg.HookBaseURL()
+	}
+	// What the installers describe the daemon by (baseURL) and where an HTTP
+	// request to it goes (dialURL) differ only for a socket: unix:///path is not
+	// a URL a request can be built on.
+	dialURL := baseURL
+	if hooks.IsSocketBaseURL(baseURL) {
+		dialURL = cfg.ServerURL()
 	}
 	seamBin := resolveSeamBin(*seamFlag)
 	if _, lookErr := exec.LookPath(seamBin); lookErr != nil {
@@ -131,7 +139,7 @@ func runInstallHooks(args []string) error {
 		// A client has no database here, so the stored override lives on the
 		// server and is read over HTTP; a server reads its own row.
 		if cfg.IsClient() {
-			skillOpts.DisabledSkills = disabledFeatureSkills(clientFeatures(cfg, baseURL))
+			skillOpts.DisabledSkills = disabledFeatureSkills(clientFeatures(cfg, dialURL))
 		} else {
 			skillOpts.DisabledSkills = disabledFeatureSkills(effectiveFeatures(cfg))
 		}
@@ -943,7 +951,7 @@ func claudeMCPAddArgs(baseURL, seamBin, configPath string) []string {
 		"url":           baseURL + "/api/mcp",
 		"headersHelper": claudeHeadersHelper(seamBin, configPath),
 	}
-	if hooks.IsHTTPSBaseURL(baseURL) {
+	if hooks.CommandOnlyBaseURL(baseURL) {
 		args := []any{"mcp-proxy"}
 		if configPath != "" {
 			args = append(args, "--config", configPath)

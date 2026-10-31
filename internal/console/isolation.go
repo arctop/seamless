@@ -300,7 +300,7 @@ func (s *Service) projectIsolationSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	applied, aerr := store.TightenProjectIsolation(ctx, s.cfg.DB, slug, state, time.Now().UTC())
+	applied, aerr := store.TightenProjectIsolation(ctx, s.writeDB(), slug, state, time.Now().UTC())
 	switch {
 	case errors.Is(aerr, store.ErrIsolationHasChildren):
 		// The world moved between the preview and the confirm; the apply wrote
@@ -334,7 +334,7 @@ func (s *Service) projectIsolationSet(w http.ResponseWriter, r *http.Request) {
 // isolationLoosen applies a loosening (or an already-held open state) directly.
 func (s *Service) isolationLoosen(w http.ResponseWriter, r *http.Request, slug string, from, to core.Isolation) {
 	ctx := r.Context()
-	if err := store.SetProjectIsolation(ctx, s.cfg.DB, slug, to); err != nil {
+	if err := store.SetProjectIsolation(ctx, s.writeDB(), slug, to); err != nil {
 		if errors.Is(err, store.ErrProjectNotFound) {
 			s.notFound(w, r, "No project with slug "+slug+".")
 			return

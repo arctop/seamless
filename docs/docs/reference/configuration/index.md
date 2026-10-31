@@ -116,6 +116,36 @@ keys they do not know, so a file that sets one runs only with v0.7.0 or newer.
 The example file spells out the keys whose default has a value and leaves
 `check` and `auto`, whose default is unset, commented out.
 
+### Peer-user authentication {#peer-auth}
+
+The `peer_auth:` block turns on a Unix-socket listener whose callers the daemon
+identifies by the uid the kernel reports, and maps OS accounts to the projects
+they may reach. It is off by default, and off is exactly the behavior of every
+earlier release. The guide is [Seal projects to OS accounts](https://thereisnospoon.org/docs/guides/peer-auth/);
+in short:
+
+- `enabled` (`SEAMLESS_PEER_AUTH_ENABLED`) switches it on.
+- `owner` (`SEAMLESS_PEER_AUTH_OWNER`) is the OS account - a user name or a
+  numeric uid - the TCP bearer key stands for, and whose socket connections act
+  as the owner. Required when enabled.
+- `socket.path` (`SEAMLESS_PEER_AUTH_SOCKET_PATH`) is the socket's absolute path,
+  outside `data_dir`. Required when enabled.
+- `socket.mode` (`SEAMLESS_PEER_AUTH_SOCKET_MODE`) is its permission bits in
+  octal, default `0666`: every local account may knock, and the kernel still
+  names each one. `socket.group` (`SEAMLESS_PEER_AUTH_SOCKET_GROUP`) hands the
+  socket to a group, for a mode such as `0660`.
+- `users` maps an OS account (name or uid) to `sealed` - projects reachable only
+  from that account - and `projects` - projects it shares with the owner. It is
+  file-only: a map of lists has no single-variable spelling.
+
+A client of such a daemon names the socket as its `server_url`:
+`unix:///absolute/path.sock`. It needs no `mcp.api_key`, and its hooks and MCP
+registration go through the `seam` CLI (`install-hooks` does that by itself for
+a socket URL).
+
+The block is new after v0.7.4; releases before it refuse config keys they do
+not know, so the example file leaves it commented out.
+
 ## Generating a key
 
 `mcp.api_key` guards `/api/mcp` and the console. On a true first run - no
@@ -199,6 +229,12 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `update.auto` | bool, optional | unset |
 | `update.max_defer` | duration | `24h` |
 | `update.min_age` | duration | `24h` |
+| `peer_auth.enabled` | bool | - |
+| `peer_auth.owner` | string | - |
+| `peer_auth.socket.path` | string | - |
+| `peer_auth.socket.mode` | string | - |
+| `peer_auth.socket.group` | string | - |
+| `peer_auth.users` | map of string to {sealed []string, projects []string} | - |
 
 ## Annotated example
 
@@ -243,6 +279,9 @@ role: "server"
 # A wildcard host here is refused at load (0.0.0.0, ::, [::0], ...): that
 # answers "where do I listen", not "where do I dial", so it belongs in addr
 # instead.
+# A client of a peer_auth daemon (see peer_auth below) names its socket here
+# instead -- unix:///absolute/path.sock -- and needs no mcp.api_key: the daemon
+# identifies the calling OS account by the uid the kernel reports.
 # env: SEAMLESS_SERVER_URL
 server_url: ""
 
@@ -548,4 +587,58 @@ update:
   # Installing by hand (seamlessd update) does not wait.
   # env: SEAMLESS_UPDATE_MIN_AGE
   min_age: 24h
+
+# Peer-user authentication: a Unix socket whose callers the daemon identifies by
+# the uid the kernel reports (never by anything the client sends), and the map of
+# which OS accounts may reach which projects. Off by default, and off is exactly
+# the behavior of every earlier release. On:
+#   - the TCP bearer key is the owner account: it reaches every project except
+#     those sealed to another account, and so does the owner on the socket;
+#   - a configured account reaches only its own projects (sealed plus shared)
+#     and reads -- never writes -- the global scope;
+#   - any other uid on the socket is refused (403);
+#   - the console is the owner's alone, and shows no project sealed to another
+#     account;
+#   - the daemon reads no agent files (transcripts, plan files): findings
+#     harvest, token totals, model sniffing, plan and subagent capture are off.
+# serve refuses to start unless the boundary would hold on disk too: the daemon
+# runs as its own account (not the owner, not root), data_dir is that account's
+# and 0700, the socket's directory and every directory above the data, the
+# config file and the seamlessd binary are writable by nobody but root and the
+# daemon's account, every named project exists, and every sealed project is
+# confidential or sealed. `seamlessd doctor`, run as the daemon's account,
+# reports each of those. See the peer_auth guide in the docs for the deployment.
+# The block is new after v0.7.4 and releases before it refuse config keys they
+# do not know, so it is left commented out here.
+# peer_auth:
+#   # env: SEAMLESS_PEER_AUTH_ENABLED
+#   enabled: false
+#   # The OS account (user name or numeric uid) the TCP bearer key stands for.
+#   # env: SEAMLESS_PEER_AUTH_OWNER
+#   owner: ""
+#   socket:
+#     # Absolute path. Its directory may be searchable by the accounts that
+#     # connect, and writable by nobody but the daemon's account or root. Not
+#     # inside data_dir, which is 0700.
+#     # env: SEAMLESS_PEER_AUTH_SOCKET_PATH
+#     path: ""
+#     # Octal permission bits. Connecting needs write permission on the socket;
+#     # the kernel still names every peer, so 0666 lets every local account
+#     # knock and refuses the unconfigured ones. Empty means 0666.
+#     # env: SEAMLESS_PEER_AUTH_SOCKET_MODE
+#     mode: "0666"
+#     # Optional group (name or gid) to hand the socket to, with a mode such as
+#     # 0660 to let only that group's members connect at all.
+#     # env: SEAMLESS_PEER_AUTH_SOCKET_GROUP
+#     group: ""
+#   # OS account (user name or numeric uid) -> its reach. File only (no env).
+#   # sealed: reachable ONLY from this account's socket connections; a project
+#   # is sealed to at most one account, and never also listed for another.
+#   # projects: also reachable from this account, and still the owner's too.
+#   # The first sealed project (else the first shared one) is the account's
+#   # home: where its sessions and unplaced calls land.
+#   users:
+#     _example_role:
+#       sealed: [example-project]
+#       projects: []
 ```

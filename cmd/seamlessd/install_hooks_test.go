@@ -864,3 +864,13 @@ func TestRunInstallHooks_UpgradeFromBefore022KeepsResearchWithoutMigrating(t *te
 	require.Equal(t, featuresGrandfatherVersion-4, schemaVersionAt(t, dbPath),
 		"the old daemon's schema is the new daemon's to migrate")
 }
+
+// A peer_auth socket install registers the seam stdio bridge: Claude Code's own
+// http MCP client cannot dial a Unix socket.
+func TestClaudeMCPAddArgs_SocketUsesTheBridge(t *testing.T) {
+	args := claudeMCPAddArgs("unix:///opt/seamless/run/seamlessd.sock", "/opt/seam", "/etc/seamless.yaml")
+	require.Equal(t, []string{
+		"mcp", "add-json", "--scope", "user", "seamless",
+		`{"args":["mcp-proxy","--config","/etc/seamless.yaml"],"command":"/opt/seam","type":"stdio"}`,
+	}, args)
+}

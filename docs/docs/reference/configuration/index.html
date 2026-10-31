@@ -156,6 +156,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
         
+        <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
+        
         <li><a href="../../guides/troubleshooting/">Troubleshooting</a></li>
         
       </ul>
@@ -230,7 +232,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
+      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
     </ul>
   </details>
   <p>Seamless reads a single YAML file. Every key also has a <code>SEAMLESS_*</code> environment
@@ -356,6 +358,33 @@ than tune them.</p>
 keys they do not know, so a file that sets one runs only with v0.7.0 or newer.
 The example file spells out the keys whose default has a value and leaves
 <code>check</code> and <code>auto</code>, whose default is unset, commented out.</p>
+<h3 id="peer-auth">Peer-user authentication</h3>
+<p>The <code>peer_auth:</code> block turns on a Unix-socket listener whose callers the daemon
+identifies by the uid the kernel reports, and maps OS accounts to the projects
+they may reach. It is off by default, and off is exactly the behavior of every
+earlier release. The guide is <a href="../../guides/peer-auth/">Seal projects to OS accounts</a>;
+in short:</p>
+<ul>
+<li><code>enabled</code> (<code>SEAMLESS_PEER_AUTH_ENABLED</code>) switches it on.</li>
+<li><code>owner</code> (<code>SEAMLESS_PEER_AUTH_OWNER</code>) is the OS account - a user name or a
+numeric uid - the TCP bearer key stands for, and whose socket connections act
+as the owner. Required when enabled.</li>
+<li><code>socket.path</code> (<code>SEAMLESS_PEER_AUTH_SOCKET_PATH</code>) is the socket's absolute path,
+outside <code>data_dir</code>. Required when enabled.</li>
+<li><code>socket.mode</code> (<code>SEAMLESS_PEER_AUTH_SOCKET_MODE</code>) is its permission bits in
+octal, default <code>0666</code>: every local account may knock, and the kernel still
+names each one. <code>socket.group</code> (<code>SEAMLESS_PEER_AUTH_SOCKET_GROUP</code>) hands the
+socket to a group, for a mode such as <code>0660</code>.</li>
+<li><code>users</code> maps an OS account (name or uid) to <code>sealed</code> - projects reachable only
+from that account - and <code>projects</code> - projects it shares with the owner. It is
+file-only: a map of lists has no single-variable spelling.</li>
+</ul>
+<p>A client of such a daemon names the socket as its <code>server_url</code>:
+<code>unix:///absolute/path.sock</code>. It needs no <code>mcp.api_key</code>, and its hooks and MCP
+registration go through the <code>seam</code> CLI (<code>install-hooks</code> does that by itself for
+a socket URL).</p>
+<p>The block is new after v0.7.4; releases before it refuse config keys they do
+not know, so the example file leaves it commented out.</p>
 <h2 id="generating-a-key">Generating a key</h2>
 <p><code>mcp.api_key</code> guards <code>/api/mcp</code> and the console. On a true first run - no
 config file anywhere in the search order and no <code>SEAMLESS_MCP_API_KEY</code> in the
@@ -693,6 +722,36 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <td>duration</td>
 <td><code>24h</code></td>
 </tr>
+<tr>
+<td><code>peer_auth.enabled</code></td>
+<td>bool</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>peer_auth.owner</code></td>
+<td>string</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>peer_auth.socket.path</code></td>
+<td>string</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>peer_auth.socket.mode</code></td>
+<td>string</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>peer_auth.socket.group</code></td>
+<td>string</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>peer_auth.users</code></td>
+<td>map of string to {sealed []string, projects []string}</td>
+<td>-</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -736,6 +795,9 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c"># A wildcard host here is refused at load (0.0.0.0, ::, [::0], ...): that</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># answers &#34;where do I listen&#34;, not &#34;where do I dial&#34;, so it belongs in addr</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># instead.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># A client of a peer_auth daemon (see peer_auth below) names its socket here</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># instead -- unix:///absolute/path.sock -- and needs no mcp.api_key: the daemon</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># identifies the calling OS account by the uid the kernel reports.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># env: SEAMLESS_SERVER_URL</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;&#34;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
@@ -1041,6 +1103,60 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Installing by hand (seamlessd update) does not wait.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_UPDATE_MIN_AGE</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">min_age</span><span class="p">:</span><span class="w"> </span><span class="l">24h</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># Peer-user authentication: a Unix socket whose callers the daemon identifies by</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># the uid the kernel reports (never by anything the client sends), and the map of</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># which OS accounts may reach which projects. Off by default, and off is exactly</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># the behavior of every earlier release. On:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   - the TCP bearer key is the owner account: it reaches every project except</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     those sealed to another account, and so does the owner on the socket;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   - a configured account reaches only its own projects (sealed plus shared)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     and reads -- never writes -- the global scope;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   - any other uid on the socket is refused (403);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   - the console is the owner&#39;s alone, and shows no project sealed to another</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     account;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   - the daemon reads no agent files (transcripts, plan files): findings</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     harvest, token totals, model sniffing, plan and subagent capture are off.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># serve refuses to start unless the boundary would hold on disk too: the daemon</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># runs as its own account (not the owner, not root), data_dir is that account&#39;s</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># and 0700, the socket&#39;s directory and every directory above the data, the</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># config file and the seamlessd binary are writable by nobody but root and the</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># daemon&#39;s account, every named project exists, and every sealed project is</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># confidential or sealed. `seamlessd doctor`, run as the daemon&#39;s account,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># reports each of those. See the peer_auth guide in the docs for the deployment.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># The block is new after v0.7.4 and releases before it refuse config keys they</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># do not know, so it is left commented out here.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># peer_auth:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # env: SEAMLESS_PEER_AUTH_ENABLED</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   enabled: false</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # The OS account (user name or numeric uid) the TCP bearer key stands for.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # env: SEAMLESS_PEER_AUTH_OWNER</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   owner: &#34;&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   socket:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     # Absolute path. Its directory may be searchable by the accounts that</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     # connect, and writable by nobody but the daemon&#39;s account or root. Not</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     # inside data_dir, which is 0700.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     # env: SEAMLESS_PEER_AUTH_SOCKET_PATH</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     path: &#34;&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     # Octal permission bits. Connecting needs write permission on the socket;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     # the kernel still names every peer, so 0666 lets every local account</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     # knock and refuses the unconfigured ones. Empty means 0666.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     # env: SEAMLESS_PEER_AUTH_SOCKET_MODE</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     mode: &#34;0666&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     # Optional group (name or gid) to hand the socket to, with a mode such as</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     # 0660 to let only that group&#39;s members connect at all.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     # env: SEAMLESS_PEER_AUTH_SOCKET_GROUP</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     group: &#34;&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # OS account (user name or numeric uid) -&gt; its reach. File only (no env).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # sealed: reachable ONLY from this account&#39;s socket connections; a project</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # is sealed to at most one account, and never also listed for another.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # projects: also reachable from this account, and still the owner&#39;s too.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # The first sealed project (else the first shared one) is the account&#39;s</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # home: where its sessions and unplaced calls land.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   users:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     _example_role:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#       sealed: [example-project]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#       projects: []</span><span class="w">
 </span></span></span></code></pre></div>
 
 </article>
@@ -1059,7 +1175,7 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
+      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
     </ul>
   </aside>
   

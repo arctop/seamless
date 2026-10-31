@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/llm"
 	"github.com/arctop/seamless/internal/store"
@@ -338,6 +339,12 @@ func (s *Service) hydrate(ctx context.Context, ordered []string, acc map[string]
 // entirely in-scope and entirely live. With no embedder configured it degrades
 // to FTS only.
 func (s *Service) Recall(ctx context.Context, in RecallInput) ([]Hit, error) {
+	// peer_auth: a project the caller's OS account may not read is refused here,
+	// whichever surface asked (MCP recall resolved the scope through its own
+	// fence first; A2A names it straight from the message metadata).
+	if !access.Visible(ctx, in.Project) {
+		return nil, access.Refusal(ctx, in.Project)
+	}
 	kinds := recallScopeKinds(in.Scope)
 	if in.Kind != "" {
 		// An unknown kind would silently match nothing, indistinguishable from
@@ -454,8 +461,9 @@ func (s *Service) Recall(ctx context.Context, in RecallInput) ([]Hit, error) {
 			continue
 		}
 		// The candidate queries already filter to scope; this is a final guard
-		// for link-expanded neighbors and any index/fts project drift.
-		if !scopeVisible(h.Project, in.Project, globalVisible) {
+		// for link-expanded neighbors and any index/fts project drift -- and for
+		// the caller's peer_auth reach, which the candidate queries also apply.
+		if !scopeVisible(h.Project, in.Project, globalVisible) || !access.Visible(ctx, h.Project) {
 			continue
 		}
 		h.Source = fusedSource(f)

@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
@@ -238,6 +239,9 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
+	if h.foreignSession(ctx, client, p.SessionID) {
+		p.SessionID = ""
+	}
 
 	// Grow the repo->project map when this agent is working in a not-yet-mapped
 	// repo, so the briefing below (and later tool calls) resolve to a real
@@ -251,14 +255,28 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 	// A remote agent that sent no repo root is the one case with its own stage:
 	// nothing was written and nothing could be, because deriving the roots would
 	// mean reading THIS machine's disk for another machine's path.
-	if _, moved, err := store.RegisterProjectForCWD(ctx, h.db, p.identity(host), h.localHost); err != nil {
-		stage := "register-project"
-		if errors.Is(err, store.ErrRemoteRootUnknown) {
-			stage = "register-project-remote-root"
+	//
+	// A configured peer_auth account never grows the map: it works only inside
+	// its own projects, and a repository it opens must not mint a project.
+	if !peerUser(ctx) {
+		if _, moved, err := store.RegisterProjectForCWD(ctx, h.db, p.identity(host), h.localHost); err != nil {
+			stage := "register-project"
+			if errors.Is(err, store.ErrRemoteRootUnknown) {
+				stage = "register-project-remote-root"
+			}
+			h.recordHookError(ctx, stage, client, err, "cwd", p.CWD, "host", host)
+		} else if moved != nil {
+			h.recordRepoMoved(ctx, client, moved)
 		}
-		h.recordHookError(ctx, stage, client, err, "cwd", p.CWD, "host", host)
-	} else if moved != nil {
-		h.recordRepoMoved(ctx, client, moved)
+	}
+
+	// peer_auth: the owner opening a repository whose project is sealed to
+	// another OS account gets a notice instead of a briefing, and no session --
+	// a session there would be the owner working inside the seal.
+	if sealed, ok := h.sealedCWD(ctx, host, p.CWD); ok {
+		h.writeContextResponse(ctx, w, "SessionStart", "session-start", client,
+			p.SessionID, "", sealedNotice(sealed), false, nil)
+		return
 	}
 
 	briefing, injectedIDs, err := h.retrieve.Briefing(ctx, retrieve.BriefingInput{
@@ -299,6 +317,9 @@ func (h *Handler) sessionEnd(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
+	if h.foreignSession(ctx, client, p.SessionID) {
+		p.SessionID = ""
+	}
 
 	h.completeClaudeSessions(ctx, client, p)
 	// SessionEnd has no hookSpecificOutput variant in Claude Code's schema, so
@@ -328,6 +349,9 @@ func (h *Handler) stop(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
+	if h.foreignSession(ctx, client, p.SessionID) {
+		p.SessionID = ""
+	}
 
 	// A Stop is proof the agent is alive this turn: heartbeat so the idle reaper
 	// does not expire the session mid-work. Always, for every client.
@@ -425,6 +449,15 @@ func (h *Handler) ensureAmbientSession(ctx context.Context, client Client, host 
 		h.recordHookError(ctx, "ambient-project-resolve", client, err, "cwd", p.CWD)
 		project = ""
 	}
+	// peer_auth: a configured account's session lands in its own project; the
+	// owner is never given a session inside a project sealed to another account
+	// (sessionStart answered that case with a notice already -- this is the
+	// backstop).
+	placed, err := access.SessionScope(ctx, project)
+	if err != nil {
+		return ""
+	}
+	project = placed
 
 	// Resume: reactivate and re-scope, so a compact/resume continues the same
 	// ambient session rather than forking a new one.
@@ -571,6 +604,75 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 	}
 }
 
+// foreignSession reports whether the agent session a hook names belongs to a
+// project the caller's OS account may not write (peer_auth). A hook identifies
+// its session only by the client's session id, which travels in the body; under
+// peer_auth that id must not be enough to act on -- resume, re-scope, complete,
+// harvest into, or attribute to -- another account's session. The callers blank
+// the id instead, so every session-touching step downstream no-ops and the hook
+// still answers. A lookup failure fails closed. With peer_auth off it is false
+// without touching the database.
+func (h *Handler) foreignSession(ctx context.Context, client Client, externalID string) bool {
+	v, ok := access.FromContext(ctx)
+	if !ok || h.db == nil || strings.TrimSpace(externalID) == "" {
+		return false
+	}
+	ambient, found, err := store.AmbientSessionByExternalIdentity(ctx, h.db, client.externalIdentity(), externalID)
+	if err != nil {
+		h.recordHookError(ctx, "peer-auth-session-lookup", client, err)
+		return true
+	}
+	if found && !v.Writable(ambient.ProjectSlug) {
+		return true
+	}
+	linked, err := store.ActiveSessionsByExternalIdentity(ctx, h.db, client.externalIdentity(), externalID)
+	if err != nil {
+		h.recordHookError(ctx, "peer-auth-session-lookup", client, err)
+		return true
+	}
+	for _, sess := range linked {
+		if !v.Writable(sess.ProjectSlug) {
+			return true
+		}
+	}
+	return false
+}
+
+// peerUser reports whether the request is a configured peer_auth account's (not
+// the owner's, and not peer_auth off).
+func peerUser(ctx context.Context) bool {
+	v, ok := access.FromContext(ctx)
+	return ok && v.Principal().Kind == access.KindUser
+}
+
+// sealedCWD reports the project a cwd resolves to when the caller may not be
+// placed in it at all: the owner in a repository sealed to another OS account.
+// A configured account is never refused here -- its session lands in its own
+// project wherever it opens.
+func (h *Handler) sealedCWD(ctx context.Context, host, cwd string) (string, bool) {
+	if _, ok := access.FromContext(ctx); !ok || h.db == nil {
+		return "", false
+	}
+	project, err := store.ResolveProjectForCWD(ctx, h.db, host, cwd)
+	if err != nil {
+		return "", false
+	}
+	if _, err := access.SessionScope(ctx, project); errors.Is(err, access.ErrNotReachable) {
+		return project, true
+	}
+	return "", false
+}
+
+// sealedNotice is the SessionStart context for the owner inside a repository
+// sealed to another OS account: what happened, and what to do instead. It names
+// the project (the owner mapped this repository; the slug is not news) and
+// nothing from inside it.
+func sealedNotice(project string) string {
+	return "<seam-briefing>\nSeamless: project " + project + " is sealed to its own system's OS account (peer_auth), " +
+		"so this session is not recorded and Seamless tools from this account cannot reach that project. " +
+		"To work on it with its memory, run the agent as that system's account (sudo -u).\n</seam-briefing>"
+}
+
 // ambientName constructs a collision-resistant display name for a NEW ambient
 // session. It is never used to resolve lifecycle identity: store lookups use the
 // full external id plus client. Existing legacy rows keep and return their
@@ -637,6 +739,9 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
+	if h.foreignSession(ctx, client, p.SessionID) {
+		p.SessionID = ""
+	}
 
 	// UserPromptSubmit is installed as an http hook (it is reliable mid-turn),
 	// so no seam process computed an identity for it. The ambient session the
@@ -881,7 +986,20 @@ func (h *Handler) sameHost(host string) bool {
 // this hook, recording the skip when it may not. what is a stable curated label
 // for the capture being skipped (the aggregation key, like a hook.error stage);
 // the host rides in the payload.
+//
+// Under peer_auth the answer is always no. The daemon then runs as its own OS
+// account, so every path a hook names is a path some OTHER account chose -- and
+// the daemon can read its own data directory. A transcript_path, plan file or
+// rollout pointing (or symlinked) into it would have the daemon read a sealed
+// project's files and file the result as the caller's findings or notes: the
+// confused deputy the whole boundary exists to rule out. Nothing is opened, and
+// nothing is recorded per call either (it would be every call); doctor states
+// the cost once.
 func (h *Handler) localDiskOK(ctx context.Context, what string, client Client, host string) bool {
+	if _, peerAuth := access.FromContext(ctx); peerAuth {
+		h.logger.Debug("hooks: peer_auth, skipping agent-disk capture", "what", what)
+		return false
+	}
 	if h.sameHost(host) {
 		return true
 	}
@@ -1030,8 +1148,13 @@ func writeHookAck(w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(hookResponse{Continue: true, SuppressOutput: true})
 }
 
-// verifyBearer constant-time-compares the request's bearer token to key.
+// verifyBearer constant-time-compares the request's bearer token to key. A
+// peer_auth socket request needs no key: the kernel named its caller before it
+// got here (cmd/seamlessd), and that is the authentication.
 func verifyBearer(r *http.Request, key string) bool {
+	if access.PeerAuthenticated(r.Context()) {
+		return true
+	}
 	if key == "" {
 		return false
 	}

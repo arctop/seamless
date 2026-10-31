@@ -393,12 +393,31 @@ var durationType = reflect.TypeFor[config.Duration]()
 // config.Duration is written as 6h, so it reads "duration". A pointer is an
 // optional key -- unset is a state of its own, which the build or another
 // setting decides -- so *bool reads "bool, optional".
+//
+// A map reads as what its YAML looks like: the key type, then the value's own
+// keys when it is a struct (peer_auth.users maps an account to {sealed,
+// projects}), rather than a Go type name the YAML never spells.
 func configType(t reflect.Type) string {
 	switch {
 	case t == durationType:
 		return "duration"
 	case t.Kind() == reflect.Pointer:
 		return configType(t.Elem()) + ", optional"
+	case t.Kind() == reflect.Map:
+		elem := t.Elem()
+		if elem.Kind() != reflect.Struct {
+			return "map of " + configType(t.Key()) + " to " + configType(elem)
+		}
+		var fields []string
+		for i := range elem.NumField() {
+			f := elem.Field(i)
+			tag, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
+			if !f.IsExported() || tag == "" || tag == "-" {
+				continue
+			}
+			fields = append(fields, tag+" "+configType(f.Type))
+		}
+		return "map of " + configType(t.Key()) + " to {" + strings.Join(fields, ", ") + "}"
 	default:
 		return t.String()
 	}

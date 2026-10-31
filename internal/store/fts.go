@@ -182,6 +182,13 @@ func ftsSearchMatch(ctx context.Context, db *sql.DB, match string, kinds, projec
 			args = append(args, p)
 		}
 	}
+	// The caller's peer_auth reach, whatever scope the caller asked for: this is
+	// the one read of the fts table, and it serves the owner's console search as
+	// well as agent recall.
+	if clause, extra := accessFilter(ctx, "fts.project"); clause != "" {
+		sqlStr += clause
+		args = append(args, extra...)
+	}
 	// A NULL mi.kind (a note, or an orphan) fails the predicate, so a memKind
 	// filter is memories-only by construction -- applied inside the candidate
 	// query, like scope, so the whole depth stays in-kind.

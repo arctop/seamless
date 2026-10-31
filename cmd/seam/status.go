@@ -46,7 +46,7 @@ func runStatus(ctx context.Context, e *env, _ *noOpts, _ []string) error {
 	}
 	resp, err := client.Get(base + "/healthz")
 	if err != nil {
-		return fmt.Errorf("server unreachable at %s: %w", base, err)
+		return fmt.Errorf("server unreachable at %s: %w", cfg.DaemonAddress(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var hz map[string]any
@@ -56,7 +56,7 @@ func runStatus(ctx context.Context, e *env, _ *noOpts, _ []string) error {
 		fmt.Fprintf(e.stdout, "server:   (unreadable health response: %v)\n", derr)
 		failed++
 	} else {
-		fmt.Fprintf(e.stdout, "server:   %s (%s)\n", str(hz["status"]), base)
+		fmt.Fprintf(e.stdout, "server:   %s (%s)\n", str(hz["status"]), cfg.DaemonAddress())
 		fmt.Fprintf(e.stdout, "version:  %s\n", str(hz["version"]))
 		if line := updateAvailableLine(hz); line != "" {
 			fmt.Fprintf(e.stdout, "update:   %s\n", strings.TrimPrefix(line, "update available: "))

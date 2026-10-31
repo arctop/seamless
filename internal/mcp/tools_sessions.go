@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/retrieve"
@@ -54,6 +56,7 @@ const (
 	scopeFromArg                        // the project argument
 	scopeFromSession                    // the session being resumed
 	scopeFromOwn                        // the agent's own process-bound session
+	scopeFromAccount                    // peer_auth: the caller's OS account's own project
 )
 
 func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -70,13 +73,13 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 	// projects-table row when the agent works in a not-yet-mapped git repo. A
 	// moved repo adopts its existing project here; surface that remap as an
 	// event so the console shows the map healed itself.
-	project, moved, err := store.RegisterProjectForCWD(ctx, s.cfg.DB, store.CWDIdentity{
+	project, moved, err := s.cwdProject(ctx, store.CWDIdentity{
 		Host:     host,
 		CWD:      cwd,
 		RepoRoot: strings.TrimSpace(argString(req, "repo_root")),
 		MainRoot: strings.TrimSpace(argString(req, "main_worktree_root")),
 		Origin:   strings.TrimSpace(argString(req, "repo_origin")),
-	}, s.cfg.LocalHost)
+	})
 	warning := ""
 	switch {
 	case errors.Is(err, store.ErrRemoteRootUnknown):
@@ -115,15 +118,29 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 				"session_start again with the project you meant"
 		}
 	}
+	// peer_auth: a session lands only where this connection's OS account may
+	// write. A configured account's session outside its own projects -- an
+	// unmapped cwd, another repository -- lands in its own project instead; the
+	// owner is refused a project sealed to another account outright.
+	if placed, perr := access.SessionScope(ctx, project); perr != nil {
+		return errResult("session_start", perr)
+	} else if placed != project {
+		project, how = placed, scopeFromAccount
+		warning = ""
+	}
 	// Whether the caller chose a scope at all. A cwd outside any repository chose
 	// nothing, and neither did a call with no cwd and no project.
-	pinned := how == scopeFromArg || project != ""
+	pinned := how == scopeFromArg || how == scopeFromAccount || project != ""
 
 	// Resume a named session if it already exists.
 	if name != "" {
 		existing, ok, err := store.SessionByName(ctx, s.cfg.DB, name)
 		if err != nil {
 			return errResult("session_start", err)
+		}
+		if ok && !access.Visible(ctx, existing.ProjectSlug) {
+			return errResult("session_start", fmt.Errorf("session %q is not reachable from this connection: "+
+				"it belongs to a project this OS account may not reach -- choose another name", name))
 		}
 		if ok {
 			if !pinned {
@@ -238,6 +255,12 @@ func (s *Server) sessionProjectArg(ctx context.Context, raw, cwd, cwdProject str
 	if err != nil {
 		return "", false, err
 	}
+	// Named outright, so refused outright rather than redirected: before the
+	// conflict check (which would name the cwd's project) and before
+	// EnsureProject (which would register a slug this account may not create).
+	if !access.Writable(ctx, project) {
+		return "", false, access.Refusal(ctx, project)
+	}
 	if cwdProject != "" && project != cwdProject {
 		return "", false, fmt.Errorf("project %q conflicts with cwd %q, which is in project %q: "+
 			"pass one or the other (cwd places the session in its repository's project)", raw, cwd, cwdProject)
@@ -253,6 +276,19 @@ func (s *Server) sessionProjectArg(ctx context.Context, raw, cwd, cwdProject str
 		return "", false, err
 	}
 	return project, !exists, nil
+}
+
+// cwdProject resolves a session_start cwd to its project. Normally that
+// registers a not-yet-mapped repository as a project (store.RegisterProjectForCWD).
+// A configured peer_auth account only ever works inside its own projects, so
+// for it the map is read and never grown: a repository it opens must not mint a
+// project, and a mapping the owner made is all it needs.
+func (s *Server) cwdProject(ctx context.Context, id store.CWDIdentity) (string, *store.RepoMapAdoption, error) {
+	if v, ok := access.FromContext(ctx); ok && v.Principal().Kind == access.KindUser {
+		project, err := store.ResolveProjectForCWD(ctx, s.cfg.DB, id.Host, id.CWD)
+		return project, nil, err
+	}
+	return store.RegisterProjectForCWD(ctx, s.cfg.DB, id, s.cfg.LocalHost)
 }
 
 // stampSessionModel records a self-reported model id on a resumed/adopted
@@ -293,6 +329,9 @@ func scopeNote(project string, how scopeSource) string {
 			"Pass project=<slug> here, or on each durable write, to target a project."
 	case how == scopeFromArg:
 		return fmt.Sprintf("project %q, as named.", project)
+	case how == scopeFromAccount:
+		return fmt.Sprintf("project %q: this connection's OS account works only in its own projects "+
+			"(peer_auth), so its sessions land here whatever the cwd.", project)
 	case how == scopeFromSession:
 		return fmt.Sprintf("project %q, the resumed session's.", project)
 	default:
@@ -350,6 +389,8 @@ func (s *Server) soleAmbientByCWD(ctx context.Context, host, cwd string) (core.S
 		s.logger.Warn("session_start: ambient lookup", "error", err)
 		return core.Session{}, false
 	}
+	// Another OS account's sessions are never candidates (peer_auth).
+	ambients = slices.DeleteFunc(ambients, func(a core.Session) bool { return !access.Visible(ctx, a.ProjectSlug) })
 	if len(ambients) != 1 {
 		return core.Session{}, false
 	}
@@ -518,7 +559,7 @@ func (s *Server) mishapMatchCorpus(ctx context.Context, project string, mishapCo
 // completing the wrong session is destructive, not merely mis-scoped.
 func (s *Server) resolveSession(ctx context.Context, req mcp.CallToolRequest) (core.Session, bool, error) {
 	if id := argString(req, "session_id"); id != "" {
-		sess, ok, err := store.SessionByID(ctx, s.cfg.DB, id)
+		sess, ok, err := sessionByID(ctx, s.cfg.DB, id)
 		if err == nil && !ok {
 			err = fmt.Errorf("session_id %q not found", id)
 		}
@@ -532,7 +573,7 @@ func (s *Server) resolveSession(ctx context.Context, req mcp.CallToolRequest) (c
 		return sess, ok, err
 	}
 	if b, ok := s.getBinding(ctx); ok {
-		return store.SessionByID(ctx, s.cfg.DB, b.sessionID)
+		return sessionByID(ctx, s.cfg.DB, b.sessionID)
 	}
 	sess, ok, ambiguous, err := s.ambientSessionTarget(ctx)
 	if err != nil {
@@ -579,15 +620,37 @@ func (s *Server) ambientSessionTarget(ctx context.Context) (sess core.Session, o
 // session_start returned as session=, and reading that only as a name turned a
 // correct reference into "no active session: call session_start first", sending
 // an agent that had just called it to call it again.
+//
+// Under peer_auth a session in a project this connection's OS account may not
+// reach is reported as not found, exactly like a name that matches nothing: a
+// handle is how a call adopts a session's project, so honoring one would be a
+// way around every fence.
 func sessionByRef(ctx context.Context, db *sql.DB, ref string) (core.Session, bool, error) {
 	sess, ok, err := store.SessionByName(ctx, db, ref)
-	if err != nil || ok {
-		return sess, ok, err
+	if err == nil && !ok && store.LooksLikeSessionULID(ref) {
+		sess, ok, err = store.SessionByID(ctx, db, ref)
 	}
-	if store.LooksLikeSessionULID(ref) {
-		return store.SessionByID(ctx, db, ref)
+	if err != nil || !ok {
+		return core.Session{}, false, err
 	}
-	return core.Session{}, false, nil
+	if !access.Visible(ctx, sess.ProjectSlug) {
+		return core.Session{}, false, nil
+	}
+	return sess, true, nil
+}
+
+// sessionByID is store.SessionByID under the same peer_auth rule as
+// sessionByRef: a session this connection's OS account may not reach is not
+// found.
+func sessionByID(ctx context.Context, db *sql.DB, id string) (core.Session, bool, error) {
+	sess, ok, err := store.SessionByID(ctx, db, id)
+	if err != nil || !ok {
+		return core.Session{}, false, err
+	}
+	if !access.Visible(ctx, sess.ProjectSlug) {
+		return core.Session{}, false, nil
+	}
+	return sess, true, nil
 }
 
 // errSessionRefNotFound is the refusal for a session= that names nothing. It

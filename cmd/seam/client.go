@@ -31,7 +31,7 @@ func consoleJSON(cfg config.Config, path string, v any) error {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("console unreachable at %s: %w", cfg.ServerURL(), err)
+		return fmt.Errorf("console unreachable at %s: %w", cfg.DaemonAddress(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNotFound {
@@ -82,7 +82,7 @@ func consolePOST(cfg config.Config, path string, v any) error {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("console unreachable at %s: %w", cfg.ServerURL(), err)
+		return fmt.Errorf("console unreachable at %s: %w", cfg.DaemonAddress(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNotFound {

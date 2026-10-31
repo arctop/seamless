@@ -25,7 +25,7 @@ func (s *Service) projectStages(ctx context.Context, rows []store.ProjectBoardRo
 	if !features.Enabled(s.effectiveFeatures(ctx), features.Momentum) {
 		return nil
 	}
-	stages, crossings, err := store.EvaluateProjectStages(ctx, s.cfg.DB, rows, now)
+	stages, crossings, err := store.EvaluateProjectStagesWith(ctx, s.cfg.DB, s.writeDB(), rows, now)
 	if err != nil {
 		s.logger.Warn("console: project stages", "error", err)
 		return nil

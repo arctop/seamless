@@ -30,8 +30,10 @@ Strict layering, no circular imports. `cmd/` wires everything; no package import
 cmd/seamlessd, cmd/seam, cmd/seambench, cmd/demoseed, cmd/docsgen
   -> internal/{mcp,hooks,console}         (API surfaces)
     -> internal/{retrieve,lifecycle,gardener,files,capture,bench,demokit,update} (domains)
-      -> internal/{store,events,llm,core,config,validate}          (foundations)
+      -> internal/{store,events,llm,core,config,validate,access}   (foundations)
 ```
+
+(`access` imports only `config`; `store` and `events` import `access`.)
 
 (The dependency-aware ready-queue and lease-based claiming live in
 `internal/store/tasks*.go`; there is no `internal/tasks` package.)
@@ -114,7 +116,9 @@ cmd/seamlessd, cmd/seam, cmd/seambench, cmd/demoseed, cmd/docsgen
   bytes (`internal/validate.Path`). Names that become filenames go through
   `validate.Name`; human titles through `validate.Title`.
 - Auth: a single static bearer key guards `/api/mcp` and the console. Bind
-  `127.0.0.1` by default. No JWT, no multi-user, no registration.
+  `127.0.0.1` by default. No JWT, no registration. The one other credential is
+  the kernel's: with `peer_auth` on, a Unix-socket request is authenticated by
+  its peer uid (see "Peer-user auth" below), and the TCP key is the owner.
 - SSRF: URL capture must reject private IPs, localhost, and `file://`.
 - Every JSON/body handler starts with `http.MaxBytesReader`.
 
@@ -218,6 +222,62 @@ the pointer is where to look, not a substitute for reading it.
 - Stamp provenance with `s.boundSession(ctx)`, not the raw binding.
 - A new tool must be registered in `registerTools` AND bump `ToolCount`, or
   `doctor` fails its tool-count assertion.
+
+### Peer-user auth (`internal/access`)
+
+With `peer_auth` on, every request carries a `View`: the owner's on TCP
+(`ownerHandler`), the kernel-named peer's on the socket (`peerConnContext` +
+`peerHandler`, cmd/seamlessd/peerauth.go). Off, no request carries one, and
+every check below answers yes -- which is how "off is exactly the old
+behavior" holds. Read the guide (docs-src/guides/peer-auth.md) before touching
+any of it.
+
+- **The policy lives in `internal/access` and nowhere else.** `View.Visible`,
+  `View.Writable` and `View.SessionScope` are the rules; surfaces ask them (or
+  `access.Visible(ctx, p)`) and never compare principal kinds or slugs
+  themselves. `store.CanRead`/`CanWrite` consult the View FIRST -- including
+  for the caller's own bound project -- so every isolation fence inherits it.
+- **The identity comes from the transport, never the client.** A header, a
+  `session=` handle, a body field or an agent-process identity can only ever
+  narrow what the View allows. `getBinding` drops a binding to an unreachable
+  project; `sessionByRef`/`sessionByID` report another account's session as not
+  found; the process binding, ambient inference and `soleAmbientByCWD` skip
+  sessions the caller may not reach; hooks blank a session id that names one
+  (`foreignSession`).
+- **A configured account never writes the global scope**, and anything nothing
+  else places lands in its home project (`peerHome`, `View.SessionScope`). It
+  never grows the repo map (`cwdProject`).
+- **Lists filter.** Anything that enumerates projects or sessions applies
+  `access.Visible` (project_list, scope-error project lists, ambient
+  candidates). A sealed project's name is not shown to an account that cannot
+  reach it.
+- **The console reads through `store.OpenView`**: TEMP VIEWs that shadow every
+  project-scoped table on a read-only handle. Console writes go to
+  `s.writeDB()`, after reading their target through `s.cfg.DB`; a gardener
+  action by id checks `proposalReachable` first. A store function that both
+  reads and caches takes both handles (`CaptureStreakWith` and its siblings).
+  A new table must be classified in `viewTables` or `viewExempt`
+  (`TestViewCoversEveryTable`), and the one table a view cannot shadow -- `fts`
+  -- is filtered by the request's View in its only reader (`accessFilter`).
+  Work done for no caller (the gardener, the reaper, milestones) is hidden by
+  what it is about: an event recorded without a project is still hidden by its
+  session, its item, or -- for the gardener's own events, whose payload carries
+  the proposal key -- the proposal it concerns.
+- **The event log files a configured account's events under its own project**
+  (`events.refile` in `Record`/`RecordOnce`), so nothing it does lands in the
+  global scope the owner reads. Never insert into `events` anywhere else; the
+  console's live feed re-reads each event through the filtered handle
+  (`liveEventVisible`).
+- **No agent-disk reads under peer_auth.** `localDiskOK` answers no for every
+  hook: the daemon runs as its own account, so every path a hook names was
+  chosen by another account, and the daemon could be made to read its own data
+  directory on a caller's behalf. Do not "restore" transcript harvest by
+  opening caller-supplied paths.
+- **Prove it in the matrix.** `cmd/seamlessd/peerauth_matrix_test.go` drives
+  every tool in `mcp.Catalog()` (a tool without a probe row fails it), every
+  console route (read from console.go), the hooks, A2A and the live feed, in
+  both directions, and checks state after every write. A new surface gets a
+  row there.
 
 ### FTS5 and LIKE escaping (`internal/store`)
 

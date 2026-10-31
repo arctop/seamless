@@ -44,6 +44,9 @@ func (h *Handler) postToolUse(w http.ResponseWriter, r *http.Request) {
 	var p toolPayload
 	_ = json.NewDecoder(r.Body).Decode(&p) //nolint:errcheck // tolerant: a decode error just leaves p zero (no tool name -> no capture)
 	p.Identity = identityFromRequest(r)
+	if h.foreignSession(r.Context(), ClientClaudeCode, p.SessionID) {
+		p.SessionID = ""
+	}
 
 	// Heartbeat the ambient session on any tool activity, so a long turn that never
 	// calls a seamless MCP tool still keeps its cc/* session live for the reaper.
@@ -95,6 +98,9 @@ func (h *Handler) permissionRequest(w http.ResponseWriter, r *http.Request) {
 	var p toolPayload
 	_ = json.NewDecoder(r.Body).Decode(&p) //nolint:errcheck // tolerant: a decode error just leaves p zero (no tool name -> no capture)
 	p.Identity = identityFromRequest(r)
+	if h.foreignSession(r.Context(), ClientClaudeCode, p.SessionID) {
+		p.SessionID = ""
+	}
 
 	if p.ToolName == "ExitPlanMode" && h.captureLocal(r.Context(), "plan-presented", p.Identity) {
 		ctx, cancel := context.WithTimeout(r.Context(), captureTimeout)

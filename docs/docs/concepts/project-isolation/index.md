@@ -53,6 +53,10 @@ search and views still see everything; isolated projects are simply badged with 
 lock pill. Nothing about an isolated project's pages turns scary or
 half-rendered - the pill and the Overview control are the whole story.
 
+The one exception is a project [sealed to another OS account](https://thereisnospoon.org/docs/guides/peer-auth/)
+under `peer_auth`: there the threat *is* your own account, so the console shows
+no trace of it.
+
 ## Isolation requires a standalone project
 
 A project cannot be isolated while it is entangled in a family: no family
@@ -156,11 +160,13 @@ it. A connection bound to nothing - a hookless client that skipped
 global scope, which fails closed against reading an isolated project but also
 means the fence cannot recognize it as belonging to one.
 
-**What would make it stronger.** Per-project bearer keys: a confidential project
-gets its own key, the repo's hooks use it, and the shared key cannot touch it.
-That upgrades the fence from policy to an auth boundary at the daemon. It is not
-built.
+**What makes it stronger.** [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) puts an
+authentication boundary under the fence: the daemon runs as its own OS account,
+names each caller by the uid the kernel reports for its Unix-socket connection,
+and reserves a project for one account - so a project's own agents run as that
+account, and nothing running as you reaches it, through a tool or through a
+file. Use it with isolation, not instead of it: a sealed-to-an-account project
+must also be confidential or sealed.
 
-**The hard boundary today** is a separate Seamless instance - its own data dir,
-port, and key. If your threat model is adversarial rather than accidental, that
-is the honest answer.
+**Without it**, the hard boundary is a separate Seamless instance - its own data
+dir, port, and key, run as its own account.

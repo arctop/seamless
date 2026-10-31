@@ -36,6 +36,9 @@ role: "server"
 # A wildcard host here is refused at load (0.0.0.0, ::, [::0], ...): that
 # answers "where do I listen", not "where do I dial", so it belongs in addr
 # instead.
+# A client of a peer_auth daemon (see peer_auth below) names its socket here
+# instead -- unix:///absolute/path.sock -- and needs no mcp.api_key: the daemon
+# identifies the calling OS account by the uid the kernel reports.
 # env: SEAMLESS_SERVER_URL
 server_url: ""
 
@@ -341,3 +344,57 @@ update:
   # Installing by hand (seamlessd update) does not wait.
   # env: SEAMLESS_UPDATE_MIN_AGE
   min_age: 24h
+
+# Peer-user authentication: a Unix socket whose callers the daemon identifies by
+# the uid the kernel reports (never by anything the client sends), and the map of
+# which OS accounts may reach which projects. Off by default, and off is exactly
+# the behavior of every earlier release. On:
+#   - the TCP bearer key is the owner account: it reaches every project except
+#     those sealed to another account, and so does the owner on the socket;
+#   - a configured account reaches only its own projects (sealed plus shared)
+#     and reads -- never writes -- the global scope;
+#   - any other uid on the socket is refused (403);
+#   - the console is the owner's alone, and shows no project sealed to another
+#     account;
+#   - the daemon reads no agent files (transcripts, plan files): findings
+#     harvest, token totals, model sniffing, plan and subagent capture are off.
+# serve refuses to start unless the boundary would hold on disk too: the daemon
+# runs as its own account (not the owner, not root), data_dir is that account's
+# and 0700, the socket's directory and every directory above the data, the
+# config file and the seamlessd binary are writable by nobody but root and the
+# daemon's account, every named project exists, and every sealed project is
+# confidential or sealed. `seamlessd doctor`, run as the daemon's account,
+# reports each of those. See the peer_auth guide in the docs for the deployment.
+# The block is new after v0.7.4 and releases before it refuse config keys they
+# do not know, so it is left commented out here.
+# peer_auth:
+#   # env: SEAMLESS_PEER_AUTH_ENABLED
+#   enabled: false
+#   # The OS account (user name or numeric uid) the TCP bearer key stands for.
+#   # env: SEAMLESS_PEER_AUTH_OWNER
+#   owner: ""
+#   socket:
+#     # Absolute path. Its directory may be searchable by the accounts that
+#     # connect, and writable by nobody but the daemon's account or root. Not
+#     # inside data_dir, which is 0700.
+#     # env: SEAMLESS_PEER_AUTH_SOCKET_PATH
+#     path: ""
+#     # Octal permission bits. Connecting needs write permission on the socket;
+#     # the kernel still names every peer, so 0666 lets every local account
+#     # knock and refuses the unconfigured ones. Empty means 0666.
+#     # env: SEAMLESS_PEER_AUTH_SOCKET_MODE
+#     mode: "0666"
+#     # Optional group (name or gid) to hand the socket to, with a mode such as
+#     # 0660 to let only that group's members connect at all.
+#     # env: SEAMLESS_PEER_AUTH_SOCKET_GROUP
+#     group: ""
+#   # OS account (user name or numeric uid) -> its reach. File only (no env).
+#   # sealed: reachable ONLY from this account's socket connections; a project
+#   # is sealed to at most one account, and never also listed for another.
+#   # projects: also reachable from this account, and still the owner's too.
+#   # The first sealed project (else the first shared one) is the account's
+#   # home: where its sessions and unplaced calls land.
+#   users:
+#     _example_role:
+#       sealed: [example-project]
+#       projects: []

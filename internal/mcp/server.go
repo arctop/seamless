@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/agentguide"
 	"github.com/arctop/seamless/internal/agentproc"
 	"github.com/arctop/seamless/internal/capture"
@@ -360,7 +362,10 @@ func (s *Server) Handler() http.Handler {
 	}
 	transport := mcpserver.NewStreamableHTTPServer(s.mcp, opts...)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !verifyBearer(r, s.cfg.APIKey) {
+		// The bearer key, or the kernel: a peer_auth socket connection was
+		// authenticated by its peer uid before it got here (cmd/seamlessd), and
+		// carries no key at all.
+		if !verifyBearer(r, s.cfg.APIKey) && !access.PeerAuthenticated(r.Context()) {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -531,7 +536,20 @@ func (s *Server) setBinding(ctx context.Context, sessionID, project string) {
 // resolveWriteScope/resolveReadScope an empty project (the global scope) and
 // shadow the ambient fallback, silently globalizing unscoped writes after a bare
 // lab_open. Such entries are visible only through rawBinding.
+//
+// Under peer_auth a binding to a project this connection's OS account may not
+// reach is no binding at all, whichever of the three routes produced it: the
+// session= handle and the process binding already refuse such sessions, and
+// this is the last word for an explicit binding made before the policy changed.
 func (s *Server) getBinding(ctx context.Context) (binding, bool) {
+	b, ok := s.resolveBinding(ctx)
+	if ok && !access.Visible(ctx, b.project) {
+		return binding{}, false
+	}
+	return b, ok
+}
+
+func (s *Server) resolveBinding(ctx context.Context) (binding, bool) {
 	if b, ok := handleBinding(ctx); ok {
 		return b, true
 	}
@@ -708,7 +726,25 @@ func (s *Server) resolveReadScope(ctx context.Context, explicit string) (string,
 	if ambiguity != nil {
 		return "", s.scopeErr(ctx, ambiguity, "")
 	}
+	// A configured peer_auth account with nothing else to go on is in its own
+	// project: it can be nowhere else, so this is identification, not a guess.
+	if home := peerHome(ctx); home != "" {
+		return home, nil
+	}
 	return "", nil
+}
+
+// peerHome is the home project of a configured peer_auth account's connection,
+// and "" for every other caller (the owner, or peer_auth off). Such an account
+// reaches only its own projects, so when no binding, handle or ambient session
+// places one of its calls, the call is in its home project -- the same answer
+// access.View.SessionScope gives a session it starts.
+func peerHome(ctx context.Context) string {
+	v, ok := access.FromContext(ctx)
+	if !ok || v.Principal().Kind != access.KindUser {
+		return ""
+	}
+	return v.Home()
 }
 
 // scopeErr decorates a scope sentinel with the guidance an agent needs to answer
@@ -745,7 +781,9 @@ func (s *Server) knownProjects(ctx context.Context) string {
 	}
 	slugs := make([]string, 0, len(ps))
 	for _, p := range ps {
-		if p.RetiredAt != nil {
+		// A project this connection's OS account may not reach is not one to
+		// suggest -- and under peer_auth its name is none of this caller's business.
+		if p.RetiredAt != nil || !access.Visible(ctx, p.Slug) {
 			continue
 		}
 		slugs = append(slugs, p.Slug)
@@ -818,6 +856,9 @@ func (s *Server) resolveWriteScope(ctx context.Context, explicit string) (string
 	}
 	if ambiguity != nil {
 		return "", s.scopeErr(ctx, ambiguity, writeScopeHelp)
+	}
+	if home := peerHome(ctx); home != "" {
+		return home, nil
 	}
 	return "", s.scopeErr(ctx, errNoScope, writeScopeHelp)
 }
@@ -912,7 +953,7 @@ func (s *Server) boundSessionModel(ctx context.Context) string {
 // fall-through -- naming a bad identity should fail, not attribute elsewhere.
 func (s *Server) resolveActor(ctx context.Context, req mcp.CallToolRequest) (string, bool, error) {
 	if id := argString(req, "session_id"); id != "" {
-		sess, ok, err := store.SessionByID(ctx, s.cfg.DB, id)
+		sess, ok, err := sessionByID(ctx, s.cfg.DB, id)
 		if err != nil {
 			return "", false, err
 		}
@@ -982,7 +1023,10 @@ func (s *Server) ambientFallback(ctx context.Context) (sess core.Session, ok boo
 	// "Would a session bound elsewhere be allowed to read this project?" is the
 	// same question as "may an unbound connection be resolved into it?", so the
 	// probe is CanRead from the global scope rather than a second policy rule.
-	visible, err := store.CanRead(ctx, s.cfg.DB, "", projects[0])
+	// A configured peer_auth account probes from its own home project instead:
+	// its unbound calls are in that project already (peerHome), so its own
+	// confidential project is no "elsewhere" to it.
+	visible, err := store.CanRead(ctx, s.cfg.DB, peerHome(ctx), projects[0])
 	if err != nil {
 		// Decline rather than grant: a fence that fails open on a database error
 		// is not a fence.
@@ -1018,15 +1062,20 @@ func (s *Server) ambientFallback(ctx context.Context) (sess core.Session, ok boo
 // other agents' sessions are active, so a fallback to the global scope would
 // silently narrow a call the caller meant for some project. The callers turn it
 // into a refusal instead.
+//
+// Under peer_auth the inference only ever sees projects this connection's OS
+// account may reach: another account's sessions are not candidates at all, so
+// they can neither be inferred into nor make an otherwise single answer
+// ambiguous.
 func (s *Server) ambientProjectsNearestFirst(ctx context.Context) (projects []string, scope store.AmbientScope, othersOnly bool, err error) {
 	scope = store.AmbientScope{Host: s.callerHost(ctx), Caller: callerAgentProcess(ctx)}
-	projects, err = store.ActiveAmbientProjects(ctx, s.cfg.DB, scope, ambientFallbackWindow)
+	projects, err = s.activeAmbientProjects(ctx, scope)
 	if err != nil || len(projects) > 0 {
 		return projects, scope, false, err
 	}
 	if scope.Host != "" {
 		scope.Host = ""
-		projects, err = store.ActiveAmbientProjects(ctx, s.cfg.DB, scope, ambientFallbackWindow)
+		projects, err = s.activeAmbientProjects(ctx, scope)
 		if err != nil || len(projects) > 0 {
 			return projects, scope, false, err
 		}
@@ -1034,8 +1083,18 @@ func (s *Server) ambientProjectsNearestFirst(ctx context.Context) (projects []st
 	if scope.Caller == "" {
 		return nil, scope, false, nil
 	}
-	others, err := store.ActiveAmbientProjects(ctx, s.cfg.DB, store.AmbientScope{}, ambientFallbackWindow)
+	others, err := s.activeAmbientProjects(ctx, store.AmbientScope{})
 	return nil, scope, len(others) > 0, err
+}
+
+// activeAmbientProjects is store.ActiveAmbientProjects narrowed to the projects
+// this connection's OS account may reach (all of them with peer_auth off).
+func (s *Server) activeAmbientProjects(ctx context.Context, scope store.AmbientScope) ([]string, error) {
+	projects, err := store.ActiveAmbientProjects(ctx, s.cfg.DB, scope, ambientFallbackWindow)
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(projects, func(p string) bool { return !access.Visible(ctx, p) }), nil
 }
 
 // record appends an event best-effort; a logging failure never fails a tool.

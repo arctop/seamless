@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -85,6 +86,12 @@ func (s *Server) processSession(ctx context.Context) (core.Session, bool) {
 		return slot.sess, slot.ok
 	}
 	sess, ok := s.lookupProcessSession(ctx, proc)
+	// The agent-process header is the client's own claim. Under peer_auth it may
+	// name only a session this connection's OS account may reach: a forged
+	// identity pointing at another account's agent binds nothing.
+	if ok && !access.Visible(ctx, sess.ProjectSlug) {
+		sess, ok = core.Session{}, false
+	}
 	if memo {
 		slot.done, slot.sess, slot.ok = true, sess, ok
 	}

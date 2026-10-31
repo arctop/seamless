@@ -145,7 +145,19 @@ func defaultTaskID(data tasksData) string {
 func (s *Service) taskRelease(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
-	released, err := store.ForceReleaseTask(ctx, s.cfg.DB, id, time.Now().UTC())
+	// Read through the console's (possibly filtered) handle first: the release
+	// itself runs on the write handle, which sees every project (see writeDB).
+	if s.cfg.WriteDB != nil {
+		if _, err := store.TaskByID(ctx, s.cfg.DB, id); err != nil {
+			if errors.Is(err, store.ErrTaskNotFound) {
+				s.notFound(w, r, "No task with id "+id+".")
+				return
+			}
+			s.serverError(w, r, err)
+			return
+		}
+	}
+	released, err := store.ForceReleaseTask(ctx, s.writeDB(), id, time.Now().UTC())
 	if err != nil {
 		if errors.Is(err, store.ErrTaskNotFound) {
 			s.notFound(w, r, "No task with id "+id+".")

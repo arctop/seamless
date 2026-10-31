@@ -146,6 +146,12 @@ func cosineSearch(ctx context.Context, db *sql.DB, query []float32, model string
 			args = append(args, p)
 		}
 	}
+	// The caller's peer_auth reach, applied before the top-K scan like scope, so
+	// a sealed project's vectors never compete for (or fill) the depth.
+	if clause, extra := accessFilter(ctx, "COALESCE(mi.project, ni.project)"); clause != "" {
+		sqlStr += clause
+		args = append(args, extra...)
+	}
 	// A NULL mi.kind (a note, or an orphan) fails the predicate, so a memKind
 	// filter is memories-only by construction, applied before the top-K scan
 	// like every other scope predicate.

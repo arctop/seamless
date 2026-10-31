@@ -265,6 +265,67 @@ walks through the outcomes. What the service manager can tell you:
   `seamlessd import --from ~/.seamless.broken/backups/pre-update-v<old>-<time>.tar.gz`,
   then `seamlessd start`.
 
+## A system service for peer_auth {#peer-auth-daemon}
+
+[Sealing projects to OS accounts](/guides/peer-auth/) needs the daemon to run as
+an account of its own, so the per-user service above cannot host it. On macOS it
+is a LaunchDaemon that names the account; it runs whether or not anyone is
+logged in. Install it as `/Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist`
+(`root:wheel`, `0644`):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>             <string>org.thereisnospoon.seamless.daemon</string>
+  <key>UserName</key>          <string>_seamless</string>
+  <key>GroupName</key>         <string>_seamless</string>
+  <key>InitGroups</key>        <true/>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/seamless/bin/seamlessd</string>
+    <string>serve</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>SEAMLESS_CONFIG</key> <string>/opt/seamless/etc/seamless.yaml</string>
+    <key>HOME</key>            <string>/opt/seamless/home</string>
+  </dict>
+  <key>Umask</key>             <integer>63</integer>
+  <key>RunAtLoad</key>         <true/>
+  <key>KeepAlive</key>         <true/>
+  <key>ThrottleInterval</key>  <integer>10</integer>
+  <key>StandardOutPath</key>   <string>/opt/seamless/data/seamlessd.log</string>
+  <key>StandardErrorPath</key> <string>/opt/seamless/data/seamlessd.log</string>
+</dict>
+</plist>
+```
+
+`Umask` 63 is `077`. The controls are the system domain's, all with `sudo`:
+
+```bash
+sudo plutil -lint /Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist
+sudo launchctl kickstart -k system/org.thereisnospoon.seamless.daemon   # restart
+sudo launchctl print system/org.thereisnospoon.seamless.daemon          # state, pid, last exit
+sudo launchctl bootout system/org.thereisnospoon.seamless.daemon        # stop and unload
+```
+
+`seamlessd start|stop|restart|status` manage the per-user service, not this one.
+Before loading it, stop and remove the per-user service, or it starts again at
+your next login: `seamlessd stop`, then
+`launchctl bootout gui/$(id -u)/org.thereisnospoon.seamless` and delete
+`~/Library/LaunchAgents/org.thereisnospoon.seamless.plist`.
+
+On Linux the same daemon is a system unit with `User=` and `Group=` set to the
+account, `UMask=0077`, `Environment=SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml`
+and `ExecStart=/opt/seamless/bin/seamlessd serve`, enabled with
+`sudo systemctl enable --now`.
+
+Automatic updates do not manage this install (the daemon only notifies): replace
+the binaries in `/opt/seamless/bin` with `sudo` and restart it.
+
 ## Where things live {#where-things-live}
 
 Every `~` path resolves under `%USERPROFILE%` on Windows - the daemon searches

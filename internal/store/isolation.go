@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 )
 
@@ -107,7 +108,17 @@ func isolationOfTx(ctx context.Context, q rowQuerier, slug string) (core.Isolati
 // targetProject's knowledge ("" is the global scope). A scope always reads
 // itself; a fenced (confidential or sealed) target never leaks to another
 // scope; a sealed caller reads nothing outside itself, global included.
+//
+// Before any of that, the request's peer_auth View (internal/access) has the
+// first word: a project the caller's OS account may not reach is unreadable
+// whatever the binding says -- and that includes the caller's OWN bound
+// project, so a binding to a sealed project that slipped past every other gate
+// still reads nothing. With peer_auth off no View is set and this check is a
+// no-op.
 func CanRead(ctx context.Context, db *sql.DB, callerProject, targetProject string) (bool, error) {
+	if !access.Visible(ctx, targetProject) || !access.Visible(ctx, callerProject) {
+		return false, nil
+	}
 	if callerProject == targetProject {
 		return true, nil
 	}
@@ -416,7 +427,14 @@ func GlobalMemoriesFromProjectSessions(ctx context.Context, db *sql.DB, project 
 // global included, is an outbound leak; a sealed target admits nothing from
 // outside, while a confidential target stays writable from outside (inbound
 // is unchanged -- relocating knowledge INTO the fence is how it gets there).
+//
+// The peer_auth View has the first word here too: a configured OS user writes
+// only into its own projects (never the global scope), and the owner never
+// writes into a project sealed to another user.
 func CanWrite(ctx context.Context, db *sql.DB, callerProject, targetProject string) (bool, error) {
+	if !access.Writable(ctx, targetProject) || !access.Visible(ctx, callerProject) {
+		return false, nil
+	}
 	if callerProject == targetProject {
 		return true, nil
 	}

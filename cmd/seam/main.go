@@ -135,7 +135,7 @@ func dial(ctx context.Context) (*mcpclient.Client, config.Config, error) {
 	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
 	initReq.Params.ClientInfo = mcp.Implementation{Name: "seam-cli", Version: "0"}
 	if _, err := cli.Initialize(ctx, initReq); err != nil {
-		return nil, cfg, fmt.Errorf("connect to seamlessd at %s: %w", cfg.ServerURL(), err)
+		return nil, cfg, fmt.Errorf("connect to seamlessd at %s: %w", cfg.DaemonAddress(), err)
 	}
 	return cli, cfg, nil
 }

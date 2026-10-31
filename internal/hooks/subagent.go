@@ -77,6 +77,9 @@ func (h *Handler) subagentStart(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
+	if h.foreignSession(ctx, client, p.ParentSessionID) {
+		p.ParentSessionID = ""
+	}
 
 	// The released contract requires these fields. A malformed request gets an
 	// empty, correctly shaped response; never guess a parent, child, or scope.
@@ -117,6 +120,9 @@ func (h *Handler) subagentStop(w http.ResponseWriter, r *http.Request) {
 	}
 	p := decodeSubagentStop(client, readHookBody(w, r))
 	p.Identity = identityFromRequest(r)
+	if h.foreignSession(r.Context(), client, p.ParentSessionID) {
+		p.ParentSessionID = ""
+	}
 
 	if client == ClientCodex {
 		// The Codex contract shares the parent session_id. Keep it alive, but do

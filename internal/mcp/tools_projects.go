@@ -9,6 +9,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/validate"
@@ -38,6 +39,13 @@ func (s *Server) handleProjectList(ctx context.Context, _ mcp.CallToolRequest) (
 	}
 	out := make([]map[string]any, 0, len(ps))
 	for _, p := range ps {
+		// peer_auth: a project this connection's OS account may not reach is not
+		// listed. Unlike the isolation fence -- which keeps a fenced project's
+		// existence visible so an agent can bind to it -- there is no binding
+		// that would let this caller in, so its name is nothing to act on.
+		if !access.Visible(ctx, p.Slug) {
+			continue
+		}
 		// Always present, never omitempty: "open" is a real answer, and a missing
 		// field would be indistinguishable from a server that does not fence at
 		// all -- the one reading an agent must not get wrong.
@@ -92,6 +100,12 @@ func (s *Server) handleProjectCreate(ctx context.Context, req mcp.CallToolReques
 	// separators and ".." so no later write can escape its tree.
 	if err := validate.Name(slug); err != nil {
 		return errResult("project_create", fmt.Errorf("invalid slug %q: %w", slug, err))
+	}
+	// peer_auth: creating a project is a write into it. Judged before the
+	// existence check, so a slug sealed to another OS account answers with the
+	// seal whether or not it exists yet.
+	if !access.Writable(ctx, slug) {
+		return errResult("project_create", access.Refusal(ctx, slug))
 	}
 	// Absent -> the default; present but uninterpretable -> an error naming the
 	// accepted values. validateMiddleware already enforces the declared enum, so

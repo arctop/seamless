@@ -128,6 +128,7 @@ func doctor(args []string) error {
 	}
 
 	checks = append(checks, schemaVersionCheck(db))
+	checks = append(checks, peerAuthChecks(context.Background(), cfg, db, defaultPeerAuthEnv())...)
 	checks = append(checks, repoMapCheck(db))
 	checks = append(checks, remoteSessionsCheck(db))
 	checks = append(checks, mcpToolsCheck())
@@ -416,7 +417,18 @@ func transportChecks(cfg config.Config) []check {
 func clientServerURLCheck(cfg config.Config) check {
 	const name = "server_url"
 	base := cfg.ServerURL()
-	resp, err := reachabilityProbe().Get(base + "/healthz")
+	probe := reachabilityProbe()
+	if cfg.SocketPath() != "" {
+		// A peer_auth socket: the one client that can dial it is the shared
+		// constructor (it has no TLS to skip), and the message names the socket
+		// rather than the placeholder URL every socket request carries.
+		sock, err := cfg.HTTPClient(codexActivityTimeout)
+		if err != nil {
+			return check{statusFail, name, err.Error()}
+		}
+		probe, base = sock, cfg.DaemonAddress()
+	}
+	resp, err := probe.Get(cfg.ServerURL() + "/healthz")
 	if err != nil {
 		return check{statusFail, name, fmt.Sprintf(
 			"%s is not answering (%v) -- start seamlessd there, or correct server_url", base, err)}
@@ -430,6 +442,9 @@ func clientServerURLCheck(cfg config.Config) check {
 		return check{statusFail, name, fmt.Sprintf(
 			"%s answers 421 to Host %q: that host belongs in the SERVER's allowed_hosts (or its server_url); add it there and restart it",
 			base, cfg.ServerHost())}
+	case resp.StatusCode == http.StatusForbidden && cfg.SocketPath() != "":
+		return check{statusFail, name, fmt.Sprintf(
+			"%s refused this OS account (403): it is not the owner and not configured under the server's peer_auth.users", base)}
 	case resp.StatusCode != http.StatusOK:
 		return check{statusWarn, name, fmt.Sprintf("%s answered %s", base, resp.Status)}
 	}
@@ -687,7 +702,7 @@ func codexChecks(cfg config.Config, db *sql.DB) []check {
 // drift tautologically current.
 func doctorInstallOptions(client hooks.Client, settingsPath string, cfg config.Config) hooks.InstallOptions {
 	return hooks.InstallOptions{
-		Client: client, SettingsPath: settingsPath, BaseURL: cfg.ServerURL(),
+		Client: client, SettingsPath: settingsPath, BaseURL: cfg.HookBaseURL(),
 		APIKey: cfg.MCP.APIKey, SeamBin: resolveSeamBin(""), ConfigPath: absConfigPath(cfg.SourcePath()),
 	}
 }
@@ -1179,6 +1194,9 @@ func remoteToolCount(ctx context.Context, cfg config.Config) (int, error) {
 // apiKeyCheck warns when the static bearer key is unset. On a true first run
 // (no config file at all) the message points at serve, which generates one.
 func apiKeyCheck(cfg config.Config) check {
+	if cfg.IsClient() && cfg.SocketPath() != "" {
+		return check{statusInfo, "mcp.api_key", "not used: server_url is a peer_auth socket, which identifies this OS account by its uid"}
+	}
 	if strings.TrimSpace(cfg.MCP.APIKey) == "" {
 		if cfg.SourcePath() == "" {
 			return check{statusWarn, "mcp.api_key", "empty -- `seamlessd serve` generates one on first run (or set SEAMLESS_MCP_API_KEY)"}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/store"
@@ -41,7 +42,9 @@ func (s *Server) callerScope(ctx context.Context) string {
 	if sess, ok, _, _ := s.ambientFallback(ctx); ok { //nolint:errcheck // a fenced refusal already forces ok=false, and "" is the fail-closed scope this returns anyway
 		return sess.ProjectSlug
 	}
-	return ""
+	// A configured peer_auth account is in its own project (peerHome); everyone
+	// else unpinned is judged as global.
+	return peerHome(ctx)
 }
 
 // fenceRead refuses a read that would cross an isolation fence. It backs the
@@ -49,6 +52,12 @@ func (s *Server) callerScope(ctx context.Context) string {
 // resolve no scope at all, so without it any caller holding a ULID reads any
 // project's item.
 func (s *Server) fenceRead(ctx context.Context, target string) error {
+	// peer_auth first: a project this connection's OS account may not reach is
+	// refused with ITS rule and remedy. The isolation copy below would advise
+	// binding to the project with session_start, which peer_auth refuses too.
+	if !access.Visible(ctx, target) {
+		return access.Refusal(ctx, target)
+	}
 	caller := s.callerScope(ctx)
 	allowed, err := store.CanRead(ctx, s.cfg.DB, caller, target)
 	if err != nil {
@@ -88,6 +97,9 @@ func (s *Server) fenceRead(ctx context.Context, target string) error {
 // writable from outside, because relocating knowledge INTO the fence is how it
 // gets there. store.CanWrite owns that matrix; nothing here restates it.
 func (s *Server) fenceWrite(ctx context.Context, target string) error {
+	if !access.Writable(ctx, target) {
+		return access.Refusal(ctx, target)
+	}
 	caller := s.callerScope(ctx)
 	allowed, err := store.CanWrite(ctx, s.cfg.DB, caller, target)
 	if err != nil {

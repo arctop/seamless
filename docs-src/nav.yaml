@@ -54,6 +54,7 @@ sections:
       - research-trials.md
       - data.md
       - network-install.md
+      - peer-auth.md
       - troubleshooting.md
 
   - title: Reference

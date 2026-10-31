@@ -47,13 +47,13 @@ func runVersion(_ context.Context, e *env, _ *noOpts, _ []string) error {
 	}
 	resp, err := client.Get(base + "/healthz")
 	if err != nil {
-		return fmt.Errorf("server unreachable at %s: %w", base, err)
+		return fmt.Errorf("server unreachable at %s: %w", cfg.DaemonAddress(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	var hz map[string]any
 	if derr := json.NewDecoder(resp.Body).Decode(&hz); derr != nil {
-		return fmt.Errorf("unreadable health response from %s: %w", base, derr)
+		return fmt.Errorf("unreadable health response from %s: %w", cfg.DaemonAddress(), derr)
 	}
 
 	// A daemon new enough to report its distribution gets it in the line, as

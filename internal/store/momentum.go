@@ -52,6 +52,14 @@ type captureStreakCache struct {
 // A momentum-only surface: callers gate on the feature, so a disabled install
 // neither queries nor writes the cache.
 func CaptureStreak(ctx context.Context, db *sql.DB, now time.Time) (current, longest int, err error) {
+	return CaptureStreakWith(ctx, db, db, now)
+}
+
+// CaptureStreakWith is CaptureStreak reading through db and writing its cache
+// row through cache. The console passes its peer_auth-filtered read handle as
+// db (store.OpenView, read-only) and the main handle as cacheDB, so the streak is
+// the owner's own and the cache still persists.
+func CaptureStreakWith(ctx context.Context, db, cacheDB *sql.DB, now time.Time) (current, longest int, err error) {
 	today := localDay(now)
 	yesterday := today.AddDate(0, 0, -1)
 
@@ -98,7 +106,7 @@ func CaptureStreak(ctx context.Context, db *sql.DB, now time.Time) (current, lon
 		if merr != nil {
 			return 0, 0, fmt.Errorf("store.CaptureStreak: encode cache: %w", merr)
 		}
-		if serr := SetSetting(ctx, db, SettingCaptureStreak, string(raw)); serr != nil {
+		if serr := SetSetting(ctx, cacheDB, SettingCaptureStreak, string(raw)); serr != nil {
 			return 0, 0, serr
 		}
 	}

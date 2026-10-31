@@ -45,7 +45,7 @@ func (s *Service) freshRetrievalStats(ctx context.Context) {
 	} else if inputs == s.stats.inputs && time.Since(s.stats.at) < statsDecayWindow {
 		return
 	}
-	if err := store.RebuildRetrievalStats(ctx, s.cfg.DB); err != nil {
+	if err := store.RebuildRetrievalStats(ctx, s.writeDB()); err != nil {
 		s.logger.Warn("console: rebuild retrieval stats", "error", err)
 		return
 	}

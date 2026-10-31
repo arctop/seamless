@@ -5,6 +5,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -103,7 +104,10 @@ func (s *Service) Search(ctx context.Context, in SearchInput) ([]Hit, error) {
 			continue
 		}
 		h, ok := hyd.hit(id, f.kind)
-		if !ok {
+		// peer_auth: the identifier leg reads every project, so the caller's
+		// reach is applied to the hydrated hit -- the console owner's search must
+		// not surface a project sealed to another OS account.
+		if !ok || !access.Visible(ctx, h.Project) {
 			continue
 		}
 		if f.identifierMatch != "" {

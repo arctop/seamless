@@ -289,7 +289,7 @@ func (s *Service) captureCalendar(ctx context.Context, now time.Time, selected s
 	if len(buckets) == 0 {
 		return "", nil // no sessions in the year: absence is the empty state
 	}
-	current, longest, err := store.CaptureStreak(ctx, s.cfg.DB, now)
+	current, longest, err := store.CaptureStreakWith(ctx, s.cfg.DB, s.writeDB(), now)
 	if err != nil {
 		s.logger.Warn("console: capture streak", "error", err)
 		return calendarGrid(buckets, start, selected), nil

@@ -118,6 +118,36 @@ keys they do not know, so a file that sets one runs only with v0.7.0 or newer.
 The example file spells out the keys whose default has a value and leaves
 `check` and `auto`, whose default is unset, commented out.
 
+### Peer-user authentication {#peer-auth}
+
+The `peer_auth:` block turns on a Unix-socket listener whose callers the daemon
+identifies by the uid the kernel reports, and maps OS accounts to the projects
+they may reach. It is off by default, and off is exactly the behavior of every
+earlier release. The guide is [Seal projects to OS accounts](/guides/peer-auth/);
+in short:
+
+- `enabled` (`SEAMLESS_PEER_AUTH_ENABLED`) switches it on.
+- `owner` (`SEAMLESS_PEER_AUTH_OWNER`) is the OS account - a user name or a
+  numeric uid - the TCP bearer key stands for, and whose socket connections act
+  as the owner. Required when enabled.
+- `socket.path` (`SEAMLESS_PEER_AUTH_SOCKET_PATH`) is the socket's absolute path,
+  outside `data_dir`. Required when enabled.
+- `socket.mode` (`SEAMLESS_PEER_AUTH_SOCKET_MODE`) is its permission bits in
+  octal, default `0666`: every local account may knock, and the kernel still
+  names each one. `socket.group` (`SEAMLESS_PEER_AUTH_SOCKET_GROUP`) hands the
+  socket to a group, for a mode such as `0660`.
+- `users` maps an OS account (name or uid) to `sealed` - projects reachable only
+  from that account - and `projects` - projects it shares with the owner. It is
+  file-only: a map of lists has no single-variable spelling.
+
+A client of such a daemon names the socket as its `server_url`:
+`unix:///absolute/path.sock`. It needs no `mcp.api_key`, and its hooks and MCP
+registration go through the `seam` CLI (`install-hooks` does that by itself for
+a socket URL).
+
+The block is new after v0.7.4; releases before it refuse config keys they do
+not know, so the example file leaves it commented out.
+
 ## Generating a key
 
 `mcp.api_key` guards `/api/mcp` and the console. On a true first run - no

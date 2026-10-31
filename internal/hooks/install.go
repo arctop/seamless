@@ -119,8 +119,12 @@ func resolveHookProfile(raw Client) (Client, []hookSpec, error) {
 // always accepted every event in this table as a command hook (cmd/seam/hook.go
 // hookEvents), which is what makes the flip a transport change rather than a new
 // protocol.
+//
+// A peer_auth socket base URL (unix:///path) forces it for a stronger reason:
+// Claude Code's http hook cannot dial a Unix socket at all, and the socket is
+// the only way such an install reaches its daemon.
 func profileForBaseURL(profile []hookSpec, baseURL string) []hookSpec {
-	if !IsHTTPSBaseURL(baseURL) {
+	if !CommandOnlyBaseURL(baseURL) {
 		return profile
 	}
 	out := slices.Clone(profile)
@@ -151,6 +155,25 @@ func IsHTTPSBaseURL(baseURL string) bool {
 		return false
 	}
 	return strings.EqualFold(u.Scheme, "https")
+}
+
+// IsSocketBaseURL reports whether baseURL names a peer_auth Unix socket
+// (unix:///path, config.Config.HookBaseURL).
+func IsSocketBaseURL(baseURL string) bool {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Scheme, "unix")
+}
+
+// CommandOnlyBaseURL reports whether every hook and the MCP registration must go
+// through the seam CLI for baseURL: an https one (Claude Code cannot be told
+// about tls.ca_file) or a peer_auth socket (Claude Code cannot dial one). The
+// installer's MCP registration asks the same question, so the two cannot
+// disagree.
+func CommandOnlyBaseURL(baseURL string) bool {
+	return IsHTTPSBaseURL(baseURL) || IsSocketBaseURL(baseURL)
 }
 
 // InstallOptions configures an install.
@@ -188,7 +211,10 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	if err != nil {
 		return InstallResult{}, fmt.Errorf("hooks.Install: %w", err)
 	}
-	if strings.TrimSpace(opts.APIKey) == "" {
+	// A socket install carries no key at all: the daemon identifies its caller
+	// by the uid the kernel reports, and its hooks are all command hooks, which
+	// never write a key into the settings file anyway.
+	if strings.TrimSpace(opts.APIKey) == "" && !IsSocketBaseURL(opts.BaseURL) {
 		return InstallResult{}, fmt.Errorf("hooks.Install: api key is required")
 	}
 	if strings.TrimSpace(opts.SettingsPath) == "" {

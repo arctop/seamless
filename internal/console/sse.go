@@ -1,11 +1,15 @@
 package console
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/core"
 )
 
 // ssePingInterval keeps the stream and any intermediary connections alive during
@@ -69,6 +73,9 @@ func (s *Service) sse(w http.ResponseWriter, r *http.Request) {
 			if !open {
 				return
 			}
+			if !s.liveEventVisible(ctx, e) {
+				continue
+			}
 			var payload []byte
 			var err error
 			if interactions {
@@ -92,4 +99,27 @@ func (s *Service) sse(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+// liveEventVisible applies the console's peer_auth filter to the live feed. The
+// fan-out is in memory and carries every event the daemon records, while the
+// console's pages read through a filtered handle (Config.WriteDB set). The
+// event row is already committed when it is published, so the question "may
+// this console see it" is asked of the same filtered view the pages read: the
+// row is fetched back through it, and an event a sealed project hides -- by its
+// project, its session or the item it is about -- is simply not there. With no
+// filter (peer_auth off) every event passes, as before.
+func (s *Service) liveEventVisible(ctx context.Context, e core.Event) bool {
+	if s.cfg.WriteDB == nil {
+		return true
+	}
+	if !access.Visible(ctx, e.ProjectSlug) {
+		return false
+	}
+	_, ok, err := s.cfg.Events.ByID(ctx, e.ID)
+	if err != nil {
+		s.logger.Warn("console: sse visibility", "error", err)
+		return false
+	}
+	return ok
 }

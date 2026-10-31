@@ -1159,6 +1159,9 @@ func (s *Service) gardenerApply(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	next := s.nextSelection(r)
+	if !s.proposalReachable(w, r, id) {
+		return
+	}
 	res, err := s.cfg.Gardener.Apply(r.Context(), id)
 	if err != nil {
 		s.logger.Warn("console: gardener apply", "id", id, "error", err)
@@ -1179,6 +1182,9 @@ func (s *Service) gardenerDismiss(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	next := s.nextSelection(r)
+	if !s.proposalReachable(w, r, id) {
+		return
+	}
 	if err := s.cfg.Gardener.Dismiss(r.Context(), id); err != nil {
 		s.logger.Warn("console: gardener dismiss", "id", id, "error", err)
 		gardenerRedirect(w, r, id, "error", err.Error())
@@ -1198,6 +1204,9 @@ func (s *Service) gardenerHide(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	next := s.nextSelection(r)
+	if !s.proposalReachable(w, r, id) {
+		return
+	}
 	if err := s.cfg.Gardener.Hide(r.Context(), id); err != nil {
 		s.logger.Warn("console: gardener hide", "id", id, "error", err)
 		gardenerRedirect(w, r, id, "error", err.Error())
@@ -1216,6 +1225,9 @@ func (s *Service) gardenerUnhide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	if !s.proposalReachable(w, r, id) {
+		return
+	}
 	if err := s.cfg.Gardener.Unhide(r.Context(), id); err != nil {
 		s.logger.Warn("console: gardener unhide", "id", id, "error", err)
 		gardenerRedirect(w, r, "", "error", err.Error())
@@ -1233,6 +1245,9 @@ func (s *Service) gardenerUndo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	if !s.proposalReachable(w, r, id) {
+		return
+	}
 	if err := s.cfg.Gardener.Undo(r.Context(), id); err != nil {
 		s.logger.Warn("console: gardener undo", "id", id, "error", err)
 		gardenerRedirect(w, r, "", "error", err.Error())
@@ -1445,7 +1460,7 @@ func (s *Service) gardenerRetarget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.Payload["to"] = to
-	if err := store.UpdateProposalPayload(r.Context(), s.cfg.DB, id, p.Payload); err != nil {
+	if err := store.UpdateProposalPayload(r.Context(), s.writeDB(), id, p.Payload); err != nil {
 		s.logger.Warn("console: gardener retarget", "id", id, "error", err)
 		redirectFlash(w, r, err.Error())
 		return
@@ -1543,4 +1558,27 @@ func payloadFloat(p map[string]any, key string) float64 {
 		return v
 	}
 	return 0
+}
+
+// proposalReachable reports whether the console's own (read) handle can see the
+// proposal a gardener action names, answering 404 when it cannot. The gardener
+// service loads proposals from the unfiltered store, so under peer_auth -- where
+// the console reads through a handle on which projects sealed to other OS
+// accounts do not exist -- an id is the one thing that could reach past the
+// filter, and this is the check that stops it. With nothing filtered (peer_auth
+// off) there is nothing to check, and the action behaves exactly as it did.
+func (s *Service) proposalReachable(w http.ResponseWriter, r *http.Request, id string) bool {
+	if s.cfg.WriteDB == nil {
+		return true
+	}
+	_, ok, err := store.ProposalByID(r.Context(), s.cfg.DB, id)
+	if err != nil {
+		s.serverError(w, r, err)
+		return false
+	}
+	if !ok {
+		s.notFound(w, r, "No proposal with id "+id+".")
+		return false
+	}
+	return true
 }

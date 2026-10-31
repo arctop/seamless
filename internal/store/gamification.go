@@ -91,6 +91,13 @@ type RecordCrossing struct {
 // re-earned. A gamification-only surface: callers gate on the feature, so a
 // disabled install neither reads nor writes the row.
 func EvaluateGamificationRecords(ctx context.Context, db *sql.DB, today DayCounts, liveAgents int, now time.Time) (GamificationRecords, []RecordCrossing, error) {
+	return EvaluateGamificationRecordsWith(ctx, db, db, today, liveAgents, now)
+}
+
+// EvaluateGamificationRecordsWith is EvaluateGamificationRecords reading the
+// stored records through db and writing them through cacheDB (see
+// CaptureStreakWith).
+func EvaluateGamificationRecordsWith(ctx context.Context, db, cacheDB *sql.DB, today DayCounts, liveAgents int, now time.Time) (GamificationRecords, []RecordCrossing, error) {
 	recs, err := gamificationRecordsStored(ctx, db)
 	if err != nil {
 		return GamificationRecords{}, nil, err
@@ -112,7 +119,7 @@ func EvaluateGamificationRecords(ctx context.Context, db *sql.DB, today DayCount
 		if merr != nil {
 			return GamificationRecords{}, nil, fmt.Errorf("store.EvaluateGamificationRecords: encode: %w", merr)
 		}
-		if serr := SetSetting(ctx, db, SettingGamificationRecords, string(raw)); serr != nil {
+		if serr := SetSetting(ctx, cacheDB, SettingGamificationRecords, string(raw)); serr != nil {
 			return GamificationRecords{}, nil, serr
 		}
 	}

@@ -59,7 +59,7 @@ func runDoctor(ctx context.Context, e *env, _ *noOpts, _ []string) error {
 	}
 	resp, herr := client.Get(base + "/healthz")
 	if herr != nil {
-		report(false, "server", "unreachable at "+base+": "+herr.Error())
+		report(false, "server", "unreachable at "+cfg.DaemonAddress()+": "+herr.Error())
 		if failed > 0 {
 			return fmt.Errorf("doctor: %d check(s) failed", failed)
 		}
@@ -69,9 +69,9 @@ func runDoctor(ctx context.Context, e *env, _ *noOpts, _ []string) error {
 		_ = resp.Body.Close()
 		if derr != nil {
 			// Without this the check still fails, but reports a blank status and no reason.
-			report(false, "server", "unreadable health response from "+base+": "+derr.Error())
+			report(false, "server", "unreadable health response from "+cfg.DaemonAddress()+": "+derr.Error())
 		} else {
-			report(str(hz["status"]) == "ok", "server", fmt.Sprintf("%s (%s)", str(hz["status"]), base))
+			report(str(hz["status"]) == "ok", "server", fmt.Sprintf("%s (%s)", str(hz["status"]), cfg.DaemonAddress()))
 		}
 	}
 

@@ -131,6 +131,8 @@ func TestGenerateConfigCoversExample(t *testing.T) {
 		"gardener.enabled", "gardener.session_idle_minutes",
 		"capture.allowed_ports", "plan_capture.enabled",
 		"update.check", "update.check_interval", "update.auto", "update.max_defer", "update.min_age",
+		"peer_auth.enabled", "peer_auth.owner", "peer_auth.socket.path", "peer_auth.socket.mode",
+		"peer_auth.socket.group", "peer_auth.users",
 	} {
 		require.Contains(t, md, "| `"+key+"` |", "key %s is missing from the table", key)
 	}
@@ -166,6 +168,8 @@ func TestConfigTypeAndDefault(t *testing.T) {
 		{"duration", config.Duration(90 * time.Minute), "duration", "`1h30m`"},
 		{"zero duration", config.Duration(0), "duration", "-"},
 		{"plain int", 60, "int", "`60`"},
+		{"map of structs", map[string]config.PeerUser(nil), "map of string to {sealed []string, projects []string}", "-"},
+		{"map of scalars", map[string]int(nil), "map of string to int", "-"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

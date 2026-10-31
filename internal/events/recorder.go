@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
@@ -61,7 +62,18 @@ const subBuffer = 32
 // recorded events out to live subscribers (the console SSE feed).
 type Recorder struct {
 	db *sql.DB
+	// reader, when set, serves every read (ByID, ByKinds, ...) instead of db:
+	// the console's peer_auth-filtered handle (ReadingFrom). Writes and the live
+	// fan-out always stay on db and the shared hub.
+	reader *sql.DB
+	*hub
+}
 
+// hub is the state every Recorder sharing one event log shares: the live
+// subscribers and the milestone layer's arming. ReadingFrom copies a Recorder
+// but never its hub, so an event recorded through either reaches both's
+// subscribers.
+type hub struct {
 	mu     sync.Mutex
 	subs   map[int]chan core.Event
 	nextID int
@@ -76,7 +88,43 @@ type Recorder struct {
 }
 
 // NewRecorder returns a Recorder backed by db.
-func NewRecorder(db *sql.DB) *Recorder { return &Recorder{db: db} }
+func NewRecorder(db *sql.DB) *Recorder { return &Recorder{db: db, hub: &hub{}} }
+
+// ReadingFrom returns a Recorder that answers every read from db -- a filtered
+// handle (store.OpenView) on the same database -- while recording, milestones
+// and the live fan-out stay this Recorder's. The console reads the event log
+// through one, so an event about a project sealed to another OS account never
+// reaches its pages.
+func (r *Recorder) ReadingFrom(db *sql.DB) *Recorder {
+	return &Recorder{db: r.db, reader: db, hub: r.hub}
+}
+
+// rdb is the handle reads go to.
+func (r *Recorder) rdb() *sql.DB {
+	if r.reader != nil {
+		return r.reader
+	}
+	return r.db
+}
+
+// refile files an event recorded on behalf of a configured peer_auth account
+// under that account's own project whenever it named another scope -- the
+// global scope, typically, for an unattributed tool call. A sealed system's
+// tool calls, prompts and reads are its content as much as its memories are,
+// and the event log is read by the owner's console: an event filed under the
+// global scope would carry a sealed agent's arguments to the one account the
+// seal exists to keep them from. The owner's own events, and every event
+// recorded for no caller, are left exactly as given.
+func refile(ctx context.Context, e core.Event) core.Event {
+	v, ok := access.FromContext(ctx)
+	if !ok || v.Principal().Kind != access.KindUser {
+		return e
+	}
+	if !v.Writable(e.ProjectSlug) {
+		e.ProjectSlug = v.Home()
+	}
+	return e
+}
 
 // The milestone layer mints through RecordOnce (store.OnceRecorder).
 var _ store.OnceRecorder = (*Recorder)(nil)
@@ -158,6 +206,7 @@ func (r *Recorder) Record(ctx context.Context, e core.Event) (string, error) {
 	if e.Kind == "" {
 		return "", fmt.Errorf("events.Record: empty kind")
 	}
+	e = refile(ctx, e)
 	if e.ID == "" {
 		id, err := core.NewID()
 		if err != nil {
@@ -205,6 +254,7 @@ func (r *Recorder) RecordOnce(ctx context.Context, e core.Event) (id string, rec
 	if e.ItemID == "" {
 		return "", false, fmt.Errorf("events.RecordOnce: empty item id (the latch is per item)")
 	}
+	e = refile(ctx, e)
 	if e.ID == "" {
 		nid, err := core.NewID()
 		if err != nil {
@@ -252,7 +302,7 @@ func (r *Recorder) ByID(ctx context.Context, id string) (core.Event, bool, error
 	if id == "" {
 		return core.Event{}, false, nil
 	}
-	rows, err := r.db.QueryContext(ctx,
+	rows, err := r.rdb().QueryContext(ctx,
 		`SELECT id, ts, kind, session_id, project_slug, item_id, payload
 		 FROM events WHERE id = ? LIMIT 1`, id)
 	if err != nil {
@@ -278,7 +328,7 @@ func (r *Recorder) BySession(ctx context.Context, sessionID string, limit int) (
 	if limit <= 0 {
 		limit = 500
 	}
-	rows, err := r.db.QueryContext(ctx,
+	rows, err := r.rdb().QueryContext(ctx,
 		`SELECT id, ts, kind, session_id, project_slug, item_id, payload
 		 FROM events WHERE session_id = ? ORDER BY ts ASC, id ASC LIMIT ?`, sessionID, limit)
 	if err != nil {
@@ -308,7 +358,7 @@ func (r *Recorder) LatestBySession(ctx context.Context, sessionID string, kinds 
 	}
 	q += ` ORDER BY ts DESC, id DESC LIMIT ?`
 	args = append(args, limit)
-	rows, err := r.db.QueryContext(ctx, q, args...)
+	rows, err := r.rdb().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("events.LatestBySession: %w", err)
 	}
@@ -336,7 +386,7 @@ func (r *Recorder) ByKinds(ctx context.Context, kinds []core.EventKind, beforeTS
 	}
 	q += ` ORDER BY ts DESC, id DESC LIMIT ?`
 	args = append(args, limit)
-	rows, err := r.db.QueryContext(ctx, q, args...)
+	rows, err := r.rdb().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("events.ByKinds: %w", err)
 	}
@@ -369,7 +419,7 @@ func (r *Recorder) ByKindsAfter(ctx context.Context, kinds []core.EventKind, aft
 	}
 	q += ` ORDER BY ts DESC, id DESC LIMIT ?`
 	args = append(args, limit)
-	rows, err := r.db.QueryContext(ctx, q, args...)
+	rows, err := r.rdb().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("events.ByKindsAfter: %w", err)
 	}
@@ -396,7 +446,7 @@ func (r *Recorder) ByKindsSince(ctx context.Context, kinds []core.EventKind, sin
 	}
 	q += ` ORDER BY ts ASC, id ASC LIMIT ?`
 	args = append(args, limit)
-	rows, err := r.db.QueryContext(ctx, q, args...)
+	rows, err := r.rdb().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("events.ByKindsSince: %w", err)
 	}
@@ -435,7 +485,7 @@ func (r *Recorder) KindTimeline(ctx context.Context, kinds []core.EventKind, pro
 	}
 	q += ` ORDER BY ts DESC, id DESC LIMIT ?`
 	args = append(args, limit)
-	rows, err := r.db.QueryContext(ctx, q, args...)
+	rows, err := r.rdb().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("events.KindTimeline: %w", err)
 	}
@@ -467,7 +517,7 @@ func (r *Recorder) TimestampsSince(ctx context.Context, since time.Time, limit i
 	if limit <= 0 {
 		limit = 2000
 	}
-	rows, err := r.db.QueryContext(ctx,
+	rows, err := r.rdb().QueryContext(ctx,
 		`SELECT ts FROM events WHERE ts >= ? ORDER BY ts ASC, id ASC LIMIT ?`,
 		core.FormatTime(since), limit)
 	if err != nil {
@@ -507,7 +557,7 @@ func (r *Recorder) RecentExcluding(ctx context.Context, limit int, exclude ...co
 	}
 	q += ` ORDER BY ts DESC, id DESC LIMIT ?`
 	args = append(args, limit)
-	rows, err := r.db.QueryContext(ctx, q, args...)
+	rows, err := r.rdb().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("events.RecentExcluding: %w", err)
 	}

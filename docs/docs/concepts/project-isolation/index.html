@@ -156,6 +156,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
         
+        <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
+        
         <li><a href="../../guides/troubleshooting/">Troubleshooting</a></li>
         
       </ul>
@@ -295,6 +297,9 @@ rather than discovering it as an unexplained error.</p>
 search and views still see everything; isolated projects are simply badged with a
 lock pill. Nothing about an isolated project's pages turns scary or
 half-rendered - the pill and the Overview control are the whole story.</p>
+<p>The one exception is a project <a href="../../guides/peer-auth/">sealed to another OS account</a>
+under <code>peer_auth</code>: there the threat <em>is</em> your own account, so the console shows
+no trace of it.</p>
 <h2 id="isolation-requires-a-standalone-project">Isolation requires a standalone project</h2>
 <p>A project cannot be isolated while it is entangled in a family: no family
 membership, no parent, no children.</p>
@@ -376,13 +381,15 @@ it. A connection bound to nothing - a hookless client that skipped
 <code>session_start</code>, or an older <code>seam</code> that sends no identity - is judged as the
 global scope, which fails closed against reading an isolated project but also
 means the fence cannot recognize it as belonging to one.</p>
-<p><strong>What would make it stronger.</strong> Per-project bearer keys: a confidential project
-gets its own key, the repo's hooks use it, and the shared key cannot touch it.
-That upgrades the fence from policy to an auth boundary at the daemon. It is not
-built.</p>
-<p><strong>The hard boundary today</strong> is a separate Seamless instance - its own data dir,
-port, and key. If your threat model is adversarial rather than accidental, that
-is the honest answer.</p>
+<p><strong>What makes it stronger.</strong> <a href="../../guides/peer-auth/">peer_auth</a> puts an
+authentication boundary under the fence: the daemon runs as its own OS account,
+names each caller by the uid the kernel reports for its Unix-socket connection,
+and reserves a project for one account - so a project's own agents run as that
+account, and nothing running as you reaches it, through a tool or through a
+file. Use it with isolation, not instead of it: a sealed-to-an-account project
+must also be confidential or sealed.</p>
+<p><strong>Without it</strong>, the hard boundary is a separate Seamless instance - its own data
+dir, port, and key, run as its own account.</p>
 
 </article>
 

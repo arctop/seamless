@@ -8,6 +8,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -121,6 +122,13 @@ func (s *Server) handleGardenerSplit(ctx context.Context, req mcp.CallToolReques
 	source := argString(req, "source")
 	if source == "" {
 		return errResult("gardener_split", errors.New("source is required"))
+	}
+	// peer_auth: planning a split reads the source's memories into proposals and
+	// writes a plan against it, so the caller's OS account must reach it both
+	// ways. (The isolation fence's own refusal of a fenced source stays in
+	// gardener.Split; this is the account rule, which isolation cannot see.)
+	if !access.Visible(ctx, source) || !access.Writable(ctx, source) {
+		return errResult("gardener_split", access.Refusal(ctx, source))
 	}
 	res, err := s.cfg.Gardener.Split(ctx, source, argString(req, "instruction"))
 	if err != nil {

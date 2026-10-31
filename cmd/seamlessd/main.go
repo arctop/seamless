@@ -33,6 +33,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -235,6 +236,17 @@ func runServe(args []string) error {
 	serverURL := cfg.ServerURL()
 	logger := slog.Default()
 
+	// peer_auth: build the policy and refuse a deployment in which the boundary
+	// would not hold, before anything opens a file in the data dir (preflight
+	// creates a missing data dir 0700 once its parents have passed).
+	var peer *peerAuthRuntime
+	if cfg.PeerAuth.Enabled {
+		peer, err = preparePeerAuth(cfg, defaultPeerAuthEnv())
+		if err != nil {
+			return fmt.Errorf("seamlessd.serve: %w", err)
+		}
+	}
+
 	// One daemon per data dir, decided before anything touches it: a second
 	// serve must never migrate, reconcile, or adopt anything under the one
 	// already serving, and without this it did all three before failing to bind.
@@ -280,6 +292,19 @@ func runServe(args []string) error {
 	// resolver below asks for one. It is idempotent, so it runs on every start.
 	if err := store.AdoptLocalHost(ctx, db, config.Hostname()); err != nil {
 		return fmt.Errorf("seamlessd.serve: adopt local host: %w", err)
+	}
+
+	// peer_auth, second half of the preflight: the policy against the projects
+	// table. A seal naming a project that does not exist protects nothing.
+	if peer != nil {
+		problems, perr := projectProblems(ctx, db, peer.policy)
+		if perr != nil {
+			return fmt.Errorf("seamlessd.serve: peer_auth projects: %w", perr)
+		}
+		if len(problems) > 0 {
+			return fmt.Errorf("seamlessd.serve: %w: %s", errPeerAuthPreflight, strings.Join(problems, "; "))
+		}
+		peer.logPolicy(logger)
 	}
 
 	// Files subsystem: markdown source of truth, watcher, reconcile, and
@@ -403,8 +428,21 @@ func runServe(args []string) error {
 		APIKey: cfg.MCP.APIKey, MaxEventChars: cfg.Budgets.ToolEventMaxChars,
 		PlanCapture: cfg.PlanCapture, LocalHost: config.Hostname(), Logger: logger,
 	})
+	// The console reads through a handle on which projects sealed to other OS
+	// accounts do not exist, when there are any (store.OpenView); its writes go
+	// to the main handle after reading their target through the filtered one.
+	consoleDB, consoleEvents := db, rec
+	var consoleWriteDB *sql.DB
+	if peer != nil && len(peer.policy.SealedProjects()) > 0 {
+		viewDB, verr := store.OpenView(cfg.DBPath(), peer.policy.SealedProjects())
+		if verr != nil {
+			return fmt.Errorf("seamlessd.serve: %w", verr)
+		}
+		defer func() { _ = viewDB.Close() }()
+		consoleDB, consoleWriteDB, consoleEvents = viewDB, db, rec.ReadingFrom(viewDB)
+	}
 	consoleSrv, err := console.New(console.Config{
-		DB: db, Files: mgr, Gardener: garden, Events: rec, Retrieve: ret,
+		DB: consoleDB, WriteDB: consoleWriteDB, Files: mgr, Gardener: garden, Events: consoleEvents, Retrieve: ret,
 		APIKey: cfg.MCP.APIKey, DataDir: cfg.DataDir, ConfigPath: absConfigPath(cfg.SourcePath()),
 		DBPath:  cfg.DBPath(),
 		Budgets: cfg.Budgets, GardenerCfg: cfg.Gardener, BriefingCfg: cfg.Briefing,
@@ -452,7 +490,13 @@ func runServe(args []string) error {
 	// server_url, so naming the daemon is all it takes to arm the guard --
 	// including on a wildcard bind.
 	tlsOn := cfg.TLSEnabled()
-	srv := newHTTPServer(ctx, bind, daemonHandler(bind, cfg.AllowedHostsEffective(), activity, mux))
+	// Under peer_auth every TCP request is the owner's: the bearer key the
+	// routes check is the owner account's key.
+	var tcpRoutes http.Handler = mux
+	if peer != nil {
+		tcpRoutes = ownerHandler(peer.policy, mux)
+	}
+	srv := newHTTPServer(ctx, bind, daemonHandler(bind, cfg.AllowedHostsEffective(), activity, tcpRoutes))
 	if tlsOn {
 		// TLS 1.2 floor: everything below it is either broken or obsolete, and
 		// nothing that speaks to this daemon (Go, curl, a browser) needs it.
@@ -479,9 +523,27 @@ func runServe(args []string) error {
 		garden.Wait()
 		return fmt.Errorf("seamlessd.serve: %w", err)
 	}
+	// The peer_auth socket: the same routes, no Host guard (a Unix socket has no
+	// DNS name to rebind and no browser can reach it), and each connection's
+	// principal read from the kernel at accept. The refusal of an unknown peer
+	// sits outside the activity tracker for the guard's reason: a refused
+	// knock is not someone using the daemon.
+	var sockSrv *http.Server
+	var sockLn net.Listener
+	if peer != nil {
+		sockLn, err = peer.listenSocket()
+		if err != nil {
+			_ = ln.Close()
+			stop()
+			garden.Wait()
+			return fmt.Errorf("seamlessd.serve: %w", err)
+		}
+		sockSrv = newHTTPServer(ctx, peer.cfg.Socket.Path, peerHandler(peer.policy, logger, activity.wrap(mux)))
+		sockSrv.ConnContext = peerConnContext
+	}
 	upd.Start(ctx)
 
-	errCh := make(chan error, 1)
+	errCh := make(chan error, 2)
 	go func() {
 		slog.Info("seamlessd listening", "addr", bind, "url", serverURL, "tls", tlsOn,
 			"data_dir", cfg.DataDir,
@@ -496,12 +558,24 @@ func runServe(args []string) error {
 			errCh <- err
 		}
 	}()
+	if sockSrv != nil {
+		go func() {
+			slog.Info("seamlessd listening on the peer_auth socket", "socket", peer.cfg.Socket.Path)
+			if err := sockSrv.Serve(sockLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				errCh <- err
+			}
+		}()
+	}
 
 	select {
 	case <-ctx.Done():
 		slog.Info("shutdown signal received")
 	case err := <-errCh:
 		stop() // stop background work (gardener, watcher ctx) on the error path too
+		if sockSrv != nil {
+			_ = sockSrv.Close()
+		}
+		_ = srv.Close()
 		garden.Wait()
 		upd.Wait()
 		return fmt.Errorf("seamlessd.serve: %w", err)
@@ -514,6 +588,13 @@ func runServe(args []string) error {
 	stop()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	if sockSrv != nil {
+		// Closing the listener unlinks the socket file (net.UnixListener's
+		// default), so a stopped daemon leaves nothing at the path to dial.
+		if err := sockSrv.Shutdown(shutdownCtx); err != nil {
+			slog.Warn("seamlessd: peer_auth socket shutdown", "err", err)
+		}
+	}
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		garden.Wait()
 		upd.Wait()

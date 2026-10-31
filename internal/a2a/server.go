@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/retrieve"
@@ -202,6 +203,14 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request, id json.RawM
 	if err != nil {
 		s.writeError(w, id, codeInvalidParams, err.Error())
 		return
+	}
+	// A configured peer_auth account that names no project recalls in its own
+	// project (plus global), the scope every other surface places it in; with
+	// no project named anyone else recalls the global scope, as before.
+	if !projectPresent {
+		if v, ok := access.FromContext(r.Context()); ok && v.Principal().Kind == access.KindUser {
+			project = v.Home()
+		}
 	}
 	if scopePresent && !slices.Contains(retrieve.RecallScopes, scope) {
 		s.writeError(w, id, codeInvalidParams,
@@ -409,8 +418,13 @@ func metadataType(v any) string {
 }
 
 // verifyBearer mirrors internal/mcp's check: constant-time compare, and an
-// empty configured key rejects everything rather than waving everything in.
+// empty configured key rejects everything rather than waving everything in. A
+// peer_auth socket request was authenticated by the kernel and needs no key;
+// its recall still runs under that account's reach (retrieve.Recall).
 func verifyBearer(r *http.Request, key string) bool {
+	if access.PeerAuthenticated(r.Context()) {
+		return true
+	}
 	if key == "" {
 		return false
 	}

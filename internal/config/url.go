@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -33,6 +34,13 @@ const defaultServerURL = "http://127.0.0.1:8081"
 // where clients reach me", which is precisely the question no bind address can
 // answer once the two differ (a wildcard bind, a LAN name, a reverse proxy).
 func (c Config) ServerURL() string {
+	if c.SocketPath() != "" {
+		// A socket has no host to put in a URL. Every consumer appends a path to
+		// this value and dials through HTTPClient, whose transport ignores the
+		// host and dials the socket instead -- so the URL only has to be a valid
+		// http one.
+		return SocketBaseURL
+	}
 	if advertised := strings.TrimSpace(c.AdvertisedURL); advertised != "" {
 		return strings.TrimSuffix(advertised, "/")
 	}
@@ -45,6 +53,44 @@ func (c Config) ServerURL() string {
 		return defaultServerURL
 	}
 	return scheme + "://" + net.JoinHostPort(reachableHost(host), port)
+}
+
+// SocketBaseURL is ServerURL for a server_url naming a Unix socket. The host is
+// never resolved: HTTPClient's transport dials the socket for every request.
+const SocketBaseURL = "http://localhost"
+
+// SocketPath is the Unix socket a `server_url: unix:///path` names, or "" when
+// server_url is an http(s) URL or unset. It is how a role user's install (the
+// seam CLI, its hooks, its mcp-proxy bridge) reaches a daemon that tells
+// callers apart by peer uid: the kernel, not a key, authenticates the dial.
+func (c Config) SocketPath() string {
+	u, err := url.Parse(strings.TrimSpace(c.AdvertisedURL))
+	if err != nil || !strings.EqualFold(u.Scheme, "unix") {
+		return ""
+	}
+	return u.Path
+}
+
+// HookBaseURL is the base URL the hook and MCP installers describe this
+// install's daemon by: ServerURL, except for a socket server_url, where it is
+// the unix:///path itself -- the one spelling from which the installers can
+// tell that every hook and the MCP registration must go through the seam CLI
+// (Claude Code cannot dial a socket). Anything that actually dials keeps using
+// ServerURL with HTTPClient.
+func (c Config) HookBaseURL() string {
+	if p := c.SocketPath(); p != "" {
+		return "unix://" + p
+	}
+	return c.ServerURL()
+}
+
+// DaemonAddress is where this install's daemon is reached, for messages a
+// person reads: the socket path when server_url names one, else ServerURL.
+func (c Config) DaemonAddress() string {
+	if p := c.SocketPath(); p != "" {
+		return "unix:" + p
+	}
+	return c.ServerURL()
 }
 
 // ServerHost is the bare host of ServerURL: no scheme, no port, no IPv6
@@ -106,7 +152,9 @@ func (c Config) AllowedHostsEffective() []string {
 	for _, h := range c.AllowedHosts {
 		add(h)
 	}
-	if strings.TrimSpace(c.AdvertisedURL) != "" {
+	// A socket server_url names no host at all, so it adds nothing here: the
+	// guard is about Host headers on the TCP listener.
+	if strings.TrimSpace(c.AdvertisedURL) != "" && c.SocketPath() == "" {
 		add(c.ServerHost())
 	}
 	return out
@@ -166,8 +214,10 @@ func validateServerURL(raw string) error {
 	}
 	switch u.Scheme {
 	case "http", "https":
+	case "unix":
+		return validateSocketURL(s, u)
 	default:
-		return fmt.Errorf("config: server_url %q must be an absolute http:// or https:// URL", s)
+		return fmt.Errorf("config: server_url %q must be an absolute http:// or https:// URL, or unix:///path/to/socket", s)
 	}
 	if u.Hostname() == "" {
 		return fmt.Errorf("config: server_url %q names no host", s)
@@ -261,4 +311,20 @@ func Hostname() string {
 		cachedHostname = strings.ToLower(strings.TrimSpace(h))
 	})
 	return cachedHostname
+}
+
+// validateSocketURL accepts unix:///absolute/path (and its one-slash spelling
+// unix:/absolute/path): a daemon's peer_auth socket. There is no host, query or
+// fragment to carry, so any of them is a mistake rather than something to drop.
+func validateSocketURL(raw string, u *url.URL) error {
+	if u.Host != "" || u.User != nil {
+		return fmt.Errorf("config: server_url %q names a host; a socket URL is unix:///absolute/path", raw)
+	}
+	if u.Opaque != "" || !filepath.IsAbs(u.Path) || filepath.Clean(u.Path) != u.Path {
+		return fmt.Errorf("config: server_url %q must name an absolute, clean socket path: unix:///absolute/path", raw)
+	}
+	if u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return fmt.Errorf("config: server_url %q must be a bare socket URL, with no query or fragment", raw)
+	}
+	return nil
 }

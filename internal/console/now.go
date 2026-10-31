@@ -534,7 +534,7 @@ func (s *Service) nowArcade(ctx context.Context, now, dayStart time.Time, liveAg
 	cell("plans", "plans touched", today.PlansTouched, week.PlansTouched)
 	cell("sessions", "sessions started", today.Sessions, week.Sessions)
 
-	recs, crossings, err := store.EvaluateGamificationRecords(ctx, s.cfg.DB, today, liveAgents, now)
+	recs, crossings, err := store.EvaluateGamificationRecordsWith(ctx, s.cfg.DB, s.writeDB(), today, liveAgents, now)
 	if err != nil {
 		s.logger.Warn("console: now arcade records", "error", err)
 		return nil
