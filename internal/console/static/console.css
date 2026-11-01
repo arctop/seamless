@@ -6550,7 +6550,9 @@ html:not(.js) .brief-preview { display: none; }
 .held-reasons { margin: 10px 0 0; padding-left: 18px; font-size: var(--text-sm); }
 .held-reasons code, .held-meta code { font-family: var(--font-mono); font-size: var(--text-xs); }
 .held-note, .held-sub, .held-none, .held-stale { margin: 8px 0 0; color: var(--muted); font-size: var(--text-sm); }
-.held-stale { display: flex; align-items: center; gap: 6px; }
+/* The stale line sits in the .held-actions row beside Discard: no top margin,
+   or the row's centering pushes it below the button. */
+.held-stale { display: flex; align-items: center; gap: 6px; margin: 0; }
 .held-preview-box { margin-top: 10px; }
 .held-preview-box summary { cursor: pointer; font-size: var(--text-sm); }
 .held-preview-box summary small { color: var(--faint); }
