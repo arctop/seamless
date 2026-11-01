@@ -6577,4 +6577,7 @@ html:not(.js) .brief-preview { display: none; }
   border: 1px dashed var(--border); border-radius: var(--radius-md); font-size: var(--text-sm); cursor: pointer;
 }
 .level-welcome-optin input { margin-top: 3px; flex: none; }
+/* The global :focus-visible rule drops the native ring and restores one only on
+   links, buttons and summaries, so the box gets the house ring here. */
+.level-welcome-optin:has(input:focus-visible) { box-shadow: var(--shadow-focus); }
 .level-welcome-optin small { display: block; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
