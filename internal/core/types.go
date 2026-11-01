@@ -442,6 +442,10 @@ const (
 	EventPlanShipped      EventKind = "plan.shipped"      // momentum: a plan's final open step closed as done (payload: plan, project, steps); latched once per plan via RecordOnce
 	EventSubagentCaptured EventKind = "subagent.captured" // a planning subagent's prompt+report landed as a cc-agent note
 
+	// The owner changed the optional features (console Settings -> Features or
+	// the Home welcome card; payload: features, by).
+	EventFeaturesChanged EventKind = "settings.features_changed"
+
 	// Project isolation: the owner moved a project's agent-facing fence.
 	EventProjectIsolationChanged EventKind = "project.isolation.changed" // (payload: slug, from, to, families + parent detached by a tighten, by)
 
@@ -454,6 +458,11 @@ const (
 	EventMemoryDiscarded EventKind = "memory.discarded"  // the owner discarded a held write; its text is erased (item_id; payload: hold, op, item_kind, kind, by)
 	EventSessionTainted  EventKind = "session.tainted"   // a session was marked as having read outside text (session_id; payload: reason, via); recorded once per session
 	EventSessionCleared  EventKind = "session.untainted" // the owner cleared a session's outside-text mark (session_id; payload: by)
+	EventAccessRefused   EventKind = "access.refused"    // a refused access: a fence, a peer account, a bad credential (session_id when bound; payload: reason, surface, tool, target, suppressed)
+	EventCorpusDrift     EventKind = "corpus.drift"      // a memory or note file changed outside Seamless, appeared with no Seamless write, or went missing (item_id; payload: change, item_kind, verdicts, quarantined)
+	EventCorpusReviewed  EventKind = "corpus.reviewed"   // the review read every memory and note file (payload: items, safe, flagged, by, baseline)
+	EventCorpusConfirmed EventKind = "corpus.confirmed"  // the owner marked a flagged item safe or accepted a drifted one (item_id; payload: item_kind, via, by)
+	EventLockdownChanged EventKind = "lockdown.changed"  // lockdown went on or off (payload: on, source, by)
 
 	// Background update check (internal/update). Payload values are parsed
 	// X.Y.Z versions and fixed install-kind words, never release-API text.

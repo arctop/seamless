@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -451,6 +452,98 @@ func (r *Recorder) ByKindsSince(ctx context.Context, kinds []core.EventKind, sin
 		return nil, fmt.Errorf("events.ByKindsSince: %w", err)
 	}
 	return scanEvents(rows)
+}
+
+// Logged is an event with its row in the log: the insertion order, which a
+// durable tail follows. Timestamps cannot stand in for it -- a caller may
+// stamp an event's time, and a clock may step back -- and ULIDs minted in the
+// same millisecond do not sort in the order they were made.
+type Logged struct {
+	Row int64
+	core.Event
+}
+
+// Tail returns the events inserted after row afterRow, in insertion order,
+// capped at limit (default 500). It is the durable tail a subscriber reads
+// behind the best-effort live fan-out (Subscribe drops events for a full
+// channel; the log never does).
+func (r *Recorder) Tail(ctx context.Context, afterRow int64, limit int) ([]Logged, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	rows, err := r.rdb().QueryContext(ctx,
+		`SELECT rowid, id, ts, kind, session_id, project_slug, item_id, payload
+		 FROM events WHERE rowid > ? ORDER BY rowid ASC LIMIT ?`, afterRow, limit)
+	if err != nil {
+		return nil, fmt.Errorf("events.Tail: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Logged
+	for rows.Next() {
+		var (
+			l                 Logged
+			ts, kind, payload string
+		)
+		if err := rows.Scan(&l.Row, &l.ID, &ts, &kind, &l.SessionID, &l.ProjectSlug, &l.ItemID, &payload); err != nil {
+			return nil, fmt.Errorf("events.Tail: scan: %w", err)
+		}
+		t, err := core.ParseTime(ts)
+		if err != nil {
+			return nil, fmt.Errorf("events.Tail: parse ts: %w", err)
+		}
+		l.TS, l.Kind = t, core.EventKind(kind)
+		if payload != "" && payload != "{}" {
+			if err := json.Unmarshal([]byte(payload), &l.Payload); err != nil {
+				return nil, fmt.Errorf("events.Tail: unmarshal payload: %w", err)
+			}
+		}
+		out = append(out, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("events.Tail: rows: %w", err)
+	}
+	return out, nil
+}
+
+// NewestRow returns the newest event's row and id, or (0, "") for an empty
+// log.
+func (r *Recorder) NewestRow(ctx context.Context) (int64, string, error) {
+	var row int64
+	var id string
+	err := r.rdb().QueryRowContext(ctx, `SELECT rowid, id FROM events ORDER BY rowid DESC LIMIT 1`).Scan(&row, &id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, "", nil
+	}
+	if err != nil {
+		return 0, "", fmt.Errorf("events.NewestRow: %w", err)
+	}
+	return row, id, nil
+}
+
+// RowOf returns the row of the event with this id. found is false when no
+// event has it (pruned, or the log was replaced).
+func (r *Recorder) RowOf(ctx context.Context, id string) (row int64, found bool, err error) {
+	err = r.rdb().QueryRowContext(ctx, `SELECT rowid FROM events WHERE id = ?`, id).Scan(&row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("events.RowOf: %w", err)
+	}
+	return row, true, nil
+}
+
+// IDAt returns the id of the event at row, or "" when there is none.
+func (r *Recorder) IDAt(ctx context.Context, row int64) (string, error) {
+	var id string
+	err := r.rdb().QueryRowContext(ctx, `SELECT id FROM events WHERE rowid = ?`, row).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("events.IDAt: %w", err)
+	}
+	return id, nil
 }
 
 // KindTick is one event's id, timestamp, and kind -- the minimal projection the
