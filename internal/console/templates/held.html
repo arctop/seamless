@@ -50,7 +50,7 @@
 
 <section class="held-sessions" aria-labelledby="held-sessions-title">
   <h2 id="held-sessions-title">Sessions that read outside text</h2>
-  <p class="held-sub">An agent guard marks a session after a tool brings outside text into it (a web page, a mail, a fetched file). Its changes to binding rules are held until you clear the mark or the session ends. Only you can clear it.</p>
+  <p class="held-sub">An agent guard marks a session after a tool brings outside text into it (a web page, a mail, a fetched file). Its changes to binding rules are held until you clear the mark. Only you can clear it; a new session starts unmarked.</p>
   {{if .Tainted}}
   <ul class="held-taints">
     {{range .Tainted}}
