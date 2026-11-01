@@ -5515,6 +5515,9 @@ a.ov2-vital:hover, a.ov2-attn-card:hover, a.project-summary-card:hover { border-
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), var(--glow-brand);
 }
 .btn.primary:hover { filter: brightness(1.08); background: linear-gradient(135deg, var(--brand), var(--violet)); }
+/* The primary and pop glows outrank .btn:focus-visible, which left a
+   keyboard-focused primary or pop button with no ring at all. */
+.btn.primary:focus-visible, button.btn[type="submit"].primary:focus-visible, .btn.pop:focus-visible { box-shadow: var(--shadow-focus); }
 .btn.pop { background: linear-gradient(135deg, var(--pop), color-mix(in oklab, var(--pop) 70%, var(--violet))); border-color: transparent; color: var(--pop-ink); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 6px 20px color-mix(in oklab, var(--pop) 30%, transparent); }
 .btn.pop:hover, .btn.pop:active { filter: brightness(1.06); color: var(--pop-ink); background: linear-gradient(135deg, var(--pop), color-mix(in oklab, var(--pop) 70%, var(--violet))); }
 .btn.small { border-radius: 7px; }
