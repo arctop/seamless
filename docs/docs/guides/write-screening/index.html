@@ -5,20 +5,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Screen writes and hold the suspicious ones - Seamless docs</title>
-<meta name="description" content="Write screening - every agent write to a memory or note is screened for secrets, injection markers, hidden characters, encoded blobs and unlisted links; suspicious ones, and changes to binding rules by a session that read outside text, wait for your release.">
+<meta name="description" content="Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.">
 <link rel="canonical" href="https://thereisnospoon.org/docs/guides/write-screening/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://thereisnospoon.org/docs/guides/write-screening/">
 <meta property="og:title" content="Screen writes and hold the suspicious ones - Seamless docs">
-<meta property="og:description" content="Write screening - every agent write to a memory or note is screened for secrets, injection markers, hidden characters, encoded blobs and unlisted links; suspicious ones, and changes to binding rules by a session that read outside text, wait for your release.">
+<meta property="og:description" content="Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Screen writes and hold the suspicious ones","item":"https://thereisnospoon.org/docs/guides/write-screening/"}]},{"@type":"TechArticle","headline":"Screen writes and hold the suspicious ones - Seamless docs","description":"Write screening - every agent write to a memory or note is screened for secrets, injection markers, hidden characters, encoded blobs and unlisted links; suspicious ones, and changes to binding rules by a session that read outside text, wait for your release.","url":"https://thereisnospoon.org/docs/guides/write-screening/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Screen writes and hold the suspicious ones","item":"https://thereisnospoon.org/docs/guides/write-screening/"}]},{"@type":"TechArticle","headline":"Screen writes and hold the suspicious ones - Seamless docs","description":"Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.","url":"https://thereisnospoon.org/docs/guides/write-screening/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
 <link rel="icon" type="image/svg+xml" href="../../../static/favicon.svg">
@@ -230,11 +230,11 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 </nav>
 
   <h1>Screen writes and hold the suspicious ones</h1>
-  <p class="lede">Write screening - every agent write to a memory or note is screened for secrets, injection markers, hidden characters, encoded blobs and unlisted links; suspicious ones, and changes to binding rules by a session that read outside text, wait for your release.</p>
+  <p class="lede">Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.</p>
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#turn-it-on">Turn it on</a></li><li class="lvl-2"><a href="#what-is-screened">What is screened</a></li><li class="lvl-2"><a href="#what-is-held">What is held</a></li><li class="lvl-2"><a href="#review-on-the-held-screen">Review on the Held screen</a></li><li class="lvl-2"><a href="#the-outside-text-mark">The outside-text mark</a></li><li class="lvl-2"><a href="#provenance-on-injected-memories">Provenance on injected memories</a></li><li class="lvl-2"><a href="#events">Events</a></li><li class="lvl-2"><a href="#calibrate-before-you-turn-it-on">Calibrate before you turn it on</a></li><li class="lvl-2"><a href="#what-it-does-not-cover">What it does not cover</a></li>
+      <li class="lvl-2"><a href="#turn-it-on">Turn it on</a></li><li class="lvl-2"><a href="#what-is-screened">What is screened</a></li><li class="lvl-2"><a href="#what-is-held">What is held</a></li><li class="lvl-2"><a href="#review-on-the-held-screen">Review on the Held screen</a></li><li class="lvl-2"><a href="#the-outside-text-mark">The outside-text mark</a></li><li class="lvl-2"><a href="#provenance-on-injected-memories">Provenance on injected memories</a></li><li class="lvl-2"><a href="#the-review-and-the-safe-mark">The review and the safe mark</a></li><li class="lvl-2"><a href="#changed-outside-seamless">Changed outside Seamless</a></li><li class="lvl-2"><a href="#lockdown">Lockdown</a></li><li class="lvl-2"><a href="#refusals">Refusals</a></li><li class="lvl-2"><a href="#the-metadata-feed">The metadata feed</a></li><li class="lvl-2"><a href="#forensics">Forensics</a></li><li class="lvl-2"><a href="#events">Events</a></li><li class="lvl-2"><a href="#calibrate-before-you-turn-it-on">Calibrate before you turn it on</a></li><li class="lvl-2"><a href="#what-it-does-not-cover">What it does not cover</a></li>
     </ul>
   </details>
   <p>Seamless injects its constraints and conventions into every session's
@@ -245,7 +245,7 @@ notices. The gardener, which reads memories and proposes rewrites, can carry
 one further.</p>
 <p><strong>Write screening</strong> is the optional feature that closes that door. It is off by
 default, and off means writes land exactly as they always have. On, it does
-three things:</p>
+these things:</p>
 <ol>
 <li><strong>Screens every agent write</strong> to a memory or note for secrets, injection
 markers, hidden Unicode, long encoded blobs, and links outside an allowlist,
@@ -260,6 +260,18 @@ them on the console's <strong>Held</strong> screen.</li>
 <li><strong>Marks provenance</strong> on what agents read: every injected memory line says
 whether you confirmed its content or an agent wrote it, and in which
 session.</li>
+<li><strong>Reviews the existing corpus</strong> the first time you turn it on: every memory
+and note goes through the same screens, on this machine. Clean ones are
+marked safe; the rest are listed for you with a <strong>Mark safe</strong> action.</li>
+<li><strong>Quarantines files changed outside Seamless.</strong> A memory or note file
+edited or planted on disk by anything but Seamless stays exactly as it is,
+but no briefing or prompt recall injects it until you accept it.</li>
+<li><strong>Offers a lockdown switch</strong> for an incident: changes to binding rules wait
+for you, and briefings inject only what you confirmed or the review marked
+safe.</li>
+<li><strong>Records refusals and feeds a monitor.</strong> Refused accesses become
+<code>access.refused</code> events, and an optional metadata feed delivers every
+event's metadata - never its content - to a Unix socket you name.</li>
 </ol>
 <h2 id="turn-it-on">Turn it on</h2>
 <p>Three ways, all the same switch:</p>
@@ -290,6 +302,16 @@ you reset it.</li>
 <p><code>SEAMLESS_SCREENING_URL_ALLOWLIST</code> (comma-separated) and
 <code>SEAMLESS_SCREENING_BLOB_MIN_LENGTH</code> override them. Loopback URLs
 (<code>localhost</code>, <code>127.0.0.1</code>) are never &quot;outside&quot;.</p>
+<p>Four more keys belong to the review, drift, lockdown and feed sections below:</p>
+<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">screening</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">drift_interval</span><span class="p">:</span><span class="w"> </span><span class="l">5m                      </span><span class="w"> </span><span class="c"># 0 turns the drift watch off</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">lockdown_file</span><span class="p">:</span><span class="w"> </span><span class="l">/path/to/lockdown.flag   </span><span class="w"> </span><span class="c"># its existence turns lockdown on</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">feed_socket</span><span class="p">:</span><span class="w"> </span><span class="l">/path/to/consumer/ingest.sock</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">feed_spool</span><span class="p">:</span><span class="w"> </span><span class="l">/path/to/spool              </span><span class="w"> </span><span class="c"># default &lt;data_dir&gt;/feed</span><span class="w">
+</span></span></span></code></pre></div>
+<p>Each has a <code>SEAMLESS_SCREENING_*</code> override (<code>DRIFT_INTERVAL</code>,
+<code>LOCKDOWN_FILE</code>, <code>FEED_SOCKET</code>, <code>FEED_SPOOL</code>); the paths expand a leading
+<code>~</code> and must be absolute.</p>
 <h2 id="what-is-screened">What is screened</h2>
 <p>Every agent write that lands text in the corpus: <code>memory_write</code> (including
 the half that supersedes), <code>memory_append</code>, <code>memory_edit</code>, <code>notes_create</code>,
@@ -543,6 +565,152 @@ does not carry that project's session name into every other briefing.</li>
 </ul>
 <p><code>memory_read</code> returns the same answer as <code>provenance</code> and
 <code>written_by_session</code>.</p>
+<h2 id="the-review-and-the-safe-mark">The review and the safe mark</h2>
+<p>The first time the feature is on - from the welcome card, Settings or the
+config, whichever comes first - the daemon reviews every memory and note
+file already on disk. It runs the same screens agent writes go through,
+deterministically and on this machine: nothing is sent anywhere. Each item
+gets a verdict:</p>
+<ul>
+<li><strong>safe</strong> - the screens found nothing that holds. The mark is stamped with a
+fingerprint of what the item says (its kind, scope, name, description and
+body), and holds only while it still says exactly that: an agent's later
+change lapses it on its own. A star or a tag change does not.</li>
+<li><strong>flagged</strong> - a holding code fired. The Held screen lists flagged items
+under <strong>Review</strong>, each with its codes, the sessions it was already injected
+into, and its text as an agent reads it, so you can decide.</li>
+</ul>
+<p><strong>Mark safe</strong> on a flagged item marks it safe as it reads now and, for a
+memory, stamps it owner-confirmed - the same mark a released write carries.
+<strong>Re-run review</strong> screens the whole corpus again and marks every clean item
+safe as it reads now; an item you marked safe keeps your mark while it is
+unchanged. The review runs once by itself; after that it runs when you ask.</p>
+<p>The review does not run when the database is migrated: the migration only
+adds the table, so an installation that never turns the feature on does no
+review and stores nothing.</p>
+<h2 id="changed-outside-seamless">Changed outside Seamless</h2>
+<p>The review also records the content hash of every file, and while the
+feature is on every write Seamless makes updates that record. Every
+<code>drift_interval</code> (5 minutes by default) the drift watch compares each file on
+disk with it:</p>
+<ul>
+<li>a file whose bytes no longer match was <strong>changed</strong> outside Seamless - an
+editor, a script, a sync tool, another program;</li>
+<li>a memory or note file Seamless has no record of <strong>appeared</strong> there;</li>
+<li>a recorded file that is gone went <strong>missing</strong>.</li>
+</ul>
+<p>A changed or appeared file is quarantined <strong>in place</strong>: it stays on disk
+exactly as it is (Seamless never moves, rewrites or deletes it), its text goes
+through the screens and the codes are recorded, <code>corpus.drift</code> is logged, and
+while the feature is on no briefing or prompt recall injects it - lockdown or
+not, because its text never passed the write screens. An agent's edit of a
+quarantined memory is screened against nothing, so the drifted text cannot
+ride in as if it were already there, and the quarantine stays until you act.
+A missing file is reported and nothing is restored.</p>
+<p>The Held screen lists quarantined files under <strong>Changed outside Seamless</strong>,
+with their codes, the sessions they reached before they changed, and their
+text as an agent reads it. <strong>Accept</strong> records the file as it stands, lifts the
+quarantine and, for a memory, stamps it owner-confirmed. If it should not
+stand, edit it back or delete it: a file put back to the exact bytes Seamless
+recorded leaves the quarantine by itself.</p>
+<p>Editing memory files in your own editor is fine; each edit lands in the list
+until you accept it. Changes made while the feature was off are not watched:
+turning it back on adopts the files as they are (it does not re-run the
+review, so their safe marks stay lapsed until you do).</p>
+<h2 id="lockdown">Lockdown</h2>
+<p>Lockdown is for an incident: something wrote where it should not have, and you
+want agents working only from knowledge you trust until you have looked. It
+only ever narrows what agents receive. While it is on:</p>
+<ul>
+<li>every change that touches a constraint, convention, protocol or stage - a
+write, an edit, a supersede, a delete, a gardener apply - is <strong>held</strong> for you
+with the reason <code>lockdown</code>, from any session;</li>
+<li>briefings and prompt recall inject only memories you confirmed or the review
+marked safe and that still say what they said then. An agent-written memory
+created or changed since waits for you or the next review. The briefing
+carries one line saying lockdown is on and how many memories it withheld.</li>
+</ul>
+<p>Two things turn it on, and either keeps it on:</p>
+<ul>
+<li>the switch on the Held screen (<code>lockdown.changed</code>, source <code>console</code>);</li>
+<li>the file <code>screening.lockdown_file</code> existing. Another program - a security
+monitor during an incident - can create it. The console cannot lift a
+lockdown the file holds; it lifts when the file goes. A file that exists but
+cannot be checked counts as present.</li>
+</ul>
+<p>Lockdown does nothing while the feature is off. <code>recall</code> and <code>memory_read</code>,
+which an agent asks for, are not narrowed.</p>
+<h2 id="refusals">Refusals</h2>
+<p>Every refused access becomes an <code>access.refused</code> event while the feature is
+on, with a reason code:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Reason</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fence.read</code>, <code>fence.write</code></td>
+<td>A read or write across a <a href="../../concepts/project-isolation/">project isolation</a> fence. <code>fence.write</code> is also every cross-project write attempt.</td>
+</tr>
+<tr>
+<td><code>peer.unreachable</code></td>
+<td>Under <a href="../../guides/peer-auth/">peer_auth</a>, an account reaching a project it may not.</td>
+</tr>
+<tr>
+<td><code>peer.unknown</code></td>
+<td>A socket caller whose OS account peer_auth does not know, or with no peer credential.</td>
+</tr>
+<tr>
+<td><code>peer.owner_only</code></td>
+<td>A configured account reaching the owner's console.</td>
+</tr>
+<tr>
+<td><code>auth.failed</code></td>
+<td>A request with no valid bearer key, on any surface.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The event names the surface (<code>mcp</code>, <code>hooks</code>, <code>a2a</code>, <code>console</code>), the tool and
+the target project when there is one - never the call's arguments. It is
+rate-limited: one event per reason, surface, tool, target and session every
+ten seconds, with the refusals in between counted in <code>suppressed</code>.</p>
+<h2 id="the-metadata-feed">The metadata feed</h2>
+<p>With <code>screening.feed_socket</code> set, the daemon delivers every event's metadata
+to that Unix socket, for a monitor that should see what agents do without
+reading Seamless. A frame carries the event's kind (as <code>activity</code>), time,
+class, severity and outcome; the session's name and agent process; the
+project - <strong>a confidential or sealed project, or one sealed to another OS
+account, as a keyed hash</strong> (<code>h:</code> and 24 hex characters, keyed by a random key
+in the spool folder); the item kind and id; and the codes, counts, sizes and
+flags the event carries. It never carries arguments, results, bodies,
+prompts, queries, names or titles: each frame is built from an allowlist of
+metadata keys, and a value that does not fit its pattern (free text where a
+code belongs) is dropped.</p>
+<p>The protocol is HTTP/1.1 on the socket: <code>GET /v1/limits</code>, then
+<code>POST /v1/batch</code> with <code>Content-Type: application/x-ndjson</code>, a header line
+<code>{&quot;v&quot;:1,&quot;batch&quot;:&quot;&lt;id&gt;&quot;,&quot;frames&quot;:&lt;n&gt;,&quot;dropped&quot;:&lt;n&gt;}</code> and one frame per line.
+The consumer answers each batch with a receipt whose <code>action</code> is <code>settle</code>,
+<code>retry</code> or <code>discard</code>. While it is down the feed spools to <code>feed_spool</code>
+(0700): bounded at 10,000 frames and 8 MiB, the oldest dropped first and
+counted in the next header's <code>dropped</code>; one batch in flight, resent unchanged
+under its id until a receipt settles or discards it, across restarts too. When
+nothing else is waiting it sends a heartbeat frame every third of the
+consumer's <code>heartbeat_s</code>.</p>
+<p>The feed reads the event log itself, in the order events landed, from a
+cursor it keeps in the spool, so a burst never loses an event. Turned off and
+on again, it starts from the newest event rather than replaying the gap.</p>
+<h2 id="forensics">Forensics</h2>
+<p><code>retrieval.injected</code> - the record of which memories a briefing, a prompt
+recall or a recall answer gave which session - is never pruned: the retention
+pass only ever removes transport events (<code>tool.call</code>, <code>hook.prompt</code>,
+<code>recall.miss</code>, <code>hook.error</code>). So when a memory turns out poisoned, the
+sessions it reached are on record back to its first injection. The Held
+screen shows them beside each flagged or quarantined memory.</p>
 <h2 id="events">Events</h2>
 <div class="table-wrap">
 <table>
@@ -584,6 +752,31 @@ does not carry that project's session name into every other briefing.</li>
 <td>You cleared a session's mark.</td>
 <td><code>by</code></td>
 </tr>
+<tr>
+<td><code>access.refused</code></td>
+<td>An access was refused (rate-limited).</td>
+<td><code>reason</code>, <code>surface</code>, <code>tool</code>, <code>target</code>, <code>suppressed</code></td>
+</tr>
+<tr>
+<td><code>corpus.reviewed</code></td>
+<td>The review read the corpus.</td>
+<td><code>items</code>, <code>safe</code>, <code>flagged</code>, <code>by</code>, <code>baseline</code></td>
+</tr>
+<tr>
+<td><code>corpus.drift</code></td>
+<td>A file changed, appeared or went missing outside Seamless.</td>
+<td><code>change</code>, <code>item_kind</code>, <code>verdicts</code>, <code>quarantined</code></td>
+</tr>
+<tr>
+<td><code>corpus.confirmed</code></td>
+<td>You marked a flagged item safe or accepted a quarantined one.</td>
+<td><code>item_kind</code>, <code>via</code>, <code>by</code></td>
+</tr>
+<tr>
+<td><code>lockdown.changed</code></td>
+<td>Lockdown went on or off.</td>
+<td><code>on</code>, <code>source</code>, <code>by</code></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -604,9 +797,9 @@ it runs with. Run it on a copy of a corpus you are allowed to read.</p>
 merges, the v1 importer) are yours, and are not screened.</li>
 <li><strong>Other text agents leave.</strong> Session findings and task titles also reach
 briefings, and plan-mode captures land as notes; none of them is screened
-by this feature.</li>
-<li><strong>Edits that bypass Seamless.</strong> A file changed on disk by another process is
-re-indexed as it always was; its provenance mark lapses, but it is not held.</li>
+by this feature, and lockdown does not narrow them.</li>
+<li><strong>What agents ask for.</strong> Drift quarantine and lockdown narrow what is
+injected; <code>recall</code> and <code>memory_read</code> still answer an agent that asks.</li>
 </ul>
 
 </article>
@@ -625,7 +818,7 @@ re-indexed as it always was; its provenance mark lapses, but it is not held.</li
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#turn-it-on">Turn it on</a></li><li class="lvl-2"><a href="#what-is-screened">What is screened</a></li><li class="lvl-2"><a href="#what-is-held">What is held</a></li><li class="lvl-2"><a href="#review-on-the-held-screen">Review on the Held screen</a></li><li class="lvl-2"><a href="#the-outside-text-mark">The outside-text mark</a></li><li class="lvl-2"><a href="#provenance-on-injected-memories">Provenance on injected memories</a></li><li class="lvl-2"><a href="#events">Events</a></li><li class="lvl-2"><a href="#calibrate-before-you-turn-it-on">Calibrate before you turn it on</a></li><li class="lvl-2"><a href="#what-it-does-not-cover">What it does not cover</a></li>
+      <li class="lvl-2"><a href="#turn-it-on">Turn it on</a></li><li class="lvl-2"><a href="#what-is-screened">What is screened</a></li><li class="lvl-2"><a href="#what-is-held">What is held</a></li><li class="lvl-2"><a href="#review-on-the-held-screen">Review on the Held screen</a></li><li class="lvl-2"><a href="#the-outside-text-mark">The outside-text mark</a></li><li class="lvl-2"><a href="#provenance-on-injected-memories">Provenance on injected memories</a></li><li class="lvl-2"><a href="#the-review-and-the-safe-mark">The review and the safe mark</a></li><li class="lvl-2"><a href="#changed-outside-seamless">Changed outside Seamless</a></li><li class="lvl-2"><a href="#lockdown">Lockdown</a></li><li class="lvl-2"><a href="#refusals">Refusals</a></li><li class="lvl-2"><a href="#the-metadata-feed">The metadata feed</a></li><li class="lvl-2"><a href="#forensics">Forensics</a></li><li class="lvl-2"><a href="#events">Events</a></li><li class="lvl-2"><a href="#calibrate-before-you-turn-it-on">Calibrate before you turn it on</a></li><li class="lvl-2"><a href="#what-it-does-not-cover">What it does not cover</a></li>
     </ul>
   </aside>
   

@@ -87,3 +87,51 @@ screening:
 	_, err := LoadFrom(path)
 	require.ErrorContains(t, err, "screening.url_allowlist")
 }
+
+// Part 2's keys: the drift interval (5m by default, 0 turns the watch off),
+// the lockdown file, and the feed's socket and spool -- paths that expand ~
+// and must be absolute.
+func TestLoadFrom_ScreeningPart2Keys(t *testing.T) {
+	clearSeamlessEnv(t)
+	cfg, err := LoadFrom("")
+	require.NoError(t, err)
+	require.Equal(t, DefaultScreeningDriftInterval, cfg.Screening.DriftInterval)
+	require.Empty(t, cfg.Screening.LockdownFile)
+	require.Empty(t, cfg.Screening.FeedSocket, "no socket: the feed is off")
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	path := writeConfig(t, `
+screening:
+  drift_interval: 2m
+  lockdown_file: ~/flags/lockdown
+  feed_socket: /tmp/consumer/ingest.sock
+`)
+	cfg, err = LoadFrom(path)
+	require.NoError(t, err)
+	require.Equal(t, Duration(2*60*1e9), cfg.Screening.DriftInterval)
+	require.Equal(t, home+string(os.PathSeparator)+"flags"+string(os.PathSeparator)+"lockdown", cfg.Screening.LockdownFile)
+	require.Equal(t, "/tmp/consumer/ingest.sock", cfg.Screening.FeedSocket)
+
+	t.Setenv("SEAMLESS_SCREENING_DRIFT_INTERVAL", "0")
+	t.Setenv("SEAMLESS_SCREENING_FEED_SPOOL", "/var/spool/feed")
+	cfg, err = LoadFrom(path)
+	require.NoError(t, err)
+	require.Zero(t, cfg.Screening.DriftInterval, "0 turns the drift watch off")
+	require.Equal(t, "/var/spool/feed", cfg.Screening.FeedSpool)
+}
+
+func TestScreeningValidate_Part2(t *testing.T) {
+	ok := Screening{BlobMinLength: 200, DriftInterval: DefaultScreeningDriftInterval}
+	require.NoError(t, ok.Validate())
+	bad := ok
+	bad.DriftInterval = Duration(5 * 1e9)
+	require.ErrorContains(t, bad.Validate(), "drift_interval")
+	bad = ok
+	bad.LockdownFile = "relative/flag"
+	require.ErrorContains(t, bad.Validate(), "screening.lockdown_file must be an absolute path")
+	bad = ok
+	bad.FeedSocket = "ingest.sock"
+	require.ErrorContains(t, bad.Validate(), "screening.feed_socket")
+}

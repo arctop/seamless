@@ -64,6 +64,12 @@ const Gamification Key = "gamification"
 // hold only counts, a hold with no screen has nothing to catch, and the marks
 // are how an agent tells released knowledge from the rest.
 //
+// Part 2 joins the same toggle rather than adding one: the review of the
+// existing corpus at the first turn-on, the drift quarantine of files changed
+// outside Seamless, the lockdown switch, access.refused events and the
+// optional metadata feed. They extend the same promise -- what agents receive
+// has passed the screens or the owner -- and mean nothing without the screens.
+//
 // Unlike the presentation features above, it changes what agents receive, so
 // it is a feature toggle and never part of a console level. Turning it off
 // stops screening new writes; a write already held stays held -- out of the
@@ -177,7 +183,7 @@ var registry = []Feature{
 	{
 		Key:           Screening,
 		Label:         "Write screening",
-		Blurb:         "Screens every agent write to memories and notes for secrets, injection markers, hidden characters, encoded blobs and unlisted links, and holds suspicious ones -- with any change to a binding rule by a session that read outside text -- out of briefings and recall until you release them.",
+		Blurb:         "Screens every agent write to memories and notes for secrets, injection markers, hidden characters, encoded blobs and unlisted links, and holds suspicious ones -- with any change to a binding rule by a session that read outside text -- out of briefings and recall until you release them. It also reviews the existing corpus on this machine, keeps files changed outside Seamless out of briefings until you accept them, and adds a lockdown switch.",
 		NavIDs:        []string{"held"},
 		RoutePrefixes: []string{"/console/held"},
 		Surfaces: []string{

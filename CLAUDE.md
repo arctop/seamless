@@ -53,8 +53,11 @@ internal/retrieve/ briefing assembler, prompt-context matcher, recall (RRF),
                    console search                                          [P2/P4]
 internal/lifecycle/ supersession, archival, provenance                     [P3]
 internal/screening/ write screening (optional feature, off by default): the
-                   screens, the hold policy, and the held-writes queue the
-                   console releases or discards; see AGENTS.md
+                   screens, the hold policy, the held-writes queue the
+                   console releases or discards, the corpus review, drift
+                   quarantine, lockdown and access.refused; see AGENTS.md
+internal/feed/     write screening's metadata feed: event log -> metadata
+                   frames -> on-disk spool -> a configured Unix socket
 # (the dependency-aware ready-queue + lease-based claiming live in
 #  internal/store/tasks*.go -- there is no internal/tasks package)
 internal/gardener/ the propose-only passes (dedup, staleness, stale-stage,
@@ -185,6 +188,7 @@ reach; a client of it sets `server_url: unix:///path.sock` and needs no key.
   update/state.json                the update check's record (release daemons only)
   update/update.lock               the updater's lock (never delete it)
   update/attempt.json, attempts.jsonl, logs/   the updater's records (it writes, the daemon reads)
+  feed/                            write screening's metadata-feed spool (only with screening.feed_socket set)
 ```
 
 Files are the source of truth for durable knowledge; the DB is the record for
@@ -210,7 +214,7 @@ updated: 2026-07-10T18:00:00Z
 valid_from: 2026-07-10T18:00:00Z
 invalid_at: null           # set on supersession/archive; invalid memories leave indexes
 superseded_by: null        # ULID of the replacement
-source_session: cc/ab12cd34
+source_session: 01K...     # the writing session's ULID (not its cc/... name)
 model: claude-fable-5      # the model that produced the content, verbatim as the provider names it
 tags: [x, y]
 ---

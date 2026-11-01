@@ -155,6 +155,32 @@ func eventSummary(e core.Event) string {
 		return "session read outside text"
 	case core.EventSessionCleared:
 		return "outside-text mark cleared by the owner"
+	case core.EventAccessRefused:
+		line := "access refused (" + payloadStr(p, "reason") + ")"
+		if tool := payloadStr(p, "tool"); tool != "" {
+			line += " on " + tool
+		}
+		return line
+	case core.EventCorpusDrift:
+		switch payloadStr(p, "change") {
+		case store.DriftMissing:
+			return payloadStr(p, "item_kind") + " file went missing outside Seamless"
+		case store.DriftUnknown:
+			return payloadStr(p, "item_kind") + " file appeared outside Seamless; quarantined" + codesSuffix(p, "verdicts")
+		}
+		return payloadStr(p, "item_kind") + " file changed outside Seamless; quarantined" + codesSuffix(p, "verdicts")
+	case core.EventCorpusReviewed:
+		return fmt.Sprintf("reviewed the corpus: %d safe, %d flagged", payloadInt(p, "safe"), payloadInt(p, "flagged"))
+	case core.EventCorpusConfirmed:
+		if payloadStr(p, "via") == "drift" {
+			return "owner accepted a " + payloadStr(p, "item_kind") + " changed outside Seamless"
+		}
+		return "owner marked a flagged " + payloadStr(p, "item_kind") + " safe"
+	case core.EventLockdownChanged:
+		if on, _ := p["on"].(bool); on {
+			return "lockdown on (" + payloadStr(p, "source") + ")"
+		}
+		return "lockdown off (" + payloadStr(p, "source") + ")"
 	case core.EventProjectIsolationChanged:
 		line := "isolation " + payloadStr(p, "from") + " -> " + payloadStr(p, "to")
 		if parent := payloadStr(p, "parent"); parent != "" {

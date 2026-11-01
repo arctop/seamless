@@ -256,6 +256,10 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/held/{id}/release", formBodySmall, gated(features.Screening, s.heldRelease))
 	post("POST /console/held/{id}/discard", formBodySmall, gated(features.Screening, s.heldDiscard))
 	post("POST /console/held/sessions/{id}/clear", formBodySmall, gated(features.Screening, s.heldUntaint))
+	post("POST /console/held/lockdown", formBodySmall, gated(features.Screening, s.heldLockdown))
+	post("POST /console/held/review", formBodySmall, gated(features.Screening, s.heldReview))
+	post("POST /console/held/corpus/safe", formBodySmall, gated(features.Screening, s.heldMarkSafe))
+	post("POST /console/held/corpus/accept", formBodySmall, gated(features.Screening, s.heldAcceptDrift))
 	post("POST /console/favorites/{kind}/{id}", formBodySmall, s.favoriteToggle)
 	handle("GET /console/settings", s.auth(s.settings))
 	post("POST /console/settings/briefing", formBodyStandard, s.settingsBriefingSave)
@@ -353,6 +357,7 @@ func (s *Service) auth(next http.HandlerFunc) http.HandlerFunc {
 		// on the socket works through its agents' tools, which carry its reach;
 		// the console's pages are built for the owner's.
 		if !access.OwnerOnly(r.Context()) {
+			access.NoteRefusal(r.Context(), screening.RefusedOwnerOnly)
 			if wantsJSON(r) {
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden: the console is the owner's surface"})
 				return

@@ -6,6 +6,21 @@
   <span class="mv2-count" aria-label="{{len .Pending}} writes waiting"><strong>{{len .Pending}}</strong>waiting</span>
 </header>
 
+<section class="held-lockdown{{if .Lockdown.On}} is-on{{end}}" aria-labelledby="held-lockdown-title" data-lockdown="{{if .Lockdown.On}}on{{else}}off{{end}}">
+  <h2 id="held-lockdown-title">{{icon "lock"}}Lockdown {{if .Lockdown.On}}<span class="badge warn">on</span>{{else}}<span class="badge">off</span>{{end}}</h2>
+  <p class="held-sub">During an incident: changes to constraints, conventions, protocols and stages wait here for you, and briefings and prompt recall inject only memories you confirmed or the review marked safe.</p>
+  {{if .Lockdown.File}}<p class="held-sub">{{icon "triangle-alert"}} Held on by the lockdown file{{if .Lockdown.FilePath}} <code>{{.Lockdown.FilePath}}</code>{{end}}. It lifts when that file goes; your switch cannot lift it.</p>{{end}}
+  <form method="post" action="/console/held/lockdown">
+    {{if .Lockdown.Console}}
+    <input type="hidden" name="on" value="0">
+    <button class="btn small" type="submit">Turn lockdown off</button>
+    {{else}}
+    <input type="hidden" name="on" value="1">
+    <button class="btn small" type="submit" onclick="return confirm('Turn lockdown on? Agents receive only confirmed or reviewed memories, and their changes to binding rules wait for you.');">Turn lockdown on</button>
+    {{end}}
+  </form>
+</section>
+
 {{if .Pending}}
 <section class="held-list" aria-label="Writes waiting for your review">
   {{range .Pending}}
@@ -47,6 +62,78 @@
   <div class="empty dotgrid"><span class="empty-ico">{{icon "lock"}}</span><div>Nothing is waiting. A write lands here when it fails a screen (a secret, an injection marker, hidden characters, an encoded blob, an unlisted link), when a session that read outside text changes a constraint, convention, protocol or stage, and when any agent supersedes or deletes a constraint.</div></div>
 </section>
 {{end}}
+
+<section class="held-corpus" aria-labelledby="held-drift-title">
+  <h2 id="held-drift-title">Changed outside Seamless</h2>
+  <p class="held-sub">A memory or note file that changed on disk without going through Seamless (an editor, a script, another program), or appeared there. It stays exactly as it is on disk, but no briefing or prompt recall injects it until you accept it. Accept records it as it stands; if it should not stand, edit or delete the file and it leaves this list by itself.</p>
+  {{if .Drifted}}
+  <div class="held-list">
+    {{range .Drifted}}
+    <article class="held-card" data-drift="{{.Path}}">
+      <header class="held-card-head">
+        <span class="badge">{{.ItemKind}} {{if eq .Change "unknown"}}appeared{{else}}changed{{end}}</span>
+        {{if .Link}}<a class="held-name mono" href="{{.Link}}">{{.Path}}</a>{{else}}<strong class="held-name mono">{{.Path}}</strong>{{end}}
+        <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .At}} &middot; <span title="{{ts .}}">{{ago .}}</span>{{end}}</span>
+      </header>
+      {{if .Codes}}<ul class="held-reasons">{{range .Codes}}<li><code>{{.Code}}</code>{{if .Words}} {{.Words}}{{end}}</li>{{end}}</ul>{{else}}<p class="held-note">The screens found nothing in the changed text.</p>{{end}}
+      {{if .InjectedTotal}}<p class="held-note">Injected before it changed into {{.InjectedTotal}} session{{if ne .InjectedTotal 1}}s{{end}}:{{range .Injected}} <a class="mono" href="/console/sessions/{{.SessionID}}">{{.Name}}</a>{{end}}</p>{{end}}
+      {{if .Preview}}
+      <details class="held-preview-box" open>
+        <summary>The file, as an agent would read it <small>(hidden characters spelled out, secrets redacted)</small></summary>
+        <pre class="held-preview">{{.Preview}}</pre>
+      </details>
+      {{end}}
+      <div class="held-actions">
+        <form method="post" action="/console/held/corpus/accept">
+          <input type="hidden" name="path" value="{{.Path}}">
+          <button class="btn primary small" type="submit">{{icon "check"}} Accept</button>
+        </form>
+      </div>
+    </article>
+    {{end}}
+  </div>
+  {{else}}
+  <p class="held-none">{{if .Review.Armed}}No file changed outside Seamless.{{else}}The drift watch starts when write screening is on.{{end}}</p>
+  {{end}}
+</section>
+
+<section class="held-corpus" aria-labelledby="held-review-title">
+  <h2 id="held-review-title">Review</h2>
+  <p class="held-sub">When write screening was first turned on, every existing memory and note went through the same screens agent writes do (on this machine; nothing leaves it). Clean ones were marked safe; the rest are below for you. A safe mark holds while the item says exactly what it said when reviewed: an agent's later change lapses it, so under lockdown that item waits for you or the next review.</p>
+  <p class="held-meta">{{.Review.Items}} items &middot; {{.Review.Safe}} safe &middot; {{.Review.Flagged}} flagged &middot; {{.Review.Unreviewed}} not reviewed{{with .Review.Baseline}} &middot; first review <span title="{{ts .}}">{{ago .}}</span>{{end}}{{with .Review.Reviewed}} &middot; last <span title="{{ts .}}">{{ago .}}</span>{{end}}</p>
+  <form method="post" action="/console/held/review">
+    <button class="btn small" type="submit" onclick="return confirm('Re-run the review? Every memory and note is screened again, and clean ones are marked safe as they read now.');">Re-run review</button>
+  </form>
+  {{if .Flagged}}
+  <div class="held-list">
+    {{range .Flagged}}
+    <article class="held-card" data-flagged="{{.Path}}">
+      <header class="held-card-head">
+        <span class="badge">{{.ItemKind}}</span>
+        {{if .Link}}<a class="held-name mono" href="{{.Link}}">{{.Path}}</a>{{else}}<strong class="held-name mono">{{.Path}}</strong>{{end}}
+        <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .At}} &middot; reviewed <span title="{{ts .}}">{{ago .}}</span>{{end}}</span>
+      </header>
+      <ul class="held-reasons">{{range .Codes}}<li><code>{{.Code}}</code>{{if .Words}} {{.Words}}{{end}}</li>{{end}}</ul>
+      {{if .InjectedTotal}}<p class="held-note">Injected into {{.InjectedTotal}} session{{if ne .InjectedTotal 1}}s{{end}}:{{range .Injected}} <a class="mono" href="/console/sessions/{{.SessionID}}">{{.Name}}</a>{{end}}</p>{{end}}
+      {{if .Preview}}
+      <details class="held-preview-box">
+        <summary>The item, as an agent would read it <small>(hidden characters spelled out, secrets redacted)</small></summary>
+        <pre class="held-preview">{{.Preview}}</pre>
+      </details>
+      {{end}}
+      <div class="held-actions">
+        <form method="post" action="/console/held/corpus/safe">
+          <input type="hidden" name="path" value="{{.Path}}">
+          <button class="btn small" type="submit">{{icon "check"}} Mark safe</button>
+        </form>
+      </div>
+    </article>
+    {{end}}
+  </div>
+  {{else if .Review.Armed}}
+  <p class="held-none">Nothing is flagged.</p>
+  {{end}}
+</section>
 
 <section class="held-sessions" aria-labelledby="held-sessions-title">
   <h2 id="held-sessions-title">Sessions that read outside text</h2>

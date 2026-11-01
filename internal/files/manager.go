@@ -695,6 +695,7 @@ func (m *Manager) WriteMemory(ctx context.Context, mem core.Memory) (core.Memory
 	if err != nil {
 		return core.Memory{}, err
 	}
+	m.recordWrite(ctx, kindMemory, written.ID, written.Project, written.FilePath, written.ContentHash)
 	if err := m.indexer.IndexMemory(ctx, written); err != nil {
 		return core.Memory{}, err
 	}
@@ -743,6 +744,7 @@ func (m *Manager) WriteNote(ctx context.Context, note core.Note) (core.Note, err
 	if err != nil {
 		return core.Note{}, err
 	}
+	m.recordWrite(ctx, kindNote, written.ID, written.Project, written.FilePath, written.ContentHash)
 	if err := m.indexer.IndexNote(ctx, written); err != nil {
 		return core.Note{}, err
 	}
@@ -799,7 +801,38 @@ func (m *Manager) Remove(ctx context.Context, relPath string) error {
 	if err := m.store.Remove(relPath); err != nil {
 		return err
 	}
+	m.recordRemove(ctx, relPath)
 	return m.indexer.DeleteByFilePath(ctx, relPath)
+}
+
+// recordWrite records the hash of a file this Manager just wrote in the
+// corpus record (write screening's drift watch). The statement is a no-op
+// while the watch is disarmed, which is every installation that never turned
+// write screening on. Every corpus writer -- the MCP tools, the gardener, the
+// hooks' captures, a release, the owner's import and merge -- comes through
+// WriteMemory and WriteNote, so a file whose bytes stop matching its record
+// was changed by something other than Seamless.
+//
+// A failure is logged, never returned: the write already landed, and a
+// missing record only makes the drift watch quarantine the file (in place,
+// touching nothing) until the owner accepts it.
+func (m *Manager) recordWrite(ctx context.Context, kind, id, project, relPath, hash string) {
+	if m.db == nil {
+		return
+	}
+	if err := store.RecordCorpusWrite(ctx, m.db, kind, id, project, relPath, hash, time.Now().UTC()); err != nil {
+		m.logger.Warn("files: corpus record", "file_path", relPath, "error", err)
+	}
+}
+
+// recordRemove drops the corpus record of a file this Manager just removed.
+func (m *Manager) recordRemove(ctx context.Context, relPath string) {
+	if m.db == nil {
+		return
+	}
+	if err := store.RecordCorpusRemove(ctx, m.db, relPath); err != nil {
+		m.logger.Warn("files: corpus record removal", "file_path", relPath, "error", err)
+	}
 }
 
 // suppress tells the watcher to ignore its own imminent write to relPath.

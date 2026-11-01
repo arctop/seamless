@@ -125,6 +125,11 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 	if err != nil {
 		return "", nil, err
 	}
+	// Write screening, when on: a memory in drift quarantine -- and, under
+	// lockdown, every memory the owner has not confirmed or the review not
+	// marked safe -- is left out before anything is partitioned or ranked.
+	hold := s.newWithholding(ctx)
+	mems = s.filter(ctx, hold, mems)
 	var constraints, stageMems, favorites, conventions []core.Memory
 	index := make([]core.Memory, 0, len(mems))
 	for _, m := range mems {
@@ -169,7 +174,7 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 	if in.AgentType != "" {
 		var relevant []promptHit
 		if len(constraints) > 0 {
-			relevant = s.subagentRelevant(ctx, project, in.Prompt, constraints)
+			relevant = s.filterHits(ctx, hold, s.subagentRelevant(ctx, project, in.Prompt, constraints))
 		}
 		var marks map[string]string
 		if len(constraints) > 0 && s.provenanceOn(ctx) {
@@ -227,6 +232,7 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 	if err != nil {
 		return "", nil, err
 	}
+	siblingMems = s.filter(ctx, hold, siblingMems)
 	rollups, err := store.ActivePlans(ctx, s.db, project)
 	if err != nil {
 		return "", nil, err
@@ -256,7 +262,7 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 		pendingPlans: pending, isolation: iso,
 		// Asked for only past the nothing-to-inject return above: the notice
 		// rides on a briefing, it never makes an empty one non-empty.
-		notice:   s.updateNoticeLine(ctx, in.Host),
+		notice:   s.updateNoticeLine(ctx, in.Host) + hold.line(),
 		momentum: features.Enabled(s.effectiveFeatures(ctx), features.Momentum),
 	}, cfg)
 	return text, ids, nil

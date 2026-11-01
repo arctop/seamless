@@ -102,6 +102,10 @@ func (s *Server) recordScreened(ctx context.Context, tool, itemKind, itemID, pro
 func (s *Server) judgeMemoryWrite(ctx context.Context, tool string, mem, replaced, supersedes core.Memory,
 	sessionID string, tainted bool, jd *judged) error {
 	extra := screening.MemoryReasons(tainted, mem.Kind, replaced.Kind)
+	lockdown := s.cfg.Screening.LockdownOn(ctx)
+	if lockdown && (screening.IsBriefingKind(mem.Kind) || screening.IsBriefingKind(replaced.Kind)) {
+		extra = append(extra, screening.ReasonLockdown)
+	}
 	detail := map[string]string{"path": files.MemoryRelPath(mem.Project, mem.Name)}
 	if supersedes.ID != "" && supersedes.ID != mem.ID {
 		if supersedes.Kind == core.KindConstraint {
@@ -110,13 +114,19 @@ func (s *Server) judgeMemoryWrite(ctx context.Context, tool string, mem, replace
 		if tainted && screening.IsBriefingKind(supersedes.Kind) {
 			extra = append(extra, screening.ReasonTaintedSession)
 		}
+		if lockdown && screening.IsBriefingKind(supersedes.Kind) {
+			extra = append(extra, screening.ReasonLockdown)
+		}
 		detail["supersedes_id"] = supersedes.ID
 		detail["supersedes_name"] = supersedes.Name
 		detail["supersedes_project"] = supersedes.Project
 	}
 	text := screening.MemoryText(mem)
 	base := ""
-	if replaced.ID != "" {
+	if replaced.ID != "" && !s.drifted(ctx, replaced.FilePath) {
+		// A file in drift quarantine changed outside Seamless and was never
+		// screened, so it is no baseline: judged against it, an edit would carry
+		// the drifted text into the corpus as if it were already there.
 		base = screening.MemoryText(replaced)
 	}
 	jd.verdict = screening.Judge(text, base, s.cfg.Screening.Rules(), extra...)
@@ -147,7 +157,7 @@ func (s *Server) judgeNoteWrite(ctx context.Context, tool string, note, replaced
 	sessionID string, jd *judged) error {
 	text := screening.NoteText(note)
 	base := ""
-	if replaced.ID != "" {
+	if replaced.ID != "" && !s.drifted(ctx, replaced.FilePath) {
 		base = screening.NoteText(replaced)
 	}
 	jd.verdict = screening.Judge(text, base, s.cfg.Screening.Rules())
@@ -201,12 +211,16 @@ func (s *Server) judgeGardenerApply(ctx context.Context, p store.Proposal, sessi
 		}
 		return m, true, nil
 	}
+	lockdown := s.cfg.Screening.LockdownOn(ctx)
 	retire := func(m core.Memory, reason screening.Code) {
 		if m.Kind == core.KindConstraint {
 			reasons = append(reasons, reason)
 		}
 		if tainted && screening.IsBriefingKind(m.Kind) {
 			reasons = append(reasons, screening.ReasonTaintedSession)
+		}
+		if lockdown && screening.IsBriefingKind(m.Kind) {
+			reasons = append(reasons, screening.ReasonLockdown)
 		}
 	}
 	switch p.Kind {
@@ -242,6 +256,9 @@ func (s *Server) judgeGardenerApply(ctx context.Context, p store.Proposal, sessi
 		if tainted && screening.IsBriefingKind(writesKind) {
 			reasons = append(reasons, screening.ReasonTaintedSession)
 		}
+		if lockdown && screening.IsBriefingKind(writesKind) {
+			reasons = append(reasons, screening.ReasonLockdown)
+		}
 		text = payloadText(p.Payload, "description") + "\n" + payloadText(p.Payload, "body")
 	case store.ProposalRekind:
 		m, ok, lerr := lookup(payloadText(p.Payload, "id"))
@@ -252,6 +269,9 @@ func (s *Server) judgeGardenerApply(ctx context.Context, p store.Proposal, sessi
 			target = m
 			to := core.MemoryKind(payloadText(p.Payload, "to"))
 			reasons = append(reasons, screening.MemoryReasons(tainted, to, m.Kind)...)
+			if lockdown && (screening.IsBriefingKind(to) || screening.IsBriefingKind(m.Kind)) {
+				reasons = append(reasons, screening.ReasonLockdown)
+			}
 		}
 	case store.ProposalDigest:
 		itemKind = core.ItemKindNote
@@ -281,6 +301,21 @@ func (s *Server) judgeGardenerApply(ctx context.Context, p store.Proposal, sessi
 		return nil, judged{}, false, err
 	}
 	return &h, jd, screened, nil
+}
+
+// drifted reports whether the file at relPath is in drift quarantine. A
+// failed lookup counts as drifted: the write is then screened against no
+// baseline, which can only find more.
+func (s *Server) drifted(ctx context.Context, relPath string) bool {
+	if relPath == "" {
+		return false
+	}
+	rec, ok, err := store.CorpusRecordByPath(ctx, s.cfg.DB, relPath)
+	if err != nil {
+		s.logger.Warn("mcp: corpus record lookup failed; screening the write against no baseline", "file_path", relPath, "error", err)
+		return true
+	}
+	return ok && rec.Drifted()
 }
 
 // payloadText, payloadObject and payloadObjects read a gardener proposal's

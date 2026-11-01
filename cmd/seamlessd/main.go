@@ -33,6 +33,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -42,6 +44,8 @@ import (
 	"github.com/arctop/seamless/internal/console"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
+	"github.com/arctop/seamless/internal/features"
+	"github.com/arctop/seamless/internal/feed"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/hooks"
@@ -400,10 +404,47 @@ func runServe(args []string) error {
 	// session marks. Built unconditionally and inert while the feature is off --
 	// every surface asks the effective features before calling in, so the
 	// console toggle applies without a restart.
+	screeningOn := func(ctx context.Context) bool {
+		fc, _, ferr := store.FeaturesConfig(ctx, db, cfg.Features)
+		if ferr != nil {
+			slog.Warn("features override unreadable; using the file/env config", "error", ferr)
+			fc = cfg.Features
+		}
+		return features.Enabled(fc, features.Screening)
+	}
 	screen := screening.New(screening.Config{
 		DB: db, Files: mgr, Events: rec, Gardener: garden, Logger: logger,
-		Rules: screening.Rules{URLAllowlist: cfg.Screening.URLAllowlist, BlobMinLength: cfg.Screening.BlobMinLength},
+		Rules:   screening.Rules{URLAllowlist: cfg.Screening.URLAllowlist, BlobMinLength: cfg.Screening.BlobMinLength},
+		Enabled: screeningOn, LockdownFile: cfg.Screening.LockdownFile,
+		DriftInterval: time.Duration(cfg.Screening.DriftInterval),
 	})
+	// Part 2 of the feature: lockdown narrows what briefings and prompt recall
+	// inject; the corpus watch (review, drift, the lockdown file's changes)
+	// runs in the background, inert while the feature is off.
+	ret.SetLockdown(screen.LockdownOn)
+	screen.Run(ctx)
+	// stop() first: on an early return ctx is still live, and Wait would block.
+	defer func() { stop(); screen.Wait() }()
+	// The metadata feed: off unless screening.feed_socket names a consumer.
+	feedSpool := cfg.Screening.FeedSpool
+	if feedSpool == "" {
+		feedSpool = filepath.Join(cfg.DataDir, "feed")
+	}
+	var sealedSlugs func(string) bool
+	if peer != nil {
+		sealed := peer.policy.SealedProjects()
+		sealedSlugs = func(slug string) bool { return slices.Contains(sealed, slug) }
+	}
+	metaFeed := feed.New(feed.Config{
+		DB: db, Events: rec, Socket: cfg.Screening.FeedSocket, Spool: feedSpool,
+		Host: feed.HostName(config.Hostname()), Enabled: screeningOn, Sealed: sealedSlugs, Logger: logger,
+	})
+	if ferr := metaFeed.Run(ctx); ferr != nil {
+		// The daemon serves without the feed rather than not at all; the
+		// owner sees why in the log, and the spool keeps nothing until fixed.
+		slog.Error("metadata feed not started", "error", ferr)
+	}
+	defer func() { stop(); metaFeed.Wait() }()
 
 	if cfg.MCP.APIKey == "" {
 		slog.Warn("mcp.api_key is empty; MCP and hook requests will be rejected -- set it in seamless.yaml")
@@ -507,6 +548,9 @@ func runServe(args []string) error {
 	if peer != nil {
 		tcpRoutes = ownerHandler(peer.policy, mux)
 	}
+	// Refusals (write screening's access.refused, when on) are watched on both
+	// listeners, outside everything that can refuse.
+	tcpRoutes = refusalWatch(screen, tcpRoutes)
 	srv := newHTTPServer(ctx, bind, daemonHandler(bind, cfg.AllowedHostsEffective(), activity, tcpRoutes))
 	if tlsOn {
 		// TLS 1.2 floor: everything below it is either broken or obsolete, and
@@ -549,7 +593,7 @@ func runServe(args []string) error {
 			garden.Wait()
 			return fmt.Errorf("seamlessd.serve: %w", err)
 		}
-		sockSrv = newHTTPServer(ctx, peer.cfg.Socket.Path, peerHandler(peer.policy, logger, activity.wrap(mux)))
+		sockSrv = newHTTPServer(ctx, peer.cfg.Socket.Path, refusalWatch(screen, peerHandler(peer.policy, logger, activity.wrap(mux))))
 		sockSrv.ConnContext = peerConnContext
 	}
 	upd.Start(ctx)

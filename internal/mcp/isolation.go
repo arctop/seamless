@@ -2,11 +2,13 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/gardener"
+	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -52,11 +54,20 @@ func (s *Server) callerScope(ctx context.Context) string {
 // resolve no scope at all, so without it any caller holding a ULID reads any
 // project's item.
 func (s *Server) fenceRead(ctx context.Context, target string) error {
+	err := s.fenceReadQuiet(ctx, target)
+	s.noteRefusal(ctx, err, target)
+	return err
+}
+
+// fenceReadQuiet is fenceRead without the access.refused event, for a caller
+// that uses the fence as a filter (dropping what it may not show) rather than
+// refusing the call.
+func (s *Server) fenceReadQuiet(ctx context.Context, target string) error {
 	// peer_auth first: a project this connection's OS account may not reach is
 	// refused with ITS rule and remedy. The isolation copy below would advise
 	// binding to the project with session_start, which peer_auth refuses too.
 	if !access.Visible(ctx, target) {
-		return access.Refusal(ctx, target)
+		return &fenceRefusal{reason: screening.RefusedPeerUnreach, err: access.Refusal(ctx, target)}
 	}
 	caller := s.callerScope(ctx)
 	allowed, err := store.CanRead(ctx, s.cfg.DB, caller, target)
@@ -74,10 +85,11 @@ func (s *Server) fenceRead(ctx context.Context, target string) error {
 		return err
 	}
 	if state.FencesOutbound() {
-		return fmt.Errorf("project %s is %s: reads require a session bound to it%s", target, state, bindRemedy(target))
+		return &fenceRefusal{reason: screening.RefusedFenceRead,
+			err: fmt.Errorf("project %s is %s: reads require a session bound to it%s", target, state, bindRemedy(target))}
 	}
-	return fmt.Errorf("this session is bound to %s project %s: reads outside it are disabled",
-		core.IsolationSealed, caller)
+	return &fenceRefusal{reason: screening.RefusedFenceRead, err: fmt.Errorf("this session is bound to %s project %s: reads outside it are disabled",
+		core.IsolationSealed, caller)}
 }
 
 // fenceWrite refuses a write that would cross an isolation fence. It backs the
@@ -97,8 +109,15 @@ func (s *Server) fenceRead(ctx context.Context, target string) error {
 // writable from outside, because relocating knowledge INTO the fence is how it
 // gets there. store.CanWrite owns that matrix; nothing here restates it.
 func (s *Server) fenceWrite(ctx context.Context, target string) error {
+	err := s.fenceWriteQuiet(ctx, target)
+	s.noteRefusal(ctx, err, target)
+	return err
+}
+
+// fenceWriteQuiet is fenceWrite without the access.refused event.
+func (s *Server) fenceWriteQuiet(ctx context.Context, target string) error {
 	if !access.Writable(ctx, target) {
-		return access.Refusal(ctx, target)
+		return &fenceRefusal{reason: screening.RefusedPeerUnreach, err: access.Refusal(ctx, target)}
 	}
 	caller := s.callerScope(ctx)
 	allowed, err := store.CanWrite(ctx, s.cfg.DB, caller, target)
@@ -115,11 +134,38 @@ func (s *Server) fenceWrite(ctx context.Context, target string) error {
 		return err
 	}
 	if state.FencesOutbound() {
-		return fmt.Errorf("this session is bound to %s project %s: writes outside it are disabled",
-			state, caller)
+		return &fenceRefusal{reason: screening.RefusedFenceWrite, err: fmt.Errorf("this session is bound to %s project %s: writes outside it are disabled",
+			state, caller)}
 	}
-	return fmt.Errorf("project %s is %s: writes into it require a session bound to it%s",
-		target, core.IsolationSealed, bindRemedy(target))
+	return &fenceRefusal{reason: screening.RefusedFenceWrite, err: fmt.Errorf("project %s is %s: writes into it require a session bound to it%s",
+		target, core.IsolationSealed, bindRemedy(target))}
+}
+
+// fenceRefusal is a fence's refusal: the error the agent reads, and the
+// access.refused reason it records. It unwraps to the error it carries, so
+// errors.Is on a peer_auth refusal still finds access.ErrNotReachable.
+type fenceRefusal struct {
+	reason string
+	err    error
+}
+
+func (f *fenceRefusal) Error() string { return f.err.Error() }
+func (f *fenceRefusal) Unwrap() error { return f.err }
+
+// noteRefusal records access.refused for a fence refusal (write screening,
+// when on): the reason, the tool, the target project and the caller's scope,
+// never the call's arguments. Any other error -- a store failure -- is not a
+// refusal and records nothing.
+func (s *Server) noteRefusal(ctx context.Context, err error, target string) {
+	var f *fenceRefusal
+	if s.cfg.Screening == nil || !errors.As(err, &f) {
+		return
+	}
+	tool, _ := ctx.Value(toolNameKey{}).(string)
+	s.cfg.Screening.RecordRefused(ctx, screening.Refusal{
+		Reason: f.reason, Surface: "mcp", Tool: tool, Target: target,
+		SessionID: s.boundSession(ctx), Project: s.callerScope(ctx),
+	})
 }
 
 // bindRemedy completes a fence refusal with the way through it and the reason

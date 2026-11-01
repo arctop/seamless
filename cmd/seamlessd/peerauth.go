@@ -24,6 +24,7 @@ import (
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -352,12 +353,14 @@ func peerHandler(policy *access.Policy, logger *slog.Logger, next http.Handler) 
 		cred, ok := r.Context().Value(peerCredKey{}).(peerCred)
 		if !ok || cred.err != nil {
 			logger.Warn("peer_auth: socket request without a peer credential", "error", cred.err)
+			access.NoteRefusal(r.Context(), screening.RefusedPeerUnknown)
 			http.Error(w, "forbidden: no peer credential", http.StatusForbidden)
 			return
 		}
 		view, known := policy.PeerView(cred.uid)
 		if !known {
 			logger.Warn("peer_auth: refused socket peer", "uid", cred.uid)
+			access.NoteRefusal(r.Context(), screening.RefusedPeerUnknown)
 			http.Error(w, fmt.Sprintf("forbidden: uid %d is not configured under peer_auth", cred.uid), http.StatusForbidden)
 			return
 		}

@@ -201,6 +201,29 @@ screening:
   # (hashes, ids and PEM certificate lines stay below the default).
   # env: SEAMLESS_SCREENING_BLOB_MIN_LENGTH
   blob_min_length: 200
+  # How often the drift watch compares every memory and note file with the
+  # hash Seamless last wrote for it. A file changed or planted outside Seamless
+  # stays on disk untouched but is kept out of briefings and prompt recall
+  # until you accept it on the Held screen. 0 turns the watch off.
+  # env: SEAMLESS_SCREENING_DRIFT_INTERVAL
+  drift_interval: 5m
+  # A file whose existence turns lockdown on (another program can create it
+  # during an incident; lockdown only ever narrows what agents receive, and
+  # the console cannot lift a lockdown this file holds). Unset: the Held
+  # screen's switch is the only way in. A leading ~ expands.
+  # env: SEAMLESS_SCREENING_LOCKDOWN_FILE
+  # lockdown_file: /path/to/lockdown.flag
+  # The Unix socket of a metadata feed's consumer: every event's metadata --
+  # kind, time, session, agent process, project (isolated ones as a keyed
+  # hash), item kind, sizes and verdict codes, never arguments, results,
+  # bodies or prompts -- is spooled and delivered there as NDJSON batches over
+  # HTTP. Unset: no feed. A leading ~ expands.
+  # env: SEAMLESS_SCREENING_FEED_SOCKET
+  # feed_socket: /path/to/consumer/ingest.sock
+  # Where the feed spools while its consumer is down (bounded: the oldest
+  # events go first, and are counted). Unset: <data_dir>/feed.
+  # env: SEAMLESS_SCREENING_FEED_SPOOL
+  # feed_spool: /path/to/spool
 
 # The observability console. Presentation only: nothing here changes what your
 # agents receive -- briefings, MCP tools, hooks, recall, and the gardener are

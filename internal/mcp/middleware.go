@@ -120,6 +120,9 @@ func (s *Server) logMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.ToolHan
 		// sessionHandleMiddleware further in, so the attribution read below
 		// credits the session a call named as well as the one it was bound to.
 		ctx = context.WithValue(ctx, sessionHandleSlotKey{}, &sessionHandleSlot{})
+		// The tool's name, for what a handler records about the call itself (a
+		// fence refusal's access.refused names the tool, never its arguments).
+		ctx = context.WithValue(ctx, toolNameKey{}, req.Params.Name)
 		start := time.Now()
 		result, err := next(ctx, req)
 		durMS := time.Since(start).Milliseconds()
@@ -170,6 +173,9 @@ func (s *Server) logMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.ToolHan
 		return result, err
 	}
 }
+
+// toolNameKey keys the called tool's name, planted by logMiddleware.
+type toolNameKey struct{}
 
 // attributionSlotKey keys the pre-allocated attribution slot logMiddleware
 // plants into the call context before running the handler.

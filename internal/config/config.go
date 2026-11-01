@@ -349,6 +349,31 @@ type Screening struct {
 	// long encoded blob. The default (200) clears hashes, ids and the
 	// 64-character lines of a PEM certificate.
 	BlobMinLength int `yaml:"blob_min_length"`
+	// DriftInterval is how often the drift watch compares every memory and
+	// note file with the hash Seamless last wrote for it. A file changed or
+	// planted outside Seamless is quarantined in place (kept out of briefing
+	// and prompt injection) until the owner accepts it. 0 turns the watch off.
+	// The default is 5m.
+	DriftInterval Duration `yaml:"drift_interval"`
+	// LockdownFile is a path whose existence turns lockdown on: no writes of
+	// briefing-injected kinds land without the owner's release, and only
+	// memories the review marked safe or the owner confirmed are injected.
+	// Another program (a security monitor during an incident) can create it;
+	// it can only ever reduce what agents receive, and the console cannot lift
+	// a lockdown the file holds. Empty -- the default -- leaves the console's
+	// switch as the only way in. A leading ~ expands.
+	LockdownFile string `yaml:"lockdown_file"`
+	// FeedSocket is the Unix socket of a metadata feed's consumer: while the
+	// feature is on, every event's metadata (kind, time, session, agent
+	// process, project -- isolated ones as a keyed hash -- item kind, sizes and
+	// verdict codes; never arguments, results, bodies or prompts) is spooled
+	// and delivered there as NDJSON batches over HTTP. Empty -- the default --
+	// turns the feed off. A leading ~ expands.
+	FeedSocket string `yaml:"feed_socket"`
+	// FeedSpool is the folder the feed spools to while its consumer is down
+	// (bounded; the oldest events are dropped first, and counted). Empty means
+	// <data_dir>/feed. A leading ~ expands.
+	FeedSpool string `yaml:"feed_spool"`
 }
 
 // Console tunes the human-facing observability console. Nothing here changes
@@ -539,7 +564,7 @@ func Defaults() Config {
 		// owner enables it. Existing installations holding research data are
 		// grandfathered on by a one-time store migration, not by this default.
 		Features:  Features{Research: false, Momentum: false, Gamification: false, Screening: false},
-		Screening: Screening{BlobMinLength: DefaultScreeningBlobMinLength},
+		Screening: Screening{BlobMinLength: DefaultScreeningBlobMinLength, DriftInterval: DefaultScreeningDriftInterval},
 		// A fresh installation starts at the fewest knobs. Existing
 		// installations are grandfathered to advanced by a one-time store
 		// migration, not by this default.
@@ -663,6 +688,9 @@ func LoadFrom(path string) (Config, error) {
 		{"tls.key_file", &cfg.TLS.KeyFile},
 		{"tls.ca_file", &cfg.TLS.CAFile},
 		{"peer_auth.socket.path", &cfg.PeerAuth.Socket.Path},
+		{"screening.lockdown_file", &cfg.Screening.LockdownFile},
+		{"screening.feed_socket", &cfg.Screening.FeedSocket},
+		{"screening.feed_spool", &cfg.Screening.FeedSpool},
 	} {
 		v, perr := expandHome(*p.dst)
 		if perr != nil {
@@ -903,6 +931,12 @@ func (c *Config) applyEnv() error {
 	if err := envInt("SEAMLESS_SCREENING_BLOB_MIN_LENGTH", &c.Screening.BlobMinLength); err != nil {
 		return err
 	}
+	if err := envDuration("SEAMLESS_SCREENING_DRIFT_INTERVAL", &c.Screening.DriftInterval); err != nil {
+		return err
+	}
+	envStr("SEAMLESS_SCREENING_LOCKDOWN_FILE", &c.Screening.LockdownFile)
+	envStr("SEAMLESS_SCREENING_FEED_SOCKET", &c.Screening.FeedSocket)
+	envStr("SEAMLESS_SCREENING_FEED_SPOOL", &c.Screening.FeedSpool)
 	envStr("SEAMLESS_CONSOLE_LEVEL", &c.Console.Level)
 	if err := envFloat("SEAMLESS_SEARCH_SEMANTIC_FLOOR", &c.Search.SemanticFloor); err != nil {
 		return err

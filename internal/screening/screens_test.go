@@ -79,6 +79,8 @@ func TestScan_Secrets(t *testing.T) {
 		{SecretGitHubToken, "token ghp_" + strings.Repeat("a1B2", 9)},
 		{SecretGitHubToken, "github_pat_" + strings.Repeat("A1b2C3d4", 4)},
 		{SecretSlackToken, "xoxb-" + "123456789012-abcdefABCDEF"},
+		{SecretSlackToken, "xoxb-" + "123456789012-1234567890123-" + "AbCdEfGhIjKlMnOpQrStUvWx"},
+		{SecretSlackToken, "xoxp-" + "1234-5678-9012-" + strings.Repeat("a1", 16)},
 		{SecretSlackToken, "https://hooks.slack.com/services/T0001/B0002/" + "abcdEFGH1234"},
 		{SecretOpenAIKey, "sk-proj-" + strings.Repeat("Ab3", 10)},
 		{SecretAnthropicKey, "sk-ant-api03-" + strings.Repeat("xY9", 10)},
@@ -99,6 +101,9 @@ func TestScan_Secrets(t *testing.T) {
 		"the sk-learn-pipeline-for-everything module",
 		"-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIUQ\n-----END CERTIFICATE-----",
 		"-----BEGIN PUBLIC KEY-----",
+		// A placeholder carries none of the digit groups a real Slack token has.
+		"set SLACK_BOT_TOKEN=xoxb-your-bot-token-here",
+		"xoxp-not-a-real-token-at-all",
 	} {
 		require.Empty(t, scan(text).Codes(), "%q", text)
 	}

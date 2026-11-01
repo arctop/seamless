@@ -35,6 +35,10 @@ type Service struct {
 	// updateNotice supplies the main-session briefing's update-notice line
 	// (SetUpdateNotice); nil, the default, renders none.
 	updateNotice UpdateNoticeFunc
+
+	// lockdown reports whether write screening's lockdown is on (SetLockdown);
+	// nil, the default, is never.
+	lockdown func(context.Context) bool
 }
 
 // UpdateNoticeFunc returns the one-line Seamless update notice for a briefing
@@ -88,6 +92,10 @@ func (s *Service) SetFeaturesConfig(c config.Features) { s.features = c }
 // other setters it is wiring-time configuration: call it before the Service
 // assembles briefings.
 func (s *Service) SetUpdateNotice(fn UpdateNoticeFunc) { s.updateNotice = fn }
+
+// SetLockdown installs write screening's lockdown check
+// (screening.Service.LockdownOn). Wiring-time, like the other setters.
+func (s *Service) SetLockdown(fn func(context.Context) bool) { s.lockdown = fn }
 
 // injectionRe strips imperative prompt-injection phrases from any free-prose
 // field lifted out of stored content and shown to an agent as trusted context.

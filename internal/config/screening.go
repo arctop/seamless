@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
 // DefaultScreeningBlobMinLength is screening.blob_min_length's default: an
@@ -11,6 +13,21 @@ import (
 // -- while a SHA-256 (64 hex characters), a git object id (40) and the
 // 64-character lines of a PEM certificate all stay below it.
 const DefaultScreeningBlobMinLength = 200
+
+// DefaultScreeningDriftInterval is screening.drift_interval's default: how
+// often the drift watch compares every memory and note file with the hash
+// Seamless last wrote. Reading and hashing a corpus of a few thousand small
+// files takes milliseconds, so five minutes is cheap and bounds how long an
+// out-of-band edit can reach agents before it is quarantined.
+const DefaultScreeningDriftInterval = Duration(5 * time.Minute)
+
+// Drift-interval bounds: below the floor the watch would contend with every
+// write for the corpus locks; above the ceiling an edit could reach a whole
+// day of briefings.
+const (
+	minScreeningDriftInterval = Duration(30 * time.Second)
+	maxScreeningDriftInterval = Duration(24 * time.Hour)
+)
 
 // Screening blob-length bounds. Below the floor every identifier and hash
 // would read as a blob; above the ceiling the screen could never fire on a
@@ -32,6 +49,19 @@ func (s Screening) Validate() error {
 	for _, h := range s.URLAllowlist {
 		if err := validAllowlistHost(h); err != nil {
 			return fmt.Errorf("config: screening.url_allowlist: %q %w", h, err)
+		}
+	}
+	if s.DriftInterval != 0 && (s.DriftInterval < minScreeningDriftInterval || s.DriftInterval > maxScreeningDriftInterval) {
+		return fmt.Errorf("config: screening.drift_interval must be 0 (off) or in [%s, %s]",
+			time.Duration(minScreeningDriftInterval), time.Duration(maxScreeningDriftInterval))
+	}
+	for _, p := range []struct{ key, path string }{
+		{"screening.lockdown_file", s.LockdownFile},
+		{"screening.feed_socket", s.FeedSocket},
+		{"screening.feed_spool", s.FeedSpool},
+	} {
+		if p.path != "" && !filepath.IsAbs(p.path) {
+			return fmt.Errorf("config: %s must be an absolute path (or start with ~/), got %q", p.key, p.path)
 		}
 	}
 	return nil

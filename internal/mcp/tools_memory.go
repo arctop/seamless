@@ -649,6 +649,9 @@ func (s *Server) handleMemoryDelete(ctx context.Context, req mcp.CallToolRequest
 		if screening.IsBriefingKind(idx.Kind) && s.sessionTainted(ctx, session) {
 			reasons = append(reasons, screening.ReasonTaintedSession)
 		}
+		if screening.IsBriefingKind(idx.Kind) && s.cfg.Screening.LockdownOn(ctx) {
+			reasons = append(reasons, screening.ReasonLockdown)
+		}
 		if len(reasons) > 0 {
 			h, herr := s.cfg.Screening.Hold(ctx, store.HeldWrite{
 				Op: store.HeldOpDelete, Tool: "memory_delete", ItemKind: core.ItemKindMemory, ItemID: idx.ID,

@@ -681,7 +681,7 @@ func briefingFromForm(r *http.Request) (config.Briefing, error) {
 // eventFeaturesChanged records an optional-feature toggle in the event log, so
 // a change of what agents can reach shows up in Activity with the same
 // attribution as every other owner action.
-const eventFeaturesChanged core.EventKind = "settings.features_changed"
+const eventFeaturesChanged = core.EventFeaturesChanged
 
 // eventLevelChanged records a console experience-level change in the event log
 // (payload {from, to, by: "console"}, plus reset: true when the owner went back

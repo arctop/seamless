@@ -265,7 +265,7 @@ var (
 	privateKeyRe = regexp.MustCompile(`-----BEGIN (?:(?:RSA|EC|DSA|OPENSSH|ENCRYPTED|PGP) )?PRIVATE KEY(?: BLOCK)?-----`)
 	awsKeyRe     = regexp.MustCompile(`\b(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b`)
 	githubRe     = regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,255})\b`)
-	slackRe      = regexp.MustCompile(`\bxox[abposr]-[A-Za-z0-9-]{10,}|https://hooks\.slack\.com/services/T[A-Za-z0-9]+/B[A-Za-z0-9]+/[A-Za-z0-9]+`)
+	slackRe      = regexp.MustCompile(`\bxox[abposre]-(?:\d+-){1,3}[A-Za-z0-9]{8,}|https://hooks\.slack\.com/services/T[A-Za-z0-9]+/B[A-Za-z0-9]+/[A-Za-z0-9]+`)
 	anthropicRe  = regexp.MustCompile(`\bsk-ant-[A-Za-z0-9_-]{20,}`)
 	openaiRe     = regexp.MustCompile(`\bsk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}`)
 	googleKeyRe  = regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}\b`)
@@ -273,6 +273,10 @@ var (
 	jwtRe        = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`)
 )
 
+// scanSecrets counts each secret format. A Slack token must carry the digit
+// groups real ones have (the team, user or bot ids, or the version of an
+// xoxa/xoxe token) before its secret part, so a placeholder that merely starts
+// with xoxb- ("xoxb-your-token-here") is not one.
 func scanSecrets(text string, f Findings) {
 	f[SecretPrivateKey] += len(privateKeyRe.FindAllStringIndex(text, -1))
 	for _, m := range awsKeyRe.FindAllString(text, -1) {
@@ -617,6 +621,7 @@ var codeWords = map[Code]string{
 	ReasonConstraintSupersede: "supersedes a constraint",
 	ReasonConstraintDelete:    "deletes or archives a constraint",
 	ReasonConstraintDemote:    "turns a constraint into another kind",
+	ReasonLockdown:            "changes a binding rule while lockdown is on",
 }
 
 // Describe returns a code's owner-facing description ("" for an unknown one).

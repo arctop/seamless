@@ -6575,6 +6575,10 @@ html:not(.js) .brief-preview { display: none; }
 .held-taint { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .held-taint form { margin: 0 0 0 auto; }
 .held-history li { font-size: var(--text-sm); }
+.held-lockdown h2, .held-corpus h2 { margin: 0; font-family: var(--font-serif); font-weight: 560; font-size: 19px; display: flex; align-items: center; gap: 8px; }
+.held-lockdown form, .held-corpus > form { margin: 10px 0 0; }
+.held-lockdown.is-on { border-left: 3px solid var(--warn); padding-left: 12px; }
+.held-corpus .held-list { margin-top: 12px; }
 .level-welcome-optin {
   display: flex; align-items: flex-start; gap: 10px; margin: 12px 0 0; padding: 10px 12px;
   border: 1px dashed var(--border); border-radius: var(--radius-md); font-size: var(--text-sm); cursor: pointer;

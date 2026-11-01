@@ -591,3 +591,52 @@ func treeAndRel(relPath string) (tree, rest string, ok bool) {
 		return "", "", false
 	}
 }
+
+// ReadFile returns a corpus file's raw text, unparsed. It refuses a symlink
+// or anything else that is not a regular file, like every reader here.
+func (s *Store) ReadFile(relPath string) (string, error) {
+	content, err := s.readFile(relPath)
+	if err != nil {
+		return "", fmt.Errorf("files.ReadFile: %w", err)
+	}
+	return content, nil
+}
+
+// CorpusPaths lists every markdown file under memory/ and notes/ as a
+// data-dir-relative, slash-separated path, in walk order. Symlinks and
+// anything that is not a regular file are skipped, as Reconcile skips them;
+// a missing tree contributes nothing.
+func (s *Store) CorpusPaths() ([]string, error) {
+	var out []string
+	for _, tree := range []string{memoryTree, notesTree} {
+		root := filepath.Join(s.dataDir, tree)
+		info, err := os.Lstat(root)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("files.CorpusPaths: lstat %s: %w", tree, err)
+		}
+		if !info.IsDir() {
+			return nil, fmt.Errorf("files.CorpusPaths: %w: %s is not a directory", ErrNotRegular, tree)
+		}
+		err = filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if d.Type()&os.ModeSymlink != 0 || d.IsDir() || !d.Type().IsRegular() || filepath.Ext(path) != ".md" {
+				return nil
+			}
+			rel, err := filepath.Rel(s.dataDir, path)
+			if err != nil {
+				return err
+			}
+			out = append(out, filepath.ToSlash(rel))
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("files.CorpusPaths: walk %s: %w", tree, err)
+		}
+	}
+	return out, nil
+}

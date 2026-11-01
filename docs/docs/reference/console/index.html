@@ -343,6 +343,26 @@ is not how Seamless is driven; it is how you watch it.</p>
 <td>The only way the mark comes off: the session's changes to binding rules land without a hold again.</td>
 </tr>
 <tr>
+<td>Turn lockdown on or off</td>
+<td><code>POST /console/held/lockdown</code></td>
+<td><code>on=1</code> or <code>on=0</code>. Your switch only: a lockdown the configured lockdown file holds stays on until that file goes.</td>
+</tr>
+<tr>
+<td>Re-run the review</td>
+<td><code>POST /console/held/review</code></td>
+<td>Screens every memory and note again and marks the clean ones safe as they read now; your own marks on unchanged items stand.</td>
+</tr>
+<tr>
+<td>Mark a flagged item safe</td>
+<td><code>POST /console/held/corpus/safe</code></td>
+<td><code>path=</code> the item's file. Safe as it reads now; a memory is also stamped owner-confirmed.</td>
+</tr>
+<tr>
+<td>Accept a file changed outside Seamless</td>
+<td><code>POST /console/held/corpus/accept</code></td>
+<td><code>path=</code> the file. Records it as it stands, lifts its quarantine, and stamps a memory owner-confirmed.</td>
+</tr>
+<tr>
 <td>Set a project's isolation</td>
 <td><code>POST /console/projects/{slug}/isolation</code></td>
 <td>Changes how far a project's knowledge travels. A tightening that would cut existing context first renders a confirmation step; nothing is written until it is confirmed.</td>
@@ -1415,10 +1435,20 @@ was held, only <strong>Discard</strong> is offered: a release would silently und
 later change.</li>
 <li><strong>Discard</strong> lands nothing and erases the held text.</li>
 </ul>
-<p>Below the queue, <strong>Sessions that read outside text</strong> lists every session an
-agent guard marked, with its reason and a <strong>Clear mark</strong> button - the only way
-a mark comes off. <strong>Recently decided</strong> keeps the last twenty releases and
-discards, without their text. The sidebar badge counts what is waiting.</p>
+<p>At the top, <strong>Lockdown</strong> says whether lockdown is on and what holds it, with
+the switch; a lockdown the configured lockdown file holds says so, and only
+that file going lifts it.</p>
+<p>Below the queue, <strong>Changed outside Seamless</strong> lists the memory and note files
+the drift watch quarantined - changed or planted on disk by something other
+than Seamless - with their verdict codes, the sessions they were injected into
+before, and their text with the same treatment as a held write. <strong>Accept</strong>
+records one as it stands and lets agents receive it again. <strong>Review</strong> counts
+the review's verdicts (safe, flagged, not reviewed), lists each flagged item
+the same way with <strong>Mark safe</strong>, and offers <strong>Re-run review</strong>.</p>
+<p><strong>Sessions that read outside text</strong> lists every session an agent guard
+marked, with its reason and a <strong>Clear mark</strong> button - the only way a mark
+comes off. <strong>Recently decided</strong> keeps the last twenty releases and discards,
+without their text. The sidebar badge counts what is waiting.</p>
 <h2 id="settings">Settings</h2>
 <p><code>/console/settings?s=&lt;section&gt;</code></p>
 <p>Settings is one section at a time, each shaped by what you came to do rather

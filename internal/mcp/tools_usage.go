@@ -125,7 +125,7 @@ func (s *Server) memoryReadable(ctx context.Context) func(memoryID string) bool 
 		if ok, seen := byProject[m.Project]; seen {
 			return ok
 		}
-		ok := s.fenceRead(ctx, m.Project) == nil
+		ok := s.fenceReadQuiet(ctx, m.Project) == nil
 		byProject[m.Project] = ok
 		return ok
 	}

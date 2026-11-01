@@ -20,10 +20,14 @@ const (
 	// ReasonConstraintDemote: the write turns a constraint into another kind,
 	// which drops it from the binding section of every briefing.
 	ReasonConstraintDemote Code = "constraint.demote"
+	// ReasonLockdown: lockdown is on, and the write touches a
+	// briefing-injected kind (writes it, replaces it, supersedes or deletes
+	// it). Every such write waits for the owner until lockdown lifts.
+	ReasonLockdown Code = "lockdown"
 )
 
 // Reasons lists the non-verdict hold reasons.
-var Reasons = []Code{ReasonTaintedSession, ReasonConstraintSupersede, ReasonConstraintDelete, ReasonConstraintDemote}
+var Reasons = []Code{ReasonTaintedSession, ReasonConstraintSupersede, ReasonConstraintDelete, ReasonConstraintDemote, ReasonLockdown}
 
 // BriefingKinds are the memory kinds that bind or steer every session:
 // constraints and conventions (each its own briefing section), stages (pinned

@@ -147,6 +147,9 @@ func (s *Service) PromptRecall(ctx context.Context, host, cwd, prompt string) (s
 		return "", nil, err
 	}
 	hits := scorePrompt(tokens, corpus)
+	// Write screening, when on: drift quarantine and lockdown apply here as in
+	// the briefing (the prompt corpus is cached, so the filter runs per prompt).
+	hits = s.filterHits(ctx, s.newWithholding(ctx), hits)
 	var marks map[string]string
 	if len(hits) > 0 && s.provenanceOn(ctx) {
 		marks = s.provenanceMarks(ctx, s.hitMemories(ctx, hits))

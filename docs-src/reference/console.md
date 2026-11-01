@@ -34,6 +34,10 @@ The console is **read-mostly**. That is a design claim, so here is the whole lis
 | Release a held write | `POST /console/held/{id}/release` | [Write screening](#held): lands a held agent write exactly as the agent sent it, and marks the memory owner-confirmed. Refused when its target changed after it was held. |
 | Discard a held write | `POST /console/held/{id}/discard` | Lands nothing and erases the held text; the row stays as the record. |
 | Clear a session's outside-text mark | `POST /console/held/sessions/{id}/clear` | The only way the mark comes off: the session's changes to binding rules land without a hold again. |
+| Turn lockdown on or off | `POST /console/held/lockdown` | `on=1` or `on=0`. Your switch only: a lockdown the configured lockdown file holds stays on until that file goes. |
+| Re-run the review | `POST /console/held/review` | Screens every memory and note again and marks the clean ones safe as they read now; your own marks on unchanged items stand. |
+| Mark a flagged item safe | `POST /console/held/corpus/safe` | `path=` the item's file. Safe as it reads now; a memory is also stamped owner-confirmed. |
+| Accept a file changed outside Seamless | `POST /console/held/corpus/accept` | `path=` the file. Records it as it stands, lifts its quarantine, and stamps a memory owner-confirmed. |
 | Set a project's isolation | `POST /console/projects/{slug}/isolation` | Changes how far a project's knowledge travels. A tightening that would cut existing context first renders a confirmation step; nothing is written until it is confirmed. |
 | Save briefing settings | `POST /console/settings/briefing` | Writes the briefing knobs as a runtime **override row** in the DB. It never writes the config file. |
 | Reset briefing settings | `POST /console/settings/briefing/reset` | Clears the override row, reverting to the file/env configuration. |
@@ -738,10 +742,22 @@ credential it holds.
   later change.
 - **Discard** lands nothing and erases the held text.
 
-Below the queue, **Sessions that read outside text** lists every session an
-agent guard marked, with its reason and a **Clear mark** button - the only way
-a mark comes off. **Recently decided** keeps the last twenty releases and
-discards, without their text. The sidebar badge counts what is waiting.
+At the top, **Lockdown** says whether lockdown is on and what holds it, with
+the switch; a lockdown the configured lockdown file holds says so, and only
+that file going lifts it.
+
+Below the queue, **Changed outside Seamless** lists the memory and note files
+the drift watch quarantined - changed or planted on disk by something other
+than Seamless - with their verdict codes, the sessions they were injected into
+before, and their text with the same treatment as a held write. **Accept**
+records one as it stands and lets agents receive it again. **Review** counts
+the review's verdicts (safe, flagged, not reviewed), lists each flagged item
+the same way with **Mark safe**, and offers **Re-run review**.
+
+**Sessions that read outside text** lists every session an agent guard
+marked, with its reason and a **Clear mark** button - the only way a mark
+comes off. **Recently decided** keeps the last twenty releases and discards,
+without their text. The sidebar badge counts what is waiting.
 
 ## Settings
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/arctop/seamless/internal/core"
@@ -43,12 +44,37 @@ type Config struct {
 	Rules    Rules
 	Logger   *slog.Logger
 	Now      func() time.Time // nil = time.Now
+
+	// Enabled reports whether the screening feature is on for a request (the
+	// file/env base overlaid with the console's override). The corpus watch,
+	// lockdown and refusal events ask it; nil means off.
+	Enabled func(context.Context) bool
+	// LockdownFile is screening.lockdown_file: a path whose existence turns
+	// lockdown on ("" = none).
+	LockdownFile string
+	// DriftInterval is screening.drift_interval (0: no drift checks).
+	DriftInterval time.Duration
 }
 
 // Service owns the held queue and the session marks. It never decides whether
 // the feature is on: the surfaces ask features.Screening first.
 type Service struct {
 	cfg Config
+
+	// syncMu serializes arming, the review and the resync: two passes over
+	// the corpus at once would only race each other's records.
+	syncMu sync.Mutex
+
+	// lockMu guards the flag file's last-seen state (noteLockdownFile).
+	lockMu      sync.Mutex
+	fileSeen    bool
+	filePresent bool
+
+	// refusals rate-limits access.refused (RecordRefused).
+	refusals refusalLimiter
+
+	// runDone is closed when Run's loop returns; nil until Run.
+	runDone chan struct{}
 }
 
 // New builds a Service.

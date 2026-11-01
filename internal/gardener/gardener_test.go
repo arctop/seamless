@@ -111,6 +111,37 @@ func TestPruneToolEvents_OnlyOldTransport(t *testing.T) {
 	require.Len(t, got2, 2)
 }
 
+// Forensics retention (write screening): retrieval.injected is a domain
+// event, so the retention prune never takes it, however old -- the record that
+// answers "which sessions received memory M" when M turns out poisoned -- and
+// neither does any part-2 security event.
+func TestPruneToolEvents_KeepsTheInjectionLedger(t *testing.T) {
+	ctx := context.Background()
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	rec := events.NewRecorder(db)
+	now := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	ancient := now.AddDate(-3, 0, 0)
+	kept := []core.EventKind{core.EventInjected, core.EventAccessRefused, core.EventCorpusDrift, core.EventCorpusReviewed,
+		core.EventCorpusConfirmed, core.EventLockdownChanged, core.EventMemoryScreened, core.EventMemoryHeld}
+	for _, k := range kept {
+		_, err := rec.Record(ctx, core.Event{TS: ancient, Kind: k, SessionID: "S1",
+			Payload: map[string]any{"item_ids": []string{"01MEMORY000000000000000000"}}})
+		require.NoError(t, err)
+	}
+	g := New(db, nil, nil, nil, rec, Config{ToolEventRetentionDays: 1}, slog.Default())
+	g.now = func() time.Time { return now }
+	g.pruneToolEvents(ctx)
+	got, err := rec.ByKinds(ctx, kept, "", "", 100)
+	require.NoError(t, err)
+	require.Len(t, got, len(kept), "no security or injection event is pruned")
+	sessions, err := store.InjectedSessions(ctx, db, "01MEMORY000000000000000000", 0)
+	require.NoError(t, err)
+	require.Len(t, sessions, 1)
+	require.Equal(t, "S1", sessions[0].SessionID)
+}
+
 func TestReapStaleSessions(t *testing.T) {
 	ctx := context.Background()
 	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))

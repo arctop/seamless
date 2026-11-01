@@ -76,6 +76,11 @@ type heldPageData struct {
 	Pending []heldRow  `json:"pending"`
 	Recent  []heldRow  `json:"recent"`
 	Tainted []taintRow `json:"tainted"`
+	// Part 2: lockdown, the review, and drift quarantine.
+	Lockdown lockdownView `json:"lockdown"`
+	Review   reviewView   `json:"review"`
+	Flagged  []corpusRow  `json:"flagged"`
+	Drifted  []corpusRow  `json:"drifted"`
 }
 
 func (s *Service) heldPage(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +119,11 @@ func (s *Service) heldPage(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	data := heldPageData{Pending: []heldRow{}, Recent: []heldRow{}, Tainted: []taintRow{}}
+	data := heldPageData{Pending: []heldRow{}, Recent: []heldRow{}, Tainted: []taintRow{}, Flagged: []corpusRow{}, Drifted: []corpusRow{}}
+	if err := s.corpusSections(r, &data); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	for _, h := range pending {
 		data.Pending = append(data.Pending, s.heldRowOf(r, h, refs[h.SessionID].Name, true))
 	}

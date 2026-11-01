@@ -29,7 +29,7 @@ Strict layering, no circular imports. `cmd/` wires everything; no package import
 ```
 cmd/seamlessd, cmd/seam, cmd/seambench, cmd/demoseed, cmd/docsgen
   -> internal/{mcp,hooks,console}         (API surfaces)
-    -> internal/{retrieve,lifecycle,gardener,files,capture,bench,demokit,update} (domains)
+    -> internal/{retrieve,lifecycle,gardener,files,capture,bench,demokit,update,screening,feed} (domains)
       -> internal/{store,events,llm,core,config,validate,access}   (foundations)
 ```
 
@@ -306,6 +306,48 @@ behavior). Guide: docs-src/guides/write-screening.md.
 - **Provenance names a session only inside the memory's own scope**
   (`retrieve.MemoryProvenance`): a global memory written from a project must
   not carry that project's session name into other briefings.
+
+Part 2 of the same feature (migration 029, `internal/screening/corpus.go`,
+`refused.go`, `internal/feed`):
+
+- **One corpus record.** `corpus_records` (keyed by file path) holds the hash
+  Seamless last wrote, the review's verdict and the digest it judged, and the
+  drift quarantine. `files.Manager.WriteMemory`/`WriteNote`/`Remove` record
+  every write, but only while the watch is ARMED (the `screening_corpus_armed`
+  setting, checked in the same statement): the record never claims a write
+  nobody recorded. A new corpus writer goes through the Manager, or its writes
+  read as drift.
+- **The review runs at the first turn-on, never in a migration.** Migrations
+  are SQL; the review reads files and runs the screens. Arming the first time
+  runs it (`Service.Sync`); re-arming after the feature was off resyncs hashes
+  and leaves trust marks alone. Only the owner re-runs it.
+- **Trust is a digest, never a flag.** A memory is trusted while
+  `core.MemoryDigest` of its current content equals the review's digest
+  (status safe) or its owner confirmation. Never mark an item trusted without
+  stamping the digest it was judged at.
+- **Drift is quarantine in place.** Never move, rewrite or delete a drifted
+  file: the owner may have edited it in an editor, and its only copy is on
+  disk. Only the owner's Accept (or the bytes returning to `drift_base`) lifts
+  a quarantine; a Seamless write over it does not, and an edit of it is
+  screened against no baseline (`Server.drifted`).
+- **Withholding is at injection only.** `retrieve` drops drifted memories
+  (feature on) and untrusted ones (lockdown) from briefings and prompt recall
+  (`withholding`). Recall and memory_read are not narrowed.
+- **Lockdown only reduces.** It holds writes of briefing-injected kinds
+  (`ReasonLockdown`) and narrows injection; the flag file
+  (`screening.lockdown_file`) cannot be lifted from the console, and a file
+  that cannot be checked counts as present.
+- **access.refused carries codes.** Fence refusals are recorded in
+  `fenceRead`/`fenceWrite` (a caller using the fence as a filter calls the
+  `...Quiet` variant); a 401 anywhere and a reason noted with
+  `access.NoteRefusal` are recorded by `refusalWatch` (cmd/seamlessd).
+  Rate-limited; never arguments.
+- **The feed is an allowlist.** `feed.frameFields` lists every payload key a
+  frame may carry, each checked against its type's pattern; nothing else in an
+  event reaches a frame, and `TestFrames_CarryNoContent` scans for content. A
+  new event payload key reaches the feed only by being listed there. The feed
+  tails the event log by rowid (not by time, not through the lossy live
+  fan-out) from a cursor in its spool.
 
 ### FTS5 and LIKE escaping (`internal/store`)
 
@@ -651,6 +693,8 @@ writes are the owner's overrides and curation actions, among them -- archive a
 memory, approve a plan, force-release a task's claim lock,
 ask/split/apply/dismiss/retarget a gardener proposal, save or reset the
 briefing settings, switch update checks and automatic updates (or hand both
-back to the config), check for updates now, update now, and resume automatic
-updates. Keep pages self-contained and dependency-free so an agent can edit
+back to the config), check for updates now, update now, resume automatic
+updates, and -- with write screening on -- release or discard a held write,
+clear a session's mark, switch lockdown, re-run the review, mark a flagged item
+safe and accept a file changed outside Seamless. Keep pages self-contained and dependency-free so an agent can edit
 them without a toolchain.
