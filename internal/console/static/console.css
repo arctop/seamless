@@ -6556,8 +6556,12 @@ html:not(.js) .brief-preview { display: none; }
 .held-preview-box { margin-top: 10px; }
 .held-preview-box summary { cursor: pointer; font-size: var(--text-sm); }
 .held-preview-box summary small { color: var(--faint); }
+/* No height cap: the whole held text shows (the server already cuts it at
+   heldPreviewMaxRunes), so Release sits below all of it. An inner scroller
+   could hide the part that was held below its fold, with no visible scrollbar
+   on overlay-scrollbar systems. */
 .held-preview {
-  margin: 8px 0 0; padding: 10px 12px; max-height: 360px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  margin: 8px 0 0; padding: 10px 12px; overflow: auto; white-space: pre-wrap; word-break: break-word;
   border: 1px solid var(--border); border-radius: var(--radius-md); background: color-mix(in oklab, var(--ink) 4%, var(--surface-solid));
   font-family: var(--font-mono); font-size: var(--text-xs);
 }
