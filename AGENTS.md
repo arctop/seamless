@@ -279,6 +279,34 @@ any of it.
   both directions, and checks state after every write. A new surface gets a
   row there.
 
+### Write screening (`internal/screening`)
+
+The `screening` optional feature (off by default; off is exactly the previous
+behavior). Guide: docs-src/guides/write-screening.md.
+
+- **A held write never touches the corpus.** It lives in the `held_writes`
+  queue, not under `memory/` or `notes/`, and that is the whole exclusion:
+  briefings, recall, prompt injection and the gardener read only those trees,
+  so no reconcile or rebuild can un-hold it. Never "hold" by writing the file
+  and filtering it out of readers.
+- **Judge right before the files layer.** Every MCP tool that lands content
+  asks `screeningOn` and, inside the same lock as its read, calls
+  `judgeMemoryWrite`/`judgeNoteWrite` just before `WriteMemory`/`WriteNote`; a
+  `heldError` aborts the mutation. A new content-writing tool joins them.
+  Deletes and gardener applies of a constraint are held by reason, not screen.
+- **A held call is held whole.** A `memory_write` that supersedes a constraint
+  writes neither half; the release applies both. A release refuses a stale
+  target (`ErrStale`) rather than undo a later write.
+- **Events carry codes, never text.** `memory.screened`, `memory.held`,
+  `memory.released` and `memory.discarded` hold verdict and reason codes, ids,
+  kinds and sizes; never a body, a description, or the matched substring.
+- **Clearing a taint mark is the owner's.** The session-taint hook only sets
+  it; only the console's Held screen clears it. Do not add an MCP or hook path
+  that clears one.
+- **Provenance names a session only inside the memory's own scope**
+  (`retrieve.MemoryProvenance`): a global memory written from a project must
+  not carry that project's session name into other briefings.
+
 ### FTS5 and LIKE escaping (`internal/store`)
 
 - User text reaching `MATCH` goes through `ftsQuery` (`fts.go`): it splits on

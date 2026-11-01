@@ -178,6 +178,29 @@ features:
   # real recorded activity; off, the Now screen carries no trace of it.
   # env: SEAMLESS_FEATURES_GAMIFICATION
   gamification: false
+  # Write screening: every agent write to a memory or note is screened for
+  # secrets, injection markers, hidden Unicode, long encoded blobs and URLs
+  # outside screening.url_allowlist. A suspicious write -- and any change to a
+  # constraint, convention, protocol or stage by a session an agent guard
+  # marked as having read outside text, and any supersede or delete of a
+  # constraint -- is held out of briefings, recall and the gardener until you
+  # release it on the console's Held screen; injected memories say whether you
+  # confirmed them or an agent wrote them. Off, writes land exactly as before.
+  # The Home welcome card offers it too. Tunables: the screening block below.
+  # env: SEAMLESS_FEATURES_SCREENING
+  screening: false
+
+# The write screens behind features.screening (inert while it is off).
+screening:
+  # Hosts a URL in a screened write may point at without a verdict; each entry
+  # covers its subdomains too. Unset or empty turns the URL screen off. A URL
+  # to any other host holds the write for your review.
+  # env: SEAMLESS_SCREENING_URL_ALLOWLIST (comma-separated)
+  # url_allowlist: [example.com, docs.example.org]
+  # The shortest unbroken base64 or hex run that counts as a long encoded blob
+  # (hashes, ids and PEM certificate lines stay below the default).
+  # env: SEAMLESS_SCREENING_BLOB_MIN_LENGTH
+  blob_min_length: 200
 
 # The observability console. Presentation only: nothing here changes what your
 # agents receive -- briefings, MCP tools, hooks, recall, and the gardener are

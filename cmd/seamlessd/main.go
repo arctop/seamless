@@ -48,6 +48,7 @@ import (
 	"github.com/arctop/seamless/internal/llm"
 	"github.com/arctop/seamless/internal/mcp"
 	"github.com/arctop/seamless/internal/retrieve"
+	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/update"
 )
@@ -395,12 +396,20 @@ func runServe(args []string) error {
 		chat = c
 	}
 	garden := gardener.New(db, mgr, embedder, chat, rec, gardener.FromConfig(cfg.Gardener), logger)
+	// Write screening (the screening optional feature): the held queue and the
+	// session marks. Built unconditionally and inert while the feature is off --
+	// every surface asks the effective features before calling in, so the
+	// console toggle applies without a restart.
+	screen := screening.New(screening.Config{
+		DB: db, Files: mgr, Events: rec, Gardener: garden, Logger: logger,
+		Rules: screening.Rules{URLAllowlist: cfg.Screening.URLAllowlist, BlobMinLength: cfg.Screening.BlobMinLength},
+	})
 
 	if cfg.MCP.APIKey == "" {
 		slog.Warn("mcp.api_key is empty; MCP and hook requests will be rejected -- set it in seamless.yaml")
 	}
 	mcpSrv := mcp.New(mcp.Config{
-		DB: db, Files: mgr, Retrieve: ret, Events: rec, Gardener: garden, Embedder: embedder,
+		DB: db, Files: mgr, Retrieve: ret, Events: rec, Gardener: garden, Embedder: embedder, Screening: screen,
 		APIKey: cfg.MCP.APIKey, Version: buildVersion(), LocalHost: config.Hostname(),
 		ToolEventMaxChars:   cfg.Budgets.ToolEventMaxChars,
 		CaptureAllowedPorts: cfg.Capture.AllowedPorts, Logger: logger,
@@ -427,6 +436,7 @@ func runServe(args []string) error {
 		DB: db, Retrieve: ret, Events: rec, Files: mgr,
 		APIKey: cfg.MCP.APIKey, MaxEventChars: cfg.Budgets.ToolEventMaxChars,
 		PlanCapture: cfg.PlanCapture, LocalHost: config.Hostname(), Logger: logger,
+		Features: cfg.Features, Screening: screen,
 	})
 	// The console reads through a handle on which projects sealed to other OS
 	// accounts do not exist, when there are any (store.OpenView); its writes go
@@ -443,7 +453,8 @@ func runServe(args []string) error {
 	}
 	consoleSrv, err := console.New(console.Config{
 		DB: consoleDB, WriteDB: consoleWriteDB, Files: mgr, Gardener: garden, Events: consoleEvents, Retrieve: ret,
-		APIKey: cfg.MCP.APIKey, DataDir: cfg.DataDir, ConfigPath: absConfigPath(cfg.SourcePath()),
+		Screening: screen,
+		APIKey:    cfg.MCP.APIKey, DataDir: cfg.DataDir, ConfigPath: absConfigPath(cfg.SourcePath()),
 		DBPath:  cfg.DBPath(),
 		Budgets: cfg.Budgets, GardenerCfg: cfg.Gardener, BriefingCfg: cfg.Briefing,
 		// The file/env optional-features base; the console layers its own stored

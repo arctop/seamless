@@ -72,7 +72,7 @@ func TestFeaturesConfigStoredShapeMatchesMigration(t *testing.T) {
 	raw, found, err := GetSetting(ctx, db, SettingFeaturesConfig)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, `{"research":true,"momentum":false,"gamification":false}`, raw,
+	require.Equal(t, `{"research":true,"momentum":false,"gamification":false,"screening":false}`, raw,
 		"the migration's seeded {\"research\":true} decodes over this shape: absent keys stay at the base value")
 }
 

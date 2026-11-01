@@ -104,7 +104,7 @@ func TestScreenRegistry_WellFormed(t *testing.T) {
 	}
 	// The existing chords survive the move to the registry.
 	require.Equal(t, map[string]bool{"o": true, "n": true, "i": true, "m": true, "e": true, "r": true, "g": true,
-		"w": true, "p": true, "t": true, "s": true, "l": true, "x": true, ",": true}, keys)
+		"w": true, "p": true, "t": true, "s": true, "l": true, "x": true, ",": true, "h": true}, keys)
 }
 
 // Monotonic: each level shows everything the previous one does, with every
@@ -125,7 +125,8 @@ func TestScreenRegistry_VisibleSetsNest(t *testing.T) {
 	for _, sc := range visibleScreens(featuresAll(true), levelBasic) {
 		basic = append(basic, sc.ID)
 	}
-	require.Equal(t, []string{"overview", "memories", "notes", "gardener", "sessions", "settings", "search"}, basic)
+	require.Equal(t, []string{"overview", "memories", "notes", "gardener", "held", "sessions", "settings", "search"}, basic,
+		"held is a basic screen while write screening is on: whoever turns it on must reach what it holds")
 	require.Len(t, visibleScreens(featuresAll(true), levelAdvanced), len(screenRegistry()))
 }
 

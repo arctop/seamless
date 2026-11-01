@@ -83,6 +83,11 @@ var screens = []screen{
 		Min: levelAdvanced, NavRow: true},
 	{ID: "gardener", Label: "Gardener", Icon: "sprout", Href: "/console/gardener", Group: groupKnowledge, Key: "g",
 		Min: levelBasic, NavRow: true, Badge: "proposals", BadgeTitle: "Proposals waiting for review", BadgeZero: true},
+	// Basic, because an owner who turns write screening on at any level must
+	// be able to reach what it holds.
+	{ID: "held", Label: "Held", Icon: "lock", Href: "/console/held", Group: groupKnowledge, Key: "h",
+		Min: levelBasic, Feature: features.Screening, NavRow: true, Badge: "held",
+		BadgeTitle: "Writes held for your review", BadgeZero: true},
 	{ID: "projects", Label: "Projects", Icon: "table-2", Href: "/console/projects", Group: groupWork, Key: "w",
 		Min: levelStandard, NavRow: true, Badge: "projects", Scope: "projects"},
 	{ID: "plans", Label: "Plans", Icon: "map", Href: "/console/plans", Group: groupWork, Key: "p",
@@ -219,6 +224,8 @@ func (n navCounts) count(badge string) (int, bool) {
 		return n.Labs, true
 	case "trials":
 		return n.Trials, true
+	case "held":
+		return n.Held, true
 	default:
 		return 0, false
 	}

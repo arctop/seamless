@@ -445,6 +445,16 @@ const (
 	// Project isolation: the owner moved a project's agent-facing fence.
 	EventProjectIsolationChanged EventKind = "project.isolation.changed" // (payload: slug, from, to, families + parent detached by a tighten, by)
 
+	// Write screening (the screening optional feature, internal/screening).
+	// Payloads carry verdict and reason codes, ids, kinds and sizes -- never a
+	// body, a description, or the text a screen matched.
+	EventMemoryScreened  EventKind = "memory.screened"   // a screened write (item_id: the memory or note; payload: item_kind, kind, tool, size, verdicts, held)
+	EventMemoryHeld      EventKind = "memory.held"       // a write was held out of the corpus for the owner (item_id: the item it lands on; payload: hold, op, item_kind, kind, tool, reasons)
+	EventMemoryReleased  EventKind = "memory.released"   // the owner released a held write and it landed (item_id; payload: hold, op, item_kind, kind, by)
+	EventMemoryDiscarded EventKind = "memory.discarded"  // the owner discarded a held write; its text is erased (item_id; payload: hold, op, item_kind, kind, by)
+	EventSessionTainted  EventKind = "session.tainted"   // a session was marked as having read outside text (session_id; payload: reason, via); recorded once per session
+	EventSessionCleared  EventKind = "session.untainted" // the owner cleared a session's outside-text mark (session_id; payload: by)
+
 	// Background update check (internal/update). Payload values are parsed
 	// X.Y.Z versions and fixed install-kind words, never release-API text.
 	EventUpdateAvailable EventKind = "update.available" // a newer installable release was seen (item_id: the version; payload: version, current, kind); latched once per version via RecordOnce

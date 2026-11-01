@@ -158,6 +158,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
         
+        <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
+        
         <li><a href="../../guides/troubleshooting/">Troubleshooting</a></li>
         
       </ul>
@@ -272,8 +274,8 @@ restart, and stay until reset.</li>
 </tr>
 <tr>
 <td><code>features:</code></td>
-<td>Settings → <a href="../../reference/console/#optional-features">Features</a></td>
-<td>Immediately in the console; an agent sees it from its next session (tool lists and briefings alike).</td>
+<td>Settings → <a href="../../reference/console/#optional-features">Features</a>, or the Home welcome card's write-screening box</td>
+<td>Immediately in the console; an agent sees it from its next session (tool lists and briefings alike), and write screening from its next write.</td>
 </tr>
 <tr>
 <td><code>console.level</code></td>
@@ -556,6 +558,21 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <td><code>features.gamification</code></td>
 <td>bool</td>
 <td>-</td>
+</tr>
+<tr>
+<td><code>features.screening</code></td>
+<td>bool</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>screening.url_allowlist</code></td>
+<td>[]string</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>screening.blob_min_length</code></td>
+<td>int</td>
+<td><code>200</code></td>
 </tr>
 <tr>
 <td><code>console.level</code></td>
@@ -937,6 +954,29 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># real recorded activity; off, the Now screen carries no trace of it.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_FEATURES_GAMIFICATION</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">gamification</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Write screening: every agent write to a memory or note is screened for</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># secrets, injection markers, hidden Unicode, long encoded blobs and URLs</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># outside screening.url_allowlist. A suspicious write -- and any change to a</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># constraint, convention, protocol or stage by a session an agent guard</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># marked as having read outside text, and any supersede or delete of a</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># constraint -- is held out of briefings, recall and the gardener until you</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># release it on the console&#39;s Held screen; injected memories say whether you</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># confirmed them or an agent wrote them. Off, writes land exactly as before.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># The Home welcome card offers it too. Tunables: the screening block below.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_FEATURES_SCREENING</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">screening</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># The write screens behind features.screening (inert while it is off).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">screening</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Hosts a URL in a screened write may point at without a verdict; each entry</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># covers its subdomains too. Unset or empty turns the URL screen off. A URL</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># to any other host holds the write for your review.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_SCREENING_URL_ALLOWLIST (comma-separated)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># url_allowlist: [example.com, docs.example.org]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># The shortest unbroken base64 or hex run that counts as a long encoded blob</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># (hashes, ids and PEM certificate lines stay below the default).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_SCREENING_BLOB_MIN_LENGTH</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">blob_min_length</span><span class="p">:</span><span class="w"> </span><span class="m">200</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># The observability console. Presentation only: nothing here changes what your</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># agents receive -- briefings, MCP tools, hooks, recall, and the gardener are</span><span class="w">

@@ -234,6 +234,14 @@ func featureDataKept(key features.Key, n navCounts) string {
 		}
 		return fmt.Sprintf("Data kept: %s across %s.",
 			plural(n.Trials, "trial", "trials"), plural(n.Labs, "lab", "labs"))
+	case features.Screening:
+		// Turning screening off never releases what it holds: the writes stay
+		// out of the corpus until it is back on and the owner decides.
+		if n.Held == 0 {
+			return "Nothing is held."
+		}
+		return fmt.Sprintf("Data kept: %s waiting for review; turning this off releases none of them.",
+			plural(n.Held, "held write", "held writes"))
 	default:
 		return ""
 	}

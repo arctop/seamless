@@ -158,6 +158,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
         
+        <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
+        
         <li><a href="../../guides/troubleshooting/">Troubleshooting</a></li>
         
       </ul>
@@ -232,7 +234,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </details>
   <p>Seamless installs hooks for two clients: seven for Claude Code (including
@@ -522,6 +524,34 @@ MCP state. It also checks the recorded binary and config targets exist. A machin
 with no Codex CLI, initialized home, or Seamless Codex configuration is one quiet
 <code>not detected</code> line, never a failure. <code>seam doctor</code> covers the other half: it hits
 <code>/healthz</code> and calls <code>tools/list</code>, which proves the endpoint and key are working.</p>
+<h2 id="session-taint">The outside-text mark: session-taint</h2>
+<p>One more endpoint lives beside the hooks, and no profile installs it:
+<code>POST /api/hooks/session-taint</code> is for an <strong>agent guard</strong> - a hook of your own
+that knows which tools bring outside text into a session (a web fetch, a
+search, a mail reader). After one runs, the guard marks the session, and from
+then on, with <a href="../../guides/write-screening/">write screening</a> on, the session's
+changes to constraints, conventions, protocols and stages are held for your
+release instead of landing.</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="c1"># In the guard&#39;s PostToolUse hook, forward its stdin unchanged:</span>
+</span></span><span class="line"><span class="cl">seam hook session-taint                 <span class="c1"># Claude Code</span>
+</span></span><span class="line"><span class="cl">seam hook session-taint --client codex  <span class="c1"># Codex</span>
+</span></span></code></pre></div>
+<p>The body is a hook payload: the client's own <code>session_id</code> (with <code>?client=</code>
+naming the client, as for every hook), or <code>{&quot;session&quot;: &quot;&lt;ULID or cc/... name&gt;&quot;}</code>
+for a caller that knows the Seamless session. An optional <code>reason</code> is a short
+code (<code>web_fetch</code>, <code>mail</code>); without one, the payload's <code>tool_name</code> becomes the
+reason (<code>tool:webfetch</code>). It authenticates like every hook - the bearer key,
+or the peer_auth socket - and under peer_auth a session of another account is
+not found.</p>
+<p>It is the one hook route that reports its outcome: the body is always the
+plain acknowledgement (<code>{&quot;continue&quot;:true,&quot;suppressOutput&quot;:true}</code>), so a guard
+that uses <code>seam hook session-taint</code> as its whole hook command hands its client
+valid hook output, while the <code>X-Seamless-Taint</code> header and the status say what
+happened - <code>marked</code> or <code>already-marked</code> (200; the first mark stands), <code>off</code>
+(200; screening is off, nothing marked), <code>unknown-session</code> (404), <code>invalid</code>
+(400). <code>seam hook</code> still exits 0 on every one of them.</p>
+<p>Nothing clears a mark through a hook, a flag or an MCP tool: only the owner,
+on the console's Held screen.</p>
 <h2 id="what-rides-on-the-query-string">What rides on the query string</h2>
 <p>A hook body is the agent client's schema, not Seamless's, so everything
 Seamless needs <em>about</em> the call travels beside it as query parameters on the
@@ -817,7 +847,7 @@ live/schema evidence and the recapture procedure.</li>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </aside>
   

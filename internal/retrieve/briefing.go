@@ -171,7 +171,11 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 		if len(constraints) > 0 {
 			relevant = s.subagentRelevant(ctx, project, in.Prompt, constraints)
 		}
-		text, ids := s.assembleSubagent(project, iso, constraints, relevant, cfg)
+		var marks map[string]string
+		if len(constraints) > 0 && s.provenanceOn(ctx) {
+			marks = s.provenanceMarks(ctx, constraints, s.hitMemories(ctx, relevant))
+		}
+		text, ids := s.assembleSubagent(project, iso, constraints, relevant, marks, cfg)
 		return text, ids, nil
 	}
 
@@ -238,8 +242,14 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 		len(stages) == 0 && len(rollups) == 0 && len(pending) == 0 {
 		return "", nil, nil
 	}
+	// Provenance marks (screening on) for every memory a line may name. A
+	// pinned stage renders from its index row, so the stage memories go in too.
+	var marks map[string]string
+	if s.provenanceOn(ctx) {
+		marks = s.provenanceMarks(ctx, constraints, favorites, conventions, index, siblingMems, stageMems)
+	}
 	text, ids := s.assembleBriefing(project, in.Source, briefingSections{
-		constraints: constraints, favorites: favorites, conventions: conventions,
+		constraints: constraints, favorites: favorites, conventions: conventions, provenance: marks,
 		index: index, indexOmitted: omitted,
 		findings: findings, ready: ready, siblings: siblings,
 		siblingMems: siblingMems, stages: stages, plans: rollups,
@@ -710,7 +720,11 @@ type briefingSections struct {
 	isolation    core.Isolation     // the project's fence state; open renders no line
 	notice       string             // sanitized update-notice line ("" = none), pinned under the isolation line
 	momentum     bool               // momentum feature on: near-done plan lines carry the finish-line emphasis
+	provenance   map[string]string  // memory id -> provenance mark (screening on); nil renders no marks
 }
+
+// mark is a memory line's provenance suffix: "" while provenance is off.
+func (sec briefingSections) mark(id string) string { return sec.provenance[id] }
 
 // assembleBriefing packs the grouped sections against the token budget. The
 // pinned content -- the header line, the isolation line, the update notice,
@@ -765,7 +779,7 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 		constraintsSec.WriteString("\nConstraints (binding for every session):\n")
 		full, compact := constraintTiers(constraints, cfg.ConstraintMaxFull)
 		for _, c := range full {
-			constraintsSec.WriteString("- " + sanitizeName(c.Name, 80) + ": " + sanitizeField(c.Description, 160) + "\n")
+			constraintsSec.WriteString("- " + sanitizeName(c.Name, 80) + ": " + sanitizeField(c.Description, 160) + sec.mark(c.ID) + "\n")
 			ids = append(ids, c.ID)
 		}
 		// The compact tier is part of the same pinned section -- budget can drop
@@ -779,7 +793,7 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 	// The pinned Stages section sits right after constraints and, like them, is
 	// never dropped for budget -- a gated stage's status is load-bearing for
 	// the whole session.
-	stagesSec := stagesSection(sec.stages)
+	stagesSec := stagesSection(sec.stages, sec.provenance)
 	for _, st := range sec.stages {
 		ids = append(ids, st.id)
 	}
@@ -892,7 +906,7 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 		full, _ := conventionTiers(sec.conventions, cfg.ConventionMaxFull)
 		shown := 0
 		for _, m := range full {
-			line := "- " + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + "\n"
+			line := "- " + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + sec.mark(m.ID) + "\n"
 			if !m.Favorite && used+estTokens(line) > budget {
 				break
 			}
@@ -953,13 +967,13 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 		// favorite pin folded into the section (partitioned out before the
 		// recency/count trims, so those never saw them either).
 		for _, m := range sec.favorites {
-			line := "- " + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + "\n"
+			line := "- " + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + sec.mark(m.ID) + "\n"
 			body.WriteString(line)
 			used += estTokens(line)
 			ids = append(ids, m.ID)
 		}
 		for i, m := range index {
-			line := "- " + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + "\n"
+			line := "- " + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + sec.mark(m.ID) + "\n"
 			if used+estTokens(line) > budget && (i > 0 || len(sec.favorites) > 0) {
 				dropped = len(index) - i
 				break
@@ -1001,7 +1015,7 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 			body.WriteString(lead)
 			used += estTokens(lead)
 			for _, m := range sec.siblingMems {
-				line := "- " + sanitizeName(m.Project, 60) + "/" + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + "\n"
+				line := "- " + sanitizeName(m.Project, 60) + "/" + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + sec.mark(m.ID) + "\n"
 				if used+estTokens(line) > budget {
 					break
 				}
@@ -1143,7 +1157,7 @@ func (s *Service) briefingHardCap(cfg config.Briefing) int {
 // The second return value is the ids of the rendered memories (both constraint
 // tiers plus the relevant hits) for retrieval instrumentation; like
 // assembleBriefing's, it is a superset when the hard cap truncates lines.
-func (s *Service) assembleSubagent(project string, iso core.Isolation, constraints []core.Memory, relevant []promptHit, cfg config.Briefing) (string, []string) {
+func (s *Service) assembleSubagent(project string, iso core.Isolation, constraints []core.Memory, relevant []promptHit, marks map[string]string, cfg config.Briefing) (string, []string) {
 	if len(constraints) == 0 {
 		return "", nil
 	}
@@ -1157,7 +1171,7 @@ func (s *Service) assembleSubagent(project string, iso core.Isolation, constrain
 	b.WriteString("\nConstraints (binding for every session):\n")
 	full, compact := constraintTiers(constraints, cfg.ConstraintMaxFull)
 	for _, c := range full {
-		b.WriteString("- " + sanitizeName(c.Name, 80) + ": " + sanitizeField(c.Description, 160) + "\n")
+		b.WriteString("- " + sanitizeName(c.Name, 80) + ": " + sanitizeField(c.Description, 160) + marks[c.ID] + "\n")
 		ids = append(ids, c.ID)
 	}
 	b.WriteString(alsoBindingLine(compact))
@@ -1167,7 +1181,7 @@ func (s *Service) assembleSubagent(project string, iso core.Isolation, constrain
 	if len(relevant) > 0 {
 		b.WriteString("\nRelevant to this task:\n")
 		for _, h := range relevant {
-			b.WriteString("- " + sanitizeName(h.name, 80) + ": " + sanitizeField(h.description, 160) + "\n")
+			b.WriteString("- " + sanitizeName(h.name, 80) + ": " + sanitizeField(h.description, 160) + marks[h.id] + "\n")
 			ids = append(ids, h.id)
 		}
 	}

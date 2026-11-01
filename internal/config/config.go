@@ -64,6 +64,7 @@ type Config struct {
 	Budgets     Budgets     `yaml:"budgets"`
 	Briefing    Briefing    `yaml:"briefing"`
 	Features    Features    `yaml:"features"`
+	Screening   Screening   `yaml:"screening"`
 	Console     Console     `yaml:"console"`
 	Search      Search      `yaml:"search"`
 	LLM         LLM         `yaml:"llm"`
@@ -324,6 +325,30 @@ type Features struct {
 	// the personal-records rail, the hot-streak pulse, and the celebration
 	// moments.
 	Gamification bool `yaml:"gamification" json:"gamification"`
+	// Screening enables write screening: every agent write to a memory or note
+	// is screened (secrets, injection markers, hidden Unicode, long encoded
+	// blobs, URLs outside screening.url_allowlist), a suspicious write -- and
+	// any change to a binding rule by a session marked as having read outside
+	// text, and any retirement of a constraint -- is held out of briefings,
+	// recall and the gardener until the owner releases it, and injected
+	// memories carry an owner-confirmed or agent-written mark. The screens'
+	// tunables live in the screening: block.
+	Screening bool `yaml:"screening" json:"screening"`
+}
+
+// Screening tunes the write screens behind the screening optional feature
+// (features.screening). It is inert while the feature is off.
+type Screening struct {
+	// URLAllowlist names the hosts a URL in a screened write may point at
+	// without a verdict. A host matches itself and its subdomains
+	// ("example.com" covers "docs.example.com"). Empty -- the default -- turns
+	// the URL screen off: with no list, every URL would be "outside" it, which
+	// says nothing.
+	URLAllowlist []string `yaml:"url_allowlist"`
+	// BlobMinLength is the shortest unbroken base64 or hex run counted as a
+	// long encoded blob. The default (200) clears hashes, ids and the
+	// 64-character lines of a PEM certificate.
+	BlobMinLength int `yaml:"blob_min_length"`
 }
 
 // Console tunes the human-facing observability console. Nothing here changes
@@ -513,7 +538,8 @@ func Defaults() Config {
 		// Optional features ship off: a fresh installation exposes none until the
 		// owner enables it. Existing installations holding research data are
 		// grandfathered on by a one-time store migration, not by this default.
-		Features: Features{Research: false, Momentum: false, Gamification: false},
+		Features:  Features{Research: false, Momentum: false, Gamification: false, Screening: false},
+		Screening: Screening{BlobMinLength: DefaultScreeningBlobMinLength},
 		// A fresh installation starts at the fewest knobs. Existing
 		// installations are grandfathered to advanced by a one-time store
 		// migration, not by this default.
@@ -783,6 +809,9 @@ func (c Config) Validate() error {
 	if err := c.Console.Validate(); err != nil {
 		return err
 	}
+	if err := c.Screening.Validate(); err != nil {
+		return err
+	}
 	if err := c.Update.Validate(); err != nil {
 		return err
 	}
@@ -865,6 +894,13 @@ func (c *Config) applyEnv() error {
 		return err
 	}
 	if err := envBool("SEAMLESS_FEATURES_GAMIFICATION", &c.Features.Gamification); err != nil {
+		return err
+	}
+	if err := envBool("SEAMLESS_FEATURES_SCREENING", &c.Features.Screening); err != nil {
+		return err
+	}
+	envStrSlice("SEAMLESS_SCREENING_URL_ALLOWLIST", &c.Screening.URLAllowlist)
+	if err := envInt("SEAMLESS_SCREENING_BLOB_MIN_LENGTH", &c.Screening.BlobMinLength); err != nil {
 		return err
 	}
 	envStr("SEAMLESS_CONSOLE_LEVEL", &c.Console.Level)

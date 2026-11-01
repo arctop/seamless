@@ -20,30 +20,38 @@
        card) or dismisses it, on any device -- the flag is server-side. Each
        card is a POST back to Home; the morph after it drops the card. */}}
   {{with .Welcome}}
+  {{/* One form, one button per choice: the write-screening box below rides
+       with whichever button sends the card, so a tick is never lost to a
+       click on a different form. Dismiss posts the same form elsewhere. */}}
   <section class="level-welcome" id="level-welcome" data-live-skip aria-labelledby="level-welcome-title">
+    <form method="post" action="/console/settings/level">
+    <input type="hidden" name="return" value="/console/">
     <header class="level-welcome-head">
       <div>
         <h2 id="level-welcome-title">{{if .Seeded}}New: choose how much of the console you see{{else}}Choose how much of the console you want to see{{end}}</h2>
         <p>{{if .Seeded}}This installation kept every screen through the upgrade. Pick a simpler level if you would rather see less.{{else}}Start with the essentials, or turn on more. Your agents get exactly the same either way.{{end}}</p>
       </div>
-      <form method="post" action="/console/settings/level/welcome">
-        <input type="hidden" name="return" value="/console/">
-        <button class="btn small" type="submit">Dismiss</button>
-      </form>
+      <button class="btn small" type="submit" formaction="/console/settings/level/welcome">Dismiss</button>
     </header>
     <div class="level-welcome-cards">
       {{range .Cards}}
-      <form class="level-welcome-card{{if .Current}} is-current{{end}}" method="post" action="/console/settings/level" data-level-card="{{.Level}}">
-        <input type="hidden" name="level" value="{{.Level}}">
-        <input type="hidden" name="return" value="/console/">
-        <button type="submit">
+      <div class="level-welcome-card{{if .Current}} is-current{{end}}" data-level-card="{{.Level}}">
+        <button type="submit" name="level" value="{{.Level}}">
           <span class="level-welcome-name"><strong>{{.Level.Label}}</strong>{{if .Current}}<span class="badge ok">Current</span>{{end}}</span>
           <span class="level-welcome-line">{{.Line}}</span>
         </button>
-      </form>
+      </div>
       {{end}}
     </div>
+    {{if .OfferScreening}}
+    <label class="level-welcome-optin" data-welcome-optin="screening">
+      <input type="checkbox" name="{{.ScreeningField}}" value="1">
+      <span><strong>Also turn on write screening</strong>
+        <small>Agent writes to memories and notes are screened, and suspicious ones are held until you release them on the Held screen. This changes what your agents receive, unlike the level. Off by default; Settings &rarr; Features turns it off again, and nothing is deleted either way.</small></span>
+    </label>
+    {{end}}
     <p class="level-welcome-foot">You can change this any time in <a href="/console/settings?s=experience">Settings</a>.</p>
+    </form>
   </section>
   {{end}}
 

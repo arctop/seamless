@@ -473,6 +473,7 @@ func TestHookDialBudgets_ByClientAndEvent(t *testing.T) {
 			"subagent-stop":      full,
 			"permission-request": full,
 			"stop":               short,
+			"session-taint":      full,
 		},
 		"codex": {
 			"session-start":      full,
@@ -483,6 +484,7 @@ func TestHookDialBudgets_ByClientAndEvent(t *testing.T) {
 			"subagent-stop":      short,
 			"permission-request": full,
 			"stop":               short,
+			"session-taint":      full,
 		},
 	}
 	got := map[string]map[string]time.Duration{}
@@ -601,6 +603,7 @@ func TestHookDeadlines_ByEvent(t *testing.T) {
 		"subagent-stop":      9 * s,
 		"permission-request": 9 * s,
 		"stop":               9 * s,
+		"session-taint":      9 * s,
 	}
 	got := map[string]time.Duration{}
 	for _, h := range hookEvents {
@@ -615,10 +618,10 @@ func TestHookDeadlines_ByEvent(t *testing.T) {
 func TestHookCmd_HelpDerivesTheDialBudgetsAndDeadlines(t *testing.T) {
 	help := commandHelp(hookCmd)
 	require.Contains(t, help, "\ndial retry: 5s for session-start, session-end, post-tool-use, "+
-		"subagent-start, subagent-stop (claude-code), permission-request; "+
+		"subagent-start, subagent-stop (claude-code), permission-request, session-taint; "+
 		"1s for user-prompt-submit, subagent-stop (codex), stop\n")
 	require.Contains(t, help, "\ndeadline: 9s for session-start, session-end, post-tool-use, "+
-		"subagent-start, subagent-stop, permission-request, stop; 4s for user-prompt-submit\n")
+		"subagent-start, subagent-stop, permission-request, stop, session-taint; 4s for user-prompt-submit\n")
 }
 
 // The pin that keeps the CLI's copy of the event table honest against the

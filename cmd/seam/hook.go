@@ -72,6 +72,11 @@ var hookEvents = []hookEvent{
 	// Codex-only: its per-turn end signal (heartbeat + provisional harvest). Codex
 	// has no SessionEnd, so the codex install profile wires `seam hook stop`.
 	{"stop", "/api/hooks/stop", hookShortDialBudget, hookDeadline},
+	// The one event no installer wires: an agent guard's own PostToolUse hook
+	// pipes its stdin here after a tool that read outside text, and the daemon
+	// marks the session (write screening). A full budget: a mark lost to a
+	// restart would let the session write binding rules unheld.
+	{"session-taint", "/api/hooks/session-taint", hookFullDialBudget, hookDeadline},
 }
 
 // hookClientDialBudget gives one client its own dial budget for one event.

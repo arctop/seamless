@@ -55,6 +55,7 @@ sections:
       - data.md
       - network-install.md
       - peer-auth.md
+      - write-screening.md
       - troubleshooting.md
 
   - title: Reference

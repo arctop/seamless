@@ -175,6 +175,41 @@ with no Codex CLI, initialized home, or Seamless Codex configuration is one quie
 `not detected` line, never a failure. `seam doctor` covers the other half: it hits
 `/healthz` and calls `tools/list`, which proves the endpoint and key are working.
 
+## The outside-text mark: session-taint {#session-taint}
+
+One more endpoint lives beside the hooks, and no profile installs it:
+`POST /api/hooks/session-taint` is for an **agent guard** - a hook of your own
+that knows which tools bring outside text into a session (a web fetch, a
+search, a mail reader). After one runs, the guard marks the session, and from
+then on, with [write screening](/guides/write-screening/) on, the session's
+changes to constraints, conventions, protocols and stages are held for your
+release instead of landing.
+
+```bash
+# In the guard's PostToolUse hook, forward its stdin unchanged:
+seam hook session-taint                 # Claude Code
+seam hook session-taint --client codex  # Codex
+```
+
+The body is a hook payload: the client's own `session_id` (with `?client=`
+naming the client, as for every hook), or `{"session": "<ULID or cc/... name>"}`
+for a caller that knows the Seamless session. An optional `reason` is a short
+code (`web_fetch`, `mail`); without one, the payload's `tool_name` becomes the
+reason (`tool:webfetch`). It authenticates like every hook - the bearer key,
+or the peer_auth socket - and under peer_auth a session of another account is
+not found.
+
+It is the one hook route that reports its outcome: the body is always the
+plain acknowledgement (`{"continue":true,"suppressOutput":true}`), so a guard
+that uses `seam hook session-taint` as its whole hook command hands its client
+valid hook output, while the `X-Seamless-Taint` header and the status say what
+happened - `marked` or `already-marked` (200; the first mark stands), `off`
+(200; screening is off, nothing marked), `unknown-session` (404), `invalid`
+(400). `seam hook` still exits 0 on every one of them.
+
+Nothing clears a mark through a hook, a flag or an MCP tool: only the owner,
+on the console's Held screen.
+
 ## What rides on the query string
 
 A hook body is the agent client's schema, not Seamless's, so everything

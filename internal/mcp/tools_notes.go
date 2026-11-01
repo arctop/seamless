@@ -61,11 +61,29 @@ func (s *Server) handleNotesCreate(ctx context.Context, req mcp.CallToolRequest)
 		SourceURL: argString(req, "source_url"), Model: s.boundSessionModel(ctx),
 		Created: now, Updated: now,
 	}
+	screen := s.screeningOn(ctx)
+	var screenSession string
+	var jd judged
+	if screen {
+		session := s.boundSession(ctx)
+		screenSession = session
+		if herr := s.judgeNoteWrite(ctx, "notes_create", note, core.Note{}, "", session, &jd); herr != nil {
+			held, ok := asHeld(herr)
+			if !ok {
+				return errResult("notes_create", herr)
+			}
+			s.recordScreened(ctx, "notes_create", core.ItemKindNote, note.ID, project, session, "", jd)
+			return heldResult(held.hold, map[string]any{"id": note.ID, "slug": note.Slug, "title": title, "project": project})
+		}
+	}
 	written, err := s.cfg.Files.WriteNote(ctx, note)
 	if err != nil {
 		return errResult("notes_create", err)
 	}
 	s.record(ctx, core.EventNoteWritten, s.boundSession(ctx), project, written.ID, map[string]any{"title": title})
+	if screen {
+		s.recordScreened(ctx, "notes_create", core.ItemKindNote, written.ID, project, screenSession, "", jd)
+	}
 	out := map[string]any{"id": written.ID, "slug": written.Slug, "title": title, "project": project}
 	if plan := plans.SlugFromTags(written.Tags); plan != "" {
 		out["plan"] = plan
@@ -168,6 +186,12 @@ func (s *Server) handleNotesUpdate(ctx context.Context, req mcp.CallToolRequest)
 	if patch.project != nil {
 		paths = append(paths, files.NoteRelPath(*patch.project, idx.Slug))
 	}
+	screen := s.screeningOn(ctx)
+	var screenSession string
+	if screen {
+		screenSession = s.boundSession(ctx)
+	}
+	var jd judged
 	var written core.Note
 	err = s.cfg.Files.MutatePaths(ctx, paths, func(ctx context.Context) error {
 		// The read is INSIDE the lock. Reading it outside was the lost update: two
@@ -194,6 +218,7 @@ func (s *Server) handleNotesUpdate(ctx context.Context, req mcp.CallToolRequest)
 			return err
 		}
 		oldProject := note.Project
+		before := note
 		s.applyNoteUpdate(ctx, &note, patch)
 		note.Updated = time.Now().UTC()
 
@@ -219,6 +244,11 @@ func (s *Server) handleNotesUpdate(ctx context.Context, req mcp.CallToolRequest)
 				return fmt.Errorf("a different note with slug %q already exists in project %q", note.Slug, note.Project)
 			}
 		}
+		if screen {
+			if herr := s.judgeNoteWrite(ctx, "notes_update", note, before, idx.FilePath, screenSession, &jd); herr != nil {
+				return herr
+			}
+		}
 		// Write the new file BEFORE removing the old one: the index row is keyed by
 		// id (the write repoints its file_path), so a failed write leaves the note
 		// intact at its old path instead of deleting it outright.
@@ -234,8 +264,15 @@ func (s *Server) handleNotesUpdate(ctx context.Context, req mcp.CallToolRequest)
 		}
 		return nil
 	})
+	if held, ok := asHeld(err); ok {
+		s.recordScreened(ctx, "notes_update", core.ItemKindNote, held.hold.ItemID, held.hold.Project, screenSession, "", jd)
+		return heldResult(held.hold, map[string]any{"id": held.hold.ItemID})
+	}
 	if err != nil {
 		return errResult("notes_update", err)
+	}
+	if screen {
+		s.recordScreened(ctx, "notes_update", core.ItemKindNote, written.ID, written.Project, screenSession, "", jd)
 	}
 	// Recorded against the project the note now sits in: after a move, that is
 	// where the change landed, and an event filed under the old project would tell
@@ -372,6 +409,12 @@ func (s *Server) handleNotesAppend(ctx context.Context, req mcp.CallToolRequest)
 	// shape the lost update hurt most: two agents adding a line each both read the
 	// same body, and the second write dropped the first line entirely -- silently,
 	// since the index upsert is by id and the file_path constraint stayed happy.
+	screen := s.screeningOn(ctx)
+	var screenSession string
+	if screen {
+		screenSession = s.boundSession(ctx)
+	}
+	var jd judged
 	written, err := s.cfg.Files.MutateNote(ctx, idx.FilePath, func(ctx context.Context, note core.Note) (core.Note, error) {
 		// The fence is judged on the project the FILE names, and it lives here
 		// rather than in the loader: reads and writes cross the fence on different
@@ -381,6 +424,7 @@ func (s *Server) handleNotesAppend(ctx context.Context, req mcp.CallToolRequest)
 			return core.Note{}, err
 		}
 		now := time.Now().UTC()
+		before := note
 		note.Body = strings.TrimRight(note.Body, "\n") + "\n\n" + now.Format("2006-01-02 15:04") + " -- " + text + "\n"
 		note.Updated = now
 		// Appended text is content this model produced, so it re-stamps attribution
@@ -391,10 +435,22 @@ func (s *Server) handleNotesAppend(ctx context.Context, req mcp.CallToolRequest)
 		if model := s.boundSessionModel(ctx); model != "" {
 			note.Model = model
 		}
+		if screen {
+			if herr := s.judgeNoteWrite(ctx, "notes_append", note, before, "", screenSession, &jd); herr != nil {
+				return core.Note{}, herr
+			}
+		}
 		return note, nil
 	})
+	if held, ok := asHeld(err); ok {
+		s.recordScreened(ctx, "notes_append", core.ItemKindNote, held.hold.ItemID, held.hold.Project, screenSession, "", jd)
+		return heldResult(held.hold, map[string]any{"id": held.hold.ItemID})
+	}
 	if err != nil {
 		return errResult("notes_append", err)
+	}
+	if screen {
+		s.recordScreened(ctx, "notes_append", core.ItemKindNote, written.ID, written.Project, screenSession, "", jd)
 	}
 	s.record(ctx, core.EventNoteWritten, s.boundSession(ctx), written.Project, written.ID,
 		map[string]any{"slug": written.Slug, "appended": true})

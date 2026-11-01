@@ -1,0 +1,182 @@
+package retrieve
+
+import (
+	"context"
+	"slices"
+
+	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/features"
+	"github.com/arctop/seamless/internal/store"
+)
+
+// Provenance on injected memories (the screening optional feature): every
+// memory line a briefing or a prompt-recall block carries says whether the
+// owner confirmed its current content or an agent wrote it, and from which
+// session. Off, nothing here runs and every line renders exactly as before.
+//
+// "Owner-confirmed" has one meaning: the owner released a held write of this
+// content on the console's Held screen, and the memory still says exactly
+// what it said then (store.OwnerConfirmations holds the core.MemoryDigest of
+// the confirmed content; any later change -- an agent's edit, a hand edit of
+// the file -- no longer matches, so the mark lapses on its own). Everything
+// else is "agent-written": the memory reached the corpus through an agent's
+// write, the gardener, or a path that recorded no owner decision.
+
+// Provenance labels, as agents read them.
+const (
+	ProvenanceOwnerConfirmed = "owner-confirmed"
+	ProvenanceAgentWritten   = "agent-written"
+)
+
+// Provenance is who stands behind a memory's current content.
+type Provenance struct {
+	// OwnerConfirmed: the owner confirmed exactly this content.
+	OwnerConfirmed bool
+	// Session is the display name of the session that last wrote the content
+	// through Seamless: "" when none is on record, or when that session ran
+	// outside the memory's own scope (a global memory written from inside a
+	// project), whose name the reader has no business learning.
+	Session string
+}
+
+// Label is the provenance word: owner-confirmed or agent-written.
+func (p Provenance) Label() string {
+	if p.OwnerConfirmed {
+		return ProvenanceOwnerConfirmed
+	}
+	return ProvenanceAgentWritten
+}
+
+// mark is the bracketed suffix a briefing or recall line carries.
+func (p Provenance) mark() string {
+	if p.OwnerConfirmed {
+		return " [" + ProvenanceOwnerConfirmed + "]"
+	}
+	if p.Session != "" {
+		return " [" + ProvenanceAgentWritten + ", session " + sanitizeField(p.Session, 40) + "]"
+	}
+	return " [" + ProvenanceAgentWritten + "]"
+}
+
+// provenanceOn reports whether injected memories carry provenance marks.
+func (s *Service) provenanceOn(ctx context.Context) bool {
+	return features.Enabled(s.effectiveFeatures(ctx), features.Screening)
+}
+
+// MemoryProvenance resolves the provenance of each memory. mems may be index
+// rows (no body) or file-read memories; a confirmation is verified against
+// the memory's current content, read through the body reader when the row
+// carries none. It is failure-soft: a store or file error degrades that
+// memory to agent-written (the conservative answer) and is logged.
+func (s *Service) MemoryProvenance(ctx context.Context, mems []core.Memory) map[string]Provenance {
+	out := make(map[string]Provenance, len(mems))
+	if len(mems) == 0 {
+		return out
+	}
+	ids := make([]string, 0, len(mems))
+	for _, m := range mems {
+		ids = append(ids, m.ID)
+	}
+	confirmed, err := store.OwnerConfirmations(ctx, s.db, ids)
+	if err != nil {
+		s.logger.Warn("retrieve: owner confirmations unavailable; marking memories agent-written", "error", err)
+		confirmed = nil
+	}
+	writers, err := store.ContentWriters(ctx, s.db, ids)
+	if err != nil {
+		s.logger.Warn("retrieve: content writers unavailable; provenance names no session", "error", err)
+		writers = nil
+	}
+	sessionIDs := make([]string, 0, len(mems))
+	writerOf := make(map[string]string, len(mems))
+	for _, m := range mems {
+		w, ok := writers[m.ID]
+		if !ok {
+			w = m.SourceSession // no write on record: the creator, if known
+		}
+		writerOf[m.ID] = w
+		if w != "" && !slices.Contains(sessionIDs, w) {
+			sessionIDs = append(sessionIDs, w)
+		}
+	}
+	refs, err := store.SessionRefs(ctx, s.db, sessionIDs)
+	if err != nil {
+		s.logger.Warn("retrieve: session names unavailable; provenance names no session", "error", err)
+		refs = nil
+	}
+	for _, m := range mems {
+		var p Provenance
+		// A session is named only when it ran in the memory's own scope: anyone
+		// reading the memory reaches that scope already. A global memory written
+		// from inside a project would otherwise carry that project's session
+		// name into every other project's briefing -- across an isolation fence,
+		// or another OS account's seal, as easily as anywhere.
+		if ref, ok := refs[writerOf[m.ID]]; ok && ref.Project == m.Project {
+			p.Session = ref.Name
+		}
+		if digest, ok := confirmed[m.ID]; ok {
+			p.OwnerConfirmed = s.stillConfirmed(m, digest)
+		}
+		out[m.ID] = p
+	}
+	return out
+}
+
+// stillConfirmed reports whether m still digests as the owner confirmed it.
+func (s *Service) stillConfirmed(m core.Memory, digest string) bool {
+	full := m
+	if full.Body == "" {
+		if s.bodyReader == nil || m.FilePath == "" {
+			return false // cannot verify, so not confirmed
+		}
+		read, err := s.bodyReader.ReadMemory(m.FilePath)
+		if err != nil {
+			s.logger.Warn("retrieve: confirmed memory unreadable; marking it agent-written", "id", m.ID, "error", err)
+			return false
+		}
+		full = read
+	}
+	return core.MemoryDigest(full) == digest
+}
+
+// provenanceMarks maps each memory to its line suffix. Callers ask
+// provenanceOn first and pass a nil map while it is off -- the nil map is what
+// keeps every line byte-identical to the feature-off rendering.
+func (s *Service) provenanceMarks(ctx context.Context, groups ...[]core.Memory) map[string]string {
+	var all []core.Memory
+	seen := map[string]bool{}
+	for _, g := range groups {
+		for _, m := range g {
+			if !seen[m.ID] {
+				seen[m.ID] = true
+				all = append(all, m)
+			}
+		}
+	}
+	marks := make(map[string]string, len(all))
+	for id, p := range s.MemoryProvenance(ctx, all) {
+		marks[id] = p.mark()
+	}
+	return marks
+}
+
+// hitMemories loads the index rows behind prompt-matched hits, for their
+// provenance. Only asked while provenance is on; a row that vanished since the
+// match (or a failed read) simply carries no mark.
+func (s *Service) hitMemories(ctx context.Context, hits []promptHit) []core.Memory {
+	if len(hits) == 0 {
+		return nil
+	}
+	out := make([]core.Memory, 0, len(hits))
+	for _, h := range hits {
+		m, ok, err := store.MemoryByID(ctx, s.db, h.id)
+		if err != nil {
+			s.logger.Warn("retrieve: provenance row unavailable", "id", h.id, "error", err)
+			continue
+		}
+		if ok {
+			out = append(out, m)
+		}
+	}
+	return out
+}

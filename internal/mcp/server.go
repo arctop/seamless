@@ -32,6 +32,7 @@ import (
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/llm"
 	"github.com/arctop/seamless/internal/retrieve"
+	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/validate"
 )
@@ -214,8 +215,11 @@ type Config struct {
 	Events   *events.Recorder
 	Gardener *gardener.Service // may be nil (gardener_apply is then unavailable)
 	Embedder llm.Embedder      // may be nil (memory_write dedup hint is then skipped)
-	APIKey   string
-	Version  string // build version advertised in the MCP handshake; defaults to serverVersion
+	// Screening backs the screening optional feature. nil means writes are
+	// never screened, whatever the feature toggle says.
+	Screening *screening.Service
+	APIKey    string
+	Version   string // build version advertised in the MCP handshake; defaults to serverVersion
 	// ToolEventMaxChars caps each captured field (tool.call args value/result,
 	// session findings) of a logged Interactions event at this many runes. 0 =
 	// unlimited (the default): content is logged in full.

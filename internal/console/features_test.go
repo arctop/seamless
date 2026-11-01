@@ -934,7 +934,7 @@ func TestSettingsFeaturesSave_RecordsAnEvent(t *testing.T) {
 	}
 	require.NotNil(t, found, "the toggle must be visible in Activity")
 	require.Equal(t, "console", found.Payload["by"])
-	require.Equal(t, "optional features changed (research on, momentum off, gamification off)", eventSummary(*found))
+	require.Equal(t, "optional features changed (research on, momentum off, gamification off, screening off)", eventSummary(*found))
 
 	rr = postForm(mux, "/console/settings/features/reset", "")
 	require.Equal(t, http.StatusSeeOther, rr.Code)
@@ -977,7 +977,7 @@ func TestSettingsJSON_ExposesTheFeatureContract(t *testing.T) {
 	require.Equal(t, "feature_research", cards[0].Field)
 	require.NotEmpty(t, cards[0].WhenOff)
 
-	require.JSONEq(t, `{"research": false, "momentum": false, "gamification": false}`, string(raw["featuresConfig"]))
+	require.JSONEq(t, `{"research": false, "momentum": false, "gamification": false, "screening": false}`, string(raw["featuresConfig"]))
 	require.Equal(t, "false", string(raw["featuresOverridden"]))
 }
 

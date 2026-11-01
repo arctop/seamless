@@ -57,6 +57,8 @@ func TestEvtLabel_HumanNames(t *testing.T) {
 		core.EventPlanPresented, core.EventPlanApproved, core.EventPlanShipped, core.EventSubagentCaptured,
 		core.EventProjectIsolationChanged, eventFeaturesChanged, eventLevelChanged,
 		core.EventUpdateAvailable, core.EventUpdateApplied, core.EventUpdateStarted, core.EventUpdateFailed,
+		core.EventMemoryScreened, core.EventMemoryHeld, core.EventMemoryReleased, core.EventMemoryDiscarded,
+		core.EventSessionTainted, core.EventSessionCleared,
 	} {
 		_, ok := eventLabels[string(k)]
 		require.True(t, ok, "event kind %q has no human label", k)

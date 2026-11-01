@@ -68,7 +68,7 @@ func (s *Service) pinnedStages(stages []core.Memory, maxUnknownAgeDays int, now 
 // after constraints), or "" when there are none. The trailer names the depth
 // command: a stage's gate details live in its body, which only memory_read
 // reaches.
-func stagesSection(stages []stageLine) string {
+func stagesSection(stages []stageLine, marks map[string]string) string {
 	if len(stages) == 0 {
 		return ""
 	}
@@ -87,7 +87,7 @@ func stagesSection(stages []stageLine) string {
 		if st.gate != "" {
 			b.WriteString(", gate " + sanitizeField(st.gate, 40))
 		}
-		b.WriteString("\n")
+		b.WriteString(marks[st.id] + "\n")
 	}
 	b.WriteString("(details: memory_read name=<stage>)\n")
 	return b.String()

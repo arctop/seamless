@@ -38,6 +38,7 @@ import (
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/retrieve"
+	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -66,6 +67,10 @@ type Config struct {
 	Files    *files.Manager
 	Gardener *gardener.Service
 	Events   *events.Recorder
+	// Screening backs the Held screen (the screening optional feature): the
+	// held queue's release and discard, and clearing a session's
+	// outside-text mark. It writes through the main database handle.
+	Screening *screening.Service
 	// Retrieve backs the search page and command palette: the same fused
 	// FTS+semantic engine recall uses, through its human-facing Search entry
 	// point. A nil Retrieve degrades search to the structured entities only.
@@ -246,6 +251,11 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/gardener/{id}/unhide", formBodySmall, s.gardenerUnhide)
 	post("POST /console/gardener/{id}/retarget", formBodySmall, s.gardenerRetarget)
 	post("POST /console/gardener/{id}/undo", formBodySmall, s.gardenerUndo)
+	handle("GET /console/held", s.auth(gated(features.Screening, s.heldPage)))
+	handle("GET /console/held/{id}", s.auth(gated(features.Screening, s.heldOne)))
+	post("POST /console/held/{id}/release", formBodySmall, gated(features.Screening, s.heldRelease))
+	post("POST /console/held/{id}/discard", formBodySmall, gated(features.Screening, s.heldDiscard))
+	post("POST /console/held/sessions/{id}/clear", formBodySmall, gated(features.Screening, s.heldUntaint))
 	post("POST /console/favorites/{kind}/{id}", formBodySmall, s.favoriteToggle)
 	handle("GET /console/settings", s.auth(s.settings))
 	post("POST /console/settings/briefing", formBodyStandard, s.settingsBriefingSave)
@@ -724,6 +734,14 @@ type welcomeCard struct {
 	// the card announces the picker rather than asking a newcomer.
 	Seeded bool
 	Cards  []levelCard
+	// OfferScreening offers write screening beside the level choice, as an
+	// unchecked box, while the feature is off. It is a feature toggle, never
+	// part of a level: levels change what the owner sees, screening changes
+	// what agents receive. Ticked, whichever button sends the card turns it
+	// on through the same store call and event as Settings -> Features.
+	OfferScreening bool
+	// ScreeningField is the checkbox's form field (feature_screening).
+	ScreeningField string
 }
 
 // spotlightData is the memory-of-the-month panel payload: the winner (when
@@ -967,9 +985,14 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 		data.Health = s.healthFacts(ctx)
 		data.HealthLead = lvl < levelStandard
 		if !lvlState.Welcomed {
+			feats := s.effectiveFeatures(ctx)
 			data.Welcome = &welcomeCard{
 				Seeded: lvlState.Source == store.ConsoleLevelSeeded,
-				Cards:  levelCards(s.effectiveFeatures(ctx), lvl),
+				Cards:  levelCards(feats, lvl),
+				// Offered only while it is off and a screening service is wired:
+				// a box that could turn on nothing would be a fake control.
+				OfferScreening: !features.Enabled(feats, features.Screening) && s.cfg.Screening != nil,
+				ScreeningField: featureField(features.Screening),
 			}
 		}
 	}
@@ -1238,6 +1261,15 @@ func (s *Service) navCounts(ctx context.Context, feats config.Features) navCount
 	if !features.Enabled(feats, features.Research) {
 		counts.Labs, counts.Trials = 0, 0
 	}
+	// The held queue is counted only while its feature is on: off, the table
+	// is not consulted at all.
+	if features.Enabled(feats, features.Screening) {
+		if held, herr := store.CountPendingHolds(ctx, s.cfg.DB); herr != nil {
+			s.logger.Warn("console: nav held count", "error", herr)
+		} else {
+			counts.Held = held
+		}
+	}
 	// The Now badge is the live agent count -- the one sidebar number that is a
 	// pulse rather than an inventory. Same best-effort rule as the rest.
 	ttl := s.cfg.SessionIdleTTL
@@ -1264,4 +1296,5 @@ type navCounts struct {
 	Plans     int
 	Labs      int
 	Trials    int
+	Held      int // writes held for the owner (write screening)
 }

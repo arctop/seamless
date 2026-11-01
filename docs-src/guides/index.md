@@ -28,6 +28,12 @@ agents share dead ends instead of repeating them. Related:
 [Capture Claude Code plans](/guides/plan-mode/) explains how plan mode is
 captured into notes and tasks automatically, and which hook does what.
 
+[Screen writes and hold the suspicious ones](/guides/write-screening/) is the
+opt-in guard against a poisoned memory: every agent write is screened for
+secrets, injection markers and hidden characters, and the suspicious ones -
+along with any change to a binding rule by a session that read outside text -
+wait for your release instead of reaching every briefing.
+
 The last three are operational. [Import, back up & restore](/guides/data/) covers
 putting `~/.seamless` in git, what deleting `seam.db` actually costs (an index
 rebuild, not data loss), and moving to a new machine.

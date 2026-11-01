@@ -54,6 +54,22 @@ const Momentum Key = "momentum"
 // are no punishment mechanics.
 const Gamification Key = "gamification"
 
+// Screening covers write screening and the held queue: every agent write to a
+// memory or note is screened, and a suspicious write -- or a change to a
+// binding rule by a session marked as having read outside text, or the
+// retirement of a constraint -- is held out of briefings, recall and the
+// gardener until the owner releases it on the Held screen. Injected memories
+// carry an owner-confirmed or agent-written mark while it is on. It is one
+// feature because the parts only mean something together: a screen with no
+// hold only counts, a hold with no screen has nothing to catch, and the marks
+// are how an agent tells released knowledge from the rest.
+//
+// Unlike the presentation features above, it changes what agents receive, so
+// it is a feature toggle and never part of a console level. Turning it off
+// stops screening new writes; a write already held stays held -- out of the
+// corpus -- until the feature is back on and the owner decides.
+const Screening Key = "screening"
+
 // Feature describes one optional feature and every surface it owns.
 type Feature struct {
 	// Key is the stable identifier (also the settings anchor and form field).
@@ -157,6 +173,19 @@ var registry = []Feature{
 		Default: false,
 		get:     func(c config.Features) bool { return c.Gamification },
 		set:     func(c *config.Features, on bool) { c.Gamification = on },
+	},
+	{
+		Key:           Screening,
+		Label:         "Write screening",
+		Blurb:         "Screens every agent write to memories and notes for secrets, injection markers, hidden characters, encoded blobs and unlisted links, and holds suspicious ones -- with any change to a binding rule by a session that read outside text -- out of briefings and recall until you release them.",
+		NavIDs:        []string{"held"},
+		RoutePrefixes: []string{"/console/held"},
+		Surfaces: []string{
+			"the owner-confirmed and agent-written marks on briefing and recall lines",
+		},
+		Default: false,
+		get:     func(c config.Features) bool { return c.Screening },
+		set:     func(c *config.Features, on bool) { c.Screening = on },
 	},
 }
 

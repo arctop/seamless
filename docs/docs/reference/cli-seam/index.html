@@ -158,6 +158,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
         
+        <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
+        
         <li><a href="../../guides/troubleshooting/">Troubleshooting</a></li>
         
       </ul>
@@ -564,6 +566,7 @@ an absolute path into the client registration so it works from every repository.
 <h2 id="hooks">Hooks</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam hook session-start<span class="p">|</span>user-prompt-submit<span class="p">|</span>session-end<span class="p">|</span>stop
 </span></span><span class="line"><span class="cl">seam hook subagent-start<span class="p">|</span>subagent-stop<span class="p">|</span>post-tool-use<span class="p">|</span>permission-request
+</span></span><span class="line"><span class="cl">seam hook session-taint
 </span></span></code></pre></div>
 <p>Invoked by Claude Code or Codex, not by hand. Each reads the hook payload from stdin,
 forwards it to the matching <code>/api/hooks/...</code> endpoint with the bearer key, and
@@ -591,7 +594,11 @@ exits 1; it never silently becomes Claude Code.</li>
 approval or a write to a file directly under <code>~/.claude/plans</code> before loading
 config or touching the network. The daemon re-validates the path anyway.</li>
 </ul>
-<p>Install these with <code>seamlessd install-hooks</code>.</p>
+<p>Install these with <code>seamlessd install-hooks</code>. The one exception is
+<code>session-taint</code>, which no installer wires: an agent guard's own PostToolUse
+hook pipes its stdin to it after a tool that read outside text, and the daemon
+marks the session for <a href="../../guides/write-screening/#the-outside-text-mark">write screening</a>.
+It retries and gives up like the others (5s, 9s).</p>
 
 </article>
 

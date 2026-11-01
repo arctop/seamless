@@ -29,7 +29,7 @@ That fourth layer covers three blocks where the stored row simply wins:
 | Block | Written by | When it takes effect |
 |---|---|---|
 | `briefing:` | Settings → [Briefing](https://thereisnospoon.org/docs/reference/console/#briefing) | From the next session start. |
-| `features:` | Settings → [Features](https://thereisnospoon.org/docs/reference/console/#optional-features) | Immediately in the console; an agent sees it from its next session (tool lists and briefings alike). |
+| `features:` | Settings → [Features](https://thereisnospoon.org/docs/reference/console/#optional-features), or the Home welcome card's write-screening box | Immediately in the console; an agent sees it from its next session (tool lists and briefings alike), and write screening from its next write. |
 | `console.level` | Settings → [Experience](https://thereisnospoon.org/docs/reference/console/#experience), or the Home welcome card | Immediately, in the console only. |
 
 The `update:` block's two switches, `update.check` and `update.auto`, are merged
@@ -196,6 +196,9 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `features.research` | bool | - |
 | `features.momentum` | bool | - |
 | `features.gamification` | bool | - |
+| `features.screening` | bool | - |
+| `screening.url_allowlist` | []string | - |
+| `screening.blob_min_length` | int | `200` |
 | `console.level` | string | `basic` |
 | `search.semantic_floor` | float64 | `0.3` |
 | `llm.provider` | string | `openai` |
@@ -421,6 +424,29 @@ features:
   # real recorded activity; off, the Now screen carries no trace of it.
   # env: SEAMLESS_FEATURES_GAMIFICATION
   gamification: false
+  # Write screening: every agent write to a memory or note is screened for
+  # secrets, injection markers, hidden Unicode, long encoded blobs and URLs
+  # outside screening.url_allowlist. A suspicious write -- and any change to a
+  # constraint, convention, protocol or stage by a session an agent guard
+  # marked as having read outside text, and any supersede or delete of a
+  # constraint -- is held out of briefings, recall and the gardener until you
+  # release it on the console's Held screen; injected memories say whether you
+  # confirmed them or an agent wrote them. Off, writes land exactly as before.
+  # The Home welcome card offers it too. Tunables: the screening block below.
+  # env: SEAMLESS_FEATURES_SCREENING
+  screening: false
+
+# The write screens behind features.screening (inert while it is off).
+screening:
+  # Hosts a URL in a screened write may point at without a verdict; each entry
+  # covers its subdomains too. Unset or empty turns the URL screen off. A URL
+  # to any other host holds the write for your review.
+  # env: SEAMLESS_SCREENING_URL_ALLOWLIST (comma-separated)
+  # url_allowlist: [example.com, docs.example.org]
+  # The shortest unbroken base64 or hex run that counts as a long encoded blob
+  # (hashes, ids and PEM certificate lines stay below the default).
+  # env: SEAMLESS_SCREENING_BLOB_MIN_LENGTH
+  blob_min_length: 200
 
 # The observability console. Presentation only: nothing here changes what your
 # agents receive -- briefings, MCP tools, hooks, recall, and the gardener are

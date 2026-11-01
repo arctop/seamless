@@ -29,6 +29,9 @@ The console is **read-mostly**. That is a design claim, so here is the whole lis
 | Apply a whole plan batch | `POST /console/gardener/plan/{slug}/apply` | Applies every pending proposal in a plan, split setup first so the child projects exist before the memories move. Best-effort: it applies what it can, reports how many landed, and leaves the rest pending. |
 | Dismiss a whole rail group | `POST /console/gardener/group/dismiss` | Dismisses every pending proposal in one rail section or split plan, one at a time, so each keeps its own event and stays individually undoable. Only Dismiss is offered in bulk. |
 | Undo a decision | `POST /console/gardener/{id}/undo` | Returns a resolved proposal to the queue from **Recently decided**, inverting whatever its apply did, for the kinds whose apply can be inverted. |
+| Release a held write | `POST /console/held/{id}/release` | [Write screening](#held): lands a held agent write exactly as the agent sent it, and marks the memory owner-confirmed. Refused when its target changed after it was held. |
+| Discard a held write | `POST /console/held/{id}/discard` | Lands nothing and erases the held text; the row stays as the record. |
+| Clear a session's outside-text mark | `POST /console/held/sessions/{id}/clear` | The only way the mark comes off: the session's changes to binding rules land without a hold again. |
 | Set a project's isolation | `POST /console/projects/{slug}/isolation` | Changes how far a project's knowledge travels. A tightening that would cut existing context first renders a confirmation step; nothing is written until it is confirmed. |
 | Save briefing settings | `POST /console/settings/briefing` | Writes the briefing knobs as a runtime **override row** in the DB. It never writes the config file. |
 | Reset briefing settings | `POST /console/settings/briefing/reset` | Clears the override row, reverting to the file/env configuration. |
@@ -37,7 +40,7 @@ The console is **read-mostly**. That is a design claim, so here is the whole lis
 | Re-embed everything | `POST /console/settings/embeddings/reembed` | Starts a background pass that re-embeds every memory and note with the active model. It changes vectors, never content. |
 | Choose the console level | `POST /console/settings/level` | Stores the [experience level](#choose-how-much-you-see) as a row that wins over file and env. Presentation only: nothing an agent receives changes. |
 | Reset the console level | `POST /console/settings/level/reset` | Clears that row, back to the file/env level. |
-| Dismiss the welcome card | `POST /console/settings/level/welcome` | Records that the Home welcome card was seen, without choosing a level. |
+| Dismiss the welcome card | `POST /console/settings/level/welcome` | Records that the Home welcome card was seen, without choosing a level. With the card's write-screening box ticked, it also turns that feature on, as a level choice with the box ticked does. |
 | Save optional features | `POST /console/settings/features` | Writes the feature switches as a stored **override row** in the DB. It changes what is exposed - console screens and the matching agent tools - and deletes nothing. |
 | Reset optional features | `POST /console/settings/features/reset` | Clears the override row, reverting to the file/env configuration - which, unless you set the keys there, means every optional feature is off again. Still deletes nothing. |
 | Turn update checks on or off | `POST /console/settings/updates` | Stores the console's `update.check` override (`check=on` or `off`). It can always turn checks off; it cannot turn them on while the config file or environment says `update.check: false` - that is final, and the form says so. Installs nothing. |
@@ -52,8 +55,10 @@ The console is **read-mostly**. That is a design claim, so here is the whole lis
 
 Read the shape of that list. There is no "create memory", no "edit note", no
 "delete", no "add task", no "start session". The direct writes to knowledge
-state are **archive a memory**, **approve a captured plan**, and the **star**
-flag; the rest either manage gardener proposals - which are themselves
+state are **archive a memory**, **approve a captured plan**, the **star**
+flag, and - with write screening on - **releasing a held write**, which lands
+exactly what an agent wrote, never text of the console's own; the rest either
+manage gardener proposals - which are themselves
 proposals, reviewed before they do anything - or free a lock, or set a
 configuration knob (briefing overrides, feature switches, project families, the
 update switches) that shapes future briefings, or what is exposed, without
@@ -212,7 +217,11 @@ and raw event payloads.
 
 A fresh installation starts at **Basic**, and Home carries a one-time welcome
 card offering all three - pick one, or dismiss it; either way it does not come
-back, on any device. The sidebar's account row names the level you are on and
+back, on any device. Beside the levels the card offers one optional feature as
+an unchecked box, **Also turn on write screening**: it rides with whichever
+button you press, and unticked it changes nothing at any level. It is a
+feature, not part of a level, because it changes what your agents receive (see
+[Held](#held)); once the card is gone, Settings > Features is the way in. The sidebar's account row names the level you are on and
 links to **Settings > Experience**, where the three levels sit side by side with
 the list of what each one shows. The palette's **Change experience level** action
 goes there too.
@@ -249,6 +258,7 @@ What each level shows, generated from the console's own registries:
 | **Notes** | shown | shown | shown |
 | **Retrieval** | - | - | shown |
 | **Gardener** | shown | shown | shown |
+| **Held** - while the screening feature is on | shown | shown | shown |
 | **Projects** | - | shown | shown |
 | **Plans** | - | shown | shown |
 | **Tasks** | - | shown | shown |
@@ -764,6 +774,32 @@ asks you to pick the project and plans the split from there; nothing is retyped.
 
 See [The gardener](https://thereisnospoon.org/docs/concepts/gardener/) for what each proposal type means.
 
+## Held {#held}
+
+`/console/held` - while [write screening](https://thereisnospoon.org/docs/guides/write-screening/) is on, at
+every level (whoever turns it on must reach what it holds).
+
+The owner's queue of agent writes kept out of the corpus. Each card says what
+the write would do (a constraint memory, a note, a delete, a gardener apply),
+which project, tool and session it came from, and why it was held - each
+reason code with its meaning in words. Below that is the write exactly as an
+agent would read it: every hidden character spelled out as `[U+XXXX]`, and
+secrets redacted, so the page can be reviewed and captured without the
+credential it holds.
+
+- **Release** lands it through the files layer as the agent wrote it, and the
+  memory reads `[owner-confirmed]` in briefings from then on. A held supersede
+  releases both halves together; a held delete removes the memory; a held
+  gardener apply applies the proposal. When the target changed after the write
+  was held, only **Discard** is offered: a release would silently undo that
+  later change.
+- **Discard** lands nothing and erases the held text.
+
+Below the queue, **Sessions that read outside text** lists every session an
+agent guard marked, with its reason and a **Clear mark** button - the only way
+a mark comes off. **Recently decided** keeps the last twenty releases and
+discards, without their text. The sidebar badge counts what is waiting.
+
 ## Settings
 
 `/console/settings?s=<section>`
@@ -815,7 +851,7 @@ feature is, a generated line naming exactly what switching it off hides, and a
 live count of the data it holds either way ("Data kept: 12 trials across 3
 labs").
 
-There are three today:
+There are four today:
 
 **Research labs & trials** owns the [Labs](#labs) and [Trials](#trials)
 screens, the trials search scope, and the `lab_open`, `trial_record`, and
@@ -909,6 +945,16 @@ The same guardrails as momentum apply: every number is judged from recorded
 activity, never invented, and there are no punishment mechanics - a quiet day
 is an empty tape, never a warning. Off (the default), none of it is computed,
 no record latch is written, and the Now page carries zero trace of it.
+
+**Write screening** is the only feature that changes what agents receive
+rather than what the console shows. On, every agent write to a memory or note
+is screened, the suspicious ones - and any change to a binding rule by a
+session that read outside text, and any supersede or delete of a constraint -
+wait on the [Held](#held) screen instead of landing, and briefing and recall
+lines carry owner-confirmed or agent-written marks. Its card's data line counts
+the writes waiting; turning it off stops screening new writes and releases
+none of them. The [write screening guide](https://thereisnospoon.org/docs/guides/write-screening/) has the
+screens, the reasons and the events.
 
 **Nothing is ever deleted.** Switching a feature off gates exposure and nothing
 else: the trials stay in the database, its screens answer with a short "switched

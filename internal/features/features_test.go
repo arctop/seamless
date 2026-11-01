@@ -48,12 +48,27 @@ func TestRegistry_GamificationEntry(t *testing.T) {
 	require.False(t, f.Default, "optional features ship off")
 }
 
-func TestRegistry_OrderIsResearchThenMomentumThenGamification(t *testing.T) {
+func TestRegistry_ScreeningEntry(t *testing.T) {
+	f, ok := Get(Screening)
+	require.True(t, ok)
+	require.Equal(t, Key("screening"), f.Key)
+	require.Equal(t, "Write screening", f.Label)
+	require.NotEmpty(t, f.Blurb)
+	require.Empty(t, f.Tools, "screening owns no MCP tools -- it screens the existing write tools")
+	require.Equal(t, []string{"held"}, f.NavIDs)
+	require.Equal(t, []string{"/console/held"}, f.RoutePrefixes)
+	require.Empty(t, f.Skill)
+	require.NotEmpty(t, f.Surfaces, "the provenance marks are an in-page surface")
+	require.False(t, f.Default, "optional features ship off")
+}
+
+func TestRegistry_OrderIsResearchThenMomentumThenGamificationThenScreening(t *testing.T) {
 	reg := Registry()
-	require.Len(t, reg, 3)
+	require.Len(t, reg, 4)
 	require.Equal(t, Research, reg[0].Key, "registry order is the Settings card order")
 	require.Equal(t, Momentum, reg[1].Key)
 	require.Equal(t, Gamification, reg[2].Key)
+	require.Equal(t, Screening, reg[3].Key)
 }
 
 func TestRegistry_WellFormed(t *testing.T) {

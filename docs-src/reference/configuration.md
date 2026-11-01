@@ -31,7 +31,7 @@ That fourth layer covers three blocks where the stored row simply wins:
 | Block | Written by | When it takes effect |
 |---|---|---|
 | `briefing:` | Settings → [Briefing](/reference/console/#briefing) | From the next session start. |
-| `features:` | Settings → [Features](/reference/console/#optional-features) | Immediately in the console; an agent sees it from its next session (tool lists and briefings alike). |
+| `features:` | Settings → [Features](/reference/console/#optional-features), or the Home welcome card's write-screening box | Immediately in the console; an agent sees it from its next session (tool lists and briefings alike), and write screening from its next write. |
 | `console.level` | Settings → [Experience](/reference/console/#experience), or the Home welcome card | Immediately, in the console only. |
 
 The `update:` block's two switches, `update.check` and `update.auto`, are merged

@@ -158,6 +158,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
         
+        <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
+        
         <li><a href="../../guides/troubleshooting/">Troubleshooting</a></li>
         
       </ul>
@@ -232,7 +234,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#what-the-console-can-change">What the console can change</a></li><li class="lvl-2"><a href="#signing-in">Signing in</a></li><li class="lvl-3"><a href="#make-console">make console</a></li><li class="lvl-2"><a href="#getting-around">Getting around</a></li><li class="lvl-3"><a href="#the-command-palette">The command palette</a></li><li class="lvl-3"><a href="#keyboard">Keyboard</a></li><li class="lvl-3"><a href="#ambient-signals">Ambient signals</a></li><li class="lvl-2"><a href="#choose-how-much-you-see">Choose how much you see</a></li><li class="lvl-3"><a href="#screens">Screens</a></li><li class="lvl-3"><a href="#settings-sections">Settings sections</a></li><li class="lvl-3"><a href="#within-screens">Within screens</a></li><li class="lvl-2"><a href="#three-ways-to-render-a-page">Three ways to render a page</a></li><li class="lvl-2"><a href="#overview">Overview</a></li><li class="lvl-3"><a href="#since-you-were-last-here">Since you were last here</a></li><li class="lvl-2"><a href="#now">Now</a></li><li class="lvl-2"><a href="#interactions">Interactions</a></li><li class="lvl-2"><a href="#search">Search</a></li><li class="lvl-2"><a href="#projects">Projects</a></li><li class="lvl-2"><a href="#sessions">Sessions</a></li><li class="lvl-2"><a href="#memories">Memories</a></li><li class="lvl-2"><a href="#notes">Notes</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-2"><a href="#plans">Plans</a></li><li class="lvl-2"><a href="#labs">Labs</a></li><li class="lvl-2"><a href="#trials">Trials</a></li><li class="lvl-2"><a href="#context">Context</a></li><li class="lvl-2"><a href="#retrieval">Retrieval</a></li><li class="lvl-2"><a href="#gardener">Gardener</a></li><li class="lvl-2"><a href="#settings">Settings</a></li><li class="lvl-3"><a href="#experience">Experience</a></li><li class="lvl-3"><a href="#optional-features">Optional features</a></li><li class="lvl-3"><a href="#your-setup">Your setup</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#briefing">Briefing</a></li><li class="lvl-3"><a href="#workspaces">Workspaces</a></li><li class="lvl-3"><a href="#knowledge-engine">Knowledge engine</a></li><li class="lvl-2"><a href="#event-detail">Event detail</a></li><li class="lvl-2"><a href="#errors">Errors</a></li>
+      <li class="lvl-2"><a href="#what-the-console-can-change">What the console can change</a></li><li class="lvl-2"><a href="#signing-in">Signing in</a></li><li class="lvl-3"><a href="#make-console">make console</a></li><li class="lvl-2"><a href="#getting-around">Getting around</a></li><li class="lvl-3"><a href="#the-command-palette">The command palette</a></li><li class="lvl-3"><a href="#keyboard">Keyboard</a></li><li class="lvl-3"><a href="#ambient-signals">Ambient signals</a></li><li class="lvl-2"><a href="#choose-how-much-you-see">Choose how much you see</a></li><li class="lvl-3"><a href="#screens">Screens</a></li><li class="lvl-3"><a href="#settings-sections">Settings sections</a></li><li class="lvl-3"><a href="#within-screens">Within screens</a></li><li class="lvl-2"><a href="#three-ways-to-render-a-page">Three ways to render a page</a></li><li class="lvl-2"><a href="#overview">Overview</a></li><li class="lvl-3"><a href="#since-you-were-last-here">Since you were last here</a></li><li class="lvl-2"><a href="#now">Now</a></li><li class="lvl-2"><a href="#interactions">Interactions</a></li><li class="lvl-2"><a href="#search">Search</a></li><li class="lvl-2"><a href="#projects">Projects</a></li><li class="lvl-2"><a href="#sessions">Sessions</a></li><li class="lvl-2"><a href="#memories">Memories</a></li><li class="lvl-2"><a href="#notes">Notes</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-2"><a href="#plans">Plans</a></li><li class="lvl-2"><a href="#labs">Labs</a></li><li class="lvl-2"><a href="#trials">Trials</a></li><li class="lvl-2"><a href="#context">Context</a></li><li class="lvl-2"><a href="#retrieval">Retrieval</a></li><li class="lvl-2"><a href="#gardener">Gardener</a></li><li class="lvl-2"><a href="#held">Held</a></li><li class="lvl-2"><a href="#settings">Settings</a></li><li class="lvl-3"><a href="#experience">Experience</a></li><li class="lvl-3"><a href="#optional-features">Optional features</a></li><li class="lvl-3"><a href="#your-setup">Your setup</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#briefing">Briefing</a></li><li class="lvl-3"><a href="#workspaces">Workspaces</a></li><li class="lvl-3"><a href="#knowledge-engine">Knowledge engine</a></li><li class="lvl-2"><a href="#event-detail">Event detail</a></li><li class="lvl-2"><a href="#errors">Errors</a></li>
     </ul>
   </details>
   <p>The console is the owner's window onto a system whose actual clients are agents.
@@ -326,6 +328,21 @@ is not how Seamless is driven; it is how you watch it.</p>
 <td>Returns a resolved proposal to the queue from <strong>Recently decided</strong>, inverting whatever its apply did, for the kinds whose apply can be inverted.</td>
 </tr>
 <tr>
+<td>Release a held write</td>
+<td><code>POST /console/held/{id}/release</code></td>
+<td><a href="#held">Write screening</a>: lands a held agent write exactly as the agent sent it, and marks the memory owner-confirmed. Refused when its target changed after it was held.</td>
+</tr>
+<tr>
+<td>Discard a held write</td>
+<td><code>POST /console/held/{id}/discard</code></td>
+<td>Lands nothing and erases the held text; the row stays as the record.</td>
+</tr>
+<tr>
+<td>Clear a session's outside-text mark</td>
+<td><code>POST /console/held/sessions/{id}/clear</code></td>
+<td>The only way the mark comes off: the session's changes to binding rules land without a hold again.</td>
+</tr>
+<tr>
 <td>Set a project's isolation</td>
 <td><code>POST /console/projects/{slug}/isolation</code></td>
 <td>Changes how far a project's knowledge travels. A tightening that would cut existing context first renders a confirmation step; nothing is written until it is confirmed.</td>
@@ -368,7 +385,7 @@ is not how Seamless is driven; it is how you watch it.</p>
 <tr>
 <td>Dismiss the welcome card</td>
 <td><code>POST /console/settings/level/welcome</code></td>
-<td>Records that the Home welcome card was seen, without choosing a level.</td>
+<td>Records that the Home welcome card was seen, without choosing a level. With the card's write-screening box ticked, it also turns that feature on, as a level choice with the box ticked does.</td>
 </tr>
 <tr>
 <td>Save optional features</td>
@@ -430,8 +447,10 @@ is not how Seamless is driven; it is how you watch it.</p>
 </div>
 <p>Read the shape of that list. There is no &quot;create memory&quot;, no &quot;edit note&quot;, no
 &quot;delete&quot;, no &quot;add task&quot;, no &quot;start session&quot;. The direct writes to knowledge
-state are <strong>archive a memory</strong>, <strong>approve a captured plan</strong>, and the <strong>star</strong>
-flag; the rest either manage gardener proposals - which are themselves
+state are <strong>archive a memory</strong>, <strong>approve a captured plan</strong>, the <strong>star</strong>
+flag, and - with write screening on - <strong>releasing a held write</strong>, which lands
+exactly what an agent wrote, never text of the console's own; the rest either
+manage gardener proposals - which are themselves
 proposals, reviewed before they do anything - or free a lock, or set a
 configuration knob (briefing overrides, feature switches, project families, the
 update switches) that shapes future briefings, or what is exposed, without
@@ -612,7 +631,11 @@ transport), Retrieval (the analytics), Context, the Knowledge engine settings,
 and raw event payloads.</p>
 <p>A fresh installation starts at <strong>Basic</strong>, and Home carries a one-time welcome
 card offering all three - pick one, or dismiss it; either way it does not come
-back, on any device. The sidebar's account row names the level you are on and
+back, on any device. Beside the levels the card offers one optional feature as
+an unchecked box, <strong>Also turn on write screening</strong>: it rides with whichever
+button you press, and unticked it changes nothing at any level. It is a
+feature, not part of a level, because it changes what your agents receive (see
+<a href="#held">Held</a>); once the card is gone, Settings &gt; Features is the way in. The sidebar's account row names the level you are on and
 links to <strong>Settings &gt; Experience</strong>, where the three levels sit side by side with
 the list of what each one shows. The palette's <strong>Change experience level</strong> action
 goes there too.</p>
@@ -683,6 +706,12 @@ there. See <a href="../../reference/configuration/">Configuration</a>.</p>
 </tr>
 <tr>
 <td><strong>Gardener</strong></td>
+<td>shown</td>
+<td>shown</td>
+<td>shown</td>
+</tr>
+<tr>
+<td><strong>Held</strong> - while the screening feature is on</td>
 <td>shown</td>
 <td>shown</td>
 <td>shown</td>
@@ -1367,6 +1396,29 @@ split is planned as a split directly - the plan batch appears below like any
 other. When the split's source project cannot be matched, an inline follow-up
 asks you to pick the project and plans the split from there; nothing is retyped.</p>
 <p>See <a href="../../concepts/gardener/">The gardener</a> for what each proposal type means.</p>
+<h2 id="held">Held</h2>
+<p><code>/console/held</code> - while <a href="../../guides/write-screening/">write screening</a> is on, at
+every level (whoever turns it on must reach what it holds).</p>
+<p>The owner's queue of agent writes kept out of the corpus. Each card says what
+the write would do (a constraint memory, a note, a delete, a gardener apply),
+which project, tool and session it came from, and why it was held - each
+reason code with its meaning in words. Below that is the write exactly as an
+agent would read it: every hidden character spelled out as <code>[U+XXXX]</code>, and
+secrets redacted, so the page can be reviewed and captured without the
+credential it holds.</p>
+<ul>
+<li><strong>Release</strong> lands it through the files layer as the agent wrote it, and the
+memory reads <code>[owner-confirmed]</code> in briefings from then on. A held supersede
+releases both halves together; a held delete removes the memory; a held
+gardener apply applies the proposal. When the target changed after the write
+was held, only <strong>Discard</strong> is offered: a release would silently undo that
+later change.</li>
+<li><strong>Discard</strong> lands nothing and erases the held text.</li>
+</ul>
+<p>Below the queue, <strong>Sessions that read outside text</strong> lists every session an
+agent guard marked, with its reason and a <strong>Clear mark</strong> button - the only way
+a mark comes off. <strong>Recently decided</strong> keeps the last twenty releases and
+discards, without their text. The sidebar badge counts what is waiting.</p>
 <h2 id="settings">Settings</h2>
 <p><code>/console/settings?s=&lt;section&gt;</code></p>
 <p>Settings is one section at a time, each shaped by what you came to do rather
@@ -1408,7 +1460,7 @@ section renders one card per feature - a toggle, an Enabled/Disabled pill, what 
 feature is, a generated line naming exactly what switching it off hides, and a
 live count of the data it holds either way (&quot;Data kept: 12 trials across 3
 labs&quot;).</p>
-<p>There are three today:</p>
+<p>There are four today:</p>
 <p><strong>Research labs &amp; trials</strong> owns the <a href="#labs">Labs</a> and <a href="#trials">Trials</a>
 screens, the trials search scope, and the <code>lab_open</code>, <code>trial_record</code>, and
 <code>trial_query</code> MCP tools. Screens and tools move together on purpose, so an
@@ -1498,6 +1550,15 @@ crossing is minted into the event ledger at most once per record per day.</li>
 activity, never invented, and there are no punishment mechanics - a quiet day
 is an empty tape, never a warning. Off (the default), none of it is computed,
 no record latch is written, and the Now page carries zero trace of it.</p>
+<p><strong>Write screening</strong> is the only feature that changes what agents receive
+rather than what the console shows. On, every agent write to a memory or note
+is screened, the suspicious ones - and any change to a binding rule by a
+session that read outside text, and any supersede or delete of a constraint -
+wait on the <a href="#held">Held</a> screen instead of landing, and briefing and recall
+lines carry owner-confirmed or agent-written marks. Its card's data line counts
+the writes waiting; turning it off stops screening new writes and releases
+none of them. The <a href="../../guides/write-screening/">write screening guide</a> has the
+screens, the reasons and the events.</p>
 <p><strong>Nothing is ever deleted.</strong> Switching a feature off gates exposure and nothing
 else: the trials stay in the database, its screens answer with a short &quot;switched
 off&quot; page that links back here (a JSON caller gets a 403), and switching it back
@@ -1715,7 +1776,7 @@ the detail pane would nest the whole console inside itself.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#what-the-console-can-change">What the console can change</a></li><li class="lvl-2"><a href="#signing-in">Signing in</a></li><li class="lvl-3"><a href="#make-console">make console</a></li><li class="lvl-2"><a href="#getting-around">Getting around</a></li><li class="lvl-3"><a href="#the-command-palette">The command palette</a></li><li class="lvl-3"><a href="#keyboard">Keyboard</a></li><li class="lvl-3"><a href="#ambient-signals">Ambient signals</a></li><li class="lvl-2"><a href="#choose-how-much-you-see">Choose how much you see</a></li><li class="lvl-3"><a href="#screens">Screens</a></li><li class="lvl-3"><a href="#settings-sections">Settings sections</a></li><li class="lvl-3"><a href="#within-screens">Within screens</a></li><li class="lvl-2"><a href="#three-ways-to-render-a-page">Three ways to render a page</a></li><li class="lvl-2"><a href="#overview">Overview</a></li><li class="lvl-3"><a href="#since-you-were-last-here">Since you were last here</a></li><li class="lvl-2"><a href="#now">Now</a></li><li class="lvl-2"><a href="#interactions">Interactions</a></li><li class="lvl-2"><a href="#search">Search</a></li><li class="lvl-2"><a href="#projects">Projects</a></li><li class="lvl-2"><a href="#sessions">Sessions</a></li><li class="lvl-2"><a href="#memories">Memories</a></li><li class="lvl-2"><a href="#notes">Notes</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-2"><a href="#plans">Plans</a></li><li class="lvl-2"><a href="#labs">Labs</a></li><li class="lvl-2"><a href="#trials">Trials</a></li><li class="lvl-2"><a href="#context">Context</a></li><li class="lvl-2"><a href="#retrieval">Retrieval</a></li><li class="lvl-2"><a href="#gardener">Gardener</a></li><li class="lvl-2"><a href="#settings">Settings</a></li><li class="lvl-3"><a href="#experience">Experience</a></li><li class="lvl-3"><a href="#optional-features">Optional features</a></li><li class="lvl-3"><a href="#your-setup">Your setup</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#briefing">Briefing</a></li><li class="lvl-3"><a href="#workspaces">Workspaces</a></li><li class="lvl-3"><a href="#knowledge-engine">Knowledge engine</a></li><li class="lvl-2"><a href="#event-detail">Event detail</a></li><li class="lvl-2"><a href="#errors">Errors</a></li>
+      <li class="lvl-2"><a href="#what-the-console-can-change">What the console can change</a></li><li class="lvl-2"><a href="#signing-in">Signing in</a></li><li class="lvl-3"><a href="#make-console">make console</a></li><li class="lvl-2"><a href="#getting-around">Getting around</a></li><li class="lvl-3"><a href="#the-command-palette">The command palette</a></li><li class="lvl-3"><a href="#keyboard">Keyboard</a></li><li class="lvl-3"><a href="#ambient-signals">Ambient signals</a></li><li class="lvl-2"><a href="#choose-how-much-you-see">Choose how much you see</a></li><li class="lvl-3"><a href="#screens">Screens</a></li><li class="lvl-3"><a href="#settings-sections">Settings sections</a></li><li class="lvl-3"><a href="#within-screens">Within screens</a></li><li class="lvl-2"><a href="#three-ways-to-render-a-page">Three ways to render a page</a></li><li class="lvl-2"><a href="#overview">Overview</a></li><li class="lvl-3"><a href="#since-you-were-last-here">Since you were last here</a></li><li class="lvl-2"><a href="#now">Now</a></li><li class="lvl-2"><a href="#interactions">Interactions</a></li><li class="lvl-2"><a href="#search">Search</a></li><li class="lvl-2"><a href="#projects">Projects</a></li><li class="lvl-2"><a href="#sessions">Sessions</a></li><li class="lvl-2"><a href="#memories">Memories</a></li><li class="lvl-2"><a href="#notes">Notes</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-2"><a href="#plans">Plans</a></li><li class="lvl-2"><a href="#labs">Labs</a></li><li class="lvl-2"><a href="#trials">Trials</a></li><li class="lvl-2"><a href="#context">Context</a></li><li class="lvl-2"><a href="#retrieval">Retrieval</a></li><li class="lvl-2"><a href="#gardener">Gardener</a></li><li class="lvl-2"><a href="#held">Held</a></li><li class="lvl-2"><a href="#settings">Settings</a></li><li class="lvl-3"><a href="#experience">Experience</a></li><li class="lvl-3"><a href="#optional-features">Optional features</a></li><li class="lvl-3"><a href="#your-setup">Your setup</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#briefing">Briefing</a></li><li class="lvl-3"><a href="#workspaces">Workspaces</a></li><li class="lvl-3"><a href="#knowledge-engine">Knowledge engine</a></li><li class="lvl-2"><a href="#event-detail">Event detail</a></li><li class="lvl-2"><a href="#errors">Errors</a></li>
     </ul>
   </aside>
   

@@ -147,7 +147,11 @@ func (s *Service) PromptRecall(ctx context.Context, host, cwd, prompt string) (s
 		return "", nil, err
 	}
 	hits := scorePrompt(tokens, corpus)
-	return renderPromptRecall(hits), promptHitIDs(hits), nil
+	var marks map[string]string
+	if len(hits) > 0 && s.provenanceOn(ctx) {
+		marks = s.provenanceMarks(ctx, s.hitMemories(ctx, hits))
+	}
+	return renderPromptRecall(hits, marks), promptHitIDs(hits), nil
 }
 
 // promptHitIDs returns the memory ids of the surfaced hits, in render order.
@@ -360,15 +364,15 @@ func scorePromptAll(promptTokens []string, c *promptCorpus) []promptHit {
 
 // renderPromptRecall renders matched hits as a <seam-recall> block, or "" when
 // there are none (Claude Code ignores an empty additionalContext).
-func renderPromptRecall(hits []promptHit) string {
+func renderPromptRecall(hits []promptHit, marks map[string]string) string {
 	if len(hits) == 0 {
 		return ""
 	}
 	var b strings.Builder
 	b.WriteString("<seam-recall>Seam has possibly relevant memories:")
 	for _, h := range hits {
-		fmt.Fprintf(&b, "\n- %s (%s): %s",
-			sanitizeName(h.name, 80), humanAge(h.updatedAt), sanitizeField(h.description, 160))
+		fmt.Fprintf(&b, "\n- %s (%s): %s%s",
+			sanitizeName(h.name, 80), humanAge(h.updatedAt), sanitizeField(h.description, 160), marks[h.id])
 	}
 	b.WriteString("\nRead with memory_read before re-deriving.</seam-recall>")
 	return b.String()

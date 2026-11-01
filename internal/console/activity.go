@@ -86,7 +86,10 @@ func (s *Service) recentMishaps(ctx context.Context, limit int) ([]mishapRow, er
 // zero trace. The audit surfaces (the Interactions stream, the event detail
 // page) keep the history, exactly like historical trial lines.
 func (s *Service) ledgerExcludedKinds(ctx context.Context) []core.EventKind {
-	kinds := []core.EventKind{core.EventToolCall, core.EventHookPrompt}
+	// memory.screened rides beside every write while write screening is on:
+	// telemetry for a monitor, not news for the owner. What the owner acts on
+	// -- a hold, a release, a discard, a marked session -- stays in the ledger.
+	kinds := []core.EventKind{core.EventToolCall, core.EventHookPrompt, core.EventMemoryScreened}
 	if !features.Enabled(s.effectiveFeatures(ctx), features.Momentum) {
 		kinds = append(kinds, store.EventMilestoneReached)
 	}
@@ -137,6 +140,21 @@ func eventSummary(e core.Event) string {
 		return "superseded " + payloadStr(p, "name")
 	case core.EventMemoryArchived:
 		return "archived " + payloadStr(p, "name")
+	case core.EventMemoryScreened:
+		return screenedSummary(p)
+	case core.EventMemoryHeld:
+		return "held " + heldWhat(p) + " for review" + codesSuffix(p, "reasons")
+	case core.EventMemoryReleased:
+		return "released held " + heldWhat(p)
+	case core.EventMemoryDiscarded:
+		return "discarded held " + heldWhat(p)
+	case core.EventSessionTainted:
+		if reason := payloadStr(p, "reason"); reason != "" {
+			return "session read outside text (" + reason + ")"
+		}
+		return "session read outside text"
+	case core.EventSessionCleared:
+		return "outside-text mark cleared by the owner"
 	case core.EventProjectIsolationChanged:
 		line := "isolation " + payloadStr(p, "from") + " -> " + payloadStr(p, "to")
 		if parent := payloadStr(p, "parent"); parent != "" {
@@ -429,4 +447,49 @@ func gardenerSummary(p map[string]any) string {
 	default:
 		return "gardener " + strings.ReplaceAll(action, "_", " ")
 	}
+}
+
+// screenedSummary renders a memory.screened event: the verdict codes, never
+// the text they matched (the event carries none).
+func screenedSummary(p map[string]any) string {
+	what := heldWhat(p)
+	if held, _ := p["held"].(bool); held {
+		return "screened " + what + ": held" + codesSuffix(p, "verdicts")
+	}
+	if codes := codesSuffix(p, "verdicts"); codes != "" {
+		return "screened " + what + ": recorded" + codes
+	}
+	return "screened " + what + ": clean"
+}
+
+// heldWhat names the item a screening event is about by its kinds alone.
+func heldWhat(p map[string]any) string {
+	what := payloadStr(p, "item_kind")
+	if kind := payloadStr(p, "kind"); kind != "" {
+		what = kind + " " + what
+	}
+	if op := payloadStr(p, "op"); op == "delete" {
+		what += " delete"
+	} else if op == "gardener" {
+		what += " gardener apply"
+	}
+	if what == "" {
+		return "write"
+	}
+	return what
+}
+
+// codesSuffix renders a payload's code list as " (a, b)", or "".
+func codesSuffix(p map[string]any, key string) string {
+	raw, _ := p[key].([]any)
+	codes := make([]string, 0, len(raw))
+	for _, c := range raw {
+		if s, ok := c.(string); ok && s != "" {
+			codes = append(codes, s)
+		}
+	}
+	if len(codes) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(codes, ", ") + ")"
 }

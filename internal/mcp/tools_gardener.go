@@ -9,6 +9,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -171,9 +172,36 @@ func (s *Server) handleGardenerApply(ctx context.Context, req mcp.CallToolReques
 	}
 	switch action {
 	case gardener.DecisionApply:
+		// Write screening, when on: an agent's apply that retires a constraint,
+		// changes a briefing-injected kind from a session marked as having read
+		// outside text, or lands text that fails a screen is held, and the
+		// proposal stays pending until the owner releases it. The owner applying
+		// it on the console's Gardener screen is the other way through.
+		var jd judged
+		var screened bool
+		var session string
+		if s.screeningOn(ctx) && p.Status == store.ProposalPending {
+			session = s.boundSession(ctx)
+			hold, j, sc, herr := s.judgeGardenerApply(ctx, p, session, s.sessionTainted(ctx, session))
+			if herr != nil {
+				return errResult("gardener_apply", herr)
+			}
+			jd, screened = j, sc
+			if hold != nil {
+				if screened {
+					s.recordScreened(ctx, "gardener_apply", hold.ItemKind, firstNonEmpty(hold.ItemID, p.ID), hold.Project,
+						session, hold.MemoryKind, jd)
+				}
+				return heldResult(*hold, map[string]any{"id": id, "kind": p.Kind})
+			}
+		}
 		result, err := s.cfg.Gardener.Apply(ctx, id)
 		if err != nil {
 			return errResult("gardener_apply", err)
+		}
+		if screened {
+			s.recordScreened(ctx, "gardener_apply", gardenerItemKind(p.Kind), p.ID, payloadText(p.Payload, "project"),
+				session, core.MemoryKind(payloadText(p.Payload, "kind")), jd)
 		}
 		return jsonResult(result)
 	case gardener.DecisionDismiss:
@@ -190,4 +218,21 @@ func (s *Server) handleGardenerApply(ctx context.Context, req mcp.CallToolReques
 		return errResult("gardener_apply", fmt.Errorf("invalid action %q: valid values are %s",
 			action, strings.Join(gardener.Decisions, ", ")))
 	}
+}
+
+// gardenerItemKind is the corpus kind a content-landing proposal writes.
+func gardenerItemKind(kind string) string {
+	if kind == store.ProposalDigest {
+		return core.ItemKindNote
+	}
+	return core.ItemKindMemory
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

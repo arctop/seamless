@@ -29,6 +29,7 @@ import (
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/gitread"
 	"github.com/arctop/seamless/internal/retrieve"
+	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -77,7 +78,12 @@ type Config struct {
 	PlanCapture   config.PlanCapture
 	PlansDir      string
 	LocalHost     string
-	Logger        *slog.Logger
+	// Features is the file/env optional-features base; the stored console
+	// override layers over it per request. Screening backs the session-taint
+	// endpoint (the screening feature); nil leaves it answering "off".
+	Features  config.Features
+	Screening *screening.Service
+	Logger    *slog.Logger
 }
 
 // Handler serves the hook endpoints.
@@ -91,6 +97,8 @@ type Handler struct {
 	planCapture   config.PlanCapture
 	plansDir      string
 	localHost     string
+	features      config.Features
+	screening     *screening.Service
 	logger        *slog.Logger
 }
 
@@ -108,7 +116,8 @@ func NewHandler(cfg Config) *Handler {
 		db: cfg.DB, retrieve: cfg.Retrieve, events: cfg.Events, files: cfg.Files,
 		apiKey: cfg.APIKey, maxEventChars: cfg.MaxEventChars,
 		planCapture: cfg.PlanCapture, plansDir: cfg.PlansDir,
-		localHost: strings.ToLower(strings.TrimSpace(cfg.LocalHost)), logger: cfg.Logger,
+		localHost: strings.ToLower(strings.TrimSpace(cfg.LocalHost)),
+		features:  cfg.Features, screening: cfg.Screening, logger: cfg.Logger,
 	}
 }
 
@@ -122,6 +131,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/hooks/post-tool-use", h.postToolUse)
 	mux.HandleFunc("POST /api/hooks/subagent-stop", h.subagentStop)
 	mux.HandleFunc("POST /api/hooks/permission-request", h.permissionRequest)
+	mux.HandleFunc("POST /api/hooks/session-taint", h.sessionTaint)
 }
 
 // hookPayload is the SessionStart request body (tolerant decode; unknown fields

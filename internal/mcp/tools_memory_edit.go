@@ -115,6 +115,14 @@ func (s *Server) handleMemoryEdit(ctx context.Context, req mcp.CallToolRequest) 
 	}
 
 	now := time.Now().UTC()
+	screen := s.screeningOn(ctx)
+	var screenSession string
+	var tainted bool
+	if screen {
+		screenSession = s.boundSession(ctx)
+		tainted = s.sessionTainted(ctx, screenSession)
+	}
+	var jd judged
 	var oldBody, newBody string
 	// MutateMemory hands over the memory as the FILE carries it and writes back
 	// whatever this returns, so the edit mutates `cur` in place. That is what
@@ -132,6 +140,7 @@ func (s *Server) handleMemoryEdit(ctx context.Context, req mcp.CallToolRequest) 
 			return core.Memory{}, err
 		}
 		oldBody = cur.Body
+		before := cur
 		if len(edits) > 0 {
 			edited, aerr := applyEdits(cur.Body, edits)
 			if aerr != nil {
@@ -178,10 +187,23 @@ func (s *Server) handleMemoryEdit(ctx context.Context, req mcp.CallToolRequest) 
 				cur.Model = model
 			}
 		}
+		if screen {
+			if herr := s.judgeMemoryWrite(ctx, "memory_edit", cur, before, core.Memory{}, screenSession, tainted, &jd); herr != nil {
+				return core.Memory{}, herr
+			}
+		}
 		return cur, nil
 	})
+	if held, ok := asHeld(err); ok {
+		s.recordScreened(ctx, "memory_edit", core.ItemKindMemory, held.hold.ItemID, held.hold.Project, screenSession,
+			held.hold.MemoryKind, jd)
+		return heldResult(held.hold, map[string]any{"id": held.hold.ItemID, "name": name, "project": held.hold.Project})
+	}
 	if err != nil {
 		return errResult("memory_edit", err)
+	}
+	if screen {
+		s.recordScreened(ctx, "memory_edit", core.ItemKindMemory, mem.ID, mem.Project, screenSession, mem.Kind, jd)
 	}
 	diff := unifiedDiff(oldBody, newBody)
 	// The diff rides in the payload so the console can render edit history later

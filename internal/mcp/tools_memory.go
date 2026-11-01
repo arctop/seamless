@@ -13,6 +13,7 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/lifecycle"
+	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/validate"
 )
@@ -84,8 +85,40 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 	}
 
 	now := time.Now().UTC()
+	// Write screening, when on, judges the call before anything lands: a
+	// supersede of a constraint (or, from a session marked as having read
+	// outside text, of any briefing-injected kind) holds the WHOLE call, so the
+	// old memory stays valid and in every briefing until the owner releases
+	// both halves together. The target is resolved here, ahead of the lock,
+	// only to judge; the supersede itself still runs after the write as always.
+	screen := s.screeningOn(ctx)
+	var screenSession string
+	var tainted bool
+	var supersedeTarget core.Memory
+	if screen {
+		screenSession = s.boundSession(ctx)
+		tainted = s.sessionTainted(ctx, screenSession)
+		target, terr := memoryName(argString(req, "supersedes"))
+		if terr != nil {
+			return errResult("memory_write", terr)
+		}
+		if target != "" {
+			if old, ok, rerr := s.resolveMemory(ctx, project, target, true); rerr != nil {
+				return errResult("memory_write", rerr)
+			} else if ok {
+				// The fence the supersede would meet after the write is met here,
+				// first: a hold must never turn a refused cross-scope supersede
+				// into one the owner releases without seeing the refusal.
+				if ferr := s.fenceWrite(ctx, old.Project); ferr != nil {
+					return errResult("memory_write", ferr)
+				}
+				supersedeTarget = old
+			}
+		}
+	}
 	var written core.Memory
 	var found bool
+	var jd judged
 	// Resolve, read, build and write as one serialized step. Split apart, two
 	// concurrent writers of the same name both saw the same starting file and the
 	// second rename won: the first write's body, tags and star were gone with no
@@ -99,6 +132,7 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 			return err
 		}
 		found = ok
+		var replaced core.Memory // the file this write replaces, read under the lock (screening's base)
 
 		mem := core.Memory{
 			Kind: kind, Name: name, Description: desc, Project: project, Body: body,
@@ -156,6 +190,7 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 						existing.FilePath, rerr)
 				}
 				mem.Tags, mem.Favorite, mem.Extra = onDisk.Tags, onDisk.Favorite, onDisk.Extra
+				replaced = onDisk
 			}
 		} else {
 			id, err := core.NewID()
@@ -175,6 +210,11 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 			mem.Tags = argStrings(req, "tags")
 		}
 
+		if screen {
+			if herr := s.judgeMemoryWrite(ctx, "memory_write", mem, replaced, supersedeTarget, screenSession, tainted, &jd); herr != nil {
+				return herr
+			}
+		}
 		w, werr := s.cfg.Files.WriteMemory(ctx, mem)
 		if werr != nil {
 			return werr
@@ -182,12 +222,19 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 		written = w
 		return nil
 	})
+	if held, ok := asHeld(err); ok {
+		s.recordScreened(ctx, "memory_write", core.ItemKindMemory, held.hold.ItemID, project, screenSession, kind, jd)
+		return heldResult(held.hold, map[string]any{"id": held.hold.ItemID, "name": name, "project": project, "updated": found})
+	}
 	if err != nil {
 		if errors.Is(err, files.ErrPathOccupied) {
 			return errResult("memory_write", fmt.Errorf(
 				"name %q is still held by a superseded or archived memory (%w) -- free it with memory_delete or pick a different name", name, err))
 		}
 		return errResult("memory_write", err)
+	}
+	if screen {
+		s.recordScreened(ctx, "memory_write", core.ItemKindMemory, written.ID, project, screenSession, kind, jd)
 	}
 	s.record(ctx, core.EventMemoryWritten, s.boundSession(ctx), project, written.ID,
 		map[string]any{"name": name, "kind": kindStr, "updated": found})
@@ -345,7 +392,16 @@ func (s *Server) handleMemoryAppend(ctx context.Context, req mcp.CallToolRequest
 	// two agents adding findings to the same memory is the normal case, not the
 	// pathological one -- and unserialized both read the same starting body and
 	// the second rename kept only its own addition.
+	screen := s.screeningOn(ctx)
+	var screenSession string
+	var tainted bool
+	if screen {
+		screenSession = s.boundSession(ctx)
+		tainted = s.sessionTainted(ctx, screenSession)
+	}
+	var jd judged
 	mem, err := s.cfg.Files.MutateMemory(ctx, idx.FilePath, func(ctx context.Context, cur core.Memory) (core.Memory, error) {
+		before := cur
 		cur.Body = strings.TrimRight(cur.Body, "\n") + "\n" + content + "\n"
 		cur.Updated = time.Now().UTC()
 		// Any body change re-stamps the model, the same rule memory_write follows on
@@ -357,10 +413,23 @@ func (s *Server) handleMemoryAppend(ctx context.Context, req mcp.CallToolRequest
 		if model := s.boundSessionModel(ctx); model != "" {
 			cur.Model = model
 		}
+		if screen {
+			if herr := s.judgeMemoryWrite(ctx, "memory_append", cur, before, core.Memory{}, screenSession, tainted, &jd); herr != nil {
+				return core.Memory{}, herr
+			}
+		}
 		return cur, nil
 	})
+	if held, ok := asHeld(err); ok {
+		s.recordScreened(ctx, "memory_append", core.ItemKindMemory, held.hold.ItemID, held.hold.Project, screenSession,
+			held.hold.MemoryKind, jd)
+		return heldResult(held.hold, map[string]any{"id": held.hold.ItemID, "name": name})
+	}
 	if err != nil {
 		return errResult("memory_append", err)
+	}
+	if screen {
+		s.recordScreened(ctx, "memory_append", core.ItemKindMemory, mem.ID, mem.Project, screenSession, mem.Kind, jd)
 	}
 	s.record(ctx, core.EventMemoryWritten, s.boundSession(ctx), mem.Project, mem.ID,
 		map[string]any{"name": name, "appended": true})
@@ -485,6 +554,15 @@ func (s *Server) handleMemoryRead(ctx context.Context, req mcp.CallToolRequest) 
 	if !mem.Active() {
 		out["warning"] = s.supersededWarning(ctx, mem)
 	}
+	// Write screening, when on: who stands behind this content -- the owner,
+	// or an agent and which session -- read the same way the briefing marks it.
+	if s.screeningOn(ctx) && s.cfg.Retrieve != nil {
+		p := s.cfg.Retrieve.MemoryProvenance(ctx, []core.Memory{mem})[mem.ID]
+		out["provenance"] = p.Label()
+		if p.Session != "" {
+			out["written_by_session"] = p.Session
+		}
+	}
 	return jsonResult(out)
 }
 
@@ -558,6 +636,31 @@ func (s *Server) handleMemoryDelete(ctx context.Context, req mcp.CallToolRequest
 	// write there is.
 	if err := s.fenceWrite(ctx, idx.Project); err != nil {
 		return errResult("memory_delete", err)
+	}
+	// Write screening, when on: deleting a constraint -- or, from a session
+	// marked as having read outside text, any briefing-injected kind -- is held,
+	// and the memory stays exactly where it is until the owner releases it.
+	if s.screeningOn(ctx) {
+		session := s.boundSession(ctx)
+		var reasons []screening.Code
+		if idx.Kind == core.KindConstraint {
+			reasons = append(reasons, screening.ReasonConstraintDelete)
+		}
+		if screening.IsBriefingKind(idx.Kind) && s.sessionTainted(ctx, session) {
+			reasons = append(reasons, screening.ReasonTaintedSession)
+		}
+		if len(reasons) > 0 {
+			h, herr := s.cfg.Screening.Hold(ctx, store.HeldWrite{
+				Op: store.HeldOpDelete, Tool: "memory_delete", ItemKind: core.ItemKindMemory, ItemID: idx.ID,
+				Project: idx.Project, Name: idx.Name, MemoryKind: idx.Kind, SessionID: session,
+				Reasons: screening.Strings(reasons), BaseHash: idx.ContentHash,
+				Detail: map[string]string{"path": idx.FilePath},
+			})
+			if herr != nil {
+				return errResult("memory_delete", herr)
+			}
+			return heldResult(h, map[string]any{"id": idx.ID, "name": name, "project": idx.Project})
+		}
 	}
 	if err := s.cfg.Files.Remove(ctx, idx.FilePath); err != nil {
 		return errResult("memory_delete", err)

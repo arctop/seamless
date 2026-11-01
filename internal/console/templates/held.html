@@ -1,0 +1,81 @@
+{{define "content"}}
+{{with .Data}}
+<div class="held-page" data-held>
+<header class="mv2-bar">
+  <h1>{{icon "lock"}}Held</h1>{{about "Agent writes kept out of briefings, recall and the gardener until you decide. Release one to let it land exactly as the agent wrote it; discard it to erase it."}}
+  <span class="mv2-count" aria-label="{{len .Pending}} writes waiting"><strong>{{len .Pending}}</strong>waiting</span>
+</header>
+
+{{if .Pending}}
+<section class="held-list" aria-label="Writes waiting for your review">
+  {{range .Pending}}
+  <article class="held-card{{if .Stale}} is-stale{{end}}" id="held-{{.ID}}" data-hold="{{.ID}}">
+    <header class="held-card-head">
+      <span class="badge">{{.What}}</span>
+      {{if .Link}}<a class="held-name" href="{{.Link}}">{{.Name}}</a>{{else}}<strong class="held-name">{{.Name}}</strong>{{end}}
+      <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}} &middot; {{.Tool}}{{if .Session}} &middot; <span class="mono">{{.Session}}</span>{{end}} &middot; <span title="{{ts .CreatedAt}}">{{ago .CreatedAt}}</span></span>
+    </header>
+    <ul class="held-reasons">
+      {{range .Reasons}}<li><code>{{.Code}}</code>{{if .Words}} {{.Words}}{{end}}</li>{{end}}
+    </ul>
+    {{if .Note}}<p class="held-note">{{.Note}}</p>{{end}}
+    {{if .Preview}}
+    <details class="held-preview-box" open>
+      <summary>The write, as an agent would read it <small>(hidden characters spelled out, secrets redacted)</small></summary>
+      <pre class="held-preview">{{.Preview}}</pre>
+    </details>
+    {{end}}
+    <div class="held-actions">
+      {{if .Stale}}
+      <p class="held-stale">{{icon "triangle-alert"}} The {{.ItemKind}} changed after this was held, so releasing it would undo that change. Discard it; the agent can write again.</p>
+      {{else}}
+      <form method="post" action="/console/held/{{.ID}}/release">
+        <button class="btn primary small" type="submit">{{icon "check"}} Release</button>
+      </form>
+      {{end}}
+      <form method="post" action="/console/held/{{.ID}}/discard">
+        <button class="btn small" type="submit" onclick="return confirm('Discard this held write? Nothing lands, and its text is erased.');">{{icon "x"}} Discard</button>
+      </form>
+    </div>
+  </article>
+  {{end}}
+</section>
+{{else}}
+<section class="held-empty">
+  <p>Nothing is waiting. A write lands here when it fails a screen (a secret, an injection marker, hidden characters, an encoded blob, an unlisted link), when a session that read outside text changes a constraint, convention, protocol or stage, and when any agent supersedes or deletes a constraint.</p>
+</section>
+{{end}}
+
+<section class="held-sessions" aria-labelledby="held-sessions-title">
+  <h2 id="held-sessions-title">Sessions that read outside text</h2>
+  <p class="held-sub">An agent guard marks a session after a tool brings outside text into it (a web page, a mail, a fetched file). Its changes to binding rules are held until you clear the mark or the session ends. Only you can clear it.</p>
+  {{if .Tainted}}
+  <ul class="held-taints">
+    {{range .Tainted}}
+    <li class="held-taint" data-taint="{{.SessionID}}">
+      <a class="mono" href="/console/sessions/{{.SessionID}}">{{.Name}}</a>
+      <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}} &middot; {{.Status}} &middot; <code>{{.Reason}}</code> &middot; since <span title="{{ts .Since}}">{{ago .Since}}</span></span>
+      <form method="post" action="/console/held/sessions/{{.SessionID}}/clear">
+        <button class="btn small" type="submit" onclick="return confirm('Clear the outside-text mark on this session? Its changes to binding rules will land without a hold.');">Clear mark</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="held-none">No session carries the mark.</p>
+  {{end}}
+</section>
+
+{{if .Recent}}
+<section class="held-recent" aria-labelledby="held-recent-title">
+  <h2 id="held-recent-title">Recently decided</h2>
+  <ul class="held-history">
+    {{range .Recent}}
+    <li><span class="badge{{if eq .Status "released"}} ok{{end}}">{{.Status}}</span> {{.What}} <strong>{{.Name}}</strong> <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{range .Reasons}} &middot; <code>{{.Code}}</code>{{end}}{{with .ResolvedAt}} &middot; <span title="{{ts .}}">{{ago .}}</span>{{end}}</span></li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+</div>
+{{end}}
+{{end}}

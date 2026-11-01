@@ -52,7 +52,7 @@ var faviconSVG []byte
 var pageNames = []string{
 	"login", "overview", "now", "search", "interactions", "projects", "projectdetail", "context", "sessions", "session",
 	"memories", "notes", "retrieval", "tasks", "plans", "labs", "trials", "gardener", "settings", "event", "error",
-	"feature_off",
+	"feature_off", "held",
 }
 
 // peekNames are the entity detail templates. Each templates/peek_<name>.html
@@ -389,6 +389,12 @@ var eventLabels = map[string]string{
 	"update.applied":             "Version changed", // a downgrade too; the summary says which
 	"update.started":             "Update started",
 	"update.failed":              "Update failed",
+	"memory.screened":            "Write screened",
+	"memory.held":                "Write held",
+	"memory.released":            "Held write released",
+	"memory.discarded":           "Held write discarded",
+	"session.tainted":            "Outside text read",
+	"session.untainted":          "Outside-text mark cleared",
 }
 
 // evtLabel names an event kind for a reader. An unlisted kind is spelled out

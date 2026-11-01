@@ -55,12 +55,34 @@ func (s *Server) handleCaptureURL(ctx context.Context, req mcp.CallToolRequest) 
 		Project: project, Body: body, Tags: []string{"created-by:agent", "captured-url"},
 		SourceURL: content.URL, Model: s.boundSessionModel(ctx), Created: now, Updated: now,
 	}
+	// A captured page is outside text by definition, landing straight in the
+	// corpus where recall can serve it to every later session: it is screened
+	// like any other note write.
+	screen := s.screeningOn(ctx)
+	var screenSession string
+	var jd judged
+	if screen {
+		session := s.boundSession(ctx)
+		screenSession = session
+		if herr := s.judgeNoteWrite(ctx, "capture_url", note, core.Note{}, "", session, &jd); herr != nil {
+			held, ok := asHeld(herr)
+			if !ok {
+				return errResult("capture_url", herr)
+			}
+			s.recordScreened(ctx, "capture_url", core.ItemKindNote, note.ID, project, session, "", jd)
+			return heldResult(held.hold, map[string]any{"id": note.ID, "slug": note.Slug, "title": note.Title,
+				"project": project, "source_url": content.URL})
+		}
+	}
 	written, err := s.cfg.Files.WriteNote(ctx, note)
 	if err != nil {
 		return errResult("capture_url", err)
 	}
 	s.record(ctx, core.EventNoteWritten, s.boundSession(ctx), project, written.ID,
 		map[string]any{"title": content.Title, "source_url": content.URL})
+	if screen {
+		s.recordScreened(ctx, "capture_url", core.ItemKindNote, written.ID, project, screenSession, "", jd)
+	}
 	return jsonResult(map[string]any{
 		"id": written.ID, "slug": written.Slug, "title": written.Title,
 		"project": project, "source_url": content.URL,

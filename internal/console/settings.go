@@ -394,6 +394,10 @@ func (s *Service) settings(w http.ResponseWriter, r *http.Request) {
 		// reassurance line, not the page.
 		s.logger.Warn("console: settings feature counts", "error", cerr)
 	}
+	heldCount, herr := store.CountPendingHolds(ctx, s.cfg.DB)
+	if herr != nil {
+		s.logger.Warn("console: settings held count", "error", herr)
+	}
 
 	var previewProjects []string
 	var previewProject string
@@ -418,7 +422,7 @@ func (s *Service) settings(w http.ResponseWriter, r *http.Request) {
 			Gardener:           s.cfg.GardenerCfg,
 			Briefing:           briefing,
 			BriefingOverridden: overridden,
-			Features:           featureCards(featuresCfg, navCounts{Labs: rawCounts.Labs, Trials: rawCounts.Trials}),
+			Features:           featureCards(featuresCfg, navCounts{Labs: rawCounts.Labs, Trials: rawCounts.Trials, Held: heldCount}),
 			FeaturesConfig:     featuresCfg,
 			FeaturesOverridden: featuresOverridden,
 			UtilityRows:        utilityRows,
@@ -769,6 +773,11 @@ func (s *Service) settingsLevelSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	// The welcome card's write-screening box rides with the level choice:
+	// unticked (absent) changes nothing, ticked turns the feature on.
+	if ok := s.welcomeFeatureOptIn(w, r); !ok {
+		return
+	}
 	prev := s.consoleLevel(ctx).Level
 	if err := store.SetConsoleLevel(ctx, s.writeDB(), next.String(), store.ConsoleLevelChosen); err != nil {
 		s.serverError(w, r, err)
@@ -808,6 +817,9 @@ func (s *Service) settingsLevelReset(w http.ResponseWriter, r *http.Request) {
 // settingsLevelWelcome dismisses the Home welcome card without changing the
 // level. It lands back where it was posted from, with nothing to announce.
 func (s *Service) settingsLevelWelcome(w http.ResponseWriter, r *http.Request) {
+	if ok := s.welcomeFeatureOptIn(w, r); !ok {
+		return
+	}
 	if err := store.MarkConsoleWelcomed(r.Context(), s.writeDB()); err != nil {
 		s.serverError(w, r, err)
 		return
@@ -818,6 +830,69 @@ func (s *Service) settingsLevelWelcome(w http.ResponseWriter, r *http.Request) {
 	q.Del("error")
 	target.RawQuery = q.Encode()
 	http.Redirect(w, r, target.RequestURI(), http.StatusSeeOther)
+}
+
+// welcomeOptInFeatures are the optional features the Home welcome card may
+// turn on beside the level choice. Only write screening: it changes what
+// agents receive, so it is offered as its own choice there instead of hiding
+// inside a level.
+var welcomeOptInFeatures = []features.Key{features.Screening}
+
+// welcomeFeatureOptIn applies the welcome card's feature boxes posted with a
+// level choice or a dismissal. An absent box changes nothing, at any level; a
+// ticked one turns its feature on through enableFeature -- the same store call
+// and event as Settings -> Features. A box present with any value other than
+// the checkbox's own is refused, never read as off. It reports whether the
+// handler may go on.
+func (s *Service) welcomeFeatureOptIn(w http.ResponseWriter, r *http.Request) bool {
+	for _, key := range welcomeOptInFeatures {
+		values, present := r.PostForm[featureField(key)]
+		if !present {
+			continue
+		}
+		if len(values) != 1 || values[0] != "1" {
+			settingsLevelFlash(w, r, fmt.Sprintf("%s must be omitted (off) or set exactly once to 1 (on)", featureField(key)))
+			return false
+		}
+		if err := s.enableFeature(r.Context(), key); err != nil {
+			s.serverError(w, r, err)
+			return false
+		}
+	}
+	return true
+}
+
+// enableFeature turns one optional feature on and leaves every other one as
+// it is, through the store call and the event Settings -> Features uses: the
+// whole effective set stored as the override row, and settings.features_changed
+// naming every feature's resulting state. Already on, it stores and logs
+// nothing. Turning a feature on deletes nothing and is undone in Settings.
+func (s *Service) enableFeature(ctx context.Context, key features.Key) error {
+	f, ok := features.Get(key)
+	if !ok {
+		return fmt.Errorf("console: unknown feature %q", key)
+	}
+	cfg, _ := s.featuresConfig(ctx)
+	if f.Enabled(cfg) {
+		return nil
+	}
+	f.Set(&cfg, true)
+	if err := store.SetFeaturesConfig(ctx, s.writeDB(), cfg); err != nil {
+		return err
+	}
+	changed := make(map[string]any, len(features.Registry()))
+	for _, g := range features.Registry() {
+		changed[string(g.Key)] = g.Enabled(cfg)
+	}
+	if s.cfg.Events != nil {
+		if _, err := s.cfg.Events.Record(ctx, core.Event{
+			Kind:    eventFeaturesChanged,
+			Payload: map[string]any{"features": changed, "by": "console"},
+		}); err != nil {
+			s.logger.Warn("console: record features event", "error", err)
+		}
+	}
+	return nil
 }
 
 // levelReturn is the level forms' optional return path, through the login

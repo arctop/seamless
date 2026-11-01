@@ -461,6 +461,7 @@ an absolute path into the client registration so it works from every repository.
 ```bash
 seam hook session-start|user-prompt-submit|session-end|stop
 seam hook subagent-start|subagent-stop|post-tool-use|permission-request
+seam hook session-taint
 ```
 
 Invoked by Claude Code or Codex, not by hand. Each reads the hook payload from stdin,
@@ -490,4 +491,8 @@ Two behaviours matter if you are debugging a hook:
   approval or a write to a file directly under `~/.claude/plans` before loading
   config or touching the network. The daemon re-validates the path anyway.
 
-Install these with `seamlessd install-hooks`.
+Install these with `seamlessd install-hooks`. The one exception is
+`session-taint`, which no installer wires: an agent guard's own PostToolUse
+hook pipes its stdin to it after a tool that read outside text, and the daemon
+marks the session for [write screening](/guides/write-screening/#the-outside-text-mark).
+It retries and gives up like the others (5s, 9s).

@@ -83,6 +83,12 @@ func (s *Server) handleNotesEdit(ctx context.Context, req mcp.CallToolRequest) (
 		return errResult("notes_edit", err)
 	}
 
+	screen := s.screeningOn(ctx)
+	var screenSession string
+	if screen {
+		screenSession = s.boundSession(ctx)
+	}
+	var jd judged
 	var oldBody, newBody string
 	// MutateNote hands over the note as the FILE carries it and writes back
 	// whatever this returns, so the edit mutates `cur` in place. That is what
@@ -106,6 +112,7 @@ func (s *Server) handleNotesEdit(ctx context.Context, req mcp.CallToolRequest) (
 			return core.Note{}, aerr
 		}
 		oldBody, newBody = cur.Body, edited
+		before := cur
 		cur.Body = edited
 		cur.Updated = time.Now().UTC()
 		// The body changed, so the prose is this model's: leaving the old value
@@ -116,10 +123,22 @@ func (s *Server) handleNotesEdit(ctx context.Context, req mcp.CallToolRequest) (
 		if model := s.boundSessionModel(ctx); model != "" {
 			cur.Model = model
 		}
+		if screen {
+			if herr := s.judgeNoteWrite(ctx, "notes_edit", cur, before, "", screenSession, &jd); herr != nil {
+				return core.Note{}, herr
+			}
+		}
 		return cur, nil
 	})
+	if held, ok := asHeld(err); ok {
+		s.recordScreened(ctx, "notes_edit", core.ItemKindNote, held.hold.ItemID, held.hold.Project, screenSession, "", jd)
+		return heldResult(held.hold, map[string]any{"id": held.hold.ItemID})
+	}
 	if err != nil {
 		return errResult("notes_edit", err)
+	}
+	if screen {
+		s.recordScreened(ctx, "notes_edit", core.ItemKindNote, note.ID, note.Project, screenSession, "", jd)
 	}
 
 	diff := unifiedDiff(oldBody, newBody)

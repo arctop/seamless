@@ -4220,6 +4220,12 @@ agents share dead ends instead of repeating them. Related:
 [Capture Claude Code plans](/guides/plan-mode/) explains how plan mode is
 captured into notes and tasks automatically, and which hook does what.
 
+[Screen writes and hold the suspicious ones](/guides/write-screening/) is the
+opt-in guard against a poisoned memory: every agent write is screened for
+secrets, injection markers and hidden characters, and the suspicious ones -
+along with any change to a binding rule by a session that read outside text -
+wait for your release instead of reaching every briefing.
+
 The last three are operational. [Import, back up & restore](/guides/data/) covers
 putting `~/.seamless` in git, what deleting `seam.db` actually costs (an index
 rebuild, not data loss), and moving to a new machine.
@@ -6251,6 +6257,259 @@ is the fallback if anything in the move went wrong.
 
 ---
 
+# Screen writes and hold the suspicious ones
+
+URL: https://thereisnospoon.org/docs/guides/write-screening/
+
+
+Seamless injects its constraints and conventions into every session's
+briefing, and recall serves memories and notes to any agent that asks. That
+makes the corpus the most leveraged place to plant a prompt injection: a
+poisoned constraint is read by every agent, in every session, until someone
+notices. The gardener, which reads memories and proposes rewrites, can carry
+one further.
+
+**Write screening** is the optional feature that closes that door. It is off by
+default, and off means writes land exactly as they always have. On, it does
+three things:
+
+1. **Screens every agent write** to a memory or note for secrets, injection
+   markers, hidden Unicode, long encoded blobs, and links outside an allowlist,
+   and records the verdict codes - never the text - as a `memory.screened`
+   event.
+2. **Holds the suspicious ones.** A write that fails a screen, a change to a
+   briefing-injected kind (constraint, convention, protocol, stage) by a
+   session an agent guard marked as having read outside text, and any
+   supersede or delete of a constraint are kept out of the corpus - out of
+   briefings, recall, prompt injection and the gardener - until you release
+   them on the console's **Held** screen.
+3. **Marks provenance** on what agents read: every injected memory line says
+   whether you confirmed its content or an agent wrote it, and in which
+   session.
+
+## Turn it on
+
+Three ways, all the same switch:
+
+- **The Home welcome card.** After installing, Home asks how much of the
+  console you want to see. Beside the level choice is an unchecked box, **Also
+  turn on write screening**. Tick it and whichever button you press (a level
+  or Dismiss) turns the feature on too. Leave it unticked and nothing changes,
+  at any level. The level is presentation only; screening changes what your
+  agents receive, which is why it is its own choice rather than part of a
+  level.
+- **Settings -> Features**, the card named **Write screening**. This is the way
+  in once the welcome card is gone. It stores the same override row the
+  welcome box writes, records the same `settings.features_changed` event, and,
+  like every optional feature, turning it off deletes nothing.
+- **The config file or environment:** `features.screening: true`, or
+  `SEAMLESS_FEATURES_SCREENING=true`. A console choice wins over both until
+  you reset it.
+
+The tunables live in their own block:
+
+```yaml
+screening:
+  # Hosts a URL may point at without a verdict; each covers its subdomains.
+  # Unset or empty turns the URL screen off.
+  url_allowlist: [example.com, docs.example.org]
+  # The shortest unbroken base64 or hex run that counts as a long blob.
+  blob_min_length: 200
+```
+
+`SEAMLESS_SCREENING_URL_ALLOWLIST` (comma-separated) and
+`SEAMLESS_SCREENING_BLOB_MIN_LENGTH` override them. Loopback URLs
+(`localhost`, `127.0.0.1`) are never "outside".
+
+## What is screened
+
+Every agent write that lands text in the corpus: `memory_write` (including
+the half that supersedes), `memory_append`, `memory_edit`, `notes_create`,
+`notes_update`, `notes_edit`, `notes_append`, `capture_url` (a fetched page is
+outside text by definition), and an agent's `gardener_apply` of a proposal
+that writes text (a digest, a consolidated memory). A memory is screened on
+its description, body and tags; a note on its title, description, source URL,
+body and tags.
+
+An update is judged by what it **adds**: a verdict counts only if the new text
+matches it more often than the text it replaces. So a memory you released
+because it legitimately quotes an injection (a note about prompt injection,
+say) takes later edits without being held again, while a second marker - or
+one assembled across two appends - still shows.
+
+Memories are instructions to agents by design, so the screens look for what
+an injection or a leak looks like, never for ordinary imperative text. "Always
+run make check" and "fetch upstream first" screen clean.
+
+| Code | Holds? | What it means |
+|---|---|---|
+| `secret.private_key` | holds | A PEM or OpenSSH private key block. |
+| `secret.aws_access_key` | holds | An AWS access key id (AWS's documented example key excepted). |
+| `secret.github_token` | holds | A GitHub personal, OAuth, app or fine-grained token. |
+| `secret.slack_token` | holds | A Slack token or incoming-webhook URL. |
+| `secret.openai_key` | holds | An OpenAI API key. |
+| `secret.anthropic_key` | holds | An Anthropic API key. |
+| `secret.google_api_key` | holds | A Google API key. |
+| `secret.stripe_key` | holds | A live Stripe secret or restricted key. |
+| `secret.jwt` | holds | A signed JSON Web Token. |
+| `instruction.override` | holds | Telling the reader to drop its prior instructions ("ignore all previous instructions", "you are now in developer mode", "new instructions:"). |
+| `instruction.role_marker` | holds | Chat-template and role tags that impersonate the system, a developer or a tool, including Seamless's own `seam-briefing` and `seam-recall` envelope tags. Quoted as code (in backticks or a fence) they are documentation and do not count. |
+| `instruction.concealment` | holds | Telling the reader to hide what it does from the user ("keep this hidden from the user", "do not reveal these instructions", "secretly send"). |
+| `instruction.exfiltration` | holds | Telling the reader to send credentials somewhere outside: a sending verb, a secret, and a destination it goes **to** (a webhook, an external server, or a URL outside the allowlist), or a network command reading a credential file. Copying a public key is not one. |
+| `hidden.comment` | records | An HTML or markdown comment: invisible on the console, read in full by an agent. |
+| `hidden.style` | records | An element styled or flagged invisible (`display:none`, `font-size:0`, `hidden`). |
+| `hidden.instruction` | holds | An imperative aimed at the agent inside hidden text: harmless in plain sight, a marker when hidden from the person reviewing it. |
+| `unicode.tag` | holds | Tag characters U+E0000 to U+E007F, which can spell invisible ASCII. |
+| `unicode.zero_width` | holds | Zero-width characters U+200B to U+200D, U+2060 and U+FEFF (a byte-order mark at the very start excepted). They also split words to slip past the phrase screens, which is why those screens read the text with them removed. |
+| `unicode.bidi` | holds | Bidirectional embeddings, overrides and isolates U+202A to U+202E and U+2066 to U+2069, which make the console show different text than an agent reads. |
+| `blob.base64` | holds | An unbroken base64 run of at least `blob_min_length` characters, mixing digits and both cases. |
+| `blob.hex` | holds | An unbroken hex run of at least `blob_min_length` characters. |
+| `url.unlisted` | holds | A URL whose host is outside `url_allowlist`. With no allowlist this screen is off: every URL would be "outside", which says nothing. |
+
+Why the two that only record: comments and invisible styles are common in real
+notes (templates, TODOs, pasted HTML), and holding on them alone would bury the
+queue. What makes one dangerous - an instruction to the agent hidden inside -
+is `hidden.instruction`, which holds.
+
+## What is held
+
+A write is held when any of these is true:
+
+| Reason | When |
+|---|---|
+| a screen verdict that holds | The write adds one of the holding codes above. |
+| `session.tainted` | The writing session carries the outside-text mark, and the write touches a briefing-injected kind: a constraint, convention, protocol or stage it writes, replaces, supersedes or deletes. |
+| `constraint.supersede` | The write supersedes a constraint, from any session. |
+| `constraint.delete` | `memory_delete`, or an agent's gardener archive, of a constraint, from any session. |
+| `constraint.demote` | The write turns a constraint into another kind, which drops it from every briefing's binding section. |
+
+A held call is held **whole**: a `memory_write` that supersedes a constraint
+writes nothing - neither the replacement nor the supersede - so the old
+constraint stays valid and in every briefing until you release both halves
+together. A held delete leaves the memory exactly where it is. A held gardener
+apply leaves the proposal pending.
+
+The held text lives in the database's queue, never under `memory/` or
+`notes/`. Briefings, recall, prompt injection and the gardener only ever read
+those two trees, so a held write cannot reach any of them, and no reconcile or
+index rebuild can bring it back. Deleting `seam.db` discards the queue with
+the rest of the database - held writes are not corpus data until you release
+them.
+
+The agent is told plainly that the write is held: the tool answers with
+`status: "held"`, the hold's id, its reason codes, and a message that nothing
+in the corpus changed and the owner decides. It is a success answer, not an
+error an agent would retry. `memory_read` and `notes_read` keep serving the
+corpus as it stands - the held text reaches no agent.
+
+## Review on the Held screen
+
+**Held** (in the sidebar while the feature is on, at every console level)
+lists each waiting write with what it would do, who wrote it, the reason codes
+in plain words, and the text exactly as an agent would read it: every hidden
+character is spelled out (`[U+200B]`), and secrets are redacted, so the screen
+can be reviewed - and captured - without the credential.
+
+- **Release** applies the write through the files layer, exactly as the agent
+  sent it, and marks the memory owner-confirmed. A release whose target moved
+  on after it was held (a later write landed, the name was taken, the
+  constraint it supersedes is already gone) is refused, because it would
+  silently undo that change; such a hold offers only Discard.
+- **Discard** lands nothing and erases the held text. The row stays as the
+  record of what was refused.
+
+Turning the feature off stops screening new writes but releases nothing: held
+writes stay out of the corpus, and the queue comes back when you turn it on.
+
+## The outside-text mark
+
+An agent guard - a client hook that knows which tools bring outside text into
+a session, such as a web fetch, a search or a mail reader - marks the session
+after one runs. From then on the session's changes to briefing-injected kinds
+are held. The mark is set by POSTing to the daemon with the credentials every
+hook already has (the bearer key, or the peer_auth socket):
+
+```bash
+# From a PostToolUse hook: forward the hook's own stdin unchanged.
+seam hook session-taint
+seam hook session-taint --client codex
+```
+
+`seam hook session-taint` reads the hook payload from stdin and posts it to
+`POST /api/hooks/session-taint`, which finds the session by the client's own
+`session_id`. A caller that knows the Seamless session can name it instead,
+with `{"session": "<ULID or cc/... name>"}`. An optional `reason` is a short
+code (`web_fetch`, `mail`); without one, the payload's `tool_name` becomes the
+reason (`tool:webfetch`). The first mark stands. With the feature off the
+endpoint marks nothing and says so.
+
+Setting the mark only lowers trust, so a session's own hook may set it.
+Clearing it is yours: the Held screen lists every marked session with a
+**Clear mark** button, and nothing else - no endpoint, flag or MCP tool -
+clears one. A new session starts unmarked.
+
+`install-hooks` does not wire this event: the stock PostToolUse hook only ever
+forwards plan-file writes and plan approvals, so the daemon never sees which
+other tools ran. The guard is a hook of your own.
+
+## Provenance on injected memories
+
+While the feature is on, every memory line in a briefing and in the
+prompt-matched `seam-recall` block ends with a mark:
+
+- `[owner-confirmed]` - you released a held write of exactly this content (the
+  console stores a fingerprint of its kind, scope, name, description and
+  body). Any later change - an agent's edit, an append, a hand edit of the file
+  - no longer matches, and the mark lapses on its own. A star or a tag change
+  does not lapse it.
+- `[agent-written, session cc/...]` - everything else, with the session that
+  last wrote the content through Seamless. The session is named only when it
+  ran in the memory's own scope: a global memory written from inside a project
+  does not carry that project's session name into every other briefing.
+
+`memory_read` returns the same answer as `provenance` and
+`written_by_session`.
+
+## Events
+
+| Event | When | Payload |
+|---|---|---|
+| `memory.screened` | Every screened write, clean ones included (`verdicts: []`), so a monitor can tell a clean write from one never screened. | `item_kind`, `kind`, `tool`, `size`, `verdicts`, `held` |
+| `memory.held` | A write went to the queue. | `hold`, `op`, `item_kind`, `kind`, `tool`, `reasons` |
+| `memory.released` | You released a held write and it landed. | `hold`, `op`, `item_kind`, `kind`, `tool`, `by` |
+| `memory.discarded` | You discarded a held write. | `hold`, `op`, `item_kind`, `kind`, `tool`, `by` |
+| `session.tainted` | A session got the outside-text mark (once). | `reason`, `via` |
+| `session.untainted` | You cleared a session's mark. | `by` |
+
+Each carries the session, project and item ids in the event's own columns.
+None carries a body, a description, or the text a screen matched.
+
+## Calibrate before you turn it on
+
+The screens ship with a calibration test that reads a folder of memory and
+note markdown files and prints how often each verdict would fire, per code and
+per file - never the matched text:
+
+```bash
+SEAMLESS_SCREEN_CORPUS=/path/to/a/copy/of/memory go test ./internal/screening \
+  -run TestCalibration_Corpus -v
+```
+
+`SEAMLESS_SCREEN_ALLOWLIST` and `SEAMLESS_SCREEN_BLOB_MIN_LENGTH` set the rules
+it runs with. Run it on a copy of a corpus you are allowed to read.
+
+## What it does not cover
+
+- **Your own writes.** Console actions and the owner CLIs (`seamlessd import`,
+  merges, the v1 importer) are yours, and are not screened.
+- **Other text agents leave.** Session findings and task titles also reach
+  briefings, and plan-mode captures land as notes; none of them is screened
+  by this feature.
+- **Edits that bypass Seamless.** A file changed on disk by another process is
+  re-indexed as it always was; its provenance mark lapses, but it is not held.
+
+---
+
 # Troubleshooting
 
 URL: https://thereisnospoon.org/docs/guides/troubleshooting/
@@ -8197,6 +8456,7 @@ an absolute path into the client registration so it works from every repository.
 ```bash
 seam hook session-start|user-prompt-submit|session-end|stop
 seam hook subagent-start|subagent-stop|post-tool-use|permission-request
+seam hook session-taint
 ```
 
 Invoked by Claude Code or Codex, not by hand. Each reads the hook payload from stdin,
@@ -8226,7 +8486,11 @@ Two behaviours matter if you are debugging a hook:
   approval or a write to a file directly under `~/.claude/plans` before loading
   config or touching the network. The daemon re-validates the path anyway.
 
-Install these with `seamlessd install-hooks`.
+Install these with `seamlessd install-hooks`. The one exception is
+`session-taint`, which no installer wires: an agent guard's own PostToolUse
+hook pipes its stdin to it after a tool that read outside text, and the daemon
+marks the session for [write screening](/guides/write-screening/#the-outside-text-mark).
+It retries and gives up like the others (5s, 9s).
 
 ---
 
@@ -8941,7 +9205,7 @@ That fourth layer covers three blocks where the stored row simply wins:
 | Block | Written by | When it takes effect |
 |---|---|---|
 | `briefing:` | Settings → [Briefing](/reference/console/#briefing) | From the next session start. |
-| `features:` | Settings → [Features](/reference/console/#optional-features) | Immediately in the console; an agent sees it from its next session (tool lists and briefings alike). |
+| `features:` | Settings → [Features](/reference/console/#optional-features), or the Home welcome card's write-screening box | Immediately in the console; an agent sees it from its next session (tool lists and briefings alike), and write screening from its next write. |
 | `console.level` | Settings → [Experience](/reference/console/#experience), or the Home welcome card | Immediately, in the console only. |
 
 The `update:` block's two switches, `update.check` and `update.auto`, are merged
@@ -9108,6 +9372,9 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `features.research` | bool | - |
 | `features.momentum` | bool | - |
 | `features.gamification` | bool | - |
+| `features.screening` | bool | - |
+| `screening.url_allowlist` | []string | - |
+| `screening.blob_min_length` | int | `200` |
 | `console.level` | string | `basic` |
 | `search.semantic_floor` | float64 | `0.3` |
 | `llm.provider` | string | `openai` |
@@ -9333,6 +9600,29 @@ features:
   # real recorded activity; off, the Now screen carries no trace of it.
   # env: SEAMLESS_FEATURES_GAMIFICATION
   gamification: false
+  # Write screening: every agent write to a memory or note is screened for
+  # secrets, injection markers, hidden Unicode, long encoded blobs and URLs
+  # outside screening.url_allowlist. A suspicious write -- and any change to a
+  # constraint, convention, protocol or stage by a session an agent guard
+  # marked as having read outside text, and any supersede or delete of a
+  # constraint -- is held out of briefings, recall and the gardener until you
+  # release it on the console's Held screen; injected memories say whether you
+  # confirmed them or an agent wrote them. Off, writes land exactly as before.
+  # The Home welcome card offers it too. Tunables: the screening block below.
+  # env: SEAMLESS_FEATURES_SCREENING
+  screening: false
+
+# The write screens behind features.screening (inert while it is off).
+screening:
+  # Hosts a URL in a screened write may point at without a verdict; each entry
+  # covers its subdomains too. Unset or empty turns the URL screen off. A URL
+  # to any other host holds the write for your review.
+  # env: SEAMLESS_SCREENING_URL_ALLOWLIST (comma-separated)
+  # url_allowlist: [example.com, docs.example.org]
+  # The shortest unbroken base64 or hex run that counts as a long encoded blob
+  # (hashes, ids and PEM certificate lines stay below the default).
+  # env: SEAMLESS_SCREENING_BLOB_MIN_LENGTH
+  blob_min_length: 200
 
 # The observability console. Presentation only: nothing here changes what your
 # agents receive -- briefings, MCP tools, hooks, recall, and the gardener are
@@ -9733,6 +10023,41 @@ MCP state. It also checks the recorded binary and config targets exist. A machin
 with no Codex CLI, initialized home, or Seamless Codex configuration is one quiet
 `not detected` line, never a failure. `seam doctor` covers the other half: it hits
 `/healthz` and calls `tools/list`, which proves the endpoint and key are working.
+
+## The outside-text mark: session-taint {#session-taint}
+
+One more endpoint lives beside the hooks, and no profile installs it:
+`POST /api/hooks/session-taint` is for an **agent guard** - a hook of your own
+that knows which tools bring outside text into a session (a web fetch, a
+search, a mail reader). After one runs, the guard marks the session, and from
+then on, with [write screening](/guides/write-screening/) on, the session's
+changes to constraints, conventions, protocols and stages are held for your
+release instead of landing.
+
+```bash
+# In the guard's PostToolUse hook, forward its stdin unchanged:
+seam hook session-taint                 # Claude Code
+seam hook session-taint --client codex  # Codex
+```
+
+The body is a hook payload: the client's own `session_id` (with `?client=`
+naming the client, as for every hook), or `{"session": "<ULID or cc/... name>"}`
+for a caller that knows the Seamless session. An optional `reason` is a short
+code (`web_fetch`, `mail`); without one, the payload's `tool_name` becomes the
+reason (`tool:webfetch`). It authenticates like every hook - the bearer key,
+or the peer_auth socket - and under peer_auth a session of another account is
+not found.
+
+It is the one hook route that reports its outcome: the body is always the
+plain acknowledgement (`{"continue":true,"suppressOutput":true}`), so a guard
+that uses `seam hook session-taint` as its whole hook command hands its client
+valid hook output, while the `X-Seamless-Taint` header and the status say what
+happened - `marked` or `already-marked` (200; the first mark stands), `off`
+(200; screening is off, nothing marked), `unknown-session` (404), `invalid`
+(400). `seam hook` still exits 0 on every one of them.
+
+Nothing clears a mark through a hook, a flag or an MCP tool: only the owner,
+on the console's Held screen.
 
 ## What rides on the query string
 
@@ -10562,6 +10887,9 @@ The console is **read-mostly**. That is a design claim, so here is the whole lis
 | Apply a whole plan batch | `POST /console/gardener/plan/{slug}/apply` | Applies every pending proposal in a plan, split setup first so the child projects exist before the memories move. Best-effort: it applies what it can, reports how many landed, and leaves the rest pending. |
 | Dismiss a whole rail group | `POST /console/gardener/group/dismiss` | Dismisses every pending proposal in one rail section or split plan, one at a time, so each keeps its own event and stays individually undoable. Only Dismiss is offered in bulk. |
 | Undo a decision | `POST /console/gardener/{id}/undo` | Returns a resolved proposal to the queue from **Recently decided**, inverting whatever its apply did, for the kinds whose apply can be inverted. |
+| Release a held write | `POST /console/held/{id}/release` | [Write screening](#held): lands a held agent write exactly as the agent sent it, and marks the memory owner-confirmed. Refused when its target changed after it was held. |
+| Discard a held write | `POST /console/held/{id}/discard` | Lands nothing and erases the held text; the row stays as the record. |
+| Clear a session's outside-text mark | `POST /console/held/sessions/{id}/clear` | The only way the mark comes off: the session's changes to binding rules land without a hold again. |
 | Set a project's isolation | `POST /console/projects/{slug}/isolation` | Changes how far a project's knowledge travels. A tightening that would cut existing context first renders a confirmation step; nothing is written until it is confirmed. |
 | Save briefing settings | `POST /console/settings/briefing` | Writes the briefing knobs as a runtime **override row** in the DB. It never writes the config file. |
 | Reset briefing settings | `POST /console/settings/briefing/reset` | Clears the override row, reverting to the file/env configuration. |
@@ -10570,7 +10898,7 @@ The console is **read-mostly**. That is a design claim, so here is the whole lis
 | Re-embed everything | `POST /console/settings/embeddings/reembed` | Starts a background pass that re-embeds every memory and note with the active model. It changes vectors, never content. |
 | Choose the console level | `POST /console/settings/level` | Stores the [experience level](#choose-how-much-you-see) as a row that wins over file and env. Presentation only: nothing an agent receives changes. |
 | Reset the console level | `POST /console/settings/level/reset` | Clears that row, back to the file/env level. |
-| Dismiss the welcome card | `POST /console/settings/level/welcome` | Records that the Home welcome card was seen, without choosing a level. |
+| Dismiss the welcome card | `POST /console/settings/level/welcome` | Records that the Home welcome card was seen, without choosing a level. With the card's write-screening box ticked, it also turns that feature on, as a level choice with the box ticked does. |
 | Save optional features | `POST /console/settings/features` | Writes the feature switches as a stored **override row** in the DB. It changes what is exposed - console screens and the matching agent tools - and deletes nothing. |
 | Reset optional features | `POST /console/settings/features/reset` | Clears the override row, reverting to the file/env configuration - which, unless you set the keys there, means every optional feature is off again. Still deletes nothing. |
 | Turn update checks on or off | `POST /console/settings/updates` | Stores the console's `update.check` override (`check=on` or `off`). It can always turn checks off; it cannot turn them on while the config file or environment says `update.check: false` - that is final, and the form says so. Installs nothing. |
@@ -10585,8 +10913,10 @@ The console is **read-mostly**. That is a design claim, so here is the whole lis
 
 Read the shape of that list. There is no "create memory", no "edit note", no
 "delete", no "add task", no "start session". The direct writes to knowledge
-state are **archive a memory**, **approve a captured plan**, and the **star**
-flag; the rest either manage gardener proposals - which are themselves
+state are **archive a memory**, **approve a captured plan**, the **star**
+flag, and - with write screening on - **releasing a held write**, which lands
+exactly what an agent wrote, never text of the console's own; the rest either
+manage gardener proposals - which are themselves
 proposals, reviewed before they do anything - or free a lock, or set a
 configuration knob (briefing overrides, feature switches, project families, the
 update switches) that shapes future briefings, or what is exposed, without
@@ -10745,7 +11075,11 @@ and raw event payloads.
 
 A fresh installation starts at **Basic**, and Home carries a one-time welcome
 card offering all three - pick one, or dismiss it; either way it does not come
-back, on any device. The sidebar's account row names the level you are on and
+back, on any device. Beside the levels the card offers one optional feature as
+an unchecked box, **Also turn on write screening**: it rides with whichever
+button you press, and unticked it changes nothing at any level. It is a
+feature, not part of a level, because it changes what your agents receive (see
+[Held](#held)); once the card is gone, Settings > Features is the way in. The sidebar's account row names the level you are on and
 links to **Settings > Experience**, where the three levels sit side by side with
 the list of what each one shows. The palette's **Change experience level** action
 goes there too.
@@ -10782,6 +11116,7 @@ What each level shows, generated from the console's own registries:
 | **Notes** | shown | shown | shown |
 | **Retrieval** | - | - | shown |
 | **Gardener** | shown | shown | shown |
+| **Held** - while the screening feature is on | shown | shown | shown |
 | **Projects** | - | shown | shown |
 | **Plans** | - | shown | shown |
 | **Tasks** | - | shown | shown |
@@ -11297,6 +11632,32 @@ asks you to pick the project and plans the split from there; nothing is retyped.
 
 See [The gardener](/concepts/gardener/) for what each proposal type means.
 
+## Held {#held}
+
+`/console/held` - while [write screening](/guides/write-screening/) is on, at
+every level (whoever turns it on must reach what it holds).
+
+The owner's queue of agent writes kept out of the corpus. Each card says what
+the write would do (a constraint memory, a note, a delete, a gardener apply),
+which project, tool and session it came from, and why it was held - each
+reason code with its meaning in words. Below that is the write exactly as an
+agent would read it: every hidden character spelled out as `[U+XXXX]`, and
+secrets redacted, so the page can be reviewed and captured without the
+credential it holds.
+
+- **Release** lands it through the files layer as the agent wrote it, and the
+  memory reads `[owner-confirmed]` in briefings from then on. A held supersede
+  releases both halves together; a held delete removes the memory; a held
+  gardener apply applies the proposal. When the target changed after the write
+  was held, only **Discard** is offered: a release would silently undo that
+  later change.
+- **Discard** lands nothing and erases the held text.
+
+Below the queue, **Sessions that read outside text** lists every session an
+agent guard marked, with its reason and a **Clear mark** button - the only way
+a mark comes off. **Recently decided** keeps the last twenty releases and
+discards, without their text. The sidebar badge counts what is waiting.
+
 ## Settings
 
 `/console/settings?s=<section>`
@@ -11348,7 +11709,7 @@ feature is, a generated line naming exactly what switching it off hides, and a
 live count of the data it holds either way ("Data kept: 12 trials across 3
 labs").
 
-There are three today:
+There are four today:
 
 **Research labs & trials** owns the [Labs](#labs) and [Trials](#trials)
 screens, the trials search scope, and the `lab_open`, `trial_record`, and
@@ -11442,6 +11803,16 @@ The same guardrails as momentum apply: every number is judged from recorded
 activity, never invented, and there are no punishment mechanics - a quiet day
 is an empty tape, never a warning. Off (the default), none of it is computed,
 no record latch is written, and the Now page carries zero trace of it.
+
+**Write screening** is the only feature that changes what agents receive
+rather than what the console shows. On, every agent write to a memory or note
+is screened, the suspicious ones - and any change to a binding rule by a
+session that read outside text, and any supersede or delete of a constraint -
+wait on the [Held](#held) screen instead of landing, and briefing and recall
+lines carry owner-confirmed or agent-written marks. Its card's data line counts
+the writes waiting; turning it off stops screening new writes and releases
+none of them. The [write screening guide](/guides/write-screening/) has the
+screens, the reasons and the events.
 
 **Nothing is ever deleted.** Switching a feature off gates exposure and nothing
 else: the trials stay in the database, its screens answer with a short "switched

@@ -6360,7 +6360,8 @@ html:not(.js) [data-form-discard] { display: none; }
 .level-welcome-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
 .level-welcome-head h2 { margin: 0; font-family: var(--font-serif); font-weight: 560; font-size: 21px; letter-spacing: -0.01em; }
 .level-welcome-head p { margin: 4px 0 0; color: var(--muted); font-size: var(--text-sm); }
-.level-welcome-head form { margin: 0; flex: none; }
+.level-welcome-head form, .level-welcome-head > .btn { margin: 0; flex: none; }
+.level-welcome > form { margin: 0; }
 .level-welcome-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .level-welcome-card { margin: 0; }
 .level-welcome-card button {
@@ -6532,3 +6533,42 @@ html:not(.js) .brief-preview { display: none; }
   background: color-mix(in oklab, var(--danger) 8%, var(--surface-2)); color: var(--ink-2);
 }
 .updates-alert .ico { color: var(--danger); }
+
+/* ---- Held (write screening) ------------------------------------------------
+   The owner's queue of writes kept out of the corpus, one card per write, and
+   the sessions marked as having read outside text. */
+.held-page { display: flex; flex-direction: column; gap: 16px; }
+.held-list { display: flex; flex-direction: column; gap: 12px; }
+.held-card {
+  padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface); box-shadow: inset 0 1px 0 var(--sheen);
+}
+.held-card.is-stale { border-style: dashed; }
+.held-card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.held-name { font-family: var(--font-display); font-weight: 650; color: var(--ink); }
+.held-meta { color: var(--muted); font-size: var(--text-xs); }
+.held-reasons { margin: 10px 0 0; padding-left: 18px; font-size: var(--text-sm); }
+.held-reasons code, .held-meta code { font-family: var(--font-mono); font-size: var(--text-xs); }
+.held-note, .held-sub, .held-none, .held-stale { margin: 8px 0 0; color: var(--muted); font-size: var(--text-sm); }
+.held-stale { display: flex; align-items: center; gap: 6px; }
+.held-preview-box { margin-top: 10px; }
+.held-preview-box summary { cursor: pointer; font-size: var(--text-sm); }
+.held-preview-box summary small { color: var(--faint); }
+.held-preview {
+  margin: 8px 0 0; padding: 10px 12px; max-height: 360px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: color-mix(in oklab, var(--ink) 4%, var(--surface-solid));
+  font-family: var(--font-mono); font-size: var(--text-xs);
+}
+.held-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.held-actions form { margin: 0; }
+.held-sessions h2, .held-recent h2 { margin: 0; font-family: var(--font-serif); font-weight: 560; font-size: 19px; }
+.held-taints, .held-history { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.held-taint { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.held-taint form { margin: 0 0 0 auto; }
+.held-history li { font-size: var(--text-sm); }
+.level-welcome-optin {
+  display: flex; align-items: flex-start; gap: 10px; margin: 12px 0 0; padding: 10px 12px;
+  border: 1px dashed var(--border); border-radius: var(--radius-md); font-size: var(--text-sm); cursor: pointer;
+}
+.level-welcome-optin input { margin-top: 3px; flex: none; }
+.level-welcome-optin small { display: block; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }

@@ -52,6 +52,9 @@ internal/llm/      OpenAI (default), Ollama, Anthropic chat + embeddings   [P1]
 internal/retrieve/ briefing assembler, prompt-context matcher, recall (RRF),
                    console search                                          [P2/P4]
 internal/lifecycle/ supersession, archival, provenance                     [P3]
+internal/screening/ write screening (optional feature, off by default): the
+                   screens, the hold policy, and the held-writes queue the
+                   console releases or discards; see AGENTS.md
 # (the dependency-aware ready-queue + lease-based claiming live in
 #  internal/store/tasks*.go -- there is no internal/tasks package)
 internal/gardener/ the propose-only passes (dedup, staleness, stale-stage,

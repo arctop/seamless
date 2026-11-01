@@ -73,6 +73,12 @@ var viewTables = []struct {
 	// more than the precise answer, never less.
 	{"gardener_proposals", payloadVisible},
 	{"jobs", payloadVisible},
+	// Write screening: a held write is its project's content (it carries the
+	// text an agent tried to write) and its session's; a confirmation and a
+	// taint mark are about one item or one session.
+	{"held_writes", "project_slug NOT IN %[1]s AND session_id NOT IN %[2]s AND item_id NOT IN %[3]s"},
+	{"owner_confirmations", "item_id NOT IN %[3]s"},
+	{"session_taints", "session_id NOT IN %[2]s"},
 }
 
 // payloadVisible keeps a row whose JSON payload mentions no hidden slug and no
