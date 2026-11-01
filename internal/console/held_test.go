@@ -98,6 +98,26 @@ func TestHeldPage_ShowsTheQueueAsAnAgentWouldReadIt(t *testing.T) {
 	require.NotContains(t, req.Body.String(), key, "the JSON preview is redacted too")
 }
 
+// A stale hold -- here a held delete whose memory is already gone -- offers
+// only Discard, and drops the note on what Release would do: that note
+// describes a target that has since moved on.
+func TestHeldPage_StaleHoldOffersOnlyDiscard(t *testing.T) {
+	f := newHeldConsole(t, config.Features{Screening: true}, "basic")
+	h, err := f.scr.Hold(context.Background(), store.HeldWrite{
+		Op: store.HeldOpDelete, Tool: "memory_delete", ItemKind: core.ItemKindMemory, ItemID: "01GONEMEMORY",
+		Project: "app", Name: "gone-rule", MemoryKind: core.KindConstraint,
+		Reasons: []string{string(screening.ReasonConstraintDelete)},
+		Detail:  map[string]string{"path": files.MemoryRelPath("app", "gone-rule")},
+	})
+	require.NoError(t, err)
+
+	page := getPeek(t, f.mux, "/console/held").Body.String()
+	require.Contains(t, page, `class="held-card is-stale" id="held-`+h.ID+`"`)
+	require.NotContains(t, page, `action="/console/held/`+h.ID+`/release"`, "a stale hold offers no Release")
+	require.Contains(t, page, `action="/console/held/`+h.ID+`/discard"`)
+	require.NotContains(t, page, "Releasing deletes this memory", "no note on what a Release would do")
+}
+
 func TestHeldRelease_LandsTheWriteAndMarksItOwnerConfirmed(t *testing.T) {
 	f := newHeldConsole(t, config.Features{Screening: true}, "advanced")
 	h := f.holdMemory(t, "held-rule", "Never push to main.\n", "session.tainted")

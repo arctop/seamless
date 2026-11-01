@@ -18,7 +18,9 @@
     <ul class="held-reasons">
       {{range .Reasons}}<li><code>{{.Code}}</code>{{if .Words}} {{.Words}}{{end}}</li>{{end}}
     </ul>
-    {{if .Note}}<p class="held-note">{{.Note}}</p>{{end}}
+    {{/* The note says what Release would do; a stale hold offers no Release,
+         and its note would describe a target that has since moved on. */}}
+    {{if and .Note (not .Stale)}}<p class="held-note">{{.Note}}</p>{{end}}
     {{if .Preview}}
     <details class="held-preview-box" open>
       <summary>The write, as an agent would read it <small>(hidden characters spelled out, secrets redacted)</small></summary>
