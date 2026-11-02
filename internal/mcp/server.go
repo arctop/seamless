@@ -234,6 +234,11 @@ type Config struct {
 	// not named itself", which matches every session row written before host
 	// scoping existed.
 	LocalHost string
+	// RecordCommits offers session_end's and tasks_update's commits argument
+	// (config commits.record). Off -- the zero value -- both tools are
+	// registered without it, exactly the schemas they had before commit
+	// records, and nothing reaches the commit_records table.
+	RecordCommits bool
 	// Features is the file/env optional-features config (config.Config.Features).
 	// It is only the BASE: the stored override row layers over it per request in
 	// effectiveFeatures, so a console toggle needs no restart. The zero value is
@@ -406,7 +411,7 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) registerTools() {
 	s.addTool(sessionStartTool(), s.handleSessionStart)
 	s.addTool(sessionUpdateTool(), s.handleSessionUpdate)
-	s.addTool(sessionEndTool(), s.handleSessionEnd)
+	s.addTool(s.offerCommits(sessionEndTool()), s.handleSessionEnd)
 
 	s.addTool(memoryWriteTool(), s.handleMemoryWrite)
 	s.addTool(memoryAppendTool(), s.handleMemoryAppend)
@@ -427,7 +432,7 @@ func (s *Server) registerTools() {
 	s.addTool(projectCreateTool(), s.handleProjectCreate)
 
 	s.addTool(tasksAddTool(), s.handleTasksAdd)
-	s.addTool(tasksUpdateTool(), s.handleTasksUpdate)
+	s.addTool(s.offerCommits(tasksUpdateTool()), s.handleTasksUpdate)
 	s.addTool(tasksReadyTool(), s.handleTasksReady)
 	s.addTool(tasksListTool(), s.handleTasksList)
 	s.addTool(tasksClaimTool(), s.handleTasksClaim)

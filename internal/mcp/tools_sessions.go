@@ -461,6 +461,7 @@ func sessionEndTool() mcp.Tool {
 		mcp.WithArray("mishaps", mcp.WithStringItems(), mcp.Description("Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. \"violated chroma-boot-race by ...\") -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered.")),
 		mcp.WithString("session", mcp.Description(sessionArgDesc)),
 		mcp.WithString("session_id", mcp.Description("Session ULID to operate on; takes precedence over session and the bound session")),
+		mcp.WithArray(commitsParam, mcp.WithStringItems(), mcp.Description(sessionCommitsArgDesc)),
 	)
 }
 
@@ -468,6 +469,12 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 	findings := argString(req, "findings")
 	if findings == "" {
 		return errResult("session_end", errors.New("findings is required and must not be empty"))
+	}
+	// Commit records: read before anything changes, so a bad id refuses the
+	// whole call and the session stays open for a corrected one.
+	commits, err := s.commitsArg(req)
+	if err != nil {
+		return errResult("session_end", err)
 	}
 	sess, ok, err := s.resolveSession(ctx, req)
 	if err != nil {
@@ -490,6 +497,14 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 	// surviving sibling session.
 	stashAttribution(ctx, sess.ID, sess.ProjectSlug)
 	now := time.Now().UTC()
+	// A session records its own commits, behind the same fence as the rest of
+	// the end, and before the end: a record refused at its bound leaves the
+	// session open, so the retry without the commits still ends it.
+	if len(commits) > 0 {
+		if _, err := store.RecordSessionCommits(ctx, s.cfg.DB, sess.ID, sess.ID, commits, now); err != nil {
+			return errResult("session_end", err)
+		}
+	}
 	sess.Status = core.SessionCompleted
 	sess.Findings = findings
 	sess.UpdatedAt = now
@@ -526,9 +541,14 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 		}
 		s.record(ctx, core.EventAgentMishap, sess.ID, sess.ProjectSlug, "", payload)
 	}
-	s.record(ctx, core.EventSessionEnded, sess.ID, sess.ProjectSlug, "",
-		map[string]any{"claims_released": released, "findings": events.Truncate(findings, s.cfg.ToolEventMaxChars)})
-	return jsonResult(map[string]any{"status": "completed", "session_id": sess.ID, "claims_released": released, "mishaps_recorded": len(mishaps)})
+	ended := map[string]any{"claims_released": released, "findings": events.Truncate(findings, s.cfg.ToolEventMaxChars)}
+	out := map[string]any{"status": "completed", "session_id": sess.ID, "claims_released": released, "mishaps_recorded": len(mishaps)}
+	if len(commits) > 0 {
+		ended["commits_recorded"] = len(commits)
+		out["commits_recorded"] = len(commits)
+	}
+	s.record(ctx, core.EventSessionEnded, sess.ID, sess.ProjectSlug, "", ended)
+	return jsonResult(out)
 }
 
 // mishapMatchCorpus loads the active memories a mishap report may name: the

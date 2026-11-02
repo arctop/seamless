@@ -32,12 +32,19 @@ type rowQuerier interface {
 // left untouched. AddDependsOn edges are added (existing edges are kept).
 // ProjectSlug reassigns the task to another project (used when a split moves a
 // project's open work to a child); the holder-lock still applies.
+//
+// AddCommits records commit ids on the task (commit records: full lowercase
+// ids, each a no-op when already recorded), attributed to the actor. They land
+// in the same transaction as the rest of the patch and behind the same holder
+// lock, so whoever may update the task may record its commits, and a task
+// another session holds refuses them like any other change.
 type TaskPatch struct {
 	Status       *core.TaskStatus
 	Title        *string
 	Body         *string
 	ProjectSlug  *string
 	AddDependsOn []string
+	AddCommits   []string
 }
 
 // CreateTask inserts a task and its dependency edges in one transaction. Every
@@ -160,6 +167,9 @@ func UpdateTask(ctx context.Context, db *sql.DB, id string, patch TaskPatch, act
 	}
 	if err := addDeps(ctx, tx, t.ID, patch.AddDependsOn); err != nil {
 		return core.Task{}, err
+	}
+	if _, err := recordCommitsTx(ctx, tx, CommitOwnerTask, t.ID, actor, patch.AddCommits, now); err != nil {
+		return core.Task{}, fmt.Errorf("store.UpdateTask: %w", err)
 	}
 	// Title, body, and project are all indexed, and a patch may change any of
 	// them; refreshing unconditionally keeps the mirror correct without the

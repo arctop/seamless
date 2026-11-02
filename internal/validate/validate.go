@@ -179,6 +179,47 @@ func Isolation(s string) (core.Isolation, error) {
 	return iso, nil
 }
 
+// CommitIDs reads a list of commit ids at an input boundary. Each entry is
+// trimmed and lowercased -- hex is case-insensitive, so that reading is
+// lossless -- and must then be a full commit id (core.IsCommitID: 40 or 64 hex
+// digits). An abbreviation is refused, never expanded: it names a different
+// commit in every repository that grows a colliding prefix. A blank entry is
+// dropped, a repeat keeps its first place, and more than max distinct ids is
+// refused rather than cut (max <= 0 sets no bound). Nothing valid is nil.
+func CommitIDs(raw []string, max int) ([]string, error) {
+	var out []string
+	seen := make(map[string]bool, len(raw))
+	for i, r := range raw {
+		id := strings.ToLower(strings.TrimSpace(r))
+		if id == "" {
+			continue
+		}
+		if !core.IsCommitID(id) {
+			return nil, fmt.Errorf("entry %d (%s) is not a full commit id: pass the 40- or 64-character hex "+
+				"name git prints for the commit (git rev-parse HEAD), not an abbreviation", i, quoteShort(r))
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	if max > 0 && len(out) > max {
+		return nil, fmt.Errorf("%d distinct commit ids: one call records at most %d", len(out), max)
+	}
+	return out, nil
+}
+
+// quoteShort quotes a caller's value for an error message, cut to a readable
+// length: the message names the entry, it does not echo a whole paste back.
+func quoteShort(s string) string {
+	const limit = 72
+	if r := []rune(s); len(r) > limit {
+		return fmt.Sprintf("%q...", string(r[:limit]))
+	}
+	return fmt.Sprintf("%q", s)
+}
+
 // windowsReservedNames are the legacy DOS device names. Windows resolves them
 // as devices in EVERY directory, so `memory/proj/con.md` is not a file there --
 // the create either fails or opens the console. Rejected on all platforms

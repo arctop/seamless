@@ -160,6 +160,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
+        <li><a href="../guides/commit-records/">Record commits for an integrity monitor</a></li>
+        
         <li><a href="../guides/troubleshooting/">Troubleshooting</a></li>
         
       </ul>
@@ -258,7 +260,11 @@ captured into notes and tasks automatically, and which hook does what.</p>
 opt-in guard against a poisoned memory: every agent write is screened for
 secrets, injection markers and hidden characters, and the suspicious ones -
 along with any change to a binding rule by a session that read outside text -
-wait for your release instead of reaching every briefing.</p>
+wait for your release instead of reaching every briefing.
+<a href="../guides/commit-records/">Record commits for an integrity monitor</a> is its
+opt-in neighbor for a repository's history: agents name the commits they made,
+and a snapshot of sessions, tasks and those commits lets a monitor flag the
+commits no tracked work accounts for.</p>
 <p>The last three are operational. <a href="../guides/data/">Import, back up &amp; restore</a> covers
 putting <code>~/.seamless</code> in git, what deleting <code>seam.db</code> actually costs (an index
 rebuild, not data loss), and moving to a new machine.
@@ -322,6 +328,11 @@ silence, not an error message.</p>
   <a class="doc-card" href="../guides/write-screening/">
     <h2>Screen writes and hold the suspicious ones</h2>
     <p>Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.</p>
+  </a>
+  
+  <a class="doc-card" href="../guides/commit-records/">
+    <h2>Record commits for an integrity monitor</h2>
+    <p>Commit records - agents name the commits they made on session_end and tasks_update, and the daemon writes a snapshot of its sessions, tasks and those commits that an integrity monitor matches a branch&#39;s commits against.</p>
   </a>
   
   <a class="doc-card" href="../guides/troubleshooting/">

@@ -29,7 +29,7 @@ Strict layering, no circular imports. `cmd/` wires everything; no package import
 ```
 cmd/seamlessd, cmd/seam, cmd/seambench, cmd/demoseed, cmd/docsgen
   -> internal/{mcp,hooks,console}         (API surfaces)
-    -> internal/{retrieve,lifecycle,gardener,files,capture,bench,demokit,update,screening,feed} (domains)
+    -> internal/{retrieve,lifecycle,gardener,files,capture,bench,demokit,update,screening,feed,commitfeed} (domains)
       -> internal/{store,events,llm,core,config,validate,access}   (foundations)
 ```
 
@@ -348,6 +348,33 @@ Part 2 of the same feature (migration 029, `internal/screening/corpus.go`,
   new event payload key reaches the feed only by being listed there. The feed
   tails the event log by rowid (not by time, not through the lossy live
   fan-out) from a cursor in its spool.
+
+### Commit records (`internal/commitfeed`)
+
+The `commits:` option (off by default; off is exactly the previous behavior).
+Guide: docs-src/guides/commit-records.md.
+
+- **Off, the argument does not exist.** While `commits.record` is off,
+  `registerTools` registers session_end and tasks_update without `commits`
+  (`offerCommits`), so tools/list and the unknown-parameter refusal are the old
+  ones word for word; `Catalog` keeps it for the docs. An argument behind an
+  option follows this pattern, never a handler that accepts and drops it.
+- **Recording is an update.** A session's commits are recorded after
+  session_end's fence and before the session completes; a task's ride in
+  `TaskPatch.AddCommits`, inside UpdateTask's transaction and holder lock. A bad
+  id refuses the whole call (`validate.CommitIDs`: full 40- or 64-digit hex,
+  lowercased, deduped, at most `store.MaxCommitsPerCall`), and no owner holds
+  more than `store.MaxRecordedCommits`, the snapshot contract's per-entry bound.
+- **The snapshot is identifiers and times.** Never a finding, title, body,
+  path or project slug; a fenced project's repository is null. `CheckJSON`
+  mirrors the consumer's contract, and the writer never replaces the file with
+  a snapshot that fails it.
+- **A session ended at its row's updated_at.** The reaper stamps its
+  session.ended at reap time, up to the idle threshold after the last sign of
+  life it leaves in updated_at; a time window must not stretch to the reap. A
+  row still active but idle past `gardener.session_idle_minutes` has ended
+  there too (`settleIdle`), so a dead agent's session never reads as open
+  while the reaper is off.
 
 ### FTS5 and LIKE escaping (`internal/store`)
 

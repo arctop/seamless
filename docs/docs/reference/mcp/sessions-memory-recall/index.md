@@ -35,6 +35,11 @@ resumed-session hint to re-ground with `recall`.
 ULID; one that matches nothing is an error saying what the argument takes. Both
 tools also accept `summary` as an alias of `findings`.
 
+On a server that records commits (`commits.record`, off by default),
+`session_end` also takes `commits`: the full ids of the commits the session
+made, recorded on it for an integrity monitor. Off, the argument does not
+exist. See [Record commits for an integrity monitor](https://thereisnospoon.org/docs/guides/commit-records/).
+
 If `tasks_update` ever fails claiming a task is held by *your own* session id,
 the connection lost an explicit `session_start` binding - those live in daemon
 memory, so a restart or reconnect drops them. Re-run `session_start` with the
@@ -138,7 +143,7 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 | `memory_write` | Stable `id`, canonical `name`, resolved `project`, `updated`, optional `similar`, and optional `superseded` | An occupied tombstone path is an error; if the new memory lands but supersession fails, the tool errors while naming the kept replacement and the still-active target |
 | `memory_edit` | `id`, `name`, `project`, the new `content_hash`, a unified `diff`, and a `stage_hint` when a `kind=stage` body still has no parseable `Status` | An `old_string` that matches zero or several places is an error naming the count, and **nothing** is written - the edits apply all-or-nothing. A stale `expect_hash` is refused rather than overwriting |
 | `recall` | `hits`, possibly empty | Remote embedder failures degrade to lexical-only; local request/config construction errors surface |
-| `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`; findings persist for the next briefing | A missing/ambiguous session is an error rather than a fabricated successful close |
+| `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`, and `commits_recorded` when it recorded commits; findings persist for the next briefing | A missing/ambiguous session is an error rather than a fabricated successful close; so is a `commits` entry that is not a full commit id, which leaves the session open |
 
 ## session_start {#session_start}
 
@@ -172,6 +177,7 @@ Complete the current session, persisting its findings for future briefings. Uses
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `findings` | string | **yes** | Final findings: what was learned, decided, or left open. Prefer a tight summary (briefings show a short preview), but long findings are stored in full -- they are not rejected. |
+| `commits` | array | no | Full ids of the commits this session made, recorded on the session for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints (git rev-parse HEAD), never an abbreviation. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
 | `mishaps` | array | no | Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. "violated chroma-boot-race by ...") -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered. |
 | `session` | string | no | Session to operate on: a name (the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a sess/* name) or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- so pass it only to act on another session, or when a call reports the session as ambiguous |
 | `session_id` | string | no | Session ULID to operate on; takes precedence over session and the bound session |

@@ -51,9 +51,17 @@ status, dependency state, claim holder, and lease fields when present.
 | Call | Refuses when |
 |---|---|
 | `tasks_add` | A blocker is missing or the new dependency would create a cycle |
-| `tasks_update` | Nothing was supplied to change, a new dependency is invalid, or another live session holds the task |
+| `tasks_update` | Nothing was supplied to change, a new dependency is invalid, a `commits` entry is not a full commit id, or another live session holds the task |
 | `tasks_claim` | The task is blocked, closed, or held by another live claimant; each error names the actual cause |
 | `tasks_release` | The acting session is not the holder; force release exists only on the owner console/CLI surface |
 
 An expired claim is not reported as live. Claiming that task by id succeeds at
 the exact lease boundary, even while its status remains `in_progress`.
+
+## Commit records
+
+On a server that records commits (`commits.record`, off by default),
+`tasks_update` also takes `commits`: the full ids of the commits that did the
+task's work, recorded on the task in the same transaction as the rest of the
+call and behind the same claim lock. Off, the argument does not exist. See
+[Record commits for an integrity monitor](/guides/commit-records/).

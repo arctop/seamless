@@ -695,8 +695,15 @@ func uniqueProjectSlug(base, host, main string, rows []RepoMapRow) string {
 // hook's spelling, so hook-driven sessions keep the project they resolved to
 // before. The smaller key breaks any tie left, so map order never decides.
 func matchProjectPath(cwd string, m map[string]string) string {
+	_, slug, _ := matchRepoKey(cwd, m)
+	return slug
+}
+
+// matchRepoKey is matchProjectPath reporting the winning key too, and whether
+// any key matched.
+func matchRepoKey(cwd string, m map[string]string) (string, string, bool) {
 	if cwd == "" || len(m) == 0 {
-		return ""
+		return "", "", false
 	}
 	cwd = normPath(cwd)
 	found := false
@@ -717,7 +724,24 @@ func matchProjectPath(cwd string, m map[string]string) string {
 		}
 		found, best, bestKey, bestSlug = true, p, key, slug
 	}
-	return bestSlug
+	return bestKey, bestSlug, found
+}
+
+// RepoRowForCWD returns the mapping a host's working directory lies under: the
+// row of rows (RepoMapRows) whose path is the longest path-prefix of cwd,
+// chosen by exactly the rules ResolveProjectForCWD uses to pick its project.
+// ok is false when no mapping of that host covers cwd.
+func RepoRowForCWD(rows []RepoMapRow, host, cwd string) (RepoMapRow, bool) {
+	key, _, found := matchRepoKey(cwd, pathSlugs(rows, host))
+	if !found {
+		return RepoMapRow{}, false
+	}
+	for _, r := range rows {
+		if r.Host == host && r.Path == key {
+			return r, true
+		}
+	}
+	return RepoMapRow{}, false
 }
 
 // keyWinsTie reports whether key beats other, two raw keys that both normalize

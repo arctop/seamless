@@ -4225,6 +4225,10 @@ opt-in guard against a poisoned memory: every agent write is screened for
 secrets, injection markers and hidden characters, and the suspicious ones -
 along with any change to a binding rule by a session that read outside text -
 wait for your release instead of reaching every briefing.
+[Record commits for an integrity monitor](/guides/commit-records/) is its
+opt-in neighbor for a repository's history: agents name the commits they made,
+and a snapshot of sessions, tasks and those commits lets a monitor flag the
+commits no tracked work accounts for.
 
 The last three are operational. [Import, back up & restore](/guides/data/) covers
 putting `~/.seamless` in git, what deleting `seam.db` actually costs (an index
@@ -6681,6 +6685,163 @@ it runs with. Run it on a copy of a corpus you are allowed to read.
 
 ---
 
+# Record commits for an integrity monitor
+
+URL: https://thereisnospoon.org/docs/guides/commit-records/
+
+
+An integrity monitor watching a repository's main branch wants to know which
+commits came from tracked work and which came from nowhere: a commit pushed
+from outside every agent session and every task is the one worth a look.
+Seamless already knows which sessions ran when, and in which repository, and
+which tasks exist. **Commit records** let it say so, in two halves:
+
+1. **Agents record their commits.** `session_end` and `tasks_update` take an
+   optional `commits` argument: the full ids of the commits a session made or
+   a task's work produced, recorded on that session or task.
+2. **The daemon writes a snapshot.** One JSON file, replaced whole every few
+   minutes, lists the sessions live in a window - name, repository, start and
+   end - and the tasks a commit in it may name, each with the commits it
+   recorded. The monitor reads that file and matches its own list of the
+   branch's commits against it.
+
+Both are off by default, and off is exactly the previous behavior: neither
+tool offers the argument (a call that sends one is refused as an unknown
+parameter, word for word as before), nothing is recorded, and no file is
+written. They switch on separately: a snapshot without recorded commits still
+tells a monitor which sessions ran when, and where.
+
+## Turn it on
+
+```yaml
+commits:
+  record: true                                               # offer the commits argument
+  snapshot_file: /path/to/outbox/snapshot-seamless_feed.json # write the snapshot here
+  snapshot_interval: 5m                                      # default 5m, from 30s to 24h
+  snapshot_window: 720h                                      # default 30 days, from 1h to a year
+```
+
+Each key has an environment override: `SEAMLESS_COMMITS_RECORD`,
+`SEAMLESS_COMMITS_SNAPSHOT_FILE`, `SEAMLESS_COMMITS_SNAPSHOT_INTERVAL` and
+`SEAMLESS_COMMITS_SNAPSHOT_WINDOW`. They are read at start, so restart the
+daemon after a change. `snapshot_file` must be absolute (a leading `~`
+expands), and its directory must already exist: the daemon creates nothing
+there but that file (and, for a moment, a hidden temporary file beside it).
+
+## Recording commits
+
+With `record` on, both tools list `commits` in their schema:
+
+- `session_end commits=[...]` records the ids on the session being ended - the
+  same session the call completes, behind the same project fence.
+- `tasks_update id=<task> commits=[...]` records them on the task. Recording is
+  an update like any other: it lands in the same transaction as the rest of the
+  call, and a task another session holds via a live claim refuses it with
+  `already claimed`, exactly as it refuses a retitle.
+
+The argument takes an array, or a comma-separated string. Each entry must be a
+full commit id - the 40-character SHA-1 or 64-character SHA-256 name
+`git rev-parse HEAD` prints. An abbreviation is refused, never expanded: it can
+name a different commit once the repository grows a colliding prefix.
+Uppercase is read as lowercase, and a repeat counts once - within the call, and
+against what the session or task already holds. One call records at most 256
+distinct ids, and one session or task holds at most 10,000. Any bad entry
+refuses the whole call: a refused `session_end` leaves the session open, and a
+refused `tasks_update` changes nothing, its other fields included.
+
+A successful call reports `commits_recorded`, and its event
+(`session.ended`, `task.transition`) carries the same count. The ids
+themselves live in the record, never in an event.
+
+## The snapshot
+
+With `snapshot_file` set, the daemon writes the snapshot as it starts and every
+`snapshot_interval` after. Each write builds the whole document, checks it
+against the contract below, writes it beside the file and renames it into
+place, so a reader never sees half of one. A snapshot that would break the
+contract is not written, and the last good file stays. The file's mode is
+`0640`: put it in a directory only the daemon's account can write and whose
+group is the monitor's. Whoever can write that directory can replace the
+snapshot, and with it vouch for any commit.
+
+```json
+{
+  "kind": "seamless_feed",
+  "version": 1,
+  "host": "build-host",
+  "taken_at": "2026-11-02T01:16:54.977Z",
+  "since": "2026-10-03T01:16:54.977Z",
+  "sessions": [
+    {"id": "cc/0a1b2c3d-4e5f6a7b", "repo": "myapp", "started_at": "2026-11-01T09:00:00.000Z",
+     "ended_at": "2026-11-01T10:30:00.000Z",
+     "commits": ["1111111111111111111111111111111111111111"]},
+    {"id": "cx/0f0f0f0f-1e1e1e1e", "repo": null, "started_at": "2026-11-02T01:00:00.000Z",
+     "ended_at": null}
+  ],
+  "tasks": [
+    {"id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "repo": "myapp",
+     "commits": ["2222222222222222222222222222222222222222222222222222222222222222"]}
+  ]
+}
+```
+
+| Field | What it holds |
+|---|---|
+| `host` | The daemon's host name, lowercase |
+| `taken_at` | When it was built, UTC to the millisecond |
+| `since` | The start of what it covers: `snapshot_window` before `taken_at`, or the start of the first session when that is later. A commit seen before it is outside the snapshot |
+| `sessions[].id` | The session's name - the `cc/...` or `cx/...` on a briefing's `Seam session` line, or a `sess/*` name - so a commit message that mentions it matches. A name outside the contract's pattern is replaced by the session's ULID |
+| `sessions[].repo` | The repository the session's working directory is in, or `null` |
+| `sessions[].started_at`, `ended_at` | When it started, and when it ended - `null` while it is active. A session idle longer than `gardener.session_idle_minutes` has ended at its last activity, the end the idle reaper gives it: never at the moment it was reaped, and whether or not the reaper runs |
+| `tasks[].id` | A task's ULID, for a commit message that names one |
+| `tasks[].repo` | Its project's repository, when the project maps exactly one; left out otherwise |
+| `commits` | The ids recorded on the session or task, oldest first; left out when there are none |
+
+Which entries it lists: every session live at some point since `since`, and
+every task that is open or in progress or changed since `since` (closing a
+task and recording its commits both change it). Up to 100,000 of each: past
+that, the sessions that ended earliest are left out and `since` moves past them,
+so the snapshot still covers everything it claims to, and the tasks changed
+least recently are left out.
+
+It carries identifiers and times only: never a finding, a title, a body, a
+path or a project slug.
+
+## Which repository a session is in
+
+A session's repository is found from its working directory through the repo
+map, exactly as its project is (the longest mapped path the directory lies
+under, on the session's own host). The repository's name is the last segment
+of its origin remote - `git@host:owner/myapp.git` gives `myapp` - or, with no
+origin recorded, the last segment of its path. Configure the monitor with the
+same names. A working directory outside every mapped repository gives `null`,
+and so does a name outside the contract's pattern.
+
+A confidential or sealed project's repository is never named, and neither is
+that of a project sealed to another OS account under
+[peer_auth](/guides/peer-auth/): their sessions and tasks are still listed - by
+name or id, with their times and recorded commits - with `repo` `null`, the way
+the metadata feed sends such a project's slug only as a keyed hash. A monitor
+that matches by time cannot match those sessions; a recorded commit, or one
+whose message names the session or task, still matches.
+
+## What it does not cover
+
+- **A record is an agent's claim.** Seamless checks that an id is a full commit
+  id, never that the commit exists or that this session made it. Any caller
+  allowed to end a session or update a task can vouch for a commit on it; the
+  per-call bound keeps an agent from vouching for a whole history in one paste.
+- **Agents must pass the ids.** Nothing reads git on an agent's behalf. A
+  session that ends through the client's own hook (most Claude Code sessions)
+  records no commits unless the agent called `session_end` with them; its
+  times and repository still reach the snapshot.
+- **It is the record's view, not git's.** Commits that never reached a
+  session's or task's record are matched, if at all, by the monitor's own
+  rules - a message naming a listed session or task, or a commit time inside
+  an open session of the same repository.
+
+---
+
 # Troubleshooting
 
 URL: https://thereisnospoon.org/docs/guides/troubleshooting/
@@ -7423,6 +7584,11 @@ resumed-session hint to re-ground with `recall`.
 ULID; one that matches nothing is an error saying what the argument takes. Both
 tools also accept `summary` as an alias of `findings`.
 
+On a server that records commits (`commits.record`, off by default),
+`session_end` also takes `commits`: the full ids of the commits the session
+made, recorded on it for an integrity monitor. Off, the argument does not
+exist. See [Record commits for an integrity monitor](/guides/commit-records/).
+
 If `tasks_update` ever fails claiming a task is held by *your own* session id,
 the connection lost an explicit `session_start` binding - those live in daemon
 memory, so a restart or reconnect drops them. Re-run `session_start` with the
@@ -7526,7 +7692,7 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 | `memory_write` | Stable `id`, canonical `name`, resolved `project`, `updated`, optional `similar`, and optional `superseded` | An occupied tombstone path is an error; if the new memory lands but supersession fails, the tool errors while naming the kept replacement and the still-active target |
 | `memory_edit` | `id`, `name`, `project`, the new `content_hash`, a unified `diff`, and a `stage_hint` when a `kind=stage` body still has no parseable `Status` | An `old_string` that matches zero or several places is an error naming the count, and **nothing** is written - the edits apply all-or-nothing. A stale `expect_hash` is refused rather than overwriting |
 | `recall` | `hits`, possibly empty | Remote embedder failures degrade to lexical-only; local request/config construction errors surface |
-| `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`; findings persist for the next briefing | A missing/ambiguous session is an error rather than a fabricated successful close |
+| `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`, and `commits_recorded` when it recorded commits; findings persist for the next briefing | A missing/ambiguous session is an error rather than a fabricated successful close; so is a `commits` entry that is not a full commit id, which leaves the session open |
 
 ## session_start {#session_start}
 
@@ -7560,6 +7726,7 @@ Complete the current session, persisting its findings for future briefings. Uses
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `findings` | string | **yes** | Final findings: what was learned, decided, or left open. Prefer a tight summary (briefings show a short preview), but long findings are stored in full -- they are not rejected. |
+| `commits` | array | no | Full ids of the commits this session made, recorded on the session for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints (git rev-parse HEAD), never an abbreviation. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
 | `mishaps` | array | no | Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. "violated chroma-boot-race by ...") -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered. |
 | `session` | string | no | Session to operate on: a name (the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a sess/* name) or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- so pass it only to act on another session, or when a call reports the session as ambiguous |
 | `session_id` | string | no | Session ULID to operate on; takes precedence over session and the bound session |
@@ -7884,12 +8051,20 @@ status, dependency state, claim holder, and lease fields when present.
 | Call | Refuses when |
 |---|---|
 | `tasks_add` | A blocker is missing or the new dependency would create a cycle |
-| `tasks_update` | Nothing was supplied to change, a new dependency is invalid, or another live session holds the task |
+| `tasks_update` | Nothing was supplied to change, a new dependency is invalid, a `commits` entry is not a full commit id, or another live session holds the task |
 | `tasks_claim` | The task is blocked, closed, or held by another live claimant; each error names the actual cause |
 | `tasks_release` | The acting session is not the holder; force release exists only on the owner console/CLI surface |
 
 An expired claim is not reported as live. Claiming that task by id succeeds at
 the exact lease boundary, even while its status remains `in_progress`.
+
+## Commit records
+
+On a server that records commits (`commits.record`, off by default),
+`tasks_update` also takes `commits`: the full ids of the commits that did the
+task's work, recorded on the task in the same transaction as the rest of the
+call and behind the same claim lock. Off, the argument does not exist. See
+[Record commits for an integrity monitor](/guides/commit-records/).
 
 ## tasks_add {#tasks_add}
 
@@ -7913,6 +8088,7 @@ Update a task: change status (open|in_progress|done|dropped), edit title/body, o
 | `id` | string | **yes** | task id |
 | `add_depends_on` | array | no | task ids to add as blockers (a comma-separated string is also accepted) |
 | `body` | string | no | new body (aliases: content, text) |
+| `commits` | array | no | Full ids of the commits that did this task's work, recorded on the task for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints (git rev-parse HEAD), never an abbreviation. Recording them is an update like any other: a task another session holds refuses it. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
 | `project` | string | no | reassign the task to another project slug (used when a split moves a project's open work to a child) |
 | `session` | string | no | the acting agent's session (the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a session name); needed only to mutate a task you hold a live claim on when several agents are active |
 | `session_id` | string | no | the acting agent's session ULID; takes precedence over session and the bound session |
@@ -9550,6 +9726,10 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `screening.lockdown_file` | string | - |
 | `screening.feed_socket` | string | - |
 | `screening.feed_spool` | string | - |
+| `commits.record` | bool | - |
+| `commits.snapshot_file` | string | - |
+| `commits.snapshot_interval` | duration | `5m` |
+| `commits.snapshot_window` | duration | `720h` |
 | `console.level` | string | `basic` |
 | `search.semantic_floor` | float64 | `0.3` |
 | `llm.provider` | string | `openai` |
@@ -9821,6 +10001,30 @@ screening:
   # events go first, and are counted). Unset: <data_dir>/feed.
   # env: SEAMLESS_SCREENING_FEED_SPOOL
   # feed_spool: /path/to/spool
+
+# Commit records, for an integrity monitor that matches a branch's commits to
+# the tracked work that made them. Off by default, and off is exactly the
+# previous behavior: no argument offered, nothing recorded, no snapshot.
+commits:
+  # Offer the commits argument on session_end and tasks_update: the full ids
+  # (40 or 64 hex digits) of the commits a session made or a task's work
+  # produced, recorded on that session or task.
+  # env: SEAMLESS_COMMITS_RECORD
+  record: false
+  # Where the daemon writes the commit-matching snapshot: one JSON document,
+  # replaced whole on every write (mode 0640; its directory must exist),
+  # listing the sessions live in the window -- name, repository, start and
+  # end -- and the tasks a commit in it may name, each with the commits it
+  # recorded. Identifiers and times only. Unset: no snapshot. A leading ~
+  # expands.
+  # env: SEAMLESS_COMMITS_SNAPSHOT_FILE
+  # snapshot_file: /path/to/outbox/snapshot-seamless_feed.json
+  # How often the snapshot is rewritten (it is also written at start).
+  # env: SEAMLESS_COMMITS_SNAPSHOT_INTERVAL
+  snapshot_interval: 5m
+  # How far back the snapshot reaches: a commit seen earlier is outside it.
+  # env: SEAMLESS_COMMITS_SNAPSHOT_WINDOW
+  snapshot_window: 720h
 
 # The observability console. Presentation only: nothing here changes what your
 # agents receive -- briefings, MCP tools, hooks, recall, and the gardener are

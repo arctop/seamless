@@ -203,6 +203,10 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `screening.lockdown_file` | string | - |
 | `screening.feed_socket` | string | - |
 | `screening.feed_spool` | string | - |
+| `commits.record` | bool | - |
+| `commits.snapshot_file` | string | - |
+| `commits.snapshot_interval` | duration | `5m` |
+| `commits.snapshot_window` | duration | `720h` |
 | `console.level` | string | `basic` |
 | `search.semantic_floor` | float64 | `0.3` |
 | `llm.provider` | string | `openai` |
@@ -474,6 +478,30 @@ screening:
   # events go first, and are counted). Unset: <data_dir>/feed.
   # env: SEAMLESS_SCREENING_FEED_SPOOL
   # feed_spool: /path/to/spool
+
+# Commit records, for an integrity monitor that matches a branch's commits to
+# the tracked work that made them. Off by default, and off is exactly the
+# previous behavior: no argument offered, nothing recorded, no snapshot.
+commits:
+  # Offer the commits argument on session_end and tasks_update: the full ids
+  # (40 or 64 hex digits) of the commits a session made or a task's work
+  # produced, recorded on that session or task.
+  # env: SEAMLESS_COMMITS_RECORD
+  record: false
+  # Where the daemon writes the commit-matching snapshot: one JSON document,
+  # replaced whole on every write (mode 0640; its directory must exist),
+  # listing the sessions live in the window -- name, repository, start and
+  # end -- and the tasks a commit in it may name, each with the commits it
+  # recorded. Identifiers and times only. Unset: no snapshot. A leading ~
+  # expands.
+  # env: SEAMLESS_COMMITS_SNAPSHOT_FILE
+  # snapshot_file: /path/to/outbox/snapshot-seamless_feed.json
+  # How often the snapshot is rewritten (it is also written at start).
+  # env: SEAMLESS_COMMITS_SNAPSHOT_INTERVAL
+  snapshot_interval: 5m
+  # How far back the snapshot reaches: a commit seen earlier is outside it.
+  # env: SEAMLESS_COMMITS_SNAPSHOT_WINDOW
+  snapshot_window: 720h
 
 # The observability console. Presentation only: nothing here changes what your
 # agents receive -- briefings, MCP tools, hooks, recall, and the gardener are

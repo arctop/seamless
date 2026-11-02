@@ -65,6 +65,7 @@ type Config struct {
 	Briefing    Briefing    `yaml:"briefing"`
 	Features    Features    `yaml:"features"`
 	Screening   Screening   `yaml:"screening"`
+	Commits     Commits     `yaml:"commits"`
 	Console     Console     `yaml:"console"`
 	Search      Search      `yaml:"search"`
 	LLM         LLM         `yaml:"llm"`
@@ -565,6 +566,8 @@ func Defaults() Config {
 		// grandfathered on by a one-time store migration, not by this default.
 		Features:  Features{Research: false, Momentum: false, Gamification: false, Screening: false},
 		Screening: Screening{BlobMinLength: DefaultScreeningBlobMinLength, DriftInterval: DefaultScreeningDriftInterval},
+		// Commit records ship off: nothing is recorded and no snapshot written.
+		Commits: Commits{SnapshotInterval: DefaultCommitsSnapshotInterval, SnapshotWindow: DefaultCommitsSnapshotWindow},
 		// A fresh installation starts at the fewest knobs. Existing
 		// installations are grandfathered to advanced by a one-time store
 		// migration, not by this default.
@@ -691,6 +694,7 @@ func LoadFrom(path string) (Config, error) {
 		{"screening.lockdown_file", &cfg.Screening.LockdownFile},
 		{"screening.feed_socket", &cfg.Screening.FeedSocket},
 		{"screening.feed_spool", &cfg.Screening.FeedSpool},
+		{"commits.snapshot_file", &cfg.Commits.SnapshotFile},
 	} {
 		v, perr := expandHome(*p.dst)
 		if perr != nil {
@@ -840,6 +844,9 @@ func (c Config) Validate() error {
 	if err := c.Screening.Validate(); err != nil {
 		return err
 	}
+	if err := c.Commits.Validate(); err != nil {
+		return err
+	}
 	if err := c.Update.Validate(); err != nil {
 		return err
 	}
@@ -937,6 +944,16 @@ func (c *Config) applyEnv() error {
 	envStr("SEAMLESS_SCREENING_LOCKDOWN_FILE", &c.Screening.LockdownFile)
 	envStr("SEAMLESS_SCREENING_FEED_SOCKET", &c.Screening.FeedSocket)
 	envStr("SEAMLESS_SCREENING_FEED_SPOOL", &c.Screening.FeedSpool)
+	if err := envBool("SEAMLESS_COMMITS_RECORD", &c.Commits.Record); err != nil {
+		return err
+	}
+	envStr("SEAMLESS_COMMITS_SNAPSHOT_FILE", &c.Commits.SnapshotFile)
+	if err := envDuration("SEAMLESS_COMMITS_SNAPSHOT_INTERVAL", &c.Commits.SnapshotInterval); err != nil {
+		return err
+	}
+	if err := envDuration("SEAMLESS_COMMITS_SNAPSHOT_WINDOW", &c.Commits.SnapshotWindow); err != nil {
+		return err
+	}
 	envStr("SEAMLESS_CONSOLE_LEVEL", &c.Console.Level)
 	if err := envFloat("SEAMLESS_SEARCH_SEMANTIC_FLOOR", &c.Search.SemanticFloor); err != nil {
 		return err

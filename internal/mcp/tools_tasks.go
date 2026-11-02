@@ -86,6 +86,7 @@ func tasksUpdateTool() mcp.Tool {
 		mcp.WithArray("add_depends_on", mcp.WithStringItems(), mcp.Description("task ids to add as blockers (a comma-separated string is also accepted)")),
 		mcp.WithString("session", mcp.Description("the acting agent's session (the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session name); needed only to mutate a task you hold a live claim on when several agents are active")),
 		mcp.WithString("session_id", mcp.Description(actorSessionIDArgDesc)),
+		mcp.WithArray(commitsParam, mcp.WithStringItems(), mcp.Description(taskCommitsArgDesc)),
 	)
 }
 
@@ -121,8 +122,17 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 		patch.ProjectSlug = &project
 	}
 	patch.AddDependsOn = argStrings(req, "add_depends_on")
+	commits, err := s.commitsArg(req)
+	if err != nil {
+		return errResult("tasks_update", err)
+	}
+	patch.AddCommits = commits
 
-	if patch.Status == nil && patch.Title == nil && patch.Body == nil && patch.ProjectSlug == nil && len(patch.AddDependsOn) == 0 {
+	if patch.Status == nil && patch.Title == nil && patch.Body == nil && patch.ProjectSlug == nil &&
+		len(patch.AddDependsOn) == 0 && len(patch.AddCommits) == 0 {
+		if s.cfg.RecordCommits {
+			return errResult("tasks_update", errors.New("nothing to update: pass status, title, body, project, add_depends_on, or commits"))
+		}
 		return errResult("tasks_update", errors.New("nothing to update: pass status, title, body, project, or add_depends_on"))
 	}
 	// A task id is globally unique, so nothing above resolved a write scope. The
@@ -157,16 +167,26 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 	if err != nil && !errors.Is(err, errAmbiguousActor) {
 		return errResult("tasks_update", err)
 	}
+	// The commits ride in the patch: UpdateTask records them in the same
+	// transaction and behind the same holder lock as every other change, so
+	// whoever may update the task may record its commits, and nobody else.
 	updated, err := store.UpdateTask(ctx, s.cfg.DB, id, patch, actor, time.Now().UTC())
 	if err != nil {
 		return errResult("tasks_update", err)
 	}
-	s.record(ctx, core.EventTaskTransition, actor, updated.ProjectSlug, id,
-		map[string]any{"to": string(updated.Status)})
+	transition := map[string]any{"to": string(updated.Status)}
+	if len(commits) > 0 {
+		transition["commits_recorded"] = len(commits)
+	}
+	s.record(ctx, core.EventTaskTransition, actor, updated.ProjectSlug, id, transition)
 	// The response is judged against the project the task now sits in: a move
 	// INTO a fenced project is sanctioned, but the item it lands on is that
 	// project's content from the moment it arrives.
-	return jsonResult(s.withholdContent(ctx, updated.ProjectSlug, taskJSON(updated), taskContentFields))
+	out := s.withholdContent(ctx, updated.ProjectSlug, taskJSON(updated), taskContentFields)
+	if len(commits) > 0 {
+		out["commits_recorded"] = len(commits)
+	}
+	return jsonResult(out)
 }
 
 func tasksReadyTool() mcp.Tool {

@@ -82,6 +82,10 @@ var viewTables = []struct {
 	// The corpus record names one file of one project: hidden by the project
 	// its path is under, and by the item it records.
 	{"corpus_records", "project_slug NOT IN %[1]s AND item_id NOT IN %[3]s"},
+	// A commit record belongs to one session or one task, and was recorded by
+	// one session: hidden with either (the hidden items hold every session and
+	// task id in a hidden project).
+	{"commit_records", "owner_id NOT IN %[3]s AND recorded_by NOT IN %[2]s"},
 }
 
 // payloadVisible keeps a row whose JSON payload mentions no hidden slug and no

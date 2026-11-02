@@ -160,6 +160,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
+        <li><a href="../../guides/commit-records/">Record commits for an integrity monitor</a></li>
+        
         <li><a href="../../guides/troubleshooting/">Troubleshooting</a></li>
         
       </ul>
@@ -595,6 +597,26 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <td>-</td>
 </tr>
 <tr>
+<td><code>commits.record</code></td>
+<td>bool</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>commits.snapshot_file</code></td>
+<td>string</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>commits.snapshot_interval</code></td>
+<td>duration</td>
+<td><code>5m</code></td>
+</tr>
+<tr>
+<td><code>commits.snapshot_window</code></td>
+<td>duration</td>
+<td><code>720h</code></td>
+</tr>
+<tr>
 <td><code>console.level</code></td>
 <td>string</td>
 <td><code>basic</code></td>
@@ -1020,6 +1042,30 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># events go first, and are counted). Unset: &lt;data_dir&gt;/feed.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_SCREENING_FEED_SPOOL</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># feed_spool: /path/to/spool</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># Commit records, for an integrity monitor that matches a branch&#39;s commits to</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># the tracked work that made them. Off by default, and off is exactly the</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># previous behavior: no argument offered, nothing recorded, no snapshot.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">commits</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Offer the commits argument on session_end and tasks_update: the full ids</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># (40 or 64 hex digits) of the commits a session made or a task&#39;s work</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># produced, recorded on that session or task.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_COMMITS_RECORD</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">record</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Where the daemon writes the commit-matching snapshot: one JSON document,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># replaced whole on every write (mode 0640; its directory must exist),</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># listing the sessions live in the window -- name, repository, start and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># end -- and the tasks a commit in it may name, each with the commits it</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># recorded. Identifiers and times only. Unset: no snapshot. A leading ~</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># expands.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_COMMITS_SNAPSHOT_FILE</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># snapshot_file: /path/to/outbox/snapshot-seamless_feed.json</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># How often the snapshot is rewritten (it is also written at start).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_COMMITS_SNAPSHOT_INTERVAL</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">snapshot_interval</span><span class="p">:</span><span class="w"> </span><span class="l">5m</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># How far back the snapshot reaches: a commit seen earlier is outside it.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_COMMITS_SNAPSHOT_WINDOW</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">snapshot_window</span><span class="p">:</span><span class="w"> </span><span class="l">720h</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># The observability console. Presentation only: nothing here changes what your</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># agents receive -- briefings, MCP tools, hooks, recall, and the gardener are</span><span class="w">

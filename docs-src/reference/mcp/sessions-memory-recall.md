@@ -47,6 +47,11 @@ resumed-session hint to re-ground with `recall`.
 ULID; one that matches nothing is an error saying what the argument takes. Both
 tools also accept `summary` as an alias of `findings`.
 
+On a server that records commits (`commits.record`, off by default),
+`session_end` also takes `commits`: the full ids of the commits the session
+made, recorded on it for an integrity monitor. Off, the argument does not
+exist. See [Record commits for an integrity monitor](/guides/commit-records/).
+
 If `tasks_update` ever fails claiming a task is held by *your own* session id,
 the connection lost an explicit `session_start` binding - those live in daemon
 memory, so a restart or reconnect drops them. Re-run `session_start` with the
@@ -150,4 +155,4 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 | `memory_write` | Stable `id`, canonical `name`, resolved `project`, `updated`, optional `similar`, and optional `superseded` | An occupied tombstone path is an error; if the new memory lands but supersession fails, the tool errors while naming the kept replacement and the still-active target |
 | `memory_edit` | `id`, `name`, `project`, the new `content_hash`, a unified `diff`, and a `stage_hint` when a `kind=stage` body still has no parseable `Status` | An `old_string` that matches zero or several places is an error naming the count, and **nothing** is written - the edits apply all-or-nothing. A stale `expect_hash` is refused rather than overwriting |
 | `recall` | `hits`, possibly empty | Remote embedder failures degrade to lexical-only; local request/config construction errors surface |
-| `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`; findings persist for the next briefing | A missing/ambiguous session is an error rather than a fabricated successful close |
+| `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`, and `commits_recorded` when it recorded commits; findings persist for the next briefing | A missing/ambiguous session is an error rather than a fabricated successful close; so is a `commits` entry that is not a full commit id, which leaves the session open |

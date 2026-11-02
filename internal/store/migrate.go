@@ -96,6 +96,9 @@ var migration028 string
 //go:embed migrations/029_screening_corpus.sql
 var migration029 string
 
+//go:embed migrations/030_commit_records.sql
+var migration030 string
+
 // Migration is a single numbered schema migration.
 type Migration struct {
 	Version int
@@ -135,6 +138,7 @@ func migrationList() []Migration {
 		{Version: 27, SQL: migration027},
 		{Version: 28, SQL: migration028},
 		{Version: 29, SQL: migration029},
+		{Version: 30, SQL: migration030},
 	}
 }
 

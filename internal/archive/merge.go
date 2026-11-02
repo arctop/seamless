@@ -46,8 +46,12 @@ import (
 // A host-local table (one keyed by which machine a row came from) does not
 // belong here either: its rows describe the exporting machine's filesystem, and
 // merging them would hand this instance paths it cannot stat.
+//
+// commit_records rides with the sessions and tasks it hangs off, as task_deps
+// does: it holds commit ids, no path, and a merged session or task without its
+// recorded commits would read as work that recorded none.
 var mergeTables = []string{
-	"projects", "sessions", "tasks", "task_deps", "trials", "events", "gardener_proposals",
+	"projects", "sessions", "tasks", "task_deps", "trials", "events", "gardener_proposals", "commit_records",
 }
 
 // uniqueNameColumns are the UNIQUE columns whose collisions are worth naming in

@@ -58,6 +58,9 @@ internal/screening/ write screening (optional feature, off by default): the
                    quarantine, lockdown and access.refused; see AGENTS.md
 internal/feed/     write screening's metadata feed: event log -> metadata
                    frames -> on-disk spool -> a configured Unix socket
+internal/commitfeed/ commit records' snapshot (the commits: option, off by
+                   default): sessions, tasks and the commits they recorded ->
+                   one JSON file an integrity monitor matches commits against
 # (the dependency-aware ready-queue + lease-based claiming live in
 #  internal/store/tasks*.go -- there is no internal/tasks package)
 internal/gardener/ the propose-only passes (dedup, staleness, stale-stage,
@@ -175,6 +178,9 @@ number other than 0 is refused). The `peer_auth:` block (off by default; see
 docs-src/guides/peer-auth.md) adds a Unix-socket listener whose callers are
 named by the kernel's peer uid and maps OS accounts to the projects they may
 reach; a client of it sets `server_url: unix:///path.sock` and needs no key.
+The `commits:` block (off by default; docs-src/guides/commit-records.md) offers
+session_end and tasks_update a `commits` argument (`record`) and writes the
+commit-matching snapshot to `snapshot_file`.
 
 ## Storage layout
 

@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -189,4 +190,43 @@ func TestIsolation(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "valid values are open, confidential, sealed")
 	}
+}
+
+func TestCommitIDs(t *testing.T) {
+	sha1 := "0123456789abcdef0123456789abcdef01234567"
+	sha256 := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	other := "fedcba9876543210fedcba9876543210fedcba98"
+
+	got, err := CommitIDs([]string{" " + sha1 + " ", sha256, "", "0123456789ABCDEF0123456789ABCDEF01234567", other}, 10)
+	require.NoError(t, err)
+	require.Equal(t, []string{sha1, sha256, other}, got,
+		"trimmed, lowercased, blanks dropped, a repeat keeps its first place")
+
+	got, err = CommitIDs(nil, 10)
+	require.NoError(t, err)
+	require.Nil(t, got)
+
+	for _, bad := range []string{
+		"0123456",                   // an abbreviation
+		sha1[:39],                   // one short of SHA-1
+		sha1 + "0",                  // between the two lengths
+		"g" + sha1[1:],              // not hex
+		sha1[:20] + " " + sha1[21:], // a space inside
+	} {
+		_, err := CommitIDs([]string{sha1, bad}, 10)
+		require.Error(t, err, "%q", bad)
+		require.Contains(t, err.Error(), "entry 1")
+		require.Contains(t, err.Error(), "not a full commit id")
+	}
+	_, err = CommitIDs([]string{strings.Repeat("x", 500)}, 10)
+	require.Error(t, err)
+	require.Less(t, len(err.Error()), 300, "a long paste is not echoed back whole")
+
+	_, err = CommitIDs([]string{sha1, sha256, other}, 2)
+	require.ErrorContains(t, err, "3 distinct commit ids: one call records at most 2")
+	got, err = CommitIDs([]string{sha1, sha1, strings.ToUpper(sha1)}, 1)
+	require.NoError(t, err, "the bound counts distinct ids")
+	require.Equal(t, []string{sha1}, got)
+	require.True(t, core.IsCommitID(sha256))
+	require.False(t, core.IsCommitID(strings.ToUpper(sha1)), "the canonical form is lowercase")
 }

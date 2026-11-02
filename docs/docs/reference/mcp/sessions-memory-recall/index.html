@@ -160,6 +160,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
+        <li><a href="../../../guides/commit-records/">Record commits for an integrity monitor</a></li>
+        
         <li><a href="../../../guides/troubleshooting/">Troubleshooting</a></li>
         
       </ul>
@@ -264,6 +266,10 @@ resumed-session hint to re-ground with <code>recall</code>.</p>
 <code>cx/...</code> on the briefing's <code>Seam session</code> line, or a <code>sess/*</code> name) or a session
 ULID; one that matches nothing is an error saying what the argument takes. Both
 tools also accept <code>summary</code> as an alias of <code>findings</code>.</p>
+<p>On a server that records commits (<code>commits.record</code>, off by default),
+<code>session_end</code> also takes <code>commits</code>: the full ids of the commits the session
+made, recorded on it for an integrity monitor. Off, the argument does not
+exist. See <a href="../../../guides/commit-records/">Record commits for an integrity monitor</a>.</p>
 <p>If <code>tasks_update</code> ever fails claiming a task is held by <em>your own</em> session id,
 the connection lost an explicit <code>session_start</code> binding - those live in daemon
 memory, so a restart or reconnect drops them. Re-run <code>session_start</code> with the
@@ -402,8 +408,8 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 </tr>
 <tr>
 <td><code>session_end</code></td>
-<td>Confirmation of the close - <code>session_id</code>, <code>claims_released</code>, <code>mishaps_recorded</code>; findings persist for the next briefing</td>
-<td>A missing/ambiguous session is an error rather than a fabricated successful close</td>
+<td>Confirmation of the close - <code>session_id</code>, <code>claims_released</code>, <code>mishaps_recorded</code>, and <code>commits_recorded</code> when it recorded commits; findings persist for the next briefing</td>
+<td>A missing/ambiguous session is an error rather than a fabricated successful close; so is a <code>commits</code> entry that is not a full commit id, which leaves the session open</td>
 </tr>
 </tbody>
 </table>
@@ -524,6 +530,12 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 <td>string</td>
 <td><strong>yes</strong></td>
 <td>Final findings: what was learned, decided, or left open. Prefer a tight summary (briefings show a short preview), but long findings are stored in full -- they are not rejected.</td>
+</tr>
+<tr>
+<td><code>commits</code></td>
+<td>array</td>
+<td>no</td>
+<td>Full ids of the commits this session made, recorded on the session for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints (git rev-parse HEAD), never an abbreviation. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record)</td>
 </tr>
 <tr>
 <td><code>mishaps</code></td>

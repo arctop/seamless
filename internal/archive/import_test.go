@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -142,6 +143,8 @@ func seedIndexedInto(t *testing.T, dir string, s instanceSpec) {
 		Status: core.TaskOpen, DependsOn: []string{s.taskA},
 		CreatedAt: now, UpdatedAt: now,
 	}))
+	_, err = store.RecordSessionCommits(ctx, db, s.sessionID, s.sessionID, []string{strings.Repeat("c", 40)}, now)
+	require.NoError(t, err)
 	require.NoError(t, store.CreateTrial(ctx, db, core.Trial{
 		ID: s.trialID, Lab: "import", Title: "attach + insert or ignore",
 		Expected: "rows appear once", Actual: "they did", Outcome: core.OutcomePass,
@@ -464,7 +467,7 @@ func TestImport_Merge(t *testing.T) {
 	require.Empty(t, rep.NameCollisions)
 	require.Equal(t, map[string]int{
 		"projects": 1, "sessions": 1, "tasks": 2, "task_deps": 1,
-		"trials": 1, "events": 1, "gardener_proposals": 0,
+		"trials": 1, "events": 1, "gardener_proposals": 0, "commit_records": 1,
 	}, rep.Rows)
 	require.Zero(t, rep.Projects, "the archive's own projects row carried the slug")
 

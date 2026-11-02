@@ -782,3 +782,44 @@ func TestLocalRepoMappings_ExcludesOtherHosts(t *testing.T) {
 	require.Len(t, local, 1)
 	require.Equal(t, "/local/app", local[0].Path)
 }
+
+// RepoRowForCWD picks the row ResolveProjectForCWD resolves through: the
+// longest mapped path the cwd lies under on that host, aligned on a separator,
+// with the row's origin along.
+func TestRepoRowForCWD_MatchesTheProjectResolution(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	at := core.FormatTime(time.Now().UTC())
+	for _, r := range []struct{ host, path, slug, origin string }{
+		{"h1", "/a/foo", "foo", "git@example.com:owner/foo.git"},
+		{"h1", "/a/foo/sub", "sub", ""},
+		{"h1", "/a/foobar", "foobar", ""},
+		{"h2", "/a/foo", "other", ""},
+	} {
+		_, err := db.ExecContext(ctx, `INSERT INTO repo_map (host, path, slug, origin, created_at)
+			VALUES (?, ?, ?, ?, ?)`, r.host, r.path, r.slug, r.origin, at)
+		require.NoError(t, err)
+	}
+	rows, err := RepoMapRows(ctx, db)
+	require.NoError(t, err)
+	for _, tc := range []struct{ host, cwd, wantPath string }{
+		{"h1", "/a/foo", "/a/foo"},
+		{"h1", "/a/foo/deep/dir", "/a/foo"},
+		{"h1", "/a/foo/sub/x", "/a/foo/sub"},
+		{"h1", "/a/foobar/x", "/a/foobar"},
+		{"h1", "/a/fo", ""},
+		{"h2", "/a/foo/x", "/a/foo"},
+		{"h3", "/a/foo", ""},
+		{"h1", "", ""},
+	} {
+		row, ok := RepoRowForCWD(rows, tc.host, tc.cwd)
+		require.Equal(t, tc.wantPath != "", ok, "%s %s", tc.host, tc.cwd)
+		require.Equal(t, tc.wantPath, row.Path, "%s %s", tc.host, tc.cwd)
+		slug, err := ResolveProjectForCWD(ctx, db, tc.host, tc.cwd)
+		require.NoError(t, err)
+		require.Equal(t, slug, row.Slug, "%s %s: the same choice as the project resolution", tc.host, tc.cwd)
+	}
+	row, ok := RepoRowForCWD(rows, "h1", "/a/foo/x")
+	require.True(t, ok)
+	require.Equal(t, "git@example.com:owner/foo.git", row.Origin)
+}

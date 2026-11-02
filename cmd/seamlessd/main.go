@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/a2a"
+	"github.com/arctop/seamless/internal/commitfeed"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/console"
 	"github.com/arctop/seamless/internal/core"
@@ -445,6 +446,21 @@ func runServe(args []string) error {
 		slog.Error("metadata feed not started", "error", ferr)
 	}
 	defer func() { stop(); metaFeed.Wait() }()
+	// Commit records' snapshot: off unless commits.snapshot_file names a file.
+	// It reads the database and writes that one file, nothing else.
+	commitSnap := commitfeed.NewWriter(commitfeed.WriterConfig{
+		DB: db, File: cfg.Commits.SnapshotFile, Every: time.Duration(cfg.Commits.SnapshotInterval),
+		Window: time.Duration(cfg.Commits.SnapshotWindow), Host: feed.HostName(config.Hostname()),
+		// The reaper's liveness threshold: a session idle past it has ended,
+		// in the snapshot as in the console, whether or not the reaper runs.
+		Idle:   time.Duration(cfg.Gardener.SessionIdleMinutes) * time.Minute,
+		Sealed: sealedSlugs, Logger: logger,
+	})
+	if cerr := commitSnap.Run(ctx); cerr != nil {
+		// Like the feed: the daemon serves without it, and the log says why.
+		slog.Error("commit snapshot writer not started", "error", cerr)
+	}
+	defer func() { stop(); commitSnap.Wait() }()
 
 	if cfg.MCP.APIKey == "" {
 		slog.Warn("mcp.api_key is empty; MCP and hook requests will be rejected -- set it in seamless.yaml")
@@ -454,6 +470,9 @@ func runServe(args []string) error {
 		APIKey: cfg.MCP.APIKey, Version: buildVersion(), LocalHost: config.Hostname(),
 		ToolEventMaxChars:   cfg.Budgets.ToolEventMaxChars,
 		CaptureAllowedPorts: cfg.Capture.AllowedPorts, Logger: logger,
+		// Commit records: off, session_end and tasks_update are registered
+		// without their commits argument.
+		RecordCommits: cfg.Commits.Record,
 		// The file/env optional-features base. The server layers the console's
 		// stored override on top of it per request, so a toggle needs no restart
 		// -- but without this line the file and SEAMLESS_FEATURES_* env would be

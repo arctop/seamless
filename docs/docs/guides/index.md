@@ -32,6 +32,10 @@ opt-in guard against a poisoned memory: every agent write is screened for
 secrets, injection markers and hidden characters, and the suspicious ones -
 along with any change to a binding rule by a session that read outside text -
 wait for your release instead of reaching every briefing.
+[Record commits for an integrity monitor](https://thereisnospoon.org/docs/guides/commit-records/) is its
+opt-in neighbor for a repository's history: agents name the commits they made,
+and a snapshot of sessions, tasks and those commits lets a monitor flag the
+commits no tracked work accounts for.
 
 The last three are operational. [Import, back up & restore](https://thereisnospoon.org/docs/guides/data/) covers
 putting `~/.seamless` in git, what deleting `seam.db` actually costs (an index
@@ -53,4 +57,5 @@ silence, not an error message.
 - [Share one daemon across a LAN](https://thereisnospoon.org/docs/guides/network-install/): Run one seamlessd for several devices - the server config, TLS with mkcert or openssl, the client-config pairing command, and the captures a remote device honestly does not get.
 - [Seal projects to OS accounts](https://thereisnospoon.org/docs/guides/peer-auth/): peer_auth - one daemon, a Unix socket that names each caller by its uid, projects only their own OS account can reach, and the deployment that makes the files hold too.
 - [Screen writes and hold the suspicious ones](https://thereisnospoon.org/docs/guides/write-screening/): Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.
+- [Record commits for an integrity monitor](https://thereisnospoon.org/docs/guides/commit-records/): Commit records - agents name the commits they made on session_end and tasks_update, and the daemon writes a snapshot of its sessions, tasks and those commits that an integrity monitor matches a branch's commits against.
 - [Troubleshooting](https://thereisnospoon.org/docs/guides/troubleshooting/): Symptom-first fixes for a system whose hooks fail open - where silence, not an error, is what a broken install looks like.

@@ -181,6 +181,9 @@ func newPADaemon(t *testing.T) *paDaemon {
 	mcpSrv := mcp.New(mcp.Config{
 		DB: db, Files: mgr, Retrieve: ret, Events: rec, Gardener: garden, Screening: screen,
 		APIKey: paKey, LocalHost: paHost, Features: feats,
+		// Commit records on, so the commits argument is a surface the probes
+		// reach rather than an unknown parameter.
+		RecordCommits: true,
 	})
 	a2aSrv, err := a2a.New(a2a.Config{Retrieve: ret, Events: rec, APIKey: paKey, Version: "test", Endpoint: "http://127.0.0.1:8081/api/a2a"})
 	require.NoError(t, err)
@@ -533,6 +536,9 @@ func (d *paDaemon) hook(t *testing.T, base, key, event string, body map[string]a
 	return string(out)
 }
 
+// paCommit is the synthetic commit id the commit-record probes send.
+var paCommit = strings.Repeat("ab", 20)
+
 // paToolProbes is every way a caller outside it might try to reach it's
 // project through each MCP tool. TestPeerAuthMatrix fails when a tool in
 // mcp.Catalog() has no row: a new tool is a new surface to prove.
@@ -541,7 +547,10 @@ func paToolProbes(it paItems) map[string][]map[string]any {
 	return map[string][]map[string]any{
 		"session_start":  {{"project": it.project}, {"name": it.sessName}, {"cwd": "/work/finance-os"}, {"cwd": "/work/ops"}},
 		"session_update": {{"session": it.sessName, "findings": "outsider overwrite"}, {"session_id": it.sessID, "findings": "outsider overwrite"}},
-		"session_end":    {{"session": it.sessName, "findings": "outsider end"}, {"session_id": it.sessID, "findings": "outsider end"}},
+		"session_end": {
+			{"session": it.sessName, "findings": "outsider end"}, {"session_id": it.sessID, "findings": "outsider end"},
+			{"session": it.sessName, "findings": "outsider end", "commits": []any{paCommit}},
+		},
 		"memory_write": {
 			{"project": it.project, "name": "probe-in", "kind": "gotcha", "description": "probe", "body": "probe"},
 			{"name": "probe-supersede", "kind": "gotcha", "description": "probe", "body": "probe", "supersedes": it.memName, "project": it.project},
@@ -566,7 +575,7 @@ func paToolProbes(it paItems) map[string][]map[string]any {
 		"tasks_add":      {{"project": it.project, "title": "probe"}},
 		"tasks_update": {
 			{"id": it.taskID, "status": "done"}, {"id": it.taskID, "project": "global"},
-			{"id": it.taskID, "title": "outsider retitle"},
+			{"id": it.taskID, "title": "outsider retitle"}, {"id": it.taskID, "commits": []any{paCommit}},
 		},
 		"tasks_ready":        {{"project": it.project}, {"project": it.project, "plan": it.plan}, {}},
 		"tasks_list":         {{"project": it.project}, {"id": it.taskID}, {"project": it.project, "plan": it.plan}, {}},
@@ -655,6 +664,8 @@ func (d *paDaemon) unchanged(t *testing.T, it paItems, after string) {
 	require.Zero(t, n, after)
 	require.NoError(t, d.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM trials WHERE project_slug = ? AND title = 'probe'`, it.project).Scan(&n))
 	require.Zero(t, n, after)
+	require.NoError(t, d.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM commit_records WHERE owner_id IN (?, ?)`, it.sessID, it.taskID).Scan(&n))
+	require.Zero(t, n, "%s: no outsider recorded a commit on its session or task", after)
 }
 
 // sealedIsolation is the isolation the fixture gave the sealed project; a
