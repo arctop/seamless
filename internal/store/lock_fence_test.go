@@ -15,8 +15,8 @@ import (
 )
 
 // The owner-locked view at the store's one enforcement point: CanRead/CanWrite
-// and the fts/cosine reach filter (accessFilter) answer for a passkey-sealed
-// project exactly what the request's View answers -- locked for the bearer key,
+// and the fts/cosine reach filter (accessFilter) answer for a locked project
+// exactly what the request's View answers -- locked for the bearer key,
 // for a socket owner without a lease, for an expired lease and for another
 // process; open for the one process holding a live lease.
 
@@ -28,10 +28,10 @@ var (
 
 func lockedPolicy(t *testing.T) *access.Policy {
 	t.Helper()
-	p, err := access.New(config.PeerAuth{Owner: "katata", Sealed: []string{"arctop-finance", "arctop-legal"}},
+	p, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{"example-finance", "example-legal"}},
 		func(n string) (access.Account, error) {
-			if n == "katata" {
-				return access.Account{UID: 501, Name: "katata"}, nil
+			if n == "owner" {
+				return access.Account{UID: 501, Name: "owner"}, nil
 			}
 			return access.Account{}, fmt.Errorf("no %s", n)
 		})
@@ -69,14 +69,14 @@ func TestCanReadCanWrite_OwnerLocked(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
-	for _, slug := range []string{"arctop-finance", "arctop-legal", "arctop-ops"} {
+	for _, slug := range []string{"example-finance", "example-legal", "example-ops"} {
 		_, err := EnsureProject(ctx, db, slug, slug)
 		require.NoError(t, err)
 	}
-	require.NoError(t, SetProjectIsolation(ctx, db, "arctop-finance", core.IsolationConfidential))
-	require.NoError(t, SetProjectIsolation(ctx, db, "arctop-legal", core.IsolationConfidential))
+	require.NoError(t, SetProjectIsolation(ctx, db, "example-finance", core.IsolationConfidential))
+	require.NoError(t, SetProjectIsolation(ctx, db, "example-legal", core.IsolationConfidential))
 	p := lockedPolicy(t)
-	lease := access.Lease{ID: "l1", Project: "arctop-finance", Process: fenceProc.Key(), Expires: fenceNow.Add(3 * time.Hour)}
+	lease := access.Lease{ID: "l1", Project: "example-finance", Process: fenceProc.Key(), Expires: fenceNow.Add(3 * time.Hour)}
 	principals := fencePrincipals(t, p, []access.Lease{lease})
 
 	type row struct {
@@ -99,22 +99,22 @@ func TestCanReadCanWrite_OwnerLocked(t *testing.T) {
 		return m
 	}
 	for name, tc := range map[string]row{
-		// A session bound INTO the sealed project reads and writes it only
+		// A session bound INTO the locked project reads and writes it only
 		// under the lease -- the binding never stands in for the unlock.
-		"bound to the seal, its own project": {"arctop-finance", "arctop-finance", all([2]bool{true, true}, [2]bool{true, true})},
+		"bound to the lock, its own project": {"example-finance", "example-finance", all([2]bool{true, true}, [2]bool{true, true})},
 		// From an open project: the isolation fence keeps a confidential
 		// project unreadable from outside whatever the lease, and lets a write
 		// in (inbound is unchanged) -- but only for a View that may write it.
-		"bound to an open project, reaching the seal": {"arctop-ops", "arctop-finance", all([2]bool{false, true}, [2]bool{false, true})},
-		// A lease on one sealed project never opens the other.
-		"bound to the seal, reaching the other seal": {"arctop-finance", "arctop-legal", same(locked)},
-		"bound to the other seal, its own project":   {"arctop-legal", "arctop-legal", all(locked, [2]bool{true, true})},
+		"bound to an open project, reaching the lock": {"example-ops", "example-finance", all([2]bool{false, true}, [2]bool{false, true})},
+		// A lease on one locked project never opens the other.
+		"bound to the lock, reaching the other lock": {"example-finance", "example-legal", same(locked)},
+		"bound to the other lock, its own project":   {"example-legal", "example-legal", all(locked, [2]bool{true, true})},
 		// The owner's open project and global: untouched by the lock.
-		"an open project, its own":  {"arctop-ops", "arctop-ops", same([2]bool{true, true})},
-		"an open project to global": {"arctop-ops", "", same([2]bool{true, true})},
-		// A leased sealed session still never writes global (its isolation
+		"an open project, its own":  {"example-ops", "example-ops", same([2]bool{true, true})},
+		"an open project to global": {"example-ops", "", same([2]bool{true, true})},
+		// A leased locked session still never writes global (its isolation
 		// fences outbound), and reads it only once it may read its own project.
-		"bound to the seal, global": {"arctop-finance", "", all([2]bool{true, false}, [2]bool{true, false})},
+		"bound to the lock, global": {"example-finance", "", all([2]bool{true, false}, [2]bool{true, false})},
 	} {
 		for who, pctx := range principals {
 			t.Run(name+"/"+who, func(t *testing.T) {
@@ -137,7 +137,7 @@ func TestAccessFilter_OwnerLocked(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
 	for _, row := range []struct{ id, project string }{
-		{"m-fin", "arctop-finance"}, {"m-legal", "arctop-legal"}, {"m-ops", "arctop-ops"}, {"m-glob", ""},
+		{"m-fin", "example-finance"}, {"m-legal", "example-legal"}, {"m-ops", "example-ops"}, {"m-glob", ""},
 	} {
 		_, err := db.ExecContext(ctx, `INSERT INTO fts (item_id, kind, project, title, name, description, body) VALUES (?, 'memory', ?, '', 'ledger', '', 'ledger body')`, row.id, row.project)
 		require.NoError(t, err)
@@ -148,7 +148,7 @@ func TestAccessFilter_OwnerLocked(t *testing.T) {
 		require.NoError(t, err)
 	}
 	p := lockedPolicy(t)
-	lease := access.Lease{ID: "l1", Project: "arctop-finance", Process: fenceProc.Key(), Expires: fenceNow.Add(time.Hour)}
+	lease := access.Lease{ID: "l1", Project: "example-finance", Process: fenceProc.Key(), Expires: fenceNow.Add(time.Hour)}
 	principals := fencePrincipals(t, p, []access.Lease{lease})
 	ids := func(ctx context.Context) []string {
 		hits, err := FTSSearch(ctx, db, "ledger", nil, nil, 10)

@@ -63,7 +63,7 @@ func TestMigration031_AccessTables(t *testing.T) {
 func TestAccessApproval_CreateAndPending(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
-	a, err := CreateAccessApproval(ctx, db, leaseReq("arctop-finance", fenceProc), fenceNow)
+	a, err := CreateAccessApproval(ctx, db, leaseReq("example-finance", fenceProc), fenceNow)
 	require.NoError(t, err)
 	require.Equal(t, ApprovalPending, a.Status)
 	require.Len(t, a.Challenge, AccessChallengeBytes)
@@ -77,12 +77,12 @@ func TestAccessApproval_CreateAndPending(t *testing.T) {
 
 	// A second request a second later (ULIDs within one millisecond are not
 	// ordered, so "newest" is by requested_at).
-	b, err := CreateAccessApproval(ctx, db, leaseReq("arctop-finance", fenceProc), fenceNow.Add(time.Second))
+	b, err := CreateAccessApproval(ctx, db, leaseReq("example-finance", fenceProc), fenceNow.Add(time.Second))
 	require.NoError(t, err)
 	require.NotEqual(t, a.ID, b.ID)
 	require.False(t, bytes.Equal(a.Challenge, b.Challenge), "every approval has its own challenge")
 
-	got, ok, err := PendingAccessApproval(ctx, db, fenceProc.Key(), "arctop-finance", fenceNow.Add(time.Minute))
+	got, ok, err := PendingAccessApproval(ctx, db, fenceProc.Key(), "example-finance", fenceNow.Add(time.Minute))
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, b.ID, got.ID, "the newest pending request")
@@ -90,10 +90,10 @@ func TestAccessApproval_CreateAndPending(t *testing.T) {
 		key, project string
 		at           time.Time
 	}{
-		"another process":         {fenceOther.Key(), "arctop-finance", fenceNow},
-		"another project":         {fenceProc.Key(), "arctop-legal", fenceNow},
-		"after the deadline":      {fenceProc.Key(), "arctop-finance", fenceNow.Add(10*time.Minute + time.Second)},
-		"long after the deadline": {fenceProc.Key(), "arctop-finance", fenceNow.Add(time.Hour)},
+		"another process":         {fenceOther.Key(), "example-finance", fenceNow},
+		"another project":         {fenceProc.Key(), "example-legal", fenceNow},
+		"after the deadline":      {fenceProc.Key(), "example-finance", fenceNow.Add(10*time.Minute + time.Second)},
+		"long after the deadline": {fenceProc.Key(), "example-finance", fenceNow.Add(time.Hour)},
 	} {
 		_, ok, err := PendingAccessApproval(ctx, db, probe.key, probe.project, probe.at)
 		require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestAccessApproval_Refusals(t *testing.T) {
 	ctx := context.Background()
 	for name, mutate := range map[string]func(*AccessRequest){
 		"no project":                 func(r *AccessRequest) { r.Project = "" },
-		"a padded project":           func(r *AccessRequest) { r.Project = " arctop-finance" },
+		"a padded project":           func(r *AccessRequest) { r.Project = " example-finance" },
 		"an unknown kind":            func(r *AccessRequest) { r.Kind = "forever" },
 		"a lease under a second":     func(r *AccessRequest) { r.Lease = time.Millisecond },
 		"a fractional-second lease":  func(r *AccessRequest) { r.Lease = 1500 * time.Millisecond },
@@ -120,13 +120,13 @@ func TestAccessApproval_Refusals(t *testing.T) {
 		"an over-long cwd":           func(r *AccessRequest) { r.CWD = "/" + strings.Repeat("d", maxAccessFieldBytes) },
 	} {
 		t.Run(name, func(t *testing.T) {
-			req := leaseReq("arctop-finance", fenceProc)
+			req := leaseReq("example-finance", fenceProc)
 			mutate(&req)
 			_, err := CreateAccessApproval(ctx, db, req, fenceNow)
 			require.ErrorIs(t, err, ErrInvalidAccessRequest)
 		})
 	}
-	req := leaseReq("arctop-finance", fenceProc)
+	req := leaseReq("example-finance", fenceProc)
 	req.Reason = strings.Repeat("\xc3\xa9", MaxAccessReasonRunes)
 	_, err := CreateAccessApproval(ctx, db, req, fenceNow)
 	require.NoError(t, err, "the cap counts characters, not bytes")
@@ -138,9 +138,9 @@ func TestAccessApproval_Refusals(t *testing.T) {
 func TestApproveAccess_SingleUseAndChallengeBound(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
-	a, err := CreateAccessApproval(ctx, db, leaseReq("arctop-finance", fenceProc), fenceNow)
+	a, err := CreateAccessApproval(ctx, db, leaseReq("example-finance", fenceProc), fenceNow)
 	require.NoError(t, err)
-	other, err := CreateAccessApproval(ctx, db, leaseReq("arctop-legal", fenceProc), fenceNow)
+	other, err := CreateAccessApproval(ctx, db, leaseReq("example-legal", fenceProc), fenceNow)
 	require.NoError(t, err)
 
 	at := fenceNow.Add(2 * time.Minute)
@@ -156,7 +156,7 @@ func TestApproveAccess_SingleUseAndChallengeBound(t *testing.T) {
 
 	lease, err := ApproveAccess(ctx, db, a.ID, a.Challenge, "cred-1", at)
 	require.NoError(t, err)
-	require.Equal(t, "arctop-finance", lease.Project)
+	require.Equal(t, "example-finance", lease.Project)
 	require.Equal(t, fenceProc.Key(), lease.ProcessKey)
 	require.Equal(t, at.Add(3*time.Hour), lease.ExpiresAt)
 	require.Equal(t, a.SessionID, lease.SessionID)
@@ -183,7 +183,7 @@ func TestApproveAccess_SingleUseAndChallengeBound(t *testing.T) {
 func TestApproveAccess_ConcurrentApprovesGrantOnce(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
-	a, err := CreateAccessApproval(ctx, db, leaseReq("arctop-finance", fenceProc), fenceNow)
+	a, err := CreateAccessApproval(ctx, db, leaseReq("example-finance", fenceProc), fenceNow)
 	require.NoError(t, err)
 	var (
 		wg   sync.WaitGroup
@@ -218,7 +218,7 @@ func TestApproveAccess_ConcurrentApprovesGrantOnce(t *testing.T) {
 func TestApproveAccess_ExpiredAndDenied(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
-	late, err := CreateAccessApproval(ctx, db, leaseReq("arctop-finance", fenceProc), fenceNow)
+	late, err := CreateAccessApproval(ctx, db, leaseReq("example-finance", fenceProc), fenceNow)
 	require.NoError(t, err)
 	_, err = ApproveAccess(ctx, db, late.ID, late.Challenge, "cred-1", late.ExpiresAt)
 	require.ErrorIs(t, err, ErrApprovalExpired, "the deadline itself is too late")
@@ -228,14 +228,14 @@ func TestApproveAccess_ExpiredAndDenied(t *testing.T) {
 	_, err = ApproveAccess(ctx, db, late.ID, late.Challenge, "cred-1", fenceNow)
 	require.ErrorIs(t, err, ErrApprovalNotPending, "an expired approval never comes back")
 
-	denied, err := CreateAccessApproval(ctx, db, leaseReq("arctop-finance", fenceProc), fenceNow)
+	denied, err := CreateAccessApproval(ctx, db, leaseReq("example-finance", fenceProc), fenceNow)
 	require.NoError(t, err)
 	require.NoError(t, DenyAccess(ctx, db, denied.ID, "cred-1", fenceNow))
 	_, err = ApproveAccess(ctx, db, denied.ID, denied.Challenge, "cred-1", fenceNow)
 	require.ErrorIs(t, err, ErrApprovalNotPending)
 	require.ErrorIs(t, DenyAccess(ctx, db, "01NOPE", "", fenceNow), ErrApprovalNotFound)
 
-	stale, err := CreateAccessApproval(ctx, db, leaseReq("arctop-legal", fenceProc), fenceNow)
+	stale, err := CreateAccessApproval(ctx, db, leaseReq("example-legal", fenceProc), fenceNow)
 	require.NoError(t, err)
 	n, err := ExpireAccessApprovals(ctx, db, fenceNow.Add(9*time.Minute))
 	require.NoError(t, err)
@@ -265,13 +265,13 @@ func TestAccessLeases_RefreshRevokeExpire(t *testing.T) {
 		require.NoError(t, err)
 		return l
 	}
-	first := grant("arctop-finance", fenceProc, AccessKindRequest, fenceNow)
-	legal := grant("arctop-legal", fenceProc, AccessKindRequest, fenceNow)
-	elsewhere := grant("arctop-finance", fenceOther, AccessKindRequest, fenceNow)
+	first := grant("example-finance", fenceProc, AccessKindRequest, fenceNow)
+	legal := grant("example-legal", fenceProc, AccessKindRequest, fenceNow)
+	elsewhere := grant("example-finance", fenceOther, AccessKindRequest, fenceNow)
 
 	// A refresh is a new approval and a new 3h lease; the old one retires.
 	refreshAt := fenceNow.Add(2*time.Hour + 40*time.Minute)
-	second := grant("arctop-finance", fenceProc, AccessKindRefresh, refreshAt)
+	second := grant("example-finance", fenceProc, AccessKindRefresh, refreshAt)
 	require.Equal(t, refreshAt.Add(3*time.Hour), second.ExpiresAt, "a fresh 3h from the approval, not an extension")
 	live, err := ActiveAccessLeases(ctx, db, fenceProc.Key(), refreshAt)
 	require.NoError(t, err)
@@ -311,11 +311,11 @@ func TestAccessLeases_RefreshRevokeExpire(t *testing.T) {
 	require.Empty(t, live)
 
 	// One lease by id, and everything at once.
-	third := grant("arctop-finance", fenceProc, AccessKindRequest, refreshAt)
+	third := grant("example-finance", fenceProc, AccessKindRequest, refreshAt)
 	require.NoError(t, RevokeAccessLease(ctx, db, third.ID, LeaseRevokedOwner, refreshAt))
 	require.ErrorIs(t, RevokeAccessLease(ctx, db, third.ID, LeaseRevokedOwner, refreshAt), ErrLeaseNotLive)
-	grant("arctop-finance", fenceProc, AccessKindRequest, refreshAt)
-	grant("arctop-legal", fenceOther, AccessKindRequest, refreshAt)
+	grant("example-finance", fenceProc, AccessKindRequest, refreshAt)
+	grant("example-legal", fenceOther, AccessKindRequest, refreshAt)
 	n, err = RevokeAllAccessLeases(ctx, db, LeaseRevokedReset, refreshAt)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), n)
@@ -326,13 +326,13 @@ func TestAccessLeases_RefreshRevokeExpire(t *testing.T) {
 func TestAccessLeases_DriveTheLockedView(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
-	for _, slug := range []string{"arctop-finance", "arctop-legal"} {
+	for _, slug := range []string{"example-finance", "example-legal"} {
 		_, err := EnsureProject(ctx, db, slug, slug)
 		require.NoError(t, err)
 		require.NoError(t, SetProjectIsolation(ctx, db, slug, core.IsolationConfidential))
 	}
 	p := lockedPolicy(t)
-	a, err := CreateAccessApproval(ctx, db, leaseReq("arctop-finance", fenceProc), fenceNow)
+	a, err := CreateAccessApproval(ctx, db, leaseReq("example-finance", fenceProc), fenceNow)
 	require.NoError(t, err)
 	lease, err := ApproveAccess(ctx, db, a.ID, a.Challenge, "cred-1", fenceNow)
 	require.NoError(t, err)
@@ -359,11 +359,11 @@ func TestAccessLeases_DriveTheLockedView(t *testing.T) {
 		project     string
 		read, write bool
 	}{
-		{"leased, at the grant", request(fenceProc, fenceNow), "arctop-finance", true, true},
-		{"leased, a minute before expiry", request(fenceProc, lease.ExpiresAt.Add(-time.Minute)), "arctop-finance", true, true},
-		{"the lease opens only its project", request(fenceProc, fenceNow), "arctop-legal", false, false},
-		{"lease expired", request(fenceProc, lease.ExpiresAt), "arctop-finance", false, false},
-		{"another process of the owner", request(fenceOther, fenceNow), "arctop-finance", false, false},
+		{"leased, at the grant", request(fenceProc, fenceNow), "example-finance", true, true},
+		{"leased, a minute before expiry", request(fenceProc, lease.ExpiresAt.Add(-time.Minute)), "example-finance", true, true},
+		{"the lease opens only its project", request(fenceProc, fenceNow), "example-legal", false, false},
+		{"lease expired", request(fenceProc, lease.ExpiresAt), "example-finance", false, false},
+		{"another process of the owner", request(fenceOther, fenceNow), "example-finance", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r, w := reach(tc.ctx, tc.project)
@@ -374,15 +374,15 @@ func TestAccessLeases_DriveTheLockedView(t *testing.T) {
 	// Revoked (session_end): the very next request is locked again.
 	_, err = RevokeAccessLeasesForSession(ctx, db, a.SessionID, LeaseRevokedSessionEnded, fenceNow.Add(time.Minute))
 	require.NoError(t, err)
-	r, w := reach(request(fenceProc, fenceNow.Add(2*time.Minute)), "arctop-finance")
+	r, w := reach(request(fenceProc, fenceNow.Add(2*time.Minute)), "example-finance")
 	require.False(t, r)
 	require.False(t, w)
 
 	// A row that names the process but is handed to the TCP view (the bearer
 	// key) opens nothing: the access layer, not the row, decides.
-	rows := []AccessLease{{ID: "forged", Project: "arctop-finance", ProcessKey: fenceProc.Key(), ExpiresAt: fenceNow.Add(time.Hour)}}
+	rows := []AccessLease{{ID: "forged", Project: "example-finance", ProcessKey: fenceProc.Key(), ExpiresAt: fenceNow.Add(time.Hour)}}
 	tcp := access.WithView(ctx, p.OwnerView().WithLeases(fenceNow, AccessLeases(rows)))
-	r, w = reach(tcp, "arctop-finance")
+	r, w = reach(tcp, "example-finance")
 	require.False(t, r)
 	require.False(t, w)
 }

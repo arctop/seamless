@@ -433,8 +433,8 @@ func runServe(args []string) error {
 	}
 	var sealedSlugs func(string) bool
 	if peer != nil {
-		sealed := peer.policy.SealedProjects()
-		sealedSlugs = func(slug string) bool { return slices.Contains(sealed, slug) }
+		hidden := peer.policy.ConsoleHidden()
+		sealedSlugs = func(slug string) bool { return slices.Contains(hidden, slug) }
 	}
 	metaFeed := feed.New(feed.Config{
 		DB: db, Events: rec, Socket: cfg.Screening.FeedSocket, Spool: feedSpool,
@@ -499,12 +499,13 @@ func runServe(args []string) error {
 		Features: cfg.Features, Screening: screen,
 	})
 	// The console reads through a handle on which projects sealed to other OS
-	// accounts do not exist, when there are any (store.OpenView); its writes go
-	// to the main handle after reading their target through the filtered one.
+	// accounts, and locked projects, do not exist, when there are any
+	// (store.OpenView); its writes go to the main handle after reading their
+	// target through the filtered one.
 	consoleDB, consoleEvents := db, rec
 	var consoleWriteDB *sql.DB
-	if peer != nil && len(peer.policy.SealedProjects()) > 0 {
-		viewDB, verr := store.OpenView(cfg.DBPath(), peer.policy.SealedProjects())
+	if peer != nil && len(peer.policy.ConsoleHidden()) > 0 {
+		viewDB, verr := store.OpenView(cfg.DBPath(), peer.policy.ConsoleHidden())
 		if verr != nil {
 			return fmt.Errorf("seamlessd.serve: %w", verr)
 		}

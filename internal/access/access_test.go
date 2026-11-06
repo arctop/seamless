@@ -177,7 +177,7 @@ func TestNew_ResolutionRefusals(t *testing.T) {
 
 func TestPolicy_Listings(t *testing.T) {
 	p := testPolicy(t)
-	require.Equal(t, []string{"arctop-finance", "arctop-legal"}, p.SealedProjects())
+	require.Equal(t, []string{"arctop-finance", "arctop-legal"}, p.ConsoleHidden())
 	require.Equal(t, []string{"arctop-finance", "arctop-hq", "arctop-legal", "arctop-ops"}, p.Projects())
 	rows := p.Accounts()
 	require.Len(t, rows, 3)

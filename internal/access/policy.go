@@ -67,10 +67,10 @@ type Policy struct {
 	users       map[uint32]*userRule
 	sealedTo    map[string]Account // project -> the one account that may reach it
 	ownerHidden []string           // every project sealed to an account, sorted: none is the owner's
-	// ownerSealed is peer_auth.sealed: the projects sealed behind the owner's
-	// passkey, locked for the owner except under a lease (lease.go).
-	ownerSealed     map[string]bool
-	ownerSealedList []string // the same, sorted
+	// ownerLocked is peer_auth.locked: the locked projects, closed to the
+	// owner except under a lease (lease.go).
+	ownerLocked     map[string]bool
+	ownerLockedList []string // the same, sorted
 }
 
 type userRule struct {
@@ -102,22 +102,22 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 		owner:       owner,
 		users:       map[uint32]*userRule{},
 		sealedTo:    map[string]Account{},
-		ownerSealed: map[string]bool{},
+		ownerLocked: map[string]bool{},
 	}
-	// The two designs never mix (config.validatePeerSealed refuses it at load;
+	// The two designs never mix (config.validatePeerLocked refuses it at load;
 	// this is the same refusal for a block that did not come through a load).
-	if len(cfg.Sealed) > 0 && len(cfg.Users) > 0 {
-		return nil, fmt.Errorf("%w: peer_auth names both sealed and users: use one design", ErrInvalidPolicy)
+	if len(cfg.Locked) > 0 && len(cfg.Users) > 0 {
+		return nil, fmt.Errorf("%w: peer_auth names both locked and users: use one design", ErrInvalidPolicy)
 	}
-	for _, slug := range cfg.Sealed {
+	for _, slug := range cfg.Locked {
 		slug = strings.TrimSpace(slug)
-		if slug == "" || p.ownerSealed[slug] {
-			return nil, fmt.Errorf("%w: peer_auth.sealed lists %q: every entry must be a distinct project", ErrInvalidPolicy, slug)
+		if slug == "" || p.ownerLocked[slug] {
+			return nil, fmt.Errorf("%w: peer_auth.locked lists %q: every entry must be a distinct project", ErrInvalidPolicy, slug)
 		}
-		p.ownerSealed[slug] = true
-		p.ownerSealedList = append(p.ownerSealedList, slug)
+		p.ownerLocked[slug] = true
+		p.ownerLockedList = append(p.ownerLockedList, slug)
 	}
-	slices.Sort(p.ownerSealedList)
+	slices.Sort(p.ownerLockedList)
 	names := make([]string, 0, len(cfg.Users))
 	for name := range cfg.Users {
 		names = append(names, name)
@@ -197,23 +197,23 @@ func (p *Policy) PeerView(uid uint32) (View, bool) {
 	return View{}, false
 }
 
-// SealedProjects returns every sealed project, sorted: those sealed to a
-// configured account and those sealed behind the owner's passkey. It is what
-// the background surfaces that serve no caller (the metadata feed, the commit
-// snapshot) and serve's preflight treat as sealed.
-func (p *Policy) SealedProjects() []string {
-	out := slices.Concat(p.ownerHidden, p.ownerSealedList)
+// ConsoleHidden returns every project whose content no owner surface shows
+// without a lease, sorted: those sealed to a configured account and every
+// locked project. It is the console's hidden set (store.OpenView), what the
+// background surfaces that serve no caller (the metadata feed, the commit
+// snapshot) leave out, and what serve's preflight requires to be fenced.
+func (p *Policy) ConsoleHidden() []string {
+	out := slices.Concat(p.ownerHidden, p.ownerLockedList)
 	slices.Sort(out)
 	return slices.Compact(out)
 }
 
-// OwnerSealed returns the projects sealed behind the owner's passkey
-// (peer_auth.sealed), sorted.
-func (p *Policy) OwnerSealed() []string { return slices.Clone(p.ownerSealedList) }
+// OwnerLocked returns the locked projects (peer_auth.locked), sorted.
+func (p *Policy) OwnerLocked() []string { return slices.Clone(p.ownerLockedList) }
 
 // Projects returns every project the policy names, sorted and de-duplicated.
 func (p *Policy) Projects() []string {
-	out := slices.Clone(p.ownerSealedList)
+	out := slices.Clone(p.ownerLockedList)
 	for _, rule := range p.users {
 		for slug := range rule.allowed {
 			if !slices.Contains(out, slug) {

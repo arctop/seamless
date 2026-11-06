@@ -192,7 +192,7 @@ func newPADaemon(t *testing.T) *paDaemon {
 		PlanCapture: config.PlanCapture{Enabled: true, AutoTask: true, InjectRelated: true},
 		Features:    feats, Screening: screen,
 	})
-	viewDB, err := store.OpenView(dbPath, policy.SealedProjects())
+	viewDB, err := store.OpenView(dbPath, policy.ConsoleHidden())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = viewDB.Close() })
 	// Every console write must reach the main handle: one that reaches the

@@ -99,7 +99,7 @@ func TestPreparePeerAuth_AcceptsTheRunbookLayout(t *testing.T) {
 	l, cfg := newPALayout(t, paFinanceUsers)
 	rt, err := preparePeerAuth(cfg, paTestEnv(l, uint32(os.Geteuid())+1000))
 	require.NoError(t, err)
-	require.Equal(t, []string{"arctop-finance"}, rt.policy.SealedProjects())
+	require.Equal(t, []string{"arctop-finance"}, rt.policy.ConsoleHidden())
 }
 
 func TestPreparePeerAuth_Refusals(t *testing.T) {

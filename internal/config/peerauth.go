@@ -1,19 +1,23 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/arctop/seamless/internal/validate"
 )
 
 // PeerAuth is peer-user authentication: a Unix-socket listener whose callers
 // the daemon identifies by the uid the kernel reports, plus which projects are
-// sealed -- to other OS users (Users), or behind the owner's passkey (Sealed)
-// (internal/access holds the policy itself).
+// fenced off -- sealed to other OS users (Users), or locked until the owner
+// approves an agent's access (Locked) (internal/access holds the policy
+// itself).
 //
 // Off by default, and off means exactly the behavior every earlier release had:
 // no socket, no per-caller filtering, one static bearer key on TCP. On, every
@@ -32,17 +36,24 @@ type PeerAuth struct {
 	Owner string `yaml:"owner"`
 	// Socket is the listener the role users (and, optionally, the owner) dial.
 	Socket PeerSocket `yaml:"socket"`
-	// Sealed lists the projects sealed behind the owner's passkey (the
-	// 2026-11-04 design). The owner's agents reach one only through a lease the
-	// owner approved with a passkey, held by one session's socket connection;
-	// the TCP bearer key never reaches it. Without a lease the project is
-	// locked: its name shows, its content does not, and writes into it are
-	// refused. File only (no env).
+	// Locked lists the locked projects (the 2026-11-04 design): even the
+	// owner's own agents reach one only through a lease the owner approved,
+	// held by one session's socket connection; the TCP bearer key never
+	// reaches it. Without a lease the project is locked: its name shows, its
+	// content does not, and writes into it are refused. File only (no env).
+	//
+	// The lock is not an isolation state. Isolation (open, confidential,
+	// sealed) says what flows in and out of a project; the lock says whether
+	// its own agents need a fresh owner approval. A locked project is normally
+	// confidential, so its approved sessions still read open projects and
+	// global. The key was called "sealed" before any release shipped it; a
+	// config that still says peer_auth.sealed is refused at load
+	// (renamedPeerAuthKey).
 	//
 	// It replaces Users, which sealed projects to other OS accounts that the
 	// owner never reaches (the 2026-10-31 design). The two never mix: a config
 	// naming both is refused, so neither can take on the other's meaning.
-	Sealed []string `yaml:"sealed"`
+	Locked []string `yaml:"locked"`
 	// Users maps an OS account (user name or numeric uid) to the projects it may
 	// reach over the socket. An account not listed here, and not the owner, is
 	// refused at the door.
@@ -121,7 +132,7 @@ func (p PeerAuth) SealedTo() map[string]string {
 // de-duplicated: what serve and doctor check against the projects table.
 func (p PeerAuth) ReferencedProjects() []string {
 	var out []string
-	for _, slug := range p.Sealed {
+	for _, slug := range p.Locked {
 		if s := strings.TrimSpace(slug); s != "" && !slices.Contains(out, s) {
 			out = append(out, s)
 		}
@@ -137,15 +148,59 @@ func (p PeerAuth) ReferencedProjects() []string {
 	return out
 }
 
+// renamedPeerAuthKey reports a peer_auth key spelled the way a pre-release
+// build spelled it, and its name now: peer_auth.sealed became peer_auth.locked
+// before any release shipped it, because "sealed" is an isolation state and the
+// lock is a separate setting. Without this, KnownFields would refuse the old
+// key as an unknown field and leave the owner to guess the new name. A key
+// nested deeper (users.<account>.sealed, the earlier design's) is not this one.
+// Syntax errors are left to the strict decode, as in explicitNullPath.
+func renamedPeerAuthKey(data []byte) (old, now string) {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	var doc yaml.Node
+	if err := dec.Decode(&doc); err != nil || doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 {
+		return "", ""
+	}
+	top := resolveAlias(doc.Content[0])
+	if top.Kind != yaml.MappingNode {
+		return "", ""
+	}
+	for i := 0; i+1 < len(top.Content); i += 2 {
+		if top.Content[i].Value != "peer_auth" {
+			continue
+		}
+		block := resolveAlias(top.Content[i+1])
+		if block.Kind != yaml.MappingNode {
+			return "", ""
+		}
+		for j := 0; j+1 < len(block.Content); j += 2 {
+			if block.Content[j].Value == "sealed" {
+				return "peer_auth.sealed", "peer_auth.locked"
+			}
+		}
+	}
+	return "", ""
+}
+
+func resolveAlias(n *yaml.Node) *yaml.Node {
+	for n != nil && n.Kind == yaml.AliasNode {
+		n = n.Alias
+	}
+	if n == nil {
+		return &yaml.Node{}
+	}
+	return n
+}
+
 // validatePeerAuth checks the block's SHAPE: everything that can be judged from
 // the file alone. Resolving accounts to uids (internal/access.New) and checking
 // slugs against the projects table (serve, doctor) come later, because neither
-// belongs in a config load. The sealed list and the users map are checked even
+// belongs in a config load. The locked list and the users map are checked even
 // while the block is disabled, so a typo is caught the day it is written rather
 // than the day it is switched on.
 func (c Config) validatePeerAuth() error {
 	p := c.PeerAuth
-	if err := validatePeerSealed(p); err != nil {
+	if err := validatePeerLocked(p); err != nil {
 		return err
 	}
 	if err := validatePeerUsers(p); err != nil {
@@ -184,28 +239,28 @@ func (c Config) validatePeerAuth() error {
 	return nil
 }
 
-// validatePeerSealed is the sealed list's shape: real project slugs, never the
+// validatePeerLocked is the locked list's shape: real project slugs, never the
 // global scope, none twice -- and never beside a users map. The two keys are
-// the two designs (projects sealed behind the owner's passkey, projects sealed
-// to other OS accounts), and a config naming both would leave a reader, and
-// the policy, to guess which one a project is under.
-func validatePeerSealed(p PeerAuth) error {
-	if len(p.Sealed) > 0 && len(p.Users) > 0 {
-		return fmt.Errorf("config: peer_auth names both sealed and users: sealed puts projects behind the owner's passkey, " +
+// the two designs (projects locked until the owner approves an agent's access,
+// projects sealed to other OS accounts), and a config naming both would leave
+// a reader, and the policy, to guess which one a project is under.
+func validatePeerLocked(p PeerAuth) error {
+	if len(p.Locked) > 0 && len(p.Users) > 0 {
+		return fmt.Errorf("config: peer_auth names both locked and users: locked puts projects behind the owner's approval, " +
 			"users seals them to other OS accounts the owner never reaches (the earlier design) -- use one; " +
-			"for the passkey design, list every users.<account>.sealed project under peer_auth.sealed and remove users")
+			"for the approval design, list every users.<account>.sealed project under peer_auth.locked and remove users")
 	}
 	seen := map[string]bool{}
-	for _, raw := range p.Sealed {
+	for _, raw := range p.Locked {
 		slug, err := validate.Project(raw)
 		if err != nil {
-			return fmt.Errorf("config: peer_auth.sealed: %w", err)
+			return fmt.Errorf("config: peer_auth.locked: %w", err)
 		}
 		if slug == "" {
-			return fmt.Errorf("config: peer_auth.sealed names the global scope: a global item is injected into every project's briefing, so global is never sealed")
+			return fmt.Errorf("config: peer_auth.locked names the global scope: a global item is injected into every project's briefing, so global is never locked")
 		}
 		if seen[slug] {
-			return fmt.Errorf("config: peer_auth.sealed lists project %q twice: name it once", slug)
+			return fmt.Errorf("config: peer_auth.locked lists project %q twice: name it once", slug)
 		}
 		seen[slug] = true
 	}

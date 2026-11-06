@@ -1,13 +1,12 @@
--- Sealed-project unlocks (peer_auth.sealed, the passkey design of
--- 2026-11-04): an owner session asks for access to a project sealed behind the
--- owner's passkey, the owner approves it with a passkey, and the approval
--- becomes a lease -- one project, read and write, for one socket connection's
--- process, for a limited time. internal/access judges every lease it is handed
+-- Locked-project unlocks (peer_auth.locked, the approval design of
+-- 2026-11-04): an owner session asks for access to a locked project, the owner
+-- approves it, and the approval becomes a lease -- one project, read and
+-- write, for one socket connection's process, for a limited time. internal/access judges every lease it is handed
 -- (lease.go); these tables are only where they wait and where they are kept.
 --
 -- Two new tables and nothing else: no existing table changes shape, so the
 -- previous release reads a database this one migrated exactly as before. Both
--- stay empty while peer_auth.sealed is unset.
+-- stay empty while peer_auth.locked is unset.
 --
 -- Both hold metadata about a request, never corpus content: slugs, ids, the
 -- kernel's facts about the caller, and the agent's one-line reason (capped in
@@ -17,7 +16,7 @@
 -- access_approvals holds one row per request, from pending to decided:
 --
 --   id            ULID; the approval link names it
---   project_slug  the sealed project asked for
+--   project_slug  the locked project asked for
 --   kind          request (a first unlock) or refresh (the session already
 --                 holds a lease; approving it retires that lease)
 --   challenge     32 random bytes, the one-time WebAuthn challenge the
@@ -69,7 +68,7 @@ CREATE INDEX idx_access_approvals_process ON access_approvals (process_key, proj
 -- place (a refresh is a new approval and a new row, and it revokes this one):
 --
 --   id              ULID
---   project_slug    the one sealed project it opens
+--   project_slug    the one locked project it opens
 --   process_key     access.ProcessToken.Key of the connection it was granted
 --                   to; every other process, the owner's included, stays
 --                   locked out

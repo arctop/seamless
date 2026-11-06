@@ -111,8 +111,9 @@ peer_auth: {enabled: true, owner: katata, socket: {path: /opt/seamless/data/run/
     "_a b": {sealed: [x]}
 `, "not an OS account name"},
 		// An unknown key under peer_auth is refused (KnownFields). Top-level
-		// "sealed" was this row's sample until it became the passkey design's
-		// real key (TestPeerAuth_SealedList); "seal" keeps the property tested.
+		// "sealed" was this row's sample until it became the lock's pre-release
+		// name, which now has its own refusal (TestPeerAuth_SealedKeyRenamed);
+		// "seal" keeps the property tested.
 		{"a misspelled key", peerBase + "  seal: [x]\n", "field seal not found"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -123,35 +124,34 @@ peer_auth: {enabled: true, owner: katata, socket: {path: /opt/seamless/data/run/
 	}
 }
 
-// peer_auth.sealed (the passkey design): projects sealed behind the owner's
-// passkey, checked like the users map -- always, enabled or not -- and never
-// beside it, so a 6afda40 users block cannot be read as the new design or the
-// other way round.
-func TestPeerAuth_SealedList(t *testing.T) {
-	cfg, err := loadYAML(t, peerBase+"  sealed: [arctop-finance, \" arctop-legal\", arctop-ip]\n")
+// peer_auth.locked (the approval design): locked projects, checked like the
+// users map -- always, enabled or not -- and never beside it, so a 6afda40 users
+// block cannot be read as the new design or the other way round.
+func TestPeerAuth_LockedList(t *testing.T) {
+	cfg, err := loadYAML(t, peerBase+"  locked: [example-finance, \" example-legal\", example-ip]\n")
 	require.NoError(t, err)
-	require.Equal(t, []string{"arctop-finance", " arctop-legal", "arctop-ip"}, cfg.PeerAuth.Sealed)
-	require.Equal(t, []string{"arctop-finance", "arctop-ip", "arctop-legal"}, cfg.PeerAuth.ReferencedProjects(),
-		"serve and doctor check every sealed slug against the projects table")
+	require.Equal(t, []string{"example-finance", " example-legal", "example-ip"}, cfg.PeerAuth.Locked)
+	require.Equal(t, []string{"example-finance", "example-ip", "example-legal"}, cfg.PeerAuth.ReferencedProjects(),
+		"serve and doctor check every locked slug against the projects table")
 	require.Empty(t, cfg.PeerAuth.SealedTo(), "no project is sealed to an OS account")
 
 	for _, tc := range []struct {
 		name, yaml, want string
 	}{
-		{"both designs at once", peerBase + `  sealed: [arctop-finance]
+		{"both designs at once", peerBase + `  locked: [example-finance]
   users:
-    _a: {sealed: [arctop-legal]}
-`, "both sealed and users"},
-		{"the old design's seal moved up beside its users map", peerBase + `  sealed: [arctop-finance]
+    _a: {sealed: [example-legal]}
+`, "both locked and users"},
+		{"the old design's seal moved up beside its users map", peerBase + `  locked: [example-finance]
   users:
-    _a: {sealed: [arctop-finance]}
-`, "both sealed and users"},
-		{"global", peerBase + "  sealed: [global]\n", "global scope"},
-		{"the _global alias", peerBase + "  sealed: [_global]\n", "global scope"},
-		{"the widening token", peerBase + "  sealed: [all]\n", "reserved"},
-		{"a traversal slug", peerBase + "  sealed: [\"../notes\"]\n", "invalid project"},
-		{"listed twice", peerBase + "  sealed: [arctop-finance, \"arctop-finance \"]\n", "twice"},
-		{"disabled is still checked", "peer_auth:\n  enabled: false\n  sealed: [global]\n", "global scope"},
+    _a: {sealed: [example-finance]}
+`, "both locked and users"},
+		{"global", peerBase + "  locked: [global]\n", "global scope"},
+		{"the _global alias", peerBase + "  locked: [_global]\n", "global scope"},
+		{"the widening token", peerBase + "  locked: [all]\n", "reserved"},
+		{"a traversal slug", peerBase + "  locked: [\"../notes\"]\n", "invalid project"},
+		{"listed twice", peerBase + "  locked: [example-finance, \"example-finance \"]\n", "twice"},
+		{"disabled is still checked", "peer_auth:\n  enabled: false\n  locked: [global]\n", "global scope"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := loadYAML(t, tc.yaml)
@@ -161,8 +161,32 @@ func TestPeerAuth_SealedList(t *testing.T) {
 	}
 }
 
+// The lock was spelled peer_auth.sealed before any release shipped it. A config
+// that still says so is refused with the new name rather than a bare "field
+// sealed not found", enabled or not, whatever the list holds. The earlier
+// design's users.<account>.sealed is a different key and still loads.
+func TestPeerAuth_SealedKeyRenamed(t *testing.T) {
+	for name, body := range map[string]string{
+		"enabled":                 peerBase + "  sealed: [example-finance]\n",
+		"disabled":                "peer_auth:\n  enabled: false\n  sealed: [example-finance]\n",
+		"an empty list":           "peer_auth:\n  sealed: []\n",
+		"beside the new key":      peerBase + "  locked: [example-finance]\n  sealed: [example-finance]\n",
+		"the block from an alias": "base: &pa\n  sealed: [example-finance]\npeer_auth: *pa\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := loadYAML(t, body)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "peer_auth.sealed was renamed to peer_auth.locked")
+		})
+	}
+
+	cfg, err := loadYAML(t, peerBase+"  users:\n    _example_finance:\n      sealed: [example-finance]\n")
+	require.NoError(t, err, "users.<account>.sealed is the earlier design's key, not the renamed one")
+	require.Equal(t, map[string]string{"example-finance": "_example_finance"}, cfg.PeerAuth.SealedTo())
+}
+
 // A config written for 6afda40 -- the users map alone -- loads exactly as it
-// did: no project lands in the passkey design's sealed list, and every seal
+// did: no project lands in the approval design's locked list, and every seal
 // stays with its account. (internal/access's TestLegacyUsersConfig_KeepsItsMeaning
 // carries the same file through the policy.)
 func TestPeerAuth_UsersOnlyConfigKeepsItsMeaning(t *testing.T) {
@@ -173,7 +197,7 @@ func TestPeerAuth_UsersOnlyConfigKeepsItsMeaning(t *testing.T) {
       projects: [arctop-hq, arctop-ops]
 `)
 	require.NoError(t, err)
-	require.Empty(t, cfg.PeerAuth.Sealed, "the users map never fills the passkey design's list")
+	require.Empty(t, cfg.PeerAuth.Locked, "the users map never fills the approval design's list")
 	require.Equal(t, map[string]string{"arctop-finance": "_arctop_finance"}, cfg.PeerAuth.SealedTo())
 	require.Equal(t, []string{"arctop-finance", "arctop-hq", "arctop-ops"}, cfg.PeerAuth.ReferencedProjects())
 }

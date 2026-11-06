@@ -639,6 +639,9 @@ func LoadFrom(path string) (Config, error) {
 		if nullPath := explicitNullPath(data); nullPath != "" {
 			return Config{}, fmt.Errorf("config.Load: parse %s: %s must not be null", path, nullPath)
 		}
+		if old, now := renamedPeerAuthKey(data); old != "" {
+			return Config{}, fmt.Errorf("config.Load: parse %s: %s was renamed to %s: rename the key", path, old, now)
+		}
 		// Decode over the defaults: absent keys keep their default value. KnownFields
 		// makes a typo fail at startup instead of quietly preserving a potentially
 		// privacy-sensitive default, and the second decode rejects appended YAML

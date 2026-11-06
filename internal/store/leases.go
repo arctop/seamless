@@ -1,9 +1,9 @@
 package store
 
-// Access approvals and leases: the storage behind peer_auth.sealed's unlocks
-// (migration 031). An owner session asks for one sealed project; the request
+// Access approvals and leases: the storage behind peer_auth.locked's unlocks
+// (migration 031). An owner session asks for one locked project; the request
 // waits here as a pending approval with a one-time challenge; the owner's
-// passkey signs that challenge; ApproveAccess turns the approval into a lease
+// approval signs that challenge; ApproveAccess turns the approval into a lease
 // bound to the requesting connection's process. The access layer judges every
 // lease again on every request (access.View.WithLeases), so a row here is never
 // trusted on its own: this file only keeps the rows honest -- single use, never
@@ -61,7 +61,7 @@ const (
 	AccessChallengeBytes = 32
 	// MaxAccessReasonRunes caps the agent's reason. It is shown on the approval
 	// page, and a long free text there is a channel out of a session that
-	// already read a sealed project (a refresh).
+	// already read a locked project (a refresh).
 	MaxAccessReasonRunes = 200
 	// maxAccessFieldBytes caps every other descriptive field (program, cwd,
 	// repo, model, session name).

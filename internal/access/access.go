@@ -23,12 +23,14 @@
 //     owner's included, so a global write from a sealed system is the loudest
 //     possible way for its content to leave.
 //
-// peer_auth.sealed is the other design (2026-11-04; lease.go). There, a project
-// is sealed behind the owner's passkey rather than to another account. It is
-// locked for every owner request -- listed, never read, never written -- unless
-// the request rides a socket connection whose process holds a live lease the
-// owner approved. A config uses one design or the other, never both
-// (config.validatePeerSealed).
+// peer_auth.locked is the other design (2026-11-04; lease.go). There, a project
+// is locked rather than sealed to another account: closed to every owner
+// request -- listed, never read, never written -- unless the request rides a
+// socket connection whose process holds a live lease the owner approved. The
+// lock is not an isolation state (open, confidential, sealed): isolation says
+// what flows in and out of a project, the lock whether even its own agents need
+// a fresh approval. A config uses one design or the other, never both
+// (config.validatePeerLocked).
 //
 // Everything else -- the store's isolation fence (store.CanRead/CanWrite), the
 // MCP scope funnels, the hooks, the retrieval surfaces, the console's filtered
@@ -102,8 +104,8 @@ type View struct {
 	policy *Policy
 	who    Principal
 	user   *userRule
-	// leases are the owner's live unlocks of passkey-sealed projects, by
-	// project, as WithLeases judged them. Nil for every other view.
+	// leases are the owner's live unlocks of locked projects, by project, as
+	// WithLeases judged them. Nil for every other view.
 	leases map[string]Lease
 }
 
@@ -112,7 +114,7 @@ func (v View) Principal() Principal { return v.who }
 
 // Restricted reports whether this view can be refused anything at all: a
 // configured user always can, the owner only while some project is sealed to
-// another user or locked behind the owner's passkey.
+// another user or locked (peer_auth.locked).
 func (v View) Restricted() bool {
 	switch v.who.Kind {
 	case KindUser:
@@ -138,8 +140,8 @@ func (v View) Visible(project string) bool {
 		if _, sealed := v.policy.sealedTo[project]; sealed {
 			return false
 		}
-		// Sealed behind the owner's passkey: readable only under a lease.
-		return !v.policy.ownerSealed[project] || v.leased(project)
+		// Locked: readable only under a lease.
+		return !v.policy.ownerLocked[project] || v.leased(project)
 	case KindUser:
 		return v.user != nil && v.user.allowed[project]
 	default:
@@ -159,7 +161,7 @@ func (v View) Writable(project string) bool {
 
 // Hidden returns the projects this view may not read, sorted, when that set is
 // finite: for the owner, the projects sealed to other users plus every
-// passkey-sealed project it holds no lease on. A locked project is hidden here
+// locked project it holds no lease on. A locked project is hidden here
 // although it is Listed: Hidden is about content. A configured user's reach is
 // an allow-list instead (Allowed), and the zero View hides nothing.
 func (v View) Hidden() []string {
@@ -167,7 +169,7 @@ func (v View) Hidden() []string {
 		return nil
 	}
 	out := slices.Clone(v.policy.ownerHidden)
-	for _, slug := range v.policy.ownerSealedList {
+	for _, slug := range v.policy.ownerLockedList {
 		if !v.leased(slug) {
 			out = append(out, slug)
 		}
