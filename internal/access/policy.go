@@ -174,15 +174,34 @@ func (p *Policy) OwnerView() View {
 }
 
 // PeerProcessView is PeerView for a connection whose peer process the kernel
-// also reported: the view carries the token a lease is bound to (WithLeases).
-// An invalid token is not attached -- the view then holds no lease, ever.
+// also reported, with no ancestors: PeerChainView of that one process.
 func (p *Policy) PeerProcessView(uid uint32, proc ProcessToken) (View, bool) {
+	return p.PeerChainView(uid, []ProcessToken{proc})
+}
+
+// PeerChainView is PeerView for a connection whose peer process, and that
+// process's verified ancestors, the kernel reported (Peer.Chain, the peer
+// first). The view carries the chain a lease is matched against (WithLeases).
+// A chain that is empty, longer than MaxChainHops, or holds an invalid token
+// or two boots is not attached at all -- the view then holds no lease, ever.
+func (p *Policy) PeerChainView(uid uint32, chain []ProcessToken) (View, bool) {
 	v, ok := p.PeerView(uid)
-	if ok && proc.Valid() {
-		v.who.Process, v.who.HasProcess = proc, true
+	if !ok || len(chain) == 0 || len(chain) > MaxChainHops {
+		return v, ok
 	}
+	for _, t := range chain {
+		if !t.Valid() || t.Boot != chain[0].Boot {
+			return v, ok
+		}
+	}
+	v.who.Process, v.who.HasProcess = chain[0], true
+	v.who.Chain = slices.Clone(chain)
 	return v, ok
 }
+
+// HasLocked reports whether the policy locks any project: only then does a
+// socket request of the owner need its process chain and leases looked up.
+func (p *Policy) HasLocked() bool { return len(p.ownerLockedList) > 0 }
 
 // PeerView is the view of a socket connection whose peer the kernel reported as
 // uid. ok is false for a uid the policy does not know: such a connection is

@@ -2,9 +2,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -57,4 +63,96 @@ func TestPeerAuthChecks_LockedRows(t *testing.T) {
 	require.Equal(t, statusWarn, rows[0].status)
 	require.Contains(t, rows[0].detail, "peer_auth.locked is filled in")
 	require.NotContains(t, rows[0].detail, "sealed")
+}
+
+// peerHandler on the owner's socket view, with the kernel's chain injected:
+// it installs exactly the leases that name a process of the chain, on a
+// locked project, live at now -- and fails closed on every lookup error.
+func TestPeerHandler_InstallsOnlyMatchingLeases(t *testing.T) {
+	const boot = "6c2f1a3e-0b7d-4c55-9a51-3d8f00a1b2c3"
+	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+	bridge := access.ProcessToken{PID: 300, Version: 3000, Boot: boot}
+	agent := access.ProcessToken{PID: 200, Version: 2000, Boot: boot}
+	shell := access.ProcessToken{PID: 100, Version: 1000, Boot: boot}
+	sibling := access.ProcessToken{PID: 210, Version: 2100, Boot: boot}
+	chain := []access.ChainHop{{Token: bridge, Name: "seam"}, {Token: agent, Name: "claude"}, {Token: shell, Name: "zsh"}}
+
+	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{"example-finance", "example-legal"}}, lockOwnerResolve)
+	require.NoError(t, err)
+	rows := []access.Lease{
+		{ID: "agent-fin", Project: "example-finance", Process: agent.Key(), Expires: now.Add(time.Hour)},
+		{ID: "sibling-legal", Project: "example-legal", Process: sibling.Key(), Expires: now.Add(time.Hour)},
+		{ID: "agent-open", Project: "example-ops", Process: agent.Key(), Expires: now.Add(time.Hour)},
+		{ID: "agent-legal-ended", Project: "example-legal", Process: agent.Key(), Expires: now},
+	}
+	var asked []string
+	loader := peerLeases{
+		load: func(_ context.Context, keys []string, at time.Time) ([]access.Lease, error) {
+			require.Equal(t, now, at)
+			asked = keys
+			return rows, nil
+		},
+		now: func() time.Time { return now },
+	}
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	serve := func(t *testing.T, policy *access.Policy, cred peerCred, leases peerLeases) access.View {
+		t.Helper()
+		var got access.View
+		h := peerHandler(policy, leases, discard, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			v, ok := access.FromContext(r.Context())
+			require.True(t, ok)
+			got = v
+		}))
+		req := httptest.NewRequest(http.MethodGet, "/x", nil)
+		req = req.WithContext(context.WithValue(req.Context(), peerCredKey{}, cred))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code)
+		return got
+	}
+	withChain := func(hops []access.ChainHop, err error) peerCred {
+		return peerCred{uid: 501, chain: func() ([]access.ChainHop, error) { return hops, err }}
+	}
+
+	v := serve(t, policy, withChain(chain, nil), loader)
+	require.Equal(t, []string{bridge.Key(), agent.Key(), shell.Key()}, asked, "every process of the chain is looked up")
+	require.Equal(t, access.Tokens(chain), v.Principal().Chain)
+	require.True(t, v.Visible("example-finance"), "the agent's lease opens its project for the bridge below it")
+	require.False(t, v.Visible("example-legal"), "a sibling's lease and an ended one open nothing")
+	require.Len(t, v.Leases(), 1)
+	require.Equal(t, "agent-fin", v.Leases()[0].ID)
+
+	for name, cred := range map[string]peerCred{
+		"no process for the connection": {uid: 501, chainErr: errors.New("LOCAL_PEERTOKEN failed")},
+		"the chain cannot be walked":    withChain(nil, access.ErrPeerGone),
+		"a chain the policy refuses":    withChain([]access.ChainHop{{Token: access.ProcessToken{PID: 1}}}, nil),
+	} {
+		t.Run(name, func(t *testing.T) {
+			asked = nil
+			v := serve(t, policy, cred, loader)
+			require.True(t, v.Locked("example-finance"), "fails closed")
+			require.Empty(t, v.Leases())
+			require.Nil(t, asked, "no lease is looked up without a chain")
+		})
+	}
+	t.Run("the lease lookup fails", func(t *testing.T) {
+		failing := peerLeases{load: func(context.Context, []string, time.Time) ([]access.Lease, error) {
+			return nil, errors.New("database is locked")
+		}}
+		v := serve(t, policy, withChain(chain, nil), failing)
+		require.True(t, v.Locked("example-finance"), "fails closed")
+	})
+	t.Run("no loader", func(t *testing.T) {
+		require.True(t, serve(t, policy, withChain(chain, nil), peerLeases{}).Locked("example-finance"))
+	})
+	t.Run("nothing locked: no chain is walked", func(t *testing.T) {
+		open, err := access.New(config.PeerAuth{Owner: "owner"}, lockOwnerResolve)
+		require.NoError(t, err)
+		walked := false
+		cred := peerCred{uid: 501, chain: func() ([]access.ChainHop, error) { walked = true; return chain, nil }}
+		v := serve(t, open, cred, loader)
+		require.False(t, walked)
+		require.False(t, v.Principal().HasProcess)
+	})
 }

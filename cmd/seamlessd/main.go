@@ -613,7 +613,7 @@ func runServe(args []string) error {
 			garden.Wait()
 			return fmt.Errorf("seamlessd.serve: %w", err)
 		}
-		sockSrv = newHTTPServer(ctx, peer.cfg.Socket.Path, refusalWatch(screen, peerHandler(peer.policy, logger, activity.wrap(mux))))
+		sockSrv = newHTTPServer(ctx, peer.cfg.Socket.Path, refusalWatch(screen, peerHandler(peer.policy, storeLeases(db), logger, activity.wrap(mux))))
 		sockSrv.ConnContext = peerConnContext
 	}
 	upd.Start(ctx)

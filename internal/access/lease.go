@@ -9,26 +9,27 @@ import (
 )
 
 // The owner-locked view (peer_auth.locked, the 2026-11-04 design): a locked
-// project is closed to every owner request. Its name
-// shows (View.Listed) and its content does not (View.Visible), and writes into
-// it are refused. It opens only for one request at a time, and only when the
-// transport has attached a live lease the owner approved for that connection's
-// process (View.WithLeases).
+// project is closed to every owner request. Its name shows (View.Listed) and
+// its content does not (View.Visible), and writes into it are refused. It
+// opens only for one request at a time, and only when the transport has
+// attached a live lease the owner approved for the agent process at the top of
+// that connection's process chain (View.WithLeases; proctree.go).
 //
 // A lease is data the access layer judges, never data it trusts. The transport
-// edge loads lease rows for the kernel-reported process of a socket connection
-// and hands them in. The View keeps a lease only when all four hold: it names
-// that very process, the project is one peer_auth.locked lists, it has not
-// expired, and the view is the owner's socket view. A TCP request -- the bearer
-// key, which every owner process can present -- never holds one, whatever it is
-// handed.
+// edge walks the kernel's process chain of a socket connection, loads the
+// lease rows for its processes and hands both in. The View keeps a lease only
+// when all four hold: it names a process of that very chain, the project is
+// one peer_auth.locked lists, it has not expired, and the view is the owner's
+// socket view. A TCP request -- the bearer key, which every owner process can
+// present -- never holds one, whatever it is handed.
 
-// ProcessToken names one process as the kernel reported it for a socket
-// connection. It holds the pid, a per-pid generation the kernel keeps
-// (macOS's pidversion, Linux's start time), and the boot it ran in. Together
-// these are unique across pid reuse and reboots. The token is compared as a
-// whole (Key), never by its parts: two connections share a token exactly when
-// one process opened both.
+// ProcessToken names one process as the kernel reported it: the peer of a
+// socket connection or one of its ancestors (Peer.Chain). It holds the pid,
+// the process's start time (Version, in internal/agentproc's unit:
+// microseconds since the epoch on macOS, clock ticks since boot on Linux), and
+// the boot it ran in. Together these are unique across pid reuse and reboots.
+// The token is compared as a whole (Key), never by its parts: two tokens are
+// equal exactly when they name one process.
 type ProcessToken struct {
 	PID     int32
 	Version uint64
@@ -62,8 +63,8 @@ func (t ProcessToken) Key() string {
 func (t ProcessToken) String() string { return t.Key() }
 
 // Lease is one owner approval as the access layer judges it. Process is the
-// ProcessToken.Key of the connection the lease was granted to, Expires the
-// instant it ends.
+// ProcessToken.Key of the agent process the lease was granted to (its whole
+// tree shares it), Expires the instant it ends.
 type Lease struct {
 	ID      string
 	Project string
@@ -73,8 +74,9 @@ type Lease struct {
 
 // WithLeases returns v with the leases that apply to it at now attached. It
 // keeps a lease only when v is the owner's view on the Unix socket and carries
-// a process token, and the lease names that process and a project
-// peer_auth.locked lists, and it ends after now. Every other lease is dropped,
+// a process chain, and the lease names a process of that chain (the agent's,
+// which every process it started shares) and a project peer_auth.locked
+// lists, and it ends after now. Every other lease is dropped,
 // and every other view comes back unchanged, so a lease can never reach a TCP
 // request, another process, a project sealed to an OS account, or a project
 // that is not locked at all.
@@ -86,13 +88,15 @@ func (v View) WithLeases(now time.Time, leases []Lease) View {
 	if v.who.Kind != KindOwner || !v.who.Socket || !v.who.HasProcess || v.policy == nil || len(v.policy.ownerLocked) == 0 {
 		return v
 	}
-	key := v.who.Process.Key()
-	if key == "" {
-		return v
+	inChain := make(map[string]bool, len(v.who.Chain))
+	for _, t := range v.who.Chain {
+		if k := t.Key(); k != "" {
+			inChain[k] = true
+		}
 	}
 	var kept map[string]Lease
 	for _, l := range leases {
-		if l.Process != key || !v.policy.ownerLocked[l.Project] || !l.Expires.After(now) {
+		if !inChain[l.Process] || !v.policy.ownerLocked[l.Project] || !l.Expires.After(now) {
 			continue
 		}
 		if prev, dup := kept[l.Project]; dup && !l.Expires.After(prev.Expires) {

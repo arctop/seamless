@@ -92,10 +92,13 @@ type Principal struct {
 	// socket. Only such a request may skip the bearer key.
 	Socket bool
 	// Process is the kernel-reported process at the other end of the socket
-	// connection, when the transport could read one (HasProcess). It is what a
-	// lease is bound to; a TCP request never has one.
+	// connection, when the transport could read one (HasProcess), and Chain
+	// is that process followed by its verified ancestors (proctree.go). A
+	// lease is bound to one process of the chain -- the agent's -- so every
+	// process in the agent's tree shares it. A TCP request never has either.
 	Process    ProcessToken
 	HasProcess bool
+	Chain      []ProcessToken
 }
 
 // View is one request's reach under the policy. The zero View (no policy, no

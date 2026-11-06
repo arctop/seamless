@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
@@ -339,20 +340,59 @@ type peerCredKey struct{}
 type peerCred struct {
 	uid uint32
 	err error
+	// chain walks the connecting process's parent chain (access.Peer.Chain),
+	// per request: the tree as it is when the request runs. Nil when the
+	// kernel named no process for the connection (chainErr says why).
+	chain    func() ([]access.ChainHop, error)
+	chainErr error
 }
 
-// peerConnContext reads the peer's uid once per connection, at accept, from the
-// kernel. It never fails the connection: peerHandler refuses a request whose
-// connection has no credential.
+// peerConnContext reads the peer's uid, and the process that connected, once
+// per connection, at accept, from the kernel. It never fails the connection:
+// peerHandler refuses a request whose connection has no credential, and a
+// connection whose process could not be read simply holds no lease.
 func peerConnContext(ctx context.Context, c net.Conn) context.Context {
 	uid, err := access.PeerUID(c)
-	return context.WithValue(ctx, peerCredKey{}, peerCred{uid: uid, err: err})
+	cred := peerCred{uid: uid, err: err}
+	if err == nil {
+		if peer, perr := access.ReadPeer(c); perr != nil {
+			cred.chainErr = perr
+		} else {
+			cred.chain = peer.Chain
+		}
+	}
+	return context.WithValue(ctx, peerCredKey{}, cred)
+}
+
+// peerLeases is how peerHandler opens locked projects: it loads the live
+// leases of a process chain (store.ActiveAccessLeasesFor) at now. The zero
+// value loads none, so every locked project stays locked.
+type peerLeases struct {
+	load func(ctx context.Context, processKeys []string, now time.Time) ([]access.Lease, error)
+	now  func() time.Time
+}
+
+// storeLeases is the daemon's peerLeases: rows from the database, judged
+// again by the View.
+func storeLeases(db *sql.DB) peerLeases {
+	return peerLeases{
+		load: func(ctx context.Context, keys []string, now time.Time) ([]access.Lease, error) {
+			rows, err := store.ActiveAccessLeasesFor(ctx, db, keys, now)
+			if err != nil {
+				return nil, err
+			}
+			return store.AccessLeases(rows), nil
+		},
+		now: time.Now,
+	}
 }
 
 // peerHandler admits a socket request only when the kernel named a peer the
 // policy knows, and serves it with that peer's View. Everyone else gets 403
-// before any route runs.
-func peerHandler(policy *access.Policy, logger *slog.Logger, next http.Handler) http.Handler {
+// before any route runs. For the owner, while the policy locks a project, the
+// View also carries the connection's process chain and the leases live on it
+// (leasedView).
+func peerHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cred, ok := r.Context().Value(peerCredKey{}).(peerCred)
 		if !ok || cred.err != nil {
@@ -368,8 +408,47 @@ func peerHandler(policy *access.Policy, logger *slog.Logger, next http.Handler) 
 			http.Error(w, fmt.Sprintf("forbidden: uid %d is not configured under peer_auth", cred.uid), http.StatusForbidden)
 			return
 		}
+		if view.Principal().Kind == access.KindOwner && policy.HasLocked() {
+			view = leasedView(r.Context(), policy, cred, leases, logger, view)
+		}
 		next.ServeHTTP(w, r.WithContext(access.WithView(r.Context(), view)))
 	})
+}
+
+// leasedView is the owner's socket view with the connection's process chain
+// and its live leases attached. It fails closed: a connection whose process
+// the kernel did not name, a chain that cannot be walked (the process that
+// connected is gone), or a lease lookup that fails leaves the plain view, on
+// which every locked project stays locked.
+func leasedView(ctx context.Context, policy *access.Policy, cred peerCred, leases peerLeases, logger *slog.Logger, plain access.View) access.View {
+	if cred.chain == nil {
+		logger.Debug("peer_auth: no process for this connection; locked projects stay locked", "error", cred.chainErr)
+		return plain
+	}
+	hops, err := cred.chain()
+	if err != nil {
+		logger.Warn("peer_auth: process chain unavailable; locked projects stay locked", "error", err)
+		return plain
+	}
+	view, ok := policy.PeerChainView(cred.uid, access.Tokens(hops))
+	if !ok || !view.Principal().HasProcess || leases.load == nil {
+		return view
+	}
+	now := time.Now
+	if leases.now != nil {
+		now = leases.now
+	}
+	at := now()
+	keys := make([]string, 0, len(hops))
+	for _, h := range hops {
+		keys = append(keys, h.Token.Key())
+	}
+	rows, err := leases.load(ctx, keys, at)
+	if err != nil {
+		logger.Warn("peer_auth: lease lookup failed; locked projects stay locked", "error", err)
+		return view
+	}
+	return view.WithLeases(at, rows)
 }
 
 // logPolicy writes the policy into the startup log: which account is the owner,

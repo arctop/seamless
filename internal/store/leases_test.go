@@ -394,3 +394,40 @@ func leaseIDs(ls []AccessLease) []string {
 	}
 	return out
 }
+
+// A socket request's leases are looked up for its whole process chain: the
+// lease names the agent process, and every process below it carries the agent
+// in its chain.
+func TestActiveAccessLeasesFor_Chain(t *testing.T) {
+	db := leaseDB(t)
+	ctx := context.Background()
+	agent := fenceProc
+	child := access.ProcessToken{PID: 6001, Version: 9, Boot: fenceProc.Boot}
+	a, err := CreateAccessApproval(ctx, db, leaseReq("example-finance", agent), fenceNow)
+	require.NoError(t, err)
+	lease, err := ApproveAccess(ctx, db, a.ID, a.Challenge, "cred-1", fenceNow)
+	require.NoError(t, err)
+	b, err := CreateAccessApproval(ctx, db, leaseReq("example-legal", fenceOther), fenceNow)
+	require.NoError(t, err)
+	_, err = ApproveAccess(ctx, db, b.ID, b.Challenge, "cred-1", fenceNow)
+	require.NoError(t, err)
+
+	got, err := ActiveAccessLeasesFor(ctx, db, []string{child.Key(), agent.Key()}, fenceNow.Add(time.Minute))
+	require.NoError(t, err)
+	require.Equal(t, []string{lease.ID}, leaseIDs(got), "the agent's lease, found from its child's chain; another process's is not")
+
+	got, err = ActiveAccessLeasesFor(ctx, db, []string{child.Key()}, fenceNow.Add(time.Minute))
+	require.NoError(t, err)
+	require.Empty(t, got, "a chain without the agent holds nothing")
+
+	got, err = ActiveAccessLeasesFor(ctx, db, []string{"", ""}, fenceNow)
+	require.NoError(t, err)
+	require.Empty(t, got)
+
+	long := make([]string, access.MaxChainHops+1)
+	for i := range long {
+		long[i] = access.ProcessToken{PID: int32(i + 2), Version: 1, Boot: fenceProc.Boot}.Key()
+	}
+	_, err = ActiveAccessLeasesFor(ctx, db, long, fenceNow)
+	require.ErrorIs(t, err, ErrInvalidAccessRequest, "a list longer than any chain is refused, not truncated")
+}

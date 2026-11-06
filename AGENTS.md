@@ -244,9 +244,23 @@ any of it.
   `View.WithLeases`, which keeps a lease only on the owner's socket view with a
   kernel-reported process token, and only one that names that process, a
   locked project and an expiry after now. A TCP view keeps none. Lease rows
-  (`store.ActiveAccessLeases`) are input to it and never a grant on their own.
-  `store.ApproveAccess` is the only writer of a lease: it is single use and
-  bound to the challenge, and it replaces a lease rather than extending one.
+  (`store.ActiveAccessLeasesFor`) are input to it and never a grant on their
+  own. `store.ApproveAccess` is the only writer of a lease: it is single use
+  and bound to the challenge, and it replaces a lease rather than extending
+  one.
+- **A lease covers the agent's process tree, as the kernel reports it**
+  (`internal/access/proctree*.go`). `ReadPeer` pins the socket peer at accept
+  (the audit token's pidversion on macOS; the start time under a pidfd on
+  Linux) and `Peer.Chain` walks its parents per request, verifying every link
+  (a parent starts no later than its child; on macOS the parent's unique id
+  is the one the child records). A link that does not verify ends the chain:
+  an orphan, or a reused pid, reaches nothing above it. `peerHandler` attaches
+  the chain and its leases (`leasedView`) and fails closed on every error. A
+  lease names the AGENT process (claude/codex), never a shell, terminal or
+  multiplexer above it -- one of those would lease every process under it --
+  and the self-reported agent-process header is never part of the chain. The
+  residual risk is a same-uid debugger attaching to a process in the tree;
+  the guide states it.
 - **Locked is not sealed.** Isolation (open / confidential / sealed) says what
   flows in and out of a project; the lock (`peer_auth.locked`) says whether
   even its own agents need a fresh owner approval. Two settings, two words:

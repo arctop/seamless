@@ -232,7 +232,7 @@ func TestPeerAuthSocket_KernelNamesThePeer(t *testing.T) {
 			require.Equal(t, os.FileMode(0o666), info.Mode().Perm(), "the configured (default) socket mode")
 
 			srv := &http.Server{
-				Handler:     peerHandler(policy, slog.New(slog.NewTextHandler(io.Discard, nil)), whoami),
+				Handler:     peerHandler(policy, peerLeases{}, slog.New(slog.NewTextHandler(io.Discard, nil)), whoami),
 				ConnContext: peerConnContext,
 			}
 			go func() { _ = srv.Serve(ln) }()
@@ -349,7 +349,7 @@ func TestPeerAuthSocket_MCPOverTheRealSocket(t *testing.T) {
 	sock := filepath.Join(dir, "d.sock")
 	ln, err := net.Listen("unix", sock)
 	require.NoError(t, err)
-	srv := &http.Server{Handler: peerHandler(policy, slog.New(slog.NewTextHandler(io.Discard, nil)), d.mux), ConnContext: peerConnContext}
+	srv := &http.Server{Handler: peerHandler(policy, peerLeases{}, slog.New(slog.NewTextHandler(io.Discard, nil)), d.mux), ConnContext: peerConnContext}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close() })
 

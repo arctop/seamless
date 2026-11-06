@@ -452,23 +452,42 @@ func scanLeases(rows *sql.Rows) ([]AccessLease, error) {
 }
 
 // ActiveAccessLeases returns the leases live at now for one process: not
-// revoked, expiring after now. These are what the transport hands the access
-// layer for a socket request from that process. An empty key -- a connection
-// whose process the kernel did not name -- holds none.
+// revoked, expiring after now. An empty key -- a connection whose process the
+// kernel did not name -- holds none.
 func ActiveAccessLeases(ctx context.Context, db *sql.DB, processKey string, now time.Time) ([]AccessLease, error) {
-	if processKey == "" {
+	return ActiveAccessLeasesFor(ctx, db, []string{processKey}, now)
+}
+
+// ActiveAccessLeasesFor returns the leases live at now for any of the given
+// processes: a socket connection's process chain (access.Peer.Chain), whose
+// agent process is the one a lease names. These are what the transport hands
+// the access layer, which judges them again (access.View.WithLeases). Empty
+// keys are ignored, and more than access.MaxChainHops keys are refused rather
+// than truncated: a longer list did not come from a chain.
+func ActiveAccessLeasesFor(ctx context.Context, db *sql.DB, processKeys []string, now time.Time) ([]AccessLease, error) {
+	keys := make([]any, 0, len(processKeys)+1)
+	for _, k := range processKeys {
+		if k != "" {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) == 0 {
 		return nil, nil
 	}
+	if len(keys) > access.MaxChainHops {
+		return nil, fmt.Errorf("store.ActiveAccessLeasesFor: %w: %d process keys, at most %d", ErrInvalidAccessRequest, len(keys), access.MaxChainHops)
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",")
 	rows, err := db.QueryContext(ctx, `SELECT `+leaseCols+` FROM access_leases
-		WHERE process_key = ? AND revoked_at IS NULL AND expires_at > ?
-		ORDER BY project_slug, expires_at DESC, id`, processKey, core.FormatTime(now))
+		WHERE process_key IN (`+marks+`) AND revoked_at IS NULL AND expires_at > ?
+		ORDER BY project_slug, expires_at DESC, id`, append(keys, core.FormatTime(now))...)
 	if err != nil {
-		return nil, fmt.Errorf("store.ActiveAccessLeases: %w", err)
+		return nil, fmt.Errorf("store.ActiveAccessLeasesFor: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	out, err := scanLeases(rows)
 	if err != nil {
-		return nil, fmt.Errorf("store.ActiveAccessLeases: %w", err)
+		return nil, fmt.Errorf("store.ActiveAccessLeasesFor: %w", err)
 	}
 	return out, nil
 }

@@ -225,7 +225,7 @@ func newPADaemon(t *testing.T) *paDaemon {
 	t.Cleanup(func() { closeServer(d.owner) })
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	for _, uid := range []uint32{paUIDOwner, paUIDFinance, paUIDLegal, paUIDStranger} {
-		srv := httptest.NewServer(injectPeer(uid, peerHandler(policy, logger, mux)))
+		srv := httptest.NewServer(injectPeer(uid, peerHandler(policy, peerLeases{}, logger, mux)))
 		t.Cleanup(func() { closeServer(srv) })
 		d.peers[uid] = srv
 	}
