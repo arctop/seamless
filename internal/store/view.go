@@ -101,6 +101,10 @@ var viewExempt = map[string]string{
 	"settings":          "owner settings, counts and slugs (families, stages, the repo-map mirror); no corpus content",
 	"schema_migrations": "migration bookkeeping",
 	"fts":               "a virtual table cannot be shadowed by a view; its one reader filters by the request's View (accessFilter)",
+	// peer_auth.sealed's unlocks: the approval page must read a request for a
+	// LOCKED project, which is exactly the project this handle would hide.
+	"access_approvals": "unlock requests for passkey-sealed projects: slugs, ids, the kernel's facts about the caller and a capped one-line reason; no corpus content, and the approval page reads it for a locked project",
+	"access_leases":    "granted unlocks: slugs, process keys, session ids and times; no corpus content",
 }
 
 const (

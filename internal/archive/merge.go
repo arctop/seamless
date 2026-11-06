@@ -41,6 +41,9 @@ import (
 //   - retrieval_stats: recomputed from the merged event log by
 //     store.RebuildRetrievalStats.
 //   - jobs: a work queue, not a record of anything.
+//   - access_approvals, access_leases: unlocks of passkey-sealed projects,
+//     bound to processes of the exporting machine's boot. Merging one would
+//     be an unlock nobody approved here.
 //   - schema_migrations: the destination's own migration history.
 //
 // A host-local table (one keyed by which machine a row came from) does not

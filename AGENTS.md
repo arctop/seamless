@@ -237,6 +237,16 @@ any of it.
   `access.Visible(ctx, p)`) and never compare principal kinds or slugs
   themselves. `store.CanRead`/`CanWrite` consult the View FIRST -- including
   for the caller's own bound project -- so every isolation fence inherits it.
+- **A lease is judged, never trusted** (`peer_auth.sealed`, the passkey design
+  being built; `internal/access/lease.go`, migration 031). A passkey-sealed
+  project is locked for the owner: `View.Listed` (name and counts) is true,
+  `Visible`/`Writable` are false. A View opens it only through
+  `View.WithLeases`, which keeps a lease only on the owner's socket view with a
+  kernel-reported process token, and only one that names that process, a
+  sealed project and an expiry after now. A TCP view keeps none. Lease rows
+  (`store.ActiveAccessLeases`) are input to it and never a grant on their own.
+  `store.ApproveAccess` is the only writer of a lease: it is single use and
+  bound to the challenge, and it replaces a lease rather than extending one.
 - **The identity comes from the transport, never the client.** A header, a
   `session=` handle, a body field or an agent-process identity can only ever
   narrow what the View allows. `getBinding` drops a binding to an unreachable
