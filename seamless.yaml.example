@@ -466,6 +466,9 @@ update:
 #   # File only (no env). Never beside users below: a config names one design
 #   # or the other.
 #   locked: []
+#   # Caps every lease the owner approves on a locked project, "until this
+#   # session ends" included. At most 24h; unset means 8h. File only (no env).
+#   max_lease: 8h
 #   # The WebAuthn relying party of the owner's approver passkeys (seamlessd
 #   # approvers). Unset: rp_id localhost and the console's own address on
 #   # localhost. rp_id is a host name, never an IP; each origin is https, or

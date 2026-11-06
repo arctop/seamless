@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/store"
@@ -969,4 +970,37 @@ func TestImport_FreshRefusesToWriteThroughASymlink(t *testing.T) {
 	got, err := os.ReadFile(outside)
 	require.NoError(t, err)
 	require.Equal(t, "not yours", string(got))
+}
+
+// A restored database brings back the leases on locked projects it held when
+// the snapshot was taken; a fresh restore ends every live one, so a locked
+// project's agents ask again.
+func TestImport_FreshRevokesRestoredLeases(t *testing.T) {
+	ctx := context.Background()
+	src := seedIndexed(t, specA)
+	srcDB, err := store.Open(filepath.Join(src, DBName))
+	require.NoError(t, err)
+	proc := access.ProcessToken{PID: 4242, Version: 7, Boot: "6c2f1a3e-0b7d-4c55-9a51-3d8f00a1b2c3"}
+	now := time.Now().UTC()
+	a, err := store.CreateAccessApproval(ctx, srcDB, store.AccessRequest{
+		Project: "example-finance", Kind: store.AccessKindRequest, Lease: 8 * time.Hour, TTL: 10 * time.Minute,
+		PeerUID: 501, PeerPID: proc.PID, ProcessKey: proc.Key(),
+	}, now)
+	require.NoError(t, err)
+	_, err = store.ApproveAccess(ctx, srcDB, a.ID, a.Challenge, "daemon-account", now)
+	require.NoError(t, err)
+	require.NoError(t, srcDB.Close())
+
+	dst := filepath.Join(t.TempDir(), "restored")
+	_, err = Import(ctx, ImportOptions{DataDir: dst, Src: bytes.NewReader(exportOf(t, src))})
+	require.NoError(t, err)
+	dstDB, err := store.Open(filepath.Join(dst, DBName))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = dstDB.Close() })
+	live, err := store.ActiveAccessLeases(ctx, dstDB, proc.Key(), time.Now())
+	require.NoError(t, err)
+	require.Empty(t, live, "no lease survives a restore")
+	var reason string
+	require.NoError(t, dstDB.QueryRowContext(ctx, `SELECT revoked_reason FROM access_leases`).Scan(&reason))
+	require.Equal(t, store.LeaseRevokedReset, reason)
 }

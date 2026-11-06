@@ -122,7 +122,10 @@ type Config struct {
 	// keys for locked projects). Nil -- no project is locked -- makes every
 	// Approvers route a 404, and nothing else shows it.
 	Approvals ApprovalsView
-	Logger    *slog.Logger
+	// Terminal tells seam approve how to run the terminal path's commit
+	// (the daemon's account, its seamlessd, its config); nil omits it.
+	Terminal *TerminalApprover
+	Logger   *slog.Logger
 }
 
 // Service renders the console and serves its routes.
@@ -255,6 +258,11 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/gardener/{id}/unhide", formBodySmall, s.gardenerUnhide)
 	post("POST /console/gardener/{id}/retarget", formBodySmall, s.gardenerRetarget)
 	post("POST /console/gardener/{id}/undo", formBodySmall, s.gardenerUndo)
+	handle("GET /console/access", s.auth(s.accessList))
+	handle("GET /console/access/{id}", s.auth(s.accessOne))
+	post("POST /console/access/request", formBodySmall, s.accessRequest)
+	post("POST /console/access/{id}/approve", formBodyPasskey, s.accessApprove)
+	post("POST /console/access/{id}/deny", formBodySmall, s.accessDeny)
 	handle("GET /console/approvers", s.auth(s.approversPage))
 	post("POST /console/approvers/passkey/begin", formBodySmall, s.approversBegin)
 	post("POST /console/approvers/passkey/finish", formBodyPasskey, s.approversFinish)

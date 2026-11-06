@@ -278,6 +278,21 @@ any of it.
   No socket or TCP route may mint a code (the matrix asserts the table stays
   empty). A credential's sign counter is recorded with a compare-and-set
   (`store.RecordApproverUse`), so of two racing assertions only one counts.
+- **Requests are filed at the refusal; approvals need a proof**
+  (`internal/approval`, `access/request.go`). `access.Refusal(ctx, p)` and
+  `access.SessionScope` call the `LockRequester` the surface planted (MCP:
+  `lockRequestMiddleware`) and name the request in the refusal; a requester
+  runs with none in its own context, so resolving the session cannot file
+  again. The lease's anchor is the session's stamped agent process (else the
+  agent-process header), and only when it equals `AgentID()` of a hop in the
+  kernel chain. `approval.Approve` is the one approve core: a proof
+  (`ProofDaemon` only from `seamlessd approve`, run as the daemon's account
+  and checked by `approverAccountCheck`; a passkey assertion over the
+  request's own challenge; a Touch ID signature over
+  `TouchIDApproveMessage`) and the facts digest the owner saw. No route
+  constructs `ProofDaemon`. An agent's socket connection may not deny. No MCP
+  tool is added for requests: a new tool would change every install's tool
+  count; `seam access request` files one explicitly.
 - **The identity comes from the transport, never the client.** A header, a
   `session=` handle, a body field or an agent-process identity can only ever
   narrow what the View allows. `getBinding` drops a binding to an unreachable

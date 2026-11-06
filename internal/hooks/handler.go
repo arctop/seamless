@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
@@ -83,7 +84,20 @@ type Config struct {
 	// endpoint (the screening feature); nil leaves it answering "off".
 	Features  config.Features
 	Screening *screening.Service
+	// RevokeSessionLeases ends a finished session's leases on locked
+	// projects (peer_auth.locked); nil -- nothing locked -- does nothing.
+	RevokeSessionLeases func(ctx context.Context, sessionID string) (int64, error)
+	// Approvals is the daemon's approval service while a project is locked
+	// (the locked notice and its automatic request); nil changes nothing.
+	Approvals Approvals
 	Logger    *slog.Logger
+}
+
+// Approvals is what the hooks need of the daemon's approval service
+// (*approval.Service).
+type Approvals interface {
+	Request(ctx context.Context, in approval.RequestInput) (store.AccessApproval, error)
+	Page(id string) string
 }
 
 // Handler serves the hook endpoints.
@@ -99,6 +113,8 @@ type Handler struct {
 	localHost     string
 	features      config.Features
 	screening     *screening.Service
+	revokeLeases  func(ctx context.Context, sessionID string) (int64, error)
+	approvals     Approvals
 	logger        *slog.Logger
 }
 
@@ -117,7 +133,7 @@ func NewHandler(cfg Config) *Handler {
 		apiKey: cfg.APIKey, maxEventChars: cfg.MaxEventChars,
 		planCapture: cfg.PlanCapture, plansDir: cfg.PlansDir,
 		localHost: strings.ToLower(strings.TrimSpace(cfg.LocalHost)),
-		features:  cfg.Features, screening: cfg.Screening, logger: cfg.Logger,
+		features:  cfg.Features, screening: cfg.Screening, revokeLeases: cfg.RevokeSessionLeases, approvals: cfg.Approvals, logger: cfg.Logger,
 	}
 }
 
@@ -605,6 +621,11 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 		released, rerr := store.ReleaseClaimsForSession(ctx, h.db, sess.ID, now)
 		if rerr != nil {
 			h.recordHookError(ctx, "session-end-release-claims", client, rerr, "session", sess.ID)
+		}
+		if h.revokeLeases != nil {
+			if _, lerr := h.revokeLeases(ctx, sess.ID); lerr != nil {
+				h.recordHookError(ctx, "session-end-revoke-leases", client, lerr, "session", sess.ID)
+			}
 		}
 		h.recordSession(ctx, core.EventSessionEnded, sess, map[string]any{
 			"ambient": sess.Ambient, "harvested": sess.Ambient, "linked": !sess.Ambient,

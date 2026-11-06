@@ -239,6 +239,11 @@ type Config struct {
 	// registered without it, exactly the schemas they had before commit
 	// records, and nothing reaches the commit_records table.
 	RecordCommits bool
+	// Approvals is the daemon's approval service while peer_auth locks a
+	// project: a call refused at a lock files an access request (locked.go),
+	// and session_end revokes the session's leases. Nil -- nothing locked --
+	// changes nothing.
+	Approvals Approvals
 	// Features is the file/env optional-features config (config.Config.Features).
 	// It is only the BASE: the stored override row layers over it per request in
 	// effectiveFeatures, so a console toggle needs no restart. The zero value is
@@ -341,6 +346,7 @@ func New(cfg Config) *Server {
 		mcpserver.WithToolHandlerMiddleware(s.logMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.validateMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.sessionHandleMiddleware),
+		mcpserver.WithToolHandlerMiddleware(s.lockRequestMiddleware),
 		// The optional-feature gate. It is a FILTER, not a middleware, because
 		// mcp-go applies filters at both tools/list and tools/call -- so a
 		// disabled feature's tools are neither advertised nor callable, with one

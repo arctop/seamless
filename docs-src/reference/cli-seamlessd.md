@@ -630,6 +630,29 @@ the socket or with the TCP key, can mint a code or remove a credential.
 With no credential enrolled, `seamlessd doctor` warns while a project is
 locked: only the terminal path can approve then.
 
+## seamlessd approve {#seamlessd_approve}
+
+```bash
+seamlessd approve <request> --for <session|1h|4h> --digest <facts digest>
+seamlessd approve <request> --deny
+```
+
+The terminal approval path's commit for an access request to a locked
+project. You do not normally type it: `seam approve`, in your own terminal,
+shows the request's facts, asks for the duration, and runs it as
+`sudo -k -u <daemon account> seamlessd approve ...`. The `sudo -k` asks for
+your Touch ID or password every time, and becoming the daemon's account is
+the proof - this command refuses unless it runs as that account (the data
+directory is its own and `0700`, and it is not the owner's account).
+
+`<request>` is the short id an agent's refusal names (`R-7F3K`) or the full
+id. `--for` is the lease's length: until the session ends (at most
+`peer_auth.max_lease`), one hour or four hours. `--digest` is the digest of
+the facts you were shown; when they changed since (another request from the
+same agent, a mark on the session), the approval is refused and you look
+again. `--deny` closes the request; the project stays locked for that
+session.
+
 ## seamlessd console-open {#seamlessd_console_open}
 
 ```bash

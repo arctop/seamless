@@ -110,6 +110,14 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbe
       });
     });
   }
+  // Refresh the view in place (console-data-updates-never-reload-document):
+  // the shared navigation fetches the page and morphs only what changed.
+  function refresh() {
+    if (window.SeamConsole && window.SeamConsole.load) {
+      return window.SeamConsole.load(location.href, { history: 'replace', source: 'query' });
+    }
+    return Promise.resolve(false);
+  }
   function enhance() {
     var form = document.getElementById('approver-form');
     if (!form || form._seamWired) return;
@@ -140,7 +148,7 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbe
         });
       }).then(function (done) {
         say('Enrolled "' + done.name + '".');
-        window.location.reload();
+        refresh();
       }).catch(function (err) {
         say(err && err.name === 'NotAllowedError' ? 'Cancelled, or the authenticator timed out. Nothing was enrolled.' :
             err && err.name === 'InvalidStateError' ? 'That authenticator already holds an enrolled passkey.' :

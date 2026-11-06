@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"slices"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/passkey"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -194,7 +196,7 @@ func writeApproversJSON(out io.Writer, creds []store.ApproverCredential) error {
 // newApprovals builds the daemon's approval service over the main database
 // handle: the relying party from peer_auth.passkeys (or the console on
 // localhost), and the owner's account name an authenticator shows.
-func newApprovals(cfg config.Config, db *sql.DB) (*approval.Service, error) {
+func newApprovals(cfg config.Config, db *sql.DB, rec *events.Recorder, logger *slog.Logger) (*approval.Service, error) {
 	rpID, origins := cfg.RelyingParty()
 	v, err := passkey.New(passkey.Config{RPID: rpID, Origins: origins})
 	if err != nil {
@@ -207,5 +209,6 @@ func newApprovals(cfg config.Config, db *sql.DB) (*approval.Service, error) {
 	}
 	return approval.New(approval.Config{
 		DB: db, Passkeys: v, Origins: origins, UserName: "owner", UserDisplayName: display,
+		Events: rec, Host: host, LeaseCap: cfg.PeerAuth.LeaseCap(), Logger: logger,
 	}), nil
 }

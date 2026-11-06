@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/a2a"
+	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/commitfeed"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/console"
@@ -132,6 +133,8 @@ func main() {
 		err = runFamily(args)
 	case "approvers":
 		err = runApprovers(args)
+	case "approve":
+		err = runApprove(args)
 	case "console-open":
 		err = runConsoleOpen(args)
 	case "start":
@@ -185,6 +188,8 @@ usage:
   seamlessd family         manage project families (list|add|remove)
   seamlessd approvers      the owner's passkeys and Touch ID keys for locked projects
                            (enroll-code|list|remove|reset; run as the daemon's account)
+  seamlessd approve        commit an access approval for a locked project (seam approve runs it
+                           through sudo -k as the daemon's account)
   seamlessd console-open   open the console in a browser, pre-authenticated
                            (--browser "Google Chrome" targets a specific browser; macOS only)
   seamlessd start          start the installed service (launchd/systemd/Scheduled Task)
@@ -469,6 +474,24 @@ func runServe(args []string) error {
 	if cfg.MCP.APIKey == "" {
 		slog.Warn("mcp.api_key is empty; MCP and hook requests will be rejected -- set it in seamless.yaml")
 	}
+	// Locked projects: the approval service backs the lock's requests, the
+	// session-end revocations, and the console's Approvers and access pages.
+	// It exists only while peer_auth locks a project; off, every surface
+	// below behaves exactly as before.
+	var approvalSvc *approval.Service
+	if peer != nil && peer.policy.HasLocked() {
+		svc, aerr := newApprovals(cfg, db, rec, logger)
+		if aerr != nil {
+			return fmt.Errorf("seamlessd.serve: %w", aerr)
+		}
+		approvalSvc = svc
+	}
+	var mcpApprovals mcp.Approvals
+	var hookApprovals hooks.Approvals
+	var revokeLeases func(context.Context, string) (int64, error)
+	if approvalSvc != nil {
+		mcpApprovals, hookApprovals, revokeLeases = approvalSvc, approvalSvc, approvalSvc.RevokeSession
+	}
 	mcpSrv := mcp.New(mcp.Config{
 		DB: db, Files: mgr, Retrieve: ret, Events: rec, Gardener: garden, Embedder: embedder, Screening: screen,
 		APIKey: cfg.MCP.APIKey, Version: buildVersion(), LocalHost: config.Hostname(),
@@ -481,7 +504,8 @@ func runServe(args []string) error {
 		// stored override on top of it per request, so a toggle needs no restart
 		// -- but without this line the file and SEAMLESS_FEATURES_* env would be
 		// invisible to the tool gate, leaving the DB row as the only way in.
-		Features: cfg.Features,
+		Features:  cfg.Features,
+		Approvals: mcpApprovals,
 	})
 	// A2A: the agent-to-agent surface, one recall skill over the same retrieve
 	// service and bearer key as MCP. The endpoint URL in the card is the URL
@@ -500,7 +524,7 @@ func runServe(args []string) error {
 		DB: db, Retrieve: ret, Events: rec, Files: mgr,
 		APIKey: cfg.MCP.APIKey, MaxEventChars: cfg.Budgets.ToolEventMaxChars,
 		PlanCapture: cfg.PlanCapture, LocalHost: config.Hostname(), Logger: logger,
-		Features: cfg.Features, Screening: screen,
+		Features: cfg.Features, Screening: screen, RevokeSessionLeases: revokeLeases, Approvals: hookApprovals,
 	})
 	// The console reads through a handle on which projects sealed to other OS
 	// accounts, and locked projects, do not exist, when there are any
@@ -516,15 +540,13 @@ func runServe(args []string) error {
 		defer func() { _ = viewDB.Close() }()
 		consoleDB, consoleWriteDB, consoleEvents = viewDB, db, rec.ReadingFrom(viewDB)
 	}
-	// The Approvers page exists only while a project is locked: off, the
-	// console has no such page and nothing on another page changes.
+	// The Approvers and access pages exist only while a project is locked:
+	// off, the console has no such pages and nothing on another page changes.
 	var approvals console.ApprovalsView
-	if peer != nil && peer.policy.HasLocked() {
-		svc, aerr := newApprovals(cfg, db)
-		if aerr != nil {
-			return fmt.Errorf("seamlessd.serve: %w", aerr)
-		}
-		approvals = svc
+	var terminal *console.TerminalApprover
+	if approvalSvc != nil {
+		approvals = approvalSvc
+		terminal = terminalApprover(cfg)
 	}
 	consoleSrv, err := console.New(console.Config{
 		DB: consoleDB, WriteDB: consoleWriteDB, Files: mgr, Gardener: garden, Events: consoleEvents, Retrieve: ret,
@@ -549,6 +571,7 @@ func runServe(args []string) error {
 		// console on the default loopback install.
 		SecureCookies: cfg.TLSEnabled(),
 		Approvals:     approvals,
+		Terminal:      terminal,
 		Logger:        logger,
 	})
 	if err != nil {

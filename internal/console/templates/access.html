@@ -1,0 +1,25 @@
+{{define "content"}}
+{{with .Data}}
+<div class="access-page" data-access>
+<header class="mv2-bar">
+  <h1>{{icon "lock"}}Access requests</h1>{{about "Agents asking for a locked project. Approve one with a passkey here, or in your own terminal with seam approve. Nothing is granted until you do."}}
+  <span class="mv2-count" aria-label="{{len .Requests}} waiting"><strong>{{len .Requests}}</strong>waiting</span>
+</header>
+{{if .Requests}}
+<ul class="access-list">
+  {{range .Requests}}
+  <li class="access-item" data-request="{{.ID}}">
+    <a href="/console/access/{{.ID}}"><strong>{{.Short}}</strong></a>
+    <span class="badge">{{.Project}}</span>
+    {{if eq .Kind "refresh"}}<span class="badge">refresh</span>{{end}}
+    {{if .Warnings}}<span class="badge warn">{{len .Warnings}} warning{{if gt (len .Warnings) 1}}s{{end}}</span>{{end}}
+    <small>{{if .Session}}{{.Session}}{{else}}no session{{end}} &middot; asked {{.RequestedAt.Local.Format "15:04"}}, waits until {{.ExpiresAt.Local.Format "15:04"}}</small>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="held-sub">Nothing is waiting. When an agent is refused at a locked project, its request appears here.</p>
+{{end}}
+</div>
+{{end}}
+{{end}}

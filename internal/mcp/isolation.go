@@ -61,7 +61,9 @@ func (s *Server) fenceRead(ctx context.Context, target string) error {
 
 // fenceReadQuiet is fenceRead without the access.refused event, for a caller
 // that uses the fence as a filter (dropping what it may not show) rather than
-// refusing the call.
+// refusing the call. Such a caller also clears the lock requester from ctx
+// (access.WithLockRequester(ctx, nil)): dropping a locked project's item is
+// not asking for the project.
 func (s *Server) fenceReadQuiet(ctx context.Context, target string) error {
 	// peer_auth first: a project this connection's OS account may not reach is
 	// refused with ITS rule and remedy. The isolation copy below would advise

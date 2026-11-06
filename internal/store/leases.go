@@ -289,6 +289,45 @@ func PendingAccessApproval(ctx context.Context, db *sql.DB, processKey, project 
 	return a, true, nil
 }
 
+// PendingAccessApprovals returns every approval still waiting for a decision
+// at now, oldest first: what `seam approve` and the console list.
+func PendingAccessApprovals(ctx context.Context, db *sql.DB, now time.Time) ([]AccessApproval, error) {
+	rows, err := db.QueryContext(ctx, `SELECT `+approvalCols+` FROM access_approvals
+		WHERE status = ? AND expires_at > ? ORDER BY requested_at, id`, ApprovalPending, core.FormatTime(now))
+	if err != nil {
+		return nil, fmt.Errorf("store.PendingAccessApprovals: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []AccessApproval
+	for rows.Next() {
+		a, err := scanApproval(rows)
+		if err != nil {
+			return nil, fmt.Errorf("store.PendingAccessApprovals: %w", err)
+		}
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store.PendingAccessApprovals: %w", err)
+	}
+	return out, nil
+}
+
+// LastAccessReason returns the reason of the newest approval for this process
+// and project, approved or not: what a refresh reuses, since a refresh carries
+// no new free text.
+func LastAccessReason(ctx context.Context, db *sql.DB, processKey, project string) (string, error) {
+	var reason string
+	err := db.QueryRowContext(ctx, `SELECT reason FROM access_approvals WHERE process_key = ? AND project_slug = ?
+		ORDER BY requested_at DESC, id DESC LIMIT 1`, processKey, project).Scan(&reason)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("store.LastAccessReason: %w", err)
+	}
+	return reason, nil
+}
+
 // ApproveAccess turns a pending approval into a lease, in one transaction:
 // the approval must be pending, before its deadline, and carry exactly the
 // challenge the owner's passkey signed (checked here too, so an assertion over
@@ -300,8 +339,19 @@ func PendingAccessApproval(ctx context.Context, db *sql.DB, processKey, project 
 // An approval found past its deadline is marked expired, and the call returns
 // ErrApprovalExpired.
 func ApproveAccess(ctx context.Context, db *sql.DB, id string, challenge []byte, credentialID string, now time.Time) (AccessLease, error) {
+	return ApproveAccessFor(ctx, db, id, challenge, credentialID, 0, now)
+}
+
+// ApproveAccessFor is ApproveAccess with the lease length the owner chose at
+// approval: lease, a whole number of seconds, or 0 for the length the request
+// carried. decidedBy names the proof that decided (an approver credential id,
+// or the daemon account's).
+func ApproveAccessFor(ctx context.Context, db *sql.DB, id string, challenge []byte, credentialID string, length time.Duration, now time.Time) (AccessLease, error) {
 	if credentialID == "" {
-		return AccessLease{}, fmt.Errorf("store.ApproveAccess: %w: no passkey credential named", ErrInvalidAccessRequest)
+		return AccessLease{}, fmt.Errorf("store.ApproveAccess: %w: no deciding proof named", ErrInvalidAccessRequest)
+	}
+	if length < 0 || length%time.Second != 0 {
+		return AccessLease{}, fmt.Errorf("store.ApproveAccess: %w: lease %s is not a whole number of seconds", ErrInvalidAccessRequest, length)
 	}
 	now = now.UTC()
 	tx, err := db.BeginTx(ctx, nil)
@@ -354,6 +404,9 @@ func ApproveAccess(ctx context.Context, db *sql.DB, id string, challenge []byte,
 	lease := AccessLease{
 		ID: leaseID, Project: a.Project, ProcessKey: a.ProcessKey, PeerUID: a.PeerUID, PeerPID: a.PeerPID,
 		SessionID: a.SessionID, ApprovalID: a.ID, GrantedAt: now, ExpiresAt: now.Add(a.Lease),
+	}
+	if length > 0 {
+		lease.ExpiresAt = now.Add(length)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO access_leases (id, project_slug, process_key, peer_uid, peer_pid,
 		session_id, approval_id, granted_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,

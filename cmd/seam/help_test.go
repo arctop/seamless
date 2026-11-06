@@ -42,11 +42,31 @@ func TestHelpText_CoversTheWholeCommandSet(t *testing.T) {
 	help := helpText()
 	for _, want := range []string{
 		"seam plan approve <slug>",
+		"seam access request [--json] [--reason TEXT] <project>",
+		"seam approve [--for DURATION] [--passkey] [--watch] [<request>]",
 		"seam status",
 		"seam hook",
 	} {
 		require.Contains(t, help, want)
 	}
+}
+
+// The two halves of a locked project's access request sit together under their
+// own heading, and seam approve's help says what proves the decision.
+func TestHelpText_LockedProjects(t *testing.T) {
+	help := helpText()
+	section := help[strings.Index(help, "\n"+groupAccess+":\n"):]
+	section = section[:strings.Index(section[1:], "\n\n")+1]
+	require.Contains(t, section, "seam access request")
+	require.Contains(t, section, "seam approve")
+
+	page := commandHelp(approveCmd)
+	for _, want := range []string{"sudo -k", "Touch ID or password", "an agent cannot use it", "--passkey", "--watch"} {
+		require.Contains(t, page, want)
+	}
+	e, out, _ := stubEnv()
+	require.Equal(t, 0, dispatch(context.Background(), e, []string{"approve", "--help"}), "help needs no terminal")
+	require.Contains(t, out.String(), "usage: seam approve")
 }
 
 // Groups render in groupOrder regardless of where their content comes from.

@@ -5,20 +5,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>seam CLI - Seamless docs</title>
-<meta name="description" content="Every seam subcommand - agent loop, memories and notes, tasks, plans, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.">
+<meta name="description" content="Every seam subcommand - agent loop, memories and notes, tasks, plans, locked-project access requests, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.">
 <link rel="canonical" href="https://thereisnospoon.org/docs/reference/cli-seam/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://thereisnospoon.org/docs/reference/cli-seam/">
 <meta property="og:title" content="seam CLI - Seamless docs">
-<meta property="og:description" content="Every seam subcommand - agent loop, memories and notes, tasks, plans, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.">
+<meta property="og:description" content="Every seam subcommand - agent loop, memories and notes, tasks, plans, locked-project access requests, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Reference","item":"https://thereisnospoon.org/docs/reference/"},{"@type":"ListItem","position":3,"name":"seam CLI","item":"https://thereisnospoon.org/docs/reference/cli-seam/"}]},{"@type":"TechArticle","headline":"seam CLI - Seamless docs","description":"Every seam subcommand - agent loop, memories and notes, tasks, plans, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.","url":"https://thereisnospoon.org/docs/reference/cli-seam/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Reference","item":"https://thereisnospoon.org/docs/reference/"},{"@type":"ListItem","position":3,"name":"seam CLI","item":"https://thereisnospoon.org/docs/reference/cli-seam/"}]},{"@type":"TechArticle","headline":"seam CLI - Seamless docs","description":"Every seam subcommand - agent loop, memories and notes, tasks, plans, locked-project access requests, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.","url":"https://thereisnospoon.org/docs/reference/cli-seam/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
 <link rel="icon" type="image/svg+xml" href="../../../static/favicon.svg">
@@ -232,18 +232,18 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 </nav>
 
   <h1>seam CLI</h1>
-  <p class="lede">Every seam subcommand - agent loop, memories and notes, tasks, plans, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.</p>
+  <p class="lede">Every seam subcommand - agent loop, memories and notes, tasks, plans, locked-project access requests, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.</p>
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#flags-and-positionals">Flags and positionals</a></li><li class="lvl-2"><a href="#json-output">JSON output</a></li><li class="lvl-2"><a href="#which-session">Which session a command acts in</a></li><li class="lvl-2"><a href="#agent-loop">Agent loop</a></li><li class="lvl-3"><a href="#seam_prime">seam prime</a></li><li class="lvl-3"><a href="#seam_remember">seam remember</a></li><li class="lvl-3"><a href="#seam_recall">seam recall</a></li><li class="lvl-3"><a href="#seam_capture">seam capture</a></li><li class="lvl-2"><a href="#memories-and-notes">Memories and notes</a></li><li class="lvl-3"><a href="#seam_memory_read">seam memory read</a></li><li class="lvl-3"><a href="#seam_memory_list">seam memory list</a></li><li class="lvl-3"><a href="#seam_note_read">seam note read</a></li><li class="lvl-3"><a href="#seam_note_list">seam note list</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-3"><a href="#seam_ready">seam ready</a></li><li class="lvl-3"><a href="#seam_task_list">seam task list</a></li><li class="lvl-3"><a href="#seam_task_add">seam task add</a></li><li class="lvl-3"><a href="#seam_task_transition">seam task done|start|drop|reopen</a></li><li class="lvl-3"><a href="#seam_task_claim">seam task claim</a></li><li class="lvl-3"><a href="#seam_task_heartbeat">seam task heartbeat</a></li><li class="lvl-3"><a href="#seam_task_release">seam task release</a></li><li class="lvl-2"><a href="#captured-plans">Captured plans</a></li><li class="lvl-3"><a href="#seam_plan_list">seam plan list</a></li><li class="lvl-3"><a href="#seam_plan_show">seam plan show</a></li><li class="lvl-3"><a href="#seam_plan_check">seam plan check</a></li><li class="lvl-3"><a href="#seam_plan_approve">seam plan approve</a></li><li class="lvl-2"><a href="#observability">Observability</a></li><li class="lvl-3"><a href="#seam_status">seam status</a></li><li class="lvl-3"><a href="#seam_sessions">seam sessions</a></li><li class="lvl-3"><a href="#seam_fav">seam fav</a></li><li class="lvl-3"><a href="#seam_project_isolation">seam project isolation</a></li><li class="lvl-3"><a href="#seam_usage">seam usage</a></li><li class="lvl-3"><a href="#seam_doctor">seam doctor</a></li><li class="lvl-3"><a href="#seam_version">seam version</a></li><li class="lvl-2"><a href="#any-mcp-tool">Any MCP tool</a></li><li class="lvl-3"><a href="#seam_call">seam call</a></li><li class="lvl-2"><a href="#mcp-bridge-and-auth-helper">MCP bridge and auth helper</a></li><li class="lvl-2"><a href="#hooks">Hooks</a></li>
+      <li class="lvl-2"><a href="#flags-and-positionals">Flags and positionals</a></li><li class="lvl-2"><a href="#json-output">JSON output</a></li><li class="lvl-2"><a href="#which-session">Which session a command acts in</a></li><li class="lvl-2"><a href="#agent-loop">Agent loop</a></li><li class="lvl-3"><a href="#seam_prime">seam prime</a></li><li class="lvl-3"><a href="#seam_remember">seam remember</a></li><li class="lvl-3"><a href="#seam_recall">seam recall</a></li><li class="lvl-3"><a href="#seam_capture">seam capture</a></li><li class="lvl-2"><a href="#memories-and-notes">Memories and notes</a></li><li class="lvl-3"><a href="#seam_memory_read">seam memory read</a></li><li class="lvl-3"><a href="#seam_memory_list">seam memory list</a></li><li class="lvl-3"><a href="#seam_note_read">seam note read</a></li><li class="lvl-3"><a href="#seam_note_list">seam note list</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-3"><a href="#seam_ready">seam ready</a></li><li class="lvl-3"><a href="#seam_task_list">seam task list</a></li><li class="lvl-3"><a href="#seam_task_add">seam task add</a></li><li class="lvl-3"><a href="#seam_task_transition">seam task done|start|drop|reopen</a></li><li class="lvl-3"><a href="#seam_task_claim">seam task claim</a></li><li class="lvl-3"><a href="#seam_task_heartbeat">seam task heartbeat</a></li><li class="lvl-3"><a href="#seam_task_release">seam task release</a></li><li class="lvl-2"><a href="#captured-plans">Captured plans</a></li><li class="lvl-3"><a href="#seam_plan_list">seam plan list</a></li><li class="lvl-3"><a href="#seam_plan_show">seam plan show</a></li><li class="lvl-3"><a href="#seam_plan_check">seam plan check</a></li><li class="lvl-3"><a href="#seam_plan_approve">seam plan approve</a></li><li class="lvl-2"><a href="#locked-projects">Locked projects</a></li><li class="lvl-3"><a href="#seam_access_request">seam access request</a></li><li class="lvl-3"><a href="#seam_approve">seam approve</a></li><li class="lvl-2"><a href="#observability">Observability</a></li><li class="lvl-3"><a href="#seam_status">seam status</a></li><li class="lvl-3"><a href="#seam_sessions">seam sessions</a></li><li class="lvl-3"><a href="#seam_fav">seam fav</a></li><li class="lvl-3"><a href="#seam_project_isolation">seam project isolation</a></li><li class="lvl-3"><a href="#seam_usage">seam usage</a></li><li class="lvl-3"><a href="#seam_doctor">seam doctor</a></li><li class="lvl-3"><a href="#seam_version">seam version</a></li><li class="lvl-2"><a href="#any-mcp-tool">Any MCP tool</a></li><li class="lvl-3"><a href="#seam_call">seam call</a></li><li class="lvl-2"><a href="#mcp-bridge-and-auth-helper">MCP bridge and auth helper</a></li><li class="lvl-2"><a href="#hooks">Hooks</a></li>
     </ul>
   </details>
   <p><code>seam</code> is the headless CLI. It does no work itself: it loads the same
 configuration the daemon does, then talks to a running <code>seamlessd</code> - over MCP at
 <code>/api/mcp</code> for most commands, and over the console's JSON endpoints for the
 owner-only actions that do not exist as MCP tools (force-releasing a task lock,
-approving a plan). Both paths authenticate with the static bearer key from
+approving a plan, deciding a locked project's access request). Both paths authenticate with the static bearer key from
 <a href="../../reference/configuration/">Configuration</a>, so if the key is wrong or the daemon
 is down, every subcommand below fails at the connection.</p>
 <p>The target address is derived from the configured bind address, with a bind-all
@@ -512,6 +512,94 @@ note is stale</strong>, so it works as a gate in a script.</p>
 <p>Escape hatch for when Claude Code skips the approval hook: flips the plan to
 approved and creates its tracking task, reporting the new task or noting that
 one already exists.</p>
+<h2 id="locked-projects">Locked projects</h2>
+<p>Under <code>peer_auth</code>, a project listed in <code>peer_auth.locked</code> (see the
+<a href="../../reference/configuration/#peer-auth">configuration reference</a>) is closed to
+every owner request - the owner's own agents included - until the owner
+approves a lease for the asking agent's process. A refused call files a
+pending access request by itself; an agent can also ask explicitly. The owner
+decides it in their own terminal with <code>seam approve</code>, or on the console's
+passkey page. Both commands talk to the console's <code>/console/access</code> routes,
+which answer <code>no project is locked</code> while the daemon locks nothing.</p>
+<h3 id="seam_access_request">seam access request</h3>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam access request <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>--reason TEXT<span class="o">]</span> &lt;project&gt;
+</span></span></code></pre></div>
+<p>Files an access request for a locked project, naming the agent that runs it:
+run it from the agent's own shell, where <code>seam</code> names the agent process that
+started it (the same identity every MCP request carries, see
+<a href="#which-session">which session a command acts in</a>). <code>--reason</code> is the agent's
+own words on why it needs the project, at most 200 characters; the owner sees
+it quoted and labeled as the agent's, never as a fact. A longer reason is
+refused before anything is sent.</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">Requested R-7F3K for example-finance (request). The owner approves it with: seam approve R-7F3K
+</span></span><span class="line"><span class="cl">or with a passkey: https://seamless.example.org/console/access/01K...
+</span></span></code></pre></div>
+<p>The second line appears only when the daemon has a passkey page for the
+request. Asking again while a request is pending answers with that same
+request; a request from an agent that already holds a lease is a <code>refresh</code>.
+<code>--json</code> prints the console's answer as received (<a href="#json-output">JSON output</a>).
+The console's refusal is printed as it is: the project is not locked, or the
+connection has no agent process the daemon could verify.</p>
+<h3 id="seam_approve">seam approve</h3>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam approve <span class="o">[</span>--for DURATION<span class="o">]</span> <span class="o">[</span>&lt;request&gt;<span class="o">]</span>
+</span></span><span class="line"><span class="cl">seam approve --passkey <span class="o">[</span>&lt;request&gt;<span class="o">]</span>
+</span></span><span class="line"><span class="cl">seam approve --watch
+</span></span></code></pre></div>
+<p>The owner's terminal path. It needs a terminal on both stdin and stdout and
+refuses otherwise: an agent cannot use it. <code>&lt;request&gt;</code> is the short id
+(<code>R-7F3K</code>) or the full id; without one, <code>seam approve</code> lists what is waiting
+(short id, project, session, warning count, and when each stops waiting),
+takes the only request, or asks which one by number or short id. With nothing
+waiting it prints <code>Nothing is waiting.</code></p>
+<p>It then shows the request's facts - the daemon's warnings first, each on its
+own line behind <code>!</code>, then the project with its isolation and access, the
+asking program with its pid and uid, the session and model, the working
+directory, the agent's reason (quoted, and labeled as the agent's own words),
+whether this is a first request or a refresh, and until when it waits. Only
+the warnings are colored, and not with <code>NO_COLOR</code> set or <code>TERM=dumb</code>. Every
+value is printed with control characters escaped, so nothing an agent wrote
+can repaint the terminal.</p>
+<p>Next it asks for the duration - <code>session</code> (the default: until the asking
+session ends, at most <code>peer_auth.max_lease</code>), <code>1h</code> or <code>4h</code> - unless <code>--for</code>
+names one; <code>--for</code> takes only a duration the daemon offers. Last it asks to
+confirm:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">Approve R-7F3K (example-finance, read-write, until the session ends, at most 8h)? [y/N/d=deny]
+</span></span></code></pre></div>
+<p><code>y</code> approves and <code>d</code> denies; any other answer prints <code>Nothing changed.</code> and
+exits 0. Either decision runs <a href="../../reference/cli-seamlessd/#seamlessd_approve"><code>seamlessd approve</code></a>
+as the daemon's account, with the account, executable and config the daemon
+names in its answer:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -k -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>&lt;config&gt; &lt;seamlessd&gt; approve &lt;id&gt; --for &lt;duration&gt; --digest &lt;facts digest&gt;
+</span></span><span class="line"><span class="cl">sudo -k -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>&lt;config&gt; &lt;seamlessd&gt; approve &lt;id&gt; --deny
+</span></span></code></pre></div>
+<p><code>sudo -k</code> asks for your Touch ID or password every time and leaves no cached
+ticket behind; that authentication is the proof, not <code>seam approve</code>. The
+command runs on your terminal, so the prompt shows there, and <code>seamlessd</code>'s
+own answer (<code>Approved R-7F3K: example-finance, read and write, ...</code>) is what
+you read; when it fails, <code>seam approve</code> exits 1. The digest is that of the
+facts you were shown: when they changed in the meantime, the approval is
+refused and you look again.</p>
+<p>Before running it, <code>seam approve</code> drops sudo's cached ticket and tries
+<code>sudo -n -u &lt;account&gt; true</code>, which succeeds only under a sudoers rule that asks
+for no authentication. When it does, it warns that the approval proves nothing
+while the rule stands - any process running as you could run the same command
+unasked - and goes ahead. A rule scoped to <code>seamlessd</code> alone is not seen by
+that probe.</p>
+<p>When the daemon's answer does not say how to reach the terminal path (its
+account, executable or config file is unknown), the facts are still shown and
+the command points at the request's passkey page instead.</p>
+<p><code>--passkey</code> opens the request's passkey page (the <code>page</code> the daemon names) in
+the default browser - <code>open</code> on macOS, <code>xdg-open</code> on Linux, <code>rundll32</code> on
+Windows - or prints the address when no browser could be opened. A daemon
+that offers no passkey approval names no page, and the command says so.</p>
+<p><code>--watch</code> polls the pending list every 3 seconds, prints each new request once
+(with its warnings and the <code>seam approve</code> line to decide it), and raises a
+notification - <code>osascript</code> on macOS, a terminal bell elsewhere - whose text is
+the short id and project only, never the agent's reason. Ctrl-C ends it. It
+decides nothing; it takes no request, <code>--for</code> or <code>--passkey</code>.</p>
+<p>Exit status: 0 when a request was approved or denied, when nothing changed,
+and when nothing is waiting; 1 on any error, including a request that is no
+longer pending (and 2, as everywhere, for a command line it cannot parse).</p>
 <h2 id="observability">Observability</h2>
 <h3 id="seam_status">seam status</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam status <span class="o">[</span>--json<span class="o">]</span>
@@ -727,7 +815,7 @@ It retries and gives up like the others (5s, 9s).</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#flags-and-positionals">Flags and positionals</a></li><li class="lvl-2"><a href="#json-output">JSON output</a></li><li class="lvl-2"><a href="#which-session">Which session a command acts in</a></li><li class="lvl-2"><a href="#agent-loop">Agent loop</a></li><li class="lvl-3"><a href="#seam_prime">seam prime</a></li><li class="lvl-3"><a href="#seam_remember">seam remember</a></li><li class="lvl-3"><a href="#seam_recall">seam recall</a></li><li class="lvl-3"><a href="#seam_capture">seam capture</a></li><li class="lvl-2"><a href="#memories-and-notes">Memories and notes</a></li><li class="lvl-3"><a href="#seam_memory_read">seam memory read</a></li><li class="lvl-3"><a href="#seam_memory_list">seam memory list</a></li><li class="lvl-3"><a href="#seam_note_read">seam note read</a></li><li class="lvl-3"><a href="#seam_note_list">seam note list</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-3"><a href="#seam_ready">seam ready</a></li><li class="lvl-3"><a href="#seam_task_list">seam task list</a></li><li class="lvl-3"><a href="#seam_task_add">seam task add</a></li><li class="lvl-3"><a href="#seam_task_transition">seam task done|start|drop|reopen</a></li><li class="lvl-3"><a href="#seam_task_claim">seam task claim</a></li><li class="lvl-3"><a href="#seam_task_heartbeat">seam task heartbeat</a></li><li class="lvl-3"><a href="#seam_task_release">seam task release</a></li><li class="lvl-2"><a href="#captured-plans">Captured plans</a></li><li class="lvl-3"><a href="#seam_plan_list">seam plan list</a></li><li class="lvl-3"><a href="#seam_plan_show">seam plan show</a></li><li class="lvl-3"><a href="#seam_plan_check">seam plan check</a></li><li class="lvl-3"><a href="#seam_plan_approve">seam plan approve</a></li><li class="lvl-2"><a href="#observability">Observability</a></li><li class="lvl-3"><a href="#seam_status">seam status</a></li><li class="lvl-3"><a href="#seam_sessions">seam sessions</a></li><li class="lvl-3"><a href="#seam_fav">seam fav</a></li><li class="lvl-3"><a href="#seam_project_isolation">seam project isolation</a></li><li class="lvl-3"><a href="#seam_usage">seam usage</a></li><li class="lvl-3"><a href="#seam_doctor">seam doctor</a></li><li class="lvl-3"><a href="#seam_version">seam version</a></li><li class="lvl-2"><a href="#any-mcp-tool">Any MCP tool</a></li><li class="lvl-3"><a href="#seam_call">seam call</a></li><li class="lvl-2"><a href="#mcp-bridge-and-auth-helper">MCP bridge and auth helper</a></li><li class="lvl-2"><a href="#hooks">Hooks</a></li>
+      <li class="lvl-2"><a href="#flags-and-positionals">Flags and positionals</a></li><li class="lvl-2"><a href="#json-output">JSON output</a></li><li class="lvl-2"><a href="#which-session">Which session a command acts in</a></li><li class="lvl-2"><a href="#agent-loop">Agent loop</a></li><li class="lvl-3"><a href="#seam_prime">seam prime</a></li><li class="lvl-3"><a href="#seam_remember">seam remember</a></li><li class="lvl-3"><a href="#seam_recall">seam recall</a></li><li class="lvl-3"><a href="#seam_capture">seam capture</a></li><li class="lvl-2"><a href="#memories-and-notes">Memories and notes</a></li><li class="lvl-3"><a href="#seam_memory_read">seam memory read</a></li><li class="lvl-3"><a href="#seam_memory_list">seam memory list</a></li><li class="lvl-3"><a href="#seam_note_read">seam note read</a></li><li class="lvl-3"><a href="#seam_note_list">seam note list</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-3"><a href="#seam_ready">seam ready</a></li><li class="lvl-3"><a href="#seam_task_list">seam task list</a></li><li class="lvl-3"><a href="#seam_task_add">seam task add</a></li><li class="lvl-3"><a href="#seam_task_transition">seam task done|start|drop|reopen</a></li><li class="lvl-3"><a href="#seam_task_claim">seam task claim</a></li><li class="lvl-3"><a href="#seam_task_heartbeat">seam task heartbeat</a></li><li class="lvl-3"><a href="#seam_task_release">seam task release</a></li><li class="lvl-2"><a href="#captured-plans">Captured plans</a></li><li class="lvl-3"><a href="#seam_plan_list">seam plan list</a></li><li class="lvl-3"><a href="#seam_plan_show">seam plan show</a></li><li class="lvl-3"><a href="#seam_plan_check">seam plan check</a></li><li class="lvl-3"><a href="#seam_plan_approve">seam plan approve</a></li><li class="lvl-2"><a href="#locked-projects">Locked projects</a></li><li class="lvl-3"><a href="#seam_access_request">seam access request</a></li><li class="lvl-3"><a href="#seam_approve">seam approve</a></li><li class="lvl-2"><a href="#observability">Observability</a></li><li class="lvl-3"><a href="#seam_status">seam status</a></li><li class="lvl-3"><a href="#seam_sessions">seam sessions</a></li><li class="lvl-3"><a href="#seam_fav">seam fav</a></li><li class="lvl-3"><a href="#seam_project_isolation">seam project isolation</a></li><li class="lvl-3"><a href="#seam_usage">seam usage</a></li><li class="lvl-3"><a href="#seam_doctor">seam doctor</a></li><li class="lvl-3"><a href="#seam_version">seam version</a></li><li class="lvl-2"><a href="#any-mcp-tool">Any MCP tool</a></li><li class="lvl-3"><a href="#seam_call">seam call</a></li><li class="lvl-2"><a href="#mcp-bridge-and-auth-helper">MCP bridge and auth helper</a></li><li class="lvl-2"><a href="#hooks">Hooks</a></li>
     </ul>
   </aside>
   

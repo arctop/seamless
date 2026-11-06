@@ -464,6 +464,14 @@ const (
 	EventCorpusConfirmed EventKind = "corpus.confirmed"  // the owner marked a flagged item safe or accepted a drifted one (item_id; payload: item_kind, via, by)
 	EventLockdownChanged EventKind = "lockdown.changed"  // lockdown went on or off (payload: on, source, by)
 
+	// Locked projects (peer_auth.locked): the owner's approvals of an agent's
+	// access. Payloads carry ids, codes and lengths -- never the agent's reason
+	// or a path.
+	EventAccessRequested EventKind = "access.requested" // an agent asked for a locked project (item_id: the request; session_id when known; payload: kind, via)
+	EventAccessApproved  EventKind = "access.approved"  // the owner approved a request (item_id: the request; payload: lease, proof, seconds)
+	EventAccessDenied    EventKind = "access.denied"    // the owner denied a request (item_id: the request; payload: proof)
+	EventAccessRevoked   EventKind = "access.revoked"   // leases ended early (payload: reason, leases; session_id for a session end)
+
 	// Background update check (internal/update). Payload values are parsed
 	// X.Y.Z versions and fixed install-kind words, never release-API text.
 	EventUpdateAvailable EventKind = "update.available" // a newer installable release was seen (item_id: the version; payload: version, current, kind); latched once per version via RecordOnce

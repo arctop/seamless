@@ -22,11 +22,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/passkey"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -61,8 +63,17 @@ type Config struct {
 	// UserName and UserDisplayName are what an authenticator shows for the
 	// owner's account ("owner", "Seamless owner on <host>").
 	UserName, UserDisplayName string
+	// Events records access.requested, approved, denied and revoked; nil
+	// records nothing.
+	Events *events.Recorder
+	// Host is this machine's name, for the repo-map warning (a session's cwd
+	// outside the project's mapped repositories).
+	Host string
+	// LeaseCap is peer_auth.max_lease; 0 means 8 hours.
+	LeaseCap time.Duration
 	// Now is the clock; nil means time.Now.
-	Now func() time.Time
+	Now    func() time.Time
+	Logger *slog.Logger
 }
 
 // Service runs enrolments. It is safe for concurrent use.
@@ -79,6 +90,9 @@ func New(cfg Config) *Service {
 	}
 	if cfg.UserName == "" {
 		cfg.UserName = "owner"
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = slog.Default()
 	}
 	return &Service{cfg: cfg, pending: map[string]*pendingEnrol{}}
 }

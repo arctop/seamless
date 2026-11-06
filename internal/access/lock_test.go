@@ -360,3 +360,46 @@ peer_auth:
 	require.False(t, fin.Writable(""), "the account still never writes global")
 	require.Equal(t, lockFin, fin.Home())
 }
+
+// A refusal at a lock files the request through the requester the surface
+// planted, and names it; without one, or for anything but the owner's socket
+// view of a locked project, the refusal is as before and nothing is filed.
+func TestLockedRefusal_FilesTheRequest(t *testing.T) {
+	p := lockPolicy(t)
+	sock := socketView(t, p, lockProc)
+	var asked []string
+	requester := func(_ context.Context, project string) (LockRequest, error) {
+		asked = append(asked, project)
+		return LockRequest{ID: "01REQUEST", Short: "R-7F3K", Page: "http://localhost:8081/console/access/01REQUEST"}, nil
+	}
+	ctx := WithLockRequester(WithView(context.Background(), sock), requester)
+
+	err := Refusal(ctx, lockFin)
+	require.ErrorIs(t, err, ErrNotReachable)
+	require.Contains(t, err.Error(), "R-7F3K")
+	require.Contains(t, err.Error(), "seam approve R-7F3K")
+	require.Contains(t, err.Error(), "/console/access/01REQUEST")
+	require.Equal(t, []string{lockFin}, asked)
+
+	_, err = SessionScope(ctx, lockLegal)
+	require.ErrorContains(t, err, "R-7F3K", "a session placed in a locked project files one too")
+	require.Equal(t, []string{lockFin, lockLegal}, asked)
+
+	// Not locked, not the socket, no requester, a failing requester: no
+	// request, the old refusal.
+	require.NotContains(t, Refusal(ctx, lockOps).Error(), "R-7F3K", "an open project files nothing")
+	tcpCtx := WithLockRequester(WithView(context.Background(), p.OwnerView()), requester)
+	require.NotContains(t, Refusal(tcpCtx, lockFin).Error(), "R-7F3K")
+	plain := WithView(context.Background(), sock)
+	require.NotContains(t, Refusal(plain, lockFin).Error(), "R-")
+	failing := WithLockRequester(WithView(context.Background(), sock), func(context.Context, string) (LockRequest, error) {
+		return LockRequest{}, ErrNotReachable
+	})
+	require.ErrorIs(t, Refusal(failing, lockFin), ErrNotReachable)
+	require.Equal(t, []string{lockFin, lockLegal}, asked, "nothing more was filed")
+
+	refresh := WithLockRequester(WithView(context.Background(), sock), func(context.Context, string) (LockRequest, error) {
+		return LockRequest{ID: "01R", Short: "R-AAAA", Refresh: true}, nil
+	})
+	require.Contains(t, Refusal(refresh, lockFin).Error(), "refresh request R-AAAA")
+}

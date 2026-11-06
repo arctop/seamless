@@ -1,0 +1,146 @@
+{{define "content"}}
+{{with .Data}}
+{{with .Request}}
+<div class="access-one" data-access-one="{{.ID}}">
+<header class="mv2-bar">
+  <h1>{{icon "lock"}}{{.Short}}: {{.Project}}</h1>{{about "An agent is asking for a locked project. Read the facts; the reason is the agent's own words."}}
+</header>
+
+{{if .Warnings}}
+<section class="access-warnings" aria-label="Warnings">
+  {{range .Warnings}}<p class="held-sub">{{icon "triangle-alert"}} <strong>{{.Text}}</strong></p>{{end}}
+</section>
+{{end}}
+
+<dl class="access-facts">
+  <dt>Project</dt><dd>{{.Project}} ({{.Isolation}}), {{.Access}}</dd>
+  <dt>Asking</dt><dd>{{if .Program}}<code>{{.Program}}</code>{{else}}a process{{end}}, pid {{.PID}}, uid {{.UID}}</dd>
+  <dt>Session</dt><dd>{{if .Session}}{{.Session}}{{else}}none{{end}}{{if .Model}} &middot; {{.Model}}{{end}}</dd>
+  <dt>Working in</dt><dd>{{if .CWD}}<code>{{.CWD}}</code>{{else}}unknown{{end}}</dd>
+  <dt>The agent says</dt><dd>{{if .Reason}}<q>{{.Reason}}</q>{{else}}(no reason given){{end}}</dd>
+  <dt>Kind</dt><dd>{{if eq .Kind "refresh"}}a refresh of a lease it holds{{else}}a first request{{end}}</dd>
+  <dt>Waits until</dt><dd>{{.ExpiresAt.Local.Format "15:04"}}</dd>
+</dl>
+{{end}}
+
+{{if eq .Status "pending"}}
+<form id="access-form" class="access-form" data-id="{{.Request.ID}}" data-digest="{{.Request.Digest}}" data-options="{{printf "%s" .PasskeyOptions}}">
+  <fieldset>
+    <legend>For how long</legend>
+    <label><input type="radio" name="duration" value="session" checked> until this session ends (at most {{.MaxLease}})</label>
+    <label><input type="radio" name="duration" value="1h"> 1 hour</label>
+    <label><input type="radio" name="duration" value="4h"> 4 hours</label>
+  </fieldset>
+  {{if and .PasskeyOptions .OnOrigin}}
+  <button class="btn primary" id="access-approve" type="submit">{{icon "key-round"}} Approve with a passkey</button>
+  {{else if .PasskeyOptions}}
+  <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/access/{{.Request.ID}}">{{.Origin}}</a>.</p>
+  {{else}}
+  <p class="held-sub">No passkey is enrolled here. Approve in your own terminal instead.</p>
+  {{end}}
+  <button class="btn" id="access-deny" type="button">Deny</button>
+</form>
+<p class="held-sub">Or, in your own terminal: <code>seam approve {{.Request.Short}}</code></p>
+<p class="held-sub" id="access-status" role="status" aria-live="polite"></p>
+{{else}}
+<p class="held-sub">This request is <strong>{{.Status}}</strong>.</p>
+{{end}}
+{{end}}
+{{end}}
+
+{{define "scripts"}}
+<script>
+window.SEAM_NO_LIVE_REFRESH = true; // an approval in progress must not be clobbered by a refresh
+(function () {
+  function b64urlToBuf(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out.buffer;
+  }
+  function bufToB64url(buf) {
+    var bytes = new Uint8Array(buf), bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function requestOptions(pk) {
+    if (window.PublicKeyCredential && PublicKeyCredential.parseRequestOptionsFromJSON) {
+      return PublicKeyCredential.parseRequestOptionsFromJSON(pk);
+    }
+    pk.challenge = b64urlToBuf(pk.challenge);
+    (pk.allowCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
+    return pk;
+  }
+  function toJSON(cred) {
+    if (cred.toJSON) return cred.toJSON();
+    var r = cred.response;
+    var out = {
+      id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
+      authenticatorAttachment: cred.authenticatorAttachment || null,
+      clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+      response: {
+        clientDataJSON: bufToB64url(r.clientDataJSON), authenticatorData: bufToB64url(r.authenticatorData),
+        signature: bufToB64url(r.signature)
+      }
+    };
+    if (r.userHandle) out.response.userHandle = bufToB64url(r.userHandle);
+    return out;
+  }
+  function post(path, fields) {
+    return fetch(path, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(fields).toString()
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error(data.error || ('request failed (' + res.status + ')'));
+        return data;
+      });
+    });
+  }
+  // Refresh the view in place (console-data-updates-never-reload-document):
+  // the shared navigation fetches the page and morphs only what changed.
+  function refresh() {
+    if (window.SeamConsole && window.SeamConsole.load) {
+      return window.SeamConsole.load(location.href, { history: 'replace', source: 'query' });
+    }
+    return Promise.resolve(false);
+  }
+  function enhance() {
+    var form = document.getElementById('access-form');
+    if (!form || form._seamWired) return;
+    form._seamWired = true;
+    var status = document.getElementById('access-status');
+    function say(msg) { status.textContent = msg; }
+    var id = form.getAttribute('data-id');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var raw = form.getAttribute('data-options');
+      if (!raw || !window.PublicKeyCredential) { say('This browser cannot use a passkey here.'); return; }
+      var duration = (form.querySelector('input[name="duration"]:checked') || {}).value || 'session';
+      say('Follow your browser\'s prompt.');
+      navigator.credentials.get({ publicKey: requestOptions(JSON.parse(raw).publicKey) }).then(function (cred) {
+        return post('/console/access/' + id + '/approve', {
+          duration: duration, digest: form.getAttribute('data-digest'), response: JSON.stringify(toJSON(cred))
+        });
+      }).then(function (done) {
+        say('Approved ' + done.approved + ' for ' + done.project + '.');
+        refresh();
+      }).catch(function (err) {
+        say(err && err.name === 'NotAllowedError' ? 'Cancelled, or the authenticator timed out. Nothing was approved.' :
+            (err && err.message ? err.message : 'Something went wrong. Nothing was approved.'));
+      });
+    });
+    var deny = document.getElementById('access-deny');
+    if (deny) deny.addEventListener('click', function () {
+      if (!confirm('Deny this request? The project stays locked for that session.')) return;
+      post('/console/access/' + id + '/deny', {}).then(function () { refresh(); })
+        .catch(function (err) { say(err.message); });
+    });
+  }
+  enhance();
+  document.addEventListener('seam:content-updated', enhance);
+})();
+</script>
+{{end}}

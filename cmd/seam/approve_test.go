@@ -1,0 +1,652 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/arctop/seamless/internal/config"
+)
+
+// Every test here runs against a stand-in console and a fake program runner:
+// never a real daemon, never a real sudo, browser or notifier.
+
+const (
+	reqA = "01KACCESSREQUEST0000007F3K"
+	reqB = "01KACCESSREQUEST000000BBBB"
+)
+
+// fixedNow is the clock the facts are measured against: twelve minutes before
+// the requests stop waiting.
+var (
+	fixedNow  = time.Date(2026, 11, 6, 13, 53, 0, 0, time.UTC)
+	expiresAt = fixedNow.Add(12 * time.Minute)
+)
+
+var testTerminal = &terminalApprover{Account: "_seamless", Seamlessd: "/opt/seamless/bin/seamlessd", Config: "/opt/seamless/seamless.yaml"}
+
+func factsOf(id, short, project string, warnings ...accessWarning) accessFacts {
+	return accessFacts{
+		ID: id, Short: short, Project: project, Isolation: "confidential", Access: "read-write", Kind: "request",
+		Program: "/usr/local/bin/claude", PID: 4242, UID: 501, Session: "cc/quiet-otter", SessionID: "01KSESSION",
+		CWD: "/Users/owner/repos/finance", Repo: "finance", Model: "claude-opus-5-5",
+		Reason: "reconcile the Q3 ledger", Warnings: warnings,
+		RequestedAt: fixedNow.Add(-3 * time.Minute), ExpiresAt: expiresAt, Digest: "c0ffee" + strings.Repeat("0", 58),
+	}
+}
+
+func mustJSON(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	return string(b)
+}
+
+// listJSON is GET /console/access?format=json.
+func listJSON(t *testing.T, reqs ...accessFacts) string {
+	if reqs == nil {
+		reqs = []accessFacts{}
+	}
+	return mustJSON(t, accessList{Requests: reqs, Terminal: testTerminal, Durations: []string{"session", "1h", "4h"}, MaxLease: "8h0m0s"})
+}
+
+// oneJSON is GET /console/access/{id}?format=json.
+func oneJSON(t *testing.T, f accessFacts, mutate ...func(*accessOne)) string {
+	one := accessOne{Request: f, Status: "pending", Page: "https://seamless.example.org/console/access/" + f.ID,
+		Terminal: testTerminal, Durations: []string{"session", "1h", "4h"}, MaxLease: "8h0m0s"}
+	for _, m := range mutate {
+		m(&one)
+	}
+	return mustJSON(t, one)
+}
+
+// byRef serves one request under its full id and its short id, as the console
+// resolves either.
+func byRef(t *testing.T, f accessFacts, mutate ...func(*accessOne)) map[string]string {
+	body := oneJSON(t, f, mutate...)
+	return map[string]string{"GET /console/access/" + f.ID: body, "GET /console/access/" + f.Short: body}
+}
+
+// routes answers the access routes from a fixed table: "GET /console/access" is
+// the list, "GET /console/access/<ref>" one request.
+func routes(t *testing.T, table map[string]string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		body, ok := table[r.Method+" "+r.URL.Path]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":"no such access request"}`))
+			return
+		}
+		_, _ = w.Write([]byte(body))
+	}
+}
+
+// fakeRunner records every program seam asked to run and answers with code.
+type fakeRunner struct {
+	mu       sync.Mutex
+	calls    [][]string
+	attached []bool // whether the call was given the terminal's stdin
+	code     func(argv []string) (int, error)
+}
+
+func (f *fakeRunner) exec(stdin io.Reader) execFunc {
+	return func(_ context.Context, argv []string, in io.Reader, _, _ io.Writer) (int, error) {
+		f.mu.Lock()
+		f.calls = append(f.calls, slices.Clone(argv))
+		f.attached = append(f.attached, in != nil && in == stdin)
+		f.mu.Unlock()
+		if f.code != nil {
+			return f.code(argv)
+		}
+		// By default sudo -n is refused, as it is with no NOPASSWD rule.
+		if len(argv) > 1 && argv[0] == "sudo" && argv[1] == "-n" {
+			return 1, nil
+		}
+		return 0, nil
+	}
+}
+
+func (f *fakeRunner) recorded() [][]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.calls)
+}
+
+// approveRig is a terminal env aimed at a stand-in console, with the owner's
+// typed answers on stdin.
+type approveRig struct {
+	e      *env
+	out    *strings.Builder
+	errb   *strings.Builder
+	runner *fakeRunner
+	ac     *accessConsole
+	vars   map[string]string
+}
+
+func newApproveRig(t *testing.T, h http.HandlerFunc, typed string) *approveRig {
+	t.Helper()
+	ac := newAccessConsole(t, h)
+	e, out, errb := ac.env()
+	e.stdin = strings.NewReader(typed)
+	rig := &approveRig{e: e, out: out, errb: errb, runner: &fakeRunner{}, ac: ac, vars: map[string]string{"NO_COLOR": "1"}}
+	e.terminal = func() bool { return true }
+	e.exec = rig.runner.exec(e.stdin)
+	e.getenv = func(k string) string { return rig.vars[k] }
+	e.now = func() time.Time { return fixedNow }
+	e.goos = "darwin"
+	return rig
+}
+
+func (r *approveRig) run(argv ...string) int {
+	return dispatch(context.Background(), r.e, append([]string{"approve"}, argv...))
+}
+
+func approveArgvFor(id, duration, digest string) []string {
+	return []string{"sudo", "-k", "-u", "_seamless", "env", "SEAMLESS_CONFIG=/opt/seamless/seamless.yaml",
+		"/opt/seamless/bin/seamlessd", "approve", id, "--for", duration, "--digest", digest}
+}
+
+func denyArgvFor(id string) []string {
+	return []string{"sudo", "-k", "-u", "_seamless", "env", "SEAMLESS_CONFIG=/opt/seamless/seamless.yaml",
+		"/opt/seamless/bin/seamlessd", "approve", id, "--deny"}
+}
+
+var passwordlessProbe = [][]string{{"sudo", "-k"}, {"sudo", "-n", "-u", "_seamless", "true"}}
+
+// --- the terminal check ---
+
+func TestApprove_RefusesWithoutTheOwnersTerminal(t *testing.T) {
+	for _, argv := range [][]string{{}, {"R-7F3K"}, {"--watch"}, {"--passkey", "R-7F3K"}} {
+		e, out, errb := stubEnv()
+		e.exec = func(context.Context, []string, io.Reader, io.Writer, io.Writer) (int, error) {
+			t.Fatal("nothing may run without the owner's terminal")
+			return 0, nil
+		}
+		e.loadConfig = func() (config.Config, error) {
+			t.Fatal("nothing may be fetched without the owner's terminal")
+			return config.Config{}, nil
+		}
+		require.Equal(t, 1, dispatch(context.Background(), e, append([]string{"approve"}, argv...)), "%v", argv)
+		require.Contains(t, errb.String(), "seam approve is the owner's own terminal path")
+		require.Contains(t, errb.String(), "an agent cannot use it")
+		require.Contains(t, errb.String(), "seam access request <project>")
+		require.Empty(t, out.String())
+	}
+}
+
+// --- listing and selection ---
+
+func TestApprove_NothingWaiting(t *testing.T) {
+	rig := newApproveRig(t, routes(t, map[string]string{"GET /console/access": listJSON(t)}), "")
+	require.Equal(t, 0, rig.run())
+	require.Equal(t, "Nothing is waiting.\n", rig.out.String())
+	require.Empty(t, rig.runner.recorded())
+}
+
+func TestApprove_TheOnlyRequestIsSelected(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	rig := newApproveRig(t, routes(t, map[string]string{
+		"GET /console/access":         listJSON(t, a),
+		"GET /console/access/" + reqA: oneJSON(t, a),
+	}), "\nn\n")
+	require.Equal(t, 0, rig.run())
+	out := rig.out.String()
+	require.Contains(t, out, "Waiting for the owner:\n  1  R-7F3K   example-finance          cc/quiet-otter           no warnings  waits until "+clockTime(expiresAt)+"\n")
+	require.Contains(t, out, "Access request R-7F3K")
+	require.True(t, strings.HasSuffix(out, "Nothing changed.\n"), out)
+	require.Empty(t, rig.runner.recorded(), "an answer other than y or d runs nothing")
+}
+
+func TestApprove_SeveralRequestsAskWhichOne(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	b := factsOf(reqB, "R-BBBB", "example-payroll", accessWarning{Code: "no_session", Text: "no session named this agent"})
+	table := map[string]string{
+		"GET /console/access":         listJSON(t, a, b),
+		"GET /console/access/" + reqA: oneJSON(t, a),
+		"GET /console/access/" + reqB: oneJSON(t, b),
+	}
+	for _, tc := range []struct {
+		name, typed, want string
+	}{
+		{"by number", "2\n\nn\n", "R-BBBB"},
+		{"by short id, any case", "r-bbbb\n\nn\n", "R-BBBB"},
+		{"an unknown answer asks again", "9\nR-7F3K\n\nn\n", "R-7F3K"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rig := newApproveRig(t, routes(t, table), tc.typed)
+			require.Equal(t, 0, rig.run(), rig.errb.String())
+			require.Contains(t, rig.out.String(), "  2  R-BBBB   example-payroll          cc/quiet-otter           1 warning")
+			require.Contains(t, rig.out.String(), "Which one? [1-2 or its short id, empty for none] ")
+			require.Contains(t, rig.out.String(), "Access request "+tc.want+"\n")
+		})
+	}
+
+	rig := newApproveRig(t, routes(t, table), "\n")
+	require.Equal(t, 0, rig.run())
+	require.True(t, strings.HasSuffix(rig.out.String(), "Nothing changed.\n"))
+	require.NotContains(t, rig.out.String(), "Access request")
+}
+
+// --- the facts ---
+
+func TestApprove_FactsShowWarningsFirstAndLabelTheReason(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance",
+		accessWarning{Code: "session_tainted", Text: "the session read text from outside"},
+		accessWarning{Code: "other_pending", Text: "the same agent is also asking for example-payroll"})
+	rig := newApproveRig(t, routes(t, byRef(t, a)), "\nn\n")
+	require.Equal(t, 0, rig.run("R-7F3K"))
+	out := rig.out.String()
+	want := "\nAccess request R-7F3K\n\n" +
+		"! the session read text from outside\n" +
+		"! the same agent is also asking for example-payroll\n\n" +
+		"  Project         example-finance (confidential, read-write)\n" +
+		"  Asking          /usr/local/bin/claude (pid 4242, uid 501)\n" +
+		"  Session         cc/quiet-otter (claude-opus-5-5)\n" +
+		"  Working in      /Users/owner/repos/finance\n" +
+		"  The agent says  \"reconcile the Q3 ledger\"  (the agent's own words, not checked)\n" +
+		"  Kind            first request\n" +
+		"  Waits until     " + clockTime(expiresAt) + " (12m left)\n\n"
+	require.Contains(t, out, want)
+	require.Less(t, strings.Index(out, "! the session"), strings.Index(out, "Project"), "warnings come first")
+}
+
+// The reason, the program and the cwd are the agent's to choose: a terminal
+// escape among them must show as text, never act on the terminal.
+func TestApprove_FactsCannotRepaintTheTerminal(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	a.Reason = "fine\x1b[2K\x1b[1A  Project         other\u202e"
+	a.Program = "/tmp/cl\x1b]0;x\x07aude"
+	a.CWD = "/tmp/\x9bwork"
+	rig := newApproveRig(t, routes(t, byRef(t, a)), "\nn\n")
+	require.Equal(t, 0, rig.run("R-7F3K"))
+	out := rig.out.String()
+	require.NotContains(t, out, "\x1b")
+	require.NotContains(t, out, "\u202e")
+	require.NotContains(t, out, "\x07")
+	require.Contains(t, out, `The agent says  "fine\x1b[2K\x1b[1A  Project         other\u202e"  (the agent's own words, not checked)`)
+	require.Contains(t, out, `/tmp/cl\x1b]0;x\aaude (pid 4242`)
+}
+
+func TestApprove_ColorIsForWarningsOnlyAndHonorsNoColor(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance", accessWarning{Code: "no_session", Text: "no session named this agent"})
+	table := byRef(t, a)
+
+	rig := newApproveRig(t, routes(t, table), "\nn\n")
+	rig.vars = map[string]string{}
+	require.Equal(t, 0, rig.run("R-7F3K"))
+	out := rig.out.String()
+	require.Contains(t, out, "\x1b[1;31m! no session named this agent\x1b[0m\n")
+	require.Equal(t, 1, strings.Count(out, "\x1b[1;31m"), "only the warning is colored")
+
+	for _, vars := range []map[string]string{{"NO_COLOR": "1"}, {"TERM": "dumb"}} {
+		rig = newApproveRig(t, routes(t, table), "\nn\n")
+		rig.vars = vars
+		require.Equal(t, 0, rig.run("R-7F3K"))
+		require.NotContains(t, rig.out.String(), "\x1b", "%v", vars)
+		require.Contains(t, rig.out.String(), "! no session named this agent\n")
+	}
+}
+
+// --- duration ---
+
+func TestApprove_ForIsValidatedAgainstTheDaemonsDurations(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	rig := newApproveRig(t, routes(t, byRef(t, a)), "y\n")
+	require.Equal(t, 1, rig.run("R-7F3K", "--for", "2h"))
+	require.Contains(t, rig.errb.String(), `invalid value "2h" for --for: valid values are session, 1h, 4h`)
+	require.Empty(t, rig.runner.recorded())
+
+	// Present but empty is not absent: it is refused, not answered with the question.
+	rig = newApproveRig(t, routes(t, byRef(t, a)), "y\n")
+	require.Equal(t, 1, rig.run("R-7F3K", "--for="))
+	require.Contains(t, rig.errb.String(), `invalid value "" for --for: valid values are session, 1h, 4h`)
+	require.NotContains(t, rig.out.String(), "For how long?")
+	require.Empty(t, rig.runner.recorded())
+}
+
+func TestApprove_DurationPrompt(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	table := byRef(t, a)
+	for _, tc := range []struct {
+		name, typed, duration, words string
+	}{
+		{"empty is the session", "\ny\n", "session", "until the session ends, at most 8h"},
+		{"a listed choice", "4h\ny\n", "4h", "for 4 hours"},
+		{"anything else asks again", "2h\n1h\ny\n", "1h", "for 1 hour"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rig := newApproveRig(t, routes(t, table), tc.typed)
+			require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+			out := rig.out.String()
+			require.Contains(t, out, "For how long?\n  session  until the session ends, at most 8h\n  1h       for 1 hour\n  4h       for 4 hours\nDuration [session]: ")
+			require.Contains(t, out, "Approve R-7F3K (example-finance, read-write, "+tc.words+")? [y/N/d=deny] ")
+			calls := rig.runner.recorded()
+			require.Equal(t, approveArgvFor(reqA, tc.duration, a.Digest), calls[len(calls)-1])
+		})
+	}
+	rig := newApproveRig(t, routes(t, table), "2h\n")
+	require.Equal(t, 0, rig.run("R-7F3K"))
+	require.Contains(t, rig.errb.String(), "valid values are session, 1h, 4h")
+	require.True(t, strings.HasSuffix(rig.out.String(), "Nothing changed.\n"), "end of input decides nothing")
+	require.Empty(t, rig.runner.recorded())
+}
+
+func TestDurationWords(t *testing.T) {
+	for _, tc := range []struct{ choice, max, want string }{
+		{"session", "8h0m0s", "until the session ends, at most 8h"},
+		{"session", "", "until the session ends"},
+		{"1h", "8h0m0s", "for 1 hour"},
+		{"4h", "8h0m0s", "for 4 hours"},
+		{"4h", "2h0m0s", "for 2h (the max_lease cap)"},
+		{"90m", "8h0m0s", "for 1h30m"},
+		{"week", "8h0m0s", "for week"},
+	} {
+		require.Equal(t, tc.want, durationWords(tc.choice, tc.max), "%s / %s", tc.choice, tc.max)
+	}
+}
+
+// --- the sudo commit ---
+
+func TestApprove_RunsSudoWithTheExactArgv(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	table := byRef(t, a)
+
+	rig := newApproveRig(t, routes(t, table), "y\n")
+	require.Equal(t, 0, rig.run("R-7F3K", "--for", "1h"), rig.errb.String())
+	require.Equal(t, append(slices.Clone(passwordlessProbe), approveArgvFor(reqA, "1h", a.Digest)), rig.runner.recorded())
+	require.Equal(t, []bool{false, false, true}, rig.runner.attached, "only the commit gets the terminal, for sudo's prompt")
+	require.Contains(t, rig.out.String(), "Approve R-7F3K (example-finance, read-write, for 1 hour)? [y/N/d=deny] ")
+	require.NotContains(t, rig.out.String(), "For how long?", "--for skips the question")
+
+	rig = newApproveRig(t, routes(t, table), "d\n")
+	require.Equal(t, 0, rig.run("R-7F3K", "--for", "session"), rig.errb.String())
+	require.Equal(t, append(slices.Clone(passwordlessProbe), denyArgvFor(reqA)), rig.runner.recorded())
+
+	// Named by its full id, the request is fetched by it; the commit always names the full id.
+	rig = newApproveRig(t, routes(t, map[string]string{"GET /console/access/" + reqA: oneJSON(t, a)}), "yes\n")
+	require.Equal(t, 0, rig.run(reqA, "--for", "4h"), rig.errb.String())
+	require.Equal(t, approveArgvFor(reqA, "4h", a.Digest), rig.runner.recorded()[2])
+}
+
+func TestApprove_AnythingButYesOrDenyChangesNothing(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	for _, typed := range []string{"n\n", "\n", "maybe\n", ""} {
+		rig := newApproveRig(t, routes(t, byRef(t, a)), typed)
+		require.Equal(t, 0, rig.run("R-7F3K", "--for", "1h"), "%q", typed)
+		require.True(t, strings.HasSuffix(rig.out.String(), "Nothing changed.\n"), "%q", typed)
+		require.Empty(t, rig.runner.recorded(), "%q", typed)
+	}
+}
+
+func TestApprove_RelaysAFailedCommit(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	rig := newApproveRig(t, routes(t, byRef(t, a)), "y\n")
+	rig.runner.code = func(argv []string) (int, error) {
+		if slices.Contains(argv, "approve") {
+			return 1, nil
+		}
+		return 1, nil
+	}
+	require.Equal(t, 1, rig.run("R-7F3K", "--for", "1h"))
+	require.Contains(t, rig.errb.String(), "the approval of R-7F3K did not complete (sudo exited with status 1)")
+
+	rig = newApproveRig(t, routes(t, byRef(t, a)), "y\n")
+	rig.runner.code = func([]string) (int, error) { return -1, errors.New(`exec: "sudo": executable file not found in $PATH`) }
+	require.Equal(t, 1, rig.run("R-7F3K", "--for", "1h"))
+	require.Contains(t, rig.errb.String(), "run sudo: exec: \"sudo\": executable file not found")
+}
+
+func TestApprove_WarnsWhenSudoAsksForNothing(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	rig := newApproveRig(t, routes(t, byRef(t, a)), "y\n")
+	rig.runner.code = func([]string) (int, error) { return 0, nil } // sudo -n succeeds: a NOPASSWD rule
+	require.Equal(t, 0, rig.run("R-7F3K", "--for", "1h"))
+	require.Contains(t, rig.errb.String(), "! warning: sudo runs commands as _seamless here without asking for authentication")
+	require.Contains(t, rig.errb.String(), "this approval proves nothing")
+	require.Equal(t, approveArgvFor(reqA, "1h", a.Digest), rig.runner.recorded()[2], "a warning, not a refusal")
+
+	rig = newApproveRig(t, routes(t, byRef(t, a)), "y\n")
+	require.Equal(t, 0, rig.run("R-7F3K", "--for", "1h"))
+	require.NotContains(t, rig.errb.String(), "warning", "sudo -n refused: nothing to warn about")
+}
+
+func TestApprove_WithoutATerminalApprover(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	for _, tc := range []struct {
+		name   string
+		mutate func(*accessOne)
+		want   string
+	}{
+		{"absent", func(o *accessOne) { o.Terminal = nil }, "it named no terminal approver"},
+		{"no account", func(o *accessOne) { o.Terminal = &terminalApprover{Seamlessd: "/x", Config: "/y"} }, "it does not know its own account"},
+		{"no config", func(o *accessOne) { o.Terminal = &terminalApprover{Account: "_seamless", Seamlessd: "/x"} }, "it does not know its config file"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rig := newApproveRig(t, routes(t, byRef(t, a, tc.mutate)), "y\n")
+			require.Equal(t, 1, rig.run("R-7F3K", "--for", "1h"))
+			require.Contains(t, rig.errb.String(), "the daemon did not say how to reach the terminal path ("+tc.want+")")
+			require.Contains(t, rig.errb.String(), "on the console's passkey page instead: https://seamless.example.org/console/access/"+reqA)
+			require.Contains(t, rig.out.String(), "Access request R-7F3K", "the facts are still shown")
+			require.Empty(t, rig.runner.recorded())
+		})
+	}
+	rig := newApproveRig(t, routes(t, byRef(t, a, func(o *accessOne) { o.Terminal, o.Page = nil, "" })), "")
+	require.Equal(t, 1, rig.run("R-7F3K"))
+	require.Contains(t, rig.errb.String(), "/console/access/"+reqA+" (open it on the passkey origin)")
+}
+
+// What the daemon names becomes sudo's arguments: anything shaped to be read
+// as a flag, or a relative program, is refused rather than run.
+func TestApprove_RefusesAnUnusableTerminalApprover(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	for _, mutate := range []func(*accessOne){
+		func(o *accessOne) { o.Terminal = &terminalApprover{Account: "-s", Seamlessd: "/x", Config: "/y"} },
+		func(o *accessOne) {
+			o.Terminal = &terminalApprover{Account: "_seamless", Seamlessd: "seamlessd", Config: "/y"}
+		},
+		func(o *accessOne) { o.Request.ID = "--deny" },
+		func(o *accessOne) { o.Request.Digest = "--for" },
+	} {
+		rig := newApproveRig(t, routes(t, byRef(t, a, mutate)), "y\n")
+		require.Equal(t, 1, rig.run("R-7F3K", "--for", "1h"))
+		require.Empty(t, rig.runner.recorded())
+	}
+}
+
+func TestApprove_OnlyAPendingRequestIsDecided(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	for _, tc := range []struct {
+		mutate func(*accessOne)
+		want   string
+	}{
+		{func(o *accessOne) { o.Status = "approved" }, "R-7F3K is already approved: nothing to decide"},
+		{func(o *accessOne) { o.Status = "denied" }, "R-7F3K is already denied: nothing to decide"},
+		{func(o *accessOne) { o.Status = "expired" }, "R-7F3K expired: nothing to decide (the agent can ask again)"},
+		{func(o *accessOne) { o.Request.ExpiresAt = fixedNow.Add(-time.Second) }, "R-7F3K expired"},
+	} {
+		rig := newApproveRig(t, routes(t, byRef(t, a, tc.mutate)), "y\n")
+		require.Equal(t, 1, rig.run("R-7F3K", "--for", "1h"))
+		require.Contains(t, rig.errb.String(), tc.want)
+		require.Empty(t, rig.runner.recorded())
+	}
+}
+
+func TestApprove_UnknownRequestSurfacesTheConsolesMessage(t *testing.T) {
+	rig := newApproveRig(t, routes(t, map[string]string{}), "")
+	require.Equal(t, 1, rig.run("R-0000"))
+	require.Equal(t, "error: no such access request\n", rig.errb.String())
+}
+
+// --- --passkey ---
+
+func TestApprove_PasskeyOpensThePage(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	page := "https://seamless.example.org/console/access/" + reqA
+	table := byRef(t, a)
+	for goos, want := range map[string][]string{
+		"darwin":  {"open", page},
+		"linux":   {"xdg-open", page},
+		"windows": {"rundll32", "url.dll,FileProtocolHandler", page},
+	} {
+		rig := newApproveRig(t, routes(t, table), "")
+		rig.e.goos = goos
+		require.Equal(t, 0, rig.run("--passkey", reqA), goos)
+		require.Equal(t, [][]string{want}, rig.runner.recorded(), goos)
+		require.Equal(t, "Opened "+page+" in the browser: decide R-7F3K there with a passkey.\n", rig.out.String())
+	}
+
+	rig := newApproveRig(t, routes(t, table), "")
+	rig.runner.code = func([]string) (int, error) { return -1, errors.New("no browser") }
+	require.Equal(t, 0, rig.run("--passkey", reqA))
+	require.Equal(t, "Could not open a browser. Open this page to decide R-7F3K with a passkey:\n  "+page+"\n", rig.out.String())
+
+	rig = newApproveRig(t, routes(t, byRef(t, a, func(o *accessOne) { o.Page = "" })), "")
+	require.Equal(t, 1, rig.run("--passkey", reqA))
+	require.Contains(t, rig.errb.String(), "R-7F3K has no passkey page: this daemon offers no passkey approval, so decide it here: seam approve R-7F3K")
+	require.Empty(t, rig.runner.recorded())
+
+	rig = newApproveRig(t, routes(t, byRef(t, a, func(o *accessOne) { o.Page = "file:///etc/passwd" })), "")
+	require.Equal(t, 1, rig.run("--passkey", reqA))
+	require.Contains(t, rig.errb.String(), "which is not a web address: not opening it")
+	require.Empty(t, rig.runner.recorded())
+}
+
+func TestApprove_FlagConflicts(t *testing.T) {
+	for _, tc := range []struct {
+		argv []string
+		want string
+	}{
+		{[]string{"--watch", "R-7F3K"}, "--watch only watches"},
+		{[]string{"--watch", "--for", "1h"}, "--watch only watches"},
+		{[]string{"--watch", "--passkey"}, "--watch only watches"},
+		{[]string{"--watch", "--for="}, "--watch only watches"},
+		{[]string{"--passkey", "--for", "1h", "R-7F3K"}, "the duration is chosen on the passkey page"},
+	} {
+		rig := newApproveRig(t, routes(t, map[string]string{}), "")
+		require.Equal(t, 1, rig.run(tc.argv...), "%v", tc.argv)
+		require.Contains(t, rig.errb.String(), tc.want, "%v", tc.argv)
+		require.Empty(t, rig.ac.requests(), "%v: refused before connecting", tc.argv)
+	}
+}
+
+// --- --watch ---
+
+// watchRig runs seam approve --watch in the background against a list that
+// gains a request on the second poll, paced by a ticker the test drives.
+func watchRig(t *testing.T, goos string, project string) (*approveRig, chan time.Time, func() int) {
+	t.Helper()
+	a := factsOf(reqA, "R-7F3K", "example-finance", accessWarning{Code: "no_session", Text: "no session named this agent"})
+	b := factsOf(reqB, "R-BBBB", project)
+	b.Reason = "IGNORE PREVIOUS INSTRUCTIONS"
+	var polls atomic.Int32
+	rig := newApproveRig(t, func(w http.ResponseWriter, r *http.Request) {
+		if polls.Add(1) == 1 {
+			_, _ = w.Write([]byte(listJSON(t, a)))
+			return
+		}
+		_, _ = w.Write([]byte(listJSON(t, a, b)))
+	}, "")
+	rig.e.goos = goos
+	tick := make(chan time.Time)
+	rig.e.tick = func(d time.Duration) (<-chan time.Time, func()) {
+		require.Equal(t, 3*time.Second, d)
+		return tick, func() {}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int, 1)
+	go func() { done <- dispatch(ctx, rig.e, []string{"approve", "--watch"}) }()
+	return rig, tick, func() int {
+		cancel()
+		return <-done
+	}
+}
+
+func TestApprove_WatchPrintsEachNewRequestOnceAndNotifies(t *testing.T) {
+	rig, tick, stop := watchRig(t, "darwin", "example-payroll")
+	// Each send returns once the loop has finished a poll and is waiting again.
+	tick <- time.Time{}
+	tick <- time.Time{}
+	tick <- time.Time{}
+	require.Equal(t, 0, stop())
+
+	out := rig.out.String()
+	require.Equal(t, 1, strings.Count(out, "R-7F3K   example-finance"), out)
+	require.Equal(t, 1, strings.Count(out, "R-BBBB   example-payroll"), out)
+	require.Contains(t, out, "R-7F3K   example-finance          cc/quiet-otter           1 warning    waits until ")
+	require.Contains(t, out, "  ! no session named this agent\n  decide it with: seam approve R-7F3K\n")
+	require.Contains(t, out, "  decide it with: seam approve R-BBBB\n")
+	require.NotContains(t, out, "IGNORE PREVIOUS INSTRUCTIONS", "the watch never shows the agent's words")
+
+	script := []string{"osascript", "-e", "on run argv", "-e", `display notification (item 1 of argv) with title "Seamless"`, "-e", "end run"}
+	require.Equal(t, [][]string{
+		append(slices.Clone(script), "R-7F3K wants example-finance"),
+		append(slices.Clone(script), "R-BBBB wants example-payroll"),
+	}, rig.runner.recorded())
+	require.GreaterOrEqual(t, len(rig.ac.requests()), 3)
+}
+
+// The message is an argument to the script, never part of it, and carries only
+// the short id and the slug's own characters.
+func TestApprove_WatchNotificationCannotBecomeScript(t *testing.T) {
+	rig, tick, stop := watchRig(t, "darwin", `x" & do shell script "touch /tmp/pwned`)
+	tick <- time.Time{}
+	tick <- time.Time{}
+	require.Equal(t, 0, stop())
+	calls := rig.runner.recorded()
+	require.Len(t, calls, 2)
+	last := calls[1]
+	require.Equal(t, `display notification (item 1 of argv) with title "Seamless"`, last[4], "the script is constant")
+	require.Equal(t, "R-BBBB wants xdoshellscripttouchtmppwned", last[len(last)-1])
+}
+
+func TestApprove_WatchRingsTheBellOffMacOS(t *testing.T) {
+	rig, tick, stop := watchRig(t, "linux", "example-payroll")
+	tick <- time.Time{}
+	tick <- time.Time{}
+	require.Equal(t, 0, stop())
+	require.Empty(t, rig.runner.recorded(), "no notifier off macOS")
+	require.Equal(t, 2, strings.Count(rig.out.String(), "\a"))
+}
+
+func TestApprove_WatchFailsFastOnTheFirstPoll(t *testing.T) {
+	rig := newApproveRig(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"no project is locked, so there are no access requests"}`))
+	}, "")
+	rig.e.tick = func(time.Duration) (<-chan time.Time, func()) { return make(chan time.Time), func() {} }
+	require.Equal(t, 1, rig.run("--watch"))
+	require.Contains(t, rig.errb.String(), "error: no project is locked")
+}
+
+// --- helpers ---
+
+func TestPrintable(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain words":            "plain words",
+		"é and ü stay":           "é and ü stay",
+		"esc\x1b[31m":            `esc\x1b[31m`,
+		"rtl\u202eoverride":      `rtl\u202eoverride`,
+		"bad\xffbyte":            `bad\xffbyte`,
+		"tab\tand\nnewline":      `tab\tand\nnewline`,
+		`a "quoted" \ backslash`: `a "quoted" \ backslash`,
+	} {
+		require.Equal(t, want, printable(in), "%q", in)
+	}
+}
+
+func TestCompactDuration(t *testing.T) {
+	require.Equal(t, "8h", compactDuration(8*time.Hour))
+	require.Equal(t, "1h30m", compactDuration(90*time.Minute))
+	require.Equal(t, "12m", compactDuration(12*time.Minute))
+	require.Equal(t, "3s", compactDuration(3*time.Second))
+}

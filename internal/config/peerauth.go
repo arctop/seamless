@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -56,6 +57,10 @@ type PeerAuth struct {
 	// owner never reaches (the 2026-10-31 design). The two never mix: a config
 	// naming both is refused, so neither can take on the other's meaning.
 	Locked []string `yaml:"locked"`
+	// MaxLease caps every lease the owner approves on a locked project, the
+	// "until this session ends" choice included: past it, a session asks again.
+	// Unset (0) means DefaultMaxLease; set, it is at most 24h. File only.
+	MaxLease Duration `yaml:"max_lease"`
 	// Passkeys names the WebAuthn relying party the owner's approver passkeys
 	// are registered to (the console's enrolment and approval pages). Unset,
 	// it is the console itself on localhost (RelyingParty). File only.
@@ -211,6 +216,22 @@ func resolveAlias(n *yaml.Node) *yaml.Node {
 	return n
 }
 
+// DefaultMaxLease is peer_auth.max_lease when unset (owner decision,
+// 2026-11-06).
+const DefaultMaxLease = 8 * time.Hour
+
+// maxMaxLease bounds peer_auth.max_lease: an approval is a decision about one
+// working session, never a standing grant.
+const maxMaxLease = 24 * time.Hour
+
+// LeaseCap returns peer_auth.max_lease, or DefaultMaxLease when unset.
+func (p PeerAuth) LeaseCap() time.Duration {
+	if p.MaxLease <= 0 {
+		return DefaultMaxLease
+	}
+	return time.Duration(p.MaxLease)
+}
+
 // RelyingParty returns the WebAuthn relying party for the approver passkeys:
 // the configured rp_id and origins, or, unset, "localhost" and the console's
 // own address on localhost (http, or https when the daemon serves TLS). A
@@ -333,6 +354,9 @@ func (c Config) validatePeerAuth() error {
 	}
 	if err := validatePeerPasskeys(p.Passkeys); err != nil {
 		return err
+	}
+	if m := time.Duration(p.MaxLease); m < 0 || m > maxMaxLease || m%time.Second != 0 {
+		return fmt.Errorf("config: peer_auth.max_lease %s must be a whole number of seconds, at most %s (unset means %s)", m, maxMaxLease, DefaultMaxLease)
 	}
 	if !p.Enabled {
 		return nil

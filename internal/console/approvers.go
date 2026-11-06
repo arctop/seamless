@@ -27,14 +27,24 @@ import (
 // (at most passkey.MaxResponseBytes) form-encoded, with room to spare.
 const formBodyPasskey int64 = 3 * passkey.MaxResponseBytes
 
-// ApprovalsView is what the Approvers page needs of the daemon's approval
-// service (*approval.Service).
+// ApprovalsView is what the Approvers and access pages need of the daemon's
+// approval service (*approval.Service).
 type ApprovalsView interface {
 	PasskeysOn() bool
 	Origins() []string
 	BeginPasskey(ctx context.Context, name, code string) (approval.Begun, error)
 	FinishPasskey(ctx context.Context, id string, response []byte) (approval.Finished, error)
 	ApprovePasskey(ctx context.Context, id string, response []byte) (store.ApproverCredential, error)
+
+	Request(ctx context.Context, in approval.RequestInput) (store.AccessApproval, error)
+	Pending(ctx context.Context) ([]approval.Facts, error)
+	Facts(ctx context.Context, id string) (approval.Facts, error)
+	Resolve(ctx context.Context, ref string) (store.AccessApproval, error)
+	AssertionOptions(ctx context.Context, id string) ([]byte, error)
+	Approve(ctx context.Context, d approval.Decision) (store.AccessLease, error)
+	Deny(ctx context.Context, id, by string) error
+	Page(id string) string
+	LeaseLength(choice string) (time.Duration, error)
 }
 
 type approverRow struct {

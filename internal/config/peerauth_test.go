@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -309,5 +310,20 @@ func TestPeerAuth_Passkeys(t *testing.T) {
 			_, err = loadYAML(t, "peer_auth:\n  enabled: false\n  passkeys:\n"+tc.block)
 			require.Error(t, err, "checked while disabled too")
 		})
+	}
+}
+
+// peer_auth.max_lease caps every approved lease: unset is 8h, set is at most
+// 24h.
+func TestPeerAuth_MaxLease(t *testing.T) {
+	cfg, err := loadYAML(t, peerBase)
+	require.NoError(t, err)
+	require.Equal(t, 8*time.Hour, cfg.PeerAuth.LeaseCap(), "the owner's default")
+	cfg, err = loadYAML(t, peerBase+"  max_lease: 2h\n")
+	require.NoError(t, err)
+	require.Equal(t, 2*time.Hour, cfg.PeerAuth.LeaseCap())
+	for _, bad := range []string{"25h", "-1h", "90"} {
+		_, err := loadYAML(t, peerBase+"  max_lease: "+bad+"\n")
+		require.Error(t, err, bad)
 	}
 }

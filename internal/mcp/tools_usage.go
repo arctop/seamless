@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"github.com/arctop/seamless/internal/access"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
@@ -125,7 +126,9 @@ func (s *Server) memoryReadable(ctx context.Context) func(memoryID string) bool 
 		if ok, seen := byProject[m.Project]; seen {
 			return ok
 		}
-		ok := s.fenceReadQuiet(ctx, m.Project) == nil
+		// A filter, not a refusal: a locked project it drops files no access
+		// request (the requester is cleared for the check).
+		ok := s.fenceReadQuiet(access.WithLockRequester(ctx, nil), m.Project) == nil
 		byProject[m.Project] = ok
 		return ok
 	}

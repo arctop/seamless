@@ -146,6 +146,8 @@ in short:
   The lock is not the `sealed` isolation state (which says what flows in and
   out of a project): a locked project is normally `confidential`. File-only,
   and never beside `users`: a config names one design or the other.
+- `max_lease` caps every lease the owner approves on a locked project, "until
+  this session ends" included: at most `24h`, unset `8h`. File-only.
 - `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
   the owner's approver passkeys ([seamlessd approvers](/reference/cli-seamlessd/#seamlessd_approvers)).
   Unset, they are `localhost` and the console's own address on localhost.

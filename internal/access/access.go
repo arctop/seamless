@@ -281,17 +281,28 @@ func Writable(ctx context.Context, project string) bool {
 	return v.Writable(project)
 }
 
-// Refusal is View.Refusal for the View in ctx.
+// Refusal is View.Refusal for the View in ctx. At a locked project, when ctx
+// carries a LockRequester, it files (or finds) the pending access request and
+// the refusal names it.
 func Refusal(ctx context.Context, project string) error {
 	v, _ := FromContext(ctx)
+	if req, ok := lockRequest(ctx, v, project); ok {
+		return lockedRefusalFor(project, req)
+	}
 	return v.Refusal(project)
 }
 
 // SessionScope is View.SessionScope for the View in ctx; with no View every
-// project is kept.
+// project is kept. A refusal at a lock files its request, as Refusal does.
 func SessionScope(ctx context.Context, project string) (string, error) {
 	v, _ := FromContext(ctx)
-	return v.SessionScope(project)
+	got, err := v.SessionScope(project)
+	if err != nil {
+		if req, ok := lockRequest(ctx, v, project); ok {
+			return "", lockedRefusalFor(project, req)
+		}
+	}
+	return got, err
 }
 
 // PeerAuthenticated reports whether the kernel authenticated this request on the

@@ -389,6 +389,8 @@ process holds a lease the owner approved. The TCP bearer key never holds one.
 The lock is not the <code>sealed</code> isolation state (which says what flows in and
 out of a project): a locked project is normally <code>confidential</code>. File-only,
 and never beside <code>users</code>: a config names one design or the other.</li>
+<li><code>max_lease</code> caps every lease the owner approves on a locked project, &quot;until
+this session ends&quot; included: at most <code>24h</code>, unset <code>8h</code>. File-only.</li>
 <li><code>passkeys.rp_id</code> and <code>passkeys.origins</code> name the WebAuthn relying party of
 the owner's approver passkeys (<a href="../../reference/cli-seamlessd/#seamlessd_approvers">seamlessd approvers</a>).
 Unset, they are <code>localhost</code> and the console's own address on localhost.
@@ -823,6 +825,11 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <tr>
 <td><code>peer_auth.locked</code></td>
 <td>[]string</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>peer_auth.max_lease</code></td>
+<td>duration</td>
 <td>-</td>
 </tr>
 <tr>
@@ -1313,6 +1320,9 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # File only (no env). Never beside users below: a config names one design</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # or the other.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   locked: []</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # Caps every lease the owner approves on a locked project, &#34;until this</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # session ends&#34; included. At most 24h; unset means 8h. File only (no env).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   max_lease: 8h</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # The WebAuthn relying party of the owner&#39;s approver passkeys (seamlessd</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # approvers). Unset: rp_id localhost and the console&#39;s own address on</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # localhost. rp_id is a host name, never an IP; each origin is https, or</span><span class="w">

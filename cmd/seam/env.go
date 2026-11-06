@@ -11,11 +11,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
+	"os/exec"
+	"runtime"
 	"time"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
+	"golang.org/x/term"
 
 	"github.com/arctop/seamless/internal/config"
 )
@@ -35,6 +39,26 @@ type env struct {
 	// JSON surface (client.go) and need the address and key without an MCP
 	// session.
 	loadConfig func() (config.Config, error)
+
+	// The rest serves seam approve, the owner's terminal path, and each is nil
+	// in a test env unless the test sets it. A nil terminal, getenv or exec
+	// degrades to the safe answer, never to the real world: not a terminal, an
+	// empty environment, and no program run at all -- so a test that forgets to
+	// fake sudo fails rather than running it. A nil now or tick is the real
+	// clock, which runs nothing.
+
+	// terminal reports whether stdin and stdout are both terminals.
+	terminal func() bool
+	// exec runs a program (sudo, the browser opener, the notifier).
+	exec execFunc
+	// getenv reads the environment (NO_COLOR, TERM).
+	getenv func(string) string
+	// goos picks the browser opener and the notifier; "" is runtime.GOOS.
+	goos string
+	// now is the clock the facts' "waits until" is measured against.
+	now func() time.Time
+	// tick paces seam approve --watch: a channel that fires every d, and its stop.
+	tick func(d time.Duration) (<-chan time.Time, func())
 }
 
 // newEnv returns the real world.
@@ -45,7 +69,90 @@ func newEnv() *env {
 		stderr:     os.Stderr,
 		dial:       dial,
 		loadConfig: config.Load,
+		terminal:   stdioIsTerminal,
+		exec:       runProgram,
+		getenv:     os.Getenv,
 	}
+}
+
+// execFunc runs argv[0] with argv[1:] and the given stdio (a nil stdin reads
+// nothing), returning the program's exit code, or an error when it could not be
+// started at all.
+type execFunc func(ctx context.Context, argv []string, stdin io.Reader, stdout, stderr io.Writer) (int, error)
+
+// errNoRunner is a test env that runs no programs.
+var errNoRunner = errors.New("no program runner in this environment")
+
+// stdioIsTerminal reports whether stdin and stdout are both terminals. It asks
+// the terminal driver (x/term) rather than checking for a character device,
+// because /dev/null is one: `seam approve </dev/null >/dev/null` must not pass
+// for the owner's terminal.
+func stdioIsTerminal() bool {
+	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+// runProgram is the real execFunc.
+func runProgram(ctx context.Context, argv []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	if len(argv) == 0 {
+		return -1, errors.New("no program to run")
+	}
+	c := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	c.Stdin, c.Stdout, c.Stderr = stdin, stdout, stderr
+	err := c.Run()
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return exit.ExitCode(), nil
+	}
+	if err != nil {
+		return -1, err
+	}
+	return 0, nil
+}
+
+// isTerminal is e.terminal, false when unset.
+func (e *env) isTerminal() bool {
+	return e.terminal != nil && e.terminal()
+}
+
+// run is e.exec, refusing when unset.
+func (e *env) run(ctx context.Context, argv []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	if e.exec == nil {
+		return -1, errNoRunner
+	}
+	return e.exec(ctx, argv, stdin, stdout, stderr)
+}
+
+// envVar reads one environment variable, "" when e.getenv is unset.
+func (e *env) envVar(key string) string {
+	if e.getenv == nil {
+		return ""
+	}
+	return e.getenv(key)
+}
+
+// platform names the OS, runtime.GOOS unless a test set it.
+func (e *env) platform() string {
+	if e.goos != "" {
+		return e.goos
+	}
+	return runtime.GOOS
+}
+
+// clock is e.now, time.Now when unset.
+func (e *env) clock() time.Time {
+	if e.now != nil {
+		return e.now()
+	}
+	return time.Now()
+}
+
+// ticker is e.tick, a real ticker when unset.
+func (e *env) ticker(d time.Duration) (<-chan time.Time, func()) {
+	if e.tick != nil {
+		return e.tick(d)
+	}
+	t := time.NewTicker(d)
+	return t.C, t.Stop
 }
 
 // The HTTP client every command here dials with is config.Config.HTTPClient,

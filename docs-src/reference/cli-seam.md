@@ -1,13 +1,13 @@
 ---
 title: seam CLI
-description: Every seam subcommand - agent loop, memories and notes, tasks, plans, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.
+description: Every seam subcommand - agent loop, memories and notes, tasks, plans, locked-project access requests, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.
 ---
 
 `seam` is the headless CLI. It does no work itself: it loads the same
 configuration the daemon does, then talks to a running `seamlessd` - over MCP at
 `/api/mcp` for most commands, and over the console's JSON endpoints for the
 owner-only actions that do not exist as MCP tools (force-releasing a task lock,
-approving a plan). Both paths authenticate with the static bearer key from
+approving a plan, deciding a locked project's access request). Both paths authenticate with the static bearer key from
 [Configuration](/reference/configuration/), so if the key is wrong or the daemon
 is down, every subcommand below fails at the connection.
 
@@ -383,6 +383,120 @@ seam plan approve <slug>
 Escape hatch for when Claude Code skips the approval hook: flips the plan to
 approved and creates its tracking task, reporting the new task or noting that
 one already exists.
+
+## Locked projects
+
+Under `peer_auth`, a project listed in `peer_auth.locked` (see the
+[configuration reference](/reference/configuration/#peer-auth)) is closed to
+every owner request - the owner's own agents included - until the owner
+approves a lease for the asking agent's process. A refused call files a
+pending access request by itself; an agent can also ask explicitly. The owner
+decides it in their own terminal with `seam approve`, or on the console's
+passkey page. Both commands talk to the console's `/console/access` routes,
+which answer `no project is locked` while the daemon locks nothing.
+
+### seam access request {#seam_access_request}
+
+```bash
+seam access request [--json] [--reason TEXT] <project>
+```
+
+Files an access request for a locked project, naming the agent that runs it:
+run it from the agent's own shell, where `seam` names the agent process that
+started it (the same identity every MCP request carries, see
+[which session a command acts in](#which-session)). `--reason` is the agent's
+own words on why it needs the project, at most 200 characters; the owner sees
+it quoted and labeled as the agent's, never as a fact. A longer reason is
+refused before anything is sent.
+
+```text
+Requested R-7F3K for example-finance (request). The owner approves it with: seam approve R-7F3K
+or with a passkey: https://seamless.example.org/console/access/01K...
+```
+
+The second line appears only when the daemon has a passkey page for the
+request. Asking again while a request is pending answers with that same
+request; a request from an agent that already holds a lease is a `refresh`.
+`--json` prints the console's answer as received ([JSON output](#json-output)).
+The console's refusal is printed as it is: the project is not locked, or the
+connection has no agent process the daemon could verify.
+
+### seam approve {#seam_approve}
+
+```bash
+seam approve [--for DURATION] [<request>]
+seam approve --passkey [<request>]
+seam approve --watch
+```
+
+The owner's terminal path. It needs a terminal on both stdin and stdout and
+refuses otherwise: an agent cannot use it. `<request>` is the short id
+(`R-7F3K`) or the full id; without one, `seam approve` lists what is waiting
+(short id, project, session, warning count, and when each stops waiting),
+takes the only request, or asks which one by number or short id. With nothing
+waiting it prints `Nothing is waiting.`
+
+It then shows the request's facts - the daemon's warnings first, each on its
+own line behind `!`, then the project with its isolation and access, the
+asking program with its pid and uid, the session and model, the working
+directory, the agent's reason (quoted, and labeled as the agent's own words),
+whether this is a first request or a refresh, and until when it waits. Only
+the warnings are colored, and not with `NO_COLOR` set or `TERM=dumb`. Every
+value is printed with control characters escaped, so nothing an agent wrote
+can repaint the terminal.
+
+Next it asks for the duration - `session` (the default: until the asking
+session ends, at most `peer_auth.max_lease`), `1h` or `4h` - unless `--for`
+names one; `--for` takes only a duration the daemon offers. Last it asks to
+confirm:
+
+```text
+Approve R-7F3K (example-finance, read-write, until the session ends, at most 8h)? [y/N/d=deny]
+```
+
+`y` approves and `d` denies; any other answer prints `Nothing changed.` and
+exits 0. Either decision runs [`seamlessd approve`](/reference/cli-seamlessd/#seamlessd_approve)
+as the daemon's account, with the account, executable and config the daemon
+names in its answer:
+
+```bash
+sudo -k -u _seamless env SEAMLESS_CONFIG=<config> <seamlessd> approve <id> --for <duration> --digest <facts digest>
+sudo -k -u _seamless env SEAMLESS_CONFIG=<config> <seamlessd> approve <id> --deny
+```
+
+`sudo -k` asks for your Touch ID or password every time and leaves no cached
+ticket behind; that authentication is the proof, not `seam approve`. The
+command runs on your terminal, so the prompt shows there, and `seamlessd`'s
+own answer (`Approved R-7F3K: example-finance, read and write, ...`) is what
+you read; when it fails, `seam approve` exits 1. The digest is that of the
+facts you were shown: when they changed in the meantime, the approval is
+refused and you look again.
+
+Before running it, `seam approve` drops sudo's cached ticket and tries
+`sudo -n -u <account> true`, which succeeds only under a sudoers rule that asks
+for no authentication. When it does, it warns that the approval proves nothing
+while the rule stands - any process running as you could run the same command
+unasked - and goes ahead. A rule scoped to `seamlessd` alone is not seen by
+that probe.
+
+When the daemon's answer does not say how to reach the terminal path (its
+account, executable or config file is unknown), the facts are still shown and
+the command points at the request's passkey page instead.
+
+`--passkey` opens the request's passkey page (the `page` the daemon names) in
+the default browser - `open` on macOS, `xdg-open` on Linux, `rundll32` on
+Windows - or prints the address when no browser could be opened. A daemon
+that offers no passkey approval names no page, and the command says so.
+
+`--watch` polls the pending list every 3 seconds, prints each new request once
+(with its warnings and the `seam approve` line to decide it), and raises a
+notification - `osascript` on macOS, a terminal bell elsewhere - whose text is
+the short id and project only, never the agent's reason. Ctrl-C ends it. It
+decides nothing; it takes no request, `--for` or `--passkey`.
+
+Exit status: 0 when a request was approved or denied, when nothing changed,
+and when nothing is waiting; 1 on any error, including a request that is no
+longer pending (and 2, as everywhere, for a command line it cannot parse).
 
 ## Observability
 
