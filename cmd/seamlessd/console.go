@@ -63,7 +63,7 @@ func runConsoleOpen(args []string) error {
 	if strings.TrimSpace(cfg.MCP.APIKey) == "" {
 		return fmt.Errorf("seamlessd.console-open: mcp.api_key is empty; run `seamlessd serve` once to generate it, or set it in seamless.yaml")
 	}
-	base := cfg.ServerURL()
+	base := consoleBase(cfg)
 	if !serverReachable(urlHostPort(base)) {
 		return fmt.Errorf("seamlessd.console-open: console not reachable at %s -- start it with `make run` or `make start`", base)
 	}
@@ -246,4 +246,18 @@ func browserCommand(goos, target, app string) (*exec.Cmd, error) {
 	default:
 		return exec.Command("xdg-open", target), nil
 	}
+}
+
+// consoleBase is where console-open signs in. While a project is locked it is
+// the passkey relying party's origin (localhost by default) rather than the
+// server URL: the console cookie is per host, and a passkey ceremony on an IP
+// address such as 127.0.0.1 is refused by every browser. Otherwise it is the
+// server URL, as it always was.
+func consoleBase(cfg config.Config) string {
+	if cfg.PeerAuth.Enabled && len(cfg.PeerAuth.Locked) > 0 {
+		if _, origins := cfg.RelyingParty(); len(origins) > 0 {
+			return origins[0]
+		}
+	}
+	return cfg.ServerURL()
 }

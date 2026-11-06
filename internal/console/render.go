@@ -52,7 +52,7 @@ var faviconSVG []byte
 var pageNames = []string{
 	"login", "overview", "now", "search", "interactions", "projects", "projectdetail", "context", "sessions", "session",
 	"memories", "notes", "retrieval", "tasks", "plans", "labs", "trials", "gardener", "settings", "event", "error",
-	"feature_off", "held",
+	"feature_off", "held", "approvers",
 }
 
 // peekNames are the entity detail templates. Each templates/peek_<name>.html

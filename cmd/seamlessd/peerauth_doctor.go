@@ -8,6 +8,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/store"
 )
 
 // peerAuthChecks is doctor's peer_auth section: the policy as it resolves on
@@ -43,6 +44,7 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 	if locked := policy.OwnerLocked(); len(locked) > 0 {
 		out = append(out, check{statusOK, "peer_auth.locked", fmt.Sprintf("locked: [%s]; closed to every owner request "+
 			"that holds no lease the owner approved (the TCP bearer key never holds one)", strings.Join(locked, ", "))})
+		out = append(out, approverCheck(ctx, db))
 	}
 	for _, a := range policy.Accounts() {
 		out = append(out, check{statusOK, "peer_auth.user", fmt.Sprintf("%s (uid %d): sealed [%s], shared [%s]; sessions land in %s",
@@ -74,4 +76,28 @@ func groupSuffix(g string) string {
 		return ""
 	}
 	return ", group " + g
+}
+
+// approverCheck reports the enrolled approver credentials while a project is
+// locked. None is a warning, not a failure: the terminal path (seam approve,
+// confirmed by a sudo to the daemon's account) needs no credential.
+func approverCheck(ctx context.Context, db *sql.DB) check {
+	const name = "peer_auth.approvers"
+	if db == nil {
+		return check{statusInfo, name, "not checked: no database"}
+	}
+	creds, err := store.ApproverCredentials(ctx, db, "")
+	if err != nil {
+		return check{statusFail, name, err.Error()}
+	}
+	if len(creds) == 0 {
+		return check{statusWarn, name, "no passkey or Touch ID key is enrolled: only the terminal path (seam approve) can approve " +
+			"access to a locked project; enrol one with `seamlessd approvers enroll-code passkey`, run as the daemon's account"}
+	}
+	kinds := map[string]int{}
+	for _, c := range creds {
+		kinds[c.Kind]++
+	}
+	return check{statusOK, name, fmt.Sprintf("%d enrolled (passkeys %d, Touch ID keys %d)",
+		len(creds), kinds[store.ApproverPasskey], kinds[store.ApproverTouchID])}
 }

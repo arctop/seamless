@@ -35,6 +35,7 @@ import (
 
 	"github.com/arctop/seamless/internal/a2a"
 	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/console"
 	"github.com/arctop/seamless/internal/core"
@@ -43,6 +44,7 @@ import (
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/hooks"
 	"github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/passkey"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
@@ -208,7 +210,10 @@ func newPADaemon(t *testing.T) *paDaemon {
 		DB: viewDB, WriteDB: db, Files: mgr, Gardener: garden, Events: rec.ReadingFrom(viewDB),
 		Screening: screen,
 		Retrieve:  ret, APIKey: paKey, DataDir: dir, Features: feats, Level: "advanced",
-		Logger: slog.New(slog.NewTextHandler(consoleLog, nil)),
+		// The Approvers routes are live here, so the crawl and the writes
+		// reach them: none may mint an enrolment code.
+		Approvals: paApprovals(t, db),
+		Logger:    slog.New(slog.NewTextHandler(consoleLog, nil)),
 	})
 	require.NoError(t, err)
 	mux := daemonRoutes{
@@ -785,6 +790,23 @@ func TestPeerAuthMatrix(t *testing.T) {
 	// Every route the owner exercised, once more, after the MCP probes: the
 	// sealed content is still absent from every console page.
 	t.Run("console GET routes after the probes", func(t *testing.T) { d.crawlConsole(t, false) })
+
+	// Enrolment codes are minted only by `seamlessd approvers enroll-code`,
+	// run as the daemon's account: after every route above, none exists.
+	t.Run("no route mints an enrolment code", func(t *testing.T) {
+		var n int
+		require.NoError(t, d.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM approver_enrol_codes`).Scan(&n))
+		require.Zero(t, n)
+	})
+}
+
+// paApprovals is the matrix daemon's approval service: the Approvers page and
+// its passkey ceremony routes, live.
+func paApprovals(t *testing.T, db *sql.DB) *approval.Service {
+	t.Helper()
+	v, err := passkey.New(passkey.Config{RPID: "localhost", Origins: []string{"http://localhost:8081"}})
+	require.NoError(t, err)
+	return approval.New(approval.Config{DB: db, Passkeys: v, Origins: []string{"http://localhost:8081"}})
 }
 
 // noIdentifiers fails when text names one of it's items, unless the caller

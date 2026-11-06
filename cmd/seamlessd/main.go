@@ -130,6 +130,8 @@ func main() {
 		err = runRetireProject(args)
 	case "family":
 		err = runFamily(args)
+	case "approvers":
+		err = runApprovers(args)
 	case "console-open":
 		err = runConsoleOpen(args)
 	case "start":
@@ -181,6 +183,8 @@ usage:
   seamlessd retire-project mark a mistakenly minted project retired (--project SLUG); refused while
                            repos map to it or it holds memories, notes or open tasks; --undo; --dry-run
   seamlessd family         manage project families (list|add|remove)
+  seamlessd approvers      the owner's passkeys and Touch ID keys for locked projects
+                           (enroll-code|list|remove|reset; run as the daemon's account)
   seamlessd console-open   open the console in a browser, pre-authenticated
                            (--browser "Google Chrome" targets a specific browser; macOS only)
   seamlessd start          start the installed service (launchd/systemd/Scheduled Task)
@@ -512,6 +516,16 @@ func runServe(args []string) error {
 		defer func() { _ = viewDB.Close() }()
 		consoleDB, consoleWriteDB, consoleEvents = viewDB, db, rec.ReadingFrom(viewDB)
 	}
+	// The Approvers page exists only while a project is locked: off, the
+	// console has no such page and nothing on another page changes.
+	var approvals console.ApprovalsView
+	if peer != nil && peer.policy.HasLocked() {
+		svc, aerr := newApprovals(cfg, db)
+		if aerr != nil {
+			return fmt.Errorf("seamlessd.serve: %w", aerr)
+		}
+		approvals = svc
+	}
 	consoleSrv, err := console.New(console.Config{
 		DB: consoleDB, WriteDB: consoleWriteDB, Files: mgr, Gardener: garden, Events: consoleEvents, Retrieve: ret,
 		Screening: screen,
@@ -534,6 +548,7 @@ func runServe(args []string) error {
 		// http, so setting it unconditionally would lock the owner out of the
 		// console on the default loopback install.
 		SecureCookies: cfg.TLSEnabled(),
+		Approvals:     approvals,
 		Logger:        logger,
 	})
 	if err != nil {

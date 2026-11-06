@@ -1,0 +1,155 @@
+{{define "content"}}
+{{with .Data}}
+<div class="approvers-page" data-approvers>
+<header class="mv2-bar">
+  <h1>{{icon "key-round"}}Approvers</h1>{{about "Passkeys and Touch ID keys that approve an agent's access to a locked project. Each approval needs you present: a passkey asks for your PIN, fingerprint or face; a Touch ID key asks for your finger."}}
+  <span class="mv2-count" aria-label="{{len .Credentials}} enrolled"><strong>{{len .Credentials}}</strong>enrolled</span>
+</header>
+
+<section aria-labelledby="approvers-list-title">
+  <h2 id="approvers-list-title">Enrolled</h2>
+  {{if .Credentials}}
+  <ul class="approvers-list">
+    {{range .Credentials}}
+    <li class="approver" data-approver="{{.ID}}">
+      <span class="badge">{{if eq .Kind "touchid"}}Touch ID{{else}}passkey{{end}}</span>
+      <strong>{{.Name}}</strong>
+      {{if .Synced}}<span class="badge" title="The passkey provider syncs it to your other devices">synced</span>{{end}}
+      <small>added {{.AddedAt.Local.Format "2006-01-02 15:04"}} by {{.AddedBy}} &middot; {{if .LastUsed}}last used {{.LastUsed.Local.Format "2006-01-02 15:04"}}{{else}}never used{{end}}</small>
+      <code class="approver-id">{{.ID}}</code>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="held-sub">Nothing is enrolled yet. Until something is, only the terminal path approves: <code>seam approve</code> in your own terminal.</p>
+  {{end}}
+  <p class="held-sub">To remove one, or all of them at once, run <code>seamlessd approvers remove &lt;id&gt;</code> or <code>seamlessd approvers reset --yes</code> as the daemon's account.</p>
+</section>
+
+<section aria-labelledby="approvers-add-title">
+  <h2 id="approvers-add-title">Add a passkey</h2>
+  {{if not .PasskeysOn}}
+  <p class="held-sub">Passkeys are not configured on this daemon.</p>
+  {{else if not .OnOrigin}}
+  <p class="held-sub">{{icon "triangle-alert"}} A passkey can only be created on <a href="{{.Origin}}/console/approvers">{{.Origin}}</a>. Browsers refuse passkeys on an IP address such as 127.0.0.1, so open this page there (you may need to sign in to the console again on that address).</p>
+  {{else}}
+  <p class="held-sub">A security key, your phone, this computer, or a password manager. The first passkey needs a one-time code: run <code>seamlessd approvers enroll-code passkey</code> as the daemon's account. {{if .Credentials}}Without a code, one of your enrolled passkeys approves the new one instead.{{end}}</p>
+  <form id="approver-form" class="approver-form" autocomplete="off">
+    <label>Name <input id="approver-name" name="name" maxlength="64" required placeholder="security key, phone, laptop"></label>
+    <label>Enrolment code <input id="approver-code" name="code" placeholder="XXXX-XXXX-XXXX-XXXX" {{if not .Credentials}}required{{end}} autocapitalize="characters" spellcheck="false"></label>
+    <button class="btn primary" id="approver-go" type="submit">{{icon "key-round"}} Create passkey</button>
+  </form>
+  <p class="held-sub" id="approver-status" role="status" aria-live="polite"></p>
+  {{end}}
+</section>
+</div>
+{{end}}
+{{end}}
+
+{{define "scripts"}}
+<script>
+window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbered by a refresh
+(function () {
+  function b64urlToBuf(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out.buffer;
+  }
+  function bufToB64url(buf) {
+    var bytes = new Uint8Array(buf), bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function creationOptions(pk) {
+    if (window.PublicKeyCredential && PublicKeyCredential.parseCreationOptionsFromJSON) {
+      return PublicKeyCredential.parseCreationOptionsFromJSON(pk);
+    }
+    pk.challenge = b64urlToBuf(pk.challenge);
+    pk.user.id = b64urlToBuf(pk.user.id);
+    (pk.excludeCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
+    return pk;
+  }
+  function requestOptions(pk) {
+    if (window.PublicKeyCredential && PublicKeyCredential.parseRequestOptionsFromJSON) {
+      return PublicKeyCredential.parseRequestOptionsFromJSON(pk);
+    }
+    pk.challenge = b64urlToBuf(pk.challenge);
+    (pk.allowCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
+    return pk;
+  }
+  function toJSON(cred) {
+    if (cred.toJSON) return cred.toJSON();
+    var r = cred.response, out = {
+      id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
+      authenticatorAttachment: cred.authenticatorAttachment || null,
+      clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+      response: { clientDataJSON: bufToB64url(r.clientDataJSON) }
+    };
+    if (r.attestationObject) {
+      out.response.attestationObject = bufToB64url(r.attestationObject);
+      if (r.getTransports) out.response.transports = r.getTransports();
+    } else {
+      out.response.authenticatorData = bufToB64url(r.authenticatorData);
+      out.response.signature = bufToB64url(r.signature);
+      if (r.userHandle) out.response.userHandle = bufToB64url(r.userHandle);
+    }
+    return out;
+  }
+  function post(path, fields) {
+    var body = new URLSearchParams(fields);
+    return fetch(path, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error(data.error || ('request failed (' + res.status + ')'));
+        return data;
+      });
+    });
+  }
+  function enhance() {
+    var form = document.getElementById('approver-form');
+    if (!form || form._seamWired) return;
+    form._seamWired = true;
+    var status = document.getElementById('approver-status');
+    var go = document.getElementById('approver-go');
+    function say(msg) { status.textContent = msg; }
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!window.PublicKeyCredential) { say('This browser does not support passkeys.'); return; }
+      var name = document.getElementById('approver-name').value;
+      var code = document.getElementById('approver-code').value;
+      var id = '';
+      go.disabled = true;
+      say('Starting...');
+      post('/console/approvers/passkey/begin', { name: name, code: code }).then(function (begun) {
+        id = begun.id;
+        say('Follow your browser\'s prompt to create the passkey.');
+        return navigator.credentials.create({ publicKey: creationOptions(begun.options.publicKey) });
+      }).then(function (cred) {
+        say('Checking the new passkey...');
+        return post('/console/approvers/passkey/finish', { id: id, response: JSON.stringify(toJSON(cred)) });
+      }).then(function (fin) {
+        if (fin.enrolled) return fin;
+        say('Now approve it with a passkey you already enrolled.');
+        return navigator.credentials.get({ publicKey: requestOptions(fin.approve.publicKey) }).then(function (cred) {
+          return post('/console/approvers/passkey/approve', { id: id, response: JSON.stringify(toJSON(cred)) });
+        });
+      }).then(function (done) {
+        say('Enrolled "' + done.name + '".');
+        window.location.reload();
+      }).catch(function (err) {
+        say(err && err.name === 'NotAllowedError' ? 'Cancelled, or the authenticator timed out. Nothing was enrolled.' :
+            err && err.name === 'InvalidStateError' ? 'That authenticator already holds an enrolled passkey.' :
+            (err && err.message ? err.message : 'Something went wrong. Nothing was enrolled.'));
+      }).finally(function () { go.disabled = false; });
+    });
+  }
+  enhance();
+  document.addEventListener('seam:content-updated', enhance);
+})();
+</script>
+{{end}}

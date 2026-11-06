@@ -3,6 +3,8 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"net"
+	"net/url"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -54,10 +56,27 @@ type PeerAuth struct {
 	// owner never reaches (the 2026-10-31 design). The two never mix: a config
 	// naming both is refused, so neither can take on the other's meaning.
 	Locked []string `yaml:"locked"`
+	// Passkeys names the WebAuthn relying party the owner's approver passkeys
+	// are registered to (the console's enrolment and approval pages). Unset,
+	// it is the console itself on localhost (RelyingParty). File only.
+	Passkeys PeerPasskeys `yaml:"passkeys"`
 	// Users maps an OS account (user name or numeric uid) to the projects it may
 	// reach over the socket. An account not listed here, and not the owner, is
 	// refused at the door.
 	Users map[string]PeerUser `yaml:"users"`
+}
+
+// PeerPasskeys is the WebAuthn relying party of the approver passkeys. A
+// passkey is bound to its RP ID for life: changing rp_id later strands every
+// passkey enrolled under the old one.
+type PeerPasskeys struct {
+	// RPID is a host name -- never an IP literal, which WebAuthn does not
+	// accept -- such as "localhost" (the default) or "seamless.example.com".
+	RPID string `yaml:"rp_id"`
+	// Origins are the exact origins the console's passkey pages are served
+	// from: https, or http on localhost, each on rp_id or a subdomain of it.
+	// Empty means the console's own address on localhost.
+	Origins []string `yaml:"origins"`
 }
 
 // PeerSocket places the Unix-socket listener.
@@ -192,6 +211,112 @@ func resolveAlias(n *yaml.Node) *yaml.Node {
 	return n
 }
 
+// RelyingParty returns the WebAuthn relying party for the approver passkeys:
+// the configured rp_id and origins, or, unset, "localhost" and the console's
+// own address on localhost (http, or https when the daemon serves TLS). A
+// console reached as 127.0.0.1 cannot run a passkey ceremony at all -- an IP is
+// not a valid RP ID -- which is why the default names localhost.
+func (c Config) RelyingParty() (rpID string, origins []string) {
+	p := c.PeerAuth.Passkeys
+	rpID = strings.TrimSpace(p.RPID)
+	if rpID == "" {
+		rpID = "localhost"
+	}
+	for _, o := range p.Origins {
+		if o = strings.TrimSpace(o); o != "" {
+			origins = append(origins, strings.TrimSuffix(o, "/"))
+		}
+	}
+	if len(origins) > 0 {
+		return rpID, origins
+	}
+	scheme := "http"
+	if c.TLSEnabled() {
+		scheme = "https"
+	}
+	port := "8081"
+	if _, pt, err := net.SplitHostPort(c.Addr); err == nil && pt != "" && pt != "0" {
+		port = pt
+	}
+	return rpID, []string{scheme + "://" + net.JoinHostPort(rpID, port)}
+}
+
+// validatePeerPasskeys is the passkeys block's shape: rp_id a lowercase host
+// name (never an IP literal), and every origin exactly scheme://host[:port] --
+// https, or http on localhost -- with a host that is rp_id or a subdomain of
+// it. Origins without an rp_id are refused rather than read against the
+// default: a config naming origins means to name its relying party too.
+func validatePeerPasskeys(p PeerPasskeys) error {
+	rpID := strings.TrimSpace(p.RPID)
+	if rpID == "" {
+		if len(p.Origins) > 0 {
+			return fmt.Errorf("config: peer_auth.passkeys.origins is set without rp_id: name the relying party the origins belong to")
+		}
+		return nil
+	}
+	if err := validRPID(rpID); err != nil {
+		return fmt.Errorf("config: peer_auth.passkeys.rp_id %q: %w", p.RPID, err)
+	}
+	seen := map[string]bool{}
+	for _, raw := range p.Origins {
+		o := strings.TrimSuffix(strings.TrimSpace(raw), "/")
+		if err := validPasskeyOrigin(o, rpID); err != nil {
+			return fmt.Errorf("config: peer_auth.passkeys.origins %q: %w", raw, err)
+		}
+		if seen[o] {
+			return fmt.Errorf("config: peer_auth.passkeys.origins lists %q twice", raw)
+		}
+		seen[o] = true
+	}
+	return nil
+}
+
+// validRPID accepts a lowercase DNS host name: dot-separated labels of
+// letters, digits and inner dashes. An IP literal is refused.
+func validRPID(s string) error {
+	if net.ParseIP(s) != nil {
+		return fmt.Errorf("an IP address is not a valid WebAuthn RP ID: use a host name such as localhost")
+	}
+	if len(s) > 253 {
+		return fmt.Errorf("too long for a host name")
+	}
+	for label := range strings.SplitSeq(s, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return fmt.Errorf("not a host name (lowercase letters, digits, dots and dashes)")
+		}
+		for _, r := range label {
+			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
+				return fmt.Errorf("not a host name (lowercase letters, digits, dots and dashes)")
+			}
+		}
+	}
+	return nil
+}
+
+func validPasskeyOrigin(o, rpID string) error {
+	u, err := url.Parse(o)
+	if err != nil || u.Host == "" || u.Opaque != "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("an origin is scheme://host[:port] and nothing else")
+	}
+	host := u.Hostname()
+	if net.ParseIP(host) != nil {
+		return fmt.Errorf("an IP address cannot carry a passkey: use a host name")
+	}
+	if host != rpID && !strings.HasSuffix(host, "."+rpID) {
+		return fmt.Errorf("the host must be rp_id %q or a subdomain of it", rpID)
+	}
+	switch u.Scheme {
+	case "https":
+	case "http":
+		if host != "localhost" && !strings.HasSuffix(host, ".localhost") {
+			return fmt.Errorf("http is accepted only on localhost: browsers refuse passkeys on any other plain-http origin")
+		}
+	default:
+		return fmt.Errorf("the scheme must be https (or http on localhost)")
+	}
+	return nil
+}
+
 // validatePeerAuth checks the block's SHAPE: everything that can be judged from
 // the file alone. Resolving accounts to uids (internal/access.New) and checking
 // slugs against the projects table (serve, doctor) come later, because neither
@@ -204,6 +329,9 @@ func (c Config) validatePeerAuth() error {
 		return err
 	}
 	if err := validatePeerUsers(p); err != nil {
+		return err
+	}
+	if err := validatePeerPasskeys(p.Passkeys); err != nil {
 		return err
 	}
 	if !p.Enabled {

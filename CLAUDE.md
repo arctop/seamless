@@ -37,6 +37,10 @@ internal/config/   single YAML + env config (static key, budgets, briefing tunab
 internal/access/   peer_auth policy: who a request speaks for (the owner on TCP, a
                    kernel-named uid on the Unix socket) and which projects it may
                    reach (View); Unix-socket peer credentials. Foundation layer
+internal/passkey/  WebAuthn passkey ceremonies over go-webauthn (approver passkeys
+                   for locked projects); stateless, imports nothing internal
+internal/approval/ approver credentials for locked projects: passkey and Touch ID
+                   enrolment over store/approvers.go (migration 032)
 internal/store/    SQLite: schema, FTS5, embeddings (BLOB + cosine), migrations;
                    index_work.go mirrors the DB-native work record (tasks,
                    trials, session findings) into the same fts table the files

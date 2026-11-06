@@ -29,11 +29,12 @@ Strict layering, no circular imports. `cmd/` wires everything; no package import
 ```
 cmd/seamlessd, cmd/seam, cmd/seambench, cmd/demoseed, cmd/docsgen
   -> internal/{mcp,hooks,console}         (API surfaces)
-    -> internal/{retrieve,lifecycle,gardener,files,capture,bench,demokit,update,screening,feed,commitfeed} (domains)
+    -> internal/{retrieve,lifecycle,gardener,files,capture,bench,demokit,update,screening,feed,commitfeed,approval} (domains)
       -> internal/{store,events,llm,core,config,validate,access}   (foundations)
 ```
 
-(`access` imports only `config`; `store` and `events` import `access`.)
+(`access` imports only `config`; `store` and `events` import `access`.
+`passkey` imports nothing internal; `approval` imports `store` and `passkey`.)
 
 (The dependency-aware ready-queue and lease-based claiming live in
 `internal/store/tasks*.go`; there is no `internal/tasks` package.)
@@ -267,6 +268,16 @@ any of it.
   never call the lock "sealed" in code, text or config. A locked project is
   normally confidential. `Policy.ConsoleHidden` is the set no owner surface
   shows without a lease (projects sealed to an account plus the locked ones).
+- **Approver credentials are enrolled by the daemon's account, never by a
+  route** (`store/approvers.go`, `internal/approval`, migration 032). A first
+  passkey or Touch ID key needs a one-time code that only
+  `seamlessd approvers enroll-code` mints (it opens the database directly, so
+  running it is the proof of being the daemon's account); a later one needs a
+  code or an existing passkey's assertion over a challenge binding the new
+  credential (`enrolBinding`). Removing and resetting are that command's too.
+  No socket or TCP route may mint a code (the matrix asserts the table stays
+  empty). A credential's sign counter is recorded with a compare-and-set
+  (`store.RecordApproverUse`), so of two racing assertions only one counts.
 - **The identity comes from the transport, never the client.** A header, a
   `session=` handle, a body field or an agent-process identity can only ever
   narrow what the View allows. `getBinding` drops a binding to an unreachable

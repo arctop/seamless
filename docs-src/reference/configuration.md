@@ -146,6 +146,13 @@ in short:
   The lock is not the `sealed` isolation state (which says what flows in and
   out of a project): a locked project is normally `confidential`. File-only,
   and never beside `users`: a config names one design or the other.
+- `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
+  the owner's approver passkeys ([seamlessd approvers](/reference/cli-seamlessd/#seamlessd_approvers)).
+  Unset, they are `localhost` and the console's own address on localhost.
+  `rp_id` is a host name, never an IP address; each origin is https, or http
+  on localhost, on `rp_id` or a subdomain of it. A passkey is bound to its
+  `rp_id` for life: changing it strands every passkey enrolled under the old
+  one. File-only.
 
 A client of such a daemon names the socket as its `server_url`:
 `unix:///absolute/path.sock`. It needs no `mcp.api_key`, and its hooks and MCP

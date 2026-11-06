@@ -44,6 +44,9 @@ import (
 //   - access_approvals, access_leases: unlocks of locked projects,
 //     bound to processes of the exporting machine's boot. Merging one would
 //     be an unlock nobody approved here.
+//   - approver_credentials, approver_enrol_codes: who may approve those
+//     unlocks. A credential enrolled on another machine was never shown to
+//     this one's owner.
 //   - schema_migrations: the destination's own migration history.
 //
 // A host-local table (one keyed by which machine a row came from) does not

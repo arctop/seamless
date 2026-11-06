@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -261,4 +262,52 @@ func TestServerURL_Socket(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, cfg.SocketPath())
 	require.Equal(t, cfg.ServerURL(), cfg.HookBaseURL())
+}
+
+// peer_auth.passkeys: the WebAuthn relying party of the approver passkeys.
+// Checked always, enabled or not; unset, it is the console on localhost.
+func TestPeerAuth_Passkeys(t *testing.T) {
+	cfg, err := loadYAML(t, "addr: 127.0.0.1:9123\n"+strings.TrimPrefix(peerBase, "\n"))
+	require.NoError(t, err)
+	rp, origins := cfg.RelyingParty()
+	require.Equal(t, "localhost", rp, "an IP is not a valid RP ID, so the default names localhost")
+	require.Equal(t, []string{"http://localhost:9123"}, origins, "the console's own port")
+
+	cfg, err = loadYAML(t, peerBase+`  passkeys:
+    rp_id: seamless.example.com
+    origins: ["https://seamless.example.com", "https://console.seamless.example.com:8443/"]
+`)
+	require.NoError(t, err)
+	rp, origins = cfg.RelyingParty()
+	require.Equal(t, "seamless.example.com", rp)
+	require.Equal(t, []string{"https://seamless.example.com", "https://console.seamless.example.com:8443"}, origins)
+
+	cfg, err = loadYAML(t, peerBase+"  passkeys:\n    rp_id: localhost\n    origins: [\"http://localhost:8081\", \"http://app.localhost:8081\"]\n")
+	require.NoError(t, err, "http is fine on localhost and its subdomains")
+	_, origins = cfg.RelyingParty()
+	require.Equal(t, []string{"http://localhost:8081", "http://app.localhost:8081"}, origins)
+
+	for _, tc := range []struct{ name, block, want string }{
+		{"an IP literal as rp_id", "    rp_id: 127.0.0.1\n", "IP address"},
+		{"an IPv6 rp_id", "    rp_id: \"::1\"\n", "IP address"},
+		{"uppercase", "    rp_id: Example.com\n", "host name"},
+		{"a port in rp_id", "    rp_id: localhost:8081\n", "host name"},
+		{"a scheme in rp_id", "    rp_id: https://example.com\n", "host name"},
+		{"origins without rp_id", "    origins: [\"http://localhost:8081\"]\n", "without rp_id"},
+		{"http off localhost", "    rp_id: example.com\n    origins: [\"http://example.com\"]\n", "only on localhost"},
+		{"a mismatched host", "    rp_id: example.com\n    origins: [\"https://example.org\"]\n", "subdomain"},
+		{"a suffix that is not a subdomain", "    rp_id: example.com\n    origins: [\"https://badexample.com\"]\n", "subdomain"},
+		{"an IP origin", "    rp_id: localhost\n    origins: [\"http://127.0.0.1:8081\"]\n", "IP address"},
+		{"a path", "    rp_id: localhost\n    origins: [\"http://localhost:8081/console\"]\n", "nothing else"},
+		{"another scheme", "    rp_id: localhost\n    origins: [\"ftp://localhost\"]\n", "scheme"},
+		{"listed twice", "    rp_id: localhost\n    origins: [\"http://localhost:1\", \"http://localhost:1/\"]\n", "twice"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := loadYAML(t, peerBase+"  passkeys:\n"+tc.block)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.want)
+			_, err = loadYAML(t, "peer_auth:\n  enabled: false\n  passkeys:\n"+tc.block)
+			require.Error(t, err, "checked while disabled too")
+		})
+	}
 }

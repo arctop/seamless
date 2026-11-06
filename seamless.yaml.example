@@ -466,6 +466,14 @@ update:
 #   # File only (no env). Never beside users below: a config names one design
 #   # or the other.
 #   locked: []
+#   # The WebAuthn relying party of the owner's approver passkeys (seamlessd
+#   # approvers). Unset: rp_id localhost and the console's own address on
+#   # localhost. rp_id is a host name, never an IP; each origin is https, or
+#   # http on localhost, on rp_id or a subdomain. Changing rp_id later strands
+#   # every passkey enrolled under the old one. File only (no env).
+#   passkeys:
+#     rp_id: ""
+#     origins: []
 #   # OS account (user name or numeric uid) -> its reach. File only (no env).
 #   # sealed: reachable ONLY from this account's socket connections; a project
 #   # is sealed to at most one account, and never also listed for another.

@@ -144,6 +144,13 @@ in short:
   The lock is not the `sealed` isolation state (which says what flows in and
   out of a project): a locked project is normally `confidential`. File-only,
   and never beside `users`: a config names one design or the other.
+- `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
+  the owner's approver passkeys ([seamlessd approvers](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_approvers)).
+  Unset, they are `localhost` and the console's own address on localhost.
+  `rp_id` is a host name, never an IP address; each origin is https, or http
+  on localhost, on `rp_id` or a subdomain of it. A passkey is bound to its
+  `rp_id` for life: changing it strands every passkey enrolled under the old
+  one. File-only.
 
 A client of such a daemon names the socket as its `server_url`:
 `unix:///absolute/path.sock`. It needs no `mcp.api_key`, and its hooks and MCP
@@ -253,6 +260,8 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `peer_auth.socket.mode` | string | - |
 | `peer_auth.socket.group` | string | - |
 | `peer_auth.locked` | []string | - |
+| `peer_auth.passkeys.rp_id` | string | - |
+| `peer_auth.passkeys.origins` | []string | - |
 | `peer_auth.users` | map of string to {sealed []string, projects []string} | - |
 
 ## Annotated example
@@ -728,6 +737,14 @@ update:
 #   # File only (no env). Never beside users below: a config names one design
 #   # or the other.
 #   locked: []
+#   # The WebAuthn relying party of the owner's approver passkeys (seamlessd
+#   # approvers). Unset: rp_id localhost and the console's own address on
+#   # localhost. rp_id is a host name, never an IP; each origin is https, or
+#   # http on localhost, on rp_id or a subdomain. Changing rp_id later strands
+#   # every passkey enrolled under the old one. File only (no env).
+#   passkeys:
+#     rp_id: ""
+#     origins: []
 #   # OS account (user name or numeric uid) -> its reach. File only (no env).
 #   # sealed: reachable ONLY from this account's socket connections; a project
 #   # is sealed to at most one account, and never also listed for another.

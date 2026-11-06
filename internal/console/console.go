@@ -118,7 +118,11 @@ type Config struct {
 	// cookie that arrives over http, so setting it on a plaintext listener
 	// would lock the owner out of their own console with no error anywhere.
 	SecureCookies bool
-	Logger        *slog.Logger
+	// Approvals backs the Approvers page (the owner's passkeys and Touch ID
+	// keys for locked projects). Nil -- no project is locked -- makes every
+	// Approvers route a 404, and nothing else shows it.
+	Approvals ApprovalsView
+	Logger    *slog.Logger
 }
 
 // Service renders the console and serves its routes.
@@ -251,6 +255,10 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/gardener/{id}/unhide", formBodySmall, s.gardenerUnhide)
 	post("POST /console/gardener/{id}/retarget", formBodySmall, s.gardenerRetarget)
 	post("POST /console/gardener/{id}/undo", formBodySmall, s.gardenerUndo)
+	handle("GET /console/approvers", s.auth(s.approversPage))
+	post("POST /console/approvers/passkey/begin", formBodySmall, s.approversBegin)
+	post("POST /console/approvers/passkey/finish", formBodyPasskey, s.approversFinish)
+	post("POST /console/approvers/passkey/approve", formBodyPasskey, s.approversApprove)
 	handle("GET /console/held", s.auth(gated(features.Screening, s.heldPage)))
 	handle("GET /console/held/{id}", s.auth(gated(features.Screening, s.heldOne)))
 	post("POST /console/held/{id}/release", formBodySmall, gated(features.Screening, s.heldRelease))

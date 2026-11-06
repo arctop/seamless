@@ -596,6 +596,39 @@ Adding a slug that is not yet a registered project prints a warning but
 succeeds: the membership starts taking effect once an agent opens that repo and
 registers it.
 
+## seamlessd approvers {#seamlessd_approvers}
+
+```bash
+seamlessd approvers enroll-code <passkey|touchid>
+seamlessd approvers list [--json]
+seamlessd approvers remove <id>
+seamlessd approvers reset --yes
+```
+
+Manages the owner's approver credentials: the passkeys and Touch ID keys that
+can approve an agent's access to a locked project (`peer_auth.locked`, see the
+[configuration reference](https://thereisnospoon.org/docs/reference/configuration/)). Every verb opens the
+database directly, so run it as the daemon's own account, for example
+`sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml
+seamlessd approvers list`. Becoming that account is the proof: no route, over
+the socket or with the TCP key, can mint a code or remove a credential.
+
+- `enroll-code` mints a one-time enrolment code for one kind of credential. It
+  works once, for 10 minutes; only its hash is stored. For a passkey, open the
+  console's Approvers page (`/console/approvers`, on the passkey origin -
+  `http://localhost:<port>` unless `peer_auth.passkeys` says otherwise) and
+  enter it there. The first credential needs a code; a later passkey can be
+  approved by one already enrolled instead.
+- `list` prints the enrolled credentials: id, kind, name, how each was enrolled
+  and when it was last used. `--json` prints them as JSON.
+- `remove` deletes one credential. Leases it already approved are untouched.
+- `reset --yes` deletes every credential and every unused code, and revokes
+  every live lease, in one transaction: for when a credential may be in someone
+  else's hands.
+
+With no credential enrolled, `seamlessd doctor` warns while a project is
+locked: only the terminal path can approve then.
+
 ## seamlessd console-open {#seamlessd_console_open}
 
 ```bash
@@ -616,6 +649,11 @@ error on other platforms rather than silently opening the default browser.
 It refuses to run when `mcp.api_key` is empty, or when the server does not
 answer `/healthz` within two seconds - the page has nowhere to POST otherwise.
 Any HTTP response counts as reachable, including a degraded 503.
+
+While `peer_auth` is on and a project is locked, it signs in on the passkey
+origin (`http://localhost:<port>` by default) instead of the server URL: the
+console's cookie belongs to one host, and browsers refuse passkeys on an IP
+address such as `127.0.0.1`.
 
 ## seamlessd start / stop / restart / status {#seamlessd_service}
 

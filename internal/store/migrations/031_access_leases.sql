@@ -1,8 +1,9 @@
 -- Locked-project unlocks (peer_auth.locked, the approval design of
 -- 2026-11-04): an owner session asks for access to a locked project, the owner
 -- approves it, and the approval becomes a lease -- one project, read and
--- write, for one socket connection's process, for a limited time. internal/access judges every lease it is handed
--- (lease.go); these tables are only where they wait and where they are kept.
+-- write, for one socket connection's process, for a limited time.
+-- internal/access judges every lease it is handed (lease.go); these tables are
+-- only where they wait and where they are kept.
 --
 -- Two new tables and nothing else: no existing table changes shape, so the
 -- previous release reads a database this one migrated exactly as before. Both
