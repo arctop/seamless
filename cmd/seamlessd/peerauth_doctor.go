@@ -21,6 +21,9 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 		if len(pa.Users) > 0 {
 			return []check{{statusWarn, name, "off, but peer_auth.users is filled in: nothing is sealed until peer_auth.enabled is true"}}
 		}
+		if len(pa.Sealed) > 0 {
+			return []check{{statusWarn, name, "off, but peer_auth.sealed is filled in: nothing is sealed until peer_auth.enabled is true"}}
+		}
 		return []check{{statusInfo, name, "off: no socket; the TCP bearer key reaches every project (the default)"}}
 	}
 	if !access.PeerCredSupported {
@@ -37,6 +40,10 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 	}
 	out := []check{{statusOK, name, fmt.Sprintf("socket %s (mode %s%s); owner %s (uid %d) on TCP and the socket",
 		pa.Socket.Path, mode, groupSuffix(pa.Socket.Group), owner.Name, owner.UID)}}
+	if sealed := policy.OwnerSealed(); len(sealed) > 0 {
+		out = append(out, check{statusOK, "peer_auth.sealed", fmt.Sprintf("behind the owner's passkey: [%s]; locked for every owner request "+
+			"that holds no lease (the TCP bearer key never holds one)", strings.Join(sealed, ", "))})
+	}
 	for _, a := range policy.Accounts() {
 		out = append(out, check{statusOK, "peer_auth.user", fmt.Sprintf("%s (uid %d): sealed [%s], shared [%s]; sessions land in %s",
 			a.Account.Name, a.Account.UID, strings.Join(a.Sealed, ", "), strings.Join(a.Projects, ", "), a.Home)})

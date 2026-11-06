@@ -139,6 +139,12 @@ in short:
 - `users` maps an OS account (name or uid) to `sealed` - projects reachable only
   from that account - and `projects` - projects it shares with the owner. It is
   file-only: a map of lists has no single-variable spelling.
+- `sealed` lists projects sealed behind the owner's passkey instead (the
+  passkey design, being built): each is locked for every owner request - its
+  name shows, its content does not, writes are refused - unless the request
+  rides a socket connection whose process holds a lease the owner approved. The
+  TCP bearer key never holds one. File-only, and never beside `users`: a config
+  names one design or the other.
 
 A client of such a daemon names the socket as its `server_url`:
 `unix:///absolute/path.sock`. It needs no `mcp.api_key`, and its hooks and MCP

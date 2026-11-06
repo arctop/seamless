@@ -1,0 +1,162 @@
+package access
+
+import (
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// The owner-locked view (peer_auth.sealed, the 2026-11-04 design): a project
+// sealed behind the owner's passkey is LOCKED for every owner request. Its name
+// shows (View.Listed) and its content does not (View.Visible), and writes into
+// it are refused. It opens only for one request at a time, and only when the
+// transport has attached a live lease the owner approved for that connection's
+// process (View.WithLeases).
+//
+// A lease is data the access layer judges, never data it trusts. The transport
+// edge loads lease rows for the kernel-reported process of a socket connection
+// and hands them in. The View keeps a lease only when all four hold: it names
+// that very process, the project is one peer_auth.sealed lists, it has not
+// expired, and the view is the owner's socket view. A TCP request -- the bearer
+// key, which every owner process can present -- never holds one, whatever it is
+// handed.
+
+// ProcessToken names one process as the kernel reported it for a socket
+// connection. It holds the pid, a per-pid generation the kernel keeps
+// (macOS's pidversion, Linux's start time), and the boot it ran in. Together
+// these are unique across pid reuse and reboots. The token is compared as a
+// whole (Key), never by its parts: two connections share a token exactly when
+// one process opened both.
+type ProcessToken struct {
+	PID     int32
+	Version uint64
+	Boot    string
+}
+
+// Valid reports whether t names a process at all: a positive pid and a boot
+// identifier of letters, digits and dashes (a UUID, as both kernels give it).
+func (t ProcessToken) Valid() bool {
+	if t.PID <= 0 || t.Boot == "" || len(t.Boot) > 64 {
+		return false
+	}
+	for _, r := range t.Boot {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+// Key is the token's one comparable form: what lease rows store and match on.
+// An invalid token has no key ("").
+func (t ProcessToken) Key() string {
+	if !t.Valid() {
+		return ""
+	}
+	return t.Boot + ":" + strconv.FormatInt(int64(t.PID), 10) + ":" + strconv.FormatUint(t.Version, 10)
+}
+
+// String renders the token for logs: the key.
+func (t ProcessToken) String() string { return t.Key() }
+
+// Lease is one owner approval as the access layer judges it. Process is the
+// ProcessToken.Key of the connection the lease was granted to, Expires the
+// instant it ends.
+type Lease struct {
+	ID      string
+	Project string
+	Process string
+	Expires time.Time
+}
+
+// WithLeases returns v with the leases that apply to it at now attached. It
+// keeps a lease only when v is the owner's view on the Unix socket and carries
+// a process token, and the lease names that process and a project
+// peer_auth.sealed lists, and it ends after now. Every other lease is dropped,
+// and every other view comes back unchanged, so a lease can never reach a TCP
+// request, another process, a project sealed to an OS account, or a project
+// that is not sealed at all.
+//
+// The leases are judged once, at now: a request that began before a lease
+// ended finishes under it. The transport builds a View per request, so the
+// next request is judged afresh.
+func (v View) WithLeases(now time.Time, leases []Lease) View {
+	if v.who.Kind != KindOwner || !v.who.Socket || !v.who.HasProcess || v.policy == nil || len(v.policy.ownerSealed) == 0 {
+		return v
+	}
+	key := v.who.Process.Key()
+	if key == "" {
+		return v
+	}
+	var kept map[string]Lease
+	for _, l := range leases {
+		if l.Process != key || !v.policy.ownerSealed[l.Project] || !l.Expires.After(now) {
+			continue
+		}
+		if prev, dup := kept[l.Project]; dup && !l.Expires.After(prev.Expires) {
+			continue
+		}
+		if kept == nil {
+			kept = map[string]Lease{}
+		}
+		kept[l.Project] = l
+	}
+	v.leases = kept
+	return v
+}
+
+// leased reports whether v holds a lease on project.
+func (v View) leased(project string) bool {
+	_, ok := v.leases[project]
+	return ok
+}
+
+// Lease returns the lease v holds on project, if any: the expiry the
+// warnings count down to.
+func (v View) Lease(project string) (Lease, bool) {
+	l, ok := v.leases[project]
+	return l, ok
+}
+
+// Leases returns every lease v holds, by project.
+func (v View) Leases() []Lease {
+	out := make([]Lease, 0, len(v.leases))
+	for _, l := range v.leases {
+		out = append(out, l)
+	}
+	slices.SortFunc(out, func(a, b Lease) int { return strings.Compare(a.Project, b.Project) })
+	return out
+}
+
+// Locked reports whether project is sealed behind the owner's passkey and v
+// holds no lease on it: the owner may see that it exists, and nothing inside.
+// It is false for every non-owner view (they never list such a project: a
+// configured account reaches only its own projects).
+func (v View) Locked(project string) bool {
+	return v.who.Kind == KindOwner && v.policy != nil && v.policy.ownerSealed[project] && !v.leased(project)
+}
+
+// Listed reports whether v may show that project exists: its slug, name and
+// item counts, never anything inside it. Every project v may read is listed;
+// beyond that, the owner sees a locked project -- locked, not hidden -- so an
+// agent can name it in an access request. A project sealed to another OS
+// account stays unlisted, as before.
+func (v View) Listed(project string) bool {
+	return v.Visible(project) || v.Locked(project)
+}
+
+// lockedRefusal is the refusal for a locked project: the rule and the remedy,
+// which differ between the TCP key and the socket.
+func (v View) lockedRefusal(project string) error {
+	if !v.who.Socket {
+		return &RefusalError{msg: fmt.Sprintf("project %s is sealed: the TCP connection and its bearer key never reach a "+
+			"sealed project, because a shared key cannot be tied to one process -- work in it from an agent session "+
+			"whose seam mcp-proxy dials the peer_auth Unix socket, once the owner has approved that session's access "+
+			"request with a passkey", project)}
+	}
+	return &RefusalError{msg: fmt.Sprintf("project %s is locked: it is sealed behind the owner's passkey, and this "+
+		"connection holds no unlock for it -- the owner unlocks it for one session's seam mcp-proxy process, for a "+
+		"limited time, by approving that session's access request with a passkey", project)}
+}

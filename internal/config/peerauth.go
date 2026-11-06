@@ -11,8 +11,9 @@ import (
 )
 
 // PeerAuth is peer-user authentication: a Unix-socket listener whose callers
-// the daemon identifies by the uid the kernel reports, plus the map of which OS
-// users may reach which projects (internal/access holds the policy itself).
+// the daemon identifies by the uid the kernel reports, plus which projects are
+// sealed -- to other OS users (Users), or behind the owner's passkey (Sealed)
+// (internal/access holds the policy itself).
 //
 // Off by default, and off means exactly the behavior every earlier release had:
 // no socket, no per-caller filtering, one static bearer key on TCP. On, every
@@ -31,6 +32,17 @@ type PeerAuth struct {
 	Owner string `yaml:"owner"`
 	// Socket is the listener the role users (and, optionally, the owner) dial.
 	Socket PeerSocket `yaml:"socket"`
+	// Sealed lists the projects sealed behind the owner's passkey (the
+	// 2026-11-04 design). The owner's agents reach one only through a lease the
+	// owner approved with a passkey, held by one session's socket connection;
+	// the TCP bearer key never reaches it. Without a lease the project is
+	// locked: its name shows, its content does not, and writes into it are
+	// refused. File only (no env).
+	//
+	// It replaces Users, which sealed projects to other OS accounts that the
+	// owner never reaches (the 2026-10-31 design). The two never mix: a config
+	// naming both is refused, so neither can take on the other's meaning.
+	Sealed []string `yaml:"sealed"`
 	// Users maps an OS account (user name or numeric uid) to the projects it may
 	// reach over the socket. An account not listed here, and not the owner, is
 	// refused at the door.
@@ -109,6 +121,11 @@ func (p PeerAuth) SealedTo() map[string]string {
 // de-duplicated: what serve and doctor check against the projects table.
 func (p PeerAuth) ReferencedProjects() []string {
 	var out []string
+	for _, slug := range p.Sealed {
+		if s := strings.TrimSpace(slug); s != "" && !slices.Contains(out, s) {
+			out = append(out, s)
+		}
+	}
 	for _, u := range p.Users {
 		for _, slug := range slices.Concat(u.Sealed, u.Projects) {
 			if s := strings.TrimSpace(slug); s != "" && !slices.Contains(out, s) {
@@ -123,11 +140,14 @@ func (p PeerAuth) ReferencedProjects() []string {
 // validatePeerAuth checks the block's SHAPE: everything that can be judged from
 // the file alone. Resolving accounts to uids (internal/access.New) and checking
 // slugs against the projects table (serve, doctor) come later, because neither
-// belongs in a config load. The users map is checked even while the block is
-// disabled, so a typo is caught the day it is written rather than the day it is
-// switched on.
+// belongs in a config load. The sealed list and the users map are checked even
+// while the block is disabled, so a typo is caught the day it is written rather
+// than the day it is switched on.
 func (c Config) validatePeerAuth() error {
 	p := c.PeerAuth
+	if err := validatePeerSealed(p); err != nil {
+		return err
+	}
 	if err := validatePeerUsers(p); err != nil {
 		return err
 	}
@@ -160,6 +180,34 @@ func (c Config) validatePeerAuth() error {
 		if err := validateAccount("peer_auth.socket.group", g); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// validatePeerSealed is the sealed list's shape: real project slugs, never the
+// global scope, none twice -- and never beside a users map. The two keys are
+// the two designs (projects sealed behind the owner's passkey, projects sealed
+// to other OS accounts), and a config naming both would leave a reader, and
+// the policy, to guess which one a project is under.
+func validatePeerSealed(p PeerAuth) error {
+	if len(p.Sealed) > 0 && len(p.Users) > 0 {
+		return fmt.Errorf("config: peer_auth names both sealed and users: sealed puts projects behind the owner's passkey, " +
+			"users seals them to other OS accounts the owner never reaches (the earlier design) -- use one; " +
+			"for the passkey design, list every users.<account>.sealed project under peer_auth.sealed and remove users")
+	}
+	seen := map[string]bool{}
+	for _, raw := range p.Sealed {
+		slug, err := validate.Project(raw)
+		if err != nil {
+			return fmt.Errorf("config: peer_auth.sealed: %w", err)
+		}
+		if slug == "" {
+			return fmt.Errorf("config: peer_auth.sealed names the global scope: a global item is injected into every project's briefing, so global is never sealed")
+		}
+		if seen[slug] {
+			return fmt.Errorf("config: peer_auth.sealed lists project %q twice: name it once", slug)
+		}
+		seen[slug] = true
 	}
 	return nil
 }

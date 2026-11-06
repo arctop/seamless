@@ -382,6 +382,12 @@ socket to a group, for a mode such as <code>0660</code>.</li>
 <li><code>users</code> maps an OS account (name or uid) to <code>sealed</code> - projects reachable only
 from that account - and <code>projects</code> - projects it shares with the owner. It is
 file-only: a map of lists has no single-variable spelling.</li>
+<li><code>sealed</code> lists projects sealed behind the owner's passkey instead (the
+passkey design, being built): each is locked for every owner request - its
+name shows, its content does not, writes are refused - unless the request
+rides a socket connection whose process holds a lease the owner approved. The
+TCP bearer key never holds one. File-only, and never beside <code>users</code>: a config
+names one design or the other.</li>
 </ul>
 <p>A client of such a daemon names the socket as its <code>server_url</code>:
 <code>unix:///absolute/path.sock</code>. It needs no <code>mcp.api_key</code>, and its hooks and MCP
@@ -804,6 +810,11 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <tr>
 <td><code>peer_auth.socket.group</code></td>
 <td>string</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>peer_auth.sealed</code></td>
+<td>[]string</td>
 <td>-</td>
 </tr>
 <tr>
@@ -1276,6 +1287,13 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c">#     # 0660 to let only that group&#39;s members connect at all.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#     # env: SEAMLESS_PEER_AUTH_SOCKET_GROUP</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#     group: &#34;&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # Projects sealed behind the owner&#39;s passkey (the passkey design). Each is</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # locked for every owner request -- its name shows, its content does not,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # writes are refused -- unless the request rides a socket connection whose</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # process holds a lease the owner approved with a passkey; the TCP bearer</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # key never holds one. File only (no env). Never beside users below: a</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # config names one design or the other.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   sealed: []</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # OS account (user name or numeric uid) -&gt; its reach. File only (no env).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # sealed: reachable ONLY from this account&#39;s socket connections; a project</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # is sealed to at most one account, and never also listed for another.</span><span class="w">

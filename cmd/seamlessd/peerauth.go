@@ -247,7 +247,7 @@ func projectProblems(ctx context.Context, db *sql.DB, policy *access.Policy) ([]
 			continue
 		}
 		if slices.Contains(sealed, slug) && !p.Isolation.FencesOutbound() {
-			problems = append(problems, fmt.Sprintf("project %q is sealed to an OS account but its isolation is %q: make it confidential first (seam project isolation %s confidential --yes)", slug, isolationWord(p.Isolation), slug))
+			problems = append(problems, fmt.Sprintf("project %q is sealed (peer_auth) but its isolation is %q: make it confidential first (seam project isolation %s confidential --yes)", slug, isolationWord(p.Isolation), slug))
 		}
 	}
 	return problems, nil

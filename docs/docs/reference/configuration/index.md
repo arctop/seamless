@@ -137,6 +137,12 @@ in short:
 - `users` maps an OS account (name or uid) to `sealed` - projects reachable only
   from that account - and `projects` - projects it shares with the owner. It is
   file-only: a map of lists has no single-variable spelling.
+- `sealed` lists projects sealed behind the owner's passkey instead (the
+  passkey design, being built): each is locked for every owner request - its
+  name shows, its content does not, writes are refused - unless the request
+  rides a socket connection whose process holds a lease the owner approved. The
+  TCP bearer key never holds one. File-only, and never beside `users`: a config
+  names one design or the other.
 
 A client of such a daemon names the socket as its `server_url`:
 `unix:///absolute/path.sock`. It needs no `mcp.api_key`, and its hooks and MCP
@@ -245,6 +251,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `peer_auth.socket.path` | string | - |
 | `peer_auth.socket.mode` | string | - |
 | `peer_auth.socket.group` | string | - |
+| `peer_auth.sealed` | []string | - |
 | `peer_auth.users` | map of string to {sealed []string, projects []string} | - |
 
 ## Annotated example
@@ -712,6 +719,13 @@ update:
 #     # 0660 to let only that group's members connect at all.
 #     # env: SEAMLESS_PEER_AUTH_SOCKET_GROUP
 #     group: ""
+#   # Projects sealed behind the owner's passkey (the passkey design). Each is
+#   # locked for every owner request -- its name shows, its content does not,
+#   # writes are refused -- unless the request rides a socket connection whose
+#   # process holds a lease the owner approved with a passkey; the TCP bearer
+#   # key never holds one. File only (no env). Never beside users below: a
+#   # config names one design or the other.
+#   sealed: []
 #   # OS account (user name or numeric uid) -> its reach. File only (no env).
 #   # sealed: reachable ONLY from this account's socket connections; a project
 #   # is sealed to at most one account, and never also listed for another.

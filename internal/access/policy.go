@@ -66,7 +66,11 @@ type Policy struct {
 	owner       Account
 	users       map[uint32]*userRule
 	sealedTo    map[string]Account // project -> the one account that may reach it
-	ownerHidden []string           // every sealed project, sorted: none is the owner's
+	ownerHidden []string           // every project sealed to an account, sorted: none is the owner's
+	// ownerSealed is peer_auth.sealed: the projects sealed behind the owner's
+	// passkey, locked for the owner except under a lease (lease.go).
+	ownerSealed     map[string]bool
+	ownerSealedList []string // the same, sorted
 }
 
 type userRule struct {
@@ -95,10 +99,25 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 		return nil, fmt.Errorf("%w: peer_auth.owner: %w", ErrInvalidPolicy, err)
 	}
 	p := &Policy{
-		owner:    owner,
-		users:    map[uint32]*userRule{},
-		sealedTo: map[string]Account{},
+		owner:       owner,
+		users:       map[uint32]*userRule{},
+		sealedTo:    map[string]Account{},
+		ownerSealed: map[string]bool{},
 	}
+	// The two designs never mix (config.validatePeerSealed refuses it at load;
+	// this is the same refusal for a block that did not come through a load).
+	if len(cfg.Sealed) > 0 && len(cfg.Users) > 0 {
+		return nil, fmt.Errorf("%w: peer_auth names both sealed and users: use one design", ErrInvalidPolicy)
+	}
+	for _, slug := range cfg.Sealed {
+		slug = strings.TrimSpace(slug)
+		if slug == "" || p.ownerSealed[slug] {
+			return nil, fmt.Errorf("%w: peer_auth.sealed lists %q: every entry must be a distinct project", ErrInvalidPolicy, slug)
+		}
+		p.ownerSealed[slug] = true
+		p.ownerSealedList = append(p.ownerSealedList, slug)
+	}
+	slices.Sort(p.ownerSealedList)
 	names := make([]string, 0, len(cfg.Users))
 	for name := range cfg.Users {
 		names = append(names, name)
@@ -154,6 +173,17 @@ func (p *Policy) OwnerView() View {
 	return View{policy: p, who: Principal{Kind: KindOwner, User: p.owner.Name}}
 }
 
+// PeerProcessView is PeerView for a connection whose peer process the kernel
+// also reported: the view carries the token a lease is bound to (WithLeases).
+// An invalid token is not attached -- the view then holds no lease, ever.
+func (p *Policy) PeerProcessView(uid uint32, proc ProcessToken) (View, bool) {
+	v, ok := p.PeerView(uid)
+	if ok && proc.Valid() {
+		v.who.Process, v.who.HasProcess = proc, true
+	}
+	return v, ok
+}
+
 // PeerView is the view of a socket connection whose peer the kernel reported as
 // uid. ok is false for a uid the policy does not know: such a connection is
 // refused before any route runs.
@@ -167,12 +197,23 @@ func (p *Policy) PeerView(uid uint32) (View, bool) {
 	return View{}, false
 }
 
-// SealedProjects returns every project sealed to a configured account, sorted.
-func (p *Policy) SealedProjects() []string { return slices.Clone(p.ownerHidden) }
+// SealedProjects returns every sealed project, sorted: those sealed to a
+// configured account and those sealed behind the owner's passkey. It is what
+// the background surfaces that serve no caller (the metadata feed, the commit
+// snapshot) and serve's preflight treat as sealed.
+func (p *Policy) SealedProjects() []string {
+	out := slices.Concat(p.ownerHidden, p.ownerSealedList)
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// OwnerSealed returns the projects sealed behind the owner's passkey
+// (peer_auth.sealed), sorted.
+func (p *Policy) OwnerSealed() []string { return slices.Clone(p.ownerSealedList) }
 
 // Projects returns every project the policy names, sorted and de-duplicated.
 func (p *Policy) Projects() []string {
-	var out []string
+	out := slices.Clone(p.ownerSealedList)
 	for _, rule := range p.users {
 		for slug := range rule.allowed {
 			if !slices.Contains(out, slug) {

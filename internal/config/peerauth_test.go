@@ -110,7 +110,10 @@ peer_auth: {enabled: true, owner: katata, socket: {path: /opt/seamless/data/run/
 		{"an account name with a space", peerBase + `  users:
     "_a b": {sealed: [x]}
 `, "not an OS account name"},
-		{"a misspelled key", peerBase + "  sealed: [x]\n", "field sealed not found"},
+		// An unknown key under peer_auth is refused (KnownFields). Top-level
+		// "sealed" was this row's sample until it became the passkey design's
+		// real key (TestPeerAuth_SealedList); "seal" keeps the property tested.
+		{"a misspelled key", peerBase + "  seal: [x]\n", "field seal not found"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := loadYAML(t, tc.yaml)
@@ -118,6 +121,61 @@ peer_auth: {enabled: true, owner: katata, socket: {path: /opt/seamless/data/run/
 			require.Contains(t, err.Error(), tc.want)
 		})
 	}
+}
+
+// peer_auth.sealed (the passkey design): projects sealed behind the owner's
+// passkey, checked like the users map -- always, enabled or not -- and never
+// beside it, so a 6afda40 users block cannot be read as the new design or the
+// other way round.
+func TestPeerAuth_SealedList(t *testing.T) {
+	cfg, err := loadYAML(t, peerBase+"  sealed: [arctop-finance, \" arctop-legal\", arctop-ip]\n")
+	require.NoError(t, err)
+	require.Equal(t, []string{"arctop-finance", " arctop-legal", "arctop-ip"}, cfg.PeerAuth.Sealed)
+	require.Equal(t, []string{"arctop-finance", "arctop-ip", "arctop-legal"}, cfg.PeerAuth.ReferencedProjects(),
+		"serve and doctor check every sealed slug against the projects table")
+	require.Empty(t, cfg.PeerAuth.SealedTo(), "no project is sealed to an OS account")
+
+	for _, tc := range []struct {
+		name, yaml, want string
+	}{
+		{"both designs at once", peerBase + `  sealed: [arctop-finance]
+  users:
+    _a: {sealed: [arctop-legal]}
+`, "both sealed and users"},
+		{"the old design's seal moved up beside its users map", peerBase + `  sealed: [arctop-finance]
+  users:
+    _a: {sealed: [arctop-finance]}
+`, "both sealed and users"},
+		{"global", peerBase + "  sealed: [global]\n", "global scope"},
+		{"the _global alias", peerBase + "  sealed: [_global]\n", "global scope"},
+		{"the widening token", peerBase + "  sealed: [all]\n", "reserved"},
+		{"a traversal slug", peerBase + "  sealed: [\"../notes\"]\n", "invalid project"},
+		{"listed twice", peerBase + "  sealed: [arctop-finance, \"arctop-finance \"]\n", "twice"},
+		{"disabled is still checked", "peer_auth:\n  enabled: false\n  sealed: [global]\n", "global scope"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := loadYAML(t, tc.yaml)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.want)
+		})
+	}
+}
+
+// A config written for 6afda40 -- the users map alone -- loads exactly as it
+// did: no project lands in the passkey design's sealed list, and every seal
+// stays with its account. (internal/access's TestLegacyUsersConfig_KeepsItsMeaning
+// carries the same file through the policy.)
+func TestPeerAuth_UsersOnlyConfigKeepsItsMeaning(t *testing.T) {
+	cfg, err := loadYAML(t, peerBase+`  users:
+    _arctop_finance:
+      sealed: [arctop-finance]
+    _arctop_hq:
+      projects: [arctop-hq, arctop-ops]
+`)
+	require.NoError(t, err)
+	require.Empty(t, cfg.PeerAuth.Sealed, "the users map never fills the passkey design's list")
+	require.Equal(t, map[string]string{"arctop-finance": "_arctop_finance"}, cfg.PeerAuth.SealedTo())
+	require.Equal(t, []string{"arctop-finance", "arctop-hq", "arctop-ops"}, cfg.PeerAuth.ReferencedProjects())
 }
 
 // A disabled block is still checked: a typo is caught the day it is written.

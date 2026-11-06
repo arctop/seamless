@@ -23,6 +23,13 @@
 //     owner's included, so a global write from a sealed system is the loudest
 //     possible way for its content to leave.
 //
+// peer_auth.sealed is the other design (2026-11-04; lease.go). There, a project
+// is sealed behind the owner's passkey rather than to another account. It is
+// locked for every owner request -- listed, never read, never written -- unless
+// the request rides a socket connection whose process holds a live lease the
+// owner approved. A config uses one design or the other, never both
+// (config.validatePeerSealed).
+//
 // Everything else -- the store's isolation fence (store.CanRead/CanWrite), the
 // MCP scope funnels, the hooks, the retrieval surfaces, the console's filtered
 // database handle, the event log -- asks a View from the request context. Code
@@ -82,6 +89,11 @@ type Principal struct {
 	// Socket reports that the kernel authenticated this request on the Unix
 	// socket. Only such a request may skip the bearer key.
 	Socket bool
+	// Process is the kernel-reported process at the other end of the socket
+	// connection, when the transport could read one (HasProcess). It is what a
+	// lease is bound to; a TCP request never has one.
+	Process    ProcessToken
+	HasProcess bool
 }
 
 // View is one request's reach under the policy. The zero View (no policy, no
@@ -90,6 +102,9 @@ type View struct {
 	policy *Policy
 	who    Principal
 	user   *userRule
+	// leases are the owner's live unlocks of passkey-sealed projects, by
+	// project, as WithLeases judged them. Nil for every other view.
+	leases map[string]Lease
 }
 
 // Principal returns who the view speaks for.
@@ -97,13 +112,13 @@ func (v View) Principal() Principal { return v.who }
 
 // Restricted reports whether this view can be refused anything at all: a
 // configured user always can, the owner only while some project is sealed to
-// another user.
+// another user or locked behind the owner's passkey.
 func (v View) Restricted() bool {
 	switch v.who.Kind {
 	case KindUser:
 		return true
 	case KindOwner:
-		return v.policy != nil && len(v.policy.ownerHidden) > 0
+		return len(v.Hidden()) > 0
 	default:
 		return false
 	}
@@ -120,8 +135,11 @@ func (v View) Visible(project string) bool {
 		if v.policy == nil {
 			return true
 		}
-		_, sealed := v.policy.sealedTo[project]
-		return !sealed
+		if _, sealed := v.policy.sealedTo[project]; sealed {
+			return false
+		}
+		// Sealed behind the owner's passkey: readable only under a lease.
+		return !v.policy.ownerSealed[project] || v.leased(project)
 	case KindUser:
 		return v.user != nil && v.user.allowed[project]
 	default:
@@ -140,13 +158,22 @@ func (v View) Writable(project string) bool {
 }
 
 // Hidden returns the projects this view may not read, sorted, when that set is
-// finite: the projects sealed to other users, for the owner. A configured user's
-// reach is an allow-list instead (Allowed), and the zero View hides nothing.
+// finite: for the owner, the projects sealed to other users plus every
+// passkey-sealed project it holds no lease on. A locked project is hidden here
+// although it is Listed: Hidden is about content. A configured user's reach is
+// an allow-list instead (Allowed), and the zero View hides nothing.
 func (v View) Hidden() []string {
 	if v.who.Kind != KindOwner || v.policy == nil {
 		return nil
 	}
-	return slices.Clone(v.policy.ownerHidden)
+	out := slices.Clone(v.policy.ownerHidden)
+	for _, slug := range v.policy.ownerSealedList {
+		if !v.leased(slug) {
+			out = append(out, slug)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // Allowed returns a configured user's projects, sorted, and true. Any other view
@@ -205,6 +232,9 @@ func (v View) Refusal(project string) error {
 		}
 		return &RefusalError{msg: fmt.Sprintf("project %s is not reachable from this connection: "+
 			"OS user %s may reach only %s (and read the global scope)", project, v.who.User, strings.Join(allowed, ", "))}
+	}
+	if v.Locked(project) {
+		return v.lockedRefusal(project)
 	}
 	return &RefusalError{msg: fmt.Sprintf("project %s is not reachable from this connection: peer_auth "+
 		"reserves it for its own system's OS user -- work in it from an agent running as that user "+

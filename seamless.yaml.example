@@ -458,6 +458,13 @@ update:
 #     # 0660 to let only that group's members connect at all.
 #     # env: SEAMLESS_PEER_AUTH_SOCKET_GROUP
 #     group: ""
+#   # Projects sealed behind the owner's passkey (the passkey design). Each is
+#   # locked for every owner request -- its name shows, its content does not,
+#   # writes are refused -- unless the request rides a socket connection whose
+#   # process holds a lease the owner approved with a passkey; the TCP bearer
+#   # key never holds one. File only (no env). Never beside users below: a
+#   # config names one design or the other.
+#   sealed: []
 #   # OS account (user name or numeric uid) -> its reach. File only (no env).
 #   # sealed: reachable ONLY from this account's socket connections; a project
 #   # is sealed to at most one account, and never also listed for another.
