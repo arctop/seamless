@@ -21,7 +21,7 @@ func stubEnv() (*env, *bytes.Buffer, *bytes.Buffer) {
 func TestSynopsis_RendersFromTheSpec(t *testing.T) {
 	require.Equal(t, "seam capture [--project SLUG] <url>", synopsis(captureCmd))
 	require.Equal(t, "seam prime [--cwd DIR] [--name NAME]", synopsis(primeCmd))
-	require.Equal(t, "seam recall [--limit N] [--project SLUG] [--scope SCOPE] <word>...", synopsis(recallCmd))
+	require.Equal(t, "seam recall [--json] [--limit N] [--project SLUG] [--scope SCOPE] <word>...", synopsis(recallCmd))
 }
 
 // Every migrated command must reach the page. A spec whose group is not in
@@ -170,4 +170,51 @@ func TestBindRecall_Defaults(t *testing.T) {
 	o := p.opts.(*recallOpts)
 	require.Equal(t, "all", *o.scope)
 	require.Equal(t, 10, *o.limit)
+}
+
+// call's help lists every tool it can reach. The list is the literal callTools,
+// which TestCallTools_MatchTheCatalog pins to the server's catalog, so between
+// them the help names exactly the catalog.
+func TestCommandHelp_CallListsEveryTool(t *testing.T) {
+	help := commandHelp(callCmd)
+	require.Contains(t, help, "usage: seam call <tool> [<json>]")
+	for _, name := range callTools {
+		require.Contains(t, help, " "+name, "%s is missing from seam call --help", name)
+	}
+	for _, line := range strings.Split(help, "\n") {
+		require.LessOrEqual(t, len(line), 100, "the tool list wraps: %q", line)
+	}
+}
+
+// Every read command takes --json. A read verb added without it would leave an
+// agent scraping text again; one listed here and since removed fails too.
+func TestReadCommands_TakeJSON(t *testing.T) {
+	read := []string{
+		"recall", "memory read", "memory list", "note read", "note list",
+		"ready", "task list", "plan list", "plan show",
+		"status", "sessions", "project isolation", "usage", "version",
+	}
+	seen := 0
+	for _, c := range commands() {
+		if !slices.Contains(read, c.name) {
+			continue
+		}
+		seen++
+		require.NotNil(t, bindTo(c).Lookup("json"), "%s is a read command and must take --json", c.name)
+		require.Contains(t, synopsis(c), "[--json]", c.name)
+	}
+	require.Equal(t, len(read), seen, "every listed read command is in the table")
+}
+
+// The new families are commands of their own groups, and a bare family name
+// names its members like task and plan do.
+func TestDispatch_KnowledgeFamiliesListTheirMembers(t *testing.T) {
+	for family, want := range map[string]string{
+		"memory": "valid values are memory read, memory list",
+		"note":   "valid values are note read, note list",
+	} {
+		e, _, errb := stubEnv()
+		require.Equal(t, 2, dispatch(context.Background(), e, []string{family}))
+		require.Contains(t, errb.String(), want)
+	}
 }

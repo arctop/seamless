@@ -5,14 +5,16 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/arctop/seamless/internal/update"
 )
 
 var versionCmd = spec("version", groupObservability, "the running daemon's version",
-	noArgs(), bindNoOpts, runVersion).
+	noArgs(), bindVersion, runVersion).
 	withLong(`Prints the version of the daemon this CLI is configured to talk to, in
 the same form as ` + "`seamlessd version`" + `:
 
@@ -26,7 +28,17 @@ for a process still serving the old one.
 
 The version therefore comes from the daemon's /healthz, and an unreachable daemon
 is a failure rather than a fallback: there is no second source to fall back to,
-and printing seam's own build here is the exact confusion this avoids.`)
+and printing seam's own build here is the exact confusion this avoids.
+
+--json prints that /healthz answer itself, as the daemon sent it.`)
+
+type versionOpts struct {
+	asJSON *bool
+}
+
+func bindVersion(fs *flag.FlagSet) *versionOpts {
+	return &versionOpts{asJSON: jsonFlag(fs, "print the daemon's /healthz answer as-is (for jq)")}
+}
 
 // runVersion prints the running daemon's version, in seamlessd's own phrasing.
 //
@@ -34,7 +46,7 @@ and printing seam's own build here is the exact confusion this avoids.`)
 // built separately, which is everything `seamlessd version` prints -- so seam
 // reassembles that one line rather than inventing a second format for the same
 // fact.
-func runVersion(_ context.Context, e *env, _ *noOpts, _ []string) error {
+func runVersion(_ context.Context, e *env, o *versionOpts, _ []string) error {
 	cfg, err := e.loadConfig()
 	if err != nil {
 		return err
@@ -50,6 +62,17 @@ func runVersion(_ context.Context, e *env, _ *noOpts, _ []string) error {
 		return fmt.Errorf("server unreachable at %s: %w", cfg.DaemonAddress(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	if *o.asJSON {
+		body, rerr := io.ReadAll(resp.Body)
+		if rerr != nil {
+			return fmt.Errorf("unreadable health response from %s: %w", cfg.DaemonAddress(), rerr)
+		}
+		if !json.Valid(body) {
+			return fmt.Errorf("unreadable health response from %s: not JSON", cfg.DaemonAddress())
+		}
+		return writeRaw(e.stdout, body)
+	}
 
 	var hz map[string]any
 	if derr := json.NewDecoder(resp.Body).Decode(&hz); derr != nil {

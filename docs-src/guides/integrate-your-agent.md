@@ -276,13 +276,15 @@ a headless client for the same daemon, authenticating with the same key:
 ```bash
 seam prime --cwd /abs/path/to/repo        # session_start; prints the briefing
 seam recall "why is the console theme split"
+seam memory read lease-steal-window       # memory_read; note read is notes_read
 seam remember --name lease-steal-window --kind gotcha \
   --description "..." --body "..."        # or pipe the body on stdin
 seam ready                                # the actionable queue
 seam task claim --lease 1800 01K7ABCD     # flags on either side of the id
+seam call session_end '{"findings":"..."}' # any tool by name, JSON in and out
 ```
 
-Two things to know before you script it.
+Three things to know before you script it.
 
 **Flags go on either side of a positional.** Every `seam` command parses flags
 and positionals in any order, so `seam task claim 01K7ABCD --lease 1800` and
@@ -290,12 +292,42 @@ and positionals in any order, so `seam task claim 01K7ABCD --lease 1800` and
 error rather than a silently different command. See the
 [seam CLI reference](/reference/cli-seam/).
 
-**There is no `seam session-end`.** The CLI covers start, write, search, and the
-queue, but findings are harvested by the SessionEnd hook or the `session_end` MCP
-tool. An agent driving Seamless purely through `seam` starts sessions that only
-the idle reaper closes, and contributes nothing to the next briefing. If findings
-matter - and they are the whole point of `session_end` - that agent needs the MCP
-surface.
+**Every read command takes `--json`, and `seam call` reaches the rest.** `--json`
+prints the daemon's own answer byte for byte instead of the text rendering, and
+`seam call <tool> '<json-args>'` calls any MCP tool by name and prints its
+result, so a large or filtered read is a pipe into `jq` - through the same
+project fences and limits as the MCP tools. That is also the one thing the CLI
+has over an MCP client, which caps how much of a result its agent sees. See
+[JSON output](/reference/cli-seam/#json-output) and
+[seam call](/reference/cli-seam/#seam_call).
+
+```bash
+seam memory list --kind convention --limit 100 --json | jq -r '.hits[].name'
+seam call tasks_list '{"status":"open","plan":"lease-rework"}' | jq '.tasks[] | {id, title}'
+```
+
+**Findings go through `session_end`.** There is no `seam session-end` verb, and
+`seam prime` does not close what it opens: an agent driving Seamless through
+`seam` hands off with `seam call session_end '{"findings":"..."}'`, adding
+`"session":"<name or id>"` (`seam prime` prints the id on stderr) when the call
+is not bound to its session - a terminal, or a client without hooks. Skip it
+and the session is only ever closed by the idle reaper, contributing nothing to
+the next briefing.
+
+### Optional: tell your agent where to read from
+
+Agents with a shell sometimes write scripts over the files under the data
+directory (`~/.seamless`) to search or filter. Those reads skip the project
+fences, miss everything that lives only in the database - tasks, sessions,
+trials - and stop working under [peer_auth](/guides/peer-auth/), where the data
+directory belongs to the daemon's account. Nothing in Seamless tells an agent
+this on its own; if you want it said, paste a line like this into your agent's
+instructions (`CLAUDE.md`, `AGENTS.md`, or your client's equivalent):
+
+```markdown
+Use the Seamless tools, or `seam ... --json | jq` for large or filtered reads;
+never read files under the data dir.
+```
 
 ## Verify the integration
 

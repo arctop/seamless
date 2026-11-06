@@ -22,6 +22,7 @@ var sessionsCmd = spec("sessions", groupObservability, "list sessions, or show o
 
 type sessionsOpts struct {
 	status *string
+	asJSON *bool
 }
 
 func bindSessions(fs *flag.FlagSet) *sessionsOpts {
@@ -31,6 +32,7 @@ func bindSessions(fs *flag.FlagSet) *sessionsOpts {
 		// the console has always accepted. Transcribing the help text would have
 		// shipped that omission as an enforced rule.
 		status: enumFlag(fs, "status", "", "filter by `STATUS`", enumOf(core.SessionStatuses)),
+		asJSON: jsonFlag(fs, jsonUsage),
 	}
 }
 
@@ -40,6 +42,9 @@ func runSessions(_ context.Context, e *env, o *sessionsOpts, pos []string) error
 		return err
 	}
 	if len(pos) > 0 {
+		if *o.asJSON {
+			return printConsoleJSON(e, cfg, sessionDetailPath(pos[0]))
+		}
 		return sessionDetail(e.stdout, cfg, pos[0])
 	}
 
@@ -60,6 +65,9 @@ func runSessions(_ context.Context, e *env, o *sessionsOpts, pos []string) error
 	if *o.status != "" {
 		path += "&status=" + url.QueryEscape(*o.status)
 	}
+	if *o.asJSON {
+		return printConsoleJSON(e, cfg, path)
+	}
 	if err := consoleJSON(cfg, path, &data); err != nil {
 		return err
 	}
@@ -78,6 +86,12 @@ func runSessions(_ context.Context, e *env, o *sessionsOpts, pos []string) error
 	return nil
 }
 
+// sessionDetailPath is the console route for one session. The id is spliced in
+// as typed, exactly as the detail view always has: --json reads the same route.
+func sessionDetailPath(id string) string {
+	return "/console/sessions/" + id + "?format=json"
+}
+
 func sessionDetail(out io.Writer, cfg config.Config, id string) error {
 	var d struct {
 		Session struct {
@@ -94,7 +108,7 @@ func sessionDetail(out io.Writer, cfg config.Config, id string) error {
 		Injected  int    `json:"injectedItems"`
 		ReadBack  int    `json:"readAfterInject"`
 	}
-	if err := consoleJSON(cfg, "/console/sessions/"+id+"?format=json", &d); err != nil {
+	if err := consoleJSON(cfg, sessionDetailPath(id), &d); err != nil {
 		return err
 	}
 	name := d.Session.Name

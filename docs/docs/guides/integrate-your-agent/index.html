@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-loop">The loop</a></li><li class="lvl-2"><a href="#connecting">Connecting</a></li><li class="lvl-3"><a href="#auth-is-enforced-at-the-tool-not-the-transport">Auth is enforced at the tool, not the transport</a></li><li class="lvl-2"><a href="#the-connection-is-the-session-binding">The connection is the session binding</a></li><li class="lvl-2"><a href="#scope-discipline">Scope discipline</a></li><li class="lvl-2"><a href="#when-to-write-a-memory-and-when-to-skip">When to write a memory, and when to skip</a></li><li class="lvl-2"><a href="#a2a-recall-without-a-session">A2A: recall without a session</a></li><li class="lvl-2"><a href="#skills-over-the-web">Skills over the web</a></li><li class="lvl-2"><a href="#the-seam-cli-as-a-fallback-client">The seam CLI as a fallback client</a></li><li class="lvl-2"><a href="#verify-the-integration">Verify the integration</a></li>
+      <li class="lvl-2"><a href="#the-loop">The loop</a></li><li class="lvl-2"><a href="#connecting">Connecting</a></li><li class="lvl-3"><a href="#auth-is-enforced-at-the-tool-not-the-transport">Auth is enforced at the tool, not the transport</a></li><li class="lvl-2"><a href="#the-connection-is-the-session-binding">The connection is the session binding</a></li><li class="lvl-2"><a href="#scope-discipline">Scope discipline</a></li><li class="lvl-2"><a href="#when-to-write-a-memory-and-when-to-skip">When to write a memory, and when to skip</a></li><li class="lvl-2"><a href="#a2a-recall-without-a-session">A2A: recall without a session</a></li><li class="lvl-2"><a href="#skills-over-the-web">Skills over the web</a></li><li class="lvl-2"><a href="#the-seam-cli-as-a-fallback-client">The seam CLI as a fallback client</a></li><li class="lvl-3"><a href="#optional-tell-your-agent-where-to-read-from">Optional: tell your agent where to read from</a></li><li class="lvl-2"><a href="#verify-the-integration">Verify the integration</a></li>
     </ul>
   </details>
   <p>Any MCP client can be wired into Seamless: the daemon serves streamable-HTTP
@@ -509,23 +509,48 @@ delivered.</p>
 a headless client for the same daemon, authenticating with the same key:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam prime --cwd /abs/path/to/repo        <span class="c1"># session_start; prints the briefing</span>
 </span></span><span class="line"><span class="cl">seam recall <span class="s2">&#34;why is the console theme split&#34;</span>
+</span></span><span class="line"><span class="cl">seam memory <span class="nb">read</span> lease-steal-window       <span class="c1"># memory_read; note read is notes_read</span>
 </span></span><span class="line"><span class="cl">seam remember --name lease-steal-window --kind gotcha <span class="se">\
 </span></span></span><span class="line"><span class="cl">  --description <span class="s2">&#34;...&#34;</span> --body <span class="s2">&#34;...&#34;</span>        <span class="c1"># or pipe the body on stdin</span>
 </span></span><span class="line"><span class="cl">seam ready                                <span class="c1"># the actionable queue</span>
 </span></span><span class="line"><span class="cl">seam task claim --lease <span class="m">1800</span> 01K7ABCD     <span class="c1"># flags on either side of the id</span>
+</span></span><span class="line"><span class="cl">seam call session_end <span class="s1">&#39;{&#34;findings&#34;:&#34;...&#34;}&#39;</span> <span class="c1"># any tool by name, JSON in and out</span>
 </span></span></code></pre></div>
-<p>Two things to know before you script it.</p>
+<p>Three things to know before you script it.</p>
 <p><strong>Flags go on either side of a positional.</strong> Every <code>seam</code> command parses flags
 and positionals in any order, so <code>seam task claim 01K7ABCD --lease 1800</code> and
 <code>seam task claim --lease 1800 01K7ABCD</code> are the same line. A typo'd flag is an
 error rather than a silently different command. See the
 <a href="../../reference/cli-seam/">seam CLI reference</a>.</p>
-<p><strong>There is no <code>seam session-end</code>.</strong> The CLI covers start, write, search, and the
-queue, but findings are harvested by the SessionEnd hook or the <code>session_end</code> MCP
-tool. An agent driving Seamless purely through <code>seam</code> starts sessions that only
-the idle reaper closes, and contributes nothing to the next briefing. If findings
-matter - and they are the whole point of <code>session_end</code> - that agent needs the MCP
-surface.</p>
+<p><strong>Every read command takes <code>--json</code>, and <code>seam call</code> reaches the rest.</strong> <code>--json</code>
+prints the daemon's own answer byte for byte instead of the text rendering, and
+<code>seam call &lt;tool&gt; '&lt;json-args&gt;'</code> calls any MCP tool by name and prints its
+result, so a large or filtered read is a pipe into <code>jq</code> - through the same
+project fences and limits as the MCP tools. That is also the one thing the CLI
+has over an MCP client, which caps how much of a result its agent sees. See
+<a href="../../reference/cli-seam/#json-output">JSON output</a> and
+<a href="../../reference/cli-seam/#seam_call">seam call</a>.</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam memory list --kind convention --limit <span class="m">100</span> --json <span class="p">|</span> jq -r <span class="s1">&#39;.hits[].name&#39;</span>
+</span></span><span class="line"><span class="cl">seam call tasks_list <span class="s1">&#39;{&#34;status&#34;:&#34;open&#34;,&#34;plan&#34;:&#34;lease-rework&#34;}&#39;</span> <span class="p">|</span> jq <span class="s1">&#39;.tasks[] | {id, title}&#39;</span>
+</span></span></code></pre></div>
+<p><strong>Findings go through <code>session_end</code>.</strong> There is no <code>seam session-end</code> verb, and
+<code>seam prime</code> does not close what it opens: an agent driving Seamless through
+<code>seam</code> hands off with <code>seam call session_end '{&quot;findings&quot;:&quot;...&quot;}'</code>, adding
+<code>&quot;session&quot;:&quot;&lt;name or id&gt;&quot;</code> (<code>seam prime</code> prints the id on stderr) when the call
+is not bound to its session - a terminal, or a client without hooks. Skip it
+and the session is only ever closed by the idle reaper, contributing nothing to
+the next briefing.</p>
+<h3 id="optional-tell-your-agent-where-to-read-from">Optional: tell your agent where to read from</h3>
+<p>Agents with a shell sometimes write scripts over the files under the data
+directory (<code>~/.seamless</code>) to search or filter. Those reads skip the project
+fences, miss everything that lives only in the database - tasks, sessions,
+trials - and stop working under <a href="../../guides/peer-auth/">peer_auth</a>, where the data
+directory belongs to the daemon's account. Nothing in Seamless tells an agent
+this on its own; if you want it said, paste a line like this into your agent's
+instructions (<code>CLAUDE.md</code>, <code>AGENTS.md</code>, or your client's equivalent):</p>
+<div class="code-block" data-lang="markdown"><pre class="chroma"><code><span class="line"><span class="cl">Use the Seamless tools, or <span class="sb">`seam ... --json | jq`</span> for large or filtered reads;
+</span></span><span class="line"><span class="cl">never read files under the data dir.
+</span></span></code></pre></div>
 <h2 id="verify-the-integration">Verify the integration</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam doctor        <span class="c1"># /healthz, key acceptance, tools/list count, project_list</span>
 </span></span></code></pre></div>
@@ -552,7 +577,7 @@ the failure mode.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-loop">The loop</a></li><li class="lvl-2"><a href="#connecting">Connecting</a></li><li class="lvl-3"><a href="#auth-is-enforced-at-the-tool-not-the-transport">Auth is enforced at the tool, not the transport</a></li><li class="lvl-2"><a href="#the-connection-is-the-session-binding">The connection is the session binding</a></li><li class="lvl-2"><a href="#scope-discipline">Scope discipline</a></li><li class="lvl-2"><a href="#when-to-write-a-memory-and-when-to-skip">When to write a memory, and when to skip</a></li><li class="lvl-2"><a href="#a2a-recall-without-a-session">A2A: recall without a session</a></li><li class="lvl-2"><a href="#skills-over-the-web">Skills over the web</a></li><li class="lvl-2"><a href="#the-seam-cli-as-a-fallback-client">The seam CLI as a fallback client</a></li><li class="lvl-2"><a href="#verify-the-integration">Verify the integration</a></li>
+      <li class="lvl-2"><a href="#the-loop">The loop</a></li><li class="lvl-2"><a href="#connecting">Connecting</a></li><li class="lvl-3"><a href="#auth-is-enforced-at-the-tool-not-the-transport">Auth is enforced at the tool, not the transport</a></li><li class="lvl-2"><a href="#the-connection-is-the-session-binding">The connection is the session binding</a></li><li class="lvl-2"><a href="#scope-discipline">Scope discipline</a></li><li class="lvl-2"><a href="#when-to-write-a-memory-and-when-to-skip">When to write a memory, and when to skip</a></li><li class="lvl-2"><a href="#a2a-recall-without-a-session">A2A: recall without a session</a></li><li class="lvl-2"><a href="#skills-over-the-web">Skills over the web</a></li><li class="lvl-2"><a href="#the-seam-cli-as-a-fallback-client">The seam CLI as a fallback client</a></li><li class="lvl-3"><a href="#optional-tell-your-agent-where-to-read-from">Optional: tell your agent where to read from</a></li><li class="lvl-2"><a href="#verify-the-integration">Verify the integration</a></li>
     </ul>
   </aside>
   

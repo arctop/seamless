@@ -15,9 +15,11 @@ package main
 // each spec so a typo cannot silently open a second section.
 const (
 	groupAgentLoop     = "agent loop"
+	groupKnowledge     = "memories and notes"
 	groupTasks         = "tasks"
 	groupPlans         = "captured plans (Claude Code plan mode)"
 	groupObservability = "observability"
+	groupCall          = "any MCP tool"
 	groupHooks         = "hooks (invoked by your agent client, not by hand)"
 	groupBridge        = "mcp bridge (invoked by an MCP client, not by hand)"
 )
@@ -26,7 +28,7 @@ const (
 // command renders nothing; help_test pins the converse, that every group a
 // command names is listed here, since a spec in an unlisted group renders
 // nowhere at all.
-var groupOrder = []string{groupAgentLoop, groupTasks, groupPlans, groupObservability, groupHooks, groupBridge}
+var groupOrder = []string{groupAgentLoop, groupKnowledge, groupTasks, groupPlans, groupObservability, groupCall, groupHooks, groupBridge}
 
 // commands returns the migrated command table, in help order.
 //
@@ -39,6 +41,11 @@ func commands() []cmd {
 		rememberCmd,
 		recallCmd,
 		captureCmd,
+
+		memoryReadCmd,
+		memoryListCmd,
+		noteReadCmd,
+		noteListCmd,
 
 		readyCmd,
 		taskListCmd,
@@ -63,6 +70,8 @@ func commands() []cmd {
 		usageCmd,
 		doctorCmd,
 		versionCmd,
+
+		callCmd,
 
 		hookCmd,
 

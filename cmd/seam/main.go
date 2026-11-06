@@ -115,6 +115,15 @@ func dial(ctx context.Context) (*mcpclient.Client, config.Config, error) {
 	if err != nil {
 		return nil, cfg, err
 	}
+	return dialWith(ctx, cfg)
+}
+
+// dialWith is dial against an already-loaded config: the one place an MCP
+// client is built, so every command -- and `seam call` -- sends the same headers
+// (mcpHeaders) over the same connection path (cfg.HTTPClient, which dials the
+// peer_auth socket when server_url names one). Tests aim it at a stand-in
+// daemon instead of loading a config file.
+func dialWith(ctx context.Context, cfg config.Config) (*mcpclient.Client, config.Config, error) {
 	// No whole-request deadline: a tool call may be LLM-backed (recall
 	// embeddings, gardener_request) and legitimately slow. The dial timeout
 	// inside httpClient is what makes a down daemon fail fast.
@@ -142,13 +151,9 @@ func dial(ctx context.Context) (*mcpclient.Client, config.Config, error) {
 
 // callTool invokes a tool and returns its decoded JSON result.
 func callTool(ctx context.Context, cli *mcpclient.Client, name string, args map[string]any) (map[string]any, error) {
-	res, err := cli.CallTool(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Name: name, Arguments: args}})
+	text, err := callToolRaw(ctx, cli, name, args)
 	if err != nil {
 		return nil, err
-	}
-	text := firstText(res)
-	if res.IsError {
-		return nil, fmt.Errorf("%s", text)
 	}
 	var out map[string]any
 	if text != "" {
@@ -160,6 +165,25 @@ func callTool(ctx context.Context, cli *mcpclient.Client, name string, args map[
 		}
 	}
 	return out, nil
+}
+
+// callToolRaw invokes a tool and returns its result text exactly as the daemon
+// sent it, or the tool's error text as the error. callTool decodes it; --json
+// and `seam call` print it untouched, so no field the daemon added is lost to a
+// client that predates it.
+//
+// args is passed to the transport as-is: `seam call` hands it any JSON object,
+// the commands hand it their own map.
+func callToolRaw(ctx context.Context, cli *mcpclient.Client, name string, args any) (string, error) {
+	res, err := cli.CallTool(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Name: name, Arguments: args}})
+	if err != nil {
+		return "", err
+	}
+	text := firstText(res)
+	if res.IsError {
+		return "", fmt.Errorf("%s", text)
+	}
+	return text, nil
 }
 
 func firstText(res *mcp.CallToolResult) string {

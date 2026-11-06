@@ -32,6 +32,7 @@ type recallOpts struct {
 	scope   *string
 	project *string
 	limit   *int
+	asJSON  *bool
 }
 
 func bindRecall(fs *flag.FlagSet) *recallOpts {
@@ -39,6 +40,7 @@ func bindRecall(fs *flag.FlagSet) *recallOpts {
 		scope:   enumFlag(fs, "scope", "all", "what to search: `SCOPE`", recallScopes),
 		project: fs.String("project", "", "project `SLUG` (default: server's binding)"),
 		limit:   posIntFlag(fs, "limit", 10, "maximum results: `N`"),
+		asJSON:  jsonFlag(fs, jsonUsage),
 	}
 }
 
@@ -55,9 +57,13 @@ func runRecall(ctx context.Context, e *env, o *recallOpts, pos []string) error {
 	}
 	defer func() { _ = cli.Close() }()
 
-	out, err := callTool(ctx, cli, "recall", map[string]any{
+	args := map[string]any{
 		"query": query, "scope": *o.scope, "project": *o.project, "limit": *o.limit,
-	})
+	}
+	if *o.asJSON {
+		return printToolJSON(ctx, e, cli, "recall", args)
+	}
+	out, err := callTool(ctx, cli, "recall", args)
 	if err != nil {
 		return err
 	}

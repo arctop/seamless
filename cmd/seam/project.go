@@ -43,12 +43,14 @@ those consequences and applies nothing until you pass --yes. Loosening is
 immediate.`)
 
 type projectIsolationOpts struct {
-	yes *bool
+	yes    *bool
+	asJSON *bool
 }
 
 func bindProjectIsolation(fs *flag.FlagSet) *projectIsolationOpts {
 	return &projectIsolationOpts{
-		yes: fs.Bool("yes", false, "apply a tighten without the confirmation step (a loosen needs none)"),
+		yes:    fs.Bool("yes", false, "apply a tighten without the confirmation step (a loosen needs none)"),
+		asJSON: jsonFlag(fs, jsonUsage+"; the exit status is unchanged"),
 	}
 }
 
@@ -84,9 +86,9 @@ func runProjectIsolation(_ context.Context, e *env, o *projectIsolationOpts, pos
 		return err
 	}
 	if state == "" {
-		return showProjectIsolation(e, cfg, slug)
+		return showProjectIsolation(e, cfg, slug, *o.asJSON)
 	}
-	return setProjectIsolation(e, cfg, slug, state, *o.yes)
+	return setProjectIsolation(e, cfg, slug, state, *o.yes, *o.asJSON)
 }
 
 // cliProjectSummary is the slice of the console's project summary JSON this
@@ -98,9 +100,22 @@ type cliProjectSummary struct {
 }
 
 // showProjectIsolation prints the state a project holds now, and its promise.
-func showProjectIsolation(e *env, cfg config.Config, slug string) error {
+// With asJSON it prints the route's summary as-is, after the same check: an
+// answer with no isolation state is not seamlessd's, in either rendering.
+func showProjectIsolation(e *env, cfg config.Config, slug string, asJSON bool) error {
+	path := "/console/projects/" + url.PathEscape(slug) + "?format=json"
 	var p cliProjectSummary
-	if err := consoleJSON(cfg, "/console/projects/"+url.PathEscape(slug)+"?format=json", &p); err != nil {
+	var raw []byte
+	if asJSON {
+		body, err := consoleRaw(cfg, path)
+		if err != nil {
+			return err
+		}
+		if err := decodeConsole(path, body, &p); err != nil {
+			return err
+		}
+		raw = body
+	} else if err := consoleJSON(cfg, path, &p); err != nil {
 		return err
 	}
 	if p.Isolation == "" {
@@ -108,6 +123,9 @@ func showProjectIsolation(e *env, cfg config.Config, slug string) error {
 		// never on the wire), so an empty state means something other than seamlessd
 		// answered. Printing "isolation: " would be a confident blank.
 		return fmt.Errorf("unreadable project summary for %s: no isolation state", slug)
+	}
+	if raw != nil {
+		return writeRaw(e.stdout, raw)
 	}
 	fmt.Fprintf(e.stdout, "%s  isolation: %s\n", slug, p.Isolation)
 	printIsolationPromise(e, p.IsolationPromise)
@@ -146,18 +164,41 @@ type cliIsolationResult struct {
 // which concatenates the query and the body, so a value supplied in both places
 // is two values and a deliberate 400 -- which is also why consolePOST's bodyless
 // request needs no special-casing here.
-func setProjectIsolation(e *env, cfg config.Config, slug, state string, yes bool) error {
+//
+// With asJSON the response is printed as-is in place of the text, and the
+// outcome still decides the exit status: an unconfirmed tighten exits 1 in
+// either rendering, so a script reading JSON cannot mistake it for a fence that
+// went up either.
+func setProjectIsolation(e *env, cfg config.Config, slug, state string, yes, asJSON bool) error {
 	q := url.Values{"format": {"json"}, "state": {state}}
 	if yes {
 		q.Set("confirm", "1")
 	}
+	path := "/console/projects/" + url.PathEscape(slug) + "/isolation?" + q.Encode()
 	var res cliIsolationResult
-	if err := consolePOST(cfg, "/console/projects/"+url.PathEscape(slug)+"/isolation?"+q.Encode(), &res); err != nil {
+	var raw []byte
+	if asJSON {
+		body, err := consolePOSTRaw(cfg, path)
+		if err != nil {
+			return err
+		}
+		if err := decodeConsole(path, body, &res); err != nil {
+			return err
+		}
+		raw = body
+	} else if err := consolePOST(cfg, path, &res); err != nil {
 		// A refusal arrives here as the handler's own message -- the blocking
 		// children and the remedy -- because every 409 on this route carries `error`.
 		return err
 	}
 	switch {
+	case raw != nil && res.Applied:
+		return writeRaw(e.stdout, raw)
+	case raw != nil && res.ConfirmRequired:
+		if err := writeRaw(e.stdout, raw); err != nil {
+			return err
+		}
+		return errNotApplied
 	case res.Applied:
 		fmt.Fprintf(e.stdout, "%s  isolation set to %s\n", slug, res.State)
 		printIsolationPromise(e, res.Promise)
@@ -173,7 +214,7 @@ func setProjectIsolation(e *env, cfg config.Config, slug, state string, yes bool
 		// caller asked to see, and the error is the verdict that nothing happened
 		// (the `plan check` / `status` precedent). Exiting 0 here would let a script
 		// read an unconfirmed tighten as a fence that went up.
-		return errors.New("nothing applied -- re-run with --yes to apply this tighten")
+		return errNotApplied
 	default:
 		// The two outcomes above are exhaustive on a 200, and a refusal is the 409
 		// handled above. Anything else is something other than seamlessd answering;
@@ -182,6 +223,9 @@ func setProjectIsolation(e *env, cfg config.Config, slug, state string, yes bool
 		return fmt.Errorf("unreadable isolation response for %s: neither applied nor awaiting confirmation", slug)
 	}
 }
+
+// errNotApplied is an unconfirmed tighten's result, in both renderings.
+var errNotApplied = errors.New("nothing applied -- re-run with --yes to apply this tighten")
 
 // printIsolationPromise echoes the promise sentence verbatim. The console owns
 // that copy -- one sentence per state, quoted from one place so the surfaces

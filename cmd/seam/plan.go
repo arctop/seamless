@@ -74,6 +74,7 @@ var planWindows = []string{"24h", "7d", "30d", "all"}
 type planListOpts struct {
 	project *string
 	window  *string
+	asJSON  *bool
 }
 
 func bindPlanList(fs *flag.FlagSet) *planListOpts {
@@ -83,18 +84,32 @@ func bindPlanList(fs *flag.FlagSet) *planListOpts {
 		// "24h". Nothing in the output says which window it answered, so the caller
 		// reads a one-day list as the 30d one they asked for.
 		window: enumFlag(fs, "window", "all", "time `WINDOW`", planWindows),
+		asJSON: jsonFlag(fs, jsonUsage+"; not with --project, which filters client-side"),
 	}
 }
 
 func runPlanList(_ context.Context, e *env, o *planListOpts, _ []string) error {
+	if *o.asJSON && *o.project != "" {
+		// --project is applied HERE, to rows the route returned for every
+		// project, and --json prints the route's answer as-is. Honoring both
+		// would mean re-marshalling the answer around a filtered row list whose
+		// counts no longer add up, so the pair is refused rather than one of them
+		// silently dropped -- with the filter that does both spelled out.
+		return fmt.Errorf("--json prints the console's answer as-is and --project filters it client-side; "+
+			"filter the JSON instead: seam plan list --json | jq '.rows[] | select(.project == %q)'", *o.project)
+	}
 	cfg, err := e.loadConfig()
 	if err != nil {
 		return err
 	}
+	path := "/console/plans?format=json&w=" + url.QueryEscape(*o.window)
+	if *o.asJSON {
+		return printConsoleJSON(e, cfg, path)
+	}
 	var data struct {
 		Rows []cliPlanRow `json:"rows"`
 	}
-	if err := consoleJSON(cfg, "/console/plans?format=json&w="+url.QueryEscape(*o.window), &data); err != nil {
+	if err := consoleJSON(cfg, path, &data); err != nil {
 		return err
 	}
 	shown := 0
@@ -116,15 +131,27 @@ func runPlanList(_ context.Context, e *env, o *planListOpts, _ []string) error {
 // --- plan show ---
 
 var planShowCmd = spec("plan show", groupPlans, "one plan: body, attached notes, tasks",
-	exactly(1, "slug"), bindNoOpts, runPlanShow)
+	exactly(1, "slug"), bindPlanShow, runPlanShow)
 
-func runPlanShow(_ context.Context, e *env, _ *noOpts, pos []string) error {
+type planShowOpts struct {
+	asJSON *bool
+}
+
+func bindPlanShow(fs *flag.FlagSet) *planShowOpts {
+	return &planShowOpts{asJSON: jsonFlag(fs, jsonUsage)}
+}
+
+func runPlanShow(_ context.Context, e *env, o *planShowOpts, pos []string) error {
 	cfg, err := e.loadConfig()
 	if err != nil {
 		return err
 	}
+	path := "/console/plans/" + url.PathEscape(pos[0]) + "?format=json"
+	if *o.asJSON {
+		return printConsoleJSON(e, cfg, path)
+	}
 	var d cliPlanDetail
-	if err := consoleJSON(cfg, "/console/plans/"+url.PathEscape(pos[0])+"?format=json", &d); err != nil {
+	if err := consoleJSON(cfg, path, &d); err != nil {
 		return err
 	}
 	fmt.Fprintf(e.stdout, "%s  [%s]  %s\n", d.Plan.Slug, d.Plan.Status, orDash(d.Plan.Project))

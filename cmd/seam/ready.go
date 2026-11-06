@@ -9,12 +9,15 @@ import (
 )
 
 var readyCmd = spec("ready", groupTasks, "list the actionable (unblocked) tasks",
-	noArgs(), bindReady, runReady)
+	noArgs(), bindReady, runReady).
+	withLong("--json prints tasks_ready's answer, which always carries both the ready\n" +
+		"and the blocked lists, so --blocked changes nothing there.")
 
 type readyOpts struct {
 	project     *string
 	showBlocked *bool
 	plan        *string
+	asJSON      *bool
 }
 
 func bindReady(fs *flag.FlagSet) *readyOpts {
@@ -22,6 +25,7 @@ func bindReady(fs *flag.FlagSet) *readyOpts {
 		project:     fs.String("project", "", "project `SLUG` (defaults to the server binding)"),
 		showBlocked: fs.Bool("blocked", false, "also list blocked tasks and their blockers"),
 		plan:        fs.String("plan", "", "show the ready/blocked step tasks of plan `SLUG` instead of the default queue"),
+		asJSON:      jsonFlag(fs, jsonUsage),
 	}
 }
 
@@ -32,7 +36,11 @@ func runReady(ctx context.Context, e *env, o *readyOpts, _ []string) error {
 	}
 	defer func() { _ = cli.Close() }()
 
-	out, err := callTool(ctx, cli, "tasks_ready", map[string]any{"project": *o.project, "plan": *o.plan})
+	args := map[string]any{"project": *o.project, "plan": *o.plan}
+	if *o.asJSON {
+		return printToolJSON(ctx, e, cli, "tasks_ready", args)
+	}
+	out, err := callTool(ctx, cli, "tasks_ready", args)
 	if err != nil {
 		return err
 	}

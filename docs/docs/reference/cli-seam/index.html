@@ -5,20 +5,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>seam CLI - Seamless docs</title>
-<meta name="description" content="Every seam subcommand - agent loop, tasks, plans, observability, hooks - plus the flag-order rules and what each one rejects.">
+<meta name="description" content="Every seam subcommand - agent loop, memories and notes, tasks, plans, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.">
 <link rel="canonical" href="https://thereisnospoon.org/docs/reference/cli-seam/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://thereisnospoon.org/docs/reference/cli-seam/">
 <meta property="og:title" content="seam CLI - Seamless docs">
-<meta property="og:description" content="Every seam subcommand - agent loop, tasks, plans, observability, hooks - plus the flag-order rules and what each one rejects.">
+<meta property="og:description" content="Every seam subcommand - agent loop, memories and notes, tasks, plans, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Reference","item":"https://thereisnospoon.org/docs/reference/"},{"@type":"ListItem","position":3,"name":"seam CLI","item":"https://thereisnospoon.org/docs/reference/cli-seam/"}]},{"@type":"TechArticle","headline":"seam CLI - Seamless docs","description":"Every seam subcommand - agent loop, tasks, plans, observability, hooks - plus the flag-order rules and what each one rejects.","url":"https://thereisnospoon.org/docs/reference/cli-seam/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Reference","item":"https://thereisnospoon.org/docs/reference/"},{"@type":"ListItem","position":3,"name":"seam CLI","item":"https://thereisnospoon.org/docs/reference/cli-seam/"}]},{"@type":"TechArticle","headline":"seam CLI - Seamless docs","description":"Every seam subcommand - agent loop, memories and notes, tasks, plans, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.","url":"https://thereisnospoon.org/docs/reference/cli-seam/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
 <link rel="icon" type="image/svg+xml" href="../../../static/favicon.svg">
@@ -232,11 +232,11 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 </nav>
 
   <h1>seam CLI</h1>
-  <p class="lede">Every seam subcommand - agent loop, tasks, plans, observability, hooks - plus the flag-order rules and what each one rejects.</p>
+  <p class="lede">Every seam subcommand - agent loop, memories and notes, tasks, plans, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.</p>
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#flags-and-positionals">Flags and positionals</a></li><li class="lvl-2"><a href="#which-session">Which session a command acts in</a></li><li class="lvl-2"><a href="#agent-loop">Agent loop</a></li><li class="lvl-3"><a href="#seam_prime">seam prime</a></li><li class="lvl-3"><a href="#seam_remember">seam remember</a></li><li class="lvl-3"><a href="#seam_recall">seam recall</a></li><li class="lvl-3"><a href="#seam_capture">seam capture</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-3"><a href="#seam_ready">seam ready</a></li><li class="lvl-3"><a href="#seam_task_list">seam task list</a></li><li class="lvl-3"><a href="#seam_task_add">seam task add</a></li><li class="lvl-3"><a href="#seam_task_transition">seam task done|start|drop|reopen</a></li><li class="lvl-3"><a href="#seam_task_claim">seam task claim</a></li><li class="lvl-3"><a href="#seam_task_heartbeat">seam task heartbeat</a></li><li class="lvl-3"><a href="#seam_task_release">seam task release</a></li><li class="lvl-2"><a href="#captured-plans">Captured plans</a></li><li class="lvl-3"><a href="#seam_plan_list">seam plan list</a></li><li class="lvl-3"><a href="#seam_plan_show">seam plan show</a></li><li class="lvl-3"><a href="#seam_plan_check">seam plan check</a></li><li class="lvl-3"><a href="#seam_plan_approve">seam plan approve</a></li><li class="lvl-2"><a href="#observability">Observability</a></li><li class="lvl-3"><a href="#seam_status">seam status</a></li><li class="lvl-3"><a href="#seam_sessions">seam sessions</a></li><li class="lvl-3"><a href="#seam_fav">seam fav</a></li><li class="lvl-3"><a href="#seam_project_isolation">seam project isolation</a></li><li class="lvl-3"><a href="#seam_usage">seam usage</a></li><li class="lvl-3"><a href="#seam_doctor">seam doctor</a></li><li class="lvl-3"><a href="#seam_version">seam version</a></li><li class="lvl-2"><a href="#mcp-bridge-and-auth-helper">MCP bridge and auth helper</a></li><li class="lvl-2"><a href="#hooks">Hooks</a></li>
+      <li class="lvl-2"><a href="#flags-and-positionals">Flags and positionals</a></li><li class="lvl-2"><a href="#json-output">JSON output</a></li><li class="lvl-2"><a href="#which-session">Which session a command acts in</a></li><li class="lvl-2"><a href="#agent-loop">Agent loop</a></li><li class="lvl-3"><a href="#seam_prime">seam prime</a></li><li class="lvl-3"><a href="#seam_remember">seam remember</a></li><li class="lvl-3"><a href="#seam_recall">seam recall</a></li><li class="lvl-3"><a href="#seam_capture">seam capture</a></li><li class="lvl-2"><a href="#memories-and-notes">Memories and notes</a></li><li class="lvl-3"><a href="#seam_memory_read">seam memory read</a></li><li class="lvl-3"><a href="#seam_memory_list">seam memory list</a></li><li class="lvl-3"><a href="#seam_note_read">seam note read</a></li><li class="lvl-3"><a href="#seam_note_list">seam note list</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-3"><a href="#seam_ready">seam ready</a></li><li class="lvl-3"><a href="#seam_task_list">seam task list</a></li><li class="lvl-3"><a href="#seam_task_add">seam task add</a></li><li class="lvl-3"><a href="#seam_task_transition">seam task done|start|drop|reopen</a></li><li class="lvl-3"><a href="#seam_task_claim">seam task claim</a></li><li class="lvl-3"><a href="#seam_task_heartbeat">seam task heartbeat</a></li><li class="lvl-3"><a href="#seam_task_release">seam task release</a></li><li class="lvl-2"><a href="#captured-plans">Captured plans</a></li><li class="lvl-3"><a href="#seam_plan_list">seam plan list</a></li><li class="lvl-3"><a href="#seam_plan_show">seam plan show</a></li><li class="lvl-3"><a href="#seam_plan_check">seam plan check</a></li><li class="lvl-3"><a href="#seam_plan_approve">seam plan approve</a></li><li class="lvl-2"><a href="#observability">Observability</a></li><li class="lvl-3"><a href="#seam_status">seam status</a></li><li class="lvl-3"><a href="#seam_sessions">seam sessions</a></li><li class="lvl-3"><a href="#seam_fav">seam fav</a></li><li class="lvl-3"><a href="#seam_project_isolation">seam project isolation</a></li><li class="lvl-3"><a href="#seam_usage">seam usage</a></li><li class="lvl-3"><a href="#seam_doctor">seam doctor</a></li><li class="lvl-3"><a href="#seam_version">seam version</a></li><li class="lvl-2"><a href="#any-mcp-tool">Any MCP tool</a></li><li class="lvl-3"><a href="#seam_call">seam call</a></li><li class="lvl-2"><a href="#mcp-bridge-and-auth-helper">MCP bridge and auth helper</a></li><li class="lvl-2"><a href="#hooks">Hooks</a></li>
     </ul>
   </details>
   <p><code>seam</code> is the headless CLI. It does no work itself: it loads the same
@@ -248,6 +248,10 @@ approving a plan). Both paths authenticate with the static bearer key from
 is down, every subcommand below fails at the connection.</p>
 <p>The target address is derived from the configured bind address, with a bind-all
 host (<code>0.0.0.0</code>, <code>::</code>, or empty) mapped to loopback.</p>
+<p>Every read command also takes <a href="#json-output"><code>--json</code></a>, and
+<a href="#seam_call"><code>seam call</code></a> reaches any MCP tool by name, so a script or an agent
+with a shell can read everything the MCP surface serves and filter it with
+<code>jq</code> - through the same project fences, never by reading the data directory.</p>
 <h2 id="flags-and-positionals">Flags and positionals</h2>
 <p>Every <code>seam</code> command takes flags on either side of its positionals. These two
 lines are the same line:</p>
@@ -261,9 +265,42 @@ lines are the same line:</p>
 is an error instead of a silently different command: <code>seam recall foo --projct p</code>
 reports <code>flag provided but not defined: -projct</code>. A positional that starts with
 <code>-</code> needs the <code>--</code> terminator (<code>seam recall -- -foo</code>).</p>
-<p><code>seam task done|start|drop|reopen</code> and <code>seam plan show|approve</code> parse no flags at
-all. Commands that take only flags and no positionals (<code>ready</code>, <code>task list</code>,
-<code>task add</code>, <code>plan list</code>, <code>status</code>, <code>usage</code>, <code>doctor</code>) are unaffected either way.</p>
+<p><code>seam plan approve</code> parses no flags at all. Commands that take only flags and no
+positionals (<code>ready</code>, <code>task list</code>, <code>task add</code>, <code>plan list</code>, <code>status</code>, <code>usage</code>,
+<code>doctor</code>) are unaffected either way.</p>
+<h2 id="json-output">JSON output</h2>
+<p>Every read command takes <code>--json</code>: <code>recall</code>, <code>memory read</code>, <code>memory list</code>,
+<code>note read</code>, <code>note list</code>, <code>ready</code>, <code>task list</code>, <code>plan list</code>, <code>plan show</code>,
+<code>status</code>, <code>sessions</code>, <code>project isolation</code>, <code>usage</code>, and <code>version</code>. With it, the
+command prints the daemon's own answer - the tool's result, or the console
+route's JSON - byte for byte, followed by a newline. It is not re-encoded from
+anything the CLI decoded, so a field this <code>seam</code> does not know about still
+reaches <code>jq</code>. Without <code>--json</code> every command prints exactly the text it always
+has.</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam recall lease grace --limit <span class="m">50</span> --json <span class="p">|</span> jq -r <span class="s1">&#39;.hits[] | &#34;\(.kind)\t\(.name)&#34;&#39;</span>
+</span></span><span class="line"><span class="cl">seam task list --status open --json <span class="p">|</span> jq <span class="s1">&#39;.tasks | length&#39;</span>
+</span></span><span class="line"><span class="cl">seam sessions --status active --json <span class="p">|</span> jq -r <span class="s1">&#39;.sessions[].name&#39;</span>
+</span></span></code></pre></div>
+<p><code>--json</code> changes the rendering and nothing else: the same tool is called with
+the same arguments, the same fences apply, the server's limits (recall's 100-hit
+cap and token budget among them) are the MCP surface's, and the exit status is
+the command's usual one - a tool error still exits 1 with nothing on stdout. An
+answer that is not JSON is refused rather than passed on, so a pipe never
+receives something other than <code>seamlessd</code>'s answer. What a CLI gains over an MCP
+client is only the pipe: an MCP client caps how much of a result its agent sees,
+and a shell does not.</p>
+<p>Three commands assemble or filter their answer, and say so:</p>
+<ul>
+<li><code>seam status --json</code> prints the two answers it is made of, each as received:
+<code>{&quot;healthz&quot;: &lt;GET /healthz&gt;, &quot;project_list&quot;: &lt;the project_list result&gt;}</code>. A half
+that could not be read is <code>null</code>, and the command still exits 1 naming it.</li>
+<li><code>seam plan list --project</code> filters the console's rows on the client, so it
+cannot be combined with <code>--json</code> (which prints the console's answer
+untouched). The pair is refused with the equivalent filter:
+<code>seam plan list --json | jq '.rows[] | select(.project == &quot;SLUG&quot;)'</code>.</li>
+<li><code>seam ready --json</code> prints <code>tasks_ready</code>'s answer, which always carries both
+the <code>ready</code> and the <code>blocked</code> lists; <code>--blocked</code> adds nothing to it.</li>
+</ul>
 <h2 id="which-session">Which session a command acts in</h2>
 <p>Every MCP request <code>seam</code> makes names the machine it runs on and the agent process
 that launched it - its nearest ancestor that is not a shell - the same identity
@@ -309,10 +346,11 @@ session's project and is an error when nothing pins it, and <code>global</code> 
 explicit escape hatch. Output reports whether the write created or updated the
 memory, and names a similar existing memory when the server flags one.</p>
 <h3 id="seam_recall">seam recall</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam recall QUERY <span class="o">[</span>--scope all<span class="p">|</span>memories<span class="p">|</span>notes<span class="o">]</span> <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--limit N<span class="o">]</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam recall QUERY <span class="o">[</span>--scope SCOPE<span class="o">]</span> <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--limit N<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span>
 </span></span></code></pre></div>
-<p>Calls <code>recall</code>, the single RRF-fused search entry point. Scope defaults to <code>all</code>
-and limit to <code>10</code>. Query words are joined with spaces, and flags may sit on
+<p>Calls <code>recall</code>, the single RRF-fused search entry point. <code>--scope</code> is <code>all</code>,
+<code>memories</code>, <code>notes</code>, <code>tasks</code>, <code>trials</code>, or <code>sessions</code>; it defaults to <code>all</code> and
+limit to <code>10</code>. Query words are joined with spaces, and flags may sit on
 either side of them. A query word that starts with <code>-</code> needs the <code>--</code> terminator
 (<code>seam recall -- -foo</code>), which is the only reason to reach for it. Each hit
 prints its kind, name, age, source, score, and description; no matches prints
@@ -333,11 +371,53 @@ is an error naming the fix. Pass <code>--project global</code> to file the note 
 (<code>notes/_global/</code>), or <code>--project &lt;slug&gt;</code> to name a project outright.</p>
 <p><code>--project</code> binds on either side of the URL: <code>seam capture --project p URL</code> and
 <code>seam capture URL --project p</code> are the same line.</p>
+<h2 id="memories-and-notes">Memories and notes</h2>
+<p>Read verbs for the knowledge the agent loop writes, as thin clients of the same
+MCP tools an agent calls: the same project fences, the same limits. Each takes
+<a href="#json-output"><code>--json</code></a>. A reference is either a name or slug positional or
+<code>--id</code>, never both; <code>--project</code> scopes a name or slug lookup and is refused
+beside <code>--id</code>, which reads by ULID from any scope the caller may read. These
+refusals happen before connecting and exit 1.</p>
+<h3 id="seam_memory_read">seam memory read</h3>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam memory <span class="nb">read</span> <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> &lt;name&gt;
+</span></span><span class="line"><span class="cl">seam memory <span class="nb">read</span> --id ID <span class="o">[</span>--json<span class="o">]</span>
+</span></span></code></pre></div>
+<p>Calls <code>memory_read</code>. A name resolves in the project (<code>--project</code>, else the
+session's) and falls back to a global memory of the same name. Prints the name,
+kind and project, then the id, description, tags, model and - for a superseded
+memory, which still reads - a warning naming its replacement, then the body.
+Empty fields print no line.</p>
+<h3 id="seam_memory_list">seam memory list</h3>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam memory list --kind KIND <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--limit N<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span>
+</span></span><span class="line"><span class="cl">seam memory list <span class="o">[</span>--kind KIND<span class="o">]</span> <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--limit N<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> WORD...
+</span></span></code></pre></div>
+<p>Calls <code>recall</code> scoped to memories. <code>--kind</code> with no words lists that kind newest
+first (recall's browse mode); words search memories, within <code>--kind</code> when it is
+given. One of the two is required - there is no unfiltered listing. The project's
+memories and global ones are both included. Each hit prints its name, project
+and age, then its description; nothing found prints <code>(no memories)</code>. The limits
+are recall's: at most 100 hits (<code>--limit</code>, default 10) inside the server's
+recall token budget.</p>
+<h3 id="seam_note_read">seam note read</h3>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam note <span class="nb">read</span> <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> &lt;slug&gt;
+</span></span><span class="line"><span class="cl">seam note <span class="nb">read</span> --id ID <span class="o">[</span>--json<span class="o">]</span>
+</span></span></code></pre></div>
+<p>Calls <code>notes_read</code>. A slug resolves in the project (<code>--project</code>, else the
+session's) and falls back to a global note of the same slug. Prints the slug and
+project, then the title, id, description, tags, source URL and model, then the
+body.</p>
+<h3 id="seam_note_list">seam note list</h3>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam note list <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--limit N<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> WORD...
+</span></span></code></pre></div>
+<p>Calls <code>recall</code> with scope <code>notes</code>. No tool lists notes without a query -
+recall's browse mode is for memory kinds - so this takes words, as <code>recall</code>
+does, and returns the best matches first: slug, title, project and age, then the
+description. Nothing found prints <code>(no notes)</code>. The limits are recall's.</p>
 <h2 id="tasks">Tasks</h2>
 <p>The queue side of the CLI. See <a href="../../reference/mcp/tasks/">Tasks</a> for what ready,
 blocked, and claimed mean.</p>
 <h3 id="seam_ready">seam ready</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam ready <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--blocked<span class="o">]</span> <span class="o">[</span>--plan S<span class="o">]</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam ready <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--blocked<span class="o">]</span> <span class="o">[</span>--plan S<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span>
 </span></span></code></pre></div>
 <p>Calls <code>tasks_ready</code> and lists the actionable queue by short id and title.
 <code>--blocked</code> additionally lists blocked tasks, each followed by its blockers and
@@ -345,7 +425,7 @@ their statuses. <code>--plan S</code> shows that plan's step tasks instead of th
 queue - plan steps are excluded from the default view. Prints
 <code>ready: (nothing actionable)</code> when the queue is empty.</p>
 <h3 id="seam_task_list">seam task list</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam task list <span class="o">[</span>--id ID<span class="o">]</span> <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--status S<span class="o">]</span> <span class="o">[</span>--plan S<span class="o">]</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam task list <span class="o">[</span>--id ID<span class="o">]</span> <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--status S<span class="o">]</span> <span class="o">[</span>--plan S<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span>
 </span></span></code></pre></div>
 <p>Calls <code>tasks_list</code>. <code>--status</code> filters to <code>open</code>, <code>in_progress</code>, <code>done</code>, or
 <code>dropped</code>. <code>--id</code> loads a single task by its globally-unique id and ignores the
@@ -391,18 +471,19 @@ any holder's claim. Agents on the MCP surface cannot reach that path.</p>
 locally. Bare <code>seam plan</code> is not a command - it names its subcommands and exits
 2, the same as bare <code>seam task</code>.</p>
 <h3 id="seam_plan_list">seam plan list</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam plan list <span class="o">[</span>--project SLUG<span class="o">]</span> <span class="o">[</span>--window WINDOW<span class="o">]</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam plan list <span class="o">[</span>--project SLUG<span class="o">]</span> <span class="o">[</span>--window WINDOW<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span>
 </span></span></code></pre></div>
 <p>Lists captured plans with slug, status, title, project, iteration, agent count,
 task progress, and age. <code>--window</code> is <code>24h</code>, <code>7d</code>, <code>30d</code>, or <code>all</code> (default
 <code>all</code>) and is applied by the server; anything else is a parse error rather than a
 silent fall back to the server's <code>24h</code> default. <code>--project</code> filters the returned
-rows client-side.
+rows client-side, which is why it cannot be combined with <code>--json</code>
+(<a href="#json-output">see above</a>).
 Prints <code>(no captured plans)</code> when nothing matches.</p>
 <p><code>plan list</code> takes no positional: <code>seam plan list &lt;slug&gt;</code> is an error pointing at
 <code>seam plan show</code>, not a listing of every plan.</p>
 <h3 id="seam_plan_show">seam plan show</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam plan show &lt;slug&gt;
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam plan show <span class="o">[</span>--json<span class="o">]</span> &lt;slug&gt;
 </span></span></code></pre></div>
 <p>Prints one plan: its status, project, title, source file and iteration, the
 notes attached to the composition (each marked <code>note</code> or <code>agent</code>), its tasks,
@@ -433,7 +514,7 @@ approved and creates its tracking task, reporting the new task or noting that
 one already exists.</p>
 <h2 id="observability">Observability</h2>
 <h3 id="seam_status">seam status</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam status
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam status <span class="o">[</span>--json<span class="o">]</span>
 </span></span></code></pre></div>
 <p>Server health from the unauthenticated <code>/healthz</code> endpoint (status and version),
 the configured data directory, then the project count and slugs via
@@ -446,9 +527,10 @@ health gate. A partial answer is still printed - if MCP is unavailable it report
 health and names the failure on the projects line - but the command fails rather
 than reporting success. The printed lines are its output; the exit code is its
 result. Exit 1 means the server had a problem, not that the command line did
-(that is exit 2).</p>
+(that is exit 2). <code>--json</code> prints <code>/healthz</code> and <code>project_list</code> as one object
+under the same rule (<a href="#json-output">JSON output</a>).</p>
 <h3 id="seam_sessions">seam sessions</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam sessions <span class="o">[</span>--status STATUS<span class="o">]</span> <span class="o">[</span>&lt;id&gt;<span class="o">]</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam sessions <span class="o">[</span>--status STATUS<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>&lt;id&gt;<span class="o">]</span>
 </span></span></code></pre></div>
 <p>With no positional, lists sessions with name (or short id), project, status, age,
 and an ambient marker, under a total/active count. With an id, prints that
@@ -470,7 +552,7 @@ and note-slug resolution when the ambient scope is not the right one.</p>
 memories are pinned into every session briefing and rank-boosted in recall. A
 plan's star lives on its primary note, so a task-only plan cannot be starred.</p>
 <h3 id="seam_project_isolation">seam project isolation</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam project isolation <span class="o">[</span>--yes<span class="o">]</span> &lt;slug&gt; <span class="o">[</span>&lt;state&gt;<span class="o">]</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam project isolation <span class="o">[</span>--yes<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> &lt;slug&gt; <span class="o">[</span>&lt;state&gt;<span class="o">]</span>
 </span></span></code></pre></div>
 <p>Shows or sets a project's <a href="../../concepts/project-isolation/">isolation</a> state.
 <code>state</code> is one of <code>open</code>, <code>confidential</code>, or <code>sealed</code>; omit it to print the
@@ -483,11 +565,13 @@ consequences the console's confirm panel shows - the family and parent it would
 detach from - applies nothing, and exits non-zero, so a script cannot mistake an
 unconfirmed tighten for a fence that went up. <strong>Loosening is immediate</strong> and
 ignores <code>--yes</code>.</p>
+<p>With <code>--json</code> the console's answer is printed in place of the text, and the exit
+status is unchanged: an unconfirmed tighten still exits non-zero.</p>
 <p>A project with children refuses to tighten until they are re-parented; the
 refusal names them. Promise text is echoed from the server rather than
 transcribed here, so the console and the CLI cannot drift apart.</p>
 <h3 id="seam_usage">seam usage</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam usage
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam usage <span class="o">[</span>--json<span class="o">]</span>
 </span></span></code></pre></div>
 <p>Activity roll-up from <code>usage_summary</code>: active memories broken down by kind, note
 count, session and task counts by status, retrieval injections and reads with a
@@ -514,7 +598,7 @@ daemon.</li>
 credentials on the server side; they are different commands answering different
 questions.</p>
 <h3 id="seam_version">seam version</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam version
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam version <span class="o">[</span>--json<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seam -v
 </span></span><span class="line"><span class="cl">seam --version
 </span></span></code></pre></div>
@@ -538,7 +622,32 @@ for a process still serving the old one.</p>
 daemon fails the command rather than falling back: there is no second source, and
 printing the CLI's own build is the confusion this avoids. <code>seamlessd version</code>
 accepts the same three spellings and answers from the binary directly, without a
-running server.</p>
+running server. <code>--json</code> prints that <code>/healthz</code> answer itself.</p>
+<h2 id="any-mcp-tool">Any MCP tool</h2>
+<h3 id="seam_call">seam call</h3>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam call &lt;tool&gt; <span class="o">[</span>&lt;json&gt; <span class="p">|</span> -<span class="o">]</span>
+</span></span></code></pre></div>
+<p>Calls one MCP tool by name and prints its result to stdout exactly as the
+daemon returned it - a JSON object, ready for <code>jq</code>. It dials the way every other
+command does: the bearer key (or the <a href="../../guides/peer-auth/">peer_auth</a> socket when
+<code>server_url</code> names one), plus the <code>X-Seamless-Host</code> and
+<code>X-Seamless-Agent-Process</code> headers, so a call an agent runs through its shell is
+<a href="#which-session">bound to that agent's session</a> like its MCP calls.</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam call recall <span class="s1">&#39;{&#34;query&#34;:&#34;lease grace&#34;,&#34;scope&#34;:&#34;notes&#34;,&#34;limit&#34;:50}&#39;</span> <span class="p">|</span> jq -r <span class="s1">&#39;.hits[].name&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="nb">echo</span> <span class="s1">&#39;{&#34;name&#34;:&#34;lease-steal-window&#34;}&#39;</span> <span class="p">|</span> seam call memory_read -
+</span></span><span class="line"><span class="cl">seam call session_end <span class="s1">&#39;{&#34;findings&#34;:&#34;...&#34;}&#39;</span>
+</span></span></code></pre></div>
+<p>The arguments are one JSON object, given inline or as <code>-</code> to read it from stdin;
+none means <code>{}</code>. Anything else - an array, a string, <code>null</code>, two objects, text
+after the object, an empty stdin - is refused before connecting. Numbers travel
+as written. Each tool's arguments are in the <a href="../../reference/mcp/">MCP tool
+reference</a>, and <code>seam call --help</code> lists the tool names.</p>
+<p>A tool error exits 1 with the tool's own message on stderr and nothing on
+stdout. A name the daemon does not serve is refused by the daemon - <code>seam</code> does
+not gate names itself, since a newer daemon may serve tools the CLI predates -
+and an <a href="../../reference/console/#optional-features">optional feature</a> that is off
+serves none of its tools. A missing tool name or a second positional is a usage
+error (exit 2): quote the JSON object as one argument.</p>
 <h2 id="mcp-bridge-and-auth-helper">MCP bridge and auth helper</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam mcp-proxy <span class="o">[</span>--config PATH<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seam mcp-headers <span class="o">[</span>--config PATH<span class="o">]</span>
@@ -618,7 +727,7 @@ It retries and gives up like the others (5s, 9s).</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#flags-and-positionals">Flags and positionals</a></li><li class="lvl-2"><a href="#which-session">Which session a command acts in</a></li><li class="lvl-2"><a href="#agent-loop">Agent loop</a></li><li class="lvl-3"><a href="#seam_prime">seam prime</a></li><li class="lvl-3"><a href="#seam_remember">seam remember</a></li><li class="lvl-3"><a href="#seam_recall">seam recall</a></li><li class="lvl-3"><a href="#seam_capture">seam capture</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-3"><a href="#seam_ready">seam ready</a></li><li class="lvl-3"><a href="#seam_task_list">seam task list</a></li><li class="lvl-3"><a href="#seam_task_add">seam task add</a></li><li class="lvl-3"><a href="#seam_task_transition">seam task done|start|drop|reopen</a></li><li class="lvl-3"><a href="#seam_task_claim">seam task claim</a></li><li class="lvl-3"><a href="#seam_task_heartbeat">seam task heartbeat</a></li><li class="lvl-3"><a href="#seam_task_release">seam task release</a></li><li class="lvl-2"><a href="#captured-plans">Captured plans</a></li><li class="lvl-3"><a href="#seam_plan_list">seam plan list</a></li><li class="lvl-3"><a href="#seam_plan_show">seam plan show</a></li><li class="lvl-3"><a href="#seam_plan_check">seam plan check</a></li><li class="lvl-3"><a href="#seam_plan_approve">seam plan approve</a></li><li class="lvl-2"><a href="#observability">Observability</a></li><li class="lvl-3"><a href="#seam_status">seam status</a></li><li class="lvl-3"><a href="#seam_sessions">seam sessions</a></li><li class="lvl-3"><a href="#seam_fav">seam fav</a></li><li class="lvl-3"><a href="#seam_project_isolation">seam project isolation</a></li><li class="lvl-3"><a href="#seam_usage">seam usage</a></li><li class="lvl-3"><a href="#seam_doctor">seam doctor</a></li><li class="lvl-3"><a href="#seam_version">seam version</a></li><li class="lvl-2"><a href="#mcp-bridge-and-auth-helper">MCP bridge and auth helper</a></li><li class="lvl-2"><a href="#hooks">Hooks</a></li>
+      <li class="lvl-2"><a href="#flags-and-positionals">Flags and positionals</a></li><li class="lvl-2"><a href="#json-output">JSON output</a></li><li class="lvl-2"><a href="#which-session">Which session a command acts in</a></li><li class="lvl-2"><a href="#agent-loop">Agent loop</a></li><li class="lvl-3"><a href="#seam_prime">seam prime</a></li><li class="lvl-3"><a href="#seam_remember">seam remember</a></li><li class="lvl-3"><a href="#seam_recall">seam recall</a></li><li class="lvl-3"><a href="#seam_capture">seam capture</a></li><li class="lvl-2"><a href="#memories-and-notes">Memories and notes</a></li><li class="lvl-3"><a href="#seam_memory_read">seam memory read</a></li><li class="lvl-3"><a href="#seam_memory_list">seam memory list</a></li><li class="lvl-3"><a href="#seam_note_read">seam note read</a></li><li class="lvl-3"><a href="#seam_note_list">seam note list</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-3"><a href="#seam_ready">seam ready</a></li><li class="lvl-3"><a href="#seam_task_list">seam task list</a></li><li class="lvl-3"><a href="#seam_task_add">seam task add</a></li><li class="lvl-3"><a href="#seam_task_transition">seam task done|start|drop|reopen</a></li><li class="lvl-3"><a href="#seam_task_claim">seam task claim</a></li><li class="lvl-3"><a href="#seam_task_heartbeat">seam task heartbeat</a></li><li class="lvl-3"><a href="#seam_task_release">seam task release</a></li><li class="lvl-2"><a href="#captured-plans">Captured plans</a></li><li class="lvl-3"><a href="#seam_plan_list">seam plan list</a></li><li class="lvl-3"><a href="#seam_plan_show">seam plan show</a></li><li class="lvl-3"><a href="#seam_plan_check">seam plan check</a></li><li class="lvl-3"><a href="#seam_plan_approve">seam plan approve</a></li><li class="lvl-2"><a href="#observability">Observability</a></li><li class="lvl-3"><a href="#seam_status">seam status</a></li><li class="lvl-3"><a href="#seam_sessions">seam sessions</a></li><li class="lvl-3"><a href="#seam_fav">seam fav</a></li><li class="lvl-3"><a href="#seam_project_isolation">seam project isolation</a></li><li class="lvl-3"><a href="#seam_usage">seam usage</a></li><li class="lvl-3"><a href="#seam_doctor">seam doctor</a></li><li class="lvl-3"><a href="#seam_version">seam version</a></li><li class="lvl-2"><a href="#any-mcp-tool">Any MCP tool</a></li><li class="lvl-3"><a href="#seam_call">seam call</a></li><li class="lvl-2"><a href="#mcp-bridge-and-auth-helper">MCP bridge and auth helper</a></li><li class="lvl-2"><a href="#hooks">Hooks</a></li>
     </ul>
   </aside>
   

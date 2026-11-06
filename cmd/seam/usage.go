@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"sort"
@@ -11,15 +12,26 @@ import (
 )
 
 var usageCmd = spec("usage", groupObservability, "activity roll-up",
-	noArgs(), bindNoOpts, runUsage)
+	noArgs(), bindUsage, runUsage)
 
-func runUsage(ctx context.Context, e *env, _ *noOpts, _ []string) error {
+type usageOpts struct {
+	asJSON *bool
+}
+
+func bindUsage(fs *flag.FlagSet) *usageOpts {
+	return &usageOpts{asJSON: jsonFlag(fs, jsonUsage)}
+}
+
+func runUsage(ctx context.Context, e *env, o *usageOpts, _ []string) error {
 	cli, _, err := e.dial(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = cli.Close() }()
 
+	if *o.asJSON {
+		return printToolJSON(ctx, e, cli, "usage_summary", nil)
+	}
 	out, err := callTool(ctx, cli, "usage_summary", nil)
 	if err != nil {
 		return err

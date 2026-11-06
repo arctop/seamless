@@ -26,6 +26,7 @@ type taskListOpts struct {
 	project *string
 	status  *string
 	plan    *string
+	asJSON  *bool
 }
 
 func bindTaskList(fs *flag.FlagSet) *taskListOpts {
@@ -37,6 +38,7 @@ func bindTaskList(fs *flag.FlagSet) *taskListOpts {
 		// parse time instead of round-tripping to find out.
 		status: enumFlag(fs, "status", "", "filter by `STATUS`", enumOf(core.TaskStatuses)),
 		plan:   fs.String("plan", "", "list the step tasks of plan `SLUG` instead of the default (non-plan) tasks"),
+		asJSON: jsonFlag(fs, jsonUsage),
 	}
 }
 
@@ -46,9 +48,13 @@ func runTaskList(ctx context.Context, e *env, o *taskListOpts, _ []string) error
 		return err
 	}
 	defer func() { _ = cli.Close() }()
-	out, err := callTool(ctx, cli, "tasks_list", map[string]any{
+	args := map[string]any{
 		"id": *o.id, "project": *o.project, "status": *o.status, "plan": *o.plan,
-	})
+	}
+	if *o.asJSON {
+		return printToolJSON(ctx, e, cli, "tasks_list", args)
+	}
+	out, err := callTool(ctx, cli, "tasks_list", args)
 	if err != nil {
 		return err
 	}

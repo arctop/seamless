@@ -1,6 +1,6 @@
 ---
 title: seam CLI
-description: Every seam subcommand - agent loop, tasks, plans, observability, hooks - plus the flag-order rules and what each one rejects.
+description: Every seam subcommand - agent loop, memories and notes, tasks, plans, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.
 ---
 
 `seam` is the headless CLI. It does no work itself: it loads the same
@@ -13,6 +13,11 @@ is down, every subcommand below fails at the connection.
 
 The target address is derived from the configured bind address, with a bind-all
 host (`0.0.0.0`, `::`, or empty) mapped to loopback.
+
+Every read command also takes [`--json`](#json-output), and
+[`seam call`](#seam_call) reaches any MCP tool by name, so a script or an agent
+with a shell can read everything the MCP surface serves and filter it with
+`jq` - through the same project fences, never by reading the data directory.
 
 ## Flags and positionals
 
@@ -34,9 +39,47 @@ is an error instead of a silently different command: `seam recall foo --projct p
 reports `flag provided but not defined: -projct`. A positional that starts with
 `-` needs the `--` terminator (`seam recall -- -foo`).
 
-`seam task done|start|drop|reopen` and `seam plan show|approve` parse no flags at
-all. Commands that take only flags and no positionals (`ready`, `task list`,
-`task add`, `plan list`, `status`, `usage`, `doctor`) are unaffected either way.
+`seam plan approve` parses no flags at all. Commands that take only flags and no
+positionals (`ready`, `task list`, `task add`, `plan list`, `status`, `usage`,
+`doctor`) are unaffected either way.
+
+## JSON output {#json-output}
+
+Every read command takes `--json`: `recall`, `memory read`, `memory list`,
+`note read`, `note list`, `ready`, `task list`, `plan list`, `plan show`,
+`status`, `sessions`, `project isolation`, `usage`, and `version`. With it, the
+command prints the daemon's own answer - the tool's result, or the console
+route's JSON - byte for byte, followed by a newline. It is not re-encoded from
+anything the CLI decoded, so a field this `seam` does not know about still
+reaches `jq`. Without `--json` every command prints exactly the text it always
+has.
+
+```bash
+seam recall lease grace --limit 50 --json | jq -r '.hits[] | "\(.kind)\t\(.name)"'
+seam task list --status open --json | jq '.tasks | length'
+seam sessions --status active --json | jq -r '.sessions[].name'
+```
+
+`--json` changes the rendering and nothing else: the same tool is called with
+the same arguments, the same fences apply, the server's limits (recall's 100-hit
+cap and token budget among them) are the MCP surface's, and the exit status is
+the command's usual one - a tool error still exits 1 with nothing on stdout. An
+answer that is not JSON is refused rather than passed on, so a pipe never
+receives something other than `seamlessd`'s answer. What a CLI gains over an MCP
+client is only the pipe: an MCP client caps how much of a result its agent sees,
+and a shell does not.
+
+Three commands assemble or filter their answer, and say so:
+
+- `seam status --json` prints the two answers it is made of, each as received:
+  `{"healthz": <GET /healthz>, "project_list": <the project_list result>}`. A half
+  that could not be read is `null`, and the command still exits 1 naming it.
+- `seam plan list --project` filters the console's rows on the client, so it
+  cannot be combined with `--json` (which prints the console's answer
+  untouched). The pair is refused with the equivalent filter:
+  `seam plan list --json | jq '.rows[] | select(.project == "SLUG")'`.
+- `seam ready --json` prints `tasks_ready`'s answer, which always carries both
+  the `ready` and the `blocked` lists; `--blocked` adds nothing to it.
 
 ## Which session a command acts in {#which-session}
 
@@ -99,11 +142,12 @@ memory, and names a similar existing memory when the server flags one.
 ### seam recall {#seam_recall}
 
 ```bash
-seam recall QUERY [--scope all|memories|notes] [--project P] [--limit N]
+seam recall QUERY [--scope SCOPE] [--project P] [--limit N] [--json]
 ```
 
-Calls `recall`, the single RRF-fused search entry point. Scope defaults to `all`
-and limit to `10`. Query words are joined with spaces, and flags may sit on
+Calls `recall`, the single RRF-fused search entry point. `--scope` is `all`,
+`memories`, `notes`, `tasks`, `trials`, or `sessions`; it defaults to `all` and
+limit to `10`. Query words are joined with spaces, and flags may sit on
 either side of them. A query word that starts with `-` needs the `--` terminator
 (`seam recall -- -foo`), which is the only reason to reach for it. Each hit
 prints its kind, name, age, source, score, and description; no matches prints
@@ -131,6 +175,66 @@ is an error naming the fix. Pass `--project global` to file the note globally
 `--project` binds on either side of the URL: `seam capture --project p URL` and
 `seam capture URL --project p` are the same line.
 
+## Memories and notes
+
+Read verbs for the knowledge the agent loop writes, as thin clients of the same
+MCP tools an agent calls: the same project fences, the same limits. Each takes
+[`--json`](#json-output). A reference is either a name or slug positional or
+`--id`, never both; `--project` scopes a name or slug lookup and is refused
+beside `--id`, which reads by ULID from any scope the caller may read. These
+refusals happen before connecting and exit 1.
+
+### seam memory read {#seam_memory_read}
+
+```bash
+seam memory read [--project P] [--json] <name>
+seam memory read --id ID [--json]
+```
+
+Calls `memory_read`. A name resolves in the project (`--project`, else the
+session's) and falls back to a global memory of the same name. Prints the name,
+kind and project, then the id, description, tags, model and - for a superseded
+memory, which still reads - a warning naming its replacement, then the body.
+Empty fields print no line.
+
+### seam memory list {#seam_memory_list}
+
+```bash
+seam memory list --kind KIND [--project P] [--limit N] [--json]
+seam memory list [--kind KIND] [--project P] [--limit N] [--json] WORD...
+```
+
+Calls `recall` scoped to memories. `--kind` with no words lists that kind newest
+first (recall's browse mode); words search memories, within `--kind` when it is
+given. One of the two is required - there is no unfiltered listing. The project's
+memories and global ones are both included. Each hit prints its name, project
+and age, then its description; nothing found prints `(no memories)`. The limits
+are recall's: at most 100 hits (`--limit`, default 10) inside the server's
+recall token budget.
+
+### seam note read {#seam_note_read}
+
+```bash
+seam note read [--project P] [--json] <slug>
+seam note read --id ID [--json]
+```
+
+Calls `notes_read`. A slug resolves in the project (`--project`, else the
+session's) and falls back to a global note of the same slug. Prints the slug and
+project, then the title, id, description, tags, source URL and model, then the
+body.
+
+### seam note list {#seam_note_list}
+
+```bash
+seam note list [--project P] [--limit N] [--json] WORD...
+```
+
+Calls `recall` with scope `notes`. No tool lists notes without a query -
+recall's browse mode is for memory kinds - so this takes words, as `recall`
+does, and returns the best matches first: slug, title, project and age, then the
+description. Nothing found prints `(no notes)`. The limits are recall's.
+
 ## Tasks
 
 The queue side of the CLI. See [Tasks](/reference/mcp/tasks/) for what ready,
@@ -139,7 +243,7 @@ blocked, and claimed mean.
 ### seam ready {#seam_ready}
 
 ```bash
-seam ready [--project P] [--blocked] [--plan S]
+seam ready [--project P] [--blocked] [--plan S] [--json]
 ```
 
 Calls `tasks_ready` and lists the actionable queue by short id and title.
@@ -151,7 +255,7 @@ queue - plan steps are excluded from the default view. Prints
 ### seam task list {#seam_task_list}
 
 ```bash
-seam task list [--id ID] [--project P] [--status S] [--plan S]
+seam task list [--id ID] [--project P] [--status S] [--plan S] [--json]
 ```
 
 Calls `tasks_list`. `--status` filters to `open`, `in_progress`, `done`, or
@@ -224,14 +328,15 @@ locally. Bare `seam plan` is not a command - it names its subcommands and exits
 ### seam plan list {#seam_plan_list}
 
 ```bash
-seam plan list [--project SLUG] [--window WINDOW]
+seam plan list [--project SLUG] [--window WINDOW] [--json]
 ```
 
 Lists captured plans with slug, status, title, project, iteration, agent count,
 task progress, and age. `--window` is `24h`, `7d`, `30d`, or `all` (default
 `all`) and is applied by the server; anything else is a parse error rather than a
 silent fall back to the server's `24h` default. `--project` filters the returned
-rows client-side.
+rows client-side, which is why it cannot be combined with `--json`
+([see above](#json-output)).
 Prints `(no captured plans)` when nothing matches.
 
 `plan list` takes no positional: `seam plan list <slug>` is an error pointing at
@@ -240,7 +345,7 @@ Prints `(no captured plans)` when nothing matches.
 ### seam plan show {#seam_plan_show}
 
 ```bash
-seam plan show <slug>
+seam plan show [--json] <slug>
 ```
 
 Prints one plan: its status, project, title, source file and iteration, the
@@ -284,7 +389,7 @@ one already exists.
 ### seam status {#seam_status}
 
 ```bash
-seam status
+seam status [--json]
 ```
 
 Server health from the unauthenticated `/healthz` endpoint (status and version),
@@ -299,12 +404,13 @@ health gate. A partial answer is still printed - if MCP is unavailable it report
 health and names the failure on the projects line - but the command fails rather
 than reporting success. The printed lines are its output; the exit code is its
 result. Exit 1 means the server had a problem, not that the command line did
-(that is exit 2).
+(that is exit 2). `--json` prints `/healthz` and `project_list` as one object
+under the same rule ([JSON output](#json-output)).
 
 ### seam sessions {#seam_sessions}
 
 ```bash
-seam sessions [--status STATUS] [<id>]
+seam sessions [--status STATUS] [--json] [<id>]
 ```
 
 With no positional, lists sessions with name (or short id), project, status, age,
@@ -336,7 +442,7 @@ plan's star lives on its primary note, so a task-only plan cannot be starred.
 ### seam project isolation {#seam_project_isolation}
 
 ```bash
-seam project isolation [--yes] <slug> [<state>]
+seam project isolation [--yes] [--json] <slug> [<state>]
 ```
 
 Shows or sets a project's [isolation](/concepts/project-isolation/) state.
@@ -352,6 +458,9 @@ detach from - applies nothing, and exits non-zero, so a script cannot mistake an
 unconfirmed tighten for a fence that went up. **Loosening is immediate** and
 ignores `--yes`.
 
+With `--json` the console's answer is printed in place of the text, and the exit
+status is unchanged: an unconfirmed tighten still exits non-zero.
+
 A project with children refuses to tighten until they are re-parented; the
 refusal names them. Promise text is echoed from the server rather than
 transcribed here, so the console and the CLI cannot drift apart.
@@ -359,7 +468,7 @@ transcribed here, so the console and the CLI cannot drift apart.
 ### seam usage {#seam_usage}
 
 ```bash
-seam usage
+seam usage [--json]
 ```
 
 Activity roll-up from `usage_summary`: active memories broken down by kind, note
@@ -394,7 +503,7 @@ questions.
 ### seam version {#seam_version}
 
 ```bash
-seam version
+seam version [--json]
 seam -v
 seam --version
 ```
@@ -424,7 +533,41 @@ The version therefore comes from the daemon's `/healthz`, and an unreachable
 daemon fails the command rather than falling back: there is no second source, and
 printing the CLI's own build is the confusion this avoids. `seamlessd version`
 accepts the same three spellings and answers from the binary directly, without a
-running server.
+running server. `--json` prints that `/healthz` answer itself.
+
+## Any MCP tool
+
+### seam call {#seam_call}
+
+```bash
+seam call <tool> [<json> | -]
+```
+
+Calls one MCP tool by name and prints its result to stdout exactly as the
+daemon returned it - a JSON object, ready for `jq`. It dials the way every other
+command does: the bearer key (or the [peer_auth](/guides/peer-auth/) socket when
+`server_url` names one), plus the `X-Seamless-Host` and
+`X-Seamless-Agent-Process` headers, so a call an agent runs through its shell is
+[bound to that agent's session](#which-session) like its MCP calls.
+
+```bash
+seam call recall '{"query":"lease grace","scope":"notes","limit":50}' | jq -r '.hits[].name'
+echo '{"name":"lease-steal-window"}' | seam call memory_read -
+seam call session_end '{"findings":"..."}'
+```
+
+The arguments are one JSON object, given inline or as `-` to read it from stdin;
+none means `{}`. Anything else - an array, a string, `null`, two objects, text
+after the object, an empty stdin - is refused before connecting. Numbers travel
+as written. Each tool's arguments are in the [MCP tool
+reference](/reference/mcp/), and `seam call --help` lists the tool names.
+
+A tool error exits 1 with the tool's own message on stderr and nothing on
+stdout. A name the daemon does not serve is refused by the daemon - `seam` does
+not gate names itself, since a newer daemon may serve tools the CLI predates -
+and an [optional feature](/reference/console/#optional-features) that is off
+serves none of its tools. A missing tool name or a second positional is a usage
+error (exit 2): quote the JSON object as one argument.
 
 ## MCP bridge and auth helper
 
