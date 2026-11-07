@@ -410,8 +410,8 @@ func RemoveApprover(ctx context.Context, db *sql.DB, id string) error {
 }
 
 // ResetApprovers deletes every credential and every unused enrolment code,
-// revokes every live lease (reason reset) and ends every console unlock, in
-// one transaction: what the
+// revokes every live lease and read grant (reason reset) and ends every
+// console unlock, in one transaction: what the
 // owner does when a credential may be in someone else's hands. It returns
 // how many credentials and leases it ended.
 func ResetApprovers(ctx context.Context, db *sql.DB, now time.Time) (credentials, leases int64, err error) {
@@ -437,6 +437,12 @@ func ResetApprovers(ctx context.Context, db *sql.DB, now time.Time) (credentials
 		return 0, 0, fmt.Errorf("%s: %w", op, err)
 	}
 	if leases, err = res.RowsAffected(); err != nil {
+		return 0, 0, fmt.Errorf("%s: %w", op, err)
+	}
+	// So was a read grant under peer_auth (isolation.requests): it ends with
+	// them too. Its holder stays confined, as after any revoke.
+	if _, err := tx.ExecContext(ctx, `UPDATE access_grants SET revoked_at = ?, revoked_reason = ?
+		WHERE revoked_at IS NULL AND expires_at > ?`, core.FormatTime(now), LeaseRevokedReset, core.FormatTime(now)); err != nil {
 		return 0, 0, fmt.Errorf("%s: %w", op, err)
 	}
 	// A console unlock was granted by a credential too: it ends with them.

@@ -191,7 +191,7 @@ func (s *Service) withChrome(ctx context.Context, pd pageData) pageData {
 	pd.Features = s.effectiveFeatures(ctx)
 	lvl := s.consoleLevel(ctx)
 	pd.Level, pd.LevelOverridden = lvl.Level, lvl.Overridden
-	pd.Screens = withLockScreens(visibleScreens(pd.Features, pd.Level), s.cfg.Approvals != nil)
+	pd.Screens = withAccessScreens(visibleScreens(pd.Features, pd.Level), s.cfg.Approvals != nil, s.cfg.Grants != nil)
 	pd.Nav = s.navCounts(ctx, pd.Features)
 	pd.NavGroups = navGroups(pd.Screens, pd.Active, pd.Nav)
 	pd.VisibleScopes = strings.Join(slices.DeleteFunc(searchScopesFor(pd.Features, pd.Level),

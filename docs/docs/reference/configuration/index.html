@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
+      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-3"><a href="#isolation-requests">Access requests at a confidential fence</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
     </ul>
   </details>
   <p>Seamless reads a single YAML file. Every key also has a <code>SEAMLESS_*</code> environment
@@ -403,6 +403,31 @@ one. File-only.</li>
 <code>unix:///absolute/path.sock</code>. It needs no <code>mcp.api_key</code>, and its hooks and MCP
 registration go through the <code>seam</code> CLI (<code>install-hooks</code> does that by itself for
 a socket URL).</p>
+<p>The block is new after v0.7.4; releases before it refuse config keys they do
+not know, so the example file leaves it commented out.</p>
+<h3 id="isolation-requests">Access requests at a confidential fence</h3>
+<p>The <code>isolation:</code> block is what <a href="../../concepts/project-isolation/">project isolation</a>
+does beyond each project's own state. It holds one key, and it is off by
+default; off is exactly the behavior of every earlier release.</p>
+<ul>
+<li><code>requests</code> (<code>SEAMLESS_ISOLATION_REQUESTS</code>, default <code>false</code>) turns a read
+refused at a confidential project's fence into an access request you can
+approve: a <strong>read grant</strong> of that one project, read-only, to the one session
+that asked, for a limited time (until the session ends, 1 hour or 4 hours,
+capped by <code>peer_auth.max_lease</code>, <code>8h</code> when unset). A session in an open
+project that is granted a read writes only into its own project for the rest
+of its life. Nothing that involves a sealed project is ever offered, writes
+are never granted, and briefings do not change.
+<a href="../../concepts/project-isolation/#asking-for-access">Asking for access</a> has the
+whole model.</li>
+</ul>
+<p>Without <code>peer_auth</code> the approval is <strong>advisory</strong>: <code>seam approve</code> and the
+console's Approve commit it with the bearer key, so any process that holds the
+key can approve a request, its own included. Under <code>peer_auth</code> a grant is
+bound to the asking agent's process tree, as a locked project's lease is, and
+needs the same proofs: <code>seam approve</code> in your terminal (through <code>sudo</code> to the
+daemon's account), a passkey, or a Touch ID key. Locks work without this
+switch; grants do not.</p>
 <p>The block is new after v0.7.4; releases before it refuse config keys they do
 not know, so the example file leaves it commented out.</p>
 <h2 id="generating-a-key">Generating a key</h2>
@@ -845,6 +870,11 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <tr>
 <td><code>peer_auth.users</code></td>
 <td>map of string to {sealed []string, projects []string}</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>isolation.requests</code></td>
+<td>bool</td>
 <td>-</td>
 </tr>
 </tbody>
@@ -1341,6 +1371,25 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c">#     _example_role:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#       sealed: [example-project]</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#       projects: []</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># Project isolation beyond each project&#39;s own state (open, confidential or</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># sealed, set on the console&#39;s project Overview or with seam project</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># isolation). Off by default, and off is exactly the previous behavior.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   requests: a read refused at a confidential project&#39;s fence files an access</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   request instead of only refusing: the owner may grant that one session</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   (under peer_auth, that one agent process tree) read-only access to that one</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   project for a limited time. A session in an open project that holds a grant</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   may write only into its own project for the rest of its life. Nothing that</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   involves a sealed project is ever offered, and writes are never granted.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   Without peer_auth the approval is advisory: seam approve and the console&#39;s</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   Approve commit it with the bearer key, so any process holding the key can</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   approve. Under peer_auth it takes the same proofs as a locked project&#39;s</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   lease.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># The block is new after v0.7.4 and releases before it refuse config keys they</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># do not know, so it is left commented out here.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># isolation:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # env: SEAMLESS_ISOLATION_REQUESTS</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   requests: false</span><span class="w">
 </span></span></span></code></pre></div>
 
 </article>
@@ -1359,7 +1408,7 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
+      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-3"><a href="#isolation-requests">Access requests at a confidential fence</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
     </ul>
   </aside>
   

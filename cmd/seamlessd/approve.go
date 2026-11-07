@@ -35,9 +35,10 @@ import (
 const approveUsage = `usage: seamlessd approve <request> --for <session|1h|4h> --digest <facts digest>
        seamlessd approve <request> --deny
 
-Approves (or denies) an access request for a locked project. Run it as the
-daemon's own account: seam approve, in the owner's terminal, runs it through
-sudo -k with the digest of the facts it showed.
+Approves (or denies) an access request for a locked project, or -- with
+isolation.requests on -- a read grant request for a confidential one. Run it
+as the daemon's own account: seam approve, in the owner's terminal, runs it
+through sudo -k with the digest of the facts it showed.
 `
 
 func runApprove(args []string) error {
@@ -54,22 +55,32 @@ func runApprove(args []string) error {
 	}
 	defer func() { _ = db.Close() }()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	svc, err := newApprovals(cfg, db, events.NewRecorder(db), logger)
+	rec := events.NewRecorder(db)
+	svc, err := newApprovals(cfg, db, rec, logger)
 	if err != nil {
 		return fmt.Errorf("seamlessd.approve: %w", err)
 	}
-	if err := approve(context.Background(), svc, os.Stdout, args); err != nil {
+	// Read grants (isolation.requests): the same approve core and proof.
+	var grants *approval.Grants
+	if cfg.Isolation.Requests {
+		grants = approval.NewGrants(approval.GrantsConfig{DB: db, Approvals: svc, Events: rec})
+	}
+	if err := approveWith(context.Background(), svc, grants, os.Stdout, args); err != nil {
 		return fmt.Errorf("seamlessd.approve: %w", err)
 	}
 	return nil
 }
 
 // approverAccountCheck refuses unless this process runs as the daemon's own
-// account while peer_auth locks a project: the data directory must be this
-// account's and 0700, and this account must not be the owner's.
+// account while peer_auth locks a project, or offers read grants
+// (isolation.requests): the data directory must be this account's and 0700,
+// and this account must not be the owner's.
 func approverAccountCheck(cfg config.Config, env peerAuthEnv) error {
 	pa := cfg.PeerAuth
-	if !pa.Enabled || len(pa.Locked) == 0 {
+	if !pa.Enabled && cfg.Isolation.Requests {
+		return errors.New("peer_auth is off, so a read grant is approved over the console with the bearer key: run seam approve, which does that")
+	}
+	if !pa.Enabled || (len(pa.Locked) == 0 && !cfg.Isolation.Requests) {
 		return errors.New("peer_auth locks no project, so there is nothing to approve")
 	}
 	facts, err := env.inspect(cfg.DataDir)
@@ -87,8 +98,14 @@ func approverAccountCheck(cfg config.Config, env peerAuthEnv) error {
 	return nil
 }
 
-// approve is the testable core of runApprove.
+// approve is the testable core of runApprove, with read grants off.
 func approve(ctx context.Context, svc *approval.Service, out io.Writer, args []string) error {
+	return approveWith(ctx, svc, nil, out, args)
+}
+
+// approveWith is approve with the read grants (nil while isolation.requests
+// is off): a read grant request is decided by them, with the same proof.
+func approveWith(ctx context.Context, svc *approval.Service, grants *approval.Grants, out io.Writer, args []string) error {
 	fs := flag.NewFlagSet("approve", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	duration := fs.String("for", "", "the lease's duration: "+strings.Join(approval.Durations, ", "))
@@ -116,6 +133,7 @@ func approve(ctx context.Context, svc *approval.Service, out io.Writer, args []s
 		return err
 	}
 	short := approval.ShortID(a.ID)
+	grant := a.Kind == store.AccessKindGrant
 	if *deny {
 		if *duration != "" || *digest != "" {
 			return errors.New("--deny takes no --for or --digest")
@@ -123,11 +141,18 @@ func approve(ctx context.Context, svc *approval.Service, out io.Writer, args []s
 		if err := svc.Deny(ctx, a.ID, "daemon-account"); err != nil {
 			return err
 		}
+		if grant {
+			fmt.Fprintf(out, "Denied %s: %s stays closed to that session.\n", short, a.Project)
+			return nil
+		}
 		fmt.Fprintf(out, "Denied %s: %s stays locked for that session.\n", short, a.Project)
 		return nil
 	}
 	if *duration == "" || *digest == "" {
 		return errors.New("an approval needs --for and --digest (seam approve supplies both)")
+	}
+	if grant {
+		return approveGrant(ctx, grants, out, a, *duration, *digest)
 	}
 	lease, err := svc.Approve(ctx, approval.Decision{ID: a.ID, Duration: *duration, Digest: *digest, Proof: approval.Proof{Kind: approval.ProofDaemon}})
 	if errors.Is(err, approval.ErrFactsChanged) {
@@ -141,6 +166,28 @@ func approve(ctx context.Context, svc *approval.Service, out io.Writer, args []s
 		until = "until " + lease.ExpiresAt.Local().Format("15:04")
 	}
 	fmt.Fprintf(out, "Approved %s: %s, read and write, %s.\n", short, a.Project, until)
+	return nil
+}
+
+// approveGrant commits a read grant with the daemon account's proof.
+func approveGrant(ctx context.Context, grants *approval.Grants, out io.Writer, a store.AccessApproval, duration, digest string) error {
+	short := approval.ShortID(a.ID)
+	if grants == nil {
+		return fmt.Errorf("%s is a read grant request, and read grants are off here (isolation.requests): nothing to approve", short)
+	}
+	g, err := grants.Approve(ctx, approval.Decision{ID: a.ID, Duration: duration, Digest: digest, Proof: approval.Proof{Kind: approval.ProofDaemon}})
+	if errors.Is(err, approval.ErrFactsChanged) {
+		return fmt.Errorf("the facts of %s changed since they were shown: run seam approve again and look at them first", short)
+	}
+	if err != nil {
+		return err
+	}
+	until := "until the session ends (at the latest " + g.ExpiresAt.Local().Format("15:04") + ")"
+	if duration != approval.ForSession {
+		until = "until " + g.ExpiresAt.Local().Format("15:04")
+	}
+	fmt.Fprintf(out, "Approved %s: %s, read-only, for %s, %s; %s.\n", short, a.Project, a.FromProject, until,
+		approval.CopyIntoLine(a.Project, a.FromProject))
 	return nil
 }
 

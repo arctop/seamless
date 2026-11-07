@@ -92,7 +92,7 @@ func approvers(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writer
 		case store.ApproverTouchID:
 			fmt.Fprintln(out, "Run `seam touchid enroll` in the owner's terminal on this Mac and enter it there.")
 		}
-		if len(cfg.PeerAuth.Locked) == 0 {
+		if len(cfg.PeerAuth.Locked) == 0 && !cfg.Isolation.Requests {
 			fmt.Fprintln(out, "Note: peer_auth.locked lists no project yet, so nothing asks for an approval.")
 		}
 		return nil

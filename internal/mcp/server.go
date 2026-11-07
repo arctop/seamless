@@ -245,6 +245,11 @@ type Config struct {
 	// leased connection carry the project's briefing once and the expiry
 	// warnings. Nil -- nothing locked -- changes nothing.
 	Approvals Approvals
+	// Grants is the daemon's read grants while isolation.requests is on: a
+	// read refused at a confidential project's fence files an access request,
+	// every tool call carries its holder's grants, and recall searches a
+	// granted project (grants.go). Nil -- the default -- changes nothing.
+	Grants Grants
 	// Now is the clock the lease notices read; nil means time.Now.
 	Now func() time.Time
 	// Features is the file/env optional-features config (config.Config.Features).
@@ -283,6 +288,11 @@ type Server struct {
 	// result already carried (locked.go), by lease id, with their expiry.
 	leaseMu   sync.Mutex
 	leaseSeen map[string]time.Time
+
+	// grantMu guards grantSeen: the read grants a tool result already
+	// announced (grants.go), by grant id, with their expiry.
+	grantMu   sync.Mutex
+	grantSeen map[string]time.Time
 }
 
 // NumTools returns the number of registered MCP tools. doctor asserts it equals
@@ -333,6 +343,7 @@ func New(cfg Config) *Server {
 		bindings:    make(map[string]binding),
 		toolSchemas: make(map[string]mcp.ToolInputSchema),
 		leaseSeen:   make(map[string]time.Time),
+		grantSeen:   make(map[string]time.Time),
 	}
 	s.mcp = mcpserver.NewMCPServer(
 		ServerName, version,
@@ -355,12 +366,16 @@ func New(cfg Config) *Server {
 		//     locked project's briefing they append must not be copied into the
 		//     tool.call event, which is filed under whatever project the call
 		//     was bound to. Off (nothing locked) they add nothing.
+		//   - the read grants (grants.go) innermost, after the session= handle:
+		//     the grants a call carries are its own binding's. Off
+		//     (isolation.requests unset) they add nothing.
 		mcpserver.WithToolHandlerMiddleware(s.authMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.leaseNoticeMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.logMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.validateMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.sessionHandleMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.lockRequestMiddleware),
+		mcpserver.WithToolHandlerMiddleware(s.grantsMiddleware),
 		// The optional-feature gate. It is a FILTER, not a middleware, because
 		// mcp-go applies filters at both tools/list and tools/call -- so a
 		// disabled feature's tools are neither advertised nor callable, with one

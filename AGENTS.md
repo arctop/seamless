@@ -310,6 +310,29 @@ any of it.
   items outside `logMiddleware`, and a leased connection's tool.call events
   keep no arguments, result or error text: the event is filed under the bound
   session's project, and must never copy a locked project's content there.
+- **Read grants are judged, never trusted, and only ever read**
+  (`isolation.requests`, off by default; `access/grant.go`, `approval/grant.go`,
+  `store/grants.go`, migration 034). A grant request is an `access_approvals`
+  row of kind `grant` (with `from_project`); `store.ApproveAccessGrant` is the
+  only writer of an `access_grants` row -- single use, bound to the request's
+  challenge -- and `ApproveAccess(For)` refuses a grant request, so a grant is
+  never a lease. The MCP edge (`grantsMiddleware`) loads the rows of whoever
+  the call speaks for -- the owner's socket chain under peer_auth, else the
+  session `getBinding` names, never an ambient inference -- and
+  `access.JudgeGrants` keeps only that holder's. `store.CanRead` honors a live
+  grant after the View, for a confidential target and only from its
+  `from_project`; never a sealed project on either side. `store.CanWrite`
+  never asks whether a grant is live: it consults only `access.WriteConfined`,
+  the confinement every grant a holder was ever approved leaves, which only
+  refuses (writes only into those `from_project`s, for the holder's life).
+  Requests are filed only by `fenceRead` (an explicit `project=` or a by-ULID
+  read), never by a filter (`fenceReadQuiet`) or the read half of a move or
+  apply (`fenceReadNoAsk`). Without peer_auth the decision is the bearer
+  key's (`approval.ProofKey`, accepted only by advisory Grants -- the docs
+  call it advisory); under it, the approve core's proofs (`Service.prove`).
+  Event slugs ride `from_project`/`target_project`, never a key in
+  `feed.frameFields`. Off, no request carries grants and every check answers
+  as before.
 - **The identity comes from the transport, never the client.** A header, a
   `session=` handle, a body field or an agent-process identity can only ever
   narrow what the View allows. `getBinding` drops a binding to an unreachable

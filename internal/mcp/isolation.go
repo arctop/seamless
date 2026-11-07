@@ -53,7 +53,24 @@ func (s *Server) callerScope(ctx context.Context) string {
 // read funnel (an explicit project=) and the by-id post-load checks -- those
 // resolve no scope at all, so without it any caller holding a ULID reads any
 // project's item.
+//
+// With read grants on (isolation.requests), a refusal at a confidential
+// project's fence also files an access request and names it on a second line
+// (grantRequestRefusal); off, the refusal is exactly fenceReadQuiet's.
 func (s *Server) fenceRead(ctx context.Context, target string) error {
+	err := s.fenceReadNoAsk(ctx, target)
+	if s.cfg.Grants != nil {
+		err = s.grantRequestRefusal(ctx, err, target)
+	}
+	return err
+}
+
+// fenceReadNoAsk is fenceRead without the access request: for a read that is
+// one half of a move or a gardener apply, which a read grant could never let
+// through -- the other half writes into the fenced project, and the
+// confinement a grant brings refuses exactly that. Off (no read grants) it is
+// fenceRead.
+func (s *Server) fenceReadNoAsk(ctx context.Context, target string) error {
 	err := s.fenceReadQuiet(ctx, target)
 	s.noteRefusal(ctx, err, target)
 	return err
@@ -128,6 +145,11 @@ func (s *Server) fenceWriteQuiet(ctx context.Context, target string) error {
 	}
 	if allowed {
 		return nil
+	}
+	// A read grant's confinement (isolation.requests) refuses before either
+	// fence: its copy names the rule it is, not a state the target is not in.
+	if access.WriteConfined(ctx, target) {
+		return &fenceRefusal{reason: screening.RefusedFenceWrite, err: s.confinedRefusal(ctx, target)}
 	}
 	// CanWrite judges the caller's outbound fence first (the mirror of fenceRead),
 	// and only a sealed target can be the other side.
@@ -214,7 +236,7 @@ func (s *Server) fenceProposal(ctx context.Context, p store.Proposal) error {
 		return fmt.Errorf("proposal %s names no project to check an isolation fence against: resolve it from the console", p.ID)
 	}
 	for _, project := range scope.Projects {
-		if err := s.fenceRead(ctx, project); err != nil {
+		if err := s.fenceReadNoAsk(ctx, project); err != nil {
 			return err
 		}
 		if err := s.fenceWrite(ctx, project); err != nil {

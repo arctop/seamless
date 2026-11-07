@@ -122,6 +122,12 @@ type Config struct {
 	// keys for locked projects). Nil -- no project is locked -- makes every
 	// Approvers route a 404, and nothing else shows it.
 	Approvals ApprovalsView
+	// Grants backs the read grants while isolation.requests is on: the
+	// Access requests page lists a confidential project's requests and the
+	// live grants with Revoke, and -- without peer_auth, where Approvals is
+	// nil -- approves one with the bearer key or the console cookie (the
+	// advisory tier). Nil changes nothing.
+	Grants GrantsView
 	// Terminal tells seam approve how to run the terminal path's commit
 	// (the daemon's account, its seamlessd, its config); nil omits it.
 	Terminal *TerminalApprover
@@ -270,6 +276,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/access/{id}/approve", formBodyPasskey, s.accessApprove)
 	post("POST /console/access/{id}/deny", formBodySmall, s.accessDeny)
 	post("POST /console/access/leases/{id}/revoke", formBodySmall, s.leaseRevoke)
+	post("POST /console/access/grants/{id}/revoke", formBodySmall, s.grantRevoke)
 	post("POST /console/access/unlocks/{id}/end", formBodySmall, s.unlockEnd)
 	handle("GET /console/unlock", s.auth(s.unlockClaim))
 	handle("GET /console/unlock/{project}", s.auth(s.unlockPage))
@@ -1309,8 +1316,9 @@ func (s *Service) navCounts(ctx context.Context, feats config.Features) navCount
 	}
 	// Locked projects: the Access requests badge counts what waits for the
 	// owner, and the Projects badge counts the locked projects the board
-	// lists by name. Nothing is locked: neither query runs.
-	if s.cfg.Approvals != nil {
+	// lists by name. Nothing is locked: neither query runs. With read grants
+	// on (isolation.requests), the same badge counts their requests.
+	if s.cfg.Approvals != nil || s.cfg.Grants != nil {
 		if pending, perr := store.PendingAccessApprovals(ctx, s.writeDB(), time.Now()); perr != nil {
 			s.logger.Warn("console: nav access count", "error", perr)
 		} else {

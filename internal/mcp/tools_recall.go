@@ -64,12 +64,18 @@ func (s *Server) handleRecall(ctx context.Context, req mcp.CallToolRequest) (*mc
 			return errResult("recall", err)
 		}
 	}
+	// A project a live read grant opens to this one joins the scope while
+	// the grant lives (isolation.requests; nil while it is off).
+	also, err := s.grantedScope(ctx, project)
+	if err != nil {
+		return errResult("recall", err)
+	}
 	hits := []retrieve.Hit{}
 	if globalOK {
 		var err error
 		hits, err = s.cfg.Retrieve.Recall(ctx, retrieve.RecallInput{
 			Query: query, Project: project, Scope: argString(req, "scope"),
-			Kind: kind, Limit: argInt(req, "limit", retrieve.DefaultRecallLimit),
+			Kind: kind, Limit: argInt(req, "limit", retrieve.DefaultRecallLimit), Also: also,
 		})
 		if err != nil {
 			return errResult("recall", err)

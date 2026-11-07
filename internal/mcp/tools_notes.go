@@ -232,7 +232,7 @@ func (s *Server) handleNotesUpdate(ctx context.Context, req mcp.CallToolRequest)
 			// confidential note in place (inbound is deliberately open), but carrying
 			// it out of the fence is precisely the outbound leak confidential exists to
 			// stop.
-			if err := s.fenceRead(ctx, oldProject); err != nil {
+			if err := s.fenceReadNoAsk(ctx, oldProject); err != nil {
 				return err
 			}
 			if err := s.fenceWrite(ctx, note.Project); err != nil {

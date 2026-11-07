@@ -76,6 +76,10 @@ type Config struct {
 	// PeerAuth is peer-user authentication over a Unix socket (peerauth.go).
 	// Off by default; off is exactly the pre-peer_auth behavior.
 	PeerAuth PeerAuth `yaml:"peer_auth"`
+	// Isolation is what project isolation does beyond its states
+	// (isolation.go): access requests at a confidential project's fence. Off
+	// by default; off is exactly the previous behavior.
+	Isolation Isolation `yaml:"isolation"`
 
 	// sourcePath records which config file was loaded (empty = defaults only).
 	sourcePath string `yaml:"-"`
@@ -1047,6 +1051,9 @@ func (c *Config) applyEnv() error {
 	envStr("SEAMLESS_PEER_AUTH_SOCKET_PATH", &c.PeerAuth.Socket.Path)
 	envStr("SEAMLESS_PEER_AUTH_SOCKET_MODE", &c.PeerAuth.Socket.Mode)
 	envStr("SEAMLESS_PEER_AUTH_SOCKET_GROUP", &c.PeerAuth.Socket.Group)
+	if err := envBool("SEAMLESS_ISOLATION_REQUESTS", &c.Isolation.Requests); err != nil {
+		return err
+	}
 	return nil
 }
 

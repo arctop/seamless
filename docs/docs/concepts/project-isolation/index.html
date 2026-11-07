@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-three-states">The three states</a></li><li class="lvl-2"><a href="#the-console-is-exempt">The console is exempt</a></li><li class="lvl-2"><a href="#isolation-requires-a-standalone-project">Isolation requires a standalone project</a></li><li class="lvl-2"><a href="#tightening-and-loosening">Tightening and loosening</a></li><li class="lvl-2"><a href="#knowledge-that-already-got-out">Knowledge that already got out</a></li><li class="lvl-3"><a href="#in-the-console">In the console</a></li><li class="lvl-3"><a href="#from-the-cli">From the CLI</a></li><li class="lvl-2"><a href="#what-agents-see">What agents see</a></li><li class="lvl-2"><a href="#honest-limits">Honest limits</a></li>
+      <li class="lvl-2"><a href="#the-three-states">The three states</a></li><li class="lvl-2"><a href="#the-console-is-exempt">The console is exempt</a></li><li class="lvl-2"><a href="#isolation-requires-a-standalone-project">Isolation requires a standalone project</a></li><li class="lvl-2"><a href="#tightening-and-loosening">Tightening and loosening</a></li><li class="lvl-2"><a href="#knowledge-that-already-got-out">Knowledge that already got out</a></li><li class="lvl-3"><a href="#in-the-console">In the console</a></li><li class="lvl-3"><a href="#from-the-cli">From the CLI</a></li><li class="lvl-2"><a href="#what-agents-see">What agents see</a></li><li class="lvl-2"><a href="#asking-for-access">Asking for access</a></li><li class="lvl-2"><a href="#honest-limits">Honest limits</a></li>
     </ul>
   </details>
   <p>By default, projects are cooperative rather than isolated. Any agent can read or
@@ -368,6 +368,53 @@ outside agent refused at the fence is told to bind to the project with
 <code>session_start project=&lt;slug&gt;</code> if its task really is that project, and to
 leave it alone otherwise.</li>
 </ul>
+<h2 id="asking-for-access">Asking for access</h2>
+<p>A refusal at a confidential project's fence can become a request you approve,
+when the daemon's config turns it on (<code>isolation.requests: true</code>; see
+<a href="../../reference/configuration/#isolation-requests">the configuration</a>). It is off by
+default, and off the refusal reads exactly as above and nothing is recorded.</p>
+<p>Isolation itself is unchanged by it: a confidential project's sessions still
+read open projects and global, and nothing leaves the project on its own. What
+changes is that a session refused a read of a confidential project - naming it
+with <code>project=</code> (in <code>recall</code> or any other read) or reading one of its items by
+ULID - files an access request, and the refusal names it. A read that only
+filters, such as <code>recall</code> without <code>project=</code> or <code>trial_query</code>, asks for
+nothing:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">project example-finance is confidential: reads require a session bound to it -- ...
+</span></span><span class="line"><span class="cl">Remedy: read request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console&#39;s Access requests page; retry once it is approved. An approved read is read-only, and confines this session&#39;s writes to example-ops for the rest of its life.
+</span></span></code></pre></div>
+<p>An agent can also ask explicitly, with its reason, from its own shell:
+<code>seam access request example-finance --reason &quot;...&quot;</code>.</p>
+<p><strong>Who may ask:</strong> a session bound to an open or a confidential project. Nothing
+that involves a sealed project is ever offered, on either side: a sealed
+project's refusal stays final, and a sealed project's session cannot ask for
+anything outside it.</p>
+<p><strong>What you approve.</strong> <code>seam approve</code> (or the console's Access requests page)
+shows the request's facts, including the line <em>content from example-finance
+may be copied into example-ops's memories</em>: an approved session can read the
+project, and nothing stops it from writing what it read into its own project.
+You choose how long: until the session ends, 1 hour or 4 hours.</p>
+<p><strong>What a grant is.</strong> Read-only, one project, to the one session that asked
+(under <code>peer_auth</code>, to the asking agent and the programs it started), until it
+expires, you revoke it from the Access requests page, or the session ends.
+While it lives, the granted project also joins that session's <code>recall</code> scope
+and its trials show in <code>trial_query</code>; the briefing does not change. Another
+session is still refused.</p>
+<p><strong>Writes are never granted.</strong> A grant never lets a session write into the
+project it reads. A session in an open project that receives a grant is
+write-confined like a confidential project's session, for the rest of its
+life: no writes to other projects, and none to the global scope. Its next tool
+result says so, and the confinement is recorded as an event. Expiry and
+revocation end the read, never the confinement - what was read stays read.</p>
+<p><strong>How much an approval proves.</strong> Without <code>peer_auth</code> the approval is
+<strong>advisory</strong>: <code>seam approve</code> asks for a y/N in a terminal (it refuses to run
+without one) and commits over the console with the bearer key, and the
+console's Approve does the same. Any process that holds the key - which every
+local agent can read - can make that call, so an approval guards against an
+agent wandering into a confidential project, not against one set on it. Under
+<code>peer_auth</code> a grant needs the same proofs as a
+<a href="../../guides/peer-auth/">locked project's lease</a>: your terminal through <code>sudo</code> to
+the daemon's account, a passkey, or a Touch ID key.</p>
 <h2 id="honest-limits">Honest limits</h2>
 <p>This matters more than the feature list, so it is stated plainly.</p>
 <p><strong>What this is.</strong> A policy fence at every Seamless surface - briefings, recall,
@@ -411,7 +458,7 @@ dir, port, and key, run as its own account.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-three-states">The three states</a></li><li class="lvl-2"><a href="#the-console-is-exempt">The console is exempt</a></li><li class="lvl-2"><a href="#isolation-requires-a-standalone-project">Isolation requires a standalone project</a></li><li class="lvl-2"><a href="#tightening-and-loosening">Tightening and loosening</a></li><li class="lvl-2"><a href="#knowledge-that-already-got-out">Knowledge that already got out</a></li><li class="lvl-3"><a href="#in-the-console">In the console</a></li><li class="lvl-3"><a href="#from-the-cli">From the CLI</a></li><li class="lvl-2"><a href="#what-agents-see">What agents see</a></li><li class="lvl-2"><a href="#honest-limits">Honest limits</a></li>
+      <li class="lvl-2"><a href="#the-three-states">The three states</a></li><li class="lvl-2"><a href="#the-console-is-exempt">The console is exempt</a></li><li class="lvl-2"><a href="#isolation-requires-a-standalone-project">Isolation requires a standalone project</a></li><li class="lvl-2"><a href="#tightening-and-loosening">Tightening and loosening</a></li><li class="lvl-2"><a href="#knowledge-that-already-got-out">Knowledge that already got out</a></li><li class="lvl-3"><a href="#in-the-console">In the console</a></li><li class="lvl-3"><a href="#from-the-cli">From the CLI</a></li><li class="lvl-2"><a href="#what-agents-see">What agents see</a></li><li class="lvl-2"><a href="#asking-for-access">Asking for access</a></li><li class="lvl-2"><a href="#honest-limits">Honest limits</a></li>
     </ul>
   </aside>
   

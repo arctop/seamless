@@ -81,6 +81,15 @@ var (
 	ErrNoProof = errors.New("an approval needs a proof")
 	// ErrDuration is a duration that is not one of Durations.
 	ErrDuration = errors.New("invalid duration")
+	// ErrIsGrant is a lease approval of a read grant request: a grant is
+	// decided by Grants.Approve and never becomes a lease.
+	ErrIsGrant = errors.New("this is a read grant request, not a lock's")
+)
+
+// The access a decision opens, as the facts name it.
+const (
+	accessReadWrite = "read-write"
+	accessReadOnly  = "read-only"
 )
 
 // ShortID is a request's short form for a person: R- and the last four
@@ -114,6 +123,10 @@ type Facts struct {
 	RequestedAt time.Time `json:"requested_at"`
 	ExpiresAt   time.Time `json:"expires_at"`
 	Digest      string    `json:"digest"`
+	// From is a read grant request's asking project (isolation.requests):
+	// the grant would open Project to sessions working there. Empty, and
+	// absent from the JSON, for a lock's request.
+	From string `json:"from,omitempty"`
 }
 
 // Warning is one thing the owner should weigh before approving: a code and
@@ -181,41 +194,11 @@ func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApp
 	if !in.View.Locked(in.Project) && !leased {
 		return store.AccessApproval{}, fmt.Errorf("%s: %w: %s", op, ErrNotLocked, in.Project)
 	}
-	if in.SessionID == "" && in.AgentProcess != "" {
-		// No binding: the session the agent's SessionStart hook stamped with
-		// this process, when exactly one is live.
-		if found, err := store.ActiveAmbientByAgentProcess(ctx, s.cfg.DB, in.Host, in.AgentProcess); err == nil && len(found) == 1 {
-			in.SessionID = found[0].ID
-		}
+	anchor, sessionID, sess, err := s.resolveAnchor(ctx, chain, in.SessionID, in.AgentProcess, in.Host)
+	if err != nil {
+		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
 	}
-	var sess store.SessionProcess
-	anchorID := in.AgentProcess
-	if in.SessionID != "" {
-		got, err := store.SessionAgentProcesses(ctx, s.cfg.DB, []string{in.SessionID})
-		if err != nil {
-			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
-		}
-		if p, ok := got[in.SessionID]; ok {
-			sess = p
-			if p.AgentProcess != "" {
-				anchorID = p.AgentProcess
-			}
-		}
-	}
-	if anchorID == "" {
-		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, ErrNoAnchor)
-	}
-	var anchor access.ProcessToken
-	found := false
-	for _, t := range chain {
-		if t.AgentID() == anchorID {
-			anchor, found = t, true
-			break
-		}
-	}
-	if !found {
-		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, ErrAnchorNotInChain)
-	}
+	in.SessionID = sessionID
 
 	pending, ok, err := store.PendingAccessApproval(ctx, s.cfg.DB, anchor.Key(), in.Project, now)
 	if err != nil {
@@ -264,6 +247,45 @@ func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApp
 	s.record(ctx, core.Event{Kind: core.EventAccessRequested, ItemID: a.ID, SessionID: in.SessionID, ProjectSlug: in.Project,
 		Payload: map[string]any{"kind": kind, "via": via}})
 	return a, nil
+}
+
+// resolveAnchor finds the agent process a request is anchored to: the one
+// the session is stamped with, else the one the request claims, and only when
+// it is a process of the connection's kernel-verified chain. With no session
+// named, the session the agent's SessionStart hook stamped with the claimed
+// process stands in, when exactly one is live. It returns the anchor, the
+// session it settled on ("" for none) and that session's process row.
+func (s *Service) resolveAnchor(ctx context.Context, chain []access.ProcessToken, sessionID, agentProcess, host string) (access.ProcessToken, string, store.SessionProcess, error) {
+	if sessionID == "" && agentProcess != "" {
+		// No binding: the session the agent's SessionStart hook stamped with
+		// this process, when exactly one is live.
+		if found, err := store.ActiveAmbientByAgentProcess(ctx, s.cfg.DB, host, agentProcess); err == nil && len(found) == 1 {
+			sessionID = found[0].ID
+		}
+	}
+	var sess store.SessionProcess
+	anchorID := agentProcess
+	if sessionID != "" {
+		got, err := store.SessionAgentProcesses(ctx, s.cfg.DB, []string{sessionID})
+		if err != nil {
+			return access.ProcessToken{}, "", store.SessionProcess{}, err
+		}
+		if p, ok := got[sessionID]; ok {
+			sess = p
+			if p.AgentProcess != "" {
+				anchorID = p.AgentProcess
+			}
+		}
+	}
+	if anchorID == "" {
+		return access.ProcessToken{}, "", store.SessionProcess{}, ErrNoAnchor
+	}
+	for _, t := range chain {
+		if t.AgentID() == anchorID {
+			return t, sessionID, sess, nil
+		}
+	}
+	return access.ProcessToken{}, "", store.SessionProcess{}, ErrAnchorNotInChain
 }
 
 // repoName is the repository a cwd sits in, for display: its last element.
@@ -326,12 +348,22 @@ func (s *Service) factsOf(ctx context.Context, a store.AccessApproval) (Facts, e
 	if isoWord == "" {
 		isoWord = string(core.IsolationOpen)
 	}
+	grant := a.Kind == store.AccessKindGrant
 	f := Facts{
-		ID: a.ID, Short: ShortID(a.ID), Project: a.Project, Isolation: isoWord, Access: "read-write", Kind: a.Kind,
+		ID: a.ID, Short: ShortID(a.ID), Project: a.Project, Isolation: isoWord, Access: accessReadWrite, Kind: a.Kind,
 		Program: a.Program, PID: a.PeerPID, UID: a.PeerUID, Session: a.SessionName, SessionID: a.SessionID,
 		CWD: a.CWD, Repo: a.Repo, Model: a.Model, Reason: a.Reason, RequestedAt: a.RequestedAt, ExpiresAt: a.ExpiresAt,
 	}
+	// A read grant opens the project read-only to the asking project, and its
+	// repository is the one the session should be working in.
+	home := a.Project
+	if grant {
+		f.Access, f.From, home = accessReadOnly, a.FromProject, a.FromProject
+	}
 	warn := func(code, text string) { f.Warnings = append(f.Warnings, Warning{Code: code, Text: text}) }
+	if grant {
+		warn(WarnCopyInto, CopyIntoLine(a.Project, a.FromProject))
+	}
 	if a.Kind == store.AccessKindRefresh {
 		warn(WarnRefreshOfLease, "this session already holds a lease on the project; approving replaces it")
 	}
@@ -347,13 +379,13 @@ func (s *Service) factsOf(ctx context.Context, a store.AccessApproval) (Facts, e
 			return Facts{}, fmt.Errorf("%s: %w", op, err)
 		}
 		inside := false
-		for _, root := range roots[a.Project] {
+		for _, root := range roots[home] {
 			if rel, err := filepath.Rel(root, a.CWD); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 				inside = true
 			}
 		}
 		if !inside {
-			warn(WarnCWDOutside, "the session works outside "+a.Project+"'s repository")
+			warn(WarnCWDOutside, "the session works outside "+home+"'s repository")
 		}
 	}
 	if a.SessionID != "" {
@@ -368,13 +400,24 @@ func (s *Service) factsOf(ctx context.Context, a store.AccessApproval) (Facts, e
 		return Facts{}, fmt.Errorf("%s: %w", op, err)
 	}
 	for _, p := range pending {
-		if p.ID != a.ID && p.ProcessKey == a.ProcessKey {
+		if p.ID != a.ID && sameAsker(p, a) {
 			warn(WarnOtherPending, "the same agent is also asking for "+p.Project)
 			break
 		}
 	}
 	f.Digest = digestOf(f)
 	return f, nil
+}
+
+// sameAsker reports whether two requests come from one asker: one agent
+// process under peer_auth, else one session (a read grant request without
+// peer_auth names no process). Two requests that name neither are not known
+// to share anything.
+func sameAsker(a, b store.AccessApproval) bool {
+	if a.ProcessKey != "" || b.ProcessKey != "" {
+		return a.ProcessKey == b.ProcessKey
+	}
+	return a.SessionID != "" && a.SessionID == b.SessionID
 }
 
 // Pending returns the facts of every pending request, oldest first.
@@ -465,6 +508,10 @@ func (s *Service) Approve(ctx context.Context, d Decision) (store.AccessLease, e
 	if err != nil {
 		return store.AccessLease{}, fmt.Errorf("%s: %w", op, err)
 	}
+	if a.Kind == store.AccessKindGrant {
+		// A read grant is decided by Grants.Approve, and never becomes a lease.
+		return store.AccessLease{}, fmt.Errorf("%s: %w: %s", op, ErrIsGrant, ShortID(a.ID))
+	}
 	if a.Status != store.ApprovalPending {
 		return store.AccessLease{}, fmt.Errorf("%s: %w: %s is %s", op, store.ErrApprovalNotPending, ShortID(a.ID), a.Status)
 	}
@@ -476,49 +523,9 @@ func (s *Service) Approve(ctx context.Context, d Decision) (store.AccessLease, e
 		return store.AccessLease{}, fmt.Errorf("%s: %w", op, ErrFactsChanged)
 	}
 	now := s.cfg.Now()
-	var decidedBy string
-	switch d.Proof.Kind {
-	case ProofDaemon:
-		decidedBy = decidedByDaemon
-	case ProofPasskey:
-		if !s.PasskeysOn() {
-			return store.AccessLease{}, fmt.Errorf("%s: %w", op, ErrPasskeysOff)
-		}
-		rows, err := store.ApproverCredentials(ctx, s.cfg.DB, store.ApproverPasskey)
-		if err != nil {
-			return store.AccessLease{}, fmt.Errorf("%s: %w", op, err)
-		}
-		allowed := make([]passkey.Credential, len(rows))
-		for i, r := range rows {
-			allowed[i] = ToPasskey(r)
-		}
-		used, err := s.cfg.Passkeys.FinishAssertion(a.Challenge, allowed, d.Proof.Assertion)
-		if err != nil {
-			return store.AccessLease{}, fmt.Errorf("%s: %w", op, err)
-		}
-		row, ok := rowFor(rows, used.ID)
-		if !ok {
-			return store.AccessLease{}, fmt.Errorf("%s: unknown passkey", op)
-		}
-		if err := store.RecordApproverUse(ctx, s.cfg.DB, row.ID, row.SignCount, used.SignCount, used.BackupState, now); err != nil {
-			return store.AccessLease{}, fmt.Errorf("%s: %w", op, err)
-		}
-		decidedBy = row.ID
-	case ProofTouchID:
-		row, err := store.ApproverByID(ctx, s.cfg.DB, d.Proof.CredentialID)
-		if err != nil || row.Kind != store.ApproverTouchID {
-			return store.AccessLease{}, fmt.Errorf("%s: %w: no such Touch ID key", op, ErrTouchIDKey)
-		}
-		msg := TouchIDApproveMessage(a.ID, a.Challenge, d.Digest, facts.Access, d.Duration)
-		if err := VerifyTouchID(row.PublicKey, msg, d.Proof.Signature); err != nil {
-			return store.AccessLease{}, fmt.Errorf("%s: %w", op, err)
-		}
-		if err := store.RecordApproverUse(ctx, s.cfg.DB, row.ID, row.SignCount, row.SignCount, false, now); err != nil {
-			return store.AccessLease{}, fmt.Errorf("%s: %w", op, err)
-		}
-		decidedBy = row.ID
-	default:
-		return store.AccessLease{}, fmt.Errorf("%s: %w", op, ErrNoProof)
+	decidedBy, err := s.prove(ctx, a, facts, d, now)
+	if err != nil {
+		return store.AccessLease{}, fmt.Errorf("%s: %w", op, err)
 	}
 	lease, err := store.ApproveAccessFor(ctx, s.cfg.DB, a.ID, a.Challenge, decidedBy, length, now)
 	if err != nil {
@@ -527,6 +534,56 @@ func (s *Service) Approve(ctx context.Context, d Decision) (store.AccessLease, e
 	s.record(ctx, core.Event{Kind: core.EventAccessApproved, ItemID: a.ID, SessionID: a.SessionID, ProjectSlug: a.Project,
 		Payload: map[string]any{"lease": lease.ID, "proof": d.Proof.Kind, "seconds": int64(length / time.Second), "duration": d.Duration}})
 	return lease, nil
+}
+
+// prove verifies a decision's proof over request a, whose facts (and their
+// digest) the owner was shown, and returns who decided: the daemon's account,
+// or the approver credential that signed. It is the one proof check of the
+// approve core, for a lock's lease and a read grant alike.
+func (s *Service) prove(ctx context.Context, a store.AccessApproval, facts Facts, d Decision, now time.Time) (string, error) {
+	switch d.Proof.Kind {
+	case ProofDaemon:
+		return decidedByDaemon, nil
+	case ProofPasskey:
+		if !s.PasskeysOn() {
+			return "", ErrPasskeysOff
+		}
+		rows, err := store.ApproverCredentials(ctx, s.cfg.DB, store.ApproverPasskey)
+		if err != nil {
+			return "", err
+		}
+		allowed := make([]passkey.Credential, len(rows))
+		for i, r := range rows {
+			allowed[i] = ToPasskey(r)
+		}
+		used, err := s.cfg.Passkeys.FinishAssertion(a.Challenge, allowed, d.Proof.Assertion)
+		if err != nil {
+			return "", err
+		}
+		row, ok := rowFor(rows, used.ID)
+		if !ok {
+			return "", errors.New("unknown passkey")
+		}
+		if err := store.RecordApproverUse(ctx, s.cfg.DB, row.ID, row.SignCount, used.SignCount, used.BackupState, now); err != nil {
+			return "", err
+		}
+		return row.ID, nil
+	case ProofTouchID:
+		row, err := store.ApproverByID(ctx, s.cfg.DB, d.Proof.CredentialID)
+		if err != nil || row.Kind != store.ApproverTouchID {
+			return "", fmt.Errorf("%w: no such Touch ID key", ErrTouchIDKey)
+		}
+		msg := TouchIDApproveMessage(a.ID, a.Challenge, d.Digest, facts.Access, d.Duration)
+		if err := VerifyTouchID(row.PublicKey, msg, d.Proof.Signature); err != nil {
+			return "", err
+		}
+		if err := store.RecordApproverUse(ctx, s.cfg.DB, row.ID, row.SignCount, row.SignCount, false, now); err != nil {
+			return "", err
+		}
+		return row.ID, nil
+	default:
+		return "", ErrNoProof
+	}
 }
 
 // Deny ends a pending request without a lease. by names who decided (a

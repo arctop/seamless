@@ -154,5 +154,14 @@ func TestPeerHandler_InstallsOnlyMatchingLeases(t *testing.T) {
 		v := serve(t, open, cred, loader)
 		require.False(t, walked)
 		require.False(t, v.Principal().HasProcess)
+
+		// Read grants under peer_auth key on the chain: with chains on it is
+		// walked and attached although nothing is locked.
+		withChains := loader
+		withChains.chains = true
+		v = serve(t, open, cred, withChains)
+		require.True(t, walked)
+		require.True(t, v.Principal().HasProcess)
+		require.Equal(t, access.Tokens(chain), v.Principal().Chain)
 	})
 }

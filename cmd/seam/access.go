@@ -1,12 +1,17 @@
 package main
 
-// seam access request -- an agent asks the owner for a locked project.
+// seam access request -- an agent asks the owner for a locked project, or --
+// with isolation.requests on -- to read a confidential one.
 //
 // Under peer_auth a locked project (peer_auth.locked) is closed to every owner
 // request until the owner approves a lease for the asking agent's process. A
 // refused call already files a pending request by itself; this is the explicit
 // form, with the agent's own reason attached. The owner decides it with seam
 // approve (approve.go) in their own terminal, or on the console's passkey page.
+//
+// A confidential project's fence works the same way when the daemon offers
+// read grants (isolation.requests): the request asks for read-only access to
+// that one project for the asking session's own project.
 //
 // The routes are the console's /console/access family. They are 404 with a JSON
 // message when the daemon locks nothing, and that message is the answer the
@@ -59,6 +64,7 @@ type accessFacts struct {
 	RequestedAt time.Time       `json:"requested_at"`
 	ExpiresAt   time.Time       `json:"expires_at"`
 	Digest      string          `json:"digest"`
+	From        string          `json:"from,omitempty"`
 }
 
 // accessWarning mirrors approval.Warning.
@@ -91,6 +97,10 @@ type accessOne struct {
 	Terminal  *terminalApprover `json:"terminal"`
 	Durations []string          `json:"durations"`
 	MaxLease  string            `json:"max_lease"`
+	// Advisory marks a read grant request on a daemon without peer_auth:
+	// seam approve commits it over the console with the bearer key, and any
+	// process holding the key could.
+	Advisory bool `json:"advisory"`
 }
 
 // accessFiled is POST /console/access/request's answer.
@@ -99,8 +109,12 @@ type accessFiled struct {
 	Short   string `json:"short_id"`
 	Project string `json:"project"`
 	Kind    string `json:"kind"`
+	From    string `json:"from"`
 	Page    string `json:"page"`
 }
+
+// kindGrant is a read grant request's kind (store.AccessKindGrant).
+const kindGrant = "grant"
 
 // The paths of the access routes.
 const (
@@ -181,6 +195,10 @@ names the agent that started it. A refused call files one by itself; this is
 the explicit form, with a reason the owner sees labeled as the agent's words
 (at most 200 characters).
 
+On a daemon that offers read grants (isolation.requests), a confidential
+project can be asked for the same way: read-only, for the asking session's own
+project, whose writes then stay inside that project.
+
 Asking again while a request is pending answers with that request. The owner
 decides it with seam approve <short id> in their own terminal, or on the
 console's passkey page when the daemon names one.`)
@@ -221,8 +239,13 @@ func runAccessRequest(_ context.Context, e *env, o *accessRequestOpts, pos []str
 	if err := json.NewDecoder(bytes.NewReader(b)).Decode(&got); err != nil {
 		return fmt.Errorf("unreadable console response from %s: %w", accessRequestPath, err)
 	}
-	fmt.Fprintf(e.stdout, "Requested %s for %s (%s). The owner approves it with: seam approve %s\n",
-		printable(got.Short), printable(got.Project), printable(got.Kind), printable(got.Short))
+	if got.Kind == kindGrant {
+		fmt.Fprintf(e.stdout, "Requested read access to %s for %s (%s, read-only). The owner approves it with: seam approve %s\n",
+			printable(got.Project), printable(got.From), printable(got.Short), printable(got.Short))
+	} else {
+		fmt.Fprintf(e.stdout, "Requested %s for %s (%s). The owner approves it with: seam approve %s\n",
+			printable(got.Short), printable(got.Project), printable(got.Kind), printable(got.Short))
+	}
 	if got.Page != "" {
 		fmt.Fprintf(e.stdout, "or with a passkey: %s\n", printable(got.Page))
 	}

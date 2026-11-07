@@ -133,6 +133,26 @@ func withLockScreens(visible []screen, locked bool) []screen {
 	if !locked {
 		return visible
 	}
+	return beforeTail(visible, lockScreens)
+}
+
+// withAccessScreens is withLockScreens when a project is locked; otherwise,
+// with read grants on (isolation.requests) and no lock, it places only the
+// Access requests screen -- there are no approver credentials to manage
+// without peer_auth. Neither: visible itself.
+func withAccessScreens(visible []screen, locked, grants bool) []screen {
+	switch {
+	case locked:
+		return withLockScreens(visible, true)
+	case grants:
+		return beforeTail(visible, lockScreens[:1])
+	}
+	return visible
+}
+
+// beforeTail inserts extra ahead of the pinned tail (the first nav row with
+// no group: Settings).
+func beforeTail(visible, extra []screen) []screen {
 	at := len(visible)
 	for i, sc := range visible {
 		if sc.NavRow && sc.Group == "" {
@@ -140,7 +160,7 @@ func withLockScreens(visible []screen, locked bool) []screen {
 			break
 		}
 	}
-	return slices.Concat(visible[:at:at], lockScreens, visible[at:])
+	return slices.Concat(visible[:at:at], extra, visible[at:])
 }
 
 // screenRegistry returns the ordered screens. The slice is a copy, so a caller

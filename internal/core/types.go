@@ -471,6 +471,8 @@ const (
 	EventAccessApproved  EventKind = "access.approved"  // the owner approved a request (item_id: the request; payload: lease, proof, seconds)
 	EventAccessDenied    EventKind = "access.denied"    // the owner denied a request (item_id: the request; payload: proof)
 	EventAccessRevoked   EventKind = "access.revoked"   // leases ended early (payload: reason, leases; session_id for a session end)
+	EventAccessGranted   EventKind = "access.granted"   // the owner approved a read grant of a confidential project (isolation.requests; item_id: the request; session_id; project: the target; payload: grant, from_project, proof, seconds, duration)
+	EventAccessConfined  EventKind = "access.confined"  // a session in an open project was write-confined by its read grant (item_id: the request; session_id; project: the confined project; payload: grant, target_project)
 
 	// Background update check (internal/update). Payload values are parsed
 	// X.Y.Z versions and fixed install-kind words, never release-API text.

@@ -370,6 +370,9 @@ func peerConnContext(ctx context.Context, c net.Conn) context.Context {
 type peerLeases struct {
 	load func(ctx context.Context, processKeys []string, now time.Time) ([]access.Lease, error)
 	now  func() time.Time
+	// chains walks the owner's process chain even while nothing is locked:
+	// read grants (isolation.requests) under peer_auth are keyed on it.
+	chains bool
 }
 
 // storeLeases is the daemon's peerLeases: rows from the database, judged
@@ -408,7 +411,7 @@ func peerHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger, 
 			http.Error(w, fmt.Sprintf("forbidden: uid %d is not configured under peer_auth", cred.uid), http.StatusForbidden)
 			return
 		}
-		if view.Principal().Kind == access.KindOwner && policy.HasLocked() {
+		if view.Principal().Kind == access.KindOwner && (policy.HasLocked() || leases.chains) {
 			view = leasedView(r.Context(), policy, cred, leases, logger, view)
 		}
 		next.ServeHTTP(w, r.WithContext(access.WithView(r.Context(), view)))

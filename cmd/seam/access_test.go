@@ -225,3 +225,16 @@ func TestAccessShapes_MatchTheDaemon(t *testing.T) {
 	require.Equal(t, jsonKeys(reflect.TypeFor[console.TerminalApprover]()), jsonKeys(reflect.TypeFor[terminalApprover]()))
 	require.Equal(t, approval.Durations[0], durationSession, "the daemon's default duration is the prompt's")
 }
+
+// A read grant request (isolation.requests) is answered with its kind and
+// the asking project, and said as what it is.
+func TestAccessRequest_ReadGrant(t *testing.T) {
+	ac := newAccessConsole(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"01KACCESSREQUEST0000007F3K","short_id":"R-7F3K","project":"example-finance",` +
+			`"kind":"grant","from":"example-ops","page":""}`))
+	})
+	e, out, errb := ac.env()
+	require.Equal(t, 0, dispatch(context.Background(), e, []string{"access", "request", "example-finance"}), errb.String())
+	require.Equal(t, "Requested read access to example-finance for example-ops (R-7F3K, read-only). "+
+		"The owner approves it with: seam approve R-7F3K\n", out.String())
+}

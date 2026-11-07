@@ -135,6 +135,10 @@ type RecallInput struct {
 	// of another kind would violate it.
 	Kind  string
 	Limit int
+	// Also are further projects the caller may read and searches beside
+	// Project: the targets of its live read grants (isolation.requests). The
+	// caller has judged each with store.CanRead; nil is the old scope exactly.
+	Also []string
 }
 
 type fusedItem struct {
@@ -378,7 +382,7 @@ func (s *Service) Recall(ctx context.Context, in RecallInput) ([]Hit, error) {
 		if in.Kind == "" {
 			return nil, errors.New("retrieve.Recall: query is required unless kind is set")
 		}
-		return s.browseKind(ctx, in.Kind, in.Project, limit)
+		return s.browseKind(ctx, in.Kind, in.Project, in.Also, limit)
 	}
 
 	// The recall scope is the bound project plus global (project "") -- except
@@ -396,6 +400,11 @@ func (s *Service) Recall(ctx context.Context, in RecallInput) ([]Hit, error) {
 	projects := []string{in.Project}
 	if in.Project != "" && globalVisible {
 		projects = append(projects, "")
+	}
+	for _, p := range in.Also {
+		if p != "" && !slices.Contains(projects, p) {
+			projects = append(projects, p)
+		}
 	}
 
 	acc, err := s.candidates(ctx, in.Query, kinds, projects, in.Kind, time.Time{}, recallSourceDepth, true, "retrieve.Recall")
@@ -463,7 +472,8 @@ func (s *Service) Recall(ctx context.Context, in RecallInput) ([]Hit, error) {
 		// The candidate queries already filter to scope; this is a final guard
 		// for link-expanded neighbors and any index/fts project drift -- and for
 		// the caller's peer_auth reach, which the candidate queries also apply.
-		if !scopeVisible(h.Project, in.Project, globalVisible) || !access.Visible(ctx, h.Project) {
+		if !(scopeVisible(h.Project, in.Project, globalVisible) || h.Project != "" && slices.Contains(in.Also, h.Project)) ||
+			!access.Visible(ctx, h.Project) {
 			continue
 		}
 		h.Source = fusedSource(f)
@@ -491,8 +501,8 @@ func (s *Service) Recall(ctx context.Context, in RecallInput) ([]Hit, error) {
 // query-gated demand: a listing is the briefing's kin, and crediting it would
 // let browsing reinforce the ranking it reads
 // (closed-loop-utility-signal-contract).
-func (s *Service) browseKind(ctx context.Context, kind, project string, limit int) ([]Hit, error) {
-	mems, err := s.scopedActiveMemories(ctx, project, nil)
+func (s *Service) browseKind(ctx context.Context, kind, project string, also []string, limit int) ([]Hit, error) {
+	mems, err := s.scopedActiveMemories(ctx, project, also)
 	if err != nil {
 		return nil, err
 	}

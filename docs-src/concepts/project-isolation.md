@@ -140,6 +140,64 @@ nothing.
   `session_start project=<slug>` if its task really is that project, and to
   leave it alone otherwise.
 
+## Asking for access
+
+A refusal at a confidential project's fence can become a request you approve,
+when the daemon's config turns it on (`isolation.requests: true`; see
+[the configuration](/reference/configuration/#isolation-requests)). It is off by
+default, and off the refusal reads exactly as above and nothing is recorded.
+
+Isolation itself is unchanged by it: a confidential project's sessions still
+read open projects and global, and nothing leaves the project on its own. What
+changes is that a session refused a read of a confidential project - naming it
+with `project=` (in `recall` or any other read) or reading one of its items by
+ULID - files an access request, and the refusal names it. A read that only
+filters, such as `recall` without `project=` or `trial_query`, asks for
+nothing:
+
+```text
+project example-finance is confidential: reads require a session bound to it -- ...
+Remedy: read request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console's Access requests page; retry once it is approved. An approved read is read-only, and confines this session's writes to example-ops for the rest of its life.
+```
+
+An agent can also ask explicitly, with its reason, from its own shell:
+`seam access request example-finance --reason "..."`.
+
+**Who may ask:** a session bound to an open or a confidential project. Nothing
+that involves a sealed project is ever offered, on either side: a sealed
+project's refusal stays final, and a sealed project's session cannot ask for
+anything outside it.
+
+**What you approve.** `seam approve` (or the console's Access requests page)
+shows the request's facts, including the line *content from example-finance
+may be copied into example-ops's memories*: an approved session can read the
+project, and nothing stops it from writing what it read into its own project.
+You choose how long: until the session ends, 1 hour or 4 hours.
+
+**What a grant is.** Read-only, one project, to the one session that asked
+(under `peer_auth`, to the asking agent and the programs it started), until it
+expires, you revoke it from the Access requests page, or the session ends.
+While it lives, the granted project also joins that session's `recall` scope
+and its trials show in `trial_query`; the briefing does not change. Another
+session is still refused.
+
+**Writes are never granted.** A grant never lets a session write into the
+project it reads. A session in an open project that receives a grant is
+write-confined like a confidential project's session, for the rest of its
+life: no writes to other projects, and none to the global scope. Its next tool
+result says so, and the confinement is recorded as an event. Expiry and
+revocation end the read, never the confinement - what was read stays read.
+
+**How much an approval proves.** Without `peer_auth` the approval is
+**advisory**: `seam approve` asks for a y/N in a terminal (it refuses to run
+without one) and commits over the console with the bearer key, and the
+console's Approve does the same. Any process that holds the key - which every
+local agent can read - can make that call, so an approval guards against an
+agent wandering into a confidential project, not against one set on it. Under
+`peer_auth` a grant needs the same proofs as a
+[locked project's lease](/guides/peer-auth/): your terminal through `sudo` to
+the daemon's account, a passkey, or a Touch ID key.
+
 ## Honest limits
 
 This matters more than the feature list, so it is stated plainly.

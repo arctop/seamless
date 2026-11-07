@@ -3,7 +3,7 @@
 {{with .Request}}
 <div class="access-one" data-access-one="{{.ID}}">
 <header class="mv2-bar">
-  <h1>{{icon "lock"}}{{.Short}}: {{.Project}}</h1>{{about "An agent is asking for a locked project. Read the facts; the reason is the agent's own words."}}
+  <h1>{{icon "lock"}}{{.Short}}: {{.Project}}</h1>{{if eq .Kind "grant"}}{{about "An agent is asking to read a confidential project. Read the facts; the reason is the agent's own words."}}{{else}}{{about "An agent is asking for a locked project. Read the facts; the reason is the agent's own words."}}{{end}}
 </header>
 
 {{if .Warnings}}
@@ -13,17 +13,34 @@
 {{end}}
 
 <dl class="access-facts">
-  <dt>Project</dt><dd>{{.Project}} ({{.Isolation}}), {{.Access}}</dd>
-  <dt>Asking</dt><dd>{{if .Program}}<code>{{.Program}}</code>{{else}}a process{{end}}, pid {{.PID}}, uid {{.UID}}</dd>
+  <dt>Project</dt><dd>{{.Project}} ({{.Isolation}}), {{.Access}}</dd>{{if .From}}<dt>For</dt><dd>sessions working in {{.From}}</dd>{{end}}
+  <dt>Asking</dt><dd>{{if not .PID}}a session (without peer_auth the daemon knows no process){{else}}{{if .Program}}<code>{{.Program}}</code>{{else}}a process{{end}}, pid {{.PID}}, uid {{.UID}}{{end}}</dd>
   <dt>Session</dt><dd>{{if .Session}}{{.Session}}{{else}}none{{end}}{{if .Model}} &middot; {{.Model}}{{end}}</dd>
   <dt>Working in</dt><dd>{{if .CWD}}<code>{{.CWD}}</code>{{else}}unknown{{end}}</dd>
   <dt>The agent says</dt><dd>{{if .Reason}}<q>{{.Reason}}</q>{{else}}(no reason given){{end}}</dd>
-  <dt>Kind</dt><dd>{{if eq .Kind "refresh"}}a refresh of a lease it holds{{else}}a first request{{end}}</dd>
+  <dt>Kind</dt><dd>{{if eq .Kind "refresh"}}a refresh of a lease it holds{{else if eq .Kind "grant"}}a read-only grant of a confidential project{{else}}a first request{{end}}</dd>
   <dt>Waits until</dt><dd>{{.ExpiresAt.Local.Format "15:04"}}</dd>
 </dl>
 {{end}}
 
-{{if eq .Status "pending"}}
+{{if eq .Status "pending"}}{{if .Advisory}}
+<form class="access-form" method="post" action="/console/access/{{.Request.ID}}/approve">
+  <input type="hidden" name="digest" value="{{.Request.Digest}}">
+  <input type="hidden" name="next" value="/console/access/{{.Request.ID}}">
+  <fieldset>
+    <legend>For how long</legend>
+    <label><input type="radio" name="duration" value="session" checked> until this session ends (at most {{.MaxLease}})</label>
+    <label><input type="radio" name="duration" value="1h"> 1 hour</label>
+    <label><input type="radio" name="duration" value="4h"> 4 hours</label>
+  </fieldset>
+  <p class="held-sub">{{icon "triangle-alert"}} Without peer_auth this approval is advisory: any process holding the bearer key can make it.</p>
+  <button class="btn primary" type="submit">Approve</button>
+</form>
+<form method="post" action="/console/access/{{.Request.ID}}/deny">
+  <input type="hidden" name="next" value="/console/access/{{.Request.ID}}">
+  <button class="btn" type="submit">Deny</button>
+</form>
+{{else}}
 <form id="access-form" class="access-form" data-id="{{.Request.ID}}" data-digest="{{.Request.Digest}}" data-options="{{printf "%s" .PasskeyOptions}}">
   <fieldset>
     <legend>For how long</legend>
@@ -39,7 +56,7 @@
   <p class="held-sub">No passkey is enrolled here. Approve in your own terminal instead.</p>
   {{end}}
   <button class="btn" id="access-deny" type="button">Deny</button>
-</form>
+</form>{{end}}
 <p class="held-sub">Or, in your own terminal: <code>seam approve {{.Request.Short}}</code></p>
 <p class="held-sub" id="access-status" role="status" aria-live="polite"></p>
 {{else}}

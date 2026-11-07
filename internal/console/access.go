@@ -3,7 +3,10 @@ package console
 // Access requests for locked projects (peer_auth.locked): the pending list,
 // one request's facts with its passkey approval, and the JSON the terminal
 // path (seam approve) reads. Every route here is a 404 unless a project is
-// locked (Config.Approvals set).
+// locked (Config.Approvals set) or read grants are on (Config.Grants set,
+// isolation.requests): then the same pages carry a confidential project's
+// requests and its live grants, and without peer_auth -- the advisory tier --
+// the bearer key or the console cookie approves one.
 //
 // What the routes never do: approve without a proof. The passkey approval is
 // an assertion over the request's own challenge; the terminal approval is not
@@ -43,7 +46,70 @@ type accessListData struct {
 	// every browser's live console unlocks, each with Lock again.
 	Leases  []leaseRow  `json:"leases"`
 	Unlocks []unlockRow `json:"unlocks"`
+	// Grants are the live read grants, each with Revoke (isolation.requests
+	// on; absent otherwise). Advisory marks the tier without peer_auth, whose
+	// approvals the bearer key makes.
+	Grants   []grantRow `json:"grants,omitempty"`
+	Advisory bool       `json:"advisory,omitempty"`
+	// LockOn and GrantsOn say which halves the page shows.
+	LockOn   bool `json:"-"`
+	GrantsOn bool `json:"-"`
 }
+
+// grantRow is one live read grant on the access page.
+type grantRow struct {
+	ID        string    `json:"id"`
+	Project   string    `json:"project"`
+	From      string    `json:"from"`
+	Session   string    `json:"session,omitempty"`
+	PID       int32     `json:"pid,omitempty"`
+	GrantedAt time.Time `json:"granted_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// GrantsView is what the access pages need of the daemon's read grants
+// (*approval.Grants, isolation.requests).
+type GrantsView interface {
+	Advisory() bool
+	RequestGrant(ctx context.Context, in approval.GrantInput) (store.AccessApproval, error)
+	Approve(ctx context.Context, d approval.Decision) (store.AccessGrant, error)
+	RevokeGrant(ctx context.Context, id string) (store.AccessGrant, error)
+	Live(ctx context.Context) ([]store.AccessGrant, error)
+	accessCore
+}
+
+// accessCore is the request side a lock's approvals and the read grants
+// share: the same rows, facts and decisions.
+type accessCore interface {
+	Pending(ctx context.Context) ([]approval.Facts, error)
+	Facts(ctx context.Context, id string) (approval.Facts, error)
+	Resolve(ctx context.Context, ref string) (store.AccessApproval, error)
+	Deny(ctx context.Context, id, by string) error
+	LeaseLength(choice string) (time.Duration, error)
+	Page(id string) string
+}
+
+// core is the request side this console serves: the lock's approval service
+// when a project is locked, else the read grants' own.
+func (s *Service) core() accessCore {
+	if s.cfg.Approvals != nil {
+		return s.cfg.Approvals
+	}
+	return s.cfg.Grants
+}
+
+// accessOff answers a 404 for the access routes when neither a lock nor
+// read grants are on -- in the same words as before read grants existed.
+func (s *Service) accessOff(w http.ResponseWriter, r *http.Request) bool {
+	if s.cfg.Approvals == nil && s.cfg.Grants == nil {
+		return s.approversOff(w, r)
+	}
+	return false
+}
+
+// advisory reports the read grants' advisory tier: no peer_auth, the bearer
+// key decides.
+func (s *Service) advisory() bool { return s.cfg.Grants != nil && s.cfg.Grants.Advisory() }
 
 // leaseRow is one live agent lease on the access page.
 type leaseRow struct {
@@ -72,6 +138,11 @@ type accessOneData struct {
 	Terminal       *TerminalApprover `json:"terminal,omitempty"`
 	Durations      []string          `json:"durations"`
 	MaxLease       string            `json:"max_lease"`
+	// Advisory marks a read grant request in the tier without peer_auth: seam
+	// approve commits it over this console with the bearer key (POST
+	// /console/access/{id}/approve without a passkey response), and the page
+	// offers a plain Approve.
+	Advisory bool `json:"advisory,omitempty"`
 	// OnOrigin and Origin are for the page: a passkey ceremony runs only on
 	// the relying party's origin.
 	OnOrigin bool   `json:"-"`
@@ -79,7 +150,7 @@ type accessOneData struct {
 }
 
 func (s *Service) maxLease() string {
-	d, err := s.cfg.Approvals.LeaseLength(approval.ForSession)
+	d, err := s.core().LeaseLength(approval.ForSession)
 	if err != nil {
 		return ""
 	}
@@ -87,10 +158,10 @@ func (s *Service) maxLease() string {
 }
 
 func (s *Service) accessList(w http.ResponseWriter, r *http.Request) {
-	if s.approversOff(w, r) {
+	if s.accessOff(w, r) {
 		return
 	}
-	pending, err := s.cfg.Approvals.Pending(r.Context())
+	pending, err := s.core().Pending(r.Context())
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -98,12 +169,41 @@ func (s *Service) accessList(w http.ResponseWriter, r *http.Request) {
 	if pending == nil {
 		pending = []approval.Facts{}
 	}
-	d := accessListData{Requests: pending, Terminal: s.cfg.Terminal, Durations: approval.Durations, MaxLease: s.maxLease()}
-	if d.Leases, d.Unlocks, err = s.accessGrants(r.Context()); err != nil {
-		s.serverError(w, r, err)
-		return
+	d := accessListData{Requests: pending, Terminal: s.cfg.Terminal, Durations: approval.Durations, MaxLease: s.maxLease(),
+		LockOn: s.cfg.Approvals != nil, GrantsOn: s.cfg.Grants != nil, Advisory: s.advisory()}
+	if d.LockOn {
+		if d.Leases, d.Unlocks, err = s.accessGrants(r.Context()); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+	} else {
+		d.Leases, d.Unlocks = []leaseRow{}, []unlockRow{}
+	}
+	if d.GrantsOn {
+		if d.Grants, err = s.readGrants(r.Context()); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
 	}
 	s.render(w, r, "access", pageData{Title: "Access requests", Active: "access", Data: d})
+}
+
+// readGrants lists the live read grants: metadata about confidential
+// projects (slugs, ids, times), which no console handle hides.
+func (s *Service) readGrants(ctx context.Context) ([]grantRow, error) {
+	live, err := s.cfg.Grants.Live(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]grantRow, 0, len(live))
+	for _, g := range live {
+		row := grantRow{ID: g.ID, Project: g.Project, From: g.FromProject, PID: g.PeerPID, GrantedAt: g.GrantedAt, ExpiresAt: g.ExpiresAt}
+		if a, err := store.AccessApprovalByID(ctx, s.writeDB(), g.ApprovalID); err == nil {
+			row.Session = a.SessionName
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
 }
 
 // accessGrants lists what is open right now: the agent trees' live leases and
@@ -155,10 +255,10 @@ func (s *Service) accessGrants(ctx context.Context) ([]leaseRow, []unlockRow, er
 }
 
 func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
-	if s.approversOff(w, r) {
+	if s.accessOff(w, r) {
 		return
 	}
-	a, err := s.cfg.Approvals.Resolve(r.Context(), r.PathValue("id"))
+	a, err := s.core().Resolve(r.Context(), r.PathValue("id"))
 	if errors.Is(err, store.ErrApprovalNotFound) {
 		s.notFound(w, r, "no such access request")
 		return
@@ -167,13 +267,18 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	facts, err := s.cfg.Approvals.Facts(r.Context(), a.ID)
+	facts, err := s.core().Facts(r.Context(), a.ID)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	d := accessOneData{Request: facts, Status: a.Status, Page: s.cfg.Approvals.Page(a.ID), Terminal: s.cfg.Terminal,
-		Durations: approval.Durations, MaxLease: s.maxLease()}
+	d := accessOneData{Request: facts, Status: a.Status, Page: s.core().Page(a.ID), Terminal: s.cfg.Terminal,
+		Durations: approval.Durations, MaxLease: s.maxLease(), Advisory: a.Kind == store.AccessKindGrant && s.advisory()}
+	if s.cfg.Approvals == nil {
+		// The advisory tier: no passkeys, no terminal commit through sudo.
+		s.render(w, r, "access_one", pageData{Title: "Access request " + facts.Short, Active: "access", Data: d})
+		return
+	}
 	if origins := s.cfg.Approvals.Origins(); len(origins) > 0 {
 		d.Origin = origins[0]
 		d.OnOrigin = containsString(origins, requestOrigin(r))
@@ -199,7 +304,7 @@ func containsString(list []string, v string) bool {
 // the agent's own shell, so the kernel's chain and the agent-process header
 // name the agent.
 func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
-	if s.approversOff(w, r) {
+	if s.accessOff(w, r) {
 		return
 	}
 	v, _ := access.FromContext(r.Context())
@@ -207,9 +312,19 @@ func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
 	if !agentproc.Valid(proc) {
 		proc = ""
 	}
+	project := strings.TrimSpace(r.PostForm.Get("project"))
+	host := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Seamless-Host")))
+	if s.cfg.Grants != nil && !access.Locked(r.Context(), project) {
+		s.grantRequest(w, r, project, proc, host)
+		return
+	}
+	if s.cfg.Approvals == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "that project is not confidential: nothing to request"})
+		return
+	}
 	a, err := s.cfg.Approvals.Request(r.Context(), approval.RequestInput{
-		Project: strings.TrimSpace(r.PostForm.Get("project")), View: v, AgentProcess: proc,
-		Host:   strings.ToLower(strings.TrimSpace(r.Header.Get("X-Seamless-Host"))),
+		Project: project, View: v, AgentProcess: proc,
+		Host:   host,
 		Reason: r.PostForm.Get("reason"), Via: "request",
 	})
 	if err != nil {
@@ -233,13 +348,23 @@ func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 // accessApprove approves a request with a passkey assertion over its own
-// challenge, for the duration and over the facts digest the page showed.
+// challenge, for the duration and over the facts digest the page showed. A
+// read grant request goes to the read grants, where -- in the advisory tier
+// only -- a decision without a passkey response is the bearer key's.
 func (s *Service) accessApprove(w http.ResponseWriter, r *http.Request) {
-	if s.approversOff(w, r) {
+	if s.accessOff(w, r) {
 		return
 	}
-	a, err := s.cfg.Approvals.Resolve(r.Context(), r.PathValue("id"))
+	a, err := s.core().Resolve(r.Context(), r.PathValue("id"))
 	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such access request"})
+		return
+	}
+	if a.Kind == store.AccessKindGrant {
+		s.grantApprove(w, r, a)
+		return
+	}
+	if s.cfg.Approvals == nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such access request"})
 		return
 	}
@@ -259,23 +384,29 @@ func (s *Service) accessApprove(w http.ResponseWriter, r *http.Request) {
 // accessDeny closes a request without a lease. An agent's socket connection
 // may not deny: the owner's browser or the TCP key only.
 func (s *Service) accessDeny(w http.ResponseWriter, r *http.Request) {
-	if s.approversOff(w, r) {
+	if s.accessOff(w, r) {
 		return
 	}
 	if access.PeerAuthenticated(r.Context()) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "deny from the console, or with seam approve in the owner's terminal"})
 		return
 	}
-	a, err := s.cfg.Approvals.Resolve(r.Context(), r.PathValue("id"))
+	a, err := s.core().Resolve(r.Context(), r.PathValue("id"))
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such access request"})
 		return
 	}
-	if err := s.cfg.Approvals.Deny(r.Context(), a.ID, "console"); err != nil {
+	if err := s.core().Deny(r.Context(), a.ID, "console"); err != nil {
 		s.accessError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"denied": approval.ShortID(a.ID), "project": a.Project})
+	payload := map[string]any{"denied": approval.ShortID(a.ID), "project": a.Project}
+	if s.cfg.Approvals == nil {
+		// The advisory tier's page denies with a plain form.
+		afterAccessWrite(w, r, payload, "Denied "+approval.ShortID(a.ID)+": "+a.Project+" stays closed to that session.")
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func (s *Service) accessError(w http.ResponseWriter, r *http.Request, err error) {
@@ -289,8 +420,12 @@ func (s *Service) accessError(w http.ResponseWriter, r *http.Request, err error)
 		msg = "this request expired: the agent can ask again"
 	case errors.Is(err, approval.ErrDuration):
 		msg = "choose a duration: until the session ends, 1 hour or 4 hours"
-	case errors.Is(err, approval.ErrNoProof), errors.Is(err, approval.ErrPasskeysOff):
+	case errors.Is(err, approval.ErrNoProof), errors.Is(err, approval.ErrPasskeysOff), errors.Is(err, approval.ErrPeerProof):
 		msg = "approving needs a passkey here, or seam approve in the owner's terminal"
+	case errors.Is(err, approval.ErrSealed):
+		msg = "a sealed project is never granted, and never granted to: deny the request"
+	case errors.Is(err, approval.ErrNotConfidential):
+		msg = "that project is no longer confidential: nothing to grant"
 	}
 	if msg != "" {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": msg})

@@ -32,9 +32,15 @@ const (
 	// AccessKindRefresh is a request from a session that already holds a lease
 	// on the project; approving it retires that lease.
 	AccessKindRefresh = "refresh"
+	// AccessKindGrant is a request for a read grant of a confidential project
+	// (isolation.requests; grants.go). It is filed by CreateGrantRequest and
+	// approved by ApproveAccessGrant only: it never becomes a lease.
+	AccessKindGrant = "grant"
 )
 
-// AccessKinds is the canonical kind set.
+// AccessKinds is the canonical kind set of a LOCK's requests, the ones
+// CreateAccessApproval files and ApproveAccess turns into a lease. A grant
+// request (AccessKindGrant) is deliberately not in it.
 var AccessKinds = []string{AccessKindRequest, AccessKindRefresh}
 
 // Approval statuses.
@@ -124,6 +130,10 @@ type AccessApproval struct {
 	Program    string
 
 	SessionID, SessionName, CWD, Repo, Model, Reason string
+
+	// FromProject is a grant request's asking project (migration 034): the
+	// grant opens Project to sessions working there. "" for a lock's request.
+	FromProject string
 
 	DecidedAt *time.Time
 	DecidedBy string
@@ -227,7 +237,7 @@ func CreateAccessApproval(ctx context.Context, db *sql.DB, req AccessRequest, no
 
 const approvalCols = `id, project_slug, kind, challenge, status, requested_at, expires_at, lease_seconds,
 	peer_uid, peer_pid, process_key, program, session_id, session_name, cwd, repo, model, reason,
-	decided_at, decided_by, lease_id`
+	decided_at, decided_by, lease_id, from_project`
 
 func scanApproval(row interface{ Scan(...any) error }) (AccessApproval, error) {
 	var (
@@ -239,7 +249,7 @@ func scanApproval(row interface{ Scan(...any) error }) (AccessApproval, error) {
 	)
 	if err := row.Scan(&a.ID, &a.Project, &a.Kind, &a.Challenge, &a.Status, &requested, &expires, &leaseSecs,
 		&uid, &pid, &a.ProcessKey, &a.Program, &a.SessionID, &a.SessionName, &a.CWD, &a.Repo, &a.Model, &a.Reason,
-		&decided, &a.DecidedBy, &a.LeaseID); err != nil {
+		&decided, &a.DecidedBy, &a.LeaseID, &a.FromProject); err != nil {
 		return AccessApproval{}, err
 	}
 	var err error
@@ -273,13 +283,14 @@ func AccessApprovalByID(ctx context.Context, db *sql.DB, id string) (AccessAppro
 	return a, nil
 }
 
-// PendingAccessApproval returns the newest approval still waiting for a
+// PendingAccessApproval returns the newest lock request still waiting for a
 // decision at now for this process and project, so a repeated request can
-// answer with the link it already has instead of piling up challenges.
+// answer with the link it already has instead of piling up challenges. A
+// grant request is never one (PendingGrantRequest finds those).
 func PendingAccessApproval(ctx context.Context, db *sql.DB, processKey, project string, now time.Time) (AccessApproval, bool, error) {
 	a, err := scanApproval(db.QueryRowContext(ctx, `SELECT `+approvalCols+` FROM access_approvals
-		WHERE process_key = ? AND project_slug = ? AND status = ? AND expires_at > ?
-		ORDER BY requested_at DESC, id DESC LIMIT 1`, processKey, project, ApprovalPending, core.FormatTime(now)))
+		WHERE process_key = ? AND project_slug = ? AND status = ? AND expires_at > ? AND kind <> ?
+		ORDER BY requested_at DESC, id DESC LIMIT 1`, processKey, project, ApprovalPending, core.FormatTime(now), AccessKindGrant))
 	if errors.Is(err, sql.ErrNoRows) {
 		return AccessApproval{}, false, nil
 	}
@@ -312,13 +323,13 @@ func PendingAccessApprovals(ctx context.Context, db *sql.DB, now time.Time) ([]A
 	return out, nil
 }
 
-// LastAccessReason returns the reason of the newest approval for this process
-// and project, approved or not: what a refresh reuses, since a refresh carries
-// no new free text.
+// LastAccessReason returns the reason of the newest lock request for this
+// process and project, approved or not: what a refresh reuses, since a
+// refresh carries no new free text.
 func LastAccessReason(ctx context.Context, db *sql.DB, processKey, project string) (string, error) {
 	var reason string
-	err := db.QueryRowContext(ctx, `SELECT reason FROM access_approvals WHERE process_key = ? AND project_slug = ?
-		ORDER BY requested_at DESC, id DESC LIMIT 1`, processKey, project).Scan(&reason)
+	err := db.QueryRowContext(ctx, `SELECT reason FROM access_approvals WHERE process_key = ? AND project_slug = ? AND kind <> ?
+		ORDER BY requested_at DESC, id DESC LIMIT 1`, processKey, project, AccessKindGrant).Scan(&reason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
@@ -367,6 +378,9 @@ func ApproveAccessFor(ctx context.Context, db *sql.DB, id string, challenge []by
 		return AccessLease{}, fmt.Errorf("store.ApproveAccess: %w", err)
 	case a.Status != ApprovalPending:
 		return AccessLease{}, fmt.Errorf("store.ApproveAccess: %w: %s is %s", ErrApprovalNotPending, id, a.Status)
+	case a.Kind == AccessKindGrant:
+		// A read grant is never a lease: ApproveAccessGrant is its one writer.
+		return AccessLease{}, fmt.Errorf("store.ApproveAccess: %w: %s is a read grant request, not a lock's", ErrInvalidAccessRequest, id)
 	}
 	if !a.ExpiresAt.After(now) {
 		if err := expireApprovalTx(ctx, tx, id, now); err != nil {

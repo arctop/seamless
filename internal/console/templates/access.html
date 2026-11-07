@@ -2,7 +2,7 @@
 {{with .Data}}
 <div class="access-page" data-access>
 <header class="mv2-bar">
-  <h1>{{icon "lock"}}Access requests</h1>{{about "Agents asking for a locked project. Approve one with a passkey here, or in your own terminal with seam approve. Nothing is granted until you do."}}
+  <h1>{{icon "lock"}}Access requests</h1>{{if not .GrantsOn}}{{about "Agents asking for a locked project. Approve one with a passkey here, or in your own terminal with seam approve. Nothing is granted until you do."}}{{else if .LockOn}}{{about "Agents asking for a locked project, or to read a confidential one. Approve one with a passkey here, or in your own terminal with seam approve. Nothing is granted until you do."}}{{else}}{{about "Agents asking to read a confidential project. Approve one here, or in your own terminal with seam approve. Without peer_auth the approval is advisory: any process holding the bearer key can make it."}}{{end}}
   <span class="mv2-count" aria-label="{{len .Requests}} waiting"><strong>{{len .Requests}}</strong>waiting</span>
 </header>
 {{if .Requests}}
@@ -11,15 +11,36 @@
   <li class="access-item" data-request="{{.ID}}">
     <a href="/console/access/{{.ID}}"><strong>{{.Short}}</strong></a>
     <span class="badge">{{.Project}}</span>
-    {{if eq .Kind "refresh"}}<span class="badge">refresh</span>{{end}}
+    {{if eq .Kind "refresh"}}<span class="badge">refresh</span>{{end}}{{if eq .Kind "grant"}}<span class="badge">read-only, for {{.From}}</span>{{end}}
     {{if .Warnings}}<span class="badge warn">{{len .Warnings}} warning{{if gt (len .Warnings) 1}}s{{end}}</span>{{end}}
     <small>{{if .Session}}{{.Session}}{{else}}no session{{end}} &middot; asked {{.RequestedAt.Local.Format "15:04"}}, waits until {{.ExpiresAt.Local.Format "15:04"}}</small>
   </li>
   {{end}}
 </ul>
 {{else}}
-<p class="held-sub">Nothing is waiting. When an agent is refused at a locked project, its request appears here.</p>
-{{end}}
+<p class="held-sub">Nothing is waiting. When an agent is refused at a {{if not .LockOn}}confidential project's fence{{else}}locked project{{if .GrantsOn}} or at a confidential project's fence{{end}}{{end}}, its request appears here.</p>
+{{end}}{{if .GrantsOn}}
+
+<section aria-labelledby="access-grants-title">
+  <h2 id="access-grants-title">Read grants</h2>
+  {{if .Advisory}}<p class="held-sub">{{icon "triangle-alert"}} Without peer_auth these approvals are advisory: any process holding the bearer key can make one.</p>{{end}}
+  {{if .Grants}}
+  <ul class="access-list">
+    {{range .Grants}}
+    <li class="access-item" data-grant="{{.ID}}">
+      <span class="badge">{{.Project}}</span>
+      <strong>{{if .Session}}{{.Session}}{{else}}pid {{.PID}}{{end}}</strong>
+      <small>read-only, for {{.From}} &middot; granted {{.GrantedAt.Local.Format "15:04"}}, ends {{.ExpiresAt.Local.Format "15:04"}}</small>
+      <form method="post" action="/console/access/grants/{{.ID}}/revoke">
+        <button class="btn" type="submit">Revoke</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="held-sub">No session holds a read grant. An approved request becomes one: that session reads that one project, read-only, until it ends, and writes only into its own project for the rest of its life.</p>
+  {{end}}
+</section>{{end}}{{if .LockOn}}
 
 <section aria-labelledby="access-leases-title">
   <h2 id="access-leases-title">Agent leases</h2>
@@ -59,7 +80,7 @@
   {{else}}
   <p class="held-sub">No browser has a locked project open. Unlocking one opens it in that browser only, never to an agent.</p>
   {{end}}
-</section>
+</section>{{end}}
 </div>
 {{end}}
 {{end}}

@@ -476,21 +476,52 @@ func runServe(args []string) error {
 	}
 	// Locked projects: the approval service backs the lock's requests, the
 	// session-end revocations, and the console's Approvers and access pages.
-	// It exists only while peer_auth locks a project; off, every surface
+	// It exists only while peer_auth locks a project, or offers read grants
+	// (isolation.requests, whose proofs are the same); off, every surface
 	// below behaves exactly as before.
 	var approvalSvc *approval.Service
-	if peer != nil && peer.policy.HasLocked() {
+	if peer != nil && (peer.policy.HasLocked() || cfg.Isolation.Requests) {
 		svc, aerr := newApprovals(cfg, db, rec, logger)
 		if aerr != nil {
 			return fmt.Errorf("seamlessd.serve: %w", aerr)
 		}
 		approvalSvc = svc
 	}
+	// Read grants (isolation.requests): a read refused at a confidential
+	// project's fence files a request the owner may approve. Under peer_auth
+	// they ride the approval service (the agent's process tree, the same
+	// proofs); without it they are the advisory tier (the session, the bearer
+	// key). Off -- the default -- none of this exists.
+	var grantSvc *approval.Grants
+	if cfg.Isolation.Requests {
+		grantSvc = approval.NewGrants(approval.GrantsConfig{DB: db, Approvals: approvalSvc, Events: rec,
+			Host: config.Hostname(), LeaseCap: cfg.PeerAuth.LeaseCap(), Logger: logger})
+	}
 	var mcpApprovals mcp.Approvals
 	var hookApprovals hooks.Approvals
 	var revokeLeases func(context.Context, string) (int64, error)
 	if approvalSvc != nil {
 		mcpApprovals, hookApprovals, revokeLeases = approvalSvc, approvalSvc, approvalSvc.RevokeSession
+	}
+	var mcpGrants mcp.Grants
+	var consoleGrants console.GrantsView
+	if grantSvc != nil {
+		mcpGrants, consoleGrants = grantSvc, grantSvc
+		// A session's end revokes its leases and its read grants: the hooks'
+		// SessionEnd says so through the one callback they take.
+		leaseRevoke := revokeLeases
+		revokeLeases = func(ctx context.Context, sessionID string) (int64, error) {
+			var n int64
+			if leaseRevoke != nil {
+				m, err := leaseRevoke(ctx, sessionID)
+				if err != nil {
+					return m, err
+				}
+				n = m
+			}
+			m, err := grantSvc.RevokeSession(ctx, sessionID)
+			return n + m, err
+		}
 	}
 	mcpSrv := mcp.New(mcp.Config{
 		DB: db, Files: mgr, Retrieve: ret, Events: rec, Gardener: garden, Embedder: embedder, Screening: screen,
@@ -506,6 +537,7 @@ func runServe(args []string) error {
 		// invisible to the tool gate, leaving the DB row as the only way in.
 		Features:  cfg.Features,
 		Approvals: mcpApprovals,
+		Grants:    mcpGrants,
 	})
 	// A2A: the agent-to-agent surface, one recall skill over the same retrieve
 	// service and bearer key as MCP. The endpoint URL in the card is the URL
@@ -583,6 +615,7 @@ func runServe(args []string) error {
 		// console on the default loopback install.
 		SecureCookies: cfg.TLSEnabled(),
 		Approvals:     approvals,
+		Grants:        consoleGrants,
 		Terminal:      terminal,
 		Views:         consoleViews,
 		Logger:        logger,
@@ -664,7 +697,11 @@ func runServe(args []string) error {
 			garden.Wait()
 			return fmt.Errorf("seamlessd.serve: %w", err)
 		}
-		sockSrv = newHTTPServer(ctx, peer.cfg.Socket.Path, refusalWatch(screen, peerHandler(peer.policy, storeLeases(db), logger, activity.wrap(mux))))
+		// The owner's process chain is walked while a project is locked, and for
+		// read grants (isolation.requests), which are keyed on it under peer_auth.
+		sockLeases := storeLeases(db)
+		sockLeases.chains = cfg.Isolation.Requests
+		sockSrv = newHTTPServer(ctx, peer.cfg.Socket.Path, refusalWatch(screen, peerHandler(peer.policy, sockLeases, logger, activity.wrap(mux))))
 		sockSrv.ConnContext = peerConnContext
 	}
 	upd.Start(ctx)

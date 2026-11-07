@@ -530,8 +530,10 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 	if err != nil {
 		return errResult("session_end", err)
 	}
-	// The session's leases on locked projects end with it.
+	// The session's leases on locked projects end with it, and its read
+	// grants.
 	s.revokeSessionLeases(ctx, sess.ID)
+	s.revokeSessionGrants(ctx, sess.ID)
 	// Self-reported mishaps land as one durable agent.mishap event each -- the
 	// only record of an action no telemetry can observe (the agent confessing it
 	// is the signal). Recorded before session.ended so the session's timeline

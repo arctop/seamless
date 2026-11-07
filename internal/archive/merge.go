@@ -49,6 +49,9 @@ import (
 //     this one's owner.
 //   - console_unlocks: one browser's console unlocks, behind a cookie only
 //     that machine's browser holds.
+//   - access_grants: read grants of confidential projects, bound to this
+//     machine's sessions and processes; merging one would be a grant nobody
+//     approved here.
 //   - schema_migrations: the destination's own migration history.
 //
 // A host-local table (one keyed by which machine a row came from) does not

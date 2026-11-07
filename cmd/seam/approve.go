@@ -1,7 +1,14 @@
 package main
 
 // seam approve -- the owner's terminal path for a locked project's access
-// requests (access.go has the routes and seam access request).
+// requests (access.go has the routes and seam access request), and for a
+// confidential project's read grant requests (isolation.requests).
+//
+// Without peer_auth a read grant request is decided over the console with the
+// bearer key instead of through sudo: the daemon marks it advisory, this
+// command says so, and the y/N commits it as POST
+// /console/access/<id>/approve with the digest of the facts shown. Any process
+// holding the key could make the same call, which is why it is advisory.
 //
 // It shows a request's facts -- the daemon's, with the agent's reason quoted
 // and labeled as the agent's -- asks for a duration and a confirmation, and then
@@ -21,10 +28,12 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -70,6 +79,12 @@ Touch ID or password is asked for every time; the daemon's answer names the
 account, its seamlessd and its config. Before that it warns when a sudoers
 rule lets this account skip the authentication, which would make the approval
 prove nothing.
+
+A read grant request (isolation.requests: an agent asking to read a
+confidential project) is decided the same way. On a daemon without peer_auth
+it is committed over the console with the bearer key instead of through sudo,
+and seam approve says so: that approval is advisory, since any process holding
+the key could make it.
 
 It needs a terminal on stdin and stdout: an agent cannot use it. --passkey
 opens the request's passkey page in the browser instead; --watch polls for new
@@ -158,8 +173,10 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 	}
 
 	renderFacts(e, f)
-	t, err := terminalOf(one)
-	if err != nil {
+	var t terminalApprover
+	if one.Advisory {
+		warnAdvisory(e)
+	} else if t, err = terminalOf(one); err != nil {
 		return err
 	}
 	if !o.duration.set {
@@ -174,6 +191,9 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 
 	answer, _ := prompt(e, in, fmt.Sprintf("Approve %s (%s, %s, %s)? [y/N/d=deny] ",
 		printable(f.Short), printable(f.Project), printable(orDash(f.Access)), durationWords(duration, one.MaxLease)))
+	if one.Advisory {
+		return decideOverConsole(e, cfg, f, strings.ToLower(answer), duration)
+	}
 	var argv []string
 	what := ""
 	switch strings.ToLower(answer) {
@@ -200,6 +220,62 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 	if code != 0 {
 		return fmt.Errorf("the %s of %s did not complete (sudo exited with status %d)", what, printable(f.Short), code)
 	}
+	return nil
+}
+
+// warnAdvisory says what an approval without peer_auth is worth, before the
+// owner is asked for it.
+func warnAdvisory(e *env) {
+	line := "! This approval is advisory: without peer_auth it is made with the bearer key, and any process " +
+		"holding the key could make it."
+	if useColor(e) {
+		line = "\x1b[1;31m" + line + "\x1b[0m"
+	}
+	fmt.Fprintln(e.stdout, line)
+	fmt.Fprintln(e.stdout)
+}
+
+// accessDecided is the console's answer to an approval or a denial.
+type accessDecided struct {
+	Approved  string    `json:"approved"`
+	Denied    string    `json:"denied"`
+	Project   string    `json:"project"`
+	From      string    `json:"from"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// decideOverConsole commits the owner's answer to an advisory read grant
+// request with the bearer key: y approves it for duration over the digest of
+// the facts shown, d denies it, anything else changes nothing.
+func decideOverConsole(e *env, cfg config.Config, f accessFacts, answer, duration string) error {
+	short := printable(f.Short)
+	var path string
+	form := url.Values{}
+	switch answer {
+	case "y", "yes":
+		path = "/console/access/" + url.PathEscape(f.ID) + "/approve?format=json"
+		form.Set("duration", duration)
+		form.Set("digest", f.Digest)
+	case "d", "deny":
+		path = "/console/access/" + url.PathEscape(f.ID) + "/deny?format=json"
+	default:
+		fmt.Fprintln(e.stdout, "Nothing changed.")
+		return nil
+	}
+	b, err := accessCall(cfg, http.MethodPost, path, form)
+	if err != nil {
+		return fmt.Errorf("the decision on %s did not complete: %w", short, err)
+	}
+	var got accessDecided
+	if err := json.Unmarshal(b, &got); err != nil {
+		return fmt.Errorf("unreadable console response from %s: %w", path, err)
+	}
+	if got.Denied != "" {
+		fmt.Fprintf(e.stdout, "Denied %s: %s stays closed to that session.\n", short, printable(got.Project))
+		return nil
+	}
+	fmt.Fprintf(e.stdout, "Approved %s: %s, read-only, for %s, until %s.\n", short, printable(got.Project),
+		printable(got.From), clockTime(got.ExpiresAt))
 	return nil
 }
 
@@ -322,9 +398,15 @@ func renderFacts(e *env, f accessFacts) {
 		fmt.Fprintf(e.stdout, "  %-*s%s\n", factLabelWidth, label, value)
 	}
 	fact("Project", fmt.Sprintf("%s (%s, %s)", printable(f.Project), printable(orDash(f.Isolation)), printable(orDash(f.Access))))
+	if f.From != "" {
+		fact("For", "sessions working in "+printable(f.From))
+	}
 	asking := fmt.Sprintf("pid %d, uid %d", f.PID, f.UID)
 	if f.Program != "" {
 		asking = fmt.Sprintf("%s (%s)", printable(f.Program), asking)
+	}
+	if f.PID == 0 {
+		asking = "a session (without peer_auth the daemon knows no process)"
 	}
 	fact("Asking", asking)
 	session := printable(f.Session)
@@ -367,6 +449,8 @@ func kindWords(kind string) string {
 		return "first request"
 	case "refresh":
 		return "refresh of a lease this agent already holds"
+	case kindGrant:
+		return "a read-only grant of a confidential project"
 	default:
 		return orDash(printable(kind))
 	}

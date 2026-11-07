@@ -365,6 +365,9 @@ func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, logg
 	if _, err := store.EndAllConsoleUnlocks(ctx, db, store.ConsoleUnlockEndReset, time.Now()); err != nil {
 		return fmt.Errorf("archive.Import: end restored console unlocks: %w", err)
 	}
+	if _, err := store.RevokeAllAccessGrants(ctx, db, store.LeaseRevokedReset, time.Now()); err != nil {
+		return fmt.Errorf("archive.Import: revoke restored read grants: %w", err)
+	}
 
 	mgr, err := files.NewManager(opts.DataDir, db, logger)
 	if err != nil {

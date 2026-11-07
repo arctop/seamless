@@ -164,6 +164,34 @@ a socket URL).
 The block is new after v0.7.4; releases before it refuse config keys they do
 not know, so the example file leaves it commented out.
 
+### Access requests at a confidential fence {#isolation-requests}
+
+The `isolation:` block is what [project isolation](/concepts/project-isolation/)
+does beyond each project's own state. It holds one key, and it is off by
+default; off is exactly the behavior of every earlier release.
+
+- `requests` (`SEAMLESS_ISOLATION_REQUESTS`, default `false`) turns a read
+  refused at a confidential project's fence into an access request you can
+  approve: a **read grant** of that one project, read-only, to the one session
+  that asked, for a limited time (until the session ends, 1 hour or 4 hours,
+  capped by `peer_auth.max_lease`, `8h` when unset). A session in an open
+  project that is granted a read writes only into its own project for the rest
+  of its life. Nothing that involves a sealed project is ever offered, writes
+  are never granted, and briefings do not change.
+  [Asking for access](/concepts/project-isolation/#asking-for-access) has the
+  whole model.
+
+Without `peer_auth` the approval is **advisory**: `seam approve` and the
+console's Approve commit it with the bearer key, so any process that holds the
+key can approve a request, its own included. Under `peer_auth` a grant is
+bound to the asking agent's process tree, as a locked project's lease is, and
+needs the same proofs: `seam approve` in your terminal (through `sudo` to the
+daemon's account), a passkey, or a Touch ID key. Locks work without this
+switch; grants do not.
+
+The block is new after v0.7.4; releases before it refuse config keys they do
+not know, so the example file leaves it commented out.
+
 ## Generating a key
 
 `mcp.api_key` guards `/api/mcp` and the console. On a true first run - no

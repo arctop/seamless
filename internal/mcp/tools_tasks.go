@@ -149,7 +149,7 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 		// Reassignment is a read of the old project plus a write into the new, so
 		// an outside caller may edit a confidential task in place but may not
 		// carry it out of the fence (the notes_update move, same reasoning).
-		if err := s.fenceRead(ctx, current.ProjectSlug); err != nil {
+		if err := s.fenceReadNoAsk(ctx, current.ProjectSlug); err != nil {
 			return errResult("tasks_update", err)
 		}
 		if err := s.fenceWrite(ctx, *patch.ProjectSlug); err != nil {

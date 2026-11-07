@@ -115,6 +115,13 @@ func isolationOfTx(ctx context.Context, q rowQuerier, slug string) (core.Isolati
 // project, so a binding to a sealed project that slipped past every other gate
 // still reads nothing. With peer_auth off no View is set and this check is a
 // no-op.
+//
+// After the View, and only for a CONFIDENTIAL target, a live read grant
+// (isolation.requests) opens the target to the one caller project it was
+// approved from (access.ReadGranted over the grants the request carries). It
+// never opens a sealed target, and a sealed caller still reads nothing outside
+// itself. With isolation.requests off no request carries grants and this is a
+// no-op too.
 func CanRead(ctx context.Context, db *sql.DB, callerProject, targetProject string) (bool, error) {
 	if !access.Visible(ctx, targetProject) || !access.Visible(ctx, callerProject) {
 		return false, nil
@@ -126,7 +133,8 @@ func CanRead(ctx context.Context, db *sql.DB, callerProject, targetProject strin
 	if err != nil {
 		return false, fmt.Errorf("store.CanRead: %w", err)
 	}
-	if target.FencesOutbound() {
+	if target.FencesOutbound() &&
+		(target != core.IsolationConfidential || !access.ReadGranted(ctx, callerProject, targetProject)) {
 		return false, nil
 	}
 	caller, err := IsolationOf(ctx, db, callerProject)
@@ -431,8 +439,18 @@ func GlobalMemoriesFromProjectSessions(ctx context.Context, db *sql.DB, project 
 // The peer_auth View has the first word here too: a configured OS user writes
 // only into its own projects (never the global scope), and the owner never
 // writes into a project sealed to another user.
+//
+// A read grant never opens a write: nothing here asks whether one is live. The
+// one thing a grant leaves behind that this consults is its confinement
+// (access.WriteConfined), and that only ever refuses: a holder that was granted
+// a read writes only into the projects its grants were approved from, for the
+// rest of its life, so content it read cannot be carried anywhere else. With
+// isolation.requests off nothing is confined.
 func CanWrite(ctx context.Context, db *sql.DB, callerProject, targetProject string) (bool, error) {
 	if !access.Writable(ctx, targetProject) || !access.Visible(ctx, callerProject) {
+		return false, nil
+	}
+	if access.WriteConfined(ctx, targetProject) {
 		return false, nil
 	}
 	if callerProject == targetProject {

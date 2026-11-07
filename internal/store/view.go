@@ -106,6 +106,9 @@ var viewExempt = map[string]string{
 	// LOCKED project, which is exactly the project this handle would hide.
 	"access_approvals": "unlock requests for locked projects: slugs, ids, the kernel's facts about the caller and a capped one-line reason; no corpus content, and the approval page reads it for a locked project",
 	"access_leases":    "granted unlocks: slugs, process keys, session ids and times; no corpus content",
+	// isolation.requests' read grants: the access page lists them beside the
+	// leases, metadata about a confidential project the console never hides.
+	"access_grants": "read grants of confidential projects: slugs, process keys, session ids and times; no corpus content",
 	// The owner's approver credentials and enrolment codes: key material and
 	// hashes about no project at all.
 	"approver_credentials": "approver credentials (passkeys, Touch ID keys): public keys and labels, about no project; no corpus content",

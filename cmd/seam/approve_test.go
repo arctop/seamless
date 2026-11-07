@@ -650,3 +650,75 @@ func TestCompactDuration(t *testing.T) {
 	require.Equal(t, "12m", compactDuration(12*time.Minute))
 	require.Equal(t, "3s", compactDuration(3*time.Second))
 }
+
+// --- read grants without peer_auth (the advisory tier) ---
+
+// grantFacts is a read grant request as an advisory daemon shows it: no
+// process facts, read-only, the copy line among the warnings.
+func grantFacts() accessFacts {
+	f := factsOf(reqA, "R-7F3K", "example-finance",
+		accessWarning{Code: "copy_into", Text: "content from example-finance may be copied into example-ops's memories"})
+	f.Kind, f.Access, f.From, f.Program, f.PID, f.UID = "grant", "read-only", "example-ops", "", 0, 0
+	return f
+}
+
+func advisoryOne(o *accessOne) { o.Advisory, o.Terminal, o.Page = true, nil, "" }
+
+func TestApprove_AdvisoryGrantCommitsOverTheConsole(t *testing.T) {
+	f := grantFacts()
+	table := byRef(t, f, advisoryOne)
+	table["POST /console/access/"+reqA+"/approve"] = `{"approved":"R-7F3K","project":"example-finance","from":"example-ops",` +
+		`"grant":"01KGRANT","expires_at":"` + fixedNow.Add(time.Hour).Format(time.RFC3339) + `"}`
+	rig := newApproveRig(t, routes(t, table), "1h\ny\n")
+	require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+	out := rig.out.String()
+	require.Contains(t, out, "! content from example-finance may be copied into example-ops's memories\n")
+	require.Contains(t, out, "  Project         example-finance (confidential, read-only)\n")
+	require.Contains(t, out, "  For             sessions working in example-ops\n")
+	require.Contains(t, out, "  Asking          a session (without peer_auth the daemon knows no process)\n")
+	require.Contains(t, out, "  Kind            a read-only grant of a confidential project\n")
+	require.Contains(t, out, "! This approval is advisory: without peer_auth it is made with the bearer key, and any process holding the key could make it.\n")
+	require.Contains(t, out, "Approve R-7F3K (example-finance, read-only, for 1 hour)? [y/N/d=deny] ")
+	require.Contains(t, out, "Approved R-7F3K: example-finance, read-only, for example-ops, until "+clockTime(fixedNow.Add(time.Hour))+".\n")
+	require.Empty(t, rig.runner.recorded(), "no sudo: the bearer key commits it")
+
+	var posted *seenRequest
+	for _, r := range rig.ac.requests() {
+		if r.method == http.MethodPost {
+			posted = &r
+		}
+	}
+	require.NotNil(t, posted)
+	require.Equal(t, "/console/access/"+reqA+"/approve?format=json", posted.uri)
+	require.Equal(t, []string{"1h"}, posted.form["duration"])
+	require.Equal(t, []string{f.Digest}, posted.form["digest"])
+	require.Empty(t, posted.form["response"], "no passkey: the bearer key's decision")
+	require.Equal(t, "Bearer fixture-key", posted.header.Get("Authorization"))
+}
+
+func TestApprove_AdvisoryGrantDenyAndNo(t *testing.T) {
+	f := grantFacts()
+	table := byRef(t, f, advisoryOne)
+	table["POST /console/access/"+reqA+"/deny"] = `{"denied":"R-7F3K","project":"example-finance"}`
+	rig := newApproveRig(t, routes(t, table), "\nd\n")
+	require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+	require.Contains(t, rig.out.String(), "Denied R-7F3K: example-finance stays closed to that session.\n")
+
+	rig = newApproveRig(t, routes(t, table), "\nn\n")
+	require.Equal(t, 0, rig.run("R-7F3K"))
+	require.True(t, strings.HasSuffix(rig.out.String(), "Nothing changed.\n"))
+	for _, r := range rig.ac.requests() {
+		require.Equal(t, http.MethodGet, r.method, "an answer other than y or d posts nothing")
+	}
+}
+
+// A grant request on a daemon under peer_auth is not advisory: it goes
+// through sudo exactly as a lock's request does.
+func TestApprove_PeerGrantGoesThroughSudo(t *testing.T) {
+	f := grantFacts()
+	f.Program, f.PID, f.UID = "/usr/local/bin/claude", 4242, 501
+	rig := newApproveRig(t, routes(t, byRef(t, f)), "4h\ny\n")
+	require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+	require.NotContains(t, rig.out.String(), "advisory")
+	require.Equal(t, append(slices.Clone(passwordlessProbe), approveArgvFor(reqA, "4h", f.Digest)), rig.runner.recorded())
+}
