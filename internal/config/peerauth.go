@@ -62,7 +62,7 @@ type PeerAuth struct {
 	// Unset (0) means DefaultMaxLease; set, it is at most 24h. File only.
 	MaxLease Duration `yaml:"max_lease"`
 	// Passkeys names the WebAuthn relying party the owner's approver passkeys
-	// are registered to (the console's enrolment and approval pages). Unset,
+	// are registered to (the console's enrollment and approval pages). Unset,
 	// it is the console itself on localhost (RelyingParty). File only.
 	Passkeys PeerPasskeys `yaml:"passkeys"`
 	// Users maps an OS account (user name or numeric uid) to the projects it may

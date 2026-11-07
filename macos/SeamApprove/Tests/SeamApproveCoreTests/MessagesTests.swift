@@ -3,11 +3,11 @@ import Foundation
 import XCTest
 
 // Golden vectors computed by the Go side's own functions
-// (store.NormalizeEnrolCode, approval.TouchIDEnrolMessage,
+// (store.NormalizeEnrollCode, approval.TouchIDEnrollMessage,
 // approval.TouchIDApproveMessage) on 2026-11-06. A change on either side that
 // breaks byte equality fails here before it fails an owner's approval.
 final class MessagesTests: XCTestCase {
-    func testNormalizeEnrolCodeMatchesGo() throws {
+    func testNormalizeEnrollCodeMatchesGo() throws {
         let cases: [(String, String)] = [
             ("abcd-efgh-jkmn-pqrs", "ABCDEFGHJKMNPQRS"),
             ("ABCD-EFGH-JKMN-PQRS", "ABCDEFGHJKMNPQRS"),
@@ -16,22 +16,22 @@ final class MessagesTests: XCTestCase {
             ("", ""),
         ]
         for (typed, want) in cases {
-            XCTAssertEqual(try Messages.normalizeEnrolCode(typed), want, typed)
+            XCTAssertEqual(try Messages.normalizeEnrollCode(typed), want, typed)
         }
     }
 
     func testNormalizeRefusesNonASCII() {
         // Go's strings.ToUpper maps U+0131 (dotless i) to 'I' and so to '1';
         // the helper refuses rather than fold any differently.
-        XCTAssertThrowsError(try Messages.normalizeEnrolCode("abcd-\u{0131}fgh"))
-        XCTAssertThrowsError(try Messages.normalizeEnrolCode("ABCD\u{00A0}EFGH"))
+        XCTAssertThrowsError(try Messages.normalizeEnrollCode("abcd-\u{0131}fgh"))
+        XCTAssertThrowsError(try Messages.normalizeEnrollCode("ABCD\u{00A0}EFGH"))
     }
 
-    func testIsEnrolCode() throws {
-        XCTAssertTrue(Messages.isEnrolCode(try Messages.normalizeEnrolCode("abcd-efgh-jkmn-pqrs")))
-        XCTAssertFalse(Messages.isEnrolCode("ABCDEFGHJKMNPQR"), "15 symbols")
-        XCTAssertFalse(Messages.isEnrolCode("ABCDEFGHJKMNPQRU"), "U is not Crockford")
-        XCTAssertFalse(Messages.isEnrolCode(""))
+    func testIsEnrollCode() throws {
+        XCTAssertTrue(Messages.isEnrollCode(try Messages.normalizeEnrollCode("abcd-efgh-jkmn-pqrs")))
+        XCTAssertFalse(Messages.isEnrollCode("ABCDEFGHJKMNPQR"), "15 symbols")
+        XCTAssertFalse(Messages.isEnrollCode("ABCDEFGHJKMNPQRU"), "U is not Crockford")
+        XCTAssertFalse(Messages.isEnrollCode(""))
     }
 
     static let publicKey: Data = {
@@ -40,14 +40,14 @@ final class MessagesTests: XCTestCase {
         return d
     }()
 
-    func testEnrolMessageMatchesGo() throws {
+    func testEnrollMessageMatchesGo() throws {
         XCTAssertEqual(Self.publicKey.hex, "040102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40")
         XCTAssertEqual(
-            try Messages.touchIDEnrolMessage(code: "abcd-efgh-jkmn-pqrs", publicKey: Self.publicKey).hex,
-            "7365616d6c65737320746f756368696420656e726f6c6d656e7420763100f598056127fcd4387651a49b3a4235d8ce50d71f4091068df51511cfc10f388f040102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40")
+            try Messages.touchIDEnrollMessage(code: "abcd-efgh-jkmn-pqrs", publicKey: Self.publicKey).hex,
+            "7365616d6c65737320746f756368696420656e726f6c6c6d656e7420763100f598056127fcd4387651a49b3a4235d8ce50d71f4091068df51511cfc10f388f040102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40")
         XCTAssertEqual(
-            try Messages.touchIDEnrolMessage(code: "0ilo-OILO", publicKey: Self.publicKey).hex,
-            "7365616d6c65737320746f756368696420656e726f6c6d656e74207631007b158f7df9bf300bcd68345e7e1f91df41d15bf7072323d6c78800e90c196548040102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40")
+            try Messages.touchIDEnrollMessage(code: "0ilo-OILO", publicKey: Self.publicKey).hex,
+            "7365616d6c65737320746f756368696420656e726f6c6c6d656e74207631007b158f7df9bf300bcd68345e7e1f91df41d15bf7072323d6c78800e90c196548040102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40")
     }
 
     func testApproveMessageMatchesGo() {

@@ -319,15 +319,15 @@ func happyDaemon() *stubDaemon {
 	return &stubDaemon{terminal: testTerminal}
 }
 
-// enrols makes the fake helper enrol a key on d.
-func enrols(d *stubDaemon) func([]string) {
+// enrolls makes the fake helper enroll a key on d.
+func enrolls(d *stubDaemon) func([]string) {
 	return func(argv []string) { d.addKey("01KTOUCHIDKEY0000000000001", argv[len(argv)-1]) }
 }
 
 func TestTouchIDEnroll_ReleaseHappyPath(t *testing.T) {
 	d := happyDaemon()
 	rig := newTouchRig(t, d, "\n")
-	rig.runner.helper = enrols(d)
+	rig.runner.helper = enrolls(d)
 
 	require.Equal(t, 0, rig.run("enroll", "--name", "Touch ID on laptop"), rig.errb.String())
 	stage := rig.staging(t)
@@ -377,7 +377,7 @@ func TestTouchIDEnroll_RefusesATamperedApp(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			d := happyDaemon()
 			rig := newTouchRig(t, d, "\n")
-			rig.runner.helper = enrols(d)
+			rig.runner.helper = enrolls(d)
 			tc.mutate(rig)
 			require.Equal(t, 1, rig.run("enroll"))
 			require.Contains(t, rig.errb.String(), "refusing Seamless Approve")
@@ -396,7 +396,7 @@ func TestTouchIDEnroll_RefusesATamperedApp(t *testing.T) {
 func TestTouchIDEnroll_LocalBuild(t *testing.T) {
 	d := happyDaemon()
 	rig := newTouchRig(t, d, "\n")
-	rig.runner.helper = enrols(d)
+	rig.runner.helper = enrolls(d)
 	rig.world.version = func() (update.Version, bool) { return update.Version{}, false }
 	src := filepath.Join(t.TempDir(), "build", approverAppName)
 	require.NoError(t, os.MkdirAll(filepath.Join(src, "Contents"), 0o755))
@@ -428,7 +428,7 @@ func TestTouchIDEnroll_UnsignedSeamAsks(t *testing.T) {
 	for answer, ok := range map[string]bool{"y\n\n": true, "n\n": false, "": false} {
 		d := happyDaemon()
 		rig := newTouchRig(t, d, answer)
-		rig.runner.helper = enrols(d)
+		rig.runner.helper = enrolls(d)
 		rig.runner.selfTeam = ""
 		src := filepath.Join(t.TempDir(), approverAppName)
 		require.NoError(t, os.MkdirAll(src, 0o755))
@@ -454,7 +454,7 @@ func TestTouchIDEnroll_ExistingInstall(t *testing.T) {
 	t.Run("kept", func(t *testing.T) {
 		d := happyDaemon()
 		rig := newTouchRig(t, d, "n\n\n")
-		rig.runner.helper = enrols(d)
+		rig.runner.helper = enrolls(d)
 		marker := filepath.Join(rig.target(), "Contents", "kept")
 		require.NoError(t, os.MkdirAll(filepath.Dir(marker), 0o755))
 		require.NoError(t, os.WriteFile(marker, nil, 0o600))
@@ -470,7 +470,7 @@ func TestTouchIDEnroll_ExistingInstall(t *testing.T) {
 	t.Run("replaced", func(t *testing.T) {
 		d := happyDaemon()
 		rig := newTouchRig(t, d, "y\n\n")
-		rig.runner.helper = enrols(d)
+		rig.runner.helper = enrolls(d)
 		marker := filepath.Join(rig.target(), "Contents", "old")
 		require.NoError(t, os.MkdirAll(filepath.Dir(marker), 0o755))
 		require.NoError(t, os.WriteFile(marker, nil, 0o600))
@@ -627,7 +627,7 @@ func TestTouchID_Help(t *testing.T) {
 }
 
 // End to end against the real console routes on a real Unix socket: the
-// daemon's access JSON names the code's account, the fake helper enrols a
+// daemon's access JSON names the code's account, the fake helper enrolls a
 // software P-256 key with a code the daemon's account minted, and seam reads
 // the new key back from the Approvers JSON -- so the shapes seam decodes are
 // the console's own.
@@ -657,7 +657,7 @@ func TestTouchIDEnroll_AgainstTheConsole(t *testing.T) {
 	})
 
 	rig := newTouchRig(t, daemon, "\n")
-	code, _, err := store.MintEnrolCode(ctx, db, store.ApproverTouchID, time.Now())
+	code, _, err := store.MintEnrollCode(ctx, db, store.ApproverTouchID, time.Now())
 	require.NoError(t, err)
 	var enrolled string
 	rig.runner.helper = func(argv []string) {
@@ -669,7 +669,7 @@ func TestTouchIDEnroll_AgainstTheConsole(t *testing.T) {
 		require.NoError(t, err)
 		pub, err := key.PublicKey.Bytes()
 		require.NoError(t, err)
-		digest := sha256.Sum256(approval.TouchIDEnrolMessage(code, pub))
+		digest := sha256.Sum256(approval.TouchIDEnrollMessage(code, pub))
 		sig, err := ecdsa.SignASN1(rand.Reader, key, digest[:])
 		require.NoError(t, err)
 		client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -677,7 +677,7 @@ func TestTouchIDEnroll_AgainstTheConsole(t *testing.T) {
 		}}}
 		form := url.Values{"code": {code}, "name": {name}, "public_key": {base64.StdEncoding.EncodeToString(pub)},
 			"signature": {base64.StdEncoding.EncodeToString(sig)}}
-		req, err := http.NewRequest(http.MethodPost, "http://localhost/console/approvers/touchid/enrol", strings.NewReader(form.Encode()))
+		req, err := http.NewRequest(http.MethodPost, "http://localhost/console/approvers/touchid/enroll", strings.NewReader(form.Encode()))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.Header.Set("Accept", "application/json")

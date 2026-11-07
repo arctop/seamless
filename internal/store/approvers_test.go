@@ -34,7 +34,7 @@ func TestMigration032_ApproverTables(t *testing.T) {
 	var v int
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&v))
 	require.GreaterOrEqual(t, v, 32)
-	for _, table := range []string{"approver_credentials", "approver_enrol_codes"} {
+	for _, table := range []string{"approver_credentials", "approver_enroll_codes"} {
 		var n int
 		require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+table).Scan(&n))
 		require.Zero(t, n, "%s starts empty", table)
@@ -44,34 +44,34 @@ func TestMigration032_ApproverTables(t *testing.T) {
 	require.Error(t, err, "the kind is checked by the schema too")
 }
 
-func TestEnrolCode_Shape(t *testing.T) {
+func TestEnrollCode_Shape(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
-	code, exp, err := MintEnrolCode(ctx, db, ApproverPasskey, apNow)
+	code, exp, err := MintEnrollCode(ctx, db, ApproverPasskey, apNow)
 	require.NoError(t, err)
-	require.Equal(t, apNow.Add(EnrolCodeTTL), exp)
+	require.Equal(t, apNow.Add(EnrollCodeTTL), exp)
 	require.Regexp(t, `^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$`, code)
 
 	var stored string
-	require.NoError(t, db.QueryRowContext(ctx, `SELECT hash FROM approver_enrol_codes`).Scan(&stored))
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT hash FROM approver_enroll_codes`).Scan(&stored))
 	require.NotContains(t, stored, strings.ReplaceAll(code, "-", ""), "only the hash is stored")
 	require.Len(t, stored, 64)
 
 	// As typed: lowercase, no dashes, spaces, and Crockford's look-alikes.
 	typed := strings.ToLower(strings.ReplaceAll(code, "-", " "))
-	require.NoError(t, CheckEnrolCode(ctx, db, ApproverPasskey, typed, apNow))
-	require.Equal(t, "0110", NormalizeEnrolCode("oIl0"))
+	require.NoError(t, CheckEnrollCode(ctx, db, ApproverPasskey, typed, apNow))
+	require.Equal(t, "0110", NormalizeEnrollCode("oIl0"))
 
-	_, _, err = MintEnrolCode(ctx, db, "password", apNow)
+	_, _, err = MintEnrollCode(ctx, db, "password", apNow)
 	require.ErrorIs(t, err, ErrInvalidApprover)
 }
 
-func TestEnrolApprover_CodeRules(t *testing.T) {
+func TestEnrollApprover_CodeRules(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
-	code, _, err := MintEnrolCode(ctx, db, ApproverPasskey, apNow)
+	code, _, err := MintEnrollCode(ctx, db, ApproverPasskey, apNow)
 	require.NoError(t, err)
-	touchCode, _, err := MintEnrolCode(ctx, db, ApproverTouchID, apNow)
+	touchCode, _, err := MintEnrollCode(ctx, db, ApproverTouchID, apNow)
 	require.NoError(t, err)
 
 	for name, tc := range map[string]struct {
@@ -79,7 +79,7 @@ func TestEnrolApprover_CodeRules(t *testing.T) {
 		at   time.Time
 	}{
 		"absent":                        {"AAAA-BBBB-CCCC-DDDD", apNow},
-		"expired":                       {code, apNow.Add(EnrolCodeTTL)},
+		"expired":                       {code, apNow.Add(EnrollCodeTTL)},
 		"another kind's code":           {touchCode, apNow},
 		"one symbol off":                {code[:len(code)-1] + "Z", apNow},
 		"a long time later, still dead": {code, apNow.Add(24 * time.Hour)},
@@ -88,23 +88,23 @@ func TestEnrolApprover_CodeRules(t *testing.T) {
 			if tc.code == code[:len(code)-1]+"Z" && strings.HasSuffix(code, "Z") {
 				t.Skip("the random code already ends in Z")
 			}
-			require.ErrorIs(t, CheckEnrolCode(ctx, db, ApproverPasskey, tc.code, tc.at), ErrEnrolCode)
-			_, err := EnrolApprover(ctx, db, passkeyCred("c-"+name), tc.code, "", tc.at)
-			require.ErrorIs(t, err, ErrEnrolCode)
+			require.ErrorIs(t, CheckEnrollCode(ctx, db, ApproverPasskey, tc.code, tc.at), ErrEnrollCode)
+			_, err := EnrollApprover(ctx, db, passkeyCred("c-"+name), tc.code, "", tc.at)
+			require.ErrorIs(t, err, ErrEnrollCode)
 		})
 	}
 
-	first, err := EnrolApprover(ctx, db, passkeyCred("c1"), code, "", apNow.Add(time.Minute))
+	first, err := EnrollApprover(ctx, db, passkeyCred("c1"), code, "", apNow.Add(time.Minute))
 	require.NoError(t, err)
 	require.Equal(t, AddedByCode, first.AddedBy)
 	require.NotEmpty(t, first.ID)
 
-	_, err = EnrolApprover(ctx, db, passkeyCred("c2"), code, "", apNow.Add(2*time.Minute))
-	require.ErrorIs(t, err, ErrEnrolCode, "a code is single use")
-	require.ErrorIs(t, CheckEnrolCode(ctx, db, ApproverPasskey, code, apNow.Add(2*time.Minute)), ErrEnrolCode)
+	_, err = EnrollApprover(ctx, db, passkeyCred("c2"), code, "", apNow.Add(2*time.Minute))
+	require.ErrorIs(t, err, ErrEnrollCode, "a code is single use")
+	require.ErrorIs(t, CheckEnrollCode(ctx, db, ApproverPasskey, code, apNow.Add(2*time.Minute)), ErrEnrollCode)
 
 	var usedFor string
-	require.NoError(t, db.QueryRowContext(ctx, `SELECT used_for FROM approver_enrol_codes WHERE kind = 'passkey'`).Scan(&usedFor))
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT used_for FROM approver_enroll_codes WHERE kind = 'passkey'`).Scan(&usedFor))
 	require.Equal(t, first.ID, usedFor)
 
 	got, err := ApproverCredentials(ctx, db, "")
@@ -116,37 +116,37 @@ func TestEnrolApprover_CodeRules(t *testing.T) {
 	require.Equal(t, []byte("handle"), got[0].UserHandle)
 }
 
-func TestEnrolApprover_ProofRules(t *testing.T) {
+func TestEnrollApprover_ProofRules(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
 
-	_, err := EnrolApprover(ctx, db, passkeyCred("c1"), "", "", apNow)
-	require.ErrorIs(t, err, ErrEnrolProof, "no proof at all")
-	_, err = EnrolApprover(ctx, db, passkeyCred("c1"), "", "no-such-credential", apNow)
-	require.ErrorIs(t, err, ErrEnrolProof, "the first credential needs a code: there is nothing to approve it")
+	_, err := EnrollApprover(ctx, db, passkeyCred("c1"), "", "", apNow)
+	require.ErrorIs(t, err, ErrEnrollProof, "no proof at all")
+	_, err = EnrollApprover(ctx, db, passkeyCred("c1"), "", "no-such-credential", apNow)
+	require.ErrorIs(t, err, ErrEnrollProof, "the first credential needs a code: there is nothing to approve it")
 
-	code, _, err := MintEnrolCode(ctx, db, ApproverPasskey, apNow)
+	code, _, err := MintEnrollCode(ctx, db, ApproverPasskey, apNow)
 	require.NoError(t, err)
-	first, err := EnrolApprover(ctx, db, passkeyCred("c1"), code, "", apNow)
+	first, err := EnrollApprover(ctx, db, passkeyCred("c1"), code, "", apNow)
 	require.NoError(t, err)
 
-	code2, _, err := MintEnrolCode(ctx, db, ApproverPasskey, apNow)
+	code2, _, err := MintEnrollCode(ctx, db, ApproverPasskey, apNow)
 	require.NoError(t, err)
-	_, err = EnrolApprover(ctx, db, passkeyCred("c2"), code2, first.ID, apNow)
-	require.ErrorIs(t, err, ErrEnrolProof, "two proofs is not one")
-	require.NoError(t, CheckEnrolCode(ctx, db, ApproverPasskey, code2, apNow), "a refused enrolment consumes nothing")
+	_, err = EnrollApprover(ctx, db, passkeyCred("c2"), code2, first.ID, apNow)
+	require.ErrorIs(t, err, ErrEnrollProof, "two proofs is not one")
+	require.NoError(t, CheckEnrollCode(ctx, db, ApproverPasskey, code2, apNow), "a refused enrollment consumes nothing")
 
-	second, err := EnrolApprover(ctx, db, passkeyCred("c2"), "", first.ID, apNow)
+	second, err := EnrollApprover(ctx, db, passkeyCred("c2"), "", first.ID, apNow)
 	require.NoError(t, err, "a later credential, approved by an existing one")
 	require.Equal(t, first.ID, second.AddedBy)
 
-	_, err = EnrolApprover(ctx, db, passkeyCred("c1"), "", first.ID, apNow)
+	_, err = EnrollApprover(ctx, db, passkeyCred("c1"), "", first.ID, apNow)
 	require.ErrorIs(t, err, ErrApproverExists)
 
 	touch := ApproverCredential{Kind: ApproverTouchID, CredentialID: []byte("tk1"), PublicKey: touchKey(7), Alg: -7, Name: "this Mac"}
-	tcode, _, err := MintEnrolCode(ctx, db, ApproverTouchID, apNow)
+	tcode, _, err := MintEnrollCode(ctx, db, ApproverTouchID, apNow)
 	require.NoError(t, err)
-	tk, err := EnrolApprover(ctx, db, touch, tcode, "", apNow)
+	tk, err := EnrollApprover(ctx, db, touch, tcode, "", apNow)
 	require.NoError(t, err)
 	require.Equal(t, ApproverTouchID, tk.Kind)
 
@@ -158,7 +158,7 @@ func TestEnrolApprover_ProofRules(t *testing.T) {
 	require.Equal(t, 3, n)
 }
 
-func TestEnrolApprover_RefusesBadRecords(t *testing.T) {
+func TestEnrollApprover_RefusesBadRecords(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
 	for name, c := range map[string]ApproverCredential{
@@ -173,18 +173,18 @@ func TestEnrolApprover_RefusesBadRecords(t *testing.T) {
 		"an over-long name":         {Kind: ApproverPasskey, CredentialID: []byte("x"), PublicKey: []byte{1}, Name: strings.Repeat("n", 65)},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := EnrolApprover(ctx, db, c, "AAAA", "", apNow)
+			_, err := EnrollApprover(ctx, db, c, "AAAA", "", apNow)
 			require.ErrorIs(t, err, ErrInvalidApprover)
 		})
 	}
 }
 
-func enrolOne(t *testing.T, db *sql.DB, c ApproverCredential) ApproverCredential {
+func enrollOne(t *testing.T, db *sql.DB, c ApproverCredential) ApproverCredential {
 	t.Helper()
 	ctx := context.Background()
-	code, _, err := MintEnrolCode(ctx, db, c.Kind, apNow)
+	code, _, err := MintEnrollCode(ctx, db, c.Kind, apNow)
 	require.NoError(t, err)
-	got, err := EnrolApprover(ctx, db, c, code, "", apNow)
+	got, err := EnrollApprover(ctx, db, c, code, "", apNow)
 	require.NoError(t, err)
 	return got
 }
@@ -192,7 +192,7 @@ func enrolOne(t *testing.T, db *sql.DB, c ApproverCredential) ApproverCredential
 func TestRecordApproverUse_CompareAndSet(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
-	c := enrolOne(t, db, passkeyCred("c1"))
+	c := enrollOne(t, db, passkeyCred("c1"))
 
 	require.NoError(t, RecordApproverUse(ctx, db, c.ID, 0, 5, false, apNow.Add(time.Minute)))
 	got, err := ApproverByID(ctx, db, c.ID)
@@ -230,8 +230,8 @@ func TestRecordApproverUse_CompareAndSet(t *testing.T) {
 func TestRemoveAndResetApprovers(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
-	a := enrolOne(t, db, passkeyCred("c1"))
-	enrolOne(t, db, passkeyCred("c2"))
+	a := enrollOne(t, db, passkeyCred("c1"))
+	enrollOne(t, db, passkeyCred("c2"))
 	require.NoError(t, RemoveApprover(ctx, db, a.ID))
 	require.ErrorIs(t, RemoveApprover(ctx, db, a.ID), ErrApproverNotFound)
 	_, err := ApproverByID(ctx, db, a.ID)
@@ -242,7 +242,7 @@ func TestRemoveAndResetApprovers(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ApproveAccess(ctx, db, approval.ID, approval.Challenge, "cred-1", apNow)
 	require.NoError(t, err)
-	pending, _, err := MintEnrolCode(ctx, db, ApproverPasskey, apNow)
+	pending, _, err := MintEnrollCode(ctx, db, ApproverPasskey, apNow)
 	require.NoError(t, err)
 
 	creds, leases, err := ResetApprovers(ctx, db, apNow.Add(time.Minute))
@@ -258,7 +258,7 @@ func TestRemoveAndResetApprovers(t *testing.T) {
 	var reason string
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT revoked_reason FROM access_leases`).Scan(&reason))
 	require.Equal(t, LeaseRevokedReset, reason)
-	require.ErrorIs(t, CheckEnrolCode(ctx, db, ApproverPasskey, pending, apNow.Add(time.Minute)), ErrEnrolCode,
+	require.ErrorIs(t, CheckEnrollCode(ctx, db, ApproverPasskey, pending, apNow.Add(time.Minute)), ErrEnrollCode,
 		"an unused code minted before the reset is gone")
 }
 

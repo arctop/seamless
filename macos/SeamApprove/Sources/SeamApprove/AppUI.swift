@@ -4,15 +4,15 @@ import SeamApproveCore
 /// The helper's own dialogs. The flows run on a worker thread; every dialog
 /// runs modally on the main thread.
 final class AppUI: ApproverUI {
-    func enrolCode(command: String, problem: String?) -> String? {
+    func enrollCode(command: String, problem: String?) -> String? {
         onMain {
             let alert = NSAlert()
-            alert.messageText = "Enrol this Mac's Touch ID with Seamless"
+            alert.messageText = "Enroll this Mac's Touch ID with Seamless"
             var info = ""
             if let problem = problem {
                 info += problem + "\n\n"
             }
-            info += "Type the one-time enrolment code that this command prints in your own terminal:\n\n"
+            info += "Type the one-time enrollment code that this command prints in your own terminal:\n\n"
             info += command + "\n\n"
             info += "A code works once and lasts 10 minutes. It is typed here, never passed on a command line."
             alert.informativeText = info
@@ -20,7 +20,7 @@ final class AppUI: ApproverUI {
             field.placeholderString = "XXXX-XXXX-XXXX-XXXX"
             field.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
             alert.accessoryView = field
-            alert.addButton(withTitle: "Enrol")
+            alert.addButton(withTitle: "Enroll")
             alert.addButton(withTitle: "Cancel")
             alert.window.initialFirstResponder = field
             App.bringForward()
@@ -33,7 +33,7 @@ final class AppUI: ApproverUI {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = "Delete this Mac's Touch ID approver key?"
-            var info = "Seamless Approve will no longer be able to approve access from this Mac until you enrol again with seam touchid enroll."
+            var info = "Seamless Approve will no longer be able to approve access from this Mac until you enroll again with seam touchid enroll."
             if !credentials.isEmpty {
                 info += "\n\nThe daemon keeps the credential (\(credentials.joined(separator: ", "))) until its account removes it with seamlessd approvers remove."
             }
@@ -95,7 +95,7 @@ enum App {
     }
 
     /// An Edit menu, never shown (the app has no menu bar: LSUIElement), so
-    /// that Command-V pastes into the enrolment code's field.
+    /// that Command-V pastes into the enrollment code's field.
     static func editMenu() -> NSMenu {
         let main = NSMenu()
         let editItem = NSMenuItem()

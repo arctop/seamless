@@ -36,7 +36,7 @@
   <p class="held-sub">A security key, your phone, this computer, or a password manager. The first passkey needs a one-time code: run <code>seamlessd approvers enroll-code passkey</code> as the daemon's account. {{if .Credentials}}Without a code, one of your enrolled passkeys approves the new one instead.{{end}}</p>
   <form id="approver-form" class="approver-form" autocomplete="off">
     <label>Name <input id="approver-name" name="name" maxlength="64" required placeholder="security key, phone, laptop"></label>
-    <label>Enrolment code <input id="approver-code" name="code" placeholder="XXXX-XXXX-XXXX-XXXX" {{if not .Credentials}}required{{end}} autocapitalize="characters" spellcheck="false"></label>
+    <label>Enrollment code <input id="approver-code" name="code" placeholder="XXXX-XXXX-XXXX-XXXX" {{if not .Credentials}}required{{end}} autocapitalize="characters" spellcheck="false"></label>
     <button class="btn primary" id="approver-go" type="submit">{{icon "key-round"}} Create passkey</button>
   </form>
   <p class="held-sub" id="approver-status" role="status" aria-live="polite"></p>

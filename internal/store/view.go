@@ -109,10 +109,10 @@ var viewExempt = map[string]string{
 	// isolation.requests' read grants: the access page lists them beside the
 	// leases, metadata about a confidential project the console never hides.
 	"access_grants": "read grants of confidential projects: slugs, process keys, session ids and times; no corpus content",
-	// The owner's approver credentials and enrolment codes: key material and
+	// The owner's approver credentials and enrollment codes: key material and
 	// hashes about no project at all.
-	"approver_credentials": "approver credentials (passkeys, Touch ID keys): public keys and labels, about no project; no corpus content",
-	"approver_enrol_codes": "one-time enrolment code hashes and their expiry, about no project; no corpus content",
+	"approver_credentials":  "approver credentials (passkeys, Touch ID keys): public keys and labels, about no project; no corpus content",
+	"approver_enroll_codes": "one-time enrollment code hashes and their expiry, about no project; no corpus content",
 	// A console unlock names a LOCKED project, and the console reads it to
 	// decide which handle a browser gets: the handle that would hide it.
 	"console_unlocks": "per-browser console unlocks of locked projects: a slug, cookie and link hashes, a credential id and times; no corpus content, and the console reads it to choose the handle",

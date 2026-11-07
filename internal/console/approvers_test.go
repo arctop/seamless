@@ -62,8 +62,8 @@ func ceremonyError(t *testing.T, out map[string]json.RawMessage) string {
 	return msg
 }
 
-// enrolOverHTTP runs a passkey enrolment through the console routes.
-func enrolOverHTTP(t *testing.T, mux *http.ServeMux, a *passkeytest.Authenticator, name, code string) map[string]json.RawMessage {
+// enrollOverHTTP runs a passkey enrollment through the console routes.
+func enrollOverHTTP(t *testing.T, mux *http.ServeMux, a *passkeytest.Authenticator, name, code string) map[string]json.RawMessage {
 	t.Helper()
 	status, begun := postCeremony(t, mux, "/console/approvers/passkey/begin", url.Values{"name": {name}, "code": {code}})
 	require.Equal(t, http.StatusOK, status, string(begun["error"]))
@@ -92,7 +92,7 @@ func TestApprovers_OffIsNotFound(t *testing.T) {
 	require.Contains(t, ceremonyError(t, out), "no project is locked")
 }
 
-func TestApprovers_EnrolAndList(t *testing.T) {
+func TestApprovers_EnrollAndList(t *testing.T) {
 	db, mux := newApproversConsole(t)
 	ctx := context.Background()
 
@@ -110,27 +110,27 @@ func TestApprovers_EnrolAndList(t *testing.T) {
 
 	status, out := postCeremony(t, mux, "/console/approvers/passkey/begin", url.Values{"name": {"key"}})
 	require.Equal(t, http.StatusBadRequest, status)
-	require.Contains(t, ceremonyError(t, out), "needs an enrolment code")
+	require.Contains(t, ceremonyError(t, out), "needs an enrollment code")
 	status, out = postCeremony(t, mux, "/console/approvers/passkey/begin", url.Values{"name": {"key"}, "code": {"AAAA-BBBB-CCCC-DDDD"}})
 	require.Equal(t, http.StatusBadRequest, status)
 	require.Contains(t, ceremonyError(t, out), "not valid")
 
-	code, _, err := store.MintEnrolCode(ctx, db, store.ApproverPasskey, time.Now())
+	code, _, err := store.MintEnrollCode(ctx, db, store.ApproverPasskey, time.Now())
 	require.NoError(t, err)
 	a, err := passkeytest.New(true)
 	require.NoError(t, err)
-	fin := enrolOverHTTP(t, mux, a, "security key", code)
+	fin := enrollOverHTTP(t, mux, a, "security key", code)
 	require.Contains(t, string(fin["name"]), "security key")
 
 	body = page("localhost:8081")
 	require.Contains(t, body, "security key")
-	require.Contains(t, body, "an enrolment code")
+	require.Contains(t, body, "an enrollment code")
 	require.NotContains(t, body, "Nothing is enrolled yet")
 
 	// A second passkey with no code: the first approves it.
 	b, err := passkeytest.New(false)
 	require.NoError(t, err)
-	fin = enrolOverHTTP(t, mux, b, "phone", "")
+	fin = enrollOverHTTP(t, mux, b, "phone", "")
 	require.Contains(t, fin, "approve")
 	var id string
 	require.NoError(t, json.Unmarshal(fin["_id"], &id))
@@ -157,7 +157,7 @@ func TestApprovers_CrossOriginRefused(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, rr.Code)
 }
 
-// No console route mints an enrolment code: after every Approvers route has
+// No console route mints an enrollment code: after every Approvers route has
 // been hit, the code table is still empty.
 func TestApprovers_NoRouteMintsACode(t *testing.T) {
 	db, mux := newApproversConsole(t)
@@ -166,6 +166,6 @@ func TestApprovers_NoRouteMintsACode(t *testing.T) {
 	}
 	do(mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/approvers", nil)))
 	var n int
-	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM approver_enrol_codes`).Scan(&n))
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM approver_enroll_codes`).Scan(&n))
 	require.Zero(t, n)
 }

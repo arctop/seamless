@@ -40,8 +40,8 @@ public enum Reason {
         return s
     }
 
-    /// The enrolment's prompt: the key is about to sign its first message.
-    public static func enrolment(account: String) -> String {
+    /// The enrollment's prompt: the key is about to sign its first message.
+    public static func enrollment(account: String) -> String {
         "add this Mac's Touch ID key as an approver for the Seamless daemon running as " + Text.clean(account, max: 32)
     }
 

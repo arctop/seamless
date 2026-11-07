@@ -33,17 +33,17 @@ import (
 	"github.com/arctop/seamless/internal/store"
 )
 
-// EnrolTTL is how long a started passkey enrolment waits for its browser.
-const EnrolTTL = 5 * time.Minute
+// EnrollTTL is how long a started passkey enrollment waits for its browser.
+const EnrollTTL = 5 * time.Minute
 
-// maxPending caps the passkey enrolments in flight, so a caller looping on
+// maxPending caps the passkey enrollments in flight, so a caller looping on
 // begin cannot grow the table without bound.
 const maxPending = 32
 
 var (
-	// ErrNoEnrolment is a finish or approve step naming an enrolment that was
+	// ErrNoEnrollment is a finish or approve step naming an enrollment that was
 	// never begun, already finished, or expired.
-	ErrNoEnrolment = errors.New("no such enrolment in progress")
+	ErrNoEnrollment = errors.New("no such enrollment in progress")
 	// ErrPasskeysOff is a passkey ceremony on a daemon whose relying party
 	// is not configured (no Service, or no Verifier).
 	ErrPasskeysOff = errors.New("passkeys are not configured")
@@ -55,7 +55,7 @@ var (
 type Config struct {
 	DB *sql.DB
 	// Passkeys is the relying party (internal/passkey). Nil disables every
-	// passkey ceremony; Touch ID enrolment still works.
+	// passkey ceremony; Touch ID enrollment still works.
 	Passkeys *passkey.Verifier
 	// Origins are the relying party's origins, for the pages that must send
 	// the owner there (a ceremony on any other origin fails).
@@ -76,11 +76,11 @@ type Config struct {
 	Logger *slog.Logger
 }
 
-// Service runs enrolments. It is safe for concurrent use.
+// Service runs enrollments. It is safe for concurrent use.
 type Service struct {
 	cfg     Config
 	mu      sync.Mutex
-	pending map[string]*pendingEnrol
+	pending map[string]*pendingEnroll
 }
 
 // New builds a Service.
@@ -94,7 +94,7 @@ func New(cfg Config) *Service {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
-	return &Service{cfg: cfg, pending: map[string]*pendingEnrol{}}
+	return &Service{cfg: cfg, pending: map[string]*pendingEnroll{}}
 }
 
 // PasskeysOn reports whether the passkey ceremonies are available.
@@ -103,8 +103,8 @@ func (s *Service) PasskeysOn() bool { return s != nil && s.cfg.Passkeys != nil }
 // Origins returns the relying party's origins.
 func (s *Service) Origins() []string { return slices.Clone(s.cfg.Origins) }
 
-// pendingEnrol is one passkey enrolment between its requests.
-type pendingEnrol struct {
+// pendingEnroll is one passkey enrollment between its requests.
+type pendingEnroll struct {
 	name    string
 	code    string // "" when an existing passkey approves it
 	state   passkey.RegistrationState
@@ -115,14 +115,14 @@ type pendingEnrol struct {
 	binding []byte
 }
 
-// Begun is a started passkey enrolment: its id and the creation options for
+// Begun is a started passkey enrollment: its id and the creation options for
 // navigator.credentials.create.
 type Begun struct {
 	ID      string          `json:"id"`
 	Options json.RawMessage `json:"options"`
 }
 
-// Finished is a passkey enrolment's result. Either the credential was stored
+// Finished is a passkey enrollment's result. Either the credential was stored
 // (Credential set), or an existing passkey must approve it first: Approve then
 // holds the request options for navigator.credentials.get.
 type Finished struct {
@@ -138,7 +138,7 @@ func newID() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// gc drops expired enrolments; the caller holds mu.
+// gc drops expired enrollments; the caller holds mu.
 func (s *Service) gc(now time.Time) {
 	for id, p := range s.pending {
 		if !now.Before(p.expires) {
@@ -147,14 +147,14 @@ func (s *Service) gc(now time.Time) {
 	}
 }
 
-// take removes and returns a live enrolment.
-func (s *Service) take(id string, now time.Time) (*pendingEnrol, error) {
+// take removes and returns a live enrollment.
+func (s *Service) take(id string, now time.Time) (*pendingEnroll, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.gc(now)
 	p, ok := s.pending[id]
 	if !ok {
-		return nil, ErrNoEnrolment
+		return nil, ErrNoEnrollment
 	}
 	delete(s.pending, id)
 	return p, nil
@@ -199,11 +199,11 @@ func (s *Service) BeginPasskey(ctx context.Context, name, code string) (Begun, e
 		return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", err)
 	}
 	if code = strings.TrimSpace(code); code != "" {
-		if err := store.CheckEnrolCode(ctx, s.cfg.DB, store.ApproverPasskey, code, now); err != nil {
+		if err := store.CheckEnrollCode(ctx, s.cfg.DB, store.ApproverPasskey, code, now); err != nil {
 			return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", err)
 		}
 	} else if len(existing) == 0 {
-		return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", store.ErrEnrolProof)
+		return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", store.ErrEnrollProof)
 	}
 	user, err := s.user(ctx)
 	if err != nil {
@@ -221,13 +221,13 @@ func (s *Service) BeginPasskey(ctx context.Context, name, code string) (Begun, e
 	defer s.mu.Unlock()
 	s.gc(now)
 	if len(s.pending) >= maxPending {
-		return Begun{}, fmt.Errorf("approval.BeginPasskey: too many enrolments in progress; try again in a few minutes")
+		return Begun{}, fmt.Errorf("approval.BeginPasskey: too many enrollments in progress; try again in a few minutes")
 	}
-	s.pending[id] = &pendingEnrol{name: name, code: code, state: state, expires: now.Add(EnrolTTL)}
+	s.pending[id] = &pendingEnroll{name: name, code: code, state: state, expires: now.Add(EnrollTTL)}
 	return Begun{ID: id, Options: opts}, nil
 }
 
-// FinishPasskey verifies the browser's creation response for enrolment id.
+// FinishPasskey verifies the browser's creation response for enrollment id.
 // With a code, the credential is stored and the code consumed, in one
 // transaction. Without one, the new credential waits for an existing
 // passkey's approval (ApprovePasskey) over a challenge that binds it.
@@ -238,7 +238,7 @@ func (s *Service) FinishPasskey(ctx context.Context, id string, response []byte)
 	now := s.cfg.Now()
 	p, err := s.take(id, now)
 	if err != nil || p.cred != nil {
-		return Finished{}, fmt.Errorf("approval.FinishPasskey: %w", ErrNoEnrolment)
+		return Finished{}, fmt.Errorf("approval.FinishPasskey: %w", ErrNoEnrollment)
 	}
 	user, err := s.user(ctx)
 	if err != nil {
@@ -249,7 +249,7 @@ func (s *Service) FinishPasskey(ctx context.Context, id string, response []byte)
 		return Finished{}, fmt.Errorf("approval.FinishPasskey: %w", err)
 	}
 	if p.code != "" {
-		stored, err := store.EnrolApprover(ctx, s.cfg.DB, FromPasskey(cred, p.name), p.code, "", now)
+		stored, err := store.EnrollApprover(ctx, s.cfg.DB, FromPasskey(cred, p.name), p.code, "", now)
 		if err != nil {
 			return Finished{}, fmt.Errorf("approval.FinishPasskey: %w", err)
 		}
@@ -259,7 +259,7 @@ func (s *Service) FinishPasskey(ctx context.Context, id string, response []byte)
 	if err != nil {
 		return Finished{}, fmt.Errorf("approval.FinishPasskey: %w", err)
 	}
-	binding := enrolBinding(id, cred)
+	binding := enrollBinding(id, cred)
 	opts, err := s.cfg.Passkeys.BeginAssertion(binding, existing)
 	if err != nil {
 		return Finished{}, fmt.Errorf("approval.FinishPasskey: %w", err)
@@ -271,7 +271,7 @@ func (s *Service) FinishPasskey(ctx context.Context, id string, response []byte)
 	return Finished{Approve: opts}, nil
 }
 
-// ApprovePasskey verifies an existing passkey's approval of enrolment id's new
+// ApprovePasskey verifies an existing passkey's approval of enrollment id's new
 // credential -- an assertion over the challenge that binds it -- records the
 // approving credential's use, and stores the new one as added by it.
 func (s *Service) ApprovePasskey(ctx context.Context, id string, response []byte) (store.ApproverCredential, error) {
@@ -281,7 +281,7 @@ func (s *Service) ApprovePasskey(ctx context.Context, id string, response []byte
 	now := s.cfg.Now()
 	p, err := s.take(id, now)
 	if err != nil || p.cred == nil {
-		return store.ApproverCredential{}, fmt.Errorf("approval.ApprovePasskey: %w", ErrNoEnrolment)
+		return store.ApproverCredential{}, fmt.Errorf("approval.ApprovePasskey: %w", ErrNoEnrollment)
 	}
 	rows, err := store.ApproverCredentials(ctx, s.cfg.DB, store.ApproverPasskey)
 	if err != nil {
@@ -302,7 +302,7 @@ func (s *Service) ApprovePasskey(ctx context.Context, id string, response []byte
 	if err := store.RecordApproverUse(ctx, s.cfg.DB, approver.ID, approver.SignCount, used.SignCount, used.BackupState, now); err != nil {
 		return store.ApproverCredential{}, fmt.Errorf("approval.ApprovePasskey: %w", err)
 	}
-	stored, err := store.EnrolApprover(ctx, s.cfg.DB, FromPasskey(*p.cred, p.name), "", approver.ID, now)
+	stored, err := store.EnrollApprover(ctx, s.cfg.DB, FromPasskey(*p.cred, p.name), "", approver.ID, now)
 	if err != nil {
 		return store.ApproverCredential{}, fmt.Errorf("approval.ApprovePasskey: %w", err)
 	}
@@ -318,13 +318,13 @@ func rowFor(rows []store.ApproverCredential, credID []byte) (store.ApproverCrede
 	return store.ApproverCredential{}, false
 }
 
-// enrolBinding is the 32-byte challenge an existing passkey signs to approve a
-// new credential: it names this enrolment and the new credential's id and
-// public key, so the approval cannot be lifted onto another enrolment or
+// enrollBinding is the 32-byte challenge an existing passkey signs to approve a
+// new credential: it names this enrollment and the new credential's id and
+// public key, so the approval cannot be lifted onto another enrollment or
 // another key.
-func enrolBinding(id string, c passkey.Credential) []byte {
+func enrollBinding(id string, c passkey.Credential) []byte {
 	h := sha256.New()
-	h.Write([]byte("seamless approver enrolment v1\x00"))
+	h.Write([]byte("seamless approver enrollment v1\x00"))
 	h.Write([]byte(id))
 	h.Write([]byte{0})
 	h.Write(c.ID)
@@ -333,31 +333,31 @@ func enrolBinding(id string, c passkey.Credential) []byte {
 	return h.Sum(nil)
 }
 
-// TouchIDEnrolMessage is what the Touch ID helper signs with its new key to
-// enrol it: proof that the code's holder holds the key. The code is folded in
+// TouchIDEnrollMessage is what the Touch ID helper signs with its new key to
+// enroll it: proof that the code's holder holds the key. The code is folded in
 // as its hash, never in the clear.
-func TouchIDEnrolMessage(code string, publicKey []byte) []byte {
-	sum := sha256.Sum256([]byte(store.NormalizeEnrolCode(code)))
-	msg := []byte("seamless touchid enrolment v1\x00")
+func TouchIDEnrollMessage(code string, publicKey []byte) []byte {
+	sum := sha256.Sum256([]byte(store.NormalizeEnrollCode(code)))
+	msg := []byte("seamless touchid enrollment v1\x00")
 	msg = append(msg, sum[:]...)
 	return append(msg, publicKey...)
 }
 
-// EnrolTouchID stores a Touch ID key: publicKey is the raw uncompressed P-256
+// EnrollTouchID stores a Touch ID key: publicKey is the raw uncompressed P-256
 // point, and signature an ASN.1 ECDSA signature by that key over
-// TouchIDEnrolMessage(code, publicKey). The code must be a live touchid code;
+// TouchIDEnrollMessage(code, publicKey). The code must be a live touchid code;
 // it is consumed with the insert.
-func (s *Service) EnrolTouchID(ctx context.Context, name, code string, publicKey, signature []byte) (store.ApproverCredential, error) {
-	if err := VerifyTouchID(publicKey, TouchIDEnrolMessage(code, publicKey), signature); err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("approval.EnrolTouchID: %w", err)
+func (s *Service) EnrollTouchID(ctx context.Context, name, code string, publicKey, signature []byte) (store.ApproverCredential, error) {
+	if err := VerifyTouchID(publicKey, TouchIDEnrollMessage(code, publicKey), signature); err != nil {
+		return store.ApproverCredential{}, fmt.Errorf("approval.EnrollTouchID: %w", err)
 	}
 	keyID := sha256.Sum256(publicKey)
 	cred := store.ApproverCredential{
 		Kind: store.ApproverTouchID, CredentialID: keyID[:], PublicKey: publicKey, Alg: passkey.AlgES256, Name: name,
 	}
-	stored, err := store.EnrolApprover(ctx, s.cfg.DB, cred, code, "", s.cfg.Now())
+	stored, err := store.EnrollApprover(ctx, s.cfg.DB, cred, code, "", s.cfg.Now())
 	if err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("approval.EnrolTouchID: %w", err)
+		return store.ApproverCredential{}, fmt.Errorf("approval.EnrollTouchID: %w", err)
 	}
 	return stored, nil
 }

@@ -44,7 +44,7 @@ import (
 //   - access_approvals, access_leases: unlocks of locked projects,
 //     bound to processes of the exporting machine's boot. Merging one would
 //     be an unlock nobody approved here.
-//   - approver_credentials, approver_enrol_codes: who may approve those
+//   - approver_credentials, approver_enroll_codes: who may approve those
 //     unlocks. A credential enrolled on another machine was never shown to
 //     this one's owner.
 //   - console_unlocks: one browser's console unlocks, behind a cookie only

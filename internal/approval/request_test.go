@@ -289,7 +289,7 @@ func TestApprove_PasskeyPath(t *testing.T) {
 	ctx := context.Background()
 	key, err := passkeytest.New(true)
 	require.NoError(t, err)
-	cred := f.enrolWithCode(t, key, "security key")
+	cred := f.enrollWithCode(t, key, "security key")
 	sess := f.session(t, "cc/fin", "/work/ops", agent)
 	a := f.request(t, lockFin, sess, bridge, agent, shell)
 	b := f.request(t, lockLeg, f.session(t, "cc/b", "/work/ops", other), otherBr, other, shell)
@@ -334,7 +334,7 @@ func TestApprove_TouchIDPath(t *testing.T) {
 		return sig
 	}
 	code := f.code(t, store.ApproverTouchID)
-	cred, err := f.svc.EnrolTouchID(ctx, "this Mac", code, pub, sign(TouchIDEnrolMessage(code, pub)))
+	cred, err := f.svc.EnrollTouchID(ctx, "this Mac", code, pub, sign(TouchIDEnrollMessage(code, pub)))
 	require.NoError(t, err)
 
 	sess := f.session(t, "cc/fin", "/work/ops", agent)

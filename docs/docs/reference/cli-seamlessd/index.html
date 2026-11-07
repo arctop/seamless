@@ -1119,7 +1119,7 @@ database directly, so run it as the daemon's own account, for example
 <code>sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml seamlessd approvers list</code>. Becoming that account is the proof: no route, over
 the socket or with the TCP key, can mint a code or remove a credential.</p>
 <ul>
-<li><code>enroll-code</code> mints a one-time enrolment code for one kind of credential. It
+<li><code>enroll-code</code> mints a one-time enrollment code for one kind of credential. It
 works once, for 10 minutes; only its hash is stored. For a passkey, open the
 console's Approvers page (<code>/console/approvers</code>, on the passkey origin -
 <code>http://localhost:&lt;port&gt;</code> unless <code>peer_auth.passkeys</code> says otherwise) and

@@ -24,7 +24,7 @@ final class PeerTests: XCTestCase {
     func testASocketServedByThisAccountGetsNothing() throws {
         let server = try TestServer(replies: [TestServer.reply(200, "{}")])
         let t = UnixSocketTransport(path: server.path, userAgent: "t", timeoutSeconds: 5, admit: PeerGuard(ownUID: getuid()).admit)
-        XCTAssertThrowsError(try t.exchange(HTTPRequest(method: "POST", path: "/console/approvers/touchid/enrol",
+        XCTAssertThrowsError(try t.exchange(HTTPRequest(method: "POST", path: "/console/approvers/touchid/enroll",
                                                         form: [FormField("code", "SECRET")]))) { e in
             guard case ApproverError.peer(let msg) = e else { return XCTFail("\(e)") }
             XCTAssertTrue(msg.contains("runs as this account"), msg)

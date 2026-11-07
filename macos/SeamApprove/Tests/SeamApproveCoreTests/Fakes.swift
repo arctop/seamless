@@ -156,7 +156,7 @@ final class SoftwareKeyStore: KeyStore {
         return (key, pub)
     }
 
-    /// `add` stores an enrolled key, as an earlier enrolment would have.
+    /// `add` stores an enrolled key, as an earlier enrollment would have.
     @discardableResult
     func add(credential: String) throws -> StoredKey {
         let (key, _) = try create()
@@ -215,7 +215,7 @@ final class FakeUI: ApproverUI {
         self.codes = codes
     }
 
-    func enrolCode(command: String, problem: String?) -> String? {
+    func enrollCode(command: String, problem: String?) -> String? {
         asked.append((command, problem))
         return codes.isEmpty ? nil : codes.removeFirst()
     }

@@ -93,7 +93,7 @@ func approverCheck(ctx context.Context, db *sql.DB) check {
 	}
 	if len(creds) == 0 {
 		return check{statusWarn, name, "no passkey or Touch ID key is enrolled: only the terminal path (seam approve) can approve " +
-			"access to a locked project; enrol one with `seamlessd approvers enroll-code passkey`, run as the daemon's account"}
+			"access to a locked project; enroll one with `seamlessd approvers enroll-code passkey`, run as the daemon's account"}
 	}
 	kinds := map[string]int{}
 	for _, c := range creds {

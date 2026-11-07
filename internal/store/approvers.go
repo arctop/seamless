@@ -2,16 +2,16 @@ package store
 
 // Approver credentials (migration 032): what can sign an access approval's
 // challenge with the owner present -- a WebAuthn passkey or the macOS Touch ID
-// key. This file keeps the rows and the enrolment rules:
+// key. This file keeps the rows and the enrollment rules:
 //
-//   - The first credential needs a one-time enrolment code. Only
+//   - The first credential needs a one-time enrollment code. Only
 //     `seamlessd approvers enroll-code`, run as the daemon's own account,
-//     mints one (MintEnrolCode); no route does. The code is the secret: it is
-//     stored only as a hash, lives EnrolCodeTTL, and is consumed in the same
-//     transaction as the credential it enrols.
+//     mints one (MintEnrollCode); no route does. The code is the secret: it is
+//     stored only as a hash, lives EnrollCodeTTL, and is consumed in the same
+//     transaction as the credential it enrolls.
 //   - A later credential needs a code too, or the approval of an existing
 //     credential over a challenge that binds the new one. The caller verifies
-//     that assertion (internal/passkey); EnrolApprover checks the approving
+//     that assertion (internal/passkey); EnrollApprover checks the approving
 //     credential exists.
 //
 // The ceremonies themselves live above the store; a row here is input to them
@@ -44,15 +44,15 @@ const (
 var ApproverKinds = []string{ApproverPasskey, ApproverTouchID}
 
 const (
-	// EnrolCodeTTL is how long an enrolment code stays valid.
-	EnrolCodeTTL = 10 * time.Minute
+	// EnrollCodeTTL is how long an enrollment code stays valid.
+	EnrollCodeTTL = 10 * time.Minute
 	// AddedByCode is approver_credentials.added_by for a credential a code
 	// enrolled; otherwise it holds the approving credential's id.
 	AddedByCode = "code"
-	// enrolCodeSymbols is Crockford's base32: no I, L, O or U.
-	enrolCodeSymbols = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-	// enrolCodeLen is 16 symbols, 80 bits.
-	enrolCodeLen = 16
+	// enrollCodeSymbols is Crockford's base32: no I, L, O or U.
+	enrollCodeSymbols = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+	// enrollCodeLen is 16 symbols, 80 bits.
+	enrollCodeLen = 16
 	// approverUserHandleKey is the settings key of the owner's WebAuthn user
 	// handle: one random value every passkey is registered to.
 	approverUserHandleKey = "approver_user_handle"
@@ -61,14 +61,14 @@ const (
 )
 
 var (
-	// ErrEnrolCode is an enrolment code that is absent, expired, already
+	// ErrEnrollCode is an enrollment code that is absent, expired, already
 	// used, or minted for another kind. One error for all four, so a caller
 	// learns nothing about which.
-	ErrEnrolCode = errors.New("enrolment code is not valid")
-	// ErrEnrolProof is an enrolment with no proof (or two): it needs exactly
+	ErrEnrollCode = errors.New("enrollment code is not valid")
+	// ErrEnrollProof is an enrollment with no proof (or two): it needs exactly
 	// one of a code or an existing credential's approval, and the first
 	// credential needs a code.
-	ErrEnrolProof = errors.New("enrolment needs a code or an existing credential's approval")
+	ErrEnrollProof = errors.New("enrollment needs a code or an existing credential's approval")
 	// ErrApproverNotFound is an approver id or credential id with no row.
 	ErrApproverNotFound = errors.New("approver credential not found")
 	// ErrApproverExists is a credential already enrolled.
@@ -108,10 +108,10 @@ func validApproverKind(kind string) error {
 	return nil
 }
 
-// NormalizeEnrolCode turns a code as typed into its canonical form:
+// NormalizeEnrollCode turns a code as typed into its canonical form:
 // uppercase, without the dashes and spaces it is printed with, and with
 // Crockford's look-alikes folded (O to 0, I and L to 1).
-func NormalizeEnrolCode(code string) string {
+func NormalizeEnrollCode(code string) string {
 	var b strings.Builder
 	for _, r := range strings.ToUpper(code) {
 		switch r {
@@ -127,52 +127,52 @@ func NormalizeEnrolCode(code string) string {
 	return b.String()
 }
 
-func enrolCodeHash(code string) string {
-	sum := sha256.Sum256([]byte(NormalizeEnrolCode(code)))
+func enrollCodeHash(code string) string {
+	sum := sha256.Sum256([]byte(NormalizeEnrollCode(code)))
 	return hex.EncodeToString(sum[:])
 }
 
-// MintEnrolCode creates a one-time enrolment code for kind, valid for
-// EnrolCodeTTL from now, and returns it formatted for a person
+// MintEnrollCode creates a one-time enrollment code for kind, valid for
+// EnrollCodeTTL from now, and returns it formatted for a person
 // (XXXX-XXXX-XXXX-XXXX). Only the hash is stored. Nothing but
 // `seamlessd approvers enroll-code` calls it: no route may.
-func MintEnrolCode(ctx context.Context, db *sql.DB, kind string, now time.Time) (string, time.Time, error) {
+func MintEnrollCode(ctx context.Context, db *sql.DB, kind string, now time.Time) (string, time.Time, error) {
 	if err := validApproverKind(kind); err != nil {
-		return "", time.Time{}, fmt.Errorf("store.MintEnrolCode: %w", err)
+		return "", time.Time{}, fmt.Errorf("store.MintEnrollCode: %w", err)
 	}
-	raw := make([]byte, enrolCodeLen)
+	raw := make([]byte, enrollCodeLen)
 	if _, err := rand.Read(raw); err != nil {
-		return "", time.Time{}, fmt.Errorf("store.MintEnrolCode: %w", err)
+		return "", time.Time{}, fmt.Errorf("store.MintEnrollCode: %w", err)
 	}
 	var b strings.Builder
 	for i, v := range raw {
 		if i > 0 && i%4 == 0 {
 			b.WriteByte('-')
 		}
-		b.WriteByte(enrolCodeSymbols[int(v)%len(enrolCodeSymbols)])
+		b.WriteByte(enrollCodeSymbols[int(v)%len(enrollCodeSymbols)])
 	}
 	code := b.String()
-	expires := now.Add(EnrolCodeTTL)
-	if _, err := db.ExecContext(ctx, `INSERT INTO approver_enrol_codes (hash, kind, created_at, expires_at) VALUES (?, ?, ?, ?)`,
-		enrolCodeHash(code), kind, core.FormatTime(now), core.FormatTime(expires)); err != nil {
-		return "", time.Time{}, fmt.Errorf("store.MintEnrolCode: %w", err)
+	expires := now.Add(EnrollCodeTTL)
+	if _, err := db.ExecContext(ctx, `INSERT INTO approver_enroll_codes (hash, kind, created_at, expires_at) VALUES (?, ?, ?, ?)`,
+		enrollCodeHash(code), kind, core.FormatTime(now), core.FormatTime(expires)); err != nil {
+		return "", time.Time{}, fmt.Errorf("store.MintEnrollCode: %w", err)
 	}
 	return code, expires, nil
 }
 
-// CheckEnrolCode reports whether code is a live, unused code for kind at now,
-// without consuming it: the begin step of an enrolment, so a mistyped code is
+// CheckEnrollCode reports whether code is a live, unused code for kind at now,
+// without consuming it: the begin step of an enrollment, so a mistyped code is
 // refused before the owner touches an authenticator.
-func CheckEnrolCode(ctx context.Context, db *sql.DB, kind, code string, now time.Time) error {
+func CheckEnrollCode(ctx context.Context, db *sql.DB, kind, code string, now time.Time) error {
 	var n int
-	err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM approver_enrol_codes
+	err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM approver_enroll_codes
 		WHERE hash = ? AND kind = ? AND used_at IS NULL AND expires_at > ?`,
-		enrolCodeHash(code), kind, core.FormatTime(now)).Scan(&n)
+		enrollCodeHash(code), kind, core.FormatTime(now)).Scan(&n)
 	if err != nil {
-		return fmt.Errorf("store.CheckEnrolCode: %w", err)
+		return fmt.Errorf("store.CheckEnrollCode: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("store.CheckEnrolCode: %w", ErrEnrolCode)
+		return fmt.Errorf("store.CheckEnrollCode: %w", ErrEnrollCode)
 	}
 	return nil
 }
@@ -197,19 +197,19 @@ func validApproverCredential(c ApproverCredential) error {
 	return nil
 }
 
-// EnrolApprover stores cred, proven by exactly one of: code, a live unused
-// enrolment code of cred's kind (consumed here, in the same transaction), or
+// EnrollApprover stores cred, proven by exactly one of: code, a live unused
+// enrollment code of cred's kind (consumed here, in the same transaction), or
 // approvedBy, the id of an existing credential whose approval of this
-// enrolment the caller has verified. The first credential needs a code. It
+// enrollment the caller has verified. The first credential needs a code. It
 // returns the stored row.
-func EnrolApprover(ctx context.Context, db *sql.DB, cred ApproverCredential, code, approvedBy string, now time.Time) (ApproverCredential, error) {
-	const op = "store.EnrolApprover"
+func EnrollApprover(ctx context.Context, db *sql.DB, cred ApproverCredential, code, approvedBy string, now time.Time) (ApproverCredential, error) {
+	const op = "store.EnrollApprover"
 	cred.Name = strings.TrimSpace(cred.Name)
 	if err := validApproverCredential(cred); err != nil {
 		return ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
 	}
 	if (code == "") == (approvedBy == "") {
-		return ApproverCredential{}, fmt.Errorf("%s: %w", op, ErrEnrolProof)
+		return ApproverCredential{}, fmt.Errorf("%s: %w", op, ErrEnrollProof)
 	}
 	id, err := core.NewID()
 	if err != nil {
@@ -223,9 +223,9 @@ func EnrolApprover(ctx context.Context, db *sql.DB, cred ApproverCredential, cod
 
 	addedBy := AddedByCode
 	if code != "" {
-		res, err := tx.ExecContext(ctx, `UPDATE approver_enrol_codes SET used_at = ?, used_for = ?
+		res, err := tx.ExecContext(ctx, `UPDATE approver_enroll_codes SET used_at = ?, used_for = ?
 			WHERE hash = ? AND kind = ? AND used_at IS NULL AND expires_at > ?`,
-			core.FormatTime(now), id, enrolCodeHash(code), cred.Kind, core.FormatTime(now))
+			core.FormatTime(now), id, enrollCodeHash(code), cred.Kind, core.FormatTime(now))
 		if err != nil {
 			return ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
 		}
@@ -234,7 +234,7 @@ func EnrolApprover(ctx context.Context, db *sql.DB, cred ApproverCredential, cod
 			return ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
 		}
 		if n != 1 {
-			return ApproverCredential{}, fmt.Errorf("%s: %w", op, ErrEnrolCode)
+			return ApproverCredential{}, fmt.Errorf("%s: %w", op, ErrEnrollCode)
 		}
 	} else {
 		var n int
@@ -242,7 +242,7 @@ func EnrolApprover(ctx context.Context, db *sql.DB, cred ApproverCredential, cod
 			return ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
 		}
 		if n == 0 {
-			return ApproverCredential{}, fmt.Errorf("%s: %w: the approving credential %q is not enrolled", op, ErrEnrolProof, approvedBy)
+			return ApproverCredential{}, fmt.Errorf("%s: %w: the approving credential %q is not enrolled", op, ErrEnrollProof, approvedBy)
 		}
 		addedBy = approvedBy
 	}
@@ -409,7 +409,7 @@ func RemoveApprover(ctx context.Context, db *sql.DB, id string) error {
 	return nil
 }
 
-// ResetApprovers deletes every credential and every unused enrolment code,
+// ResetApprovers deletes every credential and every unused enrollment code,
 // revokes every live lease and read grant (reason reset) and ends every
 // console unlock, in one transaction: what the
 // owner does when a credential may be in someone else's hands. It returns
@@ -428,7 +428,7 @@ func ResetApprovers(ctx context.Context, db *sql.DB, now time.Time) (credentials
 	if credentials, err = res.RowsAffected(); err != nil {
 		return 0, 0, fmt.Errorf("%s: %w", op, err)
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM approver_enrol_codes WHERE used_at IS NULL`); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM approver_enroll_codes WHERE used_at IS NULL`); err != nil {
 		return 0, 0, fmt.Errorf("%s: %w", op, err)
 	}
 	res, err = tx.ExecContext(ctx, `UPDATE access_leases SET revoked_at = ?, revoked_reason = ?

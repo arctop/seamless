@@ -98,8 +98,8 @@ final class ReasonTests: XCTestCase {
         XCTAssertEqual(Reason.durationPhrase("2d", maxLease: nil), "for 2d")
     }
 
-    func testEnrolment() {
-        XCTAssertEqual(Reason.enrolment(account: "_seamless"),
+    func testEnrollment() {
+        XCTAssertEqual(Reason.enrollment(account: "_seamless"),
                        "add this Mac's Touch ID key as an approver for the Seamless daemon running as _seamless")
     }
 }

@@ -415,7 +415,7 @@ func TestLockedConsole_LockAgainAndRevoke(t *testing.T) {
 func TestLockedConsole_PasskeyUnlock(t *testing.T) {
 	lc := newLockedConsole(t)
 	ctx := context.Background()
-	code, _, err := store.MintEnrolCode(ctx, lc.db, store.ApproverPasskey, time.Now())
+	code, _, err := store.MintEnrollCode(ctx, lc.db, store.ApproverPasskey, time.Now())
 	require.NoError(t, err)
 	key, err := passkeytest.New(true)
 	require.NoError(t, err)

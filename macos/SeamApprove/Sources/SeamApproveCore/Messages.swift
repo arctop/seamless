@@ -3,24 +3,24 @@ import Foundation
 
 /// The bytes the helper's key signs, byte for byte what the daemon verifies
 /// (internal/approval: TouchIDApproveMessage in request.go,
-/// TouchIDEnrolMessage in enrol.go, store.NormalizeEnrolCode in
+/// TouchIDEnrollMessage in enroll.go, store.NormalizeEnrollCode in
 /// internal/store/approvers.go). The Secure Enclave signs SHA-256 of them
 /// (ecdsaSignatureMessageX962SHA256), and the daemon's VerifyTouchID hashes
 /// the same way.
 public enum Messages {
     static let approveTag = "seamless touchid approval v1"
-    static let enrolTag = "seamless touchid enrolment v1"
+    static let enrollTag = "seamless touchid enrollment v1"
 
-    /// An enrolment code as typed that holds something other than ASCII. A
+    /// An enrollment code as typed that holds something other than ASCII. A
     /// minted code is 16 ASCII symbols, so such a code never matches one; the
     /// helper refuses it rather than fold it differently from Go's
     /// strings.ToUpper.
     public struct NonASCIICode: Error {}
 
-    /// `normalizeEnrolCode` mirrors store.NormalizeEnrolCode: upper case, the
+    /// `normalizeEnrollCode` mirrors store.NormalizeEnrollCode: upper case, the
     /// dashes, spaces and tabs it is printed or typed with dropped, and
     /// Crockford's look-alikes folded (O to 0, I and L to 1).
-    public static func normalizeEnrolCode(_ code: String) throws -> String {
+    public static func normalizeEnrollCode(_ code: String) throws -> String {
         var out = String.UnicodeScalarView()
         for u in code.unicodeScalars {
             guard u.isASCII else { throw NonASCIICode() }
@@ -43,18 +43,18 @@ public enum Messages {
         return String(out)
     }
 
-    /// `isEnrolCode` reports whether a normalized code has the shape the
+    /// `isEnrollCode` reports whether a normalized code has the shape the
     /// daemon mints (16 Crockford symbols), so a typo is caught before the
     /// owner is asked for Touch ID. It does not change what is signed.
-    public static func isEnrolCode(_ normalized: String) -> Bool {
+    public static func isEnrollCode(_ normalized: String) -> Bool {
         normalized.unicodeScalars.count == 16 && normalized.unicodeScalars.allSatisfy { Validate.crockford.contains($0) }
     }
 
-    /// TouchIDEnrolMessage(code, publicKey): the tag and a NUL, SHA-256 of
+    /// TouchIDEnrollMessage(code, publicKey): the tag and a NUL, SHA-256 of
     /// the normalized code, then the raw public key.
-    public static func touchIDEnrolMessage(code: String, publicKey: Data) throws -> Data {
-        let normalized = try normalizeEnrolCode(code)
-        var msg = Data(enrolTag.utf8)
+    public static func touchIDEnrollMessage(code: String, publicKey: Data) throws -> Data {
+        let normalized = try normalizeEnrollCode(code)
+        var msg = Data(enrollTag.utf8)
         msg.append(0)
         msg.append(contentsOf: SHA256.hash(data: Data(normalized.utf8)))
         msg.append(publicKey)

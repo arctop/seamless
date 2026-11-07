@@ -4,7 +4,7 @@ import Foundation
 /// bridge or `seam touchid`) and from the daemon's JSON. They mirror the Go
 /// side's patterns (cmd/seam/approver_app.go, cmd/seam/approve.go).
 public enum Validate {
-    /// Crockford's base32, the alphabet of a ULID and of an enrolment code.
+    /// Crockford's base32, the alphabet of a ULID and of an enrollment code.
     static let crockford = Set("0123456789ABCDEFGHJKMNPQRSTVWXYZ".unicodeScalars)
 
     /// The longest socket path a sockaddr_un holds on macOS: sun_path is 104
@@ -22,7 +22,7 @@ public enum Validate {
         (1...16).contains(s.utf8.count) && s.utf8.allSatisfy(isAlnum)
     }
 
-    /// An approver credential id as the daemon returns it at enrolment (a
+    /// An approver credential id as the daemon returns it at enrollment (a
     /// ULID today): 1 to 64 ASCII letters, digits, '-' or '_'.
     public static func isCredentialID(_ s: String) -> Bool {
         (1...64).contains(s.utf8.count) && s.utf8.allSatisfy { isAlnum($0) || $0 == UInt8(ascii: "-") || $0 == UInt8(ascii: "_") }

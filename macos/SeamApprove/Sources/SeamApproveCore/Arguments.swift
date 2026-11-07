@@ -3,11 +3,11 @@ import Foundation
 /// One run of the helper. LaunchServices starts it (`open -n -a <app> --args
 /// ...`), so argv is all it is told -- and it trusts argv for nothing but
 /// where to look: the request's facts and challenge come from the daemon, and
-/// the enrolment code from the owner's own typing in the helper's dialog.
+/// the enrollment code from the owner's own typing in the helper's dialog.
 public enum Command: Equatable {
     /// Approve one access request for one duration.
     case approve(socket: String, request: String, duration: String)
-    /// Create this Mac's key and enrol it with the daemon. `name` is the
+    /// Create this Mac's key and enroll it with the daemon. `name` is the
     /// label the daemon shows; nil picks this Mac's name.
     case enroll(socket: String, name: String?)
     /// Delete this Mac's key from the keychain.
@@ -28,7 +28,7 @@ public enum Arguments {
         usage: SeamApprove approve --socket <path> --request <id> --for <duration>
                SeamApprove enroll --socket <path> [--name <label>]
                SeamApprove forget
-        The enrolment code is typed into the helper's own dialog, never passed here.
+        The enrollment code is typed into the helper's own dialog, never passed here.
         """
 
     /// The longest approver name the daemon accepts, in Unicode code points

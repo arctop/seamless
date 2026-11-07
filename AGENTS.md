@@ -274,7 +274,7 @@ any of it.
   `seamlessd approvers enroll-code` mints (it opens the database directly, so
   running it is the proof of being the daemon's account); a later one needs a
   code or an existing passkey's assertion over a challenge binding the new
-  credential (`enrolBinding`). Removing and resetting are that command's too.
+  credential (`enrollBinding`). Removing and resetting are that command's too.
   No socket or TCP route may mint a code (the matrix asserts the table stays
   empty). A credential's sign counter is recorded with a compare-and-set
   (`store.RecordApproverUse`), so of two racing assertions only one counts.
@@ -322,7 +322,7 @@ any of it.
   feature: the client's answer arrives behind the call that waits on it.
 - **The Touch ID approver is opt-in, socket-only, and keychain-bound**
   (`macos/`, `cmd/seam/touchid*.go`, `cmd/seam/approver_app.go`; console
-  `approversTouchIDEnrol`, `touchIDProof`). Nothing installs or launches
+  `approversTouchIDEnroll`, `touchIDProof`). Nothing installs or launches
   Seamless Approve but `seam touchid enroll`, which checks the zip against the
   release's checksums.txt (`update.VerifyChecksum`), then `codesign --verify
   --strict --deep`, the identifier `com.arctop.seamless.approve`,
@@ -336,7 +336,7 @@ any of it.
   takes no fact from its arguments: it reads the request and its challenge
   over the socket and refuses a socket whose peer is its own uid or not the
   daemon's account. A key is enrolled (`POST
-  /console/approvers/touchid/enrol`) and a proof accepted (`POST
+  /console/approvers/touchid/enroll`) and a proof accepted (`POST
   /console/access/{id}/approve`, `proof=touchid`) only when
   `access.PeerAuthenticated`; a request's `challenge` appears in its JSON only
   when pending and read over the socket (a nonce, not a secret). Never put a

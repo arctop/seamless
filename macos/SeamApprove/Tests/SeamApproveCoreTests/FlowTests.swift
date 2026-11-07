@@ -94,7 +94,7 @@ final class FlowTests: XCTestCase {
         }
         XCTAssertTrue(msg.contains("seam touchid enroll"), msg)
         // Two enrolled keys: which one the daemon knows is not guessed. The
-        // way out names a command seam has (a new enrolment keeps one key).
+        // way out names a command seam has (a new enrollment keeps one key).
         let two = SoftwareKeyStore()
         try two.add(credential: "01APPROVERID000000000000AA")
         try two.add(credential: "01APPROVERID000000000000BB")
@@ -153,7 +153,7 @@ final class FlowTests: XCTestCase {
         let reqs = server.requestStrings
         XCTAssertEqual(reqs.count, 2)
         XCTAssertTrue(reqs[0].hasPrefix("GET /console/access?format=json HTTP/1.0\r\n"))
-        XCTAssertTrue(reqs[1].hasPrefix("POST /console/approvers/touchid/enrol?format=json HTTP/1.0\r\n"))
+        XCTAssertTrue(reqs[1].hasPrefix("POST /console/approvers/touchid/enroll?format=json HTTP/1.0\r\n"))
         let form = formOf(reqs[1])
         XCTAssertEqual(form["code"], "ABCDEFGHJKMNPQRS")
         XCTAssertEqual(form["name"], "Test Mac")
@@ -167,8 +167,8 @@ final class FlowTests: XCTestCase {
         XCTAssertEqual(stored[0].credential, "01NEWAPPROVER0000000000000")
         XCTAssertEqual(keys.publicKey(stored[0].handle), pub)
         let sig = try XCTUnwrap(Data(base64Encoded: form["signature"] ?? ""))
-        XCTAssertTrue(keys.verifies(sig, try Messages.touchIDEnrolMessage(code: "ABCDEFGHJKMNPQRS", publicKey: pub), handle: stored[0].handle))
-        XCTAssertEqual(keys.reasons, [Reason.enrolment(account: "_seamless")])
+        XCTAssertTrue(keys.verifies(sig, try Messages.touchIDEnrollMessage(code: "ABCDEFGHJKMNPQRS", publicKey: pub), handle: stored[0].handle))
+        XCTAssertEqual(keys.reasons, [Reason.enrollment(account: "_seamless")])
     }
 
     func testEnrollChecksTheDaemonBeforeAskingForTheCode() throws {
@@ -187,11 +187,11 @@ final class FlowTests: XCTestCase {
         let old = try keys.add(credential: "01OLDAPPROVER0000000000000")
         let server = try TestServer(replies: [
             TestServer.reply(200, terminalList),
-            TestServer.reply(400, #"{"error":"that enrolment code is not valid"}"#),
+            TestServer.reply(400, #"{"error":"that enrollment code is not valid"}"#),
         ])
         let out = flows(server, keys: keys, ui: FakeUI(codes: ["ABCD-EFGH-JKMN-PQRS"])).enroll(name: "work")
         server.stop()
-        XCTAssertEqual(out, .failed("The daemon refused: that enrolment code is not valid"))
+        XCTAssertEqual(out, .failed("The daemon refused: that enrollment code is not valid"))
         XCTAssertEqual(try keys.keys(), [old], "the new key is deleted and the enrolled one kept")
         XCTAssertEqual(formOf(server.requestStrings[1])["name"], "work")
     }

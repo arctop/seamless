@@ -614,7 +614,7 @@ database directly, so run it as the daemon's own account, for example
 seamlessd approvers list`. Becoming that account is the proof: no route, over
 the socket or with the TCP key, can mint a code or remove a credential.
 
-- `enroll-code` mints a one-time enrolment code for one kind of credential. It
+- `enroll-code` mints a one-time enrollment code for one kind of credential. It
   works once, for 10 minutes; only its hash is stored. For a passkey, open the
   console's Approvers page (`/console/approvers`, on the passkey origin -
   `http://localhost:<port>` unless `peer_auth.passkeys` says otherwise) and

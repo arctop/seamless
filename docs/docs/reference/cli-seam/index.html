@@ -604,7 +604,7 @@ longer pending (and 2, as everywhere, for a command line it cannot parse).</p>
 <h3 id="seam_touchid_enroll">seam touchid enroll</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam touchid enroll <span class="o">[</span>--app PATH<span class="o">]</span> <span class="o">[</span>--name NAME<span class="o">]</span>
 </span></span></code></pre></div>
-<p>Installs the Touch ID approver, Seamless Approve, and enrols its key. macOS
+<p>Installs the Touch ID approver, Seamless Approve, and enrolls its key. macOS
 only, in the owner's own terminal, with <code>server_url: unix:///path</code> naming the
 <code>peer_auth</code> socket; nothing installs or launches the app unless you run this.</p>
 <p>A release build of <code>seam</code> fetches its own version's
@@ -616,7 +616,7 @@ team as <code>seam</code> itself (an unsigned <code>seam</code> shows the app's 
 release asset must also pass Gatekeeper. It is installed at
 <code>~/Applications/Seamless Approve.app</code>, replacing an existing copy only after
 a y/N.</p>
-<p>It then prints the command that mints a one-time enrolment code as the
+<p>It then prints the command that mints a one-time enrollment code as the
 daemon's account:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -k -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>&lt;config&gt; &lt;seamlessd&gt; approvers enroll-code touchid
 </span></span></code></pre></div>

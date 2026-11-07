@@ -411,7 +411,7 @@ func (s *Service) unlockError(w http.ResponseWriter, r *http.Request, err error)
 	case errors.Is(err, store.ErrConsoleUnlockBusy):
 		msg = "too many unlocks are in progress; try again in a few minutes"
 	case errors.Is(err, approval.ErrNoPasskey):
-		msg = "no passkey is enrolled: enrol one on the Approvers page, or unlock in your own terminal"
+		msg = "no passkey is enrolled: enroll one on the Approvers page, or unlock in your own terminal"
 	case errors.Is(err, passkey.ErrUnknownCredential):
 		msg = "that passkey is not enrolled here"
 	}

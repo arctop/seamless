@@ -32,7 +32,7 @@ func TestConsoleUnlock_Passkey(t *testing.T) {
 
 	key, err := passkeytest.New(true)
 	require.NoError(t, err)
-	cred := f.enrolWithCode(t, key, "security key")
+	cred := f.enrollWithCode(t, key, "security key")
 
 	begun, err := f.svc.BeginConsoleUnlock(ctx, "example-finance", browser)
 	require.NoError(t, err)

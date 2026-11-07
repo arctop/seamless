@@ -38,7 +38,7 @@ const approversUsage = `usage: seamlessd approvers <verb>
 Approver credentials sign the owner's approvals of access to locked projects
 (peer_auth.locked). Run these as the daemon's own account.
 
-  enroll-code <passkey|touchid>   mint a one-time enrolment code, valid for 10 minutes
+  enroll-code <passkey|touchid>   mint a one-time enrollment code, valid for 10 minutes
   list [--json]                   list the enrolled credentials
   remove <id>                     remove one credential
   reset --yes                     remove every credential and revoke every live lease
@@ -79,12 +79,12 @@ func approvers(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writer
 		if !slices.Contains(store.ApproverKinds, kind) {
 			return fmt.Errorf("invalid kind %q: valid kinds are %s", kind, strings.Join(store.ApproverKinds, ", "))
 		}
-		code, expires, err := store.MintEnrolCode(ctx, db, kind, now)
+		code, expires, err := store.MintEnrollCode(ctx, db, kind, now)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "Enrolment code (%s): %s\n", kind, code)
-		fmt.Fprintf(out, "It works once, until %s (%d minutes).\n", expires.Local().Format("15:04"), int(store.EnrolCodeTTL/time.Minute))
+		fmt.Fprintf(out, "Enrollment code (%s): %s\n", kind, code)
+		fmt.Fprintf(out, "It works once, until %s (%d minutes).\n", expires.Local().Format("15:04"), int(store.EnrollCodeTTL/time.Minute))
 		switch kind {
 		case store.ApproverPasskey:
 			_, origins := cfg.RelyingParty()
@@ -122,7 +122,7 @@ func approvers(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writer
 			if c.LastUsedAt != nil {
 				used = "last used " + c.LastUsedAt.Local().Format("2006-01-02 15:04")
 			}
-			by := "an enrolment code"
+			by := "an enrollment code"
 			if c.AddedBy != store.AddedByCode {
 				by = "credential " + c.AddedBy
 			}

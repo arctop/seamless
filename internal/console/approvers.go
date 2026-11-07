@@ -1,14 +1,14 @@
 package console
 
 // The Approvers page: the owner's passkeys and Touch ID keys, which approve
-// access to locked projects (peer_auth.locked), the passkey enrolment
-// ceremony, and the Touch ID helper's enrolment (`seam touchid enroll`). It
+// access to locked projects (peer_auth.locked), the passkey enrollment
+// ceremony, and the Touch ID helper's enrollment (`seam touchid enroll`). It
 // exists only while a project is locked (Config.Approvals set); otherwise
 // every route here is a 404 and nothing on any other page changes.
 //
 // The page lists and adds; it never removes. Removing a credential, or
 // resetting them all, is `seamlessd approvers remove|reset`, run as the
-// daemon's own account -- the same proof that mints the enrolment code a first
+// daemon's own account -- the same proof that mints the enrollment code a first
 // credential needs. A console cookie, or the bearer key a script holds, is not
 // that proof.
 
@@ -39,9 +39,9 @@ type ApprovalsView interface {
 	BeginPasskey(ctx context.Context, name, code string) (approval.Begun, error)
 	FinishPasskey(ctx context.Context, id string, response []byte) (approval.Finished, error)
 	ApprovePasskey(ctx context.Context, id string, response []byte) (store.ApproverCredential, error)
-	// EnrolTouchID stores the Touch ID helper's new key, proven by a live
-	// touchid enrolment code and the key's own signature over it.
-	EnrolTouchID(ctx context.Context, name, code string, publicKey, signature []byte) (store.ApproverCredential, error)
+	// EnrollTouchID stores the Touch ID helper's new key, proven by a live
+	// touchid enrollment code and the key's own signature over it.
+	EnrollTouchID(ctx context.Context, name, code string, publicKey, signature []byte) (store.ApproverCredential, error)
 
 	Request(ctx context.Context, in approval.RequestInput) (store.AccessApproval, error)
 	Pending(ctx context.Context) ([]approval.Facts, error)
@@ -75,7 +75,7 @@ type approverRow struct {
 type approversData struct {
 	Credentials []approverRow `json:"credentials"`
 	// PasskeysOn is false when the relying party is not configured; the page
-	// then lists credentials and explains, with no enrolment form.
+	// then lists credentials and explains, with no enrollment form.
 	PasskeysOn bool `json:"passkeys_on"`
 	// Origin is where a passkey ceremony must run; OnOrigin is whether this
 	// page was loaded from one of the configured origins. A page on
@@ -131,16 +131,16 @@ func (s *Service) approversPage(w http.ResponseWriter, r *http.Request) {
 func (s *Service) approverError(w http.ResponseWriter, r *http.Request, err error) {
 	msg, status := "the passkey could not be verified; try again", http.StatusBadRequest
 	switch {
-	case errors.Is(err, store.ErrEnrolCode):
-		msg = "that enrolment code is not valid: it may be mistyped, expired (codes last 10 minutes) or already used"
-	case errors.Is(err, store.ErrEnrolProof):
-		msg = "the first passkey needs an enrolment code: mint one with `seamlessd approvers enroll-code passkey`, run as the daemon's account"
+	case errors.Is(err, store.ErrEnrollCode):
+		msg = "that enrollment code is not valid: it may be mistyped, expired (codes last 10 minutes) or already used"
+	case errors.Is(err, store.ErrEnrollProof):
+		msg = "the first passkey needs an enrollment code: mint one with `seamlessd approvers enroll-code passkey`, run as the daemon's account"
 	case errors.Is(err, store.ErrInvalidApprover):
 		msg = "give the passkey a name of 1 to 64 characters on one line"
 	case errors.Is(err, store.ErrApproverExists):
 		msg = "that passkey is already enrolled"
-	case errors.Is(err, approval.ErrNoEnrolment):
-		msg = "this enrolment expired or was already used; start again"
+	case errors.Is(err, approval.ErrNoEnrollment):
+		msg = "this enrollment expired or was already used; start again"
 	case errors.Is(err, approval.ErrPasskeysOff):
 		msg, status = "passkeys are not configured on this daemon", http.StatusConflict
 	case errors.Is(err, passkey.ErrUserVerification):
@@ -201,7 +201,7 @@ func (s *Service) approversApprove(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"enrolled": cred.ID, "name": cred.Name})
 }
 
-// The Touch ID helper's enrolment form: what the Secure Enclave key it made
+// The Touch ID helper's enrollment form: what the Secure Enclave key it made
 // looks like on the wire.
 const (
 	// touchIDPublicKeyBytes is a raw uncompressed P-256 point: 0x04, X, Y.
@@ -211,15 +211,15 @@ const (
 	touchIDMaxSignatureBytes = 128
 )
 
-// approversTouchIDEnrol enrols the Touch ID helper's key: POST
-// /console/approvers/touchid/enrol with the code the owner typed into the
+// approversTouchIDEnroll enrolls the Touch ID helper's key: POST
+// /console/approvers/touchid/enroll with the code the owner typed into the
 // helper's dialog, the key's name, its public key, and its signature over
-// approval.TouchIDEnrolMessage(code, public key). The code is the proof --
+// approval.TouchIDEnrollMessage(code, public key). The code is the proof --
 // only `seamlessd approvers enroll-code touchid`, run as the daemon's account,
 // mints one -- and the signature shows the code's holder holds the key. It is
 // accepted on the peer_auth socket only, where the helper runs as the owner's
-// uid; the TCP key and the console cookie never enrol a Touch ID key.
-func (s *Service) approversTouchIDEnrol(w http.ResponseWriter, r *http.Request) {
+// uid; the TCP key and the console cookie never enroll a Touch ID key.
+func (s *Service) approversTouchIDEnroll(w http.ResponseWriter, r *http.Request) {
 	if s.approversOff(w, r) {
 		return
 	}
@@ -236,7 +236,7 @@ func (s *Service) approversTouchIDEnrol(w http.ResponseWriter, r *http.Request) 
 	}
 	code := strings.TrimSpace(r.PostForm.Get("code"))
 	if code == "" {
-		bad("a Touch ID key needs an enrolment code: mint one with `seamlessd approvers enroll-code touchid`, run as the daemon's account")
+		bad("a Touch ID key needs an enrollment code: mint one with `seamlessd approvers enroll-code touchid`, run as the daemon's account")
 		return
 	}
 	pub, err := base64.StdEncoding.Strict().DecodeString(r.PostForm.Get("public_key"))
@@ -246,21 +246,21 @@ func (s *Service) approversTouchIDEnrol(w http.ResponseWriter, r *http.Request) 
 	}
 	sig, err := base64.StdEncoding.Strict().DecodeString(r.PostForm.Get("signature"))
 	if err != nil || len(sig) == 0 || len(sig) > touchIDMaxSignatureBytes {
-		bad("signature must be the new key's ASN.1 DER signature over the enrolment message in standard base64")
+		bad("signature must be the new key's ASN.1 DER signature over the enrollment message in standard base64")
 		return
 	}
-	cred, err := s.cfg.Approvals.EnrolTouchID(r.Context(), name, code, pub, sig)
+	cred, err := s.cfg.Approvals.EnrollTouchID(r.Context(), name, code, pub, sig)
 	switch {
 	case err == nil:
 		writeJSON(w, http.StatusOK, map[string]any{"id": cred.ID, "name": cred.Name})
 	case errors.Is(err, approval.ErrTouchIDKey):
-		bad("the new key's signature over the enrolment code does not verify")
+		bad("the new key's signature over the enrollment code does not verify")
 	case errors.Is(err, store.ErrApproverExists):
 		bad("that Touch ID key is already enrolled")
 	case errors.Is(err, store.ErrInvalidApprover):
 		bad("give the Touch ID key a name of 1 to 64 characters on one line")
-	case errors.Is(err, store.ErrEnrolProof):
-		bad("a Touch ID key needs an enrolment code: mint one with `seamlessd approvers enroll-code touchid`, run as the daemon's account")
+	case errors.Is(err, store.ErrEnrollProof):
+		bad("a Touch ID key needs an enrollment code: mint one with `seamlessd approvers enroll-code touchid`, run as the daemon's account")
 	default:
 		s.approverError(w, r, err)
 	}
@@ -269,7 +269,7 @@ func (s *Service) approversTouchIDEnrol(w http.ResponseWriter, r *http.Request) 
 // approverAddedBy renders added_by for the list.
 func approverAddedBy(addedBy string, rows []store.ApproverCredential) string {
 	if addedBy == store.AddedByCode {
-		return "an enrolment code"
+		return "an enrollment code"
 	}
 	for _, r := range rows {
 		if r.ID == addedBy {

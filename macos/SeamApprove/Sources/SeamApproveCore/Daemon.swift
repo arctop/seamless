@@ -92,7 +92,7 @@ public struct AccessOne: Decodable {
     }
 }
 
-/// GET /console/access?format=json: the enrolment reads it for the daemon's
+/// GET /console/access?format=json: the enrollment reads it for the daemon's
 /// account before the owner types a code.
 public struct AccessList: Decodable {
     public var terminal: Terminal?
@@ -110,7 +110,7 @@ public struct Approved: Decodable {
     }
 }
 
-/// POST /console/approvers/touchid/enrol's answer.
+/// POST /console/approvers/touchid/enroll's answer.
 public struct Enrolled: Decodable {
     public var id: String?
     public var name: String?

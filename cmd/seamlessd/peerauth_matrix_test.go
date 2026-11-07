@@ -215,7 +215,7 @@ func newPADaemon(t *testing.T) *paDaemon {
 		Screening: screen,
 		Retrieve:  ret, APIKey: paKey, DataDir: dir, Features: feats, Level: "advanced",
 		// The Approvers routes are live here, so the crawl and the writes
-		// reach them: none may mint an enrolment code.
+		// reach them: none may mint an enrollment code.
 		Approvals: paApprovals(t, db),
 		Logger:    slog.New(slog.NewTextHandler(consoleLog, nil)),
 	})
@@ -803,11 +803,11 @@ func TestPeerAuthMatrix(t *testing.T) {
 	// sealed content is still absent from every console page.
 	t.Run("console GET routes after the probes", func(t *testing.T) { d.crawlConsole(t, false) })
 
-	// Enrolment codes are minted only by `seamlessd approvers enroll-code`,
+	// Enrollment codes are minted only by `seamlessd approvers enroll-code`,
 	// run as the daemon's account: after every route above, none exists.
-	t.Run("no route mints an enrolment code", func(t *testing.T) {
+	t.Run("no route mints an enrollment code", func(t *testing.T) {
 		var n int
-		require.NoError(t, d.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM approver_enrol_codes`).Scan(&n))
+		require.NoError(t, d.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM approver_enroll_codes`).Scan(&n))
 		require.Zero(t, n)
 	})
 }

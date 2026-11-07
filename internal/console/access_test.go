@@ -162,7 +162,7 @@ func TestAccess_RequestListAndFacts(t *testing.T) {
 func TestAccess_PasskeyApproveAndDeny(t *testing.T) {
 	f := newAccessFixture(t)
 	ctx := context.Background()
-	code, _, err := store.MintEnrolCode(ctx, f.db, store.ApproverPasskey, time.Now())
+	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverPasskey, time.Now())
 	require.NoError(t, err)
 	key, err := passkeytest.New(true)
 	require.NoError(t, err)

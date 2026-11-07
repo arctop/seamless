@@ -42,7 +42,7 @@ func TestApprovers_Verbs(t *testing.T) {
 	code := codeRe.FindString(out)
 	require.NotEmpty(t, code, out)
 	require.Contains(t, out, "http://localhost:9123/console/approvers", "the passkey page on the relying party's origin, never 127.0.0.1")
-	require.NoError(t, store.CheckEnrolCode(ctx, db, store.ApproverPasskey, code, now))
+	require.NoError(t, store.CheckEnrollCode(ctx, db, store.ApproverPasskey, code, now))
 
 	out, err = run("enroll-code", "touchid")
 	require.NoError(t, err)
@@ -54,7 +54,7 @@ func TestApprovers_Verbs(t *testing.T) {
 		require.Error(t, err, "%v", bad)
 	}
 
-	cred, err := store.EnrolApprover(ctx, db, store.ApproverCredential{
+	cred, err := store.EnrollApprover(ctx, db, store.ApproverCredential{
 		Kind: store.ApproverPasskey, CredentialID: []byte{1, 2, 3}, PublicKey: []byte{9}, Alg: -7, Name: "laptop",
 	}, code, "", now)
 	require.NoError(t, err)
@@ -63,7 +63,7 @@ func TestApprovers_Verbs(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, cred.ID)
 	require.Contains(t, out, `"laptop"`)
-	require.Contains(t, out, "an enrolment code")
+	require.Contains(t, out, "an enrollment code")
 
 	out, err = run("list", "--json")
 	require.NoError(t, err)
@@ -97,9 +97,9 @@ func TestApproverCheck(t *testing.T) {
 	require.Contains(t, c.detail, "only the terminal path")
 
 	now := time.Now()
-	code, _, err := store.MintEnrolCode(ctx, db, store.ApproverPasskey, now)
+	code, _, err := store.MintEnrollCode(ctx, db, store.ApproverPasskey, now)
 	require.NoError(t, err)
-	_, err = store.EnrolApprover(ctx, db, store.ApproverCredential{
+	_, err = store.EnrollApprover(ctx, db, store.ApproverCredential{
 		Kind: store.ApproverPasskey, CredentialID: []byte{1}, PublicKey: []byte{9}, Alg: -7, Name: "key",
 	}, code, "", now)
 	require.NoError(t, err)

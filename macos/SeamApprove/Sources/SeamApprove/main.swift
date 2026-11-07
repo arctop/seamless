@@ -2,7 +2,7 @@ import AppKit
 import SeamApproveCore
 import SystemConfiguration
 
-// Seamless Approve: one approval, one enrolment or one forget per launch.
+// Seamless Approve: one approval, one enrollment or one forget per launch.
 //
 //   approve --socket <path> --request <id> --for <duration>
 //   enroll  --socket <path> [--name <label>]

@@ -43,12 +43,12 @@ func newFixture(t *testing.T) *fixture {
 
 func (f *fixture) code(t *testing.T, kind string) string {
 	t.Helper()
-	code, _, err := store.MintEnrolCode(context.Background(), f.db, kind, f.now)
+	code, _, err := store.MintEnrollCode(context.Background(), f.db, kind, f.now)
 	require.NoError(t, err)
 	return code
 }
 
-func (f *fixture) enrolWithCode(t *testing.T, a *passkeytest.Authenticator, name string) store.ApproverCredential {
+func (f *fixture) enrollWithCode(t *testing.T, a *passkeytest.Authenticator, name string) store.ApproverCredential {
 	t.Helper()
 	ctx := context.Background()
 	begun, err := f.svc.BeginPasskey(ctx, name, f.code(t, store.ApproverPasskey))
@@ -62,12 +62,12 @@ func (f *fixture) enrolWithCode(t *testing.T, a *passkeytest.Authenticator, name
 	return *fin.Credential
 }
 
-func TestPasskeyEnrolment_WithACode(t *testing.T) {
+func TestPasskeyEnrollment_WithACode(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	a, err := passkeytest.New(true)
 	require.NoError(t, err)
-	cred := f.enrolWithCode(t, a, "security key")
+	cred := f.enrollWithCode(t, a, "security key")
 	require.Equal(t, store.ApproverPasskey, cred.Kind)
 	require.Equal(t, store.AddedByCode, cred.AddedBy)
 	require.Equal(t, a.CredentialID(), cred.CredentialID)
@@ -104,16 +104,16 @@ func TestPasskeyEnrolment_WithACode(t *testing.T) {
 	require.Error(t, err, "the same authenticator is refused by its own exclusion")
 }
 
-func TestPasskeyEnrolment_CodeRules(t *testing.T) {
+func TestPasskeyEnrollment_CodeRules(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
 	_, err := f.svc.BeginPasskey(ctx, "key", "")
-	require.ErrorIs(t, err, store.ErrEnrolProof, "the first passkey needs a code")
+	require.ErrorIs(t, err, store.ErrEnrollProof, "the first passkey needs a code")
 	_, err = f.svc.BeginPasskey(ctx, "key", "AAAA-BBBB-CCCC-DDDD")
-	require.ErrorIs(t, err, store.ErrEnrolCode, "an absent code is refused before the authenticator is touched")
+	require.ErrorIs(t, err, store.ErrEnrollCode, "an absent code is refused before the authenticator is touched")
 	_, err = f.svc.BeginPasskey(ctx, "key", f.code(t, store.ApproverTouchID))
-	require.ErrorIs(t, err, store.ErrEnrolCode, "a Touch ID code does not enrol a passkey")
+	require.ErrorIs(t, err, store.ErrEnrollCode, "a Touch ID code does not enroll a passkey")
 	_, err = f.svc.BeginPasskey(ctx, "", f.code(t, store.ApproverPasskey))
 	require.ErrorIs(t, err, store.ErrInvalidApprover, "a name is required")
 
@@ -121,25 +121,25 @@ func TestPasskeyEnrolment_CodeRules(t *testing.T) {
 	a, err := passkeytest.New(false)
 	require.NoError(t, err)
 	late := f.code(t, store.ApproverPasskey)
-	f.now = t0.Add(store.EnrolCodeTTL - time.Minute)
+	f.now = t0.Add(store.EnrollCodeTTL - time.Minute)
 	begun, err := f.svc.BeginPasskey(ctx, "key", late)
 	require.NoError(t, err)
 	resp, err := a.Create(begun.Options, origin)
 	require.NoError(t, err)
-	f.now = t0.Add(store.EnrolCodeTTL)
+	f.now = t0.Add(store.EnrollCodeTTL)
 	_, err = f.svc.FinishPasskey(ctx, begun.ID, resp)
-	require.ErrorIs(t, err, store.ErrEnrolCode)
+	require.ErrorIs(t, err, store.ErrEnrollCode)
 
-	// An enrolment left waiting longer than EnrolTTL is gone.
+	// An enrollment left waiting longer than EnrollTTL is gone.
 	begun, err = f.svc.BeginPasskey(ctx, "key", f.code(t, store.ApproverPasskey))
 	require.NoError(t, err)
 	resp, err = a.Create(begun.Options, origin)
 	require.NoError(t, err)
-	f.now = f.now.Add(EnrolTTL)
+	f.now = f.now.Add(EnrollTTL)
 	_, err = f.svc.FinishPasskey(ctx, begun.ID, resp)
-	require.ErrorIs(t, err, ErrNoEnrolment)
+	require.ErrorIs(t, err, ErrNoEnrollment)
 
-	// A reused code: the second enrolment with it fails at begin.
+	// A reused code: the second enrollment with it fails at begin.
 	f.now = t0.Add(time.Hour)
 	code := f.code(t, store.ApproverPasskey)
 	begun, err = f.svc.BeginPasskey(ctx, "key", code)
@@ -149,16 +149,16 @@ func TestPasskeyEnrolment_CodeRules(t *testing.T) {
 	_, err = f.svc.FinishPasskey(ctx, begun.ID, resp)
 	require.NoError(t, err)
 	_, err = f.svc.BeginPasskey(ctx, "again", code)
-	require.ErrorIs(t, err, store.ErrEnrolCode)
+	require.ErrorIs(t, err, store.ErrEnrollCode)
 
-	// An enrolment is finished once.
+	// An enrollment is finished once.
 	_, err = f.svc.FinishPasskey(ctx, begun.ID, resp)
-	require.ErrorIs(t, err, ErrNoEnrolment)
+	require.ErrorIs(t, err, ErrNoEnrollment)
 	_, err = f.svc.FinishPasskey(ctx, "never-begun", resp)
-	require.ErrorIs(t, err, ErrNoEnrolment)
+	require.ErrorIs(t, err, ErrNoEnrollment)
 }
 
-func TestPasskeyEnrolment_WrongOriginIsRefused(t *testing.T) {
+func TestPasskeyEnrollment_WrongOriginIsRefused(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	a, err := passkeytest.New(false)
@@ -176,12 +176,12 @@ func TestPasskeyEnrolment_WrongOriginIsRefused(t *testing.T) {
 
 // A second passkey without a code: it is created, then an existing passkey
 // approves it over a challenge that binds the new credential.
-func TestPasskeyEnrolment_ApprovedByAnExistingPasskey(t *testing.T) {
+func TestPasskeyEnrollment_ApprovedByAnExistingPasskey(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	first, err := passkeytest.New(true)
 	require.NoError(t, err)
-	firstRow := f.enrolWithCode(t, first, "security key")
+	firstRow := f.enrollWithCode(t, first, "security key")
 
 	second, err := passkeytest.New(false)
 	require.NoError(t, err)
@@ -213,17 +213,17 @@ func TestPasskeyEnrolment_ApprovedByAnExistingPasskey(t *testing.T) {
 	require.NotNil(t, approver.LastUsedAt)
 
 	_, err = f.svc.ApprovePasskey(ctx, begun.ID, assertion)
-	require.ErrorIs(t, err, ErrNoEnrolment, "an approval is used once")
+	require.ErrorIs(t, err, ErrNoEnrollment, "an approval is used once")
 }
 
-// An approval made for one enrolment does not approve another: the
-// challenge binds the enrolment and the new credential.
-func TestPasskeyEnrolment_ApprovalIsBoundToItsEnrolment(t *testing.T) {
+// An approval made for one enrollment does not approve another: the
+// challenge binds the enrollment and the new credential.
+func TestPasskeyEnrollment_ApprovalIsBoundToItsEnrollment(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	first, err := passkeytest.New(false)
 	require.NoError(t, err)
-	f.enrolWithCode(t, first, "key")
+	f.enrollWithCode(t, first, "key")
 
 	start := func(a *passkeytest.Authenticator) (string, json.RawMessage) {
 		begun, err := f.svc.BeginPasskey(ctx, "new", "")
@@ -244,15 +244,15 @@ func TestPasskeyEnrolment_ApprovalIsBoundToItsEnrolment(t *testing.T) {
 	assertionForB, err := first.Get(approveB, origin)
 	require.NoError(t, err)
 	_, err = f.svc.ApprovePasskey(ctx, idC, assertionForB)
-	require.ErrorIs(t, err, passkey.ErrVerification, "B's approval does not enrol C")
+	require.ErrorIs(t, err, passkey.ErrVerification, "B's approval does not enroll C")
 	_, err = f.svc.ApprovePasskey(ctx, idC, assertionForB)
-	require.ErrorIs(t, err, ErrNoEnrolment, "a failed approval ends that enrolment: one attempt each")
+	require.ErrorIs(t, err, ErrNoEnrollment, "a failed approval ends that enrollment: one attempt each")
 	added, err := f.svc.ApprovePasskey(ctx, idB, assertionForB)
-	require.NoError(t, err, "B's approval still enrols B")
+	require.NoError(t, err, "B's approval still enrolls B")
 	require.Equal(t, b.CredentialID(), added.CredentialID)
 }
 
-func TestEnrolTouchID(t *testing.T) {
+func TestEnrollTouchID(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -269,24 +269,24 @@ func TestEnrolTouchID(t *testing.T) {
 
 	other, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	_, err = f.svc.EnrolTouchID(ctx, "this Mac", code, pub, signFor(other, TouchIDEnrolMessage(code, pub)))
+	_, err = f.svc.EnrollTouchID(ctx, "this Mac", code, pub, signFor(other, TouchIDEnrollMessage(code, pub)))
 	require.ErrorIs(t, err, ErrTouchIDKey, "proof by another key")
-	_, err = f.svc.EnrolTouchID(ctx, "this Mac", code, pub, signFor(key, TouchIDEnrolMessage("WRONG-CODE", pub)))
+	_, err = f.svc.EnrollTouchID(ctx, "this Mac", code, pub, signFor(key, TouchIDEnrollMessage("WRONG-CODE", pub)))
 	require.ErrorIs(t, err, ErrTouchIDKey, "a proof over another code")
-	_, err = f.svc.EnrolTouchID(ctx, "this Mac", code, []byte{4, 1, 2}, []byte{1})
+	_, err = f.svc.EnrollTouchID(ctx, "this Mac", code, []byte{4, 1, 2}, []byte{1})
 	require.ErrorIs(t, err, ErrTouchIDKey, "not a P-256 point")
-	_, err = f.svc.EnrolTouchID(ctx, "this Mac", f.code(t, store.ApproverPasskey), pub, signFor(key, TouchIDEnrolMessage(code, pub)))
+	_, err = f.svc.EnrollTouchID(ctx, "this Mac", f.code(t, store.ApproverPasskey), pub, signFor(key, TouchIDEnrollMessage(code, pub)))
 	require.Error(t, err)
 
-	cred, err := f.svc.EnrolTouchID(ctx, "this Mac", code, pub, signFor(key, TouchIDEnrolMessage(code, pub)))
+	cred, err := f.svc.EnrollTouchID(ctx, "this Mac", code, pub, signFor(key, TouchIDEnrollMessage(code, pub)))
 	require.NoError(t, err)
 	require.Equal(t, store.ApproverTouchID, cred.Kind)
 	require.Equal(t, pub, cred.PublicKey)
 	sum := sha256.Sum256(pub)
 	require.Equal(t, sum[:], cred.CredentialID)
 
-	_, err = f.svc.EnrolTouchID(ctx, "this Mac", code, pub, signFor(key, TouchIDEnrolMessage(code, pub)))
-	require.ErrorIs(t, err, store.ErrEnrolCode, "single use")
+	_, err = f.svc.EnrollTouchID(ctx, "this Mac", code, pub, signFor(key, TouchIDEnrollMessage(code, pub)))
+	require.ErrorIs(t, err, store.ErrEnrollCode, "single use")
 	require.NoError(t, VerifyTouchID(pub, []byte("hello"), signFor(key, []byte("hello"))))
 }
 

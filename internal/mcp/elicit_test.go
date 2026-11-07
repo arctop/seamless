@@ -234,18 +234,18 @@ func sign(t *testing.T, key *ecdsa.PrivateKey, msg []byte) []byte {
 	return sig
 }
 
-// enrolTouchID enrols a key with a one-time code, as `seamlessd approvers
-// enroll-code` and the helper's enrolment do.
-func (d *dialogRig) enrolTouchID() touchKey {
+// enrollTouchID enrolls a key with a one-time code, as `seamlessd approvers
+// enroll-code` and the helper's enrollment do.
+func (d *dialogRig) enrollTouchID() touchKey {
 	d.t.Helper()
 	ctx := context.Background()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(d.t, err)
 	pub, err := key.PublicKey.Bytes()
 	require.NoError(d.t, err)
-	code, _, err := store.MintEnrolCode(ctx, d.db, store.ApproverTouchID, d.clock())
+	code, _, err := store.MintEnrollCode(ctx, d.db, store.ApproverTouchID, d.clock())
 	require.NoError(d.t, err)
-	cred, err := d.svc.EnrolTouchID(ctx, "this Mac", code, pub, sign(d.t, key, approval.TouchIDEnrolMessage(code, pub)))
+	cred, err := d.svc.EnrollTouchID(ctx, "this Mac", code, pub, sign(d.t, key, approval.TouchIDEnrollMessage(code, pub)))
 	require.NoError(d.t, err)
 	return touchKey{key: key, cred: cred}
 }
@@ -369,7 +369,7 @@ func TestDialog_TouchIDProofApproves(t *testing.T) {
 	d := newDialogRig(t, dialogOpts{wait: dlgLong})
 	d.seed()
 	d.session("cc/fin", lkFin)
-	key := d.enrolTouchID()
+	key := d.enrollTouchID()
 	o := newOwner(accepting(approval.For1h, approval.ProofTouchID))
 	agent := d.dialOwner(d.agentSocket(), o, nil)
 
@@ -435,7 +435,7 @@ func TestDialog_AcceptWithoutProofGrantsNothing(t *testing.T) {
 	d := newDialogRig(t, dialogOpts{wait: 800 * time.Millisecond})
 	d.seed()
 	d.session("cc/fin", lkFin)
-	d.enrolTouchID()
+	d.enrollTouchID()
 	o := newOwner(accepting(approval.ForSession, approval.ProofTouchID))
 	agent := d.dialOwner(d.agentSocket(), o, nil)
 
@@ -467,7 +467,7 @@ func TestDialog_DeclineOrCancelLeavesThePendingRequest(t *testing.T) {
 		t.Run(c.word, func(t *testing.T) {
 			d := newDialogRig(t, dialogOpts{wait: dlgLong})
 			d.session("cc/fin", lkFin)
-			d.enrolTouchID()
+			d.enrollTouchID()
 			o := newOwner(answerWith(c.action, nil))
 			agent := d.dialOwner(d.agentSocket(), o, nil)
 
@@ -490,7 +490,7 @@ func TestDialog_DeclineOrCancelLeavesThePendingRequest(t *testing.T) {
 func TestDialog_ClientCancelEndsTheWait(t *testing.T) {
 	d := newDialogRig(t, dialogOpts{wait: dlgLong})
 	d.session("cc/fin", lkFin)
-	d.enrolTouchID()
+	d.enrollTouchID()
 	var n atomic.Int32
 	o := newOwner(func(ctx context.Context, req mcp.ElicitationRequest) (*mcp.ElicitationResult, error) {
 		if n.Add(1) == 1 {
@@ -539,7 +539,7 @@ func TestDialog_PreconditionsElseTheTextPath(t *testing.T) {
 	t.Run("client without the capability", func(t *testing.T) {
 		d := newDialogRig(t, dialogOpts{wait: dlgLong})
 		d.session("cc/fin", lkFin)
-		d.enrolTouchID()
+		d.enrollTouchID()
 		plainRefusal(t, d.refused(d.dialOwner(d.agentSocket(), nil, nil), "tasks_list", nil))
 		require.Zero(t, d.tap.count())
 	})
@@ -554,7 +554,7 @@ func TestDialog_PreconditionsElseTheTextPath(t *testing.T) {
 	t.Run("a passkey needs a client that opens URLs", func(t *testing.T) {
 		d := newDialogRig(t, dialogOpts{wait: dlgLong, passkeys: true})
 		d.session("cc/fin", lkFin)
-		d.enrolPasskey()
+		d.enrollPasskey()
 		o := newOwner(accepting(approval.ForSession, approval.ProofPasskey))
 		plainRefusal(t, d.refused(d.dialOwner(d.agentSocket(), o, nil), "tasks_list", nil))
 		require.Zero(t, d.tap.count())
@@ -562,7 +562,7 @@ func TestDialog_PreconditionsElseTheTextPath(t *testing.T) {
 	t.Run("the TCP key", func(t *testing.T) {
 		d := newDialogRig(t, dialogOpts{wait: dlgLong})
 		d.session("cc/fin", lkFin)
-		d.enrolTouchID()
+		d.enrollTouchID()
 		o := newOwner(accepting(approval.ForSession, approval.ProofTouchID))
 		tcp := d.dialOwner(d.listen(func() (access.View, bool) { return d.policy.OwnerView(), true }), o, nil)
 		text := d.refused(tcp, "tasks_list", nil)
@@ -579,7 +579,7 @@ func TestDialog_PreconditionsElseTheTextPath(t *testing.T) {
 func TestDialog_AnotherConnectionsAnswerGrantsNothing(t *testing.T) {
 	d := newDialogRig(t, dialogOpts{wait: 1500 * time.Millisecond})
 	d.session("cc/fin", lkFin)
-	d.enrolTouchID()
+	d.enrollTouchID()
 	o := newOwner(func(ctx context.Context, _ mcp.ElicitationRequest) (*mcp.ElicitationResult, error) {
 		<-ctx.Done() // the agent's own client never answers
 		return nil, ctx.Err()
@@ -622,13 +622,13 @@ func TestDialog_AnotherConnectionsAnswerGrantsNothing(t *testing.T) {
 	require.Len(t, d.pending(), 1)
 }
 
-// enrolPasskey enrols a virtual authenticator as the owner's passkey.
-func (d *dialogRig) enrolPasskey() *passkeytest.Authenticator {
+// enrollPasskey enrolls a virtual authenticator as the owner's passkey.
+func (d *dialogRig) enrollPasskey() *passkeytest.Authenticator {
 	d.t.Helper()
 	ctx := context.Background()
 	a, err := passkeytest.New(true)
 	require.NoError(d.t, err)
-	code, _, err := store.MintEnrolCode(ctx, d.db, store.ApproverPasskey, d.clock())
+	code, _, err := store.MintEnrollCode(ctx, d.db, store.ApproverPasskey, d.clock())
 	require.NoError(d.t, err)
 	begun, err := d.svc.BeginPasskey(ctx, "security key", code)
 	require.NoError(d.t, err)
@@ -672,9 +672,9 @@ func TestDialog_PasskeyPage(t *testing.T) {
 			d := newDialogRig(t, dialogOpts{wait: dlgLong, passkeys: true})
 			d.seed()
 			d.session("cc/fin", lkFin)
-			auth := d.enrolPasskey()
+			auth := d.enrollPasskey()
 			if withTouchID {
-				d.enrolTouchID()
+				d.enrollTouchID()
 			}
 			type opened struct{ url, id string }
 			pages := make(chan opened, 1)
@@ -734,7 +734,7 @@ func TestDialog_ReadGrantRequest(t *testing.T) {
 	var note map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &note))
 	d.session("cc/ops", lkOps)
-	key := d.enrolTouchID()
+	key := d.enrollTouchID()
 	o := newOwner(accepting(approval.ForSession, approval.ProofTouchID))
 	agent := d.dialOwner(d.agentSocket(), o, nil)
 
@@ -862,7 +862,7 @@ func TestAccessRequest_TextPathAndBoundary(t *testing.T) {
 func TestAccessRequest_DialogShowsTheReasonAsTheAgents(t *testing.T) {
 	d := newDialogRig(t, dialogOpts{wait: dlgLong})
 	d.session("cc/fin", lkFin)
-	d.enrolTouchID()
+	d.enrollTouchID()
 	o := newOwner(answerWith(mcp.ElicitationResponseActionDecline, nil))
 	agent := d.dialOwner(d.agentSocket(), o, nil)
 

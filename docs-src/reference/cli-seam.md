@@ -506,7 +506,7 @@ longer pending (and 2, as everywhere, for a command line it cannot parse).
 seam touchid enroll [--app PATH] [--name NAME]
 ```
 
-Installs the Touch ID approver, Seamless Approve, and enrols its key. macOS
+Installs the Touch ID approver, Seamless Approve, and enrolls its key. macOS
 only, in the owner's own terminal, with `server_url: unix:///path` naming the
 `peer_auth` socket; nothing installs or launches the app unless you run this.
 
@@ -520,7 +520,7 @@ release asset must also pass Gatekeeper. It is installed at
 `~/Applications/Seamless Approve.app`, replacing an existing copy only after
 a y/N.
 
-It then prints the command that mints a one-time enrolment code as the
+It then prints the command that mints a one-time enrollment code as the
 daemon's account:
 
 ```bash

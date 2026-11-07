@@ -47,7 +47,7 @@ public enum Outcome: Equatable {
 
 /// One key in the store: `handle` names it to the store (the keychain
 /// item's application label, a hash of its public key), and `credential` is
-/// the approver id the daemon returned at enrolment, or nil while the key
+/// the approver id the daemon returned at enrollment, or nil while the key
 /// is not enrolled.
 public struct StoredKey: Equatable {
     public let handle: Data
@@ -80,9 +80,9 @@ public protocol KeyStore {
 
 /// What the flows ask the owner, in the helper's own dialogs.
 public protocol ApproverUI {
-    /// `enrolCode` asks for the one-time code; nil is a cancel. `problem`
+    /// `enrollCode` asks for the one-time code; nil is a cancel. `problem`
     /// says what was wrong with the last one typed.
-    func enrolCode(command: String, problem: String?) -> String?
+    func enrollCode(command: String, problem: String?) -> String?
     /// `confirmForget` asks before the key is deleted.
     func confirmForget(credentials: [String]) -> Bool
 }
@@ -157,8 +157,8 @@ public struct Flows {
     // MARK: enroll
 
     /// `enroll` checks the socket is the daemon's, asks the owner for the
-    /// enrolment code in the helper's own dialog, creates a key, signs
-    /// TouchIDEnrolMessage with it and registers it. A key that does not end
+    /// enrollment code in the helper's own dialog, creates a key, signs
+    /// TouchIDEnrollMessage with it and registers it. A key that does not end
     /// up enrolled is deleted; an older key is replaced once the new one is.
     public func enroll(name: String?) -> Outcome {
         Flows.run {
@@ -170,7 +170,7 @@ public struct Flows {
             let account = try Plan.daemonAccount(list.terminal)
             try requireAccount(account, isPeer: got.peerUID, lookup: lookupAccount)
 
-            let code = try askCode(enrolCommand(list.terminal, account: account))
+            let code = try askCode(enrollCommand(list.terminal, account: account))
             let label = name ?? Arguments.defaultApproverName(defaultName())
 
             let older = try keys.keys()
@@ -181,20 +181,20 @@ public struct Flows {
                     try? keys.delete(key)
                 }
             }
-            let message = try Messages.touchIDEnrolMessage(code: code, publicKey: publicKey)
+            let message = try Messages.touchIDEnrollMessage(code: code, publicKey: publicKey)
             let signature: Data
             do {
-                signature = try keys.sign(message, with: key, reason: Reason.enrolment(account: account))
+                signature = try keys.sign(message, with: key, reason: Reason.enrollment(account: account))
             } catch ApproverError.cancelled {
                 throw ApproverError.cancelled("Not enrolled: the Touch ID prompt was cancelled.")
             }
-            let sent = try transport.exchange(HTTPRequest(method: "POST", path: "/console/approvers/touchid/enrol?format=json", form: [
+            let sent = try transport.exchange(HTTPRequest(method: "POST", path: "/console/approvers/touchid/enroll?format=json", form: [
                 FormField("code", code),
                 FormField("name", label),
                 FormField("public_key", publicKey.base64EncodedString()),
                 FormField("signature", signature.base64EncodedString()),
             ]))
-            let ok: Enrolled = try decode(sent.response, what: "the enrolment")
+            let ok: Enrolled = try decode(sent.response, what: "the enrollment")
             guard let id = ok.id, Validate.isCredentialID(id) else {
                 throw ApproverError.daemon("the daemon enrolled the key but returned no usable approver id")
             }
@@ -218,27 +218,27 @@ public struct Flows {
     func askCode(_ command: String) throws -> String {
         var problem: String?
         for _ in 0..<5 {
-            guard let typed = ui.enrolCode(command: command, problem: problem) else {
+            guard let typed = ui.enrollCode(command: command, problem: problem) else {
                 throw ApproverError.cancelled("Not enrolled: cancelled.")
             }
             let normalized: String
             do {
-                normalized = try Messages.normalizeEnrolCode(typed)
+                normalized = try Messages.normalizeEnrollCode(typed)
             } catch {
-                problem = "An enrolment code holds only letters, digits and dashes."
+                problem = "An enrollment code holds only letters, digits and dashes."
                 continue
             }
-            if Messages.isEnrolCode(normalized) {
+            if Messages.isEnrollCode(normalized) {
                 return normalized
             }
-            problem = "That is not an enrolment code: it has 16 letters and digits, as XXXX-XXXX-XXXX-XXXX."
+            problem = "That is not an enrollment code: it has 16 letters and digits, as XXXX-XXXX-XXXX-XXXX."
         }
-        throw ApproverError.refused("Not enrolled: no valid enrolment code was typed.")
+        throw ApproverError.refused("Not enrolled: no valid enrollment code was typed.")
     }
 
     /// The command that mints a Touch ID code, as `seam approve` would run
     /// the daemon's seamlessd (cmd/seam/approve.go sudoArgv).
-    func enrolCommand(_ t: Terminal?, account: String) -> String {
+    func enrollCommand(_ t: Terminal?, account: String) -> String {
         var parts = ["sudo -k -u", account]
         if let config = t?.config, config.hasPrefix("/") {
             parts.append("env SEAMLESS_CONFIG=" + Text.clean(config, max: 120))
@@ -287,7 +287,7 @@ public struct Flows {
         case 1:
             return enrolled[0]
         default:
-            // seam has no forget command; a new enrolment deletes every older
+            // seam has no forget command; a new enrollment deletes every older
             // key once the new one is enrolled (enroll, below).
             throw ApproverError.keyStore("Several Touch ID approver keys are stored on this Mac: run seam touchid enroll again, which keeps only the new key.")
         }

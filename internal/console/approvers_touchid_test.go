@@ -82,15 +82,15 @@ func (f *accessFixture) socketJSON(t *testing.T, req *http.Request) (int, map[st
 	return f.jsonDo(t, f.asOwnerSocket(t, req))
 }
 
-// enrolTouch enrols k over the socket with a fresh touchid code and returns
+// enrollTouch enrolls k over the socket with a fresh touchid code and returns
 // the credential's id.
-func (f *accessFixture) enrolTouch(t *testing.T, k touchKey, name string) string {
+func (f *accessFixture) enrollTouch(t *testing.T, k touchKey, name string) string {
 	t.Helper()
-	code, _, err := store.MintEnrolCode(context.Background(), f.db, store.ApproverTouchID, time.Now())
+	code, _, err := store.MintEnrollCode(context.Background(), f.db, store.ApproverTouchID, time.Now())
 	require.NoError(t, err)
-	status, out := f.socketJSON(t, formPost("/console/approvers/touchid/enrol", url.Values{
+	status, out := f.socketJSON(t, formPost("/console/approvers/touchid/enroll", url.Values{
 		"code": {code}, "name": {name}, "public_key": {base64.StdEncoding.EncodeToString(k.pub)},
-		"signature": {k.sign(t, approval.TouchIDEnrolMessage(code, k.pub))},
+		"signature": {k.sign(t, approval.TouchIDEnrollMessage(code, k.pub))},
 	}))
 	require.Equal(t, http.StatusOK, status, string(out["error"]))
 	var id, got string
@@ -136,11 +136,11 @@ func errorOf(t *testing.T, out map[string]json.RawMessage) string {
 	return msg
 }
 
-func TestTouchID_EnrolOverTheSocket(t *testing.T) {
+func TestTouchID_EnrollOverTheSocket(t *testing.T) {
 	f := newAccessFixture(t)
 	ctx := context.Background()
 	k := newTouchKey(t)
-	id := f.enrolTouch(t, k, "Touch ID on laptop")
+	id := f.enrollTouch(t, k, "Touch ID on laptop")
 
 	// The approvers JSON lists it, which is how seam touchid enroll confirms it.
 	status, out := f.socketJSON(t, httptest.NewRequest(http.MethodGet, "/console/approvers?format=json", nil))
@@ -162,28 +162,28 @@ func TestTouchID_EnrolOverTheSocket(t *testing.T) {
 	require.Contains(t, page, "seam touchid enroll")
 
 	// The same key again, with a fresh code: already enrolled.
-	code, _, err := store.MintEnrolCode(ctx, f.db, store.ApproverTouchID, time.Now())
+	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverTouchID, time.Now())
 	require.NoError(t, err)
-	status, out = f.socketJSON(t, formPost("/console/approvers/touchid/enrol", url.Values{
+	status, out = f.socketJSON(t, formPost("/console/approvers/touchid/enroll", url.Values{
 		"code": {code}, "name": {"again"}, "public_key": {base64.StdEncoding.EncodeToString(k.pub)},
-		"signature": {k.sign(t, approval.TouchIDEnrolMessage(code, k.pub))},
+		"signature": {k.sign(t, approval.TouchIDEnrollMessage(code, k.pub))},
 	}))
 	require.Equal(t, http.StatusBadRequest, status)
 	require.Contains(t, errorOf(t, out), "already enrolled")
 }
 
-func TestTouchID_EnrolRefusals(t *testing.T) {
+func TestTouchID_EnrollRefusals(t *testing.T) {
 	f := newAccessFixture(t)
 	ctx := context.Background()
 	k, other := newTouchKey(t), newTouchKey(t)
-	code, _, err := store.MintEnrolCode(ctx, f.db, store.ApproverTouchID, time.Now())
+	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverTouchID, time.Now())
 	require.NoError(t, err)
-	passkeyCode, _, err := store.MintEnrolCode(ctx, f.db, store.ApproverPasskey, time.Now())
+	passkeyCode, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverPasskey, time.Now())
 	require.NoError(t, err)
 	pub := base64.StdEncoding.EncodeToString(k.pub)
 	good := func() url.Values {
 		return url.Values{"code": {code}, "name": {"laptop"}, "public_key": {pub},
-			"signature": {k.sign(t, approval.TouchIDEnrolMessage(code, k.pub))}}
+			"signature": {k.sign(t, approval.TouchIDEnrollMessage(code, k.pub))}}
 	}
 	with := func(key, val string) url.Values {
 		v := good()
@@ -195,21 +195,21 @@ func TestTouchID_EnrolRefusals(t *testing.T) {
 		form url.Values
 		want string
 	}{
-		{"no code", with("code", ""), "needs an enrolment code"},
+		{"no code", with("code", ""), "needs an enrollment code"},
 		{"a wrong code", url.Values{"code": {"AAAA-BBBB-CCCC-DDDD"}, "name": {"laptop"}, "public_key": {pub},
-			"signature": {k.sign(t, approval.TouchIDEnrolMessage("AAAA-BBBB-CCCC-DDDD", k.pub))}}, "not valid"},
+			"signature": {k.sign(t, approval.TouchIDEnrollMessage("AAAA-BBBB-CCCC-DDDD", k.pub))}}, "not valid"},
 		{"a passkey's code", url.Values{"code": {passkeyCode}, "name": {"laptop"}, "public_key": {pub},
-			"signature": {k.sign(t, approval.TouchIDEnrolMessage(passkeyCode, k.pub))}}, "not valid"},
+			"signature": {k.sign(t, approval.TouchIDEnrollMessage(passkeyCode, k.pub))}}, "not valid"},
 		{"no name", with("name", " "), "a name of 1 to 64 characters"},
 		{"a name on two lines", with("name", "a\nb"), "a name of 1 to 64 characters"},
 		{"a public key that is not base64", with("public_key", "not*base64"), "65-byte uncompressed P-256 point"},
 		{"a public key of the wrong length", with("public_key", base64.StdEncoding.EncodeToString(k.pub[:33])), "65-byte uncompressed P-256 point"},
 		{"a signature that is not base64", with("signature", "%%%"), "standard base64"},
 		{"no signature", with("signature", ""), "standard base64"},
-		{"a signature by another key", with("signature", other.sign(t, approval.TouchIDEnrolMessage(code, k.pub))), "does not verify"},
-		{"a signature over another code", with("signature", k.sign(t, approval.TouchIDEnrolMessage("ZZZZ-ZZZZ-ZZZZ-ZZZZ", k.pub))), "does not verify"},
+		{"a signature by another key", with("signature", other.sign(t, approval.TouchIDEnrollMessage(code, k.pub))), "does not verify"},
+		{"a signature over another code", with("signature", k.sign(t, approval.TouchIDEnrollMessage("ZZZZ-ZZZZ-ZZZZ-ZZZZ", k.pub))), "does not verify"},
 	} {
-		status, out := f.socketJSON(t, formPost("/console/approvers/touchid/enrol", tc.form))
+		status, out := f.socketJSON(t, formPost("/console/approvers/touchid/enroll", tc.form))
 		require.Equal(t, http.StatusBadRequest, status, tc.name)
 		require.Contains(t, errorOf(t, out), tc.want, tc.name)
 	}
@@ -217,11 +217,11 @@ func TestTouchID_EnrolRefusals(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, n, "nothing refused was enrolled")
 
-	// Off the socket: the TCP key, and a browser's cookie, never enrol one.
-	status, out := f.jsonDo(t, f.asOwnerTCP(formPost("/console/approvers/touchid/enrol", good())))
+	// Off the socket: the TCP key, and a browser's cookie, never enroll one.
+	status, out := f.jsonDo(t, f.asOwnerTCP(formPost("/console/approvers/touchid/enroll", good())))
 	require.Equal(t, http.StatusForbidden, status)
 	require.Contains(t, errorOf(t, out), "peer_auth socket only")
-	req := formPost("/console/approvers/touchid/enrol", good())
+	req := formPost("/console/approvers/touchid/enroll", good())
 	req.AddCookie(&http.Cookie{Name: cookieName, Value: consoleToken(testKey)})
 	rr := do(f.mux, req)
 	require.Equal(t, http.StatusForbidden, rr.Code, "a cookie POST without Origin is refused as every console write is")
@@ -229,24 +229,24 @@ func TestTouchID_EnrolRefusals(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, n)
 
-	// The code was never consumed by a refusal: the good form still enrols.
-	status, out = f.socketJSON(t, formPost("/console/approvers/touchid/enrol", good()))
+	// The code was never consumed by a refusal: the good form still enrolls.
+	status, out = f.socketJSON(t, formPost("/console/approvers/touchid/enroll", good()))
 	require.Equal(t, http.StatusOK, status, string(out["error"]))
 	// And a code works once.
 	other2 := newTouchKey(t)
-	status, out = f.socketJSON(t, formPost("/console/approvers/touchid/enrol", url.Values{"code": {code}, "name": {"second"},
-		"public_key": {base64.StdEncoding.EncodeToString(other2.pub)}, "signature": {other2.sign(t, approval.TouchIDEnrolMessage(code, other2.pub))}}))
+	status, out = f.socketJSON(t, formPost("/console/approvers/touchid/enroll", url.Values{"code": {code}, "name": {"second"},
+		"public_key": {base64.StdEncoding.EncodeToString(other2.pub)}, "signature": {other2.sign(t, approval.TouchIDEnrollMessage(code, other2.pub))}}))
 	require.Equal(t, http.StatusBadRequest, status)
 	require.Contains(t, errorOf(t, out), "already used")
 
 	var codes int
-	require.NoError(t, f.db.QueryRow(`SELECT COUNT(*) FROM approver_enrol_codes`).Scan(&codes))
+	require.NoError(t, f.db.QueryRow(`SELECT COUNT(*) FROM approver_enroll_codes`).Scan(&codes))
 	require.Equal(t, 2, codes, "the route consumed a code and minted none")
 }
 
-func TestTouchID_EnrolOffIsNotFound(t *testing.T) {
+func TestTouchID_EnrollOffIsNotFound(t *testing.T) {
 	_, mux := newConsole(t)
-	rr := do(mux, authedReq(formPost("/console/approvers/touchid/enrol", url.Values{"code": {"x"}})))
+	rr := do(mux, authedReq(formPost("/console/approvers/touchid/enroll", url.Values{"code": {"x"}})))
 	require.Equal(t, http.StatusNotFound, rr.Code, "no project is locked: the route does not exist")
 }
 
@@ -254,7 +254,7 @@ func TestTouchID_ApproveALockRequest(t *testing.T) {
 	f := newAccessFixture(t)
 	ctx := context.Background()
 	k, stranger := newTouchKey(t), newTouchKey(t)
-	cred := f.enrolTouch(t, k, "laptop")
+	cred := f.enrollTouch(t, k, "laptop")
 	id, _ := f.file(t)
 	other, _ := f.anotherRequest(t)
 	v := f.helperRead(t, id)
@@ -381,7 +381,7 @@ func TestTouchID_ApproveAReadGrant(t *testing.T) {
 	require.NoError(t, store.SetSessionAgentProcess(ctx, f.db, sid, accAgent.AgentID()))
 
 	k := newTouchKey(t)
-	cred := f.enrolTouch(t, k, "laptop")
+	cred := f.enrollTouch(t, k, "laptop")
 	status, filed := f.jsonDo(t, f.asAgent(t, formPost("/console/access/request", url.Values{"project": {"example-hr"}})))
 	require.Equal(t, http.StatusOK, status, string(filed["error"]))
 	var id string
@@ -402,17 +402,17 @@ func TestTouchID_ApproveAReadGrant(t *testing.T) {
 	require.Equal(t, "example-hr", live[0].Project)
 }
 
-// No Touch ID route mints an enrolment code.
+// No Touch ID route mints an enrollment code.
 func TestTouchID_NoRouteMintsACode(t *testing.T) {
 	f := newAccessFixture(t)
 	for _, req := range []*http.Request{
-		f.asOwnerSocket(t, formPost("/console/approvers/touchid/enrol", url.Values{"name": {"k"}})),
-		f.asOwnerTCP(formPost("/console/approvers/touchid/enrol", url.Values{"name": {"k"}})),
+		f.asOwnerSocket(t, formPost("/console/approvers/touchid/enroll", url.Values{"name": {"k"}})),
+		f.asOwnerTCP(formPost("/console/approvers/touchid/enroll", url.Values{"name": {"k"}})),
 	} {
 		do(f.mux, req)
 	}
 	var n int
-	require.NoError(t, f.db.QueryRow(`SELECT COUNT(*) FROM approver_enrol_codes`).Scan(&n))
+	require.NoError(t, f.db.QueryRow(`SELECT COUNT(*) FROM approver_enroll_codes`).Scan(&n))
 	require.Zero(t, n)
 }
 

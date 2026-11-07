@@ -10,7 +10,7 @@
 --
 -- Two new tables and nothing else: no existing table changes shape, so the
 -- previous release reads a database this one migrated exactly as before. Both
--- stay empty until the owner enrols a credential. Neither holds corpus
+-- stay empty until the owner enrolls a credential. Neither holds corpus
 -- content, and neither is ever merged by an archive import: a credential
 -- enrolled on another machine was never shown to this one's owner.
 --
@@ -32,7 +32,7 @@
 --                    so the credential round-trips through internal/passkey
 --   name             the owner's label for it
 --   added_at         when it was enrolled
---   added_by         how: 'code' (a one-time enrolment code) or the id of the
+--   added_by         how: 'code' (a one-time enrollment code) or the id of the
 --                    existing credential that approved it
 --   last_used_at     the last approval it signed
 CREATE TABLE approver_credentials (
@@ -56,18 +56,18 @@ CREATE TABLE approver_credentials (
     UNIQUE (kind, credential_id)
 );
 
--- approver_enrol_codes holds the one-time enrolment codes, by hash. Only
+-- approver_enroll_codes holds the one-time enrollment codes, by hash. Only
 -- `seamlessd approvers enroll-code`, run as the daemon's own account, mints
 -- one; no route does. A code is the secret (never a URL), lives ten minutes,
--- and is consumed in the same transaction as the credential it enrols:
+-- and is consumed in the same transaction as the credential it enrolls:
 --
 --   hash        hex SHA-256 of the normalized code; the code itself is never
 --               stored
---   kind        the credential kind it may enrol (passkey or touchid)
+--   kind        the credential kind it may enroll (passkey or touchid)
 --   created_at, expires_at
 --   used_at     when it was consumed (NULL while unused)
 --   used_for    the approver_credentials.id it enrolled
-CREATE TABLE approver_enrol_codes (
+CREATE TABLE approver_enroll_codes (
     hash       TEXT PRIMARY KEY,
     kind       TEXT NOT NULL CHECK (kind IN ('passkey', 'touchid')),
     created_at TEXT NOT NULL,
