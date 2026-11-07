@@ -157,6 +157,59 @@ func TestRestoreDatabase(t *testing.T) {
 	require.Equal(t, res.schema+1, migrated)
 }
 
+// When the restored database's access cannot be ended, the rollback puts the
+// migrated database back: unrestoreDatabase undoes restoreDatabase, keeping the
+// restored files (and the WAL opening them left) aside, never deleting them.
+func TestUnrestoreDatabase_PutsTheMigratedDatabaseBack(t *testing.T) {
+	dataDir, exe := backupDataDir(t)
+	id := testAttemptID(t)
+	res, err := takeBackup(context.Background(), backupRequest{
+		dataDir: dataDir, from: mustVersion(t, "0.7.2"), attemptID: id, at: time.Now(),
+		exe: exe, freeBytes: func(string) (uint64, error) { return 1 << 40, nil },
+	})
+	require.NoError(t, err)
+
+	dbPath := filepath.Join(dataDir, "seam.db")
+	db, err := store.OpenExisting(dbPath)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO schema_migrations(version) VALUES (?)`, res.schema+1)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+
+	suffix, err := restoreDatabase(dataDir, res.path, id, res.schema)
+	require.NoError(t, err)
+	got, err := dbSchemaVersion(dbPath)
+	require.NoError(t, err)
+	require.Equal(t, res.schema, got)
+	// The restored database was opened (to end its access), which can leave a WAL.
+	require.NoError(t, os.WriteFile(dbPath+"-wal", []byte("restored wal"), 0o600))
+
+	require.NoError(t, unrestoreDatabase(dataDir, suffix, id))
+	got, err = dbSchemaVersion(dbPath)
+	require.NoError(t, err)
+	require.Equal(t, res.schema+1, got, "the migrated database is back")
+	require.FileExists(t, dbPath+".unrestored-"+id, "the restored one is kept aside")
+	wal, err := os.ReadFile(dbPath + "-wal.unrestored-" + id)
+	require.NoError(t, err)
+	require.Equal(t, "restored wal", string(wal), "its WAL moved with it")
+	_, err = os.Stat(dbPath + suffix)
+	require.ErrorIs(t, err, os.ErrNotExist, "nothing is left under the pre-rollback name")
+}
+
+func TestRestoredAccessWords(t *testing.T) {
+	for _, tc := range []struct {
+		in   store.RestoredAccess
+		want string
+	}{
+		{store.RestoredAccess{}, "no access"},
+		{store.RestoredAccess{Leases: 1}, "1 access lease"},
+		{store.RestoredAccess{Leases: 2, Grants: 1}, "2 access leases and 1 read grant"},
+		{store.RestoredAccess{Leases: 1, Unlocks: 3, Grants: 2}, "1 access lease, 3 console unlocks and 2 read grants"},
+	} {
+		require.Equal(t, tc.want, restoredAccessWords(tc.in))
+	}
+}
+
 func TestRestoreDatabase_RefusesWhatIsNotABackup(t *testing.T) {
 	dataDir := t.TempDir()
 	notArchive := filepath.Join(t.TempDir(), "x.tar.gz")

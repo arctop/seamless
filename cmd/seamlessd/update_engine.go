@@ -823,7 +823,7 @@ func (u *updater) rollback(ctx context.Context, target, back releaseAssets, caus
 		notes = append(notes, "stopping the service failed: "+firstLine(out))
 	}
 	if u.waitDaemonGone(ctx) {
-		if n := u.restoreDBIfMigrated(); n != "" {
+		if n := u.restoreDBIfMigrated(ctx); n != "" {
 			notes = append(notes, n)
 		}
 	} else {
@@ -903,8 +903,14 @@ func (u *updater) waitDaemonGone(ctx context.Context) bool {
 }
 
 // restoreDBIfMigrated puts the backup's database back when the schema moved
-// past the backup's (S1 > S0), and says what it did.
-func (u *updater) restoreDBIfMigrated() string {
+// past the backup's (S1 > S0), and says what it did. The backup holds the
+// access leases, console unlocks and read grants live when it was taken,
+// including ones revoked since, so every live one in it is ended before
+// anything serves it; when that cannot be done, the migrated database goes
+// back instead -- the rollback target then runs on the newer schema, which
+// release discipline keeps working -- rather than serve permissions the owner
+// had closed.
+func (u *updater) restoreDBIfMigrated(ctx context.Context) string {
 	dbPath := filepath.Join(u.dataDir(), archive.DBName)
 	s1, err := dbSchemaVersion(dbPath)
 	if err != nil {
@@ -914,11 +920,25 @@ func (u *updater) restoreDBIfMigrated() string {
 		u.logf("rollback: schema v%d, not past the backup's v%d; database left as it is", s1, u.backup.schema)
 		return ""
 	}
-	suffix, err := restoreDatabase(u.dataDir(), u.backup.path, u.job.req.AttemptID, u.backup.schema)
+	attempt := u.job.req.AttemptID
+	suffix, err := restoreDatabase(u.dataDir(), u.backup.path, attempt, u.backup.schema)
 	if err != nil {
 		return fmt.Sprintf("the database (schema v%d) could not be restored to v%d, so the rollback target runs on a newer schema: %v", s1, u.backup.schema, err)
 	}
-	return fmt.Sprintf("the database was restored to schema v%d from the backup; the migrated one (v%d) is kept as %s%s", u.backup.schema, s1, archive.DBName, suffix)
+	ended, err := resetRestoredAccess(ctx, u.dataDir(), u.d.now())
+	if err != nil {
+		if uerr := unrestoreDatabase(u.dataDir(), suffix, attempt); uerr != nil {
+			return fmt.Sprintf("the database was restored to schema v%d, but its access leases could not be ended (%v), "+
+				"and the migrated database could not be put back either (%v): stop the daemon and run seamlessd doctor", u.backup.schema, err, uerr)
+		}
+		return fmt.Sprintf("the backup's access leases could not be ended (%v), so the migrated database (v%d) was put back "+
+			"and the rollback target runs on a newer schema", err, s1)
+	}
+	msg := fmt.Sprintf("the database was restored to schema v%d from the backup; the migrated one (v%d) is kept as %s%s", u.backup.schema, s1, archive.DBName, suffix)
+	if ended.Total() > 0 {
+		msg += fmt.Sprintf("; ended what the backup held live: %s (locked projects ask again)", restoredAccessWords(ended))
+	}
+	return msg
 }
 
 // firstLine is the first line of a command's output, for a record.

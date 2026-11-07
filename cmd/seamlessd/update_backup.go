@@ -334,6 +334,76 @@ func restoreDatabase(dataDir, backupPath, attemptID string, wantSchema int) (str
 	return suffix, nil
 }
 
+// resetRestoredAccess ends every live access lease, console unlock and read
+// grant in the database restoreDatabase put back at dataDir
+// (store.ResetRestoredAccess). It opens the database without migrating it: the
+// rollback target is the release the backup was taken by, and it migrates its
+// own database when it starts.
+func resetRestoredAccess(ctx context.Context, dataDir string, now time.Time) (store.RestoredAccess, error) {
+	db, err := store.OpenExisting(filepath.Join(dataDir, archive.DBName))
+	if err != nil {
+		return store.RestoredAccess{}, err
+	}
+	got, err := store.ResetRestoredAccess(ctx, db, now)
+	if cerr := db.Close(); cerr != nil && err == nil {
+		err = cerr
+	}
+	return got, err
+}
+
+// unrestoreDatabase undoes a restoreDatabase that returned suffix: the
+// restored seam.db and the WAL and shared-memory files opening it left are
+// renamed aside to <name>.unrestored-<attemptID> -- never deleted -- and the
+// migrated files restoreDatabase moved aside are put back.
+func unrestoreDatabase(dataDir, suffix, attemptID string) error {
+	names := []string{archive.DBName, archive.DBName + "-wal", archive.DBName + "-shm"}
+	for _, name := range names {
+		p := filepath.Join(dataDir, name)
+		if _, err := os.Lstat(p); errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err := os.Rename(p, p+".unrestored-"+attemptID); err != nil {
+			return fmt.Errorf("move the restored %s aside: %w", name, err)
+		}
+	}
+	for _, name := range names {
+		p := filepath.Join(dataDir, name)
+		if _, err := os.Lstat(p + suffix); errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err := os.Rename(p+suffix, p); err != nil {
+			return fmt.Errorf("put the migrated %s back: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// restoredAccessWords names what ResetRestoredAccess ended, for the rollback's
+// record: "1 access lease and 2 read grants".
+func restoredAccessWords(r store.RestoredAccess) string {
+	var parts []string
+	for _, c := range []struct {
+		n    int64
+		noun string
+	}{
+		{r.Leases, "access lease"},
+		{r.Unlocks, "console unlock"},
+		{r.Grants, "read grant"},
+	} {
+		if c.n > 0 {
+			parts = append(parts, update.Plural(c.n, c.noun))
+		}
+	}
+	switch len(parts) {
+	case 0:
+		return "no access"
+	case 1:
+		return parts[0]
+	default:
+		return strings.Join(parts[:len(parts)-1], ", ") + " and " + parts[len(parts)-1]
+	}
+}
+
 // extractSnapshotDB writes the seam.db entry of the archive at backupPath to
 // dst (which must not exist), after checking the manifest describes a
 // database at schema wantSchema. It reads the archive layout archive.Export

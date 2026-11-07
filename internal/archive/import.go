@@ -356,17 +356,11 @@ func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, logg
 		return fmt.Errorf("archive.Import: open restored database: %w", err)
 	}
 	defer func() { _ = db.Close() }()
-	// A restored database brings back the leases it held when the snapshot
-	// was taken, including ones revoked since: every live one ends here, and a
-	// locked project's agents ask again.
-	if _, err := store.RevokeAllAccessLeases(ctx, db, store.LeaseRevokedReset, time.Now()); err != nil {
-		return fmt.Errorf("archive.Import: revoke restored leases: %w", err)
-	}
-	if _, err := store.EndAllConsoleUnlocks(ctx, db, store.ConsoleUnlockEndReset, time.Now()); err != nil {
-		return fmt.Errorf("archive.Import: end restored console unlocks: %w", err)
-	}
-	if _, err := store.RevokeAllAccessGrants(ctx, db, store.LeaseRevokedReset, time.Now()); err != nil {
-		return fmt.Errorf("archive.Import: revoke restored read grants: %w", err)
+	// A restored database brings back the leases, console unlocks and read
+	// grants it held when the snapshot was taken, including ones revoked
+	// since: every live one ends here, and a locked project's agents ask again.
+	if _, err := store.ResetRestoredAccess(ctx, db, time.Now()); err != nil {
+		return fmt.Errorf("archive.Import: %w", err)
 	}
 
 	mgr, err := files.NewManager(opts.DataDir, db, logger)

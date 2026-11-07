@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/store/storetest"
@@ -405,6 +406,63 @@ func TestAutoUpdate_RollbackRestoresTheDatabaseOnlyWhenTheSchemaAdvanced(t *test
 	migrated, err := dbSchemaVersion(aside)
 	require.NoError(t, err)
 	require.Equal(t, s0+1, migrated)
+}
+
+// The backup holds the access leases live when it was taken. One revoked after
+// the backup (its session ended while the new release installed) must not come
+// back with the restored database: every live one in it ends, and the
+// rollback's record says so.
+func TestAutoUpdate_ARollbackRestoreEndsTheBackupsAccessLeases(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t, "linux", "amd64", "0.7.2")
+	w.publish("0.7.2", releaseOpts{})
+	w.publish("0.7.3", releaseOpts{})
+	s0 := store.LatestSchemaVersion()
+	dbPath := filepath.Join(w.dataDir, "seam.db")
+
+	db, err := store.OpenExisting(dbPath)
+	require.NoError(t, err)
+	proc := access.ProcessToken{PID: 4242, Version: 7, Boot: "6c2f1a3e-0b7d-4c55-9a51-3d8f00a1b2c3"}
+	req, err := store.CreateAccessApproval(ctx, db, store.AccessRequest{
+		Project: "example-finance", Kind: store.AccessKindRequest, Lease: time.Hour, TTL: 10 * time.Minute,
+		PeerUID: 501, PeerPID: proc.PID, ProcessKey: proc.Key(),
+	}, time.Now())
+	require.NoError(t, err)
+	lease, err := store.ApproveAccessFor(ctx, db, req.ID, req.Challenge, "daemon-account", time.Hour, time.Now())
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+
+	w.installer = func(w *world, run installerRun) error {
+		if installerVersion(t, run) == "0.7.3" {
+			// After the backup: the session ends and its lease is revoked;
+			// then the new release migrates one step and fails to come up.
+			db, err := store.OpenExisting(dbPath)
+			require.NoError(t, err)
+			require.NoError(t, store.RevokeAccessLease(ctx, db, lease.ID, store.LeaseRevokedSessionEnded, time.Now()))
+			_, err = db.Exec(`INSERT INTO schema_migrations(version) VALUES (?)`, s0+1)
+			require.NoError(t, err)
+			require.NoError(t, db.Close())
+			w.daemon.stop()
+			return os.WriteFile(w.exe, []byte("seamlessd 0.7.3\n"), 0o755)
+		}
+		return installerSwaps(w, run)
+	}
+
+	a, err := w.runAuto("0.7.3")
+	require.Error(t, err)
+	requireRecorded(t, w, a, update.StageRollback, true)
+	require.Contains(t, a.Error, "restored to schema")
+	require.Contains(t, a.Error, "ended what the backup held live: 1 access lease")
+
+	db, err = store.OpenExisting(dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	live, err := store.ActiveAccessLeases(ctx, db, proc.Key(), time.Now())
+	require.NoError(t, err)
+	require.Empty(t, live, "the revoked lease did not come back with the backup")
+	var reason string
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT revoked_reason FROM access_leases WHERE id = ?`, lease.ID).Scan(&reason))
+	require.Equal(t, store.LeaseRevokedReset, reason)
 }
 
 func TestAutoUpdate_ARollbackThatFailsSaysTheDaemonMayBeDown(t *testing.T) {
