@@ -9,16 +9,19 @@ package console
 // the bearer key or the console cookie approves one.
 //
 // What the routes never do: approve without a proof. The passkey approval is
-// an assertion over the request's own challenge; the terminal approval is not
-// a route at all (seamlessd approve, run as the daemon's account). Denying
-// needs no proof -- it only ever closes a request -- but an agent's socket
-// connection may not deny: only the owner's browser (the console cookie) or
-// the TCP key can.
+// an assertion over the request's own challenge; the Touch ID approval is the
+// helper app's signature over approval.TouchIDApproveMessage, accepted only on
+// the peer_auth socket; the terminal approval is not a route at all
+// (seamlessd approve, run as the daemon's account). Denying needs no proof --
+// it only ever closes a request -- but an agent's socket connection may not
+// deny: only the owner's browser (the console cookie) or the TCP key can.
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -143,6 +146,14 @@ type accessOneData struct {
 	// /console/access/{id}/approve without a passkey response), and the page
 	// offers a plain Approve.
 	Advisory bool `json:"advisory,omitempty"`
+	// Challenge is the request's challenge, standard base64, for the Touch ID
+	// helper to sign over (approval.TouchIDApproveMessage). It is in the JSON
+	// of a pending request read over the peer_auth socket only, and never on
+	// the page. Handing it out grants nothing: it is a nonce every proof must
+	// cover, not a secret -- the passkey options above carry the same bytes to
+	// the browser -- and a proof over it still needs the owner's passkey or
+	// the Secure Enclave key, both of which ask for the owner's presence.
+	Challenge string `json:"challenge,omitempty"`
 	// OnOrigin and Origin are for the page: a passkey ceremony runs only on
 	// the relying party's origin.
 	OnOrigin bool   `json:"-"`
@@ -274,6 +285,9 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 	}
 	d := accessOneData{Request: facts, Status: a.Status, Page: s.core().Page(a.ID), Terminal: s.cfg.Terminal,
 		Durations: approval.Durations, MaxLease: s.maxLease(), Advisory: a.Kind == store.AccessKindGrant && s.advisory()}
+	if a.Status == store.ApprovalPending && access.PeerAuthenticated(r.Context()) && wantsJSON(r) {
+		d.Challenge = base64.StdEncoding.EncodeToString(a.Challenge)
+	}
 	if s.cfg.Approvals == nil {
 		// The advisory tier: no passkeys, no terminal commit through sudo.
 		s.render(w, r, "access_one", pageData{Title: "Access request " + facts.Short, Active: "access", Data: d})
@@ -351,8 +365,22 @@ func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
 // challenge, for the duration and over the facts digest the page showed. A
 // read grant request goes to the read grants, where -- in the advisory tier
 // only -- a decision without a passkey response is the bearer key's.
+//
+// proof=touchid is the Touch ID helper's form instead: credential names the
+// enrolled key and signature is its signature over the decision, and the same
+// approve core checks it, for a lock's request and a read grant alike. It is
+// accepted on the peer_auth socket only, the one transport the helper uses.
 func (s *Service) accessApprove(w http.ResponseWriter, r *http.Request) {
 	if s.accessOff(w, r) {
+		return
+	}
+	touch, ok, err := touchIDProof(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if ok && !access.PeerAuthenticated(r.Context()) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": errTouchIDOffSocket.Error()})
 		return
 	}
 	a, err := s.core().Resolve(r.Context(), r.PathValue("id"))
@@ -361,6 +389,10 @@ func (s *Service) accessApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if a.Kind == store.AccessKindGrant {
+		if ok {
+			s.grantApproveTouchID(w, r, a, touch)
+			return
+		}
 		s.grantApprove(w, r, a)
 		return
 	}
@@ -368,9 +400,12 @@ func (s *Service) accessApprove(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such access request"})
 		return
 	}
+	proof := approval.Proof{Kind: approval.ProofPasskey, Assertion: []byte(r.PostForm.Get("response"))}
+	if ok {
+		proof = touch
+	}
 	lease, err := s.cfg.Approvals.Approve(r.Context(), approval.Decision{
-		ID: a.ID, Duration: r.PostForm.Get("duration"), Digest: r.PostForm.Get("digest"),
-		Proof: approval.Proof{Kind: approval.ProofPasskey, Assertion: []byte(r.PostForm.Get("response"))},
+		ID: a.ID, Duration: r.PostForm.Get("duration"), Digest: r.PostForm.Get("digest"), Proof: proof,
 	})
 	if err != nil {
 		s.accessError(w, r, err)
@@ -379,6 +414,60 @@ func (s *Service) accessApprove(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"approved": approval.ShortID(a.ID), "project": a.Project, "expires_at": lease.ExpiresAt.UTC().Format(time.RFC3339),
 	})
+}
+
+// proofTouchIDValue is the form value that selects the Touch ID proof.
+const proofTouchIDValue = approval.ProofTouchID
+
+// errTouchIDOffSocket is a Touch ID proof that did not arrive on the
+// peer_auth socket.
+var errTouchIDOffSocket = errors.New("a Touch ID approval is accepted on the peer_auth socket only: " +
+	"approve from the agent's dialog, or with seam approve in the owner's terminal")
+
+// touchIDProof reads the Touch ID helper's proof from an approve form: ok is
+// false when the form names no proof, which keeps the passkey (or, in the
+// advisory tier, the bearer key's) decision exactly as before. A proof that is
+// present but empty or unknown, a missing credential, and a signature that is
+// not standard base64 are refused, never read as absent.
+func touchIDProof(r *http.Request) (approval.Proof, bool, error) {
+	if !r.PostForm.Has("proof") {
+		return approval.Proof{}, false, nil
+	}
+	if kind := r.PostForm.Get("proof"); kind != proofTouchIDValue {
+		return approval.Proof{}, false, fmt.Errorf("invalid proof %q: the valid value is %s (leave proof out to approve with a passkey response)",
+			kind, proofTouchIDValue)
+	}
+	cred := strings.TrimSpace(r.PostForm.Get("credential"))
+	if cred == "" {
+		return approval.Proof{}, false, errors.New("a Touch ID approval names its key: credential is the enrolled key's id")
+	}
+	sig, err := base64.StdEncoding.Strict().DecodeString(r.PostForm.Get("signature"))
+	if err != nil || len(sig) == 0 {
+		return approval.Proof{}, false, errors.New("signature must be the Touch ID key's ASN.1 DER signature in standard base64")
+	}
+	return approval.Proof{Kind: approval.ProofTouchID, CredentialID: cred, Signature: sig}, true, nil
+}
+
+// grantApproveTouchID decides a read grant request with a Touch ID proof
+// under peer_auth: the read grants' approve, with the answer grantApprove
+// gives.
+func (s *Service) grantApproveTouchID(w http.ResponseWriter, r *http.Request, a store.AccessApproval, proof approval.Proof) {
+	if s.cfg.Grants == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "read grants are off (isolation.requests)"})
+		return
+	}
+	grant, err := s.cfg.Grants.Approve(r.Context(), approval.Decision{
+		ID: a.ID, Duration: r.PostForm.Get("duration"), Digest: r.PostForm.Get("digest"), Proof: proof,
+	})
+	if err != nil {
+		s.accessError(w, r, err)
+		return
+	}
+	afterAccessWrite(w, r, map[string]any{
+		"approved": approval.ShortID(a.ID), "project": a.Project, "from": a.FromProject, "grant": grant.ID,
+		"expires_at": grant.ExpiresAt.UTC().Format(time.RFC3339),
+	}, "Approved "+approval.ShortID(a.ID)+": "+a.Project+" is readable from "+a.FromProject+", read-only, until "+
+		grant.ExpiresAt.Local().Format("15:04")+".")
 }
 
 // accessDeny closes a request without a lease. An agent's socket connection
@@ -422,6 +511,12 @@ func (s *Service) accessError(w http.ResponseWriter, r *http.Request, err error)
 		msg = "choose a duration: until the session ends, 1 hour or 4 hours"
 	case errors.Is(err, approval.ErrNoProof), errors.Is(err, approval.ErrPasskeysOff), errors.Is(err, approval.ErrPeerProof):
 		msg = "approving needs a passkey here, or seam approve in the owner's terminal"
+	case errors.Is(err, approval.ErrTouchIDKey):
+		// The helper's signature, or the key it names: refused like a passkey
+		// assertion that does not verify.
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "the Touch ID signature does not verify for this request, " +
+			"this duration and these facts with that key: approve again from the agent's dialog"})
+		return
 	case errors.Is(err, approval.ErrSealed):
 		msg = "a sealed project is never granted, and never granted to: deny the request"
 	case errors.Is(err, approval.ErrNotConfidential):

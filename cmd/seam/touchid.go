@@ -1,0 +1,386 @@
+package main
+
+// seam touchid -- the macOS Touch ID approver (plan step T), installed and
+// enrolled only when the owner asks: a default install neither contains nor
+// launches it.
+//
+// `seam touchid enroll`, in the owner's own terminal on the Mac:
+//
+//  1. gets the Seamless Approve app: the release asset of this seam's own
+//     version (seamless-approve_<v>_darwin.zip), checked against the
+//     release's checksums.txt, or a local build with --app;
+//  2. checks its code signature: intact (codesign --verify --strict --deep),
+//     the helper's bundle identifier, and the same Developer ID team as this
+//     seam binary (the keychain access group that holds the key is bound to
+//     that team too), plus Gatekeeper's notarization check for a release
+//     asset -- a tampered, re-signed or foreign app is refused;
+//  3. installs it atomically at ~/Applications/Seamless Approve.app,
+//     replacing an existing install only after a y/N;
+//  4. tells the owner how to mint the one-time enrolment code (as the
+//     daemon's account: only that account can), opens the app through
+//     LaunchServices to create the Secure Enclave key and enrol it with the
+//     code -- which the owner types into the app's own dialog, never through
+//     seam -- and confirms on the daemon that a new Touch ID key exists.
+//
+// Nothing here is the proof of anything. The enrolment code is (the daemon
+// checks it), and every later approval is the key's signature (the daemon's
+// approve core checks it). The terminal check is a courtesy, as for seam
+// approve: it keeps an agent's shell out of prompts it cannot answer.
+
+import (
+	"bufio"
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/arctop/seamless/internal/config"
+)
+
+// approverBundleID is the helper app's bundle identifier, the Identifier its
+// code signature must carry.
+const approverBundleID = "org.thereisnospoon.seamless.approve"
+
+// approversJSONPath is the Approvers page as JSON.
+const approversJSONPath = "/console/approvers?format=json"
+
+// approverKindTouchID is a Touch ID key's kind (store.ApproverTouchID).
+const approverKindTouchID = "touchid"
+
+// maxApproverNameRunes is the daemon's limit on a credential's name
+// (store.MaxApproverNameRunes, pinned by a test).
+const maxApproverNameRunes = 64
+
+var (
+	// errTouchIDNotMac is seam touchid enroll anywhere but macOS.
+	errTouchIDNotMac = errors.New("the Touch ID approver exists only on macOS")
+	// errTouchIDNotTerminal is seam touchid enroll without the owner's terminal.
+	errTouchIDNotTerminal = errors.New("seam touchid enroll is the owner's own terminal path: it needs a terminal on stdin and stdout, " +
+		"and an agent cannot use it")
+)
+
+var touchIDEnrollCmd = spec("touchid enroll", groupAccess,
+	"install the macOS Touch ID approver and enrol its key (the owner's terminal)",
+	noArgs(), bindTouchIDEnroll, runTouchIDEnroll).withLong(
+	`Installs Seamless Approve, the small signed macOS app whose Secure Enclave
+key approves an agent's access to a locked project with Touch ID (or the
+Apple Watch, or the login password), and enrols that key with the daemon.
+Nothing installs it but this command.
+
+The app is this seam's own release (seamless-approve_<version>_darwin.zip),
+checked against the release's checksums.txt; a seam built from source has no
+release to fetch, and installs a local build with --app <path to
+Seamless Approve.app or its zip> instead. Before installing, its code
+signature must verify, name the helper
+(` + approverBundleID + `), and come from the same
+Developer ID team as this seam binary; a release asset must also pass
+Gatekeeper's notarization check. When this seam is not signed with a
+Developer ID, the app's team is shown and you are asked. It installs at
+~/Applications/Seamless Approve.app, replacing an installed one only after
+you confirm; keeping it enrols with the installed app.
+
+Then it prints the command that mints the one-time enrolment code, run as
+the daemon's account, and opens the app: type the code into the app's own
+dialog, and touch the sensor. Afterwards it confirms on the daemon that a
+new Touch ID key is enrolled.
+
+It needs macOS, a terminal on stdin and stdout (an agent cannot use it), and
+server_url naming the daemon's peer_auth socket (unix:///path), which is how
+the app reaches the daemon.`)
+
+type touchIDEnrollOpts struct {
+	app  *presentString
+	name *presentString
+}
+
+func bindTouchIDEnroll(fs *flag.FlagSet) *touchIDEnrollOpts {
+	o := &touchIDEnrollOpts{app: &presentString{}, name: &presentString{}}
+	fs.Var(o.app, "app", "install from a local build at `PATH` (Seamless Approve.app, or a zip of it) instead of the release asset")
+	fs.Var(o.name, "name", "list the key under `NAME` (default: Touch ID on <this host>)")
+	return o
+}
+
+// approverEnrollArgs is the helper's command line for an enrolment: the
+// socket to enrol over and the name to list the key under. The code is not
+// among them: the owner types it into the helper's own dialog.
+func approverEnrollArgs(socket, name string) []string {
+	return []string{"enroll", "--socket", socket, "--name", name}
+}
+
+func runTouchIDEnroll(ctx context.Context, e *env, o *touchIDEnrollOpts, _ []string) error {
+	if e.platform() != "darwin" {
+		return errTouchIDNotMac
+	}
+	if !e.isTerminal() {
+		return errTouchIDNotTerminal
+	}
+	if o.app.set && strings.TrimSpace(o.app.val) == "" {
+		return errors.New("--app needs the path of a Seamless Approve.app, or of a zip holding one")
+	}
+	name := defaultKeyName(config.Hostname())
+	if o.name.set {
+		name = strings.TrimSpace(o.name.val)
+		if err := validKeyName(name); err != nil {
+			return err
+		}
+	}
+	cfg, err := e.loadConfig()
+	if err != nil {
+		return err
+	}
+	sock := cfg.SocketPath()
+	switch {
+	case sock == "":
+		return errNoApproverSocket
+	case !filepath.IsAbs(sock):
+		return fmt.Errorf("the peer_auth socket %q is not an absolute path", sock)
+	}
+
+	// The daemon first: how the owner mints the code, and the keys enrolled so
+	// far. A daemon that locks nothing answers here, before anything installs.
+	t, err := enrolCodeApprover(cfg)
+	if err != nil {
+		return err
+	}
+	before, err := touchIDKeys(cfg)
+	if err != nil {
+		return err
+	}
+
+	w := newTouchIDWorld()
+	home, err := w.home()
+	if err != nil {
+		return fmt.Errorf("find the home directory: %w", err)
+	}
+	target := approverAppPath(home)
+	in := bufio.NewReader(e.stdin)
+	installed, err := installApprover(ctx, e, w, in, o.app, target)
+	if err != nil || !installed {
+		return err
+	}
+
+	fmt.Fprintf(e.stdout, "\nNext, mint a one-time enrolment code as the daemon's account. In another terminal on this Mac, run:\n\n  %s\n\n",
+		strings.Join(shellWords(enrolCodeArgv(t)), " "))
+	fmt.Fprintln(e.stdout, "It asks for your password or Touch ID, prints the code, and the code works once, for 10 minutes.")
+	if _, ok := prompt(e, in, "Press Return to open Seamless Approve: type the code into its dialog, then touch the sensor. "); !ok {
+		fmt.Fprintln(e.stdout, "Nothing enrolled. Seamless Approve stays installed; run seam touchid enroll again to enrol.")
+		return nil
+	}
+	argv := append([]string{"open", "-W", "-n", "-a", target, "--args"}, approverEnrollArgs(sock, name)...)
+	code, err := e.run(ctx, argv, nil, io.Discard, e.stderr)
+	if err != nil {
+		return fmt.Errorf("open Seamless Approve: %w", err)
+	}
+	if code != 0 {
+		return fmt.Errorf("open could not start Seamless Approve at %s (exit status %d)", target, code)
+	}
+	after, err := touchIDKeys(cfg)
+	if err != nil {
+		return fmt.Errorf("the daemon's approvers could not be read to confirm the new key (Seamless Approve has finished): %w", err)
+	}
+	added := newKeys(before, after)
+	if len(added) == 0 {
+		return errors.New("no new Touch ID key is enrolled: Seamless Approve was cancelled, or the daemon refused the code " +
+			"(it may be mistyped, expired or already used) -- mint a fresh code and run seam touchid enroll again")
+	}
+	for _, k := range added {
+		fmt.Fprintf(e.stdout, "Enrolled the Touch ID key %q (%s). An agent's access dialog can now be approved with it.\n",
+			printable(k.Name), printable(k.ID))
+	}
+	return nil
+}
+
+// defaultKeyName is the name a key is listed under when --name is absent.
+func defaultKeyName(host string) string {
+	name := "Touch ID"
+	if h := strings.TrimSpace(host); h != "" && validKeyName(name+" on "+h) == nil {
+		name += " on " + h
+	}
+	return name
+}
+
+// validKeyName holds a key's name to what the daemon accepts, and to what can
+// be the helper's argument: a name that began with "-" would read as a flag.
+func validKeyName(name string) error {
+	n := utf8.RuneCountInString(name)
+	switch {
+	case n == 0 || n > maxApproverNameRunes || !utf8.ValidString(name) ||
+		strings.ContainsFunc(name, func(r rune) bool { return !unicode.IsPrint(r) }):
+		return fmt.Errorf("invalid value %q for --name: a name is 1 to %d printable characters on one line", name, maxApproverNameRunes)
+	case strings.HasPrefix(name, "-"):
+		return fmt.Errorf("invalid value %q for --name: a name may not begin with -", name)
+	}
+	return nil
+}
+
+// enrolCodeApprover reads, from the daemon's access JSON, the account and
+// paths the enrolment code is minted with, held to the shapes seam approve
+// holds them to before they become a command line.
+func enrolCodeApprover(cfg config.Config) (terminalApprover, error) {
+	var list accessList
+	if err := accessGet(cfg, accessListPath, &list); err != nil {
+		return terminalApprover{}, err
+	}
+	t := list.Terminal
+	if t == nil || t.Account == "" || t.Seamlessd == "" || t.Config == "" {
+		return terminalApprover{}, errors.New("the daemon did not say how to reach its own account: mint the code with " +
+			"`seamlessd approvers enroll-code touchid`, run as the daemon's account, then run seam touchid enroll again")
+	}
+	switch {
+	case !accountName.MatchString(t.Account):
+		return terminalApprover{}, fmt.Errorf("the daemon named %q as its account, which is not an account name", t.Account)
+	case !absPath(t.Seamlessd):
+		return terminalApprover{}, fmt.Errorf("the daemon named %q as its seamlessd, which is not an absolute path", t.Seamlessd)
+	case !absPath(t.Config):
+		return terminalApprover{}, fmt.Errorf("the daemon named %q as its config, which is not an absolute path", t.Config)
+	}
+	return *t, nil
+}
+
+// enrolCodeArgv mints a Touch ID enrolment code as the daemon's account. -k
+// makes sudo ask every time and keep no ticket an agent could reuse.
+func enrolCodeArgv(t terminalApprover) []string {
+	return []string{"sudo", "-k", "-u", t.Account, "env", "SEAMLESS_CONFIG=" + t.Config, t.Seamlessd, "approvers", "enroll-code", "touchid"}
+}
+
+// shellWords quotes each argument for a POSIX shell, so a printed command
+// line pastes as the arguments it names.
+func shellWords(argv []string) []string {
+	out := make([]string, len(argv))
+	for i, a := range argv {
+		if a != "" && !strings.ContainsFunc(a, func(r rune) bool {
+			return !(r < utf8.RuneSelf && (unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("_./=:,+@%-", r)))
+		}) {
+			out[i] = a
+			continue
+		}
+		out[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
+	}
+	return out
+}
+
+// approverKey is one enrolled credential in the Approvers JSON.
+type approverKey struct {
+	ID         string     `json:"id"`
+	Kind       string     `json:"kind"`
+	Name       string     `json:"name"`
+	Synced     bool       `json:"synced"`
+	AddedAt    time.Time  `json:"added_at"`
+	AddedBy    string     `json:"added_by"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+}
+
+// approversPage is GET /console/approvers?format=json.
+type approversPage struct {
+	Credentials []approverKey `json:"credentials"`
+}
+
+// touchIDKeys lists the daemon's enrolled Touch ID keys.
+func touchIDKeys(cfg config.Config) ([]approverKey, error) {
+	var page approversPage
+	if err := accessGet(cfg, approversJSONPath, &page); err != nil {
+		return nil, err
+	}
+	var keys []approverKey
+	for _, c := range page.Credentials {
+		if c.Kind == approverKindTouchID {
+			keys = append(keys, c)
+		}
+	}
+	return keys, nil
+}
+
+// newKeys is after's keys that before did not list.
+func newKeys(before, after []approverKey) []approverKey {
+	var out []approverKey
+	for _, k := range after {
+		if !slices.ContainsFunc(before, func(b approverKey) bool { return b.ID == k.ID }) {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// --- touchid status ---
+
+var touchIDStatusCmd = spec("touchid status", groupAccess,
+	"is the Touch ID approver installed, and which Touch ID keys are enrolled",
+	noArgs(), bindNoOpts, runTouchIDStatus).withLong(
+	`Says whether Seamless Approve is installed at ~/Applications/Seamless
+Approve.app and how it is signed, whether server_url names the peer_auth
+socket the app talks to the daemon over, and which Touch ID keys the daemon
+has enrolled. It changes nothing; seam touchid enroll installs and enrols.`)
+
+func runTouchIDStatus(ctx context.Context, e *env, _ *noOpts, _ []string) error {
+	if e.platform() != "darwin" {
+		return errTouchIDNotMac
+	}
+	w := newTouchIDWorld()
+	home, err := w.home()
+	if err != nil {
+		return fmt.Errorf("find the home directory: %w", err)
+	}
+	target := approverAppPath(home)
+	if !isDir(target) {
+		fmt.Fprintf(e.stdout, "Seamless Approve: not installed at %s (seam touchid enroll installs it)\n", printable(target))
+	} else {
+		sig, err := describeSignature(ctx, e, target)
+		intact := false
+		if err == nil {
+			code, rerr := e.run(ctx, []string{"codesign", "--verify", "--strict", "--deep", target}, nil, io.Discard, io.Discard)
+			intact = rerr == nil && code == 0
+		}
+		switch {
+		case err != nil:
+			fmt.Fprintf(e.stdout, "Seamless Approve: installed at %s, but its signature cannot be read: %v\n", printable(target), err)
+		default:
+			state := "signature intact"
+			if !intact {
+				state = "signature DOES NOT VERIFY"
+			}
+			fmt.Fprintf(e.stdout, "Seamless Approve: installed at %s (%s, %s, %s)\n",
+				printable(target), printable(orDash(sig.identifier)), teamWords(sig.team), state)
+		}
+	}
+	cfg, err := e.loadConfig()
+	if err != nil {
+		return err
+	}
+	if sock := cfg.SocketPath(); sock != "" {
+		fmt.Fprintf(e.stdout, "server_url: the peer_auth socket %s\n", printable(sock))
+	} else {
+		fmt.Fprintln(e.stdout, "server_url: not the peer_auth socket, so Seamless Approve cannot reach the daemon from here")
+	}
+	keys, err := touchIDKeys(cfg)
+	if err != nil {
+		return fmt.Errorf("the daemon's Touch ID keys: %w", err)
+	}
+	if len(keys) == 0 {
+		fmt.Fprintln(e.stdout, "Touch ID keys: none enrolled")
+		return nil
+	}
+	fmt.Fprintln(e.stdout, "Touch ID keys:")
+	for _, k := range keys {
+		used := "never used"
+		if k.LastUsedAt != nil {
+			used = "last used " + k.LastUsedAt.Local().Format("2006-01-02 15:04")
+		}
+		fmt.Fprintf(e.stdout, "  %s  %q  added %s, %s\n", printable(k.ID), printable(k.Name), k.AddedAt.Local().Format("2006-01-02 15:04"), used)
+	}
+	return nil
+}
+
+// teamWords names a signature's team for the owner.
+func teamWords(team string) string {
+	if team == "" {
+		return "no Developer ID team (ad hoc or unsigned)"
+	}
+	return "team " + team
+}

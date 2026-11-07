@@ -2,7 +2,7 @@
 {{with .Data}}
 <div class="approvers-page" data-approvers>
 <header class="mv2-bar">
-  <h1>{{icon "key-round"}}Approvers</h1>{{about "Passkeys and Touch ID keys that approve an agent's access to a locked project. Each approval needs you present: a passkey asks for your PIN, fingerprint or face; a Touch ID key asks for your finger."}}
+  <h1>{{icon "key-round"}}Approvers</h1>{{about "Passkeys and Touch ID keys that approve an agent's access to a locked project. Each approval needs you present: a passkey asks for your PIN, fingerprint or face; a Touch ID key asks for your finger, your Apple Watch or your login password."}}
   <span class="mv2-count" aria-label="{{len .Credentials}} enrolled"><strong>{{len .Credentials}}</strong>enrolled</span>
 </header>
 
@@ -41,6 +41,11 @@
   </form>
   <p class="held-sub" id="approver-status" role="status" aria-live="polite"></p>
   {{end}}
+</section>
+
+<section aria-labelledby="approvers-touchid-title">
+  <h2 id="approvers-touchid-title">Add a Touch ID key</h2>
+  <p class="held-sub">On a Mac, run <code>seam touchid enroll</code> in your own terminal. It installs the Seamless Approve app, which keeps its key in this Mac's Secure Enclave, and asks for a one-time code from <code>seamlessd approvers enroll-code touchid</code>, run as the daemon's account. The key then approves from the agent's dialog with your finger, your Apple Watch or your login password.</p>
 </section>
 </div>
 {{end}}

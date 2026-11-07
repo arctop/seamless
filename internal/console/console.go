@@ -286,6 +286,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/approvers/passkey/begin", formBodySmall, s.approversBegin)
 	post("POST /console/approvers/passkey/finish", formBodyPasskey, s.approversFinish)
 	post("POST /console/approvers/passkey/approve", formBodyPasskey, s.approversApprove)
+	post("POST /console/approvers/touchid/enrol", formBodySmall, s.approversTouchIDEnrol)
 	handle("GET /console/held", s.auth(gated(features.Screening, s.heldPage)))
 	handle("GET /console/held/{id}", s.auth(gated(features.Screening, s.heldOne)))
 	post("POST /console/held/{id}/release", formBodySmall, gated(features.Screening, s.heldRelease))

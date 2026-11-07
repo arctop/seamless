@@ -90,7 +90,7 @@ func approvers(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writer
 			_, origins := cfg.RelyingParty()
 			fmt.Fprintf(out, "Open %s/console/approvers in the owner's browser and enter it there.\n", origins[0])
 		case store.ApproverTouchID:
-			fmt.Fprintln(out, "Run `seam touchid enroll` in the owner's terminal on this Mac and enter it there.")
+			fmt.Fprintln(out, "Type it into the Seamless Approve dialog that `seam touchid enroll` opens, in the owner's session on this Mac.")
 		}
 		if len(cfg.PeerAuth.Locked) == 0 && !cfg.Isolation.Requests {
 			fmt.Fprintln(out, "Note: peer_auth.locked lists no project yet, so nothing asks for an approval.")

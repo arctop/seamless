@@ -66,6 +66,8 @@ func commands() []cmd {
 
 		accessRequestCmd,
 		approveCmd,
+		touchIDEnrollCmd,
+		touchIDStatusCmd,
 
 		statusCmd,
 		sessionsCmd,

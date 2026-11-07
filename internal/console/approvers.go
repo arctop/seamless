@@ -1,9 +1,10 @@
 package console
 
 // The Approvers page: the owner's passkeys and Touch ID keys, which approve
-// access to locked projects (peer_auth.locked), and the passkey enrolment
-// ceremony. It exists only while a project is locked (Config.Approvals set);
-// otherwise every route here is a 404 and nothing on any other page changes.
+// access to locked projects (peer_auth.locked), the passkey enrolment
+// ceremony, and the Touch ID helper's enrolment (`seam touchid enroll`). It
+// exists only while a project is locked (Config.Approvals set); otherwise
+// every route here is a 404 and nothing on any other page changes.
 //
 // The page lists and adds; it never removes. Removing a credential, or
 // resetting them all, is `seamlessd approvers remove|reset`, run as the
@@ -13,11 +14,14 @@ package console
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/passkey"
 	"github.com/arctop/seamless/internal/store"
@@ -35,6 +39,9 @@ type ApprovalsView interface {
 	BeginPasskey(ctx context.Context, name, code string) (approval.Begun, error)
 	FinishPasskey(ctx context.Context, id string, response []byte) (approval.Finished, error)
 	ApprovePasskey(ctx context.Context, id string, response []byte) (store.ApproverCredential, error)
+	// EnrolTouchID stores the Touch ID helper's new key, proven by a live
+	// touchid enrolment code and the key's own signature over it.
+	EnrolTouchID(ctx context.Context, name, code string, publicKey, signature []byte) (store.ApproverCredential, error)
 
 	Request(ctx context.Context, in approval.RequestInput) (store.AccessApproval, error)
 	Pending(ctx context.Context) ([]approval.Facts, error)
@@ -53,26 +60,28 @@ type ApprovalsView interface {
 	FinishConsoleUnlock(ctx context.Context, id, project, tokenHash string, response []byte) (store.ConsoleUnlock, error)
 }
 
+// approverRow is one enrolled credential. Its JSON is what `seam touchid
+// enroll` reads to confirm the helper enrolled a new key.
 type approverRow struct {
-	ID       string
-	Kind     string
-	Name     string
-	Synced   bool
-	AddedAt  time.Time
-	AddedBy  string // how it was enrolled, for a person
-	LastUsed *time.Time
+	ID       string     `json:"id"`
+	Kind     string     `json:"kind"`
+	Name     string     `json:"name"`
+	Synced   bool       `json:"synced"`
+	AddedAt  time.Time  `json:"added_at"`
+	AddedBy  string     `json:"added_by"` // how it was enrolled, for a person
+	LastUsed *time.Time `json:"last_used_at,omitempty"`
 }
 
 type approversData struct {
-	Credentials []approverRow
+	Credentials []approverRow `json:"credentials"`
 	// PasskeysOn is false when the relying party is not configured; the page
 	// then lists credentials and explains, with no enrolment form.
-	PasskeysOn bool
+	PasskeysOn bool `json:"passkeys_on"`
 	// Origin is where a passkey ceremony must run; OnOrigin is whether this
 	// page was loaded from one of the configured origins. A page on
 	// 127.0.0.1 cannot run one at all (an IP is not a valid RP ID).
-	Origin   string
-	OnOrigin bool
+	Origin   string `json:"origin,omitempty"`
+	OnOrigin bool   `json:"on_origin"`
 }
 
 func (s *Service) approversOff(w http.ResponseWriter, r *http.Request) bool {
@@ -101,7 +110,7 @@ func (s *Service) approversPage(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	d := approversData{PasskeysOn: s.cfg.Approvals.PasskeysOn()}
+	d := approversData{Credentials: []approverRow{}, PasskeysOn: s.cfg.Approvals.PasskeysOn()}
 	origins := s.cfg.Approvals.Origins()
 	if len(origins) > 0 {
 		d.Origin = origins[0]
@@ -190,6 +199,71 @@ func (s *Service) approversApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"enrolled": cred.ID, "name": cred.Name})
+}
+
+// The Touch ID helper's enrolment form: what the Secure Enclave key it made
+// looks like on the wire.
+const (
+	// touchIDPublicKeyBytes is a raw uncompressed P-256 point: 0x04, X, Y.
+	touchIDPublicKeyBytes = 65
+	// touchIDMaxSignatureBytes bounds an ASN.1 DER P-256 signature (at most
+	// 72 bytes), with room to spare.
+	touchIDMaxSignatureBytes = 128
+)
+
+// approversTouchIDEnrol enrols the Touch ID helper's key: POST
+// /console/approvers/touchid/enrol with the code the owner typed into the
+// helper's dialog, the key's name, its public key, and its signature over
+// approval.TouchIDEnrolMessage(code, public key). The code is the proof --
+// only `seamlessd approvers enroll-code touchid`, run as the daemon's account,
+// mints one -- and the signature shows the code's holder holds the key. It is
+// accepted on the peer_auth socket only, where the helper runs as the owner's
+// uid; the TCP key and the console cookie never enrol a Touch ID key.
+func (s *Service) approversTouchIDEnrol(w http.ResponseWriter, r *http.Request) {
+	if s.approversOff(w, r) {
+		return
+	}
+	if !access.PeerAuthenticated(r.Context()) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "a Touch ID key is enrolled over the peer_auth socket only: " +
+			"run seam touchid enroll in the owner's terminal on this Mac"})
+		return
+	}
+	bad := func(msg string) { writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg}) }
+	name := strings.TrimSpace(r.PostForm.Get("name"))
+	if name == "" || len([]rune(name)) > store.MaxApproverNameRunes || strings.ContainsAny(name, "\r\n\t") {
+		bad("give the Touch ID key a name of 1 to 64 characters on one line")
+		return
+	}
+	code := strings.TrimSpace(r.PostForm.Get("code"))
+	if code == "" {
+		bad("a Touch ID key needs an enrolment code: mint one with `seamlessd approvers enroll-code touchid`, run as the daemon's account")
+		return
+	}
+	pub, err := base64.StdEncoding.Strict().DecodeString(r.PostForm.Get("public_key"))
+	if err != nil || len(pub) != touchIDPublicKeyBytes || pub[0] != 0x04 {
+		bad("public_key must be the key's 65-byte uncompressed P-256 point in standard base64")
+		return
+	}
+	sig, err := base64.StdEncoding.Strict().DecodeString(r.PostForm.Get("signature"))
+	if err != nil || len(sig) == 0 || len(sig) > touchIDMaxSignatureBytes {
+		bad("signature must be the new key's ASN.1 DER signature over the enrolment message in standard base64")
+		return
+	}
+	cred, err := s.cfg.Approvals.EnrolTouchID(r.Context(), name, code, pub, sig)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, map[string]any{"id": cred.ID, "name": cred.Name})
+	case errors.Is(err, approval.ErrTouchIDKey):
+		bad("the new key's signature over the enrolment code does not verify")
+	case errors.Is(err, store.ErrApproverExists):
+		bad("that Touch ID key is already enrolled")
+	case errors.Is(err, store.ErrInvalidApprover):
+		bad("give the Touch ID key a name of 1 to 64 characters on one line")
+	case errors.Is(err, store.ErrEnrolProof):
+		bad("a Touch ID key needs an enrolment code: mint one with `seamlessd approvers enroll-code touchid`, run as the daemon's account")
+	default:
+		s.approverError(w, r, err)
+	}
 }
 
 // approverAddedBy renders added_by for the list.
