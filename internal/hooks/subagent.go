@@ -15,16 +15,12 @@ package hooks
 // session's plan composition.
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -38,23 +34,6 @@ import (
 
 // maxAgentTitleRunes caps the prompt-derived part of an agent-cache note title.
 const maxAgentTitleRunes = 120
-
-// Claude Code appends a subagent's final message to the transcript while
-// SubagentStop is already in flight, so parsing the file the moment the hook
-// fires reads it one message short: the capture stores the narration line
-// before the report ("Now the console files.") as though it were the
-// deliverable. 55 of this machine's first 80 captures landed that way, and the
-// bimodal split -- one-line narration or a full report, nothing between --
-// is the race, not truncation. A half-written trailing line reaches the same
-// end by a second route, because the tolerant parser skips it and falls back to
-// the previous assistant text. So wait for the transcript's terminal shape
-// rather than trusting whatever is on disk at hook time. The budget fits inside
-// captureTimeout with room for the note write, and an interrupted subagent --
-// one that never emits a final message -- just spends it.
-const (
-	subagentReportSettle = 3 * time.Second
-	subagentReportPoll   = 50 * time.Millisecond
-)
 
 // subagentStart injects the child briefing (project constraints plus
 // spawn-prompt-matched RELEVANT memories) without running any ambient-session
@@ -71,12 +50,14 @@ func (h *Handler) subagentStart(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p := decodeSubagentStart(client, readHookBody(w, r))
+	body := readHookBody(w, r)
+	p := decodeSubagentStart(client, body)
 	p.Identity = identityFromRequest(r)
 	host := h.hostOf(p.Identity)
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
+	p.Capture = h.pushedCapture(ctx, client, body)
 	if h.foreignSession(ctx, client, p.ParentSessionID) {
 		p.ParentSessionID = ""
 	}
@@ -91,9 +72,14 @@ func (h *Handler) subagentStart(w http.ResponseWriter, r *http.Request) {
 	}
 	// The spawn prompt is read out of the child's transcript, so it is resolved
 	// only for an agent on this machine; a remote child still gets the project's
-	// constraints, just without the prompt-matched RELEVANT section.
+	// constraints, just without the prompt-matched RELEVANT section. Under
+	// peer_auth the transcript is never opened here: `seam hook` read it and
+	// pushed the prompt (pushed.go).
 	prompt := ""
-	if h.localDiskOK(ctx, "subagent-spawn-prompt", client, host) {
+	switch {
+	case p.Capture != nil:
+		prompt = p.Capture.Prompt
+	case h.localDiskOK(ctx, "subagent-spawn-prompt", client, host):
 		prompt = subagentSpawnPrompt(client, p)
 	}
 	briefing, injectedIDs, err := h.retrieve.Briefing(ctx, subagentBriefingInput(p, host, prompt))
@@ -118,10 +104,13 @@ func (h *Handler) subagentStop(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p := decodeSubagentStop(client, readHookBody(w, r))
+	body := readHookBody(w, r)
+	p := decodeSubagentStop(client, body)
 	p.Identity = identityFromRequest(r)
-	if h.foreignSession(r.Context(), client, p.ParentSessionID) {
-		p.ParentSessionID = ""
+	p.Capture = h.pushedCapture(r.Context(), client, body)
+	reach, lockedProject := h.sessionReachOf(r.Context(), client, p.ParentSessionID)
+	if reach != reachOK {
+		p.ParentSessionID = "" // foreignSession: another account's, or locked
 	}
 
 	if client == ClientCodex {
@@ -135,12 +124,27 @@ func (h *Handler) subagentStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.captureLocal(r.Context(), "subagent-transcript", p.Identity) {
+	// Under peer_auth the transcript is never opened here: `seam hook` waited
+	// for it to settle and pushed the prompt and report (pushed.go).
+	if h.subagentCaptureRuns(r.Context(), p) {
 		ctx, cancel := context.WithTimeout(r.Context(), captureTimeout)
 		defer cancel()
-		h.captureSubagent(ctx, p)
+		if notice := h.captureSubagent(ctx, p, reach, lockedProject); notice != "" {
+			h.refuseCapture(w, notice)
+		}
 	}
 	writeHookAck(w)
+}
+
+// subagentCaptureRuns decides whether a subagent capture runs at all: the
+// daemon's own read of the transcript (captureLocal) when nothing was pushed --
+// always, with peer_auth off -- or, under peer_auth, the push (whose fences
+// captureSubagent applies).
+func (h *Handler) subagentCaptureRuns(ctx context.Context, p subagentPayload) bool {
+	if p.Capture != nil {
+		return h.captureEnabled()
+	}
+	return h.captureLocal(ctx, "subagent-transcript", p.Identity)
 }
 
 // errAgentCaptureDropped is the fail-open signal out of the locked upsert, the
@@ -153,15 +157,43 @@ var errAgentCaptureDropped = errors.New("agent capture dropped")
 // a note.
 // Gate: only while the session has an unapproved plan capture or is in plan
 // mode -- otherwise every subagent machine-wide would produce a note.
-func (h *Handler) captureSubagent(ctx context.Context, p subagentPayload) {
+//
+// Under peer_auth the prompt and report are the ones `seam hook` pushed, and
+// they land only once the fences pass them (fenceNotePush, judged with the
+// parent session's reach); the notice for one refused at a lock is returned
+// for the response. It is "" in every other case.
+func (h *Handler) captureSubagent(ctx context.Context, p subagentPayload, reach sessionReach, lockedProject string) (notice string) {
 	if p.AgentID == "" {
-		return
+		return ""
 	}
 	meta, hasMeta := h.sessionPlanMeta(ctx, p.ParentSessionID)
 	planning := hasMeta && (meta.Status == plans.StatusDraft || meta.Status == plans.StatusPresented)
 	if !planning && p.PermissionMode != "plan" {
-		return
+		return ""
 	}
+	if p.Capture == nil {
+		prompt, report, ok := h.subagentReportFromDisk(ctx, p)
+		if ok {
+			h.writeSubagentNote(ctx, p, meta, h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD), prompt, report)
+		}
+		return ""
+	}
+	if p.Capture.Prompt == "" && p.Capture.Report == "" {
+		return "" // the client found no transcript, or nothing in it
+	}
+	target := h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD)
+	project, verdict := h.fenceNotePush(ctx, ClientClaudeCode, reach, lockedProject, p.ParentSessionID, target, "this subagent's report")
+	if !verdict.ok {
+		return verdict.notice
+	}
+	h.writeSubagentNote(ctx, p, meta, project, p.Capture.Prompt, p.Capture.Report)
+	return ""
+}
+
+// subagentReportFromDisk reads a subagent's prompt and report out of its
+// transcript on this machine, waiting for the report to settle. ok is false
+// when there is nothing to capture.
+func (h *Handler) subagentReportFromDisk(ctx context.Context, p subagentPayload) (prompt, report string, ok bool) {
 	path := subagentTranscriptPath(p)
 	// Claude Code also fires SubagentStop for agents that never write a
 	// transcript: no SubagentStart, no file anywhere, at turn cadence for as
@@ -172,16 +204,21 @@ func (h *Handler) captureSubagent(ctx context.Context, p subagentPayload) {
 	if _, err := os.Stat(path); path != "" && errors.Is(err, fs.ErrNotExist) {
 		h.logger.Debug("hooks: subagent left no transcript; nothing to capture",
 			"agent_id", p.AgentID, "agent_type", p.AgentType)
-		return
+		return "", "", false
 	}
-	prompt, report := h.awaitSubagentReport(ctx, path, p.AgentID)
+	prompt, report = h.awaitSubagentReport(ctx, path, p.AgentID)
 	if prompt == "" && report == "" {
 		h.logger.Warn("hooks: subagent transcript unreadable or empty",
 			"agent_id", p.AgentID, "agent_type", p.AgentType, "path", path)
-		return
+		return "", "", false
 	}
+	return prompt, report, true
+}
 
-	project := h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD)
+// writeSubagentNote upserts the cc-agent-<agent_id> note for one subagent run
+// in project, parks it on the session when no plan slug exists yet, and
+// records the capture.
+func (h *Handler) writeSubagentNote(ctx context.Context, p subagentPayload, meta planCaptureMeta, project, prompt, report string) {
 	noteSlug := plans.AgentNotePrefix + core.Slugify(p.AgentID)
 	now := time.Now().UTC()
 
@@ -207,7 +244,7 @@ func (h *Handler) captureSubagent(ctx context.Context, p subagentPayload) {
 		note.Description = fmt.Sprintf("Cached planning-subagent run (%s) -- prompt + final report", p.AgentType)
 		note.Body = agentStamp(
 			h.ambientDisplayName(ctx, ClientClaudeCode, p.ParentSessionID),
-			p.AgentID, h.gitHead(ctx, p.Identity, p.CWD), now,
+			p.AgentID, h.gitHead(ctx, p.Identity, p.CWD, p.Capture), now,
 		) +
 			"\n\n## Prompt\n\n" + prompt + "\n\n## Report\n\n" + report
 		note.Tags = agentNoteTags(meta.PlanSlug, p.AgentType)
@@ -308,146 +345,4 @@ func subagentSpawnPrompt(client Client, p subagentPayload) string {
 		return headCodexRollout(p.TranscriptPath)
 	}
 	return ""
-}
-
-// subagentTranscriptPath resolves the subagent's JSONL transcript: the
-// agent_transcript_path Claude Code's SubagentStop names, else the payload
-// transcript_path when it already names a subagents/agent-*.jsonl file, else
-// constructed from the main transcript path and agent id (the verified layout:
-// <proj-dir>/<session-id>/subagents/agent-<agent_id>.jsonl; SubagentStart
-// carries no agent_transcript_path). An agent id carrying path separators or
-// ".." is rejected rather than joined into the path -- it is a filename
-// fragment, never a path.
-func subagentTranscriptPath(p subagentPayload) string {
-	if p.AgentTranscriptPath != "" {
-		return p.AgentTranscriptPath
-	}
-	if p.TranscriptPath == "" {
-		return ""
-	}
-	base := filepath.Base(p.TranscriptPath)
-	if filepath.Base(filepath.Dir(p.TranscriptPath)) == "subagents" &&
-		strings.HasPrefix(base, "agent-") && strings.HasSuffix(base, ".jsonl") {
-		return p.TranscriptPath
-	}
-	if strings.ContainsAny(p.AgentID, `/\`) || strings.Contains(p.AgentID, "..") {
-		return ""
-	}
-	return filepath.Join(strings.TrimSuffix(p.TranscriptPath, ".jsonl"),
-		"subagents", "agent-"+p.AgentID+".jsonl")
-}
-
-// awaitSubagentReport parses the transcript, waiting up to subagentReportSettle
-// for the final assistant message to land. It returns the best values seen, so
-// a transcript that never settles (an interrupted subagent) still yields its
-// last narration rather than nothing -- that is the truest record available,
-// and captureSubagent's own empty check decides whether it is worth a note.
-func (h *Handler) awaitSubagentReport(ctx context.Context, path, agentID string) (prompt, report string) {
-	prompt, report, complete := parseSubagentTranscript(path)
-	if complete {
-		return prompt, report
-	}
-	fi, err := os.Stat(path)
-	if err != nil {
-		return prompt, report // blank or absent path: nothing to wait for
-	}
-	size := fi.Size()
-
-	settled := time.NewTimer(subagentReportSettle)
-	defer settled.Stop()
-	tick := time.NewTicker(subagentReportPoll)
-	defer tick.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return prompt, report
-		case <-settled.C:
-			h.logger.Warn("hooks: subagent transcript never settled; capture may hold narration",
-				"agent_id", agentID)
-			return prompt, report
-		case <-tick.C:
-			// Re-parse only on growth: an interrupted subagent would otherwise
-			// re-read a transcript that will never change once per tick.
-			fi, err := os.Stat(path)
-			if err != nil || fi.Size() == size {
-				continue
-			}
-			size = fi.Size()
-			p, r, done := parseSubagentTranscript(path)
-			if p != "" {
-				prompt = p
-			}
-			if r != "" {
-				report = r
-			}
-			if done {
-				return prompt, report
-			}
-		}
-	}
-}
-
-// parseSubagentTranscript extracts the prompt (first user message) and final
-// report (last assistant text) from a subagent transcript, and reports whether
-// the transcript has reached its TERMINAL shape: a last line that parses, is an
-// assistant message, carries text, and carries no tool_use. 371 of the 378
-// subagent transcripts on the machine this was diagnosed on end exactly that
-// way; the 7 that do not were interrupted mid-run. Anything else -- a trailing
-// tool_use, a lone thinking block, a tool_result, a half-written line -- means
-// the agent is still working or the writer is mid-flush, so the newest
-// assistant text is narration rather than the report. Any problem yields empty
-// strings and complete=false; capture is best-effort and never errors.
-func parseSubagentTranscript(path string) (prompt, report string, complete bool) {
-	if strings.TrimSpace(path) == "" {
-		return "", "", false
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return "", "", false
-	}
-	defer func() { _ = f.Close() }()
-
-	sc := bufio.NewScanner(f)
-	// Same headroom as harvestFindings: transcript lines can be very large.
-	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
-	for sc.Scan() {
-		line := sc.Bytes()
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
-		// Every line clears the flag, so it describes the LAST one and not merely
-		// some earlier line that happened to look final.
-		complete = false
-		var tl transcriptLine
-		if err := json.Unmarshal(line, &tl); err != nil {
-			continue // tolerant: skip malformed lines (a trailing one is a mid-flush write)
-		}
-		switch tl.Type {
-		case "user":
-			if prompt == "" {
-				prompt = messageText(tl.Message.Content)
-			}
-		case "assistant":
-			if txt := messageText(tl.Message.Content); txt != "" {
-				report = txt
-				complete = !hasToolUse(tl.Message.Content)
-			}
-		}
-	}
-	if sc.Err() != nil {
-		complete = false // a truncated read cannot show which line is last
-	}
-	return strings.TrimSpace(prompt), strings.TrimSpace(report), complete
-}
-
-// hasToolUse reports whether a message's content carries a tool_use block, the
-// marker that the turn continues. Text sitting beside a tool_use is the model
-// narrating its next step, never its report. Content that is a plain string
-// carries no blocks and so no tool_use.
-func hasToolUse(raw json.RawMessage) bool {
-	var blocks []contentBlock
-	if err := json.Unmarshal(raw, &blocks); err != nil {
-		return false
-	}
-	return slices.ContainsFunc(blocks, func(b contentBlock) bool { return b.Type == "tool_use" })
 }

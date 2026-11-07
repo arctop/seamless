@@ -8,6 +8,7 @@
 package hooks
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -29,6 +30,7 @@ import (
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/gitread"
+	"github.com/arctop/seamless/internal/harvest"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
@@ -170,6 +172,9 @@ type hookPayload struct {
 	// Identity travels on the query string, not in the body (see adapter.go);
 	// the handler copies it in so everything downstream reads one payload.
 	Identity hookIdentity `json:"-"`
+	// Capture is what `seam hook` pushed under peer_auth (pushed.go); nil
+	// otherwise, and always nil with peer_auth off.
+	Capture *harvest.Push `json:"-"`
 }
 
 type promptPayload struct {
@@ -183,14 +188,18 @@ type promptPayload struct {
 	// http hook, so no seam process computes an identity for it. The daemon
 	// attributes it through the ambient session it already owns.
 	Host string `json:"-"`
+	// Capture is what `seam hook` pushed under peer_auth (pushed.go), where
+	// every hook is a command hook; nil otherwise.
+	Capture *harvest.Push `json:"-"`
 }
 
 // endPayload is the SessionEnd request body.
 type endPayload struct {
-	SessionID      string       `json:"session_id"`
-	TranscriptPath string       `json:"transcript_path"`
-	Reason         string       `json:"reason"` // clear|logout|prompt_input_exit|other
-	Identity       hookIdentity `json:"-"`
+	SessionID      string        `json:"session_id"`
+	TranscriptPath string        `json:"transcript_path"`
+	Reason         string        `json:"reason"` // clear|logout|prompt_input_exit|other
+	Identity       hookIdentity  `json:"-"`
+	Capture        *harvest.Push `json:"-"` // pushed under peer_auth (pushed.go)
 }
 
 // stopPayload is the Codex Stop request body. Stop fires at every turn end and,
@@ -198,13 +207,14 @@ type endPayload struct {
 // agent message directly (LastAssistantMessage), with transcript_path as the
 // rollout-file fallback when it is absent.
 type stopPayload struct {
-	SessionID            string       `json:"session_id"`
-	CWD                  string       `json:"cwd"`
-	TranscriptPath       string       `json:"transcript_path"`
-	LastAssistantMessage string       `json:"last_assistant_message"`
-	StopHookActive       bool         `json:"stop_hook_active"`
-	Model                string       `json:"model"` // Codex sends it; Claude Code does not (see setAmbientModel)
-	Identity             hookIdentity `json:"-"`
+	SessionID            string        `json:"session_id"`
+	CWD                  string        `json:"cwd"`
+	TranscriptPath       string        `json:"transcript_path"`
+	LastAssistantMessage string        `json:"last_assistant_message"`
+	StopHookActive       bool          `json:"stop_hook_active"`
+	Model                string        `json:"model"` // Codex sends it; Claude Code does not (see setAmbientModel)
+	Identity             hookIdentity  `json:"-"`
+	Capture              *harvest.Push `json:"-"` // pushed under peer_auth (pushed.go)
 }
 
 // toolPayload is the tolerant shape of the PostToolUse and PermissionRequest
@@ -220,6 +230,10 @@ type toolPayload struct {
 	ToolInput      json.RawMessage `json:"tool_input"`
 	ToolResponse   json.RawMessage `json:"tool_response"`
 	Identity       hookIdentity    `json:"-"`
+	Capture        *harvest.Push   `json:"-"` // pushed under peer_auth (pushed.go)
+	// Project is where the fences placed a pushed capture (planCaptureRuns);
+	// read only when Capture is set (captureProject).
+	Project string `json:"-"`
 }
 
 // subagentPayload is the normalized SubagentStart/SubagentStop shape. Both
@@ -229,19 +243,20 @@ type toolPayload struct {
 // Claude Code's smaller payload leaves the Codex-only fields (turn_id, model)
 // empty, preserving its plan-capture path.
 type subagentPayload struct {
-	ParentSessionID      string       `json:"session_id"`
-	TurnID               string       `json:"turn_id"`
-	AgentID              string       `json:"agent_id"`
-	AgentType            string       `json:"agent_type"`
-	CWD                  string       `json:"cwd"`
-	Model                string       `json:"model"`
-	PermissionMode       string       `json:"permission_mode"`
-	HookEventName        string       `json:"hook_event_name"`
-	TranscriptPath       string       `json:"transcript_path"`
-	AgentTranscriptPath  string       `json:"agent_transcript_path"`
-	LastAssistantMessage string       `json:"last_assistant_message"`
-	StopHookActive       bool         `json:"stop_hook_active"`
-	Identity             hookIdentity `json:"-"`
+	ParentSessionID      string        `json:"session_id"`
+	TurnID               string        `json:"turn_id"`
+	AgentID              string        `json:"agent_id"`
+	AgentType            string        `json:"agent_type"`
+	CWD                  string        `json:"cwd"`
+	Model                string        `json:"model"`
+	PermissionMode       string        `json:"permission_mode"`
+	HookEventName        string        `json:"hook_event_name"`
+	TranscriptPath       string        `json:"transcript_path"`
+	AgentTranscriptPath  string        `json:"agent_transcript_path"`
+	LastAssistantMessage string        `json:"last_assistant_message"`
+	StopHookActive       bool          `json:"stop_hook_active"`
+	Identity             hookIdentity  `json:"-"`
+	Capture              *harvest.Push `json:"-"` // pushed under peer_auth (pushed.go)
 }
 
 // hookResponse is the Claude Code hook response envelope; the field names are
@@ -266,12 +281,14 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p := decodeSessionStart(client, readHookBody(w, r))
+	body := readHookBody(w, r)
+	p := decodeSessionStart(client, body)
 	p.Identity = identityFromRequest(r)
 	host := h.hostOf(p.Identity)
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
+	p.Capture = h.pushedCapture(ctx, client, body)
 	reach, reachProject := h.sessionReachOf(ctx, client, p.SessionID)
 	if reach == reachForeign {
 		p.SessionID = ""
@@ -347,7 +364,7 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 		if id, name := h.ensureAmbientSessionIn(ctx, client, host, p, ""); name != "" {
 			sessionID = id
 			briefing = injectAmbientLine(briefing, name, p.Identity.AgentProcess != "")
-			h.setAmbientModel(ctx, client, host, p.SessionID, p.Model, p.TranscriptPath)
+			h.setAmbientModel(ctx, client, host, p.SessionID, pushedModel(p.Model, p.Capture), p.TranscriptPath)
 		}
 	} else {
 		sessionID = h.ambientSessionID(ctx, client, p.SessionID)
@@ -371,18 +388,24 @@ func (h *Handler) sessionEnd(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p := decodeSessionEnd(client, readHookBody(w, r))
+	body := readHookBody(w, r)
+	p := decodeSessionEnd(client, body)
 	p.Identity = identityFromRequest(r)
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
-	reach, _ := h.sessionReachOf(ctx, client, p.SessionID)
+	p.Capture = h.pushedCapture(ctx, client, body)
+	reach, lockedProject := h.sessionReachOf(ctx, client, p.SessionID)
 	if reach == reachForeign {
 		p.SessionID = ""
 	}
 
 	// A session in a locked project (recorded there before any approval)
-	// completes like any other, metadata only: nothing is harvested into it.
+	// completes like any other, metadata only: nothing is harvested into it,
+	// and a pushed harvest is refused with the notice.
+	if reach == reachLocked && pushCarries(p.Capture) {
+		h.refuseCapture(w, captureRefusedNotice("this session's findings and token totals", lockedProject))
+	}
 	h.completeClaudeSessions(ctx, client, p, reach == reachLocked)
 	// SessionEnd has no hookSpecificOutput variant in Claude Code's schema, so
 	// the response is a bare ack -- emitting one fails root validation.
@@ -405,13 +428,15 @@ func (h *Handler) stop(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p := decodeStop(client, readHookBody(w, r))
+	body := readHookBody(w, r)
+	p := decodeStop(client, body)
 	p.Identity = identityFromRequest(r)
 	host := h.hostOf(p.Identity)
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
-	reach, _ := h.sessionReachOf(ctx, client, p.SessionID)
+	p.Capture = h.pushedCapture(ctx, client, body)
+	reach, lockedProject := h.sessionReachOf(ctx, client, p.SessionID)
 	if reach == reachForeign {
 		p.SessionID = ""
 	}
@@ -419,12 +444,18 @@ func (h *Handler) stop(w http.ResponseWriter, r *http.Request) {
 	// A Stop is proof the agent is alive this turn: heartbeat so the idle reaper
 	// does not expire the session mid-work. Always, for every client.
 	h.touchAmbient(ctx, client, p.SessionID)
-	h.setAmbientModel(ctx, client, host, p.SessionID, p.Model, p.TranscriptPath)
+	h.setAmbientModel(ctx, client, host, p.SessionID, pushedModel(p.Model, p.Capture), p.TranscriptPath)
 
 	// A session in a locked project takes no findings until the owner
-	// approves its access (metadata only): the heartbeat above is all.
-	if client == ClientCodex && reach != reachLocked {
-		h.harvestCodexStop(ctx, host, p)
+	// approves its access (metadata only): the heartbeat above is all, and a
+	// pushed harvest is refused with the notice.
+	if client == ClientCodex {
+		switch {
+		case reach != reachLocked:
+			h.harvestCodexStop(ctx, host, p)
+		case pushCarries(p.Capture):
+			h.refuseCapture(w, captureRefusedNotice("this turn's findings and token totals", lockedProject))
+		}
 	}
 
 	// Stop has no hookSpecificOutput variant in Codex's schema (it can only
@@ -442,6 +473,12 @@ func (h *Handler) harvestCodexStop(ctx context.Context, host string, p stopPaylo
 	if h.db == nil || p.SessionID == "" {
 		return
 	}
+	// Under peer_auth the daemon reads no rollout: `seam hook stop` read it and
+	// pushed the same two values (pushed.go), which land the same way.
+	if p.Capture != nil {
+		h.applyCodexStop(ctx, p.SessionID, p.Capture.Tokens, p.Capture.Findings)
+		return
+	}
 	// Everything below reads the agent's rollout file. On another machine that
 	// path either does not exist here or, worse, is a DIFFERENT session's
 	// rollout under the same username and home layout -- so the turn is recorded
@@ -453,22 +490,31 @@ func (h *Handler) harvestCodexStop(ctx context.Context, host string, p stopPaylo
 	// re-reading the latest one each Stop and overwriting is idempotent (Codex has no
 	// SessionEnd, so this is the only place its usage lands). Independent of findings
 	// -- a turn may update one without the other.
+	var tokens *core.TokenUsage
 	if usage, ok := codexRolloutTokens(p.TranscriptPath); ok {
+		tokens = &usage
+	}
+	h.applyCodexStop(ctx, p.SessionID, tokens, codexStopFindings(p.LastAssistantMessage, p.TranscriptPath))
+}
+
+// applyCodexStop records one Codex turn's harvest on its ambient session: the
+// absolute token totals when there are any, and the findings when the turn had
+// assistant text ("" leaves the previous turn's in place).
+func (h *Handler) applyCodexStop(ctx context.Context, externalSessionID string, tokens *core.TokenUsage, findings string) {
+	if tokens != nil {
 		if _, err := store.SetAmbientSessionTokens(
-			ctx, h.db, ClientCodex.externalIdentity(), p.SessionID, usage, time.Now().UTC(),
+			ctx, h.db, ClientCodex.externalIdentity(), externalSessionID, *tokens, time.Now().UTC(),
 		); err != nil {
-			h.recordHookError(ctx, "codex-stop-token-harvest", ClientCodex, err, "external_session_id", p.SessionID)
+			h.recordHookError(ctx, "codex-stop-token-harvest", ClientCodex, err, "external_session_id", externalSessionID)
 		}
 	}
-
-	findings := codexStopFindings(p.LastAssistantMessage, p.TranscriptPath)
 	if findings == "" {
 		return // nothing this turn; the heartbeat kept the session alive
 	}
 	if _, err := store.UpdateAmbientFindings(
-		ctx, h.db, ClientCodex.externalIdentity(), p.SessionID, findings, time.Now().UTC(),
+		ctx, h.db, ClientCodex.externalIdentity(), externalSessionID, findings, time.Now().UTC(),
 	); err != nil {
-		h.recordHookError(ctx, "codex-stop-findings-harvest", ClientCodex, err, "external_session_id", p.SessionID)
+		h.recordHookError(ctx, "codex-stop-findings-harvest", ClientCodex, err, "external_session_id", externalSessionID)
 	}
 }
 
@@ -489,6 +535,12 @@ func (h *Handler) harvestClaudeTokens(ctx context.Context, client Client, host, 
 	if !ok {
 		return
 	}
+	h.setSessionTokens(ctx, client, externalSessionID, usage, now)
+}
+
+// setSessionTokens overwrites the ambient session's token totals (it must
+// still be active: SetAmbientSessionTokens guards on it).
+func (h *Handler) setSessionTokens(ctx context.Context, client Client, externalSessionID string, usage core.TokenUsage, now time.Time) {
 	if _, err := store.SetAmbientSessionTokens(
 		ctx, h.db, client.externalIdentity(), externalSessionID, usage, now,
 	); err != nil {
@@ -641,10 +693,18 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 	// would open belongs to someone else, so the session completes with whatever
 	// the client already told us and the skips are recorded.
 	host := h.hostOf(p.Identity)
-	localDisk := !metadataOnly && h.localDiskOK(ctx, "session-end-transcript", client, host)
+	// Under peer_auth the transcript is never opened here: `seam hook
+	// session-end` read it and pushed the same three values (pushed.go), which
+	// land exactly where the daemon's own read would have put them.
+	push := p.Capture
+	pushed := !metadataOnly && push != nil
+	localDisk := !metadataOnly && push == nil && h.localDiskOK(ctx, "session-end-transcript", client, host)
 	finalModel := ""
-	if client == ClientClaudeCode && localDisk {
+	switch {
+	case client == ClientClaudeCode && localDisk:
 		finalModel = transcriptModel(p.TranscriptPath)
+	case pushed:
+		finalModel = push.Model
 	}
 	harvested := "" // harvest the transcript once, lazily, only when an ambient needs it
 	for _, sess := range sessions {
@@ -670,6 +730,14 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 			// UpdateSession below flips it to completed -- SetAmbientSessionTokens guards
 			// on status = 'active'.
 			h.harvestClaudeTokens(ctx, client, host, p.SessionID, p.TranscriptPath, now)
+		}
+		if sess.Ambient && pushed {
+			// Absent findings are the daemon's own default for a transcript with
+			// nothing to harvest.
+			sess.Findings = cmp.Or(push.Findings, harvestFallback)
+			if push.Tokens != nil {
+				h.setSessionTokens(ctx, client, p.SessionID, *push.Tokens, now)
+			}
 		}
 		if err := store.UpdateSession(ctx, h.db, sess); err != nil {
 			h.recordHookError(ctx, "session-end-complete", client, err, "session", sess.ID)
@@ -865,7 +933,8 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p := decodePrompt(client, readHookBody(w, r))
+	body := readHookBody(w, r)
+	p := decodePrompt(client, body)
 	if p.UserPrompt == "" {
 		h.writeContextResponse(r.Context(), w, "UserPromptSubmit", "user-prompt-submit",
 			client, p.SessionID, "", "", false, nil)
@@ -874,6 +943,7 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
+	p.Capture = h.pushedCapture(ctx, client, body)
 	// A session in a locked project is kept for what this hook does to it --
 	// the heartbeat, the model, the injection's attribution -- all metadata;
 	// the recall below reads by cwd, and a locked cwd recalls nothing.
@@ -889,7 +959,7 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 	p.Host = h.ambientHost(ctx, client, p.SessionID)
 
 	h.touchAmbient(ctx, client, p.SessionID)
-	h.setAmbientModel(ctx, client, p.Host, p.SessionID, p.Model, p.TranscriptPath)
+	h.setAmbientModel(ctx, client, p.Host, p.SessionID, pushedModel(p.Model, p.Capture), p.TranscriptPath)
 
 	out, injectedIDs, err := h.retrieve.PromptRecall(ctx, p.Host, p.CWD, p.UserPrompt)
 	if err != nil {
@@ -1141,8 +1211,10 @@ func (h *Handler) sameHost(host string) bool {
 // rollout pointing (or symlinked) into it would have the daemon read a sealed
 // project's files and file the result as the caller's findings or notes: the
 // confused deputy the whole boundary exists to rule out. Nothing is opened, and
-// nothing is recorded per call either (it would be every call); doctor states
-// the cost once.
+// nothing is recorded per call either (it would be every call). The captures
+// this skips are made by `seam hook` instead, which runs as the owner beside
+// the agent, and pushed in the hook body (pushed.go): the daemon still opens
+// nothing.
 func (h *Handler) localDiskOK(ctx context.Context, what string, client Client, host string) bool {
 	if _, peerAuth := access.FromContext(ctx); peerAuth {
 		h.logger.Debug("hooks: peer_auth, skipping agent-disk capture", "what", what)
@@ -1180,7 +1252,12 @@ func (h *Handler) recordRemoteSkip(ctx context.Context, what string, client Clie
 // stamp a commit from an unrelated history -- so the stamp is left empty, which
 // renders as "unknown" (shortHead) and which plans.StampHead and the gardener's
 // ship-evidence pass already treat as absent.
-func (h *Handler) gitHead(ctx context.Context, id hookIdentity, cwd string) string {
+func (h *Handler) gitHead(ctx context.Context, id hookIdentity, cwd string, push *harvest.Push) string {
+	if push != nil {
+		// Under peer_auth the repository is never read here: `seam hook` read
+		// the head beside the agent and pushed it (pushed.go).
+		return push.GitHead
+	}
 	if !h.localDiskOK(ctx, "git-stamp", ClientClaudeCode, h.hostOf(id)) {
 		return ""
 	}

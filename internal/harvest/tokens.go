@@ -1,4 +1,4 @@
-package hooks
+package harvest
 
 import (
 	"bufio"
@@ -11,13 +11,8 @@ import (
 	"github.com/arctop/seamless/internal/core"
 )
 
-// maxTokenScanLine caps a single transcript line the token parsers accept, matching
-// harvestFindings: assistant turns and tool results can be large, so grow well past
-// bufio's 64 KiB default.
-const maxTokenScanLine = 16 * 1024 * 1024
-
-// claudeTranscriptTokens sums the real model token usage of a Claude Code
-// transcript: every assistant message's usage block, counted ONCE per message id.
+// ClaudeTokens sums the real model token usage of a Claude Code transcript:
+// every assistant message's usage block, counted ONCE per message id.
 //
 // A single assistant message is written to the JSONL as several lines that share
 // one message.id, each repeating the SAME usage block (not a per-line delta), so
@@ -34,7 +29,7 @@ const maxTokenScanLine = 16 * 1024 * 1024
 //
 // ok is false when nothing was harvested (blank path, unreadable file, no assistant
 // usage). It never errors: the SessionEnd hook must always complete.
-func claudeTranscriptTokens(path string) (usage core.TokenUsage, ok bool) {
+func ClaudeTokens(path string) (usage core.TokenUsage, ok bool) {
 	if strings.TrimSpace(path) == "" {
 		return core.TokenUsage{}, false
 	}
@@ -45,7 +40,7 @@ func claudeTranscriptTokens(path string) (usage core.TokenUsage, ok bool) {
 	defer func() { _ = f.Close() }()
 
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), maxTokenScanLine)
+	sc.Buffer(make([]byte, 0, 64*1024), maxScanLine)
 
 	seen := map[string]struct{}{}
 	found := false
@@ -92,10 +87,10 @@ func claudeTranscriptTokens(path string) (usage core.TokenUsage, ok bool) {
 	return usage, true
 }
 
-// codexRolloutTokens returns a Codex session's cumulative model token usage: the
-// LAST token_count event in the rollout. Codex emits a token_count event every
-// turn whose total_token_usage is the running session total, so the final one is
-// the whole-session figure -- no summing, and reading it every Stop is idempotent
+// CodexTokens returns a Codex session's cumulative model token usage: the LAST
+// token_count event in the rollout. Codex emits a token_count event every turn
+// whose total_token_usage is the running session total, so the final one is the
+// whole-session figure -- no summing, and reading it every Stop is idempotent
 // (the same absolute total is written again).
 //
 // Only the file's tail is read: the closing token_count of a turn is among its
@@ -107,7 +102,7 @@ func claudeTranscriptTokens(path string) (usage core.TokenUsage, ok bool) {
 //
 // ok is false when the tail holds no token_count event (blank/unreadable path, or a
 // session too young to have emitted one). It never errors.
-func codexRolloutTokens(path string) (usage core.TokenUsage, ok bool) {
+func CodexTokens(path string) (usage core.TokenUsage, ok bool) {
 	if strings.TrimSpace(path) == "" {
 		return core.TokenUsage{}, false
 	}
@@ -122,8 +117,8 @@ func codexRolloutTokens(path string) (usage core.TokenUsage, ok bool) {
 		return core.TokenUsage{}, false
 	}
 	start := int64(0)
-	if info.Size() > maxRolloutTailBytes {
-		start = info.Size() - maxRolloutTailBytes
+	if info.Size() > MaxRolloutTailBytes {
+		start = info.Size() - MaxRolloutTailBytes
 	}
 	if _, err := f.Seek(start, io.SeekStart); err != nil {
 		return core.TokenUsage{}, false

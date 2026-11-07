@@ -32,7 +32,7 @@ func (h *Handler) lockedStart(ctx context.Context, w http.ResponseWriter, client
 	if p.AgentType == "" {
 		sessionID, name = h.ensureAmbientSessionIn(ctx, client, host, p, project)
 		if name != "" {
-			h.setAmbientModel(ctx, client, host, p.SessionID, p.Model, p.TranscriptPath)
+			h.setAmbientModel(ctx, client, host, p.SessionID, pushedModel(p.Model, p.Capture), p.TranscriptPath)
 		}
 	}
 	var req access.LockRequest

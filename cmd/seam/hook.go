@@ -28,6 +28,7 @@ import (
 	"github.com/arctop/seamless/internal/agentproc"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/gitread"
+	"github.com/arctop/seamless/internal/harvest"
 )
 
 // hookEvent is one event seam forwards: the `seam hook` argument, the endpoint
@@ -268,6 +269,14 @@ post-tool-use is Claude Code only and fires machine-wide
 on every Write/Edit, so it is pre-filtered locally: a non-plan file never reaches
 the network.
 
+With server_url naming the peer_auth Unix socket, the daemon reads none of the
+agent's files, so the hook reads them itself -- the transcript's findings, token
+totals and model, a plan file, a subagent's prompt and report, the git head --
+and sends what it found beside the payload. A capture the daemon refuses (a
+locked project the owner has not approved) is named in one line on stderr and
+is not retried. On any other server_url the payload is sent as the client
+wrote it.
+
 A runtime failure (unreadable stdin, no config, server down) is reported on
 stderr and exits 0 -- a hook must never block the session it serves. A daemon
 that cannot be dialed (restarting after an update) is retried first, for the
@@ -362,6 +371,13 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 		fmt.Fprintln(e.stderr, "seam hook: load config:", err)
 		return nil
 	}
+	// Under peer_auth the daemon opens none of the agent's files, so the
+	// captures that read them are made here and pushed (hook_capture.go). Only
+	// to the peer_auth socket: on any other server_url the payload goes on
+	// exactly as the agent client wrote it.
+	if pushesCaptures(cfg) {
+		payload = withCapture(ctx, event, o.client, payload, defaultPlansDir())
+	}
 	// --client rides as ?client=<value> so the daemon selects the per-client
 	// payload adapter; the machine identity rides beside it. Both are out of band
 	// because the body is the agent client's schema, not ours.
@@ -415,6 +431,12 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 		// are small (a briefing is the largest), so holding one costs nothing.
 		if reply, err = io.ReadAll(resp.Body); err != nil {
 			err = fmt.Errorf("read reply: %w", err)
+		}
+		// A pushed capture the daemon refused at a lock: its one line, for
+		// whoever reads the hook's stderr. Not retried -- the next capture after
+		// the owner approves carries the current state.
+		if notice := resp.Header.Get(harvest.RefusedHeader); notice != "" {
+			fmt.Fprintln(e.stderr, "seam hook:", notice)
 		}
 	}
 	if err != nil {

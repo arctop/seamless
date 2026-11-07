@@ -17,12 +17,15 @@ package hooks
 // vocabulary in plans_stamp.go.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/plans"
 )
@@ -40,12 +43,10 @@ func (h *Handler) postToolUse(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requireRequestClient(w, r); !ok {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxHookBody)
-	var p toolPayload
-	_ = json.NewDecoder(r.Body).Decode(&p) //nolint:errcheck // tolerant: a decode error just leaves p zero (no tool name -> no capture)
-	p.Identity = identityFromRequest(r)
-	if h.foreignSession(r.Context(), ClientClaudeCode, p.SessionID) {
-		p.SessionID = ""
+	p := h.decodeToolPayload(w, r)
+	reach, lockedProject := h.sessionReachOf(r.Context(), ClientClaudeCode, p.SessionID)
+	if reach != reachOK {
+		p.SessionID = "" // foreignSession: another account's, or locked
 	}
 
 	// Heartbeat the ambient session on any tool activity, so a long turn that never
@@ -58,16 +59,19 @@ func (h *Handler) postToolUse(w http.ResponseWriter, r *http.Request) {
 	// The tool name is checked BEFORE the machine check, so a remote agent's
 	// ordinary edits do not each record a skip: only a call that would actually
 	// have captured something is worth reporting as skipped.
+	//
+	// Under peer_auth the plan file is never read here: `seam hook` read it and
+	// pushed its text (pushed.go), and the push lands only through the fences.
 	var extra preparedHookContext
 	switch p.ToolName {
 	case "Write", "Edit", "MultiEdit":
-		if h.captureLocal(r.Context(), "plan-capture", p.Identity) {
+		if h.planCaptureRuns(r.Context(), w, "plan-capture", &p, reach, lockedProject, &extra) {
 			ctx, cancel := context.WithTimeout(r.Context(), captureTimeout)
 			defer cancel()
 			extra = h.capturePlanIteration(ctx, p)
 		}
 	case "ExitPlanMode":
-		if h.captureLocal(r.Context(), "plan-approval", p.Identity) {
+		if h.planCaptureRuns(r.Context(), w, "plan-approval", &p, reach, lockedProject, &extra) {
 			ctx, cancel := context.WithTimeout(r.Context(), captureTimeout)
 			defer cancel()
 			extra = h.capturePlanApproval(ctx, p)
@@ -94,15 +98,15 @@ func (h *Handler) permissionRequest(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requireRequestClient(w, r); !ok {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxHookBody)
-	var p toolPayload
-	_ = json.NewDecoder(r.Body).Decode(&p) //nolint:errcheck // tolerant: a decode error just leaves p zero (no tool name -> no capture)
-	p.Identity = identityFromRequest(r)
-	if h.foreignSession(r.Context(), ClientClaudeCode, p.SessionID) {
-		p.SessionID = ""
+	p := h.decodeToolPayload(w, r)
+	reach, lockedProject := h.sessionReachOf(r.Context(), ClientClaudeCode, p.SessionID)
+	if reach != reachOK {
+		p.SessionID = "" // foreignSession: another account's, or locked
 	}
 
-	if p.ToolName == "ExitPlanMode" && h.captureLocal(r.Context(), "plan-presented", p.Identity) {
+	// Presenting carries no plan text: a refusal here has nothing to name, so
+	// it is silent (nil: no notice).
+	if p.ToolName == "ExitPlanMode" && h.planCaptureRuns(r.Context(), w, "plan-presented", &p, reach, lockedProject, nil) {
 		ctx, cancel := context.WithTimeout(r.Context(), captureTimeout)
 		defer cancel()
 		h.markPlanPresented(ctx, p)
@@ -127,12 +131,74 @@ func (h *Handler) captureLocal(ctx context.Context, what string, id hookIdentity
 	return h.localDiskOK(ctx, what, ClientClaudeCode, h.hostOf(id))
 }
 
+// planCaptureRuns decides whether a plan capture runs: the daemon's own read
+// of the plan file (captureLocal) when no capture was pushed -- always, with
+// peer_auth off -- or, under peer_auth, what `seam hook` pushed, once the
+// fences pass it (fenceNotePush), which also place it (p.Project). When notice
+// is non-nil, a push refused at a lock sets the notice header and the notice
+// as the hook's context; nil refuses silently.
+func (h *Handler) planCaptureRuns(ctx context.Context, w http.ResponseWriter, what string, p *toolPayload, reach sessionReach, lockedProject string, notice *preparedHookContext) bool {
+	if p.Capture == nil {
+		return h.captureLocal(ctx, what, p.Identity)
+	}
+	if !h.captureEnabled() || (p.Capture.Plan == nil && p.ToolName != "ExitPlanMode") {
+		return false // an iteration whose plan file the client could not read: nothing to capture
+	}
+	target := h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD)
+	project, verdict := h.fenceNotePush(ctx, ClientClaudeCode, reach, lockedProject, p.SessionID, target, "this plan")
+	if verdict.notice != "" && notice != nil {
+		h.refuseCapture(w, verdict.notice)
+		*notice = refusalContext(verdict.notice)
+	}
+	p.Project = project
+	return verdict.ok
+}
+
+// captureProject is the project a plan capture lands in: where the fences
+// placed a pushed one (under peer_auth), else the one the hook's cwd resolves
+// to, as always.
+func (h *Handler) captureProject(ctx context.Context, p toolPayload) string {
+	if p.Capture != nil {
+		return p.Project
+	}
+	return h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD)
+}
+
+// decodeToolPayload decodes a PostToolUse or PermissionRequest body: tolerant,
+// the first JSON value, as these hooks always have. Under peer_auth it keeps
+// the bytes for the pushed capture (pushed.go); with it off the body is
+// streamed into the decoder exactly as before.
+func (h *Handler) decodeToolPayload(w http.ResponseWriter, r *http.Request) toolPayload {
+	r.Body = http.MaxBytesReader(w, r.Body, maxHookBody)
+	var p toolPayload
+	if _, on := access.FromContext(r.Context()); !on {
+		_ = json.NewDecoder(r.Body).Decode(&p) //nolint:errcheck // tolerant: a decode error just leaves p zero (no tool name -> no capture)
+		p.Identity = identityFromRequest(r)
+		return p
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		body = nil // over the cap or unreadable: the zero payload, as a decode error leaves it
+	}
+	_ = json.NewDecoder(bytes.NewReader(body)).Decode(&p) //nolint:errcheck // tolerant, as above
+	p.Identity = identityFromRequest(r)
+	p.Capture = h.pushedCapture(r.Context(), ClientClaudeCode, body)
+	return p
+}
+
 // capturePlanIteration re-reads the just-written plan file from disk (the hook
 // runs on the same machine, and re-reading is authoritative for Write and Edit
 // alike) and upserts the cc-plan note. On the session's first captured
 // iteration it returns the prepared related-prior-knowledge block for
 // injection (the zero value in every other case).
 func (h *Handler) capturePlanIteration(ctx context.Context, p toolPayload) preparedHookContext {
+	if p.Capture != nil {
+		// Pushed (peer_auth): the client read the file under its own plans dir.
+		if p.Capture.Plan == nil || p.Capture.Plan.Content == "" {
+			return preparedHookContext{}
+		}
+		return h.planIterationCaptured(ctx, p, p.Capture.Plan.Basename, p.Capture.Plan.Content)
+	}
 	var in struct {
 		FilePath string `json:"file_path"`
 	}
@@ -148,7 +214,13 @@ func (h *Handler) capturePlanIteration(ctx context.Context, p toolPayload) prepa
 		h.logger.Warn("hooks: plan capture read", "error", err)
 		return preparedHookContext{}
 	}
-	up, ok := h.upsertPlanNote(ctx, p, planBasename(path), string(content), false)
+	return h.planIterationCaptured(ctx, p, planBasename(path), string(content))
+}
+
+// planIterationCaptured upserts one plan iteration's note and, on the
+// session's first, returns the related-knowledge context.
+func (h *Handler) planIterationCaptured(ctx context.Context, p toolPayload, basename, content string) preparedHookContext {
+	up, ok := h.upsertPlanNote(ctx, p, basename, content, false)
 	if !ok || !up.first {
 		return preparedHookContext{}
 	}
@@ -172,7 +244,14 @@ func (h *Handler) capturePlanApproval(ctx context.Context, p toolPayload) prepar
 	_ = json.Unmarshal(p.ToolResponse, &resp) //nolint:errcheck // tolerant: absent fields stay zero
 
 	basename, content := "", ""
-	if resp.FilePath != "" {
+	switch {
+	case p.Capture != nil:
+		// Pushed (peer_auth): the client resolved the file under its own plans
+		// dir and read it ("" when it could not).
+		if pl := p.Capture.Plan; pl != nil {
+			basename, content = pl.Basename, pl.Content
+		}
+	case resp.FilePath != "":
 		if path, ok := h.planFilePath(resp.FilePath); ok {
 			basename = planBasename(path)
 			if b, err := os.ReadFile(path); err == nil {
@@ -211,7 +290,7 @@ func (h *Handler) markPlanPresented(ctx context.Context, p toolPayload) {
 	if !ok || meta.Basename == "" || meta.Status != plans.StatusDraft {
 		return
 	}
-	project := h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD)
+	project := h.captureProject(ctx, p)
 	path, found := h.noteFileBySlug(ctx, project, plans.NotePrefix+meta.Basename)
 	if !found {
 		return

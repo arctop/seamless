@@ -1,116 +1,95 @@
 package hooks
 
+// The transcript, rollout and subagent parsers live in internal/harvest, a leaf
+// the daemon and `seam hook` share: under peer_auth the hook reads the agent's
+// files and pushes what it found (pushed.go), and one set of parsers is what
+// keeps the two sides from reading the same file differently. These names keep
+// the daemon's call sites -- and the tests that pin each format -- reading as
+// they always have.
+
 import (
-	"bufio"
-	"bytes"
-	"encoding/json"
-	"os"
-	"strings"
+	"context"
 
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/harvest"
 )
 
 // harvestFallback is the finding recorded when no assistant text can be
-// harvested (missing/unreadable/empty transcript). It marks the session ended
-// without a summary rather than leaving findings blank. The briefing filters it
-// back out (core.FindingNoSummary) so a content-free line never reaches an agent.
-const harvestFallback = core.FindingNoSummary
+// harvested (harvest.Fallback).
+const harvestFallback = harvest.Fallback
 
-// maxHarvestRunes caps auto-harvested findings so a long final message does not
-// bloat the session record or later briefings.
-const maxHarvestRunes = 2000
+// maxHarvestRunes caps auto-harvested findings (harvest.MaxRunes).
+const maxHarvestRunes = harvest.MaxRunes
 
-// transcriptLine is the tolerant shape of one Claude Code transcript JSONL line.
-// Only assistant lines carry the text we harvest; message.content is either a
-// string or an array of typed blocks.
-type transcriptLine struct {
-	Type    string `json:"type"`
-	Message struct {
-		Content json.RawMessage `json:"content"`
-	} `json:"message"`
+// The rollout read windows (harvest.MaxRolloutTailBytes, MaxRolloutHeadBytes).
+const (
+	maxRolloutTailBytes = harvest.MaxRolloutTailBytes
+	maxRolloutHeadBytes = harvest.MaxRolloutHeadBytes
+)
+
+// subagentReportSettle is how long a subagent capture waits for the final
+// report to land (harvest.SubagentReportSettle).
+const subagentReportSettle = harvest.SubagentReportSettle
+
+// harvestFindings is a Claude Code transcript's last assistant message as
+// findings (harvest.Findings).
+func harvestFindings(path string) string { return harvest.Findings(path) }
+
+// claudeTranscriptTokens is a Claude Code transcript's token totals
+// (harvest.ClaudeTokens).
+func claudeTranscriptTokens(path string) (core.TokenUsage, bool) { return harvest.ClaudeTokens(path) }
+
+// codexRolloutTokens is a Codex rollout's cumulative token totals
+// (harvest.CodexTokens).
+func codexRolloutTokens(path string) (core.TokenUsage, bool) { return harvest.CodexTokens(path) }
+
+// transcriptModel is a Claude Code transcript's last main-thread model
+// (harvest.TranscriptModel).
+func transcriptModel(path string) string { return harvest.TranscriptModel(path) }
+
+// codexStopFindings is one Codex Stop's findings (harvest.CodexStopFindings).
+func codexStopFindings(lastAssistantMessage, transcriptPath string) string {
+	return harvest.CodexStopFindings(lastAssistantMessage, transcriptPath)
 }
 
-type contentBlock struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+// tailCodexRollout is a rollout's last agent message (harvest.CodexLastMessage).
+func tailCodexRollout(path string) string { return harvest.CodexLastMessage(path) }
+
+// headCodexRollout is a rollout's first user message
+// (harvest.CodexFirstUserMessage).
+func headCodexRollout(path string) string { return harvest.CodexFirstUserMessage(path) }
+
+// codexRolloutLineMessage is one rollout line's agent message
+// (harvest.CodexLineMessage).
+func codexRolloutLineMessage(line []byte) string { return harvest.CodexLineMessage(line) }
+
+// codexRolloutLineUserMessage is one rollout line's user message
+// (harvest.CodexLineUserMessage).
+func codexRolloutLineUserMessage(line []byte) string { return harvest.CodexLineUserMessage(line) }
+
+// parseSubagentTranscript is a subagent transcript's prompt, report and
+// whether it has settled (harvest.SubagentTranscript).
+func parseSubagentTranscript(path string) (prompt, report string, complete bool) {
+	return harvest.SubagentTranscript(path)
 }
 
-// harvestFindings extracts draft findings from a Claude Code transcript: it
-// returns the text of the LAST assistant message (its text blocks concatenated),
-// prefixed "(auto-harvested) " and capped at maxHarvestRunes. Any problem --
-// blank path, unreadable file, no assistant text -- yields harvestFallback. It
-// never errors; the session-end hook must always complete the session.
-func harvestFindings(path string) string {
-	if strings.TrimSpace(path) == "" {
-		return harvestFallback
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return harvestFallback
-	}
-	defer func() { _ = f.Close() }()
-
-	sc := bufio.NewScanner(f)
-	// Transcript lines can be large (long assistant turns, tool results); grow the
-	// scanner buffer well past the 64 KiB default so a long line is not dropped.
-	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
-
-	last := ""
-	for sc.Scan() {
-		line := sc.Bytes()
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
-		var tl transcriptLine
-		if err := json.Unmarshal(line, &tl); err != nil {
-			continue // tolerant: skip malformed lines
-		}
-		if tl.Type != "assistant" {
-			continue
-		}
-		if txt := messageText(tl.Message.Content); txt != "" {
-			last = txt
-		}
-	}
-
-	last = strings.TrimSpace(last)
-	if last == "" {
-		return harvestFallback
-	}
-	return "(auto-harvested) " + capRunes(last, maxHarvestRunes)
+// subagentTranscriptPath resolves a Claude Code subagent's transcript from a
+// SubagentStart/SubagentStop payload (harvest.SubagentTranscriptPath).
+func subagentTranscriptPath(p subagentPayload) string {
+	return harvest.SubagentTranscriptPath(p.AgentTranscriptPath, p.TranscriptPath, p.AgentID)
 }
 
-// messageText concatenates the text blocks of a transcript message's content
-// (assistant or user), which is either a plain string or an array of typed blocks.
-func messageText(raw json.RawMessage) string {
-	if len(raw) == 0 {
-		return ""
+// awaitSubagentReport parses the subagent transcript, waiting for its final
+// report to land (harvest.AwaitSubagentReport), and says so when the wait ran
+// out: the capture may then hold narration rather than the report.
+func (h *Handler) awaitSubagentReport(ctx context.Context, path, agentID string) (prompt, report string) {
+	prompt, report, unsettled := harvest.AwaitSubagentReport(ctx, path)
+	if unsettled {
+		h.logger.Warn("hooks: subagent transcript never settled; capture may hold narration",
+			"agent_id", agentID)
 	}
-	var blocks []contentBlock
-	if err := json.Unmarshal(raw, &blocks); err == nil {
-		var b strings.Builder
-		for _, blk := range blocks {
-			if blk.Type == "text" && blk.Text != "" {
-				if b.Len() > 0 {
-					b.WriteString("\n")
-				}
-				b.WriteString(blk.Text)
-			}
-		}
-		return strings.TrimSpace(b.String())
-	}
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		return strings.TrimSpace(s)
-	}
-	return ""
+	return prompt, report
 }
 
-// capRunes truncates s to at most n runes (never splitting a multi-byte rune).
-func capRunes(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n])
-}
+// capRunes truncates s to at most n runes (harvest.CapRunes).
+func capRunes(s string, n int) string { return harvest.CapRunes(s, n) }

@@ -66,8 +66,9 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 		out = append(out, check{statusOK, name, "preflight passes: serve will start with the boundary up"})
 	}
 	out = append(out, check{statusInfo, "peer_auth.captures",
-		"the daemon reads no agent files under peer_auth: session-end findings and token totals, model sniffing, " +
-			"plan-file and subagent capture are off; agents record findings through session_end instead"})
+		"the daemon reads no agent files under peer_auth: seam hook reads them and pushes session-end findings and token " +
+			"totals, the model, plan-file and subagent capture and the git head, from clients whose server_url is the " +
+			"peer_auth socket; agents on the TCP key make none of these captures"})
 	return out
 }
 

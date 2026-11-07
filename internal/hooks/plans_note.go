@@ -45,7 +45,7 @@ type planUpsert struct {
 // captured before the plan existed (pending on the session) are adopted into
 // the composition here, once the slug is minted.
 func (h *Handler) upsertPlanNote(ctx context.Context, p toolPayload, basename, content string, approve bool) (planUpsert, bool) {
-	project := h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD)
+	project := h.captureProject(ctx, p)
 	noteSlug := plans.NotePrefix + basename
 	trimmed := strings.TrimSpace(content)
 
@@ -101,7 +101,7 @@ func (h *Handler) upsertPlanNote(ctx context.Context, p toolPayload, basename, c
 			note.Title = title
 			note.Body = planStamp(
 				h.ambientDisplayName(ctx, ClientClaudeCode, p.SessionID),
-				basename, iter, h.gitHead(ctx, p.Identity, p.CWD), now,
+				basename, iter, h.gitHead(ctx, p.Identity, p.CWD, p.Capture), now,
 			) + "\n\n" + content
 			// New plan content is attributed to the capturing session's model; an
 			// unknown model keeps the note's prior attribution.

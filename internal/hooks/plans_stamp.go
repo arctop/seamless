@@ -5,42 +5,23 @@ package hooks
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/arctop/seamless/internal/validate"
+	"github.com/arctop/seamless/internal/harvest"
 )
 
 // planFilePath validates that a tool-input path is a .md file directly under
 // the plans dir (defense in depth behind the CLI pre-filter) and returns the
-// cleaned absolute path.
+// cleaned absolute path (harvest.PlanFilePath).
 func (h *Handler) planFilePath(raw string) (string, bool) {
-	if h.plansDir == "" || raw == "" {
-		return "", false
-	}
-	path := raw
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", false
-		}
-		path = filepath.Join(home, path[2:])
-	}
-	path = filepath.Clean(path)
-	if filepath.Dir(path) != filepath.Clean(h.plansDir) || filepath.Ext(path) != ".md" {
-		return "", false
-	}
-	if validate.Name(planBasename(path)) != nil {
-		return "", false
-	}
-	return path, true
+	return harvest.PlanFilePath(h.plansDir, raw)
 }
 
-// planBasename is the plan's correlation key: the file name without .md.
+// planBasename is the plan's correlation key: the file name without .md
+// (harvest.PlanBasename).
 func planBasename(path string) string {
-	return strings.TrimSuffix(filepath.Base(path), ".md")
+	return harvest.PlanBasename(path)
 }
 
 // planStamp is the provenance blockquote prepended to every captured plan body.

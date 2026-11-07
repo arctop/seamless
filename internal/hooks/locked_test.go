@@ -96,6 +96,13 @@ type lockHooks struct {
 
 func newLockHooks(t *testing.T, approvals bool) *lockHooks {
 	t.Helper()
+	return newLockHooksWith(t, approvals, nil)
+}
+
+// newLockHooksWith is newLockHooks with configure, when non-nil, adjusting
+// the handler's Config (the files layer, plan capture) before it is built.
+func newLockHooksWith(t *testing.T, approvals bool, configure func(db *sql.DB, cfg *Config)) *lockHooks {
+	t.Helper()
 	ctx := context.Background()
 	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
@@ -127,6 +134,9 @@ func newLockHooks(t *testing.T, approvals bool) *lockHooks {
 	}
 	if approvals {
 		cfg.Approvals, cfg.RevokeSessionLeases = e.svc, e.svc.RevokeSession
+	}
+	if configure != nil {
+		configure(db, &cfg)
 	}
 	h := NewHandler(cfg)
 	mux := http.NewServeMux()

@@ -272,13 +272,20 @@ is the fallback if anything in the move went wrong.
 
 ## What changes with peer_auth on
 
-- **The daemon reads no agent files.** Session-end findings and token totals
-  harvested from transcripts, model sniffing, and plan-file and subagent capture
-  are off: under peer_auth every path a hook names is one some other account
-  chose, and the daemon can read its own data directory, so honoring one could
-  make it read a sealed project's files on a caller's behalf. Agents still
-  record findings with `session_end`. (The daemon could not read your
-  transcripts anyway: it no longer runs as you.)
+- **The daemon reads no agent files; your hooks do.** Under peer_auth every
+  path a hook names was chosen by another account, and the daemon can read its
+  own data directory, so it opens none of them. When `server_url` names the
+  peer_auth socket, `seam hook` (running as you, beside the agent) reads the
+  transcript, the plan file and the subagent transcript itself and sends what
+  it found: session-end findings and token totals, the model, plan and
+  subagent capture, and the git head. The daemon treats this as your agent's
+  claim and applies the usual rules: in a locked project it lands only once
+  you approve a lease for that agent. Until then the hook says in one line on
+  stderr (and, for a plan, in the agent's context) that the capture was not
+  recorded; nothing is retried, and the next capture after the approval
+  carries the current state. Agents on the TCP key make none of these
+  captures; point their `server_url` at the socket. Agents can still record
+  findings with `session_end`.
 - **Updates are an administrator's step.** A LaunchDaemon install is not one the
   installer made, so the daemon only notifies; replace `/opt/seamless/bin` with
   `sudo` and restart it. Run `make install` only with a client-role config, so it

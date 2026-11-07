@@ -746,6 +746,14 @@ Two behaviours matter if you are debugging a hook:
   `Write`/`Edit`, so the CLI drops everything that is not an `ExitPlanMode`
   approval or a write to a file directly under `~/.claude/plans` before loading
   config or touching the network. The daemon re-validates the path anyway.
+- **On the peer_auth socket the hook makes the captures.** With `server_url`
+  naming the socket the daemon opens none of the agent's files, so `seam hook`
+  reads them and sends what it found beside the payload: the transcript's
+  findings, token totals and model, the plan file, a subagent's prompt and
+  report (waiting up to 3s for its final message), and the git head. A capture
+  the daemon refuses (a locked project the owner has not approved) is named in
+  one line on stderr and not retried. On any other `server_url` the payload is
+  forwarded exactly as the client wrote it.
 
 Install these with `seamlessd install-hooks`. The one exception is
 `session-taint`, which no installer wires: an agent guard's own PostToolUse

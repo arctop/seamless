@@ -547,13 +547,20 @@ the per-user service (<code>make install</code>, or the installer). The export f
 is the fallback if anything in the move went wrong.</p>
 <h2 id="what-changes-with-peer-auth-on">What changes with peer_auth on</h2>
 <ul>
-<li><strong>The daemon reads no agent files.</strong> Session-end findings and token totals
-harvested from transcripts, model sniffing, and plan-file and subagent capture
-are off: under peer_auth every path a hook names is one some other account
-chose, and the daemon can read its own data directory, so honoring one could
-make it read a sealed project's files on a caller's behalf. Agents still
-record findings with <code>session_end</code>. (The daemon could not read your
-transcripts anyway: it no longer runs as you.)</li>
+<li><strong>The daemon reads no agent files; your hooks do.</strong> Under peer_auth every
+path a hook names was chosen by another account, and the daemon can read its
+own data directory, so it opens none of them. When <code>server_url</code> names the
+peer_auth socket, <code>seam hook</code> (running as you, beside the agent) reads the
+transcript, the plan file and the subagent transcript itself and sends what
+it found: session-end findings and token totals, the model, plan and
+subagent capture, and the git head. The daemon treats this as your agent's
+claim and applies the usual rules: in a locked project it lands only once
+you approve a lease for that agent. Until then the hook says in one line on
+stderr (and, for a plan, in the agent's context) that the capture was not
+recorded; nothing is retried, and the next capture after the approval
+carries the current state. Agents on the TCP key make none of these
+captures; point their <code>server_url</code> at the socket. Agents can still record
+findings with <code>session_end</code>.</li>
 <li><strong>Updates are an administrator's step.</strong> A LaunchDaemon install is not one the
 installer made, so the daemon only notifies; replace <code>/opt/seamless/bin</code> with
 <code>sudo</code> and restart it. Run <code>make install</code> only with a client-role config, so it

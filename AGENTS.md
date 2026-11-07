@@ -347,11 +347,22 @@ any of it.
   global scope the owner reads. Never insert into `events` anywhere else; the
   console's live feed re-reads each event through the filtered handle
   (`liveEventVisible`).
-- **No agent-disk reads under peer_auth.** `localDiskOK` answers no for every
-  hook: the daemon runs as its own account, so every path a hook names was
-  chosen by another account, and the daemon could be made to read its own data
-  directory on a caller's behalf. Do not "restore" transcript harvest by
-  opening caller-supplied paths.
+- **No agent-disk reads under peer_auth; the client pushes the captures.**
+  `localDiskOK` answers no for every hook: the daemon runs as its own account,
+  so every path a hook names was chosen by another account, and the daemon
+  could be made to read its own data directory on a caller's behalf. Do not
+  "restore" transcript harvest by opening caller-supplied paths. The five disk
+  captures (session-end findings and token totals, the model sniff, plan and
+  subagent capture, the git stamp) are made by `seam hook` with the daemon's
+  own parsers (`internal/harvest`, a leaf both sides import) and pushed under
+  `harvest.Field`: only when server_url names the peer_auth socket
+  (`cmd/seam/hook_capture.go`), and read only on a request carrying a View
+  (`internal/hooks/pushed.go`). A push is the caller's claim and lands through
+  `sessionReachOf` and `fenceNotePush`: a locked session takes the model only;
+  a refused capture gets the one-line `harvest.RefusedHeader` notice and is
+  never retried; a note lands where `View.SessionScope` places it; a leased
+  locked project takes a note only from a session recorded in it. A field that
+  does not validate refuses the whole push, and the format is additive.
 - **Prove it in the matrix.** `cmd/seamlessd/peerauth_matrix_test.go` drives
   every tool in `mcp.Catalog()` (a tool without a probe row fails it), every
   console route (read from console.go), the hooks, A2A and the live feed, in

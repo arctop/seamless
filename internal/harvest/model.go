@@ -1,4 +1,4 @@
-package hooks
+package harvest
 
 import (
 	"bytes"
@@ -8,27 +8,27 @@ import (
 	"strings"
 )
 
-// modelSniffWindow is how many trailing bytes of a Claude Code transcript the
+// ModelSniffWindow is how many trailing bytes of a Claude Code transcript the
 // model sniff reads. Assistant entries land every turn, so the window nearly
 // always contains at least one; a window dominated by a single giant
 // tool-result line just yields "" and the session keeps its previous
 // attribution.
-const modelSniffWindow = 1 << 20
+const ModelSniffWindow = 1 << 20
 
 // syntheticModel is the placeholder Claude Code stamps on synthetic assistant
 // entries (error placeholders and the like); it is not a real producer and
 // must never become a session's attribution.
 const syntheticModel = "<synthetic>"
 
-// transcriptModel tail-reads a Claude Code transcript (JSONL) and returns the
+// TranscriptModel tail-reads a Claude Code transcript (JSONL) and returns the
 // model id of the last main-thread assistant entry, verbatim as the provider
 // names it ("claude-fable-5"), or "" when none is found. Sidechain (subagent)
 // entries are skipped: a subagent may run a different model, and its turns
 // must not re-attribute the parent session. Best-effort and never errors,
-// matching harvestFindings: a blank path, unreadable file, or window without
-// an assistant entry all yield "" -- the caller then leaves the session's
+// matching Findings: a blank path, unreadable file, or window without an
+// assistant entry all yield "" -- the caller then leaves the session's
 // previous attribution in place.
-func transcriptModel(path string) string {
+func TranscriptModel(path string) string {
 	if strings.TrimSpace(path) == "" {
 		return ""
 	}
@@ -38,7 +38,7 @@ func transcriptModel(path string) string {
 	}
 	defer func() { _ = f.Close() }()
 
-	tail, err := readTail(f, modelSniffWindow)
+	tail, err := readTail(f, ModelSniffWindow)
 	if err != nil {
 		return ""
 	}
