@@ -185,6 +185,10 @@ func newBridge(endpoint, apiKey string, client *http.Client) *bridge {
 			},
 		}
 	}
+	// A copy, so the caller's client keeps its own policy.
+	own := *client
+	own.CheckRedirect = config.RefuseRedirect
+	client = &own
 	return &bridge{
 		endpoint: endpoint, apiKey: apiKey, client: client,
 		retry: newDialRetry(proxyDialBudget), stderr: io.Discard,

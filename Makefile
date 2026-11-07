@@ -296,10 +296,13 @@ cross-check:
 # 16 hits in the 2026-07-19 audit accumulated unseen in the first place. It is
 # in `check` but NOT `check-fast`: it queries vuln.go.dev, and the pre-commit
 # hook has to work on a plane.
+#
+# scripts/vulncheck.sh holds the exceptions: an advisory the code is shown not
+# to be exposed to, though govulncheck still sees the calls, allowed until a
+# re-check date (today GO-2026-6911, which has no fixed mcp-go: every MCP
+# client refuses redirects instead). It needs jq.
 vulncheck:
-	@command -v govulncheck >/dev/null \
-	    || { echo "ERROR: govulncheck not found (go install golang.org/x/vuln/cmd/govulncheck@latest)"; exit 1; }
-	govulncheck $(PKG)
+	@scripts/vulncheck.sh $(PKG)
 
 fmt:
 	@$(GOFILES) | xargs gofmt -w

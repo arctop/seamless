@@ -1179,6 +1179,7 @@ func remoteToolCount(ctx context.Context, cfg config.Config) (int, bool, error) 
 	if err != nil {
 		return 0, false, err
 	}
+	hc.CheckRedirect = config.RefuseRedirect
 	headers := map[string]string{"Authorization": "Bearer " + cfg.MCP.APIKey}
 	if host := config.Hostname(); host != "" {
 		// The same connection-scoped machine name every other client sends, so

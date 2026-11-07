@@ -131,6 +131,7 @@ func dialWith(ctx context.Context, cfg config.Config) (*mcpclient.Client, config
 	if err != nil {
 		return nil, cfg, err
 	}
+	hc.CheckRedirect = config.RefuseRedirect
 	cli, err := mcpclient.NewStreamableHttpClient(cfg.ServerURL()+"/api/mcp",
 		transport.WithHTTPHeaders(mcpHeaders(cfg)),
 		transport.WithHTTPBasicClient(hc))

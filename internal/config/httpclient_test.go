@@ -82,3 +82,26 @@ func TestHTTPClient_CAFileTrustsAPrivateServer(t *testing.T) {
 	var unknown x509.UnknownAuthorityError
 	require.ErrorAs(t, err, &unknown)
 }
+
+// RefuseRedirect stops a redirect a default client follows: the call fails
+// naming the target, and the target is never sent the request.
+func TestRefuseRedirect(t *testing.T) {
+	var hits int
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+	}))
+	defer target.Close()
+	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/elsewhere", http.StatusTemporaryRedirect)
+	}))
+	defer daemon.Close()
+
+	resp, err := (&http.Client{}).Post(daemon.URL+"/api/mcp", "application/json", nil)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, 1, hits, "the fixture's redirect must be one a default client follows")
+
+	_, err = (&http.Client{CheckRedirect: RefuseRedirect}).Post(daemon.URL+"/api/mcp", "application/json", nil)
+	require.ErrorContains(t, err, "refusing a redirect to "+target.URL+"/elsewhere")
+	require.Equal(t, 1, hits)
+}

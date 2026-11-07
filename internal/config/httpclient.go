@@ -94,3 +94,16 @@ func (c Config) HTTPClient(timeout time.Duration) (*http.Client, error) {
 	}
 	return &http.Client{Timeout: timeout, Transport: tr}, nil
 }
+
+// RefuseRedirect is the CheckRedirect of every client that dials a daemon's
+// MCP endpoint: it follows no redirect, and the call fails naming the target.
+// The endpoint never redirects, and a followed redirect re-sends the request's
+// headers: Go keeps the bearer key for the same host on another port, and
+// forwards the host-name and agent-process headers to any host. mcp-go's
+// client transport does this with no policy of its own (GO-2026-6911, no fixed
+// mcp-go as of 2026-11-06), so its callers -- and the mcp-proxy bridge, which
+// sends the same headers -- set this. HTTPClient itself keeps Go's default:
+// the console routes its other callers reach may redirect.
+func RefuseRedirect(req *http.Request, _ []*http.Request) error {
+	return fmt.Errorf("refusing a redirect to %s: a Seamless daemon's MCP endpoint does not redirect", req.URL.Redacted())
+}

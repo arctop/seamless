@@ -31,6 +31,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -193,7 +194,8 @@ type trialRecorder struct {
 // dialTrials connects, initializes, and opens the lab.
 func dialTrials(ctx context.Context, t trialTarget) (*trialRecorder, error) {
 	cli, err := mcpclient.NewStreamableHttpClient(t.url+"/api/mcp",
-		transport.WithHTTPHeaders(map[string]string{"Authorization": "Bearer " + t.key}))
+		transport.WithHTTPHeaders(map[string]string{"Authorization": "Bearer " + t.key}),
+		transport.WithHTTPBasicClient(&http.Client{CheckRedirect: config.RefuseRedirect}))
 	if err != nil {
 		return nil, fmt.Errorf("build an MCP client for %s: %w", t.url, err)
 	}
