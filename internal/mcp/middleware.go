@@ -152,7 +152,14 @@ func (s *Server) logMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.ToolHan
 			"duration_ms": durMS,
 		}
 		if args := truncateArgs(req.GetArguments(), max); len(args) > 0 {
-			payload["args"] = args
+			if req.Params.Name == AccessRequestTool {
+				// The agent's reason is shown to the owner on the approval
+				// surfaces and kept nowhere else: never in an event.
+				delete(args, accessReasonParam)
+			}
+			if len(args) > 0 {
+				payload["args"] = args
+			}
 		}
 		switch {
 		case err != nil:

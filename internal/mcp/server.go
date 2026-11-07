@@ -50,7 +50,16 @@ const (
 	// usage_summary = 26; plans-as-composition adds tasks_claim + tasks_release = 28;
 	// gardener_request = 29; gardener_split = 30; favorite_set = 31;
 	// memory_edit + notes_edit = 33.
+	//
+	// It is the count of every install that does not lock a project, which is
+	// every default one. A server that does (Config.OfferAccessRequest) also
+	// registers the tools in LockedOnlyTools: LockedToolCount.
 	ToolCount = 33
+
+	// LockedToolCount is the number of MCP tools a server registers while
+	// peer_auth locks a project (Config.OfferAccessRequest): ToolCount plus
+	// access_request. ToolCountWith picks between the two.
+	LockedToolCount = ToolCount + 1
 
 	// maxRequestBodyBytes bounds the streamable-HTTP POST body before mcp-go
 	// buffers it. MCP calls are compact JSON-RPC envelopes; 1 MiB leaves ample
@@ -250,6 +259,16 @@ type Config struct {
 	// every tool call carries its holder's grants, and recall searches a
 	// granted project (grants.go). Nil -- the default -- changes nothing.
 	Grants Grants
+	// OfferAccessRequest registers the access_request tool (access_request.go):
+	// set while peer_auth locks a project. Off -- the zero value, and every
+	// install that locks nothing -- the tool does not exist: tools/list,
+	// NumTools (ToolCount) and every refusal are exactly as before.
+	OfferAccessRequest bool
+	// DialogWait bounds an in-session approval dialog (elicit.go), counted
+	// from the start of the tool call; 0 means two minutes. DialogPoll is how
+	// often the waiting dialog reads its request; 0 means half a second. Both
+	// exist for tests.
+	DialogWait, DialogPoll time.Duration
 	// Now is the clock the lease notices read; nil means time.Now.
 	Now func() time.Time
 	// Features is the file/env optional-features config (config.Config.Features).
@@ -293,6 +312,12 @@ type Server struct {
 	// announced (grants.go), by grant id, with their expiry.
 	grantMu   sync.Mutex
 	grantSeen map[string]time.Time
+
+	// dialogMu guards dialogs: the approval dialogs open right now, by MCP
+	// client session and request (elicit.go), so a connection never gets two
+	// for one request at once.
+	dialogMu sync.Mutex
+	dialogs  map[string]struct{}
 }
 
 // NumTools returns the number of registered MCP tools. doctor asserts it equals
@@ -344,6 +369,7 @@ func New(cfg Config) *Server {
 		toolSchemas: make(map[string]mcp.ToolInputSchema),
 		leaseSeen:   make(map[string]time.Time),
 		grantSeen:   make(map[string]time.Time),
+		dialogs:     make(map[string]struct{}),
 	}
 	s.mcp = mcpserver.NewMCPServer(
 		ServerName, version,
@@ -369,11 +395,15 @@ func New(cfg Config) *Server {
 		//   - the read grants (grants.go) innermost, after the session= handle:
 		//     the grants a call carries are its own binding's. Off
 		//     (isolation.requests unset) they add nothing.
+		//   - the approval dialog (elicit.go) around the lock requester and the
+		//     grants, so it sees the request either filed during the call. Off
+		//     (no approval service, or not the peer_auth socket) it adds nothing.
 		mcpserver.WithToolHandlerMiddleware(s.authMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.leaseNoticeMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.logMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.validateMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.sessionHandleMiddleware),
+		mcpserver.WithToolHandlerMiddleware(s.dialogMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.lockRequestMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.grantsMiddleware),
 		// The optional-feature gate. It is a FILTER, not a middleware, because
@@ -486,6 +516,12 @@ func (s *Server) registerTools() {
 	s.addTool(usageSummaryTool(), s.handleUsageSummary)
 
 	s.addTool(favoriteSetTool(), s.handleFavoriteSet)
+
+	// Registered last, and only while a project is locked, so a default
+	// server's registration is Catalog minus LockedOnlyTools, in order.
+	if s.cfg.OfferAccessRequest {
+		s.addTool(accessRequestTool(), s.handleAccessRequest)
+	}
 }
 
 // ---------------------------------------------------------------------------

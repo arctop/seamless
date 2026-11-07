@@ -5,20 +5,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Notes, projects &amp; capture - Seamless docs</title>
-<meta name="description" content="Work artifacts, project scope, and SSRF-safe URL capture - the nine tools around the edges of memory.">
+<meta name="description" content="Work artifacts, project scope, SSRF-safe URL capture, and asking for a locked project - the tools around the edges of memory.">
 <link rel="canonical" href="https://thereisnospoon.org/docs/reference/mcp/notes-projects-capture/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://thereisnospoon.org/docs/reference/mcp/notes-projects-capture/">
 <meta property="og:title" content="Notes, projects &amp; capture - Seamless docs">
-<meta property="og:description" content="Work artifacts, project scope, and SSRF-safe URL capture - the nine tools around the edges of memory.">
+<meta property="og:description" content="Work artifacts, project scope, SSRF-safe URL capture, and asking for a locked project - the tools around the edges of memory.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Reference","item":"https://thereisnospoon.org/docs/reference/"},{"@type":"ListItem","position":3,"name":"Notes, projects \u0026 capture","item":"https://thereisnospoon.org/docs/reference/mcp/notes-projects-capture/"}]},{"@type":"TechArticle","headline":"Notes, projects \u0026 capture - Seamless docs","description":"Work artifacts, project scope, and SSRF-safe URL capture - the nine tools around the edges of memory.","url":"https://thereisnospoon.org/docs/reference/mcp/notes-projects-capture/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Reference","item":"https://thereisnospoon.org/docs/reference/"},{"@type":"ListItem","position":3,"name":"Notes, projects \u0026 capture","item":"https://thereisnospoon.org/docs/reference/mcp/notes-projects-capture/"}]},{"@type":"TechArticle","headline":"Notes, projects \u0026 capture - Seamless docs","description":"Work artifacts, project scope, SSRF-safe URL capture, and asking for a locked project - the tools around the edges of memory.","url":"https://thereisnospoon.org/docs/reference/mcp/notes-projects-capture/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
 <link rel="icon" type="image/svg+xml" href="../../../../static/favicon.svg">
@@ -232,11 +232,11 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 </nav>
 
   <h1>Notes, projects &amp; capture</h1>
-  <p class="lede">Work artifacts, project scope, and SSRF-safe URL capture - the nine tools around the edges of memory.</p>
+  <p class="lede">Work artifacts, project scope, SSRF-safe URL capture, and asking for a locked project - the tools around the edges of memory.</p>
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#a-note-is-not-a-memory">A note is not a memory</a></li><li class="lvl-2"><a href="#four-ways-to-change-a-note">Four ways to change a note</a></li><li class="lvl-2"><a href="#notes-are-how-plans-get-their-narrative">Notes are how plans get their narrative</a></li><li class="lvl-2"><a href="#projects-and-scope">Projects and scope</a></li><li class="lvl-2"><a href="#capture-url-is-ssrf-safe-on-purpose">capture_url is SSRF-safe on purpose</a></li><li class="lvl-2"><a href="#notes_create">notes_create</a></li><li class="lvl-2"><a href="#notes_read">notes_read</a></li><li class="lvl-2"><a href="#notes_update">notes_update</a></li><li class="lvl-2"><a href="#notes_edit">notes_edit</a></li><li class="lvl-2"><a href="#notes_append">notes_append</a></li><li class="lvl-2"><a href="#notes_delete">notes_delete</a></li><li class="lvl-2"><a href="#project_list">project_list</a></li><li class="lvl-2"><a href="#project_create">project_create</a></li><li class="lvl-2"><a href="#capture_url">capture_url</a></li>
+      <li class="lvl-2"><a href="#a-note-is-not-a-memory">A note is not a memory</a></li><li class="lvl-2"><a href="#four-ways-to-change-a-note">Four ways to change a note</a></li><li class="lvl-2"><a href="#notes-are-how-plans-get-their-narrative">Notes are how plans get their narrative</a></li><li class="lvl-2"><a href="#projects-and-scope">Projects and scope</a></li><li class="lvl-2"><a href="#access-request-asks-the-owner-for-a-locked-project">access_request asks the owner for a locked project</a></li><li class="lvl-2"><a href="#capture-url-is-ssrf-safe-on-purpose">capture_url is SSRF-safe on purpose</a></li><li class="lvl-2"><a href="#notes_create">notes_create</a></li><li class="lvl-2"><a href="#notes_read">notes_read</a></li><li class="lvl-2"><a href="#notes_update">notes_update</a></li><li class="lvl-2"><a href="#notes_edit">notes_edit</a></li><li class="lvl-2"><a href="#notes_append">notes_append</a></li><li class="lvl-2"><a href="#notes_delete">notes_delete</a></li><li class="lvl-2"><a href="#project_list">project_list</a></li><li class="lvl-2"><a href="#project_create">project_create</a></li><li class="lvl-2"><a href="#capture_url">capture_url</a></li><li class="lvl-2"><a href="#access_request">access_request</a></li>
     </ul>
   </details>
   <h2 id="a-note-is-not-a-memory">A note is not a memory</h2>
@@ -351,6 +351,20 @@ carries it - bound automatically under Claude Code or Codex, or by
 <p>The <code>global</code> project slug is the deliberate cross-project scope. It is a token
 you pass on purpose, never a default you fall into - see the fail-closed rule in
 the <a href="../../../reference/mcp/">MCP API overview</a>.</p>
+<h2 id="access-request-asks-the-owner-for-a-locked-project">access_request asks the owner for a locked project</h2>
+<p><code>access_request</code> exists only on a daemon whose <code>peer_auth</code> locks a project;
+every other install neither lists nor accepts it. It files the same request a
+call refused at the lock files by itself, with an optional reason of up to 200
+characters that the owner sees quoted and labeled as the agent's own words.</p>
+<p>When the agent's client supports MCP elicitation (Claude Code does), the
+request opens an approval dialog in the session: the owner sees the daemon's
+facts, warnings first, and chooses a duration and Touch ID or a passkey. The
+dialog's answer is never the approval - any process of the owner's account
+could answer it - the proof is: the Touch ID helper's signature or the
+passkey's assertion, checked by the daemon. The call waits up to two minutes
+for it, then answers with the request id; the owner can still decide later
+with <code>seam approve</code> or on the console. A call refused at a lock opens the same
+dialog. Once approved, retry the call.</p>
 <h2 id="capture-url-is-ssrf-safe-on-purpose">capture_url is SSRF-safe on purpose</h2>
 <p><code>capture_url</code> fetches a URL and returns its content as markdown. It is the one
 tool that makes an outbound request on an agent's behalf, so it is guarded:
@@ -749,6 +763,40 @@ disallowed ports. Size is bounded by truncation rather than rejection: at most
 </tbody>
 </table>
 </div>
+<h2 id="access_request">access_request</h2>
+<p>Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth.locked), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to two minutes for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then.</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>project</code></td>
+<td>string</td>
+<td><strong>yes</strong></td>
+<td>the locked project's slug</td>
+</tr>
+<tr>
+<td><code>reason</code></td>
+<td>string</td>
+<td>no</td>
+<td>optional: why the work needs the project, in at most 200 characters. The owner sees it labeled as this agent's own words.</td>
+</tr>
+<tr>
+<td><code>session</code></td>
+<td>string</td>
+<td>no</td>
+<td>the session to act as: the name session_start returned, the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless</td>
+</tr>
+</tbody>
+</table>
+</div>
 
 </article>
 
@@ -766,7 +814,7 @@ disallowed ports. Size is bounded by truncation rather than rejection: at most
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#a-note-is-not-a-memory">A note is not a memory</a></li><li class="lvl-2"><a href="#four-ways-to-change-a-note">Four ways to change a note</a></li><li class="lvl-2"><a href="#notes-are-how-plans-get-their-narrative">Notes are how plans get their narrative</a></li><li class="lvl-2"><a href="#projects-and-scope">Projects and scope</a></li><li class="lvl-2"><a href="#capture-url-is-ssrf-safe-on-purpose">capture_url is SSRF-safe on purpose</a></li><li class="lvl-2"><a href="#notes_create">notes_create</a></li><li class="lvl-2"><a href="#notes_read">notes_read</a></li><li class="lvl-2"><a href="#notes_update">notes_update</a></li><li class="lvl-2"><a href="#notes_edit">notes_edit</a></li><li class="lvl-2"><a href="#notes_append">notes_append</a></li><li class="lvl-2"><a href="#notes_delete">notes_delete</a></li><li class="lvl-2"><a href="#project_list">project_list</a></li><li class="lvl-2"><a href="#project_create">project_create</a></li><li class="lvl-2"><a href="#capture_url">capture_url</a></li>
+      <li class="lvl-2"><a href="#a-note-is-not-a-memory">A note is not a memory</a></li><li class="lvl-2"><a href="#four-ways-to-change-a-note">Four ways to change a note</a></li><li class="lvl-2"><a href="#notes-are-how-plans-get-their-narrative">Notes are how plans get their narrative</a></li><li class="lvl-2"><a href="#projects-and-scope">Projects and scope</a></li><li class="lvl-2"><a href="#access-request-asks-the-owner-for-a-locked-project">access_request asks the owner for a locked project</a></li><li class="lvl-2"><a href="#capture-url-is-ssrf-safe-on-purpose">capture_url is SSRF-safe on purpose</a></li><li class="lvl-2"><a href="#notes_create">notes_create</a></li><li class="lvl-2"><a href="#notes_read">notes_read</a></li><li class="lvl-2"><a href="#notes_update">notes_update</a></li><li class="lvl-2"><a href="#notes_edit">notes_edit</a></li><li class="lvl-2"><a href="#notes_append">notes_append</a></li><li class="lvl-2"><a href="#notes_delete">notes_delete</a></li><li class="lvl-2"><a href="#project_list">project_list</a></li><li class="lvl-2"><a href="#project_create">project_create</a></li><li class="lvl-2"><a href="#capture_url">capture_url</a></li><li class="lvl-2"><a href="#access_request">access_request</a></li>
     </ul>
   </aside>
   

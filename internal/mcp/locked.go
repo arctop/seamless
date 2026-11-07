@@ -35,11 +35,15 @@ import (
 )
 
 // Approvals is what the MCP server needs of the daemon's approval service
-// (*approval.Service).
+// (*approval.Service). Facts and PasskeysOn serve the in-session approval
+// dialog (elicit.go): what it shows the owner, and whether it may offer a
+// passkey.
 type Approvals interface {
 	Request(ctx context.Context, in approval.RequestInput) (store.AccessApproval, error)
 	Page(id string) string
 	RevokeSession(ctx context.Context, sessionID string) (int64, error)
+	Facts(ctx context.Context, id string) (approval.Facts, error)
+	PasskeysOn() bool
 }
 
 // now is the clock the lease notices and the ended wording read.
@@ -75,20 +79,14 @@ func (s *Server) lockRequestMiddleware(next mcpserver.ToolHandlerFunc) mcpserver
 func (s *Server) lockRequester(ctx context.Context, project string) (access.LockRequest, error) {
 	ctx = access.WithLockRequester(ctx, nil)
 	v, _ := access.FromContext(ctx)
-	sessionID := s.boundSession(ctx)
-	if sessionID == "" {
-		if b, ok := s.lockedBinding(ctx); ok {
-			sessionID = b.sessionID
-		}
-	}
-	a, err := s.cfg.Approvals.Request(ctx, approval.RequestInput{
-		Project: project, View: v, SessionID: sessionID, AgentProcess: callerAgentProcess(ctx),
-		Host: s.callerHost(ctx), Via: "refusal",
-	})
+	a, err := s.fileAccessRequest(ctx, project, "", "refusal")
 	if err != nil {
 		s.logger.Debug("access request not filed", "project", project, "error", err)
 		return access.LockRequest{}, err
 	}
+	// The call's refusal will name this request: the approval dialog may
+	// offer it (elicit.go).
+	noteDialogTarget(ctx, dialogTarget{ID: a.ID, Short: approval.ShortID(a.ID), Project: a.Project})
 	out := access.LockRequest{
 		ID: a.ID, Short: approval.ShortID(a.ID), Refresh: a.Kind == store.AccessKindRefresh, Page: s.cfg.Approvals.Page(a.ID),
 	}
@@ -103,6 +101,28 @@ func (s *Server) lockRequester(ctx context.Context, project string) (access.Lock
 		}
 	}
 	return out, nil
+}
+
+// fileAccessRequest files (or finds) the pending request for a locked project
+// on behalf of the call in ctx, through the approval service's one path: the
+// session is the call's binding, else the connection's own session in a
+// locked project (lockedBinding) -- the one the SessionStart hook recorded
+// there -- and the anchor checks are the service's. via says how it was filed
+// ("refusal" or "request"); reason is the agent's own words. ctx must carry no
+// lock requester (resolving the session may meet a refusal, which must not
+// file again).
+func (s *Server) fileAccessRequest(ctx context.Context, project, reason, via string) (store.AccessApproval, error) {
+	v, _ := access.FromContext(ctx)
+	sessionID := s.boundSession(ctx)
+	if sessionID == "" {
+		if b, ok := s.lockedBinding(ctx); ok {
+			sessionID = b.sessionID
+		}
+	}
+	return s.cfg.Approvals.Request(ctx, approval.RequestInput{
+		Project: project, View: v, SessionID: sessionID, AgentProcess: callerAgentProcess(ctx),
+		Host: s.callerHost(ctx), Reason: reason, Via: via,
+	})
 }
 
 // chainKeys are the lease keys of the view's kernel-verified process chain.

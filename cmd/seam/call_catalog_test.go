@@ -15,7 +15,9 @@ import (
 // callTools is the list `seam call --help` prints. It is transcribed rather than
 // imported, so it is compared here, in order, with the catalog the server
 // registers from: a tool added to the server and not to the help fails this
-// rather than going unadvertised.
+// rather than going unadvertised. The catalog is every tool any server can
+// register, so the list includes the ones only a server that locks a project
+// registers (mcp.LockedOnlyTools), last, as the help says.
 func TestCallTools_MatchTheCatalog(t *testing.T) {
 	catalog := mcp.Catalog()
 	names := make([]string, 0, len(catalog))
@@ -23,5 +25,14 @@ func TestCallTools_MatchTheCatalog(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	require.Equal(t, names, callTools)
-	require.Len(t, callTools, mcp.ToolCount)
+	require.Len(t, callTools, mcp.LockedToolCount)
+	require.Equal(t, mcp.LockedOnlyTools(), callTools[mcp.ToolCount:])
+}
+
+// seam doctor mirrors the server's tool counts without importing its package
+// at run time; this pins the mirror (the test binary may import it).
+func TestDoctorMirrorsTheServersToolCounts(t *testing.T) {
+	require.Equal(t, mcp.ToolCount, expectedTools)
+	require.Equal(t, []string{lockedOnlyTool}, mcp.LockedOnlyTools())
+	require.Equal(t, mcp.LockedToolCount, expectedTools+len(mcp.LockedOnlyTools()))
 }

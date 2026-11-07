@@ -72,12 +72,13 @@ Pass `project: global` to mean global deliberately.
 
 ## The tool surface
 
-Seamless registers **33 tools**. They are documented in groups:
+Seamless registers **33 tools**, and a 34th, `access_request`, on a daemon whose
+`peer_auth` locks a project. They are documented in groups:
 
 | Group | Tools |
 |---|---|
 | Sessions, memory, and recall | `session_start`, `session_update`, `session_end`, `memory_write`, `memory_append`, `memory_edit`, `memory_read`, `memory_delete`, `recall` |
-| Notes, projects, and capture | `notes_create`, `notes_read`, `notes_update`, `notes_edit`, `notes_append`, `notes_delete`, `project_list`, `project_create`, `capture_url` |
+| Notes, projects, and capture | `notes_create`, `notes_read`, `notes_update`, `notes_edit`, `notes_append`, `notes_delete`, `project_list`, `project_create`, `capture_url`, `access_request` (locked projects only) |
 | [Tasks](https://thereisnospoon.org/docs/reference/mcp/tasks/) | `tasks_add`, `tasks_update`, `tasks_ready`, `tasks_list`, `tasks_claim`, `tasks_release` |
 | Lab, gardener, and usage | `lab_open`, `trial_record`, `trial_query`, `gardener_proposals`, `gardener_request`, `gardener_split`, `gardener_apply`, `usage_summary`, `favorite_set` |
 

@@ -1,6 +1,6 @@
 # Notes, projects & capture
 
-> Work artifacts, project scope, and SSRF-safe URL capture - the nine tools around the edges of memory.
+> Work artifacts, project scope, SSRF-safe URL capture, and asking for a locked project - the tools around the edges of memory.
 
 ## A note is not a memory
 
@@ -72,6 +72,23 @@ carries it - bound automatically under Claude Code or Codex, or by
 The `global` project slug is the deliberate cross-project scope. It is a token
 you pass on purpose, never a default you fall into - see the fail-closed rule in
 the [MCP API overview](https://thereisnospoon.org/docs/reference/mcp/).
+
+## access_request asks the owner for a locked project
+
+`access_request` exists only on a daemon whose `peer_auth` locks a project;
+every other install neither lists nor accepts it. It files the same request a
+call refused at the lock files by itself, with an optional reason of up to 200
+characters that the owner sees quoted and labeled as the agent's own words.
+
+When the agent's client supports MCP elicitation (Claude Code does), the
+request opens an approval dialog in the session: the owner sees the daemon's
+facts, warnings first, and chooses a duration and Touch ID or a passkey. The
+dialog's answer is never the approval - any process of the owner's account
+could answer it - the proof is: the Touch ID helper's signature or the
+passkey's assertion, checked by the daemon. The call waits up to two minutes
+for it, then answers with the request id; the owner can still decide later
+with `seam approve` or on the console. A call refused at a lock opens the same
+dialog. Once approved, retry the call.
 
 ## capture_url is SSRF-safe on purpose
 
@@ -191,4 +208,14 @@ Fetch a web page (SSRF-guarded: private/loopback addresses are rejected) and sav
 |---|---|---|---|
 | `url` | string | **yes** | http(s) URL to capture |
 | `project` | string | no | project slug; defaults to the bound/ambient session's project. An unknown slug CREATES that project -- naming a new one is normal and never an error. Pass project=global ONLY for knowledge that belongs in EVERY project's briefing; it is not a neutral default. With no session and no explicit project the call is rejected as ambiguous. A session bound to a confidential or sealed project can write ONLY into that project. |
+| `session` | string | no | the session to act as: the name session_start returned, the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless |
+
+## access_request {#access_request}
+
+Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth.locked), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to two minutes for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `project` | string | **yes** | the locked project's slug |
+| `reason` | string | no | optional: why the work needs the project, in at most 200 characters. The owner sees it labeled as this agent's own words. |
 | `session` | string | no | the session to act as: the name session_start returned, the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless |

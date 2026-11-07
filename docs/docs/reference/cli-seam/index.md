@@ -390,9 +390,11 @@ Under `peer_auth`, a project listed in `peer_auth.locked` (see the
 every owner request - the owner's own agents included - until the owner
 approves a lease for the asking agent's process. A refused call files a
 pending access request by itself; an agent can also ask explicitly. The owner
-decides it in their own terminal with `seam approve`, or on the console's
-passkey page. Both commands talk to the console's `/console/access` routes,
-which answer `no project is locked` while the daemon locks nothing.
+decides it in their own terminal with `seam approve`, on the console's passkey
+page, or - when the agent's client supports MCP elicitation - in an approval
+dialog inside the agent's session, confirmed with Touch ID (`seam touchid
+enroll`) or a passkey. These commands talk to the console's `/console/access`
+routes, which answer `no project is locked` while the daemon locks nothing.
 
 ### seam access request {#seam_access_request}
 
@@ -496,6 +498,56 @@ decides nothing; it takes no request, `--for` or `--passkey`.
 Exit status: 0 when a request was approved or denied, when nothing changed,
 and when nothing is waiting; 1 on any error, including a request that is no
 longer pending (and 2, as everywhere, for a command line it cannot parse).
+
+### seam touchid enroll {#seam_touchid_enroll}
+
+```bash
+seam touchid enroll [--app PATH] [--name NAME]
+```
+
+Installs the Touch ID approver, Seamless Approve, and enrols its key. macOS
+only, in the owner's own terminal, with `server_url: unix:///path` naming the
+`peer_auth` socket; nothing installs or launches the app unless you run this.
+
+A release build of `seam` fetches its own version's
+`seamless-approve_<version>_darwin.zip` and checks its SHA-256 against the
+release's `checksums.txt`; a source build passes `--app` with a local `.app`
+or zip. Either way the app must pass `codesign --verify --strict --deep`, be
+named `org.thereisnospoon.seamless.approve`, and carry the same Developer ID
+team as `seam` itself (an unsigned `seam` shows the app's team and asks); a
+release asset must also pass Gatekeeper. It is installed at
+`~/Applications/Seamless Approve.app`, replacing an existing copy only after
+a y/N.
+
+It then prints the command that mints a one-time enrolment code as the
+daemon's account:
+
+```bash
+sudo -k -u _seamless env SEAMLESS_CONFIG=<config> <seamlessd> approvers enroll-code touchid
+```
+
+and opens the app, which asks for the code in its own dialog, creates its key
+(one touch) and registers it. The key lives in the Secure Enclave, in a
+keychain group only the signed app can use, and needs your presence - finger,
+Apple Watch or login password - for every approval. `seam touchid enroll`
+finishes by confirming that the daemon lists the new key. `--name` labels it
+(default `Touch ID on <host>`; 1-64 printable characters, not starting with
+`-`).
+
+Once enrolled, accepting an access request's dialog with Touch ID opens the
+app for that request: it reads the request's facts from the daemon itself,
+shows them in the Touch ID prompt, and signs over the request and the
+duration you chose. A Touch ID approval is accepted on the `peer_auth` socket
+only.
+
+### seam touchid status {#seam_touchid_status}
+
+```bash
+seam touchid status
+```
+
+Says whether the app is installed and how it is signed, whether `server_url`
+names the socket, and which Touch ID keys the daemon has enrolled.
 
 ## Observability
 

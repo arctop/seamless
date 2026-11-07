@@ -155,6 +155,9 @@ func (s *Server) grantRequestRefusal(ctx context.Context, err error, target stri
 		s.logger.Debug("read grant request not filed", "project", target, "error", rerr)
 		return err
 	}
+	// The refusal names this request: the approval dialog may offer it
+	// (elicit.go; only ever on the peer_auth socket).
+	noteDialogTarget(ctx, dialogTarget{ID: a.ID, Short: approval.ShortID(a.ID), Project: a.Project, Grant: true})
 	confines := false
 	if iso, ierr := store.IsolationOf(ctx, s.cfg.DB, b.project); ierr == nil && iso == core.IsolationOpen {
 		confines = true

@@ -1,6 +1,6 @@
 ---
 title: Notes, projects & capture
-description: Work artifacts, project scope, and SSRF-safe URL capture - the nine tools around the edges of memory.
+description: Work artifacts, project scope, SSRF-safe URL capture, and asking for a locked project - the tools around the edges of memory.
 generate: mcp-tools
 tools:
   - notes_create
@@ -12,6 +12,7 @@ tools:
   - project_list
   - project_create
   - capture_url
+  - access_request
 ---
 
 ## A note is not a memory
@@ -84,6 +85,23 @@ carries it - bound automatically under Claude Code or Codex, or by
 The `global` project slug is the deliberate cross-project scope. It is a token
 you pass on purpose, never a default you fall into - see the fail-closed rule in
 the [MCP API overview](/reference/mcp/).
+
+## access_request asks the owner for a locked project
+
+`access_request` exists only on a daemon whose `peer_auth` locks a project;
+every other install neither lists nor accepts it. It files the same request a
+call refused at the lock files by itself, with an optional reason of up to 200
+characters that the owner sees quoted and labeled as the agent's own words.
+
+When the agent's client supports MCP elicitation (Claude Code does), the
+request opens an approval dialog in the session: the owner sees the daemon's
+facts, warnings first, and chooses a duration and Touch ID or a passkey. The
+dialog's answer is never the approval - any process of the owner's account
+could answer it - the proof is: the Touch ID helper's signature or the
+passkey's assertion, checked by the daemon. The call waits up to two minutes
+for it, then answers with the request id; the owner can still decide later
+with `seam approve` or on the console. A call refused at a lock opens the same
+dialog. Once approved, retry the call.
 
 ## capture_url is SSRF-safe on purpose
 

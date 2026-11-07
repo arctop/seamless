@@ -39,7 +39,9 @@ func TestGenerateMCPToolsCoversCatalog(t *testing.T) {
 	for _, tool := range seamlessmcp.Catalog() {
 		names = append(names, tool.Name)
 	}
-	require.Len(t, names, seamlessmcp.ToolCount)
+	// Every tool any server registers: a default one's, and the ones only a
+	// server that locks a project adds.
+	require.Len(t, names, seamlessmcp.LockedToolCount)
 
 	md, err := generateMCPTools(&Page{Src: "reference/mcp/all.md", Tools: names}, "docs-src")
 	require.NoError(t, err)

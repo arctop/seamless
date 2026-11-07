@@ -48,7 +48,7 @@ func settingsServer(t *testing.T, code int, body string) config.Config {
 func TestToolsCheck_DefaultOffPassesAndNamesTheFeature(t *testing.T) {
 	cfg := settingsServer(t, http.StatusOK, `{"featuresConfig":{"research":false},"featuresOverridden":false}`)
 
-	ok, detail := toolsCheck(cfg, expectedTools-optionalTools())
+	ok, detail := toolsCheck(cfg, expectedTools-optionalTools(), false)
 	require.True(t, ok, "a default daemon must pass doctor: %s", detail)
 	require.Equal(t,
 		fmt.Sprintf("%d registered, %d exposed (research disabled)", expectedTools, expectedTools-optionalTools()),
@@ -60,15 +60,28 @@ func TestToolsCheck_DefaultOffPassesAndNamesTheFeature(t *testing.T) {
 func TestToolsCheck_ResearchOnExpectsTheFullSurface(t *testing.T) {
 	cfg := settingsServer(t, http.StatusOK, `{"featuresConfig":{"research":true}}`)
 
-	ok, detail := toolsCheck(cfg, expectedTools)
+	ok, detail := toolsCheck(cfg, expectedTools, false)
 	require.True(t, ok, detail)
 	require.Equal(t, fmt.Sprintf("%d tools (expected %d)", expectedTools, expectedTools), detail)
 
 	// And the reduced count is now WRONG, so the check has not been softened into
 	// one that passes on anything.
-	ok, detail = toolsCheck(cfg, expectedTools-optionalTools())
+	ok, detail = toolsCheck(cfg, expectedTools-optionalTools(), false)
 	require.False(t, ok)
 	require.Contains(t, detail, fmt.Sprintf("expected %d", expectedTools))
+}
+
+// A daemon that locks a project also serves access_request: its list is judged
+// against one more registered tool, and the plain count is then one short.
+func TestToolsCheck_ALockingDaemonServesAccessRequestToo(t *testing.T) {
+	cfg := settingsServer(t, http.StatusOK, `{"featuresConfig":{"research":true}}`)
+
+	ok, detail := toolsCheck(cfg, expectedTools+1, true)
+	require.True(t, ok, detail)
+	require.Equal(t, fmt.Sprintf("%d tools (expected %d)", expectedTools+1, expectedTools+1), detail)
+
+	ok, _ = toolsCheck(cfg, expectedTools, true)
+	require.False(t, ok, "a locking daemon missing a tool still fails")
 }
 
 // A daemon with the feature off that exposes its tools anyway is a real failure:
@@ -76,7 +89,7 @@ func TestToolsCheck_ResearchOnExpectsTheFullSurface(t *testing.T) {
 func TestToolsCheck_FeatureOffButToolsExposedFails(t *testing.T) {
 	cfg := settingsServer(t, http.StatusOK, `{"featuresConfig":{"research":false}}`)
 
-	ok, detail := toolsCheck(cfg, expectedTools)
+	ok, detail := toolsCheck(cfg, expectedTools, false)
 	require.False(t, ok)
 	require.Equal(t,
 		fmt.Sprintf("%d registered, %d exposed, expected %d with research disabled",
@@ -126,7 +139,7 @@ func TestToolsCheck_UnreadableFeatureStateFallsBackToTheRange(t *testing.T) {
 			cfg := tc.cfg(t)
 
 			for _, live := range []int{low, expectedTools} {
-				ok, detail := toolsCheck(cfg, live)
+				ok, detail := toolsCheck(cfg, live, false)
 				require.True(t, ok, "%d is inside the range: %s", live, detail)
 				require.Contains(t, detail, "feature state unreadable")
 				require.Contains(t, detail, tc.want)
@@ -135,9 +148,9 @@ func TestToolsCheck_UnreadableFeatureStateFallsBackToTheRange(t *testing.T) {
 
 			// Soft, not blind: a count outside the range cannot be explained by any
 			// feature state, so it still fails.
-			ok, detail := toolsCheck(cfg, low-1)
+			ok, detail := toolsCheck(cfg, low-1, false)
 			require.False(t, ok, detail)
-			ok, _ = toolsCheck(cfg, expectedTools+1)
+			ok, _ = toolsCheck(cfg, expectedTools+1, false)
 			require.False(t, ok)
 		})
 	}
@@ -151,7 +164,7 @@ func TestToolsCheck_FeedsTheRegisteredCountToTheSharedVerdict(t *testing.T) {
 	cfg := settingsServer(t, http.StatusOK, `{"featuresConfig":{"research":false}}`)
 	feats := config.Features{}
 
-	ok, detail := toolsCheck(cfg, expectedTools-optionalTools())
+	ok, detail := toolsCheck(cfg, expectedTools-optionalTools(), false)
 	wantOK, wantDetail := features.ToolCountVerdict(expectedTools, expectedTools-optionalTools(), &feats, "")
 	require.Equal(t, wantOK, ok)
 	require.Equal(t, wantDetail, detail, "toolsCheck must be the shared verdict, not a second copy of it")

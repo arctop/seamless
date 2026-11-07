@@ -290,9 +290,58 @@ any of it.
   and checked by `approverAccountCheck`; a passkey assertion over the
   request's own challenge; a Touch ID signature over
   `TouchIDApproveMessage`) and the facts digest the owner saw. No route
-  constructs `ProofDaemon`. An agent's socket connection may not deny. No MCP
-  tool is added for requests: a new tool would change every install's tool
-  count; `seam access request` files one explicitly.
+  constructs `ProofDaemon`. An agent's socket connection may not deny.
+  `access_request` (`internal/mcp/access_request.go`) files one explicitly and
+  is registered only while peer_auth locks a project
+  (`Config.OfferAccessRequest`: the `offerCommits` pattern for a whole tool),
+  so every other install's tools/list, `ToolCount` and doctor line are
+  unchanged. `Catalog()` lists it last (`LockedOnlyTools`), `LockedToolCount`
+  counts it, and both doctors assert `ToolCountWith(locked)` (seam doctor
+  mirrors it as `expectedTools` + `lockedOnlyTool`, pinned by a test). Its
+  `reason` never reaches a tool.call event. `seam access request` files one
+  from a shell.
+- **The in-session approval dialog is a prompt, never a proof**
+  (`internal/mcp/elicit.go`). A call on the peer_auth socket that files a
+  request (refused at a lock, refused at a confidential fence with a read
+  request, or `access_request`) shows the owner the request's facts as an MCP
+  elicitation -- warnings first, every value stripped of control and format
+  characters -- only when the client declared elicitation and a proof can
+  finish in the dialog (an enrolled Touch ID key; or passkeys on, one
+  enrolled, and a URL-capable client). It then polls the request's row until
+  it leaves pending, up to `DialogWait` (two minutes) from the start of the
+  call. Any process of the owner's account, or a client hook, can answer an
+  elicitation, so the answer only starts a proof: Touch ID sends
+  `core.ApproverNotification` on the call's own reply, which the `seam
+  mcp-proxy` bridge swallows and answers by opening the helper app; a passkey
+  sends the request's page as a URL elicitation. Only the approve core
+  decides. Decline and cancel deny nothing. Without every precondition the
+  call answers at once, word for word as before, and there is at most one
+  dialog per request per connection. mcp-go v1.1.1 drops a notification
+  queued just before a handler returns, so the call stays open `notifyHold`
+  after queueing one. The bridge reads stdin on its own goroutine for the same
+  feature: the client's answer arrives behind the call that waits on it.
+- **The Touch ID approver is opt-in, socket-only, and keychain-bound**
+  (`macos/`, `cmd/seam/touchid*.go`, `cmd/seam/approver_app.go`; console
+  `approversTouchIDEnrol`, `touchIDProof`). Nothing installs or launches
+  Seamless Approve but `seam touchid enroll`, which checks the zip against the
+  release's checksums.txt (`update.VerifyChecksum`), then `codesign --verify
+  --strict --deep`, the identifier `org.thereisnospoon.seamless.approve`,
+  `spctl` for a release asset, and seam's own Developer ID team, pinned with
+  a `-R=anchor apple generic ... certificate leaf[subject.OU]` requirement
+  (an unsigned seam: the owner's y/N). seam does not link the Sigstore
+  verifier (+17 MB to every seam). The key is a Secure Enclave key in the
+  data-protection keychain under an access group only the signed app may
+  claim -- never a CryptoKit blob in a file, which any process of the owner's
+  could load and sign with behind a prompt of its own wording. The helper
+  takes no fact from its arguments: it reads the request and its challenge
+  over the socket and refuses a socket whose peer is its own uid or not the
+  daemon's account. A key is enrolled (`POST
+  /console/approvers/touchid/enrol`) and a proof accepted (`POST
+  /console/access/{id}/approve`, `proof=touchid`) only when
+  `access.PeerAuthenticated`; a request's `challenge` appears in its JSON only
+  when pending and read over the socket (a nonce, not a secret). Never put a
+  team ID in source: the pin is read at run time from seam's own signature,
+  and the build substitutes it from the environment.
 - **The locked view at the agent surfaces** (`internal/mcp/locked.go`,
   `internal/hooks/locked.go`). The SessionStart hook in a locked project's
   repository records the session there, metadata only, files its access
@@ -627,7 +676,11 @@ attempt files. Every other install only notifies. Owner decisions: memory
 An automatic update rolls back to the release it replaced when the new one does
 not come up, and an owner can pin an older release (`SEAMLESS_VERSION`). The
 rollback restores the database only when the new release had migrated it, and
-never touches memories, notes or the config. These rules exist so a rollback
+never touches memories, notes or the config. A restored database -- the
+rollback's or `seamlessd import`'s -- ends every live access lease, console
+unlock and read grant it held (`store.ResetRestoredAccess`): a snapshot would
+otherwise reopen what the owner closed after it was taken, so when that fails
+the rollback puts the migrated database back instead of serving it. These rules exist so a rollback
 to the previous release keeps working; the last keeps an update from silently
 disabling Codex's hooks.
 

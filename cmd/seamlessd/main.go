@@ -538,6 +538,9 @@ func runServe(args []string) error {
 		Features:  cfg.Features,
 		Approvals: mcpApprovals,
 		Grants:    mcpGrants,
+		// access_request exists only while a project is locked: every other
+		// install's tool surface is unchanged.
+		OfferAccessRequest: peer != nil && peer.policy.HasLocked(),
 	})
 	// A2A: the agent-to-agent surface, one recall skill over the same retrieve
 	// service and bearer key as MCP. The endpoint URL in the card is the URL
@@ -710,7 +713,7 @@ func runServe(args []string) error {
 	go func() {
 		slog.Info("seamlessd listening", "addr", bind, "url", serverURL, "tls", tlsOn,
 			"data_dir", cfg.DataDir,
-			"version", buildVersion(), "commit", commit, "built", buildDate, "mcp_tools", mcp.ToolCount,
+			"version", buildVersion(), "commit", commit, "built", buildDate, "mcp_tools", mcpSrv.NumTools(),
 			"distribution", distribution, "instance", instance)
 		serve := func() error { return srv.Serve(ln) }
 		if tlsOn {

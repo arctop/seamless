@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
@@ -31,6 +32,12 @@ import (
 // command does, through the same features.ToolCountVerdict. The two checks
 // measure different things on purpose.
 const expectedTools = 33
+
+// lockedOnlyTool is the one tool a daemon registers only while peer_auth locks
+// a project (mcp.LockedOnlyTools): a live tools/list that carries it is judged
+// against one more registered tool, as seamlessd's doctor does with
+// mcp.ToolCountWith.
+const lockedOnlyTool = "access_request"
 
 var doctorCmd = spec("doctor", groupObservability, "reachability + key + tool-count check",
 	noArgs(), bindNoOpts, runDoctor)
@@ -87,7 +94,8 @@ func runDoctor(ctx context.Context, e *env, _ *noOpts, _ []string) error {
 	if terr != nil {
 		report(false, "mcp_tools", "tools/list failed (bad key?): "+terr.Error())
 	} else {
-		ok, detail := toolsCheck(cfg, len(tools.Tools))
+		locked := slices.ContainsFunc(tools.Tools, func(t mcp.Tool) bool { return t.Name == lockedOnlyTool })
+		ok, detail := toolsCheck(cfg, len(tools.Tools), locked)
 		report(ok, "mcp_tools", detail)
 	}
 
@@ -113,14 +121,19 @@ func runDoctor(ctx context.Context, e *env, _ *noOpts, _ []string) error {
 // The judging itself is features.ToolCountVerdict, shared with the client-role
 // `seamlessd doctor`, which asks this same question from the other binary. Only
 // the registered count differs between them: seamlessd reads mcp.ToolCount
-// directly, this CLI mirrors it in expectedTools above.
-func toolsCheck(cfg config.Config, live int) (bool, string) {
+// directly, this CLI mirrors it in expectedTools above. locked says the live
+// list carries lockedOnlyTool, which a daemon locking a project registers too.
+func toolsCheck(cfg config.Config, live int, locked bool) (bool, string) {
 	feats, ferr := consoleFeatures(cfg)
 	why := ""
 	if ferr != nil {
 		why = ferr.Error()
 	}
-	return features.ToolCountVerdict(expectedTools, live, feats, why)
+	registered := expectedTools
+	if locked {
+		registered++
+	}
+	return features.ToolCountVerdict(registered, live, feats, why)
 }
 
 // consoleFeatures reads the daemon's effective optional-feature state from the

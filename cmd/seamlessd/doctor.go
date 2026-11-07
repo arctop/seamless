@@ -131,7 +131,7 @@ func doctor(args []string) error {
 	checks = append(checks, peerAuthChecks(context.Background(), cfg, db, defaultPeerAuthEnv())...)
 	checks = append(checks, repoMapCheck(db))
 	checks = append(checks, remoteSessionsCheck(db))
-	checks = append(checks, mcpToolsCheck())
+	checks = append(checks, mcpToolsCheck(cfg))
 	checks = append(checks, claudeRuntimeChecks()...)
 	checks = append(checks, hooksCheck(cfg))
 	checks = append(checks, claudeDesktopChecks(resolveSeamBin(""), absConfigPath(cfg.SourcePath()))...)
@@ -1081,14 +1081,27 @@ func missingEmbedCredential(cfg config.Config) (bool, string) {
 // `seam doctor`, and clientMCPToolsCheck below -- because it needs a running
 // server to ask; this one deliberately does not, which is what makes it the
 // useful check on a SERVER install whose daemon may well be stopped.
-func mcpToolsCheck() check {
-	srv := mcp.New(mcp.Config{})
-	n := srv.NumTools()
-	if n != mcp.ToolCount {
+//
+// The one registration that depends on the config is access_request, which a
+// daemon that locks a project registers (peer_auth.locked): the throwaway
+// server is built the way serve builds it, and the count it must match is
+// mcp.ToolCountWith that. Every other install reads exactly as before.
+func mcpToolsCheck(cfg config.Config) check {
+	locked := locksProjects(cfg)
+	srv := mcp.New(mcp.Config{OfferAccessRequest: locked})
+	n, want := srv.NumTools(), mcp.ToolCountWith(locked)
+	if n != want {
 		return check{statusFail, "mcp_tools",
-			fmt.Sprintf("registered %d tools but ToolCount is %d", n, mcp.ToolCount)}
+			fmt.Sprintf("registered %d tools but ToolCount is %d", n, want)}
 	}
 	return check{statusOK, "mcp_tools", fmt.Sprintf("%d tools registered", n)}
+}
+
+// locksProjects reports whether serve would lock a project under cfg, and so
+// register access_request: peer_auth on with a locked project (the policy
+// refuses an empty or repeated entry, so any entry is one).
+func locksProjects(cfg config.Config) bool {
+	return cfg.PeerAuth.Enabled && len(cfg.PeerAuth.Locked) > 0
 }
 
 // clientMCPTimeout bounds the whole tools/list probe: the handshake plus one
@@ -1123,7 +1136,7 @@ func clientMCPToolsCheck(cfg config.Config) check {
 
 	ctx, cancel := context.WithTimeout(context.Background(), clientMCPTimeout)
 	defer cancel()
-	live, err := remoteToolCount(ctx, cfg)
+	live, locked, err := remoteToolCount(ctx, cfg)
 	if err != nil {
 		return check{statusFail, name, fmt.Sprintf(
 			"tools/list failed against %s: %v -- check that seamlessd is running there and that mcp.api_key matches the server's key",
@@ -1139,7 +1152,9 @@ func clientMCPToolsCheck(cfg config.Config) check {
 	if ferr != nil {
 		why = ferr.Error()
 	}
-	ok, detail := features.ToolCountVerdict(mcp.ToolCount, live, feats, why)
+	// A server that locks a project registers access_request too, and says
+	// so by listing it: the count it registers is then the locked one.
+	ok, detail := features.ToolCountVerdict(mcp.ToolCountWith(locked), live, feats, why)
 	if !ok {
 		return check{statusFail, name, detail +
 			" -- a gap this arithmetic cannot explain is either the tool gate misbehaving or a client and server on different versions"}
@@ -1148,7 +1163,8 @@ func clientMCPToolsCheck(cfg config.Config) check {
 }
 
 // remoteToolCount performs the MCP handshake against the configured server and
-// returns how many tools its tools/list advertises.
+// returns how many tools its tools/list advertises, and whether one of them is
+// access_request (a server that locks a project).
 //
 // The HTTP client is config.Config.HTTPClient -- the ONE TLS trust decision,
 // shared with the seam CLI and with install-hooks. That sharing is a
@@ -1158,10 +1174,10 @@ func clientMCPToolsCheck(cfg config.Config) check {
 // connection. A tls.ca_file this machine cannot use is an error from that
 // constructor and is reported as one, never a silent fall back to the system
 // pool.
-func remoteToolCount(ctx context.Context, cfg config.Config) (int, error) {
+func remoteToolCount(ctx context.Context, cfg config.Config) (int, bool, error) {
 	hc, err := cfg.HTTPClient(clientMCPTimeout)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	headers := map[string]string{"Authorization": "Bearer " + cfg.MCP.APIKey}
 	if host := config.Hostname(); host != "" {
@@ -1173,23 +1189,24 @@ func remoteToolCount(ctx context.Context, cfg config.Config) (int, error) {
 		mcptransport.WithHTTPHeaders(headers),
 		mcptransport.WithHTTPBasicClient(hc))
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	defer func() { _ = cli.Close() }()
 	if err := cli.Start(ctx); err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	var initReq mcpgo.InitializeRequest
 	initReq.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
 	initReq.Params.ClientInfo = mcpgo.Implementation{Name: "seamlessd-doctor", Version: version}
 	if _, err := cli.Initialize(ctx, initReq); err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	tools, err := cli.ListTools(ctx, mcpgo.ListToolsRequest{})
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
-	return len(tools.Tools), nil
+	locked := slices.ContainsFunc(tools.Tools, func(t mcpgo.Tool) bool { return t.Name == mcp.AccessRequestTool })
+	return len(tools.Tools), locked, nil
 }
 
 // apiKeyCheck warns when the static bearer key is unset. On a true first run

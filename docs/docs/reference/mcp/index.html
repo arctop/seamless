@@ -298,7 +298,8 @@ session ULID.</li>
 transport failures.</li>
 </ul>
 <h2 id="the-tool-surface">The tool surface</h2>
-<p>Seamless registers <strong>33 tools</strong>. They are documented in groups:</p>
+<p>Seamless registers <strong>33 tools</strong>, and a 34th, <code>access_request</code>, on a daemon whose
+<code>peer_auth</code> locks a project. They are documented in groups:</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -314,7 +315,7 @@ transport failures.</li>
 </tr>
 <tr>
 <td>Notes, projects, and capture</td>
-<td><code>notes_create</code>, <code>notes_read</code>, <code>notes_update</code>, <code>notes_edit</code>, <code>notes_append</code>, <code>notes_delete</code>, <code>project_list</code>, <code>project_create</code>, <code>capture_url</code></td>
+<td><code>notes_create</code>, <code>notes_read</code>, <code>notes_update</code>, <code>notes_edit</code>, <code>notes_append</code>, <code>notes_delete</code>, <code>project_list</code>, <code>project_create</code>, <code>capture_url</code>, <code>access_request</code> (locked projects only)</td>
 </tr>
 <tr>
 <td><a href="../../reference/mcp/tasks/">Tasks</a></td>

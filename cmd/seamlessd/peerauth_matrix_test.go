@@ -186,6 +186,10 @@ func newPADaemon(t *testing.T) *paDaemon {
 		// Commit records on, so the commits argument is a surface the probes
 		// reach rather than an unknown parameter.
 		RecordCommits: true,
+		// access_request registered, with the approval service behind it, so
+		// the probes reach the request path rather than an unknown tool.
+		OfferAccessRequest: true,
+		Approvals:          paApprovals(t, db),
 	})
 	a2aSrv, err := a2a.New(a2a.Config{Retrieve: ret, Events: rec, APIKey: paKey, Version: "test", Endpoint: "http://127.0.0.1:8081/api/a2a"})
 	require.NoError(t, err)
@@ -595,6 +599,7 @@ func paToolProbes(it paItems) map[string][]map[string]any {
 		"gardener_apply":     {{"id": it.proposalID}, {"id": it.proposalID, "action": "dismiss"}, {"id": it.proposalID, "action": "hide"}},
 		"capture_url":        {{"url": "https://example.invalid/x", "project": it.project}},
 		"usage_summary":      {{}},
+		"access_request":     {{"project": it.project}, {"project": it.project, "reason": "outsider asks"}},
 		"favorite_set": {
 			{"kind": "memory", "id": it.memID, "favorite": true}, {"kind": "note", "id": it.noteID, "favorite": true},
 			{"kind": "task", "id": it.taskID, "favorite": true}, {"kind": "trial", "id": it.trialID, "favorite": true},

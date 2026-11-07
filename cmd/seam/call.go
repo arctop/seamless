@@ -28,7 +28,10 @@ import (
 //
 // It is help text, never a gate: a tool missing from it is still called, since
 // a newer daemon may serve tools this CLI predates, and the daemon is the one
-// that refuses a name it does not know.
+// that refuses a name it does not know. So it lists tools a given daemon may
+// not serve: an optional feature's while it is off, and access_request, which
+// only a daemon that locks a project (peer_auth.locked) registers. The help
+// says both.
 var callTools = []string{
 	"session_start", "session_update", "session_end",
 	"memory_write", "memory_append", "memory_edit", "memory_read", "memory_delete",
@@ -40,6 +43,7 @@ var callTools = []string{
 	"gardener_proposals", "gardener_request", "gardener_split", "gardener_apply",
 	"capture_url", "usage_summary",
 	"favorite_set",
+	"access_request",
 }
 
 var callCmd = spec("call", groupCall, "call any MCP tool by name, print its JSON result",
@@ -65,7 +69,8 @@ Run by an agent through its shell, a call is bound to that agent's session, as
 its MCP calls are; run from a terminal it is unbound, so pass "project" (or
 "session") in the arguments.
 
-Tools (an optional feature that is off serves none of its tools):
+Tools (an optional feature that is off serves none of its tools, and only a
+daemon that locks a project serves access_request):
 `)
 	line := " "
 	for _, t := range callTools {

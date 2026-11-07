@@ -7619,12 +7619,13 @@ Pass `project: global` to mean global deliberately.
 
 ## The tool surface
 
-Seamless registers **33 tools**. They are documented in groups:
+Seamless registers **33 tools**, and a 34th, `access_request`, on a daemon whose
+`peer_auth` locks a project. They are documented in groups:
 
 | Group | Tools |
 |---|---|
 | Sessions, memory, and recall | `session_start`, `session_update`, `session_end`, `memory_write`, `memory_append`, `memory_edit`, `memory_read`, `memory_delete`, `recall` |
-| Notes, projects, and capture | `notes_create`, `notes_read`, `notes_update`, `notes_edit`, `notes_append`, `notes_delete`, `project_list`, `project_create`, `capture_url` |
+| Notes, projects, and capture | `notes_create`, `notes_read`, `notes_update`, `notes_edit`, `notes_append`, `notes_delete`, `project_list`, `project_create`, `capture_url`, `access_request` (locked projects only) |
 | [Tasks](/reference/mcp/tasks/) | `tasks_add`, `tasks_update`, `tasks_ready`, `tasks_list`, `tasks_claim`, `tasks_release` |
 | Lab, gardener, and usage | `lab_open`, `trial_record`, `trial_query`, `gardener_proposals`, `gardener_request`, `gardener_split`, `gardener_apply`, `usage_summary`, `favorite_set` |
 
@@ -7981,6 +7982,23 @@ The `global` project slug is the deliberate cross-project scope. It is a token
 you pass on purpose, never a default you fall into - see the fail-closed rule in
 the [MCP API overview](/reference/mcp/).
 
+## access_request asks the owner for a locked project
+
+`access_request` exists only on a daemon whose `peer_auth` locks a project;
+every other install neither lists nor accepts it. It files the same request a
+call refused at the lock files by itself, with an optional reason of up to 200
+characters that the owner sees quoted and labeled as the agent's own words.
+
+When the agent's client supports MCP elicitation (Claude Code does), the
+request opens an approval dialog in the session: the owner sees the daemon's
+facts, warnings first, and chooses a duration and Touch ID or a passkey. The
+dialog's answer is never the approval - any process of the owner's account
+could answer it - the proof is: the Touch ID helper's signature or the
+passkey's assertion, checked by the daemon. The call waits up to two minutes
+for it, then answers with the request id; the owner can still decide later
+with `seam approve` or on the console. A call refused at a lock opens the same
+dialog. Once approved, retry the call.
+
 ## capture_url is SSRF-safe on purpose
 
 `capture_url` fetches a URL and returns its content as markdown. It is the one
@@ -8099,6 +8117,16 @@ Fetch a web page (SSRF-guarded: private/loopback addresses are rejected) and sav
 |---|---|---|---|
 | `url` | string | **yes** | http(s) URL to capture |
 | `project` | string | no | project slug; defaults to the bound/ambient session's project. An unknown slug CREATES that project -- naming a new one is normal and never an error. Pass project=global ONLY for knowledge that belongs in EVERY project's briefing; it is not a neutral default. With no session and no explicit project the call is rejected as ambiguous. A session bound to a confidential or sealed project can write ONLY into that project. |
+| `session` | string | no | the session to act as: the name session_start returned, the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless |
+
+## access_request {#access_request}
+
+Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth.locked), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to two minutes for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `project` | string | **yes** | the locked project's slug |
+| `reason` | string | no | optional: why the work needs the project, in at most 200 characters. The owner sees it labeled as this agent's own words. |
 | `session` | string | no | the session to act as: the name session_start returned, the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless |
 
 ---
@@ -8830,9 +8858,11 @@ Under `peer_auth`, a project listed in `peer_auth.locked` (see the
 every owner request - the owner's own agents included - until the owner
 approves a lease for the asking agent's process. A refused call files a
 pending access request by itself; an agent can also ask explicitly. The owner
-decides it in their own terminal with `seam approve`, or on the console's
-passkey page. Both commands talk to the console's `/console/access` routes,
-which answer `no project is locked` while the daemon locks nothing.
+decides it in their own terminal with `seam approve`, on the console's passkey
+page, or - when the agent's client supports MCP elicitation - in an approval
+dialog inside the agent's session, confirmed with Touch ID (`seam touchid
+enroll`) or a passkey. These commands talk to the console's `/console/access`
+routes, which answer `no project is locked` while the daemon locks nothing.
 
 ### seam access request {#seam_access_request}
 
@@ -8936,6 +8966,56 @@ decides nothing; it takes no request, `--for` or `--passkey`.
 Exit status: 0 when a request was approved or denied, when nothing changed,
 and when nothing is waiting; 1 on any error, including a request that is no
 longer pending (and 2, as everywhere, for a command line it cannot parse).
+
+### seam touchid enroll {#seam_touchid_enroll}
+
+```bash
+seam touchid enroll [--app PATH] [--name NAME]
+```
+
+Installs the Touch ID approver, Seamless Approve, and enrols its key. macOS
+only, in the owner's own terminal, with `server_url: unix:///path` naming the
+`peer_auth` socket; nothing installs or launches the app unless you run this.
+
+A release build of `seam` fetches its own version's
+`seamless-approve_<version>_darwin.zip` and checks its SHA-256 against the
+release's `checksums.txt`; a source build passes `--app` with a local `.app`
+or zip. Either way the app must pass `codesign --verify --strict --deep`, be
+named `org.thereisnospoon.seamless.approve`, and carry the same Developer ID
+team as `seam` itself (an unsigned `seam` shows the app's team and asks); a
+release asset must also pass Gatekeeper. It is installed at
+`~/Applications/Seamless Approve.app`, replacing an existing copy only after
+a y/N.
+
+It then prints the command that mints a one-time enrolment code as the
+daemon's account:
+
+```bash
+sudo -k -u _seamless env SEAMLESS_CONFIG=<config> <seamlessd> approvers enroll-code touchid
+```
+
+and opens the app, which asks for the code in its own dialog, creates its key
+(one touch) and registers it. The key lives in the Secure Enclave, in a
+keychain group only the signed app can use, and needs your presence - finger,
+Apple Watch or login password - for every approval. `seam touchid enroll`
+finishes by confirming that the daemon lists the new key. `--name` labels it
+(default `Touch ID on <host>`; 1-64 printable characters, not starting with
+`-`).
+
+Once enrolled, accepting an access request's dialog with Touch ID opens the
+app for that request: it reads the request's facts from the daemon itself,
+shows them in the Touch ID prompt, and signs over the request and the
+duration you chose. A Touch ID approval is accepted on the `peer_auth` socket
+only.
+
+### seam touchid status {#seam_touchid_status}
+
+```bash
+seam touchid status
+```
+
+Says whether the app is installed and how it is signed, whether `server_url`
+names the socket, and which Touch ID keys the daemon has enrolled.
 
 ## Observability
 

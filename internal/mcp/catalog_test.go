@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -22,15 +23,25 @@ import (
 // It is a same-package test so it can read the server's private toolNames --
 // the registration record itself, not a second hand-maintained list.
 func TestCatalogMatchesRegistration(t *testing.T) {
-	srv := New(Config{})
-
 	names := make([]string, 0, len(Catalog()))
 	for _, tool := range Catalog() {
 		names = append(names, tool.Name)
 	}
 
-	require.Equal(t, srv.toolNames, names, "Catalog order/content must mirror registerTools")
-	require.Len(t, names, ToolCount)
+	// A server that locks a project registers the whole catalog.
+	locked := New(Config{OfferAccessRequest: true})
+	require.Equal(t, locked.toolNames, names, "Catalog order/content must mirror registerTools")
+	require.Len(t, names, LockedToolCount)
+	require.Equal(t, LockedToolCount, ToolCountWith(true))
+
+	// Every other one -- every default install -- registers the catalog minus
+	// the locked-only tools, in the same order, and ToolCount counts that.
+	defaults := New(Config{})
+	want := slices.DeleteFunc(slices.Clone(names), func(n string) bool { return slices.Contains(LockedOnlyTools(), n) })
+	require.Equal(t, want, defaults.toolNames)
+	require.Len(t, defaults.toolNames, ToolCount)
+	require.Equal(t, ToolCount, ToolCountWith(false))
+	require.Equal(t, LockedOnlyTools(), names[len(want):], "the locked-only tools come last in Catalog")
 }
 
 // TestAddToolRecordsEverySchema pins what makes validation impossible to forget:
