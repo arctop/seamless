@@ -410,7 +410,8 @@ func RemoveApprover(ctx context.Context, db *sql.DB, id string) error {
 }
 
 // ResetApprovers deletes every credential and every unused enrolment code,
-// and revokes every live lease (reason reset), in one transaction: what the
+// revokes every live lease (reason reset) and ends every console unlock, in
+// one transaction: what the
 // owner does when a credential may be in someone else's hands. It returns
 // how many credentials and leases it ended.
 func ResetApprovers(ctx context.Context, db *sql.DB, now time.Time) (credentials, leases int64, err error) {
@@ -436,6 +437,11 @@ func ResetApprovers(ctx context.Context, db *sql.DB, now time.Time) (credentials
 		return 0, 0, fmt.Errorf("%s: %w", op, err)
 	}
 	if leases, err = res.RowsAffected(); err != nil {
+		return 0, 0, fmt.Errorf("%s: %w", op, err)
+	}
+	// A console unlock was granted by a credential too: it ends with them.
+	if _, err := tx.ExecContext(ctx, `UPDATE console_unlocks SET status = 'ended', ended_at = ?, ended_reason = ?,
+		claim_hash = '', challenge = NULL WHERE status IN ('live', 'pending')`, core.FormatTime(now), ConsoleUnlockEndReset); err != nil {
 		return 0, 0, fmt.Errorf("%s: %w", op, err)
 	}
 	if err := tx.Commit(); err != nil {

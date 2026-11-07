@@ -325,7 +325,13 @@ any of it.
   candidates). A sealed project's name is not shown to an account that cannot
   reach it.
 - **The console reads through `store.OpenView`**: TEMP VIEWs that shadow every
-  project-scoped table on a read-only handle. Console writes go to
+  project-scoped table on a read-only handle. While a project is locked it
+  reads through a `store.Views` pool instead (one handle per hidden set),
+  chosen per request (`console/reach.go`): the socket View's leases, plus --
+  for a cookie-authenticated browser only -- the live rows behind its
+  `seamless_unlock` cookie. Console reads go through `s.db(ctx)` and
+  `s.eventLog(ctx)`, never `s.cfg.DB`. A console unlock is a cookie, never a
+  lease: it never reaches an agent. Console writes go to
   `s.writeDB()`, after reading their target through `s.cfg.DB`; a gardener
   action by id checks `proposalReachable` first. A store function that both
   reads and caches takes both handles (`CaptureStreakWith` and its siblings).

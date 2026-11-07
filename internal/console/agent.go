@@ -70,9 +70,9 @@ func (s *Service) sourceSessionResolver(ctx context.Context) func(string) core.S
 		var ok bool
 		var err error
 		if store.LooksLikeSessionULID(src) {
-			sess, ok, err = store.SessionByID(ctx, s.cfg.DB, src)
+			sess, ok, err = store.SessionByID(ctx, s.db(ctx), src)
 		} else {
-			sess, ok, err = store.SessionByName(ctx, s.cfg.DB, src)
+			sess, ok, err = store.SessionByName(ctx, s.db(ctx), src)
 		}
 		if err != nil {
 			s.logger.Warn("console: memory source session", "source", src, "error", err)

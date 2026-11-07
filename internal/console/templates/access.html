@@ -20,6 +20,46 @@
 {{else}}
 <p class="held-sub">Nothing is waiting. When an agent is refused at a locked project, its request appears here.</p>
 {{end}}
+
+<section aria-labelledby="access-leases-title">
+  <h2 id="access-leases-title">Agent leases</h2>
+  {{if .Leases}}
+  <ul class="access-list">
+    {{range .Leases}}
+    <li class="access-item" data-lease="{{.ID}}">
+      <span class="badge">{{.Project}}</span>
+      <strong>{{if .Session}}{{.Session}}{{else}}pid {{.PID}}{{end}}</strong>
+      <small>granted {{.GrantedAt.Local.Format "15:04"}}, ends {{.ExpiresAt.Local.Format "15:04"}}</small>
+      <form method="post" action="/console/access/leases/{{.ID}}/revoke">
+        <button class="btn" type="submit">Revoke</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="held-sub">No agent holds a lease. An approved request becomes one: that agent and the programs it started read the project until it ends.</p>
+  {{end}}
+</section>
+
+<section aria-labelledby="access-unlocks-title">
+  <h2 id="access-unlocks-title">Console unlocks</h2>
+  {{if .Unlocks}}
+  <ul class="access-list">
+    {{range .Unlocks}}
+    <li class="access-item" data-unlock-row="{{.ID}}">
+      <span class="badge">{{.Project}}</span>
+      <strong>{{if .ThisBrowser}}this browser{{else}}another browser{{end}}</strong>
+      <small>unlocked by {{.By}}, ends {{.ExpiresAt.Local.Format "15:04"}}</small>
+      <form method="post" action="/console/access/unlocks/{{.ID}}/end">
+        <button class="btn" type="submit">Lock again</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="held-sub">No browser has a locked project open. Unlocking one opens it in that browser only, never to an agent.</p>
+  {{end}}
+</section>
 </div>
 {{end}}
 {{end}}

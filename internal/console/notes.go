@@ -87,7 +87,7 @@ func listQS(query, sortKey, defSort string) string {
 // notesPage assembles the grouped notes list for the given sort + filter.
 func (s *Service) notesPage(ctx context.Context, sortKey, query string) (notesData, error) {
 	q := strings.ToLower(query)
-	notes, err := store.ListNotes(ctx, s.cfg.DB)
+	notes, err := store.ListNotes(ctx, s.db(ctx))
 	if err != nil {
 		return notesData{}, err
 	}

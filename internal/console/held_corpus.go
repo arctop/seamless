@@ -74,34 +74,34 @@ func (s *Service) corpusSections(r *http.Request, data *heldPageData) error {
 		st := s.cfg.Screening.Lockdown(ctx)
 		data.Lockdown = lockdownView{On: st.On, Console: st.Console, File: st.File, FilePath: st.FilePath, Source: st.Source()}
 	}
-	armed, err := store.CorpusArmed(ctx, s.cfg.DB)
+	armed, err := store.CorpusArmed(ctx, s.db(ctx))
 	if err != nil {
 		return err
 	}
-	counts, err := store.CountCorpus(ctx, s.cfg.DB)
+	counts, err := store.CountCorpus(ctx, s.db(ctx))
 	if err != nil {
 		return err
 	}
 	data.Review = reviewView{Armed: armed, Items: counts.Items, Safe: counts.Safe, Flagged: counts.Flagged,
 		Unreviewed: counts.Unreviewed, Drifted: counts.Drifted}
-	if t, ok, terr := store.SettingTime(ctx, s.cfg.DB, store.SettingCorpusBaseline); terr != nil {
+	if t, ok, terr := store.SettingTime(ctx, s.db(ctx), store.SettingCorpusBaseline); terr != nil {
 		return terr
 	} else if ok {
 		data.Review.Baseline = &t
 	}
-	if t, ok, terr := store.SettingTime(ctx, s.cfg.DB, store.SettingCorpusReviewed); terr != nil {
+	if t, ok, terr := store.SettingTime(ctx, s.db(ctx), store.SettingCorpusReviewed); terr != nil {
 		return terr
 	} else if ok {
 		data.Review.Reviewed = &t
 	}
-	flagged, err := store.FlaggedCorpusRecords(ctx, s.cfg.DB)
+	flagged, err := store.FlaggedCorpusRecords(ctx, s.db(ctx))
 	if err != nil {
 		return err
 	}
 	for _, rec := range flagged {
 		data.Flagged = append(data.Flagged, s.corpusRowOf(r, rec, rec.ReviewVerdicts, rec.ReviewedAt))
 	}
-	drifted, err := store.DriftedCorpusRecords(ctx, s.cfg.DB)
+	drifted, err := store.DriftedCorpusRecords(ctx, s.db(ctx))
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (s *Service) corpusRowOf(r *http.Request, rec store.CorpusRecord, codes []s
 		}
 	}
 	if rec.ItemKind == core.ItemKindMemory && rec.ItemID != "" {
-		sessions, err := store.InjectedSessions(r.Context(), s.cfg.DB, rec.ItemID, 0)
+		sessions, err := store.InjectedSessions(r.Context(), s.db(r.Context()), rec.ItemID, 0)
 		if err != nil {
 			s.logger.Warn("console: injected sessions", "id", rec.ItemID, "error", err)
 		}
@@ -215,7 +215,7 @@ func (s *Service) heldCorpusTarget(w http.ResponseWriter, r *http.Request) (stor
 		heldFlash(w, r, "path is required: the memory or note file to act on")
 		return store.CorpusRecord{}, false
 	}
-	rec, ok, err := store.CorpusRecordByPath(r.Context(), s.cfg.DB, path)
+	rec, ok, err := store.CorpusRecordByPath(r.Context(), s.db(r.Context()), path)
 	if err != nil {
 		s.serverError(w, r, err)
 		return store.CorpusRecord{}, false

@@ -35,7 +35,7 @@ func (s *Service) recentEvents(ctx context.Context, limit int) ([]eventRow, erro
 	if s.cfg.Events == nil {
 		return nil, nil
 	}
-	evs, err := s.cfg.Events.RecentExcluding(ctx, limit, s.ledgerExcludedKinds(ctx)...)
+	evs, err := s.eventLog(ctx).RecentExcluding(ctx, limit, s.ledgerExcludedKinds(ctx)...)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (s *Service) recentMishaps(ctx context.Context, limit int) ([]mishapRow, er
 	if s.cfg.Events == nil {
 		return nil, nil
 	}
-	evs, err := s.cfg.Events.ByKinds(ctx, []core.EventKind{core.EventAgentMishap}, "", "", limit)
+	evs, err := s.eventLog(ctx).ByKinds(ctx, []core.EventKind{core.EventAgentMishap}, "", "", limit)
 	if err != nil {
 		return nil, err
 	}

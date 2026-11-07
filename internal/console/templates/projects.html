@@ -101,6 +101,7 @@
       </section>
       {{end}}{{else}}<div class="empty dotgrid"><span class="empty-ico">{{icon "folder-tree"}}</span><div>No projects{{if .Query}} match &ldquo;{{.Query}}&rdquo;{{end}} yet.</div></div>{{end}}
     {{end}}
+    {{if .Locked}}{{template "lockedrows" .Locked}}{{end}}
   </div>
 </section>
 </div><!-- .ops-page -->
@@ -159,4 +160,42 @@
     {{if not .Global}}<span class="project-open-cue">Open workspace {{icon "arrow-right"}}</span>{{end}}
   </div>
 </article>
+{{end}}
+
+{{define "lockedrows"}}
+<section class="project-group project-locked" aria-label="Locked projects">
+  <header class="project-group-head">
+    <div class="project-group-identity">
+      <span class="project-group-icon">{{icon "lock"}}</span>
+      <div><strong>Locked</strong><span>Name and counts only; unlock one to read it in this browser</span></div>
+    </div>
+    <div class="project-group-signals"><span>{{len .}} scope{{if ne (len .) 1}}s{{end}}</span></div>
+  </header>
+  <div class="project-group-rows">{{range .}}
+  <article id="p-{{.Slug}}" class="project-card row-link locked" data-href="/console/unlock/{{.Slug}}">
+    <div class="project-card-main">
+      <span class="project-card-tile tile">{{icon "lock"}}</span>
+      <div class="project-card-copy">
+        <div class="project-card-titleline"><a class="project-card-name" href="/console/unlock/{{.Slug}}">{{.Name}}</a>{{if ne .Name .Slug}}<span class="project-card-slug">{{.Slug}}</span>{{end}}</div>
+        <div class="project-card-badges"><span class="project-role warn">locked</span></div>
+        <p>Its content opens only with your approval.</p>
+      </div>
+    </div>
+    <div class="project-card-panel project-card-knowledge">
+      <div class="project-card-label">{{icon "brain"}} Knowledge</div>
+      <div class="project-stat"><span>Memories</span><strong>{{.Memories}}</strong></div>
+      <div class="project-stat"><span>Notes</span><strong>{{.Notes}}</strong></div>
+    </div>
+    <div class="project-card-panel project-card-work">
+      <div class="project-card-label">{{icon "list-checks"}} Work</div>
+      <div class="project-stat"><span>Sessions</span><strong>{{.Sessions}}</strong></div>
+      <div class="project-stat"><span>Open tasks</span><strong>{{.OpenTasks}}</strong></div>
+    </div>
+    <div class="project-card-panel project-card-activity">
+      <div class="project-card-label">{{icon "lock"}} Locked</div>
+      <span class="project-open-cue">Unlock {{icon "arrow-right"}}</span>
+    </div>
+  </article>{{end}}
+  </div>
+</section>
 {{end}}

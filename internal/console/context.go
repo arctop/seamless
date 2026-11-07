@@ -212,19 +212,19 @@ func projectContextHref(slug string) string {
 // registry-wide. found reports whether selected names any known registered or
 // referenced scope.
 func (s *Service) buildContextData(ctx context.Context, selected string) (contextData, bool, error) {
-	projects, err := store.ListProjects(ctx, s.cfg.DB)
+	projects, err := store.ListProjects(ctx, s.db(ctx))
 	if err != nil {
 		return contextData{}, false, fmt.Errorf("console.buildContextData: list projects: %w", err)
 	}
-	repoRows, err := store.RepoMapRows(ctx, s.cfg.DB)
+	repoRows, err := store.RepoMapRows(ctx, s.db(ctx))
 	if err != nil {
 		return contextData{}, false, fmt.Errorf("console.buildContextData: repo mappings: %w", err)
 	}
-	familyMap, err := store.ProjectFamilies(ctx, s.cfg.DB)
+	familyMap, err := store.ProjectFamilies(ctx, s.db(ctx))
 	if err != nil {
 		return contextData{}, false, fmt.Errorf("console.buildContextData: project families: %w", err)
 	}
-	briefing, overridden, err := store.BriefingConfig(ctx, s.cfg.DB, s.cfg.BriefingCfg)
+	briefing, overridden, err := store.BriefingConfig(ctx, s.db(ctx), s.cfg.BriefingCfg)
 	if err != nil {
 		return contextData{}, false, fmt.Errorf("console.buildContextData: briefing config: %w", err)
 	}
@@ -240,7 +240,7 @@ func (s *Service) buildContextData(ctx context.Context, selected string) (contex
 	// local eligibility-pool size and any memory-bearing scope missing from the
 	// registry. Avoid the project-board rollup here because its reach report scans
 	// telemetry that does not participate in briefing topology.
-	memories, err := store.AllActiveMemories(ctx, s.cfg.DB)
+	memories, err := store.AllActiveMemories(ctx, s.db(ctx))
 	if err != nil {
 		return contextData{}, false, fmt.Errorf("console.buildContextData: active memories: %w", err)
 	}
@@ -577,7 +577,7 @@ func (s *Service) contextLineages(ctx context.Context, projects []core.Project, 
 	if s.cfg.Events != nil {
 		beforeTS, beforeID := "", ""
 		for {
-			page, err := s.cfg.Events.ByKinds(ctx, []core.EventKind{core.EventMemoryMoved}, beforeTS, beforeID, 500)
+			page, err := s.eventLog(ctx).ByKinds(ctx, []core.EventKind{core.EventMemoryMoved}, beforeTS, beforeID, 500)
 			if err != nil {
 				return nil, fmt.Errorf("console.contextLineages: memory moves: %w", err)
 			}

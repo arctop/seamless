@@ -1,0 +1,145 @@
+{{define "content"}}
+{{with .Data}}
+<div class="unlock-page" data-unlock="{{.Project.Slug}}">
+<header class="mv2-bar">
+  <h1>{{icon "lock"}}{{.Project.Name}}</h1>{{about "A locked project: its name and counts show here, never its content. Unlocking it opens it in this browser only, for a limited time. It never opens it to an agent: agents ask for access on their own, and you approve each request."}}
+</header>
+
+<dl class="access-facts" aria-label="What it holds">
+  <dt>Project</dt><dd><code>{{.Project.Slug}}</code>{{if not .Project.Registered}} (not registered yet){{end}}</dd>
+  <dt>Memories</dt><dd>{{.Project.Memories}}</dd>
+  <dt>Notes</dt><dd>{{.Project.Notes}}</dd>
+  <dt>Sessions</dt><dd>{{.Project.Sessions}}</dd>
+  <dt>Open tasks</dt><dd>{{.Project.OpenTasks}}</dd>
+</dl>
+
+{{if .Unlocked}}
+<section aria-labelledby="unlock-state-title">
+  <h2 id="unlock-state-title">Unlocked in this browser</h2>
+  <p class="held-sub">{{icon "key-round"}} This browser reads {{.Project.Name}} until <strong>{{.Until.Local.Format "15:04"}}</strong>. Agents are unaffected: each still needs its own approval.</p>
+  <p><a class="btn primary" href="/console/projects/{{.Project.Slug}}">{{icon "box"}} Open {{.Project.Name}}</a></p>
+  <form method="post" action="/console/access/unlocks/{{.UnlockID}}/end">
+    <input type="hidden" name="next" value="/console/unlock/{{.Project.Slug}}">
+    <button class="btn" type="submit">{{icon "lock"}} Lock it again</button>
+  </form>
+</section>
+{{else if .Leased}}
+<p class="held-sub">This request reads {{.Project.Name}} through its agent's lease.</p>
+{{else}}
+<section aria-labelledby="unlock-how-title">
+  <h2 id="unlock-how-title">Unlock it in this browser for {{.Lease}}</h2>
+  {{if not .Browser}}
+  <p class="held-sub">An unlock is per browser: open this page in the browser you sign in to the console with.</p>
+  {{else if not .PasskeysOn}}
+  <p class="held-sub">Passkeys are not configured on this daemon. Unlock in your own terminal instead.</p>
+  {{else if not .HasPasskey}}
+  <p class="held-sub">No passkey is enrolled yet: add one on the <a href="/console/approvers">Approvers</a> page, or unlock in your own terminal.</p>
+  {{else if not .OnOrigin}}
+  <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/unlock/{{.Project.Slug}}">{{.Origin}}</a>.</p>
+  {{else}}
+  <form id="unlock-form" class="access-form" data-project="{{.Project.Slug}}">
+    <button class="btn primary" id="unlock-go" type="submit">{{icon "key-round"}} Unlock with a passkey</button>
+  </form>
+  {{end}}
+  <p class="held-sub">Or, in your own terminal (it asks for your password or Touch ID, then prints a one-time link to open here):</p>
+  <p><code class="unlock-command">{{.Command}}</code></p>
+  <p class="held-sub" id="unlock-status" role="status" aria-live="polite"></p>
+</section>
+{{end}}
+</div>
+{{end}}
+{{end}}
+
+{{define "scripts"}}
+<script>
+{{if .Data.Claimed}}try { history.replaceState(null, '', '/console/unlock/' + encodeURIComponent({{.Data.Project.Slug}})); } catch (e) {} // the used link leaves the address bar
+{{end}}window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbered by a refresh
+(function () {
+  function b64urlToBuf(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out.buffer;
+  }
+  function bufToB64url(buf) {
+    var bytes = new Uint8Array(buf), bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function requestOptions(pk) {
+    if (window.PublicKeyCredential && PublicKeyCredential.parseRequestOptionsFromJSON) {
+      return PublicKeyCredential.parseRequestOptionsFromJSON(pk);
+    }
+    pk.challenge = b64urlToBuf(pk.challenge);
+    (pk.allowCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
+    return pk;
+  }
+  function toJSON(cred) {
+    if (cred.toJSON) return cred.toJSON();
+    var r = cred.response;
+    var out = {
+      id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
+      authenticatorAttachment: cred.authenticatorAttachment || null,
+      clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+      response: {
+        clientDataJSON: bufToB64url(r.clientDataJSON), authenticatorData: bufToB64url(r.authenticatorData),
+        signature: bufToB64url(r.signature)
+      }
+    };
+    if (r.userHandle) out.response.userHandle = bufToB64url(r.userHandle);
+    return out;
+  }
+  function post(path, fields) {
+    return fetch(path, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(fields).toString()
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error(data.error || ('request failed (' + res.status + ')'));
+        return data;
+      });
+    });
+  }
+  // Refresh the view in place (console-data-updates-never-reload-document):
+  // the shared navigation fetches the page and morphs only what changed.
+  function refresh() {
+    if (window.SeamConsole && window.SeamConsole.load) {
+      return window.SeamConsole.load(location.href, { history: 'replace', source: 'query' });
+    }
+    return Promise.resolve(false);
+  }
+  function enhance() {
+    var form = document.getElementById('unlock-form');
+    if (!form || form._seamWired) return;
+    form._seamWired = true;
+    var status = document.getElementById('unlock-status');
+    var go = document.getElementById('unlock-go');
+    function say(msg) { if (status) status.textContent = msg; }
+    var base = '/console/unlock/' + encodeURIComponent(form.getAttribute('data-project'));
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!window.PublicKeyCredential) { say('This browser cannot use a passkey here.'); return; }
+      var id = '';
+      go.disabled = true;
+      say('Follow your browser\'s prompt.');
+      post(base + '/begin', {}).then(function (begun) {
+        id = begun.id;
+        return navigator.credentials.get({ publicKey: requestOptions(begun.options.publicKey) });
+      }).then(function (cred) {
+        return post(base + '/finish', { id: id, response: JSON.stringify(toJSON(cred)) });
+      }).then(function (done) {
+        say('Unlocked ' + done.unlocked + ' in this browser.');
+        refresh();
+      }).catch(function (err) {
+        say(err && err.name === 'NotAllowedError' ? 'Cancelled, or the authenticator timed out. Nothing was unlocked.' :
+            (err && err.message ? err.message : 'Something went wrong. Nothing was unlocked.'));
+      }).finally(function () { go.disabled = false; });
+    });
+  }
+  enhance();
+  document.addEventListener('seam:content-updated', enhance);
+})();
+</script>
+{{end}}

@@ -181,7 +181,7 @@ type projNoteVM struct {
 // memories), this project's injection trend (its own memories, matching the
 // board reach), and the project's recent activity.
 func (s *Service) fillOverviewTab(ctx context.Context, data *projectWorkspaceData, slug string, win store.RetrievalWindow) error {
-	active, err := store.ActiveMemories(ctx, s.cfg.DB, slug)
+	active, err := store.ActiveMemories(ctx, s.db(ctx), slug)
 	if err != nil {
 		return err
 	}
@@ -193,14 +193,14 @@ func (s *Service) fillOverviewTab(ctx context.Context, data *projectWorkspaceDat
 	}
 	data.MemByKind = orderKinds(byKind)
 
-	trend, err := store.ProjectRetrievalTrend(ctx, s.cfg.DB, win, slug)
+	trend, err := store.ProjectRetrievalTrend(ctx, s.db(ctx), win, slug)
 	if err != nil {
 		return err
 	}
 	data.Trend = trend
 
 	if s.cfg.Events != nil {
-		evs, err := s.cfg.Events.RecentExcluding(ctx, 120, s.ledgerExcludedKinds(ctx)...)
+		evs, err := s.eventLog(ctx).RecentExcluding(ctx, 120, s.ledgerExcludedKinds(ctx)...)
 		if err != nil {
 			return err
 		}
@@ -226,7 +226,7 @@ func (s *Service) fillOverviewTab(ctx context.Context, data *projectWorkspaceDat
 // for the plan notes, the transition ledger and the pending settlements. No
 // per-step or per-plan lookup beyond the dependency walk's cache misses.
 func (s *Service) fillTasksTab(ctx context.Context, data *projectWorkspaceData, slug string) error {
-	rollups, err := store.PlanRollupsForProject(ctx, s.cfg.DB, slug)
+	rollups, err := store.PlanRollupsForProject(ctx, s.db(ctx), slug)
 	if err != nil {
 		return err
 	}
@@ -250,7 +250,7 @@ func (s *Service) fillTasksTab(ctx context.Context, data *projectWorkspaceData, 
 	steps := make(map[string][]core.Task, len(active))
 	cache := map[string]core.Task{}
 	for _, pl := range active {
-		list, lerr := store.ListTasksForPlan(ctx, s.cfg.DB, slug, "", pl.Slug)
+		list, lerr := store.ListTasksForPlan(ctx, s.db(ctx), slug, "", pl.Slug)
 		if lerr != nil {
 			return lerr
 		}
@@ -297,7 +297,7 @@ func (s *Service) fillTasksTab(ctx context.Context, data *projectWorkspaceData, 
 		data.Plans = append(data.Plans, tl)
 	}
 
-	ready, err := store.ReadyTasks(ctx, s.cfg.DB, slug)
+	ready, err := store.ReadyTasks(ctx, s.db(ctx), slug)
 	if err != nil {
 		return err
 	}
@@ -390,7 +390,7 @@ func (s *Service) blockingChain(ctx context.Context, t core.Task, pc planStepCtx
 			seen[depID] = true
 			dep, ok := pc.cache[depID]
 			if !ok {
-				d, err := store.TaskByID(ctx, s.cfg.DB, depID)
+				d, err := store.TaskByID(ctx, s.db(ctx), depID)
 				if err != nil {
 					continue
 				}
@@ -484,7 +484,7 @@ func groupSteps(steps []planStepVM) []planStepGroup {
 // of which the index row already carries, and reading N plan files per page
 // load is exactly the N+1 the Plans library pays for its iteration column.
 func (s *Service) planNoteMeta(ctx context.Context, project string) (map[string]core.Note, error) {
-	notes, err := store.NotesByTagPrefix(ctx, s.cfg.DB, project, plans.SlugTagPrefix())
+	notes, err := store.NotesByTagPrefix(ctx, s.db(ctx), project, plans.SlugTagPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +523,7 @@ func (s *Service) planLedger(ctx context.Context, project string, steps map[stri
 	if s.cfg.Events == nil {
 		return nil
 	}
-	evs, err := s.cfg.Events.ByKinds(ctx, []core.EventKind{core.EventTaskTransition}, "", "", planLedgerScan)
+	evs, err := s.eventLog(ctx).ByKinds(ctx, []core.EventKind{core.EventTaskTransition}, "", "", planLedgerScan)
 	if err != nil {
 		s.logger.Warn("console: plan ledger", "project", project, "error", err)
 		return nil
@@ -594,7 +594,7 @@ func transitionVerb(payload map[string]any) (verb, iconName, tone string) {
 // load. One query; the badge is decoration, so an error costs it and nothing
 // else.
 func (s *Service) stalePlanSlugs(ctx context.Context, project string) map[string]bool {
-	proposals, err := store.PendingProposals(ctx, s.cfg.DB, "")
+	proposals, err := store.PendingProposals(ctx, s.db(ctx), "")
 	if err != nil {
 		s.logger.Warn("console: pending plan settlements", "project", project, "error", err)
 		return nil
@@ -621,7 +621,7 @@ func (s *Service) stalePlanSlugs(ctx context.Context, project string) map[string
 // fillSessionsTab loads the Sessions panel: the project's sessions newest first,
 // with each active session's held tasks resolved for an inline claim indicator.
 func (s *Service) fillSessionsTab(ctx context.Context, data *projectWorkspaceData, slug string) error {
-	sessions, err := store.ListSessionsForProject(ctx, s.cfg.DB, slug, "", time.Time{}, 60)
+	sessions, err := store.ListSessionsForProject(ctx, s.db(ctx), slug, "", time.Time{}, 60)
 	if err != nil {
 		return err
 	}
@@ -634,7 +634,7 @@ func (s *Service) fillSessionsTab(ctx context.Context, data *projectWorkspaceDat
 			Findings: snippet(markdown.PlainText(sess.Findings), 140), Updated: sess.UpdatedAt,
 		}
 		if vm.Active {
-			if held, err := store.TasksClaimedBy(ctx, s.cfg.DB, sess.ID); err == nil {
+			if held, err := store.TasksClaimedBy(ctx, s.db(ctx), sess.ID); err == nil {
 				for _, t := range held {
 					if t.ClaimLive(now) {
 						vm.Holds = append(vm.Holds, taskLabel(t))
@@ -652,14 +652,14 @@ func (s *Service) fillSessionsTab(ctx context.Context, data *projectWorkspaceDat
 // global/parent memories it inherits -- so the tab count reconciles with the
 // board's strict per-slug count instead of silently disagreeing.
 func (s *Service) fillMemoriesTab(ctx context.Context, data *projectWorkspaceData, slug string) error {
-	strict, err := store.ProjectMemoriesIncludingInvalid(ctx, s.cfg.DB, slug)
+	strict, err := store.ProjectMemoriesIncludingInvalid(ctx, s.db(ctx), slug)
 	if err != nil {
 		return err
 	}
 	for _, m := range strict {
 		data.Memories = append(data.Memories, s.projMemory(ctx, m))
 	}
-	active, err := store.ActiveMemories(ctx, s.cfg.DB, slug)
+	active, err := store.ActiveMemories(ctx, s.db(ctx), slug)
 	if err != nil {
 		return err
 	}
@@ -680,7 +680,7 @@ func (s *Service) projMemory(ctx context.Context, m core.Memory) projMemoryVM {
 		Updated: m.Updated, Superseded: !m.Active(),
 		Lineage: s.memLineage(ctx, m),
 	}
-	if stat, ok, err := store.GetRetrievalStat(ctx, s.cfg.DB, m.ID); err == nil && ok {
+	if stat, ok, err := store.GetRetrievalStat(ctx, s.db(ctx), m.ID); err == nil && ok {
 		vm.Injects, vm.Reads = stat.InjectCount, stat.ReadCount
 	}
 	return vm
@@ -691,7 +691,7 @@ func (s *Service) projMemory(ctx context.Context, m core.Memory) projMemoryVM {
 func (s *Service) memLineage(ctx context.Context, m core.Memory) template.HTML {
 	if m.SupersededBy != "" {
 		name := m.SupersededBy
-		if by, ok, err := store.MemoryByID(ctx, s.cfg.DB, m.SupersededBy); err == nil && ok {
+		if by, ok, err := store.MemoryByID(ctx, s.db(ctx), m.SupersededBy); err == nil && ok {
 			name = by.Name
 		}
 		return template.HTML(`<span class="lineage" style="color:var(--pop-strong)">` +
@@ -707,7 +707,7 @@ func (s *Service) memLineage(ctx context.Context, m core.Memory) template.HTML {
 // fillNotesTab loads the Notes panel: the project's notes (a Go-side filter of
 // the note index, newest first).
 func (s *Service) fillNotesTab(ctx context.Context, data *projectWorkspaceData, slug string) error {
-	notes, err := store.ListNotes(ctx, s.cfg.DB)
+	notes, err := store.ListNotes(ctx, s.db(ctx))
 	if err != nil {
 		return err
 	}
@@ -732,7 +732,7 @@ func (s *Service) fillInteractionsTab(ctx context.Context, data *projectWorkspac
 	if s.cfg.Events == nil {
 		return nil
 	}
-	evs, err := s.cfg.Events.ByKinds(ctx, interactionKinds, "", "", interactionsPageLimit)
+	evs, err := s.eventLog(ctx).ByKinds(ctx, interactionKinds, "", "", interactionsPageLimit)
 	if err != nil {
 		return err
 	}

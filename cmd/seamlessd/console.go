@@ -1,20 +1,27 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
+	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/events"
+	"github.com/arctop/seamless/internal/store"
 )
 
 // consoleLoginTmpl is a one-shot, self-submitting login page. Opened from a
@@ -53,12 +60,23 @@ var consoleLoginTmpl = template.Must(template.New("console-login").Parse(`<!doct
 func runConsoleOpen(args []string) error {
 	fs := flag.NewFlagSet("console-open", flag.ContinueOnError)
 	browser := fs.String("browser", "", `browser application to open instead of the default (e.g. "Google Chrome"; macOS only)`)
+	unlock := fs.String("unlock", "", "a locked project to open in one browser's console (run as the daemon's account, through sudo -k)")
+	forFlag := fs.String("for", "", "how long the unlock lasts once opened (with --unlock; at most and by default 3h, capped by peer_auth.max_lease)")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("seamlessd.console-open: %w", err)
 	}
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("seamlessd.console-open: %w", err)
+	}
+	if *unlock != "" || *forFlag != "" {
+		if *unlock == "" {
+			return errors.New("seamlessd.console-open: --for needs --unlock <project>")
+		}
+		if err := runConsoleUnlock(cfg, *unlock, *forFlag, *browser); err != nil {
+			return fmt.Errorf("seamlessd.console-open: %w", err)
+		}
+		return nil
 	}
 	if strings.TrimSpace(cfg.MCP.APIKey) == "" {
 		return fmt.Errorf("seamlessd.console-open: mcp.api_key is empty; run `seamlessd serve` once to generate it, or set it in seamless.yaml")
@@ -260,4 +278,64 @@ func consoleBase(cfg config.Config) string {
 		}
 	}
 	return cfg.ServerURL()
+}
+
+// consoleUnlockLinkTTL is how long an unlock link waits to be opened. Once
+// opened it is used up; the unlock it starts lasts --for.
+const consoleUnlockLinkTTL = 10 * time.Minute
+
+// runConsoleUnlock is console-open --unlock: the terminal way to open a
+// locked project in one browser's console. It runs as the daemon's own
+// account (the same check as seamlessd approve: the sudo is the proof), writes
+// a one-time unlock link straight into the database, prints it, and tries to
+// open it. A browser that opens it gets the seamless_unlock cookie; the
+// unlock never reaches an agent.
+func runConsoleUnlock(cfg config.Config, project, forFlag, browser string) error {
+	if err := approverAccountCheck(cfg, defaultPeerAuthEnv()); err != nil {
+		return err
+	}
+	db, err := store.Open(cfg.DBPath())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	svc, err := newApprovals(cfg, db, events.NewRecorder(db), logger)
+	if err != nil {
+		return err
+	}
+	link, err := consoleUnlockLink(context.Background(), cfg, db, svc.ConsoleLeaseLength(), project, forFlag, time.Now())
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stdout, "Unlock link for %s (works once, within %s):\n\n  %s\n\nOpen it in the browser you sign in to the console with.\n",
+		project, consoleUnlockLinkTTL, link)
+	// The daemon's account usually has no desktop session to open a browser
+	// in; the printed link is the way, and a launch failure says so quietly.
+	if err := openInBrowser(link, browser); err != nil {
+		fmt.Fprintln(os.Stderr, "(could not open a browser from this account; open the link above yourself)")
+	}
+	return nil
+}
+
+// consoleUnlockLink is runConsoleUnlock's testable core: it checks project is
+// locked and the duration (absent: the whole console lease; present: a
+// duration no longer than it), writes the link, and returns its URL.
+func consoleUnlockLink(ctx context.Context, cfg config.Config, db *sql.DB, maxLease time.Duration, project, forFlag string, now time.Time) (string, error) {
+	if !slices.Contains(cfg.PeerAuth.Locked, project) {
+		return "", fmt.Errorf("project %q is not locked: peer_auth.locked lists %s", project, strings.Join(cfg.PeerAuth.Locked, ", "))
+	}
+	lease := maxLease
+	if forFlag != "" {
+		d, err := time.ParseDuration(forFlag)
+		if err != nil || d < time.Minute || d > maxLease {
+			return "", fmt.Errorf("invalid --for %q: a duration from 1m to %s (the console lease)", forFlag, maxLease)
+		}
+		lease = d
+	}
+	secret, _, err := store.CreateConsoleUnlockLink(ctx, db, project, lease, consoleUnlockLinkTTL, now)
+	if err != nil {
+		return "", err
+	}
+	return consoleBase(cfg) + "/console/unlock?t=" + url.QueryEscape(secret), nil
 }

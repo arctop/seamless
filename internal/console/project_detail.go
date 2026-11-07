@@ -116,9 +116,13 @@ type projectMetrics struct {
 func (s *Service) projectDetail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	slug := r.PathValue("slug")
-	p, ok, err := store.ProjectBySlug(ctx, s.cfg.DB, slug)
+	p, ok, err := store.ProjectBySlug(ctx, s.db(ctx), slug)
 	if err != nil {
 		s.serverError(w, r, err)
+		return
+	}
+	if !ok && lockedHere(ctx, slug) {
+		s.lockedProject(w, r, slug)
 		return
 	}
 	if !ok {
@@ -136,7 +140,7 @@ func (s *Service) projectDetail(w http.ResponseWriter, r *http.Request) {
 // served as the peek fragment (?peek=1) or CLI JSON.
 func (s *Service) projectSummary(w http.ResponseWriter, r *http.Request, p core.Project) {
 	ctx := r.Context()
-	counts, err := store.GetProjectCounts(ctx, s.cfg.DB, p.Slug)
+	counts, err := store.GetProjectCounts(ctx, s.db(ctx), p.Slug)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -214,7 +218,7 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 
 	// Header + metric bar: strict per-slug health from the same batched query the
 	// board uses, so a single row equals the board row exactly.
-	board, err := store.ProjectsWithCounts(ctx, s.cfg.DB, win, now, s.cfg.SessionIdleTTL)
+	board, err := store.ProjectsWithCounts(ctx, s.db(ctx), win, now, s.cfg.SessionIdleTTL)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -236,7 +240,7 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 		HasReach: row.Active > 0, ReachRate: row.ReachRate,
 	}
 	data.Blocked = row.Blocked
-	if cov, cerr := store.GetSessionCoverageForProject(ctx, s.cfg.DB, slug, win.Since); cerr == nil && cov.Total > 0 {
+	if cov, cerr := store.GetSessionCoverageForProject(ctx, s.db(ctx), slug, win.Since); cerr == nil && cov.Total > 0 {
 		data.Metrics.HasCoverage = true
 		data.Metrics.Coverage = percent(cov.Covered, cov.Total)
 	}

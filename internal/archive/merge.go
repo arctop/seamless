@@ -47,6 +47,8 @@ import (
 //   - approver_credentials, approver_enrol_codes: who may approve those
 //     unlocks. A credential enrolled on another machine was never shown to
 //     this one's owner.
+//   - console_unlocks: one browser's console unlocks, behind a cookie only
+//     that machine's browser holds.
 //   - schema_migrations: the destination's own migration history.
 //
 // A host-local table (one keyed by which machine a row came from) does not

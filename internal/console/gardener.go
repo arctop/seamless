@@ -376,7 +376,7 @@ func (s *Service) gardenerPageData(w http.ResponseWriter, r *http.Request) (data
 	if !ok {
 		return gardenerData{}, nil, false
 	}
-	proposals, err := store.PendingProposals(ctx, s.cfg.DB, "")
+	proposals, err := store.PendingProposals(ctx, s.db(ctx), "")
 	if err != nil {
 		s.serverError(w, r, err)
 		return gardenerData{}, nil, false
@@ -443,7 +443,7 @@ func (s *Service) gardenerPage(w http.ResponseWriter, r *http.Request) {
 func (s *Service) gardenerDetail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
-	p, found, err := store.ProposalByID(ctx, s.cfg.DB, id)
+	p, found, err := store.ProposalByID(ctx, s.db(ctx), id)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -685,7 +685,7 @@ func findCard(groups []planGroup, sections []queueSection, id string) *proposalC
 // rail's undo affordance. Best-effort: a query error costs the section, not the
 // page.
 func (s *Service) recentDecisions(ctx context.Context) []recentRow {
-	ps, err := store.RecentResolvedProposals(ctx, s.cfg.DB, recentDecisionLimit)
+	ps, err := store.RecentResolvedProposals(ctx, s.db(ctx), recentDecisionLimit)
 	if err != nil {
 		s.logger.Warn("console: recent gardener decisions", "error", err)
 		return nil
@@ -895,7 +895,7 @@ func planTargets(cards []proposalCard) []projectOpt {
 // projectOptions lists projects for the request-scope selector, best-effort: a
 // query error yields no options rather than failing the page.
 func (s *Service) projectOptions(ctx context.Context) []projectOpt {
-	projs, err := store.ListProjects(ctx, s.cfg.DB)
+	projs, err := store.ListProjects(ctx, s.db(ctx))
 	if err != nil {
 		s.logger.Warn("console: list projects", "error", err)
 		return nil
@@ -1062,7 +1062,7 @@ func (s *Service) fencedTargets(ctx context.Context, p store.Proposal) []store.P
 	if p.Kind == store.ProposalRelocate {
 		return nil
 	}
-	fenced, err := gardener.FencedProjects(ctx, s.cfg.DB, p)
+	fenced, err := gardener.FencedProjects(ctx, s.db(ctx), p)
 	if err != nil {
 		s.logger.Warn("console: resolve proposal isolation", "proposal", p.ID, "kind", p.Kind, "error", err)
 		return nil
@@ -1288,7 +1288,7 @@ func (s *Service) gardenerGroupDismiss(w http.ResponseWriter, r *http.Request) {
 		label = sec.Label
 	}
 
-	proposals, err := store.PendingProposals(ctx, s.cfg.DB, "")
+	proposals, err := store.PendingProposals(ctx, s.db(ctx), "")
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -1349,7 +1349,7 @@ func (s *Service) nextSelection(r *http.Request) string {
 	if next == "" {
 		return ""
 	}
-	p, ok, err := store.ProposalByID(r.Context(), s.cfg.DB, next)
+	p, ok, err := store.ProposalByID(r.Context(), s.db(r.Context()), next)
 	if err != nil || !ok || p.Status != store.ProposalPending {
 		return ""
 	}
@@ -1450,7 +1450,7 @@ func (s *Service) gardenerRetarget(w http.ResponseWriter, r *http.Request) {
 		redirectFlash(w, r, "choose a target project")
 		return
 	}
-	p, ok, err := store.ProposalByID(r.Context(), s.cfg.DB, id)
+	p, ok, err := store.ProposalByID(r.Context(), s.db(r.Context()), id)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -1478,7 +1478,7 @@ func (s *Service) gardenerApplyPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := r.PathValue("slug")
-	proposals, err := store.PendingProposals(r.Context(), s.cfg.DB, "")
+	proposals, err := store.PendingProposals(r.Context(), s.db(r.Context()), "")
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -1571,7 +1571,7 @@ func (s *Service) proposalReachable(w http.ResponseWriter, r *http.Request, id s
 	if s.cfg.WriteDB == nil {
 		return true
 	}
-	_, ok, err := store.ProposalByID(r.Context(), s.cfg.DB, id)
+	_, ok, err := store.ProposalByID(r.Context(), s.db(r.Context()), id)
 	if err != nil {
 		s.serverError(w, r, err)
 		return false

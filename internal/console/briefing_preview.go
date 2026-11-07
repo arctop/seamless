@@ -115,14 +115,14 @@ func (s *Service) settingsBriefingPreview(w http.ResponseWriter, r *http.Request
 		knobs, knobsFrom = b, previewKnobsForm
 		projectValues, projectPresent = r.PostForm["project"]
 	} else {
-		b, _, err := store.BriefingConfig(ctx, s.cfg.DB, s.cfg.BriefingCfg)
+		b, _, err := store.BriefingConfig(ctx, s.db(ctx), s.cfg.BriefingCfg)
 		if err != nil {
 			s.serverError(w, r, err)
 			return
 		}
 		knobs = b
 	}
-	projects, err := store.ListProjects(ctx, s.cfg.DB)
+	projects, err := store.ListProjects(ctx, s.db(ctx))
 	if err != nil {
 		s.serverError(w, r, err)
 		return

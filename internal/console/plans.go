@@ -207,14 +207,14 @@ func (s *Service) plansPage(ctx context.Context, win store.RetrievalWindow) (pla
 	if err != nil {
 		return plansData{}, err
 	}
-	tokens, err := store.PlanTokenRollups(ctx, s.cfg.DB)
+	tokens, err := store.PlanTokenRollups(ctx, s.db(ctx))
 	if err != nil {
 		return plansData{}, err
 	}
 	// Every note carrying a plan:<slug> tag, both sources: composedPrimaries picks
 	// the composed narratives out of this set, and the activity index spans all of
 	// it (captures and agent caches carry the slug tag too).
-	composed, err := store.NotesByTagPrefix(ctx, s.cfg.DB, "", plans.SlugTagPrefix())
+	composed, err := store.NotesByTagPrefix(ctx, s.db(ctx), "", plans.SlugTagPrefix())
 	if err != nil {
 		return plansData{}, err
 	}
@@ -222,7 +222,7 @@ func (s *Service) plansPage(ctx context.Context, win store.RetrievalWindow) (pla
 	// Captures are the primary of their slug. A cc-plan note also carries its
 	// plan:<slug> tag, so track which (project, slug) pairs a capture already owns
 	// and let composed plans fill only the rest.
-	captures, err := store.NotesByTag(ctx, s.cfg.DB, "", plans.TagPlan)
+	captures, err := store.NotesByTag(ctx, s.db(ctx), "", plans.TagPlan)
 	if err != nil {
 		return plansData{}, err
 	}
@@ -285,7 +285,7 @@ func (s *Service) planShippedMomentum(ctx context.Context, data *plansData) {
 	}
 	now := time.Now().Local()
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	refs, err := store.PlansShippedSince(ctx, s.cfg.DB, monthStart)
+	refs, err := store.PlansShippedSince(ctx, s.db(ctx), monthStart)
 	if err != nil {
 		s.logger.Warn("console: plans shipped this month", "error", err)
 		return
@@ -341,7 +341,7 @@ func (s *Service) planDetailBySlug(ctx context.Context, slug string) (planDetail
 	if err != nil {
 		return planDetailData{}, false, err
 	}
-	tokens, err := store.PlanTokenRollups(ctx, s.cfg.DB)
+	tokens, err := store.PlanTokenRollups(ctx, s.db(ctx))
 	if err != nil {
 		return planDetailData{}, false, err
 	}
@@ -366,7 +366,7 @@ func (s *Service) planDetailBySlug(ctx context.Context, slug string) (planDetail
 			d.Body = s.renderBody(ctx, full.Body, planNote.Project)
 		}
 	}
-	tasks, err := store.ListTasksForPlan(ctx, s.cfg.DB, planNote.Project, "", slug)
+	tasks, err := store.ListTasksForPlan(ctx, s.db(ctx), planNote.Project, "", slug)
 	if err != nil {
 		return planDetailData{}, false, err
 	}
@@ -490,7 +490,7 @@ func (s *Service) planApprove(w http.ResponseWriter, r *http.Request) {
 // tagged into the composition, projected for display. The selection rule lives
 // in plans.Composition, shared with the favorite surfaces.
 func (s *Service) planComposition(ctx context.Context, slug string) (core.Note, []planNoteRef, bool, error) {
-	primary, others, ok, err := plans.Composition(ctx, s.cfg.DB, slug)
+	primary, others, ok, err := plans.Composition(ctx, s.db(ctx), slug)
 	if err != nil || !ok {
 		return core.Note{}, nil, ok, err
 	}
@@ -526,7 +526,7 @@ func planNoteActivity(notes []core.Note) map[string]time.Time {
 // planAgentCounts counts agent-cache notes per plan slug, one query for the
 // whole list.
 func (s *Service) planAgentCounts(ctx context.Context) (map[string]int, error) {
-	agents, err := store.NotesByTag(ctx, s.cfg.DB, "", plans.TagAgent)
+	agents, err := store.NotesByTag(ctx, s.db(ctx), "", plans.TagAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -574,7 +574,7 @@ func (s *Service) planRow(ctx context.Context, n core.Note, agentCount map[strin
 			}
 		}
 	}
-	if tasks, err := store.ListTasksForPlan(ctx, s.cfg.DB, n.Project, "", slug); err == nil {
+	if tasks, err := store.ListTasksForPlan(ctx, s.db(ctx), n.Project, "", slug); err == nil {
 		row.TasksTotal = len(tasks)
 		for _, t := range tasks {
 			switch t.Status {
@@ -630,7 +630,7 @@ func (s *Service) recordPlanAction(ctx context.Context, kind core.EventKind, pro
 	if s.cfg.Events == nil {
 		return
 	}
-	if _, err := s.cfg.Events.Record(ctx, core.Event{
+	if _, err := s.eventLog(ctx).Record(ctx, core.Event{
 		Kind: kind, ProjectSlug: project, ItemID: itemID, Payload: payload,
 	}); err != nil {
 		s.logger.Warn("console: record plan action", "kind", kind, "error", err)

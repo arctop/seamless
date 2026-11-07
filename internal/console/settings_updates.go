@@ -386,7 +386,7 @@ func onOffField(form url.Values, name string) (on bool, refusal string) {
 // the switches stuck: the checker already ignores it, so the save replaces it
 // (replaced), and the flash says so.
 func (s *Service) updateOverrideForSave(ctx context.Context) (o config.UpdateOverride, replaced bool, err error) {
-	o, _, err = store.UpdateOverride(ctx, s.cfg.DB)
+	o, _, err = store.UpdateOverride(ctx, s.db(ctx))
 	if err == nil {
 		return o, false, nil
 	}

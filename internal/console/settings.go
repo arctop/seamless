@@ -333,7 +333,7 @@ func (s *Service) setupData(ctx context.Context) setupPanel {
 	if p.ConfigPath != "" {
 		_, p.ConfigEditURL = absAndEditURL("", p.ConfigPath)
 	}
-	facts, err := store.GetHealthFacts(ctx, s.cfg.DB)
+	facts, err := store.GetHealthFacts(ctx, s.db(ctx))
 	if err != nil {
 		s.logger.Warn("console: setup clients", "error", err)
 	}
@@ -352,24 +352,24 @@ func (s *Service) settings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projects, err := store.ListProjects(ctx, s.cfg.DB)
+	projects, err := store.ListProjects(ctx, s.db(ctx))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	repoRows, err := store.RepoMapRows(ctx, s.cfg.DB)
+	repoRows, err := store.RepoMapRows(ctx, s.db(ctx))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	families, err := store.ProjectFamilies(ctx, s.cfg.DB)
+	families, err := store.ProjectFamilies(ctx, s.db(ctx))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
 	workspaces, unboundRepos := buildWorkspaceRegistry(projects, repoRows, families)
 	familyEditors, familyOptions := buildFamilyEditors(workspaces, families)
-	briefing, overridden, err := store.BriefingConfig(ctx, s.cfg.DB, s.cfg.BriefingCfg)
+	briefing, overridden, err := store.BriefingConfig(ctx, s.db(ctx), s.cfg.BriefingCfg)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -388,13 +388,13 @@ func (s *Service) settings(w http.ResponseWriter, r *http.Request) {
 	// needs the RAW counts: a feature that is off still holds its rows, and
 	// saying so is the point of the line. s.navCounts zeroes them by design.
 	featuresCfg, featuresOverridden := s.featuresConfig(ctx)
-	rawCounts, cerr := store.GetNavCounts(ctx, s.cfg.DB)
+	rawCounts, cerr := store.GetNavCounts(ctx, s.db(ctx))
 	if cerr != nil {
 		// Best-effort, like the sidebar badges: a counts failure costs the
 		// reassurance line, not the page.
 		s.logger.Warn("console: settings feature counts", "error", cerr)
 	}
-	heldCount, herr := store.CountPendingHolds(ctx, s.cfg.DB)
+	heldCount, herr := store.CountPendingHolds(ctx, s.db(ctx))
 	if herr != nil {
 		s.logger.Warn("console: settings held count", "error", herr)
 	}
@@ -461,7 +461,7 @@ func (s *Service) previewChoices(ctx context.Context, projects []core.Project) (
 	if len(live) == 0 {
 		return nil, ""
 	}
-	latest, err := store.LatestSessionProject(ctx, s.cfg.DB)
+	latest, err := store.LatestSessionProject(ctx, s.db(ctx))
 	if err != nil {
 		s.logger.Warn("console: briefing preview default project", "error", err)
 	}
@@ -477,11 +477,11 @@ func (s *Service) previewChoices(ctx context.Context, projects []core.Project) (
 // slug that exists only in the demand or activation maps.
 func (s *Service) utilityActivationRows(ctx context.Context, projects []core.Project) ([]utilityProjectRow, error) {
 	now := time.Now().UTC()
-	activation, err := store.GetUtilityActivation(ctx, s.cfg.DB)
+	activation, err := store.GetUtilityActivation(ctx, s.db(ctx))
 	if err != nil {
 		return nil, err
 	}
-	demand, err := store.UtilityDemandByProject(ctx, s.cfg.DB, now, store.UtilityReadyWindow)
+	demand, err := store.UtilityDemandByProject(ctx, s.db(ctx), now, store.UtilityReadyWindow)
 	if err != nil {
 		return nil, err
 	}
@@ -581,7 +581,7 @@ func (s *Service) settingsUtilityForce(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	activation, err := store.GetUtilityActivation(ctx, s.cfg.DB)
+	activation, err := store.GetUtilityActivation(ctx, s.db(ctx))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -734,7 +734,7 @@ func (s *Service) settingsFeaturesSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.cfg.Events != nil {
-		if _, err := s.cfg.Events.Record(r.Context(), core.Event{
+		if _, err := s.eventLog(r.Context()).Record(r.Context(), core.Event{
 			Kind:    eventFeaturesChanged,
 			Payload: map[string]any{"features": changed, "by": "console"},
 		}); err != nil {
@@ -885,7 +885,7 @@ func (s *Service) enableFeature(ctx context.Context, key features.Key) error {
 		changed[string(g.Key)] = g.Enabled(cfg)
 	}
 	if s.cfg.Events != nil {
-		if _, err := s.cfg.Events.Record(ctx, core.Event{
+		if _, err := s.eventLog(ctx).Record(ctx, core.Event{
 			Kind:    eventFeaturesChanged,
 			Payload: map[string]any{"features": changed, "by": "console"},
 		}); err != nil {
@@ -919,7 +919,7 @@ func (s *Service) recordLevelChange(ctx context.Context, from, to level, reset b
 	if reset {
 		payload["reset"] = true
 	}
-	if _, err := s.cfg.Events.Record(ctx, core.Event{Kind: eventLevelChanged, Payload: payload}); err != nil {
+	if _, err := s.eventLog(ctx).Record(ctx, core.Event{Kind: eventLevelChanged, Payload: payload}); err != nil {
 		s.logger.Warn("console: record level event", "error", err)
 	}
 }
@@ -934,7 +934,7 @@ func (s *Service) settingsFeaturesReset(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if s.cfg.Events != nil {
-		if _, err := s.cfg.Events.Record(r.Context(), core.Event{
+		if _, err := s.eventLog(r.Context()).Record(r.Context(), core.Event{
 			Kind:    eventFeaturesChanged,
 			Payload: map[string]any{"reset": true, "by": "console"},
 		}); err != nil {
@@ -958,11 +958,11 @@ func (s *Service) settingsBriefingReset(w http.ResponseWriter, r *http.Request) 
 // state from Config, the stored override and vector stats read live, and the
 // re-embed pass state from the files manager (when wired).
 func (s *Service) embeddingsPanel(ctx context.Context) (embeddingsPanel, error) {
-	mode, err := store.EmbedderMode(ctx, s.cfg.DB)
+	mode, err := store.EmbedderMode(ctx, s.db(ctx))
 	if err != nil {
 		return embeddingsPanel{}, err
 	}
-	stats, err := store.GetEmbeddingStats(ctx, s.cfg.DB)
+	stats, err := store.GetEmbeddingStats(ctx, s.db(ctx))
 	if err != nil {
 		return embeddingsPanel{}, err
 	}
@@ -1115,12 +1115,12 @@ func (s *Service) settingsFamilySave(w http.ResponseWriter, r *http.Request) {
 		settingsRegistryFlash(w, r, "Choose at least one project for the family.")
 		return
 	}
-	projects, err := store.ListProjects(r.Context(), s.cfg.DB)
+	projects, err := store.ListProjects(r.Context(), s.db(r.Context()))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	families, err := store.ProjectFamilies(r.Context(), s.cfg.DB)
+	families, err := store.ProjectFamilies(r.Context(), s.db(r.Context()))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -1157,7 +1157,7 @@ func (s *Service) settingsFamilySave(w http.ResponseWriter, r *http.Request) {
 	// this flash. The owner's other route into a family -- tightening a project
 	// that is already in one -- is handled by TightenProjectIsolation, which
 	// detaches it as part of the tighten.
-	fenced, err := store.IsolatedSlugs(r.Context(), s.cfg.DB, members)
+	fenced, err := store.IsolatedSlugs(r.Context(), s.db(r.Context()), members)
 	if err != nil {
 		s.serverError(w, r, err)
 		return

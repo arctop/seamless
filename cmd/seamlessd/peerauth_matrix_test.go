@@ -693,6 +693,13 @@ func TestPeerAuthMatrix(t *testing.T) {
 	// probes' arguments), which is the owner's data -- but paSecret never is.
 	t.Run("console GET routes as the owner", func(t *testing.T) { d.crawlConsole(t, true) })
 	t.Run("console writes as the owner", func(t *testing.T) { d.consoleWrites(t) })
+	// Every console route has now run, the unlock routes included: none of
+	// them left a console unlock behind (one needs a browser and a proof).
+	t.Run("no console route grants an unlock", func(t *testing.T) {
+		var n int
+		require.NoError(t, d.db.QueryRow(`SELECT COUNT(*) FROM console_unlocks`).Scan(&n))
+		require.Zero(t, n)
+	})
 	t.Run("live feed as the owner", func(t *testing.T) { d.liveFeed(t) })
 	t.Run("a2a", func(t *testing.T) { d.a2aProbes(t) })
 	t.Run("hooks", func(t *testing.T) { d.hookProbes(t) })
@@ -876,6 +883,10 @@ func (d *paDaemon) fill(pattern string) string {
 		p = strings.Replace(p, "{slug}", it.plan, 1)
 	case strings.HasPrefix(p, "/console/projects/"):
 		p = strings.Replace(p, "{slug}", paSealed, 1)
+	case strings.HasPrefix(p, "/console/unlock/"):
+		// The console unlock (locked projects): a sealed project is not
+		// locked, so there is nothing to unlock -- every route is refused.
+		p = strings.Replace(p, "{project}", paSealed, 1)
 	case strings.HasPrefix(p, "/console/labs/"):
 		p = strings.Replace(p, "{name...}", it.lab, 1)
 	case strings.HasPrefix(p, "/console/favorites/"):

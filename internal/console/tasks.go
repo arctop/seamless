@@ -51,23 +51,23 @@ const closedLimit = 25
 
 // tasksPage assembles the four status buckets of the tasks list.
 func (s *Service) tasksPage(ctx context.Context) (tasksData, error) {
-	ready, err := store.AllReadyTasks(ctx, s.cfg.DB)
+	ready, err := store.AllReadyTasks(ctx, s.db(ctx))
 	if err != nil {
 		return tasksData{}, err
 	}
-	inProgress, err := store.AllTasksByStatus(ctx, s.cfg.DB, core.TaskInProgress)
+	inProgress, err := store.AllTasksByStatus(ctx, s.db(ctx), core.TaskInProgress)
 	if err != nil {
 		return tasksData{}, err
 	}
-	blocked, err := store.AllBlockedTasks(ctx, s.cfg.DB)
+	blocked, err := store.AllBlockedTasks(ctx, s.db(ctx))
 	if err != nil {
 		return tasksData{}, err
 	}
-	done, err := store.AllTasksByStatus(ctx, s.cfg.DB, core.TaskDone)
+	done, err := store.AllTasksByStatus(ctx, s.db(ctx), core.TaskDone)
 	if err != nil {
 		return tasksData{}, err
 	}
-	dropped, err := store.AllTasksByStatus(ctx, s.cfg.DB, core.TaskDropped)
+	dropped, err := store.AllTasksByStatus(ctx, s.db(ctx), core.TaskDropped)
 	if err != nil {
 		return tasksData{}, err
 	}
@@ -148,7 +148,7 @@ func (s *Service) taskRelease(w http.ResponseWriter, r *http.Request) {
 	// Read through the console's (possibly filtered) handle first: the release
 	// itself runs on the write handle, which sees every project (see writeDB).
 	if s.cfg.WriteDB != nil {
-		if _, err := store.TaskByID(ctx, s.cfg.DB, id); err != nil {
+		if _, err := store.TaskByID(ctx, s.db(ctx), id); err != nil {
 			if errors.Is(err, store.ErrTaskNotFound) {
 				s.notFound(w, r, "No task with id "+id+".")
 				return
@@ -169,7 +169,7 @@ func (s *Service) taskRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.cfg.Events != nil {
-		if _, err := s.cfg.Events.Record(ctx, core.Event{
+		if _, err := s.eventLog(ctx).Record(ctx, core.Event{
 			Kind: core.EventTaskTransition, ProjectSlug: released.ProjectSlug, ItemID: released.ID,
 			Payload: map[string]any{"to": string(released.Status), "released": true, "by": "console"},
 		}); err != nil {

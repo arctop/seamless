@@ -106,7 +106,7 @@ func trialsQS(lab, outcome string) string {
 
 // trialsPage assembles the lab-grouped trial list for the given filters.
 func (s *Service) trialsPage(ctx context.Context, lab, outcome string) (trialsData, error) {
-	trials, err := store.QueryTrials(ctx, s.cfg.DB, store.TrialFilter{
+	trials, err := store.QueryTrials(ctx, s.db(ctx), store.TrialFilter{
 		Lab: lab, Outcome: outcome, Limit: trialListLimit,
 	})
 	if err != nil {
@@ -189,7 +189,7 @@ func (s *Service) trialDetailData(ctx context.Context, tr core.Trial) trialDetai
 	}
 	// Provenance: the recording session, resolved best-effort for its name.
 	if tr.SessionID != "" {
-		if sess, ok, serr := store.SessionByID(ctx, s.cfg.DB, tr.SessionID); serr != nil {
+		if sess, ok, serr := store.SessionByID(ctx, s.db(ctx), tr.SessionID); serr != nil {
 			s.logger.Warn("console: trial session", "id", tr.SessionID, "error", serr)
 		} else if ok {
 			d.SessionName = sess.Name
@@ -201,7 +201,7 @@ func (s *Service) trialDetailData(ctx context.Context, tr core.Trial) trialDetai
 // trialDetailByID loads a trial and projects it into its detail payload.
 // found=false means no such trial.
 func (s *Service) trialDetailByID(ctx context.Context, id string) (trialDetailData, bool, error) {
-	tr, ok, err := store.TrialByID(ctx, s.cfg.DB, id)
+	tr, ok, err := store.TrialByID(ctx, s.db(ctx), id)
 	if err != nil || !ok {
 		return trialDetailData{}, ok, err
 	}

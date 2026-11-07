@@ -13,6 +13,7 @@ package console
 // the TCP key can.
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -38,6 +39,29 @@ type accessListData struct {
 	Terminal  *TerminalApprover `json:"terminal,omitempty"`
 	Durations []string          `json:"durations"`
 	MaxLease  string            `json:"max_lease"`
+	// Leases are the agent trees' live leases, each with Revoke; Unlocks are
+	// every browser's live console unlocks, each with Lock again.
+	Leases  []leaseRow  `json:"leases"`
+	Unlocks []unlockRow `json:"unlocks"`
+}
+
+// leaseRow is one live agent lease on the access page.
+type leaseRow struct {
+	ID        string    `json:"id"`
+	Project   string    `json:"project"`
+	Session   string    `json:"session,omitempty"`
+	PID       int32     `json:"pid"`
+	GrantedAt time.Time `json:"granted_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// unlockRow is one live console unlock on the access page.
+type unlockRow struct {
+	ID          string    `json:"id"`
+	Project     string    `json:"project"`
+	By          string    `json:"by"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	ThisBrowser bool      `json:"this_browser"`
 }
 
 type accessOneData struct {
@@ -75,7 +99,59 @@ func (s *Service) accessList(w http.ResponseWriter, r *http.Request) {
 		pending = []approval.Facts{}
 	}
 	d := accessListData{Requests: pending, Terminal: s.cfg.Terminal, Durations: approval.Durations, MaxLease: s.maxLease()}
-	s.render(w, r, "access", pageData{Title: "Access requests", Data: d})
+	if d.Leases, d.Unlocks, err = s.accessGrants(r.Context()); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.render(w, r, "access", pageData{Title: "Access requests", Active: "access", Data: d})
+}
+
+// accessGrants lists what is open right now: the agent trees' live leases and
+// every browser's live console unlocks. Both are metadata about locked
+// projects (slugs, ids, times), read from tables no handle hides.
+func (s *Service) accessGrants(ctx context.Context) ([]leaseRow, []unlockRow, error) {
+	now := time.Now()
+	leases, err := store.LiveAccessLeases(ctx, s.writeDB(), now)
+	if err != nil {
+		return nil, nil, err
+	}
+	lrows := make([]leaseRow, 0, len(leases))
+	for _, l := range leases {
+		row := leaseRow{ID: l.ID, Project: l.Project, PID: l.PeerPID, GrantedAt: l.GrantedAt, ExpiresAt: l.ExpiresAt}
+		if a, err := store.AccessApprovalByID(ctx, s.writeDB(), l.ApprovalID); err == nil {
+			row.Session = a.SessionName
+		}
+		lrows = append(lrows, row)
+	}
+	unlocks, err := store.AllLiveConsoleUnlocks(ctx, s.writeDB(), now)
+	if err != nil {
+		return nil, nil, err
+	}
+	creds, err := store.ApproverCredentials(ctx, s.writeDB(), "")
+	if err != nil {
+		return nil, nil, err
+	}
+	names := make(map[string]string, len(creds))
+	for _, c := range creds {
+		names[c.ID] = c.Name
+	}
+	var mine string
+	if rc := reachOf(ctx); rc != nil {
+		mine = rc.token
+	}
+	urows := make([]unlockRow, 0, len(unlocks))
+	for _, u := range unlocks {
+		by := "a removed passkey"
+		switch {
+		case u.Credential == store.ConsoleUnlockByDaemon:
+			by = "the daemon's account (console-open)"
+		case names[u.Credential] != "":
+			by = names[u.Credential]
+		}
+		urows = append(urows, unlockRow{ID: u.ID, Project: u.Project, By: by, ExpiresAt: *u.ExpiresAt,
+			ThisBrowser: mine != "" && u.TokenHash == mine})
+	}
+	return lrows, urows, nil
 }
 
 func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +183,7 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 			d.PasskeyOptions = opts
 		}
 	}
-	s.render(w, r, "access_one", pageData{Title: "Access request " + facts.Short, Data: d})
+	s.render(w, r, "access_one", pageData{Title: "Access request " + facts.Short, Active: "access", Data: d})
 }
 
 func containsString(list []string, v string) bool {

@@ -52,7 +52,7 @@ var faviconSVG []byte
 var pageNames = []string{
 	"login", "overview", "now", "search", "interactions", "projects", "projectdetail", "context", "sessions", "session",
 	"memories", "notes", "retrieval", "tasks", "plans", "labs", "trials", "gardener", "settings", "event", "error",
-	"feature_off", "held", "approvers", "access", "access_one",
+	"feature_off", "held", "approvers", "access", "access_one", "unlock",
 }
 
 // peekNames are the entity detail templates. Each templates/peek_<name>.html
@@ -191,7 +191,7 @@ func (s *Service) withChrome(ctx context.Context, pd pageData) pageData {
 	pd.Features = s.effectiveFeatures(ctx)
 	lvl := s.consoleLevel(ctx)
 	pd.Level, pd.LevelOverridden = lvl.Level, lvl.Overridden
-	pd.Screens = visibleScreens(pd.Features, pd.Level)
+	pd.Screens = withLockScreens(visibleScreens(pd.Features, pd.Level), s.cfg.Approvals != nil)
 	pd.Nav = s.navCounts(ctx, pd.Features)
 	pd.NavGroups = navGroups(pd.Screens, pd.Active, pd.Nav)
 	pd.VisibleScopes = strings.Join(slices.DeleteFunc(searchScopesFor(pd.Features, pd.Level),

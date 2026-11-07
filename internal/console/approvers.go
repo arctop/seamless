@@ -45,6 +45,12 @@ type ApprovalsView interface {
 	Deny(ctx context.Context, id, by string) error
 	Page(id string) string
 	LeaseLength(choice string) (time.Duration, error)
+
+	// Console unlocks (unlock.go): a passkey ceremony that opens a locked
+	// project in one browser, and how long such an unlock lasts.
+	ConsoleLeaseLength() time.Duration
+	BeginConsoleUnlock(ctx context.Context, project, tokenHash string) (approval.Begun, error)
+	FinishConsoleUnlock(ctx context.Context, id, project, tokenHash string, response []byte) (store.ConsoleUnlock, error)
 }
 
 type approverRow struct {
@@ -90,7 +96,7 @@ func (s *Service) approversPage(w http.ResponseWriter, r *http.Request) {
 	if s.approversOff(w, r) {
 		return
 	}
-	creds, err := store.ApproverCredentials(r.Context(), s.cfg.DB, "")
+	creds, err := store.ApproverCredentials(r.Context(), s.db(r.Context()), "")
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -107,7 +113,7 @@ func (s *Service) approversPage(w http.ResponseWriter, r *http.Request) {
 			AddedBy: approverAddedBy(c.AddedBy, creds), LastUsed: c.LastUsedAt,
 		})
 	}
-	s.render(w, r, "approvers", pageData{Title: "Approvers", Data: d})
+	s.render(w, r, "approvers", pageData{Title: "Approvers", Active: "approvers", Data: d})
 }
 
 // approverError answers a ceremony step with a JSON error the page shows. The

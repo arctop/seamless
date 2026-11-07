@@ -85,11 +85,11 @@ type memoriesData struct {
 func (s *Service) memoriesPage(ctx context.Context, sortKey, query string) (memoriesData, error) {
 	q := strings.ToLower(query)
 	s.freshRetrievalStats(ctx)
-	mems, err := store.AllMemoriesIncludingInvalid(ctx, s.cfg.DB)
+	mems, err := store.AllMemoriesIncludingInvalid(ctx, s.db(ctx))
 	if err != nil {
 		return memoriesData{}, err
 	}
-	stats, err := store.AllRetrievalStats(ctx, s.cfg.DB)
+	stats, err := store.AllRetrievalStats(ctx, s.db(ctx))
 	if err != nil {
 		return memoriesData{}, err
 	}
@@ -324,7 +324,7 @@ func (s *Service) memoryArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	idx, ok, err := store.MemoryByID(ctx, s.cfg.DB, id)
+	idx, ok, err := store.MemoryByID(ctx, s.db(ctx), id)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -349,7 +349,7 @@ func (s *Service) memoryArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.cfg.Events != nil {
-		if _, err := s.cfg.Events.Record(ctx, core.Event{
+		if _, err := s.eventLog(ctx).Record(ctx, core.Event{
 			Kind: core.EventMemoryArchived, ProjectSlug: updated.Project, ItemID: updated.ID,
 			Payload: map[string]any{"name": updated.Name, "by": "console"},
 		}); err != nil {

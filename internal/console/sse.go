@@ -10,6 +10,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/store"
 )
 
 // ssePingInterval keeps the stream and any intermediary connections alive during
@@ -62,9 +63,21 @@ func (s *Service) sse(w http.ResponseWriter, r *http.Request) {
 	ping := time.NewTicker(ssePingInterval)
 	defer ping.Stop()
 
+	// A stream opened under a lease or a console unlock ends when the first of
+	// them does: the browser reconnects, and the new stream is judged afresh.
+	// Without one this channel never fires, exactly as before.
+	var ends <-chan time.Time
+	if rc := reachOf(ctx); rc != nil && !rc.until.IsZero() {
+		end := time.NewTimer(time.Until(rc.until))
+		defer end.Stop()
+		ends = end.C
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case <-ends:
 			return
 		case <-ping.C:
 			fmt.Fprint(w, ": ping\n\n")
@@ -109,17 +122,44 @@ func (s *Service) sse(w http.ResponseWriter, r *http.Request) {
 // row is fetched back through it, and an event a sealed project hides -- by its
 // project, its session or the item it is about -- is simply not there. With no
 // filter (peer_auth off) every event passes, as before.
+//
+// Under locked projects a browser's console unlock opens a project its View
+// does not (an unlock is a console cookie, never a lease): an event of that
+// project passes only while the unlock is still live, asked again per event,
+// so locking it again takes effect on the open stream too.
 func (s *Service) liveEventVisible(ctx context.Context, e core.Event) bool {
 	if s.cfg.WriteDB == nil {
 		return true
 	}
 	if !access.Visible(ctx, e.ProjectSlug) {
-		return false
+		if !unlockedHere(ctx, e.ProjectSlug) || !s.unlockStillLive(ctx, e.ProjectSlug) {
+			return false
+		}
 	}
-	_, ok, err := s.cfg.Events.ByID(ctx, e.ID)
+	_, ok, err := s.eventLog(ctx).ByID(ctx, e.ID)
 	if err != nil {
 		s.logger.Warn("console: sse visibility", "error", err)
 		return false
 	}
 	return ok
+}
+
+// unlockStillLive reports whether this browser's console unlock of project is
+// still live now: not expired, not locked again. A failed lookup is no.
+func (s *Service) unlockStillLive(ctx context.Context, project string) bool {
+	rc := reachOf(ctx)
+	if rc == nil || rc.token == "" {
+		return false
+	}
+	rows, err := store.LiveConsoleUnlocks(ctx, s.writeDB(), rc.token, time.Now())
+	if err != nil {
+		s.logger.Warn("console: sse unlock check", "error", err)
+		return false
+	}
+	for _, u := range rows {
+		if u.Project == project {
+			return true
+		}
+	}
+	return false
 }

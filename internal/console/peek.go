@@ -117,7 +117,7 @@ func (s *Service) memoryDetailData(ctx context.Context, m core.Memory) (memoryDe
 		}
 	}
 
-	if stat, found, serr := store.GetRetrievalStat(ctx, s.cfg.DB, m.ID); serr != nil {
+	if stat, found, serr := store.GetRetrievalStat(ctx, s.db(ctx), m.ID); serr != nil {
 		s.logger.Warn("console: memory retrieval stat", "id", m.ID, "error", serr)
 	} else if found {
 		d.Injects, d.Reads = stat.InjectCount, stat.ReadCount
@@ -142,13 +142,13 @@ func (s *Service) memoryDetailData(ctx context.Context, m core.Memory) (memoryDe
 
 	// Supersession, both directions.
 	if m.SupersededBy != "" {
-		if by, found, serr := store.MemoryByID(ctx, s.cfg.DB, m.SupersededBy); serr != nil {
+		if by, found, serr := store.MemoryByID(ctx, s.db(ctx), m.SupersededBy); serr != nil {
 			s.logger.Warn("console: memory superseder", "id", m.SupersededBy, "error", serr)
 		} else if found {
 			d.ReplacedBy, d.ReplacedByID = by.Name, by.ID
 		}
 	}
-	superseded, err := store.MemoriesSuperseding(ctx, s.cfg.DB, m.ID)
+	superseded, err := store.MemoriesSuperseding(ctx, s.db(ctx), m.ID)
 	if err != nil {
 		return memoryDetail{}, err
 	}
@@ -163,7 +163,7 @@ func (s *Service) memoryDetailData(ctx context.Context, m core.Memory) (memoryDe
 // memoryDetailByID loads a memory and projects it into its detail payload.
 // found=false means no such memory.
 func (s *Service) memoryDetailByID(ctx context.Context, id string) (memoryDetail, bool, error) {
-	m, ok, err := store.MemoryByID(ctx, s.cfg.DB, id)
+	m, ok, err := store.MemoryByID(ctx, s.db(ctx), id)
 	if err != nil || !ok {
 		return memoryDetail{}, ok, err
 	}
@@ -177,7 +177,7 @@ func (s *Service) memoryDetailByID(ctx context.Context, id string) (memoryDetail
 func (s *Service) memoryDetail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
-	m, ok, err := store.MemoryByID(ctx, s.cfg.DB, id)
+	m, ok, err := store.MemoryByID(ctx, s.db(ctx), id)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -264,7 +264,7 @@ func (s *Service) noteDetailData(ctx context.Context, n core.Note) noteDetail {
 // noteDetailByID loads a note and projects it into its detail payload.
 // found=false means no such note.
 func (s *Service) noteDetailByID(ctx context.Context, id string) (noteDetail, bool, error) {
-	n, ok, err := store.NoteByID(ctx, s.cfg.DB, id)
+	n, ok, err := store.NoteByID(ctx, s.db(ctx), id)
 	if err != nil || !ok {
 		return noteDetail{}, ok, err
 	}
@@ -274,7 +274,7 @@ func (s *Service) noteDetailByID(ctx context.Context, id string) (noteDetail, bo
 func (s *Service) noteDetail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
-	n, ok, err := store.NoteByID(ctx, s.cfg.DB, id)
+	n, ok, err := store.NoteByID(ctx, s.db(ctx), id)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -359,7 +359,7 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 	// bodies, scoped to the task's project.
 	d.Body = s.renderBody(ctx, t.Body, t.ProjectSlug)
 	for _, depID := range t.DependsOn {
-		dep, derr := store.TaskByID(ctx, s.cfg.DB, depID)
+		dep, derr := store.TaskByID(ctx, s.db(ctx), depID)
 		if derr != nil {
 			if errors.Is(derr, store.ErrTaskNotFound) {
 				continue // a dangling dep edge should not 500 the page
@@ -368,7 +368,7 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 		}
 		d.Deps = append(d.Deps, taskRef{ID: dep.ID, Title: dep.Title, Status: string(dep.Status)})
 	}
-	blocks, err := store.TasksBlockedBy(ctx, s.cfg.DB, t.ID)
+	blocks, err := store.TasksBlockedBy(ctx, s.db(ctx), t.ID)
 	if err != nil {
 		return taskDetail{}, err
 	}
@@ -381,7 +381,7 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 // taskDetailByID loads a task and projects it into its detail payload.
 // found=false means no such task.
 func (s *Service) taskDetailByID(ctx context.Context, id string) (taskDetail, bool, error) {
-	t, err := store.TaskByID(ctx, s.cfg.DB, id)
+	t, err := store.TaskByID(ctx, s.db(ctx), id)
 	if err != nil {
 		if errors.Is(err, store.ErrTaskNotFound) {
 			return taskDetail{}, false, nil
@@ -398,7 +398,7 @@ func (s *Service) taskDetailByID(ctx context.Context, id string) (taskDetail, bo
 func (s *Service) taskDetail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
-	t, err := store.TaskByID(ctx, s.cfg.DB, id)
+	t, err := store.TaskByID(ctx, s.db(ctx), id)
 	if err != nil {
 		if errors.Is(err, store.ErrTaskNotFound) {
 			s.notFound(w, r, "No task with id "+id+".")
@@ -474,13 +474,13 @@ func (s *Service) renderBody(ctx context.Context, body, project string) template
 // resolving the name against the store scoped to project with a global fallback.
 func (s *Service) wikiResolver(ctx context.Context, project string) markdown.WikiResolver {
 	return func(name string) (string, bool) {
-		m, ok, err := store.MemoryByName(ctx, s.cfg.DB, project, name)
+		m, ok, err := store.MemoryByName(ctx, s.db(ctx), project, name)
 		if err != nil {
 			s.logger.Warn("console: resolve wiki-link", "name", name, "error", err)
 			return "", false
 		}
 		if !ok && project != "" {
-			m, ok, err = store.MemoryByName(ctx, s.cfg.DB, "", name)
+			m, ok, err = store.MemoryByName(ctx, s.db(ctx), "", name)
 			if err != nil {
 				s.logger.Warn("console: resolve wiki-link (global)", "name", name, "error", err)
 				return "", false

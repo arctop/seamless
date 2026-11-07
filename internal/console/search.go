@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
@@ -324,7 +325,16 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 		if data.Scope == "memories" || data.Scope == "notes" {
 			scope = data.Scope
 		}
-		hits, err := s.cfg.Retrieve.Search(ctx, retrieve.SearchInput{
+		// The fused search reads the main handle and filters it by the
+		// request's View, which hides every locked project. A browser's
+		// console unlock opens some (it is a console cookie, never part of the
+		// View), so for that browser the search runs with no View, and its
+		// hits are filtered here by exactly what this request's handle hides.
+		searchCtx, hidden := ctx, []string(nil)
+		if rc := reachOf(ctx); rc != nil && len(rc.unlocked) > 0 && s.cfg.Views != nil {
+			searchCtx, hidden = access.WithView(ctx, access.View{}), s.cfg.Views.Hidden(rc.open)
+		}
+		hits, err := s.cfg.Retrieve.Search(searchCtx, retrieve.SearchInput{
 			Query: data.Query, Scope: scope, Limit: limit, Semantic: !data.Fast, Since: data.Since,
 		})
 		if err != nil {
@@ -332,6 +342,9 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 		}
 		var mems, notes []searchRow
 		for _, h := range hits {
+			if slices.Contains(hidden, h.Project) {
+				continue
+			}
 			row := hitRow(h)
 			if h.Kind == "note" {
 				notes = append(notes, row)
@@ -344,7 +357,7 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 	}
 
 	if data.wants("tasks") {
-		tasks, err := store.SearchTasksSince(ctx, s.cfg.DB, data.Query, data.Since, limit)
+		tasks, err := store.SearchTasksSince(ctx, s.db(ctx), data.Query, data.Since, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -366,7 +379,7 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 	}
 
 	if data.wants("plans") {
-		plans, err := store.SearchPlansSince(ctx, s.cfg.DB, data.Query, data.Since, limit)
+		plans, err := store.SearchPlansSince(ctx, s.db(ctx), data.Query, data.Since, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -387,7 +400,7 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 	// Trials belong to the research feature: while it is off the scope is not
 	// even in the accepted enum, and ?scope=all must not reach past it either.
 	if data.TrialsScope && data.wants("trials") {
-		trials, err := store.SearchTrialsSince(ctx, s.cfg.DB, data.Query, data.Since, limit)
+		trials, err := store.SearchTrialsSince(ctx, s.db(ctx), data.Query, data.Since, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -413,7 +426,7 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 	}
 
 	if data.wants("projects") {
-		projects, err := store.SearchProjectsSince(ctx, s.cfg.DB, data.Query, data.Since, limit)
+		projects, err := store.SearchProjectsSince(ctx, s.db(ctx), data.Query, data.Since, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -432,7 +445,7 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 	}
 
 	if data.wants("sessions") {
-		sessions, err := store.SearchSessionsSince(ctx, s.cfg.DB, data.Query, data.Since, limit)
+		sessions, err := store.SearchSessionsSince(ctx, s.db(ctx), data.Query, data.Since, limit)
 		if err != nil {
 			return nil, err
 		}

@@ -281,3 +281,24 @@ func TestApproverUserHandle_StableAndRandom(t *testing.T) {
 	_, err = ApproverUserHandle(ctx, other)
 	require.ErrorIs(t, err, ErrInvalidApprover)
 }
+
+// A reset ends every console unlock too: a credential granted it.
+func TestResetApprovers_EndsConsoleUnlocks(t *testing.T) {
+	db := leaseDB(t)
+	ctx := context.Background()
+	secret, _, err := CreateConsoleUnlockLink(ctx, db, "example-finance", 3*time.Hour, 10*time.Minute, apNow)
+	require.NoError(t, err)
+	token, err := NewConsoleToken()
+	require.NoError(t, err)
+	_, err = ClaimConsoleUnlockLink(ctx, db, secret, HashConsoleToken(token), apNow)
+	require.NoError(t, err)
+	live, err := AllLiveConsoleUnlocks(ctx, db, apNow)
+	require.NoError(t, err)
+	require.Len(t, live, 1)
+
+	_, _, err = ResetApprovers(ctx, db, apNow.Add(time.Minute))
+	require.NoError(t, err)
+	live, err = AllLiveConsoleUnlocks(ctx, db, apNow.Add(time.Minute))
+	require.NoError(t, err)
+	require.Empty(t, live)
+}

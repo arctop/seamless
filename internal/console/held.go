@@ -85,14 +85,14 @@ type heldPageData struct {
 
 func (s *Service) heldPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	pending, err := store.HeldWrites(ctx, s.cfg.DB, store.HeldStatusHeld, 0)
+	pending, err := store.HeldWrites(ctx, s.db(ctx), store.HeldStatusHeld, 0)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
 	var recent []store.HeldWrite
 	for _, status := range []string{store.HeldStatusReleased, store.HeldStatusDiscarded} {
-		rows, rerr := store.HeldWrites(ctx, s.cfg.DB, status, heldRecentLimit)
+		rows, rerr := store.HeldWrites(ctx, s.db(ctx), status, heldRecentLimit)
 		if rerr != nil {
 			s.serverError(w, r, rerr)
 			return
@@ -103,7 +103,7 @@ func (s *Service) heldPage(w http.ResponseWriter, r *http.Request) {
 	if len(recent) > heldRecentLimit {
 		recent = recent[:heldRecentLimit]
 	}
-	tainted, err := store.TaintedSessions(ctx, s.cfg.DB)
+	tainted, err := store.TaintedSessions(ctx, s.db(ctx))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -114,7 +114,7 @@ func (s *Service) heldPage(w http.ResponseWriter, r *http.Request) {
 			sessionIDs = append(sessionIDs, h.SessionID)
 		}
 	}
-	refs, err := store.SessionRefs(ctx, s.cfg.DB, sessionIDs)
+	refs, err := store.SessionRefs(ctx, s.db(ctx), sessionIDs)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -230,7 +230,7 @@ func (s *Service) heldTarget(w http.ResponseWriter, r *http.Request) (store.Held
 		return store.HeldWrite{}, false
 	}
 	id := r.PathValue("id")
-	h, ok, err := store.HeldWriteByID(r.Context(), s.cfg.DB, id)
+	h, ok, err := store.HeldWriteByID(r.Context(), s.db(r.Context()), id)
 	if err != nil {
 		s.serverError(w, r, err)
 		return store.HeldWrite{}, false
@@ -298,7 +298,7 @@ func (s *Service) heldUntaint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	sess, ok, err := store.SessionByID(r.Context(), s.cfg.DB, id)
+	sess, ok, err := store.SessionByID(r.Context(), s.db(r.Context()), id)
 	if err != nil {
 		s.serverError(w, r, err)
 		return

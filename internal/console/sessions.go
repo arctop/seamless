@@ -177,12 +177,12 @@ func (s *Service) sessionsList(w http.ResponseWriter, r *http.Request) {
 		since, limit = dayStart, 1000
 	}
 
-	sessions, err := store.ListSessions(ctx, s.cfg.DB, statusFilter, since, limit)
+	sessions, err := store.ListSessions(ctx, s.db(ctx), statusFilter, since, limit)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	counts, err := store.GetNavCounts(ctx, s.cfg.DB)
+	counts, err := store.GetNavCounts(ctx, s.db(ctx))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -191,7 +191,7 @@ func (s *Service) sessionsList(w http.ResponseWriter, r *http.Request) {
 	// on; the findings half lives on the rows already fetched.
 	var artifacts map[string]struct{}
 	if retained != "" {
-		artifacts, err = store.SessionsWithArtifacts(ctx, s.cfg.DB)
+		artifacts, err = store.SessionsWithArtifacts(ctx, s.db(ctx))
 		if err != nil {
 			s.serverError(w, r, err)
 			return
@@ -280,7 +280,7 @@ func (s *Service) captureCalendar(ctx context.Context, now time.Time, selected s
 	l := now.Local()
 	start := time.Date(l.Year(), l.Month(), l.Day(), 0, 0, 0, 0, l.Location()).AddDate(0, 0, -364)
 	start = start.AddDate(0, 0, -int(start.Weekday()))
-	buckets, err := store.SessionCoverageBuckets(ctx, s.cfg.DB,
+	buckets, err := store.SessionCoverageBuckets(ctx, s.db(ctx),
 		store.RetrievalWindow{Key: "calendar", Since: start}, now)
 	if err != nil {
 		s.logger.Warn("console: capture calendar buckets", "error", err)
@@ -289,7 +289,7 @@ func (s *Service) captureCalendar(ctx context.Context, now time.Time, selected s
 	if len(buckets) == 0 {
 		return "", nil // no sessions in the year: absence is the empty state
 	}
-	current, longest, err := store.CaptureStreakWith(ctx, s.cfg.DB, s.writeDB(), now)
+	current, longest, err := store.CaptureStreakWith(ctx, s.db(ctx), s.writeDB(), now)
 	if err != nil {
 		s.logger.Warn("console: capture streak", "error", err)
 		return calendarGrid(buckets, start, selected), nil
@@ -376,7 +376,7 @@ type sessTrialVM struct {
 func (s *Service) sessionDetail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
-	sess, ok, err := store.SessionByID(ctx, s.cfg.DB, id)
+	sess, ok, err := store.SessionByID(ctx, s.db(ctx), id)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -394,7 +394,7 @@ func (s *Service) sessionDetail(w http.ResponseWriter, r *http.Request) {
 	readItems := map[string]struct{}{}
 
 	if s.cfg.Events != nil {
-		evs, eerr := s.cfg.Events.BySession(ctx, id, 500)
+		evs, eerr := s.eventLog(ctx).BySession(ctx, id, 500)
 		if eerr != nil {
 			s.serverError(w, r, eerr)
 			return
@@ -464,7 +464,7 @@ func (s *Service) sessionDetail(w http.ResponseWriter, r *http.Request) {
 	// the T2b relation joins. Best-effort: a legacy non-ULID session id or empty
 	// name (the joins guard against mis-keyed calls) leaves the panel empty
 	// rather than failing the whole detail page.
-	if held, herr := store.TasksClaimedBy(ctx, s.cfg.DB, sess.ID); herr == nil {
+	if held, herr := store.TasksClaimedBy(ctx, s.db(ctx), sess.ID); herr == nil {
 		for _, t := range held {
 			if !t.ClaimLive(now) {
 				continue
@@ -478,7 +478,7 @@ func (s *Service) sessionDetail(w http.ResponseWriter, r *http.Request) {
 	} else {
 		s.logger.Warn("console: session claimed tasks", "session", sess.ID, "error", herr)
 	}
-	if mems, merr := store.MemoriesForSession(ctx, s.cfg.DB, sess); merr == nil {
+	if mems, merr := store.MemoriesForSession(ctx, s.db(ctx), sess); merr == nil {
 		for _, m := range mems {
 			data.Memories = append(data.Memories, sessMemVM{ID: m.ID, Name: m.Name, Kind: string(m.Kind)})
 		}
@@ -490,7 +490,7 @@ func (s *Service) sessionDetail(w http.ResponseWriter, r *http.Request) {
 	// offer a way into a gated screen.
 	data.ShowTrials = features.Enabled(s.effectiveFeatures(ctx), features.Research)
 	if data.ShowTrials {
-		if trials, terr := store.QueryTrials(ctx, s.cfg.DB, store.TrialFilter{SessionID: sess.ID, Limit: 50}); terr == nil {
+		if trials, terr := store.QueryTrials(ctx, s.db(ctx), store.TrialFilter{SessionID: sess.ID, Limit: 50}); terr == nil {
 			for _, tr := range trials {
 				data.Trials = append(data.Trials, sessTrialVM{
 					ID: tr.ID, Title: tr.Title, Lab: tr.Lab, Outcome: string(tr.Outcome),

@@ -151,7 +151,7 @@ func (s *Service) sessionNamer(ctx context.Context) func(string) core.Session {
 		if sess, ok := cache[id]; ok {
 			return sess
 		}
-		sess, ok, err := store.SessionByID(ctx, s.cfg.DB, id)
+		sess, ok, err := store.SessionByID(ctx, s.db(ctx), id)
 		if err != nil || !ok {
 			cache[id] = core.Session{} // negative cache
 			return core.Session{}
@@ -280,7 +280,7 @@ func (s *Service) interactionVolume(ctx context.Context, project string, windowS
 	if windowSecs > 0 {
 		sinceTS = core.FormatTime(now.Add(-window))
 	}
-	ticks, err := s.cfg.Events.KindTimeline(ctx, interactionKinds, project, sinceTS, volTickCap)
+	ticks, err := s.eventLog(ctx).KindTimeline(ctx, interactionKinds, project, sinceTS, volTickCap)
 	if err != nil {
 		return nil, err
 	}
@@ -378,11 +378,11 @@ func (s *Service) interactions(w http.ResponseWriter, r *http.Request) {
 	var evs []core.Event
 	var err error
 	if gapFill {
-		evs, err = s.cfg.Events.ByKindsSince(ctx, interactionKinds, q.Get("sinceTs"), q.Get("since"), interactionsPageLimit)
+		evs, err = s.eventLog(ctx).ByKindsSince(ctx, interactionKinds, q.Get("sinceTs"), q.Get("since"), interactionsPageLimit)
 	} else if afterTS != "" {
-		evs, err = s.cfg.Events.ByKindsAfter(ctx, interactionKinds, afterTS, q.Get("beforeTs"), q.Get("before"), interactionsPageLimit)
+		evs, err = s.eventLog(ctx).ByKindsAfter(ctx, interactionKinds, afterTS, q.Get("beforeTs"), q.Get("before"), interactionsPageLimit)
 	} else {
-		evs, err = s.cfg.Events.ByKinds(ctx, interactionKinds, q.Get("beforeTs"), q.Get("before"), interactionsPageLimit)
+		evs, err = s.eventLog(ctx).ByKinds(ctx, interactionKinds, q.Get("beforeTs"), q.Get("before"), interactionsPageLimit)
 	}
 	if err != nil {
 		s.serverError(w, r, err)

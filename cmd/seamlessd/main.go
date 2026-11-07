@@ -529,16 +529,28 @@ func runServe(args []string) error {
 	// The console reads through a handle on which projects sealed to other OS
 	// accounts, and locked projects, do not exist, when there are any
 	// (store.OpenView); its writes go to the main handle after reading their
-	// target through the filtered one.
+	// target through the filtered one. While projects are locked the handles
+	// form a pool (store.Views), and each request reads the one that leaves
+	// in what its agent tree's lease or its browser's console unlock opens.
 	consoleDB, consoleEvents := db, rec
 	var consoleWriteDB *sql.DB
+	var consoleViews *store.Views
 	if peer != nil && len(peer.policy.ConsoleHidden()) > 0 {
-		viewDB, verr := store.OpenView(cfg.DBPath(), peer.policy.ConsoleHidden())
+		locked := peer.policy.OwnerLocked()
+		fixed := slices.DeleteFunc(peer.policy.ConsoleHidden(), func(slug string) bool { return slices.Contains(locked, slug) })
+		views, verr := store.OpenViews(cfg.DBPath(), fixed, locked)
 		if verr != nil {
 			return fmt.Errorf("seamlessd.serve: %w", verr)
 		}
-		defer func() { _ = viewDB.Close() }()
+		defer func() { _ = views.Close() }()
+		viewDB, verr := views.For(nil)
+		if verr != nil {
+			return fmt.Errorf("seamlessd.serve: %w", verr)
+		}
 		consoleDB, consoleWriteDB, consoleEvents = viewDB, db, rec.ReadingFrom(viewDB)
+		if len(locked) > 0 {
+			consoleViews = views
+		}
 	}
 	// The Approvers and access pages exist only while a project is locked:
 	// off, the console has no such pages and nothing on another page changes.
@@ -572,6 +584,7 @@ func runServe(args []string) error {
 		SecureCookies: cfg.TLSEnabled(),
 		Approvals:     approvals,
 		Terminal:      terminal,
+		Views:         consoleViews,
 		Logger:        logger,
 	})
 	if err != nil {

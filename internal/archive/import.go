@@ -362,6 +362,9 @@ func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, logg
 	if _, err := store.RevokeAllAccessLeases(ctx, db, store.LeaseRevokedReset, time.Now()); err != nil {
 		return fmt.Errorf("archive.Import: revoke restored leases: %w", err)
 	}
+	if _, err := store.EndAllConsoleUnlocks(ctx, db, store.ConsoleUnlockEndReset, time.Now()); err != nil {
+		return fmt.Errorf("archive.Import: end restored console unlocks: %w", err)
+	}
 
 	mgr, err := files.NewManager(opts.DataDir, db, logger)
 	if err != nil {

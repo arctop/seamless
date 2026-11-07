@@ -1154,6 +1154,7 @@ again. <code>--deny</code> closes the request; the project stays locked for that
 session.</p>
 <h2 id="seamlessd_console_open">seamlessd console-open</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd console-open <span class="o">[</span>--browser APP<span class="o">]</span>
+</span></span><span class="line"><span class="cl">seamlessd console-open --unlock PROJECT <span class="o">[</span>--for DURATION<span class="o">]</span>
 </span></span></code></pre></div>
 <p>Opens the console in a browser, already authenticated. It renders a one-shot
 self-submitting login page to a <code>0600</code> temp file and opens it; the page POSTs
@@ -1171,6 +1172,25 @@ Any HTTP response counts as reachable, including a degraded 503.</p>
 origin (<code>http://localhost:&lt;port&gt;</code> by default) instead of the server URL: the
 console's cookie belongs to one host, and browsers refuse passkeys on an IP
 address such as <code>127.0.0.1</code>.</p>
+<p><code>--unlock PROJECT</code> is the terminal way to open a locked project in one
+browser's console, without a passkey. Run it as the daemon's own account,
+through <code>sudo -k</code> so it asks for your password or Touch ID every time:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -k -u _seamless seamlessd console-open --unlock example-finance --for 3h
+</span></span></code></pre></div>
+<p>It refuses unless it runs as the daemon's account (the same check as
+<code>seamlessd approve</code>) and <code>PROJECT</code> is one <code>peer_auth.locked</code> lists. It writes a
+one-time unlock link straight into the database and prints it; open the link
+within ten minutes in the browser you sign in to the console with. Opening it
+sets that browser's <code>seamless_unlock</code> cookie, and the console then reads the
+project there until the unlock ends. <code>--for</code> is how long that lasts: at most,
+and by default, the console lease of three hours (shorter when
+<code>peer_auth.max_lease</code> is). The link works once.</p>
+<p>An unlock is per browser: another browser, the TCP key and every agent stay
+locked out. It is a console cookie, never a lease, so it never opens the
+project to an agent - the owner's own agents included. The console's access
+page lists every live unlock with <strong>Lock again</strong>, and each agent lease with
+<strong>Revoke</strong>. The console's unlock page (<code>/console/unlock/PROJECT</code>) does the
+same with a passkey instead of the terminal.</p>
 <h2 id="seamlessd_service">seamlessd start / stop / restart / status</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd start      <span class="c1"># or: stop | restart | status</span>
 </span></span></code></pre></div>

@@ -39,7 +39,10 @@ type statsGate struct {
 func (s *Service) freshRetrievalStats(ctx context.Context) {
 	s.stats.mu.Lock()
 	defer s.stats.mu.Unlock()
-	inputs, err := store.RetrievalStatsInputs(ctx, s.cfg.DB)
+	// The gate reads the handle the rebuild writes, so it is one key for
+	// every request: under locked projects requests read different handles,
+	// and keying on theirs would rebuild on every switch between them.
+	inputs, err := store.RetrievalStatsInputs(ctx, s.writeDB())
 	if err != nil {
 		s.logger.Warn("console: retrieval stats inputs", "error", err)
 	} else if inputs == s.stats.inputs && time.Since(s.stats.at) < statsDecayWindow {
@@ -121,18 +124,18 @@ func (s *Service) retrieval(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	win := store.ResolveRetrievalWindow(r.URL.Query().Get("w"), now)
-	report, err := store.BuildRetrievalReport(ctx, s.cfg.DB, win, 12)
+	report, err := store.BuildRetrievalReport(ctx, s.db(ctx), win, 12)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
 	prior, hasPrior := s.priorVitals(ctx, win, now)
-	stale, err := store.StaleMemories(ctx, s.cfg.DB, time.Now().UTC().AddDate(0, 0, -staleWindowDays))
+	stale, err := store.StaleMemories(ctx, s.db(ctx), time.Now().UTC().AddDate(0, 0, -staleWindowDays))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	funnel, err := store.ReadAfterInjectFunnel(ctx, s.cfg.DB, win.Since, 0)
+	funnel, err := store.ReadAfterInjectFunnel(ctx, s.db(ctx), win.Since, 0)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -192,7 +195,7 @@ func (s *Service) priorVitals(ctx context.Context, win store.RetrievalWindow, no
 	if !ok {
 		return store.WindowVitals{}, false
 	}
-	v, err := store.GetWindowVitals(ctx, s.cfg.DB, since, until)
+	v, err := store.GetWindowVitals(ctx, s.db(ctx), since, until)
 	if err != nil {
 		s.logger.Warn("console: prior-window vitals", "window", win.Key, "error", err)
 		return store.WindowVitals{}, false
@@ -208,7 +211,7 @@ func (s *Service) priorProjectVitals(ctx context.Context, project string, win st
 	if !ok {
 		return store.WindowVitals{}, false
 	}
-	v, err := store.GetWindowVitalsForProject(ctx, s.cfg.DB, project, since, until)
+	v, err := store.GetWindowVitalsForProject(ctx, s.db(ctx), project, since, until)
 	if err != nil {
 		s.logger.Warn("console: prior-window vitals", "project", project, "window", win.Key, "error", err)
 		return store.WindowVitals{}, false

@@ -109,7 +109,7 @@ type levelState struct {
 // installation, and re-asking on every Home load would nag about a fault the
 // owner cannot see; choosing a level in Settings rewrites the row.
 func (s *Service) consoleLevel(ctx context.Context) levelState {
-	name, overridden, source, welcomed, err := store.ConsoleLevel(ctx, s.cfg.DB, s.baseLevel.String())
+	name, overridden, source, welcomed, err := store.ConsoleLevel(ctx, s.db(ctx), s.baseLevel.String())
 	if err != nil {
 		s.logger.Warn("console: console level", "error", err)
 		return levelState{Level: s.baseLevel, Welcomed: true}

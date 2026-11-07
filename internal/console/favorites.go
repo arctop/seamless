@@ -52,7 +52,7 @@ func (s *Service) favoriteToggle(w http.ResponseWriter, r *http.Request) {
 	case "memory", "note", "plan":
 		project, itemID, err = s.setFileFavorite(ctx, kind, id, fav)
 	case "project":
-		_, found, perr := store.ProjectBySlug(ctx, s.cfg.DB, id)
+		_, found, perr := store.ProjectBySlug(ctx, s.db(ctx), id)
 		if perr == nil && found {
 			perr = store.SetProjectFavorite(ctx, s.writeDB(), id, fav)
 		} else if perr == nil {
@@ -60,13 +60,13 @@ func (s *Service) favoriteToggle(w http.ResponseWriter, r *http.Request) {
 		}
 		project, itemID, err = id, id, perr
 	case "task":
-		t, terr := store.TaskByID(ctx, s.cfg.DB, id)
+		t, terr := store.TaskByID(ctx, s.db(ctx), id)
 		if terr == nil {
 			terr = store.SetTaskFavorite(ctx, s.writeDB(), id, fav)
 		}
 		project, itemID, err = t.ProjectSlug, id, terr
 	case "session":
-		sess, found, serr := store.SessionByID(ctx, s.cfg.DB, id)
+		sess, found, serr := store.SessionByID(ctx, s.db(ctx), id)
 		if serr == nil && found {
 			serr = store.SetSessionFavorite(ctx, s.writeDB(), id, fav)
 		} else if serr == nil {
@@ -74,7 +74,7 @@ func (s *Service) favoriteToggle(w http.ResponseWriter, r *http.Request) {
 		}
 		project, itemID, err = sess.ProjectSlug, id, serr
 	case "trial":
-		tr, found, terr := store.TrialByID(ctx, s.cfg.DB, id)
+		tr, found, terr := store.TrialByID(ctx, s.db(ctx), id)
 		if terr == nil && found {
 			terr = store.SetTrialFavorite(ctx, s.writeDB(), id, fav)
 		} else if terr == nil {
@@ -92,7 +92,7 @@ func (s *Service) favoriteToggle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.cfg.Events != nil {
-		if _, err := s.cfg.Events.Record(ctx, core.Event{
+		if _, err := s.eventLog(ctx).Record(ctx, core.Event{
 			Kind: core.EventFavoriteChanged, ProjectSlug: project, ItemID: itemID,
 			Payload: map[string]any{"kind": kind, "id": id, "favorite": fav, "by": "console"},
 		}); err != nil {
@@ -137,7 +137,7 @@ func (s *Service) setFileFavorite(ctx context.Context, kind, id string, fav bool
 	var filePath string
 	switch kind {
 	case "memory":
-		idx, ok, merr := store.MemoryByID(ctx, s.cfg.DB, id)
+		idx, ok, merr := store.MemoryByID(ctx, s.db(ctx), id)
 		if merr != nil {
 			return "", "", merr
 		}
@@ -146,7 +146,7 @@ func (s *Service) setFileFavorite(ctx context.Context, kind, id string, fav bool
 		}
 		filePath = idx.FilePath
 	case "note":
-		idx, ok, nerr := store.NoteByID(ctx, s.cfg.DB, id)
+		idx, ok, nerr := store.NoteByID(ctx, s.db(ctx), id)
 		if nerr != nil {
 			return "", "", nerr
 		}
@@ -155,7 +155,7 @@ func (s *Service) setFileFavorite(ctx context.Context, kind, id string, fav bool
 		}
 		filePath = idx.FilePath
 	case "plan":
-		primary, _, ok, perr := plans.Composition(ctx, s.cfg.DB, id)
+		primary, _, ok, perr := plans.Composition(ctx, s.db(ctx), id)
 		if perr != nil {
 			return "", "", perr
 		}

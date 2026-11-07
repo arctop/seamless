@@ -103,6 +103,10 @@ type projectsData struct {
 	Attention    int // visible scopes with blocked work or registry drift
 	Unregistered int
 	Retired      int
+	// Locked are the locked projects this request cannot read (peer_auth.
+	// locked): name and counts only, aggregates taken on the main handle,
+	// each linking to its unlock page. Empty while nothing is locked.
+	Locked []store.ProjectTally `json:"locked,omitempty"`
 }
 
 func (s *Service) projectsList(w http.ResponseWriter, r *http.Request) {
@@ -130,12 +134,12 @@ func (s *Service) projectsList(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	win := store.ResolveRetrievalWindow(r.URL.Query().Get("w"), now)
 
-	board, err := store.ProjectsWithCounts(ctx, s.cfg.DB, win, now, s.cfg.SessionIdleTTL)
+	board, err := store.ProjectsWithCounts(ctx, s.db(ctx), win, now, s.cfg.SessionIdleTTL)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	projects, err := store.ListProjects(ctx, s.cfg.DB)
+	projects, err := store.ListProjects(ctx, s.db(ctx))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -239,6 +243,18 @@ func (s *Service) projectsList(w http.ResponseWriter, r *http.Request) {
 		Memories: memories, Notes: notes, TokensTotal: tokensTotal, Surfaced: surfaced, Active: active,
 		HasReach: active > 0, ReachRate: percent(surfaced, active),
 		Attention: attention, Unregistered: unregistered, Retired: retired,
+	}
+	if locked := lockedProjects(ctx); len(locked) > 0 {
+		tallies, err := store.ProjectTallies(ctx, s.writeDB(), locked)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		for _, t := range tallies {
+			if t.Registered && (q == "" || strings.Contains(strings.ToLower(t.Slug), q) || strings.Contains(strings.ToLower(t.Name), q)) {
+				data.Locked = append(data.Locked, t)
+			}
+		}
 	}
 	for parent, children := range childrenOf {
 		if _, ok := vmBySlug[parent]; ok {

@@ -60,7 +60,7 @@ func (s *Service) eventDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	ev, ok, err := s.cfg.Events.ByID(ctx, id)
+	ev, ok, err := s.eventLog(ctx).ByID(ctx, id)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -244,7 +244,7 @@ func (s *Service) resolveEventItems(ctx context.Context, ev core.Event) ([]event
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	byID, err := store.MemoriesByIDs(ctx, s.cfg.DB, ids)
+	byID, err := store.MemoriesByIDs(ctx, s.db(ctx), ids)
 	if err != nil {
 		return nil, err
 	}

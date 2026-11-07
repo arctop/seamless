@@ -44,7 +44,7 @@ import (
 // is made once, here, rather than at every call site. A corrupt row is logged
 // and degrades to the base config.
 func (s *Service) featuresConfig(ctx context.Context) (config.Features, bool) {
-	cfg, overridden, err := store.FeaturesConfig(ctx, s.cfg.DB, s.cfg.Features)
+	cfg, overridden, err := store.FeaturesConfig(ctx, s.db(ctx), s.cfg.Features)
 	if err != nil {
 		s.logger.Warn("console: features config", "error", err)
 		return s.cfg.Features, false

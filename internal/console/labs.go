@@ -78,7 +78,7 @@ func toLabRow(l store.LabSummary) labRow {
 
 // labsPage assembles the lab list, most recently active first.
 func (s *Service) labsPage(ctx context.Context) (labsData, error) {
-	labs, err := store.ListLabs(ctx, s.cfg.DB)
+	labs, err := store.ListLabs(ctx, s.db(ctx))
 	if err != nil {
 		return labsData{}, err
 	}
@@ -115,7 +115,7 @@ func (s *Service) labsList(w http.ResponseWriter, r *http.Request) {
 // labDetailByName assembles a lab's detail payload: its summary row and its
 // trial history. found=false means no trial carries the lab label.
 func (s *Service) labDetailByName(ctx context.Context, name string) (labDetailData, bool, error) {
-	labs, err := store.ListLabs(ctx, s.cfg.DB)
+	labs, err := store.ListLabs(ctx, s.db(ctx))
 	if err != nil {
 		return labDetailData{}, false, err
 	}
@@ -131,7 +131,7 @@ func (s *Service) labDetailByName(ctx context.Context, name string) (labDetailDa
 	if !found {
 		return labDetailData{}, false, nil
 	}
-	trials, err := store.QueryTrials(ctx, s.cfg.DB, store.TrialFilter{Lab: name, Limit: labTrialLimit})
+	trials, err := store.QueryTrials(ctx, s.db(ctx), store.TrialFilter{Lab: name, Limit: labTrialLimit})
 	if err != nil {
 		return labDetailData{}, false, err
 	}

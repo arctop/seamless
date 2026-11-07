@@ -25,14 +25,14 @@ func (s *Service) projectStages(ctx context.Context, rows []store.ProjectBoardRo
 	if !features.Enabled(s.effectiveFeatures(ctx), features.Momentum) {
 		return nil
 	}
-	stages, crossings, err := store.EvaluateProjectStagesWith(ctx, s.cfg.DB, s.writeDB(), rows, now)
+	stages, crossings, err := store.EvaluateProjectStagesWith(ctx, s.db(ctx), s.writeDB(), rows, now)
 	if err != nil {
 		s.logger.Warn("console: project stages", "error", err)
 		return nil
 	}
 	if s.cfg.Events != nil {
 		for _, c := range crossings {
-			if _, err := s.cfg.Events.Record(ctx, core.Event{
+			if _, err := s.eventLog(ctx).Record(ctx, core.Event{
 				Kind: core.EventProjectStage, ProjectSlug: c.Project,
 				Payload: map[string]any{"stage": string(c.To), "from": string(c.From)},
 			}); err != nil {

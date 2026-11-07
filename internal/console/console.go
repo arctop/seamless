@@ -125,7 +125,13 @@ type Config struct {
 	// Terminal tells seam approve how to run the terminal path's commit
 	// (the daemon's account, its seamlessd, its config); nil omits it.
 	Terminal *TerminalApprover
-	Logger   *slog.Logger
+	// Views is the pool of filtered handles while peer_auth locks a project
+	// (store.Views): each request reads the one that leaves out exactly the
+	// locked projects it holds nothing open on (reach.go). DB is the pool's
+	// base handle then. Nil -- nothing locked -- reads every request through
+	// DB, as before.
+	Views  *store.Views
+	Logger *slog.Logger
 }
 
 // Service renders the console and serves its routes.
@@ -263,6 +269,12 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/access/request", formBodySmall, s.accessRequest)
 	post("POST /console/access/{id}/approve", formBodyPasskey, s.accessApprove)
 	post("POST /console/access/{id}/deny", formBodySmall, s.accessDeny)
+	post("POST /console/access/leases/{id}/revoke", formBodySmall, s.leaseRevoke)
+	post("POST /console/access/unlocks/{id}/end", formBodySmall, s.unlockEnd)
+	handle("GET /console/unlock", s.auth(s.unlockClaim))
+	handle("GET /console/unlock/{project}", s.auth(s.unlockPage))
+	post("POST /console/unlock/{project}/begin", formBodySmall, s.unlockBegin)
+	post("POST /console/unlock/{project}/finish", formBodyPasskey, s.unlockFinish)
 	handle("GET /console/approvers", s.auth(s.approversPage))
 	post("POST /console/approvers/passkey/begin", formBodySmall, s.approversBegin)
 	post("POST /console/approvers/passkey/finish", formBodyPasskey, s.approversFinish)
@@ -381,9 +393,9 @@ func (s *Service) auth(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "forbidden: the console is the owner's surface", http.StatusForbidden)
 			return
 		}
-		switch s.classify(r) {
+		switch cred := s.classify(r); cred {
 		case credBearer:
-			next(w, r)
+			next(w, s.withReach(r, cred))
 		case credCookie:
 			if !safeMethod(r.Method) && !sameOriginRequest(r) {
 				s.logger.Warn("console: rejected cross-origin state-changing request",
@@ -392,7 +404,7 @@ func (s *Service) auth(next http.HandlerFunc) http.HandlerFunc {
 				http.Error(w, "forbidden: cross-origin request", http.StatusForbidden)
 				return
 			}
-			next(w, r)
+			next(w, s.withReach(r, cred))
 		default:
 			if wantsJSON(r) {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized: bearer key required"})
@@ -589,7 +601,7 @@ func (s *Service) sinceDigest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "t must be in the past 90 days"})
 		return
 	}
-	act, err := store.GetActivitySince(r.Context(), s.cfg.DB, since, now)
+	act, err := store.GetActivitySince(r.Context(), s.db(r.Context()), since, now)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -871,7 +883,7 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 	// Only the counts: the summary's event-log aggregates (the all-time
 	// funnel above all) appear nowhere on this page, which re-renders on
 	// every live event.
-	sum, err := store.GetUsageCounts(ctx, s.cfg.DB)
+	sum, err := store.GetUsageCounts(ctx, s.db(ctx))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -902,22 +914,22 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 		board    []store.ProjectBoardRow
 	)
 	if analytics {
-		if report, err = store.BuildRetrievalReport(ctx, s.cfg.DB, win, 5); err != nil {
+		if report, err = store.BuildRetrievalReport(ctx, s.db(ctx), win, 5); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
-		if cov, err = store.GetSessionCoverage(ctx, s.cfg.DB, win.Since); err != nil {
+		if cov, err = store.GetSessionCoverage(ctx, s.db(ctx), win.Since); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
-		if covTrend, err = store.SessionCoverageBuckets(ctx, s.cfg.DB, win, now); err != nil {
+		if covTrend, err = store.SessionCoverageBuckets(ctx, s.db(ctx), win, now); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
 		// "Projects at a glance": the top projects by recent activity, from the
 		// same batched board query -- strict per-slug counts, so these rows equal
 		// the board's rows exactly. The global ("") scope is not a project row.
-		if board, err = store.ProjectsWithCounts(ctx, s.cfg.DB, win, now, s.cfg.SessionIdleTTL); err != nil {
+		if board, err = store.ProjectsWithCounts(ctx, s.db(ctx), win, now, s.cfg.SessionIdleTTL); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
@@ -955,7 +967,7 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 	if analytics {
 		prior, hasPrior = s.priorVitals(ctx, win, now)
 	}
-	staleUnseen, err := store.CountMemoriesUnsurfacedSince(ctx, s.cfg.DB, now.UTC().AddDate(0, 0, -staleSurfacedDays))
+	staleUnseen, err := store.CountMemoriesUnsurfacedSince(ctx, s.db(ctx), now.UTC().AddDate(0, 0, -staleSurfacedDays))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -1029,18 +1041,22 @@ func (s *Service) knowledgeSky(ctx context.Context, now time.Time, r *http.Reque
 	if wantsJSON(r) {
 		return nil
 	}
-	mems, err := store.AllMemoriesIncludingInvalid(ctx, s.cfg.DB)
+	mems, err := store.AllMemoriesIncludingInvalid(ctx, s.db(ctx))
 	if err != nil {
 		s.logger.Warn("console: knowledge sky: memories", "error", err)
 		return nil
 	}
-	stats, err := store.AllRetrievalStats(ctx, s.cfg.DB)
+	stats, err := store.AllRetrievalStats(ctx, s.db(ctx))
 	if err != nil {
 		s.logger.Warn("console: knowledge sky: retrieval stats", "error", err)
 		return nil
 	}
 	sky := buildSky(mems, stats, now)
-	if sky != nil {
+	// The ledger is shared by every request. A chart drawn under a lease or a
+	// console unlock holds a locked project's stars, and a delta from it names
+	// the ones that left -- so it is neither remembered nor diffed against:
+	// such a page gets the whole chart each time.
+	if sky != nil && !broadened(ctx) {
 		s.sky.answer(sky, heldSky(r))
 	}
 	return sky
@@ -1054,7 +1070,7 @@ func (s *Service) memorySpotlight(ctx context.Context, now time.Time) *spotlight
 	if !features.Enabled(s.effectiveFeatures(ctx), features.Momentum) {
 		return nil
 	}
-	mem, found, err := store.MemorySpotlight(ctx, s.cfg.DB, now.AddDate(0, 0, -spotlightWindowDays), now)
+	mem, found, err := store.MemorySpotlight(ctx, s.db(ctx), now.AddDate(0, 0, -spotlightWindowDays), now)
 	if err != nil {
 		s.logger.Warn("console: memory spotlight", "error", err)
 		return nil
@@ -1092,7 +1108,7 @@ func (s *Service) attentionCards(ctx context.Context, d overviewData) []attnCard
 		// The oldest pending proposal is what makes the queue feel stale, and
 		// PendingProposals is newest-first, so it is the last row. A failure here
 		// costs the age line, not the card.
-		if props, err := store.PendingProposals(ctx, s.cfg.DB, ""); err != nil {
+		if props, err := store.PendingProposals(ctx, s.db(ctx), ""); err != nil {
 			s.logger.Warn("console: pending proposals for attention strip", "error", err)
 		} else if len(props) > 0 {
 			sub = "oldest " + ago(props[len(props)-1].CreatedAt) + " · merges, retirements, and digests"
@@ -1118,7 +1134,7 @@ func (s *Service) attentionCards(ctx context.Context, d overviewData) []attnCard
 	// plan-line emphasis checks the same effective config, so the two surfaces
 	// switch together.
 	if features.Enabled(s.effectiveFeatures(ctx), features.Momentum) {
-		plans, err := store.FinishLinePlans(ctx, s.cfg.DB)
+		plans, err := store.FinishLinePlans(ctx, s.db(ctx))
 		if err != nil {
 			s.logger.Warn("console: finish-line plans for attention strip", "error", err)
 		}
@@ -1213,7 +1229,7 @@ func (s *Service) liveSessions(ctx context.Context, now time.Time, limit int) []
 	if ttl <= 0 {
 		ttl = core.SessionIdleTTL
 	}
-	sessions, err := store.ListSessions(ctx, s.cfg.DB, core.SessionActive, now.Add(-ttl), limit*2)
+	sessions, err := store.ListSessions(ctx, s.db(ctx), core.SessionActive, now.Add(-ttl), limit*2)
 	if err != nil {
 		s.logger.Warn("console: live sessions", "error", err)
 		return nil
@@ -1263,7 +1279,7 @@ func sumValues(m map[string]int) int {
 // are zeroed here as well as hidden in the layout, so a stale template can never
 // leak a count for a screen the owner switched off.
 func (s *Service) navCounts(ctx context.Context, feats config.Features) navCounts {
-	n, err := store.GetNavCounts(ctx, s.cfg.DB)
+	n, err := store.GetNavCounts(ctx, s.db(ctx))
 	if err != nil {
 		s.logger.Warn("console: nav counts", "error", err)
 		return navCounts{}
@@ -1285,10 +1301,27 @@ func (s *Service) navCounts(ctx context.Context, feats config.Features) navCount
 	// The held queue is counted only while its feature is on: off, the table
 	// is not consulted at all.
 	if features.Enabled(feats, features.Screening) {
-		if held, herr := store.CountPendingHolds(ctx, s.cfg.DB); herr != nil {
+		if held, herr := store.CountPendingHolds(ctx, s.db(ctx)); herr != nil {
 			s.logger.Warn("console: nav held count", "error", herr)
 		} else {
 			counts.Held = held
+		}
+	}
+	// Locked projects: the Access requests badge counts what waits for the
+	// owner, and the Projects badge counts the locked projects the board
+	// lists by name. Nothing is locked: neither query runs.
+	if s.cfg.Approvals != nil {
+		if pending, perr := store.PendingAccessApprovals(ctx, s.writeDB(), time.Now()); perr != nil {
+			s.logger.Warn("console: nav access count", "error", perr)
+		} else {
+			counts.Access = len(pending)
+		}
+	}
+	if locked := lockedProjects(ctx); len(locked) > 0 {
+		if n, lerr := store.CountRegisteredProjects(ctx, s.writeDB(), locked); lerr != nil {
+			s.logger.Warn("console: nav locked projects", "error", lerr)
+		} else {
+			counts.Projects += n
 		}
 	}
 	// The Now badge is the live agent count -- the one sidebar number that is a
@@ -1297,7 +1330,7 @@ func (s *Service) navCounts(ctx context.Context, feats config.Features) navCount
 	if ttl <= 0 {
 		ttl = core.SessionIdleTTL
 	}
-	if liveN, lerr := store.LiveSessionCount(ctx, s.cfg.DB, time.Now().UTC().Add(-ttl)); lerr != nil {
+	if liveN, lerr := store.LiveSessionCount(ctx, s.db(ctx), time.Now().UTC().Add(-ttl)); lerr != nil {
 		s.logger.Warn("console: nav live count", "error", lerr)
 	} else {
 		counts.Now = liveN
@@ -1318,4 +1351,5 @@ type navCounts struct {
 	Labs      int
 	Trials    int
 	Held      int // writes held for the owner (write screening)
+	Access    int // access requests waiting (only while a project is locked)
 }

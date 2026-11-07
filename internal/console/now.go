@@ -217,7 +217,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		ttl = core.SessionIdleTTL
 	}
 
-	sessions, err := store.ListSessions(ctx, s.cfg.DB, core.SessionActive, now.Add(-ttl), 200)
+	sessions, err := store.ListSessions(ctx, s.db(ctx), core.SessionActive, now.Add(-ttl), 200)
 	if err != nil {
 		return nowData{}, fmt.Errorf("now: sessions: %w", err)
 	}
@@ -231,7 +231,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		liveByID[sess.ID] = sess
 	}
 
-	inProg, err := store.AllTasksByStatus(ctx, s.cfg.DB, core.TaskInProgress)
+	inProg, err := store.AllTasksByStatus(ctx, s.db(ctx), core.TaskInProgress)
 	if err != nil {
 		return nowData{}, fmt.Errorf("now: in-progress tasks: %w", err)
 	}
@@ -333,7 +333,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		// Trail + today's contribution from one newest-first read. Best-effort:
 		// a trail failure leaves the card, not the page.
 		if s.cfg.Events != nil {
-			evs, terr := s.cfg.Events.LatestBySession(ctx, sess.ID, nowTrailKinds, 100)
+			evs, terr := s.eventLog(ctx).LatestBySession(ctx, sess.ID, nowTrailKinds, 100)
 			if terr != nil {
 				s.logger.Warn("console: now agent trail", "session", sess.ID, "error", terr)
 			}
@@ -370,7 +370,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 	}
 
 	// Moving plans: every incomplete plan across projects, freshest first.
-	rollups, err := store.AllPlanRollups(ctx, s.cfg.DB)
+	rollups, err := store.AllPlanRollups(ctx, s.db(ctx))
 	if err != nil {
 		return nowData{}, fmt.Errorf("now: plan rollups: %w", err)
 	}
@@ -400,7 +400,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 	}
 
 	// Up next: claimable this instant, across every project and plan.
-	ready, err := store.AllReadyTasks(ctx, s.cfg.DB)
+	ready, err := store.AllReadyTasks(ctx, s.db(ctx))
 	if err != nil {
 		return nowData{}, fmt.Errorf("now: ready tasks: %w", err)
 	}
@@ -409,7 +409,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 			continue
 		}
 		vm := nowReadyVM{ID: t.ID, Title: t.Title, Project: t.ProjectSlug, PlanSlug: t.PlanSlug, Created: t.CreatedAt}
-		if unblocked, uerr := store.TasksBlockedBy(ctx, s.cfg.DB, t.ID); uerr == nil {
+		if unblocked, uerr := store.TasksBlockedBy(ctx, s.db(ctx), t.ID); uerr == nil {
 			vm.Unblocks = len(unblocked)
 		}
 		data.UpNext = append(data.UpNext, vm)
@@ -433,7 +433,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 	// system's heartbeat, deliberately unfiltered by scope. Best-effort.
 	var pulseTimes []time.Time
 	if s.cfg.Events != nil {
-		if ts, perr := s.cfg.Events.TimestampsSince(ctx, now.Add(-time.Hour), 4000); perr != nil {
+		if ts, perr := s.eventLog(ctx).TimestampsSince(ctx, now.Add(-time.Hour), 4000); perr != nil {
 			s.logger.Warn("console: now pulse", "error", perr)
 		} else {
 			pulseTimes = ts
@@ -503,12 +503,12 @@ func nowPulseSpark(times []time.Time, now time.Time) spark {
 // none of this runs -- and no latch is written -- while it is off.
 func (s *Service) nowArcade(ctx context.Context, now, dayStart time.Time, liveAgents int, shippedToday []store.ProjectPlan, pulseTimes []time.Time) *nowArcadeVM {
 	dayKey := dayStart.Format("2006-01-02")
-	today, err := store.GamificationDayCounts(ctx, s.cfg.DB, dayStart, dayStart.AddDate(0, 0, 1))
+	today, err := store.GamificationDayCounts(ctx, s.db(ctx), dayStart, dayStart.AddDate(0, 0, 1))
 	if err != nil {
 		s.logger.Warn("console: now arcade day counts", "error", err)
 		return nil
 	}
-	week, err := store.GamificationDayCounts(ctx, s.cfg.DB, dayStart.AddDate(0, 0, -7), dayStart)
+	week, err := store.GamificationDayCounts(ctx, s.db(ctx), dayStart.AddDate(0, 0, -7), dayStart)
 	if err != nil {
 		s.logger.Warn("console: now arcade week counts", "error", err)
 		return nil
@@ -534,7 +534,7 @@ func (s *Service) nowArcade(ctx context.Context, now, dayStart time.Time, liveAg
 	cell("plans", "plans touched", today.PlansTouched, week.PlansTouched)
 	cell("sessions", "sessions started", today.Sessions, week.Sessions)
 
-	recs, crossings, err := store.EvaluateGamificationRecordsWith(ctx, s.cfg.DB, s.writeDB(), today, liveAgents, now)
+	recs, crossings, err := store.EvaluateGamificationRecordsWith(ctx, s.db(ctx), s.writeDB(), today, liveAgents, now)
 	if err != nil {
 		s.logger.Warn("console: now arcade records", "error", err)
 		return nil
@@ -555,7 +555,7 @@ func (s *Service) nowArcade(ctx context.Context, now, dayStart time.Time, liveAg
 		if s.cfg.Events == nil {
 			break
 		}
-		_, _, rerr := s.cfg.Events.RecordOnce(ctx, core.Event{
+		_, _, rerr := s.eventLog(ctx).RecordOnce(ctx, core.Event{
 			Kind:   core.EventRecordBroken,
 			ItemID: c.Key + ":" + dayKey,
 			Payload: map[string]any{

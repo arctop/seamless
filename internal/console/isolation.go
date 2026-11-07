@@ -135,7 +135,7 @@ func (s *Service) isolationGlobalProvenance(ctx context.Context, slug string) is
 	if s.cfg.DB == nil {
 		return isolationProvenanceVM{}
 	}
-	leaked, err := store.GlobalMemoriesFromProjectSessions(ctx, s.cfg.DB, slug)
+	leaked, err := store.GlobalMemoriesFromProjectSessions(ctx, s.db(ctx), slug)
 	if err != nil {
 		// Degrade rather than fail the page: the confirm panel's job is the
 		// topology change, and the audit re-runs on the apply either way.
@@ -242,7 +242,7 @@ type isolationResponse struct {
 func (s *Service) projectIsolationSet(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	slug := r.PathValue("slug")
-	p, found, err := store.ProjectBySlug(ctx, s.cfg.DB, slug)
+	p, found, err := store.ProjectBySlug(ctx, s.db(ctx), slug)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -271,7 +271,7 @@ func (s *Service) projectIsolationSet(w http.ResponseWriter, r *http.Request) {
 		confirmed = true
 	}
 
-	eff, perr := store.PreviewIsolationTighten(ctx, s.cfg.DB, slug, state)
+	eff, perr := store.PreviewIsolationTighten(ctx, s.db(ctx), slug, state)
 	switch {
 	case errors.Is(perr, store.ErrNotATighten):
 		// Loosening (open, or sealed -> confidential): immediate, no confirm.
@@ -367,7 +367,7 @@ func (s *Service) recordIsolationEvent(ctx context.Context, eff store.IsolationT
 	if eff.Parent != "" {
 		payload["parent"] = eff.Parent
 	}
-	if _, err := s.cfg.Events.Record(ctx, core.Event{
+	if _, err := s.eventLog(ctx).Record(ctx, core.Event{
 		Kind: core.EventProjectIsolationChanged, ProjectSlug: eff.Project,
 		ItemID: eff.Project, Payload: payload,
 	}); err != nil {
@@ -510,7 +510,7 @@ func formOnce(r *http.Request, key string) (value string, once, present bool) {
 // exists to prevent. An unknown slug or an unrecognized state never reaches
 // here -- the caller validates both.
 func (s *Service) isolationPendingConfirm(ctx context.Context, slug string, state core.Isolation) (*isolationConfirmVM, error) {
-	eff, err := store.PreviewIsolationTighten(ctx, s.cfg.DB, slug, state)
+	eff, err := store.PreviewIsolationTighten(ctx, s.db(ctx), slug, state)
 	switch {
 	case errors.Is(err, store.ErrNotATighten), errors.Is(err, store.ErrProjectNotFound):
 		return nil, nil

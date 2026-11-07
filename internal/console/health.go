@@ -27,7 +27,7 @@ type healthFact struct {
 // never the page.
 func (s *Service) healthFacts(ctx context.Context) []healthFact {
 	var out []healthFact
-	facts, err := store.GetHealthFacts(ctx, s.cfg.DB)
+	facts, err := store.GetHealthFacts(ctx, s.db(ctx))
 	if err != nil {
 		s.logger.Warn("console: health strip", "error", err)
 	}

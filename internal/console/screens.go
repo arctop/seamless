@@ -109,6 +109,40 @@ var screens = []screen{
 		Min: levelAdvanced, Hint: "briefing topology across projects"},
 }
 
+// groupAccess is the sidebar section of the lock-only screens.
+const groupAccess = "Access"
+
+// lockScreens are the screens that exist only while peer_auth locks a project
+// (Config.Approvals set): the access requests agents file at the lock, with
+// the live leases and console unlocks, and the approver credentials that
+// decide them. They are deliberately not in screens: a console with nothing
+// locked has no such pages, so its sidebar, palette and docs matrix
+// (LevelMatrix) never name them. withLockScreens places them, at every level,
+// ahead of the pinned Settings entry.
+var lockScreens = []screen{
+	{ID: "access", Label: "Access requests", Icon: "lock", Href: "/console/access", Group: groupAccess, Key: "a",
+		Min: levelBasic, NavRow: true, Badge: "access", BadgeTitle: "Access requests waiting for you", BadgeZero: true},
+	{ID: "approvers", Label: "Approvers", Icon: "key-round", Href: "/console/approvers", Group: groupAccess, Key: "k",
+		Min: levelBasic, NavRow: true},
+}
+
+// withLockScreens returns visible with the lock-only screens inserted ahead of
+// the pinned tail (the first nav row with no group: Settings), or visible
+// itself when locked is false.
+func withLockScreens(visible []screen, locked bool) []screen {
+	if !locked {
+		return visible
+	}
+	at := len(visible)
+	for i, sc := range visible {
+		if sc.NavRow && sc.Group == "" {
+			at = i
+			break
+		}
+	}
+	return slices.Concat(visible[:at:at], lockScreens, visible[at:])
+}
+
 // screenRegistry returns the ordered screens. The slice is a copy, so a caller
 // cannot mutate the registry.
 func screenRegistry() []screen { return slices.Clone(screens) }
@@ -226,6 +260,8 @@ func (n navCounts) count(badge string) (int, bool) {
 		return n.Trials, true
 	case "held":
 		return n.Held, true
+	case "access":
+		return n.Access, true
 	default:
 		return 0, false
 	}
