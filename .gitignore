@@ -13,6 +13,10 @@
 *.dll
 *.so
 *.dylib
+# The Touch ID approver's SwiftPM output when built or tested in its own
+# directory (make approver and approver-test keep theirs under bin/).
+/macos/SeamApprove/.build/
+/macos/SeamApprove/.swiftpm/
 
 # Data / runtime state (SQLite + data-dir artifacts)
 *.db

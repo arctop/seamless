@@ -162,6 +162,58 @@ jobs:
           fi
           go test -count=1 -skip "$skip" ./cmd/seamlessd ./internal/update ./internal/agentproc
 
+  # Whether this run touches the Touch ID approver: macos/, scripts/approver/
+  # or a workflow (owner, 2026-11-06: the macOS job runs only then). Plain git
+  # rather than a path-filter action, for the reason config-lint gives. Both
+  # commits are fetched at depth 1: a two-dot diff compares trees and needs
+  # no history. Anything it cannot tell (a new branch's all-zero `before`, a
+  # failed fetch or diff) runs the job.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      approver: ${{ steps.diff.outputs.approver }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - id: diff
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          approver=true
+          if [ -n "${BASE//0/}" ] && git fetch -q --no-tags --depth=1 origin "$BASE" \
+            && files=$(git diff --name-only "$BASE" HEAD); then
+            grep -qE '^(macos/|scripts/approver/|\.github/workflows/)' <<<"$files" || approver=false
+          fi
+          echo "approver=$approver" | tee -a "$GITHUB_OUTPUT"
+
+  # The macOS Touch ID approver (macos/SeamApprove, Swift) is built only on a
+  # release tag that carries its signing profile, so without this job it
+  # could rot unnoticed between releases. Unsigned: the unit tests need no
+  # keychain and raise no prompt, and `make approver` with no signing
+  # environment builds the ad-hoc universal bundle the release signs. Skipped
+  # (which a required check counts as passing) when `changes` finds nothing
+  # of the approver's in the run.
+  approver:
+    needs: changes
+    if: needs.changes.outputs.approver == 'true'
+    runs-on: macos-latest
+    # A cold build and test of the package took well under a minute locally.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: make approver-test
+        run: make approver-test
+
+      - name: make approver (unsigned)
+        run: |
+          make approver
+          app="bin/approver/Seamless Approve.app"
+          plutil -lint "$app/Contents/Info.plist" macos/SeamApprove/Bundle/SeamApprove.entitlements
+          codesign --verify --strict --deep "$app"
+          lipo -archs "$app/Contents/MacOS/SeamApprove"
+
   # Nothing else parses the workflows or .goreleaser.yaml before a tag push,
   # so a broken release config otherwise shows up when the release job fails
   # on a pushed tag. This job runs on every push instead of behind a path

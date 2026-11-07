@@ -341,7 +341,19 @@ any of it.
   `access.PeerAuthenticated`; a request's `challenge` appears in its JSON only
   when pending and read over the socket (a nonce, not a secret). Never put a
   team ID in source: the pin is read at run time from seam's own signature,
-  and the build substitutes it from the environment.
+  and the build substitutes it from the environment. A release ships the app
+  only when the repository secret `MACOS_APPROVER_PROFILE` is set (the base64
+  Developer ID provisioning profile for `org.thereisnospoon.seamless.approve`,
+  Keychain Sharing on): release.yml's `approver` job signs it with
+  `MACOS_SIGN_P12`'s Developer ID (the team seam pins) after importing Apple's
+  G2 intermediate pinned by hash, notarizes and staples it, and hands
+  `seamless-approve_<version>_darwin.zip` to goreleaser as `APPROVER_ZIP`, in
+  both `release.extra_files` and `checksum.extra_files`, so the cosign-signed
+  checksums.txt lists it. Without the secret the job is skipped and the
+  release is unchanged; with it but a darwin signing secret missing,
+  `approver-gate` fails the release. A renewed certificate needs a
+  regenerated profile: build.sh refuses a profile that does not list the
+  signing certificate.
 - **The locked view at the agent surfaces** (`internal/mcp/locked.go`,
   `internal/hooks/locked.go`). The SessionStart hook in a locked project's
   repository records the session there, metadata only, files its access

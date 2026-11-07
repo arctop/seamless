@@ -97,6 +97,10 @@ scripts/fixture/   the shared throwaway fixture: make-myapp.sh (demo repo) +
                    harness.sh --mode record|bench (branding | benchmark arms)
 scripts/branding/  GH-Pages surface: record.sh, distill.py (verbatim-audited
                    scene data), console-shots.js -- see its README.md
+macos/SeamApprove/ the optional macOS Touch ID approver app (Swift/SwiftPM, not
+                   part of the Go build): SeamApproveCore + the AppKit
+                   executable; scripts/approver/ builds (make approver) and
+                   notarizes it
 ```
 
 Bracketed tags mark the phase that introduces the package; unbuilt ones do not
@@ -123,6 +127,9 @@ make run        # build + serve on 127.0.0.1:8081
 make doctor     # build + config/DB self-checks
 make console    # open the console in a browser, pre-authenticated
 make clean      # remove bin/ and coverage files
+make approver   # macOS: the Touch ID approver app into bin/approver/ (ad-hoc
+                # signed unless APPROVER_* is set; see scripts/approver/)
+make approver-test # its Swift unit tests (no keychain, no prompt)
 
 make docs       # regenerate the docs site (docs-src/ -> docs/docs/, committed)
 make docs-check # fail if the committed docs site is stale (runs inside `check`)

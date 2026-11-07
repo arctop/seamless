@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The signed helper's entitlements. The TEAM_ID placeholders are replaced by
+  APPROVER_TEAM_ID at build time (scripts/approver/build.sh); no team id is
+  written in source.
+  All three must be authorized by the provisioning profile embedded at
+  Contents/embedded.provisionprofile, or macOS refuses to launch the app.
+  An unsigned (ad-hoc) build carries none of them, and so has no key store.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.application-identifier</key>
+	<string>@TEAM_ID@.org.thereisnospoon.seamless.approve</string>
+	<key>com.apple.developer.team-identifier</key>
+	<string>@TEAM_ID@</string>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>@TEAM_ID@.org.thereisnospoon.seamless.approve</string>
+	</array>
+</dict>
+</plist>

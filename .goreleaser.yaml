@@ -111,6 +111,17 @@ archives:
 
 checksum:
   name_template: checksums.txt
+  # The macOS Touch ID approver (macos/SeamApprove), when this release built
+  # one: seamless-approve_<version>_darwin.zip, made, signed, notarized and
+  # stapled by release.yml's approver job on macOS, which sets APPROVER_ZIP to
+  # its path. Listed here so checksums.txt -- the file cosign signs below --
+  # vouches for it like every archive; `seam touchid enroll` checks the zip
+  # against that line. Without the approver secrets (forks, or before the
+  # owner adds the profile) APPROVER_ZIP is unset, the glob renders empty,
+  # and goreleaser skips the entry ("ignoring empty glob"): checksums.txt
+  # and the release stay exactly as they were.
+  extra_files:
+    - glob: '{{ envOrDefault "APPROVER_ZIP" "" }}'
 
 # Sign checksums.txt so it proves AUTHENTICITY, not just integrity.
 #
@@ -192,6 +203,10 @@ release:
     - glob: docs/install.ps1
     - glob: sigs/install.sigstore.json
     - glob: sigs/install.ps1.sigstore.json
+    # The Touch ID approver's zip, the same opt-in entry as in checksum:
+    # above (checksum.extra_files only checksums; this uploads it). Empty
+    # without the approver secrets, and then skipped.
+    - glob: '{{ envOrDefault "APPROVER_ZIP" "" }}'
   # A tag with a semver prerelease suffix (v0.7.0-rc.1) publishes as a GitHub
   # prerelease; a plain vX.Y.Z publishes as a normal release. The update check
   # skips prereleases, and GitHub's /releases/latest (what both installers

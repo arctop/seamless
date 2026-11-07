@@ -160,6 +160,8 @@ help:
 	@echo "                    run after a deploy is live; DRY=1 previews the payload)"
 	@echo "  metrics           print GitHub stars + release download counts (needs gh)"
 	@echo "  release-snapshot  dry-run the release build into dist/ (needs goreleaser)"
+	@echo "  approver          macOS only: build the opt-in Touch ID approver app into bin/approver/"
+	@echo "  approver-test     run the approver's Swift unit tests (no keychain, no prompt)"
 	@echo "  tidy       go mod tidy"
 	@echo "  run        build and start the server in the foreground ($(ADDR))"
 	@echo "  doctor     build and run config + DB self-checks"
@@ -463,6 +465,21 @@ release-snapshot:
 	@command -v goreleaser >/dev/null \
 	    || { echo "ERROR: goreleaser not found (brew install goreleaser, v2.19.0+)"; exit 1; }
 	goreleaser release --snapshot --clean --skip=sign
+
+# The macOS Touch ID approver (macos/SeamApprove, Swift; macOS only, opt-in):
+# bin/approver/Seamless Approve.app. Nothing else builds, installs or launches
+# it -- `seam touchid enroll` installs a release's signed copy. With no
+# environment it builds an ad-hoc signed bundle for compile checks, which has
+# no key store. APPROVER_SIGN_IDENTITY + APPROVER_TEAM_ID + APPROVER_PROFILE
+# (all three) sign it with the hardened runtime and embed the profile; see
+# scripts/approver/build.sh. Notarizing is scripts/approver/notarize.sh.
+# approver-test runs the helper's unit tests (no Touch ID prompt, no keychain).
+.PHONY: approver approver-test
+approver:
+	scripts/approver/build.sh
+
+approver-test:
+	swift test --package-path macos/SeamApprove --scratch-path $(BIN_DIR)/approver/.build
 
 tidy:
 	$(GO) mod tidy
