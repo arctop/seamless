@@ -213,6 +213,11 @@ jobs:
           plutil -lint "$app/Contents/Info.plist" macos/SeamApprove/Bundle/SeamApprove.entitlements
           codesign --verify --strict --deep "$app"
           lipo -archs "$app/Contents/MacOS/SeamApprove"
+          # The app icon (scripts/approver/render-icon.swift renders it): the
+          # bundle carries it, Info.plist names it, and iconutil can unpack it.
+          test -f "$app/Contents/Resources/AppIcon.icns"
+          test "$(plutil -extract CFBundleIconFile raw -o - "$app/Contents/Info.plist")" = AppIcon
+          iconutil -c iconset -o "$RUNNER_TEMP/AppIcon.iconset" "$app/Contents/Resources/AppIcon.icns"
 
   # Nothing else parses the workflows or .goreleaser.yaml before a tag push,
   # so a broken release config otherwise shows up when the release job fails

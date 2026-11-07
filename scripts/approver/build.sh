@@ -106,13 +106,19 @@ esac
 
 # --- assemble the bundle.
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/$EXE" "$APP/Contents/MacOS/$EXE"
 sed -e "s/@SHORT_VERSION@/$SHORT_VERSION/g" -e "s/@VERSION@/$VERSION/g" "$PKG/Bundle/Info.plist" >"$APP/Contents/Info.plist"
 printf 'APPL????' >"$APP/Contents/PkgInfo"
 plutil -lint -s "$APP/Contents/Info.plist" || die "Info.plist does not lint"
 [ "$(plutil -extract CFBundleIdentifier raw -o - "$APP/Contents/Info.plist")" = "$BUNDLE_ID" ] ||
 	die "Info.plist does not carry the bundle id $BUNDLE_ID"
+# The app icon is committed already rendered, so the build needs no renderer.
+# After a change to the mark, regenerate it from the repository root with
+#   swift scripts/approver/render-icon.swift macos/SeamApprove/Bundle/AppIcon.icns
+cp "$PKG/Bundle/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+[ "$(plutil -extract CFBundleIconFile raw -o - "$APP/Contents/Info.plist")" = AppIcon ] ||
+	die "Info.plist does not name the icon Contents/Resources/AppIcon.icns (CFBundleIconFile AppIcon)"
 
 if [ "$MODE" = unsigned ]; then
 	# Ad-hoc: seals the bundle so it runs (arm64 code must be signed) and so
