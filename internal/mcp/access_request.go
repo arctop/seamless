@@ -64,7 +64,8 @@ type accessRequestResult struct {
 	// Dialog is how the in-session approval dialog ended (accepted, declined,
 	// cancelled, unoffered, or unanswered); absent when none was shown.
 	Dialog string `json:"dialog,omitempty"`
-	// Page is the request's passkey approval page, when passkeys are set up.
+	// Page is the request's passkey approval page, when a passkey can
+	// approve it there (passkeys set up, and one enrolled).
 	Page string `json:"page,omitempty"`
 	// Next is what the agent does now.
 	Next string `json:"next"`
@@ -94,8 +95,9 @@ func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolReques
 		return errResult(AccessRequestTool, accessRequestError(err))
 	}
 	t := dialogTarget{ID: a.ID, Short: approval.ShortID(a.ID), Project: a.Project}
+	ways := callWays(ctx, s.cfg.Approvals.Ways(ctx, a.ID))
 	out := accessRequestResult{
-		ID: a.ID, ShortID: t.Short, Project: a.Project, Kind: a.Kind, Status: s.stateOf(a), Page: s.cfg.Approvals.Page(a.ID),
+		ID: a.ID, ShortID: t.Short, Project: a.Project, Kind: a.Kind, Status: s.stateOf(a), Page: ways.Page,
 	}
 	if end, ran := s.dialog(ctx, start, t); ran {
 		out.Status, out.Dialog = end.state, end.answer
@@ -105,16 +107,16 @@ func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolReques
 		if end.state == stateApproved && !end.until.IsZero() {
 			out.OpenUntil = end.until.UTC().Format(time.RFC3339)
 		}
-		out.Next = accessRequestNext(t, out.Page, end)
+		out.Next = accessRequestNext(t, ways, end)
 		return jsonResult(out)
 	}
-	out.Next = accessRequestNext(t, out.Page, dialogEnd{state: out.Status})
+	out.Next = accessRequestNext(t, ways, dialogEnd{state: out.Status})
 	return jsonResult(out)
 }
 
 // accessRequestNext says what the agent does once the request is where end
-// left it.
-func accessRequestNext(t dialogTarget, page string, end dialogEnd) string {
+// left it; ways are the approval paths the daemon offers for it.
+func accessRequestNext(t dialogTarget, ways access.Ways, end dialogEnd) string {
 	switch end.state {
 	case stateApproved:
 		return "the owner approved it: " + openLine(t, end) + "; retry the work that needs it"
@@ -123,17 +125,17 @@ func accessRequestNext(t dialogTarget, page string, end dialogEnd) string {
 	case stateExpired:
 		return "it expired before the owner decided: ask again only if the work still needs " + t.Project
 	}
-	how := fmt.Sprintf("the owner approves it in their own terminal with `seam approve %s`", t.Short)
-	if page != "" {
-		how += ", or with a passkey at " + page
-	}
-	return how + "; keep to other projects until it is approved, then retry the work that needs " + t.Project
+	return ways.OwnerApproves(t.Short) + "; keep to other projects until it is approved, then retry the work that needs " + t.Project
 }
 
 // accessRequestError words the approval service's refusals for an agent, as
 // the console's access request route does.
 func accessRequestError(err error) error {
+	var anchor *approval.AnchorError
 	switch {
+	case errors.As(err, &anchor):
+		// Its own two lines: the rule, then the remedy. No request exists.
+		return anchor
 	case errors.Is(err, approval.ErrNoProcess):
 		return errors.New("this connection has no verified process: request access from an agent session whose seam dials the peer_auth socket")
 	case errors.Is(err, approval.ErrNoAnchor), errors.Is(err, approval.ErrAnchorNotInChain):

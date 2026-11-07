@@ -535,12 +535,15 @@ refused before anything is sent.</p>
 <div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">Requested R-7F3K for example-finance (request). The owner approves it with: seam approve R-7F3K
 </span></span><span class="line"><span class="cl">or with a passkey: https://seamless.example.org/console/access/01K...
 </span></span></code></pre></div>
-<p>The second line appears only when the daemon has a passkey page for the
-request. Asking again while a request is pending answers with that same
-request; a request from an agent that already holds a lease is a <code>refresh</code>.
-<code>--json</code> prints the console's answer as received (<a href="#json-output">JSON output</a>).
-The console's refusal is printed as it is: the project is not locked, or the
-connection has no agent process the daemon could verify.</p>
+<p>The second line appears only when a passkey can approve the request there:
+passkeys are set up and at least one is enrolled. Asking again while a request
+is pending answers with that same request; a request from an agent that
+already holds a lease is a <code>refresh</code>. <code>--json</code> prints the console's answer as
+received (<a href="#json-output">JSON output</a>). The console's refusal is printed as it
+is: the project is not locked, the connection has no agent process the daemon
+could verify, or the process asking is not an agent's (a shell, a terminal, a
+multiplexer such as tmux, or a login process), so nothing was filed - run it
+from the agent's own shell.</p>
 <h3 id="seam_approve">seam approve</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam approve <span class="o">[</span>--for DURATION<span class="o">]</span> <span class="o">[</span>&lt;request&gt;<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seam approve --passkey <span class="o">[</span>&lt;request&gt;<span class="o">]</span>
@@ -552,7 +555,7 @@ refuses otherwise: an agent cannot use it. <code>&lt;request&gt;</code> is the s
 (short id, project, session, warning count, and when each stops waiting),
 takes the only request, or asks which one by number or short id. With nothing
 waiting it prints <code>Nothing is waiting.</code></p>
-<p>It then shows the request's facts - the daemon's warnings first, each on its
+<p>It then shows the request's facts - the daemon's warnings first, most serious first, each on its
 own line behind <code>!</code>, then the project with its isolation and access, the
 asking program with its pid and uid, the session and model, the working
 directory, the agent's reason (quoted, and labeled as the agent's own words),

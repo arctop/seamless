@@ -33,7 +33,10 @@ func (s *Service) grantRequest(w http.ResponseWriter, r *http.Request, project, 
 	})
 	if err != nil {
 		msg := err.Error()
+		var anchor *approval.AnchorError
 		switch {
+		case errors.As(err, &anchor):
+			msg = anchor.Error()
 		case errors.Is(err, approval.ErrNotConfidential) && s.cfg.Approvals != nil:
 			msg = "that project is neither locked nor confidential: nothing to request"
 		case errors.Is(err, approval.ErrNotConfidential):
@@ -56,7 +59,7 @@ func (s *Service) grantRequest(w http.ResponseWriter, r *http.Request, project, 
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": a.ID, "short_id": approval.ShortID(a.ID), "project": a.Project, "kind": a.Kind, "from": a.FromProject,
-		"page": s.cfg.Grants.Page(a.ID),
+		"page": s.cfg.Grants.Ways(r.Context(), a.ID).Page,
 	})
 }
 

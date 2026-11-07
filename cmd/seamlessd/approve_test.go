@@ -105,3 +105,31 @@ func TestApprove_ReadGrantRequest(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, leases, "a read grant is never a lease")
 }
+
+// The terminal path (seam approve, through sudo to seamlessd approve) never
+// approves a request an older daemon filed for a broad ancestor: the approve
+// core refuses it, and the owner reads why.
+func TestApprove_TerminalRefusesABroadAnchor(t *testing.T) {
+	ctx := context.Background()
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	_, err = store.EnsureProject(ctx, db, "example-finance", "example-finance")
+	require.NoError(t, err)
+	require.NoError(t, store.SetProjectIsolation(ctx, db, "example-finance", core.IsolationConfidential))
+	a, err := store.CreateAccessApproval(ctx, db, store.AccessRequest{Project: "example-finance", Kind: store.AccessKindRequest,
+		Lease: 8 * time.Hour, TTL: 10 * time.Minute, PeerUID: 501, PeerPID: 3698, ProcessKey: "boot:3698:36980",
+		Program: "/opt/homebrew/Cellar/tmux/3.8/bin/tmux"}, time.Now())
+	require.NoError(t, err)
+	svc := approval.New(approval.Config{DB: db, LeaseCap: 8 * time.Hour})
+	facts, err := svc.Facts(ctx, a.ID)
+	require.NoError(t, err)
+	var out bytes.Buffer
+	err = approve(ctx, svc, &out, []string{approval.ShortID(a.ID), "--for", "1h", "--digest", facts.Digest})
+	require.ErrorIs(t, err, approval.ErrBroadAnchor)
+	require.ErrorContains(t, err, "tmux, a terminal multiplexer")
+	require.Empty(t, out.String())
+	leases, err := store.LiveAccessLeases(ctx, db, time.Now())
+	require.NoError(t, err)
+	require.Empty(t, leases)
+}

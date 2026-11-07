@@ -184,15 +184,11 @@ func (g *Grants) RequestGrant(ctx context.Context, in GrantInput) (store.AccessA
 		if !hasView || v.Principal().Kind != access.KindOwner || !v.Principal().Socket || len(chain) == 0 {
 			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, ErrNoProcess)
 		}
-		anchor, sessionID, _, err := g.svc.resolveAnchor(ctx, chain, in.SessionID, in.AgentProcess, in.Host)
+		got, err := g.svc.anchorFor(ctx, chain, in.SessionID, in.AgentProcess, in.Host)
 		if err != nil {
 			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
 		}
-		program, err := access.ProgramPath(anchor.PID)
-		if err != nil {
-			program = "" // display only, as for a lock's request
-		}
-		req.SessionID, req.ProcessKey, req.PeerPID, req.PeerUID, req.Program = sessionID, anchor.Key(), anchor.PID, v.Principal().UID, program
+		req.SessionID, req.ProcessKey, req.PeerPID, req.PeerUID, req.Program = got.sessionID, got.token.Key(), got.token.PID, v.Principal().UID, got.program
 	}
 	if req.SessionID == "" {
 		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, ErrNoSession)
@@ -270,6 +266,12 @@ func (g *Grants) Approve(ctx context.Context, d Decision) (store.AccessGrant, er
 	}
 	if a.Status != store.ApprovalPending {
 		return store.AccessGrant{}, fmt.Errorf("%s: %w: %s is %s", op, store.ErrApprovalNotPending, ShortID(a.ID), a.Status)
+	}
+	// The anchor rule (anchor.go), as for a lease: a grant to a broad
+	// ancestor's tree would reach every program it started. A request of the
+	// advisory tier names no process, and passes.
+	if err := storedAnchorRefusal(a.PeerPID, a.Program); err != nil {
+		return store.AccessGrant{}, fmt.Errorf("%s: %s: %w", op, ShortID(a.ID), err)
 	}
 	facts, err := g.svc.factsOf(ctx, a)
 	if err != nil {
@@ -374,3 +376,12 @@ func (g *Grants) LeaseLength(choice string) (time.Duration, error) { return g.sv
 // Page is Service.Page: the passkey page under peer_auth, "" in the advisory
 // tier.
 func (g *Grants) Page(id string) string { return g.svc.Page(id) }
+
+// Ways is Service.Ways under peer_auth. The advisory tier has neither Touch
+// ID nor passkeys (its decision is the bearer key's), so none.
+func (g *Grants) Ways(ctx context.Context, id string) access.Ways {
+	if g.advisory {
+		return access.Ways{}
+	}
+	return g.svc.Ways(ctx, id)
+}

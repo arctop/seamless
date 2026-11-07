@@ -38,6 +38,7 @@ func (s *Server) handleProjectList(ctx context.Context, _ mcp.CallToolRequest) (
 		return errResult("project_list", err)
 	}
 	out := make([]map[string]any, 0, len(ps))
+	var ways *access.Ways // the approval paths a locked row offers, looked up once
 	for _, p := range ps {
 		// A project the owner has locked (peer_auth.locked) is listed -- its
 		// identity (name, description, isolation) and aggregate counts, never
@@ -68,18 +69,25 @@ func (s *Server) handleProjectList(ctx context.Context, _ mcp.CallToolRequest) (
 			}
 			row["locked"] = true
 			row["counts"] = map[string]any{"memories": counts.Memories, "notes": counts.Notes, "open_tasks": counts.OpenTasks}
-			row["remedy"] = lockedListRemedy(p.Slug)
+			if ways == nil {
+				ways = &access.Ways{}
+				if s.cfg.Approvals != nil {
+					*ways = callWays(ctx, s.cfg.Approvals.Ways(ctx, ""))
+				}
+			}
+			row["remedy"] = lockedListRemedy(p.Slug, *ways)
 		}
 		out = append(out, row)
 	}
 	return jsonResult(map[string]any{"projects": out})
 }
 
-// lockedListRemedy is a locked project's way in, as project_list states it.
-func lockedListRemedy(slug string) string {
+// lockedListRemedy is a locked project's way in, as project_list states it,
+// offering only the approval paths ways holds.
+func lockedListRemedy(slug string, ways access.Ways) string {
 	return "locked: even the owner's own agents need the owner's approval to read or write it. A call into it " +
 		"files an access request automatically, and `seam access request " + slug + "` from your shell files one " +
-		"explicitly; the owner approves it in their own terminal with `seam approve` and the request's id."
+		"explicitly; " + ways.OwnerApproves("") + "."
 }
 
 func projectCreateTool() mcp.Tool {

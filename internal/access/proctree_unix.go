@@ -25,3 +25,35 @@ type Peer struct {
 func validBoot(s string) bool {
 	return ProcessToken{PID: 1, Boot: s}.Valid()
 }
+
+// ProgramOf names the process t names, for the approval surfaces and the
+// approval core's anchor checks: its executable path when the kernel reveals
+// it, else the kernel's name for it (Linux keeps another account's
+// /proc/<pid>/exe behind ptrace access, and its stat's name is all the
+// daemon's account may read). It is "" when t names no live process of this
+// boot: the process exited, its pid now belongs to another, or t was never a
+// process the kernel reported here. The name is read only while the pid
+// still names t's process -- the start time is checked before and after --
+// so it can never be a newer process's that reused the pid.
+func ProgramOf(t ProcessToken) string {
+	if !t.Valid() {
+		return ""
+	}
+	boot, err := bootID()
+	if err != nil || boot != t.Boot {
+		return ""
+	}
+	before, err := lookupProc(t.PID)
+	if err != nil || before.start != t.Version {
+		return ""
+	}
+	name := before.name
+	if path, err := ProgramPath(t.PID); err == nil && path != "" {
+		name = path
+	}
+	after, err := lookupProc(t.PID)
+	if err != nil || after.start != t.Version {
+		return ""
+	}
+	return name
+}

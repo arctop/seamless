@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/passkey"
 	"github.com/arctop/seamless/internal/store"
@@ -71,6 +72,11 @@ type Config struct {
 	Host string
 	// LeaseCap is peer_auth.max_lease; 0 means 8 hours.
 	LeaseCap time.Duration
+	// Programs names the process a token names, for the anchor rule
+	// (anchor.go) and the facts' program: its executable path, else the
+	// kernel's name for it, "" when no live process of this boot is that
+	// token's. Nil is access.ProgramOf.
+	Programs func(access.ProcessToken) string
 	// Now is the clock; nil means time.Now.
 	Now    func() time.Time
 	Logger *slog.Logger
@@ -93,6 +99,9 @@ func New(cfg Config) *Service {
 	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
+	}
+	if cfg.Programs == nil {
+		cfg.Programs = access.ProgramOf
 	}
 	return &Service{cfg: cfg, pending: map[string]*pendingEnroll{}}
 }

@@ -160,7 +160,7 @@ func (s *Server) dialogMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.Tool
 		}
 		out := *res
 		out.Content = slices.Clone(res.Content)
-		out.Content[0] = mcp.NewTextContent(refusalAfterDialog(req.Params.Name, first.Text, t, end))
+		out.Content[0] = mcp.NewTextContent(refusalAfterDialog(req.Params.Name, first.Text, t, end, callWays(ctx, s.cfg.Approvals.Ways(ctx, t.ID))))
 		return &out, err
 	}
 }
@@ -237,7 +237,13 @@ func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (d
 		s.logger.Debug("access dialog: facts", "request", t.Short, "error", err)
 		return dialogEnd{}, false
 	}
-	res, err := s.mcp.RequestElicitation(dctx, formElicitation(facts, methods, stopAt))
+	capped, err := s.cfg.Approvals.LeaseLength(approval.ForSession)
+	if err != nil {
+		s.logger.Debug("access dialog: lease cap", "request", t.Short, "error", err)
+		return dialogEnd{}, false
+	}
+	shown := dialogShown{stopAt: stopAt, capped: capped, ways: s.cfg.Approvals.Ways(ctx, t.ID)}
+	res, err := s.mcp.RequestElicitation(dctx, formElicitation(facts, methods, shown))
 	if err != nil {
 		if dctx.Err() == nil {
 			// The client did not take it: nothing was shown.
@@ -333,6 +339,13 @@ func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSess
 	}
 	msg := "Seamless access request " + t.Short + ": approve or deny " + plain(t.Project) +
 		" with your passkey on the page this opens. Opening it grants nothing by itself."
+	if f, err := s.cfg.Approvals.Facts(ctx, t.ID); err == nil {
+		// What is asked first, as in the form (dialogLead); the page shows
+		// every fact and asks how long.
+		msg = plain(askerName(f)) + " asks for " + plain(accessPhrase(f)) + "; " + warningCount(len(f.Warnings)) +
+			". Approve or deny it with your passkey on the page this opens, which shows the request (" + plain(f.Short) +
+			") in full. Opening it grants nothing by itself."
+	}
 	res, err := s.mcp.RequestURLElicitation(ctx, session, elicitID, page, msg)
 	if err != nil {
 		if ctx.Err() == nil {
@@ -525,6 +538,37 @@ func (s *Server) dialogMethods(ctx context.Context, id string, form, urlMode boo
 	return methods, page
 }
 
+// callWays are the approval paths a remedy in this call may offer the owner
+// for request id: the daemon's (ways, from Approvals.Ways or Grants.Ways),
+// with Touch ID only when this connection's client can show the approval
+// dialog that carries it -- a form-capable client on the peer_auth socket.
+// Elsewhere Touch ID is no way in for this call, and the text says nothing
+// of it.
+func callWays(ctx context.Context, ways access.Ways) access.Ways {
+	if ways.TouchID && !formDialogCapable(ctx) {
+		ways.TouchID = false
+	}
+	return ways
+}
+
+// formDialogCapable reports whether the call in ctx could show the approval
+// dialog's form: it came over the peer_auth socket from a client that
+// declared form elicitation.
+func formDialogCapable(ctx context.Context) bool {
+	if !access.PeerAuthenticated(ctx) {
+		return false
+	}
+	session := mcpserver.ClientSessionFromContext(ctx)
+	if session == nil {
+		return false
+	}
+	if _, ok := session.(mcpserver.SessionWithElicitation); !ok {
+		return false
+	}
+	form, _ := clientElicitation(session)
+	return form
+}
+
 // webPage reports whether p is an absolute http(s) URL.
 func webPage(p string) bool {
 	u, err := url.Parse(p)
@@ -555,14 +599,23 @@ func titles(values []string, words map[string]string) []string {
 	return out
 }
 
+// dialogShown is what a dialog says beside the request's facts: when it
+// stops waiting, how long "until the session ends" can last (the lease cap),
+// and the approval paths the daemon offers besides the dialog.
+type dialogShown struct {
+	stopAt time.Time
+	capped time.Duration
+	ways   access.Ways
+}
+
 // formElicitation is the dialog: the daemon's facts about the request, the
 // warnings first, the agent's reason quoted and labeled as its own; and two
 // fields, how long and with which proof.
-func formElicitation(f approval.Facts, methods []string, stopAt time.Time) mcp.ElicitationRequest {
+func formElicitation(f approval.Facts, methods []string, shown dialogShown) mcp.ElicitationRequest {
 	return mcp.ElicitationRequest{
 		Request: mcp.Request{Method: string(mcp.MethodElicitationCreate)},
 		Params: mcp.ElicitationParams{
-			Message: dialogMessage(f, stopAt),
+			Message: dialogMessage(f, shown),
 			RequestedSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -600,12 +653,16 @@ func dialogChoice(content any, methods []string) (duration, method string, ok bo
 	return duration, method, slices.Contains(approval.Durations, duration) && slices.Contains(methods, method)
 }
 
-// dialogMessage renders the request's facts for the dialog. Every value is
-// stripped of control and format characters (bidi overrides and isolates
-// among them), so nothing can reorder or hide what the owner reads.
-func dialogMessage(f approval.Facts, stopAt time.Time) string {
+// dialogMessage renders the request's facts for the dialog. Its first line
+// is one sentence that says what is asked -- who, which access to which
+// project, for how long, and how many warnings -- because Claude Code
+// collapses a dialog to its first line. The warnings follow, before every
+// other fact. Every value is stripped of control and format characters (bidi
+// overrides and isolates among them), so nothing can reorder or hide what the
+// owner reads.
+func dialogMessage(f approval.Facts, shown dialogShown) string {
 	var b strings.Builder
-	b.WriteString("Seamless access request " + plain(f.Short) + "\n")
+	b.WriteString(dialogLead(f, shown.capped) + "\n")
 	if len(f.Warnings) > 0 {
 		b.WriteString("\nWarnings:\n")
 		for _, w := range f.Warnings {
@@ -624,26 +681,128 @@ func dialogMessage(f approval.Facts, stopAt time.Time) string {
 		line("Project", f.Project+" ("+f.Isolation+", locked)")
 	}
 	line("Access", f.Access)
-	if f.Session != "" {
-		line("Session", f.Session+" ("+f.SessionID+")")
-	}
+	line("Session", f.Session)
 	line("Repository", f.Repo)
 	line("Working directory", f.CWD)
 	line("Model", f.Model)
-	agent := fmt.Sprintf("pid %d", f.PID)
-	if f.Program != "" {
-		agent += ", " + f.Program
+	line("Agent process", agentProcessName(f))
+	if strings.ContainsAny(f.Program, `/\`) {
+		// The full path, so a program that only borrows an agent's name
+		// shows where it really runs from.
+		line("Program", f.Program)
 	}
-	line("Agent process", agent)
-	line("Request", f.Short+" ("+f.ID+"), "+f.Kind)
-	line("This dialog stops waiting at", access.Clock(stopAt))
+	line("Request", f.Short+", "+requestKindWords(f.Kind))
+	line("This dialog stops waiting at", access.Clock(shown.stopAt))
 	line("The request expires at", access.Clock(f.ExpiresAt))
 	if reason := plain(f.Reason); reason != "" {
 		b.WriteString("\nThe agent's reason, in its own words (Seamless did not check it):\n\"" + reason + "\"\n")
 	}
+	pending := "`seam approve " + plain(f.Short) + "` in your own terminal"
+	if shown.ways.Page != "" {
+		pending += ", or a passkey at " + plain(shown.ways.Page)
+	}
 	b.WriteString("\nAccepting here grants nothing by itself: the approval needs the proof you choose below. " +
-		"Declining leaves the request pending for `seam approve " + plain(f.Short) + "` or the console.")
+		"Declining leaves the request pending for " + pending + ".")
 	return b.String()
+}
+
+// dialogLead is the dialog's first line: "Claude Code 2.1.319 asks for
+// read-write access to demo-vault (confidential, locked) until its session
+// ends (8 hours at most) unless you pick less below; 2 warnings." The
+// duration is the form's default, "until the session ends", which the lease
+// cap bounds; a request no session names has nothing to end it sooner.
+func dialogLead(f approval.Facts, capped time.Duration) string {
+	asks := "asks for"
+	if f.Kind == store.AccessKindRefresh {
+		asks = "asks again for"
+	}
+	long := "until its session ends (" + spanWords(capped) + " at most)"
+	if f.SessionID == "" {
+		long = "for " + spanWords(capped)
+	}
+	return plain(askerName(f)) + " " + asks + " " + plain(accessPhrase(f)) + " " + long + " unless you pick less below; " +
+		warningCount(len(f.Warnings)) + "."
+}
+
+// accessPhrase is the access a request asks for, and where: "read-write
+// access to demo-vault (confidential, locked)".
+func accessPhrase(f approval.Facts) string {
+	if f.Kind == store.AccessKindGrant {
+		return f.Access + " access to " + f.Project + " (" + f.Isolation + ") from project " + f.From
+	}
+	return f.Access + " access to " + f.Project + " (" + f.Isolation + ", locked)"
+}
+
+// warningCount counts the warnings for the lead: "no warnings", "1
+// warning", "2 warnings".
+func warningCount(n int) string {
+	switch {
+	case n == 1:
+		return "1 warning"
+	case n > 1:
+		return fmt.Sprintf("%d warnings", n)
+	}
+	return "no warnings"
+}
+
+// askerName names the asking process for a person: its agent's name, else
+// its program's base name, else its pid; with none of them, its session.
+func askerName(f approval.Facts) string {
+	if n := agentProcessName(f); n != "" {
+		return n
+	}
+	if f.Session != "" {
+		return "Session " + f.Session
+	}
+	return "An agent"
+}
+
+// agentProcessName is the asking process as the facts name it: the agent's
+// name (Facts.Agent), else the program's base name, and the pid only when no
+// name is known.
+func agentProcessName(f approval.Facts) string {
+	switch {
+	case f.Agent != "":
+		return f.Agent
+	case plain(f.Program) != "":
+		p := plain(f.Program)
+		if i := strings.LastIndexAny(p, `/\`); i >= 0 && i < len(p)-1 {
+			p = p[i+1:]
+		}
+		return p
+	case f.PID > 0:
+		return fmt.Sprintf("pid %d", f.PID)
+	}
+	return ""
+}
+
+// requestKindWords says what kind of request it is, for the Request line.
+func requestKindWords(kind string) string {
+	switch kind {
+	case store.AccessKindRefresh:
+		return "a refresh of the lease this agent holds"
+	case store.AccessKindGrant:
+		return "a read request"
+	}
+	return "a new request"
+}
+
+// spanWords renders a lease length for a person: "8 hours", "1 hour", "90
+// minutes".
+func spanWords(d time.Duration) string {
+	switch {
+	case d >= time.Hour && d%time.Hour == 0:
+		if h := int(d / time.Hour); h != 1 {
+			return fmt.Sprintf("%d hours", h)
+		}
+		return "1 hour"
+	case d >= time.Minute:
+		if m := int(d / time.Minute); m != 1 {
+			return fmt.Sprintf("%d minutes", m)
+		}
+		return "1 minute"
+	}
+	return d.String()
 }
 
 // plain strips control and format characters from a value shown to the owner:
@@ -663,8 +822,9 @@ func plain(v string) string {
 
 // refusalAfterDialog is a refused call's text once its dialog ended: the
 // rule, then the remedy as the dialog left it. text is the refusal as the
-// call made it (tool-prefixed, its rule and its remedy on two lines).
-func refusalAfterDialog(tool, text string, t dialogTarget, end dialogEnd) string {
+// call made it (tool-prefixed, its rule and its remedy on two lines); ways
+// are the approval paths still open to the owner while it is pending.
+func refusalAfterDialog(tool, text string, t dialogTarget, end dialogEnd, ways access.Ways) string {
 	rule, _, _ := strings.Cut(text, "\nRemedy: ")
 	what := t.what()
 	switch end.state {
@@ -681,7 +841,7 @@ func refusalAfterDialog(tool, text string, t dialogTarget, end dialogEnd) string
 		return rule + "\nRemedy: " + what + " expired before the owner decided; the next call that needs " +
 			t.Project + " files a new one."
 	}
-	pending := what + " stays pending for the owner: `seam approve " + t.Short + "` in their own terminal, or the console."
+	pending := what + " stays pending for the owner: " + ways.StillPending(t.Short) + "."
 	switch end.answer {
 	case answerDeclined, answerCancelled:
 		return text + " The approval dialog was " + end.answer + "; " + pending

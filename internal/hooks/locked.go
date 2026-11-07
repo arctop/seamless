@@ -9,6 +9,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -41,13 +42,21 @@ func (h *Handler) lockedStart(ctx context.Context, w http.ResponseWriter, client
 			Project: project, View: v, SessionID: sessionID, AgentProcess: p.Identity.AgentProcess,
 			Host: host, Via: "refusal",
 		})
-		if err != nil {
+		var anchor *approval.AnchorError
+		switch {
+		case errors.As(err, &anchor):
+			// A process no approval may name: the notice says why nothing
+			// was filed, and what to do instead.
+			h.logger.Debug("hooks: access request not filed", "project", project, "error", err)
+			req = access.LockRequest{Unfiled: anchor.Rule(), UnfiledRemedy: anchor.Remedy()}
+		case err != nil:
 			// No request (the TCP key, no verified process): the notice
 			// carries the lock's plain remedy instead.
 			h.logger.Debug("hooks: access request not filed", "project", project, "error", err)
-		} else {
+		default:
+			ways := h.approvals.Ways(ctx, a.ID)
 			req = access.LockRequest{ID: a.ID, Short: approval.ShortID(a.ID),
-				Refresh: a.Kind == store.AccessKindRefresh, Page: h.approvals.Page(a.ID)}
+				Refresh: a.Kind == store.AccessKindRefresh, Page: ways.Page, TouchID: ways.TouchID}
 		}
 	}
 	notice := lockedNotice(project, v.RefusalFor(project, req), sessionID != "")

@@ -416,12 +416,15 @@ Requested R-7F3K for example-finance (request). The owner approves it with: seam
 or with a passkey: https://seamless.example.org/console/access/01K...
 ```
 
-The second line appears only when the daemon has a passkey page for the
-request. Asking again while a request is pending answers with that same
-request; a request from an agent that already holds a lease is a `refresh`.
-`--json` prints the console's answer as received ([JSON output](#json-output)).
-The console's refusal is printed as it is: the project is not locked, or the
-connection has no agent process the daemon could verify.
+The second line appears only when a passkey can approve the request there:
+passkeys are set up and at least one is enrolled. Asking again while a request
+is pending answers with that same request; a request from an agent that
+already holds a lease is a `refresh`. `--json` prints the console's answer as
+received ([JSON output](#json-output)). The console's refusal is printed as it
+is: the project is not locked, the connection has no agent process the daemon
+could verify, or the process asking is not an agent's (a shell, a terminal, a
+multiplexer such as tmux, or a login process), so nothing was filed - run it
+from the agent's own shell.
 
 ### seam approve {#seam_approve}
 
@@ -438,7 +441,7 @@ refuses otherwise: an agent cannot use it. `<request>` is the short id
 takes the only request, or asks which one by number or short id. With nothing
 waiting it prints `Nothing is waiting.`
 
-It then shows the request's facts - the daemon's warnings first, each on its
+It then shows the request's facts - the daemon's warnings first, most serious first, each on its
 own line behind `!`, then the project with its isolation and access, the
 asking program with its pid and uid, the session and model, the working
 directory, the agent's reason (quoted, and labeled as the agent's own words),

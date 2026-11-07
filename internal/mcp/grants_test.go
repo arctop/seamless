@@ -376,7 +376,13 @@ func TestGrants_PeerTierDaemonProof(t *testing.T) {
 	})
 	require.NoError(t, err)
 	rec := events.NewRecorder(db)
-	svc := approval.New(approval.Config{DB: db, Events: rec, LeaseCap: 8 * time.Hour, Now: clock})
+	svc := approval.New(approval.Config{DB: db, Events: rec, LeaseCap: 8 * time.Hour, Now: clock,
+		Programs: func(t access.ProcessToken) string {
+			if t == lkTmux {
+				return "/opt/homebrew/Cellar/tmux/3.8/bin/tmux"
+			}
+			return ""
+		}})
 	grants := approval.NewGrants(approval.GrantsConfig{Approvals: svc})
 	ret := retrieve.New(db, nil, config.Budgets{MaxBriefingTokens: 1500, RecallBudgetTokens: 1000}, nil)
 	srv := mcpserver.New(mcpserver.Config{DB: db, Files: mgr, Retrieve: ret, Events: rec, APIKey: testKey, LocalHost: lkHost,
@@ -466,6 +472,23 @@ func TestGrants_PeerTierDaemonProof(t *testing.T) {
 	leases, err := store.LiveAccessLeases(ctx, db, now)
 	require.NoError(t, err)
 	require.Empty(t, leases)
+
+	// A tmux pane's call -- its session stamped there by hand -- files no
+	// read request (the anchor rule): the fence's refusal says why, and what
+	// to do instead.
+	before, err := grants.Pending(ctx)
+	require.NoError(t, err)
+	stamp(gOps, "cc/pane", lkTmux)
+	pane := dial(serve(chainView(lkPane, lkTmux)), lkTmux)
+	text, isErr = call(pane, "notes_read", read)
+	require.True(t, isErr)
+	ls := strings.Split(text, "\n")
+	require.Len(t, ls, 2, text)
+	require.Equal(t, "notes_read: "+offRefusal+"; "+strings.Replace(tmuxRule, "no access request", "no read request", 1), ls[0])
+	require.Equal(t, anchorCure, ls[1])
+	after, err := grants.Pending(ctx)
+	require.NoError(t, err)
+	require.Len(t, after, len(before), "nothing was filed")
 }
 
 var lkOther = access.ProcessToken{PID: 500, Version: 5000, Boot: lkBoot}

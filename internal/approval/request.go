@@ -103,6 +103,10 @@ func ShortID(id string) string {
 
 // Facts is everything the owner is shown about one request -- the daemon's
 // facts, never the agent's, except Reason, which is labeled as the agent's.
+// Agent is the readable name of the agent Program is ("Claude Code 2.1.319",
+// "Codex"), derived from it by the anchor rule's classifier (anchor.go); ""
+// for any other program, and a surface then shows the program's base name,
+// or the pid when there is none.
 type Facts struct {
 	ID          string    `json:"id"`
 	Short       string    `json:"short_id"`
@@ -111,6 +115,7 @@ type Facts struct {
 	Access      string    `json:"access"`
 	Kind        string    `json:"kind"`
 	Program     string    `json:"program"`
+	Agent       string    `json:"agent,omitempty"`
 	PID         int32     `json:"pid"`
 	UID         uint32    `json:"uid"`
 	Session     string    `json:"session"`
@@ -136,7 +141,11 @@ type Warning struct {
 	Text string `json:"text"`
 }
 
-// Warning codes.
+// Warning codes. WarnAnchorIsShell is a request whose anchor is a broad
+// ancestor (a shell, multiplexer, terminal, login process: anchor.go).
+// Filing refuses such an anchor and the approve core never approves one, so
+// it is shown only on a request an older daemon filed: it says why the
+// approval will be refused. The code is kept for the surfaces that know it.
 const (
 	WarnCWDOutside     = "cwd_outside_repo"
 	WarnTainted        = "session_tainted"
@@ -145,6 +154,38 @@ const (
 	WarnNoSession      = "no_session"
 	WarnRefreshOfLease = "refresh"
 )
+
+// WarningOrder is the order the facts serve their warnings in, most serious
+// first: a surface that shows only the first few (the Touch ID prompt shows
+// three) shows these. Reach comes first, then whether the ask is the agent's
+// own, then how much is known about the asker:
+//
+//   - anchor_is_shell: a lease on that process would cover every program it
+//     started, other agent sessions included (and is refused);
+//   - copy_into: an approved read lets the project's content leave, into
+//     another project's memories;
+//   - session_tainted: the session read text from outside, so the request and
+//     its reason may be an injection rather than the agent's own;
+//   - other_pending: the same agent asks for another project too, so
+//     approving both widens its reach further;
+//   - cwd_outside_repo: the session works outside the project's repository,
+//     so the work may not need the project at all;
+//   - no_session: no session names the agent, so its cwd and model are
+//     unknown;
+//   - refresh: the agent holds a lease on the project already; approving
+//     replaces it and adds no reach.
+var WarningOrder = []string{
+	WarnAnchorIsShell, WarnCopyInto, WarnTainted, WarnOtherPending, WarnCWDOutside, WarnNoSession, WarnRefreshOfLease,
+}
+
+// warningRank is a warning's place in WarningOrder; a code it does not list
+// sorts last.
+func warningRank(code string) int {
+	if i := slices.Index(WarningOrder, code); i >= 0 {
+		return i
+	}
+	return len(WarningOrder)
+}
 
 // digestOf is the SHA-256 of the facts' canonical JSON, the digest blanked.
 func digestOf(f Facts) string {
@@ -194,11 +235,12 @@ func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApp
 	if !in.View.Locked(in.Project) && !leased {
 		return store.AccessApproval{}, fmt.Errorf("%s: %w: %s", op, ErrNotLocked, in.Project)
 	}
-	anchor, sessionID, sess, err := s.resolveAnchor(ctx, chain, in.SessionID, in.AgentProcess, in.Host)
+	got, err := s.anchorFor(ctx, chain, in.SessionID, in.AgentProcess, in.Host)
 	if err != nil {
 		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
 	}
-	in.SessionID = sessionID
+	anchor, sess := got.token, got.sess
+	in.SessionID = got.sessionID
 
 	pending, ok, err := store.PendingAccessApproval(ctx, s.cfg.DB, anchor.Key(), in.Project, now)
 	if err != nil {
@@ -219,12 +261,10 @@ func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApp
 		return store.AccessApproval{}, fmt.Errorf("%s: %w: the reason is limited to %d characters", op,
 			store.ErrInvalidAccessRequest, store.MaxAccessReasonRunes)
 	}
-	// The program path is display only; a process another account owns may
-	// not reveal it, and the facts then show the pid alone.
-	program, err := access.ProgramPath(anchor.PID)
-	if err != nil {
-		program = ""
-	}
+	// The program is the kernel's path for the anchor, else its name for it
+	// (another account's path may be unreadable); the facts show the pid
+	// alone when neither is known.
+	program := got.program
 	var cwd, model string
 	if in.SessionID != "" {
 		if row, ok, err := store.SessionByID(ctx, s.cfg.DB, in.SessionID); err == nil && ok {
@@ -249,13 +289,41 @@ func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApp
 	return a, nil
 }
 
+// resolvedAnchor is a request's anchor as filing settles it: the process,
+// the session it settled on ("" for none) and that session's process row,
+// and the program the kernel names for the process.
+type resolvedAnchor struct {
+	token     access.ProcessToken
+	sessionID string
+	sess      store.SessionProcess
+	program   string
+}
+
+// anchorFor resolves a request's anchor (resolveAnchor) and applies the
+// anchor rule to it (anchor.go): an anchor that is not an agent's is an
+// *AnchorError, and nothing is filed.
+func (s *Service) anchorFor(ctx context.Context, chain []access.ProcessToken, sessionID, agentProcess, host string) (resolvedAnchor, error) {
+	i, sessionID, sess, err := s.resolveAnchor(ctx, chain, sessionID, agentProcess, host)
+	if err != nil {
+		return resolvedAnchor{}, err
+	}
+	tok := chain[i]
+	stamped := sess.AgentProcess != "" && sess.AgentProcess == tok.AgentID()
+	program, err := judgeAnchor(chain, i, s.cfg.Programs, stamped)
+	if err != nil {
+		return resolvedAnchor{}, err
+	}
+	return resolvedAnchor{token: tok, sessionID: sessionID, sess: sess, program: program}, nil
+}
+
 // resolveAnchor finds the agent process a request is anchored to: the one
 // the session is stamped with, else the one the request claims, and only when
 // it is a process of the connection's kernel-verified chain. With no session
 // named, the session the agent's SessionStart hook stamped with the claimed
-// process stands in, when exactly one is live. It returns the anchor, the
-// session it settled on ("" for none) and that session's process row.
-func (s *Service) resolveAnchor(ctx context.Context, chain []access.ProcessToken, sessionID, agentProcess, host string) (access.ProcessToken, string, store.SessionProcess, error) {
+// process stands in, when exactly one is live. It returns the anchor's index
+// in the chain, the session it settled on ("" for none) and that session's
+// process row.
+func (s *Service) resolveAnchor(ctx context.Context, chain []access.ProcessToken, sessionID, agentProcess, host string) (int, string, store.SessionProcess, error) {
 	if sessionID == "" && agentProcess != "" {
 		// No binding: the session the agent's SessionStart hook stamped with
 		// this process, when exactly one is live.
@@ -268,7 +336,7 @@ func (s *Service) resolveAnchor(ctx context.Context, chain []access.ProcessToken
 	if sessionID != "" {
 		got, err := store.SessionAgentProcesses(ctx, s.cfg.DB, []string{sessionID})
 		if err != nil {
-			return access.ProcessToken{}, "", store.SessionProcess{}, err
+			return 0, "", store.SessionProcess{}, err
 		}
 		if p, ok := got[sessionID]; ok {
 			sess = p
@@ -278,14 +346,14 @@ func (s *Service) resolveAnchor(ctx context.Context, chain []access.ProcessToken
 		}
 	}
 	if anchorID == "" {
-		return access.ProcessToken{}, "", store.SessionProcess{}, ErrNoAnchor
+		return 0, "", store.SessionProcess{}, ErrNoAnchor
 	}
-	for _, t := range chain {
+	for i, t := range chain {
 		if t.AgentID() == anchorID {
-			return t, sessionID, sess, nil
+			return i, sessionID, sess, nil
 		}
 	}
-	return access.ProcessToken{}, "", store.SessionProcess{}, ErrAnchorNotInChain
+	return 0, "", store.SessionProcess{}, ErrAnchorNotInChain
 }
 
 // repoName is the repository a cwd sits in, for display: its last element.
@@ -322,10 +390,6 @@ func (s *Service) LeaseLength(choice string) (time.Duration, error) {
 	return min(d, capped), nil
 }
 
-// shells are the programs an anchor should never be: a lease on one covers
-// every process under it.
-var shells = []string{"sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh", "nu", "tmux", "screen", "login", "sshd", "launchd", "init", "systemd"}
-
 // Facts returns what the owner is shown about request id, with its digest.
 // The warnings are computed now, so a fact that changed -- another request
 // from the same tree, a mark on the session -- changes the digest.
@@ -351,7 +415,7 @@ func (s *Service) factsOf(ctx context.Context, a store.AccessApproval) (Facts, e
 	grant := a.Kind == store.AccessKindGrant
 	f := Facts{
 		ID: a.ID, Short: ShortID(a.ID), Project: a.Project, Isolation: isoWord, Access: accessReadWrite, Kind: a.Kind,
-		Program: a.Program, PID: a.PeerPID, UID: a.PeerUID, Session: a.SessionName, SessionID: a.SessionID,
+		Program: a.Program, Agent: agentName(a.Program), PID: a.PeerPID, UID: a.PeerUID, Session: a.SessionName, SessionID: a.SessionID,
 		CWD: a.CWD, Repo: a.Repo, Model: a.Model, Reason: a.Reason, RequestedAt: a.RequestedAt, ExpiresAt: a.ExpiresAt,
 	}
 	// A read grant opens the project read-only to the asking project, and its
@@ -367,8 +431,9 @@ func (s *Service) factsOf(ctx context.Context, a store.AccessApproval) (Facts, e
 	if a.Kind == store.AccessKindRefresh {
 		warn(WarnRefreshOfLease, "this session already holds a lease on the project; approving replaces it")
 	}
-	if base := strings.TrimPrefix(filepath.Base(a.Program), "-"); a.Program != "" && slices.Contains(shells, base) {
-		warn(WarnAnchorIsShell, "the process asking is "+base+", not an agent: a lease on it covers every program it started")
+	if what, broad := storedBroad(a.PeerPID, a.Program); broad {
+		warn(WarnAnchorIsShell, "the process asking is "+what+", not an agent: a lease on it would cover every program "+
+			"it started, so Seamless refuses to approve it")
 	}
 	if a.SessionID == "" {
 		warn(WarnNoSession, "no session named this agent; its cwd and model are unknown")
@@ -405,6 +470,7 @@ func (s *Service) factsOf(ctx context.Context, a store.AccessApproval) (Facts, e
 			break
 		}
 	}
+	slices.SortStableFunc(f.Warnings, func(x, y Warning) int { return warningRank(x.Code) - warningRank(y.Code) })
 	f.Digest = digestOf(f)
 	return f, nil
 }
@@ -514,6 +580,11 @@ func (s *Service) Approve(ctx context.Context, d Decision) (store.AccessLease, e
 	}
 	if a.Status != store.ApprovalPending {
 		return store.AccessLease{}, fmt.Errorf("%s: %w: %s is %s", op, store.ErrApprovalNotPending, ShortID(a.ID), a.Status)
+	}
+	// The anchor rule, again: a request an older daemon filed may name a
+	// broad ancestor, and no proof makes a lease on one safe.
+	if err := storedAnchorRefusal(a.PeerPID, a.Program); err != nil {
+		return store.AccessLease{}, fmt.Errorf("%s: %s: %w", op, ShortID(a.ID), err)
 	}
 	facts, err := s.factsOf(ctx, a)
 	if err != nil {
@@ -647,6 +718,30 @@ func (s *Service) Page(id string) string {
 		return ""
 	}
 	return s.cfg.Origins[0] + "/console/access/" + id
+}
+
+// Ways returns the approval paths this daemon offers the owner for request
+// id, as the remedies name them (access.Ways): Touch ID while a Touch ID key
+// is enrolled, and the request's passkey page while passkeys are set up and
+// a passkey is enrolled -- a page no passkey can sign is no way in. With id
+// "" (no request yet) Passkey says whether a page would be one. The owner's
+// own terminal is always a way and is not part of it. A lookup that fails
+// leaves its path out: a remedy may offer less, never a path that is not
+// there.
+func (s *Service) Ways(ctx context.Context, id string) access.Ways {
+	var w access.Ways
+	if keys, err := store.ApproverCredentials(ctx, s.cfg.DB, store.ApproverTouchID); err == nil && len(keys) > 0 {
+		w.TouchID = true
+	}
+	if s.PasskeysOn() && len(s.cfg.Origins) > 0 {
+		if keys, err := store.ApproverCredentials(ctx, s.cfg.DB, store.ApproverPasskey); err == nil && len(keys) > 0 {
+			w.Passkey = true
+			if id != "" {
+				w.Page = s.Page(id)
+			}
+		}
+	}
+	return w
 }
 
 func (s *Service) record(ctx context.Context, e core.Event) {

@@ -21,6 +21,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -35,15 +36,18 @@ import (
 )
 
 // Approvals is what the MCP server needs of the daemon's approval service
-// (*approval.Service). Facts and PasskeysOn serve the in-session approval
-// dialog (elicit.go): what it shows the owner, and whether it may offer a
-// passkey.
+// (*approval.Service). Facts, PasskeysOn and LeaseLength serve the
+// in-session approval dialog (elicit.go): what it shows the owner, whether it
+// may offer a passkey, and how long "until the session ends" can last. Ways
+// is what every remedy offers: only the approval paths this daemon has.
 type Approvals interface {
 	Request(ctx context.Context, in approval.RequestInput) (store.AccessApproval, error)
 	Page(id string) string
+	Ways(ctx context.Context, id string) access.Ways
 	RevokeSession(ctx context.Context, sessionID string) (int64, error)
 	Facts(ctx context.Context, id string) (approval.Facts, error)
 	PasskeysOn() bool
+	LeaseLength(choice string) (time.Duration, error)
 }
 
 // now is the clock the lease notices and the ended wording read.
@@ -82,13 +86,19 @@ func (s *Server) lockRequester(ctx context.Context, project string) (access.Lock
 	a, err := s.fileAccessRequest(ctx, project, "", "refusal")
 	if err != nil {
 		s.logger.Debug("access request not filed", "project", project, "error", err)
+		// A process no approval may name (approval.AnchorError): the
+		// refusal says why nothing was filed, and what to do instead.
+		if unfiled, ok := unfiledRequest(err); ok {
+			return unfiled, nil
+		}
 		return access.LockRequest{}, err
 	}
 	// The call's refusal will name this request: the approval dialog may
 	// offer it (elicit.go).
 	noteDialogTarget(ctx, dialogTarget{ID: a.ID, Short: approval.ShortID(a.ID), Project: a.Project})
+	ways := callWays(ctx, s.cfg.Approvals.Ways(ctx, a.ID))
 	out := access.LockRequest{
-		ID: a.ID, Short: approval.ShortID(a.ID), Refresh: a.Kind == store.AccessKindRefresh, Page: s.cfg.Approvals.Page(a.ID),
+		ID: a.ID, Short: approval.ShortID(a.ID), Refresh: a.Kind == store.AccessKindRefresh, Page: ways.Page, TouchID: ways.TouchID,
 	}
 	if !out.Refresh {
 		// A lease this tree held on the project that has since ended: the
@@ -123,6 +133,16 @@ func (s *Server) fileAccessRequest(ctx context.Context, project, reason, via str
 		Project: project, View: v, SessionID: sessionID, AgentProcess: callerAgentProcess(ctx),
 		Host: s.callerHost(ctx), Reason: reason, Via: via,
 	})
+}
+
+// unfiledRequest is the lock refusal's account of an anchor the approval
+// service refused to file for (approval.AnchorError): why, and what to do.
+func unfiledRequest(err error) (access.LockRequest, bool) {
+	var anchor *approval.AnchorError
+	if !errors.As(err, &anchor) {
+		return access.LockRequest{}, false
+	}
+	return access.LockRequest{Unfiled: anchor.Rule(), UnfiledRemedy: anchor.Remedy()}, true
 }
 
 // chainKeys are the lease keys of the view's kernel-verified process chain.

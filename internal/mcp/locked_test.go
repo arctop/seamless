@@ -52,6 +52,19 @@ var (
 	lkShortID  = regexp.MustCompile(`R-[0-9A-Z]{4}`)
 )
 
+// lkClaude is the program the kernel names for lkAgent: Claude Code's native
+// install, by its path.
+const lkClaude = "/home/owner/.local/share/claude/versions/2.1.319"
+
+// lkPrograms is the rig's kernel: it names the agent process, and no other
+// (a token the kernel no longer names is filed as before).
+func lkPrograms(t access.ProcessToken) string {
+	if t == lkAgent {
+		return lkClaude
+	}
+	return ""
+}
+
 // lockRig is one daemon's MCP server with a locked project, a fake clock
 // shared by the server and the approval service, and transports that carry
 // the View cmd/seamlessd's peerHandler would build.
@@ -95,7 +108,8 @@ func newLockRig(t *testing.T) *lockRig {
 		now: time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)}
 	r.ret = retrieve.New(db, nil, config.Budgets{MaxBriefingTokens: 1500, RecallBudgetTokens: 1000}, nil)
 	r.ret.SetBodyReader(mgr.Store())
-	r.svc = approval.New(approval.Config{DB: db, Events: r.rec, Host: lkHost, LeaseCap: 8 * time.Hour, Now: r.clock})
+	r.svc = approval.New(approval.Config{DB: db, Events: r.rec, Host: lkHost, LeaseCap: 8 * time.Hour, Now: r.clock,
+		Programs: lkPrograms})
 	r.srv = r.server(r.svc)
 	return r
 }

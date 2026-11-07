@@ -48,6 +48,7 @@ import (
 type Grants interface {
 	RequestGrant(ctx context.Context, in approval.GrantInput) (store.AccessApproval, error)
 	Page(id string) string
+	Ways(ctx context.Context, id string) access.Ways
 	RevokeSession(ctx context.Context, sessionID string) (int64, error)
 	Advisory() bool
 }
@@ -153,6 +154,13 @@ func (s *Server) grantRequestRefusal(ctx context.Context, err error, target stri
 	})
 	if rerr != nil {
 		s.logger.Debug("read grant request not filed", "project", target, "error", rerr)
+		// A process no approval may name (approval.AnchorError): the fence's
+		// refusal, then why nothing was filed and what to do instead.
+		var anchor *approval.AnchorError
+		if errors.As(rerr, &anchor) {
+			return &fenceRefusal{reason: f.reason, err: fmt.Errorf("%w; %s.\nRemedy: %s", f.err,
+				strings.Replace(anchor.Rule(), "no access request", "no read request", 1), anchor.Remedy())}
+		}
 		return err
 	}
 	// The refusal names this request: the approval dialog may offer it
@@ -162,19 +170,18 @@ func (s *Server) grantRequestRefusal(ctx context.Context, err error, target stri
 	if iso, ierr := store.IsolationOf(ctx, s.cfg.DB, b.project); ierr == nil && iso == core.IsolationOpen {
 		confines = true
 	}
-	return &fenceRefusal{reason: f.reason, err: s.grantRefusal(f.err, a, confines)}
+	return &fenceRefusal{reason: f.reason, err: s.grantRefusal(f.err, a, confines, callWays(ctx, s.cfg.Grants.Ways(ctx, a.ID)))}
 }
 
 // grantRefusal is the fence's refusal with its remedy line: the request, how
-// the owner approves it, and what an approval brings with it.
-func (s *Server) grantRefusal(rule error, a store.AccessApproval, confines bool) error {
+// the owner approves it (only the paths ways holds), and what an approval
+// brings with it.
+func (s *Server) grantRefusal(rule error, a store.AccessApproval, confines bool, ways access.Ways) error {
 	short := approval.ShortID(a.ID)
-	how := fmt.Sprintf("the owner approves it in their own terminal with `seam approve %s`", short)
-	switch page := s.cfg.Grants.Page(a.ID); {
-	case page != "":
-		how += ", or with a passkey at " + page
-	case s.cfg.Grants.Advisory():
-		how += ", or with Approve on the console's Access requests page"
+	how := ways.OwnerApproves(short)
+	if s.cfg.Grants.Advisory() {
+		how = fmt.Sprintf("the owner approves it in their own terminal with `seam approve %s`, or with Approve on the "+
+			"console's Access requests page", short)
 	}
 	brings := "An approved read is read-only, and " + approval.CopyIntoLine(a.Project, a.FromProject) + " and nowhere else."
 	if confines {

@@ -90,6 +90,7 @@ type accessCore interface {
 	Deny(ctx context.Context, id, by string) error
 	LeaseLength(choice string) (time.Duration, error)
 	Page(id string) string
+	Ways(ctx context.Context, id string) access.Ways
 }
 
 // core is the request side this console serves: the lock's approval service
@@ -343,7 +344,11 @@ func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		msg := err.Error()
+		var anchor *approval.AnchorError
 		switch {
+		case errors.As(err, &anchor):
+			// Its own two lines, the rule and the remedy: no request exists.
+			msg = anchor.Error()
 		case errors.Is(err, approval.ErrNoProcess):
 			msg = "this connection has no verified process: request access from an agent session whose seam dials the peer_auth socket"
 		case errors.Is(err, approval.ErrNoAnchor), errors.Is(err, approval.ErrAnchorNotInChain):
@@ -356,8 +361,10 @@ func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
 		return
 	}
+	// The passkey page only when a passkey can approve the request there.
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id": a.ID, "short_id": approval.ShortID(a.ID), "project": a.Project, "kind": a.Kind, "page": s.cfg.Approvals.Page(a.ID),
+		"id": a.ID, "short_id": approval.ShortID(a.ID), "project": a.Project, "kind": a.Kind,
+		"page": s.cfg.Approvals.Ways(r.Context(), a.ID).Page,
 	})
 }
 
@@ -521,6 +528,9 @@ func (s *Service) accessError(w http.ResponseWriter, r *http.Request, err error)
 		msg = "a sealed project is never granted, and never granted to: deny the request"
 	case errors.Is(err, approval.ErrNotConfidential):
 		msg = "that project is no longer confidential: nothing to grant"
+	case errors.Is(err, approval.ErrBroadAnchor):
+		msg = "this request names a process that is not an agent (a shell, terminal, multiplexer or login process): " +
+			"approving it would open the project to every program it started, so it is never approved; deny it"
 	}
 	if msg != "" {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": msg})

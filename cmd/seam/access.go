@@ -52,6 +52,7 @@ type accessFacts struct {
 	Access      string          `json:"access"`
 	Kind        string          `json:"kind"`
 	Program     string          `json:"program"`
+	Agent       string          `json:"agent,omitempty"`
 	PID         int32           `json:"pid"`
 	UID         uint32          `json:"uid"`
 	Session     string          `json:"session"`

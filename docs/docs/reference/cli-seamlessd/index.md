@@ -650,7 +650,8 @@ id. `--for` is the lease's length: until the session ends (at most
 the facts you were shown; when they changed since (another request from the
 same agent, a mark on the session), the approval is refused and you look
 again. `--deny` closes the request; the project stays locked for that
-session.
+session. A request naming a shell, a terminal, a multiplexer or a login
+process (one an older release filed) is never approved: deny it.
 
 ## seamlessd console-open {#seamlessd_console_open}
 

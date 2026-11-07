@@ -73,7 +73,7 @@ func newDialogRig(t *testing.T, o dialogOpts) *dialogRig {
 		v, err := passkey.New(passkey.Config{RPID: "localhost", Origins: []string{dlgOrigin}})
 		require.NoError(t, err)
 		d.svc = approval.New(approval.Config{DB: r.db, Events: r.rec, Host: lkHost, LeaseCap: 8 * time.Hour, Now: r.clock,
-			Passkeys: v, Origins: []string{dlgOrigin}, UserName: "owner"})
+			Passkeys: v, Origins: []string{dlgOrigin}, UserName: "owner", Programs: lkPrograms})
 	}
 	cfg := mcpserver.Config{
 		DB: r.db, Files: r.mgr, Retrieve: r.ret, Events: r.rec, APIKey: testKey, LocalHost: lkHost,
@@ -411,13 +411,22 @@ func TestDialog_TouchIDProofApproves(t *testing.T) {
 	shown := o.dialogs()
 	require.Len(t, shown, 1)
 	msg := shown[0].Params.Message
-	require.True(t, strings.HasPrefix(msg, "Seamless access request "+short+"\n"), msg)
+	// Claude Code collapses the dialog to its first line: one sentence that
+	// says what is asked.
+	lead, _, _ := strings.Cut(msg, "\n")
+	require.Equal(t, "Claude Code 2.1.319 asks for read-write access to "+lkFin+" (confidential, locked) until its "+
+		"session ends (8 hours at most) unless you pick less below; 1 warning.", lead)
+	require.NotContains(t, lead, short, "the request's id is not the lead")
 	require.Contains(t, msg, "Project: "+lkFin+" (confidential, locked)")
-	require.Contains(t, msg, "Session: cc/fin (")
+	require.Contains(t, msg, "Session: cc/fin\n")
 	require.Contains(t, msg, "Working directory: /work/"+lkFin)
-	require.Contains(t, msg, "Request: "+short+" ("+a.ID+"), request")
+	require.Contains(t, msg, "Agent process: Claude Code 2.1.319\n")
+	require.Contains(t, msg, "Program: "+lkClaude+"\n", "the full path, so a borrowed name shows")
+	require.Contains(t, msg, "Request: "+short+", a new request\n")
+	require.NotContains(t, msg, a.ID, "no full ids")
 	require.Contains(t, msg, "the session works outside "+lkFin+"'s repository")
 	require.Less(t, strings.Index(msg, "Warnings:"), strings.Index(msg, "Project:"), "warnings come first")
+	require.True(t, strings.HasSuffix(msg, "Declining leaves the request pending for `seam approve "+short+"` in your own terminal."), msg)
 	require.NotContains(t, msg, "reason", "a refusal's request carries no reason")
 	schema, ok := shown[0].Params.RequestedSchema.(map[string]any)
 	require.True(t, ok)
@@ -452,8 +461,11 @@ func TestDialog_AcceptWithoutProofGrantsNothing(t *testing.T) {
 	require.Contains(t, ls[0], "project "+lkFin+" is locked")
 	require.True(t, strings.HasPrefix(ls[1], "Remedy: access request "+short+" is waiting"), ls[1])
 	require.Contains(t, ls[1], "The approval dialog stopped waiting at ")
+	require.Contains(t, ls[1], "-- the owner approves it with Touch ID in the approval dialog (where this agent's client "+
+		"shows one), or in their own terminal with `seam approve "+short+"`;", "Touch ID is offered: a key is enrolled")
+	require.NotContains(t, ls[1], "passkey", "no passkey is enrolled: none is offered")
 	require.True(t, strings.HasSuffix(ls[1], "without a decision; access request "+short+
-		" stays pending for the owner: `seam approve "+short+"` in their own terminal, or the console."), ls[1])
+		" stays pending for the owner: `seam approve "+short+"` in their own terminal, or Touch ID in the next approval dialog."), ls[1])
 }
 
 func TestDialog_DeclineOrCancelLeavesThePendingRequest(t *testing.T) {
@@ -712,6 +724,8 @@ func TestDialog_PasskeyPage(t *testing.T) {
 				require.Len(t, shown, 1, "the page is the dialog")
 			}
 			require.Equal(t, mcp.ElicitationModeURL, shown[len(shown)-1].Params.Mode)
+			require.True(t, strings.HasPrefix(shown[len(shown)-1].Params.Message, "Claude Code 2.1.319 asks for read-write "+
+				"access to "+lkFin+" (confidential, locked); "), "what is asked comes first: %s", shown[len(shown)-1].Params.Message)
 			require.Empty(t, o.asks, "no Touch ID ask")
 
 			leases := d.liveLeases()

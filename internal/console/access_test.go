@@ -97,10 +97,38 @@ func (f *accessFixture) file(t *testing.T) (id, short string) {
 	require.Equal(t, http.StatusOK, status, string(out["error"]))
 	require.NoError(t, json.Unmarshal(out["id"], &id))
 	require.NoError(t, json.Unmarshal(out["short_id"], &short))
+	// The passkey page only once a passkey is enrolled: a page no passkey
+	// can sign is no way in.
 	var page string
 	require.NoError(t, json.Unmarshal(out["page"], &page))
-	require.Equal(t, approverOrigin+"/console/access/"+id, page)
+	keys, err := store.ApproverCredentials(context.Background(), f.db, store.ApproverPasskey)
+	require.NoError(t, err)
+	if len(keys) == 0 {
+		require.Empty(t, page)
+	} else {
+		require.Equal(t, approverOrigin+"/console/access/"+id, page)
+	}
 	return id, short
+}
+
+// The page the request answer names is the passkey page only while a passkey
+// is enrolled.
+func TestAccess_RequestNamesThePasskeyPageOnlyWithAPasskey(t *testing.T) {
+	f := newAccessFixture(t)
+	id, _ := f.file(t)
+	ctx := context.Background()
+	require.Empty(t, f.svc.Ways(ctx, id).Page, "passkeys set up, none enrolled")
+	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverPasskey, time.Now())
+	require.NoError(t, err)
+	key, err := passkeytest.New(true)
+	require.NoError(t, err)
+	begun, err := f.svc.BeginPasskey(ctx, "key", code)
+	require.NoError(t, err)
+	created, err := key.Create(begun.Options, approverOrigin)
+	require.NoError(t, err)
+	_, err = f.svc.FinishPasskey(ctx, begun.ID, created)
+	require.NoError(t, err)
+	require.Equal(t, approverOrigin+"/console/access/"+id, f.svc.Ways(ctx, id).Page)
 }
 
 func TestAccess_OffIsNotFound(t *testing.T) {
@@ -218,4 +246,31 @@ func TestAccess_PasskeyApproveAndDeny(t *testing.T) {
 	a, err := store.AccessApprovalByID(ctx, f.db, id2)
 	require.NoError(t, err)
 	require.Equal(t, store.ApprovalDenied, a.Status)
+}
+
+// A request an older daemon filed for a broad ancestor (the tmux server) is
+// shown with its warning first, and the console's passkey approval refuses
+// it: the approve core never approves one, whatever the proof.
+func TestAccess_ApproveRefusesABroadAnchor(t *testing.T) {
+	f := newAccessFixture(t)
+	ctx := context.Background()
+	tmux := access.ProcessToken{PID: 3698, Version: 36980, Boot: accessBoot}
+	row, err := store.CreateAccessApproval(ctx, f.db, store.AccessRequest{
+		Project: "example-finance", Kind: store.AccessKindRequest, Lease: 8 * time.Hour, TTL: 15 * time.Minute,
+		PeerUID: 501, PeerPID: tmux.PID, ProcessKey: tmux.Key(), Program: "/opt/homebrew/Cellar/tmux/3.8/bin/tmux",
+	}, time.Now())
+	require.NoError(t, err)
+	facts, err := f.svc.Facts(ctx, row.ID)
+	require.NoError(t, err)
+	require.Equal(t, approval.WarnAnchorIsShell, facts.Warnings[0].Code)
+
+	req := httptest.NewRequest(http.MethodPost, "/console/access/"+row.ID+"/approve",
+		strings.NewReader(url.Values{"duration": {"1h"}, "digest": {facts.Digest}, "response": {"{}"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	status, out := f.jsonDo(t, authedReq(req))
+	require.Equal(t, http.StatusConflict, status)
+	require.Contains(t, string(out["error"]), "never approved; deny it")
+	leases, err := store.ActiveAccessLeasesFor(ctx, f.db, []string{tmux.Key()}, time.Now())
+	require.NoError(t, err)
+	require.Empty(t, leases)
 }

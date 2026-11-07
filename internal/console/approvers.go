@@ -51,6 +51,7 @@ type ApprovalsView interface {
 	Approve(ctx context.Context, d approval.Decision) (store.AccessLease, error)
 	Deny(ctx context.Context, id, by string) error
 	Page(id string) string
+	Ways(ctx context.Context, id string) access.Ways
 	LeaseLength(choice string) (time.Duration, error)
 
 	// Console unlocks (unlock.go): a passkey ceremony that opens a locked

@@ -1151,7 +1151,8 @@ id. <code>--for</code> is the lease's length: until the session ends (at most
 the facts you were shown; when they changed since (another request from the
 same agent, a mark on the session), the approval is refused and you look
 again. <code>--deny</code> closes the request; the project stays locked for that
-session.</p>
+session. A request naming a shell, a terminal, a multiplexer or a login
+process (one an older release filed) is never approved: deny it.</p>
 <h2 id="seamlessd_console_open">seamlessd console-open</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd console-open <span class="o">[</span>--browser APP<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seamlessd console-open --unlock PROJECT <span class="o">[</span>--for DURATION<span class="o">]</span>

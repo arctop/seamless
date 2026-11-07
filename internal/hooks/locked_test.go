@@ -2,6 +2,10 @@ package hooks
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -356,4 +360,51 @@ func TestLeaseExpiry_HookInjections(t *testing.T) {
 			require.NotContains(t, e.hook("user-prompt-submit", "", prompt), "Access to")
 		})
 	}
+}
+
+// A SessionStart whose agent process is a broad ancestor -- the hook run by
+// hand from a tmux pane, so the process it names is the tmux server -- files
+// nothing: the notice says why and what to do, and names no request.
+func TestLockedSessionStart_ABroadAnchorFilesNothing(t *testing.T) {
+	e := newLockHooksWith(t, true, func(db *sql.DB, cfg *Config) {
+		svc := approval.New(approval.Config{DB: db, Events: cfg.Events, Host: localHostName, LeaseCap: 8 * time.Hour, Now: cfg.Now,
+			Programs: func(t access.ProcessToken) string {
+				if t == lkAgent {
+					return "/opt/homebrew/Cellar/tmux/3.8/bin/tmux"
+				}
+				return ""
+			}})
+		cfg.Approvals = svc
+	})
+	notice := e.hook("session-start", "", map[string]any{"session_id": "fin-1", "cwd": "/work/finance", "source": "startup"})
+	require.Contains(t, notice, "Seamless: project "+lkFin+" is locked: even the owner's own agents need the owner's "+
+		"approval, and Seamless files no access request for this process: it is tmux, a terminal multiplexer, not an agent")
+	require.Contains(t, notice, "\nRemedy: run the work from an agent session (Claude Code or Codex), which asks for itself")
+	require.Empty(t, lkShortID.FindString(notice), "no request id: none was filed")
+	require.Empty(t, e.pending())
+}
+
+// The notice offers Touch ID once a key is enrolled, and says where it
+// applies: the approval dialog the agent's client shows.
+func TestLockedSessionStart_OffersTouchIDWhenEnrolled(t *testing.T) {
+	e := newLockHooks(t, true)
+	ctx := context.Background()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	pub, err := key.PublicKey.Bytes()
+	require.NoError(t, err)
+	code, _, err := store.MintEnrollCode(ctx, e.db, store.ApproverTouchID, e.clock())
+	require.NoError(t, err)
+	d := sha256.Sum256(approval.TouchIDEnrollMessage(code, pub))
+	sig, err := ecdsa.SignASN1(rand.Reader, key, d[:])
+	require.NoError(t, err)
+	_, err = e.svc.EnrollTouchID(ctx, "this Mac", code, pub, sig)
+	require.NoError(t, err)
+
+	notice := e.hook("session-start", "", map[string]any{"session_id": "fin-1", "cwd": "/work/finance", "source": "startup"})
+	short := lkShortID.FindString(notice)
+	require.NotEmpty(t, short, notice)
+	require.Contains(t, notice, "Remedy: access request "+short+" is waiting -- the owner approves it with Touch ID in the "+
+		"approval dialog (where this agent's client shows one), or in their own terminal with `seam approve "+short+"`;")
+	require.NotContains(t, notice, "passkey")
 }

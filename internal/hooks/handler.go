@@ -102,7 +102,7 @@ type Config struct {
 // (*approval.Service).
 type Approvals interface {
 	Request(ctx context.Context, in approval.RequestInput) (store.AccessApproval, error)
-	Page(id string) string
+	Ways(ctx context.Context, id string) access.Ways
 }
 
 // Handler serves the hook endpoints.

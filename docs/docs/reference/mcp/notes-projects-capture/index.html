@@ -363,8 +363,11 @@ dialog's answer is never the approval - any process of the owner's account
 could answer it - the proof is: the Touch ID helper's signature or the
 passkey's assertion, checked by the daemon. The call waits up to two minutes
 for it, then answers with the request id; the owner can still decide later
-with <code>seam approve</code> or on the console. A call refused at a lock opens the same
-dialog. Once approved, retry the call.</p>
+with <code>seam approve</code>, or with a passkey on the request's console page when one
+is enrolled. A call refused at a lock opens the same dialog. Once approved,
+retry the call. A call whose asking process is not an agent's (a tmux pane, a
+terminal, an ssh login) files nothing and says why: an approval would cover
+every program that process started.</p>
 <h2 id="capture-url-is-ssrf-safe-on-purpose">capture_url is SSRF-safe on purpose</h2>
 <p><code>capture_url</code> fetches a URL and returns its content as markdown. It is the one
 tool that makes an outbound request on an agent's behalf, so it is guarded:

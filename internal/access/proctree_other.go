@@ -26,3 +26,6 @@ func (Peer) Chain() ([]ChainHop, error) { return nil, ErrPeerCredUnsupported }
 func ProgramPath(pid int32) (string, error) {
 	return "", fmt.Errorf("access.ProgramPath(%d): %w", pid, ErrPeerCredUnsupported)
 }
+
+// ProgramOf is unsupported here: no process is named.
+func ProgramOf(ProcessToken) string { return "" }

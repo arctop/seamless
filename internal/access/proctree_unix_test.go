@@ -202,3 +202,22 @@ func shortTempDir(t *testing.T) string {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
 }
+
+// ProgramOf names a live process of this boot by its token, and nothing for
+// a token whose start time or boot is not that process's: a pid reused by
+// another process, or a token the kernel never reported here.
+func TestProgramOf_ChecksTheToken(t *testing.T) {
+	boot, err := bootID()
+	require.NoError(t, err)
+	pid := int32(os.Getpid())
+	self, err := lookupProc(pid)
+	require.NoError(t, err)
+	tok := ProcessToken{PID: pid, Version: self.start, Boot: boot}
+	want, err := ProgramPath(pid)
+	require.NoError(t, err)
+	require.Equal(t, want, ProgramOf(tok))
+
+	require.Empty(t, ProgramOf(ProcessToken{PID: pid, Version: self.start + 1, Boot: boot}), "another start time: another process")
+	require.Empty(t, ProgramOf(ProcessToken{PID: pid, Version: self.start, Boot: "6c2f1a3e-0b7d-4c55-9a51-3d8f00a1b2c3"}), "another boot")
+	require.Empty(t, ProgramOf(ProcessToken{}), "no token")
+}

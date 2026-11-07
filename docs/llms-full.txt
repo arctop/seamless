@@ -7996,8 +7996,11 @@ dialog's answer is never the approval - any process of the owner's account
 could answer it - the proof is: the Touch ID helper's signature or the
 passkey's assertion, checked by the daemon. The call waits up to two minutes
 for it, then answers with the request id; the owner can still decide later
-with `seam approve` or on the console. A call refused at a lock opens the same
-dialog. Once approved, retry the call.
+with `seam approve`, or with a passkey on the request's console page when one
+is enrolled. A call refused at a lock opens the same dialog. Once approved,
+retry the call. A call whose asking process is not an agent's (a tmux pane, a
+terminal, an ssh login) files nothing and says why: an approval would cover
+every program that process started.
 
 ## capture_url is SSRF-safe on purpose
 
@@ -8883,12 +8886,15 @@ Requested R-7F3K for example-finance (request). The owner approves it with: seam
 or with a passkey: https://seamless.example.org/console/access/01K...
 ```
 
-The second line appears only when the daemon has a passkey page for the
-request. Asking again while a request is pending answers with that same
-request; a request from an agent that already holds a lease is a `refresh`.
-`--json` prints the console's answer as received ([JSON output](#json-output)).
-The console's refusal is printed as it is: the project is not locked, or the
-connection has no agent process the daemon could verify.
+The second line appears only when a passkey can approve the request there:
+passkeys are set up and at least one is enrolled. Asking again while a request
+is pending answers with that same request; a request from an agent that
+already holds a lease is a `refresh`. `--json` prints the console's answer as
+received ([JSON output](#json-output)). The console's refusal is printed as it
+is: the project is not locked, the connection has no agent process the daemon
+could verify, or the process asking is not an agent's (a shell, a terminal, a
+multiplexer such as tmux, or a login process), so nothing was filed - run it
+from the agent's own shell.
 
 ### seam approve {#seam_approve}
 
@@ -8905,7 +8911,7 @@ refuses otherwise: an agent cannot use it. `<request>` is the short id
 takes the only request, or asks which one by number or short id. With nothing
 waiting it prints `Nothing is waiting.`
 
-It then shows the request's facts - the daemon's warnings first, each on its
+It then shows the request's facts - the daemon's warnings first, most serious first, each on its
 own line behind `!`, then the project with its isolation and access, the
 asking program with its pid and uid, the session and model, the working
 directory, the agent's reason (quoted, and labeled as the agent's own words),
@@ -9936,7 +9942,8 @@ id. `--for` is the lease's length: until the session ends (at most
 the facts you were shown; when they changed since (another request from the
 same agent, a mark on the session), the approval is refused and you look
 again. `--deny` closes the request; the project stays locked for that
-session.
+session. A request naming a shell, a terminal, a multiplexer or a login
+process (one an older release filed) is never approved: deny it.
 
 ## seamlessd console-open {#seamlessd_console_open}
 
