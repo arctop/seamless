@@ -6,9 +6,11 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/retrieve"
+	"github.com/arctop/seamless/internal/store"
 )
 
 // recallMissQueryMax bounds the query text stored on a recall.miss event; the
@@ -35,16 +37,43 @@ func (s *Server) handleRecall(ctx context.Context, req mcp.CallToolRequest) (*mc
 		return errResult("recall", errors.New("query is required unless kind is set"))
 	}
 	browse := query == ""
-	project, err := s.resolveReadScope(ctx, argString(req, "project"))
-	if err != nil {
-		return errResult("recall", err)
+	// A recall whose scope is a locked project it did not name -- the
+	// connection's own session lies there, waiting for the owner's approval --
+	// is a filter, not an ask: it searches what remains in scope (the global
+	// scope, unless the locked project is sealed and reads nothing outside
+	// itself), names the locked project, and files no request. Naming the
+	// project outright (project=) is the ask, and is refused at the lock.
+	locked, globalOK := "", true
+	if argString(req, "project") == "" {
+		// lockedBinding answers only for a binding getBinding drops (a locked
+		// project is never Visible), and nothing at all with peer_auth off.
+		if b, ok := s.lockedBinding(ctx); ok {
+			locked = b.project
+			ctx = access.WithLockRequester(ctx, nil)
+			iso, err := store.IsolationOf(ctx, s.cfg.DB, locked)
+			if err != nil {
+				return errResult("recall", err)
+			}
+			globalOK = !iso.FencesInbound()
+		}
 	}
-	hits, err := s.cfg.Retrieve.Recall(ctx, retrieve.RecallInput{
-		Query: query, Project: project, Scope: argString(req, "scope"),
-		Kind: kind, Limit: argInt(req, "limit", retrieve.DefaultRecallLimit),
-	})
-	if err != nil {
-		return errResult("recall", err)
+	project := ""
+	if locked == "" {
+		var err error
+		if project, err = s.resolveReadScope(ctx, argString(req, "project")); err != nil {
+			return errResult("recall", err)
+		}
+	}
+	hits := []retrieve.Hit{}
+	if globalOK {
+		var err error
+		hits, err = s.cfg.Retrieve.Recall(ctx, retrieve.RecallInput{
+			Query: query, Project: project, Scope: argString(req, "scope"),
+			Kind: kind, Limit: argInt(req, "limit", retrieve.DefaultRecallLimit),
+		})
+		if err != nil {
+			return errResult("recall", err)
+		}
 	}
 	// Record what was surfaced so read-after-inject stats can be derived later.
 	// item_scores rides along (parallel to item_ids, which is already in rank
@@ -83,5 +112,10 @@ func (s *Server) handleRecall(ctx context.Context, req mcp.CallToolRequest) (*mc
 		}
 		s.record(ctx, core.EventRecallMiss, s.boundSession(ctx), project, "", payload)
 	}
-	return jsonResult(map[string]any{"hits": hits})
+	out := map[string]any{"hits": hits}
+	if locked != "" {
+		// Name only, never a count of what it holds (owner decision Q7).
+		out["locked"] = []string{lockedMayHold(locked)}
+	}
+	return jsonResult(out)
 }

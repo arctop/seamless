@@ -97,7 +97,10 @@ func ReadPeer(conn net.Conn) (Peer, error) {
 }
 
 // Chain walks the peer's parent chain, the peer first. The peer must still be
-// the process that connected (its pidversion unchanged), or ErrPeerGone.
+// the process that connected (its pidversion unchanged), or ErrPeerGone. An
+// exec gives a process a new pidversion on macOS, so a peer that execs after
+// connecting is gone too -- fail closed; the start time a lease names is
+// unchanged by exec.
 func (p Peer) Chain() ([]ChainHop, error) {
 	boot, err := bootID()
 	if err != nil {

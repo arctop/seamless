@@ -77,6 +77,20 @@ type processSessionSlot struct {
 // logged and reports false for the same reason: the binding is an improvement on
 // the fallback, never a new way to fail.
 func (s *Server) processSession(ctx context.Context) (core.Session, bool) {
+	sess, ok := s.listedProcessSession(ctx)
+	if ok && !access.Visible(ctx, sess.ProjectSlug) {
+		return core.Session{}, false
+	}
+	return sess, ok
+}
+
+// listedProcessSession is processSession before the lock: it also returns the
+// caller's own session when it lies in a project the owner has locked
+// (peer_auth.locked) and this connection holds no lease on. Such a session
+// binds nothing (getBinding drops it); lockedBinding finds it, so a call that
+// would resolve through it is refused at the lock rather than inferred into
+// another project. With no lock it is processSession exactly.
+func (s *Server) listedProcessSession(ctx context.Context) (core.Session, bool) {
 	proc := callerAgentProcess(ctx)
 	if proc == "" || s.cfg.DB == nil {
 		return core.Session{}, false
@@ -88,8 +102,9 @@ func (s *Server) processSession(ctx context.Context) (core.Session, bool) {
 	sess, ok := s.lookupProcessSession(ctx, proc)
 	// The agent-process header is the client's own claim. Under peer_auth it may
 	// name only a session this connection's OS account may reach: a forged
-	// identity pointing at another account's agent binds nothing.
-	if ok && !access.Visible(ctx, sess.ProjectSlug) {
+	// identity pointing at another account's agent binds nothing. A locked
+	// project is the owner's own, so the owner's session there is kept.
+	if ok && !access.Visible(ctx, sess.ProjectSlug) && !access.Locked(ctx, sess.ProjectSlug) {
 		sess, ok = core.Session{}, false
 	}
 	if memo {

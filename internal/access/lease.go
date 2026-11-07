@@ -151,16 +151,18 @@ func (v View) Listed(project string) bool {
 	return v.Visible(project) || v.Locked(project)
 }
 
-// lockedRefusal is the refusal for a locked project: the rule and the remedy,
-// which differ between the TCP key and the socket.
+// lockedRefusal is the refusal for a locked project when no request could be
+// filed for it: one line with the rule, one with the remedy, which differ
+// between the TCP key and the socket.
 func (v View) lockedRefusal(project string) error {
 	if !v.who.Socket {
 		return &RefusalError{msg: fmt.Sprintf("project %s is locked: the TCP connection and its bearer key never reach a "+
-			"locked project, because a shared key cannot be tied to one process -- work in it from an agent session "+
-			"whose seam mcp-proxy dials the peer_auth Unix socket, once the owner has approved that session's access "+
-			"request", project)}
+			"locked project, because a shared key cannot be tied to one process.\n"+
+			"Remedy: work in it from an agent session whose seam mcp-proxy dials the peer_auth Unix socket; a call "+
+			"there files an access request, and the owner approves it in their own terminal.", project)}
 	}
 	return &RefusalError{msg: fmt.Sprintf("project %s is locked: even the owner's own agents need the owner's approval, "+
-		"and this connection holds no unlock for it -- the owner unlocks it for one session's seam mcp-proxy process, "+
-		"for a limited time, by approving that session's access request", project)}
+		"and this connection holds none.\n"+
+		"Remedy: run `seam access request %s` from the agent's shell to file an access request, and the owner "+
+		"approves it in their own terminal with `seam approve` and the request's id.", project, project)}
 }

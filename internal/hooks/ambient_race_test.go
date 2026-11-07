@@ -284,7 +284,7 @@ func TestAmbientIdentity_SameExternalIDAcrossClientsCannotCrossMatch(t *testing.
 	h.harvestCodexStop(ctx, "", stopPayload{
 		SessionID: externalID, LastAssistantMessage: "codex only",
 	})
-	h.completeClaudeSessions(ctx, ClientClaudeCode, endPayload{SessionID: externalID})
+	h.completeClaudeSessions(ctx, ClientClaudeCode, endPayload{SessionID: externalID}, false)
 	claude, _, err = store.SessionByID(ctx, db, claude.ID)
 	require.NoError(t, err)
 	codex, _, err = store.SessionByID(ctx, db, codex.ID)

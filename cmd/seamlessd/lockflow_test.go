@@ -143,6 +143,19 @@ func TestLockFlow_RefuseRequestApproveUseRevoke(t *testing.T) {
 	text, isErr = call(strangerCli, "tasks_list", map[string]any{"project": "example-finance"})
 	require.True(t, isErr)
 	require.Contains(t, text, "locked")
+	// The leased calls' tool.call events, filed under the bound session's
+	// project, carry none of the locked project's content.
+	func() {
+		rows, err := db.QueryContext(ctx, `SELECT payload FROM events WHERE kind = 'tool.call'`)
+		require.NoError(t, err)
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var payload string
+			require.NoError(t, rows.Scan(&payload))
+			require.NotContains(t, payload, "reconcile", "a leased call's event copied locked content")
+		}
+		require.NoError(t, rows.Err())
+	}()
 
 	// session_end of the session the lease was granted to revokes it.
 	_, isErr = call(agentCli, "session_end", map[string]any{"findings": "done", "session": sessID})

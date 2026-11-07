@@ -293,6 +293,23 @@ any of it.
   constructs `ProofDaemon`. An agent's socket connection may not deny. No MCP
   tool is added for requests: a new tool would change every install's tool
   count; `seam access request` files one explicitly.
+- **The locked view at the agent surfaces** (`internal/mcp/locked.go`,
+  `internal/hooks/locked.go`). The SessionStart hook in a locked project's
+  repository records the session there, metadata only, files its access
+  request and answers with the locked notice (`lockedStart`); hooks treat that
+  session as `reachLocked` (heartbeat, model, completion; no findings or
+  captures). Over MCP it binds nothing (`getBinding`), but `lockedBinding`
+  finds it: a call resolving its scope, session or actor through it is refused
+  at the lock, never inferred elsewhere, and `recall` without `project=`
+  answers from the rest of its scope and names it (`<project> (locked) may
+  hold results`) without filing. project_list and scope errors list locked
+  projects, marked. Every lock refusal is two lines, the rule then the remedy.
+  A leased connection's first tool result carries the project's briefing once
+  per lease (in memory), and from `access.ExpiryWarning` every tool result and
+  hook injection says when the lease ends. The notices ride as extra text
+  items outside `logMiddleware`, and a leased connection's tool.call events
+  keep no arguments, result or error text: the event is filed under the bound
+  session's project, and must never copy a locked project's content there.
 - **The identity comes from the transport, never the client.** A header, a
   `session=` handle, a body field or an agent-process identity can only ever
   narrow what the View allows. `getBinding` drops a binding to an unreachable

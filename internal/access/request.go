@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 // Access requests at the lock (the 2026-11-06 design, step 6): a call refused
@@ -13,6 +14,9 @@ import (
 // LockRequester in its context, and Refusal(ctx, project) calls it. A context
 // without one -- background work, the TCP key, peer_auth off -- refuses as
 // before.
+//
+// Every refusal at a lock is two lines: the rule, then the remedy. When a
+// request was filed, the remedy names it and how the owner approves it.
 
 // LockRequest is the pending request a lock refusal names.
 type LockRequest struct {
@@ -23,6 +27,10 @@ type LockRequest struct {
 	Refresh bool
 	// Page is the passkey approval page, "" when passkeys are not set up.
 	Page string
+	// Ended is when this tree's last lease on the project ended (expired or
+	// revoked), zero when it never held one: the refusal then says when
+	// access ended, so the agent can tell a lapsed approval from none.
+	Ended time.Time
 }
 
 // LockRequester files, or finds, the pending access request for a locked
@@ -53,9 +61,33 @@ func lockRequest(ctx context.Context, v View, project string) (LockRequest, bool
 	return req, true
 }
 
+// Locked is View.Locked for the View in ctx; with no View nothing is locked.
+func Locked(ctx context.Context, project string) bool {
+	v, _ := FromContext(ctx)
+	return v.Locked(project)
+}
+
+// RefusalFor is the refusal for a locked project that names req, the request
+// a surface filed for it itself (the SessionStart hook files one for the
+// session it is creating). A request with no id -- none could be filed -- is
+// the plain refusal (View.Refusal).
+func (v View) RefusalFor(project string, req LockRequest) error {
+	if req.ID == "" || !v.Locked(project) {
+		return v.Refusal(project)
+	}
+	return lockedRefusalFor(project, req)
+}
+
 // lockedRefusalFor is the refusal for a locked project that names the request
-// filed for it, and how the owner approves it.
+// filed for it, and how the owner approves it: the rule on one line, the
+// remedy on the next.
 func lockedRefusalFor(project string, req LockRequest) error {
+	rule := fmt.Sprintf("project %s is locked: even the owner's own agents need the owner's approval, "+
+		"and this session holds none.", project)
+	if !req.Ended.IsZero() {
+		rule = fmt.Sprintf("project %s is locked (access ended at %s): even the owner's own agents need the owner's "+
+			"approval, and this session's approval has ended.", project, clockDay(req.Ended))
+	}
 	what := "access request " + req.Short
 	if req.Refresh {
 		what = "refresh request " + req.Short
@@ -64,7 +96,6 @@ func lockedRefusalFor(project string, req LockRequest) error {
 	if req.Page != "" {
 		how += ", or with a passkey at " + req.Page
 	}
-	return &RefusalError{msg: fmt.Sprintf("project %s is locked: even the owner's own agents need the owner's approval, "+
-		"and this session holds none -- %s is waiting: %s. Retry once it is approved; until then, keep to other projects",
-		project, what, how)}
+	return &RefusalError{msg: rule + "\nRemedy: " + what + " is waiting -- " + how +
+		"; retry once it is approved, and keep to other projects until then."}
 }

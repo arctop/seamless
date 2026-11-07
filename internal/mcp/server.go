@@ -241,9 +241,12 @@ type Config struct {
 	RecordCommits bool
 	// Approvals is the daemon's approval service while peer_auth locks a
 	// project: a call refused at a lock files an access request (locked.go),
-	// and session_end revokes the session's leases. Nil -- nothing locked --
-	// changes nothing.
+	// session_end revokes the session's leases, and the tool results of a
+	// leased connection carry the project's briefing once and the expiry
+	// warnings. Nil -- nothing locked -- changes nothing.
 	Approvals Approvals
+	// Now is the clock the lease notices read; nil means time.Now.
+	Now func() time.Time
 	// Features is the file/env optional-features config (config.Config.Features).
 	// It is only the BASE: the stored override row layers over it per request in
 	// effectiveFeatures, so a console toggle needs no restart. The zero value is
@@ -275,6 +278,11 @@ type Server struct {
 	mu        sync.Mutex
 	bindings  map[string]binding // mcp client-session id -> binding
 	lastSweep time.Time          // last opportunistic bindings sweep (guarded by mu)
+
+	// leaseMu guards leaseSeen: the leases whose project briefing a tool
+	// result already carried (locked.go), by lease id, with their expiry.
+	leaseMu   sync.Mutex
+	leaseSeen map[string]time.Time
 }
 
 // NumTools returns the number of registered MCP tools. doctor asserts it equals
@@ -324,6 +332,7 @@ func New(cfg Config) *Server {
 		fetcher:     capture.NewURLFetcher(cfg.CaptureAllowedPorts),
 		bindings:    make(map[string]binding),
 		toolSchemas: make(map[string]mcp.ToolInputSchema),
+		leaseSeen:   make(map[string]time.Time),
 	}
 	s.mcp = mcpserver.NewMCPServer(
 		ServerName, version,
@@ -342,7 +351,12 @@ func New(cfg Config) *Server {
 		//   - the session= handle innermost: it resolves an argument, so it runs
 		//     only on a call validate accepted, and its refusal of a handle that
 		//     names no session is logged like any other.
+		//   - the lease notices (locked.go) just inside auth and OUTSIDE log: a
+		//     locked project's briefing they append must not be copied into the
+		//     tool.call event, which is filed under whatever project the call
+		//     was bound to. Off (nothing locked) they add nothing.
 		mcpserver.WithToolHandlerMiddleware(s.authMiddleware),
+		mcpserver.WithToolHandlerMiddleware(s.leaseNoticeMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.logMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.validateMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.sessionHandleMiddleware),
@@ -556,6 +570,10 @@ func (s *Server) setBinding(ctx context.Context, sessionID, project string) {
 // reach is no binding at all, whichever of the three routes produced it: the
 // session= handle and the process binding already refuse such sessions, and
 // this is the last word for an explicit binding made before the policy changed.
+// A binding to a project the owner has locked (peer_auth.locked) is no binding
+// here either -- nothing may read or write through it -- but lockedBinding
+// still finds it, so the call is refused at the lock instead of inferred
+// somewhere else.
 func (s *Server) getBinding(ctx context.Context) (binding, bool) {
 	b, ok := s.resolveBinding(ctx)
 	if ok && !access.Visible(ctx, b.project) {
@@ -571,7 +589,7 @@ func (s *Server) resolveBinding(ctx context.Context) (binding, bool) {
 	if b, ok := s.rawBinding(ctx); ok && b.sessionID != "" {
 		return b, true
 	}
-	if sess, ok := s.processSession(ctx); ok {
+	if sess, ok := s.listedProcessSession(ctx); ok {
 		return binding{sessionID: sess.ID, project: sess.ProjectSlug}, true
 	}
 	return binding{}, false
@@ -729,6 +747,9 @@ func (s *Server) resolveReadScope(ctx context.Context, explicit string) (string,
 	if b, ok := s.getBinding(ctx); ok {
 		return b.project, nil
 	}
+	if b, ok := s.lockedBinding(ctx); ok {
+		return "", s.lockedScopeRefusal(ctx, b.project)
+	}
 	sess, ok, ambiguity, fenced := s.ambientFallback(ctx)
 	if ok {
 		return sess.ProjectSlug, nil
@@ -796,9 +817,18 @@ func (s *Server) knownProjects(ctx context.Context) string {
 	}
 	slugs := make([]string, 0, len(ps))
 	for _, p := range ps {
+		if p.RetiredAt != nil {
+			continue
+		}
+		// A project the owner has locked is listed, and marked: its name is the
+		// owner's own, and an agent that means it can ask for access.
+		if access.Locked(ctx, p.Slug) {
+			slugs = append(slugs, p.Slug+" (locked)")
+			continue
+		}
 		// A project this connection's OS account may not reach is not one to
 		// suggest -- and under peer_auth its name is none of this caller's business.
-		if p.RetiredAt != nil || !access.Visible(ctx, p.Slug) {
+		if !access.Visible(ctx, p.Slug) {
 			continue
 		}
 		slugs = append(slugs, p.Slug)
@@ -858,6 +888,9 @@ func (s *Server) resolveWriteScope(ctx context.Context, explicit string) (string
 	}
 	if b, ok := s.getBinding(ctx); ok {
 		return b.project, nil
+	}
+	if b, ok := s.lockedBinding(ctx); ok {
+		return "", s.lockedScopeRefusal(ctx, b.project)
 	}
 	sess, ok, ambiguity, fenced := s.ambientFallback(ctx)
 	if ok {
@@ -975,6 +1008,9 @@ func (s *Server) resolveActor(ctx context.Context, req mcp.CallToolRequest) (str
 		if !ok {
 			return "", false, fmt.Errorf("session_id %q not found", id)
 		}
+		if access.Locked(ctx, sess.ProjectSlug) {
+			return "", false, s.lockedScopeRefusal(ctx, sess.ProjectSlug)
+		}
 		return sess.ID, true, nil
 	}
 	if ref := argString(req, "session"); ref != "" {
@@ -985,10 +1021,18 @@ func (s *Server) resolveActor(ctx context.Context, req mcp.CallToolRequest) (str
 		if !ok {
 			return "", false, errSessionRefNotFound(ref)
 		}
+		if access.Locked(ctx, sess.ProjectSlug) {
+			return "", false, s.lockedScopeRefusal(ctx, sess.ProjectSlug)
+		}
 		return sess.ID, true, nil
 	}
 	if b, ok := s.getBinding(ctx); ok {
 		return b.sessionID, true, nil
+	}
+	// A session in a locked project acts as nothing until the owner approves
+	// its access: refused at the lock, never stood in for by another agent.
+	if b, ok := s.lockedBinding(ctx); ok {
+		return "", false, s.lockedScopeRefusal(ctx, b.project)
 	}
 	sess, ok, ambiguous, err := s.ambientSessionTarget(ctx)
 	if err != nil {

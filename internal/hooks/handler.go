@@ -88,9 +88,12 @@ type Config struct {
 	// projects (peer_auth.locked); nil -- nothing locked -- does nothing.
 	RevokeSessionLeases func(ctx context.Context, sessionID string) (int64, error)
 	// Approvals is the daemon's approval service while a project is locked
-	// (the locked notice and its automatic request); nil changes nothing.
+	// (the locked notice and its automatic request, the lease expiry
+	// warnings); nil changes nothing.
 	Approvals Approvals
-	Logger    *slog.Logger
+	// Now is the clock the lease expiry warnings read; nil means time.Now.
+	Now    func() time.Time
+	Logger *slog.Logger
 }
 
 // Approvals is what the hooks need of the daemon's approval service
@@ -115,6 +118,7 @@ type Handler struct {
 	screening     *screening.Service
 	revokeLeases  func(ctx context.Context, sessionID string) (int64, error)
 	approvals     Approvals
+	now           func() time.Time
 	logger        *slog.Logger
 }
 
@@ -128,12 +132,15 @@ func NewHandler(cfg Config) *Handler {
 			cfg.PlansDir = filepath.Join(home, ".claude", "plans")
 		}
 	}
+	if cfg.Now == nil {
+		cfg.Now = time.Now
+	}
 	return &Handler{
 		db: cfg.DB, retrieve: cfg.Retrieve, events: cfg.Events, files: cfg.Files,
 		apiKey: cfg.APIKey, maxEventChars: cfg.MaxEventChars,
 		planCapture: cfg.PlanCapture, plansDir: cfg.PlansDir,
 		localHost: strings.ToLower(strings.TrimSpace(cfg.LocalHost)),
-		features:  cfg.Features, screening: cfg.Screening, revokeLeases: cfg.RevokeSessionLeases, approvals: cfg.Approvals, logger: cfg.Logger,
+		features:  cfg.Features, screening: cfg.Screening, revokeLeases: cfg.RevokeSessionLeases, approvals: cfg.Approvals, now: cfg.Now, logger: cfg.Logger,
 	}
 }
 
@@ -265,7 +272,8 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
-	if h.foreignSession(ctx, client, p.SessionID) {
+	reach, reachProject := h.sessionReachOf(ctx, client, p.SessionID)
+	if reach == reachForeign {
 		p.SessionID = ""
 	}
 
@@ -298,11 +306,28 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 
 	// peer_auth: the owner opening a repository whose project is sealed to
 	// another OS account gets a notice instead of a briefing, and no session --
-	// a session there would be the owner working inside the seal.
-	if sealed, ok := h.sealedCWD(ctx, host, p.CWD); ok {
+	// a session there would be the owner working inside the seal. A project
+	// the owner has locked (peer_auth.locked) gets the locked notice instead:
+	// the session is recorded there, metadata only, and an access request is
+	// filed for it (lockedStart).
+	if refused, locked, ok := h.refusedCWD(ctx, host, p.CWD); ok {
+		if locked {
+			// A session already locked elsewhere is not moved here: it keeps
+			// its project, and this start records none.
+			if reach == reachLocked && reachProject != refused {
+				p.SessionID = ""
+			}
+			h.lockedStart(ctx, w, client, host, p, refused)
+			return
+		}
 		h.writeContextResponse(ctx, w, "SessionStart", "session-start", client,
-			p.SessionID, "", sealedNotice(sealed), false, nil)
+			p.SessionID, "", sealedNotice(refused), false, nil)
 		return
+	}
+	// A session in a locked project never moves out of it: resuming it here
+	// would carry what it recorded there into this project.
+	if reach == reachLocked {
+		p.SessionID = ""
 	}
 
 	briefing, injectedIDs, err := h.retrieve.Briefing(ctx, retrieve.BriefingInput{
@@ -317,12 +342,20 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 	// without the agent calling session_start. Subagents share the parent's
 	// session, so they get no ambient session of their own. Best-effort: a failure
 	// just omits the ambient line.
+	sessionID := ""
 	if p.AgentType == "" {
-		if name := h.ensureAmbientSession(ctx, client, host, p); name != "" {
+		if id, name := h.ensureAmbientSessionIn(ctx, client, host, p, ""); name != "" {
+			sessionID = id
 			briefing = injectAmbientLine(briefing, name, p.Identity.AgentProcess != "")
 			h.setAmbientModel(ctx, client, host, p.SessionID, p.Model, p.TranscriptPath)
 		}
+	} else {
+		sessionID = h.ambientSessionID(ctx, client, p.SessionID)
 	}
+	// A lease of this session's ending within access.ExpiryWarning: the
+	// briefing says when, and how to ask again (only while a project is
+	// locked; otherwise nothing is looked up).
+	briefing = injectNotice(briefing, h.expiryNotice(ctx, sessionID))
 	// Cap after the ambient line is appended, then record and serialize the same
 	// prepared bytes. A SessionStart carries no user prompt (prompt="").
 	h.writeContextResponse(ctx, w, "SessionStart", "session-start", client,
@@ -343,11 +376,14 @@ func (h *Handler) sessionEnd(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
-	if h.foreignSession(ctx, client, p.SessionID) {
+	reach, _ := h.sessionReachOf(ctx, client, p.SessionID)
+	if reach == reachForeign {
 		p.SessionID = ""
 	}
 
-	h.completeClaudeSessions(ctx, client, p)
+	// A session in a locked project (recorded there before any approval)
+	// completes like any other, metadata only: nothing is harvested into it.
+	h.completeClaudeSessions(ctx, client, p, reach == reachLocked)
 	// SessionEnd has no hookSpecificOutput variant in Claude Code's schema, so
 	// the response is a bare ack -- emitting one fails root validation.
 	writeHookAck(w)
@@ -375,7 +411,8 @@ func (h *Handler) stop(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
-	if h.foreignSession(ctx, client, p.SessionID) {
+	reach, _ := h.sessionReachOf(ctx, client, p.SessionID)
+	if reach == reachForeign {
 		p.SessionID = ""
 	}
 
@@ -384,7 +421,9 @@ func (h *Handler) stop(w http.ResponseWriter, r *http.Request) {
 	h.touchAmbient(ctx, client, p.SessionID)
 	h.setAmbientModel(ctx, client, host, p.SessionID, p.Model, p.TranscriptPath)
 
-	if client == ClientCodex {
+	// A session in a locked project takes no findings until the owner
+	// approves its access (metadata only): the heartbeat above is all.
+	if client == ClientCodex && reach != reachLocked {
 		h.harvestCodexStop(ctx, host, p)
 	}
 
@@ -466,8 +505,18 @@ func (h *Handler) harvestClaudeTokens(ctx context.Context, client Client, host, 
 // which could clobber the findings a concurrent transcript harvest wrote to the
 // same session between the read and the write-back.
 func (h *Handler) ensureAmbientSession(ctx context.Context, client Client, host string, p hookPayload) string {
+	_, name := h.ensureAmbientSessionIn(ctx, client, host, p, "")
+	return name
+}
+
+// ensureAmbientSessionIn is ensureAmbientSession returning the session's id as
+// well as its name. locked names the project the caller is locked out of
+// (peer_auth.locked) that the session may be recorded in anyway -- metadata
+// only, findings refused until the owner approves (owner decision Q4); ""
+// places a session only where the caller may write, as always.
+func (h *Handler) ensureAmbientSessionIn(ctx context.Context, client Client, host string, p hookPayload, locked string) (id, name string) {
 	if h.db == nil || p.SessionID == "" {
-		return ""
+		return "", ""
 	}
 	externalClient := client.externalIdentity()
 	project, err := store.ResolveProjectForCWD(ctx, h.db, host, p.CWD)
@@ -478,10 +527,14 @@ func (h *Handler) ensureAmbientSession(ctx context.Context, client Client, host 
 	// peer_auth: a configured account's session lands in its own project; the
 	// owner is never given a session inside a project sealed to another account
 	// (sessionStart answered that case with a notice already -- this is the
-	// backstop).
+	// backstop). The one exception is the locked project the caller named: the
+	// owner's own, where the session is recorded but reaches nothing.
 	placed, err := access.SessionScope(ctx, project)
 	if err != nil {
-		return ""
+		if locked == "" || project != locked || !access.Locked(ctx, project) {
+			return "", ""
+		}
+		placed = project
 	}
 	project = placed
 
@@ -492,17 +545,17 @@ func (h *Handler) ensureAmbientSession(ctx context.Context, client Client, host 
 		ctx, h.db, externalClient, p.SessionID, project, now)
 	if err != nil {
 		h.recordHookError(ctx, "ambient-resume", client, err)
-		return ""
+		return "", ""
 	}
 	if found {
 		h.stampAgentProcess(ctx, client, resumed.ID, p.Identity.AgentProcess)
-		return resumed.Name
+		return resumed.ID, resumed.Name
 	}
 
-	name := ambientName(client, p.SessionID)
-	id, err := core.NewID()
+	name = ambientName(client, p.SessionID)
+	id, err = core.NewID()
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	sess := core.Session{
 		ID: id, Name: name, ProjectSlug: project, Status: core.SessionActive,
@@ -524,15 +577,15 @@ func (h *Handler) ensureAmbientSession(ctx context.Context, client Client, host 
 				ctx, h.db, externalClient, p.SessionID, project, now,
 			); rerr == nil && ok {
 				h.stampAgentProcess(ctx, client, existing.ID, p.Identity.AgentProcess)
-				return existing.Name
+				return existing.ID, existing.Name
 			}
 		}
 		h.recordHookError(ctx, "ambient-create", client, err)
-		return ""
+		return "", ""
 	}
 	h.stampAgentProcess(ctx, client, id, p.Identity.AgentProcess)
 	h.recordSession(ctx, core.EventSessionStarted, sess, map[string]any{"ambient": true})
-	return name
+	return id, name
 }
 
 // stampAgentProcess records which agent process now runs an ambient session, so
@@ -555,7 +608,11 @@ func (h *Handler) stampAgentProcess(ctx context.Context, client Client, sessionI
 // sessions we get no end signal for. Task claims are released. It is a no-op when
 // nothing is active (an explicit session_end already ran, or a crash left it to
 // the reaper). Never errors: the hook must always 200.
-func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p endPayload) {
+//
+// metadataOnly completes a session recorded in a locked project before any
+// approval: status, claims and leases only -- no transcript is read for it and
+// no findings are written into it.
+func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p endPayload, metadataOnly bool) {
 	if h.db == nil || p.SessionID == "" {
 		return
 	}
@@ -584,7 +641,7 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 	// would open belongs to someone else, so the session completes with whatever
 	// the client already told us and the skips are recorded.
 	host := h.hostOf(p.Identity)
-	localDisk := h.localDiskOK(ctx, "session-end-transcript", client, host)
+	localDisk := !metadataOnly && h.localDiskOK(ctx, "session-end-transcript", client, host)
 	finalModel := ""
 	if client == ClientClaudeCode && localDisk {
 		finalModel = transcriptModel(p.TranscriptPath)
@@ -642,31 +699,77 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 // harvest into, or attribute to -- another account's session. The callers blank
 // the id instead, so every session-touching step downstream no-ops and the hook
 // still answers. A lookup failure fails closed. With peer_auth off it is false
-// without touching the database.
+// without touching the database. A session in a project the owner has locked
+// counts as foreign here too: every content path (plan capture, subagent
+// reports, a taint mark, a Codex harvest) refuses it until the owner approves.
 func (h *Handler) foreignSession(ctx context.Context, client Client, externalID string) bool {
+	reach, _ := h.sessionReachOf(ctx, client, externalID)
+	return reach != reachOK
+}
+
+// sessionReach is how far a hook may act on the session it names.
+type sessionReach uint8
+
+const (
+	// reachOK: the caller may write the session's project (always, with
+	// peer_auth off).
+	reachOK sessionReach = iota
+	// reachLocked: the owner's own session in a project it is locked out of
+	// (peer_auth.locked, no lease) -- recorded there metadata only, so a hook
+	// may heartbeat, stamp and complete it, and write nothing into it.
+	reachLocked
+	// reachForeign: another account's session, or a lookup that failed.
+	reachForeign
+)
+
+// sessionReachOf judges every session the hook's id names (its ambient row and
+// any explicit session linked to it) against the caller's View: the farthest
+// out of them decides. lockedProject is the ambient row's project when that
+// row is the locked one. With peer_auth off it is reachOK without touching the
+// database.
+func (h *Handler) sessionReachOf(ctx context.Context, client Client, externalID string) (reach sessionReach, lockedProject string) {
 	v, ok := access.FromContext(ctx)
 	if !ok || h.db == nil || strings.TrimSpace(externalID) == "" {
-		return false
+		return reachOK, ""
+	}
+	judge := func(project string) sessionReach {
+		switch {
+		case v.Writable(project):
+			return reachOK
+		case v.Locked(project):
+			return reachLocked
+		default:
+			return reachForeign
+		}
 	}
 	ambient, found, err := store.AmbientSessionByExternalIdentity(ctx, h.db, client.externalIdentity(), externalID)
 	if err != nil {
 		h.recordHookError(ctx, "peer-auth-session-lookup", client, err)
-		return true
+		return reachForeign, ""
 	}
-	if found && !v.Writable(ambient.ProjectSlug) {
-		return true
+	if found {
+		reach = judge(ambient.ProjectSlug)
+		if reach == reachLocked {
+			lockedProject = ambient.ProjectSlug
+		}
+		if reach == reachForeign {
+			return reachForeign, ""
+		}
 	}
 	linked, err := store.ActiveSessionsByExternalIdentity(ctx, h.db, client.externalIdentity(), externalID)
 	if err != nil {
 		h.recordHookError(ctx, "peer-auth-session-lookup", client, err)
-		return true
+		return reachForeign, ""
 	}
 	for _, sess := range linked {
-		if !v.Writable(sess.ProjectSlug) {
-			return true
+		switch judge(sess.ProjectSlug) {
+		case reachForeign:
+			return reachForeign, ""
+		case reachLocked:
+			reach = reachLocked
 		}
 	}
-	return false
+	return reach, lockedProject
 }
 
 // peerUser reports whether the request is a configured peer_auth account's (not
@@ -676,22 +779,23 @@ func peerUser(ctx context.Context) bool {
 	return ok && v.Principal().Kind == access.KindUser
 }
 
-// sealedCWD reports the project a cwd resolves to when the caller may not be
-// placed in it at all: the owner in a repository sealed to another OS account.
-// A configured account is never refused here -- its session lands in its own
-// project wherever it opens.
-func (h *Handler) sealedCWD(ctx context.Context, host, cwd string) (string, bool) {
-	if _, ok := access.FromContext(ctx); !ok || h.db == nil {
-		return "", false
+// refusedCWD reports the project a cwd resolves to when the caller may not be
+// placed in it: the owner in a repository sealed to another OS account, or in
+// the repository of a project the owner has locked and this connection holds
+// no lease on (locked). A configured account is never refused here -- its
+// session lands in its own project wherever it opens.
+func (h *Handler) refusedCWD(ctx context.Context, host, cwd string) (project string, locked, ok bool) {
+	if _, on := access.FromContext(ctx); !on || h.db == nil {
+		return "", false, false
 	}
 	project, err := store.ResolveProjectForCWD(ctx, h.db, host, cwd)
 	if err != nil {
-		return "", false
+		return "", false, false
 	}
 	if _, err := access.SessionScope(ctx, project); errors.Is(err, access.ErrNotReachable) {
-		return project, true
+		return project, access.Locked(ctx, project), true
 	}
-	return "", false
+	return "", false, false
 }
 
 // sealedNotice is the SessionStart context for the owner inside a repository
@@ -770,7 +874,10 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
-	if h.foreignSession(ctx, client, p.SessionID) {
+	// A session in a locked project is kept for what this hook does to it --
+	// the heartbeat, the model, the injection's attribution -- all metadata;
+	// the recall below reads by cwd, and a locked cwd recalls nothing.
+	if reach, _ := h.sessionReachOf(ctx, client, p.SessionID); reach == reachForeign {
 		p.SessionID = ""
 	}
 
@@ -794,8 +901,18 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 		// Interactions feed can show "why didn't recall fire?" cases.
 		h.recordHookPrompt(ctx, client, p.SessionID, p.UserPrompt)
 	}
+	recalled := out != ""
+	// A lease of this session's ending within access.ExpiryWarning: the
+	// injection leads with when, and how to ask again.
+	if notice := h.expiryNotice(ctx, h.ambientSessionID(ctx, client, p.SessionID)); notice != "" {
+		block := injectNotice("", notice)
+		if out != "" {
+			block += "\n" + out
+		}
+		out = block
+	}
 	h.writeContextResponse(ctx, w, "UserPromptSubmit", "user-prompt-submit", client,
-		p.SessionID, p.UserPrompt, out, out != "", injectedIDs)
+		p.SessionID, p.UserPrompt, out, recalled, injectedIDs)
 }
 
 // recordInjection logs a retrieval.injected event carrying the exact text that

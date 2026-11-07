@@ -138,6 +138,12 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 		if err != nil {
 			return errResult("session_start", err)
 		}
+		if ok && access.Locked(ctx, existing.ProjectSlug) {
+			// The owner's own session, in a project locked to this connection:
+			// resuming it is working in that project, so it is refused at the
+			// lock, with the request that would open it.
+			return errResult("session_start", s.lockedScopeRefusal(ctx, existing.ProjectSlug))
+		}
 		if ok && !access.Visible(ctx, existing.ProjectSlug) {
 			return errResult("session_start", fmt.Errorf("session %q is not reachable from this connection: "+
 				"it belongs to a project this OS account may not reach -- choose another name", name))
@@ -597,6 +603,12 @@ func (s *Server) resolveSession(ctx context.Context, req mcp.CallToolRequest) (c
 	if b, ok := s.getBinding(ctx); ok {
 		return sessionByID(ctx, s.cfg.DB, b.sessionID)
 	}
+	// The connection's own session in a locked project is still the target --
+	// never another agent's ambient -- and the write fence then refuses it at
+	// the lock: its findings wait for the owner's approval.
+	if b, ok := s.lockedBinding(ctx); ok {
+		return sessionByID(ctx, s.cfg.DB, b.sessionID)
+	}
 	sess, ok, ambiguous, err := s.ambientSessionTarget(ctx)
 	if err != nil {
 		return core.Session{}, false, err
@@ -646,7 +658,9 @@ func (s *Server) ambientSessionTarget(ctx context.Context) (sess core.Session, o
 // Under peer_auth a session in a project this connection's OS account may not
 // reach is reported as not found, exactly like a name that matches nothing: a
 // handle is how a call adopts a session's project, so honoring one would be a
-// way around every fence.
+// way around every fence. A session in a project the owner has locked is the
+// owner's own and is found; it binds nothing (getBinding drops it), and every
+// use of it is refused at the lock (lockedBinding, the write fence).
 func sessionByRef(ctx context.Context, db *sql.DB, ref string) (core.Session, bool, error) {
 	sess, ok, err := store.SessionByName(ctx, db, ref)
 	if err == nil && !ok && store.LooksLikeSessionULID(ref) {
@@ -655,7 +669,7 @@ func sessionByRef(ctx context.Context, db *sql.DB, ref string) (core.Session, bo
 	if err != nil || !ok {
 		return core.Session{}, false, err
 	}
-	if !access.Visible(ctx, sess.ProjectSlug) {
+	if !access.Visible(ctx, sess.ProjectSlug) && !access.Locked(ctx, sess.ProjectSlug) {
 		return core.Session{}, false, nil
 	}
 	return sess, true, nil
@@ -669,7 +683,7 @@ func sessionByID(ctx context.Context, db *sql.DB, id string) (core.Session, bool
 	if err != nil || !ok {
 		return core.Session{}, false, err
 	}
-	if !access.Visible(ctx, sess.ProjectSlug) {
+	if !access.Visible(ctx, sess.ProjectSlug) && !access.Locked(ctx, sess.ProjectSlug) {
 		return core.Session{}, false, nil
 	}
 	return sess, true, nil

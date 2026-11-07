@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"github.com/arctop/seamless/internal/access"
 	"strings"
 	"time"
 
@@ -169,6 +170,16 @@ func (s *Server) logMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.ToolHan
 				payload["error"] = firstLine(text)
 			}
 		}
+		// A connection holding a lease on a locked project may have read it, and
+		// its tool.call event is filed under its bound session's project: keep
+		// the locked content out of that project's record. The call, its tool and
+		// its outcome are recorded; its arguments, result and error text are not.
+		if v, ok := access.FromContext(ctx); ok && len(v.Leases()) > 0 {
+			delete(payload, "args")
+			delete(payload, "result")
+			delete(payload, "error")
+			payload["leased"] = true
+		}
 		s.record(ctx, core.EventToolCall, sessionID, project, "", payload)
 		return result, err
 	}
@@ -218,6 +229,11 @@ func (s *Server) attribution(ctx context.Context) (sessionID, project string) {
 		return slot.sessionID, slot.project
 	}
 	if b, ok := s.getBinding(ctx); ok {
+		return b.sessionID, b.project
+	}
+	// A call from a session in a locked project is still that session's call
+	// (its heartbeat, its feed row), never a guess at another agent's.
+	if b, ok := s.lockedBinding(ctx); ok {
 		return b.sessionID, b.project
 	}
 	if sess, ok, _, _ := s.ambientFallback(ctx); ok { //nolint:errcheck // provenance is best-effort: a fenced refusal leaves the call unattributed rather than misattributed, which is the outcome this branch already falls through to

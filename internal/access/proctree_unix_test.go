@@ -107,19 +107,37 @@ func TestReadPeer_RealSocket(t *testing.T) {
 	require.ErrorIs(t, err, errNotUnixConn)
 }
 
+// waitExec waits until pid runs name: a shell forks, then execs, and on macOS
+// an exec gives the process a new pidversion -- the pin a peer is matched by --
+// so facts read before it would no longer name the process after it.
+func waitExec(t *testing.T, pid int32, name string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		f, err := lookupProc(pid)
+		require.NoError(t, err)
+		if f.name == name {
+			return
+		}
+		require.True(t, time.Now().Before(deadline), "pid %d never exec'd %s", pid, name)
+		<-time.After(5 * time.Millisecond)
+	}
+}
+
 func TestWalkChain_RealProcesses(t *testing.T) {
 	self := int32(os.Getpid())
 
 	// A grandchild: sh -> sleep, both below the test.
 	sh, grandchild := spawn(t, "sleep 60 >/dev/null 2>&1 & echo $!; wait")
+	waitExec(t, grandchild, "sleep")
 	child := int32(sh.Process.Pid)
 	require.Equal(t, []int32{grandchild, child, self}, chainPIDs(t, grandchild)[:3], "a grandchild reaches the test through its parent")
 	require.Equal(t, []int32{child, self}, chainPIDs(t, child)[:2])
 
 	// A sibling of the child: another child of the test, never passing
 	// through the first.
-	sib, sibling := spawn(t, "echo $$; exec sleep 60")
-	_ = sib
+	_, sibling := spawn(t, "echo $$; exec sleep 60")
+	waitExec(t, sibling, "sleep")
 	require.NotContains(t, chainPIDs(t, sibling), child, "a sibling of the same uid is not in the child's tree")
 	require.Contains(t, chainPIDs(t, sibling), self)
 
@@ -127,6 +145,7 @@ func TestWalkChain_RealProcesses(t *testing.T) {
 	// background sleep (to launchd, init or a subreaper). Its chain no longer
 	// reaches the test.
 	orphanSh, orphan := spawn(t, "sleep 60 >/dev/null 2>&1 & echo $!")
+	waitExec(t, orphan, "sleep")
 	require.NoError(t, orphanSh.Wait())
 	deadline := time.Now().Add(10 * time.Second)
 	for {
