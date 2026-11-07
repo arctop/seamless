@@ -21,6 +21,15 @@ package main
 // arguments, or results. The one stateful thing it carries is the Mcp-Session-Id
 // the daemon mints on initialize -- resending it on every later POST is what keeps
 // the connection binding alive, so session_start inheritance works across calls.
+// The one Seamless message it knows is the daemon's ask to launch the Touch ID
+// approver (core.ApproverNotification), which it swallows and acts on
+// (mcpproxy_approver.go).
+//
+// Requests and notifications are served in turn, in the order the client wrote
+// them, but stdin is read all the while: a tool call can wait on the client's
+// answer to a server request it sent mid-call (the in-session approval dialog's
+// elicitation), and that answer is behind the call on stdin. Answers and
+// notifications/cancelled therefore go to the daemon at once (see sentAtOnce).
 //
 // It outlives a daemon restart (an automatic update performs one): a failed
 // dial is retried (dialretry.go), and the old Mcp-Session-Id is still served
@@ -45,6 +54,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -120,6 +130,10 @@ func runMCPProxy(ctx context.Context, e *env, o *mcpProxyOpts, _ []string) error
 	}
 	b := newBridge(cfg.ServerURL()+"/api/mcp", cfg.MCP.APIKey, client)
 	b.stderr = e.stderr
+	// The daemon may ask this bridge to launch the Touch ID approver for an
+	// access request (mcpproxy_approver.go). The helper talks to the daemon only
+	// through the peer_auth socket, so it is told the one this bridge dials.
+	b.approver = approverHost{run: e.run, goos: e.platform(), home: os.UserHomeDir, socket: cfg.SocketPath()}
 	// The client that spawned this bridge is the agent whose SessionStart hook
 	// created its ambient session; naming it on every request is what binds the
 	// connection to that session. Resolved once: the parent does not change for
@@ -130,18 +144,29 @@ func runMCPProxy(ctx context.Context, e *env, o *mcpProxyOpts, _ []string) error
 	return b.run(ctx, e.stdin, e.stdout)
 }
 
-// bridge forwards stdio MCP frames to a streamable-HTTP endpoint and back. It is
-// single-goroutine by construction: each frame is read, forwarded, and its reply
-// relayed before the next is read, which preserves request/response ordering
-// without any per-request bookkeeping.
+// bridge forwards stdio MCP frames to a streamable-HTTP endpoint and back.
+// Requests and ordinary notifications are served by one worker, in turn: each
+// is forwarded and its reply relayed before the next is sent, which preserves
+// request/response ordering without any per-request bookkeeping. The frames
+// sent at once (sentAtOnce) and the approver launches run on side goroutines,
+// which write no reply of their own in practice; stdout and stderr are
+// serialized so no two frames or lines interleave.
 type bridge struct {
 	endpoint     string
 	apiKey       string
 	client       *http.Client
-	retry        *dialRetry // dial-phase retry policy (dialretry.go); tests swap its clock
-	stderr       io.Writer  // where a failure nothing waits on is reported; MCP clients log it
-	sessionID    string     // Mcp-Session-Id from initialize, replayed on later POSTs
-	agentProcess string     // agentproc identity of the client that spawned the bridge; "" = unknown
+	retry        *dialRetry   // dial-phase retry policy (dialretry.go); tests swap its clock
+	stderr       io.Writer    // where a failure nothing waits on is reported; MCP clients log it
+	agentProcess string       // agentproc identity of the client that spawned the bridge; "" = unknown
+	approver     approverHost // how to launch the Touch ID approver when the daemon asks
+
+	mu        sync.Mutex
+	sessionID string              // Mcp-Session-Id from initialize, replayed on later POSTs; guarded by mu
+	launching map[string]struct{} // request ids whose approver launch is running; guarded by mu
+	stopped   bool                // run is returning: no new side work starts; guarded by mu
+	side      sync.WaitGroup      // the side goroutines: frames sent at once, approver launches
+
+	logMu sync.Mutex // serializes writes to stderr
 }
 
 // newBridge takes its HTTP client rather than building one: the TLS trust the
@@ -167,25 +192,203 @@ func newBridge(endpoint, apiKey string, client *http.Client) *bridge {
 }
 
 // run reads newline-delimited JSON-RPC from r and relays each frame's reply to w
-// until stdin closes (EOF -> nil). A failure reaching the daemon is answered
-// in-band and the loop goes on (see forward); only a broken stdin or stdout, or
-// a cancelled ctx, ends it with an error.
+// until stdin closes (EOF -> nil), and then waits for the side goroutines still
+// running. A failure reaching the daemon is answered in-band and the bridge
+// goes on (see forward); only a broken stdin or stdout, or a cancelled ctx, ends
+// it with an error.
 func (b *bridge) run(ctx context.Context, r io.Reader, w io.Writer) error {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	out := &syncWriter{w: w}
+	q := newFrameQueue()
+	go b.read(ctx, r, q, out, cancel)
+
+	err := b.serve(ctx, q, out)
+	if errors.Is(err, errWriteStdout) {
+		// The client is gone: nothing a side goroutine relays can reach it.
+		cancel(err)
+	}
+	b.stop()
+	if cause := context.Cause(ctx); errors.Is(cause, errWriteStdout) {
+		// Stdout broke, perhaps under a side goroutine, whose cancel then ended
+		// the worker's forward with a bare "context canceled".
+		err = cause
+	}
+	return err
+}
+
+// serve is the worker: it forwards the queued frames in turn until stdin has
+// ended and the queue is empty, or a forward returns an error.
+func (b *bridge) serve(ctx context.Context, q *frameQueue, w io.Writer) error {
+	for {
+		frame, ok, err := q.next(ctx)
+		if !ok {
+			return err
+		}
+		if err := b.forward(ctx, frame, w); err != nil {
+			return err
+		}
+	}
+}
+
+// read is stdin's one reader. It queues the frames served in turn and starts
+// the ones sent at once, and closes the queue when stdin ends. It never waits
+// on the worker: an answer behind a queued request would then sit unread while
+// the call in flight waits on it.
+func (b *bridge) read(ctx context.Context, r io.Reader, q *frameQueue, w io.Writer, fail context.CancelCauseFunc) {
 	// ReadBytes rather than a Scanner: a tool-call frame (e.g. memory_write with a
 	// long body) can exceed a Scanner's default token cap, and ReadBytes has none.
+	// It also returns a fresh slice each time, which a side goroutine may keep.
 	br := bufio.NewReader(r)
 	for {
 		line, err := br.ReadBytes('\n')
 		if frame := bytes.TrimSpace(line); len(frame) > 0 {
-			if ferr := b.forward(ctx, frame, w); ferr != nil {
-				return ferr
+			if sentAtOnce(frame) {
+				b.goSide(func() {
+					if ferr := b.forward(ctx, frame, w); ferr != nil {
+						fail(ferr) // stdout is broken or ctx is done: end the bridge
+					}
+				})
+			} else {
+				q.push(frame)
 			}
 		}
 		if err != nil {
-			if err == io.EOF {
-				return nil
+			if errors.Is(err, io.EOF) {
+				err = nil
+			} else {
+				err = fmt.Errorf("read stdin: %w", err)
 			}
-			return fmt.Errorf("read stdin: %w", err)
+			q.close(err)
+			return
+		}
+	}
+}
+
+// sentAtOnce reports whether frame goes to the daemon as soon as it is read,
+// rather than in turn behind a call in flight: a response (an id and no
+// method), which answers a server request that call may be waiting on, and
+// notifications/cancelled, which is about that call. The daemon answers both
+// with a 202, so neither has a reply to order against the others.
+func sentAtOnce(frame []byte) bool {
+	var m struct {
+		ID     json.RawMessage `json:"id"`
+		Method string          `json:"method"`
+	}
+	if json.Unmarshal(frame, &m) != nil {
+		return false
+	}
+	return (m.Method == "" && len(m.ID) > 0) || m.Method == string(mcp.MethodNotificationCancelled)
+}
+
+// goSide runs f on a side goroutine that stop waits for, unless run is
+// already returning.
+func (b *bridge) goSide(f func()) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.stopped {
+		return
+	}
+	b.side.Add(1)
+	go func() {
+		defer b.side.Done()
+		f()
+	}()
+}
+
+// stop lets no new side goroutine start and waits for the running ones.
+func (b *bridge) stop() {
+	b.mu.Lock()
+	b.stopped = true
+	b.mu.Unlock()
+	b.side.Wait()
+}
+
+// session is the Mcp-Session-Id to send, "" before initialize.
+func (b *bridge) session() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.sessionID
+}
+
+// logf writes one line to stderr.
+func (b *bridge) logf(format string, args ...any) {
+	b.logMu.Lock()
+	defer b.logMu.Unlock()
+	fmt.Fprintf(b.stderr, format+"\n", args...)
+}
+
+// syncWriter serializes writes to the client's stdout: the worker and a side
+// goroutine may both relay a frame, and writeFrame writes each one whole in a
+// single Write.
+type syncWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (s *syncWriter) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w.Write(p)
+}
+
+// frameQueue holds the frames the worker serves in turn, in the order the
+// client wrote them. It is unbounded on purpose: the reader must never wait on
+// the worker (see read).
+type frameQueue struct {
+	mu     sync.Mutex
+	frames [][]byte
+	ended  bool          // stdin ended
+	err    error         // why: nil at EOF
+	ready  chan struct{} // signalled on every push and on close
+}
+
+func newFrameQueue() *frameQueue { return &frameQueue{ready: make(chan struct{}, 1)} }
+
+func (q *frameQueue) push(frame []byte) {
+	q.mu.Lock()
+	q.frames = append(q.frames, frame)
+	q.mu.Unlock()
+	q.signal()
+}
+
+// close marks the end of stdin, err saying why (nil at EOF).
+func (q *frameQueue) close(err error) {
+	q.mu.Lock()
+	q.ended, q.err = true, err
+	q.mu.Unlock()
+	q.signal()
+}
+
+func (q *frameQueue) signal() {
+	select {
+	case q.ready <- struct{}{}:
+	default: // a wake-up is already pending
+	}
+}
+
+// next returns the next frame. Once stdin has ended and the queue is empty, or
+// ctx is done, it returns ok=false and why: stdin's error (nil at EOF), or
+// ctx's cause.
+func (q *frameQueue) next(ctx context.Context) (frame []byte, ok bool, err error) {
+	for {
+		q.mu.Lock()
+		if len(q.frames) > 0 {
+			frame = q.frames[0]
+			q.frames[0] = nil
+			q.frames = q.frames[1:]
+			q.mu.Unlock()
+			return frame, true, nil
+		}
+		ended, err := q.ended, q.err
+		q.mu.Unlock()
+		if ended {
+			return nil, false, err
+		}
+		select {
+		case <-q.ready:
+		case <-ctx.Done():
+			return nil, false, context.Cause(ctx)
 		}
 	}
 }
@@ -264,8 +467,8 @@ func (b *bridge) exchange(ctx context.Context, frame []byte, w io.Writer) error 
 	if b.agentProcess != "" {
 		req.Header.Set(agentProcessHeader, b.agentProcess)
 	}
-	if b.sessionID != "" {
-		req.Header.Set(headerSessionID, b.sessionID)
+	if id := b.session(); id != "" {
+		req.Header.Set(headerSessionID, id)
 	}
 	setStatelessHeaders(req.Header, frame)
 
@@ -282,7 +485,9 @@ func (b *bridge) exchange(ctx context.Context, frame []byte, w io.Writer) error 
 	// Capture the session id the daemon mints on initialize; replaying it on later
 	// POSTs is what keeps the connection binding (session_start inheritance) alive.
 	if id := resp.Header.Get(headerSessionID); id != "" {
+		b.mu.Lock()
 		b.sessionID = id
+		b.mu.Unlock()
 	}
 
 	switch {
@@ -306,7 +511,7 @@ func (b *bridge) exchange(ctx context.Context, frame []byte, w io.Writer) error 
 
 	mediaType, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")) //nolint:errcheck // an absent or unparseable content type just falls through to the JSON path
 	if mediaType == "text/event-stream" {
-		replied, err := relaySSE(resp.Body, w)
+		replied, err := b.relaySSE(ctx, resp.Body, w)
 		switch {
 		case errors.Is(err, errWriteStdout):
 			return err
@@ -349,7 +554,7 @@ func (b *bridge) answerFailure(w io.Writer, frame []byte, cause error) error {
 		if msg.Method != "" {
 			prefix += ": " + msg.Method
 		}
-		fmt.Fprintf(b.stderr, "%s: %v\n", prefix, cause)
+		b.logf("%s: %v", prefix, cause)
 		return nil
 	}
 	reply, err := json.Marshal(jsonRPCFailure{
@@ -406,10 +611,12 @@ func writeFrame(w io.Writer, msg []byte) error {
 // relaySSE relays the JSON-RPC messages carried in a text/event-stream reply,
 // and reports whether one of them was the reply itself -- the message with no
 // method; the others are notifications or server requests riding the same
-// stream. The synchronous Seamless tools never upgrade to SSE, so this is
-// defensive: the streamable-HTTP server can still choose it, and each event's
-// data payload is one JSON-RPC message.
-func relaySSE(body io.Reader, w io.Writer) (replied bool, err error) {
+// stream. A tool call that waits on the owner (the in-session approval dialog)
+// upgrades to SSE to carry its elicitation and the daemon's ask to launch the
+// Touch ID approver, which is swallowed here (takeApproverAsk); the
+// synchronous tools do not, but the streamable-HTTP server can still choose
+// it. Each event's data payload is one JSON-RPC message.
+func (b *bridge) relaySSE(ctx context.Context, body io.Reader, w io.Writer) (replied bool, err error) {
 	sc := bufio.NewScanner(body)
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	var data []string
@@ -419,6 +626,9 @@ func relaySSE(body io.Reader, w io.Writer) (replied bool, err error) {
 		}
 		msg := []byte(strings.Join(data, "\n"))
 		data = data[:0]
+		if b.takeApproverAsk(ctx, msg) {
+			return nil
+		}
 		if err := writeFrame(w, msg); err != nil {
 			return err
 		}

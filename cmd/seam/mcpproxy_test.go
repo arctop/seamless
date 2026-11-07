@@ -155,27 +155,6 @@ func decodeReply(t *testing.T, frame string) rpcReply {
 	return r
 }
 
-// scriptedStdin hands the bridge one frame per Read and runs before(i) first.
-// The bridge reads frame i only after it has answered frame i-1, so before is
-// where a test changes the world between two frames.
-type scriptedStdin struct {
-	frames []string
-	before func(i int)
-	i      int
-}
-
-func (s *scriptedStdin) Read(p []byte) (int, error) {
-	if s.i >= len(s.frames) {
-		return 0, io.EOF
-	}
-	if s.before != nil {
-		s.before(s.i)
-	}
-	n := copy(p, s.frames[s.i]+"\n")
-	s.i++
-	return n, nil
-}
-
 // fakeDaemon answers every JSON-RPC request with an empty result and every
 // notification with a 202, hangs up (after reading the whole request) on any
 // frame that mentions "hang-up", and counts what it read: served by method,
@@ -269,7 +248,7 @@ func TestBridge_RidesOutADaemonRestart(t *testing.T) {
 	var out bytes.Buffer
 	require.NoError(t, b.forward(ctx, []byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"`+
 		mcp.LATEST_LEGACY_PROTOCOL_VERSION+`","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`), &out))
-	minted := b.sessionID
+	minted := b.session()
 	require.NotEmpty(t, minted, "initialize mints a session id: %s", out.String())
 	require.NoError(t, b.forward(ctx, []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`), &out))
 
@@ -302,34 +281,27 @@ func TestBridge_AnswersADownDaemonInBandAndKeepsServing(t *testing.T) {
 	clk := &fakeClock{}
 	b := newBridge("http://"+addr+"/api/mcp", "k", nil)
 	b.retry = clk.policy(proxyDialBudget)
-	in := &scriptedStdin{
-		frames: []string{
-			`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,
-			`{"jsonrpc":"2.0","id":"two","method":"tools/list"}`,
-		},
-		before: func(i int) {
-			if i == 1 {
-				serveAt(t, addr, d)
-			}
-		},
-	}
+	in, out := newFeedStdin(), newFrameSink()
+	done := runBridge(b, in, out)
 
-	var out bytes.Buffer
-	require.NoError(t, b.run(context.Background(), in, &out))
-	frames := nonEmptyLines(out.String())
-	require.Len(t, frames, 2)
-
-	failed := decodeReply(t, frames[0])
+	in.send(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	failed := decodeReply(t, out.next(t))
 	require.JSONEq(t, `1`, string(failed.ID))
-	require.NotNil(t, failed.Error, frames[0])
+	require.NotNil(t, failed.Error)
 	require.Equal(t, mcp.INTERNAL_ERROR, failed.Error.Code)
 	require.Contains(t, failed.Error.Message, "cannot reach seamlessd at http://"+addr+"/api/mcp")
 	require.Contains(t, failed.Error.Message, "request not sent after 34 attempts over 30s")
 	require.Equal(t, proxyDialBudget, clk.waited())
 
-	served := decodeReply(t, frames[1])
-	require.Nil(t, served.Error, frames[1])
+	serveAt(t, addr, d) // the daemon is back
+	in.send(`{"jsonrpc":"2.0","id":"two","method":"tools/list"}`)
+	served := decodeReply(t, out.next(t))
+	require.Nil(t, served.Error)
 	require.JSONEq(t, `"two"`, string(served.ID), "a string id comes back as the client wrote it")
+
+	in.close()
+	require.NoError(t, waitRun(t, done))
+	require.Empty(t, out.rest())
 	got, hangUps := d.counts()
 	require.Equal(t, []string{"tools/list"}, got)
 	require.Zero(t, hangUps)
@@ -684,4 +656,287 @@ func TestBridge_StatelessFrameIsServed(t *testing.T) {
 		strings.NewReader(statelessToolCall+"\n"), &out))
 	require.Contains(t, out.String(), "echoed")
 	require.Equal(t, float64(7), jsonRPCID(t, out.String()))
+}
+
+// feedStdin is a stdin the test writes frames to while the bridge runs, and
+// closes for EOF. Feeding never blocks the test, so a bridge that stops
+// reading shows up as a missing frame on stdout rather than a hung test.
+type feedStdin struct {
+	lines chan string
+	buf   []byte
+}
+
+func newFeedStdin() *feedStdin { return &feedStdin{lines: make(chan string, 16)} }
+
+func (s *feedStdin) send(frame string) { s.lines <- frame }
+func (s *feedStdin) close()            { close(s.lines) }
+
+func (s *feedStdin) Read(p []byte) (int, error) {
+	if len(s.buf) == 0 {
+		l, ok := <-s.lines
+		if !ok {
+			return 0, io.EOF
+		}
+		s.buf = []byte(l + "\n")
+	}
+	n := copy(p, s.buf)
+	s.buf = s.buf[n:]
+	return n, nil
+}
+
+// frameSink is a bridge's stdout the test reads frame by frame as the bridge
+// writes them.
+type frameSink struct{ frames chan string }
+
+func newFrameSink() *frameSink { return &frameSink{frames: make(chan string, 64)} }
+
+func (s *frameSink) Write(p []byte) (int, error) {
+	for l := range strings.SplitSeq(strings.TrimSuffix(string(p), "\n"), "\n") {
+		s.frames <- l
+	}
+	return len(p), nil
+}
+
+// next waits for the bridge's next frame.
+func (s *frameSink) next(t *testing.T) string {
+	t.Helper()
+	select {
+	case f := <-s.frames:
+		return f
+	case <-time.After(10 * time.Second):
+		t.Fatal("no frame reached stdout: the bridge is stuck")
+		return ""
+	}
+}
+
+// rest drains what the bridge wrote after the frames a test read; call it
+// once run has returned.
+func (s *frameSink) rest() []string {
+	var out []string
+	for {
+		select {
+		case f := <-s.frames:
+			out = append(out, f)
+		default:
+			return out
+		}
+	}
+}
+
+// runBridge runs b over in and out on its own goroutine and returns run's
+// result channel.
+func runBridge(b *bridge, in io.Reader, out io.Writer) <-chan error {
+	done := make(chan error, 1)
+	go func() { done <- b.run(context.Background(), in, out) }()
+	return done
+}
+
+// waitRun waits for run to return.
+func waitRun(t *testing.T, done <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(10 * time.Second):
+		t.Fatal("run did not return after stdin closed")
+		return nil
+	}
+}
+
+// elicitingDaemon is a daemon whose tool call asks the client a question
+// mid-call, as the in-session approval dialog does: the call's POST is
+// upgraded to SSE, carries an elicitation/create, and stays open until the
+// client's answer arrives on a POST of its own; only then does the call end.
+type elicitingDaemon struct {
+	answered chan []byte   // the answer POST's body
+	stop     chan struct{} // closed at cleanup, so a stuck call lets the server close
+	open     atomic.Bool   // the tool call's POST is still open
+
+	mu             sync.Mutex
+	answerSession  string   // the Mcp-Session-Id the answer carried
+	answerWhenOpen bool     // the answer arrived while the call was still open
+	served         []string // every other request's method, and whether it came while the call was open
+}
+
+func newElicitingDaemon(t *testing.T) (*elicitingDaemon, string) {
+	t.Helper()
+	d := &elicitingDaemon{answered: make(chan []byte, 1), stop: make(chan struct{})}
+	srv := httptest.NewServer(d)
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(d.stop) }) // runs first: cleanups are LIFO
+	return d, srv.URL + "/api/mcp"
+}
+
+func (d *elicitingDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	var msg struct {
+		ID     json.RawMessage `json:"id"`
+		Method string          `json:"method"`
+	}
+	if err := json.Unmarshal(body, &msg); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	switch {
+	case msg.Method == "initialize":
+		w.Header().Set(headerSessionID, "sess-e")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{}}`, msg.ID)
+	case msg.Method == "tools/call":
+		d.open.Store(true)
+		defer d.open.Store(false)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "event: message\ndata: "+
+			`{"jsonrpc":"2.0","id":0,"method":"elicitation/create","params":{"message":"Approve?","requestedSchema":{"type":"object","properties":{}}}}`+"\n\n")
+		_ = http.NewResponseController(w).Flush() // a failure shows up as a missing frame
+		var answer []byte
+		select {
+		case answer = <-d.answered:
+		case <-r.Context().Done():
+			return
+		case <-d.stop:
+			return
+		}
+		var got struct {
+			Result struct {
+				Action string `json:"action"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(answer, &got); err != nil {
+			got.Result.Action = "unreadable: " + err.Error() // fails the test's check of the reply
+		}
+		_, _ = fmt.Fprintf(w, "event: message\ndata: %s\n\n",
+			fmt.Sprintf(`{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"answered %s"}]}}`, msg.ID, got.Result.Action))
+	case msg.Method == "" && len(msg.ID) > 0: // the client's answer to the elicitation
+		d.mu.Lock()
+		d.answerSession = r.Header.Get(headerSessionID)
+		d.answerWhenOpen = d.open.Load()
+		d.mu.Unlock()
+		select {
+		case d.answered <- body:
+		default:
+		}
+		w.WriteHeader(http.StatusAccepted)
+	case len(msg.ID) > 0:
+		d.mu.Lock()
+		d.served = append(d.served, msg.Method+" open="+strconv.FormatBool(d.open.Load()))
+		d.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{}}`, msg.ID)
+	default:
+		w.WriteHeader(http.StatusAccepted)
+	}
+}
+
+// A server request inside a tool call (the approval dialog's elicitation) is
+// relayed to the client, and the client's answer is carried back while the
+// call is still open: the bridge reads stdin while a call is in flight. Read
+// in turn, the answer would sit unread behind a call that waits on it. A
+// request the client wrote in between still waits its turn, and its reply
+// follows the call's on stdout.
+func TestBridge_RelaysAnAnswerWhileTheCallWaitsOnIt(t *testing.T) {
+	d, url := newElicitingDaemon(t)
+	in, out := newFeedStdin(), newFrameSink()
+	done := runBridge(newBridge(url, "k", nil), in, out)
+
+	in.send(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`)
+	require.JSONEq(t, `1`, string(decodeReply(t, out.next(t)).ID))
+	in.send(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"recall"}}`)
+
+	var ask struct {
+		ID     json.RawMessage `json:"id"`
+		Method string          `json:"method"`
+	}
+	frame := out.next(t)
+	require.NoError(t, json.Unmarshal([]byte(frame), &ask), frame)
+	require.Equal(t, "elicitation/create", ask.Method)
+	require.JSONEq(t, `0`, string(ask.ID))
+
+	in.send(`{"jsonrpc":"2.0","id":3,"method":"ping"}`) // behind the call: waits its turn
+	in.send(`{"jsonrpc":"2.0","id":0,"result":{"action":"accept","content":{}}}`)
+	result := decodeReply(t, out.next(t))
+	require.JSONEq(t, `2`, string(result.ID))
+	require.Nil(t, result.Error)
+	require.Contains(t, string(result.Result), "answered accept")
+	require.JSONEq(t, `3`, string(decodeReply(t, out.next(t)).ID))
+
+	in.close()
+	require.NoError(t, waitRun(t, done))
+	require.Empty(t, out.rest(), "the answer's 202 relays nothing")
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	require.True(t, d.answerWhenOpen, "the answer reached the daemon while the call was open")
+	require.Equal(t, "sess-e", d.answerSession, "the answer carries the session the call runs under")
+	require.Equal(t, []string{"ping open=false"}, d.served, "the ping was sent once the call had ended")
+}
+
+// notifications/cancelled is about the call in flight, so it reaches the
+// daemon while that call is still open: here the call ends only when its
+// cancel arrives.
+func TestBridge_SendsACancelWhileTheCallIsInFlight(t *testing.T) {
+	cancelled, stop := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if bytes.Contains(body, []byte(`"notifications/cancelled"`)) {
+			once.Do(func() { close(cancelled) })
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		select {
+		case <-cancelled:
+		case <-r.Context().Done():
+			return
+		case <-stop:
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"error":{"code":-32800,"message":"request cancelled"}}`)
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(stop) })
+
+	in, out := newFeedStdin(), newFrameSink()
+	done := runBridge(newBridge(srv.URL+"/api/mcp", "k", nil), in, out)
+	in.send(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"recall"}}`)
+	in.send(`{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1,"reason":"user"}}`)
+	reply := decodeReply(t, out.next(t))
+	require.JSONEq(t, `1`, string(reply.ID))
+	require.NotNil(t, reply.Error)
+
+	in.close()
+	require.NoError(t, waitRun(t, done))
+	require.Empty(t, out.rest(), "the cancel's 202 relays nothing")
+}
+
+// brokenStdout is a client that has gone away.
+type brokenStdout struct{}
+
+func (brokenStdout) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+// A frame sent at once still ends the bridge when its relay finds stdout
+// broken, as it did when every frame was sent in turn: here the daemon refuses
+// an answer with a JSON-RPC error, which is relayed.
+func TestBridge_BrokenStdoutUnderAnAnswerEndsTheBridge(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":0,"error":{"code":-32600,"message":"no"}}`)
+	}))
+	t.Cleanup(srv.Close)
+
+	err := newBridge(srv.URL+"/api/mcp", "k", nil).run(context.Background(),
+		strings.NewReader(`{"jsonrpc":"2.0","id":0,"result":{"action":"accept"}}`+"\n"), brokenStdout{})
+	require.ErrorIs(t, err, errWriteStdout)
+	require.ErrorIs(t, err, io.ErrClosedPipe)
 }
