@@ -23,10 +23,11 @@ public enum ApproverError: Error, Equatable, CustomStringConvertible {
     }
 }
 
-/// How a run ended: the process exits 0, 1 or 2 (`exitCode`).
+/// How a run ended: the process exits 0, 1 or 2 (`exitCode`). A finished or
+/// failed run carries the alert that reports it; a cancel shows none.
 public enum Outcome: Equatable {
-    case done(String)
-    case failed(String)
+    case done(Notice)
+    case failed(Notice)
     case cancelled(String)
 
     public var exitCode: Int32 {
@@ -37,9 +38,22 @@ public enum Outcome: Equatable {
         }
     }
 
+    /// `notice` is the alert to show, nil for a cancel.
+    public var notice: Notice? {
+        switch self {
+        case .done(let n), .failed(let n):
+            return n
+        case .cancelled:
+            return nil
+        }
+    }
+
+    /// `message` is the outcome as plain text, for stderr.
     public var message: String {
         switch self {
-        case .done(let m), .failed(let m), .cancelled(let m):
+        case .done(let n), .failed(let n):
+            return n.text
+        case .cancelled(let m):
             return m
         }
     }
@@ -94,26 +108,30 @@ public struct Flows {
     public let ui: ApproverUI
     public let lookupAccount: (String) -> uid_t?
     public let defaultName: () -> String
+    /// `clock` says the lease's end in the approval's alert.
+    public let clock: WallClock
 
     public init(transport: Transport, keys: KeyStore, ui: ApproverUI,
                 lookupAccount: @escaping (String) -> uid_t? = uidOfAccount,
-                defaultName: @escaping () -> String = { "Touch ID" }) {
+                defaultName: @escaping () -> String = { "Touch ID" },
+                clock: WallClock = .system) {
         self.transport = transport
         self.keys = keys
         self.ui = ui
         self.lookupAccount = lookupAccount
         self.defaultName = defaultName
+        self.clock = clock
     }
 
-    public static func run(_ body: () throws -> Outcome) -> Outcome {
+    public static func run(_ flow: Flow, _ body: () throws -> Notice) -> Outcome {
         do {
-            return try body()
+            return .done(try body())
         } catch ApproverError.cancelled(let m) {
             return .cancelled(m)
         } catch let e as ApproverError {
-            return .failed(e.description)
+            return .failed(Notices.failed(flow, e.description))
         } catch {
-            return .failed(Text.clean("\(error)"))
+            return .failed(Notices.failed(flow, Text.clean("\(error)")))
         }
     }
 
@@ -122,7 +140,7 @@ public struct Flows {
     /// `approve` reads request `id` from the daemon, shows its facts in the
     /// Touch ID prompt, signs TouchIDApproveMessage and sends the approval.
     public func approve(id: String, duration: String) -> Outcome {
-        Flows.run {
+        Flows.run(.approve) {
             try keys.checkAvailable()
             let key = try enrolledKey()
             let got = try transport.exchange(HTTPRequest(method: "GET", path: "/console/access/\(id)?format=json"))
@@ -148,9 +166,9 @@ public struct Flows {
                 FormField("digest", plan.digest),
             ]))
             let ok: Approved = try decode(sent.response, what: "the approval")
-            let project = Text.clean(ok.project ?? plan.facts.project ?? "the project", max: 64)
-            let until = ok.expiresAt.map { " until " + Flows.localTime($0) } ?? ""
-            return .done("Approved: \(project) is open to \(Reason.who(plan.facts))\(until).")
+            let from = plan.facts.kind == "grant" ? (ok.from ?? plan.facts.from ?? "") : ""
+            return Notices.approved(access: plan.access, project: ok.project ?? plan.facts.project ?? "", from: from,
+                                    who: Reason.who(plan.facts), expires: ok.expiresAt, clock: clock)
         }
     }
 
@@ -161,7 +179,7 @@ public struct Flows {
     /// TouchIDEnrollMessage with it and registers it. A key that does not end
     /// up enrolled is deleted; an older key is replaced once the new one is.
     public func enroll(name: String?) -> Outcome {
-        Flows.run {
+        Flows.run(.enroll) {
             try keys.checkAvailable()
             // Who serves the socket is settled before the owner types the
             // code: the code is the secret, and only the daemon may see it.
@@ -170,7 +188,7 @@ public struct Flows {
             let account = try Plan.daemonAccount(list.terminal)
             try requireAccount(account, isPeer: got.peerUID, lookup: lookupAccount)
 
-            let code = try askCode(enrollCommand(list.terminal, account: account))
+            let code = try askCode(daemonCommand(list.terminal, account: account, verb: "enroll-code touchid"))
             let label = name ?? Arguments.defaultApproverName(defaultName())
 
             let older = try keys.keys()
@@ -196,22 +214,20 @@ public struct Flows {
             ]))
             let ok: Enrolled = try decode(sent.response, what: "the enrollment")
             guard let id = ok.id, Validate.isCredentialID(id) else {
-                throw ApproverError.daemon("the daemon enrolled the key but returned no usable approver id")
+                throw ApproverError.daemon("The daemon enrolled the key but returned no usable approver id.")
             }
             try keys.setCredential(id, for: key)
             enrolled = true
-            var replaced = 0
+            // A replaced key the daemon knew leaves its credential there: the
+            // alert gives the command that removes it, id and all. A key that
+            // was never enrolled leaves nothing to remove.
+            var removals: [String] = []
             for old in older where old.handle != key.handle {
-                if (try? keys.delete(old)) != nil {
-                    replaced += 1
+                if (try? keys.delete(old)) != nil, let gone = old.credential, gone != id {
+                    removals.append(daemonCommand(list.terminal, account: account, verb: "remove " + gone))
                 }
             }
-            let shown = Text.clean(ok.name ?? label, max: 64)
-            var msg = "Enrolled this Mac's Touch ID as the approver \(Text.quoted(shown, max: 64)) (\(id))."
-            if replaced > 0 {
-                msg += " The key it replaces was deleted here; remove its old credential with seamlessd approvers remove, run as the daemon's account."
-            }
-            return .done(msg)
+            return Notices.enrolled(name: Text.clean(ok.name ?? label, max: 64), removals: removals)
         }
     }
 
@@ -223,22 +239,34 @@ public struct Flows {
             }
             let normalized: String
             do {
-                normalized = try Messages.normalizeEnrollCode(typed)
+                normalized = try Flows.typedCode(typed)
             } catch {
-                problem = "An enrollment code holds only letters, digits and dashes."
+                problem = CodeProblem.notASCII
                 continue
             }
             if Messages.isEnrollCode(normalized) {
                 return normalized
             }
-            problem = "That is not an enrollment code: it has 16 letters and digits, as XXXX-XXXX-XXXX-XXXX."
+            problem = CodeProblem.notACode
         }
         throw ApproverError.refused("Not enrolled: no valid enrollment code was typed.")
     }
 
-    /// The command that mints a Touch ID code, as `seam approve` would run
-    /// the daemon's seamlessd (cmd/seam/approve.go sudoArgv).
-    func enrollCommand(_ t: Terminal?, account: String) -> String {
+    /// `typedCode` is a code as the owner typed or pasted it, in the form
+    /// the daemon parses (store.NormalizeEnrollCode, mirrored by
+    /// Messages.normalizeEnrollCode): any case, with or without the dashes,
+    /// spaces and tabs it is printed or typed with. A line break pasted
+    /// around it from a terminal is dropped too; the helper sends and signs
+    /// the normalized code, so the daemon never sees one.
+    static func typedCode(_ typed: String) throws -> String {
+        try Messages.normalizeEnrollCode(typed.trimmingCharacters(in: CharacterSet(charactersIn: " \t\r\n")))
+    }
+
+    /// `daemonCommand` is a `seamlessd approvers` command run as the daemon's
+    /// account, as `seam approve` would run the daemon's seamlessd
+    /// (cmd/seam/approve.go sudoArgv): "enroll-code touchid" mints a Touch ID
+    /// code, "remove <id>" removes a credential.
+    func daemonCommand(_ t: Terminal?, account: String, verb: String) -> String {
         var parts = ["sudo -k -u", account]
         if let config = t?.config, config.hasPrefix("/") {
             parts.append("env SEAMLESS_CONFIG=" + Text.clean(config, max: 120))
@@ -248,7 +276,7 @@ public struct Flows {
         } else {
             parts.append("seamlessd")
         }
-        parts.append("approvers enroll-code touchid")
+        parts.append("approvers " + verb)
         return parts.joined(separator: " ")
     }
 
@@ -257,11 +285,11 @@ public struct Flows {
     /// `forget` deletes this Mac's key after the owner confirms. The daemon
     /// keeps the credential until the daemon's account removes it.
     public func forget() -> Outcome {
-        Flows.run {
+        Flows.run(.forget) {
             try keys.checkAvailable()
             let stored = try keys.keys()
             if stored.isEmpty {
-                return .done("No Touch ID approver key is stored on this Mac: nothing to forget.")
+                return Notices.noKey()
             }
             let ids = stored.compactMap { $0.credential }
             guard ui.confirmForget(credentials: ids) else {
@@ -270,10 +298,7 @@ public struct Flows {
             for k in stored {
                 try keys.delete(k)
             }
-            if ids.isEmpty {
-                return .done("Deleted this Mac's Touch ID approver key.")
-            }
-            return .done("Deleted this Mac's Touch ID approver key. The daemon still lists it as \(ids.joined(separator: ", ")): remove it with seamlessd approvers remove, run as the daemon's account.")
+            return Notices.keyDeleted(credentials: ids)
         }
     }
 
@@ -296,7 +321,7 @@ public struct Flows {
     func decode<T: Decodable>(_ r: HTTPResponse, what: String) throws -> T {
         guard r.status == 200 else {
             if let refusal = try? JSONDecoder().decode(DaemonRefusal.self, from: r.body), let e = refusal.error, !e.isEmpty {
-                throw ApproverError.daemon("The daemon refused: " + Text.clean(e, max: 300))
+                throw ApproverError.daemon(Text.sentence("The daemon refused: " + Text.clean(e, max: 300)))
             }
             throw ApproverError.daemon("The daemon answered \(r.status) for \(what).")
         }
@@ -305,21 +330,5 @@ public struct Flows {
         } catch {
             throw ApproverError.daemon("The daemon's answer for \(what) is not the JSON this helper reads.")
         }
-    }
-
-    /// `localTime` shows an RFC 3339 time in this Mac's time zone, or the
-    /// cleaned text when it does not parse.
-    static func localTime(_ rfc3339: String) -> String {
-        let iso = ISO8601DateFormatter()
-        guard let d = iso.date(from: rfc3339) else {
-            return Text.clean(rfc3339, max: 40)
-        }
-        let f = DateFormatter()
-        f.dateStyle = .none
-        f.timeStyle = .short
-        if !Calendar.current.isDateInToday(d) {
-            f.dateStyle = .medium
-        }
-        return f.string(from: d)
     }
 }

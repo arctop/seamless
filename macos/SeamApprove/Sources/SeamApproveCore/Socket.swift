@@ -32,10 +32,10 @@ public final class PeerGuard {
 
     public func admit(_ peer: uid_t) throws {
         if peer == ownUID {
-            throw ApproverError.peer("the process serving the socket runs as this account (uid \(peer)), not as the daemon's: refusing to talk to it")
+            throw ApproverError.peer("The process serving the socket runs as this account (uid \(peer)), not as the daemon's, so Seamless Approve will not talk to it.")
         }
         if let p = pinned, p != peer {
-            throw ApproverError.peer("the socket's peer changed from uid \(p) to uid \(peer) during one approval: refusing to go on")
+            throw ApproverError.peer("The process serving the socket changed from uid \(p) to uid \(peer) during one run, so Seamless Approve stopped.")
         }
         pinned = peer
     }
@@ -46,10 +46,10 @@ public final class PeerGuard {
 /// peer. `lookup` resolves an account name (uidOfAccount in production).
 public func requireAccount(_ account: String, isPeer peer: uid_t, lookup: (String) -> uid_t?) throws {
     guard let uid = lookup(account) else {
-        throw ApproverError.peer("the daemon names \(Text.quoted(account)) as its account, and this Mac has no such account")
+        throw ApproverError.peer("The daemon names \(Text.quoted(account)) as its account, and this Mac has no such account.")
     }
     guard uid == peer else {
-        throw ApproverError.peer("the socket is served by uid \(peer), but the daemon names \(Text.quoted(account)) (uid \(uid)) as its account: refusing to go on")
+        throw ApproverError.peer("The socket is served by uid \(peer), but the daemon names \(Text.quoted(account)) (uid \(uid)) as its account, so Seamless Approve stopped.")
     }
 }
 
@@ -92,7 +92,7 @@ public final class UnixSocketTransport: Transport {
         }
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else {
-            throw ApproverError.transport("cannot open a socket: \(String(cString: strerror(errno)))")
+            throw ApproverError.transport("Seamless Approve cannot open a socket: \(String(cString: strerror(errno))).")
         }
         defer { close(fd) }
         var on: Int32 = 1
@@ -117,20 +117,20 @@ public final class UnixSocketTransport: Transport {
             let e = errno
             switch e {
             case ENOENT:
-                throw ApproverError.transport("there is no daemon socket at \(Text.quoted(path, max: 104))")
+                throw ApproverError.transport("There is no daemon socket at \(Text.quoted(path, max: 104)).")
             case ECONNREFUSED:
-                throw ApproverError.transport("nothing is listening on \(Text.quoted(path, max: 104)): is seamlessd running?")
+                throw ApproverError.transport("Nothing is listening on \(Text.quoted(path, max: 104)). Is seamlessd running?")
             case EACCES:
-                throw ApproverError.transport("this account may not open \(Text.quoted(path, max: 104))")
+                throw ApproverError.transport("This account may not open \(Text.quoted(path, max: 104)).")
             default:
-                throw ApproverError.transport("cannot connect to \(Text.quoted(path, max: 104)): \(String(cString: strerror(e)))")
+                throw ApproverError.transport("Seamless Approve cannot connect to \(Text.quoted(path, max: 104)): \(String(cString: strerror(e))).")
             }
         }
 
         var uid: uid_t = 0
         var gid: gid_t = 0
         guard getpeereid(fd, &uid, &gid) == 0 else {
-            throw ApproverError.peer("the kernel did not report who serves \(Text.quoted(path, max: 104)): \(String(cString: strerror(errno)))")
+            throw ApproverError.peer("The kernel did not report who serves \(Text.quoted(path, max: 104)): \(String(cString: strerror(errno))).")
         }
         try admit(uid)
 
@@ -151,9 +151,9 @@ public final class UnixSocketTransport: Transport {
                 if n < 0 {
                     if errno == EINTR { continue }
                     if errno == EAGAIN || errno == EWOULDBLOCK {
-                        throw ApproverError.transport("the daemon stopped reading the request (timed out)")
+                        throw ApproverError.transport("The daemon stopped reading the request (timed out).")
                     }
-                    throw ApproverError.transport("sending to the daemon failed: \(String(cString: strerror(errno)))")
+                    throw ApproverError.transport("Sending to the daemon failed: \(String(cString: strerror(errno))).")
                 }
                 off += n
             }
@@ -171,13 +171,13 @@ public final class UnixSocketTransport: Transport {
             if n < 0 {
                 if errno == EINTR { continue }
                 if errno == EAGAIN || errno == EWOULDBLOCK {
-                    throw ApproverError.transport("the daemon did not answer within \(timeoutSeconds) seconds")
+                    throw ApproverError.transport("The daemon did not answer within \(timeoutSeconds) seconds.")
                 }
-                throw ApproverError.transport("reading the daemon's answer failed: \(String(cString: strerror(errno)))")
+                throw ApproverError.transport("Reading the daemon's answer failed: \(String(cString: strerror(errno))).")
             }
             out.append(contentsOf: buf[0..<n])
             if out.count > maxResponseBytes {
-                throw ApproverError.daemon("the daemon's answer is larger than \(maxResponseBytes) bytes")
+                throw ApproverError.daemon("The daemon's answer is larger than \(maxResponseBytes) bytes.")
             }
         }
     }

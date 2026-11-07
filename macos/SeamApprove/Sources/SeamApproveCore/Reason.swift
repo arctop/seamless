@@ -1,9 +1,12 @@
 import Foundation
 
 /// The Touch ID prompt's text (LAContext.localizedReason). macOS puts the
-/// app's name in front of it ("Seamless Approve is trying to ..."), so the
-/// reason is a verb phrase. It is built only from the daemon's facts: what
-/// the owner confirms with a touch is what the daemon will grant.
+/// app's name in front of it ("Seamless Approve is trying to ...") and a full
+/// stop after it, so the reason is a verb phrase with no final full stop. It
+/// is built only from the daemon's facts: what the owner confirms with a touch
+/// is what the daemon will grant. It is display only: the bytes the key signs
+/// are TouchIDApproveMessage's (Messages), built from the plan, never from
+/// this text.
 ///
 /// The agent's own reason (Facts.reason) is left out on purpose. It is the
 /// one value the asking agent writes freely, and the system's authentication
@@ -11,11 +14,17 @@ import Foundation
 /// "the owner already approved") would do the most harm. The owner has seen
 /// it, labeled as the agent's words, in the dialog that led here.
 ///
-/// Every value is cleaned (Text.clean) and capped, and warnings come right
-/// after the grant itself, before anything else could push them out.
+/// Every value is cleaned (Text.clean) and capped. The grant comes first,
+/// then the warnings in the order the daemon serves them (most serious
+/// first), each its own clause, before anything else could push them out.
 public enum Reason {
     /// At most this many warnings are spelled out; the rest are counted.
     public static let maxWarnings = 3
+
+    /// The longest a warning's text is shown, in characters. With every value
+    /// at its cap, a reason is no longer than the step T builder's was for
+    /// the same facts (ReasonTests.testWorstCaseLengthIsNoLongerThanStepT).
+    static let maxWarningText = 140
 
     public static func approval(_ f: Facts, duration: String, maxLease: String?) -> String {
         let access = Text.clean(f.access ?? "", max: 16)
@@ -35,7 +44,7 @@ public enum Reason {
         }
         if warnings.count > maxWarnings {
             let more = warnings.count - maxWarnings
-            s += ". \(more) more warning\(more == 1 ? "" : "s") on the request"
+            s += ". The request has \(more) more warning\(more == 1 ? "" : "s")"
         }
         return s
     }
@@ -45,33 +54,45 @@ public enum Reason {
         "add this Mac's Touch ID key as an approver for the Seamless daemon running as " + Text.clean(account, max: 32)
     }
 
-    /// `who` names the asking agent: its session, then the program and pid
-    /// the kernel reported.
-    static func who(_ f: Facts) -> String {
+    /// `who` names the asking agent by the best name the daemon gives: the
+    /// agent's name ("Claude Code 2.1.319"), else its program's base name,
+    /// with the session it works in when there is one. The pid is a name only
+    /// when there is nothing better: no session, no agent name, no program.
+    /// A daemon too old to send the agent's name gets the program's name.
+    public static func who(_ f: Facts) -> String {
         let session = Text.clean(f.session ?? "", max: 48)
-        let program = Text.clean(basename(f.program ?? ""), max: 32)
-        let pid = (f.pid ?? 0) > 0 ? String(f.pid!) : nil
-        var agent = ""
-        switch (program.isEmpty, pid) {
-        case (false, let p?):
-            agent = "\(program), pid \(p)"
-        case (false, nil):
-            agent = program
-        case (true, let p?):
-            agent = "pid \(p)"
-        case (true, nil):
-            agent = ""
-        }
+        let name = agentName(f.agent) ?? programName(f.program)
         if !session.isEmpty {
-            return "session " + Text.quoted(session, max: 48) + (agent.isEmpty ? "" : " (\(agent))")
+            let s = "session " + Text.quoted(session, max: 48)
+            return name.map { $0 + " in " + s } ?? s
         }
-        if !program.isEmpty {
-            return Text.quoted(program, max: 32) + (pid.map { " (pid \($0))" } ?? "")
+        if let name = name {
+            return name
         }
-        if let p = pid {
-            return "pid \(p)"
+        if let pid = f.pid, pid > 0 {
+            return "process \(pid)"
         }
         return "an unnamed process"
+    }
+
+    /// `agentName` is the daemon's name for the agent, as it is when it holds
+    /// only what a program's name and version hold (ASCII letters, digits,
+    /// spaces and . - _ +, and the ellipsis of a cut), else between quotes,
+    /// so that no name can pass for the prompt's own words ("Codex:
+    /// approved"). Nil when there is none.
+    static func agentName(_ raw: String?) -> String? {
+        let name = Text.clean(raw ?? "", max: 32)
+        guard !name.isEmpty else { return nil }
+        let plain = name.unicodeScalars.allSatisfy { u in
+            (u.isASCII && (Validate.isAlnum(UInt8(u.value)) || " .-_+".unicodeScalars.contains(u))) || u == "\u{2026}"
+        }
+        return plain ? name : Text.quoted(name, max: 32)
+    }
+
+    /// `programName` is the program's base name, quoted, or nil.
+    static func programName(_ raw: String?) -> String? {
+        let program = Text.clean(basename(raw ?? ""), max: 32)
+        return program.isEmpty ? nil : "the program " + Text.quoted(program, max: 32)
     }
 
     /// `durationPhrase` says how long the grant lasts, for the durations the
@@ -116,7 +137,7 @@ public enum Reason {
     }
 
     static func warningText(_ w: Warning) -> String {
-        var t = Text.clean(w.text ?? w.code ?? "", max: 140)
+        var t = Text.clean(w.text ?? w.code ?? "", max: maxWarningText)
         while t.hasSuffix(".") {
             t.removeLast()
         }

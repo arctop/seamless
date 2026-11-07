@@ -75,4 +75,27 @@ public enum Text {
     public static func quoted(_ s: String, max: Int = 48) -> String {
         "\u{201C}" + clean(s, max: max) + "\u{201D}"
     }
+
+    /// `sentence` makes a message read as a sentence in an alert: its first
+    /// letter upper case, and a full stop at its end unless it already ends
+    /// in one, a question mark, an exclamation mark or an ellipsis. A message
+    /// that starts with no letter (a flag, a quote) keeps its first character.
+    public static func sentence(_ s: String) -> String {
+        var t = s.trimmingCharacters(in: .whitespaces)
+        guard let first = t.first else { return t }
+        if first.isLowercase {
+            t = first.uppercased() + t.dropFirst()
+        }
+        if let last = t.last, !".?!\u{2026}".contains(last) {
+            t += "."
+        }
+        return t
+    }
+
+    /// `upperFirst` is `s` with its first character upper case, for a value
+    /// that opens a sentence ("read-write" in "Read-write access to ...").
+    public static func upperFirst(_ s: String) -> String {
+        guard let first = s.first else { return s }
+        return first.uppercased() + s.dropFirst()
+    }
 }

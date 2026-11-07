@@ -34,13 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func finish(_ outcome: Outcome) {
         FileHandle.standardError.write(Data(("SeamApprove: " + outcome.message + "\n").utf8))
-        if !interactive {
-            switch outcome {
-            case .cancelled:
-                break
-            default:
-                ui.showOutcome(outcome)
-            }
+        // A cancel shows nothing: the owner just chose it.
+        if !interactive, let notice = outcome.notice {
+            ui.show(notice)
         }
         exit(outcome.exitCode)
     }
@@ -56,7 +52,7 @@ enum Runner {
         do {
             command = try Arguments.parse(argv)
         } catch {
-            return .failed("\(error)\n\(Arguments.usage)")
+            return .failed(Notices.badArguments("\(error)"))
         }
         switch command {
         case let .approve(socket, request, duration):
@@ -81,7 +77,7 @@ enum Runner {
 /// `forget` talks to no daemon.
 struct NoTransport: Transport {
     func exchange(_ request: HTTPRequest) throws -> Exchange {
-        throw ApproverError.transport("no daemon socket was given")
+        throw ApproverError.transport("No daemon socket was given.")
     }
 }
 

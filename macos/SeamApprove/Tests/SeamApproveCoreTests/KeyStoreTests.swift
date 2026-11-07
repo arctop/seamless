@@ -36,8 +36,9 @@ final class KeyStoreTests: XCTestCase {
     func testApproveOnAnUnsignedCopy() {
         let flows = Flows(transport: UnixSocketTransport(path: "/nonexistent.sock", userAgent: "t", admit: { _ in XCTFail("no connection") }),
                           keys: SecureEnclaveKeyStore(bundleID: "com.arctop.seamless.approve"), ui: FakeUI())
-        XCTAssertEqual(flows.approve(id: "01JC7Q2ZK5V0M8W9X3Y4Z5A6B7", duration: "1h"), .failed(SecureEnclaveKeyStore.unsigned))
-        XCTAssertEqual(flows.enroll(name: nil), .failed(SecureEnclaveKeyStore.unsigned))
-        XCTAssertEqual(flows.forget(), .failed(SecureEnclaveKeyStore.unsigned))
+        XCTAssertEqual(flows.approve(id: "01JC7Q2ZK5V0M8W9X3Y4Z5A6B7", duration: "1h"),
+                       .failed(Notice(title: "Couldn't approve", body: SecureEnclaveKeyStore.unsigned, succeeded: false)))
+        XCTAssertEqual(flows.enroll(name: nil), .failed(Notice(title: "Couldn't enroll", body: SecureEnclaveKeyStore.unsigned, succeeded: false)))
+        XCTAssertEqual(flows.forget(), .failed(Notice(title: "Couldn't delete the key", body: SecureEnclaveKeyStore.unsigned, succeeded: false)))
     }
 }

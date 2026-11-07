@@ -2,26 +2,21 @@ import AppKit
 import SeamApproveCore
 
 /// The helper's own dialogs. The flows run on a worker thread; every dialog
-/// runs modally on the main thread.
+/// runs modally on the main thread. The words come from SeamApproveCore
+/// (Prompts, Notices), where the tests pin them; this file only lays them out.
 final class AppUI: ApproverUI {
     func enrollCode(command: String, problem: String?) -> String? {
         onMain {
+            let p = Prompts.enrollCode(command: command, problem: problem)
             let alert = NSAlert()
-            alert.messageText = "Enroll this Mac's Touch ID with Seamless"
-            var info = ""
-            if let problem = problem {
-                info += problem + "\n\n"
-            }
-            info += "Type the one-time enrollment code that this command prints in your own terminal:\n\n"
-            info += command + "\n\n"
-            info += "A code works once and lasts 10 minutes. It is typed here, never passed on a command line."
-            alert.informativeText = info
-            let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
-            field.placeholderString = "XXXX-XXXX-XXXX-XXXX"
+            alert.messageText = p.title
+            alert.informativeText = p.body
+            let field = NSTextField(frame: NSRect(x: 0, y: 0, width: App.accessoryWidth, height: 24))
+            field.placeholderString = p.placeholder
             field.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-            alert.accessoryView = field
-            alert.addButton(withTitle: "Enroll")
-            alert.addButton(withTitle: "Cancel")
+            alert.accessoryView = App.stack([App.setApartField(p.setApart), field])
+            alert.addButton(withTitle: p.accept)
+            alert.addButton(withTitle: p.cancel)
             alert.window.initialFirstResponder = field
             App.bringForward()
             return alert.runModal() == .alertFirstButtonReturn ? field.stringValue : nil
@@ -30,42 +25,35 @@ final class AppUI: ApproverUI {
 
     func confirmForget(credentials: [String]) -> Bool {
         onMain {
+            let p = Prompts.confirmForget(keptByDaemon: !credentials.isEmpty)
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = "Delete this Mac's Touch ID approver key?"
-            var info = "Seamless Approve will no longer be able to approve access from this Mac until you enroll again with seam touchid enroll."
-            if !credentials.isEmpty {
-                info += "\n\nThe daemon keeps the credential (\(credentials.joined(separator: ", "))) until its account removes it with seamlessd approvers remove."
-            }
-            alert.informativeText = info
-            alert.addButton(withTitle: "Delete Key")
-            alert.addButton(withTitle: "Cancel")
+            alert.messageText = p.title
+            alert.informativeText = p.body
+            alert.addButton(withTitle: p.accept)
+            alert.addButton(withTitle: p.cancel)
             App.bringForward()
             return alert.runModal() == .alertFirstButtonReturn
         }
     }
 
-    /// `showOutcome` tells the owner how the run ended, since a helper that
-    /// LaunchServices started has no terminal. A success closes by itself.
-    func showOutcome(_ outcome: Outcome) {
+    /// `show` tells the owner how the run ended, since a helper that
+    /// LaunchServices started has no terminal. It closes by itself after
+    /// Notice.autoCloseSeconds only when it asks nothing of the owner
+    /// (Notice.autoCloses).
+    func show(_ notice: Notice) {
         onMain {
             let alert = NSAlert()
-            switch outcome {
-            case .done:
-                alert.alertStyle = .informational
-                alert.messageText = "Seamless Approve"
-            case .failed:
-                alert.alertStyle = .warning
-                alert.messageText = "Seamless Approve did not finish"
-            case .cancelled:
-                alert.alertStyle = .informational
-                alert.messageText = "Seamless Approve: cancelled"
+            alert.alertStyle = notice.succeeded ? .informational : .warning
+            alert.messageText = notice.title
+            alert.informativeText = notice.body
+            if !notice.setApart.isEmpty {
+                alert.accessoryView = App.setApartField(notice.setApart)
             }
-            alert.informativeText = outcome.message
             alert.addButton(withTitle: "OK")
             var timer: Timer?
-            if case .done = outcome {
-                let t = Timer(timeInterval: 6, repeats: false) { _ in
+            if notice.autoCloses {
+                let t = Timer(timeInterval: Notice.autoCloseSeconds, repeats: false) { _ in
                     NSApp.abortModal()
                 }
                 RunLoop.main.add(t, forMode: .modalPanel)
@@ -86,6 +74,12 @@ func onMain<T>(_ body: () -> T) -> T {
 }
 
 enum App {
+    /// The width of an alert's accessory view. At 12 points a monospaced
+    /// character is about 7.2 points wide, so a line holds some 47 of them:
+    /// a 26-symbol credential id always fits on one line, and word wrapping
+    /// breaks a command only at its spaces.
+    static let accessoryWidth: CGFloat = 340
+
     static func bringForward() {
         if #available(macOS 14.0, *) {
             NSApp.activate()
@@ -94,8 +88,44 @@ enum App {
         }
     }
 
+    /// `setApartField` shows lines the owner must type or match: monospaced,
+    /// selectable (to copy), not editable, one paragraph per line, wrapped at
+    /// spaces only where a line is longer than the field.
+    static func setApartField(_ lines: [String]) -> NSTextField {
+        let field = NSTextField(wrappingLabelWithString: lines.joined(separator: "\n"))
+        field.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        field.isEditable = false
+        field.isSelectable = true
+        field.isBezeled = true
+        field.bezelStyle = .squareBezel
+        field.drawsBackground = true
+        field.backgroundColor = .textBackgroundColor
+        field.textColor = .labelColor
+        field.lineBreakMode = .byWordWrapping
+        field.preferredMaxLayoutWidth = accessoryWidth
+        let bounds = NSRect(x: 0, y: 0, width: accessoryWidth, height: 10_000)
+        let height = ceil(field.cell?.cellSize(forBounds: bounds).height ?? 24)
+        field.frame = NSRect(x: 0, y: 0, width: accessoryWidth, height: height)
+        return field
+    }
+
+    /// `stack` lays views out top to bottom in one accessory view.
+    static func stack(_ views: [NSView], spacing: CGFloat = 8) -> NSView {
+        let height = views.reduce(0) { $0 + $1.frame.height } + spacing * CGFloat(max(views.count - 1, 0))
+        let box = NSView(frame: NSRect(x: 0, y: 0, width: accessoryWidth, height: height))
+        var top = height
+        for v in views {
+            top -= v.frame.height
+            v.setFrameOrigin(NSPoint(x: 0, y: top))
+            box.addSubview(v)
+            top -= spacing
+        }
+        return box
+    }
+
     /// An Edit menu, never shown (the app has no menu bar: LSUIElement), so
-    /// that Command-V pastes into the enrollment code's field.
+    /// that Command-V pastes into the enrollment code's field and Command-C
+    /// copies from a set-apart command.
     static func editMenu() -> NSMenu {
         let main = NSMenu()
         let editItem = NSMenuItem()

@@ -26,6 +26,10 @@ public struct Facts: Decodable, Equatable {
     public var access: String?
     public var kind: String?
     public var program: String?
+    /// `agent` is the daemon's readable name for the program ("Claude Code
+    /// 2.1.319", "Codex"). A daemon that cannot name it, or one too old to
+    /// know the field, sends none.
+    public var agent: String?
     public var pid: Int64?
     public var uid: Int64?
     public var session: String?
@@ -41,7 +45,7 @@ public struct Facts: Decodable, Equatable {
     public var from: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, project, isolation, access, kind, program, pid, uid, session, cwd, repo, model, reason, warnings, digest, from
+        case id, project, isolation, access, kind, program, agent, pid, uid, session, cwd, repo, model, reason, warnings, digest, from
         case shortID = "short_id"
         case sessionID = "session_id"
         case requestedAt = "requested_at"
@@ -49,7 +53,7 @@ public struct Facts: Decodable, Equatable {
     }
 
     public init(id: String? = nil, project: String? = nil, isolation: String? = nil, access: String? = nil,
-                kind: String? = nil, program: String? = nil, pid: Int64? = nil, session: String? = nil,
+                kind: String? = nil, program: String? = nil, agent: String? = nil, pid: Int64? = nil, session: String? = nil,
                 warnings: [Warning]? = nil, digest: String? = nil, from: String? = nil, reason: String? = nil) {
         self.id = id
         self.project = project
@@ -57,6 +61,7 @@ public struct Facts: Decodable, Equatable {
         self.access = access
         self.kind = kind
         self.program = program
+        self.agent = agent
         self.pid = pid
         self.session = session
         self.warnings = warnings
@@ -98,14 +103,16 @@ public struct AccessList: Decodable {
     public var terminal: Terminal?
 }
 
-/// POST /console/access/{id}/approve's answer.
+/// POST /console/access/{id}/approve's answer. `from` is a read grant's
+/// asking project; `expiresAt` is RFC 3339 in UTC.
 public struct Approved: Decodable {
     public var approved: String?
     public var project: String?
+    public var from: String?
     public var expiresAt: String?
 
     enum CodingKeys: String, CodingKey {
-        case approved, project
+        case approved, project, from
         case expiresAt = "expires_at"
     }
 }
@@ -141,29 +148,29 @@ public enum Plan {
     /// account (which the caller then checks against the socket's peer).
     public static func approval(_ one: AccessOne, id: String, duration: String) throws -> ApprovalPlan {
         guard let facts = one.request else {
-            throw ApproverError.daemon("the daemon's answer carries no request")
+            throw ApproverError.daemon("The daemon's answer carries no request.")
         }
         guard facts.id == id else {
-            throw ApproverError.daemon("the daemon answered for another request (\(Text.quoted(facts.id ?? "")))")
+            throw ApproverError.daemon("The daemon answered for another request (\(Text.quoted(facts.id ?? ""))).")
         }
         let short = Text.clean(facts.shortID ?? id, max: 26)
         guard let status = one.status, status == "pending" else {
-            throw ApproverError.refused("request \(short) is \(Text.clean(one.status ?? "in an unknown state", max: 32)): nothing to approve")
+            throw ApproverError.refused("Request \(short) is \(Text.clean(one.status ?? "in an unknown state", max: 32)), so there is nothing to approve.")
         }
         guard let offered = one.durations, offered.contains(duration) else {
-            throw ApproverError.refused("the daemon does not offer the duration \(Text.quoted(duration)) for request \(short)")
+            throw ApproverError.refused("The daemon does not offer the duration \(Text.quoted(duration)) for request \(short).")
         }
         guard let b64 = one.challenge, !b64.isEmpty else {
-            throw ApproverError.daemon("the daemon sent no challenge for request \(short); is this daemon too old for Touch ID approval?")
+            throw ApproverError.daemon("The daemon sent no challenge for request \(short). Is this daemon too old for Touch ID approval?")
         }
         guard let challenge = Data(base64Encoded: b64), !challenge.isEmpty else {
-            throw ApproverError.daemon("the daemon's challenge for request \(short) is not standard base64")
+            throw ApproverError.daemon("The daemon's challenge for request \(short) is not standard base64.")
         }
         guard let digest = facts.digest, Validate.isHexDigest(digest) else {
-            throw ApproverError.daemon("the daemon sent no usable digest of request \(short)'s facts")
+            throw ApproverError.daemon("The daemon sent no usable digest of request \(short)'s facts.")
         }
         guard let access = facts.access, !access.isEmpty else {
-            throw ApproverError.daemon("the daemon did not say what access request \(short) asks for")
+            throw ApproverError.daemon("The daemon did not say what access request \(short) asks for.")
         }
         let account = try daemonAccount(one.terminal)
         return ApprovalPlan(id: id, challenge: challenge, digest: digest, access: access, duration: duration,
@@ -174,10 +181,10 @@ public enum Plan {
     /// for shape; the caller compares it with the socket's peer.
     public static func daemonAccount(_ t: Terminal?) throws -> String {
         guard let account = t?.account, !account.isEmpty else {
-            throw ApproverError.daemon("the daemon did not name its own account, so the helper cannot check who is serving the socket")
+            throw ApproverError.daemon("The daemon did not name its own account, so Seamless Approve cannot check who is serving the socket.")
         }
         guard Validate.isAccountName(account) else {
-            throw ApproverError.daemon("the daemon named \(Text.quoted(account)) as its account, which is not an account name")
+            throw ApproverError.daemon("The daemon named \(Text.quoted(account)) as its account, which is not an account name.")
         }
         return account
     }
