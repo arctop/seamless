@@ -325,7 +325,7 @@ any of it.
   `approversTouchIDEnrol`, `touchIDProof`). Nothing installs or launches
   Seamless Approve but `seam touchid enroll`, which checks the zip against the
   release's checksums.txt (`update.VerifyChecksum`), then `codesign --verify
-  --strict --deep`, the identifier `org.thereisnospoon.seamless.approve`,
+  --strict --deep`, the identifier `com.arctop.seamless.approve`,
   `spctl` for a release asset, and seam's own Developer ID team, pinned with
   a `-R=anchor apple generic ... certificate leaf[subject.OU]` requirement
   (an unsigned seam: the owner's y/N). seam does not link the Sigstore
@@ -343,7 +343,7 @@ any of it.
   team ID in source: the pin is read at run time from seam's own signature,
   and the build substitutes it from the environment. A release ships the app
   only when the repository secret `MACOS_APPROVER_PROFILE` is set (the base64
-  Developer ID provisioning profile for `org.thereisnospoon.seamless.approve`,
+  Developer ID provisioning profile for `com.arctop.seamless.approve`,
   Keychain Sharing on): release.yml's `approver` job signs it with
   `MACOS_SIGN_P12`'s Developer ID (the team seam pins) after importing Apple's
   G2 intermediate pinned by hash, notarizes and staples it, and hands

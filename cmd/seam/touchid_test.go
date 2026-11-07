@@ -340,7 +340,7 @@ func TestTouchIDEnroll_ReleaseHappyPath(t *testing.T) {
 		{"spctl", "--assess", "--type", "execute", staged},
 		{"codesign", "-dvv", fakeSelf},
 		{"codesign", "--verify", "--strict", "--deep",
-			`-R=anchor apple generic and identifier "org.thereisnospoon.seamless.approve" and certificate leaf[subject.OU] = "` + fakeTeam + `"`, staged},
+			`-R=anchor apple generic and identifier "com.arctop.seamless.approve" and certificate leaf[subject.OU] = "` + fakeTeam + `"`, staged},
 		{"open", "-W", "-n", "-a", rig.target(), "--args", "enroll", "--socket", rig.sock, "--name", "Touch ID on laptop"},
 	}, rig.runner.recorded())
 	require.Equal(t, filepath.Join(rig.home, "Applications"), filepath.Dir(stage), "staged beside the target, so the install is one rename")

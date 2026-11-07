@@ -9,7 +9,7 @@
 	<key>CFBundleExecutable</key>
 	<string>SeamApprove</string>
 	<key>CFBundleIdentifier</key>
-	<string>org.thereisnospoon.seamless.approve</string>
+	<string>com.arctop.seamless.approve</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>

@@ -46,7 +46,7 @@ import (
 
 // approverBundleID is the helper app's bundle identifier, the Identifier its
 // code signature must carry.
-const approverBundleID = "org.thereisnospoon.seamless.approve"
+const approverBundleID = "com.arctop.seamless.approve"
 
 // approversJSONPath is the Approvers page as JSON.
 const approversJSONPath = "/console/approvers?format=json"

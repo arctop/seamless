@@ -19,7 +19,7 @@
 #                             keychain codesign can reach)
 #     APPROVER_TEAM_ID        the 10-character team id the identity belongs to
 #     APPROVER_PROFILE        path to the provisioning profile for the App ID
-#                             org.thereisnospoon.seamless.approve (Developer ID
+#                             com.arctop.seamless.approve (Developer ID
 #                             for a release, development for a local test)
 #     The team id is substituted into the entitlements, the profile is checked
 #     against them and embedded at Contents/embedded.provisionprofile, and the
@@ -47,7 +47,7 @@ PKG="$ROOT/macos/SeamApprove"
 OUT=${APPROVER_OUT:-$ROOT/bin/approver}
 APP="$OUT/Seamless Approve.app"
 EXE=SeamApprove
-BUNDLE_ID=org.thereisnospoon.seamless.approve
+BUNDLE_ID=com.arctop.seamless.approve
 VERSION=${APPROVER_VERSION:-0.0.0-dev}
 
 # CFBundleShortVersionString takes up to three dot-separated integers; the

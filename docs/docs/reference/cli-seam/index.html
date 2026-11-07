@@ -611,7 +611,7 @@ only, in the owner's own terminal, with <code>server_url: unix:///path</code> na
 <code>seamless-approve_&lt;version&gt;_darwin.zip</code> and checks its SHA-256 against the
 release's <code>checksums.txt</code>; a source build passes <code>--app</code> with a local <code>.app</code>
 or zip. Either way the app must pass <code>codesign --verify --strict --deep</code>, be
-named <code>org.thereisnospoon.seamless.approve</code>, and carry the same Developer ID
+named <code>com.arctop.seamless.approve</code>, and carry the same Developer ID
 team as <code>seam</code> itself (an unsigned <code>seam</code> shows the app's team and asks); a
 release asset must also pass Gatekeeper. It is installed at
 <code>~/Applications/Seamless Approve.app</code>, replacing an existing copy only after

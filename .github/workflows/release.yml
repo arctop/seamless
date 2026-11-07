@@ -31,7 +31,7 @@ jobs:
   # `seam touchid enroll` downloads; no install path uses it unasked. It needs
   # one secret beyond the darwin signing ones: MACOS_APPROVER_PROFILE, the
   # base64 of the Developer ID provisioning profile for the App ID
-  # org.thereisnospoon.seamless.approve (Keychain Sharing on). Without it --
+  # com.arctop.seamless.approve (Keychain Sharing on). Without it --
   # a fork, or this repo before the owner adds it -- the approver job is
   # skipped and goreleaser publishes exactly what it did before: APPROVER_ZIP
   # stays unset and the .goreleaser.yaml entries for it render empty.

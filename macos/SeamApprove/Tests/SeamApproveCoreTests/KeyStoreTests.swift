@@ -8,7 +8,7 @@ import XCTest
 /// the keychain, so no item is read or written and nothing prompts.
 final class KeyStoreTests: XCTestCase {
     func testAnUnsignedProcessHasNoKeyStore() {
-        let store = SecureEnclaveKeyStore(bundleID: "org.thereisnospoon.seamless.approve")
+        let store = SecureEnclaveKeyStore(bundleID: "com.arctop.seamless.approve")
         XCTAssertNil(store.group)
         XCTAssertEqual(store.problem, SecureEnclaveKeyStore.unsigned)
         for (what, op) in [
@@ -35,7 +35,7 @@ final class KeyStoreTests: XCTestCase {
     /// before any socket is opened.
     func testApproveOnAnUnsignedCopy() {
         let flows = Flows(transport: UnixSocketTransport(path: "/nonexistent.sock", userAgent: "t", admit: { _ in XCTFail("no connection") }),
-                          keys: SecureEnclaveKeyStore(bundleID: "org.thereisnospoon.seamless.approve"), ui: FakeUI())
+                          keys: SecureEnclaveKeyStore(bundleID: "com.arctop.seamless.approve"), ui: FakeUI())
         XCTAssertEqual(flows.approve(id: "01JC7Q2ZK5V0M8W9X3Y4Z5A6B7", duration: "1h"), .failed(SecureEnclaveKeyStore.unsigned))
         XCTAssertEqual(flows.enroll(name: nil), .failed(SecureEnclaveKeyStore.unsigned))
         XCTAssertEqual(flows.forget(), .failed(SecureEnclaveKeyStore.unsigned))

@@ -5,7 +5,7 @@ import Security
 
 /// The approver key: a P-256 key made by and kept in the Secure Enclave,
 /// stored in the data protection keychain under the access group
-/// "<team id>.org.thereisnospoon.seamless.approve".
+/// "<team id>.com.arctop.seamless.approve".
 ///
 /// Why the keychain and not a CryptoKit dataRepresentation file: a Secure
 /// Enclave key blob is bound to this Mac, not to this app, so any process of
@@ -18,7 +18,7 @@ import Security
 /// The group is read from this process's own signature (its entitlements),
 /// never written in source: the team id is substituted at build time.
 public final class SecureEnclaveKeyStore: KeyStore {
-    static let tag = Data("org.thereisnospoon.seamless.approve.touchid".utf8)
+    static let tag = Data("com.arctop.seamless.approve.touchid".utf8)
     /// The item's label carries the approver id the daemon returned.
     static let enrolledPrefix = "seamless approver "
     static let pendingLabel = "seamless approver (not enrolled)"
