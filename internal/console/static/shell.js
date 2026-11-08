@@ -669,4 +669,39 @@
     var title = a.getAttribute('data-title') || (a.querySelector('.rail-title, strong, .t') || a).textContent;
     remember(a.getAttribute('href'), (title || '').replace(/\s+/g, ' '));
   }, true);
+
+  /* ---- Clock times in this browser's zone ---------------------------------- */
+
+  // A time[data-clock] (the clock and clockDate template helpers) carries its
+  // instant in datetime and the daemon's wall clock as its text; here it reads
+  // as this browser's own wall clock, naming no zone, as the CLI prints the
+  // terminal's. Fragments swapped in later are caught by the observer.
+  function two(n) { return (n < 10 ? '0' : '') + n; }
+  function localClock(el) {
+    if (el.getAttribute('data-clocked')) return;
+    var d = new Date(el.getAttribute('datetime'));
+    if (isNaN(d.getTime())) return;
+    var text = two(d.getHours()) + ':' + two(d.getMinutes());
+    if (el.getAttribute('data-clock') === 'date') {
+      text = d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()) + ' ' + text;
+    }
+    el.textContent = text;
+    el.setAttribute('data-clocked', '1');
+  }
+  function localClocks(scope) {
+    if (scope.matches && scope.matches('time[data-clock]')) localClock(scope);
+    var els = scope.querySelectorAll ? scope.querySelectorAll('time[data-clock]') : [];
+    for (var i = 0; i < els.length; i++) localClock(els[i]);
+  }
+  localClocks(document);
+  if (window.MutationObserver && document.body) {
+    new MutationObserver(function (records) {
+      for (var i = 0; i < records.length; i++) {
+        var added = records[i].addedNodes;
+        for (var j = 0; j < added.length; j++) {
+          if (added[j].nodeType === 1) localClocks(added[j]);
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  }
 })();

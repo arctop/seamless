@@ -74,12 +74,14 @@ func minutesLeft(d time.Duration) string {
 	}
 }
 
-// clock renders an instant as the daemon's local wall clock, with its zone:
-// the owner and the agents share this machine, so its clock is theirs.
-func clock(t time.Time) string { return t.Local().Format("15:04 MST") }
+// clock renders an instant as the daemon's local wall clock, naming no zone
+// (owner decision 2026-11-08): each surface shows its viewer's own clock --
+// the terminal's for the CLI, the browser's for the console -- and the owner
+// and the agents share this machine, so its clock is theirs.
+func clock(t time.Time) string { return t.Local().Format("15:04") }
 
 // clockDay is clock with the day, for an instant that may lie days back.
-func clockDay(t time.Time) string { return t.Local().Format("15:04 MST on Jan 2") }
+func clockDay(t time.Time) string { return t.Local().Format("15:04 on Jan 2") }
 
-// Clock renders t as the warnings and refusals do (local time, with the zone).
+// Clock renders t as the warnings and refusals do: local time, no zone.
 func Clock(t time.Time) string { return clock(t) }

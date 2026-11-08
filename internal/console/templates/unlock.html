@@ -16,7 +16,7 @@
 {{if .Unlocked}}
 <section aria-labelledby="unlock-state-title">
   <h2 id="unlock-state-title">Unlocked in this browser</h2>
-  <p class="held-sub">{{icon "key-round"}} This browser reads {{.Project.Name}} until <strong>{{.Until.Local.Format "15:04"}}</strong>. Agents are unaffected: each still needs its own approval.</p>
+  <p class="held-sub">{{icon "key-round"}} This browser reads {{.Project.Name}} until <strong>{{clock .Until}}</strong>. Agents are unaffected: each still needs its own approval.</p>
   <p><a class="btn primary" href="/console/projects/{{.Project.Slug}}">{{icon "box"}} Open {{.Project.Name}}</a></p>
   <form method="post" action="/console/access/unlocks/{{.UnlockID}}/end">
     <input type="hidden" name="next" value="/console/unlock/{{.Project.Slug}}">

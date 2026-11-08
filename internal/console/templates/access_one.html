@@ -19,7 +19,7 @@
   <dt>Working in</dt><dd>{{if .CWD}}<code>{{.CWD}}</code>{{else}}unknown{{end}}</dd>
   <dt>The agent says</dt><dd>{{if .Reason}}<q>{{.Reason}}</q> <span class="faint">(the agent's own words, not checked)</span>{{else}}(no reason given){{end}}</dd>
   <dt>Kind</dt><dd>{{if eq .Kind "refresh"}}a refresh of a lease it holds{{else if eq .Kind "grant"}}a read-only grant of a confidential project{{else}}a first request{{end}}</dd>
-  <dt>{{if eq $.Data.Status "pending"}}Waits until{{else}}Waited until{{end}}</dt><dd>{{.ExpiresAt.Local.Format "15:04"}}</dd>
+  <dt>{{if eq $.Data.Status "pending"}}Waits until{{else}}Waited until{{end}}</dt><dd>{{clock .ExpiresAt}}</dd>
 </dl>
 {{end}}
 

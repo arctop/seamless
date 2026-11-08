@@ -15,7 +15,7 @@
       <span class="badge">{{if eq .Kind "touchid"}}Touch ID{{else}}passkey{{end}}</span>
       <strong>{{.Name}}</strong>
       {{if .Synced}}<span class="badge" title="The passkey provider syncs it to your other devices">synced</span>{{end}}
-      <small>added {{.AddedAt.Local.Format "2006-01-02 15:04"}} by {{.AddedBy}} &middot; {{if .LastUsed}}last used {{.LastUsed.Local.Format "2006-01-02 15:04"}}{{else}}never used{{end}}</small>
+      <small>added {{clockDate .AddedAt}} by {{.AddedBy}} &middot; {{if .LastUsed}}last used {{clockDate .LastUsed}}{{else}}never used{{end}}</small>
       <code class="approver-id">{{.ID}}</code>
     </li>
     {{end}}

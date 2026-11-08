@@ -1158,10 +1158,10 @@ same agent, a mark on the session), the approval is refused and you look
 again. <code>--deny</code> closes the request; the project stays locked for that
 session. A request naming a shell, a terminal, a multiplexer or a login
 process (one an older release filed) is never approved: deny it.</p>
-<p>It answers in one line: <code>Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may read and write example-finance until 14:53 PST.</code> (<code>until the session ends, at the latest ...</code> for <code>--for session</code>; a read grant names the asking project,
+<p>It answers in one line: <code>Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may read and write example-finance until 14:53.</code> (<code>until the session ends, at the latest ...</code> for <code>--for session</code>; a read grant names the asking project,
 and says the content may be copied into its memories), or <code>Denied R-7F3K: example-finance stays locked for that session.</code> When nothing changed it exits
 1 and says why: the facts changed (<code>the facts of R-7F3K changed since they were shown: run seam approve again and look at them first</code>), the request expired
-before the decision reached it (<code>R-7F3K expired at 14:05 PST, before this decision: nothing changed ...</code>), or it was decided meanwhile (<code>R-7F3K was already approved: nothing changed</code>).</p>
+before the decision reached it (<code>R-7F3K expired at 14:05, before this decision: nothing changed ...</code>), or it was decided meanwhile (<code>R-7F3K was already approved: nothing changed</code>).</p>
 <h2 id="seamlessd_console_open">seamlessd console-open</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd console-open <span class="o">[</span>--browser APP<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seamlessd console-open --unlock PROJECT <span class="o">[</span>--for DURATION<span class="o">]</span>

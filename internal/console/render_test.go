@@ -28,6 +28,20 @@ func TestTS(t *testing.T) {
 	require.Equal(t, "2026-07-14 15:29 UTC", ts(time.Date(2026, 7, 14, 7, 29, 0, 0, loc)))
 }
 
+// TestClock renders a wall-clock time the browser localizes: the instant in
+// datetime, the daemon's local wall clock as the text, and no zone named
+// (owner decision 2026-11-08).
+func TestClock(t *testing.T) {
+	tm := time.Date(2026, 11, 8, 22, 5, 30, 0, time.UTC)
+	require.Equal(t, `<time datetime="2026-11-08T22:05:30Z" data-clock="time">`+tm.Local().Format("15:04")+`</time>`,
+		string(clock(tm)))
+	require.Equal(t, `<time datetime="2026-11-08T22:05:30Z" data-clock="date">`+tm.Local().Format("2006-01-02 15:04")+`</time>`,
+		string(clockDate(&tm)))
+	require.Empty(t, clock((*time.Time)(nil)))
+	require.Empty(t, clock(time.Time{}))
+	require.Empty(t, clockDate("not a time"))
+}
+
 // TestShortID uses the last 8 chars so recent ULIDs (shared timestamp prefix)
 // stay distinguishable, matching the Interactions client's id.slice(-8).
 func TestShortID(t *testing.T) {

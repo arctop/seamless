@@ -13,7 +13,7 @@
     <span class="badge">{{.Project}}</span>
     {{if eq .Kind "refresh"}}<span class="badge">refresh</span>{{end}}{{if eq .Kind "grant"}}<span class="badge">read-only, for {{.From}}</span>{{end}}
     {{if .Warnings}}<span class="badge warn">{{len .Warnings}} warning{{if gt (len .Warnings) 1}}s{{end}}</span>{{end}}
-    <small>{{if .Session}}{{.Session}}{{else}}no session{{end}} &middot; asked {{.RequestedAt.Local.Format "15:04"}}, waits until {{.ExpiresAt.Local.Format "15:04"}}</small>
+    <small>{{if .Session}}{{.Session}}{{else}}no session{{end}} &middot; asked {{clock .RequestedAt}}, waits until {{clock .ExpiresAt}}</small>
   </li>
   {{end}}
 </ul>
@@ -30,7 +30,7 @@
     <li class="access-item" data-grant="{{.ID}}">
       <span class="badge">{{.Project}}</span>
       <strong>{{if .Session}}{{.Session}}{{else}}pid {{.PID}}{{end}}</strong>
-      <small>read-only, for {{.From}} &middot; granted {{.GrantedAt.Local.Format "15:04"}}, ends {{.ExpiresAt.Local.Format "15:04"}}</small>
+      <small>read-only, for {{.From}} &middot; granted {{clock .GrantedAt}}, ends {{clock .ExpiresAt}}</small>
       <form method="post" action="/console/access/grants/{{.ID}}/revoke">
         <button class="btn" type="submit">Revoke</button>
       </form>
@@ -50,7 +50,7 @@
     <li class="access-item" data-lease="{{.ID}}">
       <span class="badge">{{.Project}}</span>
       <strong>{{if .Session}}{{.Session}}{{else}}pid {{.PID}}{{end}}</strong>
-      <small>granted {{.GrantedAt.Local.Format "15:04"}}, ends {{.ExpiresAt.Local.Format "15:04"}}</small>
+      <small>granted {{clock .GrantedAt}}, ends {{clock .ExpiresAt}}</small>
       <form method="post" action="/console/access/leases/{{.ID}}/revoke">
         <button class="btn" type="submit">Revoke</button>
       </form>
@@ -70,7 +70,7 @@
     <li class="access-item" data-unlock-row="{{.ID}}">
       <span class="badge">{{.Project}}</span>
       <strong>{{if .ThisBrowser}}this browser{{else}}another browser{{end}}</strong>
-      <small>unlocked by {{.By}}, ends {{.ExpiresAt.Local.Format "15:04"}}</small>
+      <small>unlocked by {{.By}}, ends {{clock .ExpiresAt}}</small>
       <form method="post" action="/console/access/unlocks/{{.ID}}/end">
         <button class="btn" type="submit">Lock again</button>
       </form>

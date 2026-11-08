@@ -105,3 +105,12 @@ func TestLockedRefusal_TwoLines(t *testing.T) {
 	require.False(t, Locked(ctx, lockOps))
 	require.False(t, Locked(context.Background(), lockFin), "no View: nothing is locked")
 }
+
+// Every agent-facing time is the machine's wall clock with no zone named
+// (owner decision 2026-11-08): "14:05", never "14:05 PST".
+func TestClock_NamesNoZone(t *testing.T) {
+	at := time.Date(2026, 11, 8, 22, 5, 0, 0, time.UTC)
+	require.Equal(t, at.Local().Format("15:04"), Clock(at))
+	require.Equal(t, at.Local().Format("15:04")+" on "+at.Local().Format("Jan 2"), clockDay(at))
+	require.Regexp(t, `^\d\d:\d\d$`, Clock(at))
+}

@@ -243,6 +243,8 @@ var funcs = template.FuncMap{
 	"ago":           ago,
 	"agoPhrase":     agoPhrase,
 	"ts":            ts,
+	"clock":         clock,
+	"clockDate":     clockDate,
 	"day":           day,
 	"shortID":       shortID,
 	"pct":           func(n, d int) int { return percent(n, d) },
@@ -834,6 +836,37 @@ func ts(v any) string {
 		return ""
 	}
 	return t.UTC().Format("2006-01-02 15:04 MST")
+}
+
+// clock renders an instant as a wall-clock time in the viewer's own zone,
+// naming none (owner decision 2026-11-08): a <time data-clock> whose text is
+// the daemon's local "15:04", which shell.js rewrites as this browser's wall
+// clock. Accepts time.Time or *time.Time; a zero or nil time renders nothing.
+func clock(v any) template.HTML { return clockElement(v, "15:04", "time") }
+
+// clockDate is clock with the date: "2026-11-08 14:05".
+func clockDate(v any) template.HTML { return clockElement(v, "2006-01-02 15:04", "date") }
+
+// clockElement renders t in layout as the <time data-clock=kind> shell.js
+// localizes. Only the formatted instant goes into the markup.
+func clockElement(v any, layout, kind string) template.HTML {
+	var t time.Time
+	switch x := v.(type) {
+	case time.Time:
+		t = x
+	case *time.Time:
+		if x == nil {
+			return ""
+		}
+		t = *x
+	default:
+		return ""
+	}
+	if t.IsZero() {
+		return ""
+	}
+	return template.HTML(`<time datetime="` + t.UTC().Format(time.RFC3339) + `" data-clock="` + kind + `">` +
+		t.Local().Format(layout) + `</time>`)
 }
 
 // day formats a timestamp as its calendar date ("2026-08-07"), for lines that

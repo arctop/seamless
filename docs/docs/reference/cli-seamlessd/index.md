@@ -659,13 +659,13 @@ session. A request naming a shell, a terminal, a multiplexer or a login
 process (one an older release filed) is never approved: deny it.
 
 It answers in one line: `Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may
-read and write example-finance until 14:53 PST.` (`until the session ends, at
+read and write example-finance until 14:53.` (`until the session ends, at
 the latest ...` for `--for session`; a read grant names the asking project,
 and says the content may be copied into its memories), or `Denied R-7F3K:
 example-finance stays locked for that session.` When nothing changed it exits
 1 and says why: the facts changed (`the facts of R-7F3K changed since they were
 shown: run seam approve again and look at them first`), the request expired
-before the decision reached it (`R-7F3K expired at 14:05 PST, before this
+before the decision reached it (`R-7F3K expired at 14:05, before this
 decision: nothing changed ...`), or it was decided meanwhile (`R-7F3K was
 already approved: nothing changed`).
 

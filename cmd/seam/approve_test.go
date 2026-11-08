@@ -774,7 +774,7 @@ func TestApprove_TranscriptGolden(t *testing.T) {
 			rig.runner.code = func(argv []string) (int, error) {
 				if slices.Contains(argv, "approve") {
 					atSudo = rig.out.String()
-					rig.out.WriteString("Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may read and write example-finance until 15:05 UTC.\n")
+					rig.out.WriteString("Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may read and write example-finance until 15:05.\n")
 					return 0, nil
 				}
 				return 1, nil // sudo -n refused: no NOPASSWD rule
@@ -805,7 +805,7 @@ func TestApprove_TranscriptGolden(t *testing.T) {
 				"Approve R-7F3K? [y/N/d=deny] " +
 				"sudo asks for your Touch ID or password next: it commits the approval as _seamless.\n"
 			require.Equal(t, want, atSudo, "everything is said before sudo runs")
-			require.Equal(t, want+"Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may read and write example-finance until 15:05 UTC.\n",
+			require.Equal(t, want+"Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may read and write example-finance until 15:05.\n",
 				rig.out.String())
 			require.Empty(t, rig.errb.String())
 		})

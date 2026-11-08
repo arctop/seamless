@@ -509,7 +509,7 @@ below found that sudo asks for nothing.
 ticket behind; that authentication is the proof, not `seam approve`. The
 command runs on your terminal, so the prompt shows there, and `seamlessd`'s
 own answer (`Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may read and
-write example-finance until 14:53 PST.`) is what you read; when it fails,
+write example-finance until 14:53.`) is what you read; when it fails,
 `seam approve` says `the approval of R-7F3K did not complete: nothing was
 approved (sudo exited with status 1)` and exits 1. The digest is that of the
 facts you were shown: when they changed in the meantime, the approval is
