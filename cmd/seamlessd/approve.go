@@ -49,7 +49,9 @@ func runApprove(args []string) error {
 		return fmt.Errorf("seamlessd.approve: %w", err)
 	}
 	if err := approverAccountCheck(cfg, defaultPeerAuthEnv()); err != nil {
-		return fmt.Errorf("seamlessd.approve: %w", err)
+		// Said to the owner's terminal as one line, like every other outcome
+		// here (ownerError), not as a log record.
+		return &ownerError{msg: err.Error(), cause: err}
 	}
 	db, err := store.Open(cfg.DBPath())
 	if err != nil {

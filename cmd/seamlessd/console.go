@@ -309,7 +309,7 @@ func runConsoleUnlock(cfg config.Config, project, forFlag, browser string) error
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "Unlock link for %s (works once, within %s):\n\n  %s\n\nOpen it in the browser you sign in to the console with.\n",
-		project, consoleUnlockLinkTTL, link)
+		project, minutesWords(consoleUnlockLinkTTL), link)
 	// The daemon's account usually has no desktop session to open a browser
 	// in; the printed link is the way, and a launch failure says so quietly.
 	if err := openInBrowser(link, browser); err != nil {
@@ -338,4 +338,15 @@ func consoleUnlockLink(ctx context.Context, cfg config.Config, db *sql.DB, maxLe
 		return "", err
 	}
 	return consoleBase(cfg) + "/console/unlock?t=" + url.QueryEscape(secret), nil
+}
+
+// minutesWords says a whole-minute duration as the owner reads it: "10
+// minutes", not Go's "10m0s".
+func minutesWords(d time.Duration) string {
+	if m := int(d / time.Minute); m == 1 {
+		return "1 minute"
+	} else if d%time.Minute == 0 {
+		return fmt.Sprintf("%d minutes", m)
+	}
+	return d.String()
 }
