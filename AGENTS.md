@@ -519,11 +519,16 @@ any of it.
   still withheld, but the words name the locked project and the remedy, and
   the claim refusal ends in a `Remedy:` line (`TaskBlockedError.Remedy`).
   Restricted accounts, and blockers an isolation fence alone withholds, keep
-  the generic words. The console does the same on Tasks and the Plans & tasks
-  tab (`markLockedBlockers`, `lockedBlockersOf`, `store.OpenBlockerProjects`
-  on the write handle, slugs only). A console-backed CLI lookup of a locked
-  item answers 403 `{error, locked, project}` in `access.View.Refusal`'s words
-  (`answerLocked`), and lists carry `locked`.
+  the generic words. The console does the same on Tasks, the task reader and
+  peek ("Depends on"), and the Plans & tasks tab (`markLockedBlockers`,
+  `taskDetailData`, `lockedBlockersOf`, `store.OpenBlockerProjects` on the
+  write handle, slugs only); a template line for it must render nothing
+  while nothing is locked (`make defaults-golden`). A console-backed CLI
+  lookup of a locked item answers 403 `{error, locked, project}` in
+  `access.View.Refusal`'s words (`answerLocked`), and lists carry `locked`;
+  a browser page of a locked plan or session goes to the project's unlock
+  page (`lockedItem`, `?item=` and a `safeNext` `?next=`), a fragment says
+  so in place.
 - **The console reads through `store.OpenView`**: TEMP VIEWs that shadow every
   project-scoped table on a read-only handle. While a project is locked it
   reads through a `store.Views` pool instead (one handle per hidden set),
