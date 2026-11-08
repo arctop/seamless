@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +21,8 @@ import (
 // the request does not read answers the lock -- 403 with the lock refusal the
 // tool-backed commands print, {"locked": true, "project"} -- rather than a
 // 404, and the plan and session lists name the locked projects they left
-// out. Browser pages, misses and everything with nothing locked are as before.
+// out. A browser page names the lock too (owner decision 2026-11-08). Misses
+// and everything with nothing locked are as before.
 
 // lockedAnswer is a decoded lock answer.
 type lockedAnswer struct {
@@ -86,7 +88,7 @@ func TestLockedLookups_AnswerTheLock(t *testing.T) {
 	require.Empty(t, pending)
 
 	// A browser's JSON gets the console unlock, the remedy a browser has; its
-	// pages are unchanged.
+	// pages go to the locked page (TestLockedPages_NameTheLock).
 	req := lc.browser(http.MethodGet, "/console/plans/"+lc.plan+"?format=json", "", nil)
 	req.Header.Set("Accept", "application/json")
 	rr := lc.do(req)
@@ -95,10 +97,6 @@ func TestLockedLookups_AnswerTheLock(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &got))
 	require.True(t, got.Locked)
 	require.Equal(t, "/console/unlock/"+lockedSlug, got.Unlock)
-	status, _ := lc.get(t, "/console/plans/"+lc.plan, "")
-	require.Equal(t, http.StatusNotFound, status, "a browser page answers as before")
-	status, _ = lc.get(t, "/console/sessions/"+lc.sessID, "")
-	require.Equal(t, http.StatusNotFound, status)
 
 	// A miss is still a miss, and an open project's item still reads.
 	rr = lc.do(bearer(http.MethodGet, "/console/plans/no-such-plan?format=json"))
@@ -149,4 +147,51 @@ func TestLockedLookups_NothingLocked(t *testing.T) {
 		require.Equal(t, http.StatusNotFound, rr.Code, target)
 		require.NotContains(t, rr.Body.String(), "locked", target)
 	}
+}
+
+// A browser page of a plan or a session in a locked project (owner decision
+// 2026-11-08): not a 404 that sends the owner looking for something that
+// exists, but the project's unlock page, saying the item is in it -- and,
+// once this browser unlocked it, linking back. A fragment (peek, reader)
+// says so in place. Nothing from inside the project shows.
+func TestLockedPages_NameTheLock(t *testing.T) {
+	lc := newLockedConsole(t)
+	for _, tc := range []struct{ path, item string }{
+		{"/console/plans/" + lc.plan, "plan"},
+		{"/console/sessions/" + lc.sessID, "session"},
+	} {
+		rr := lc.do(lc.browser(http.MethodGet, tc.path, "", nil))
+		require.Equal(t, http.StatusSeeOther, rr.Code, tc.path)
+		loc := rr.Header().Get("Location")
+		require.Equal(t, "/console/unlock/"+lockedSlug+"?item="+tc.item+"&next="+url.QueryEscape(tc.path), loc)
+
+		status, page := lc.get(t, loc, "")
+		require.Equal(t, http.StatusOK, status)
+		require.Contains(t, page, `data-locked-item="`+tc.item+`"`)
+		require.Contains(t, page, "The "+tc.item+" you opened is in this locked project. Unlock the project in this browser to read it.")
+		require.NotContains(t, page, lockedSecret)
+
+		for _, frag := range []string{"?peek=1", "?reader=1"} {
+			rr := lc.do(lc.browser(http.MethodGet, tc.path+frag, "", nil))
+			require.Equal(t, http.StatusForbidden, rr.Code, tc.path+frag)
+			body := rr.Body.String()
+			require.Contains(t, body, "This "+tc.item+" is in locked project "+lockedSlug+".")
+			require.Contains(t, body, `<a href="/console/unlock/`+lockedSlug+`">Unlock `+lockedSlug+` in the console</a>`)
+			require.NotContains(t, body, "<html", "a fragment, not a page")
+			require.NotContains(t, body, lockedSecret)
+		}
+	}
+
+	// Unlocked, the unlock page links back; the item itself reads.
+	cookie := lc.unlockLink(t)
+	_, page := lc.get(t, "/console/unlock/"+lockedSlug+"?item=plan&next="+url.QueryEscape("/console/plans/"+lc.plan), cookie)
+	require.Contains(t, page, `The plan you opened is in this locked project. <a href="/console/plans/`+lc.plan+`">Open it</a>.`)
+	status, _ := lc.get(t, "/console/plans/"+lc.plan, cookie)
+	require.Equal(t, http.StatusOK, status)
+	// A next outside the console, or an item kind the page does not know,
+	// is dropped.
+	_, page = lc.get(t, "/console/unlock/"+lockedSlug+"?item=memory&next="+url.QueryEscape("https://example.com/"), cookie)
+	require.NotContains(t, page, "data-locked-item")
+	_, page = lc.get(t, "/console/unlock/"+lockedSlug+"?item=plan&next="+url.QueryEscape("//example.com/"), cookie)
+	require.NotContains(t, page, "example.com")
 }

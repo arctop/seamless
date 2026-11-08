@@ -517,13 +517,13 @@ func (s *Service) sessionDetail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// answerLockedSession is answerLockedPlan for a session: a JSON lookup of a
-// session in a locked project this request does not read names the lock. It
-// reports whether it answered (a failed lookup as the error it is); nothing
-// runs while nothing is locked.
+// answerLockedSession is answerLockedPlan for a session: a lookup of a
+// session in a locked project this request does not read names the lock (the
+// JSON refusal, or the locked page). It reports whether it answered (a failed
+// lookup as the error it is); nothing runs while nothing is locked.
 func (s *Service) answerLockedSession(w http.ResponseWriter, r *http.Request, id string) bool {
 	ctx := r.Context()
-	if !wantsJSON(r) || len(lockedProjects(ctx)) == 0 {
+	if len(lockedProjects(ctx)) == 0 {
 		return false
 	}
 	sess, ok, err := store.SessionByID(ctx, s.writeDB(), id)
@@ -534,7 +534,7 @@ func (s *Service) answerLockedSession(w http.ResponseWriter, r *http.Request, id
 	if !ok || !lockedHere(ctx, sess.ProjectSlug) {
 		return false
 	}
-	s.answerLocked(w, r, sess.ProjectSlug)
+	s.answerLocked(w, r, sess.ProjectSlug, lockedItemSession)
 	return true
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"html/template"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -337,9 +338,14 @@ type taskDetail struct {
 	ClaimLive   bool          `json:"claimLive,omitempty"` // lease unexpired as of render time
 	Deps        []taskRef     `json:"deps,omitempty"`      // tasks this one depends on
 	Blocks      []taskRef     `json:"blocks,omitempty"`    // tasks that depend on this one
-	Created     time.Time     `json:"created"`
-	Updated     time.Time     `json:"updated"`
-	Closed      *time.Time    `json:"closed,omitempty"`
+	// LockedBlockers are this task's unfinished blockers in a locked project
+	// the request does not read (peer_auth.locked), one project slug per
+	// blocker (markLockedBlockers' rule): the request's handle hides them
+	// and their edges, so Deps leaves them out. nil while nothing is locked.
+	LockedBlockers []string   `json:"lockedBlockers,omitempty"`
+	Created        time.Time  `json:"created"`
+	Updated        time.Time  `json:"updated"`
+	Closed         *time.Time `json:"closed,omitempty"`
 	// Account is the restricted local account that created the task and
 	// UpdatedAccount the one that last changed it; "" for the owner.
 	Account        string `json:"account,omitempty"`
@@ -349,6 +355,13 @@ type taskDetail struct {
 	// on its own default -- the task page or the tasks library.
 	Next string `json:"-"`
 }
+
+// DependsOn counts every blocker the detail names: the readable ones and the
+// ones a locked project holds.
+func (d taskDetail) DependsOn() int { return len(d.Deps) + len(d.LockedBlockers) }
+
+// LockedIn is each locked project that blocks this task, once.
+func (d taskDetail) LockedIn() []string { return slices.Compact(slices.Clone(d.LockedBlockers)) }
 
 // taskDetailData projects a task into the full detail payload, resolving both
 // dependency directions.
@@ -374,6 +387,15 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 			return taskDetail{}, derr
 		}
 		d.Deps = append(d.Deps, taskRef{ID: dep.ID, Title: dep.Title, Status: string(dep.Status)})
+	}
+	// A blocker in a locked project this request does not read: the main
+	// handle names its project, never its content (markLockedBlockers).
+	if locked := lockedProjects(ctx); len(locked) > 0 {
+		by, err := store.OpenBlockerProjects(ctx, s.writeDB(), []string{t.ID}, locked)
+		if err != nil {
+			return taskDetail{}, err
+		}
+		d.LockedBlockers = by[t.ID]
 	}
 	blocks, err := store.TasksBlockedBy(ctx, s.db(ctx), t.ID)
 	if err != nil {

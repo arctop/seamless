@@ -4,6 +4,9 @@
 <header class="mv2-bar">
   <h1>{{icon "lock"}}{{.Project.Name}}</h1>{{about "A locked project: its name and counts show here, never its content. Unlocking it opens it in this browser only, for a limited time. It never opens it to an agent: agents ask for access on their own, and you approve each request."}}
 </header>
+{{if .Item}}
+<p class="held-sub" data-locked-item="{{.Item}}">{{icon "lock"}} The {{.Item}} you opened is in this locked project.{{if .Unlocked}}{{with .Next}} <a href="{{.}}">Open it</a>.{{end}}{{else}} Unlock the project in this browser to read it.{{end}}</p>
+{{end}}
 
 <dl class="access-facts" aria-label="What it holds">
   <dt>Project</dt><dd><code>{{.Project.Slug}}</code>{{if not .Project.Registered}} (not registered yet){{end}}</dd>

@@ -1295,9 +1295,12 @@ by default). The reader carries the task's body, claim and lease state, and
 both dependency directions; <strong>force-release</strong> is the action, and it is the
 owner override - it takes the lock from whoever holds it.</p>
 <p>Under <code>peer_auth.locked</code>, a task blocked by a task in a locked project you
-haven't unlocked sits in the blocked rail, its blocker named only by project;
-the project workspace's Plans &amp; tasks tab marks such steps blocked and leaves
-them out of the ready queue.</p>
+haven't unlocked sits in the blocked rail, its blocker named only by project
+on a line of its own; the task's reader and peek list it under <strong>Depends on</strong>
+the same way. The project workspace's Plans &amp; tasks tab marks such steps
+blocked and leaves them out of the ready queue. Opening a plan or a session
+that lives in a locked project takes you to that project's unlock page, which
+says the item is there and links back once you unlock it.</p>
 <h2 id="plans">Plans</h2>
 <p><code>/console/plans</code>, <code>/console/plans/{slug}</code></p>
 <p>The same library shape, with the rail grouped by phase (<strong>in progress</strong>,

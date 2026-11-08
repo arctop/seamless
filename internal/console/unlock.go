@@ -22,6 +22,7 @@ package console
 import (
 	"errors"
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/url"
 	"slices"
@@ -63,6 +64,11 @@ type unlockData struct {
 	// link in the address bar with the project's unlock page, so a reload or
 	// a history entry never holds the used secret.
 	Claimed bool `json:"-"`
+	// Item is the kind of item a locked page sent the owner here for (a plan
+	// or a session: lockedItem), Next its page, to open once unlocked; both
+	// empty otherwise.
+	Item string `json:"-"`
+	Next string `json:"-"`
 }
 
 // unlockProject answers the routes that name a project: it must be one
@@ -137,6 +143,12 @@ func (s *Service) unlockPage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.serverError(w, r, err)
 		return
+	}
+	if item := r.URL.Query().Get("item"); item == lockedItemPlan || item == lockedItemSession {
+		d.Item = item
+		if next := safeNext(r.URL.Query().Get("next")); next != "/console/" {
+			d.Next = next
+		}
 	}
 	s.render(w, r, "unlock", pageData{Title: "Unlock " + d.Project.Name, Active: "projects", Data: d})
 }
@@ -420,6 +432,35 @@ func (s *Service) unlockError(w http.ResponseWriter, r *http.Request, err error)
 		return
 	}
 	s.approverError(w, r, err)
+}
+
+// The kinds of item a locked page names (lockedItem, the unlock page's item=).
+const (
+	lockedItemPlan    = "plan"
+	lockedItemSession = "session"
+)
+
+// lockedItem answers a browser page for an item -- a plan, a session -- that
+// lives in project, a locked project this request does not read (owner
+// decision 2026-11-08): the lock, named, with the way in, rather than a 404
+// that would send the owner looking for something that exists. A full page
+// goes to the project's unlock page, which says the item is in it and, once
+// unlocked, links back (?item=, ?next=); a fragment (the peek, the reader)
+// says so in place. Only the owner reaches the console, and only the item's
+// kind and the project's slug are named: nothing from inside the project.
+func (s *Service) lockedItem(w http.ResponseWriter, r *http.Request, project, item string) {
+	unlock := "/console/unlock/" + url.PathEscape(project)
+	if q := r.URL.Query(); q.Get("peek") == "1" || q.Get("reader") == "1" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusForbidden)
+		esc := template.HTMLEscapeString
+		fmt.Fprintf(w, `<article class="peek-entity" data-locked-item="%s"><div class="peek-head"><span class="badge">%s</span></div>`+
+			`<h2 class="peek-title">Locked</h2><p class="peek-desc">This %s is in locked project %s.</p>`+
+			`<p class="peek-note"><a href="%s">Unlock %s in the console</a> to read it.</p></article>`,
+			esc(item), esc(project), esc(item), esc(project), esc(unlock), esc(project))
+		return
+	}
+	http.Redirect(w, r, unlock+"?item="+url.QueryEscape(item)+"&next="+url.QueryEscape(r.URL.Path), http.StatusSeeOther)
 }
 
 // lockedProject answers a locked project's workspace for a request that does

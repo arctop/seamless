@@ -479,6 +479,11 @@ type PlanSearchRow struct {
 	// hand-editing of a secondary note's frontmatter.
 	Favorite bool
 	Updated  time.Time
+	// Account is the restricted local account (peer_auth.restricted) that
+	// wrote the plan, "" for the owner: the account of the note whose title
+	// labels it, or -- a plan only tasks carry -- of its tasks when one
+	// account wrote them all.
+	Account string
 }
 
 // SearchPlans returns plans whose slug or narrative-note title contains q,
@@ -515,7 +520,7 @@ func searchPlansSince(ctx context.Context, db *sql.DB, q string, since time.Time
 	// note rows open across the second query, which is the thing worth avoiding.
 	//nolint:sqlclosecheck // closed by the closure's defer, see above
 	noteRows, err := db.QueryContext(ctx, `
-		SELECT je.value, n.project, n.title, n.favorite, n.updated_at
+		SELECT je.value, n.project, n.title, n.favorite, n.updated_at, n.account
 		FROM notes_index n, json_each(n.tags) je
 		WHERE je.value LIKE 'plan:%' ESCAPE '\'
 		  AND (n.title LIKE ? ESCAPE '\' OR je.value LIKE ? ESCAPE '\')
@@ -526,14 +531,15 @@ func searchPlansSince(ctx context.Context, db *sql.DB, q string, since time.Time
 	}
 	byKey := make(map[string]*PlanSearchRow)
 	var order []string
-	upsert := func(project, slug, title string, favorite bool, updated time.Time) {
+	upsert := func(project, slug, title string, favorite bool, updated time.Time, account string) {
 		if slug == "" {
 			return
 		}
 		key := project + "\x00" + slug
 		row, ok := byKey[key]
 		if !ok {
-			byKey[key] = &PlanSearchRow{Slug: slug, Project: project, Title: title, Favorite: favorite, Updated: updated}
+			byKey[key] = &PlanSearchRow{Slug: slug, Project: project, Title: title, Favorite: favorite, Updated: updated,
+				Account: account}
 			order = append(order, key)
 			return
 		}
@@ -542,16 +548,17 @@ func searchPlansSince(ctx context.Context, db *sql.DB, q string, since time.Time
 		}
 		row.Favorite = row.Favorite || favorite
 		// A note title is a real label; the task path can only offer the slug.
-		if row.Title == row.Slug && title != "" {
-			row.Title = title
+		// The writer is the labeling note's.
+		if row.Title == row.Slug && title != "" && title != slug {
+			row.Title, row.Account = title, account
 		}
 	}
 	err = func() error {
 		defer func() { _ = noteRows.Close() }()
 		for noteRows.Next() {
-			var tag, project, title, updated string
+			var tag, project, title, updated, account string
 			var favorite bool
-			if err := noteRows.Scan(&tag, &project, &title, &favorite, &updated); err != nil {
+			if err := noteRows.Scan(&tag, &project, &title, &favorite, &updated, &account); err != nil {
 				return fmt.Errorf("scan: %w", err)
 			}
 			u, err := core.ParseTime(updated)
@@ -562,7 +569,7 @@ func searchPlansSince(ctx context.Context, db *sql.DB, q string, since time.Time
 			if title == "" {
 				title = slug
 			}
-			upsert(project, slug, title, favorite, u)
+			upsert(project, slug, title, favorite, u, account)
 		}
 		return noteRows.Err()
 	}()
@@ -573,7 +580,9 @@ func searchPlansSince(ctx context.Context, db *sql.DB, q string, since time.Time
 	// Tasks: the plan_slug column itself.
 	//nolint:sqlclosecheck // closed by the closure's defer, as above
 	taskRows, err := db.QueryContext(ctx, `
-		SELECT plan_slug, project_slug, MAX(updated_at) FROM tasks
+		SELECT plan_slug, project_slug, MAX(updated_at),
+		       CASE WHEN COUNT(DISTINCT account) = 1 THEN MAX(account) ELSE '' END
+		FROM tasks
 		WHERE plan_slug != '' AND plan_slug LIKE ? ESCAPE '\'
 		GROUP BY plan_slug, project_slug`, needle)
 	if err != nil {
@@ -582,15 +591,15 @@ func searchPlansSince(ctx context.Context, db *sql.DB, q string, since time.Time
 	err = func() error {
 		defer func() { _ = taskRows.Close() }()
 		for taskRows.Next() {
-			var slug, project, updated string
-			if err := taskRows.Scan(&slug, &project, &updated); err != nil {
+			var slug, project, updated, account string
+			if err := taskRows.Scan(&slug, &project, &updated, &account); err != nil {
 				return fmt.Errorf("scan: %w", err)
 			}
 			u, err := core.ParseTime(updated)
 			if err != nil {
 				return fmt.Errorf("updated_at: %w", err)
 			}
-			upsert(project, slug, slug, false, u)
+			upsert(project, slug, slug, false, u, account)
 		}
 		return taskRows.Err()
 	}()

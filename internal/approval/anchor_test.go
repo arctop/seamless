@@ -389,3 +389,18 @@ func newAuthenticator(t *testing.T) *passkeytest.Authenticator {
 	require.NoError(t, err)
 	return a
 }
+
+func TestAgentLabel(t *testing.T) {
+	for _, tc := range []struct {
+		program string
+		pid     int32
+		want    string
+	}{
+		{"/Users/owner/.local/share/claude/versions/2.1.319", 4242, "Claude Code 2.1.319 (pid 4242)"},
+		{"/usr/local/bin/python3", 4242, "python3 (pid 4242)"},
+		{"", 4242, "pid 4242"},
+		{"/usr/local/bin/python3", 0, ""},
+	} {
+		require.Equal(t, tc.want, AgentLabel(tc.program, tc.pid), "%q %d", tc.program, tc.pid)
+	}
+}

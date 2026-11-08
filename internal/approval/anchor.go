@@ -275,6 +275,25 @@ func agentName(p string) string {
 	return ""
 }
 
+// AgentLabel names an asking process for a person, as seam approve's "If
+// approved" line does: "Claude Code 2.1.319 (pid 4242)" for an agent, the
+// program's base name and pid for any other program, "pid 4242" when the
+// program is not known, and "" with no pid at all (no process: the tier
+// without peer_auth).
+func AgentLabel(program string, pid int32) string {
+	if pid <= 0 {
+		return ""
+	}
+	name := agentName(program)
+	if name == "" {
+		name = classify(program).base
+	}
+	if name == "" {
+		return fmt.Sprintf("pid %d", pid)
+	}
+	return fmt.Sprintf("%s (pid %d)", name, pid)
+}
+
 // judgeAnchor applies the anchor rule to anchor, the i-th process of chain
 // (the peer first), whose program the kernel names name(token). stamped
 // reports that anchor is the process a live session's SessionStart hook

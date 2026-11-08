@@ -494,3 +494,95 @@ func TestAccess_PageOfARequestPastItsWait(t *testing.T) {
 		require.NotContains(t, page, "Continue to approve with a passkey", ref)
 	}
 }
+
+// The page's duration choices word a length max_lease cuts short as the cap,
+// as seam approve does, rather than offering "4 hours" the lease cannot last.
+func TestDurationWords_MaxLeaseCap(t *testing.T) {
+	for _, tc := range []struct{ choice, maxLease, want string }{
+		{approval.ForSession, "8h0m0s", "until this session ends (at most 8h)"},
+		{approval.For1h, "8h0m0s", "1 hour"},
+		{approval.For4h, "8h0m0s", "4 hours"},
+		{approval.For1h, "20m0s", "20m (the max_lease cap)"},
+		{approval.For4h, "2h30m0s", "2h30m (the max_lease cap)"},
+		{approval.For4h, "4h0m0s", "4 hours"},
+		{approval.For1h, "", "1 hour"},
+	} {
+		require.Equal(t, tc.want, durationWords(tc.choice, tc.maxLease), "%s capped at %q", tc.choice, tc.maxLease)
+	}
+	got := durationChoices("20m0s")
+	require.Equal(t, []durationChoice{
+		{approval.ForSession, "until this session ends (at most 20m)"},
+		{approval.For1h, "20m (the max_lease cap)"},
+		{approval.For4h, "20m (the max_lease cap)"},
+	}, got)
+}
+
+// Passkeys set up and one enrolled, but no origin to verify it on: the
+// request's page offers no passkey, as no remedy does (approval.Service.Ways),
+// and never a "works only on" link with no origin in it.
+func TestAccess_PasskeyNeedsAnOrigin(t *testing.T) {
+	f := newAccessFixture(t)
+	id, _ := f.file(t)
+	ctx := context.Background()
+	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverPasskey, time.Now())
+	require.NoError(t, err)
+	key, err := passkeytest.New(true)
+	require.NoError(t, err)
+	begun, err := f.svc.BeginPasskey(ctx, "key", code)
+	require.NoError(t, err)
+	created, err := key.Create(begun.Options, approverOrigin)
+	require.NoError(t, err)
+	_, err = f.svc.FinishPasskey(ctx, begun.ID, created)
+	require.NoError(t, err)
+
+	v, err := passkey.New(passkey.Config{RPID: "localhost", Origins: []string{approverOrigin}})
+	require.NoError(t, err)
+	noOrigin := approval.New(approval.Config{DB: f.db, Passkeys: v, Events: events.NewRecorder(f.db)})
+	require.False(t, noOrigin.Ways(ctx, id).Passkey)
+	cs, err := New(Config{DB: f.db, Events: events.NewRecorder(f.db), APIKey: testKey, Level: "advanced", Approvals: noOrigin})
+	require.NoError(t, err)
+	mux := http.NewServeMux()
+	cs.Register(mux)
+	for _, path := range []string{"/console/access/" + id, "/console/access/" + id + "?for=1h"} {
+		rr := do(mux, authedReq(httptest.NewRequest(http.MethodGet, path, nil)))
+		require.Equal(t, http.StatusOK, rr.Code, path)
+		page := rr.Body.String()
+		require.NotContains(t, page, "A passkey works only on", path)
+		require.NotContains(t, page, "Continue to approve with a passkey", path)
+		require.Contains(t, page, "approve it in your own terminal: <code>seam approve R-", path)
+	}
+}
+
+// A lease row names the agent it opened the project to as seam approve does,
+// "Claude Code 2.1.319 (pid 200)", read from the approval behind it, rather
+// than a bare pid.
+func TestAccess_LeaseRowNamesTheAgent(t *testing.T) {
+	f := newAccessFixture(t)
+	ctx := context.Background()
+	a, err := store.CreateAccessApproval(ctx, f.db, store.AccessRequest{
+		Project: "example-finance", Kind: store.AccessKindRequest, Lease: time.Hour, TTL: 10 * time.Minute,
+		PeerUID: 501, PeerPID: accAgent.PID, ProcessKey: accAgent.Key(),
+		Program: "/Users/owner/.local/share/claude/versions/2.1.319", SessionName: "cc/fin",
+	}, time.Now())
+	require.NoError(t, err)
+	_, err = store.ApproveAccess(ctx, f.db, a.ID, a.Challenge, "daemon-account", time.Now())
+	require.NoError(t, err)
+
+	var list struct {
+		Leases []struct {
+			Agent   string `json:"agent"`
+			Session string `json:"session"`
+		} `json:"leases"`
+	}
+	rr := do(f.mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/access?format=json", nil)))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &list))
+	require.Len(t, list.Leases, 1)
+	require.Equal(t, "Claude Code 2.1.319 (pid 200)", list.Leases[0].Agent)
+	require.Equal(t, "cc/fin", list.Leases[0].Session)
+
+	rr = do(f.mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/access", nil)))
+	require.Equal(t, http.StatusOK, rr.Code)
+	row := between(t, rr.Body.String(), "Claude Code 2.1.319 (pid 200)", `<li class="access-item"`, "</li>")
+	require.Contains(t, row, "session cc/fin &middot; granted ")
+}

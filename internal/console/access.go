@@ -65,10 +65,13 @@ type accessListData struct {
 
 // grantRow is one live read grant on the access page.
 type grantRow struct {
-	ID        string    `json:"id"`
-	Project   string    `json:"project"`
-	From      string    `json:"from"`
-	Session   string    `json:"session,omitempty"`
+	ID      string `json:"id"`
+	Project string `json:"project"`
+	From    string `json:"from"`
+	Session string `json:"session,omitempty"`
+	// Agent names the holding process as a lease row does; "" in the tier
+	// without peer_auth, whose grants a session holds.
+	Agent     string    `json:"agent,omitempty"`
 	PID       int32     `json:"pid,omitempty"`
 	GrantedAt time.Time `json:"granted_at"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -121,9 +124,13 @@ func (s *Service) advisory() bool { return s.cfg.Grants != nil && s.cfg.Grants.A
 
 // leaseRow is one live agent lease on the access page.
 type leaseRow struct {
-	ID        string    `json:"id"`
-	Project   string    `json:"project"`
-	Session   string    `json:"session,omitempty"`
+	ID      string `json:"id"`
+	Project string `json:"project"`
+	Session string `json:"session,omitempty"`
+	// Agent names the leased process as seam approve does ("Claude Code
+	// 2.1.319 (pid 4242)", approval.AgentLabel), from the approval behind
+	// the lease.
+	Agent     string    `json:"agent,omitempty"`
 	PID       int32     `json:"pid"`
 	GrantedAt time.Time `json:"granted_at"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -168,11 +175,25 @@ type accessOneData struct {
 	OnOrigin bool   `json:"-"`
 	Origin   string `json:"-"`
 	// PasskeyReady says a passkey can approve the pending request here
-	// (passkeys set up, one enrolled); ForWords is For as the page says it.
+	// (passkeys set up, an origin, one enrolled); ForWords is For as the page
+	// says it.
 	PasskeyReady bool   `json:"-"`
 	ForWords     string `json:"-"`
-	// MaxLeaseWords is MaxLease as the page says it ("8h", not "8h0m0s").
-	MaxLeaseWords string `json:"-"`
+	// Choices are the duration radios, the default first, each worded as
+	// durationWords says it: a choice max_lease cuts short reads as the cap.
+	Choices []durationChoice `json:"-"`
+}
+
+// durationChoice is one duration radio: its value and its words.
+type durationChoice struct{ Value, Words string }
+
+// durationChoices words every duration the daemon offers, the default first.
+func durationChoices(maxLease string) []durationChoice {
+	out := make([]durationChoice, len(approval.Durations))
+	for i, c := range approval.Durations {
+		out[i] = durationChoice{Value: c, Words: durationWords(c, maxLease)}
+	}
+	return out
 }
 
 // chosenDuration is the duration ?for= names, "" when it names none or one
@@ -184,17 +205,29 @@ func chosenDuration(r *http.Request) string {
 	return ""
 }
 
-// durationWords is a duration choice as the page's choices word it.
+// durationWords is a duration choice as the page's choices word it. A fixed
+// length max_lease cuts short reads as the cap, as seam approve says it:
+// "20m (the max_lease cap)".
 func durationWords(choice, maxLease string) string {
-	switch choice {
-	case approval.ForSession:
+	fixed := map[string]time.Duration{approval.For1h: time.Hour, approval.For4h: 4 * time.Hour}
+	switch d, ok := fixed[choice]; {
+	case choice == approval.ForSession:
 		return "until this session ends (at most " + leaseWords(maxLease) + ")"
-	case approval.For1h:
+	case !ok:
+		return choice
+	case leaseCut(d, maxLease):
+		return leaseWords(maxLease) + " (the max_lease cap)"
+	case d == time.Hour:
 		return "1 hour"
-	case approval.For4h:
-		return "4 hours"
+	default:
+		return fmt.Sprintf("%d hours", int(d/time.Hour))
 	}
-	return choice
+}
+
+// leaseCut reports whether max_lease (a Go duration) is shorter than d.
+func leaseCut(d time.Duration, maxLease string) bool {
+	limit, err := time.ParseDuration(maxLease)
+	return err == nil && limit > 0 && limit < d
 }
 
 // leaseWords is a lease length as a page says it: Go's 8h0m0s reads 8h, and
@@ -262,9 +295,10 @@ func (s *Service) readGrants(ctx context.Context) ([]grantRow, error) {
 	}
 	rows := make([]grantRow, 0, len(live))
 	for _, g := range live {
-		row := grantRow{ID: g.ID, Project: g.Project, From: g.FromProject, PID: g.PeerPID, GrantedAt: g.GrantedAt, ExpiresAt: g.ExpiresAt}
+		row := grantRow{ID: g.ID, Project: g.Project, From: g.FromProject, PID: g.PeerPID, GrantedAt: g.GrantedAt, ExpiresAt: g.ExpiresAt,
+			Agent: approval.AgentLabel("", g.PeerPID)}
 		if a, err := store.AccessApprovalByID(ctx, s.writeDB(), g.ApprovalID); err == nil {
-			row.Session = a.SessionName
+			row.Session, row.Agent = a.SessionName, approval.AgentLabel(a.Program, g.PeerPID)
 		}
 		rows = append(rows, row)
 	}
@@ -282,9 +316,10 @@ func (s *Service) accessGrants(ctx context.Context) ([]leaseRow, []unlockRow, er
 	}
 	lrows := make([]leaseRow, 0, len(leases))
 	for _, l := range leases {
-		row := leaseRow{ID: l.ID, Project: l.Project, PID: l.PeerPID, GrantedAt: l.GrantedAt, ExpiresAt: l.ExpiresAt}
+		row := leaseRow{ID: l.ID, Project: l.Project, PID: l.PeerPID, GrantedAt: l.GrantedAt, ExpiresAt: l.ExpiresAt,
+			Agent: approval.AgentLabel("", l.PeerPID)}
 		if a, err := store.AccessApprovalByID(ctx, s.writeDB(), l.ApprovalID); err == nil {
-			row.Session = a.SessionName
+			row.Session, row.Agent = a.SessionName, approval.AgentLabel(a.Program, l.PeerPID)
 		}
 		lrows = append(lrows, row)
 	}
@@ -345,7 +380,7 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 	}
 	d := accessOneData{Request: facts, Status: status, Page: s.core().Page(a.ID), Terminal: s.cfg.Terminal,
 		Durations: approval.Durations, MaxLease: s.maxLease(), Advisory: a.Kind == store.AccessKindGrant && s.advisory()}
-	d.MaxLeaseWords = leaseWords(d.MaxLease)
+	d.Choices = durationChoices(d.MaxLease)
 	if status == store.ApprovalPending && access.PeerAuthenticated(r.Context()) && wantsJSON(r) {
 		d.Challenge = base64.StdEncoding.EncodeToString(a.Challenge)
 	}
@@ -359,12 +394,10 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 		d.OnOrigin = containsString(origins, requestOrigin(r))
 	}
 	if status == store.ApprovalPending && s.cfg.Approvals.PasskeysOn() {
-		keys, err := store.ApproverCredentials(r.Context(), s.writeDB(), store.ApproverPasskey)
-		if err != nil {
-			s.serverError(w, r, err)
-			return
-		}
-		d.PasskeyReady = len(keys) > 0
+		// The remedies' own rule (approval.Service.Ways): passkeys set up, an
+		// origin to verify them on, and one enrolled -- so the page never
+		// offers a passkey the remedy does not, nor a link with no origin.
+		d.PasskeyReady = s.cfg.Approvals.Ways(r.Context(), "").Passkey
 		// The options only once the duration is chosen: they sign it, with
 		// the facts this page shows.
 		if d.For = chosenDuration(r); d.For != "" {

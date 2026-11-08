@@ -29,8 +29,8 @@
     {{range .Grants}}
     <li class="access-item" data-grant="{{.ID}}">
       <span class="badge">{{.Project}}</span>
-      <strong>{{if .Session}}{{.Session}}{{else}}pid {{.PID}}{{end}}</strong>
-      <small>read-only, for {{.From}} &middot; granted {{clock .GrantedAt}}, ends {{clock .ExpiresAt}}</small>
+      <strong>{{if .Agent}}{{.Agent}}{{else if .Session}}{{.Session}}{{else}}pid {{.PID}}{{end}}</strong>
+      <small>{{if and .Agent .Session}}session {{.Session}} &middot; {{end}}read-only, for {{.From}} &middot; granted {{clock .GrantedAt}}, ends {{clock .ExpiresAt}}</small>
       <form method="post" action="/console/access/grants/{{.ID}}/revoke">
         <button class="btn" type="submit">Revoke</button>
       </form>
@@ -49,8 +49,8 @@
     {{range .Leases}}
     <li class="access-item" data-lease="{{.ID}}">
       <span class="badge">{{.Project}}</span>
-      <strong>{{if .Session}}{{.Session}}{{else}}pid {{.PID}}{{end}}</strong>
-      <small>granted {{clock .GrantedAt}}, ends {{clock .ExpiresAt}}</small>
+      <strong>{{if .Agent}}{{.Agent}}{{else}}pid {{.PID}}{{end}}</strong>
+      <small>{{with .Session}}session {{.}} &middot; {{end}}granted {{clock .GrantedAt}}, ends {{clock .ExpiresAt}}</small>
       <form method="post" action="/console/access/leases/{{.ID}}/revoke">
         <button class="btn" type="submit">Revoke</button>
       </form>

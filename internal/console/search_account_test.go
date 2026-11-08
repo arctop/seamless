@@ -173,3 +173,62 @@ func TestAccountChips_SearchLabsAndTabsUnchangedWithoutAccounts(t *testing.T) {
 		require.NotContains(t, getPeek(t, f.mux, path).Body.String(), `"account"`, path)
 	}
 }
+
+// A plan row in search carries its writer (D6): the account of the note that
+// labels it, or -- a plan only tasks carry -- of its tasks when one account
+// wrote them all. The owner's, and a mixed one, carry none.
+func TestAccountChips_SearchPlans(t *testing.T) {
+	f := newRestrictedConsole(t, config.Features{Research: true}, true)
+	ctx := context.Background()
+	_, err := store.EnsureProject(ctx, f.db, "app", "app")
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	note := func(slug, title, account string) {
+		_, err := f.mgr.WriteNote(ctx, core.Note{ID: mustID(t), Title: title, Slug: slug, Project: "app",
+			Body: "The narrative.", Tags: []string{"plan:" + slug}, Created: now, Updated: now, Account: account})
+		require.NoError(t, err)
+	}
+	note("account-plan", "Account plan narrative", exampleAccount)
+	note("owner-plan", "Owner plan narrative", "")
+	task := func(plan, account string) {
+		require.NoError(t, store.CreateTask(ctx, f.db, core.Task{ID: mustID(t), ProjectSlug: "app", Title: "a step of " + plan,
+			PlanSlug: plan, Status: core.TaskOpen, Account: account, CreatedAt: now, UpdatedAt: now}))
+	}
+	task("account-steps-plan", exampleAccount)
+	task("account-steps-plan", exampleAccount)
+	task("mixed-steps-plan", exampleAccount)
+	task("mixed-steps-plan", "")
+	// The account's narrative labels its plan even though the owner added a
+	// step to it.
+	task("account-plan", "")
+
+	var data struct {
+		Groups []struct {
+			Rows []struct {
+				Title   string  `json:"title"`
+				Account *string `json:"account"`
+			} `json:"rows"`
+		} `json:"groups"`
+	}
+	getJSON(t, f.mux, "/console/search?scope=plans&q=plan&format=json", &data)
+	seen := map[string]string{}
+	for _, g := range data.Groups {
+		for _, r := range g.Rows {
+			seen[r.Title] = ""
+			if r.Account != nil {
+				seen[r.Title] = *r.Account
+			}
+		}
+	}
+	require.Equal(t, map[string]string{
+		"Account plan narrative": exampleAccount, "Owner plan narrative": "",
+		"account-steps-plan": exampleAccount, "mixed-steps-plan": "",
+	}, seen)
+
+	page := getHTMLBody(t, f.mux, "/console/search?scope=plans&q=plan")
+	chip := accountChip(exampleAccount)
+	require.Contains(t, between(t, page, "Account plan narrative", `<article class="search-result`, "</article>"), chip)
+	require.Contains(t, between(t, page, "account-steps-plan", `<article class="search-result`, "</article>"), chip)
+	require.NotContains(t, between(t, page, "Owner plan narrative", `<article class="search-result`, "</article>"), "data-account")
+	require.NotContains(t, between(t, page, "mixed-steps-plan", `<article class="search-result`, "</article>"), "data-account")
+}

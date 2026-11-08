@@ -32,11 +32,12 @@
     {{if .Closed}}<dt>Closed</dt><dd title="{{ts .Closed}}">{{ago .Closed}}</dd>{{end}}
   </dl>
 
-  {{if .Deps}}
+  {{if .DependsOn}}
   <section class="peek-section">
-    <h3>Depends on <span class="count">{{len .Deps}}</span></h3>
+    <h3>Depends on <span class="count">{{.DependsOn}}</span></h3>
     <ul class="peek-refs">
       {{range .Deps}}<li><a href="/console/tasks/{{.ID}}" data-peek>{{.Title}}</a> <span class="badge {{taskTone .Status}}">{{.Status}}</span></li>{{end}}
+      {{range .LockedIn}}<li data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}} a task in locked project {{.}} blocks this one</li>{{end}}
     </ul>
   </section>
   {{end}}

@@ -29,9 +29,8 @@
   <input type="hidden" name="next" value="/console/access/{{.Request.ID}}">
   <fieldset>
     <legend>For how long</legend>
-    <label><input type="radio" name="duration" value="session" checked> until this session ends (at most {{.MaxLeaseWords}})</label>
-    <label><input type="radio" name="duration" value="1h"> 1 hour</label>
-    <label><input type="radio" name="duration" value="4h"> 4 hours</label>
+    {{range $i, $c := .Choices}}<label><input type="radio" name="duration" value="{{$c.Value}}"{{if eq $i 0}} checked{{end}}> {{$c.Words}}</label>
+    {{end}}
   </fieldset>
   <p class="held-sub">{{icon "triangle-alert"}} Without peer_auth this approval is advisory: any process holding the bearer key can make it.</p>
   <button class="btn primary" type="submit">Approve</button>
@@ -61,9 +60,8 @@
   {{if and .PasskeyReady .OnOrigin}}
   <fieldset>
     <legend>For how long</legend>
-    <label><input type="radio" name="for" value="session" checked> until this session ends (at most {{.MaxLeaseWords}})</label>
-    <label><input type="radio" name="for" value="1h"> 1 hour</label>
-    <label><input type="radio" name="for" value="4h"> 4 hours</label>
+    {{range $i, $c := .Choices}}<label><input type="radio" name="for" value="{{$c.Value}}"{{if eq $i 0}} checked{{end}}> {{$c.Words}}</label>
+    {{end}}
   </fieldset>
   <p class="held-sub">The passkey signs the duration you choose, with the facts above.</p>
   <button class="btn primary" id="access-continue" type="submit">{{icon "key-round"}} Continue to approve with a passkey</button>

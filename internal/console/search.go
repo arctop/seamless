@@ -394,7 +394,7 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 				Kind: "plan", ID: p.Slug, Title: p.Title, Project: p.Project,
 				Identifier: p.Slug,
 				Age:        ago(p.Updated), Updated: p.Updated, Href: "/console/plans/" + p.Slug,
-				Favorite: p.Favorite, Lexical: true, Peek: true,
+				Favorite: p.Favorite, Account: p.Account, Lexical: true, Peek: true,
 			}
 			row.MatchKind = store.NaturalIdentifierMatch(data.Query, p.Slug)
 			rows = append(rows, row)

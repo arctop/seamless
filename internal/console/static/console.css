@@ -2620,6 +2620,12 @@ kbd {
   white-space: nowrap; text-overflow: ellipsis;
 }
 .rail-item .ri-meta .mono { font-size: inherit; }
+/* A blocker in a locked project (peer_auth.locked) gets a line of its own, so
+   the truncated meta line never hides it; the reader and the peek list it
+   under "Depends on". */
+.rail-item .ri-desc[data-locked-blocker] .ico { width: 12px; height: 12px; vertical-align: -2px; }
+.peek-refs li[data-locked-blocker] { color: var(--muted); }
+.peek-refs li[data-locked-blocker] .ico { width: 14px; height: 14px; }
 .rail-item.selected, .rail-item.selected:hover { background: color-mix(in oklab, var(--lib-item-accent) 12%, var(--surface)); box-shadow: inset 3px 0 0 var(--lib-item-accent); }
 .rail-item.dim .ri-title { color: var(--muted); font-weight: 500; }
 .rail-item .kdot { display: inline-block; width: 8px; height: 8px; border-radius: 3px; margin-right: 6px; }

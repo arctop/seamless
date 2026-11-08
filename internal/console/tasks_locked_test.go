@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -153,4 +154,54 @@ func TestProjectTasksTab_LockedBlockersNamed(t *testing.T) {
 	panel = tabPanel(t, rr.Body.String(), "tasks")
 	require.NotContains(t, panel, "data-locked-blocker")
 	require.Contains(t, between(t, panel, step, `<details class="step`, "</summary>"), `<details class="step blocked"`)
+}
+
+// The task's own reader and peek name the locked blocker under "Depends on"
+// (D7), as the Tasks rail does; the rail gives it a line of its own, so the
+// truncated meta line never hides it. Unlocked, the browser reads the
+// blocker itself.
+func TestTaskDetail_LockedBlockerNamed(t *testing.T) {
+	lc := newLockedConsole(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	id := mustID(t)
+	require.NoError(t, store.CreateTask(ctx, lc.db, core.Task{ID: id, ProjectSlug: openSlug, Title: "ops waits on ledger",
+		Status: core.TaskOpen, DependsOn: []string{lc.taskID}, CreatedAt: now, UpdatedAt: now}))
+	get := func(path string) string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+testKey)
+		rr := lc.do(req)
+		require.Equal(t, http.StatusOK, rr.Code, path)
+		body := rr.Body.String()
+		require.NotContains(t, body, lockedSecret, path)
+		require.NotContains(t, body, lc.taskID, "%s: the locked blocker's id stays out", path)
+		return body
+	}
+	for _, path := range []string{"/console/tasks/" + id + "?reader=1", "/console/tasks/" + id + "?peek=1"} {
+		body := get(path)
+		at := strings.Index(body, "Depends on")
+		require.GreaterOrEqual(t, at, 0, path)
+		deps, _, _ := strings.Cut(body[at:], "</ul>")
+		require.Contains(t, deps, `1</span>`, path)
+		require.Contains(t, deps, `data-locked-blocker="`+lockedSlug+`"`, path)
+		require.Contains(t, deps, `title="Unlock `+lockedSlug+` in the console to see the task"`, path)
+		require.Contains(t, deps, "a task in locked project "+lockedSlug+" blocks this one", path)
+	}
+	var d struct {
+		LockedBlockers []string `json:"lockedBlockers"`
+		Deps           []any    `json:"deps"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(get("/console/tasks/"+id+"?format=json")), &d))
+	require.Equal(t, []string{lockedSlug}, d.LockedBlockers)
+	require.Empty(t, d.Deps)
+
+	item := between(t, get("/console/tasks"), "ops waits on ledger", `<a class="rail-item`, "</a>")
+	require.Contains(t, item, `<span class="ri-desc" data-locked-blocker="`+lockedSlug+`"`, "a line of its own")
+
+	cookie := lc.unlockLink(t)
+	rr := lc.do(lc.browser(http.MethodGet, "/console/tasks/"+id+"?reader=1", cookie, nil))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.NotContains(t, rr.Body.String(), "data-locked-blocker")
+	require.Contains(t, rr.Body.String(), lc.taskID, "unlocked, the blocker itself")
 }

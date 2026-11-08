@@ -616,9 +616,12 @@ both dependency directions; **force-release** is the action, and it is the
 owner override - it takes the lock from whoever holds it.
 
 Under `peer_auth.locked`, a task blocked by a task in a locked project you
-haven't unlocked sits in the blocked rail, its blocker named only by project;
-the project workspace's Plans & tasks tab marks such steps blocked and leaves
-them out of the ready queue.
+haven't unlocked sits in the blocked rail, its blocker named only by project
+on a line of its own; the task's reader and peek list it under **Depends on**
+the same way. The project workspace's Plans & tasks tab marks such steps
+blocked and leaves them out of the ready queue. Opening a plan or a session
+that lives in a locked project takes you to that project's unlock page, which
+says the item is there and links back once you unlock it.
 
 ## Plans
 

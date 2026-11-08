@@ -498,16 +498,17 @@ func (s *Service) planApprove(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/console/plans/"+slug, http.StatusSeeOther)
 }
 
-// answerLockedPlan answers a JSON lookup of a plan this request's handle does
-// not hold, when the plan is in a locked project (peer_auth.locked) the
-// request does not read: the lock, named (answerLocked), instead of a "not
-// found" that would send the owner looking for a plan that exists. It reports
+// answerLockedPlan answers a lookup of a plan this request's handle does not
+// hold, when the plan is in a locked project (peer_auth.locked) the request
+// does not read: the lock, named (answerLocked), instead of a "not found"
+// that would send the owner looking for a plan that exists -- the JSON
+// refusal, or for a browser page the locked page (lockedItem). It reports
 // whether it answered (a failed lookup is answered too, as the error it is).
-// Nothing runs while nothing is locked, and a browser page and a plan in no
-// locked project fall through to the 404 as before.
+// Nothing runs while nothing is locked, and a plan in no locked project falls
+// through to the 404 as before.
 func (s *Service) answerLockedPlan(w http.ResponseWriter, r *http.Request, slug string) bool {
 	ctx := r.Context()
-	if !wantsJSON(r) || len(lockedProjects(ctx)) == 0 {
+	if len(lockedProjects(ctx)) == 0 {
 		return false
 	}
 	// The base handle hides every locked project, so the composition's notes
@@ -527,19 +528,24 @@ func (s *Service) answerLockedPlan(w http.ResponseWriter, r *http.Request, slug 
 		return false
 	}
 	slices.Sort(locked)
-	s.answerLocked(w, r, locked[0])
+	s.answerLocked(w, r, locked[0], lockedItemPlan)
 	return true
 }
 
-// answerLocked is the JSON answer for an item that lives in project, a
-// locked project this request does not read: 403, {"error", "locked": true,
-// "project"}. The error is the lock refusal the tool-backed seam commands and
-// the MCP tools carry (access.View.Refusal: the rule on one line, the remedy
-// on the next, worded for the socket or the TCP key), so a console-backed
-// command says what they say. Nothing is filed: a console read is not an
-// access request. A browser's own JSON gets the console unlock instead
-// (lockedProject), the remedy a browser has.
-func (s *Service) answerLocked(w http.ResponseWriter, r *http.Request, project string) {
+// answerLocked is the answer for an item -- item names its kind, a plan or a
+// session -- that lives in project, a locked project this request does not
+// read. A browser page gets the locked page (lockedItem). The JSON answer is
+// 403, {"error", "locked": true, "project"}: the error is the lock refusal
+// the tool-backed seam commands and the MCP tools carry (access.View.Refusal:
+// the rule on one line, the remedy on the next, worded for the socket or the
+// TCP key), so a console-backed command says what they say. Nothing is
+// filed: a console read is not an access request. A browser's own JSON gets
+// the console unlock instead (lockedProject), the remedy a browser has.
+func (s *Service) answerLocked(w http.ResponseWriter, r *http.Request, project, item string) {
+	if !wantsJSON(r) {
+		s.lockedItem(w, r, project, item)
+		return
+	}
 	if s.classify(r) == credCookie {
 		s.lockedProject(w, r, project)
 		return
