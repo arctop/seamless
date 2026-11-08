@@ -429,7 +429,7 @@ func TestAccess_PasskeyPageBindsTheDuration(t *testing.T) {
 		require.Contains(t, fixed, "Approve with a passkey")
 		require.NotContains(t, fixed, `name="for"`, "no duration to choose")
 		require.NotContains(t, fixed, `name="duration"`)
-		require.Contains(t, html("/console/access/"+id+"?for=session"), "For how long: <strong>until this session ends (at most 8h0m0s)</strong>")
+		require.Contains(t, html("/console/access/"+id+"?for=session"), "For how long: <strong>until this session ends (at most 8h)</strong>", "a lease reads 8h, never Go's 8h0m0s")
 
 		// No ?for=, or one the daemon does not offer: the owner chooses, and
 		// the choice loads the page for it in place.
@@ -471,4 +471,26 @@ func TestAccess_ApproveRefusesABroadAnchor(t *testing.T) {
 	leases, err := store.ActiveAccessLeasesFor(ctx, f.db, []string{tmux.Key()}, time.Now())
 	require.NoError(t, err)
 	require.Empty(t, leases)
+}
+
+// A request past its wait reads expired, by its id or by its short id, even
+// before a sweep writes the status: the page offers nothing to decide.
+func TestAccess_PageOfARequestPastItsWait(t *testing.T) {
+	f := newAccessFixture(t)
+	f.enrollPasskey(t)
+	id, short := f.file(t)
+	_, err := f.db.ExecContext(context.Background(), `UPDATE access_approvals SET expires_at = ? WHERE id = ?`,
+		core.FormatTime(time.Now().Add(-time.Minute)), id)
+	require.NoError(t, err)
+	for _, ref := range []string{id, short} {
+		req := authedReq(httptest.NewRequest(http.MethodGet, "/console/access/"+ref, nil))
+		req.Host = "localhost:8081"
+		rr := do(f.mux, req)
+		require.Equal(t, http.StatusOK, rr.Code, ref)
+		page := rr.Body.String()
+		require.Contains(t, page, "This request is <strong>expired</strong>.", ref)
+		require.Contains(t, page, "Waited until", ref)
+		require.NotContains(t, page, `id="access-deny"`, ref)
+		require.NotContains(t, page, "Continue to approve with a passkey", ref)
+	}
 }

@@ -171,6 +171,8 @@ type accessOneData struct {
 	// (passkeys set up, one enrolled); ForWords is For as the page says it.
 	PasskeyReady bool   `json:"-"`
 	ForWords     string `json:"-"`
+	// MaxLeaseWords is MaxLease as the page says it ("8h", not "8h0m0s").
+	MaxLeaseWords string `json:"-"`
 }
 
 // chosenDuration is the duration ?for= names, "" when it names none or one
@@ -186,13 +188,30 @@ func chosenDuration(r *http.Request) string {
 func durationWords(choice, maxLease string) string {
 	switch choice {
 	case approval.ForSession:
-		return "until this session ends (at most " + maxLease + ")"
+		return "until this session ends (at most " + leaseWords(maxLease) + ")"
 	case approval.For1h:
 		return "1 hour"
 	case approval.For4h:
 		return "4 hours"
 	}
 	return choice
+}
+
+// leaseWords is a lease length as a page says it: Go's 8h0m0s reads 8h, and
+// 1h30m0s reads 1h30m. Anything that does not parse is shown as it is.
+func leaseWords(d string) string {
+	v, err := time.ParseDuration(d)
+	if err != nil || v <= 0 {
+		return d
+	}
+	out := v.String()
+	if strings.HasSuffix(out, "m0s") {
+		out = strings.TrimSuffix(out, "0s")
+	}
+	if strings.HasSuffix(out, "h0m") {
+		out = strings.TrimSuffix(out, "0m")
+	}
+	return out
 }
 
 func (s *Service) maxLease() string {
@@ -318,9 +337,16 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	d := accessOneData{Request: facts, Status: a.Status, Page: s.core().Page(a.ID), Terminal: s.cfg.Terminal,
+	// A request past its wait is expired whether or not a sweep has written
+	// that yet: the page must not offer to decide it.
+	status := a.Status
+	if status == store.ApprovalPending && !time.Now().Before(a.ExpiresAt) {
+		status = store.ApprovalExpired
+	}
+	d := accessOneData{Request: facts, Status: status, Page: s.core().Page(a.ID), Terminal: s.cfg.Terminal,
 		Durations: approval.Durations, MaxLease: s.maxLease(), Advisory: a.Kind == store.AccessKindGrant && s.advisory()}
-	if a.Status == store.ApprovalPending && access.PeerAuthenticated(r.Context()) && wantsJSON(r) {
+	d.MaxLeaseWords = leaseWords(d.MaxLease)
+	if status == store.ApprovalPending && access.PeerAuthenticated(r.Context()) && wantsJSON(r) {
 		d.Challenge = base64.StdEncoding.EncodeToString(a.Challenge)
 	}
 	if s.cfg.Approvals == nil {
@@ -332,7 +358,7 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 		d.Origin = origins[0]
 		d.OnOrigin = containsString(origins, requestOrigin(r))
 	}
-	if a.Status == store.ApprovalPending && s.cfg.Approvals.PasskeysOn() {
+	if status == store.ApprovalPending && s.cfg.Approvals.PasskeysOn() {
 		keys, err := store.ApproverCredentials(r.Context(), s.writeDB(), store.ApproverPasskey)
 		if err != nil {
 			s.serverError(w, r, err)

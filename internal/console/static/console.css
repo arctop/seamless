@@ -6579,6 +6579,53 @@ html:not(.js) .brief-preview { display: none; }
 .held-lockdown form, .held-corpus > form { margin: 10px 0 0; }
 .held-lockdown.is-on { border-left: 3px solid var(--warn); padding-left: 12px; }
 .held-corpus .held-list { margin-top: 12px; }
+
+/* Access requests, their passkey page and the unlock page: the facts as a
+   label/value grid, the warnings in the warning color, rows as rows. */
+.access-page h2, .unlock-page h2 { margin: 18px 0 0; font-family: var(--font-serif); font-weight: 560; font-size: 19px; }
+.access-warnings { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.access-warnings .held-sub {
+  display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 12px; border-radius: var(--radius-md);
+  border: 1px solid color-mix(in oklab, var(--warn) 30%, transparent); background: var(--warn-soft); color: var(--warn);
+}
+.access-warnings .held-sub strong { color: inherit; font-weight: 600; }
+.access-facts {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 22px; max-width: 860px;
+  margin: 16px 0 0; font-size: var(--text-sm);
+}
+.access-facts dt { margin: 0; color: var(--muted); }
+.access-facts dd { margin: 0; min-width: 0; color: var(--ink); overflow-wrap: anywhere; }
+.access-facts code { font-family: var(--font-mono); font-size: var(--text-xs); }
+.access-facts q { font-style: italic; }
+.access-facts .faint { color: var(--faint); font-size: var(--text-xs); }
+.access-decide { margin-top: 18px; }
+.access-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 18px 0 0; }
+.access-decide .access-form { margin-top: 0; }
+.access-form fieldset {
+  flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 10px 14px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
+}
+.access-form legend { padding: 0 6px; color: var(--muted); font-size: var(--text-xs); }
+.access-form label { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); }
+.access-form > .held-sub, .access-form > .access-duration { flex-basis: 100%; margin: 0; }
+.access-duration { font-size: var(--text-sm); }
+.access-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.access-item {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
+}
+.access-item small { color: var(--muted); font-size: var(--text-xs); }
+.access-item form { margin: 0 0 0 auto; }
+.unlock-command {
+  display: block; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--ink) 4%, var(--surface-solid)); font-family: var(--font-mono);
+  font-size: var(--text-xs); overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  .access-facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .access-facts dd { margin-bottom: 8px; }
+  .access-item form { margin-left: 0; }
+}
 .level-welcome-optin {
   display: flex; align-items: flex-start; gap: 10px; margin: 12px 0 0; padding: 10px 12px;
   border: 1px dashed var(--border); border-radius: var(--radius-md); font-size: var(--text-sm); cursor: pointer;

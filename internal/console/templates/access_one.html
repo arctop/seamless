@@ -13,13 +13,13 @@
 {{end}}
 
 <dl class="access-facts">
-  <dt>Project</dt><dd>{{.Project}} ({{.Isolation}}), {{.Access}}</dd>{{if .From}}<dt>For</dt><dd>sessions working in {{.From}}</dd>{{end}}
+  <dt>Project</dt><dd>{{.Project}} ({{.Isolation}}), {{.Access}}</dd>{{if .From}}<dt>For</dt><dd>sessions working in {{.From}}</dd>{{end}}{{if .Agent}}<dt>Agent</dt><dd>{{.Agent}}</dd>{{end}}
   <dt>Asking</dt><dd>{{if not .PID}}a session (without peer_auth the daemon knows no process){{else}}{{if .Program}}<code>{{.Program}}</code>{{else}}a process{{end}}, pid {{.PID}}, uid {{.UID}}{{end}}</dd>
   <dt>Session</dt><dd>{{if .Session}}{{.Session}}{{else}}none{{end}}{{if .Model}} &middot; {{.Model}}{{end}}</dd>
   <dt>Working in</dt><dd>{{if .CWD}}<code>{{.CWD}}</code>{{else}}unknown{{end}}</dd>
-  <dt>The agent says</dt><dd>{{if .Reason}}<q>{{.Reason}}</q>{{else}}(no reason given){{end}}</dd>
+  <dt>The agent says</dt><dd>{{if .Reason}}<q>{{.Reason}}</q> <span class="faint">(the agent's own words, not checked)</span>{{else}}(no reason given){{end}}</dd>
   <dt>Kind</dt><dd>{{if eq .Kind "refresh"}}a refresh of a lease it holds{{else if eq .Kind "grant"}}a read-only grant of a confidential project{{else}}a first request{{end}}</dd>
-  <dt>Waits until</dt><dd>{{.ExpiresAt.Local.Format "15:04"}}</dd>
+  <dt>{{if eq $.Data.Status "pending"}}Waits until{{else}}Waited until{{end}}</dt><dd>{{.ExpiresAt.Local.Format "15:04"}}</dd>
 </dl>
 {{end}}
 
@@ -29,7 +29,7 @@
   <input type="hidden" name="next" value="/console/access/{{.Request.ID}}">
   <fieldset>
     <legend>For how long</legend>
-    <label><input type="radio" name="duration" value="session" checked> until this session ends (at most {{.MaxLease}})</label>
+    <label><input type="radio" name="duration" value="session" checked> until this session ends (at most {{.MaxLeaseWords}})</label>
     <label><input type="radio" name="duration" value="1h"> 1 hour</label>
     <label><input type="radio" name="duration" value="4h"> 4 hours</label>
   </fieldset>
@@ -41,7 +41,7 @@
   <button class="btn" type="submit">Deny</button>
 </form>
 {{else}}
-<div class="access-decide" data-access-id="{{.Request.ID}}">
+<div class="access-decide" data-access-id="{{.Request.ID}}" data-deny-confirm="Deny this request? {{.Request.Project}} stays {{if eq .Request.Kind "grant"}}closed to{{else}}locked for{{end}} that session.">
 {{if .For}}
 <form id="access-form" class="access-form" data-digest="{{.Request.Digest}}" data-duration="{{.For}}" data-options="{{printf "%s" .PasskeyOptions}}">
   <p class="access-duration">For how long: <strong>{{.ForWords}}</strong> &middot; <a href="/console/access/{{.Request.ID}}" data-seam-query>choose another duration</a></p>
@@ -52,7 +52,7 @@
   {{else if .PasskeyReady}}
   <p class="held-sub">{{icon "triangle-alert"}} The request changed while this page loaded. <a href="/console/access/{{.Request.ID}}?for={{.For}}" data-seam-query>Look at it again</a>.</p>
   {{else}}
-  <p class="held-sub">No passkey is enrolled here. Approve in your own terminal instead.</p>
+  <p class="held-sub">No passkey is enrolled here, so approve it in your own terminal: <code>seam approve {{.Request.Short}}</code></p>
   {{end}}
   <button class="btn" id="access-deny" type="button">Deny</button>
 </form>
@@ -61,7 +61,7 @@
   {{if and .PasskeyReady .OnOrigin}}
   <fieldset>
     <legend>For how long</legend>
-    <label><input type="radio" name="for" value="session" checked> until this session ends (at most {{.MaxLease}})</label>
+    <label><input type="radio" name="for" value="session" checked> until this session ends (at most {{.MaxLeaseWords}})</label>
     <label><input type="radio" name="for" value="1h"> 1 hour</label>
     <label><input type="radio" name="for" value="4h"> 4 hours</label>
   </fieldset>
@@ -70,13 +70,13 @@
   {{else if .PasskeyReady}}
   <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/access/{{.Request.ID}}">{{.Origin}}</a>.</p>
   {{else}}
-  <p class="held-sub">No passkey is enrolled here. Approve in your own terminal instead.</p>
+  <p class="held-sub">No passkey is enrolled here, so approve it in your own terminal: <code>seam approve {{.Request.Short}}</code></p>
   {{end}}
   <button class="btn" id="access-deny" type="button">Deny</button>
 </form>
 {{end}}
 </div>{{end}}
-<p class="held-sub">Or, in your own terminal: <code>seam approve {{.Request.Short}}</code></p>
+{{if or .Advisory .PasskeyReady}}<p class="held-sub">Or, in your own terminal: <code>seam approve {{.Request.Short}}</code></p>{{end}}
 <p class="held-sub" id="access-status" role="status" aria-live="polite"></p>
 {{else}}
 <p class="held-sub">This request is <strong>{{.Status}}</strong>.</p>
@@ -172,7 +172,7 @@ window.SEAM_NO_LIVE_REFRESH = true; // an approval in progress must not be clobb
     });
     var deny = document.getElementById('access-deny');
     if (deny) deny.addEventListener('click', function () {
-      if (!confirm('Deny this request? The project stays locked for that session.')) return;
+      if (!confirm(root.getAttribute('data-deny-confirm') || 'Deny this request?')) return;
       post('/console/access/' + id + '/deny', {}).then(function () { refresh(); })
         .catch(function (err) { say(err.message); });
     });
