@@ -41,6 +41,11 @@ type TaskBlockedError struct {
 	// Withheld is rendered verbatim after the named blockers ("" renders
 	// nothing): the surface's words for the blockers it may not name.
 	Withheld string
+	// Remedy, when set, is rendered on a second line, "Remedy: <Remedy>",
+	// the way a lock refusal ends: how the caller reaches a withheld blocker
+	// it was told the locked project of. "" renders nothing, so a refusal
+	// without one reads exactly as before.
+	Remedy string
 }
 
 func (e *TaskBlockedError) Error() string {
@@ -51,7 +56,11 @@ func (e *TaskBlockedError) Error() string {
 	if e.Withheld != "" {
 		parts = append(parts, e.Withheld)
 	}
-	return fmt.Sprintf("store.ClaimTask: %s: task %q waits on %s", ErrTaskBlocked, e.TaskID, strings.Join(parts, ", "))
+	msg := fmt.Sprintf("store.ClaimTask: %s: task %q waits on %s", ErrTaskBlocked, e.TaskID, strings.Join(parts, ", "))
+	if e.Remedy != "" {
+		msg += "\nRemedy: " + e.Remedy
+	}
+	return msg
 }
 
 // Unwrap makes errors.Is(err, ErrTaskBlocked) hold.

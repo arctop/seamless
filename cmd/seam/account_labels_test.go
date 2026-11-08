@@ -42,7 +42,7 @@ func TestAccountLabels_TextRendering(t *testing.T) {
 
 	out, errb, code = fx.run(t, "task", "list")
 	require.Equal(t, 0, code, errb)
-	require.Equal(t, "  01KDDDDD  [open       ] write the migration  (written by account _example_agent)\n"+
+	require.Equal(t, "  01KDDDDD  [open       ] write the migration  [written by account _example_agent]\n"+
 		"  01KGGGGG  [open       ] owner idea\n", out)
 
 	out, errb, code = fx.run(t, "sessions", "01KHHHHHHHHHHHHHHHHHHHHHHH")

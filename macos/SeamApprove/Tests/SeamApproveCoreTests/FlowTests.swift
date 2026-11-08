@@ -1,4 +1,5 @@
 import Foundation
+import Security
 @testable import SeamApproveCore
 import XCTest
 
@@ -189,6 +190,7 @@ final class FlowTests: XCTestCase {
     func testEnrollAsksForTheCodeThenSignsAndRegisters() throws {
         let keys = SoftwareKeyStore()
         let old = try keys.add(credential: "01OLDAPPROVER0000000000000")
+        let oldPublic = try XCTUnwrap(keys.secKey(old.handle).flatMap(SecKeyCopyPublicKey))
         let ui = FakeUI(codes: ["not a code", "abcd-efgh-jkmn-pqrs"])
         let server = try TestServer(replies: [
             TestServer.reply(200, terminalList),
@@ -197,9 +199,10 @@ final class FlowTests: XCTestCase {
         defer { server.stop() }
 
         let out = flows(server, keys: keys, ui: ui).enroll(name: nil)
-        // The replaced key's credential is still on the daemon: the alert
-        // gives the command that removes it, id and all, set apart, and stays
-        // open. The new key's id is not shown: nothing asks the owner for it.
+        // A daemon that retires nothing (one from before retirement) still
+        // lists the replaced key's credential: the alert gives the command
+        // that removes it, id and all, set apart, and stays open. The new
+        // key's id is not shown: nothing asks the owner for it.
         XCTAssertEqual(out, .done(Notice(
             title: "Touch ID enrolled",
             body: "This Mac's Touch ID can now approve access to locked projects. The daemon lists it as \u{201C}Test Mac\u{201D}. "
@@ -232,7 +235,53 @@ final class FlowTests: XCTestCase {
         XCTAssertEqual(keys.publicKey(stored[0].handle), pub)
         let sig = try XCTUnwrap(Data(base64Encoded: form["signature"] ?? ""))
         XCTAssertTrue(keys.verifies(sig, try Messages.touchIDEnrollMessage(code: "ABCDEFGHJKMNPQRS", publicKey: pub), handle: stored[0].handle))
-        XCTAssertEqual(keys.reasons, [Reason.enrollment(account: "_seamless")])
+        // The earlier key signed its own retirement, bound to this code and
+        // the new key, under the same prompt.
+        XCTAssertEqual(form["replace"], "01OLDAPPROVER0000000000000")
+        let retireSig = try XCTUnwrap(Data(base64Encoded: form["replace_signature"] ?? ""))
+        let retireMessage = try Messages.touchIDReplaceMessage(code: "ABCDEFGHJKMNPQRS", publicKey: pub, retiring: "01OLDAPPROVER0000000000000")
+        XCTAssertTrue(SecKeyVerifySignature(oldPublic, .ecdsaSignatureMessageX962SHA256, retireMessage as CFData, retireSig as CFData, nil))
+        XCTAssertEqual(keys.reasons, [Reason.enrollment(account: "_seamless", replacing: true)])
+    }
+
+    /// A daemon that retires the earlier key with the enrollment leaves the
+    /// owner nothing to do: the alert says so and closes by itself.
+    func testEnrollRetiresTheKeyItReplaces() throws {
+        let keys = SoftwareKeyStore()
+        try keys.add(credential: "01OLDAPPROVER0000000000000")
+        let server = try TestServer(replies: [
+            TestServer.reply(200, terminalList),
+            TestServer.reply(200, #"{"id":"01NEWAPPROVER0000000000000","name":"Test Mac","retired":["01OLDAPPROVER0000000000000"]}"#),
+        ])
+        defer { server.stop() }
+        let out = flows(server, keys: keys, ui: FakeUI(codes: ["ABCD-EFGH-JKMN-PQRS"])).enroll(name: nil)
+        XCTAssertEqual(out, .done(Notice(
+            title: "Touch ID enrolled",
+            body: "This Mac's Touch ID can now approve access to locked projects. The daemon lists it as \u{201C}Test Mac\u{201D}. "
+                + "It replaces the key this Mac enrolled before, which is deleted from this Mac and from the daemon.",
+            succeeded: true)))
+        XCTAssertTrue(try XCTUnwrap(out.notice).autoCloses)
+        XCTAssertEqual(try keys.keys().map(\.credential), ["01NEWAPPROVER0000000000000"])
+    }
+
+    /// An earlier key whose signature is cancelled is not named to the
+    /// daemon: the enrollment goes on, and the alert gives the command that
+    /// removes the earlier key's credential.
+    func testEnrollWhenTheEarlierKeyDoesNotSign() throws {
+        let keys = SoftwareKeyStore()
+        try keys.add(credential: "01OLDAPPROVER0000000000000")
+        keys.cancelLater = true
+        let server = try TestServer(replies: [
+            TestServer.reply(200, terminalList),
+            TestServer.reply(200, #"{"id":"01NEWAPPROVER0000000000000","name":"Test Mac"}"#),
+        ])
+        defer { server.stop() }
+        let out = flows(server, keys: keys, ui: FakeUI(codes: ["ABCD-EFGH-JKMN-PQRS"])).enroll(name: nil)
+        XCTAssertEqual(out.notice?.setApart, ["sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers remove 01OLDAPPROVER0000000000000"])
+        let form = formOf(server.requestStrings[1])
+        XCTAssertNil(form["replace"])
+        XCTAssertNil(form["replace_signature"])
+        XCTAssertEqual(try keys.keys().map(\.credential), ["01NEWAPPROVER0000000000000"])
     }
 
     /// A first enrollment asks nothing more of the owner, and the code is
@@ -271,6 +320,8 @@ final class FlowTests: XCTestCase {
         XCTAssertEqual(out.notice?.setApart, [])
         XCTAssertEqual(out.notice?.autoCloses, true)
         XCTAssertEqual(try keys.keys().map(\.credential), ["01NEWAPPROVER0000000000000"])
+        XCTAssertNil(formOf(server.requestStrings[1])["replace"], "a key the daemon never knew has nothing to retire")
+        XCTAssertEqual(keys.reasons, [Reason.enrollment(account: "_seamless")])
     }
 
     func testEnrollChecksTheDaemonBeforeAskingForTheCode() throws {

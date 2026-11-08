@@ -95,6 +95,10 @@ type heldPageData struct {
 	// configured, so the copy names proposals. Presentation only.
 	ProposalsOnly bool `json:"-"`
 	Restricted    bool `json:"-"`
+	// Locked names the locked projects this request does not read, whose
+	// holds the queue leaves out (seam proposals prints them): names only,
+	// never a count. Empty, and absent from the JSON, when nothing is locked.
+	Locked []string `json:"locked,omitempty"`
 }
 
 func (s *Service) heldPage(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +145,7 @@ func (s *Service) heldPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := heldPageData{Pending: []heldRow{}, Recent: []heldRow{}, Tainted: []taintRow{}, Flagged: []corpusRow{}, Drifted: []corpusRow{},
-		ProposalsOnly: proposalsOnly, Restricted: s.cfg.RestrictedAccounts}
+		ProposalsOnly: proposalsOnly, Restricted: s.cfg.RestrictedAccounts, Locked: lockedProjects(ctx)}
 	if !proposalsOnly {
 		if err := s.corpusSections(r, &data); err != nil {
 			s.serverError(w, r, err)

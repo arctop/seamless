@@ -67,7 +67,7 @@ func runTaskList(ctx context.Context, e *env, o *taskListOpts, _ []string) error
 		m, _ := t.(map[string]any)
 		line := fmt.Sprintf("  %s  [%-11s] %s", shortID(str(m["id"])), str(m["status"]), str(m["title"]))
 		if by := writtenBy(str(m["account"])); by != "" {
-			line += "  (" + by + ")"
+			line += "  [" + by + "]"
 		}
 		fmt.Fprintln(e.stdout, line)
 	}

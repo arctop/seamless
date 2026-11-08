@@ -422,7 +422,7 @@ func (s *Service) settings(w http.ResponseWriter, r *http.Request) {
 			Gardener:           s.cfg.GardenerCfg,
 			Briefing:           briefing,
 			BriefingOverridden: overridden,
-			Features:           featureCards(featuresCfg, navCounts{Labs: rawCounts.Labs, Trials: rawCounts.Trials, Held: heldCount}),
+			Features:           featureCardsFor(featuresCfg, navCounts{Labs: rawCounts.Labs, Trials: rawCounts.Trials, Held: heldCount}, s.cfg.RestrictedAccounts),
 			FeaturesConfig:     featuresCfg,
 			FeaturesOverridden: featuresOverridden,
 			UtilityRows:        utilityRows,

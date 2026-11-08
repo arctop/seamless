@@ -75,7 +75,7 @@
     <h3>Trials <span class="count">{{len .Trials}}{{if .More}} of {{.Row.Trials}}{{end}}</span></h3>
     <ul class="peek-refs">
       {{range .Trials}}
-      <li><a href="/console/trials/{{.ID}}">{{.Title}}</a> {{if .Outcome}}<span class="badge {{outcomeTone .Outcome}}">{{.Outcome}}</span>{{end}} <span class="muted" title="{{ts .Created}}">{{ago .Created}}</span></li>
+      <li><a href="/console/trials/{{.ID}}">{{.Title}}</a> {{if .Outcome}}<span class="badge {{outcomeTone .Outcome}}">{{.Outcome}}</span>{{end}} <span class="muted" title="{{ts .Created}}">{{ago .Created}}</span>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</li>
       {{end}}
     </ul>
     {{if .More}}<div class="peek-note">{{.More}} older trial{{if ne .More 1}}s{{end}} not shown &mdash; <a href="/console/trials?lab={{.Row.Lab}}">open in Trials</a>.</div>{{end}}

@@ -253,11 +253,11 @@ func TestPeerAuthMatrix_CLI(t *testing.T) {
 		// the calling tree's lease chooses (the owner's surface: no
 		// confidential fence, the lock alone).
 		{args: []string{"plan", "list"}, json: true, shows: cmFinance, outside: cmFiltered},
-		{args: []string{"plan", "show", fin.capture}, json: true, shows: cmFinance, outside: cmRefusedNotFound},
-		{args: []string{"plan", "show", legal.capture}, json: true, shows: cmLegal, outside: cmRefusedNotFound},
+		{args: []string{"plan", "show", fin.capture}, json: true, shows: cmFinance, outside: cmRefusedLocked},
+		{args: []string{"plan", "show", legal.capture}, json: true, shows: cmLegal, outside: cmRefusedLocked},
 		{args: []string{"sessions"}, json: true, outside: cmFiltered},
 		{args: []string{"doctor"}, anyExit: true},
-		{args: []string{"sessions", fin.sessID}, json: true, shows: cmFinance, outside: cmRefusedNotFound},
+		{args: []string{"sessions", fin.sessID}, json: true, shows: cmFinance, outside: cmRefusedLocked},
 		{args: []string{"proposals"}, json: true, outside: cmFiltered},
 		{args: []string{"project", "isolation", cmFinance}, json: true, outside: cmRefusedLocked},
 		// Last: prime starts a session in the locked project its cwd maps to.
@@ -266,8 +266,8 @@ func TestPeerAuthMatrix_CLI(t *testing.T) {
 
 	if gitOK {
 		// It prints verdicts, never a body: inside, it reads the plan and
-		// reaches git; outside, the plan is not there to read.
-		cases = append(cases, cmCLICase{args: []string{"plan", "check", "--cwd", gitRepo, fin.capture}, outside: cmRefusedNotFound})
+		// reaches git; outside, the console names the lock.
+		cases = append(cases, cmCLICase{args: []string{"plan", "check", "--cwd", gitRepo, fin.capture}, outside: cmRefusedLocked})
 	}
 
 	runAll := func(t *testing.T, state string, inside bool) {

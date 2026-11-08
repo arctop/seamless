@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"slices"
@@ -38,7 +39,7 @@ var testTerminal = &terminalApprover{Account: "_seamless", Seamlessd: "/opt/seam
 func factsOf(id, short, project string, warnings ...accessWarning) accessFacts {
 	return accessFacts{
 		ID: id, Short: short, Project: project, Isolation: "confidential", Access: "read-write", Kind: "request",
-		Program: "/usr/local/bin/claude", PID: 4242, UID: 501, Session: "cc/quiet-otter", SessionID: "01KSESSION",
+		Program: "/usr/local/bin/claude", Agent: "Claude Code 2.1.319", PID: 4242, UID: 501, Session: "cc/quiet-otter", SessionID: "01KSESSION",
 		CWD: "/Users/owner/repos/finance", Repo: "finance", Model: "claude-opus-5-5",
 		Reason: "reconcile the Q3 ledger", Warnings: warnings,
 		RequestedAt: fixedNow.Add(-3 * time.Minute), ExpiresAt: expiresAt, Digest: "c0ffee" + strings.Repeat("0", 58),
@@ -177,9 +178,9 @@ func TestApprove_RefusesWithoutTheOwnersTerminal(t *testing.T) {
 			return config.Config{}, nil
 		}
 		require.Equal(t, 1, dispatch(context.Background(), e, append([]string{"approve"}, argv...)), "%v", argv)
-		require.Contains(t, errb.String(), "seam approve is the owner's own terminal path")
-		require.Contains(t, errb.String(), "an agent cannot use it")
-		require.Contains(t, errb.String(), "seam access request <project>")
+		require.Equal(t, "error: seam approve is the owner's own terminal path: it needs a terminal on stdin and stdout, "+
+			"so an agent cannot use it. An agent asks with `seam access request <project>`; the owner decides in their "+
+			"own terminal, or with Touch ID or a passkey where one is enrolled\n", errb.String(), "one line")
 		require.Empty(t, out.String())
 	}
 }
@@ -189,7 +190,7 @@ func TestApprove_RefusesWithoutTheOwnersTerminal(t *testing.T) {
 func TestApprove_NothingWaiting(t *testing.T) {
 	rig := newApproveRig(t, routes(t, map[string]string{"GET /console/access": listJSON(t)}), "")
 	require.Equal(t, 0, rig.run())
-	require.Equal(t, "Nothing is waiting.\n", rig.out.String())
+	require.Equal(t, "Nothing is waiting: no access request is pending (seam approve --watch prints each new one).\n", rig.out.String())
 	require.Empty(t, rig.runner.recorded())
 }
 
@@ -247,9 +248,10 @@ func TestApprove_FactsShowWarningsFirstAndLabelTheReason(t *testing.T) {
 	require.Equal(t, 0, rig.run("R-7F3K"))
 	out := rig.out.String()
 	want := "\nAccess request R-7F3K\n\n" +
-		"! the session read text from outside\n" +
-		"! the same agent is also asking for example-payroll\n\n" +
+		"  ! the session read text from outside\n" +
+		"  ! the same agent is also asking for example-payroll\n\n" +
 		"  Project         example-finance (confidential, read-write)\n" +
+		"  Agent           Claude Code 2.1.319\n" +
 		"  Asking          /usr/local/bin/claude (pid 4242, uid 501)\n" +
 		"  Session         cc/quiet-otter (claude-opus-5-5)\n" +
 		"  Working in      /Users/owner/repos/finance\n" +
@@ -285,7 +287,7 @@ func TestApprove_ColorIsForWarningsOnlyAndHonorsNoColor(t *testing.T) {
 	rig.vars = map[string]string{}
 	require.Equal(t, 0, rig.run("R-7F3K"))
 	out := rig.out.String()
-	require.Contains(t, out, "\x1b[1;31m! no session named this agent\x1b[0m\n")
+	require.Contains(t, out, "  \x1b[1;31m! no session named this agent\x1b[0m\n", "the indent is never colored")
 	require.Equal(t, 1, strings.Count(out, "\x1b[1;31m"), "only the warning is colored")
 
 	for _, vars := range []map[string]string{{"NO_COLOR": "1"}, {"TERM": "dumb"}} {
@@ -293,7 +295,7 @@ func TestApprove_ColorIsForWarningsOnlyAndHonorsNoColor(t *testing.T) {
 		rig.vars = vars
 		require.Equal(t, 0, rig.run("R-7F3K"))
 		require.NotContains(t, rig.out.String(), "\x1b", "%v", vars)
-		require.Contains(t, rig.out.String(), "! no session named this agent\n")
+		require.Contains(t, rig.out.String(), "  ! no session named this agent\n")
 	}
 }
 
@@ -322,21 +324,27 @@ func TestApprove_DurationPrompt(t *testing.T) {
 	}{
 		{"empty is the session", "\ny\n", "session", "until the session ends, at most 8h"},
 		{"a listed choice", "4h\ny\n", "4h", "for 4 hours"},
-		{"anything else asks again", "2h\n1h\ny\n", "1h", "for 1 hour"},
+		{"its number", "2\ny\n", "1h", "for 1 hour"},
+		{"anything else asks again", "2h\n0\n1h\ny\n", "1h", "for 1 hour"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rig := newApproveRig(t, routes(t, table), tc.typed)
 			require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
 			out := rig.out.String()
-			require.Contains(t, out, "For how long?\n  session  until the session ends, at most 8h\n  1h       for 1 hour\n  4h       for 4 hours\nDuration [session]: ")
-			require.Contains(t, out, "Approve R-7F3K (example-finance, read-write, "+tc.words+")? [y/N/d=deny] ")
+			require.Contains(t, out, "For how long?\n"+
+				"  1  session  until the session ends, at most 8h (the default)\n"+
+				"  2  1h       for 1 hour\n"+
+				"  3  4h       for 4 hours\n"+
+				"Duration [1-3, Enter for session]: ")
+			require.Contains(t, out, "If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance "+tc.words+".\n"+
+				"Approve R-7F3K? [y/N/d=deny] ")
 			calls := rig.runner.recorded()
 			require.Equal(t, approveArgvFor(reqA, tc.duration, a.Digest), calls[len(calls)-1])
 		})
 	}
 	rig := newApproveRig(t, routes(t, table), "2h\n")
 	require.Equal(t, 0, rig.run("R-7F3K"))
-	require.Contains(t, rig.errb.String(), "valid values are session, 1h, 4h")
+	require.Contains(t, rig.errb.String(), "answer with 1-3 or one of session, 1h, 4h\n")
 	require.True(t, strings.HasSuffix(rig.out.String(), "Nothing changed.\n"), "end of input decides nothing")
 	require.Empty(t, rig.runner.recorded())
 }
@@ -365,7 +373,8 @@ func TestApprove_RunsSudoWithTheExactArgv(t *testing.T) {
 	require.Equal(t, 0, rig.run("R-7F3K", "--for", "1h"), rig.errb.String())
 	require.Equal(t, append(slices.Clone(passwordlessProbe), approveArgvFor(reqA, "1h", a.Digest)), rig.runner.recorded())
 	require.Equal(t, []bool{false, false, true}, rig.runner.attached, "only the commit gets the terminal, for sudo's prompt")
-	require.Contains(t, rig.out.String(), "Approve R-7F3K (example-finance, read-write, for 1 hour)? [y/N/d=deny] ")
+	require.Contains(t, rig.out.String(), "If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance for 1 hour.\n"+
+		"Approve R-7F3K? [y/N/d=deny] ")
 	require.NotContains(t, rig.out.String(), "For how long?", "--for skips the question")
 
 	rig = newApproveRig(t, routes(t, table), "d\n")
@@ -398,7 +407,12 @@ func TestApprove_RelaysAFailedCommit(t *testing.T) {
 		return 1, nil
 	}
 	require.Equal(t, 1, rig.run("R-7F3K", "--for", "1h"))
-	require.Contains(t, rig.errb.String(), "the approval of R-7F3K did not complete (sudo exited with status 1)")
+	require.Equal(t, "error: the approval of R-7F3K did not complete: nothing was approved (sudo exited with status 1)\n", rig.errb.String())
+
+	rig = newApproveRig(t, routes(t, byRef(t, a)), "d\n")
+	rig.runner.code = func([]string) (int, error) { return 1, nil }
+	require.Equal(t, 1, rig.run("R-7F3K", "--for", "1h"))
+	require.Equal(t, "error: the denial of R-7F3K did not complete: nothing was denied (sudo exited with status 1)\n", rig.errb.String())
 
 	rig = newApproveRig(t, routes(t, byRef(t, a)), "y\n")
 	rig.runner.code = func([]string) (int, error) { return -1, errors.New(`exec: "sudo": executable file not found in $PATH`) }
@@ -414,10 +428,12 @@ func TestApprove_WarnsWhenSudoAsksForNothing(t *testing.T) {
 	require.Contains(t, rig.errb.String(), "! warning: sudo runs commands as _seamless here without asking for authentication")
 	require.Contains(t, rig.errb.String(), "this approval proves nothing")
 	require.Equal(t, approveArgvFor(reqA, "1h", a.Digest), rig.runner.recorded()[2], "a warning, not a refusal")
+	require.NotContains(t, rig.out.String(), "sudo asks", "sudo will ask for nothing: no prompt is announced")
 
 	rig = newApproveRig(t, routes(t, byRef(t, a)), "y\n")
 	require.Equal(t, 0, rig.run("R-7F3K", "--for", "1h"))
 	require.NotContains(t, rig.errb.String(), "warning", "sudo -n refused: nothing to warn about")
+	require.Contains(t, rig.out.String(), "sudo asks for your Touch ID or password next: it commits the approval as _seamless.\n")
 }
 
 func TestApprove_WithoutATerminalApprover(t *testing.T) {
@@ -470,13 +486,20 @@ func TestApprove_OnlyAPendingRequestIsDecided(t *testing.T) {
 		want   string
 	}{
 		{func(o *accessOne) { o.Status = "approved" }, "R-7F3K is already approved: nothing to decide"},
-		{func(o *accessOne) { o.Status = "denied" }, "R-7F3K is already denied: nothing to decide"},
-		{func(o *accessOne) { o.Status = "expired" }, "R-7F3K expired: nothing to decide (the agent can ask again)"},
-		{func(o *accessOne) { o.Request.ExpiresAt = fixedNow.Add(-time.Second) }, "R-7F3K expired"},
+		{func(o *accessOne) { o.Status = "denied" },
+			"R-7F3K was denied: nothing to decide (example-finance stays locked for that session until the agent asks again)"},
+		{func(o *accessOne) { o.Status, o.Request.Kind = "denied", "grant" },
+			"R-7F3K was denied: nothing to decide (example-finance stays closed to that session until the agent asks again)"},
+		{func(o *accessOne) { o.Status = "expired" }, "R-7F3K expired at " + clockTime(expiresAt) +
+			" without a decision: nothing to decide (the agent asks again with its next call to example-finance)"},
+		{func(o *accessOne) { o.Request.ExpiresAt = fixedNow.Add(-time.Second) }, "R-7F3K expired at " +
+			clockTime(fixedNow.Add(-time.Second)) + " without a decision"},
+		{func(o *accessOne) { o.Status = "revoked" }, "R-7F3K is revoked, not pending: nothing to decide"},
 	} {
 		rig := newApproveRig(t, routes(t, byRef(t, a, tc.mutate)), "y\n")
 		require.Equal(t, 1, rig.run("R-7F3K", "--for", "1h"))
 		require.Contains(t, rig.errb.String(), tc.want)
+		require.Equal(t, 1, strings.Count(rig.errb.String(), "\n"), "one line")
 		require.Empty(t, rig.runner.recorded())
 	}
 }
@@ -530,7 +553,6 @@ func TestApprove_FlagConflicts(t *testing.T) {
 		{[]string{"--watch", "--for", "1h"}, "--watch only watches"},
 		{[]string{"--watch", "--passkey"}, "--watch only watches"},
 		{[]string{"--watch", "--for="}, "--watch only watches"},
-		{[]string{"--passkey", "--for", "1h", "R-7F3K"}, "the duration is chosen on the passkey page"},
 	} {
 		rig := newApproveRig(t, routes(t, map[string]string{}), "")
 		require.Equal(t, 1, rig.run(tc.argv...), "%v", tc.argv)
@@ -583,14 +605,14 @@ func TestApprove_WatchPrintsEachNewRequestOnceAndNotifies(t *testing.T) {
 	require.Equal(t, 1, strings.Count(out, "R-7F3K   example-finance"), out)
 	require.Equal(t, 1, strings.Count(out, "R-BBBB   example-payroll"), out)
 	require.Contains(t, out, "R-7F3K   example-finance          cc/quiet-otter           1 warning    waits until ")
-	require.Contains(t, out, "  ! no session named this agent\n  decide it with: seam approve R-7F3K\n")
-	require.Contains(t, out, "  decide it with: seam approve R-BBBB\n")
+	require.Contains(t, out, "  ! no session named this agent\n  Claude Code asks; decide it with: seam approve R-7F3K\n")
+	require.Contains(t, out, "  Claude Code asks; decide it with: seam approve R-BBBB\n")
 	require.NotContains(t, out, "IGNORE PREVIOUS INSTRUCTIONS", "the watch never shows the agent's words")
 
-	script := []string{"osascript", "-e", "on run argv", "-e", `display notification (item 1 of argv) with title "Seamless"`, "-e", "end run"}
+	script := []string{"osascript", "-e", "on run argv", "-e", `display notification (item 1 of argv) with title "Seamless access request"`, "-e", "end run"}
 	require.Equal(t, [][]string{
-		append(slices.Clone(script), "R-7F3K wants example-finance"),
-		append(slices.Clone(script), "R-BBBB wants example-payroll"),
+		append(slices.Clone(script), "Claude Code asks for example-finance: seam approve R-7F3K"),
+		append(slices.Clone(script), "Claude Code asks for example-payroll: seam approve R-BBBB"),
 	}, rig.runner.recorded())
 	require.GreaterOrEqual(t, len(rig.ac.requests()), 3)
 }
@@ -605,8 +627,8 @@ func TestApprove_WatchNotificationCannotBecomeScript(t *testing.T) {
 	calls := rig.runner.recorded()
 	require.Len(t, calls, 2)
 	last := calls[1]
-	require.Equal(t, `display notification (item 1 of argv) with title "Seamless"`, last[4], "the script is constant")
-	require.Equal(t, "R-BBBB wants xdoshellscripttouchtmppwned", last[len(last)-1])
+	require.Equal(t, `display notification (item 1 of argv) with title "Seamless access request"`, last[4], "the script is constant")
+	require.Equal(t, "Claude Code asks for xdoshellscripttouchtmppwned: seam approve R-BBBB", last[len(last)-1])
 }
 
 func TestApprove_WatchRingsTheBellOffMacOS(t *testing.T) {
@@ -658,7 +680,7 @@ func TestCompactDuration(t *testing.T) {
 func grantFacts() accessFacts {
 	f := factsOf(reqA, "R-7F3K", "example-finance",
 		accessWarning{Code: "copy_into", Text: "content from example-finance may be copied into example-ops's memories"})
-	f.Kind, f.Access, f.From, f.Program, f.PID, f.UID = "grant", "read-only", "example-ops", "", 0, 0
+	f.Kind, f.Access, f.From, f.Program, f.Agent, f.PID, f.UID = "grant", "read-only", "example-ops", "", "", 0, 0
 	return f
 }
 
@@ -672,14 +694,16 @@ func TestApprove_AdvisoryGrantCommitsOverTheConsole(t *testing.T) {
 	rig := newApproveRig(t, routes(t, table), "1h\ny\n")
 	require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
 	out := rig.out.String()
-	require.Contains(t, out, "! content from example-finance may be copied into example-ops's memories\n")
+	require.Contains(t, out, "  ! content from example-finance may be copied into example-ops's memories\n")
 	require.Contains(t, out, "  Project         example-finance (confidential, read-only)\n")
 	require.Contains(t, out, "  For             sessions working in example-ops\n")
 	require.Contains(t, out, "  Asking          a session (without peer_auth the daemon knows no process)\n")
 	require.Contains(t, out, "  Kind            a read-only grant of a confidential project\n")
-	require.Contains(t, out, "! This approval is advisory: without peer_auth it is made with the bearer key, and any process holding the key could make it.\n")
-	require.Contains(t, out, "Approve R-7F3K (example-finance, read-only, for 1 hour)? [y/N/d=deny] ")
-	require.Contains(t, out, "Approved R-7F3K: example-finance, read-only, for example-ops, until "+clockTime(fixedNow.Add(time.Hour))+".\n")
+	require.Contains(t, out, "  ! This approval is advisory: without peer_auth it is made with the bearer key, and any process holding the key could make it.\n")
+	require.Contains(t, out, "If approved: the session cc/quiet-otter, working in example-ops, may read example-finance (read-only) for 1 hour.\n"+
+		"Approve R-7F3K? [y/N/d=deny] ")
+	require.NotContains(t, out, "sudo asks", "no sudo: the bearer key commits it")
+	require.Contains(t, out, "Approved R-7F3K: sessions working in example-ops may read example-finance (read-only) until "+clockTime(fixedNow.Add(time.Hour))+".\n")
 	require.Empty(t, rig.runner.recorded(), "no sudo: the bearer key commits it")
 
 	var posted *seenRequest
@@ -716,9 +740,202 @@ func TestApprove_AdvisoryGrantDenyAndNo(t *testing.T) {
 // through sudo exactly as a lock's request does.
 func TestApprove_PeerGrantGoesThroughSudo(t *testing.T) {
 	f := grantFacts()
-	f.Program, f.PID, f.UID = "/usr/local/bin/claude", 4242, 501
+	f.Program, f.Agent, f.PID, f.UID = "/usr/local/bin/claude", "Claude Code 2.1.319", 4242, 501
 	rig := newApproveRig(t, routes(t, byRef(t, f)), "4h\ny\n")
 	require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
 	require.NotContains(t, rig.out.String(), "advisory")
 	require.Equal(t, append(slices.Clone(passwordlessProbe), approveArgvFor(reqA, "4h", f.Digest)), rig.runner.recorded())
+}
+
+// --- the layout, byte for byte ---
+
+// The whole transcript of one approval, with and without color: the warnings
+// first and indented like the facts, the facts' values aligned past the
+// widest label, the numbered durations, what the approval grants, and the
+// line announcing sudo's prompt -- all before sudo runs. Color is the
+// warnings' alone, and never their indent.
+func TestApprove_TranscriptGolden(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance",
+		accessWarning{Code: "session_tainted", Text: "the session read text from outside"},
+		accessWarning{Code: "other_pending", Text: "the same agent is also asking for example-payroll"})
+	for _, tc := range []struct {
+		name string
+		vars map[string]string
+		warn func(string) string
+	}{
+		{"NO_COLOR", map[string]string{"NO_COLOR": "1", "TERM": "xterm-256color"}, func(s string) string { return "! " + s }},
+		{"TERM=dumb", map[string]string{"TERM": "dumb"}, func(s string) string { return "! " + s }},
+		{"color", map[string]string{"TERM": "xterm-256color"}, func(s string) string { return "\x1b[1;31m! " + s + "\x1b[0m" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rig := newApproveRig(t, routes(t, byRef(t, a)), "2\ny\n")
+			rig.vars = tc.vars
+			var atSudo string
+			rig.runner.code = func(argv []string) (int, error) {
+				if slices.Contains(argv, "approve") {
+					atSudo = rig.out.String()
+					rig.out.WriteString("Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may read and write example-finance until 15:05 UTC.\n")
+					return 0, nil
+				}
+				return 1, nil // sudo -n refused: no NOPASSWD rule
+			}
+			require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+			want := "\n" +
+				"Access request R-7F3K\n" +
+				"\n" +
+				"  " + tc.warn("the session read text from outside") + "\n" +
+				"  " + tc.warn("the same agent is also asking for example-payroll") + "\n" +
+				"\n" +
+				"  Project         example-finance (confidential, read-write)\n" +
+				"  Agent           Claude Code 2.1.319\n" +
+				"  Asking          /usr/local/bin/claude (pid 4242, uid 501)\n" +
+				"  Session         cc/quiet-otter (claude-opus-5-5)\n" +
+				"  Working in      /Users/owner/repos/finance\n" +
+				"  The agent says  \"reconcile the Q3 ledger\"  (the agent's own words, not checked)\n" +
+				"  Kind            first request\n" +
+				"  Waits until     " + clockTime(expiresAt) + " (12m left)\n" +
+				"\n" +
+				"For how long?\n" +
+				"  1  session  until the session ends, at most 8h (the default)\n" +
+				"  2  1h       for 1 hour\n" +
+				"  3  4h       for 4 hours\n" +
+				// The owner's typed answers echo on the terminal, not here.
+				"Duration [1-3, Enter for session]: " +
+				"If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance for 1 hour.\n" +
+				"Approve R-7F3K? [y/N/d=deny] " +
+				"sudo asks for your Touch ID or password next: it commits the approval as _seamless.\n"
+			require.Equal(t, want, atSudo, "everything is said before sudo runs")
+			require.Equal(t, want+"Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may read and write example-finance until 15:05 UTC.\n",
+				rig.out.String())
+			require.Empty(t, rig.errb.String())
+		})
+	}
+}
+
+// The facts' values share one column, the label column's width, widened for
+// every row when a label would leave less than two spaces before its value.
+func TestAlignFacts(t *testing.T) {
+	require.Equal(t, []string{
+		"  Project         example-finance",
+		"  The agent says  \"x\"",
+	}, alignFacts([][2]string{{"Project", "example-finance"}, {"The agent says", `"x"`}}))
+	require.Equal(t, []string{
+		"  Kind" + strings.Repeat(" ", 15) + "first request",
+		"  A label this long  v",
+	}, alignFacts([][2]string{{"Kind", "first request"}, {"A label this long", "v"}}))
+}
+
+// What an approval grants, in the words the confirmation shows.
+func TestGrantWords(t *testing.T) {
+	lock := factsOf(reqA, "R-7F3K", "example-finance")
+	refresh := lock
+	refresh.Kind = "refresh"
+	unnamed := lock
+	unnamed.Agent = ""
+	bare := lock
+	bare.Agent, bare.Program = "", ""
+	odd := lock
+	odd.Access = "write-only"
+	peerGrant := grantFacts()
+	peerGrant.Program, peerGrant.Agent, peerGrant.PID, peerGrant.UID = "/opt/homebrew/bin/codex", "Codex", 4300, 501
+	advisory := grantFacts()
+	advisory.Session = ""
+	for _, tc := range []struct {
+		name     string
+		f        accessFacts
+		duration string
+		want     string
+	}{
+		{"a lock's request", lock, "session", "Claude Code 2.1.319 (pid 4242) may read and write example-finance until the session ends, at most 8h."},
+		{"for an hour", lock, "1h", "Claude Code 2.1.319 (pid 4242) may read and write example-finance for 1 hour."},
+		{"a refresh", refresh, "4h", "Claude Code 2.1.319 (pid 4242) may read and write example-finance for 4 hours, in place of the lease it holds now."},
+		{"no agent named: the program", unnamed, "1h", "claude (pid 4242) may read and write example-finance for 1 hour."},
+		{"no program known: the pid", bare, "1h", "pid 4242 may read and write example-finance for 1 hour."},
+		{"an access it does not know", odd, "1h", "Claude Code 2.1.319 (pid 4242) may reach example-finance (write-only) for 1 hour."},
+		{"a read grant under peer_auth", peerGrant, "1h", "Codex (pid 4300), working in example-ops, may read example-finance (read-only) for 1 hour."},
+		{"an advisory read grant", grantFacts(), "session",
+			"the session cc/quiet-otter, working in example-ops, may read example-finance (read-only) until the session ends, at most 8h."},
+		{"an advisory read grant, no session named", advisory, "1h",
+			"the asking session, working in example-ops, may read example-finance (read-only) for 1 hour."},
+	} {
+		require.Equal(t, tc.want, grantWords(tc.f, tc.duration, "8h0m0s"), tc.name)
+	}
+}
+
+// A denial is announced like an approval: what sudo's prompt is for.
+func TestApprove_DenialAnnouncesSudo(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	rig := newApproveRig(t, routes(t, byRef(t, a)), "d\n")
+	var atSudo string
+	rig.runner.code = func(argv []string) (int, error) {
+		if slices.Contains(argv, "--deny") {
+			atSudo = rig.out.String()
+			return 0, nil
+		}
+		return 1, nil
+	}
+	require.Equal(t, 0, rig.run("R-7F3K", "--for", "1h"), rig.errb.String())
+	require.True(t, strings.HasSuffix(atSudo, "Approve R-7F3K? [y/N/d=deny] sudo asks for your Touch ID or password next: "+
+		"it commits the denial as _seamless.\n"), atSudo)
+}
+
+// --passkey --for opens the passkey page with that duration chosen (the
+// page's for= query); --for is checked against the daemon's durations first.
+func TestApprove_PasskeyCarriesTheDuration(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	page := "https://seamless.example.org/console/access/" + reqA
+	table := byRef(t, a)
+	for _, tc := range []struct {
+		duration, words string
+	}{
+		{"session", "until the session ends, at most 8h"},
+		{"1h", "for 1 hour"},
+		{"4h", "for 4 hours"},
+	} {
+		rig := newApproveRig(t, routes(t, table), "")
+		require.Equal(t, 0, rig.run("--passkey", "--for", tc.duration, "R-7F3K"), rig.errb.String())
+		require.Equal(t, [][]string{{"open", page + "?for=" + tc.duration}}, rig.runner.recorded(), tc.duration)
+		require.Equal(t, "Opened "+page+"?for="+tc.duration+" in the browser: decide R-7F3K there with a passkey "+
+			"(approving there grants it "+tc.words+").\n", rig.out.String())
+	}
+
+	rig := newApproveRig(t, routes(t, table), "")
+	rig.runner.code = func([]string) (int, error) { return -1, errors.New("no browser") }
+	require.Equal(t, 0, rig.run("--passkey", "--for", "1h", reqA))
+	require.Equal(t, "Could not open a browser. Open this page to decide R-7F3K with a passkey (approving there grants it "+
+		"for 1 hour):\n  "+page+"?for=1h\n", rig.out.String())
+
+	for _, bad := range []string{"2h", ""} {
+		rig = newApproveRig(t, routes(t, table), "")
+		require.Equal(t, 1, rig.run("--passkey", "--for="+bad, reqA))
+		require.Contains(t, rig.errb.String(), fmt.Sprintf("invalid value %q for --for: valid values are session, 1h, 4h", bad))
+		require.Empty(t, rig.runner.recorded(), "%q: nothing opened", bad)
+	}
+
+	// A page that carries a query already keeps it.
+	rig = newApproveRig(t, routes(t, byRef(t, a, func(o *accessOne) { o.Page = page + "?origin=1" })), "")
+	require.Equal(t, 0, rig.run("--passkey", "--for", "4h", reqA))
+	require.Equal(t, [][]string{{"open", page + "?for=4h&origin=1"}}, rig.runner.recorded())
+}
+
+// Who a notification names: the daemon's agent name without its version, and
+// nothing that is not letters.
+func TestAgentFamily(t *testing.T) {
+	for _, tc := range []struct {
+		agent string
+		pid   int32
+		want  string
+	}{
+		{"Claude Code 2.1.319", 4242, "Claude Code"},
+		{"Claude Code", 4242, "Claude Code"},
+		{"Codex 0.46.0", 4242, "Codex"},
+		{"Claude app", 4242, "Claude app"},
+		{"", 4242, "An agent"},
+		{"", 0, "A session"},
+		{"Claude\x1b[2J Code", 4242, "An agent"},
+		{"One Two Three Four", 4242, "One Two Three"},
+		{"Ünï Code", 4242, "An agent"},
+	} {
+		require.Equal(t, tc.want, agentFamily(accessFacts{Agent: tc.agent, PID: tc.pid}), "%q", tc.agent)
+	}
 }

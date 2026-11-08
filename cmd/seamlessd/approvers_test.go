@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -92,9 +93,13 @@ func TestApproverCheck(t *testing.T) {
 	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	c := approverCheck(ctx, db)
-	require.Equal(t, statusWarn, c.status)
-	require.Contains(t, c.detail, "only the terminal path")
+	for goos, touchID := range map[string]bool{"darwin": true, "linux": false, "windows": false} {
+		c := approverCheck(ctx, db, goos)
+		require.Equal(t, statusWarn, c.status)
+		require.Contains(t, c.detail, "only the terminal path")
+		require.Contains(t, c.detail, "to enroll one, mint a code with `seamlessd approvers enroll-code passkey`, run as the daemon's account")
+		require.Equal(t, touchID, strings.Contains(c.detail, "seam touchid enroll"), goos)
+	}
 
 	now := time.Now()
 	code, _, err := store.MintEnrollCode(ctx, db, store.ApproverPasskey, now)
@@ -103,10 +108,44 @@ func TestApproverCheck(t *testing.T) {
 		Kind: store.ApproverPasskey, CredentialID: []byte{1}, PublicKey: []byte{9}, Alg: -7, Name: "key",
 	}, code, "", now)
 	require.NoError(t, err)
-	c = approverCheck(ctx, db)
+	c := approverCheck(ctx, db, "darwin")
 	require.Equal(t, statusOK, c.status)
 	require.Contains(t, c.detail, "passkeys 1")
-	require.Equal(t, statusInfo, approverCheck(ctx, nil).status)
+	require.Equal(t, statusInfo, approverCheck(ctx, nil, "darwin").status)
+}
+
+// With nothing enrolled, list and doctor give the same advice: a passkey code
+// minted as the daemon's account everywhere, and seam touchid enroll too only
+// on a Mac whose daemon serves the peer_auth socket the Touch ID app needs.
+func TestApprovers_EmptyListAdvice(t *testing.T) {
+	ctx := context.Background()
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	passkey := "No approver credentials are enrolled. To enroll one, mint a code with `seamlessd approvers enroll-code passkey`, " +
+		"run as the daemon's account"
+	touchID := "; or, for this Mac's Touch ID, run `seam touchid enroll` in the owner's own terminal, which prints the command that mints its code"
+	for _, tc := range []struct {
+		goos     string
+		peerAuth bool
+		want     string
+	}{
+		{"darwin", true, passkey + touchID + ".\n"},
+		{"darwin", false, passkey + ".\n"},
+		{"linux", true, passkey + ".\n"},
+		{"windows", true, passkey + ".\n"},
+	} {
+		cfg := config.Defaults()
+		cfg.PeerAuth.Enabled = tc.peerAuth
+		var out bytes.Buffer
+		require.NoError(t, approversOn(ctx, db, cfg, &out, []string{"list"}, time.Now(), tc.goos))
+		require.Equal(t, tc.want, out.String(), "%s peer_auth=%v", tc.goos, tc.peerAuth)
+		if tc.peerAuth {
+			advice := firstApproverAdvice(tc.goos, true)
+			require.Contains(t, out.String(), advice)
+			require.Contains(t, approverCheck(ctx, db, tc.goos).detail, "; to enroll one, "+advice, "doctor says it the same way")
+		}
+	}
 }
 
 // console-open signs in on the relying party's origin while a project is

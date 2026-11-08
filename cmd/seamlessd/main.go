@@ -155,6 +155,14 @@ func main() {
 		os.Exit(2)
 	}
 	if err != nil {
+		// A refusal seamlessd approve words for the owner (approve.go's
+		// ownerError) is that one line, not a log record: seam approve runs
+		// this command through sudo on the owner's own terminal.
+		var said *ownerError
+		if errors.As(err, &said) {
+			fmt.Fprintln(os.Stderr, said.Error())
+			os.Exit(1)
+		}
 		slog.Error("command failed", "cmd", cmd, "err", err)
 		os.Exit(1)
 	}

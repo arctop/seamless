@@ -16,12 +16,15 @@ package main
 //     that team too), plus Gatekeeper's notarization check for a release
 //     asset -- a tampered, re-signed or foreign app is refused;
 //  3. installs it atomically at ~/Applications/Seamless Approve.app,
-//     replacing an existing install only after a y/N;
-//  4. tells the owner how to mint the one-time enrollment code (as the
-//     daemon's account: only that account can), opens the app through
-//     LaunchServices to create the Secure Enclave key and enroll it with the
-//     code -- which the owner types into the app's own dialog, never through
-//     seam -- and confirms on the daemon that a new Touch ID key exists.
+//     replacing an existing install only after a y/N (a local build is
+//     checked before that question, so a bad one is refused at once);
+//  4. opens the app through LaunchServices at once, its dialog waiting for
+//     the one-time enrollment code, and tells the owner how to mint that
+//     code (as the daemon's account: only that account can) in another
+//     terminal. The owner types the code into the app's own dialog, never
+//     through seam; the app creates the Secure Enclave key, enrolls it, and
+//     retires this Mac's earlier key with it. seam then confirms on the
+//     daemon that a new Touch ID key exists and names the one it replaced.
 //
 // Nothing here is the proof of anything. The enrollment code is (the daemon
 // checks it), and every later approval is the key's signature (the daemon's
@@ -87,12 +90,17 @@ pass Gatekeeper's notarization check. When this seam is not signed with a
 Developer ID, a release asset is held to the team that signed the release,
 and for a local build the app's team is shown and you are asked. It installs at
 ~/Applications/Seamless Approve.app, replacing an installed one only after
-you confirm; keeping it enrolls with the installed app.
+you confirm; keeping it enrolls with the installed app (a local build named
+with --app is checked first, and is then not used).
 
-Then it prints the command that mints the one-time enrollment code, run as
-the daemon's account, and opens the app: type the code into the app's own
-dialog, and touch the sensor. Afterwards it confirms on the daemon that a
-new Touch ID key is enrolled.
+Then it opens the app, whose dialog waits for the one-time enrollment code,
+and prints the command that mints the code, to run as the daemon's account
+in another terminal: type the code into the app's dialog, and touch the
+sensor. Afterwards it confirms on the daemon that a new Touch ID key is
+enrolled. Re-enrolling replaces this Mac's earlier key: the app deletes it,
+and the daemon retires its credential with the new enrollment once that
+earlier key has signed for it, so no dead key is left listed. A key another
+Mac holds, or a passkey, is never retired.
 
 It needs macOS, a terminal on stdin and stdout (an agent cannot use it), and
 server_url naming the daemon's peer_auth socket (unix:///path), which is how
@@ -169,13 +177,13 @@ func runTouchIDEnroll(ctx context.Context, e *env, o *touchIDEnrollOpts, _ []str
 		return err
 	}
 
-	fmt.Fprintf(e.stdout, "\nNext, mint a one-time enrollment code as the daemon's account. In another terminal on this Mac, run:\n\n  %s\n\n",
+	// The app opens at once and its dialog waits for the code, so nothing
+	// here waits on a key the owner might miss after switching terminals.
+	fmt.Fprintf(e.stdout, "\nOpening Seamless Approve. Its window waits for a one-time enrollment code.\n"+
+		"Mint the code as the daemon's account: in another terminal on this Mac, run\n\n  %s\n\n",
 		strings.Join(shellWords(enrollCodeArgv(t)), " "))
-	fmt.Fprintln(e.stdout, "It asks for your password or Touch ID, prints the code, and the code works once, for 10 minutes.")
-	if _, ok := prompt(e, in, "Press Return to open Seamless Approve: type the code into its dialog, then touch the sensor. "); !ok {
-		fmt.Fprintln(e.stdout, "Nothing enrolled. Seamless Approve stays installed; run seam touchid enroll again to enroll.")
-		return nil
-	}
+	fmt.Fprintln(e.stdout, "It asks for your password or Touch ID and prints the code, which works once, for 10 minutes. "+
+		"Type the code into the Seamless Approve window, then touch the sensor. This terminal waits until Seamless Approve closes.")
 	argv := append([]string{"open", "-W", "-n", "-a", target, "--args"}, approverEnrollArgs(sock, name)...)
 	code, err := e.run(ctx, argv, nil, io.Discard, e.stderr)
 	if err != nil {
@@ -197,7 +205,39 @@ func runTouchIDEnroll(ctx context.Context, e *env, o *touchIDEnrollOpts, _ []str
 		fmt.Fprintf(e.stdout, "Enrolled the Touch ID key %q (%s). An agent's access dialog can now be approved with it.\n",
 			printable(k.Name), printable(k.ID))
 	}
+	reportReplaced(e.stdout, t, before, after, added)
 	return nil
+}
+
+// reportReplaced says what became of the Touch ID keys enrolled before: the
+// ones the daemon no longer lists (the app's enrollment retired them, each
+// having signed as this Mac's earlier key), and the ones still listed under a
+// new key's name, which only their dates now tell apart.
+func reportReplaced(w io.Writer, t terminalApprover, before, after, added []approverKey) {
+	for _, k := range newKeys(after, before) {
+		fmt.Fprintf(w, "Retired the Touch ID key %q (%s, added %s): it was this Mac's earlier key, and the daemon no longer lists it.\n",
+			printable(k.Name), printable(k.ID), k.AddedAt.Local().Format("2006-01-02 15:04"))
+	}
+	for _, k := range after {
+		if slices.ContainsFunc(added, func(a approverKey) bool { return a.ID == k.ID }) ||
+			!slices.ContainsFunc(added, func(a approverKey) bool { return a.Name == k.Name }) {
+			continue
+		}
+		fmt.Fprintf(w, "The daemon still lists an older Touch ID key named %q (%s, added %s). ",
+			printable(k.Name), printable(k.ID), k.AddedAt.Local().Format("2006-01-02 15:04"))
+		if !approverRequestID.MatchString(k.ID) { // an approver id is a ULID, as a request id is
+			fmt.Fprintln(w, "If it was this Mac's, remove it with `seamlessd approvers remove`, run as the daemon's account; if it is another Mac's, keep it.")
+			continue
+		}
+		fmt.Fprintf(w, "If it was this Mac's, remove it as the daemon's account:\n\n  %s\n\nIf it is another Mac's, keep it.\n",
+			strings.Join(shellWords(removeApproverArgv(t, k.ID)), " "))
+	}
+}
+
+// removeApproverArgv removes one credential as the daemon's account, as
+// enrollCodeArgv mints a code.
+func removeApproverArgv(t terminalApprover, id string) []string {
+	return []string{"sudo", "-k", "-u", t.Account, "env", "SEAMLESS_CONFIG=" + t.Config, t.Seamlessd, "approvers", "remove", id}
 }
 
 // defaultKeyName is the name a key is listed under when --name is absent.

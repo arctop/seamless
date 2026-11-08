@@ -2,8 +2,10 @@ package passkey
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -126,4 +128,26 @@ func findCredential(allowed []Credential, id []byte) (Credential, bool) {
 		}
 	}
 	return Credential{}, false
+}
+
+// AssertionChallenge returns the challenge a client's assertion response
+// (the JSON of PublicKeyCredential.toJSON()) claims it signed: the one in its
+// clientDataJSON. It verifies nothing -- the signature, the origin and the
+// credential are FinishAssertion's -- so it only ever explains a refusal:
+// which challenge the response was made for, when it was not the one
+// expected.
+func AssertionChallenge(responseJSON []byte) ([]byte, error) {
+	const op = "passkey.AssertionChallenge"
+	if len(responseJSON) > MaxResponseBytes {
+		return nil, fmt.Errorf("%s: %w: the response is over %d bytes", op, ErrVerification, MaxResponseBytes)
+	}
+	parsed, err := protocol.ParseCredentialRequestResponseBytes(responseJSON)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w: %w", op, ErrVerification, err)
+	}
+	challenge, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(parsed.Response.CollectedClientData.Challenge, "="))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w: the client data's challenge is not base64url: %w", op, ErrVerification, err)
+	}
+	return challenge, nil
 }

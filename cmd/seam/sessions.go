@@ -60,6 +60,9 @@ func runSessions(_ context.Context, e *env, o *sessionsOpts, pos []string) error
 			Findings string    `json:"findings"`
 			Updated  time.Time `json:"updated"`
 		} `json:"sessions"`
+		// Locked names the locked projects whose sessions the console left
+		// out (peer_auth.locked; absent otherwise).
+		Locked []string `json:"locked"`
 	}
 	path := "/console/sessions?format=json"
 	if *o.status != "" {
@@ -82,6 +85,9 @@ func runSessions(_ context.Context, e *env, o *sessionsOpts, pos []string) error
 			amb = " (ambient)"
 		}
 		fmt.Fprintf(e.stdout, "  %-20s %-10s %-9s %s%s\n", name, orDash(s.Project), s.Status, agoShort(s.Updated), amb)
+	}
+	if line := lockedSkipped(data.Locked, ""); line != "" {
+		fmt.Fprintln(e.stdout, line)
 	}
 	return nil
 }

@@ -172,6 +172,59 @@ func TaskProjects(ctx context.Context, db *sql.DB, ids []string) (map[string]str
 	return out, nil
 }
 
+// OpenBlockerProjects returns, for each task among taskIDs, the project of
+// every unfinished (open or in_progress) blocker it has in one of projects:
+// one entry per blocker, sorted, keyed by task id; a task with none is
+// absent. It reads only the blockers' projects, never their content, in a
+// handful of batched IN queries. The console asks it on the main handle for
+// the locked projects a request does not read (peer_auth.locked): its own
+// filtered handle hides those projects' tasks and their dependency edges, so
+// a task they block would otherwise read as ready.
+func OpenBlockerProjects(ctx context.Context, db *sql.DB, taskIDs, projects []string) (map[string][]string, error) {
+	taskIDs, projects = dedupeStrings(taskIDs), dedupeStrings(projects)
+	out := map[string][]string{}
+	if len(taskIDs) == 0 || len(projects) == 0 {
+		return out, nil
+	}
+	projectArgs := make([]any, len(projects))
+	for i, p := range projects {
+		projectArgs[i] = p
+	}
+	for start := 0; start < len(taskIDs); start += depsBatchSize {
+		batch := taskIDs[start:min(start+depsBatchSize, len(taskIDs))]
+		args := make([]any, 0, len(batch)+len(projectArgs))
+		for _, id := range batch {
+			args = append(args, id)
+		}
+		args = append(args, projectArgs...)
+		//nolint:sqlclosecheck // closed by the closure's defer, as in dependsOnForTasks
+		rows, err := db.QueryContext(ctx, `SELECT d.task_id, b.project_slug FROM task_deps d
+			JOIN tasks b ON b.id = d.depends_on
+			WHERE d.task_id IN (`+placeholders(len(batch))+`)
+			  AND b.status IN ('open','in_progress')
+			  AND b.project_slug IN (`+placeholders(len(projectArgs))+`)
+			ORDER BY d.task_id ASC, b.project_slug ASC, b.id ASC`, args...)
+		if err != nil {
+			return nil, fmt.Errorf("store.OpenBlockerProjects: %w", err)
+		}
+		err = func() error {
+			defer func() { _ = rows.Close() }()
+			for rows.Next() {
+				var taskID, project string
+				if err := rows.Scan(&taskID, &project); err != nil {
+					return fmt.Errorf("store.OpenBlockerProjects: scan: %w", err)
+				}
+				out[taskID] = append(out[taskID], project)
+			}
+			return rows.Err()
+		}()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 func taskExists(ctx context.Context, q rowQuerier, id string) (bool, error) {
 	rows, err := q.QueryContext(ctx, `SELECT 1 FROM tasks WHERE id = ? LIMIT 1`, id)
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path"
 	"strings"
 	"sync"
@@ -652,19 +653,19 @@ func (d *dialogRig) enrollPasskey() *passkeytest.Authenticator {
 	return a
 }
 
-// provePasskey approves request id with the authenticator's assertion over
-// the request's own challenge, as the passkey page does.
+// provePasskey approves request id for duration with the authenticator's
+// assertion over the options the passkey page issues for that duration.
 func (d *dialogRig) provePasskey(a *passkeytest.Authenticator, id, duration string) error {
 	ctx := context.Background()
-	opts, err := d.svc.AssertionOptions(ctx, id)
+	facts, err := d.svc.Facts(ctx, id)
+	if err != nil {
+		return err
+	}
+	opts, err := d.svc.AssertionOptionsFor(ctx, id, duration, facts.Digest)
 	if err != nil {
 		return err
 	}
 	resp, err := a.Get(opts, dlgOrigin)
-	if err != nil {
-		return err
-	}
-	facts, err := d.svc.Facts(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -676,8 +677,9 @@ func (d *dialogRig) provePasskey(a *passkeytest.Authenticator, id, duration stri
 // The passkey path: the owner is sent to the request's passkey page (a URL
 // elicitation), and when the approval lands there the interaction is closed
 // (notifications/elicitation/complete). With Touch ID enrolled too, the form
-// offers both and the owner picks the passkey; without, the page is the
-// dialog.
+// offers both, the owner picks the passkey and a duration, and the page is
+// opened for that duration (?for=); without, the page is the dialog and asks
+// the duration itself.
 func TestDialog_PasskeyPage(t *testing.T) {
 	for _, withTouchID := range []bool{false, true} {
 		t.Run(fmt.Sprintf("touch id enrolled %v", withTouchID), func(t *testing.T) {
@@ -699,12 +701,23 @@ func TestDialog_PasskeyPage(t *testing.T) {
 			})
 			agent := d.dialOwner(d.agentSocket(), o, &mcp.ElicitationCapability{Form: &struct{}{}, URL: &struct{}{}})
 
+			// The duration the page approves: the form's choice when the form
+			// asked one, else the page's own.
+			want := approval.For4h
+			if withTouchID {
+				want = approval.For1h
+			}
 			proved := make(chan error, 1)
 			var page opened
 			go func() {
 				select {
 				case page = <-pages:
-					proved <- d.provePasskey(auth, path.Base(page.url), approval.For4h)
+					u, err := url.Parse(page.url)
+					if err != nil {
+						proved <- err
+						return
+					}
+					proved <- d.provePasskey(auth, path.Base(u.Path), want)
 				case <-time.After(20 * time.Second):
 					proved <- fmt.Errorf("no passkey page")
 				}
@@ -712,8 +725,14 @@ func TestDialog_PasskeyPage(t *testing.T) {
 			text := d.refused(agent, "tasks_list", nil)
 			require.NoError(t, within(t, proved, "the passkey proof"))
 
-			id := path.Base(page.url)
-			require.Equal(t, d.svc.Page(id), page.url, "the request's own passkey page")
+			u, err := url.Parse(page.url)
+			require.NoError(t, err)
+			id := path.Base(u.Path)
+			if withTouchID {
+				require.Equal(t, d.svc.Page(id)+"?for=1h", page.url, "the request's own passkey page, for the form's duration")
+			} else {
+				require.Equal(t, d.svc.Page(id), page.url, "the request's own passkey page; it asks the duration")
+			}
 			require.Equal(t, page.id, within(t, o.completions, "the elicitation's completion"))
 			shown := o.dialogs()
 			if withTouchID {
@@ -724,12 +743,23 @@ func TestDialog_PasskeyPage(t *testing.T) {
 				require.Len(t, shown, 1, "the page is the dialog")
 			}
 			require.Equal(t, mcp.ElicitationModeURL, shown[len(shown)-1].Params.Mode)
-			require.True(t, strings.HasPrefix(shown[len(shown)-1].Params.Message, "Claude Code 2.1.319 asks for read-write "+
-				"access to "+lkFin+" (confidential, locked); "), "what is asked comes first: %s", shown[len(shown)-1].Params.Message)
+			last := shown[len(shown)-1].Params.Message
+			require.True(t, strings.HasPrefix(last, "Claude Code 2.1.319 asks for read-write "+
+				"access to "+lkFin+" (confidential, locked); "), "what is asked comes first: %s", last)
+			if withTouchID {
+				require.Contains(t, last, ". Approve it for 1 hour, or deny it, with your passkey on the page this opens")
+				props := shown[0].Params.RequestedSchema.(map[string]any)["properties"].(map[string]any)
+				require.Equal(t, []any{"Touch ID", "Passkey (opens the approval page for the duration chosen here)"},
+					props["method"].(map[string]any)["enumNames"])
+			} else {
+				require.Contains(t, last, ". Approve or deny it with your passkey on the page this opens")
+			}
 			require.Empty(t, o.asks, "no Touch ID ask")
 
 			leases := d.liveLeases()
 			require.Len(t, leases, 1)
+			length := map[string]time.Duration{approval.For1h: time.Hour, approval.For4h: 4 * time.Hour}[want]
+			require.Equal(t, d.clock().Add(length), leases[0].ExpiresAt, "the duration the passkey signed")
 			require.Equal(t, "tasks_list: the owner approved access request "+approval.ShortID(id)+": project "+lkFin+
 				" is open to this agent until "+access.Clock(leases[0].ExpiresAt)+".", lines(text)[0])
 			first, _ := d.ok(agent, "tasks_list", nil)
@@ -895,4 +925,217 @@ func TestAccessRequest_DialogShowsTheReasonAsTheAgents(t *testing.T) {
 		require.NotContains(t, msg, r, "control and bidi characters are stripped")
 	}
 	require.Len(t, d.pending(), 1)
+}
+
+// approverEnded posts the bridge's word that the Touch ID helper it launched
+// for request id ended (outcome), on MCP session sid of base.
+func (d *dialogRig) approverEnded(base, sid, id, outcome string) {
+	d.t.Helper()
+	body := fmt.Sprintf(`{"jsonrpc":"2.0","method":%q,"params":{"request_id":%q,"outcome":%q}}`,
+		approverEndedMethod, id, outcome)
+	req, err := http.NewRequest(http.MethodPost, base, strings.NewReader(body))
+	require.NoError(d.t, err)
+	req.Header.Set("Authorization", "Bearer "+testKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Mcp-Session-Id", sid)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(d.t, err)
+	_ = resp.Body.Close()
+	require.Equal(d.t, http.StatusAccepted, resp.StatusCode)
+}
+
+// approverEndedMethod is the bridge's notification, pinned here as the bridge
+// pins it (cmd/seam/mcpproxy_approver_test.go).
+const approverEndedMethod = "notifications/seamless/approver_ended"
+
+// Accepted with Touch ID, then the helper ended without an approval: the
+// bridge says so and the call answers at once, the request still pending,
+// in words that say what happened. Nothing is denied or approved.
+func TestDialog_TouchIDEndAnswersAtOnce(t *testing.T) {
+	for _, c := range []struct {
+		outcome, answer, words, next string
+	}{
+		{"cancelled", "touchid_cancelled", " Touch ID was cancelled in the approval dialog, so nothing was approved; ",
+			"Touch ID was cancelled, so nothing was approved and access request "},
+		{"closed", "touchid_closed", " The Touch ID approver closed without approving; ",
+			"the Touch ID approver closed without approving, so access request "},
+	} {
+		t.Run(c.outcome, func(t *testing.T) {
+			d := newDialogRig(t, dialogOpts{wait: dlgLong})
+			d.session("cc/fin", lkFin)
+			d.enrollTouchID()
+			o := newOwner(accepting(approval.For1h, approval.ProofTouchID))
+			base := d.agentSocket()
+			agent := d.dialOwner(base, o, nil)
+			// The bridge's word is a POST of its own, from the agent's tree;
+			// it reaches the dialog through any listener of the socket.
+			own := d.agentSocket()
+			bridge := func() {
+				select {
+				case ask := <-o.asks:
+					d.approverEnded(own, agent.GetSessionId(), ask.RequestID, c.outcome)
+				case <-time.After(20 * time.Second):
+				}
+			}
+
+			go bridge()
+			start := time.Now()
+			text := d.refused(agent, "tasks_list", nil)
+			require.Less(t, time.Since(start), dlgLong/2, "the call did not wait out its dialog")
+			pending := d.pending()
+			require.Len(t, pending, 1, "the request stays pending")
+			short := approval.ShortID(pending[0].ID)
+			ls := lines(text)
+			require.Len(t, ls, 2, text)
+			require.True(t, strings.HasSuffix(ls[1], c.words+"access request "+short+" stays pending for the owner: `seam approve "+
+				short+"` in their own terminal, or Touch ID in the next approval dialog."), ls[1])
+			require.Empty(t, d.liveLeases())
+
+			// access_request, the same way.
+			go bridge()
+			start = time.Now()
+			out, _ := d.ok(agent, mcpserver.AccessRequestTool, map[string]any{"project": lkFin})
+			require.Less(t, time.Since(start), dlgLong/2)
+			var res map[string]any
+			require.NoError(t, json.Unmarshal([]byte(out), &res))
+			require.Equal(t, pending[0].ID, res["id"])
+			require.Equal(t, "pending", res["status"])
+			require.Equal(t, c.answer, res["dialog"])
+			require.True(t, strings.HasPrefix(res["next"].(string), c.next+short+" is still pending: the owner approves it "), res["next"])
+			require.Len(t, d.pending(), 1)
+			require.Empty(t, d.liveLeases())
+		})
+	}
+}
+
+// The bridge's word ends only the wait it is about: from another agent's
+// tree, or with an outcome it does not know, it is dropped and the dialog
+// waits out its bound as before.
+func TestDialog_TouchIDEndFromElsewhereIsDropped(t *testing.T) {
+	d := newDialogRig(t, dialogOpts{wait: 1500 * time.Millisecond})
+	d.session("cc/fin", lkFin)
+	d.enrollTouchID()
+	o := newOwner(accepting(approval.For1h, approval.ProofTouchID))
+	base := d.agentSocket()
+	stranger := d.listen(d.socketView(lkBridge, lkStranger))
+	agent := d.dialOwner(base, o, nil)
+	go func() {
+		select {
+		case ask := <-o.asks:
+			d.approverEnded(stranger, agent.GetSessionId(), ask.RequestID, "cancelled")
+			d.approverEnded(base, agent.GetSessionId(), ask.RequestID, "maybe")
+			d.approverEnded(base, agent.GetSessionId(), "01M6SBKTYM04X9QS4P6YQPBRMG", "cancelled")
+		case <-time.After(20 * time.Second):
+		}
+	}()
+	text := d.refused(agent, "tasks_list", nil)
+	require.Contains(t, text, "The approval dialog stopped waiting at ")
+	require.NotContains(t, text, "Touch ID was cancelled")
+	require.Len(t, d.pending(), 1)
+}
+
+// A tree that holds a live lease asks again: the lease answers, nothing is
+// filed and no dialog is shown, until the expiry warning starts; from then
+// on, asking again files a refresh (a new approval).
+func TestAccessRequest_LiveLeaseAnswersUntilTheExpiryWarning(t *testing.T) {
+	d := newDialogRig(t, dialogOpts{wait: dlgLong})
+	d.session("cc/fin", lkFin)
+	d.enrollTouchID()
+	o := newOwner(answerWith(mcp.ElicitationResponseActionDecline, nil))
+	agent := d.dialOwner(d.agentSocket(), o, nil)
+
+	out, _ := d.ok(agent, mcpserver.AccessRequestTool, map[string]any{"project": lkFin})
+	var res map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	id := res["id"].(string)
+	short := approval.ShortID(id)
+	lease := d.approve(id, 4*time.Hour)
+	shown := len(o.dialogs())
+
+	out, _ = d.ok(agent, mcpserver.AccessRequestTool, map[string]any{"project": lkFin, "reason": "one more look"})
+	res = map[string]any{}
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	require.Equal(t, map[string]any{
+		"id": id, "short_id": short, "project": lkFin, "kind": "request", "status": "approved",
+		"open_until": lease.ExpiresAt.UTC().Format(time.RFC3339),
+		"next": "project " + lkFin + " is already open to this agent until " + access.Clock(lease.ExpiresAt) + " (approved as " +
+			short + "), so nothing was filed. Nothing extends it silently: from " + access.Clock(lease.ExpiresAt.Add(-30*time.Minute)) +
+			", 30 minutes before it ends, asking again files a new approval; keep working there until then",
+	}, res)
+	require.Empty(t, d.pending(), "nothing filed")
+	require.Len(t, o.dialogs(), shown, "no dialog")
+
+	d.set(lease.ExpiresAt.Add(-30 * time.Minute))
+	out, _ = d.ok(agent, mcpserver.AccessRequestTool, map[string]any{"project": lkFin})
+	res = map[string]any{}
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	require.Equal(t, "refresh", res["kind"])
+	require.Equal(t, "pending", res["status"])
+	require.NotEqual(t, id, res["id"])
+	require.Len(t, d.pending(), 1)
+}
+
+// With read grants on (isolation.requests), access_request for a
+// confidential project no lock covers files its read grant request, as
+// `seam access request` does; with them off, the answer is the lock's "not
+// locked", word for word.
+func TestAccessRequest_ReadGrantOfAConfidentialProject(t *testing.T) {
+	d := newDialogRig(t, dialogOpts{wait: dlgLong, grants: true})
+	sess := d.session("cc/ops", lkOps)
+	agent := d.dialOwner(d.agentSocket(), nil, nil)
+
+	out, _ := d.ok(agent, mcpserver.AccessRequestTool, map[string]any{"project": dlgLegal, "reason": "read the vendor contract"})
+	var res map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	pending := d.pending()
+	require.Len(t, pending, 1)
+	short := approval.ShortID(pending[0].ID)
+	require.Equal(t, store.AccessKindGrant, pending[0].Kind)
+	require.Equal(t, lkOps, pending[0].FromProject)
+	require.Equal(t, sess, pending[0].SessionID)
+	require.Equal(t, "read the vendor contract", pending[0].Reason)
+	require.Equal(t, pending[0].ID, res["id"])
+	require.Equal(t, "grant", res["kind"])
+	require.Equal(t, lkOps, res["from"])
+	require.Equal(t, dlgLegal, res["project"])
+	require.Equal(t, "pending", res["status"])
+	require.Contains(t, res["next"], "`seam approve "+short+"`")
+
+	// Asking again finds it; once approved, the live grant answers and
+	// nothing is filed; a lock's project is still the lock's.
+	out, _ = d.ok(agent, mcpserver.AccessRequestTool, map[string]any{"project": dlgLegal})
+	require.Contains(t, out, pending[0].ID)
+	facts, err := d.svc.Facts(context.Background(), pending[0].ID)
+	require.NoError(t, err)
+	grant, err := d.grants.Approve(context.Background(), approval.Decision{ID: pending[0].ID, Duration: approval.For4h,
+		Digest: facts.Digest, Proof: approval.Proof{Kind: approval.ProofDaemon}})
+	require.NoError(t, err)
+	out, _ = d.ok(agent, mcpserver.AccessRequestTool, map[string]any{"project": dlgLegal})
+	res = map[string]any{}
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	require.Equal(t, "approved", res["status"])
+	require.Equal(t, "grant", res["kind"])
+	require.Equal(t, lkOps, res["from"])
+	require.Equal(t, pending[0].ID, res["id"])
+	require.Equal(t, grant.ExpiresAt.UTC().Format(time.RFC3339), res["open_until"])
+	require.True(t, strings.HasPrefix(res["next"].(string), "project "+dlgLegal+" is already readable from project "+lkOps+" until "), res["next"])
+	require.Empty(t, d.pending(), "the live grant answers: nothing filed")
+	out, _ = d.ok(agent, mcpserver.AccessRequestTool, map[string]any{"project": lkFin})
+	require.Contains(t, out, `"kind":"request"`)
+	require.Len(t, d.pending(), 1)
+	require.Contains(t, d.refused(agent, mcpserver.AccessRequestTool, map[string]any{"project": lkOps}),
+		"that project is neither locked nor confidential: nothing to request")
+
+	// Off: the same project is not locked, and nothing is filed.
+	off := newDialogRig(t, dialogOpts{wait: dlgLong})
+	ctx := context.Background()
+	_, err = store.EnsureProject(ctx, off.db, dlgLegal, dlgLegal)
+	require.NoError(t, err)
+	require.NoError(t, store.SetProjectIsolation(ctx, off.db, dlgLegal, core.IsolationConfidential))
+	off.session("cc/ops", lkOps)
+	offAgent := off.dialOwner(off.agentSocket(), nil, nil)
+	require.Equal(t, "access_request: that project is not locked: nothing to request",
+		off.refused(offAgent, mcpserver.AccessRequestTool, map[string]any{"project": dlgLegal}))
+	require.Empty(t, off.pending())
 }

@@ -18,6 +18,14 @@ final class AppUI: ApproverUI {
             alert.addButton(withTitle: p.accept)
             alert.addButton(withTitle: p.cancel)
             alert.window.initialFirstResponder = field
+            // The owner mints the code in another terminal while this dialog
+            // waits. The app has no Dock icon and no Command-Tab entry
+            // (LSUIElement), so the dialog must not hide or sink behind that
+            // terminal when the app is no longer frontmost.
+            alert.window.hidesOnDeactivate = false
+            if alert.window.level.rawValue < NSWindow.Level.floating.rawValue {
+                alert.window.level = .floating
+            }
             App.bringForward()
             return alert.runModal() == .alertFirstButtonReturn ? field.stringValue : nil
         }

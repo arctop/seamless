@@ -10,13 +10,17 @@ package console
 // resetting them all, is `seamlessd approvers remove|reset`, run as the
 // daemon's own account -- the same proof that mints the enrollment code a first
 // credential needs. A console cookie, or the bearer key a script holds, is not
-// that proof.
+// that proof. The one credential a route retires is a Touch ID key that signs
+// its own retirement while the same Mac enrolls its replacement with such a
+// code (approversTouchIDEnroll).
 
 import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -39,15 +43,18 @@ type ApprovalsView interface {
 	BeginPasskey(ctx context.Context, name, code string) (approval.Begun, error)
 	FinishPasskey(ctx context.Context, id string, response []byte) (approval.Finished, error)
 	ApprovePasskey(ctx context.Context, id string, response []byte) (store.ApproverCredential, error)
-	// EnrollTouchID stores the Touch ID helper's new key, proven by a live
-	// touchid enrollment code and the key's own signature over it.
-	EnrollTouchID(ctx context.Context, name, code string, publicKey, signature []byte) (store.ApproverCredential, error)
+	// EnrollTouchIDReplacing stores the Touch ID helper's new key, proven by
+	// a live touchid enrollment code and the key's own signature over it, and
+	// in the same transaction retires each earlier key of this Mac whose own
+	// key signed the request to be retired. It returns the ids it retired.
+	EnrollTouchIDReplacing(ctx context.Context, name, code string, publicKey, signature []byte,
+		replaces []approval.TouchIDReplacement) (store.ApproverCredential, []string, error)
 
 	Request(ctx context.Context, in approval.RequestInput) (store.AccessApproval, error)
 	Pending(ctx context.Context) ([]approval.Facts, error)
 	Facts(ctx context.Context, id string) (approval.Facts, error)
 	Resolve(ctx context.Context, ref string) (store.AccessApproval, error)
-	AssertionOptions(ctx context.Context, id string) ([]byte, error)
+	AssertionOptionsFor(ctx context.Context, id, duration, digest string) ([]byte, error)
 	Approve(ctx context.Context, d approval.Decision) (store.AccessLease, error)
 	Deny(ctx context.Context, id, by string) error
 	Page(id string) string
@@ -210,7 +217,14 @@ const (
 	// touchIDMaxSignatureBytes bounds an ASN.1 DER P-256 signature (at most
 	// 72 bytes), with room to spare.
 	touchIDMaxSignatureBytes = 128
+	// touchIDMaxReplaces bounds the earlier keys one enrollment may retire:
+	// the helper keeps one enrolled key per Mac, so more is never honest.
+	touchIDMaxReplaces = 4
 )
+
+// touchIDCredentialID is an approver id as the helper sends it back: what
+// Validate.isCredentialID admits on its side.
+var touchIDCredentialID = regexp.MustCompile(`^[0-9A-Za-z_-]{1,64}$`)
 
 // approversTouchIDEnroll enrolls the Touch ID helper's key: POST
 // /console/approvers/touchid/enroll with the code the owner typed into the
@@ -220,6 +234,14 @@ const (
 // mints one -- and the signature shows the code's holder holds the key. It is
 // accepted on the peer_auth socket only, where the helper runs as the owner's
 // uid; the TCP key and the console cookie never enroll a Touch ID key.
+//
+// A helper replacing this Mac's earlier key also sends, for each, a replace
+// field (its approver id) and a replace_signature field (that key's own
+// signature over approval.TouchIDReplaceMessage), in pairs. Each one whose
+// signature verifies is retired with the enrollment, and the answer lists it
+// under retired; any other is left enrolled. A key retires only itself, so the
+// page's rule holds: no route removes a credential its holder did not ask to
+// remove, and a passkey never.
 func (s *Service) approversTouchIDEnroll(w http.ResponseWriter, r *http.Request) {
 	if s.approversOff(w, r) {
 		return
@@ -250,10 +272,15 @@ func (s *Service) approversTouchIDEnroll(w http.ResponseWriter, r *http.Request)
 		bad("signature must be the new key's ASN.1 DER signature over the enrollment message in standard base64")
 		return
 	}
-	cred, err := s.cfg.Approvals.EnrollTouchID(r.Context(), name, code, pub, sig)
+	replaces, problem := touchIDReplaces(r.PostForm["replace"], r.PostForm["replace_signature"])
+	if problem != "" {
+		bad(problem)
+		return
+	}
+	cred, retired, err := s.cfg.Approvals.EnrollTouchIDReplacing(r.Context(), name, code, pub, sig, replaces)
 	switch {
 	case err == nil:
-		writeJSON(w, http.StatusOK, map[string]any{"id": cred.ID, "name": cred.Name})
+		writeJSON(w, http.StatusOK, touchIDEnrolled{ID: cred.ID, Name: cred.Name, Retired: retired})
 	case errors.Is(err, approval.ErrTouchIDKey):
 		bad("the new key's signature over the enrollment code does not verify")
 	case errors.Is(err, store.ErrApproverExists):
@@ -265,6 +292,38 @@ func (s *Service) approversTouchIDEnroll(w http.ResponseWriter, r *http.Request)
 	default:
 		s.approverError(w, r, err)
 	}
+}
+
+// touchIDEnrolled is the Touch ID enrollment's answer. Retired lists the
+// earlier keys of this Mac it retired, and is absent when there were none, so
+// a first enrollment's answer is what it always was.
+type touchIDEnrolled struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Retired []string `json:"retired,omitempty"`
+}
+
+// touchIDReplaces reads the enrollment's replace and replace_signature
+// fields, which come in pairs, or says what is wrong with them.
+func touchIDReplaces(ids, sigs []string) ([]approval.TouchIDReplacement, string) {
+	const pairs = "replace and replace_signature come in pairs: an earlier key's approver id, and that key's signature over the replacement message in standard base64"
+	switch {
+	case len(ids) == 0 && len(sigs) == 0:
+		return nil, ""
+	case len(ids) != len(sigs):
+		return nil, pairs
+	case len(ids) > touchIDMaxReplaces:
+		return nil, fmt.Sprintf("an enrollment replaces at most %d earlier keys", touchIDMaxReplaces)
+	}
+	out := make([]approval.TouchIDReplacement, len(ids))
+	for i := range ids {
+		sig, err := base64.StdEncoding.Strict().DecodeString(sigs[i])
+		if !touchIDCredentialID.MatchString(ids[i]) || err != nil || len(sig) == 0 || len(sig) > touchIDMaxSignatureBytes {
+			return nil, pairs
+		}
+		out[i] = approval.TouchIDReplacement{ID: ids[i], Signature: sig}
+	}
+	return out, ""
 }
 
 // approverAddedBy renders added_by for the list.

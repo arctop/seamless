@@ -9,7 +9,10 @@ package console
 // the bearer key or the console cookie approves one.
 //
 // What the routes never do: approve without a proof. The passkey approval is
-// an assertion over the request's own challenge; the Touch ID approval is the
+// an assertion over approval.PasskeyApproveChallenge -- the request's own
+// challenge with the facts digest, the access and the duration -- so the page
+// issues its options only once the duration is chosen (on the page, or fixed
+// by ?for=); the Touch ID approval is the
 // helper app's signature over approval.TouchIDApproveMessage, accepted only on
 // the peer_auth socket; the terminal approval is not a route at all
 // (seamlessd approve, run as the daemon's account). Denying needs no proof --
@@ -23,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -135,9 +139,13 @@ type unlockRow struct {
 }
 
 type accessOneData struct {
-	Request        approval.Facts    `json:"request"`
-	Status         string            `json:"status"`
-	Page           string            `json:"page,omitempty"`
+	Request approval.Facts `json:"request"`
+	Status  string         `json:"status"`
+	Page    string         `json:"page,omitempty"`
+	// For is the duration ?for= chose (one of approval.Durations; an invalid
+	// one is ignored, and the owner chooses on the page). PasskeyOptions are
+	// issued only with one: the assertion signs the duration.
+	For            string            `json:"for,omitempty"`
 	PasskeyOptions json.RawMessage   `json:"passkey_options,omitempty"`
 	Terminal       *TerminalApprover `json:"terminal,omitempty"`
 	Durations      []string          `json:"durations"`
@@ -159,6 +167,32 @@ type accessOneData struct {
 	// the relying party's origin.
 	OnOrigin bool   `json:"-"`
 	Origin   string `json:"-"`
+	// PasskeyReady says a passkey can approve the pending request here
+	// (passkeys set up, one enrolled); ForWords is For as the page says it.
+	PasskeyReady bool   `json:"-"`
+	ForWords     string `json:"-"`
+}
+
+// chosenDuration is the duration ?for= names, "" when it names none or one
+// the daemon does not offer: then the owner chooses on the page.
+func chosenDuration(r *http.Request) string {
+	if v := r.URL.Query().Get("for"); slices.Contains(approval.Durations, v) {
+		return v
+	}
+	return ""
+}
+
+// durationWords is a duration choice as the page's choices word it.
+func durationWords(choice, maxLease string) string {
+	switch choice {
+	case approval.ForSession:
+		return "until this session ends (at most " + maxLease + ")"
+	case approval.For1h:
+		return "1 hour"
+	case approval.For4h:
+		return "4 hours"
+	}
+	return choice
 }
 
 func (s *Service) maxLease() string {
@@ -299,8 +333,25 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 		d.OnOrigin = containsString(origins, requestOrigin(r))
 	}
 	if a.Status == store.ApprovalPending && s.cfg.Approvals.PasskeysOn() {
-		if opts, err := s.cfg.Approvals.AssertionOptions(r.Context(), a.ID); err == nil {
-			d.PasskeyOptions = opts
+		keys, err := store.ApproverCredentials(r.Context(), s.writeDB(), store.ApproverPasskey)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		d.PasskeyReady = len(keys) > 0
+		// The options only once the duration is chosen: they sign it, with
+		// the facts this page shows.
+		if d.For = chosenDuration(r); d.For != "" {
+			d.ForWords = durationWords(d.For, d.MaxLease)
+			if d.PasskeyReady {
+				// Options over the binding of the request, the chosen
+				// duration and the facts digest this page shows.
+				if opts, err := s.cfg.Approvals.AssertionOptionsFor(r.Context(), a.ID, d.For, facts.Digest); err == nil {
+					d.PasskeyOptions = opts
+				} else {
+					s.logger.Debug("console: passkey options", "request", facts.Short, "error", err)
+				}
+			}
 		}
 	}
 	s.render(w, r, "access_one", pageData{Title: "Access request " + facts.Short, Active: "access", Data: d})
@@ -329,7 +380,11 @@ func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	project := strings.TrimSpace(r.PostForm.Get("project"))
 	host := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Seamless-Host")))
-	if s.cfg.Grants != nil && !access.Locked(r.Context(), project) {
+	// A read grant is for a project no lock covers: a locked project this
+	// tree holds a lease on is still the lock's (a live lease answers, or a
+	// refresh is filed).
+	_, leased := v.Lease(project)
+	if s.cfg.Grants != nil && !access.Locked(r.Context(), project) && !leased {
 		s.grantRequest(w, r, project, proc, host)
 		return
 	}
@@ -345,10 +400,13 @@ func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		msg := err.Error()
 		var anchor *approval.AnchorError
+		var live *approval.AccessLiveError
 		switch {
 		case errors.As(err, &anchor):
 			// Its own two lines, the rule and the remedy: no request exists.
 			msg = anchor.Error()
+		case errors.As(err, &live):
+			msg = live.Answer()
 		case errors.Is(err, approval.ErrNoProcess):
 			msg = "this connection has no verified process: request access from an agent session whose seam dials the peer_auth socket"
 		case errors.Is(err, approval.ErrNoAnchor), errors.Is(err, approval.ErrAnchorNotInChain):
@@ -368,8 +426,9 @@ func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// accessApprove approves a request with a passkey assertion over its own
-// challenge, for the duration and over the facts digest the page showed. A
+// accessApprove approves a request with a passkey assertion over its binding
+// (approval.PasskeyApproveChallenge) for the duration and the facts digest
+// the page showed, both resent with the form. A
 // read grant request goes to the read grants, where -- in the advisory tier
 // only -- a decision without a passkey response is the bearer key's.
 //
@@ -508,6 +567,12 @@ func (s *Service) accessDeny(w http.ResponseWriter, r *http.Request) {
 func (s *Service) accessError(w http.ResponseWriter, r *http.Request, err error) {
 	msg := ""
 	switch {
+	case errors.Is(err, approval.ErrBindingChanged):
+		// The passkey signed this request for another duration (or over the
+		// bare challenge an older page asked for): what it approved is not
+		// what was sent.
+		msg = "the passkey approved this request for another duration, or other facts, than this approval names: " +
+			"nothing was approved; reload the page, check the duration and approve again"
 	case errors.Is(err, approval.ErrFactsChanged):
 		msg = "the request's facts changed since this page loaded: reload and look at them again"
 	case errors.Is(err, store.ErrApprovalNotPending):

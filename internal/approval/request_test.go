@@ -16,6 +16,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
+	"github.com/arctop/seamless/internal/passkey"
 	"github.com/arctop/seamless/internal/passkey/passkeytest"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -173,7 +174,9 @@ func TestApprove_DaemonPath_TheTreeReadsAndWrites(t *testing.T) {
 	require.True(t, f.view(t, otherBr, other, shell).Locked(lockFin), "another tree stays locked")
 	require.True(t, f.policy.OwnerView().WithLeases(f.now, []access.Lease{lease.Lease()}).Locked(lockFin), "TCP is refused")
 
-	// A request from the leased tree is a refresh, carrying the old reason.
+	// A request from the leased tree, inside the expiry warning, is a
+	// refresh, carrying the old reason.
+	f.now = lease.ExpiresAt.Add(-access.ExpiryWarning)
 	refresh, err := f.svc.Request(ctx, RequestInput{Project: lockFin, View: f.view(t, bridge, agent, shell), SessionID: sess, Reason: "new text"})
 	require.NoError(t, err)
 	require.Equal(t, store.AccessKindRefresh, refresh.Kind)
@@ -296,16 +299,18 @@ func TestApprove_PasskeyPath(t *testing.T) {
 	facts, err := f.svc.Facts(ctx, a.ID)
 	require.NoError(t, err)
 
-	opts, err := f.svc.AssertionOptions(ctx, a.ID)
+	opts, err := f.svc.AssertionOptionsFor(ctx, a.ID, For4h, facts.Digest)
 	require.NoError(t, err)
 	assertion, err := key.Get(opts, origin)
 	require.NoError(t, err)
 
-	// Another request's proof does not approve this one.
+	// Another request's proof does not approve this one, and is no mere
+	// change of duration: the passkey's own refusal.
 	bf, err := f.svc.Facts(ctx, b.ID)
 	require.NoError(t, err)
-	_, err = f.svc.Approve(ctx, Decision{ID: b.ID, Duration: For1h, Digest: bf.Digest, Proof: Proof{Kind: ProofPasskey, Assertion: assertion}})
-	require.Error(t, err)
+	_, err = f.svc.Approve(ctx, Decision{ID: b.ID, Duration: For4h, Digest: bf.Digest, Proof: Proof{Kind: ProofPasskey, Assertion: assertion}})
+	require.ErrorIs(t, err, passkey.ErrVerification)
+	require.NotErrorIs(t, err, ErrBindingChanged)
 
 	lease, err := f.svc.Approve(ctx, Decision{ID: a.ID, Duration: For4h, Digest: facts.Digest, Proof: Proof{Kind: ProofPasskey, Assertion: assertion}})
 	require.NoError(t, err)
@@ -318,6 +323,170 @@ func TestApprove_PasskeyPath(t *testing.T) {
 	_, err = f.svc.Approve(ctx, Decision{ID: a.ID, Duration: For4h, Digest: facts.Digest, Proof: Proof{Kind: ProofPasskey, Assertion: assertion}})
 	require.ErrorIs(t, err, store.ErrApprovalNotPending)
 	require.True(t, f.view(t, bridge, agent, shell).Visible(lockFin))
+}
+
+// A passkey approval signs its duration and the facts (decision D1): the
+// options are issued for one duration over the facts the owner sees, and the
+// approve core verifies the assertion against the binding it recomputes from
+// the submitted duration and the facts as they stand.
+func TestApprove_PasskeyBindsTheDurationAndTheFacts(t *testing.T) {
+	lengths := map[string]time.Duration{ForSession: 8 * time.Hour, For1h: time.Hour, For4h: 4 * time.Hour}
+	for _, duration := range Durations {
+		t.Run("approved for "+duration, func(t *testing.T) {
+			f := newReqFixture(t)
+			ctx := context.Background()
+			key, err := passkeytest.New(true)
+			require.NoError(t, err)
+			f.enrollWithCode(t, key, "security key")
+			a := f.request(t, lockFin, f.session(t, "cc/fin", "/work/ops", agent), bridge, agent, shell)
+			facts, err := f.svc.Facts(ctx, a.ID)
+			require.NoError(t, err)
+			opts, err := f.svc.AssertionOptionsFor(ctx, a.ID, duration, facts.Digest)
+			require.NoError(t, err)
+			assertion, err := key.Get(opts, origin)
+			require.NoError(t, err)
+
+			// The same assertion, submitted for any other duration: refused as
+			// a changed decision, and nothing is approved.
+			for _, tampered := range Durations {
+				if tampered == duration {
+					continue
+				}
+				_, err := f.svc.Approve(ctx, Decision{ID: a.ID, Duration: tampered, Digest: facts.Digest,
+					Proof: Proof{Kind: ProofPasskey, Assertion: assertion}})
+				require.ErrorIs(t, err, ErrFactsChanged, "signed for %s, sent as %s", duration, tampered)
+				require.ErrorIs(t, err, ErrBindingChanged)
+			}
+			row, err := store.AccessApprovalByID(ctx, f.db, a.ID)
+			require.NoError(t, err)
+			require.Equal(t, store.ApprovalPending, row.Status, "a tampered duration approves nothing")
+
+			lease, err := f.svc.Approve(ctx, Decision{ID: a.ID, Duration: duration, Digest: facts.Digest,
+				Proof: Proof{Kind: ProofPasskey, Assertion: assertion}})
+			require.NoError(t, err)
+			require.Equal(t, f.now.Add(lengths[duration]), lease.ExpiresAt)
+		})
+	}
+
+	t.Run("facts that changed after the options were issued", func(t *testing.T) {
+		f := newReqFixture(t)
+		ctx := context.Background()
+		key, err := passkeytest.New(true)
+		require.NoError(t, err)
+		f.enrollWithCode(t, key, "security key")
+		sess := f.session(t, "cc/fin", "/work/ops", agent)
+		a := f.request(t, lockFin, sess, bridge, agent, shell)
+		shown, err := f.svc.Facts(ctx, a.ID)
+		require.NoError(t, err)
+		opts, err := f.svc.AssertionOptionsFor(ctx, a.ID, For1h, shown.Digest)
+		require.NoError(t, err)
+		assertion, err := key.Get(opts, origin)
+		require.NoError(t, err)
+
+		_, err = store.SetSessionTaint(ctx, f.db, sess, "web", "tool", f.now)
+		require.NoError(t, err)
+		fresh, err := f.svc.Facts(ctx, a.ID)
+		require.NoError(t, err)
+		require.NotEqual(t, shown.Digest, fresh.Digest)
+
+		// The digest the owner saw no longer approves; the fresh one is not
+		// what the passkey signed; and no options are issued for stale facts.
+		_, err = f.svc.Approve(ctx, Decision{ID: a.ID, Duration: For1h, Digest: shown.Digest, Proof: Proof{Kind: ProofPasskey, Assertion: assertion}})
+		require.ErrorIs(t, err, ErrFactsChanged)
+		_, err = f.svc.Approve(ctx, Decision{ID: a.ID, Duration: For1h, Digest: fresh.Digest, Proof: Proof{Kind: ProofPasskey, Assertion: assertion}})
+		require.ErrorIs(t, err, passkey.ErrVerification)
+		_, err = f.svc.AssertionOptionsFor(ctx, a.ID, For1h, shown.Digest)
+		require.ErrorIs(t, err, ErrFactsChanged)
+		row, err := store.AccessApprovalByID(ctx, f.db, a.ID)
+		require.NoError(t, err)
+		require.Equal(t, store.ApprovalPending, row.Status)
+
+		// Options over the facts as they stand approve.
+		opts, err = f.svc.AssertionOptionsFor(ctx, a.ID, For1h, fresh.Digest)
+		require.NoError(t, err)
+		assertion, err = key.Get(opts, origin)
+		require.NoError(t, err)
+		_, err = f.svc.Approve(ctx, Decision{ID: a.ID, Duration: For1h, Digest: fresh.Digest, Proof: Proof{Kind: ProofPasskey, Assertion: assertion}})
+		require.NoError(t, err)
+	})
+
+	t.Run("an assertion over the bare challenge", func(t *testing.T) {
+		// What an older daemon's page signed: the request's challenge alone.
+		f := newReqFixture(t)
+		ctx := context.Background()
+		key, err := passkeytest.New(true)
+		require.NoError(t, err)
+		cred := f.enrollWithCode(t, key, "security key")
+		a := f.request(t, lockFin, f.session(t, "cc/fin", "/work/ops", agent), bridge, agent, shell)
+		facts, err := f.svc.Facts(ctx, a.ID)
+		require.NoError(t, err)
+		opts, err := f.svc.cfg.Passkeys.BeginAssertion(a.Challenge, []passkey.Credential{ToPasskey(cred)})
+		require.NoError(t, err)
+		assertion, err := key.Get(opts, origin)
+		require.NoError(t, err)
+		_, err = f.svc.Approve(ctx, Decision{ID: a.ID, Duration: For1h, Digest: facts.Digest, Proof: Proof{Kind: ProofPasskey, Assertion: assertion}})
+		require.ErrorIs(t, err, ErrBindingChanged)
+	})
+
+	t.Run("options need a duration offered and a pending request", func(t *testing.T) {
+		f := newReqFixture(t)
+		ctx := context.Background()
+		key, err := passkeytest.New(true)
+		require.NoError(t, err)
+		f.enrollWithCode(t, key, "security key")
+		a := f.request(t, lockFin, f.session(t, "cc/fin", "/work/ops", agent), bridge, agent, shell)
+		facts, err := f.svc.Facts(ctx, a.ID)
+		require.NoError(t, err)
+		for _, bad := range []string{"", "8d", "Session"} {
+			_, err = f.svc.AssertionOptionsFor(ctx, a.ID, bad, facts.Digest)
+			require.ErrorIs(t, err, ErrDuration, "%q", bad)
+		}
+		_, err = f.svc.AssertionOptionsFor(ctx, a.ID, For1h, "")
+		require.ErrorIs(t, err, ErrFactsChanged, "a digest is part of what is signed")
+		f.approveDaemon(t, a.ID, For1h)
+		_, err = f.svc.AssertionOptionsFor(ctx, a.ID, For1h, facts.Digest)
+		require.ErrorIs(t, err, store.ErrApprovalNotPending)
+	})
+}
+
+// A tree that holds a live lease asks again: while more than the expiry
+// warning remains, the lease is the answer and nothing is filed; from the
+// warning on, the request is a refresh -- a new approval -- as the expiry
+// notices say.
+func TestRequest_LiveLeaseAnswersUntilTheExpiryWarning(t *testing.T) {
+	f := newReqFixture(t)
+	ctx := context.Background()
+	sess := f.session(t, "cc/fin", "/work/ops", agent)
+	a := f.request(t, lockFin, sess, bridge, agent, shell)
+	lease := f.approveDaemon(t, a.ID, For4h)
+	count := func() int {
+		var n int
+		require.NoError(t, f.db.QueryRow(`SELECT COUNT(*) FROM access_approvals`).Scan(&n))
+		return n
+	}
+	before := count()
+
+	for _, at := range []time.Time{f.now, lease.ExpiresAt.Add(-access.ExpiryWarning - time.Second)} {
+		f.now = at
+		_, err := f.svc.Request(ctx, RequestInput{Project: lockFin, View: f.view(t, bridge, agent, shell), SessionID: sess, Via: "request"})
+		require.ErrorIs(t, err, ErrAccessLive)
+		var live *AccessLiveError
+		require.ErrorAs(t, err, &live)
+		require.Equal(t, AccessLiveError{Project: lockFin, AccessID: lease.ID, ApprovalID: a.ID, Expires: lease.ExpiresAt}, *live)
+		require.Equal(t, lease.ExpiresAt.Add(-30*time.Minute), live.AskAgainAt())
+		require.Equal(t, before, count(), "nothing is filed while the lease covers the ask")
+	}
+
+	// Another tree is not covered by this tree's lease: it asks as before.
+	sibling := f.request(t, lockFin, f.session(t, "cc/b", "/work/ops", other), otherBr, other, shell)
+	require.Equal(t, store.AccessKindRequest, sibling.Kind)
+
+	// From the warning on: a refresh.
+	f.now = lease.ExpiresAt.Add(-access.ExpiryWarning)
+	refresh, err := f.svc.Request(ctx, RequestInput{Project: lockFin, View: f.view(t, bridge, agent, shell), SessionID: sess, Via: "request"})
+	require.NoError(t, err)
+	require.Equal(t, store.AccessKindRefresh, refresh.Kind)
+	require.Equal(t, before+2, count())
 }
 
 func TestApprove_TouchIDPath(t *testing.T) {

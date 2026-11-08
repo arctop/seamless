@@ -89,7 +89,8 @@ func (r *gmRig) approveDaemon(short string) store.AccessGrant {
 	require.NoError(r.t, err)
 	var out bytes.Buffer
 	require.NoError(r.t, approveWith(r.ctx, r.svc, r.grants, &out, []string{short, "--for", approval.For1h, "--digest", facts.Digest}))
-	require.Contains(r.t, out.String(), "Approved "+short+": "+gmConf+", read-only, for "+gmOpen+", until ")
+	require.Contains(r.t, out.String(), "Approved "+short+": ")
+	require.Contains(r.t, out.String(), ", working in "+gmOpen+", may read "+gmConf+" (read-only) until ")
 	g := r.liveGrantOf(a.ID)
 	require.Equal(r.t, "daemon-account", g.DecidedBy)
 	return g
@@ -185,9 +186,20 @@ func (r *gmRig) writes(cli *mcpclient.Client, who string, target gmItems, regist
 			if _, named := args["session"]; named && !handles {
 				continue
 			}
+			before := r.grantRows("")
 			items, isErr := gmCall(t, cli, tool, args)
 			what := who + ": " + tool + " probe " + string(rune('0'+i)) + " " + mustJSON(t, args)
-			require.True(t, isErr, "%s must be refused: %v", what, items)
+			if tool == mcp.AccessRequestTool && !isErr {
+				// A holder of a live grant of the target asks again: the
+				// grant answers, and nothing is filed (approval.AccessLiveError).
+				var res struct{ Status, Kind string }
+				require.NoError(t, json.Unmarshal([]byte(items[0]), &res), what)
+				require.Equal(t, store.ApprovalApproved, res.Status, what)
+				require.Equal(t, store.AccessKindGrant, res.Kind, what)
+				require.Equal(t, before, r.grantRows(""), "%s: nothing filed", what)
+			} else {
+				require.True(t, isErr, "%s must be refused: %v", what, items)
+			}
 			gmNoSecretsBut(t, gmText(items), what, target.project)
 			r.unchanged(target, what)
 		}
@@ -287,12 +299,24 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 			map[string]string{mcp.AgentProcessHeader: gmAgent.AgentID(), mcp.HostHeader: gmHost})
 		require.Equal(t, http.StatusBadRequest, status, body)
 		require.Contains(t, body, "that project is neither locked nor confidential: nothing to request")
-		for _, p := range []string{gmDocs, gmConf} {
-			items, isErr = gmCall(t, agent, mcp.AccessRequestTool, map[string]any{"project": p})
-			require.True(t, isErr)
-			require.Equal(t, mcp.AccessRequestTool+": that project is not locked: nothing to request", items[0],
-				"access_request asks for a lock only: a confidential project's grant is asked at its fence")
+		items, isErr = gmCall(t, agent, mcp.AccessRequestTool, map[string]any{"project": gmDocs})
+		require.True(t, isErr)
+		require.Equal(t, mcp.AccessRequestTool+": that project is neither locked nor confidential: nothing to request", items[0])
+		// A confidential project no lock covers: access_request asks for its
+		// read grant, as `seam access request` does, and finds the request
+		// its fence filed.
+		items, isErr = gmCall(t, agent, mcp.AccessRequestTool, map[string]any{"project": gmConf})
+		require.False(t, isErr, "%v", items)
+		var asked struct {
+			ShortID                     string `json:"short_id"`
+			Kind, Project, From, Status string
 		}
+		require.NoError(t, json.Unmarshal([]byte(items[0]), &asked), items[0])
+		require.Equal(t, short, asked.ShortID, "the fence's request, found again")
+		require.Equal(t, store.AccessKindGrant, asked.Kind)
+		require.Equal(t, gmConf, asked.Project)
+		require.Equal(t, gmOpen, asked.From)
+		require.Equal(t, store.ApprovalPending, asked.Status)
 		require.Equal(t, 1, r.grantRows(""))
 	})
 

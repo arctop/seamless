@@ -123,13 +123,15 @@ func TestConsoleLock_LeasedTreeReadsThroughTheConsole(t *testing.T) {
 	require.Contains(t, body, secret, "the leased tree's seam plan show reads the locked project")
 
 	status, body = get(serveAs(stranger).URL, "")
-	require.Equal(t, http.StatusNotFound, status, "another tree on the socket is refused")
+	require.Equal(t, http.StatusForbidden, status, "another tree on the socket is refused")
+	require.Contains(t, body, "is locked", "and told the lock, not not-found")
 	require.NotContains(t, body, secret)
 
 	tcp := httptest.NewServer(ownerHandler(policy, mux))
 	t.Cleanup(func() { closeServer(tcp) })
 	status, body = get(tcp.URL, "k")
-	require.Equal(t, http.StatusNotFound, status, "the TCP key never reaches a locked project")
+	require.Equal(t, http.StatusForbidden, status, "the TCP key never reaches a locked project")
+	require.Contains(t, body, "the TCP connection and its bearer key never reach a locked project")
 	require.NotContains(t, body, secret)
 	require.LessOrEqual(t, views.Open(), 2, "the base handle and the leased one")
 }

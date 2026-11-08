@@ -151,7 +151,7 @@
       <thead><tr><th>Task</th><th>Status</th><th>Depends on</th><th>Created</th></tr></thead>
       <tbody>
         {{range .Ready}}
-        <tr id="{{.ID}}" class="row-link" data-href="/console/tasks/{{.ID}}"><td><span class="mono-id">{{shortID .ID}}</span> <a href="/console/tasks/{{.ID}}">{{.Title}}</a></td><td><span class="kind {{taskTone .Status}}">{{.Status}}</span></td><td class="muted">{{if .Deps}}{{.Deps}} dep{{if ne .Deps 1}}s{{end}}{{else}}&mdash;{{end}}</td><td class="muted">{{ago .Created}}</td></tr>
+        <tr id="{{.ID}}" class="row-link" data-href="/console/tasks/{{.ID}}"><td><span class="mono-id">{{shortID .ID}}</span> <a href="/console/tasks/{{.ID}}">{{.Title}}</a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</td><td><span class="kind {{taskTone .Status}}">{{.Status}}</span></td><td class="muted">{{if .Deps}}{{.Deps}} dep{{if ne .Deps 1}}s{{end}}{{else}}&mdash;{{end}}</td><td class="muted">{{ago .Created}}</td></tr>
         {{end}}
       </tbody>
     </table>
@@ -167,7 +167,7 @@
     {{if .Sessions}}
     <div class="sess">
       {{range .Sessions}}
-      <div id="{{.ID}}" class="r"><div><div class="id"><a href="/console/sessions/{{.ID}}">{{.Name}}</a>{{if .Active}}<span class="badge ok"><span class="live-dot"></span>active</span>{{else}}<span class="kind">{{.Source}}</span>{{end}}{{if .Ambient}}<span class="kind">ambient</span>{{end}}{{range .Holds}}<span class="claim">{{icon "lock"}}holds {{.}}</span>{{end}}</div>{{if .Findings}}<div class="find">{{.Findings}}</div>{{end}}</div><span class="when">{{ago .Updated}}</span></div>
+      <div id="{{.ID}}" class="r"><div><div class="id"><a href="/console/sessions/{{.ID}}">{{.Name}}</a>{{if .Active}}<span class="badge ok"><span class="live-dot"></span>active</span>{{else}}<span class="kind">{{.Source}}</span>{{end}}{{if .Ambient}}<span class="kind">ambient</span>{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{range .Holds}}<span class="claim">{{icon "lock"}}holds {{.}}</span>{{end}}</div>{{if .Findings}}<div class="find">{{.Findings}}</div>{{end}}</div><span class="when">{{ago .Updated}}</span></div>
       {{end}}
     </div>
     {{else}}<div class="empty">No sessions in {{.Slug}}</div>{{end}}
@@ -181,12 +181,12 @@
       <thead><tr><th>Name</th><th>Kind</th><th>Lineage</th><th class="num">Inj</th><th class="num">Read</th><th>Updated</th></tr></thead>
       <tbody>
         {{range .Memories}}
-        <tr id="{{.ID}}" class="row-link" data-href="/console/memories/{{.ID}}"><td class="mem-name"><a href="/console/memories/{{.ID}}"><strong>{{.Name}}</strong></a>{{if .Desc}}<div class="desc">{{.Desc}}</div>{{end}}</td><td><span class="kind">{{.Kind}}</span></td><td>{{.Lineage}}</td><td class="num">{{.Injects}}</td><td class="num">{{.Reads}}</td><td class="muted">{{ago .Updated}}</td></tr>
+        <tr id="{{.ID}}" class="row-link" data-href="/console/memories/{{.ID}}"><td class="mem-name"><a href="/console/memories/{{.ID}}"><strong>{{.Name}}</strong></a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{if .Desc}}<div class="desc">{{.Desc}}</div>{{end}}</td><td><span class="kind">{{.Kind}}</span></td><td>{{.Lineage}}</td><td class="num">{{.Injects}}</td><td class="num">{{.Reads}}</td><td class="muted">{{ago .Updated}}</td></tr>
         {{else}}<tr><td colspan="6"><div class="empty">No memories in {{.Slug}}</div></td></tr>{{end}}
         {{if .Inherited}}
         <tr class="subhead-row"><td colspan="6">Inherited &mdash; counted in parent/global scope, not {{.Slug}}</td></tr>
         {{range .Inherited}}
-        <tr id="{{.ID}}" class="row-link" data-href="/console/memories/{{.ID}}"><td class="mem-name"><a href="/console/memories/{{.ID}}"><strong>{{.Name}}</strong></a>{{if .Desc}}<div class="desc">{{.Desc}}</div>{{end}}</td><td><span class="kind">{{.Kind}}</span></td><td>{{.Lineage}}</td><td class="num">{{.Injects}}</td><td class="num">{{.Reads}}</td><td class="muted">{{ago .Updated}}</td></tr>
+        <tr id="{{.ID}}" class="row-link" data-href="/console/memories/{{.ID}}"><td class="mem-name"><a href="/console/memories/{{.ID}}"><strong>{{.Name}}</strong></a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{if .Desc}}<div class="desc">{{.Desc}}</div>{{end}}</td><td><span class="kind">{{.Kind}}</span></td><td>{{.Lineage}}</td><td class="num">{{.Injects}}</td><td class="num">{{.Reads}}</td><td class="muted">{{ago .Updated}}</td></tr>
         {{end}}
         {{end}}
       </tbody>
@@ -201,7 +201,7 @@
       <thead><tr><th>Title</th><th>Tags</th><th>Updated</th></tr></thead>
       <tbody>
         {{range .Notes}}
-        <tr id="{{.ID}}" class="row-link" data-href="/console/notes/{{.ID}}"><td class="mem-name"><a href="/console/notes/{{.ID}}"><strong>{{.Title}}</strong></a>{{if .Desc}}<div class="desc">{{.Desc}}</div>{{end}}</td><td><div style="display:flex;gap:6px;flex-wrap:wrap">{{range .Tags}}<span class="badge">{{.}}</span>{{end}}</div></td><td class="muted">{{ago .Updated}}</td></tr>
+        <tr id="{{.ID}}" class="row-link" data-href="/console/notes/{{.ID}}"><td class="mem-name"><a href="/console/notes/{{.ID}}"><strong>{{.Title}}</strong></a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{if .Desc}}<div class="desc">{{.Desc}}</div>{{end}}</td><td><div style="display:flex;gap:6px;flex-wrap:wrap">{{range .Tags}}<span class="badge">{{.}}</span>{{end}}</div></td><td class="muted">{{ago .Updated}}</td></tr>
         {{else}}<tr><td colspan="3"><div class="empty">No notes in {{.Slug}}</div></td></tr>
         {{end}}
       </tbody>
@@ -270,10 +270,10 @@
     <span class="body">
       <span class="t">{{.Title}}</span>
       <span class="meta">
-        <span class="mono">{{shortID .ID}}</span>
+        <span class="mono">{{shortID .ID}}</span>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
         {{if .ClaimedBy}}<span class="claim">{{icon "lock"}}{{.ClaimedBy}}</span>{{end}}
         {{if .LeaseExp}}<span class="lease{{if .LeaseLapsed}} lease-lapsed{{end}}" data-lease-exp="{{.LeaseExp}}">{{icon "timer"}}<span class="v">{{.LeaseLeft}}</span></span>{{end}}
-        {{range .Chain}}<a class="edge" href="{{if .OnPage}}#{{.ID}}{{else}}/console/tasks/{{.ID}}{{end}}"{{if .OnPage}} data-jump{{end}} title="blocked by {{.Title}} &middot; {{.Status}}">{{icon "link"}}{{.Title}}</a>{{end}}
+        {{range .Chain}}<a class="edge" href="{{if .OnPage}}#{{.ID}}{{else}}/console/tasks/{{.ID}}{{end}}"{{if .OnPage}} data-jump{{end}} title="blocked by {{.Title}} &middot; {{.Status}}">{{icon "link"}}{{.Title}}</a>{{end}}{{range .LockedIn}}<span class="edge" data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}}a task in locked project {{.}} blocks this one</span>{{end}}
         {{if .Unblocks}}<span class="edge ok" title="unblocks {{.UnblocksTitle}}">{{icon "arrow-right"}}unblocks {{len .Unblocks}}</span>{{end}}
       </span>
     </span>

@@ -131,7 +131,12 @@ func formOf(_ request: String) -> [String: String] {
 final class SoftwareKeyStore: KeyStore {
     var unavailable: String?
     var cancelSigning = false
+    /// `cancelLater` cancels every signature of a signAll but the first, as
+    /// an owner who cancels a second prompt would.
+    var cancelLater = false
     private(set) var stored: [(StoredKey, SecKey)] = []
+    /// `reasons` holds one entry per prompt: a sign, or a whole signAll (one
+    /// check covering every key, as one shared context does).
     private(set) var reasons: [String] = []
 
     func checkAvailable() throws {
@@ -166,6 +171,30 @@ final class SoftwareKeyStore: KeyStore {
 
     func sign(_ message: Data, with key: StoredKey, reason: String) throws -> Data {
         reasons.append(reason)
+        return try signQuietly(message, with: key)
+    }
+
+    func signAll(_ signings: [Signing], reason: String) throws -> [Data?] {
+        reasons.append(reason)
+        var out: [Data?] = []
+        for (i, s) in signings.enumerated() {
+            if i > 0 && cancelLater {
+                out.append(nil)
+                continue
+            }
+            do {
+                out.append(try signQuietly(s.message, with: s.key))
+            } catch {
+                if i == 0 {
+                    throw error
+                }
+                out.append(nil)
+            }
+        }
+        return out
+    }
+
+    func signQuietly(_ message: Data, with key: StoredKey) throws -> Data {
         if cancelSigning {
             throw ApproverError.cancelled("cancelled")
         }

@@ -276,6 +276,10 @@ lease. Where such a task blocks another, <code>tasks_ready</code> lists the bloc
 only the ids the caller may read, and <code>depends_on_withheld</code> counts the rest; and
 the claim's &quot;task blocked&quot; refusal names the readable blockers and counts the
 others. With nothing isolated or locked, every answer reads as it always has.</p>
+<p>The owner's own connection at a locked project it holds no lease on is told
+which one: the withheld entry reads <code>a task in locked project acme-finance blocks this one: &lt;remedy&gt;</code>, and the claim refusal names the project, with a
+<code>Remedy:</code> line. Every other caller, and every blocker an isolation fence alone
+withholds, gets the generic words.</p>
 <div class="table-wrap">
 <table>
 <thead>

@@ -15,6 +15,7 @@ package approval
 // decision: a digest of them must match the facts as they stand.
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -52,7 +53,8 @@ const (
 	// ProofDaemon is a commit by the daemon's own account (the terminal path:
 	// `seamlessd approve`, reached through sudo). No route can produce it.
 	ProofDaemon = "daemon"
-	// ProofPasskey is a WebAuthn assertion over the request's challenge.
+	// ProofPasskey is a WebAuthn assertion over PasskeyApproveChallenge: the
+	// request's challenge, the facts digest, the access and the duration.
 	ProofPasskey = "passkey"
 	// ProofTouchID is a Touch ID key's signature over the decision.
 	ProofTouchID = "touchid"
@@ -77,6 +79,20 @@ var (
 	// ErrFactsChanged is a decision over facts that changed since they were
 	// shown: the owner must look again.
 	ErrFactsChanged = errors.New("the request's facts changed since they were shown")
+	// ErrBindingChanged is a passkey assertion made for this request with
+	// another duration than the decision names, or over the request's bare
+	// challenge (a page an older daemon served): what it signed is not what
+	// is being approved. It is always returned beside ErrFactsChanged, so a
+	// surface that knows only that one refuses it the same way.
+	ErrBindingChanged = errors.New("the passkey approved another duration, or other facts, than this decision names")
+	// ErrAccessLive is a request from an asker that already holds live access
+	// to the project -- an agent tree's lease, or a read grant from the same
+	// project -- more than access.ExpiryWarning from its end: it covers what
+	// is asked, so nothing is filed (*AccessLiveError names it). From the
+	// warning on, a request files a new one -- a lease's refresh, a new read
+	// grant request -- as the expiry notices say: nothing extends access
+	// silently.
+	ErrAccessLive = errors.New("this agent already holds access to the project")
 	// ErrNoProof is an acceptance without a proof the core can check.
 	ErrNoProof = errors.New("an approval needs a proof")
 	// ErrDuration is a duration that is not one of Durations.
@@ -91,6 +107,47 @@ var (
 	ErrRestricted = errors.New("a restricted local account files no access requests and holds no lease or read " +
 		"grant: it reaches the open projects only, and the owner decides every approval")
 )
+
+// AccessLiveError is ErrAccessLive with the access that answers the request:
+// a lock's lease, or (From set) a read grant; its project, when it ends, and
+// the approved request that opened it.
+type AccessLiveError struct {
+	Project string
+	// From is a read grant's asking project; "" for a lease.
+	From string
+	// AccessID is the lease's or the grant's id.
+	AccessID string
+	// ApprovalID is the approved request behind it, "" when it could not be
+	// read.
+	ApprovalID string
+	Expires    time.Time
+}
+
+func (e *AccessLiveError) Error() string {
+	return fmt.Sprintf("%s: project %s is open to it until %s", ErrAccessLive, e.Project, e.Expires.UTC().Format(time.RFC3339))
+}
+
+func (e *AccessLiveError) Unwrap() error { return ErrAccessLive }
+
+// AskAgainAt is when a request from the same asker files a new one again:
+// access.ExpiryWarning before the access ends, when the expiry notices start.
+func (e *AccessLiveError) AskAgainAt() time.Time { return e.Expires.Add(-access.ExpiryWarning) }
+
+// Answer is the request's answer for the agent that asked: what is open,
+// until when, and from when asking again files a new approval.
+func (e *AccessLiveError) Answer() string {
+	by := ""
+	if e.ApprovalID != "" {
+		by = " (approved as " + ShortID(e.ApprovalID) + ")"
+	}
+	open := "project " + e.Project + " is already open to this agent"
+	if e.From != "" {
+		open = "project " + e.Project + " is already readable from project " + e.From
+	}
+	return fmt.Sprintf("%s until %s%s, so nothing was filed. Nothing extends it silently: from %s, %d minutes before "+
+		"it ends, asking again files a new approval", open, access.Clock(e.Expires), by, access.Clock(e.AskAgainAt()),
+		int(access.ExpiryWarning/time.Minute))
+}
 
 // refuseRestricted is the restricted-account refusal at every entry point of
 // the approval service -- filing a request or a read grant, deciding one,
@@ -248,8 +305,10 @@ type RequestInput struct {
 // Request files (or finds) the pending request for in.Project from the
 // anchor in.View's chain names. A pending request of that anchor for that
 // project is returned as it is, so a repeated refusal never piles up
-// requests. A request from a tree that already holds a live lease is a
-// refresh, and carries the earlier reason rather than new text.
+// requests. A tree that already holds a live lease on the project files
+// nothing while more than access.ExpiryWarning of it remains: the answer is a
+// *AccessLiveError naming the lease. Within the warning it files a refresh,
+// which carries the earlier reason rather than new text.
 func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApproval, error) {
 	const op = "approval.Request"
 	if err := refuseRestricted(ctx, in.View); err != nil {
@@ -260,9 +319,14 @@ func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApp
 	if len(chain) == 0 || !in.View.Principal().Socket {
 		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, ErrNoProcess)
 	}
-	_, leased := in.View.Lease(in.Project)
+	lease, leased := in.View.Lease(in.Project)
 	if !in.View.Locked(in.Project) && !leased {
 		return store.AccessApproval{}, fmt.Errorf("%s: %w: %s", op, ErrNotLocked, in.Project)
+	}
+	if leased && lease.Expires.Sub(now) > access.ExpiryWarning {
+		// The lease covers what is asked (a lock's lease is read-write), and
+		// its end is not near: a refresh now would only ask the owner again.
+		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, s.liveLease(ctx, lease, now))
 	}
 	got, err := s.anchorFor(ctx, chain, in.SessionID, in.AgentProcess, in.Host)
 	if err != nil {
@@ -316,6 +380,23 @@ func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApp
 	s.record(ctx, core.Event{Kind: core.EventAccessRequested, ItemID: a.ID, SessionID: in.SessionID, ProjectSlug: in.Project,
 		Payload: map[string]any{"kind": kind, "via": via}})
 	return a, nil
+}
+
+// liveLease is the answer to a request a live lease already covers: the
+// lease, and the approved request behind it when its row can be read.
+func (s *Service) liveLease(ctx context.Context, l access.Lease, now time.Time) *AccessLiveError {
+	out := &AccessLiveError{Project: l.Project, AccessID: l.ID, Expires: l.Expires}
+	rows, err := store.ActiveAccessLeasesFor(ctx, s.cfg.DB, []string{l.Process}, now)
+	if err != nil {
+		s.cfg.Logger.Debug("approval: read the live lease", "lease", l.ID, "error", err)
+		return out
+	}
+	for _, r := range rows {
+		if r.ID == l.ID {
+			out.ApprovalID = r.ApprovalID
+		}
+	}
+	return out
 }
 
 // resolvedAnchor is a request's anchor as filing settles it: the process,
@@ -562,7 +643,8 @@ func (s *Service) Resolve(ctx context.Context, ref string) (store.AccessApproval
 // Proof is what decides an approval.
 type Proof struct {
 	Kind string
-	// Assertion is a passkey's response JSON (ProofPasskey).
+	// Assertion is a passkey's response JSON (ProofPasskey), over
+	// PasskeyApproveChallenge for the decision's duration.
 	Assertion []byte
 	// CredentialID is the Touch ID key's store id, Signature its ASN.1 ECDSA
 	// signature over TouchIDApproveMessage (ProofTouchID).
@@ -588,6 +670,22 @@ func TouchIDApproveMessage(id string, challenge []byte, digest, accessWord, dura
 		msg = append(msg, 0)
 	}
 	return msg
+}
+
+// PasskeyApproveChallenge is the challenge a passkey signs to approve a
+// request: a SHA-256 over the request, its own challenge, the facts digest,
+// the access and the duration -- what TouchIDApproveMessage carries for a
+// Touch ID key -- so an assertion cannot be lifted onto another duration,
+// other facts or another request. It is 32 bytes, the size the passkey
+// package requires of every challenge.
+func PasskeyApproveChallenge(id string, challenge []byte, digest, accessWord, duration string) []byte {
+	h := sha256.New()
+	h.Write([]byte("seamless passkey approval v1\x00"))
+	for _, part := range [][]byte{[]byte(id), challenge, []byte(digest), []byte(accessWord), []byte(duration)} {
+		h.Write(part)
+		h.Write([]byte{0})
+	}
+	return h.Sum(nil)
 }
 
 // Approve is the approve core: every path ends here. It checks the facts
@@ -659,8 +757,14 @@ func (s *Service) prove(ctx context.Context, a store.AccessApproval, facts Facts
 		for i, r := range rows {
 			allowed[i] = ToPasskey(r)
 		}
-		used, err := s.cfg.Passkeys.FinishAssertion(a.Challenge, allowed, d.Proof.Assertion)
+		// The assertion signs the decision, not only the request: the
+		// duration as submitted and the facts as they stand now.
+		binding := PasskeyApproveChallenge(a.ID, a.Challenge, facts.Digest, facts.Access, d.Duration)
+		used, err := s.cfg.Passkeys.FinishAssertion(binding, allowed, d.Proof.Assertion)
 		if err != nil {
+			if signedOtherwise(a, facts, d) {
+				return "", fmt.Errorf("%w: %w", ErrFactsChanged, ErrBindingChanged)
+			}
 			return "", err
 		}
 		row, ok := rowFor(rows, used.ID)
@@ -687,6 +791,28 @@ func (s *Service) prove(ctx context.Context, a store.AccessApproval, facts Facts
 	default:
 		return "", ErrNoProof
 	}
+}
+
+// signedOtherwise reports whether a passkey assertion that failed against
+// decision d's binding was made for this request with another duration, or
+// over its bare challenge (an older daemon's page): a decision changed after
+// it was signed, which is refused as changed facts rather than as a bad
+// passkey. Anything else -- another request's assertion, a forged or
+// unreadable one -- is not, and keeps the passkey's own refusal.
+func signedOtherwise(a store.AccessApproval, facts Facts, d Decision) bool {
+	got, err := passkey.AssertionChallenge(d.Proof.Assertion)
+	if err != nil {
+		return false
+	}
+	if bytes.Equal(got, a.Challenge) {
+		return true
+	}
+	for _, other := range Durations {
+		if other != d.Duration && bytes.Equal(got, PasskeyApproveChallenge(a.ID, a.Challenge, facts.Digest, facts.Access, other)) {
+			return true
+		}
+	}
+	return false
 }
 
 // Deny ends a pending request without a lease. by names who decided (a
@@ -724,24 +850,46 @@ func (s *Service) RevokeSession(ctx context.Context, sessionID string) (int64, e
 	return n, nil
 }
 
-// AssertionOptions returns the navigator.credentials.get options that
-// approve request id with a passkey: its own challenge, every enrolled
-// passkey allowed, user verification required.
-func (s *Service) AssertionOptions(ctx context.Context, id string) ([]byte, error) {
+// AssertionOptionsFor returns the navigator.credentials.get options that
+// approve pending request id with a passkey for duration, over the facts
+// whose digest the page shows: every enrolled passkey allowed, user
+// verification required, and the challenge PasskeyApproveChallenge, so the
+// assertion signs the duration and the facts as well as the request. A
+// duration that is not one of Durations is ErrDuration, and a digest that is
+// not the facts' as they stand now is ErrFactsChanged: the options are issued
+// only for a decision the owner is looking at.
+func (s *Service) AssertionOptionsFor(ctx context.Context, id, duration, digest string) ([]byte, error) {
+	const op = "approval.AssertionOptionsFor"
+	if err := refuseRestricted(ctx); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
 	if !s.PasskeysOn() {
-		return nil, fmt.Errorf("approval.AssertionOptions: %w", ErrPasskeysOff)
+		return nil, fmt.Errorf("%s: %w", op, ErrPasskeysOff)
+	}
+	if _, err := s.LeaseLength(duration); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	a, err := store.AccessApprovalByID(ctx, s.cfg.DB, id)
 	if err != nil {
-		return nil, fmt.Errorf("approval.AssertionOptions: %w", err)
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	if a.Status != store.ApprovalPending {
+		return nil, fmt.Errorf("%s: %w: %s is %s", op, store.ErrApprovalNotPending, ShortID(a.ID), a.Status)
+	}
+	facts, err := s.factsOf(ctx, a)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	if digest == "" || digest != facts.Digest {
+		return nil, fmt.Errorf("%s: %w", op, ErrFactsChanged)
 	}
 	creds, err := s.passkeys(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("approval.AssertionOptions: %w", err)
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	opts, err := s.cfg.Passkeys.BeginAssertion(a.Challenge, creds)
+	opts, err := s.cfg.Passkeys.BeginAssertion(PasskeyApproveChallenge(a.ID, a.Challenge, facts.Digest, facts.Access, duration), creds)
 	if err != nil {
-		return nil, fmt.Errorf("approval.AssertionOptions: %w", err)
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	return opts, nil
 }

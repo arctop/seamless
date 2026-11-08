@@ -3,13 +3,14 @@ import Foundation
 
 /// The bytes the helper's key signs, byte for byte what the daemon verifies
 /// (internal/approval: TouchIDApproveMessage in request.go,
-/// TouchIDEnrollMessage in enroll.go, store.NormalizeEnrollCode in
-/// internal/store/approvers.go). The Secure Enclave signs SHA-256 of them
-/// (ecdsaSignatureMessageX962SHA256), and the daemon's VerifyTouchID hashes
-/// the same way.
+/// TouchIDEnrollMessage and TouchIDReplaceMessage in enroll.go,
+/// store.NormalizeEnrollCode in internal/store/approvers.go). The Secure
+/// Enclave signs SHA-256 of them (ecdsaSignatureMessageX962SHA256), and the
+/// daemon's VerifyTouchID hashes the same way.
 public enum Messages {
     static let approveTag = "seamless touchid approval v1"
     static let enrollTag = "seamless touchid enrollment v1"
+    static let replaceTag = "seamless touchid replacement v1"
 
     /// An enrollment code as typed that holds something other than ASCII. A
     /// minted code is 16 ASCII symbols, so such a code never matches one; the
@@ -58,6 +59,20 @@ public enum Messages {
         msg.append(0)
         msg.append(contentsOf: SHA256.hash(data: Data(normalized.utf8)))
         msg.append(publicKey)
+        return msg
+    }
+
+    /// TouchIDReplaceMessage(code, publicKey, retiredID): what an earlier key
+    /// of this Mac signs so that the enrollment of the new key `publicKey`
+    /// retires its credential `retiredID` on the daemon. The tag and a NUL,
+    /// SHA-256 of the normalized code, the new raw public key, then the id.
+    public static func touchIDReplaceMessage(code: String, publicKey: Data, retiring retiredID: String) throws -> Data {
+        let normalized = try normalizeEnrollCode(code)
+        var msg = Data(replaceTag.utf8)
+        msg.append(0)
+        msg.append(contentsOf: SHA256.hash(data: Data(normalized.utf8)))
+        msg.append(publicKey)
+        msg.append(Data(retiredID.utf8))
         return msg
     }
 

@@ -50,8 +50,13 @@ public enum Reason {
     }
 
     /// The enrollment's prompt: the key is about to sign its first message.
-    public static func enrollment(account: String) -> String {
-        "add this Mac's Touch ID key as an approver for the Seamless daemon running as " + Text.clean(account, max: 32)
+    /// `replacing` is whether this Mac's earlier key signs too, to be retired.
+    public static func enrollment(account: String, replacing: Bool = false) -> String {
+        var s = "add this Mac's Touch ID key as an approver for the Seamless daemon running as " + Text.clean(account, max: 32)
+        if replacing {
+            s += ", in place of the key this Mac enrolled before"
+        }
+        return s
     }
 
     /// `who` names the asking agent by the best name the daemon gives: the

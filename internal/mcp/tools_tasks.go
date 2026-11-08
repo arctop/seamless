@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -248,13 +250,14 @@ func (s *Server) handleTasksReady(ctx context.Context, req mcp.CallToolRequest) 
 		for _, bl := range b.Blockers {
 			// A blocker from a project the caller may not read is withheld --
 			// its title is that project's content, and its id the handle to it
-			// -- while the entry itself stays, so the count is true.
+			// -- while the entry itself stays, so the count is true. Only the
+			// owner, kept out by a lock alone, is told which locked project.
 			ok, err := readable(bl.ProjectSlug)
 			if err != nil {
 				return errResult("tasks_ready", err)
 			}
 			if !ok {
-				blockers = append(blockers, map[string]any{withheldKey: unreachableBlocker})
+				blockers = append(blockers, map[string]any{withheldKey: withheldBlocker(ctx, lockedBlockerProject(ctx, bl.ProjectSlug))})
 				continue
 			}
 			blockers = append(blockers, map[string]any{"id": bl.ID, "title": bl.Title, "status": string(bl.Status)})
@@ -493,9 +496,11 @@ func (s *Server) withholdTask(ctx context.Context, project string, t core.Task) 
 	return out
 }
 
-// unreachableBlocker is what tasks_ready shows, for every caller, in place of
-// a blocker that lies in a project the caller may not read. The words are the
-// ones a restricted account (peer_auth.restricted) has always been shown.
+// unreachableBlocker is what tasks_ready shows in place of a blocker that lies
+// in a project the caller may not read. The words are the ones a restricted
+// account (peer_auth.restricted) has always been shown, and every caller gets
+// them but the owner at a locked project it holds no lease on
+// (lockedBlockerProject, withheldBlocker).
 const unreachableBlocker = "a task in a project this connection may not reach blocks this one"
 
 // withheldBlockers is tasks_claim's "task blocked" refusal's words for the n
@@ -505,6 +510,81 @@ func withheldBlockers(n int) string {
 		return "a task in a project this connection may not reach"
 	}
 	return fmt.Sprintf("%d tasks in projects this connection may not reach", n)
+}
+
+// withheldBlocker is tasks_ready's words for one blocker the caller may not
+// read. locked is the locked project lockedBlockerProject named for it: the
+// owner is told which, and how to reach it -- "a task in locked project
+// acme-finance blocks this one: bind to acme-finance, or approve a request for
+// it". With locked "" it is unreachableBlocker, as before.
+func withheldBlocker(ctx context.Context, locked string) string {
+	if locked == "" {
+		return unreachableBlocker
+	}
+	return "a task in locked project " + locked + " blocks this one: " + lockedBlockerRemedy(ctx, locked)
+}
+
+// lockedBlockerRemedy is how the owner reaches a locked project's blocker
+// from this connection. On the peer_auth socket it is the owner's approval of
+// a request -- for a session bound there, since a locked project is normally
+// confidential and reads only from its own sessions. The TCP connection never
+// reaches a locked project (access.View.Refusal says why), so its remedy is
+// the socket.
+func lockedBlockerRemedy(ctx context.Context, project string) string {
+	if !access.PeerAuthenticated(ctx) {
+		return "the TCP connection never reaches a locked project, so work in it from an agent session on the " +
+			"peer_auth Unix socket"
+	}
+	return "bind to " + project + ", or approve a request for it"
+}
+
+// lockedBlockersWithheld is tasks_claim's "task blocked" refusal's words for
+// the blockers it may not name, and their remedy. byLocked counts the ones in
+// each locked project the owner is told about (lockedBlockerProject), named
+// with their count and never an id; generic counts the rest, in the words
+// every caller has always had. The remedy is "" with nothing named.
+func lockedBlockersWithheld(ctx context.Context, byLocked map[string]int, generic int) (withheld, remedy string) {
+	projects := make([]string, 0, len(byLocked))
+	for p := range byLocked {
+		projects = append(projects, p)
+	}
+	slices.Sort(projects)
+	parts := make([]string, 0, len(projects)+1)
+	remedies := make([]string, 0, len(projects))
+	for _, p := range projects {
+		if n := byLocked[p]; n == 1 {
+			parts = append(parts, "a task in locked project "+p)
+		} else {
+			parts = append(parts, fmt.Sprintf("%d tasks in locked project %s", n, p))
+		}
+		remedies = append(remedies, lockedBlockerRemedy(ctx, p))
+	}
+	if generic > 0 {
+		parts = append(parts, withheldBlockers(generic))
+	}
+	if len(remedies) > 0 {
+		remedy = strings.Join(slices.Compact(remedies), "; ") + "."
+	}
+	return strings.Join(parts, ", "), remedy
+}
+
+// lockedBlockerProject is the locked project (peer_auth.locked) a blocker
+// the caller may not read is named by, or "" for the generic words. It names
+// one only when the blocker's project is locked and this connection holds no
+// lease on it (access.Locked), and the caller is the owner's own OS account:
+// a locked project's name is already listed to the owner -- project_list,
+// scope errors and recall name it -- so naming it says nothing new, and its
+// remedy is the owner's to give. Everyone else keeps the generic words: a
+// restricted account (its refusals never tell a closed project from a missing
+// one), and every caller kept out of a blocker by an isolation fence alone --
+// a confidential or sealed project that is not locked, or a locked one this
+// connection holds a lease on -- since naming that project would leak across
+// the fence (project-isolation-fence-contract).
+func lockedBlockerProject(ctx context.Context, project string) string {
+	if access.AccountOf(ctx) != "" || !access.Locked(ctx, project) {
+		return ""
+	}
+	return project
 }
 
 // depsWithheldKey is the count a task answer carries in place of the
@@ -611,9 +691,11 @@ func (s *Server) fenceWrittenTaskDeps(ctx context.Context, t core.Task, out map[
 
 // fenceBlockedClaim withholds, from tasks_claim's "task blocked" refusal, the
 // blockers its caller may not read: the refusal names the rest as before and
-// counts these. Any other error, and a refusal whose blockers are all
-// readable, is returned unchanged. A lookup that fails withholds every
-// blocker: the refusal's cause stays true, and nothing it cannot vouch for is
+// counts these -- by locked project, with the remedy on a second line, for
+// the owner at a locked project it holds no lease on (lockedBlockerProject).
+// Any other error, and a refusal whose blockers are all readable, is returned
+// unchanged. A lookup that fails withholds every blocker in the generic
+// words: the refusal's cause stays true, and nothing it cannot vouch for is
 // named.
 func (s *Server) fenceBlockedClaim(ctx context.Context, err error) error {
 	var blocked *store.TaskBlockedError
@@ -622,22 +704,29 @@ func (s *Server) fenceBlockedClaim(ctx context.Context, err error) error {
 	}
 	readable := s.taskReader(ctx)
 	kept := make([]core.Task, 0, len(blocked.Blockers))
+	byLocked := map[string]int{}
+	generic := 0
 	for _, b := range blocked.Blockers {
 		ok, rerr := readable(b.ProjectSlug)
 		if rerr != nil {
 			s.logger.Warn("mcp: claim refusal fence", "task", blocked.TaskID, "error", rerr)
-			kept = kept[:0]
+			kept, byLocked, generic = kept[:0], map[string]int{}, len(blocked.Blockers)
 			break
 		}
-		if ok {
+		switch locked := lockedBlockerProject(ctx, b.ProjectSlug); {
+		case ok:
 			kept = append(kept, b)
+		case locked != "":
+			byLocked[locked]++
+		default:
+			generic++
 		}
 	}
-	n := len(blocked.Blockers) - len(kept)
-	if n == 0 {
+	if len(kept) == len(blocked.Blockers) {
 		return err
 	}
-	return &store.TaskBlockedError{TaskID: blocked.TaskID, Blockers: kept, Withheld: withheldBlockers(n)}
+	withheld, remedy := lockedBlockersWithheld(ctx, byLocked, generic)
+	return &store.TaskBlockedError{TaskID: blocked.TaskID, Blockers: kept, Withheld: withheld, Remedy: remedy}
 }
 
 // taskByIDFor is store.TaskByID for the caller in ctx. A restricted account

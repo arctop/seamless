@@ -34,9 +34,12 @@ func (s *Service) grantRequest(w http.ResponseWriter, r *http.Request, project, 
 	if err != nil {
 		msg := err.Error()
 		var anchor *approval.AnchorError
+		var live *approval.AccessLiveError
 		switch {
 		case errors.As(err, &anchor):
 			msg = anchor.Error()
+		case errors.As(err, &live):
+			msg = live.Answer()
 		case errors.Is(err, approval.ErrNotConfidential) && s.cfg.Approvals != nil:
 			msg = "that project is neither locked nor confidential: nothing to request"
 		case errors.Is(err, approval.ErrNotConfidential):

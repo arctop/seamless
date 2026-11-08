@@ -6323,8 +6323,10 @@ the account cannot traverse yours.
 
 **Everything it writes is labeled.** Memories, notes, tasks and their updates,
 plan steps, sessions and their findings, and trials record the account that
-wrote them, and every surface shows it: "written by account _example_agent" in
-briefings, recall, tool results and the console. Your own writes look exactly as
+wrote them, and every surface shows it: "[written by account _example_agent]"
+at the end of briefing, prompt recall (`<seam-recall>`), A2A and
+`seam task list` lines, an `account` field in tool results, and a "written by
+account _example_agent" chip on console rows. Your own writes look exactly as
 they always have.
 
 **Binding rules are proposals.** A constraint, convention, protocol or stage
@@ -8075,6 +8077,14 @@ the [MCP API overview](/reference/mcp/).
 every other install neither lists nor accepts it. It files the same request a
 call refused at the lock files by itself, with an optional reason of up to 200
 characters that the owner sees quoted and labeled as the agent's own words.
+With read grants on (`isolation.requests`), it also asks for a read of a
+confidential project no lock covers (kind `grant`, with `from`), the request a
+read refused at the project's fence files; with them off, such a project is
+not locked and nothing is filed.
+
+An agent that already holds the access it asks for is answered
+`status: approved` with `open_until`, and nothing is filed, until 30 minutes
+before it ends.
 
 When the agent's client supports MCP elicitation (Claude Code does), the
 request opens an approval dialog in the session: the owner sees the daemon's
@@ -8084,10 +8094,15 @@ could answer it - the proof is: the Touch ID helper's signature or the
 passkey's assertion, checked by the daemon. The call waits up to two minutes
 for it, then answers with the request id; the owner can still decide later
 with `seam approve`, or with a passkey on the request's console page when one
-is enrolled. A call refused at a lock opens the same dialog. Once approved,
-retry the call. A call whose asking process is not an agent's (a tmux pane, a
-terminal, an ssh login) files nothing and says why: an approval would cover
-every program that process started.
+is enrolled. Choosing a passkey in the dialog opens the request's page for the
+duration chosen there; the passkey signs it with the facts. Where a passkey is
+the only way the dialog can finish, the dialog is that page, which asks the
+duration. Cancelling the Touch ID prompt ends the wait at once
+(`dialog: touchid_cancelled`; `touchid_closed` when the helper closed without
+approving for another reason), the request still pending. A call refused at a
+lock opens the same dialog. Once approved, retry the call. A call whose asking
+process is not an agent's (a tmux pane, a terminal, an ssh login) files nothing
+and says why: an approval would cover every program that process started.
 
 ## capture_url is SSRF-safe on purpose
 
@@ -8211,7 +8226,7 @@ Fetch a web page (SSRF-guarded: private/loopback addresses are rejected) and sav
 
 ## access_request {#access_request}
 
-Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth.locked), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to two minutes for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then.
+Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth.locked), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to two minutes for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then. An agent that already holds the access it asks for is answered with it, and nothing is filed, until 30 minutes before it ends. With read grants on (isolation.requests), it also asks for a read of a confidential project no lock covers.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -8270,6 +8285,12 @@ lease. Where such a task blocks another, `tasks_ready` lists the blocker as
 only the ids the caller may read, and `depends_on_withheld` counts the rest; and
 the claim's "task blocked" refusal names the readable blockers and counts the
 others. With nothing isolated or locked, every answer reads as it always has.
+
+The owner's own connection at a locked project it holds no lease on is told
+which one: the withheld entry reads `a task in locked project acme-finance
+blocks this one: <remedy>`, and the claim refusal names the project, with a
+`Remedy:` line. Every other caller, and every blocker an isolation fence alone
+withholds, gets the generic words.
 
 | Call | Refuses when |
 |---|---|
@@ -8815,10 +8836,13 @@ seam ready [--project P] [--blocked] [--plan S] [--json]
 Calls `tasks_ready` and lists the actionable queue by short id and title.
 `--blocked` additionally lists blocked tasks, each followed by its blockers and
 their statuses; a blocker in a project this connection may not read prints the
-server's one-line notice in its place. `--plan S` shows that plan's step tasks
-instead of the default queue - plan steps are excluded from the default view.
-Prints
-`ready: (nothing actionable)` when the queue is empty.
+server's one-line notice in its place. For a blocker in a locked project you
+hold no lease on, the notice names it: `a task in locked project acme-finance
+blocks this one: bind to acme-finance, or approve a request for it` (over TCP,
+the remedy is an agent session on the `peer_auth` socket). `--plan S` shows
+that plan's step tasks instead of the default queue - plan steps are excluded
+from the default view. Prints `ready: (nothing actionable)` when the queue is
+empty.
 
 ### seam task list {#seam_task_list}
 
@@ -8965,6 +8989,16 @@ dialog inside the agent's session, confirmed with Touch ID (`seam touchid
 enroll`) or a passkey. These commands talk to the console's `/console/access`
 routes, which answer `no project is locked` while the daemon locks nothing.
 
+The console-backed commands name the lock too. For an item in a locked project
+your tree holds no lease on, `seam plan show|check|approve` and
+`seam sessions <id>` print the same two lines a tool-backed command prints,
+the rule and then the remedy, instead of `not found`. `seam plan list`,
+`seam sessions` and `seam proposals` end with one line naming the locked
+projects they left out, `(not shown: locked projects acme-finance,
+example-legal)`: names only, never a count. With `--project` (`seam plan
+list`, `seam proposals`), only that project is named, when it is locked. Their
+`--json` answers carry the same names as `locked`.
+
 ### seam access request {#seam_access_request}
 
 ```bash
@@ -8986,11 +9020,16 @@ or with a passkey: https://seamless.example.org/console/access/01K...
 
 The second line appears only when a passkey can approve the request there:
 passkeys are set up and at least one is enrolled. Asking again while a request
-is pending answers with that same request; a request from an agent that
-already holds a lease is a `refresh`. `--json` prints the console's answer as
-received ([JSON output](#json-output)). The console's refusal is printed as it
-is: the project is not locked, the connection has no agent process the daemon
-could verify, or the process asking is not an agent's (a shell, a terminal, a
+is pending answers with that same request. An agent that already holds the
+project's lease (or, with read grants on, a live read grant from its project)
+is answered with it, and nothing is filed, until 30 minutes before it ends,
+when the expiry notices start; from then on asking again files a new approval
+(a `refresh` of a lease, or a new read grant request). `--json` prints the
+console's answer as received ([JSON output](#json-output)). The console's
+refusal is printed as it is: the project is not locked; the project is already
+open to this agent until `HH:MM` (a grant: already readable from its project),
+so nothing was filed; or the connection has no agent process the daemon could
+verify, or the process asking is not an agent's (a shell, a terminal, a
 multiplexer such as tmux, or a login process), so nothing was filed - run it
 from the agent's own shell.
 
@@ -8998,33 +9037,45 @@ from the agent's own shell.
 
 ```bash
 seam approve [--for DURATION] [<request>]
-seam approve --passkey [<request>]
+seam approve --passkey [--for DURATION] [<request>]
 seam approve --watch
 ```
 
 The owner's terminal path. It needs a terminal on both stdin and stdout and
-refuses otherwise: an agent cannot use it. `<request>` is the short id
+refuses otherwise, in one line naming the other ways: an agent asks with
+`seam access request <project>`; the owner decides in their own terminal, or
+with Touch ID or a passkey where one is enrolled. `<request>` is the short id
 (`R-7F3K`) or the full id; without one, `seam approve` lists what is waiting
 (short id, project, session, warning count, and when each stops waiting),
 takes the only request, or asks which one by number or short id. With nothing
-waiting it prints `Nothing is waiting.`
+waiting it prints `Nothing is waiting: no access request is pending (seam
+approve --watch prints each new one).`
+
+A request no longer pending is refused in one line that says what became of
+it: `R-7F3K expired at 14:05 without a decision: nothing to decide (the agent
+asks again with its next call to example-finance)`, `R-7F3K was denied: ...`,
+`R-7F3K is already approved: nothing to decide`.
 
 It then shows the request's facts - the daemon's warnings first, most serious first, each on its
 own line behind `!`, then the project with its isolation and access, the
+agent the daemon names (`Claude Code 2.1.319`) when it names one, the
 asking program with its pid and uid, the session and model, the working
 directory, the agent's reason (quoted, and labeled as the agent's own words),
-whether this is a first request or a refresh, and until when it waits. Only
-the warnings are colored, and not with `NO_COLOR` set or `TERM=dumb`. Every
-value is printed with control characters escaped, so nothing an agent wrote
-can repaint the terminal.
+whether this is a first request or a refresh, and until when it waits. The
+warnings are indented like the facts, and every value lines up in one column.
+Only the warnings are colored, and not with `NO_COLOR` set or `TERM=dumb`.
+Every value is printed with control characters escaped, so nothing an agent
+wrote can repaint the terminal.
 
-Next it asks for the duration - `session` (the default: until the asking
-session ends, at most `peer_auth.max_lease`), `1h` or `4h` - unless `--for`
-names one; `--for` takes only a duration the daemon offers. Last it asks to
-confirm:
+Next it lists the durations the daemon offers, numbered (`session`, the
+default: until the asking session ends, at most `peer_auth.max_lease`; `1h`;
+`4h`), and takes the number or the name; Enter takes the default; `--for`
+skips the question, and takes only a duration the daemon offers. Then it says
+in one line what an approval grants, and asks:
 
 ```text
-Approve R-7F3K (example-finance, read-write, until the session ends, at most 8h)? [y/N/d=deny]
+If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance until the session ends, at most 8h.
+Approve R-7F3K? [y/N/d=deny]
 ```
 
 `y` approves and `d` denies; any other answer prints `Nothing changed.` and
@@ -9037,11 +9088,17 @@ sudo -k -u _seamless env SEAMLESS_CONFIG=<config> <seamlessd> approve <id> --for
 sudo -k -u _seamless env SEAMLESS_CONFIG=<config> <seamlessd> approve <id> --deny
 ```
 
+Before sudo runs it says what the prompt is for (`sudo asks for your Touch ID
+or password next: it commits the approval as _seamless.`), unless the probe
+below found that sudo asks for nothing.
+
 `sudo -k` asks for your Touch ID or password every time and leaves no cached
 ticket behind; that authentication is the proof, not `seam approve`. The
 command runs on your terminal, so the prompt shows there, and `seamlessd`'s
-own answer (`Approved R-7F3K: example-finance, read and write, ...`) is what
-you read; when it fails, `seam approve` exits 1. The digest is that of the
+own answer (`Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may read and
+write example-finance until 14:53 PST.`) is what you read; when it fails,
+`seam approve` says `the approval of R-7F3K did not complete: nothing was
+approved (sudo exited with status 1)` and exits 1. The digest is that of the
 facts you were shown: when they changed in the meantime, the approval is
 refused and you look again.
 
@@ -9058,14 +9115,21 @@ the command points at the request's passkey page instead.
 
 `--passkey` opens the request's passkey page (the `page` the daemon names) in
 the default browser - `open` on macOS, `xdg-open` on Linux, `rundll32` on
-Windows - or prints the address when no browser could be opened. A daemon
-that offers no passkey approval names no page, and the command says so.
+Windows - or prints the address when no browser could be opened. With `--for`
+(a duration the daemon offers), the page opens with it chosen
+(`/console/access/<id>?for=1h`): it shows that duration read-only, with a link
+to choose another; without `--for`, the page asks. The passkey signs the
+duration with the facts shown, so its approval binds both. A daemon that offers
+no passkey approval names no page, and the command says so.
 
 `--watch` polls the pending list every 3 seconds, prints each new request once
-(with its warnings and the `seam approve` line to decide it), and raises a
-notification - `osascript` on macOS, a terminal bell elsewhere - whose text is
-the short id and project only, never the agent's reason. Ctrl-C ends it. It
-decides nothing; it takes no request, `--for` or `--passkey`.
+(with its warnings and `Claude Code asks; decide it with: seam approve
+R-7F3K`), and raises a notification - `osascript` on macOS, titled `Seamless
+access request`; a terminal bell elsewhere - whose text names the agent
+without its version (`An agent` when the daemon names none), the project and
+the command (`Claude Code asks for example-finance: seam approve R-7F3K`),
+never the agent's reason. Ctrl-C ends it. It decides nothing; it takes no
+request, `--for` or `--passkey`.
 
 Exit status: 0 when a request was approved or denied, when nothing changed,
 and when nothing is waiting; 1 on any error, including a request that is no
@@ -9092,28 +9156,41 @@ must also pass Gatekeeper. When `seam` itself is unsigned (a `go install`),
 a release asset is held to the team that signed it, and a local build's team
 is shown for you to confirm. It is installed at
 `~/Applications/Seamless Approve.app`, replacing an existing copy only after
-a y/N.
+a y/N. A local build given with `--app` is checked first, so a bad one is
+refused before anything is asked; if you then keep the installed copy, `seam`
+says the `--app` build was not used and enrolls with the installed app.
 
-It then prints the command that mints a one-time enrollment code as the
-daemon's account:
+It then opens the app at once, whose dialog waits for the code, and prints the
+command that mints a one-time enrollment code as the daemon's account, to run
+in another terminal:
 
 ```bash
 sudo -k -u _seamless env SEAMLESS_CONFIG=<config> <seamlessd> approvers enroll-code touchid
 ```
 
-and opens the app, which asks for the code in its own dialog, creates its key
-(one touch) and registers it. The key lives in the Secure Enclave, in a
-keychain group only the signed app can use, and needs your presence - finger,
-Apple Watch or login password - for every approval. `seam touchid enroll`
-finishes by confirming that the daemon lists the new key. `--name` labels it
-(default `Touch ID on <host>`; 1-64 printable characters, not starting with
-`-`).
+Type the code into the app's dialog: it creates its key (one touch) and
+registers it, while the first terminal waits for the app to close. The key
+lives in the Secure Enclave, in a keychain group only the signed app can use,
+and needs your presence - finger, Apple Watch or login password - for every
+approval. `seam touchid enroll` finishes by confirming that the daemon lists
+the new key. `--name` labels it (default `Touch ID on <host>`; 1-64 printable
+characters, not starting with `-`).
+
+Enrolling the same Mac again replaces its key: the app deletes the earlier key
+from the keychain, and that key signs its own retirement, so the daemon removes
+its credential in the same transaction that stores the new one, and
+`seam touchid enroll` names the key it retired. Only a credential whose own key
+signs is retired, so another Mac's Touch ID key and a passkey are never
+removed this way. If the earlier key does not sign (its prompt is cancelled),
+the daemon keeps it, and the app's closing alert gives the
+`seamlessd approvers remove` command for it.
 
 Once enrolled, accepting an access request's dialog with Touch ID opens the
 app for that request: it reads the request's facts from the daemon itself,
 shows them in the Touch ID prompt, and signs over the request and the
 duration you chose. A Touch ID approval is accepted on the `peer_auth` socket
-only.
+only. If you cancel the Touch ID prompt, the agent's waiting call answers at
+once that Touch ID was cancelled and the request is still pending.
 
 ### seam touchid status {#seam_touchid_status}
 
@@ -10050,7 +10127,9 @@ can approve an agent's access to a locked project (`peer_auth.locked`, see the
 database directly, so run it as the daemon's own account, for example
 `sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml
 seamlessd approvers list`. Becoming that account is the proof: no route, over
-the socket or with the TCP key, can mint a code or remove a credential.
+the socket or with the TCP key, can mint a code or remove a credential, except
+that a Mac re-enrolling with `seam touchid enroll` retires its own earlier
+Touch ID key, which signs for it.
 
 - `enroll-code` mints a one-time enrollment code for one kind of credential. It
   works once, for 10 minutes; only its hash is stored. For a passkey, open the
@@ -10066,7 +10145,10 @@ the socket or with the TCP key, can mint a code or remove a credential.
   else's hands.
 
 With no credential enrolled, `seamlessd doctor` warns while a project is
-locked: only the terminal path can approve then.
+locked: only the terminal path can approve then. Both doctor and `list` say how
+to enroll one: a code from `enroll-code passkey`, run as the daemon's account,
+and, on a Mac whose daemon serves the `peer_auth` socket, `seam touchid enroll`
+in your own terminal.
 
 ## seamlessd approve {#seamlessd_approve}
 
@@ -10091,6 +10173,17 @@ same agent, a mark on the session), the approval is refused and you look
 again. `--deny` closes the request; the project stays locked for that
 session. A request naming a shell, a terminal, a multiplexer or a login
 process (one an older release filed) is never approved: deny it.
+
+It answers in one line: `Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may
+read and write example-finance until 14:53 PST.` (`until the session ends, at
+the latest ...` for `--for session`; a read grant names the asking project,
+and says the content may be copied into its memories), or `Denied R-7F3K:
+example-finance stays locked for that session.` When nothing changed it exits
+1 and says why: the facts changed (`the facts of R-7F3K changed since they were
+shown: run seam approve again and look at them first`), the request expired
+before the decision reached it (`R-7F3K expired at 14:05 PST, before this
+decision: nothing changed ...`), or it was decided meanwhile (`R-7F3K was
+already approved: nothing changed`).
 
 ## seamlessd console-open {#seamlessd_console_open}
 
@@ -11094,6 +11187,19 @@ install order:
 Timeouts are in seconds, Claude Code's unit. Server-side the briefing and recall
 paths are additionally bounded at 2s and the capture paths at 8s, so a slow store
 cannot spend the whole hook budget.
+
+Under `peer_auth`, a `SessionStart` in a locked project's repository answers
+with the locked notice instead of the briefing. The notice gives the lock's
+rule and remedy, and names the access request it files for the session, which
+it records with its name, cwd and model only. The remedy offers Touch ID only
+to Claude Code, the client that shows the approval dialog Touch ID runs in (not
+Codex), and only when a Touch ID key is enrolled. It offers a passkey only when
+one is enrolled, and `seam approve <id>` always. A hook whose agent process is
+one no approval may name - a shell, a terminal, a multiplexer or a login
+process; an agent started straight from a tmux pane names the tmux server -
+records nothing: the notice says why, what to do instead, and `This session is
+not recorded, and Seamless tools cannot read or write <project> from this
+process.`
 
 `SessionStart` is the only hook with a matcher on session sources, and Claude
 Code never fires it for Task subagents - its sources are the main-session ones
@@ -12676,6 +12782,11 @@ by default). The reader carries the task's body, claim and lease state, and
 both dependency directions; **force-release** is the action, and it is the
 owner override - it takes the lock from whoever holds it.
 
+Under `peer_auth.locked`, a task blocked by a task in a locked project you
+haven't unlocked sits in the blocked rail, its blocker named only by project;
+the project workspace's Plans & tasks tab marks such steps blocked and leaves
+them out of the ready queue.
+
 ## Plans
 
 `/console/plans`, `/console/plans/{slug}`
@@ -12891,8 +13002,9 @@ and the sidebar badge counts the proposals.
 
 Elsewhere on the console, a memory, note, task, session or trial that a
 restricted account wrote carries a small "written by account <name>" chip (a
-task the account last changed, "updated by account <name>"); your own items
-show none.
+task the account last changed, "updated by account <name>"), including search
+results, a lab's trial list and the project workspace's tabs; events and a
+session's activity timeline carry none. Your own items show none.
 
 ## Settings
 
@@ -13047,8 +13159,10 @@ session that read outside text, and any supersede or delete of a constraint -
 wait on the [Held](#held) screen instead of landing, and briefing and recall
 lines carry owner-confirmed or agent-written marks. Its card's data line counts
 the writes waiting; turning it off stops screening new writes and releases
-none of them. The [write screening guide](/guides/write-screening/) has the
-screens, the reasons and the events.
+none of them. With restricted local accounts configured, the card says the
+Held screen stays for their proposals and only its screening parts go. The
+[write screening guide](/guides/write-screening/) has the screens, the reasons
+and the events.
 
 **Nothing is ever deleted.** Switching a feature off gates exposure and nothing
 else: the trials stay in the database, its screens answer with a short "switched

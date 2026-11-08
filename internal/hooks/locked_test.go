@@ -362,10 +362,12 @@ func TestLeaseExpiry_HookInjections(t *testing.T) {
 	}
 }
 
-// A SessionStart whose agent process is a broad ancestor -- the hook run by
-// hand from a tmux pane, so the process it names is the tmux server -- files
-// nothing: the notice says why and what to do, and names no request.
-func TestLockedSessionStart_ABroadAnchorFilesNothing(t *testing.T) {
+// A SessionStart whose agent process is a broad ancestor -- an agent started
+// straight from a tmux pane, so the process its hook names is the tmux server
+// -- is refused before anything is recorded (owner decision 2026-11-08): no
+// session, no request, and the notice says why and what to do. A resume of
+// a session an older daemon recorded there is not reactivated either.
+func TestLockedSessionStart_ABroadAnchorRecordsNothing(t *testing.T) {
 	e := newLockHooksWith(t, true, func(db *sql.DB, cfg *Config) {
 		svc := approval.New(approval.Config{DB: db, Events: cfg.Events, Host: localHostName, LeaseCap: 8 * time.Hour, Now: cfg.Now,
 			Programs: func(t access.ProcessToken) string {
@@ -376,35 +378,89 @@ func TestLockedSessionStart_ABroadAnchorFilesNothing(t *testing.T) {
 			}})
 		cfg.Approvals = svc
 	})
+	ctx := context.Background()
 	notice := e.hook("session-start", "", map[string]any{"session_id": "fin-1", "cwd": "/work/finance", "source": "startup"})
 	require.Contains(t, notice, "Seamless: project "+lkFin+" is locked: even the owner's own agents need the owner's "+
 		"approval, and Seamless files no access request for this process: it is tmux, a terminal multiplexer, not an agent")
 	require.Contains(t, notice, "\nRemedy: run the work from an agent session (Claude Code or Codex), which asks for itself")
+	require.Contains(t, notice, "\nThis session is not recorded, and Seamless tools cannot read or write "+lkFin+
+		" from this process.\n</seam-briefing>")
+	require.NotContains(t, notice, "briefing arrives", "no approval can follow")
+	require.NotContains(t, notice, "Seam session:", "no session line: none was recorded")
 	require.Empty(t, lkShortID.FindString(notice), "no request id: none was filed")
+	require.Empty(t, e.pending())
+	_, ok, err := store.AmbientSessionByExternalIdentity(ctx, e.db, ClientClaudeCode.externalIdentity(), "fin-1")
+	require.NoError(t, err)
+	require.False(t, ok, "refused before recording")
+	n, err := events.NewRecorder(e.db).ByKinds(ctx, []core.EventKind{core.EventSessionStarted}, "", "", 10)
+	require.NoError(t, err)
+	require.Empty(t, n, "no session.started event either")
+
+	// A session an older daemon recorded under the same anchor keeps its
+	// state: the resume neither reactivates nor re-stamps it.
+	old, err := core.NewID()
+	require.NoError(t, err)
+	require.NoError(t, store.CreateSession(ctx, e.db, core.Session{ID: old, Name: "cc/older", ProjectSlug: lkFin,
+		Status: core.SessionCompleted, ExternalSessionID: "fin-2", ExternalClient: ClientClaudeCode.externalIdentity(),
+		CWD: "/work/finance", Host: localHostName, Ambient: true, CreatedAt: e.clock(), UpdatedAt: e.clock()}))
+	notice = e.hook("session-start", "", map[string]any{"session_id": "fin-2", "cwd": "/work/finance", "source": "resume"})
+	require.Contains(t, notice, "This session is not recorded")
+	sess := requireAmbientSession(t, e.db, ClientClaudeCode, "fin-2")
+	require.Equal(t, core.SessionCompleted, sess.Status)
+	procs, err := store.SessionAgentProcesses(ctx, e.db, []string{old})
+	require.NoError(t, err)
+	require.Empty(t, procs[old].AgentProcess, "not stamped with the tmux server")
 	require.Empty(t, e.pending())
 }
 
-// The notice offers Touch ID once a key is enrolled, and says where it
-// applies: the approval dialog the agent's client shows.
-func TestLockedSessionStart_OffersTouchIDWhenEnrolled(t *testing.T) {
-	e := newLockHooks(t, true)
-	ctx := context.Background()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-	pub, err := key.PublicKey.Bytes()
-	require.NoError(t, err)
-	code, _, err := store.MintEnrollCode(ctx, e.db, store.ApproverTouchID, e.clock())
-	require.NoError(t, err)
-	d := sha256.Sum256(approval.TouchIDEnrollMessage(code, pub))
-	sig, err := ecdsa.SignASN1(rand.Reader, key, d[:])
-	require.NoError(t, err)
-	_, err = e.svc.EnrollTouchID(ctx, "this Mac", code, pub, sig)
-	require.NoError(t, err)
+// The notice offers Touch ID only to an agent host known to show the approval
+// dialog's form, as MCP offers it only to a form-capable client: Claude Code
+// with a key enrolled; never Codex, whose remedy names the terminal path (and
+// a passkey only when one is enrolled, here none).
+func TestLockedSessionStart_OffersTouchIDOnlyWhereTheDialogShows(t *testing.T) {
+	for _, tc := range []struct {
+		name, client string
+		want         func(short string) string
+		touchID      bool
+	}{
+		{"Claude Code", "", func(short string) string {
+			return "Remedy: access request " + short + " is waiting -- the owner approves it with Touch ID in the " +
+				"approval dialog (where this agent's client shows one), or in their own terminal with `seam approve " + short + "`;"
+		}, true},
+		{"Codex", string(ClientCodex), func(short string) string {
+			return "Remedy: access request " + short + " is waiting -- the owner approves it in their own terminal with " +
+				"`seam approve " + short + "`;"
+		}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newLockHooks(t, true)
+			ctx := context.Background()
+			key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			require.NoError(t, err)
+			pub, err := key.PublicKey.Bytes()
+			require.NoError(t, err)
+			code, _, err := store.MintEnrollCode(ctx, e.db, store.ApproverTouchID, e.clock())
+			require.NoError(t, err)
+			d := sha256.Sum256(approval.TouchIDEnrollMessage(code, pub))
+			sig, err := ecdsa.SignASN1(rand.Reader, key, d[:])
+			require.NoError(t, err)
+			_, err = e.svc.EnrollTouchID(ctx, "this Mac", code, pub, sig)
+			require.NoError(t, err)
 
-	notice := e.hook("session-start", "", map[string]any{"session_id": "fin-1", "cwd": "/work/finance", "source": "startup"})
-	short := lkShortID.FindString(notice)
-	require.NotEmpty(t, short, notice)
-	require.Contains(t, notice, "Remedy: access request "+short+" is waiting -- the owner approves it with Touch ID in the "+
-		"approval dialog (where this agent's client shows one), or in their own terminal with `seam approve "+short+"`;")
-	require.NotContains(t, notice, "passkey")
+			notice := e.hook("session-start", tc.client, map[string]any{"session_id": "fin-1", "cwd": "/work/finance", "source": "startup"})
+			short := lkShortID.FindString(notice)
+			require.NotEmpty(t, short, notice)
+			require.Contains(t, notice, tc.want(short))
+			require.Equal(t, tc.touchID, strings.Contains(notice, "Touch ID"), notice)
+			require.NotContains(t, notice, "passkey")
+			require.Len(t, e.pending(), 1, "the request is filed either way")
+		})
+	}
+}
+
+// formDialogClient is the hook's half of MCP's form-capable check.
+func TestFormDialogClient(t *testing.T) {
+	for _, c := range HookClients {
+		require.Equal(t, c == ClientClaudeCode, formDialogClient(c), c)
+	}
 }

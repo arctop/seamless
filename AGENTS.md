@@ -326,6 +326,11 @@ any of it.
   running it is the proof of being the daemon's account); a later one needs a
   code or an existing passkey's assertion over a challenge binding the new
   credential (`enrollBinding`). Removing and resetting are that command's too.
+  The one exception is a Touch ID re-enrollment: a credential whose own key
+  signs `approval.TouchIDReplaceMessage` (the code's hash, the new key, its id)
+  is retired in the enrollment's transaction (`store.EnrollTouchIDRetiring`).
+  A key retires only itself, never a passkey or another Mac's key; one that
+  does not sign is left for `seamlessd approvers remove`.
   No socket or TCP route may mint a code (the matrix asserts the table stays
   empty). A credential's sign counter is recorded with a compare-and-set
   (`store.RecordApproverUse`), so of two racing assertions only one counts.
@@ -338,10 +343,18 @@ any of it.
   agent-process header), and only when it equals `AgentID()` of a hop in the
   kernel chain. `approval.Approve` is the one approve core: a proof
   (`ProofDaemon` only from `seamlessd approve`, run as the daemon's account
-  and checked by `approverAccountCheck`; a passkey assertion over the
-  request's own challenge; a Touch ID signature over
+  and checked by `approverAccountCheck`; a passkey assertion over
+  `approval.PasskeyApproveChallenge` (the request's challenge, the facts
+  digest, the access and the duration, as a Touch ID key signs them): the
+  passkey page issues options only once the duration is chosen (`?for=`), and
+  the core recomputes the binding from the submitted duration and the facts
+  as they stand; a Touch ID signature over
   `TouchIDApproveMessage`) and the facts digest the owner saw. No route
   constructs `ProofDaemon`. An agent's socket connection may not deny.
+  An asker that already holds what it asks for (its tree's lease, or a read
+  grant from the same project) more than `access.ExpiryWarning` from its end
+  is answered with it (`approval.AccessLiveError`) and files nothing; from the
+  warning on it files a new approval.
   `access_request` (`internal/mcp/access_request.go`) files one explicitly and
   is registered only while peer_auth locks a project
   (`Config.OfferAccessRequest`: the `offerCommits` pattern for a whole tool),
@@ -350,7 +363,9 @@ any of it.
   counts it, and both doctors assert `ToolCountWith(locked)` (seam doctor
   mirrors it as `expectedTools` + `lockedOnlyTool`, pinned by a test). Its
   `reason` never reaches a tool.call event. `seam access request` files one
-  from a shell.
+  from a shell. With `isolation.requests` on, `access_request` asks for the
+  read grant of a confidential project no lock covers, as `seam access
+  request` does.
 - **The in-session approval dialog is a prompt, never a proof**
   (`internal/mcp/elicit.go`). A call on the peer_auth socket that files a
   request (refused at a lock, refused at a confidential fence with a read
@@ -364,13 +379,21 @@ any of it.
   elicitation, so the answer only starts a proof: Touch ID sends
   `core.ApproverNotification` on the call's own reply, which the `seam
   mcp-proxy` bridge swallows and answers by opening the helper app; a passkey
-  sends the request's page as a URL elicitation. Only the approve core
+  sends the request's page as a URL elicitation (with `?for=<duration>` when
+  the form chose one). Only the approve core
   decides. Decline and cancel deny nothing. Without every precondition the
   call answers at once, word for word as before, and there is at most one
   dialog per request per connection. mcp-go v1.1.1 drops a notification
   queued just before a handler returns, so the call stays open `notifyHold`
   after queueing one. The bridge reads stdin on its own goroutine for the same
   feature: the client's answer arrives behind the call that waits on it.
+  The bridge watches the helper it launched through its stderr (`open
+  --stderr` to a FIFO; the exit status never survives LaunchServices) and,
+  when it exits having written its outcome (a silent helper is not
+  reported), posts `notifications/seamless/approver_ended` (request_id,
+  outcome cancelled|closed) on its own MCP session; the daemon takes it only
+  on the socket, from a chain holding the request's process, while that
+  dialog waits, and ends the wait at once. It grants and denies nothing.
 - **The Touch ID approver is opt-in, socket-only, and keychain-bound**
   (`macos/`, `cmd/seam/touchid*.go`, `cmd/seam/approver_app.go`; console
   `approversTouchIDEnroll`, `touchIDProof`). Nothing installs or launches
@@ -383,6 +406,9 @@ any of it.
   certificate leaf[subject.OU]` requirement. An unsigned seam pins a release
   asset to the team that signed it (the Sigstore check vouches for the zip),
   and asks the owner y/N only for a local `--app` build or a kept install.
+  `seam touchid enroll` opens the app at once; its code dialog does not hide
+  on deactivate and floats, since the owner mints the code in another
+  terminal and the LSUIElement app has no Dock or Command-Tab entry.
   Only the macOS seam links the verifier (`touchid_release_darwin.go`, about
   +12 MB); keep `internal/releasesig` out of every file without a darwin
   build tag, or the Linux and Windows seam grow by as much. The key is a Secure Enclave key in the
@@ -413,7 +439,12 @@ any of it.
 - **The locked view at the agent surfaces** (`internal/mcp/locked.go`,
   `internal/hooks/locked.go`). The SessionStart hook in a locked project's
   repository records the session there, metadata only, files its access
-  request and answers with the locked notice (`lockedStart`); hooks treat that
+  request and answers with the locked notice (`lockedStart`) -- unless the
+  agent process it would stamp fails the anchor rule
+  (`approval.Service.JudgeStart`, judged as filing judges a stamped session):
+  then nothing is recorded and the notice says why. The notice offers Touch
+  ID only to Claude Code (`formDialogClient`), as MCP offers it only to a
+  form-capable client (`callWays`). Hooks treat that
   session as `reachLocked` (heartbeat, model, completion; no findings or
   captures). Over MCP it binds nothing (`getBinding`), but `lockedBinding`
   finds it: a call resolving its scope, session or actor through it is refused
@@ -471,7 +502,16 @@ any of it.
   `depends_on` id in a project the caller may not read (`taskReader`, which is
   `store.CanRead` from `callerScope`) is withheld for every caller, the count
   kept (`internal/mcp/tools_tasks.go`; the store's `TaskBlockedError` carries
-  the claim refusal's blockers for it).
+  the claim refusal's blockers for it). The exception is the owner at a locked
+  project it holds no lease on (`mcp.lockedBlockerProject`): the blocker is
+  still withheld, but the words name the locked project and the remedy, and
+  the claim refusal ends in a `Remedy:` line (`TaskBlockedError.Remedy`).
+  Restricted accounts, and blockers an isolation fence alone withholds, keep
+  the generic words. The console does the same on Tasks and the Plans & tasks
+  tab (`markLockedBlockers`, `lockedBlockersOf`, `store.OpenBlockerProjects`
+  on the write handle, slugs only). A console-backed CLI lookup of a locked
+  item answers 403 `{error, locked, project}` in `access.View.Refusal`'s words
+  (`answerLocked`), and lists carry `locked`.
 - **The console reads through `store.OpenView`**: TEMP VIEWs that shadow every
   project-scoped table on a read-only handle. While a project is locked it
   reads through a `store.Views` pool instead (one handle per hidden set),

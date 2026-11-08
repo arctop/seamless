@@ -86,6 +86,10 @@ type sessionsData struct {
 	// while the momentum feature is off -- zero trace, including in the JSON.
 	Calendar template.HTML  `json:"-"`
 	Streak   *captureStreak `json:"captureStreak,omitempty"`
+	// Locked names the locked projects (peer_auth.locked) this request does
+	// not read, whose sessions the list leaves out: names only, never a count.
+	// nil while nothing is locked -- absent from the JSON.
+	Locked []string `json:"locked,omitempty"`
 }
 
 // captureStreak carries the calendar's two quiet numbers: the current run of
@@ -258,6 +262,7 @@ func (s *Service) sessionsList(w http.ResponseWriter, r *http.Request) {
 			Day: dayParam, DayLabel: dayLabel, Retained: retained,
 			Sessions: rows,
 			Calendar: calendar, Streak: streak,
+			Locked: lockedProjects(ctx),
 		},
 	})
 }
@@ -383,6 +388,9 @@ func (s *Service) sessionDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
+		if s.answerLockedSession(w, r, id) {
+			return
+		}
 		s.notFound(w, r, "No session with id "+id+".")
 		return
 	}
@@ -507,6 +515,27 @@ func (s *Service) sessionDetail(w http.ResponseWriter, r *http.Request) {
 		Active: "sessions",
 		Data:   data,
 	})
+}
+
+// answerLockedSession is answerLockedPlan for a session: a JSON lookup of a
+// session in a locked project this request does not read names the lock. It
+// reports whether it answered (a failed lookup as the error it is); nothing
+// runs while nothing is locked.
+func (s *Service) answerLockedSession(w http.ResponseWriter, r *http.Request, id string) bool {
+	ctx := r.Context()
+	if !wantsJSON(r) || len(lockedProjects(ctx)) == 0 {
+		return false
+	}
+	sess, ok, err := store.SessionByID(ctx, s.writeDB(), id)
+	if err != nil {
+		s.serverError(w, r, err)
+		return true
+	}
+	if !ok || !lockedHere(ctx, sess.ProjectSlug) {
+		return false
+	}
+	s.answerLocked(w, r, sess.ProjectSlug)
+	return true
 }
 
 // sessionDuration returns the compact wall-clock span shown on session review

@@ -763,6 +763,53 @@ func TestFeatureCards_RenderOnePerRegistryEntry(t *testing.T) {
 	require.Empty(t, momentum.DataKept, "no reassurance line until the feature owns stored data")
 }
 
+// The screening card says what switching screening off takes away. In an
+// install without restricted accounts that is the Held screen itself, as
+// always. With restricted accounts (peer_auth.restricted) the screen outlives
+// the switch, offered for their proposals alone (heldProposals), so the line
+// names only the screen's screening parts and says the screen stays. No other
+// card changes in either install.
+func TestFeatureCards_ScreeningLineWithRestrictedAccounts(t *testing.T) {
+	const marks = "the owner-confirmed and agent-written marks on briefing and recall lines"
+	for _, tc := range []struct {
+		name       string
+		restricted bool
+		want       string
+	}{
+		{"no restricted accounts", false, "Hides " + marks + " and the Held screen."},
+		{"restricted accounts keep the Held screen", true, "Hides " + marks + " and the Held screen's screening parts " +
+			"(lockdown, the corpus review, drift, session marks, and the writes screening held). " +
+			"The Held screen stays, for restricted accounts' proposals."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, on := range []bool{false, true} {
+				cards := featureCardsFor(config.Features{Screening: on}, navCounts{}, tc.restricted)
+				var screening featureCard
+				for _, c := range cards {
+					if c.Key == string(features.Screening) {
+						screening = c
+					}
+				}
+				require.Equal(t, tc.want, screening.WhenOff, "screening on=%v", on)
+				require.Equal(t, tc.want, screening.WhenOffPlain, "screening has no tools to name")
+			}
+			// Every other card reads as featureCards renders it.
+			plain := featureCards(config.Features{}, navCounts{})
+			for i, c := range featureCardsFor(config.Features{}, navCounts{}, tc.restricted) {
+				if c.Key == string(features.Screening) {
+					continue
+				}
+				require.Equal(t, plain[i], c, c.Key)
+			}
+		})
+	}
+	// featureCards is the no-restricted-accounts rendering, byte for byte.
+	require.Equal(t, featureCards(config.Features{}, navCounts{Held: 2}), featureCardsFor(config.Features{}, navCounts{Held: 2}, false))
+	f, ok := features.Get(features.Screening)
+	require.True(t, ok)
+	require.Equal(t, "Hides "+marks+" and the Held screen.", featureWhenOff(f))
+}
+
 // The surfaces mechanism: a feature whose surfaces live inside existing pages
 // describes them verbatim on its card, ahead of any screens or tools.
 func TestFeatureWhenOff_NamesInPageSurfaces(t *testing.T) {

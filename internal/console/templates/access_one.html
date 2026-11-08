@@ -41,22 +41,41 @@
   <button class="btn" type="submit">Deny</button>
 </form>
 {{else}}
-<form id="access-form" class="access-form" data-id="{{.Request.ID}}" data-digest="{{.Request.Digest}}" data-options="{{printf "%s" .PasskeyOptions}}">
-  <fieldset>
-    <legend>For how long</legend>
-    <label><input type="radio" name="duration" value="session" checked> until this session ends (at most {{.MaxLease}})</label>
-    <label><input type="radio" name="duration" value="1h"> 1 hour</label>
-    <label><input type="radio" name="duration" value="4h"> 4 hours</label>
-  </fieldset>
+<div class="access-decide" data-access-id="{{.Request.ID}}">
+{{if .For}}
+<form id="access-form" class="access-form" data-digest="{{.Request.Digest}}" data-duration="{{.For}}" data-options="{{printf "%s" .PasskeyOptions}}">
+  <p class="access-duration">For how long: <strong>{{.ForWords}}</strong> &middot; <a href="/console/access/{{.Request.ID}}" data-seam-query>choose another duration</a></p>
   {{if and .PasskeyOptions .OnOrigin}}
   <button class="btn primary" id="access-approve" type="submit">{{icon "key-round"}} Approve with a passkey</button>
-  {{else if .PasskeyOptions}}
+  {{else if and .PasskeyReady (not .OnOrigin)}}
+  <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/access/{{.Request.ID}}?for={{.For}}">{{.Origin}}</a>.</p>
+  {{else if .PasskeyReady}}
+  <p class="held-sub">{{icon "triangle-alert"}} The request changed while this page loaded. <a href="/console/access/{{.Request.ID}}?for={{.For}}" data-seam-query>Look at it again</a>.</p>
+  {{else}}
+  <p class="held-sub">No passkey is enrolled here. Approve in your own terminal instead.</p>
+  {{end}}
+  <button class="btn" id="access-deny" type="button">Deny</button>
+</form>
+{{else}}
+<form id="access-choose" class="access-form" method="get" action="/console/access/{{.Request.ID}}" data-seam-query>
+  {{if and .PasskeyReady .OnOrigin}}
+  <fieldset>
+    <legend>For how long</legend>
+    <label><input type="radio" name="for" value="session" checked> until this session ends (at most {{.MaxLease}})</label>
+    <label><input type="radio" name="for" value="1h"> 1 hour</label>
+    <label><input type="radio" name="for" value="4h"> 4 hours</label>
+  </fieldset>
+  <p class="held-sub">The passkey signs the duration you choose, with the facts above.</p>
+  <button class="btn primary" id="access-continue" type="submit">{{icon "key-round"}} Continue to approve with a passkey</button>
+  {{else if .PasskeyReady}}
   <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/access/{{.Request.ID}}">{{.Origin}}</a>.</p>
   {{else}}
   <p class="held-sub">No passkey is enrolled here. Approve in your own terminal instead.</p>
   {{end}}
   <button class="btn" id="access-deny" type="button">Deny</button>
-</form>{{end}}
+</form>
+{{end}}
+</div>{{end}}
 <p class="held-sub">Or, in your own terminal: <code>seam approve {{.Request.Short}}</code></p>
 <p class="held-sub" id="access-status" role="status" aria-live="polite"></p>
 {{else}}
@@ -125,21 +144,23 @@ window.SEAM_NO_LIVE_REFRESH = true; // an approval in progress must not be clobb
     return Promise.resolve(false);
   }
   function enhance() {
-    var form = document.getElementById('access-form');
-    if (!form || form._seamWired) return;
-    form._seamWired = true;
+    var root = document.querySelector('[data-access-id]');
+    if (!root || root._seamWired) return;
+    root._seamWired = true;
     var status = document.getElementById('access-status');
-    function say(msg) { status.textContent = msg; }
-    var id = form.getAttribute('data-id');
-    form.addEventListener('submit', function (e) {
+    function say(msg) { if (status) status.textContent = msg; }
+    var id = root.getAttribute('data-access-id');
+    // The passkey form exists only once the duration is chosen (?for=): its
+    // options sign that duration, so it is the one sent with the assertion.
+    var form = document.getElementById('access-form');
+    if (form) form.addEventListener('submit', function (e) {
       e.preventDefault();
       var raw = form.getAttribute('data-options');
       if (!raw || !window.PublicKeyCredential) { say('This browser cannot use a passkey here.'); return; }
-      var duration = (form.querySelector('input[name="duration"]:checked') || {}).value || 'session';
       say('Follow your browser\'s prompt.');
       navigator.credentials.get({ publicKey: requestOptions(JSON.parse(raw).publicKey) }).then(function (cred) {
         return post('/console/access/' + id + '/approve', {
-          duration: duration, digest: form.getAttribute('data-digest'), response: JSON.stringify(toJSON(cred))
+          duration: form.getAttribute('data-duration'), digest: form.getAttribute('data-digest'), response: JSON.stringify(toJSON(cred))
         });
       }).then(function (done) {
         say('Approved ' + done.approved + ' for ' + done.project + '.');

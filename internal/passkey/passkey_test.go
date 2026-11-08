@@ -600,3 +600,32 @@ func TestVerifier_Concurrent(t *testing.T) {
 		require.NoError(t, err, "job %d", i)
 	}
 }
+
+// AssertionChallenge reads the challenge a response claims it signed, and
+// verifies nothing: it explains a refusal, never makes a decision.
+func TestAssertionChallenge(t *testing.T) {
+	v := newVerifier(t)
+	a := newAuthenticator(t, passkey.AlgES256, true)
+	cred := register(t, v, newOwner(t), a)
+	challenge := newChallenge(t)
+	options, err := v.BeginAssertion(challenge, []passkey.Credential{cred})
+	require.NoError(t, err)
+
+	got, err := passkey.AssertionChallenge(a.get(t, options, testOrigin))
+	require.NoError(t, err)
+	require.Equal(t, challenge, got)
+
+	other := newChallenge(t)
+	got, err = passkey.AssertionChallenge(a.get(t, options, testOrigin, withChallenge(other), withCorruptSignature()))
+	require.NoError(t, err, "a response that would not verify still names its challenge")
+	require.Equal(t, other, got)
+
+	for name, bad := range map[string][]byte{
+		"empty":    nil,
+		"not json": []byte("{"),
+		"too long": []byte(strings.Repeat(" ", passkey.MaxResponseBytes+1)),
+	} {
+		_, err := passkey.AssertionChallenge(bad)
+		require.ErrorIs(t, err, passkey.ErrVerification, name)
+	}
+}

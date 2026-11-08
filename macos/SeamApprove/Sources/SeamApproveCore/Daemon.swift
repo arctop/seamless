@@ -117,10 +117,13 @@ public struct Approved: Decodable {
     }
 }
 
-/// POST /console/approvers/touchid/enroll's answer.
+/// POST /console/approvers/touchid/enroll's answer. `retired` lists the
+/// earlier keys of this Mac the daemon retired with the enrollment; a daemon
+/// from before that field, or one that retired none, sends no list.
 public struct Enrolled: Decodable {
     public var id: String?
     public var name: String?
+    public var retired: [String]?
 }
 
 /// Any route's refusal: {"error": "..."}.

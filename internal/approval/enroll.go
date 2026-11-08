@@ -366,21 +366,81 @@ func TouchIDEnrollMessage(code string, publicKey []byte) []byte {
 // TouchIDEnrollMessage(code, publicKey). The code must be a live touchid code;
 // it is consumed with the insert.
 func (s *Service) EnrollTouchID(ctx context.Context, name, code string, publicKey, signature []byte) (store.ApproverCredential, error) {
+	stored, _, err := s.enrollTouchID(ctx, "approval.EnrollTouchID", name, code, publicKey, signature, nil)
+	return stored, err
+}
+
+// TouchIDReplaceMessage is what an older Touch ID key signs so that the
+// enrollment of the new key retires it: the helper's proof that it holds the
+// older key, and so that both keys belong to this Mac (a Secure Enclave key
+// never leaves the Mac that made it, and only the signed helper reaches it).
+// It binds the enrollment's code (as its hash), the new key, and the id of the
+// credential retired.
+func TouchIDReplaceMessage(code string, publicKey []byte, retiredID string) []byte {
+	sum := sha256.Sum256([]byte(store.NormalizeEnrollCode(code)))
+	msg := []byte("seamless touchid replacement v1\x00")
+	msg = append(msg, sum[:]...)
+	msg = append(msg, publicKey...)
+	return append(msg, retiredID...)
+}
+
+// TouchIDReplacement is an enrolled Touch ID credential that a new key
+// replaces: its id, and its own key's ASN.1 ECDSA signature over
+// TouchIDReplaceMessage.
+type TouchIDReplacement struct {
+	ID        string
+	Signature []byte
+}
+
+// EnrollTouchIDReplacing is EnrollTouchID for a key that replaces this Mac's
+// earlier ones. Each replacement whose own key signed its
+// TouchIDReplaceMessage is retired in the enrollment's transaction, once the
+// new key is stored; one that is not an enrolled Touch ID key, or whose
+// signature does not verify, is left alone and the enrollment goes on, so a
+// key retires only itself: never a passkey, never another Mac's key. It returns
+// the stored key and the ids it retired.
+func (s *Service) EnrollTouchIDReplacing(ctx context.Context, name, code string, publicKey, signature []byte,
+	replaces []TouchIDReplacement) (store.ApproverCredential, []string, error) {
+	return s.enrollTouchID(ctx, "approval.EnrollTouchIDReplacing", name, code, publicKey, signature, replaces)
+}
+
+func (s *Service) enrollTouchID(ctx context.Context, op, name, code string, publicKey, signature []byte,
+	replaces []TouchIDReplacement) (store.ApproverCredential, []string, error) {
 	if err := refuseRestricted(ctx); err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("approval.EnrollTouchID: %w", err)
+		return store.ApproverCredential{}, nil, fmt.Errorf("%s: %w", op, err)
 	}
 	if err := VerifyTouchID(publicKey, TouchIDEnrollMessage(code, publicKey), signature); err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("approval.EnrollTouchID: %w", err)
+		return store.ApproverCredential{}, nil, fmt.Errorf("%s: %w", op, err)
+	}
+	var retire []store.RetiredApprover
+	for _, r := range replaces {
+		old, err := store.ApproverByID(ctx, s.cfg.DB, r.ID)
+		switch {
+		case errors.Is(err, store.ErrApproverNotFound):
+			continue
+		case err != nil:
+			return store.ApproverCredential{}, nil, fmt.Errorf("%s: %w", op, err)
+		case old.Kind != store.ApproverTouchID:
+			continue
+		}
+		if VerifyTouchID(old.PublicKey, TouchIDReplaceMessage(code, publicKey, old.ID), r.Signature) != nil {
+			s.cfg.Logger.Debug("approval: a Touch ID enrollment's request to retire a key does not verify; the key stays", "credential", old.ID)
+			continue
+		}
+		retire = append(retire, store.RetiredApprover{ID: old.ID, PublicKey: old.PublicKey})
 	}
 	keyID := sha256.Sum256(publicKey)
 	cred := store.ApproverCredential{
 		Kind: store.ApproverTouchID, CredentialID: keyID[:], PublicKey: publicKey, Alg: passkey.AlgES256, Name: name,
 	}
-	stored, err := store.EnrollApprover(ctx, s.cfg.DB, cred, code, "", s.cfg.Now())
+	stored, retired, err := store.EnrollTouchIDRetiring(ctx, s.cfg.DB, cred, code, s.cfg.Now(), retire)
 	if err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("approval.EnrollTouchID: %w", err)
+		return store.ApproverCredential{}, nil, fmt.Errorf("%s: %w", op, err)
 	}
-	return stored, nil
+	for _, id := range retired {
+		s.cfg.Logger.Info("approval: a Touch ID enrollment retired the key it replaces", "credential", id, "replaced_by", stored.ID)
+	}
+	return stored, retired, nil
 }
 
 // VerifyTouchID checks an ASN.1 ECDSA P-256 signature by publicKey (a raw

@@ -57,7 +57,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 
 		var out bytes.Buffer
 		require.NoError(t, approve(ctx, d.svc, &out, []string{short, "--for", approval.For1h, "--digest", one.Request.Digest}))
-		require.True(t, strings.HasPrefix(out.String(), "Approved "+short+": "+pmLocked+", read and write, until "), out.String())
+		require.True(t, strings.HasPrefix(out.String(), "Approved "+short+": Claude Code 2.1.319 (pid 200) may read and write "+pmLocked+" until "), out.String())
 		row := d.row(a.ID)
 		require.Equal(t, store.ApprovalApproved, row.Status)
 		require.Equal(t, "daemon-account", row.DecidedBy)
@@ -81,7 +81,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 		page := pmOrigin + "/console/access/" + a.ID
 		require.Contains(t, text, "with a passkey at "+page, "the remedy names the request's own page")
 
-		one, assertion := d.assertion(auth, a.ID)
+		one, assertion := d.assertion(auth, a.ID, approval.For4h)
 		require.Equal(t, page, one.Page)
 		status, body := d.passkeyPost(a.ID, assertion, approval.For4h, one.Request.Digest)
 		require.Equal(t, http.StatusOK, status, body)
@@ -203,7 +203,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 		shown := po.dialogs()
 		require.Len(t, shown, 2, "the form, then the page")
 		require.Equal(t, mcpgo.ElicitationModeURL, shown[1].Params.Mode)
-		require.Equal(t, page, shown[1].Params.URL)
+		require.Equal(t, page+"?for=1h", shown[1].Params.URL, "the page for the duration the form chose")
 		require.Contains(t, text, " The approval dialog stopped waiting at ")
 		require.Empty(t, po.asks, "no Touch ID ask for a passkey")
 		d.nothing("an opened passkey page", map[string]string{ask.RequestID: store.ApprovalPending})
@@ -258,7 +258,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 
 		// Passkey: an authenticator never enrolled answers the page's options
 		// (ignoring their allow list, as a forger would).
-		page, _ := d.assertion(auth, a.ID)
+		page, _ := d.assertion(auth, a.ID, approval.For1h)
 		var opts map[string]map[string]any
 		require.NoError(t, json.Unmarshal(page.PasskeyOptions, &opts))
 		delete(opts["publicKey"], "allowCredentials")
@@ -272,7 +272,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 		require.Equal(t, pmPasskeyBad, pmErrorText(t, body))
 
 		// Passkey: the enrolled passkey's assertion with its signature bit-flipped.
-		_, assertion := d.assertion(auth, a.ID)
+		_, assertion := d.assertion(auth, a.ID, approval.For1h)
 		status, body = d.passkeyPost(a.ID, pmFlipPasskeySignature(t, assertion), approval.For1h, page.Request.Digest)
 		require.Equal(t, http.StatusBadRequest, status, body)
 		require.Equal(t, pmPasskeyBad, pmErrorText(t, body))
@@ -333,7 +333,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 			a := d.file(d.agent(nil, nil))
 			b := d.file(d.sibling())
 
-			one, assertion := d.assertion(auth, a.ID)
+			one, assertion := d.assertion(auth, a.ID, approval.For1h)
 			status, body := d.passkeyPost(a.ID, assertion, approval.For1h, one.Request.Digest)
 			require.Equal(t, http.StatusOK, status, body)
 			first := d.requireLease(pmAgent, sess, time.Hour)
@@ -342,7 +342,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 			require.Equal(t, pmDecided, pmErrorText(t, body))
 			require.Equal(t, first.ID, d.requireLease(pmAgent, sess, time.Hour).ID)
 
-			oneB, assertionB := d.assertion(auth, b.ID)
+			oneB, assertionB := d.assertion(auth, b.ID, approval.For1h)
 			status, body = d.do(d.tcp.URL, pmKey, http.MethodPost, "/console/access/"+b.ID+"/deny", url.Values{}, nil)
 			require.Equal(t, http.StatusOK, status, body)
 			status, body = d.passkeyPost(b.ID, assertionB, approval.For1h, oneB.Request.Digest)
@@ -403,7 +403,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 			a := d.file(d.agent(nil, nil))
 			b := d.file(d.sibling())
 			oneA := d.readAccess(d.tcp.URL, pmKey, a.ID)
-			oneB, assertionB := d.assertion(auth, b.ID)
+			oneB, assertionB := d.assertion(auth, b.ID, approval.For1h)
 
 			status, body := d.passkeyPost(a.ID, assertionB, approval.For1h, oneA.Request.Digest)
 			require.Equal(t, http.StatusBadRequest, status, body)
@@ -453,7 +453,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 		one := d.readAccess(helper, "", a.ID)
 		sig, err := pmTouchIDSignature(key.key, one, approval.For1h)
 		require.NoError(t, err)
-		_, assertion := d.assertion(auth, a.ID)
+		_, assertion := d.assertion(auth, a.ID, approval.For1h)
 		garbage := strings.Repeat("0", len(one.Request.Digest))
 
 		// A digest that is not the facts': every path refuses it.
@@ -513,7 +513,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 			d.session("cc/fin", pmLocked, pmAgent)
 			auth := d.enrollPasskey()
 			a := d.file(d.agent(nil, nil))
-			one, assertion := d.assertion(auth, a.ID)
+			one, assertion := d.assertion(auth, a.ID, approval.For1h)
 			d.runAhead(late)
 			status, body := d.passkeyPost(a.ID, assertion, approval.For1h, one.Request.Digest)
 			require.Equal(t, http.StatusConflict, status, body)
@@ -537,19 +537,26 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 		})
 	})
 
-	// The passkey proof is an assertion over the request's challenge alone:
-	// the duration is the page's own form value (the dialog says the page
-	// "asks the duration again"), so the lease is as long as the page's
-	// choice. Touch ID signs the duration; a passkey does not.
-	t.Run("contract/the passkey page's duration is the form's, not the assertion's", func(t *testing.T) {
+	// The passkey proof signs its duration, as Touch ID's does (decision
+	// D1): the page issues its options for the duration chosen (?for=), and
+	// the assertion over them approves that duration only. Sent with another
+	// one it approves nothing, refused as a changed decision.
+	t.Run("contract/the passkey assertion signs its duration", func(t *testing.T) {
 		d := newPMDaemon(t, pmOpts{})
 		sess := d.session("cc/fin", pmLocked, pmAgent)
 		auth := d.enrollPasskey()
 		a := d.file(d.agent(nil, nil))
-		one, assertion := d.assertion(auth, a.ID)
-		status, body := d.passkeyPost(a.ID, assertion, approval.For4h, one.Request.Digest)
+		require.Empty(t, d.readAccess(d.tcp.URL, pmKey, a.ID).PasskeyOptions, "no options before a duration is chosen")
+		one, assertion := d.assertion(auth, a.ID, approval.For1h)
+		for _, changed := range []string{approval.For4h, approval.ForSession} {
+			status, body := d.passkeyPost(a.ID, assertion, changed, one.Request.Digest)
+			require.Equal(t, http.StatusConflict, status, "signed for 1h, sent as %s: %s", changed, body)
+			require.Equal(t, pmPasskeyRebound, pmErrorText(t, body))
+		}
+		d.nothing("a passkey assertion sent with another duration", map[string]string{a.ID: store.ApprovalPending})
+		status, body := d.passkeyPost(a.ID, assertion, approval.For1h, one.Request.Digest)
 		require.Equal(t, http.StatusOK, status, body)
-		d.requireLease(pmAgent, sess, 4*time.Hour)
+		d.requireLease(pmAgent, sess, time.Hour)
 	})
 }
 
@@ -647,6 +654,8 @@ func TestPeerAuthMatrix_Anchors(t *testing.T) {
 			"approval, and "+rule+".\n"+pmAnchorRemedy+"\n")
 		require.Empty(t, pmShortRe.FindString(notice), "no request id: none was filed")
 		require.NotContains(t, notice, "sealed", "the lock is not called sealed")
+		require.Contains(t, notice, "\nThis session is not recorded, and Seamless tools cannot read or write "+pmLocked+" from this process.\n")
+		require.Zero(t, d.count(`SELECT COUNT(*) FROM sessions`), "SessionStart: refused before recording")
 		none("SessionStart")
 	})
 
@@ -673,7 +682,7 @@ func TestPeerAuthMatrix_Anchors(t *testing.T) {
 			require.NoError(t, err)
 			pending := map[string]string{a.ID: store.ApprovalPending}
 
-			one, assertion := d.assertion(auth, a.ID)
+			one, assertion := d.assertion(auth, a.ID, approval.For1h)
 			require.NotEmpty(t, one.Request.Warnings)
 			require.Equal(t, approval.WarnAnchorIsShell, one.Request.Warnings[0].Code, "the broadest reach comes first")
 			require.Contains(t, one.Request.Warnings[0].Text, "the process asking is "+c.what+", not an agent")

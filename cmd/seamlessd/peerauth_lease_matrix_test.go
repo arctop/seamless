@@ -363,23 +363,20 @@ func (d *lmDaemon) leasedReadsWrites(t *testing.T, cli *mcpclient.Client, it, ot
 	require.Equal(t, 1, lmCount(t, d.db, `SELECT COUNT(*) FROM sessions WHERE project_slug = ? AND findings LIKE ?`, x, "%"+findings+"%"),
 		"%s: the findings landed in a session of %s", who, x)
 
-	// A tree that holds the lease asking again files a refresh, never a
-	// lease; a process that names no agent (no stamped session, no header)
-	// files nothing -- the anchor is never inferred.
+	// A tree that holds the lease asking again, more than the expiry warning
+	// from its end: the lease answers and nothing is filed -- whether or not
+	// the process names an agent, since no request (and so no anchor) is
+	// involved. From the warning on it files a refresh (approval's own tests
+	// and TestLeaseExpiry_WarningsRefreshAndEnd), never a lease.
+	_ = anchored
 	leases := lmCount(t, d.db, `SELECT COUNT(*) FROM access_leases`)
 	approvals := lmCount(t, d.db, `SELECT COUNT(*) FROM access_approvals`)
-	if anchored {
-		var req map[string]any
-		require.NoError(t, json.Unmarshal([]byte(lmFirstJSON(call("access_request", map[string]any{"project": x}))), &req))
-		require.Equal(t, store.AccessKindRefresh, req["kind"], "%v", req)
-		require.Equal(t, "pending", req["status"])
-		require.NoError(t, store.DenyAccess(ctx, d.db, req["id"].(string), "matrix", d.clock.now()))
-	} else {
-		text, isErr := paCall(t, cli, "access_request", map[string]any{"project": x})
-		require.True(t, isErr, text)
-		require.Contains(t, text, "no agent session names this connection's agent process")
-		require.Equal(t, approvals, lmCount(t, d.db, `SELECT COUNT(*) FROM access_approvals`))
-	}
+	var req map[string]any
+	require.NoError(t, json.Unmarshal([]byte(lmFirstJSON(call("access_request", map[string]any{"project": x}))), &req))
+	require.Equal(t, "approved", req["status"], "%s: %v", who, req)
+	require.NotEmpty(t, req["open_until"], "%s: %v", who, req)
+	require.Contains(t, req["next"], "is already open to this agent until ", "%s: %v", who, req)
+	require.Equal(t, approvals, lmCount(t, d.db, `SELECT COUNT(*) FROM access_approvals`), "%s: nothing is filed", who)
 	require.Equal(t, leases, lmCount(t, d.db, `SELECT COUNT(*) FROM access_leases`))
 
 	call("memory_delete", map[string]any{"project": x, "name": mem})

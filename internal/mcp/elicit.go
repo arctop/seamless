@@ -13,7 +13,11 @@ package mcp
 // with Touch ID, it asks the agent's `seam mcp-proxy` bridge to launch the
 // Touch ID helper (core.ApproverNotification on this call's own reply); with a
 // passkey, it sends the owner to the request's passkey page (a URL
-// elicitation). Only the approve core (approval.Service.Approve,
+// elicitation), with the duration the dialog's form chose (?for=) when it
+// asked one. When the helper the bridge launched exits without an approval --
+// the owner cancelled the Touch ID prompt, or it could not finish -- the
+// bridge says so (approverEndedMethod) and the wait ends at once, the request
+// still pending. Only the approve core (approval.Service.Approve,
 // approval.Grants.Approve) decides, and the wait reads the request's row:
 // approved, denied, expired, or still pending when the wait ends. A decline
 // denies nothing -- an agent's connection may not deny -- the request stays
@@ -59,6 +63,26 @@ const (
 	answerDeclined  = "declined"  // the dialog's own decline
 	answerCancelled = "cancelled" // dismissed
 	answerUnoffered = "unoffered" // accepted with something the dialog did not offer
+	// Accepted with Touch ID, then the helper ended without an approval: the
+	// owner cancelled its prompt, or it closed for another reason (it failed).
+	answerTouchIDCancelled = "touchid_cancelled"
+	answerTouchIDClosed    = "touchid_closed"
+)
+
+// approverEndedMethod is the bridge's word that the Touch ID helper it
+// launched for a request has exited (cmd/seam/mcpproxy_approver.go sends it;
+// both sides pin the string in a test). Its params are the request_id and the
+// outcome: approverCancelled when the helper reported that the owner
+// cancelled, approverClosed for any other exit -- a failure, or the approval
+// itself, which the request's row then shows. It grants and denies nothing:
+// all it does is end a dialog's wait early, which the agent could do anyway
+// by cancelling its own call.
+const approverEndedMethod = "notifications/seamless/approver_ended"
+
+// The outcomes approverEndedMethod reports.
+const (
+	approverCancelled = "cancelled"
+	approverClosed    = "closed"
 )
 
 // Where a request stood when its dialog ended.
@@ -219,7 +243,7 @@ func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (d
 	if !form || !slices.Contains(methods, approval.ProofTouchID) {
 		// A passkey only: its page shows the facts and asks the duration, so
 		// the dialog is the page itself.
-		elicitID, accepted, ok := s.passkeyDialog(dctx, session, t, page)
+		elicitID, accepted, ok := s.passkeyDialog(dctx, session, t, page, "")
 		if !ok {
 			return dialogEnd{}, false
 		}
@@ -272,7 +296,9 @@ func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (d
 	end.answer = answerAccepted
 	s.logger.Debug("access dialog: accepted", "request", t.Short, "method", method, "duration", duration)
 	if method == approval.ProofPasskey {
-		elicitID, accepted, ok := s.passkeyDialog(dctx, session, t, page)
+		// The page for the duration chosen here: it shows it read-only, and
+		// the passkey signs it.
+		elicitID, accepted, ok := s.passkeyDialog(dctx, session, t, pageFor(page, duration), duration)
 		if !ok || !accepted.answered() {
 			if ok {
 				end.answer = accepted.answer()
@@ -283,7 +309,13 @@ func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (d
 		return s.completeURL(ctx, session, elicitID, s.settle(ctx, dctx, t, end)), true
 	}
 	// Touch ID: the bridge launches the helper, which reads the facts from
-	// the daemon, shows them in the prompt, and signs over the duration.
+	// the daemon, shows them in the prompt, and signs over the duration. When
+	// it exits without approving, the bridge says so and the wait ends. The
+	// handler is registered when first needed, so a daemon that never shows
+	// a Touch ID dialog never has one.
+	ended, unwatch := s.watchApproverEnd(key)
+	defer unwatch()
+	s.mcp.AddNotificationHandler(approverEndedMethod, s.handleApproverEnded)
 	if err := s.sendApproverLaunch(dctx, t.ID, duration); err != nil {
 		// Not queued, so there is nothing to lose by returning: wait as for
 		// any other proof (the owner may still approve elsewhere).
@@ -298,8 +330,86 @@ func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (d
 	if dl, ok := wctx.Deadline(); ok {
 		end.stopAt = dl
 	}
-	s.awaitDecision(wctx, t.ID)
-	return s.settle(ctx, wctx, t, end), true
+	outcome := s.awaitDecisionOrEnd(wctx, t.ID, ended)
+	end = s.settle(ctx, wctx, t, end)
+	if outcome != "" && end.state == statePending {
+		end.answer = answerTouchIDClosed
+		if outcome == approverCancelled {
+			end.answer = answerTouchIDCancelled
+		}
+	}
+	return end, true
+}
+
+// approverEnds routes the bridge's approverEndedMethod to the dialog waiting
+// on that helper: by server, and by the dialog's key (the MCP session and the
+// request). An entry lives while its dialog waits.
+var approverEnds = struct {
+	mu sync.Mutex
+	m  map[approverEndKey]chan string
+}{m: map[approverEndKey]chan string{}}
+
+type approverEndKey struct {
+	srv *Server
+	key string
+}
+
+// watchApproverEnd opens the slot the dialog keyed key waits on for its
+// helper's end, and returns it with the func that closes it.
+func (s *Server) watchApproverEnd(key string) (<-chan string, func()) {
+	k := approverEndKey{srv: s, key: key}
+	ch := make(chan string, 1)
+	approverEnds.mu.Lock()
+	approverEnds.m[k] = ch
+	approverEnds.mu.Unlock()
+	return ch, func() {
+		approverEnds.mu.Lock()
+		defer approverEnds.mu.Unlock()
+		if approverEnds.m[k] == ch {
+			delete(approverEnds.m, k)
+		}
+	}
+}
+
+// handleApproverEnded takes the bridge's word that the helper it launched for
+// a request has exited, and ends the wait of that request's dialog on this
+// connection. It is taken only on the peer_auth socket, from the asking
+// agent's own process tree (the request's process is a hop of this
+// connection's kernel chain), with an outcome it knows; anything else is
+// dropped. A notification has no reply, so nothing is answered either way.
+func (s *Server) handleApproverEnded(ctx context.Context, n mcp.JSONRPCNotification) {
+	if !access.PeerAuthenticated(ctx) {
+		return
+	}
+	session := mcpserver.ClientSessionFromContext(ctx)
+	if session == nil || session.SessionID() == "" {
+		return
+	}
+	id, _ := n.Params.AdditionalFields["request_id"].(string)
+	outcome, _ := n.Params.AdditionalFields["outcome"].(string)
+	if id == "" || (outcome != approverCancelled && outcome != approverClosed) {
+		return
+	}
+	k := approverEndKey{srv: s, key: session.SessionID() + "\x00" + id}
+	approverEnds.mu.Lock()
+	ch, waiting := approverEnds.m[k]
+	approverEnds.mu.Unlock()
+	if !waiting {
+		return
+	}
+	a, err := store.AccessApprovalByID(ctx, s.cfg.DB, id)
+	if err != nil {
+		return
+	}
+	v, _ := access.FromContext(ctx)
+	if a.ProcessKey == "" || !slices.Contains(chainKeys(v), a.ProcessKey) {
+		s.logger.Debug("access dialog: approver end from another tree", "request", approval.ShortID(id))
+		return
+	}
+	select {
+	case ch <- outcome:
+	default: // one end is enough
+	}
 }
 
 // notifyHold is how long a call stays open after queueing a notification on
@@ -331,19 +441,27 @@ func (u urlAnswer) answered() bool { return u == answerAccepted }
 func (u urlAnswer) answer() string { return string(u) }
 
 // passkeyDialog sends the owner to the request's passkey page: a URL
-// elicitation. ok is false when the client did not take it (nothing shown).
-func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSession, t dialogTarget, page string) (string, urlAnswer, bool) {
+// elicitation. duration is the one the dialog's form chose, which page
+// carries (pageFor), "" when the page asks it. ok is false when the client
+// did not take it (nothing shown).
+func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSession, t dialogTarget, page, duration string) (string, urlAnswer, bool) {
 	elicitID, err := core.NewID()
 	if err != nil {
 		return "", "", false
 	}
-	msg := "Seamless access request " + t.Short + ": approve or deny " + plain(t.Project) +
-		" with your passkey on the page this opens. Opening it grants nothing by itself."
+	short := "approve or deny " + plain(t.Project)
+	decide := "Approve or deny it"
+	if phrase, ok := durationPhrases[duration]; ok {
+		short = "approve " + plain(t.Project) + " " + phrase + ", or deny it,"
+		decide = "Approve it " + phrase + ", or deny it,"
+	}
+	msg := "Seamless access request " + t.Short + ": " + short + " with your passkey on the page this opens. " +
+		"Opening it grants nothing by itself."
 	if f, err := s.cfg.Approvals.Facts(ctx, t.ID); err == nil {
 		// What is asked first, as in the form (dialogLead); the page shows
-		// every fact and asks how long.
+		// every fact, and asks how long unless the form did.
 		msg = plain(askerName(f)) + " asks for " + plain(accessPhrase(f)) + "; " + warningCount(len(f.Warnings)) +
-			". Approve or deny it with your passkey on the page this opens, which shows the request (" + plain(f.Short) +
+			". " + decide + " with your passkey on the page this opens, which shows the request (" + plain(f.Short) +
 			") in full. Opening it grants nothing by itself."
 	}
 	res, err := s.mcp.RequestURLElicitation(ctx, session, elicitID, page, msg)
@@ -364,6 +482,30 @@ func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSess
 	default:
 		return elicitID, answerUnoffered, true
 	}
+}
+
+// pageFor is the passkey page with the duration the dialog's form chose
+// (?for=): the page shows it read-only, and its options sign it. "" leaves
+// the page as it is, and the page asks.
+func pageFor(page, duration string) string {
+	if duration == "" {
+		return page
+	}
+	u, err := url.Parse(page)
+	if err != nil {
+		return page
+	}
+	q := u.Query()
+	q.Set("for", duration)
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// durationPhrases word a duration choice inside a sentence.
+var durationPhrases = map[string]string{
+	approval.ForSession: "until its session ends",
+	approval.For1h:      "for 1 hour",
+	approval.For4h:      "for 4 hours",
 }
 
 // completeURL tells the client a passkey page's interaction is over once the
@@ -405,16 +547,25 @@ func (s *Server) sendApproverLaunch(ctx context.Context, id, duration string) er
 // awaitDecision waits until request id leaves pending, or ctx ends. It polls
 // the request's row: every decision writes it, whoever made it.
 func (s *Server) awaitDecision(ctx context.Context, id string) {
+	s.awaitDecisionOrEnd(ctx, id, nil)
+}
+
+// awaitDecisionOrEnd is awaitDecision that also ends when ended delivers how
+// the Touch ID helper ended, and returns that outcome ("" when the wait ended
+// otherwise). A nil ended is never ready.
+func (s *Server) awaitDecisionOrEnd(ctx context.Context, id string, ended <-chan string) string {
 	tick := time.NewTicker(s.dialogPoll())
 	defer tick.Stop()
 	for {
 		a, err := store.AccessApprovalByID(ctx, s.cfg.DB, id)
 		if err == nil && s.stateOf(a) != statePending {
-			return
+			return ""
 		}
 		select {
 		case <-ctx.Done():
-			return
+			return ""
+		case outcome := <-ended:
+			return outcome
 		case <-tick.C:
 		}
 	}
@@ -584,7 +735,7 @@ var (
 	}
 	methodTitles = map[string]string{
 		approval.ProofTouchID: "Touch ID",
-		approval.ProofPasskey: "Passkey (opens the approval page, which asks the duration again)",
+		approval.ProofPasskey: "Passkey (opens the approval page for the duration chosen here)",
 	}
 )
 
@@ -845,6 +996,10 @@ func refusalAfterDialog(tool, text string, t dialogTarget, end dialogEnd, ways a
 	switch end.answer {
 	case answerDeclined, answerCancelled:
 		return text + " The approval dialog was " + end.answer + "; " + pending
+	case answerTouchIDCancelled:
+		return text + " Touch ID was cancelled in the approval dialog, so nothing was approved; " + pending
+	case answerTouchIDClosed:
+		return text + " The Touch ID approver closed without approving; " + pending
 	case answerUnoffered:
 		return text + " The approval dialog's answer was not one it offered; " + pending
 	}

@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -69,6 +70,24 @@ func runApprovers(args []string) error {
 
 // approvers runs one verb against db; the testable core of runApprovers.
 func approvers(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writer, args []string, now time.Time) error {
+	return approversOn(ctx, db, cfg, out, args, now, runtime.GOOS)
+}
+
+// firstApproverAdvice is how to enroll a first approver, said the same way by
+// `approvers list` and doctor: a passkey with a code minted as the daemon's
+// account and, where the daemon runs on a Mac and serves the peer_auth socket
+// the Touch ID app talks over, this Mac's Touch ID with `seam touchid enroll`
+// in the owner's own terminal (it prints the command that mints its code).
+func firstApproverAdvice(goos string, peerAuth bool) string {
+	s := "mint a code with `seamlessd approvers enroll-code passkey`, run as the daemon's account"
+	if goos == "darwin" && peerAuth {
+		s += "; or, for this Mac's Touch ID, run `seam touchid enroll` in the owner's own terminal, which prints the command that mints its code"
+	}
+	return s
+}
+
+// approversOn is approvers on the platform goos.
+func approversOn(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writer, args []string, now time.Time, goos string) error {
 	verb, rest := args[0], args[1:]
 	switch verb {
 	case "enroll-code":
@@ -114,7 +133,7 @@ func approvers(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writer
 			return writeApproversJSON(out, creds)
 		}
 		if len(creds) == 0 {
-			fmt.Fprintln(out, "No approver credentials are enrolled. Mint a code with `seamlessd approvers enroll-code passkey`.")
+			fmt.Fprintf(out, "No approver credentials are enrolled. To enroll one, %s.\n", firstApproverAdvice(goos, cfg.PeerAuth.Enabled))
 			return nil
 		}
 		for _, c := range creds {

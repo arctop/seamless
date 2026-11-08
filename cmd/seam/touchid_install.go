@@ -97,24 +97,29 @@ func ownReleaseVersion() (update.Version, bool) {
 
 // installApprover gets Seamless Approve to target: the release asset of this
 // seam's version, or the local build appFlag names. installed is false when
-// the owner declined, with nothing changed. An app already at target is
-// replaced only after a y/N; kept, it is checked as a local build is and used.
+// the owner declined, with nothing changed. A local build is checked first, as
+// a fresh install checks it, so a bad one is refused before anything is asked;
+// the release is fetched only once the owner wants it. An app already at
+// target is replaced only after a y/N; kept, it is checked as a local build is
+// and used, and a local build that was not installed is said to be unused.
 func installApprover(ctx context.Context, e *env, w touchIDWorld, in *bufio.Reader, appFlag *presentString, target string) (bool, error) {
+	present := false
 	if _, err := os.Lstat(target); err == nil {
-		ans, _ := prompt(e, in, fmt.Sprintf("Seamless Approve is already installed at %s. Replace it? [y/N] ", printable(target)))
-		if !isYes(ans) {
-			fmt.Fprintln(e.stdout, "Keeping the installed app.")
-			if err := verifyApprover(ctx, e, w, in, target, false); err != nil {
-				return false, err
-			}
-			return true, nil
-		}
+		present = true
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return false, fmt.Errorf("look for an installed Seamless Approve: %w", err)
 	}
+	replace := func(with string) bool {
+		ans, _ := prompt(e, in, fmt.Sprintf("Seamless Approve is already installed at %s. Replace it%s? [y/N] ", printable(target), with))
+		return isYes(ans)
+	}
 
-	var v update.Version
 	release := !appFlag.set
+	if release && present && !replace("") {
+		fmt.Fprintln(e.stdout, "Keeping the installed app.")
+		return useInstalled(ctx, e, w, in, target)
+	}
+	var v update.Version
 	if release {
 		var ok bool
 		if v, ok = w.version(); !ok {
@@ -149,13 +154,30 @@ func installApprover(ctx context.Context, e *env, w touchIDWorld, in *bufio.Read
 	if fi, err := os.Lstat(staged); err != nil || !fi.IsDir() {
 		return false, fmt.Errorf("%w: the archive holds no %s", errApproverRefused, approverAppName)
 	}
-	if err := verifyApprover(ctx, e, w, in, staged, release); err != nil {
+	if err := verifyApprover(ctx, e, w, in, staged, release, false); err != nil {
 		return false, err
+	}
+	if !release && present {
+		src := printable(strings.TrimSpace(appFlag.val))
+		if !replace(" with " + src) {
+			fmt.Fprintf(e.stdout, "Keeping the installed app: %s is not installed and not used; the app at %s enrolls instead.\n",
+				src, printable(target))
+			return useInstalled(ctx, e, w, in, target)
+		}
 	}
 	if err := swapInstall(staged, target, tmp, &keep); err != nil {
 		return false, err
 	}
 	fmt.Fprintf(e.stdout, "Installed Seamless Approve at %s.\n", printable(target))
+	return true, nil
+}
+
+// useInstalled checks the app already at target, as a local build is checked,
+// before it is used.
+func useInstalled(ctx context.Context, e *env, w touchIDWorld, in *bufio.Reader, target string) (bool, error) {
+	if err := verifyApprover(ctx, e, w, in, target, false, true); err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -328,8 +350,9 @@ func approverRequirement(team string) string {
 // Developer ID, a release asset is pinned to the team that signed it, since
 // the release signature on checksums.txt already vouches for the zip it came
 // in; anything else (a local build, an installed app) is the owner's y/N on
-// the team shown, since nothing vouches for it.
-func verifyApprover(ctx context.Context, e *env, w touchIDWorld, in *bufio.Reader, path string, release bool) error {
+// the team shown, since nothing vouches for it. installed is whether path is
+// the app already in place, which the y/N asks to use rather than install.
+func verifyApprover(ctx context.Context, e *env, w touchIDWorld, in *bufio.Reader, path string, release, installed bool) error {
 	var errb strings.Builder
 	code, err := e.run(ctx, []string{"codesign", "--verify", "--strict", "--deep", path}, nil, io.Discard, &errb)
 	if err != nil {
@@ -368,7 +391,11 @@ func verifyApprover(ctx context.Context, e *env, w touchIDWorld, in *bufio.Reade
 	case own == "":
 		fmt.Fprintf(e.stdout, "This seam is not signed with a Developer ID, so the app's publisher cannot be checked against it.\n"+
 			"The app is signed by %s%s.\n", teamWords(sig.team), authorityWords(sig.authority))
-		ans, _ := prompt(e, in, "Install and use it? [y/N] ")
+		question := "Install and use it? [y/N] "
+		if installed {
+			question = "Use it? [y/N] "
+		}
+		ans, _ := prompt(e, in, question)
 		if !isYes(ans) {
 			return fmt.Errorf("%w: not confirmed", errApproverRefused)
 		}

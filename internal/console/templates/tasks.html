@@ -61,7 +61,7 @@
           {{range .Blocked}}
           <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}" data-title="{{.Title}}" data-context="Blocked"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span> &middot; {{if .Project}}{{.Project}}{{else}}global{{end}} &middot; blocked by {{len .Blockers}} &middot; <span title="{{ts .Created}}">{{ago .Created}}</span>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
+            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span> &middot; {{if .Project}}{{.Project}}{{else}}global{{end}} &middot; blocked by {{.BlockedBy}}{{range .LockedIn}} &middot; <span class="kind faint" data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">a task in locked project {{.}} blocks this one</span>{{end}} &middot; <span title="{{ts .Created}}">{{ago .Created}}</span>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
         </div>

@@ -112,7 +112,12 @@ type searchRow struct {
 	Similarity int    `json:"similarity,omitempty"`
 	ScoreTone  string `json:"-"`
 	Favorite   bool   `json:"favorite,omitempty"`
-	Peek       bool   `json:"peek"`
+	// Account is the restricted local account (peer_auth.restricted) that
+	// wrote the item -- a memory or note's current content, a task it
+	// created, a trial it recorded, a session it started -- for the "written
+	// by account" chip; "" for the owner's items, which render as before.
+	Account string `json:"account,omitempty"`
+	Peek    bool   `json:"peek"`
 }
 
 // searchGroup is one entity kind's results.
@@ -367,7 +372,7 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 				Kind: "task", ID: t.ID, Title: t.Title, Project: t.ProjectSlug,
 				Age: ago(t.UpdatedAt), Href: "/console/tasks/" + t.ID,
 				Description: string(t.Status), Updated: t.UpdatedAt,
-				Favorite: t.Favorite, Lexical: true, Peek: true,
+				Favorite: t.Favorite, Account: t.Account, Lexical: true, Peek: true,
 			}
 			row.MatchKind = store.IDIdentifierMatch(data.Query, t.ID)
 			if row.MatchKind != "" {
@@ -414,7 +419,7 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 				Kind: "trial", ID: tr.ID, Title: tr.Title, Project: tr.ProjectSlug,
 				Age: ago(tr.CreatedAt), Href: "/console/trials/" + tr.ID,
 				Description: desc, Updated: tr.CreatedAt,
-				Favorite: tr.Favorite, Lexical: true, Peek: true,
+				Favorite: tr.Favorite, Account: tr.Account, Lexical: true, Peek: true,
 			}
 			row.MatchKind = store.IDIdentifierMatch(data.Query, tr.ID)
 			if row.MatchKind != "" {
@@ -455,7 +460,7 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 				Kind: "session", ID: sess.ID, Title: sess.Name, Project: sess.ProjectSlug,
 				Age: ago(sess.UpdatedAt), Href: "/console/sessions/" + sess.ID,
 				Description: string(sess.Status), Updated: sess.UpdatedAt,
-				Favorite: sess.Favorite, Lexical: true, Peek: true,
+				Favorite: sess.Favorite, Account: sess.Account, Lexical: true, Peek: true,
 			}
 			row.MatchKind = store.IDIdentifierMatch(data.Query, sess.ID)
 			if row.MatchKind != "" {
@@ -478,7 +483,7 @@ func hitRow(h retrieve.Hit) searchRow {
 		Kind: h.Kind, ID: h.ID, Title: h.Title, Project: h.Project,
 		Identifier: h.Name, MatchKind: h.IdentifierMatch,
 		Age: h.Age, Description: h.Description, Updated: h.Updated,
-		Favorite: h.Favorite, Peek: true,
+		Favorite: h.Favorite, Account: h.Account, Peek: true,
 	}
 	if h.IdentifierMatch == store.IdentifierMatchExactID || h.IdentifierMatch == store.IdentifierMatchIDPrefix {
 		row.MatchedID = h.ID

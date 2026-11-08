@@ -203,21 +203,65 @@ func validApproverCredential(c ApproverCredential) error {
 // enrollment the caller has verified. The first credential needs a code. It
 // returns the stored row.
 func EnrollApprover(ctx context.Context, db *sql.DB, cred ApproverCredential, code, approvedBy string, now time.Time) (ApproverCredential, error) {
-	const op = "store.EnrollApprover"
+	stored, _, err := enrollApprover(ctx, db, "store.EnrollApprover", cred, code, approvedBy, now, nil)
+	return stored, err
+}
+
+// RetiredApprover names an enrolled Touch ID credential that an enrollment
+// retires: its id, and the public key its holder's request to retire it was
+// verified against.
+type RetiredApprover struct {
+	ID        string
+	PublicKey []byte
+}
+
+// EnrollTouchIDRetiring stores the Touch ID key cred as EnrollApprover does,
+// proven by a live touchid code, and in the same transaction, only once the
+// new row is in, removes each credential in retire that is still a Touch ID
+// key with exactly that id and public key. The caller has verified that each
+// one's own key asked for it (approval.TouchIDReplaceMessage): a Touch ID key
+// retires only itself, so this never removes a passkey or a key whose holder
+// did not sign. A retiree that no longer matches is left alone. It returns the
+// stored row and the ids it removed.
+func EnrollTouchIDRetiring(ctx context.Context, db *sql.DB, cred ApproverCredential, code string, now time.Time,
+	retire []RetiredApprover) (ApproverCredential, []string, error) {
+	const op = "store.EnrollTouchIDRetiring"
+	if cred.Kind != ApproverTouchID {
+		return ApproverCredential{}, nil, fmt.Errorf("%s: %w: only a Touch ID key retires a credential", op, ErrInvalidApprover)
+	}
+	if code == "" {
+		return ApproverCredential{}, nil, fmt.Errorf("%s: %w", op, ErrEnrollProof)
+	}
+	return enrollApprover(ctx, db, op, cred, code, "", now, retire)
+}
+
+// enrollApprover is EnrollApprover and EnrollTouchIDRetiring: it stores cred
+// and removes the retirees in one transaction, every error wrapped in op.
+func enrollApprover(ctx context.Context, db *sql.DB, op string, cred ApproverCredential, code, approvedBy string, now time.Time,
+	retire []RetiredApprover) (ApproverCredential, []string, error) {
+	stored, retired, err := enrollApproverTx(ctx, db, cred, code, approvedBy, now, retire)
+	if err != nil {
+		return ApproverCredential{}, nil, fmt.Errorf("%s: %w", op, err)
+	}
+	return stored, retired, nil
+}
+
+func enrollApproverTx(ctx context.Context, db *sql.DB, cred ApproverCredential, code, approvedBy string, now time.Time,
+	retire []RetiredApprover) (ApproverCredential, []string, error) {
 	cred.Name = strings.TrimSpace(cred.Name)
 	if err := validApproverCredential(cred); err != nil {
-		return ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+		return ApproverCredential{}, nil, err
 	}
 	if (code == "") == (approvedBy == "") {
-		return ApproverCredential{}, fmt.Errorf("%s: %w", op, ErrEnrollProof)
+		return ApproverCredential{}, nil, ErrEnrollProof
 	}
 	id, err := core.NewID()
 	if err != nil {
-		return ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+		return ApproverCredential{}, nil, err
 	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+		return ApproverCredential{}, nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -227,22 +271,22 @@ func EnrollApprover(ctx context.Context, db *sql.DB, cred ApproverCredential, co
 			WHERE hash = ? AND kind = ? AND used_at IS NULL AND expires_at > ?`,
 			core.FormatTime(now), id, enrollCodeHash(code), cred.Kind, core.FormatTime(now))
 		if err != nil {
-			return ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+			return ApproverCredential{}, nil, err
 		}
 		n, err := res.RowsAffected()
 		if err != nil {
-			return ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+			return ApproverCredential{}, nil, err
 		}
 		if n != 1 {
-			return ApproverCredential{}, fmt.Errorf("%s: %w", op, ErrEnrollCode)
+			return ApproverCredential{}, nil, ErrEnrollCode
 		}
 	} else {
 		var n int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM approver_credentials WHERE id = ?`, approvedBy).Scan(&n); err != nil {
-			return ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+			return ApproverCredential{}, nil, err
 		}
 		if n == 0 {
-			return ApproverCredential{}, fmt.Errorf("%s: %w: the approving credential %q is not enrolled", op, ErrEnrollProof, approvedBy)
+			return ApproverCredential{}, nil, fmt.Errorf("%w: the approving credential %q is not enrolled", ErrEnrollProof, approvedBy)
 		}
 		addedBy = approvedBy
 	}
@@ -250,10 +294,10 @@ func EnrollApprover(ctx context.Context, db *sql.DB, cred ApproverCredential, co
 	var dup int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM approver_credentials WHERE kind = ? AND credential_id = ?`,
 		cred.Kind, cred.CredentialID).Scan(&dup); err != nil {
-		return ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+		return ApproverCredential{}, nil, err
 	}
 	if dup > 0 {
-		return ApproverCredential{}, fmt.Errorf("%s: %w", op, ErrApproverExists)
+		return ApproverCredential{}, nil, ErrApproverExists
 	}
 	cred.ID, cred.AddedAt, cred.AddedBy, cred.LastUsedAt = id, now, addedBy, nil
 	if _, err := tx.ExecContext(ctx, `INSERT INTO approver_credentials (id, kind, credential_id, public_key, alg, sign_count,
@@ -262,12 +306,29 @@ func EnrollApprover(ctx context.Context, db *sql.DB, cred ApproverCredential, co
 		cred.ID, cred.Kind, cred.CredentialID, cred.PublicKey, cred.Alg, int64(cred.SignCount),
 		boolInt(cred.BackupEligible), boolInt(cred.BackupState), cred.AAGUID, strings.Join(cred.Transports, ","),
 		cred.Attachment, cred.AttestationFormat, cred.UserHandle, cred.Name, core.FormatTime(now), addedBy); err != nil {
-		return ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+		return ApproverCredential{}, nil, err
+	}
+	// Retire only after the new row is in, in the same transaction: an
+	// enrollment that fails retires nothing.
+	var retired []string
+	for _, r := range retire {
+		res, err := tx.ExecContext(ctx, `DELETE FROM approver_credentials WHERE id = ? AND id <> ? AND kind = ? AND public_key = ?`,
+			r.ID, cred.ID, ApproverTouchID, r.PublicKey)
+		if err != nil {
+			return ApproverCredential{}, nil, err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return ApproverCredential{}, nil, err
+		}
+		if n == 1 && !slices.Contains(retired, r.ID) {
+			retired = append(retired, r.ID)
+		}
 	}
 	if err := tx.Commit(); err != nil {
-		return ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+		return ApproverCredential{}, nil, err
 	}
-	return cred, nil
+	return cred, retired, nil
 }
 
 func boolInt(b bool) int {

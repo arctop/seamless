@@ -73,6 +73,17 @@ public struct StoredKey: Equatable {
     }
 }
 
+/// One signature a run asks for: `message`, by `key`.
+public struct Signing: Equatable {
+    public let message: Data
+    public let key: StoredKey
+
+    public init(message: Data, key: StoredKey) {
+        self.message = message
+        self.key = key
+    }
+}
+
 /// Where the approver key lives. Production keeps it in the Secure Enclave,
 /// in the data protection keychain under an access group only the signed
 /// helper may claim (SecureEnclaveKeyStore); tests use a software key.
@@ -88,6 +99,11 @@ public protocol KeyStore {
     /// ASN.1 DER ECDSA signature over SHA-256 of message. A cancelled prompt
     /// throws ApproverError.cancelled.
     func sign(_ message: Data, with key: StoredKey, reason: String) throws -> Data
+    /// `signAll` signs each message with its key in one run of prompts: the
+    /// owner's presence is asked for with `reason`, once where one check can
+    /// cover every key. The first signature must succeed (a cancelled prompt
+    /// throws ApproverError.cancelled); a later one that does not is nil.
+    func signAll(_ signings: [Signing], reason: String) throws -> [Data?]
     func setCredential(_ id: String, for key: StoredKey) throws
     func delete(_ key: StoredKey) throws
 }
@@ -178,6 +194,11 @@ public struct Flows {
     /// enrollment code in the helper's own dialog, creates a key, signs
     /// TouchIDEnrollMessage with it and registers it. A key that does not end
     /// up enrolled is deleted; an older key is replaced once the new one is.
+    /// An older enrolled key also signs TouchIDReplaceMessage, so the daemon
+    /// retires its credential with the enrollment, in the same transaction:
+    /// only this Mac holds that key, so only this Mac's earlier key is ever
+    /// retired. One the daemon does not retire is left for the owner to
+    /// remove, with the command in the closing alert.
     public func enroll(name: String?) -> Outcome {
         Flows.run(.enroll) {
             try keys.checkAvailable()
@@ -199,35 +220,60 @@ public struct Flows {
                     try? keys.delete(key)
                 }
             }
-            let message = try Messages.touchIDEnrollMessage(code: code, publicKey: publicKey)
-            let signature: Data
+            let replacing = older.filter { $0.handle != key.handle && $0.credential != nil }
+            var signings = [Signing(message: try Messages.touchIDEnrollMessage(code: code, publicKey: publicKey), key: key)]
+            for old in replacing {
+                let retiring = try Messages.touchIDReplaceMessage(code: code, publicKey: publicKey, retiring: old.credential ?? "")
+                signings.append(Signing(message: retiring, key: old))
+            }
+            let signatures: [Data?]
             do {
-                signature = try keys.sign(message, with: key, reason: Reason.enrollment(account: account))
+                signatures = try keys.signAll(signings, reason: Reason.enrollment(account: account, replacing: !replacing.isEmpty))
             } catch ApproverError.cancelled {
                 throw ApproverError.cancelled("Not enrolled: the Touch ID prompt was cancelled.")
             }
-            let sent = try transport.exchange(HTTPRequest(method: "POST", path: "/console/approvers/touchid/enroll?format=json", form: [
+            guard let first = signatures.first, let signature = first else {
+                throw ApproverError.keyStore("Touch ID did not sign the enrollment.")
+            }
+            var form = [
                 FormField("code", code),
                 FormField("name", label),
                 FormField("public_key", publicKey.base64EncodedString()),
                 FormField("signature", signature.base64EncodedString()),
-            ]))
+            ]
+            // An earlier key that could not sign (its prompt was cancelled)
+            // is not named: the daemon keeps it, and the alert says how to
+            // remove it.
+            for (old, sig) in zip(replacing, signatures.dropFirst()) {
+                if let sig = sig, let gone = old.credential {
+                    form.append(FormField("replace", gone))
+                    form.append(FormField("replace_signature", sig.base64EncodedString()))
+                }
+            }
+            let sent = try transport.exchange(HTTPRequest(method: "POST", path: "/console/approvers/touchid/enroll?format=json", form: form))
             let ok: Enrolled = try decode(sent.response, what: "the enrollment")
             guard let id = ok.id, Validate.isCredentialID(id) else {
                 throw ApproverError.daemon("The daemon enrolled the key but returned no usable approver id.")
             }
             try keys.setCredential(id, for: key)
             enrolled = true
-            // A replaced key the daemon knew leaves its credential there: the
-            // alert gives the command that removes it, id and all. A key that
-            // was never enrolled leaves nothing to remove.
+            // A replaced key the daemon retired is gone from both. One it
+            // still knows leaves its credential there: the alert gives the
+            // command that removes it, id and all. A key that was never
+            // enrolled leaves nothing to remove.
+            let retired = Set(ok.retired ?? [])
             var removals: [String] = []
+            var retiredHere = 0
             for old in older where old.handle != key.handle {
                 if (try? keys.delete(old)) != nil, let gone = old.credential, gone != id {
-                    removals.append(daemonCommand(list.terminal, account: account, verb: "remove " + gone))
+                    if retired.contains(gone) {
+                        retiredHere += 1
+                    } else {
+                        removals.append(daemonCommand(list.terminal, account: account, verb: "remove " + gone))
+                    }
                 }
             }
-            return Notices.enrolled(name: Text.clean(ok.name ?? label, max: 64), removals: removals)
+            return Notices.enrolled(name: Text.clean(ok.name ?? label, max: 64), removals: removals, retired: retiredHere)
         }
     }
 

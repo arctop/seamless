@@ -228,6 +228,18 @@ func bfHookPost(t *testing.T, base, event string, body map[string]any) string {
 
 const bfWithheld = "a task in a project this connection may not reach blocks this one"
 
+// bfWithheldFor is what each outsider is told in a withheld blocker's place:
+// the owner's own connections name the locked project and the remedy for
+// their transport (D7, 2026-11-08); a restricted account keeps the generic
+// words.
+var bfWithheldFor = map[string]string{
+	"owner on TCP": "a task in locked project " + bfFin + " blocks this one: the TCP connection never reaches a locked project, " +
+		"so work in it from an agent session on the peer_auth Unix socket",
+	"owner socket without a lease": "a task in locked project " + bfFin + " blocks this one: bind to " + bfFin + ", or approve a request for it",
+	"agent before approval":        "a task in locked project " + bfFin + " blocks this one: bind to " + bfFin + ", or approve a request for it",
+	"restricted account":           bfWithheld,
+}
+
 func TestBlockerFence_Daemon(t *testing.T) {
 	d := bfNewDaemon(t)
 	ctx := context.Background()
@@ -261,7 +273,7 @@ func TestBlockerFence_Daemon(t *testing.T) {
 		require.False(t, isErr, "%s: %s", name, text)
 		d.noBlocker(t, text, name+" tasks_ready")
 		waits := bfBlockedRow(t, text, d.waits)
-		require.Equal(t, []any{map[string]any{"withheld": bfWithheld}}, waits["blockers"], name)
+		require.Equal(t, []any{map[string]any{"withheld": bfWithheldFor[name]}}, waits["blockers"], name)
 		require.NotContains(t, waits, "depends_on", name)
 		require.Equal(t, float64(1), waits["depends_on_withheld"], name)
 		both := bfBlockedRow(t, text, d.both)
@@ -282,7 +294,11 @@ func TestBlockerFence_Daemon(t *testing.T) {
 		require.True(t, isErr, "%s: %s", name, text)
 		d.noBlocker(t, text, name+" tasks_claim")
 		require.Contains(t, text, "task blocked", name)
-		require.Contains(t, text, "waits on "+d.prep+" (open), a task in a project this connection may not reach", name)
+		if name == "restricted account" {
+			require.Contains(t, text, "waits on "+d.prep+" (open), a task in a project this connection may not reach", name)
+		} else {
+			require.Contains(t, text, "waits on "+d.prep+" (open), a task in locked project "+bfFin+"\nRemedy: ", name)
+		}
 	}
 	pending, err := d.svc.Pending(ctx)
 	require.NoError(t, err)
@@ -343,6 +359,6 @@ func TestBlockerFence_Daemon(t *testing.T) {
 		text, isErr := paCall(t, cli, "tasks_ready", map[string]any{"project": bfOps})
 		require.False(t, isErr, "%s: %s", name, text)
 		d.noBlocker(t, text, name+" after the approval")
-		require.True(t, strings.Contains(text, bfWithheld), name)
+		require.True(t, strings.Contains(text, bfWithheldFor[name]), name)
 	}
 }

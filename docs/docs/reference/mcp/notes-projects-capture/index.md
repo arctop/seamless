@@ -79,6 +79,14 @@ the [MCP API overview](https://thereisnospoon.org/docs/reference/mcp/).
 every other install neither lists nor accepts it. It files the same request a
 call refused at the lock files by itself, with an optional reason of up to 200
 characters that the owner sees quoted and labeled as the agent's own words.
+With read grants on (`isolation.requests`), it also asks for a read of a
+confidential project no lock covers (kind `grant`, with `from`), the request a
+read refused at the project's fence files; with them off, such a project is
+not locked and nothing is filed.
+
+An agent that already holds the access it asks for is answered
+`status: approved` with `open_until`, and nothing is filed, until 30 minutes
+before it ends.
 
 When the agent's client supports MCP elicitation (Claude Code does), the
 request opens an approval dialog in the session: the owner sees the daemon's
@@ -88,10 +96,15 @@ could answer it - the proof is: the Touch ID helper's signature or the
 passkey's assertion, checked by the daemon. The call waits up to two minutes
 for it, then answers with the request id; the owner can still decide later
 with `seam approve`, or with a passkey on the request's console page when one
-is enrolled. A call refused at a lock opens the same dialog. Once approved,
-retry the call. A call whose asking process is not an agent's (a tmux pane, a
-terminal, an ssh login) files nothing and says why: an approval would cover
-every program that process started.
+is enrolled. Choosing a passkey in the dialog opens the request's page for the
+duration chosen there; the passkey signs it with the facts. Where a passkey is
+the only way the dialog can finish, the dialog is that page, which asks the
+duration. Cancelling the Touch ID prompt ends the wait at once
+(`dialog: touchid_cancelled`; `touchid_closed` when the helper closed without
+approving for another reason), the request still pending. A call refused at a
+lock opens the same dialog. Once approved, retry the call. A call whose asking
+process is not an agent's (a tmux pane, a terminal, an ssh login) files nothing
+and says why: an approval would cover every program that process started.
 
 ## capture_url is SSRF-safe on purpose
 
@@ -215,7 +228,7 @@ Fetch a web page (SSRF-guarded: private/loopback addresses are rejected) and sav
 
 ## access_request {#access_request}
 
-Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth.locked), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to two minutes for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then.
+Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth.locked), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to two minutes for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then. An agent that already holds the access it asks for is answered with it, and nothing is filed, until 30 minutes before it ends. With read grants on (isolation.requests), it also asks for a read of a confidential project no lock covers.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|

@@ -302,3 +302,79 @@ func TestResetApprovers_EndsConsoleUnlocks(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, live)
 }
+
+func touchCred(b byte, name string) ApproverCredential {
+	k := touchKey(b)
+	return ApproverCredential{Kind: ApproverTouchID, CredentialID: []byte{b, b}, PublicKey: k, Alg: -7, Name: name}
+}
+
+// A Touch ID enrollment retires the credentials it names, in its own
+// transaction and only once the new key is stored: never a passkey, never a
+// row whose public key is not the one the caller verified, and nothing at all
+// when the enrollment itself fails.
+func TestEnrollTouchIDRetiring(t *testing.T) {
+	ctx := context.Background()
+	fresh := func(t *testing.T) (*sql.DB, ApproverCredential, ApproverCredential, ApproverCredential) {
+		db := leaseDB(t)
+		old := enrollOne(t, db, touchCred(1, "Touch ID on example-mac"))
+		other := enrollOne(t, db, touchCred(2, "Touch ID on example-mini"))
+		pk := enrollOne(t, db, passkeyCred("c1"))
+		return db, old, other, pk
+	}
+	ids := func(t *testing.T, db *sql.DB) []string {
+		rows, err := ApproverCredentials(ctx, db, "")
+		require.NoError(t, err)
+		var out []string
+		for _, r := range rows {
+			out = append(out, r.ID)
+		}
+		return out
+	}
+	code := func(t *testing.T, db *sql.DB) string {
+		c, _, err := MintEnrollCode(ctx, db, ApproverTouchID, apNow)
+		require.NoError(t, err)
+		return c
+	}
+
+	t.Run("retires the named key with its own public key", func(t *testing.T) {
+		db, old, other, pk := fresh(t)
+		got, retired, err := EnrollTouchIDRetiring(ctx, db, touchCred(3, "Touch ID on example-mac"), code(t, db), apNow,
+			[]RetiredApprover{{ID: old.ID, PublicKey: old.PublicKey}, {ID: old.ID, PublicKey: old.PublicKey}})
+		require.NoError(t, err)
+		require.Equal(t, []string{old.ID}, retired, "named twice, retired once")
+		require.ElementsMatch(t, []string{other.ID, pk.ID, got.ID}, ids(t, db))
+	})
+	t.Run("never a passkey, another key, a stale key or the new one", func(t *testing.T) {
+		db, old, other, pk := fresh(t)
+		got, retired, err := EnrollTouchIDRetiring(ctx, db, touchCred(3, "new"), code(t, db), apNow, []RetiredApprover{
+			{ID: pk.ID, PublicKey: pk.PublicKey},     // a passkey
+			{ID: other.ID, PublicKey: old.PublicKey}, // another key's id with this key's public key
+			{ID: "01NOSUCHAPPROVER0000000000", PublicKey: old.PublicKey},
+			{ID: old.ID, PublicKey: touchKey(9)}, // a public key the row does not hold
+		})
+		require.NoError(t, err)
+		require.Empty(t, retired)
+		require.ElementsMatch(t, []string{old.ID, other.ID, pk.ID, got.ID}, ids(t, db))
+	})
+	t.Run("a failed enrollment retires nothing", func(t *testing.T) {
+		db, old, other, pk := fresh(t)
+		retire := []RetiredApprover{{ID: old.ID, PublicKey: old.PublicKey}}
+		_, _, err := EnrollTouchIDRetiring(ctx, db, touchCred(3, "new"), "AAAA-BBBB-CCCC-DDDD", apNow, retire)
+		require.ErrorIs(t, err, ErrEnrollCode)
+		_, _, err = EnrollTouchIDRetiring(ctx, db, touchCred(1, "the same key again"), code(t, db), apNow, retire)
+		require.ErrorIs(t, err, ErrApproverExists)
+		_, _, err = EnrollTouchIDRetiring(ctx, db, touchCred(3, "a\nb"), code(t, db), apNow, retire)
+		require.ErrorIs(t, err, ErrInvalidApprover)
+		_, _, err = EnrollTouchIDRetiring(ctx, db, touchCred(3, "no code"), "", apNow, retire)
+		require.ErrorIs(t, err, ErrEnrollProof)
+		_, _, err = EnrollTouchIDRetiring(ctx, db, passkeyCred("c9"), code(t, db), apNow, retire)
+		require.ErrorIs(t, err, ErrInvalidApprover, "only a Touch ID key retires one")
+		require.ElementsMatch(t, []string{old.ID, other.ID, pk.ID}, ids(t, db))
+	})
+	t.Run("EnrollApprover retires nothing", func(t *testing.T) {
+		db, old, other, pk := fresh(t)
+		got, err := EnrollApprover(ctx, db, touchCred(3, "Touch ID on example-mac"), code(t, db), "", apNow)
+		require.NoError(t, err)
+		require.ElementsMatch(t, []string{old.ID, other.ID, pk.ID, got.ID}, ids(t, db))
+	})
+}

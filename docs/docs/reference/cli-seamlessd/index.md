@@ -611,7 +611,9 @@ can approve an agent's access to a locked project (`peer_auth.locked`, see the
 database directly, so run it as the daemon's own account, for example
 `sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml
 seamlessd approvers list`. Becoming that account is the proof: no route, over
-the socket or with the TCP key, can mint a code or remove a credential.
+the socket or with the TCP key, can mint a code or remove a credential, except
+that a Mac re-enrolling with `seam touchid enroll` retires its own earlier
+Touch ID key, which signs for it.
 
 - `enroll-code` mints a one-time enrollment code for one kind of credential. It
   works once, for 10 minutes; only its hash is stored. For a passkey, open the
@@ -627,7 +629,10 @@ the socket or with the TCP key, can mint a code or remove a credential.
   else's hands.
 
 With no credential enrolled, `seamlessd doctor` warns while a project is
-locked: only the terminal path can approve then.
+locked: only the terminal path can approve then. Both doctor and `list` say how
+to enroll one: a code from `enroll-code passkey`, run as the daemon's account,
+and, on a Mac whose daemon serves the `peer_auth` socket, `seam touchid enroll`
+in your own terminal.
 
 ## seamlessd approve {#seamlessd_approve}
 
@@ -652,6 +657,17 @@ same agent, a mark on the session), the approval is refused and you look
 again. `--deny` closes the request; the project stays locked for that
 session. A request naming a shell, a terminal, a multiplexer or a login
 process (one an older release filed) is never approved: deny it.
+
+It answers in one line: `Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may
+read and write example-finance until 14:53 PST.` (`until the session ends, at
+the latest ...` for `--for session`; a read grant names the asking project,
+and says the content may be copied into its memories), or `Denied R-7F3K:
+example-finance stays locked for that session.` When nothing changed it exits
+1 and says why: the facts changed (`the facts of R-7F3K changed since they were
+shown: run seam approve again and look at them first`), the request expired
+before the decision reached it (`R-7F3K expired at 14:05 PST, before this
+decision: nothing changed ...`), or it was decided meanwhile (`R-7F3K was
+already approved: nothing changed`).
 
 ## seamlessd console-open {#seamlessd_console_open}
 

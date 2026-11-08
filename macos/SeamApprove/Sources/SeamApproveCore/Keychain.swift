@@ -152,6 +152,33 @@ public final class SecureEnclaveKeyStore: KeyStore {
         // prompt says this approval's facts.
         let context = LAContext()
         context.localizedReason = reason
+        return try sign(message, with: key, context: context)
+    }
+
+    /// `signAll` signs with one fresh context for the whole run, so the
+    /// system can let the owner's presence, checked for the first key, cover
+    /// the others rather than asking once per key; where it asks again, it
+    /// asks in the same words. Still no earlier unlock is reused
+    /// (touchIDAuthenticationAllowableReuseDuration stays 0).
+    public func signAll(_ signings: [Signing], reason: String) throws -> [Data?] {
+        try checkAvailable()
+        let context = LAContext()
+        context.localizedReason = reason
+        var out: [Data?] = []
+        for (i, s) in signings.enumerated() {
+            do {
+                out.append(try sign(s.message, with: s.key, context: context))
+            } catch {
+                if i == 0 {
+                    throw error
+                }
+                out.append(nil)
+            }
+        }
+        return out
+    }
+
+    func sign(_ message: Data, with key: StoredKey, context: LAContext) throws -> Data {
         var q = base()
         q[kSecAttrApplicationLabel as String] = key.handle
         q[kSecReturnRef as String] = true

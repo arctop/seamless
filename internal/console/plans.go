@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/features"
 	"github.com/arctop/seamless/internal/files"
@@ -112,6 +113,11 @@ type plansData struct {
 	// plan.shipped settlements in the current LOCAL calendar month. nil while
 	// the momentum feature is off -- zero trace, including in the JSON.
 	ShippedMonth *planShippedMonth `json:"shippedThisMonth,omitempty"`
+	// Locked names the locked projects (peer_auth.locked) this request does
+	// not read, whose plans the list leaves out: their names only, never a
+	// count of what they hold. nil while nothing is locked -- absent from the
+	// JSON, which reads exactly as before.
+	Locked []string `json:"locked,omitempty"`
 }
 
 // planShippedMonth carries the Plans header's monthly shipped count, a
@@ -258,7 +264,7 @@ func (s *Service) plansPage(ctx context.Context, win store.RetrievalWindow) (pla
 	data := plansData{
 		Rows: kept, Count: len(kept), Total: total,
 		Window: win.Key, WindowLabel: win.Label, Windows: windowOptions(win.Key),
-		QS: planQS(win.Key),
+		QS: planQS(win.Key), Locked: lockedProjects(ctx),
 	}
 	for _, row := range kept {
 		switch row.Phase {
@@ -385,6 +391,9 @@ func (s *Service) planDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !found {
+		if s.answerLockedPlan(w, r, slug) {
+			return
+		}
 		s.notFound(w, r, "No plan with slug "+slug+".")
 		return
 	}
@@ -425,6 +434,9 @@ func (s *Service) planApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
+		if s.answerLockedPlan(w, r, slug) {
+			return
+		}
 		s.notFound(w, r, "No plan with slug "+slug+".")
 		return
 	}
@@ -484,6 +496,56 @@ func (s *Service) planApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/console/plans/"+slug, http.StatusSeeOther)
+}
+
+// answerLockedPlan answers a JSON lookup of a plan this request's handle does
+// not hold, when the plan is in a locked project (peer_auth.locked) the
+// request does not read: the lock, named (answerLocked), instead of a "not
+// found" that would send the owner looking for a plan that exists. It reports
+// whether it answered (a failed lookup is answered too, as the error it is).
+// Nothing runs while nothing is locked, and a browser page and a plan in no
+// locked project fall through to the 404 as before.
+func (s *Service) answerLockedPlan(w http.ResponseWriter, r *http.Request, slug string) bool {
+	ctx := r.Context()
+	if !wantsJSON(r) || len(lockedProjects(ctx)) == 0 {
+		return false
+	}
+	// The base handle hides every locked project, so the composition's notes
+	// are read through the write handle -- for their projects alone.
+	tagged, err := store.NotesByTag(ctx, s.writeDB(), "", plans.SlugTag(slug))
+	if err != nil {
+		s.serverError(w, r, err)
+		return true
+	}
+	var locked []string
+	for _, n := range tagged {
+		if lockedHere(ctx, n.Project) && !slices.Contains(locked, n.Project) {
+			locked = append(locked, n.Project)
+		}
+	}
+	if len(locked) == 0 {
+		return false
+	}
+	slices.Sort(locked)
+	s.answerLocked(w, r, locked[0])
+	return true
+}
+
+// answerLocked is the JSON answer for an item that lives in project, a
+// locked project this request does not read: 403, {"error", "locked": true,
+// "project"}. The error is the lock refusal the tool-backed seam commands and
+// the MCP tools carry (access.View.Refusal: the rule on one line, the remedy
+// on the next, worded for the socket or the TCP key), so a console-backed
+// command says what they say. Nothing is filed: a console read is not an
+// access request. A browser's own JSON gets the console unlock instead
+// (lockedProject), the remedy a browser has.
+func (s *Service) answerLocked(w http.ResponseWriter, r *http.Request, project string) {
+	if s.classify(r) == credCookie {
+		s.lockedProject(w, r, project)
+		return
+	}
+	msg := access.Refusal(access.WithLockRequester(r.Context(), nil), project).Error()
+	writeJSON(w, http.StatusForbidden, map[string]any{"error": msg, "locked": true, "project": project})
 }
 
 // planComposition resolves a plan slug to its primary note and the other notes

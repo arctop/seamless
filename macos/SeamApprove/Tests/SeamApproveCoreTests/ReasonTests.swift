@@ -209,5 +209,7 @@ final class ReasonTests: XCTestCase {
     func testEnrollment() {
         XCTAssertEqual(Reason.enrollment(account: "_seamless"),
                        "add this Mac's Touch ID key as an approver for the Seamless daemon running as _seamless")
+        XCTAssertEqual(Reason.enrollment(account: "_seamless", replacing: true),
+                       "add this Mac's Touch ID key as an approver for the Seamless daemon running as _seamless, in place of the key this Mac enrolled before")
     }
 }

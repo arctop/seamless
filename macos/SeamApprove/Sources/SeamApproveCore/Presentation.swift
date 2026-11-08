@@ -161,12 +161,18 @@ public enum Notices {
         return Notice(title: "Approved", body: body + ".", succeeded: true)
     }
 
-    /// The key is enrolled under `name`. `removals` are the commands that
-    /// remove the credentials of the keys it replaced, which this Mac has
-    /// deleted and the daemon still lists.
-    public static func enrolled(name: String, removals: [String]) -> Notice {
+    /// The key is enrolled under `name`. `retired` is how many keys it
+    /// replaced that this Mac and the daemon have both deleted. `removals`
+    /// are the commands that remove the credentials of the keys it replaced,
+    /// which this Mac has deleted and the daemon still lists.
+    public static func enrolled(name: String, removals: [String], retired: Int = 0) -> Notice {
         var body = "This Mac's Touch ID can now approve access to locked projects. The daemon lists it as "
         body += Text.quoted(name, max: 64) + "."
+        if retired == 1 {
+            body += " It replaces the key this Mac enrolled before, which is deleted from this Mac and from the daemon."
+        } else if retired > 1 {
+            body += " It replaces the keys this Mac enrolled before, which are deleted from this Mac and from the daemon."
+        }
         guard !removals.isEmpty else {
             return Notice(title: "Touch ID enrolled", body: body, succeeded: true)
         }

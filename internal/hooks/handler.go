@@ -103,6 +103,10 @@ type Config struct {
 type Approvals interface {
 	Request(ctx context.Context, in approval.RequestInput) (store.AccessApproval, error)
 	Ways(ctx context.Context, id string) access.Ways
+	// JudgeStart is the anchor rule for the agent process a SessionStart
+	// is about to stamp: an *approval.AnchorError means no request could
+	// ever be filed for that session, so it is not recorded.
+	JudgeStart(v access.View, agentProcess string) error
 }
 
 // Handler serves the hook endpoints.

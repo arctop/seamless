@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -25,7 +26,19 @@ type taskRow struct {
 	Created  time.Time  `json:"created"`
 	Closed   *time.Time `json:"closed,omitempty"`
 	Blockers []blocker  `json:"blockers,omitempty"`
+	// LockedBlockers are the unfinished blockers this request's handle does
+	// not hold because they sit in a locked project it does not read
+	// (peer_auth.locked): that project's slug, once per blocker, never the
+	// blocker itself. nil while nothing is locked -- absent from the JSON.
+	LockedBlockers []string `json:"lockedBlockers,omitempty"`
 }
+
+// BlockedBy counts every unfinished blocker of the row: the ones it names and
+// the ones in locked projects.
+func (r taskRow) BlockedBy() int { return len(r.Blockers) + len(r.LockedBlockers) }
+
+// LockedIn is the locked projects the row's locked blockers sit in, once each.
+func (r taskRow) LockedIn() []string { return slices.Compact(slices.Clone(r.LockedBlockers)) }
 
 type blocker struct {
 	ID     string `json:"id"`
@@ -94,6 +107,9 @@ func (s *Service) tasksPage(ctx context.Context) (tasksData, error) {
 		Closed:     taskRows(closed),
 		ClosedMore: closedMore,
 	}
+	if err := s.markLockedBlockers(ctx, &data); err != nil {
+		return tasksData{}, err
+	}
 	// The agent-facing ready/blocked queries are deliberately oldest-first for
 	// fair claiming. The console is a review surface: within each open-state rail
 	// group, match the timestamp shown on the row and present newest-created first.
@@ -101,6 +117,47 @@ func (s *Service) tasksPage(ctx context.Context) (tasksData, error) {
 		sortTaskRowsNewest(bucket)
 	}
 	return data, nil
+}
+
+// markLockedBlockers tells the owner which open tasks a locked project
+// (peer_auth.locked) blocks. The request's handle hides a locked project it
+// does not read -- its tasks and their dependency edges both -- so a task one
+// of them blocks reads as ready on it, and a blocked one as blocked by fewer.
+// This asks the main handle for those blockers' projects alone, moves such a
+// ready task to the blocked rail, and records each blocker by its locked
+// project (LockedBlockers): the console is the owner's surface, which lists
+// locked projects by name, and their content stays out. Nothing runs while
+// nothing is locked.
+func (s *Service) markLockedBlockers(ctx context.Context, data *tasksData) error {
+	locked := lockedProjects(ctx)
+	if len(locked) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(data.Ready)+len(data.Blocked))
+	for _, row := range data.Ready {
+		ids = append(ids, row.ID)
+	}
+	for _, row := range data.Blocked {
+		ids = append(ids, row.ID)
+	}
+	by, err := store.OpenBlockerProjects(ctx, s.writeDB(), ids, locked)
+	if err != nil || len(by) == 0 {
+		return err
+	}
+	for i := range data.Blocked {
+		data.Blocked[i].LockedBlockers = by[data.Blocked[i].ID]
+	}
+	ready := data.Ready[:0]
+	for _, row := range data.Ready {
+		if projects := by[row.ID]; len(projects) > 0 {
+			row.LockedBlockers = projects
+			data.Blocked = append(data.Blocked, row)
+			continue
+		}
+		ready = append(ready, row)
+	}
+	data.Ready = ready
+	return nil
 }
 
 func (s *Service) tasks(w http.ResponseWriter, r *http.Request) {

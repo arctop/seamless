@@ -67,6 +67,15 @@ final class PresentationTests: XCTestCase {
             + "The keys it replaces are deleted from this Mac, but the daemon still lists their credentials. To remove them, run these in your own terminal:")
         XCTAssertEqual(two.setApart.count, 2)
         XCTAssertFalse(two.autoCloses)
+
+        let replaced = Notices.enrolled(name: "Touch ID", removals: [], retired: 1)
+        XCTAssertEqual(replaced, Notice(title: "Touch ID enrolled",
+                                        body: "This Mac's Touch ID can now approve access to locked projects. The daemon lists it as \u{201C}Touch ID\u{201D}. "
+                                            + "It replaces the key this Mac enrolled before, which is deleted from this Mac and from the daemon.",
+                                        succeeded: true))
+        XCTAssertTrue(replaced.autoCloses, "nothing is left for the owner to do")
+        XCTAssertTrue(Notices.enrolled(name: "Touch ID", removals: [], retired: 2).body
+            .hasSuffix(" It replaces the keys this Mac enrolled before, which are deleted from this Mac and from the daemon."))
     }
 
     func testKeyDeletedAlerts() {
@@ -128,6 +137,8 @@ final class PresentationTests: XCTestCase {
             Notices.approved(access: "read-write", project: "demo-vault", from: "", who: "Claude Code 2.1.319", expires: "2026-11-07T19:09:00Z", clock: c),
             Notices.enrolled(name: "Touch ID", removals: []),
             Notices.enrolled(name: "Touch ID", removals: ["x"]),
+            Notices.enrolled(name: "Touch ID", removals: [], retired: 1),
+            Notices.enrolled(name: "Touch ID", removals: ["x"], retired: 1),
             Notices.keyDeleted(credentials: []),
             Notices.keyDeleted(credentials: ["01A"]),
             Notices.noKey(),

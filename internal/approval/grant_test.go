@@ -250,3 +250,60 @@ func TestGrant_PeerTierAnchorsAndProves(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, leases)
 }
+
+// An asker that holds a live read grant asks again: while more than the
+// expiry warning remains, the grant answers and nothing is filed; from the
+// warning on, a new request is filed (a new approval). A grant from another
+// project, or a revoked one, answers nothing.
+func TestRequestGrant_LiveGrantAnswersUntilTheExpiryWarning(t *testing.T) {
+	f := newGrantFixture(t)
+	g := f.advisory()
+	ctx := context.Background()
+	ops := f.sessionIn(t, openOps, "cc/ops")
+	a, err := g.RequestGrant(ctx, GrantInput{Project: confHR, SessionID: ops})
+	require.NoError(t, err)
+	facts, err := g.Facts(ctx, a.ID)
+	require.NoError(t, err)
+	grant, err := g.Approve(ctx, Decision{ID: a.ID, Duration: For4h, Digest: facts.Digest, Proof: Proof{Kind: ProofKey}})
+	require.NoError(t, err)
+	count := func() int {
+		var n int
+		require.NoError(t, f.db.QueryRow(`SELECT COUNT(*) FROM access_approvals`).Scan(&n))
+		return n
+	}
+	before := count()
+
+	for _, at := range []time.Time{f.now, grant.ExpiresAt.Add(-access.ExpiryWarning - time.Second)} {
+		f.now = at
+		_, err := g.RequestGrant(ctx, GrantInput{Project: confHR, SessionID: ops, Via: "request"})
+		require.ErrorIs(t, err, ErrAccessLive)
+		var live *AccessLiveError
+		require.ErrorAs(t, err, &live)
+		require.Equal(t, AccessLiveError{Project: confHR, From: openOps, AccessID: grant.ID, ApprovalID: a.ID, Expires: grant.ExpiresAt}, *live)
+		require.Equal(t, "project "+confHR+" is already readable from project "+openOps+" until "+access.Clock(grant.ExpiresAt)+
+			" (approved as "+ShortID(a.ID)+"), so nothing was filed. Nothing extends it silently: from "+
+			access.Clock(grant.ExpiresAt.Add(-30*time.Minute))+", 30 minutes before it ends, asking again files a new approval", live.Answer())
+		require.Equal(t, before, count())
+	}
+
+	// Another project's session holds no grant: it asks as before.
+	legal := f.sessionIn(t, lockLeg, "cc/legal")
+	other, err := g.RequestGrant(ctx, GrantInput{Project: confHR, SessionID: legal})
+	require.NoError(t, err)
+	require.Equal(t, store.AccessKindGrant, other.Kind)
+
+	// From the warning on: a new request.
+	f.now = grant.ExpiresAt.Add(-access.ExpiryWarning)
+	again, err := g.RequestGrant(ctx, GrantInput{Project: confHR, SessionID: ops})
+	require.NoError(t, err)
+	require.NotEqual(t, a.ID, again.ID)
+	require.Equal(t, before+2, count())
+
+	// A revoked grant answers nothing, whatever its expiry.
+	require.NoError(t, g.Deny(ctx, again.ID, "test"))
+	f.now = grant.GrantedAt
+	_, err = g.RevokeGrant(ctx, grant.ID)
+	require.NoError(t, err)
+	_, err = g.RequestGrant(ctx, GrantInput{Project: confHR, SessionID: ops})
+	require.NoError(t, err)
+}

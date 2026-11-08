@@ -86,6 +86,11 @@ const (
 	// pmPasskeyBad is the console's answer to a passkey assertion that does
 	// not verify (console/approvers.go approverError).
 	pmPasskeyBad = "the passkey could not be verified; try again"
+	// pmPasskeyRebound is the console's answer to a passkey assertion made
+	// for this request with another duration (console/access.go accessError,
+	// approval.ErrBindingChanged).
+	pmPasskeyRebound = "the passkey approved this request for another duration, or other facts, than this approval names: " +
+		"nothing was approved; reload the page, check the duration and approve again"
 	// pmDecided, pmExpired and pmFactsChanged are accessError's 409s.
 	pmDecided      = "this request was already decided"
 	pmExpired      = "this request expired: the agent can ask again"
@@ -539,7 +544,18 @@ type pmAccessOne struct {
 }
 
 func pmReadAccess(base, key, ref string) (pmAccessOne, error) {
-	status, body, err := pmDo(base, key, http.MethodGet, "/console/access/"+url.PathEscape(ref)+"?format=json", nil, nil)
+	return pmReadAccessFor(base, key, ref, "")
+}
+
+// pmReadAccessFor reads request ref's page with the duration ?for= chose:
+// the passkey options it carries sign that duration ("" chooses none, and
+// the page carries none).
+func pmReadAccessFor(base, key, ref, duration string) (pmAccessOne, error) {
+	path := "/console/access/" + url.PathEscape(ref) + "?format=json"
+	if duration != "" {
+		path += "&for=" + url.QueryEscape(duration)
+	}
+	status, body, err := pmDo(base, key, http.MethodGet, path, nil, nil)
 	if err != nil {
 		return pmAccessOne{}, err
 	}
@@ -690,12 +706,14 @@ func (d *pmDaemon) touchIDPost(helper, id string, form url.Values) (int, string)
 	return d.do(helper, "", http.MethodPost, "/console/access/"+id+"/approve", form, nil)
 }
 
-// assertion is the passkey page's ceremony for request ref: its options read
-// over the console, answered by the authenticator from pmOrigin.
-func (d *pmDaemon) assertion(a *passkeytest.Authenticator, ref string) (pmAccessOne, []byte) {
+// assertion is the passkey page's ceremony for request ref and duration: its
+// options, issued for that duration (?for=) and read over the console,
+// answered by the authenticator from pmOrigin.
+func (d *pmDaemon) assertion(a *passkeytest.Authenticator, ref, duration string) (pmAccessOne, []byte) {
 	d.t.Helper()
-	one := d.readAccess(d.tcp.URL, pmKey, ref)
-	require.NotEmpty(d.t, one.PasskeyOptions, "a pending request's page carries its passkey options")
+	one, err := pmReadAccessFor(d.tcp.URL, pmKey, ref, duration)
+	require.NoError(d.t, err)
+	require.NotEmpty(d.t, one.PasskeyOptions, "a pending request's page carries its passkey options for the duration chosen")
 	resp, err := a.Get(one.PasskeyOptions, pmOrigin)
 	require.NoError(d.t, err)
 	return one, resp

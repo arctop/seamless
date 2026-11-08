@@ -45,7 +45,7 @@
 
 <section aria-labelledby="approvers-touchid-title">
   <h2 id="approvers-touchid-title">Add a Touch ID key</h2>
-  <p class="held-sub">On a Mac, run <code>seam touchid enroll</code> in your own terminal. It installs the Seamless Approve app, which keeps its key in this Mac's Secure Enclave, and asks for a one-time code from <code>seamlessd approvers enroll-code touchid</code>, run as the daemon's account. The key then approves from the agent's dialog with your finger, your Apple Watch or your login password.</p>
+  <p class="held-sub">On a Mac, run <code>seam touchid enroll</code> in your own terminal. It installs the Seamless Approve app, which keeps its key in this Mac's Secure Enclave, and asks for a one-time code from <code>seamlessd approvers enroll-code touchid</code>, run as the daemon's account. The key then approves from the agent's dialog with your finger, your Apple Watch or your login password. Enrolling the same Mac again replaces its key: the earlier one signs for its own removal and leaves this list with the enrollment. Another Mac's key, and a passkey, are never removed that way.</p>
 </section>
 </div>
 {{end}}

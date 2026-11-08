@@ -301,3 +301,96 @@ func TestPasskeysOff(t *testing.T) {
 	var nilSvc *Service
 	require.False(t, nilSvc.PasskeysOn())
 }
+
+// A Touch ID key that replaces this Mac's earlier one retires it in the same
+// enrollment, but only a credential whose own key signed the request to be
+// retired: never a passkey, never another Mac's key, never on a signature over
+// another enrollment, and nothing when the enrollment itself is refused.
+func TestEnrollTouchIDReplacing(t *testing.T) {
+	ctx := context.Background()
+	newKey := func(t *testing.T) (*ecdsa.PrivateKey, []byte) {
+		k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+		pub, err := k.PublicKey.Bytes()
+		require.NoError(t, err)
+		return k, pub
+	}
+	signFor := func(t *testing.T, k *ecdsa.PrivateKey, msg []byte) []byte {
+		d := sha256.Sum256(msg)
+		sig, err := ecdsa.SignASN1(rand.Reader, k, d[:])
+		require.NoError(t, err)
+		return sig
+	}
+	enroll := func(t *testing.T, f *fixture, name string) (*ecdsa.PrivateKey, store.ApproverCredential) {
+		k, pub := newKey(t)
+		code := f.code(t, store.ApproverTouchID)
+		c, err := f.svc.EnrollTouchID(ctx, name, code, pub, signFor(t, k, TouchIDEnrollMessage(code, pub)))
+		require.NoError(t, err)
+		return k, c
+	}
+	ids := func(t *testing.T, f *fixture) []string {
+		rows, err := store.ApproverCredentials(ctx, f.db, "")
+		require.NoError(t, err)
+		var out []string
+		for _, r := range rows {
+			out = append(out, r.ID)
+		}
+		return out
+	}
+
+	f := newFixture(t)
+	oldKey, old := enroll(t, f, "Touch ID on example-mac")
+	otherKey, other := enroll(t, f, "Touch ID on example-mini")
+	pk, err := store.EnrollApprover(ctx, f.db, store.ApproverCredential{Kind: store.ApproverPasskey, CredentialID: []byte("pk"),
+		PublicKey: []byte{0xa5}, Alg: -7, Name: "security key"}, f.code(t, store.ApproverPasskey), "", f.now)
+	require.NoError(t, err)
+
+	newK, pub := newKey(t)
+	code := f.code(t, store.ApproverTouchID)
+	enrollSig := signFor(t, newK, TouchIDEnrollMessage(code, pub))
+	replace := func(k *ecdsa.PrivateKey, id string) TouchIDReplacement {
+		return TouchIDReplacement{ID: id, Signature: signFor(t, k, TouchIDReplaceMessage(code, pub, id))}
+	}
+	refused := []TouchIDReplacement{
+		replace(otherKey, old.ID), // another Mac's key asking to retire this Mac's
+		replace(oldKey, other.ID), // this Mac's key asking to retire another Mac's
+		replace(oldKey, pk.ID),    // a passkey
+		replace(oldKey, "01NOSUCHAPPROVER0000000000"),
+		{ID: old.ID, Signature: signFor(t, oldKey, TouchIDReplaceMessage("ZZZZ-ZZZZ-ZZZZ-ZZZZ", pub, old.ID))}, // another enrollment
+		{ID: old.ID, Signature: signFor(t, oldKey, TouchIDEnrollMessage(code, pub))},                           // another message
+		{ID: old.ID, Signature: []byte{1, 2, 3}},
+	}
+
+	// A refused enrollment retires nothing, even with a good request to.
+	_, _, err = f.svc.EnrollTouchIDReplacing(ctx, "new", code, pub, signFor(t, otherKey, TouchIDEnrollMessage(code, pub)),
+		[]TouchIDReplacement{replace(oldKey, old.ID)})
+	require.ErrorIs(t, err, ErrTouchIDKey)
+	require.ElementsMatch(t, []string{old.ID, other.ID, pk.ID}, ids(t, f))
+
+	// Every other request is left alone, and the enrollment goes on.
+	got, retired, err := f.svc.EnrollTouchIDReplacing(ctx, "Touch ID on example-mac", code, pub, enrollSig,
+		append(refused, replace(oldKey, old.ID)))
+	require.NoError(t, err)
+	require.Equal(t, []string{old.ID}, retired)
+	require.Equal(t, pub, got.PublicKey)
+	require.ElementsMatch(t, []string{other.ID, pk.ID, got.ID}, ids(t, f))
+
+	// Without a request to retire, nothing is.
+	f2 := newFixture(t)
+	_, old2 := enroll(t, f2, "Touch ID on example-mac")
+	k3, pub3 := newKey(t)
+	code3 := f2.code(t, store.ApproverTouchID)
+	got3, retired, err := f2.svc.EnrollTouchIDReplacing(ctx, "again", code3, pub3, signFor(t, k3, TouchIDEnrollMessage(code3, pub3)), nil)
+	require.NoError(t, err)
+	require.Empty(t, retired)
+	require.ElementsMatch(t, []string{old2.ID, got3.ID}, ids(t, f2))
+}
+
+func TestTouchIDReplaceMessage(t *testing.T) {
+	pub := append([]byte{4}, make([]byte, 64)...)
+	sum := sha256.Sum256([]byte("ABCDEFGHJKMNPQRS"))
+	want := append(append(append([]byte("seamless touchid replacement v1\x00"), sum[:]...), pub...), "01OLDAPPROVER0000000000000"...)
+	require.Equal(t, want, TouchIDReplaceMessage("abcd-efgh-jkmn-pqrs", pub, "01OLDAPPROVER0000000000000"))
+	require.NotEqual(t, TouchIDEnrollMessage("ABCDEFGHJKMNPQRS", pub), TouchIDReplaceMessage("ABCDEFGHJKMNPQRS", pub, ""),
+		"an enrollment's signature is never a replacement's")
+}

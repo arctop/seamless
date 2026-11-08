@@ -283,11 +283,10 @@ func renderHits(query string, hits []retrieve.Hit) string {
 		if h.Project != "" {
 			fmt.Fprintf(&b, " (%s)", h.Project)
 		}
-		// A restricted local account's item says so; the owner's carry no
-		// account, and their lines are unchanged.
-		if label := retrieve.AccountLabel(h.Account); label != "" {
-			fmt.Fprintf(&b, " (%s)", label)
-		}
+		// A restricted local account's item says so, bracketed as the briefing
+		// and prompt recall print it; the owner's carry no account, and their
+		// lines are unchanged.
+		b.WriteString(retrieve.AccountMark(h.Account))
 		b.WriteString("\n")
 	}
 	return strings.TrimRight(b.String(), "\n")

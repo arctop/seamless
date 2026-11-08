@@ -10,11 +10,23 @@ package mcp
 // It is registered only while the daemon locks a project
 // (Config.OfferAccessRequest): every other install's tools/list and ToolCount
 // are unchanged. Catalog lists it, and the docs say when it is present.
+//
+// With read grants on as well (isolation.requests), a confidential project
+// no lock covers is asked for as a read grant, as `seam access request` asks
+// (console grantRequest): the same request a read refused at its fence files.
+// With them off, such a project is "not locked", word for word as before.
+//
+// An asker that already holds live access to the project -- its tree's lease,
+// or a read grant from its project -- is answered with it and files nothing
+// until access.ExpiryWarning before it ends; from then on asking again files
+// a new approval: a refresh, or a new read grant request
+// (approval.AccessLiveError).
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -42,7 +54,10 @@ func accessRequestTool() mcp.Tool {
 			"say why. Asking again finds the request already waiting rather than filing another. When this agent's client "+
 			"can show an approval dialog, the call shows the owner the request and waits up to two minutes for the decision; "+
 			"otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the "+
-			"project to this agent's process tree until the time the result names: retry the work then."),
+			"project to this agent's process tree until the time the result names: retry the work then. An agent that "+
+			"already holds the access it asks for is answered with it, and nothing is filed, until 30 minutes before it "+
+			"ends. With read grants on (isolation.requests), it also asks for a read of a confidential project no lock "+
+			"covers."),
 		mcp.WithString("project", mcp.Required(), mcp.Description("the locked project's slug")),
 		mcp.WithString(accessReasonParam, mcp.Description(fmt.Sprintf("optional: why the work needs the project, in at "+
 			"most %d characters. The owner sees it labeled as this agent's own words.", store.MaxAccessReasonRunes))),
@@ -54,15 +69,22 @@ type accessRequestResult struct {
 	ID      string `json:"id"`
 	ShortID string `json:"short_id"`
 	Project string `json:"project"`
-	// Kind is request, or refresh for a tree that already holds a lease on
-	// the project (approving replaces it).
+	// Kind is request, refresh for a tree whose lease on the project ends
+	// within the expiry warning (approving replaces it), or grant for a read
+	// grant of a confidential project (isolation.requests).
 	Kind string `json:"kind"`
-	// Status is pending, approved, denied or expired.
+	// From is a read grant's asking project; absent for a lock's request.
+	From string `json:"from,omitempty"`
+	// Status is pending, approved, denied or expired. A live lease that
+	// covers the ask answers approved, with the request that opened it.
 	Status string `json:"status"`
 	// OpenUntil is when the approved access ends (RFC 3339).
 	OpenUntil string `json:"open_until,omitempty"`
 	// Dialog is how the in-session approval dialog ended (accepted, declined,
-	// cancelled, unoffered, or unanswered); absent when none was shown.
+	// cancelled, unoffered, unanswered, or -- accepted with Touch ID --
+	// touchid_cancelled when the owner cancelled the Touch ID prompt and
+	// touchid_closed when the helper closed without approving); absent when
+	// none was shown.
 	Dialog string `json:"dialog,omitempty"`
 	// Page is the request's passkey approval page, when a passkey can
 	// approve it there (passkeys set up, and one enrolled).
@@ -97,7 +119,14 @@ func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolReques
 	if s.cfg.Approvals == nil {
 		return errResult(AccessRequestTool, errors.New("this server locks no project: nothing to request"))
 	}
+	if s.cfg.Grants != nil && !lockCovers(ctx, project) {
+		return s.accessRequestGrant(ctx, start, project, reason)
+	}
 	a, err := s.fileAccessRequest(ctx, project, reason, "request")
+	var live *approval.AccessLiveError
+	if errors.As(err, &live) {
+		return jsonResult(s.liveAccessResult(ctx, live))
+	}
 	if err != nil {
 		return errResult(AccessRequestTool, accessRequestError(err))
 	}
@@ -106,6 +135,66 @@ func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolReques
 	out := accessRequestResult{
 		ID: a.ID, ShortID: t.Short, Project: a.Project, Kind: a.Kind, Status: s.stateOf(a), Page: ways.Page,
 	}
+	return s.accessRequestAnswer(ctx, start, t, ways, out)
+}
+
+// lockCovers reports whether project is a lock's (peer_auth.locked) for the
+// call in ctx: locked to it, or leased by its tree. A read grant is asked
+// only for a project no lock covers.
+func lockCovers(ctx context.Context, project string) bool {
+	v, ok := access.FromContext(ctx)
+	if !ok {
+		return false
+	}
+	_, leased := v.Lease(project)
+	return leased || v.Locked(project)
+}
+
+// accessRequestGrant files (or finds) the read grant request for a
+// confidential project no lock covers, as a read refused at its fence would
+// (grantRequestRefusal), and answers like a lock's request: the dialog when
+// it can run, else at once.
+func (s *Server) accessRequestGrant(ctx context.Context, start time.Time, project, reason string) (*mcp.CallToolResult, error) {
+	a, err := s.cfg.Grants.RequestGrant(ctx, approval.GrantInput{
+		Project: project, SessionID: s.boundSession(ctx), AgentProcess: callerAgentProcess(ctx), Host: s.callerHost(ctx),
+		Reason: reason, Via: "request",
+	})
+	var live *approval.AccessLiveError
+	if errors.As(err, &live) {
+		return jsonResult(s.liveAccessResult(ctx, live))
+	}
+	if err != nil {
+		return errResult(AccessRequestTool, grantRequestError(err))
+	}
+	t := dialogTarget{ID: a.ID, Short: approval.ShortID(a.ID), Project: a.Project, Grant: true}
+	ways := callWays(ctx, s.cfg.Grants.Ways(ctx, a.ID))
+	out := accessRequestResult{
+		ID: a.ID, ShortID: t.Short, Project: a.Project, Kind: a.Kind, From: a.FromProject, Status: s.stateOf(a), Page: ways.Page,
+	}
+	return s.accessRequestAnswer(ctx, start, t, ways, out)
+}
+
+// liveAccessResult is the answer to an ask live access already covers -- a
+// lease, or a read grant from the same project: the request that opened it,
+// approved, until it ends; nothing filed.
+func (s *Server) liveAccessResult(ctx context.Context, live *approval.AccessLiveError) accessRequestResult {
+	out := accessRequestResult{
+		Project: live.Project, From: live.From, Status: stateApproved, OpenUntil: live.Expires.UTC().Format(time.RFC3339),
+		Next: live.Answer() + "; keep working there until then",
+	}
+	if live.ApprovalID != "" {
+		out.ID, out.ShortID = live.ApprovalID, approval.ShortID(live.ApprovalID)
+		if a, err := store.AccessApprovalByID(ctx, s.cfg.DB, live.ApprovalID); err == nil {
+			out.Kind = a.Kind
+		}
+	}
+	return out
+}
+
+// accessRequestAnswer runs the dialog for request t when it can and answers
+// with out as the dialog left it, else at once.
+func (s *Server) accessRequestAnswer(ctx context.Context, start time.Time, t dialogTarget, ways access.Ways,
+	out accessRequestResult) (*mcp.CallToolResult, error) {
 	if end, ran := s.dialog(ctx, start, t); ran {
 		out.Status, out.Dialog = end.state, end.answer
 		if out.Dialog == answerNone {
@@ -140,7 +229,14 @@ func accessRequestNext(t dialogTarget, ways access.Ways, end dialogEnd) string {
 	case stateExpired:
 		return "it expired before the owner decided: ask again only if the work still needs " + t.Project
 	}
-	return ways.OwnerApproves(t.Short) + "; keep to other projects until it is approved, then retry the work that needs " + t.Project
+	lead := ""
+	switch end.answer {
+	case answerTouchIDCancelled:
+		lead = "Touch ID was cancelled, so nothing was approved and " + t.what() + " is still pending: "
+	case answerTouchIDClosed:
+		lead = "the Touch ID approver closed without approving, so " + t.what() + " is still pending: "
+	}
+	return lead + ways.OwnerApproves(t.Short) + "; keep to other projects until it is approved, then retry the work that needs " + t.Project
 }
 
 // accessRequestError words the approval service's refusals for an agent, as
@@ -159,6 +255,30 @@ func accessRequestError(err error) error {
 		return errors.New("that project is not locked: nothing to request")
 	case errors.Is(err, store.ErrInvalidAccessRequest):
 		return fmt.Errorf("the reason is limited to %d characters", store.MaxAccessReasonRunes)
+	}
+	return err
+}
+
+// grantRequestError words the read grants' refusals for an agent, as the
+// console's access request route does for `seam access request`
+// (console grantRequest). The reason's length is checked before filing.
+func grantRequestError(err error) error {
+	var anchor *approval.AnchorError
+	switch {
+	case errors.As(err, &anchor):
+		return fmt.Errorf("%s.\nRemedy: %s", strings.Replace(anchor.Rule(), "no access request", "no read request", 1), anchor.Remedy())
+	case errors.Is(err, approval.ErrSealed):
+		return errors.New("a sealed project is never granted, and a sealed project's session is never granted another: nothing to request")
+	case errors.Is(err, approval.ErrNotConfidential):
+		return errors.New("that project is neither locked nor confidential: nothing to request")
+	case errors.Is(err, approval.ErrNoProject):
+		return errors.New("the asking session works in no project: a read grant opens a project to another project, never to the global scope")
+	case errors.Is(err, approval.ErrNoProcess):
+		return errors.New("this connection has no verified process: request access from an agent session whose seam dials the peer_auth socket")
+	case errors.Is(err, approval.ErrNoSession), errors.Is(err, approval.ErrNoAnchor), errors.Is(err, approval.ErrAnchorNotInChain):
+		return errors.New("no agent session names this connection's agent process: ask from the agent's own session, whose seam names the agent that started it")
+	case errors.Is(err, access.ErrNotReachable):
+		return errors.New("that project is not reachable from this connection")
 	}
 	return err
 }

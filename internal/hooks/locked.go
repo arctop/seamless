@@ -27,17 +27,37 @@ import (
 // request is filed for the session here, so the notice can name it and the
 // owner has it waiting; the project's briefing arrives with the first tool
 // result after the approval (internal/mcp).
+//
+// The agent process the session would be stamped with is judged first
+// (approval's anchor rule, owner decision 2026-11-08): one no approval may
+// name -- a shell, a terminal, a multiplexer; an agent started straight from
+// a tmux pane names the tmux server -- could never have a request filed or a
+// lease approved, so nothing is recorded, and the notice says why and what to
+// do instead.
+//
+// The notice offers Touch ID only to an agent host known to show the approval
+// dialog's form (formDialogClient), as MCP offers it only to a client that
+// declared form elicitation (internal/mcp callWays).
 func (h *Handler) lockedStart(ctx context.Context, w http.ResponseWriter, client Client, host string, p hookPayload, project string) {
 	v, _ := access.FromContext(ctx)
+	var refused *approval.AnchorError
+	if h.approvals != nil && p.AgentType == "" {
+		if err := h.approvals.JudgeStart(v, p.Identity.AgentProcess); errors.As(err, &refused) {
+			h.logger.Debug("hooks: locked session not recorded", "project", project, "error", err)
+		}
+	}
 	var sessionID, name string
-	if p.AgentType == "" {
+	if p.AgentType == "" && refused == nil {
 		sessionID, name = h.ensureAmbientSessionIn(ctx, client, host, p, project)
 		if name != "" {
 			h.setAmbientModel(ctx, client, host, p.SessionID, pushedModel(p.Model, p.Capture), p.TranscriptPath)
 		}
 	}
 	var req access.LockRequest
-	if h.approvals != nil {
+	switch {
+	case refused != nil:
+		req = access.LockRequest{Unfiled: refused.Rule(), UnfiledRemedy: refused.Remedy()}
+	case h.approvals != nil:
 		a, err := h.approvals.Request(ctx, approval.RequestInput{
 			Project: project, View: v, SessionID: sessionID, AgentProcess: p.Identity.AgentProcess,
 			Host: host, Via: "refusal",
@@ -56,10 +76,18 @@ func (h *Handler) lockedStart(ctx context.Context, w http.ResponseWriter, client
 		default:
 			ways := h.approvals.Ways(ctx, a.ID)
 			req = access.LockRequest{ID: a.ID, Short: approval.ShortID(a.ID),
-				Refresh: a.Kind == store.AccessKindRefresh, Page: ways.Page, TouchID: ways.TouchID}
+				Refresh: a.Kind == store.AccessKindRefresh, Page: ways.Page,
+				TouchID: ways.TouchID && formDialogClient(client)}
 		}
 	}
-	notice := lockedNotice(project, v.RefusalFor(project, req), sessionID != "")
+	outcome := lockedUnrecorded
+	switch {
+	case refused != nil:
+		outcome = lockedRefused
+	case sessionID != "":
+		outcome = lockedRecorded
+	}
+	notice := lockedNotice(project, v.RefusalFor(project, req), outcome)
 	if name != "" {
 		notice = injectAmbientLine(notice, name, p.Identity.AgentProcess != "")
 	}
@@ -69,19 +97,48 @@ func (h *Handler) lockedStart(ctx context.Context, w http.ResponseWriter, client
 		p.SessionID, "", notice, false, nil)
 }
 
+// formDialogClient reports whether an agent host is known to show an MCP form
+// dialog (elicitation), the one Touch ID approval runs through: Claude Code
+// does (the owner approved in it on 2026-11-07). Codex is not counted: nothing
+// Seamless has captured of it (internal/hooks/testdata/codex) shows it
+// declaring form elicitation, and a remedy may offer less, never a path that
+// is not there. The client is what the hook already knows of the agent, and
+// unlike the program's name it holds for Claude Code installed with npm,
+// which runs as node.
+func formDialogClient(c Client) bool { return c == ClientClaudeCode }
+
+// lockedOutcome is what a locked project's SessionStart did with the session.
+type lockedOutcome int
+
+const (
+	// lockedUnrecorded: no session to record (a subagent's start, no session
+	// id, or a session kept in another locked project).
+	lockedUnrecorded lockedOutcome = iota
+	// lockedRecorded: recorded in the project, metadata only.
+	lockedRecorded
+	// lockedRefused: not recorded, because no approval may name the agent
+	// process (approval.JudgeStart).
+	lockedRefused
+)
+
 // lockedNotice is the SessionStart context in a locked project's repository:
 // the lock's rule and remedy (refusal, which names the request when one was
 // filed), what happened to this session, and when the briefing comes. It
 // names the project and nothing from inside it.
-func lockedNotice(project string, refusal error, recorded bool) string {
+func lockedNotice(project string, refusal error, outcome lockedOutcome) string {
 	var b strings.Builder
 	b.WriteString("<seam-briefing>\nSeamless: ")
 	b.WriteString(refusal.Error())
 	b.WriteString("\n")
-	if recorded {
+	switch outcome {
+	case lockedRefused:
+		b.WriteString("This session is not recorded, and Seamless tools cannot read or write " + project +
+			" from this process.\n</seam-briefing>")
+		return b.String()
+	case lockedRecorded:
 		b.WriteString("This session is recorded in " + project + " (its name, cwd and model only); until the owner " +
 			"approves, Seamless tools cannot read or write " + project + ", and its findings are refused. ")
-	} else {
+	default:
 		b.WriteString("Until the owner approves, Seamless tools cannot read or write " + project + ". ")
 	}
 	b.WriteString("The project's briefing arrives with the first Seamless tool result after the approval.\n</seam-briefing>")

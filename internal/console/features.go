@@ -172,22 +172,42 @@ func featureField(key features.Key) string { return featureFieldPrefix + string(
 // Everything it names is something a gate in this package or in internal/mcp
 // actually enforces.
 func featureWhenOff(f features.Feature) string {
-	return featureHides(f, true)
+	return featureHides(f, true, false)
 }
 
-// featureWhenOffPlain is featureWhenOff without the agent tools' names: it says
-// agents lose the matching tools without spelling out their identifiers.
-func featureWhenOffPlain(f features.Feature) string {
-	return featureHides(f, false)
-}
+// heldScreenNav is the Held screen's nav id: the one screen a feature's switch
+// does not always take away (heldModeFor).
+const heldScreenNav = "held"
+
+// heldScreeningParts names what the Held screen loses while screening is off
+// but restricted accounts keep it for their proposals (heldProposals): every
+// part held_proposals.go leaves behind the feature.
+const heldScreeningParts = "the Held screen's screening parts (lockdown, the corpus review, drift, session marks, " +
+	"and the writes screening held)"
+
+// heldStaysForProposals ends the screening card's line while restricted
+// accounts are configured: the screen itself outlives the switch.
+const heldStaysForProposals = " The Held screen stays, for restricted accounts' proposals."
 
 // featureHides builds the "what disappears" sentence, naming the agent tools
-// when toolNames is set and counting them otherwise.
-func featureHides(f features.Feature, toolNames bool) string {
+// when toolNames is set (WhenOff) and counting them otherwise (WhenOffPlain:
+// agents lose the matching tools without their identifiers spelled out).
+// keepsHeld says the Held screen outlives the screening switch (restricted
+// accounts are configured, peer_auth.restricted): the screening card then
+// names the screen's screening parts instead of the screen, and says the
+// screen stays. Every other card, and every card of an install without
+// restricted accounts, is unchanged.
+func featureHides(f features.Feature, toolNames, keepsHeld bool) string {
 	parts := slices.Clone(f.Surfaces)
-	if len(f.NavIDs) > 0 {
-		screens := make([]string, 0, len(f.NavIDs))
-		for _, id := range f.NavIDs {
+	navIDs := f.NavIDs
+	keptHeld := keepsHeld && f.Key == features.Screening && slices.Contains(navIDs, heldScreenNav)
+	if keptHeld {
+		navIDs = slices.DeleteFunc(slices.Clone(navIDs), func(id string) bool { return id == heldScreenNav })
+		parts = append(parts, heldScreeningParts)
+	}
+	if len(navIDs) > 0 {
+		screens := make([]string, 0, len(navIDs))
+		for _, id := range navIDs {
 			screens = append(screens, titleWord(id))
 		}
 		noun := "screens"
@@ -197,7 +217,7 @@ func featureHides(f features.Feature, toolNames bool) string {
 		parts = append(parts, "the "+strings.Join(screens, " & ")+" "+noun)
 	}
 	var scopes []string
-	for _, id := range f.NavIDs {
+	for _, id := range navIDs {
 		if slices.Contains(searchScopes, id) {
 			scopes = append(scopes, id)
 		}
@@ -219,7 +239,11 @@ func featureHides(f features.Feature, toolNames bool) string {
 	if len(parts) == 0 {
 		return "Hides nothing on its own."
 	}
-	return "Hides " + joinWithAnd(parts) + "."
+	line := "Hides " + joinWithAnd(parts) + "."
+	if keptHeld {
+		line += heldStaysForProposals
+	}
+	return line
 }
 
 // featureDataKept states what the feature's data amounts to right now -- the
@@ -252,6 +276,16 @@ func featureDataKept(key features.Key, n navCounts) string {
 // must be the RAW nav counts (not the feature-filtered ones the sidebar uses):
 // the reassurance line has to report the data of a feature that is off.
 func featureCards(cfg config.Features, counts navCounts) []featureCard {
+	return featureCardsFor(cfg, counts, false)
+}
+
+// featureCardsFor is featureCards for an install whose restricted local
+// accounts (peer_auth.restricted, Config.RestrictedAccounts) may be
+// configured. With restricted set, the screening card's "what disappears"
+// line stays true: switching screening off leaves the Held screen up for the
+// accounts' proposals (heldProposals) and takes away only its screening
+// parts. With restricted false every card is exactly featureCards'.
+func featureCardsFor(cfg config.Features, counts navCounts, restricted bool) []featureCard {
 	reg := features.Registry()
 	cards := make([]featureCard, 0, len(reg))
 	for _, f := range reg {
@@ -263,8 +297,8 @@ func featureCards(cfg config.Features, counts navCounts) []featureCard {
 			Default:      f.Default,
 			Tools:        f.Tools,
 			Field:        featureField(f.Key),
-			WhenOff:      featureWhenOff(f),
-			WhenOffPlain: featureWhenOffPlain(f),
+			WhenOff:      featureHides(f, true, restricted),
+			WhenOffPlain: featureHides(f, false, restricted),
 			// The counts are the feature's own data, so they are reported
 			// whether it is on or off -- that is the whole point of the line.
 			DataKept: featureDataKept(f.Key, counts),

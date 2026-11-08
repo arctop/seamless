@@ -11,7 +11,9 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/console"
@@ -132,63 +134,120 @@ func approveWith(ctx context.Context, svc *approval.Service, grants *approval.Gr
 	if err != nil {
 		return err
 	}
-	short := approval.ShortID(a.ID)
 	grant := a.Kind == store.AccessKindGrant
 	if *deny {
 		if *duration != "" || *digest != "" {
 			return errors.New("--deny takes no --for or --digest")
 		}
 		if err := svc.Deny(ctx, a.ID, "daemon-account"); err != nil {
-			return err
+			return settled(ctx, svc, a, err)
 		}
-		if grant {
-			fmt.Fprintf(out, "Denied %s: %s stays closed to that session.\n", short, a.Project)
-			return nil
-		}
-		fmt.Fprintf(out, "Denied %s: %s stays locked for that session.\n", short, a.Project)
+		fmt.Fprintf(out, "Denied %s: %s stays %s that session.\n", approval.ShortID(a.ID), a.Project, closedWord(grant))
 		return nil
 	}
 	if *duration == "" || *digest == "" {
 		return errors.New("an approval needs --for and --digest (seam approve supplies both)")
 	}
+	// Who asks, as the owner was shown: read before the decision, from the
+	// facts the digest covers. A failure costs only the name.
+	who := askerOf(ctx, svc, a)
 	if grant {
-		return approveGrant(ctx, grants, out, a, *duration, *digest)
+		return approveGrant(ctx, svc, grants, out, a, who, *duration, *digest)
 	}
 	lease, err := svc.Approve(ctx, approval.Decision{ID: a.ID, Duration: *duration, Digest: *digest, Proof: approval.Proof{Kind: approval.ProofDaemon}})
-	if errors.Is(err, approval.ErrFactsChanged) {
-		return fmt.Errorf("the facts of %s changed since they were shown: run seam approve again and look at them first", short)
-	}
 	if err != nil {
-		return err
+		return settled(ctx, svc, a, err)
 	}
-	until := "until the session ends (at the latest " + lease.ExpiresAt.Local().Format("15:04") + ")"
-	if *duration != approval.ForSession {
-		until = "until " + lease.ExpiresAt.Local().Format("15:04")
-	}
-	fmt.Fprintf(out, "Approved %s: %s, read and write, %s.\n", short, a.Project, until)
+	fmt.Fprintf(out, "Approved %s: %s may read and write %s %s.\n", approval.ShortID(a.ID), who, a.Project,
+		untilWords(*duration, lease.ExpiresAt))
 	return nil
 }
 
 // approveGrant commits a read grant with the daemon account's proof.
-func approveGrant(ctx context.Context, grants *approval.Grants, out io.Writer, a store.AccessApproval, duration, digest string) error {
+func approveGrant(ctx context.Context, svc *approval.Service, grants *approval.Grants, out io.Writer, a store.AccessApproval,
+	who, duration, digest string) error {
 	short := approval.ShortID(a.ID)
 	if grants == nil {
 		return fmt.Errorf("%s is a read grant request, and read grants are off here (isolation.requests): nothing to approve", short)
 	}
 	g, err := grants.Approve(ctx, approval.Decision{ID: a.ID, Duration: duration, Digest: digest, Proof: approval.Proof{Kind: approval.ProofDaemon}})
-	if errors.Is(err, approval.ErrFactsChanged) {
-		return fmt.Errorf("the facts of %s changed since they were shown: run seam approve again and look at them first", short)
-	}
 	if err != nil {
-		return err
+		return settled(ctx, svc, a, err)
 	}
-	until := "until the session ends (at the latest " + g.ExpiresAt.Local().Format("15:04") + ")"
-	if duration != approval.ForSession {
-		until = "until " + g.ExpiresAt.Local().Format("15:04")
-	}
-	fmt.Fprintf(out, "Approved %s: %s, read-only, for %s, %s; %s.\n", short, a.Project, a.FromProject, until,
-		approval.CopyIntoLine(a.Project, a.FromProject))
+	fmt.Fprintf(out, "Approved %s: %s, working in %s, may read %s (read-only) %s; %s.\n", short, who, a.FromProject,
+		a.Project, untilWords(duration, g.ExpiresAt), approval.CopyIntoLine(a.Project, a.FromProject))
 	return nil
+}
+
+// untilWords says when an approval for duration, ending at expires, ends.
+func untilWords(duration string, expires time.Time) string {
+	if duration == approval.ForSession {
+		return "until the session ends, at the latest " + access.Clock(expires)
+	}
+	return "until " + access.Clock(expires)
+}
+
+// askerOf names who asked, as the facts do: the agent the daemon names and
+// its pid, else the pid alone. The program's own path is left out: it is the
+// asking process's to choose, and this line goes to the owner's terminal
+// unescaped. A request without a process (none under peer_auth) is its
+// session's.
+func askerOf(ctx context.Context, svc *approval.Service, a store.AccessApproval) string {
+	agent := ""
+	if f, err := svc.Facts(ctx, a.ID); err == nil {
+		agent = f.Agent
+	}
+	switch {
+	case a.PeerPID == 0:
+		return "the asking session"
+	case agent == "":
+		return fmt.Sprintf("pid %d", a.PeerPID)
+	default:
+		return fmt.Sprintf("%s (pid %d)", agent, a.PeerPID)
+	}
+}
+
+// closedWord is what a denial leaves the project: a lock's stays locked for
+// the session, a confidential project's fence (a read grant) closed to it.
+func closedWord(grant bool) string {
+	if grant {
+		return "closed to"
+	}
+	return "locked for"
+}
+
+// ownerError is a refusal in the owner's own words that still wraps its
+// cause, so errors.Is finds the sentinel under the reworded text.
+type ownerError struct {
+	msg   string
+	cause error
+}
+
+func (e *ownerError) Error() string { return e.msg }
+func (e *ownerError) Unwrap() error { return e.cause }
+
+// settled rewords the decisions the owner can act on, one line each: facts
+// that changed since seam approve showed them, a request that expired before
+// the decision reached it, one decided meanwhile (it is read again to say
+// how). Any other error is returned as it is.
+func settled(ctx context.Context, svc *approval.Service, a store.AccessApproval, err error) error {
+	short := approval.ShortID(a.ID)
+	status := a.Status
+	if errors.Is(err, store.ErrApprovalNotPending) {
+		if now, rerr := svc.Resolve(ctx, a.ID); rerr == nil {
+			status = now.Status
+		}
+	}
+	switch {
+	case errors.Is(err, approval.ErrFactsChanged):
+		return &ownerError{msg: "the facts of " + short + " changed since they were shown: run seam approve again and look at them first", cause: err}
+	case errors.Is(err, store.ErrApprovalExpired), errors.Is(err, store.ErrApprovalNotPending) && status == store.ApprovalExpired:
+		return &ownerError{msg: fmt.Sprintf("%s expired at %s, before this decision: nothing changed (the agent asks again with its next call to %s)",
+			short, access.Clock(a.ExpiresAt), a.Project), cause: err}
+	case errors.Is(err, store.ErrApprovalNotPending) && status != store.ApprovalPending:
+		return &ownerError{msg: fmt.Sprintf("%s was already %s: nothing changed", short, status), cause: err}
+	}
+	return err
 }
 
 // terminalApprover tells seam approve how to run this daemon's terminal

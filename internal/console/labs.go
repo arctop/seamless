@@ -55,6 +55,7 @@ type labTrialRef struct {
 	Title   string    `json:"title"`
 	Outcome string    `json:"outcome,omitempty"`
 	Project string    `json:"project,omitempty"`
+	Account string    `json:"account,omitempty"` // restricted account that recorded it ("" = owner)
 	Created time.Time `json:"created"`
 }
 
@@ -138,7 +139,7 @@ func (s *Service) labDetailByName(ctx context.Context, name string) (labDetailDa
 	for _, tr := range trials {
 		d.Trials = append(d.Trials, labTrialRef{
 			ID: tr.ID, Title: tr.Title, Outcome: string(tr.Outcome),
-			Project: tr.ProjectSlug, Created: tr.CreatedAt,
+			Project: tr.ProjectSlug, Account: tr.Account, Created: tr.CreatedAt,
 		})
 	}
 	if d.Row.Trials > len(d.Trials) {

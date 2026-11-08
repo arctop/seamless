@@ -58,8 +58,10 @@ const durationSession = "session"
 
 // The request statuses the daemon reports.
 const (
-	statusPending = "pending"
-	statusExpired = "expired"
+	statusPending  = "pending"
+	statusExpired  = "expired"
+	statusApproved = "approved"
+	statusDenied   = "denied"
 )
 
 var approveCmd = spec("approve", groupAccess,
@@ -72,13 +74,15 @@ several); a request is its short id (R-7F3K) or its full id.
 It shows the request's facts, warnings first, with the agent's reason quoted
 and labeled as the agent's own words; asks for a duration (default: until the
 asking session ends, capped by the daemon's max_lease) unless --for names one;
-and asks to confirm: y approves, d denies, anything else changes nothing.
+says in one line what an approval grants (the agent, the project, the access
+and the duration); and asks to confirm: y approves, d denies, anything else
+changes nothing.
 
 The decision runs as the daemon's account through sudo -k, so the owner's
 Touch ID or password is asked for every time; the daemon's answer names the
 account, its seamlessd and its config. Before that it warns when a sudoers
 rule lets this account skip the authentication, which would make the approval
-prove nothing.
+prove nothing. Only warnings are colored, and not with NO_COLOR set.
 
 A read grant request (isolation.requests: an agent asking to read a
 confidential project) is decided the same way. On a daemon without peer_auth
@@ -87,8 +91,9 @@ and seam approve says so: that approval is advisory, since any process holding
 the key could make it.
 
 It needs a terminal on stdin and stdout: an agent cannot use it. --passkey
-opens the request's passkey page in the browser instead; --watch polls for new
-requests every 3 seconds, prints each once and raises a notification.`)
+opens the request's passkey page in the browser instead, with --for's duration
+chosen there when given; --watch polls for new requests every 3 seconds,
+prints each once and raises a notification.`)
 
 type approveOpts struct {
 	duration *presentString
@@ -99,7 +104,7 @@ type approveOpts struct {
 func bindApprove(fs *flag.FlagSet) *approveOpts {
 	o := &approveOpts{
 		duration: &presentString{},
-		passkey:  fs.Bool("passkey", false, "open the request's passkey page in the browser instead"),
+		passkey:  fs.Bool("passkey", false, "open the request's passkey page in the browser instead (with --for's duration)"),
 		watch:    fs.Bool("watch", false, "watch for new requests: print each once and raise a notification"),
 	}
 	fs.Var(o.duration, "for", "approve for `DURATION`: session (until the session ends), 1h or 4h; asked when absent")
@@ -126,20 +131,19 @@ func (p *presentString) Set(v string) error {
 	return nil
 }
 
-// errNotTerminal is seam approve run without the owner's terminal.
+// errNotTerminal is seam approve run without the owner's terminal: one line,
+// naming the ways that remain for an agent and for the owner. It is said
+// before any config is read, so it names the ways in general.
 var errNotTerminal = errors.New("seam approve is the owner's own terminal path: it needs a terminal on stdin and stdout, " +
-	"and an agent cannot use it\n" + hintIndent +
-	"(an agent asks with: seam access request <project>; the owner decides here, or on the console's passkey page)")
+	"so an agent cannot use it. An agent asks with `seam access request <project>`; the owner decides in their own " +
+	"terminal, or with Touch ID or a passkey where one is enrolled")
 
 func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error {
 	if !e.isTerminal() {
 		return errNotTerminal
 	}
-	switch {
-	case *o.watch && (len(pos) > 0 || *o.passkey || o.duration.set):
+	if *o.watch && (len(pos) > 0 || *o.passkey || o.duration.set) {
 		return errors.New("--watch only watches: it takes no request, --for or --passkey")
-	case *o.passkey && o.duration.set:
-		return errors.New("the duration is chosen on the passkey page: drop --for, or drop --passkey")
 	}
 	cfg, err := e.loadConfig()
 	if err != nil {
@@ -164,12 +168,12 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 	if err := decidable(e, one); err != nil {
 		return err
 	}
-	if *o.passkey {
-		return openPasskeyPage(ctx, e, one)
-	}
 	duration := o.duration.val
 	if o.duration.set && !slices.Contains(one.Durations, duration) {
 		return fmt.Errorf("invalid value %q for --for: valid values are %s", duration, strings.Join(one.Durations, ", "))
+	}
+	if *o.passkey {
+		return openPasskeyPage(ctx, e, one, duration)
 	}
 
 	renderFacts(e, f)
@@ -189,27 +193,33 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 		}
 	}
 
-	answer, _ := prompt(e, in, fmt.Sprintf("Approve %s (%s, %s, %s)? [y/N/d=deny] ",
-		printable(f.Short), printable(f.Project), printable(orDash(f.Access)), durationWords(duration, one.MaxLease)))
+	// What y grants, said before anything runs: the agent, the project, the
+	// access and the duration. sudo's prompt follows only after the answer.
+	fmt.Fprintln(e.stdout, "If approved: "+grantWords(f, duration, one.MaxLease))
+	answer, _ := prompt(e, in, "Approve "+printable(f.Short)+"? [y/N/d=deny] ")
 	if one.Advisory {
 		return decideOverConsole(e, cfg, f, strings.ToLower(answer), duration)
 	}
 	var argv []string
-	what := ""
+	what, done := "", ""
 	switch strings.ToLower(answer) {
 	case "y", "yes":
 		if !durationArg.MatchString(duration) {
 			return fmt.Errorf("the daemon offered %q as a duration, which seamlessd approve could not take", duration)
 		}
-		argv, what = approveArgv(t, f, duration), "approval"
+		argv, what, done = approveArgv(t, f, duration), "approval", "approved"
 	case "d", "deny":
-		argv, what = denyArgv(t, f), "denial"
+		argv, what, done = denyArgv(t, f), "denial", "denied"
 	default:
 		fmt.Fprintln(e.stdout, "Nothing changed.")
 		return nil
 	}
-	if err := warnPasswordless(ctx, e, t); err != nil {
+	passwordless, err := warnPasswordless(ctx, e, t)
+	if err != nil {
 		return err
+	}
+	if !passwordless {
+		fmt.Fprintf(e.stdout, "sudo asks for your Touch ID or password next: it commits the %s as %s.\n", what, t.Account)
 	}
 	// The terminal's own stdio, so sudo's Touch ID or password prompt shows and
 	// seamlessd's answer ("Approved R-7F3K: ...") reaches the owner as it said it.
@@ -218,22 +228,91 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 		return fmt.Errorf("run sudo: %w", err)
 	}
 	if code != 0 {
-		return fmt.Errorf("the %s of %s did not complete (sudo exited with status %d)", what, printable(f.Short), code)
+		return fmt.Errorf("the %s of %s did not complete: nothing was %s (sudo exited with status %d)",
+			what, printable(f.Short), done, code)
 	}
 	return nil
+}
+
+// grantWords is what approving f for duration grants, as one sentence: who
+// (the agent and its pid; a grant's asking project), what access to which
+// project, and until when.
+func grantWords(f accessFacts, duration, maxLease string) string {
+	who := askerWords(f)
+	if f.From != "" {
+		who += ", working in " + printable(f.From) + ","
+	}
+	project := printable(f.Project)
+	var reach string
+	switch f.Access {
+	case "read-write":
+		reach = "read and write " + project
+	case "read-only":
+		reach = "read " + project + " (read-only)"
+	default:
+		reach = "reach " + project + " (" + printable(orDash(f.Access)) + ")"
+	}
+	s := who + " may " + reach + " " + durationWords(duration, maxLease)
+	if f.Kind == "refresh" {
+		s += ", in place of the lease it holds now"
+	}
+	return s + "."
+}
+
+// askerWords names who asks: the agent the daemon names and its pid, else
+// the program's base name, else the pid alone; without peer_auth (no
+// process known) the session.
+func askerWords(f accessFacts) string {
+	if f.PID == 0 {
+		if s := printable(f.Session); s != "" {
+			return "the session " + s
+		}
+		return "the asking session"
+	}
+	name := printable(f.Agent)
+	if name == "" {
+		name = programBase(f.Program)
+	}
+	if name == "" {
+		return fmt.Sprintf("pid %d", f.PID)
+	}
+	return fmt.Sprintf("%s (pid %d)", name, f.PID)
+}
+
+// programBase is a program path's last element, printable: the daemon host's
+// path, whatever this client runs on.
+func programBase(p string) string {
+	if i := strings.LastIndexAny(p, `/\`); i >= 0 {
+		p = p[i+1:]
+	}
+	return printable(p)
 }
 
 // warnAdvisory says what an approval without peer_auth is worth, before the
 // owner is asked for it.
 func warnAdvisory(e *env) {
-	line := "! This approval is advisory: without peer_auth it is made with the bearer key, and any process " +
-		"holding the key could make it."
-	if useColor(e) {
-		line = "\x1b[1;31m" + line + "\x1b[0m"
-	}
-	fmt.Fprintln(e.stdout, line)
+	fmt.Fprintln(e.stdout, warningLine(e, "  ", "This approval is advisory: without peer_auth it is made with the bearer key, "+
+		"and any process holding the key could make it."))
 	fmt.Fprintln(e.stdout)
 }
+
+// warningLine is one warning as the owner reads it: indent, then "! " and the
+// text, the two colored together when color is on (useColor) and the indent
+// never.
+func warningLine(e *env, indent, text string) string {
+	line := "! " + text
+	if useColor(e) {
+		line = colorWarn + line + colorReset
+	}
+	return indent + line
+}
+
+// The warning color (bold red) and its reset: the only color seam approve
+// prints.
+const (
+	colorWarn  = "\x1b[1;31m"
+	colorReset = "\x1b[0m"
+)
 
 // accessDecided is the console's answer to an approval or a denial.
 type accessDecided struct {
@@ -274,8 +353,8 @@ func decideOverConsole(e *env, cfg config.Config, f accessFacts, answer, duratio
 		fmt.Fprintf(e.stdout, "Denied %s: %s stays closed to that session.\n", short, printable(got.Project))
 		return nil
 	}
-	fmt.Fprintf(e.stdout, "Approved %s: %s, read-only, for %s, until %s.\n", short, printable(got.Project),
-		printable(got.From), clockTime(got.ExpiresAt))
+	fmt.Fprintf(e.stdout, "Approved %s: sessions working in %s may read %s (read-only) until %s.\n", short,
+		printable(got.From), printable(got.Project), clockTime(got.ExpiresAt))
 	return nil
 }
 
@@ -289,7 +368,7 @@ func pickRequest(e *env, cfg config.Config, in *bufio.Reader) (string, error) {
 	}
 	reqs := list.Requests
 	if len(reqs) == 0 {
-		fmt.Fprintln(e.stdout, "Nothing is waiting.")
+		fmt.Fprintln(e.stdout, "Nothing is waiting: no access request is pending (seam approve --watch prints each new one).")
 		return "", nil
 	}
 	fmt.Fprintln(e.stdout, "Waiting for the owner:")
@@ -355,51 +434,71 @@ func clockTime(t time.Time) string {
 	return t.Local().Format("15:04")
 }
 
-// decidable refuses a request that is no longer waiting for a decision: the
-// daemon's status, or a pending one whose wait has run out.
+// decidable refuses a request that is no longer waiting for a decision, in
+// one line that says what became of it: the daemon's status, or a pending
+// one whose wait has run out.
 func decidable(e *env, one accessOne) error {
-	short := printable(one.Request.Short)
+	f := one.Request
+	short, project := printable(f.Short), printable(f.Project)
 	status := one.Status
-	if status == statusPending && !one.Request.ExpiresAt.IsZero() && !e.clock().Before(one.Request.ExpiresAt) {
+	if status == statusPending && !f.ExpiresAt.IsZero() && !e.clock().Before(f.ExpiresAt) {
 		status = statusExpired
 	}
 	switch status {
 	case statusPending:
 		return nil
 	case statusExpired:
-		return fmt.Errorf("%s expired: nothing to decide (the agent can ask again)", short)
+		return fmt.Errorf("%s expired at %s without a decision: nothing to decide (the agent asks again with its next call to %s)",
+			short, clockTime(f.ExpiresAt), project)
+	case statusDenied:
+		return fmt.Errorf("%s was denied: nothing to decide (%s stays %s that session until the agent asks again)",
+			short, project, closedWord(f.Kind))
+	case statusApproved:
+		return fmt.Errorf("%s is already approved: nothing to decide", short)
 	default:
-		return fmt.Errorf("%s is already %s: nothing to decide", short, printable(status))
+		return fmt.Errorf("%s is %s, not pending: nothing to decide", short, printable(status))
 	}
 }
 
-// factLabelWidth aligns the facts' values.
-const factLabelWidth = 16
+// closedWord is what a denial leaves a project: a lock's stays locked for the
+// session, a confidential project's fence (a read grant request) closed to it.
+func closedWord(kind string) string {
+	if kind == kindGrant {
+		return "closed to"
+	}
+	return "locked for"
+}
+
+// factLabelWidth is the facts' label column, label and gap together: seam
+// proposals prints its facts in the same column. A label that would leave
+// less than factGap before its value widens the column for every row.
+const (
+	factLabelWidth = 16
+	factGap        = 2
+)
 
 // renderFacts prints what the owner decides on: the warnings first, then the
-// facts. Every value is the daemon's except the reason, which is quoted and
-// labeled as the agent's own words. Every value is also made printable: a
-// program name, a cwd and above all the reason are the agent's to choose, and
-// a terminal escape among them could repaint the lines above it.
+// facts, values aligned past the widest label. Every value is the daemon's
+// except the reason, which is quoted and labeled as the agent's own words.
+// Every value is also made printable: a program name, a cwd and above all the
+// reason are the agent's to choose, and a terminal escape among them could
+// repaint the lines above it. Only the warnings are colored (useColor).
 func renderFacts(e *env, f accessFacts) {
-	color := useColor(e)
 	fmt.Fprintf(e.stdout, "\nAccess request %s\n\n", printable(f.Short))
 	for _, w := range f.Warnings {
-		line := "! " + printable(w.Text)
-		if color {
-			line = "\x1b[1;31m" + line + "\x1b[0m"
-		}
-		fmt.Fprintln(e.stdout, line)
+		fmt.Fprintln(e.stdout, warningLine(e, "  ", printable(w.Text)))
 	}
 	if len(f.Warnings) > 0 {
 		fmt.Fprintln(e.stdout)
 	}
-	fact := func(label, value string) {
-		fmt.Fprintf(e.stdout, "  %-*s%s\n", factLabelWidth, label, value)
-	}
+	var rows [][2]string
+	fact := func(label, value string) { rows = append(rows, [2]string{label, value}) }
 	fact("Project", fmt.Sprintf("%s (%s, %s)", printable(f.Project), printable(orDash(f.Isolation)), printable(orDash(f.Access))))
 	if f.From != "" {
 		fact("For", "sessions working in "+printable(f.From))
+	}
+	if f.Agent != "" {
+		fact("Agent", printable(f.Agent))
 	}
 	asking := fmt.Sprintf("pid %d, uid %d", f.PID, f.UID)
 	if f.Program != "" {
@@ -432,7 +531,25 @@ func renderFacts(e *env, f accessFacts) {
 		waits += " (" + compactDuration(left.Round(time.Minute)) + " left)"
 	}
 	fact("Waits until", waits)
+	for _, line := range alignFacts(rows) {
+		fmt.Fprintln(e.stdout, line)
+	}
 	fmt.Fprintln(e.stdout)
+}
+
+// alignFacts lays out label/value rows, indented two spaces, every value in
+// one column: factLabelWidth, or wider when a label would leave less than
+// factGap before its value.
+func alignFacts(rows [][2]string) []string {
+	width := factLabelWidth
+	for _, r := range rows {
+		width = max(width, len(r[0])+factGap)
+	}
+	lines := make([]string, len(rows))
+	for i, r := range rows {
+		lines[i] = fmt.Sprintf("  %-*s%s", width, r[0], r[1])
+	}
+	return lines
 }
 
 func orUnknown(s string) string {
@@ -474,33 +591,51 @@ func printable(s string) string {
 	return q[1 : len(q)-1]
 }
 
-// askDuration asks how long to approve for. ok is false when the owner gave
-// no answer at all (end of input): nothing is decided.
+// askDuration asks how long to approve for: the daemon's durations,
+// numbered, each with what it grants; the answer is a number or a duration's
+// name, and an empty one is the default (until the session ends) when the
+// daemon offers it. ok is false when the owner gave no answer at all (end of
+// input): nothing is decided.
 func askDuration(e *env, in *bufio.Reader, one accessOne) (string, bool, error) {
-	if len(one.Durations) == 0 {
+	ds := one.Durations
+	if len(ds) == 0 {
 		return "", false, errors.New("the daemon offered no durations to approve for")
 	}
-	hasDefault := slices.Contains(one.Durations, durationSession)
-	fmt.Fprintln(e.stdout, "For how long?")
-	for _, d := range one.Durations {
-		fmt.Fprintf(e.stdout, "  %-8s %s\n", printable(d), durationWords(d, one.MaxLease))
+	hasDefault := slices.Contains(ds, durationSession)
+	width := 0
+	for _, d := range ds {
+		width = max(width, len(printable(d)))
 	}
-	q := "Duration: "
+	fmt.Fprintln(e.stdout, "For how long?")
+	for i, d := range ds {
+		words := durationWords(d, one.MaxLease)
+		if d == durationSession {
+			words += " (the default)"
+		}
+		fmt.Fprintf(e.stdout, "  %d  %-*s  %s\n", i+1, width, printable(d), words)
+	}
+	choices := "1"
+	if len(ds) > 1 {
+		choices = fmt.Sprintf("1-%d", len(ds))
+	}
+	q := "Duration [" + choices + "]: "
 	if hasDefault {
-		q = "Duration [" + durationSession + "]: "
+		q = "Duration [" + choices + ", Enter for " + durationSession + "]: "
 	}
 	for {
 		ans, ok := prompt(e, in, q)
 		if !ok {
 			return "", false, nil
 		}
-		if ans == "" && hasDefault {
+		switch n, err := strconv.Atoi(ans); {
+		case ans == "" && hasDefault:
 			return durationSession, true, nil
-		}
-		if slices.Contains(one.Durations, ans) {
+		case slices.Contains(ds, ans):
 			return ans, true, nil
+		case err == nil && n >= 1 && n <= len(ds):
+			return ds[n-1], true, nil
 		}
-		fmt.Fprintf(e.stderr, "valid values are %s\n", strings.Join(one.Durations, ", "))
+		fmt.Fprintf(e.stderr, "answer with %s or one of %s\n", choices, strings.Join(ds, ", "))
 	}
 }
 
@@ -634,31 +769,32 @@ func denyArgv(t terminalApprover, f accessFacts) []string {
 // non-interactive sudo -n succeeds only under a rule that asks for nothing.
 // While one stands the terminal approval proves nothing, so the owner is told;
 // the approval still goes ahead, since refusing would not remove the rule.
-func warnPasswordless(ctx context.Context, e *env, t terminalApprover) error {
+// passwordless reports that rule, so the caller does not also announce a
+// prompt sudo will not show.
+func warnPasswordless(ctx context.Context, e *env, t terminalApprover) (passwordless bool, err error) {
 	if _, err := e.run(ctx, []string{"sudo", "-k"}, nil, io.Discard, io.Discard); err != nil {
-		return fmt.Errorf("run sudo: %w", err)
+		return false, fmt.Errorf("run sudo: %w", err)
 	}
 	code, err := e.run(ctx, []string{"sudo", "-n", "-u", t.Account, "true"}, nil, io.Discard, io.Discard)
 	if err != nil {
-		return fmt.Errorf("run sudo: %w", err)
+		return false, fmt.Errorf("run sudo: %w", err)
 	}
-	if code == 0 {
-		line := "! warning: sudo runs commands as " + t.Account + " here without asking for authentication " +
-			"(a NOPASSWD rule in sudoers). While that rule stands this approval proves nothing: " +
-			"a process running as you could run it unasked. Remove the rule."
-		if useColor(e) {
-			line = "\x1b[1;31m" + line + "\x1b[0m"
-		}
-		fmt.Fprintln(e.stderr, line)
+	if code != 0 {
+		return false, nil
 	}
-	return nil
+	fmt.Fprintln(e.stderr, warningLine(e, "", "warning: sudo runs commands as "+t.Account+" here without asking for "+
+		"authentication (a NOPASSWD rule in sudoers). While that rule stands this approval proves nothing: "+
+		"a process running as you could run it unasked. Remove the rule."))
+	return true, nil
 }
 
 // --- --passkey ---
 
 // openPasskeyPage opens the request's passkey page in the browser, or prints
-// it when no browser could be opened.
-func openPasskeyPage(ctx context.Context, e *env, one accessOne) error {
+// it when no browser could be opened. duration, when given (--for, already
+// checked against the daemon's durations), rides as the page's for= query:
+// the page opens with it chosen, and the passkey's approval binds it.
+func openPasskeyPage(ctx context.Context, e *env, one accessOne, duration string) error {
 	short := printable(one.Request.Short)
 	if one.Page == "" {
 		return fmt.Errorf("%s has no passkey page: this daemon offers no passkey approval, so decide it here: seam approve %s", short, short)
@@ -667,14 +803,25 @@ func openPasskeyPage(ctx context.Context, e *env, one accessOne) error {
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return fmt.Errorf("the daemon named %q as %s's passkey page, which is not a web address: not opening it", one.Page, short)
 	}
+	chosen := ""
+	if duration != "" {
+		q := u.Query()
+		q.Set(passkeyDurationParam, duration)
+		u.RawQuery = q.Encode()
+		chosen = " (approving there grants it " + durationWords(duration, one.MaxLease) + ")"
+	}
 	page := u.String()
 	if code, err := e.run(ctx, openerArgv(e.platform(), page), nil, io.Discard, io.Discard); err != nil || code != 0 {
-		fmt.Fprintf(e.stdout, "Could not open a browser. Open this page to decide %s with a passkey:\n  %s\n", short, page)
+		fmt.Fprintf(e.stdout, "Could not open a browser. Open this page to decide %s with a passkey%s:\n  %s\n", short, chosen, page)
 		return nil
 	}
-	fmt.Fprintf(e.stdout, "Opened %s in the browser: decide %s there with a passkey.\n", page, short)
+	fmt.Fprintf(e.stdout, "Opened %s in the browser: decide %s there with a passkey%s.\n", page, short, chosen)
 	return nil
 }
+
+// passkeyDurationParam is the passkey page's duration query
+// (/console/access/<id>?for=<session|1h|4h>): the page opens with it chosen.
+const passkeyDurationParam = "for"
 
 // openerArgv is the platform's command to open a URL in the default browser.
 func openerArgv(goos, page string) []string {
@@ -741,35 +888,56 @@ func watchAccess(ctx context.Context, e *env, cfg config.Config) error {
 // announce prints one new request and raises a notification for it.
 func announce(ctx context.Context, e *env, r accessFacts) {
 	fmt.Fprintln(e.stdout, requestLine(r))
-	color := useColor(e)
 	for _, w := range r.Warnings {
-		line := "  ! " + printable(w.Text)
-		if color {
-			line = "\x1b[1;31m" + line + "\x1b[0m"
-		}
-		fmt.Fprintln(e.stdout, line)
+		fmt.Fprintln(e.stdout, warningLine(e, "  ", printable(w.Text)))
 	}
-	fmt.Fprintf(e.stdout, "  decide it with: seam approve %s\n", printable(r.Short))
+	fmt.Fprintf(e.stdout, "  %s asks; decide it with: seam approve %s\n", agentFamily(r), printable(r.Short))
 	notify(ctx, e, r)
 }
 
 // notifyScript displays its first argument as a notification. The message is
 // passed as an argument, never spliced into the script, so nothing in it can
 // become AppleScript.
-var notifyScript = []string{"-e", "on run argv", "-e", `display notification (item 1 of argv) with title "Seamless"`, "-e", "end run"}
+var notifyScript = []string{"-e", "on run argv", "-e",
+	`display notification (item 1 of argv) with title "Seamless access request"`, "-e", "end run"}
 
 // notify raises a desktop notification on macOS, and rings the terminal bell
-// elsewhere or when that fails. Its text is the short id and the project slug
-// only -- never the agent's reason, which is the agent's to write.
+// elsewhere or when that fails. Its text is who asks (agentFamily), the
+// project slug and the command that decides it -- never the agent's reason,
+// which is the agent's to write.
 func notify(ctx context.Context, e *env, r accessFacts) {
 	if e.platform() == "darwin" {
-		msg := safeToken(r.Short) + " wants " + safeToken(r.Project)
+		short := safeToken(r.Short)
+		msg := agentFamily(r) + " asks for " + safeToken(r.Project) + ": seam approve " + short
 		argv := append(append([]string{"osascript"}, notifyScript...), msg)
 		if code, err := e.run(ctx, argv, nil, io.Discard, io.Discard); err == nil && code == 0 {
 			return
 		}
 	}
 	fmt.Fprint(e.stdout, "\a")
+}
+
+// agentFamily names who asks in a notification: the leading words of the
+// daemon's agent name that are letters only ("Claude Code" of "Claude Code
+// 2.1.319"), at most three, so no version or other text rides along; "An
+// agent" when the daemon names none, "A session" without peer_auth (no
+// process known).
+func agentFamily(r accessFacts) string {
+	var words []string
+	for w := range strings.FieldsSeq(r.Agent) {
+		if len(words) == 3 || strings.ContainsFunc(w, func(c rune) bool { return c >= utf8.RuneSelf || !unicode.IsLetter(c) }) {
+			break
+		}
+		words = append(words, w)
+	}
+	switch {
+	case len(words) > 0:
+		return strings.Join(words, " ")
+	case r.PID == 0:
+		return "A session"
+	default:
+		return "An agent"
+	}
 }
 
 // safeToken keeps the characters a short id or a project slug is made of.

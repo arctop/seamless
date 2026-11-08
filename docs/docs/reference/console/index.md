@@ -613,6 +613,11 @@ by default). The reader carries the task's body, claim and lease state, and
 both dependency directions; **force-release** is the action, and it is the
 owner override - it takes the lock from whoever holds it.
 
+Under `peer_auth.locked`, a task blocked by a task in a locked project you
+haven't unlocked sits in the blocked rail, its blocker named only by project;
+the project workspace's Plans & tasks tab marks such steps blocked and leaves
+them out of the ready queue.
+
 ## Plans
 
 `/console/plans`, `/console/plans/{slug}`
@@ -828,8 +833,9 @@ and the sidebar badge counts the proposals.
 
 Elsewhere on the console, a memory, note, task, session or trial that a
 restricted account wrote carries a small "written by account <name>" chip (a
-task the account last changed, "updated by account <name>"); your own items
-show none.
+task the account last changed, "updated by account <name>"), including search
+results, a lab's trial list and the project workspace's tabs; events and a
+session's activity timeline carry none. Your own items show none.
 
 ## Settings
 
@@ -984,8 +990,10 @@ session that read outside text, and any supersede or delete of a constraint -
 wait on the [Held](#held) screen instead of landing, and briefing and recall
 lines carry owner-confirmed or agent-written marks. Its card's data line counts
 the writes waiting; turning it off stops screening new writes and releases
-none of them. The [write screening guide](https://thereisnospoon.org/docs/guides/write-screening/) has the
-screens, the reasons and the events.
+none of them. With restricted local accounts configured, the card says the
+Held screen stays for their proposals and only its screening parts go. The
+[write screening guide](https://thereisnospoon.org/docs/guides/write-screening/) has the screens, the reasons
+and the events.
 
 **Nothing is ever deleted.** Switching a feature off gates exposure and nothing
 else: the trials stay in the database, its screens answer with a short "switched

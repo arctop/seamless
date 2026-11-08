@@ -109,6 +109,9 @@ func (h heldRow) proposer() string {
 type heldQueue struct {
 	Pending []json.RawMessage `json:"pending"`
 	Recent  []json.RawMessage `json:"recent"`
+	// Locked names the locked projects whose holds the console left out
+	// (peer_auth.locked; absent otherwise).
+	Locked []string `json:"locked"`
 }
 
 // fetchHeld reads the held queue. A daemon that keeps no queue (screening off,
@@ -194,15 +197,16 @@ func runProposals(_ context.Context, e *env, o *proposalsOpts, _ []string) error
 	if *o.asJSON {
 		b, err := json.MarshalIndent(struct {
 			Proposals []json.RawMessage `json:"proposals"`
-		}{raws}, "", "  ")
+			Locked    []string          `json:"locked,omitempty"`
+		}{raws, lockedFor(q.Locked, *o.project)}, "", "  ")
 		if err != nil {
 			return err
 		}
 		return writeRaw(e.stdout, b)
 	}
+	locked := lockedSkipped(q.Locked, *o.project)
 	if len(shown) == 0 {
 		fmt.Fprintln(e.stdout, "(no proposals waiting)")
-		return nil
 	}
 	for _, h := range shown {
 		line := fmt.Sprintf("  %s  %s %s  proposed by %s  %s", printable(h.ID), printable(h.What), h.ref(),
@@ -211,6 +215,9 @@ func runProposals(_ context.Context, e *env, o *proposalsOpts, _ []string) error
 			line += "  (changed since: discard only)"
 		}
 		fmt.Fprintln(e.stdout, line)
+	}
+	if locked != "" {
+		fmt.Fprintln(e.stdout, locked)
 	}
 	return nil
 }

@@ -4,7 +4,8 @@ import XCTest
 
 // Golden vectors computed by the Go side's own functions
 // (store.NormalizeEnrollCode, approval.TouchIDEnrollMessage,
-// approval.TouchIDApproveMessage) on 2026-11-06. A change on either side that
+// approval.TouchIDApproveMessage) on 2026-11-06, and
+// approval.TouchIDReplaceMessage on 2026-11-08. A change on either side that
 // breaks byte equality fails here before it fails an owner's approval.
 final class MessagesTests: XCTestCase {
     func testNormalizeEnrollCodeMatchesGo() throws {
@@ -48,6 +49,15 @@ final class MessagesTests: XCTestCase {
         XCTAssertEqual(
             try Messages.touchIDEnrollMessage(code: "0ilo-OILO", publicKey: Self.publicKey).hex,
             "7365616d6c65737320746f756368696420656e726f6c6c6d656e74207631007b158f7df9bf300bcd68345e7e1f91df41d15bf7072323d6c78800e90c196548040102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40")
+    }
+
+    func testReplaceMessageMatchesGo() throws {
+        XCTAssertEqual(
+            try Messages.touchIDReplaceMessage(code: "abcd-efgh-jkmn-pqrs", publicKey: Self.publicKey, retiring: "01OLDAPPROVER0000000000000").hex,
+            "7365616d6c65737320746f7563686964207265706c6163656d656e7420763100f598056127fcd4387651a49b3a4235d8ce50d71f4091068df51511cfc10f388f040102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4030314f4c44415050524f56455230303030303030303030303030")
+        XCTAssertEqual(
+            try Messages.touchIDReplaceMessage(code: "0ilo-OILO", publicKey: Self.publicKey, retiring: "a").hex,
+            "7365616d6c65737320746f7563686964207265706c6163656d656e74207631007b158f7df9bf300bcd68345e7e1f91df41d15bf7072323d6c78800e90c196548040102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4061")
     }
 
     func testApproveMessageMatchesGo() {

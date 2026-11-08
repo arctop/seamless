@@ -305,11 +305,20 @@ func TestBlockerFence_LockedProject(t *testing.T) {
 		}
 		return text, byID
 	}
-	withheld := map[string]any{"withheld": "a task in a project this connection may not reach blocks this one"}
+	// The owner's own connection is told which locked project blocks it, and
+	// the remedy for its transport (D7, 2026-11-08); the blocker stays withheld.
+	named := func(socket bool) map[string]any {
+		r := "the TCP connection never reaches a locked project, so work in it from an agent session on the peer_auth Unix socket"
+		if socket {
+			r = "bind to " + lkFin + ", or approve a request for it"
+		}
+		return map[string]any{"withheld": "a task in locked project " + lkFin + " blocks this one: " + r}
+	}
 
 	for name, cli := range map[string]*mcpclient.Client{
 		"tcp": tcp, "socket without a lease": stranger, "agent before approval": agent,
 	} {
+		withheld := named(name != "tcp")
 		text, blocked := readyOf(cli)
 		bfNoBlocker(t, text, fin, secret, name+" tasks_ready")
 		require.Equal(t, []any{withheld}, blocked[waits]["blockers"], name)
@@ -330,7 +339,7 @@ func TestBlockerFence_LockedProject(t *testing.T) {
 		got := r.refused(cli, "tasks_claim", map[string]any{"id": both})
 		bfNoBlocker(t, got, fin, secret, name+" tasks_claim")
 		require.Contains(t, got, "task blocked", name)
-		require.Contains(t, got, "waits on "+prep+" (open), a task in a project this connection may not reach", name)
+		require.Contains(t, got, "waits on "+prep+" (open), a task in locked project "+lkFin+"\nRemedy: ", name)
 	}
 	require.Empty(t, r.pending(), "withholding a blocker is a filter, not an ask")
 
@@ -373,7 +382,7 @@ func TestBlockerFence_LockAloneWithholds(t *testing.T) {
 	tcp := r.dial(r.tcp(), false)
 	text, _ := r.ok(tcp, "tasks_ready", map[string]any{"project": lkOps})
 	bfNoBlocker(t, text, fin, secret, "tcp")
-	require.Contains(t, text, bfWithheldBlocker)
+	require.Contains(t, text, "a task in locked project "+lkFin+" blocks this one: the TCP connection never reaches a locked project")
 
 	off := r.dial(r.serve(r.srv, nil), false)
 	text, _ = r.ok(off, "tasks_ready", map[string]any{"project": lkOps})

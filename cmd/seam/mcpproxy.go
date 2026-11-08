@@ -22,8 +22,9 @@ package main
 // the daemon mints on initialize -- resending it on every later POST is what keeps
 // the connection binding alive, so session_start inheritance works across calls.
 // The one Seamless message it knows is the daemon's ask to launch the Touch ID
-// approver (core.ApproverNotification), which it swallows and acts on
-// (mcpproxy_approver.go).
+// approver (core.ApproverNotification), which it swallows and acts on, and
+// the one it sends of its own is its word that the approver it launched has
+// exited (approverEndedMethod; mcpproxy_approver.go).
 //
 // Requests and notifications are served in turn, in the order the client wrote
 // them, but stdin is read all the while: a tool call can wait on the client's
@@ -164,7 +165,9 @@ type bridge struct {
 	sessionID string              // Mcp-Session-Id from initialize, replayed on later POSTs; guarded by mu
 	launching map[string]struct{} // request ids whose approver launch is running; guarded by mu
 	stopped   bool                // run is returning: no new side work starts; guarded by mu
-	side      sync.WaitGroup      // the side goroutines: frames sent at once, approver launches
+	side      sync.WaitGroup      // the side goroutines: frames sent at once, approver launches and their watches
+	quit      chan struct{}       // closed when run returns: an approver's watch ends unreported
+	quitOnce  sync.Once
 
 	logMu sync.Mutex // serializes writes to stderr
 }
@@ -191,7 +194,7 @@ func newBridge(endpoint, apiKey string, client *http.Client) *bridge {
 	client = &own
 	return &bridge{
 		endpoint: endpoint, apiKey: apiKey, client: client,
-		retry: newDialRetry(proxyDialBudget), stderr: io.Discard,
+		retry: newDialRetry(proxyDialBudget), stderr: io.Discard, quit: make(chan struct{}),
 	}
 }
 
@@ -300,11 +303,13 @@ func (b *bridge) goSide(f func()) {
 	}()
 }
 
-// stop lets no new side goroutine start and waits for the running ones.
+// stop lets no new side goroutine start, ends the approvers' watches (the
+// client they would report to is gone) and waits for the running ones.
 func (b *bridge) stop() {
 	b.mu.Lock()
 	b.stopped = true
 	b.mu.Unlock()
+	b.quitOnce.Do(func() { close(b.quit) })
 	b.side.Wait()
 }
 

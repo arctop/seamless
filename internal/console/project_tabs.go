@@ -113,6 +113,7 @@ type planStepVM struct {
 	ID        string
 	Title     string
 	Project   string // the row's own actions post back to this project's tab
+	Account   string // restricted account that created the step ("" = owner)
 	Status    string
 	State     string
 	Claimable bool      // open and unblocked: an agent could take it right now
@@ -128,7 +129,14 @@ type planStepVM struct {
 	Chain         []depChipVM // unfinished blockers, nearest first
 	Unblocks      []depChipVM // steps waiting on this one
 	UnblocksTitle string      // those steps named, for the chip's tooltip
+	// LockedBlockers are the step's unfinished blockers in a locked project
+	// this request does not read (peer_auth.locked): their project, once per
+	// blocker (markLockedBlockers' rule). nil while nothing is locked.
+	LockedBlockers []string
 }
+
+// LockedIn is the locked projects the step's locked blockers sit in, once each.
+func (st planStepVM) LockedIn() []string { return slices.Compact(slices.Clone(st.LockedBlockers)) }
 
 // planStepCtx is the per-page state every step projection reads: the task cache
 // the dependency walk fills, which ids render on this page, the reverse-edge
@@ -139,6 +147,10 @@ type planStepCtx struct {
 	unblocks map[string][]depChipVM
 	namer    func(string) core.Session
 	now      time.Time
+	// lockedBy is each open step's blockers in locked projects the request
+	// does not read, by project (store.OpenBlockerProjects); nil while
+	// nothing is locked.
+	lockedBy map[string][]string
 }
 
 // projSessionVM is one row on the Sessions tab.
@@ -147,6 +159,7 @@ type projSessionVM struct {
 	Name     string
 	Status   string
 	Source   string
+	Account  string // restricted account that started it ("" = owner)
 	Ambient  bool
 	Active   bool
 	Findings string
@@ -161,6 +174,7 @@ type projMemoryVM struct {
 	Name       string
 	Kind       string
 	Desc       string
+	Account    string // restricted account that wrote the content ("" = owner)
 	Lineage    template.HTML
 	Injects    int
 	Reads      int
@@ -173,6 +187,7 @@ type projNoteVM struct {
 	ID      string
 	Title   string
 	Desc    string
+	Account string // restricted account that wrote the content ("" = owner)
 	Tags    []string
 	Updated time.Time
 }
@@ -275,7 +290,16 @@ func (s *Service) fillTasksTab(ctx context.Context, data *projectWorkspaceData, 
 	}
 	stale := s.stalePlanSlugs(ctx, slug)
 
-	pc := planStepCtx{cache: cache, onPage: onPage, unblocks: unblocks, namer: namer, now: time.Now().UTC()}
+	ready, err := store.ReadyTasks(ctx, s.db(ctx), slug)
+	if err != nil {
+		return err
+	}
+	lockedBy, err := s.lockedBlockersOf(ctx, cache, ready)
+	if err != nil {
+		return err
+	}
+
+	pc := planStepCtx{cache: cache, onPage: onPage, unblocks: unblocks, namer: namer, now: time.Now().UTC(), lockedBy: lockedBy}
 	for _, pl := range active {
 		tl := planTimelineVM{
 			Slug: pl.Slug, Total: pl.Total, Done: pl.Done, InFlight: pl.InFlight,
@@ -291,25 +315,50 @@ func (s *Service) fillTasksTab(ctx context.Context, data *projectWorkspaceData, 
 		}
 		rows := make([]planStepVM, 0, len(steps[pl.Slug]))
 		for _, st := range steps[pl.Slug] {
-			rows = append(rows, s.planStep(ctx, st, pc))
+			row := s.planStep(ctx, st, pc)
+			// The rollup counted a step a locked project blocks as claimable:
+			// the request's handle holds neither the blocker nor the edge.
+			if len(row.LockedBlockers) > 0 && len(row.Chain) == 0 && tl.Claimable > 0 {
+				tl.Claimable--
+			}
+			rows = append(rows, row)
 		}
 		tl.Groups = groupSteps(rows)
 		data.Plans = append(data.Plans, tl)
 	}
 
-	ready, err := store.ReadyTasks(ctx, s.db(ctx), slug)
-	if err != nil {
-		return err
-	}
-	data.Ready = taskRows(ready)
+	// The ready queue is what an agent could claim now: a task a locked
+	// project blocks is not.
+	data.Ready = taskRows(slices.DeleteFunc(ready, func(t core.Task) bool { return len(lockedBy[t.ID]) > 0 }))
 	return nil
+}
+
+// lockedBlockersOf is markLockedBlockers' lookup for the Plans & tasks tab:
+// the blockers, by locked project, of the page's open plan steps and its
+// ready tasks that sit in a locked project this request does not read. It is
+// nil, and asks nothing, while nothing is locked.
+func (s *Service) lockedBlockersOf(ctx context.Context, steps map[string]core.Task, ready []core.Task) (map[string][]string, error) {
+	locked := lockedProjects(ctx)
+	if len(locked) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, 0, len(steps)+len(ready))
+	for id, t := range steps {
+		if t.Status == core.TaskOpen {
+			ids = append(ids, id)
+		}
+	}
+	for _, t := range ready {
+		ids = append(ids, t.ID)
+	}
+	return store.OpenBlockerProjects(ctx, s.writeDB(), ids, locked)
 }
 
 // planStep projects a plan-step task into a timeline row, resolving its claim
 // (holder + remaining lease, live or lapsed) and both dependency directions.
 func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) planStepVM {
 	step := planStepVM{
-		ID: t.ID, Title: t.Title, Project: t.ProjectSlug, Status: string(t.Status),
+		ID: t.ID, Title: t.Title, Project: t.ProjectSlug, Account: t.Account, Status: string(t.Status),
 		State: taskState(t.Status), Created: t.CreatedAt,
 	}
 	if t.Status == core.TaskDone || t.Status == core.TaskDropped {
@@ -331,7 +380,8 @@ func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) pla
 		step.LeaseLapsed = !t.ClaimLive(pc.now)
 	}
 	if t.Status == core.TaskOpen {
-		if step.Chain = s.blockingChain(ctx, t, pc); len(step.Chain) > 0 {
+		step.LockedBlockers = pc.lockedBy[t.ID]
+		if step.Chain = s.blockingChain(ctx, t, pc); len(step.Chain) > 0 || len(step.LockedBlockers) > 0 {
 			step.State = "blocked"
 		} else {
 			step.Claimable = true
@@ -629,7 +679,7 @@ func (s *Service) fillSessionsTab(ctx context.Context, data *projectWorkspaceDat
 	for _, sess := range sessions {
 		vm := projSessionVM{
 			ID: sess.ID, Name: sess.Name, Status: string(sess.Status),
-			Source: sess.Source, Ambient: sess.Ambient,
+			Source: sess.Source, Account: sess.Account, Ambient: sess.Ambient,
 			Active:   sess.Status == core.SessionActive,
 			Findings: snippet(markdown.PlainText(sess.Findings), 140), Updated: sess.UpdatedAt,
 		}
@@ -677,7 +727,7 @@ func (s *Service) fillMemoriesTab(ctx context.Context, data *projectWorkspaceDat
 func (s *Service) projMemory(ctx context.Context, m core.Memory) projMemoryVM {
 	vm := projMemoryVM{
 		ID: m.ID, Name: m.Name, Kind: string(m.Kind), Desc: m.Description,
-		Updated: m.Updated, Superseded: !m.Active(),
+		Account: m.Account, Updated: m.Updated, Superseded: !m.Active(),
 		Lineage: s.memLineage(ctx, m),
 	}
 	if stat, ok, err := store.GetRetrievalStat(ctx, s.db(ctx), m.ID); err == nil && ok {
@@ -716,7 +766,7 @@ func (s *Service) fillNotesTab(ctx context.Context, data *projectWorkspaceData, 
 			continue
 		}
 		data.Notes = append(data.Notes, projNoteVM{
-			ID: n.ID, Title: n.Title, Desc: n.Description, Tags: n.Tags, Updated: n.Updated,
+			ID: n.ID, Title: n.Title, Desc: n.Description, Account: n.Account, Tags: n.Tags, Updated: n.Updated,
 		})
 	}
 	sort.SliceStable(data.Notes, func(i, j int) bool {

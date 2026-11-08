@@ -262,8 +262,10 @@ the account cannot traverse yours.
 
 **Everything it writes is labeled.** Memories, notes, tasks and their updates,
 plan steps, sessions and their findings, and trials record the account that
-wrote them, and every surface shows it: "written by account _example_agent" in
-briefings, recall, tool results and the console. Your own writes look exactly as
+wrote them, and every surface shows it: "[written by account _example_agent]"
+at the end of briefing, prompt recall (`<seam-recall>`), A2A and
+`seam task list` lines, an `account` field in tool results, and a "written by
+account _example_agent" chip on console rows. Your own writes look exactly as
 they always have.
 
 **Binding rules are proposals.** A constraint, convention, protocol or stage

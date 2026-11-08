@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 )
@@ -70,6 +71,41 @@ func writtenBy(account string) string {
 		return ""
 	}
 	return "written by account " + printable(account)
+}
+
+// lockedSkipped is the line a console-backed list adds for the locked projects
+// (peer_auth.locked) its answer left out: "(not shown: locked project
+// acme-finance)". It names them and never counts what they hold -- a count
+// would say what a locked project holds -- and it is "" when the answer left
+// nothing out, so a list on an install without locked projects reads exactly
+// as before. only, when set, is the list's own --project filter: a locked
+// project the filter would have dropped anyway is not named.
+func lockedSkipped(locked []string, only string) string {
+	kept := lockedFor(locked, only)
+	names := make([]string, 0, len(kept))
+	for _, p := range kept {
+		names = append(names, printable(p))
+	}
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return "(not shown: locked project " + names[0] + ")"
+	}
+	return "(not shown: locked projects " + strings.Join(names, ", ") + ")"
+}
+
+// lockedFor is the locked projects a list's --project filter leaves in: all
+// of them without a filter, the filter's own project when it is locked, none
+// otherwise.
+func lockedFor(locked []string, only string) []string {
+	if only == "" {
+		return locked
+	}
+	if slices.Contains(locked, only) {
+		return []string{only}
+	}
+	return nil
 }
 
 // printBody prints a record's markdown body under a blank line, as plan show

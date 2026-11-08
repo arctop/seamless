@@ -39,6 +39,14 @@ func TestClaimTask_BlockedRefusalCarriesBlockers(t *testing.T) {
 	require.Equal(t, `store.ClaimTask: task blocked: task "`+c+`" waits on `+a+` (open), one more elsewhere`, trimmed.Error())
 	none := &TaskBlockedError{TaskID: c, Withheld: "two tasks elsewhere"}
 	require.Equal(t, `store.ClaimTask: task blocked: task "`+c+`" waits on two tasks elsewhere`, none.Error())
+
+	// A remedy rides on a second line, the way a lock refusal ends; without
+	// one the text is exactly as before.
+	remedied := &TaskBlockedError{TaskID: c, Withheld: "a task in locked project example-finance",
+		Remedy: "bind to example-finance, or approve a request for it."}
+	require.ErrorIs(t, remedied, ErrTaskBlocked)
+	require.Equal(t, `store.ClaimTask: task blocked: task "`+c+`" waits on a task in locked project example-finance`+
+		"\nRemedy: bind to example-finance, or approve a request for it.", remedied.Error())
 }
 
 func TestTaskProjects(t *testing.T) {
@@ -56,6 +64,37 @@ func TestTaskProjects(t *testing.T) {
 		"duplicates collapse, unknown ids are absent, the global scope is \"\"")
 
 	got, err = TaskProjects(ctx, db, nil)
+	require.NoError(t, err)
+	require.Empty(t, got)
+}
+
+// OpenBlockerProjects reads, for the tasks asked about, the projects of their
+// unfinished blockers among the ones named: once per blocker, sorted, and
+// nothing about a finished blocker or another project's.
+func TestOpenBlockerProjects(t *testing.T) {
+	db := newTaskDB(t)
+	ctx := context.Background()
+	fin1 := addTask(t, db, "example-finance", "F1", 1)
+	fin2 := addTask(t, db, "example-finance", "F2", 2)
+	legal := addTask(t, db, "example-legal", "L", 3)
+	done := addTask(t, db, "example-finance", "F3", 4)
+	closed := core.TaskDone
+	_, err := UpdateTask(ctx, db, done, TaskPatch{Status: &closed}, "", time.Now())
+	require.NoError(t, err)
+	ops := addTask(t, db, "example-ops", "O", 5)
+	a := addTask(t, db, "example-ops", "A", 6, fin1, fin2, legal, ops)
+	b := addTask(t, db, "example-ops", "B", 7, done, ops)
+	c := addTask(t, db, "example-ops", "C", 8)
+
+	got, err := OpenBlockerProjects(ctx, db, []string{a, b, c, a}, []string{"example-finance", "example-legal"})
+	require.NoError(t, err)
+	require.Equal(t, map[string][]string{a: {"example-finance", "example-finance", "example-legal"}}, got,
+		"one entry per open blocker; a finished one, and one outside the projects named, are not counted")
+
+	got, err = OpenBlockerProjects(ctx, db, []string{a}, nil)
+	require.NoError(t, err)
+	require.Empty(t, got)
+	got, err = OpenBlockerProjects(ctx, db, nil, []string{"example-finance"})
 	require.NoError(t, err)
 	require.Empty(t, got)
 }

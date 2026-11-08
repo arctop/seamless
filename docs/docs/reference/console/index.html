@@ -1282,6 +1282,10 @@ dropped merged, newest first, capped at 25 with a count of the rest, collapsed
 by default). The reader carries the task's body, claim and lease state, and
 both dependency directions; <strong>force-release</strong> is the action, and it is the
 owner override - it takes the lock from whoever holds it.</p>
+<p>Under <code>peer_auth.locked</code>, a task blocked by a task in a locked project you
+haven't unlocked sits in the blocked rail, its blocker named only by project;
+the project workspace's Plans &amp; tasks tab marks such steps blocked and leaves
+them out of the ready queue.</p>
 <h2 id="plans">Plans</h2>
 <p><code>/console/plans</code>, <code>/console/plans/{slug}</code></p>
 <p>The same library shape, with the rail grouped by phase (<strong>in progress</strong>,
@@ -1462,8 +1466,9 @@ screen, showing the proposals only - no lockdown, review or session marks -
 and the sidebar badge counts the proposals.</p>
 <p>Elsewhere on the console, a memory, note, task, session or trial that a
 restricted account wrote carries a small &quot;written by account <name>&quot; chip (a
-task the account last changed, &quot;updated by account <name>&quot;); your own items
-show none.</p>
+task the account last changed, &quot;updated by account <name>&quot;), including search
+results, a lab's trial list and the project workspace's tabs; events and a
+session's activity timeline carry none. Your own items show none.</p>
 <h2 id="settings">Settings</h2>
 <p><code>/console/settings?s=&lt;section&gt;</code></p>
 <p>Settings is one section at a time, each shaped by what you came to do rather
@@ -1602,8 +1607,10 @@ session that read outside text, and any supersede or delete of a constraint -
 wait on the <a href="#held">Held</a> screen instead of landing, and briefing and recall
 lines carry owner-confirmed or agent-written marks. Its card's data line counts
 the writes waiting; turning it off stops screening new writes and releases
-none of them. The <a href="../../guides/write-screening/">write screening guide</a> has the
-screens, the reasons and the events.</p>
+none of them. With restricted local accounts configured, the card says the
+Held screen stays for their proposals and only its screening parts go. The
+<a href="../../guides/write-screening/">write screening guide</a> has the screens, the reasons
+and the events.</p>
 <p><strong>Nothing is ever deleted.</strong> Switching a feature off gates exposure and nothing
 else: the trials stay in the database, its screens answer with a short &quot;switched
 off&quot; page that links back here (a JSON caller gets a 403), and switching it back

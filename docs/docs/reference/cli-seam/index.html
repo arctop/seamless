@@ -422,10 +422,12 @@ blocked, and claimed mean.</p>
 <p>Calls <code>tasks_ready</code> and lists the actionable queue by short id and title.
 <code>--blocked</code> additionally lists blocked tasks, each followed by its blockers and
 their statuses; a blocker in a project this connection may not read prints the
-server's one-line notice in its place. <code>--plan S</code> shows that plan's step tasks
-instead of the default queue - plan steps are excluded from the default view.
-Prints
-<code>ready: (nothing actionable)</code> when the queue is empty.</p>
+server's one-line notice in its place. For a blocker in a locked project you
+hold no lease on, the notice names it: <code>a task in locked project acme-finance blocks this one: bind to acme-finance, or approve a request for it</code> (over TCP,
+the remedy is an agent session on the <code>peer_auth</code> socket). <code>--plan S</code> shows
+that plan's step tasks instead of the default queue - plan steps are excluded
+from the default view. Prints <code>ready: (nothing actionable)</code> when the queue is
+empty.</p>
 <h3 id="seam_task_list">seam task list</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam task list <span class="o">[</span>--id ID<span class="o">]</span> <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--status S<span class="o">]</span> <span class="o">[</span>--plan S<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span>
 </span></span></code></pre></div>
@@ -524,6 +526,13 @@ decides it in their own terminal with <code>seam approve</code>, on the console'
 page, or - when the agent's client supports MCP elicitation - in an approval
 dialog inside the agent's session, confirmed with Touch ID (<code>seam touchid enroll</code>) or a passkey. These commands talk to the console's <code>/console/access</code>
 routes, which answer <code>no project is locked</code> while the daemon locks nothing.</p>
+<p>The console-backed commands name the lock too. For an item in a locked project
+your tree holds no lease on, <code>seam plan show|check|approve</code> and
+<code>seam sessions &lt;id&gt;</code> print the same two lines a tool-backed command prints,
+the rule and then the remedy, instead of <code>not found</code>. <code>seam plan list</code>,
+<code>seam sessions</code> and <code>seam proposals</code> end with one line naming the locked
+projects they left out, <code>(not shown: locked projects acme-finance, example-legal)</code>: names only, never a count. With <code>--project</code> (<code>seam plan list</code>, <code>seam proposals</code>), only that project is named, when it is locked. Their
+<code>--json</code> answers carry the same names as <code>locked</code>.</p>
 <h3 id="seam_access_request">seam access request</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam access request <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>--reason TEXT<span class="o">]</span> &lt;project&gt;
 </span></span></code></pre></div>
@@ -539,37 +548,51 @@ refused before anything is sent.</p>
 </span></span></code></pre></div>
 <p>The second line appears only when a passkey can approve the request there:
 passkeys are set up and at least one is enrolled. Asking again while a request
-is pending answers with that same request; a request from an agent that
-already holds a lease is a <code>refresh</code>. <code>--json</code> prints the console's answer as
-received (<a href="#json-output">JSON output</a>). The console's refusal is printed as it
-is: the project is not locked, the connection has no agent process the daemon
-could verify, or the process asking is not an agent's (a shell, a terminal, a
+is pending answers with that same request. An agent that already holds the
+project's lease (or, with read grants on, a live read grant from its project)
+is answered with it, and nothing is filed, until 30 minutes before it ends,
+when the expiry notices start; from then on asking again files a new approval
+(a <code>refresh</code> of a lease, or a new read grant request). <code>--json</code> prints the
+console's answer as received (<a href="#json-output">JSON output</a>). The console's
+refusal is printed as it is: the project is not locked; the project is already
+open to this agent until <code>HH:MM</code> (a grant: already readable from its project),
+so nothing was filed; or the connection has no agent process the daemon could
+verify, or the process asking is not an agent's (a shell, a terminal, a
 multiplexer such as tmux, or a login process), so nothing was filed - run it
 from the agent's own shell.</p>
 <h3 id="seam_approve">seam approve</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam approve <span class="o">[</span>--for DURATION<span class="o">]</span> <span class="o">[</span>&lt;request&gt;<span class="o">]</span>
-</span></span><span class="line"><span class="cl">seam approve --passkey <span class="o">[</span>&lt;request&gt;<span class="o">]</span>
+</span></span><span class="line"><span class="cl">seam approve --passkey <span class="o">[</span>--for DURATION<span class="o">]</span> <span class="o">[</span>&lt;request&gt;<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seam approve --watch
 </span></span></code></pre></div>
 <p>The owner's terminal path. It needs a terminal on both stdin and stdout and
-refuses otherwise: an agent cannot use it. <code>&lt;request&gt;</code> is the short id
+refuses otherwise, in one line naming the other ways: an agent asks with
+<code>seam access request &lt;project&gt;</code>; the owner decides in their own terminal, or
+with Touch ID or a passkey where one is enrolled. <code>&lt;request&gt;</code> is the short id
 (<code>R-7F3K</code>) or the full id; without one, <code>seam approve</code> lists what is waiting
 (short id, project, session, warning count, and when each stops waiting),
 takes the only request, or asks which one by number or short id. With nothing
-waiting it prints <code>Nothing is waiting.</code></p>
+waiting it prints <code>Nothing is waiting: no access request is pending (seam approve --watch prints each new one).</code></p>
+<p>A request no longer pending is refused in one line that says what became of
+it: <code>R-7F3K expired at 14:05 without a decision: nothing to decide (the agent asks again with its next call to example-finance)</code>, <code>R-7F3K was denied: ...</code>,
+<code>R-7F3K is already approved: nothing to decide</code>.</p>
 <p>It then shows the request's facts - the daemon's warnings first, most serious first, each on its
 own line behind <code>!</code>, then the project with its isolation and access, the
+agent the daemon names (<code>Claude Code 2.1.319</code>) when it names one, the
 asking program with its pid and uid, the session and model, the working
 directory, the agent's reason (quoted, and labeled as the agent's own words),
-whether this is a first request or a refresh, and until when it waits. Only
-the warnings are colored, and not with <code>NO_COLOR</code> set or <code>TERM=dumb</code>. Every
-value is printed with control characters escaped, so nothing an agent wrote
-can repaint the terminal.</p>
-<p>Next it asks for the duration - <code>session</code> (the default: until the asking
-session ends, at most <code>peer_auth.max_lease</code>), <code>1h</code> or <code>4h</code> - unless <code>--for</code>
-names one; <code>--for</code> takes only a duration the daemon offers. Last it asks to
-confirm:</p>
-<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">Approve R-7F3K (example-finance, read-write, until the session ends, at most 8h)? [y/N/d=deny]
+whether this is a first request or a refresh, and until when it waits. The
+warnings are indented like the facts, and every value lines up in one column.
+Only the warnings are colored, and not with <code>NO_COLOR</code> set or <code>TERM=dumb</code>.
+Every value is printed with control characters escaped, so nothing an agent
+wrote can repaint the terminal.</p>
+<p>Next it lists the durations the daemon offers, numbered (<code>session</code>, the
+default: until the asking session ends, at most <code>peer_auth.max_lease</code>; <code>1h</code>;
+<code>4h</code>), and takes the number or the name; Enter takes the default; <code>--for</code>
+skips the question, and takes only a duration the daemon offers. Then it says
+in one line what an approval grants, and asks:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance until the session ends, at most 8h.
+</span></span><span class="line"><span class="cl">Approve R-7F3K? [y/N/d=deny]
 </span></span></code></pre></div>
 <p><code>y</code> approves and <code>d</code> denies; any other answer prints <code>Nothing changed.</code> and
 exits 0. Either decision runs <a href="../../reference/cli-seamlessd/#seamlessd_approve"><code>seamlessd approve</code></a>
@@ -578,11 +601,13 @@ names in its answer:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -k -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>&lt;config&gt; &lt;seamlessd&gt; approve &lt;id&gt; --for &lt;duration&gt; --digest &lt;facts digest&gt;
 </span></span><span class="line"><span class="cl">sudo -k -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>&lt;config&gt; &lt;seamlessd&gt; approve &lt;id&gt; --deny
 </span></span></code></pre></div>
+<p>Before sudo runs it says what the prompt is for (<code>sudo asks for your Touch ID or password next: it commits the approval as _seamless.</code>), unless the probe
+below found that sudo asks for nothing.</p>
 <p><code>sudo -k</code> asks for your Touch ID or password every time and leaves no cached
 ticket behind; that authentication is the proof, not <code>seam approve</code>. The
 command runs on your terminal, so the prompt shows there, and <code>seamlessd</code>'s
-own answer (<code>Approved R-7F3K: example-finance, read and write, ...</code>) is what
-you read; when it fails, <code>seam approve</code> exits 1. The digest is that of the
+own answer (<code>Approved R-7F3K: Claude Code 2.1.319 (pid 4242) may read and write example-finance until 14:53 PST.</code>) is what you read; when it fails,
+<code>seam approve</code> says <code>the approval of R-7F3K did not complete: nothing was approved (sudo exited with status 1)</code> and exits 1. The digest is that of the
 facts you were shown: when they changed in the meantime, the approval is
 refused and you look again.</p>
 <p>Before running it, <code>seam approve</code> drops sudo's cached ticket and tries
@@ -596,13 +621,18 @@ account, executable or config file is unknown), the facts are still shown and
 the command points at the request's passkey page instead.</p>
 <p><code>--passkey</code> opens the request's passkey page (the <code>page</code> the daemon names) in
 the default browser - <code>open</code> on macOS, <code>xdg-open</code> on Linux, <code>rundll32</code> on
-Windows - or prints the address when no browser could be opened. A daemon
-that offers no passkey approval names no page, and the command says so.</p>
+Windows - or prints the address when no browser could be opened. With <code>--for</code>
+(a duration the daemon offers), the page opens with it chosen
+(<code>/console/access/&lt;id&gt;?for=1h</code>): it shows that duration read-only, with a link
+to choose another; without <code>--for</code>, the page asks. The passkey signs the
+duration with the facts shown, so its approval binds both. A daemon that offers
+no passkey approval names no page, and the command says so.</p>
 <p><code>--watch</code> polls the pending list every 3 seconds, prints each new request once
-(with its warnings and the <code>seam approve</code> line to decide it), and raises a
-notification - <code>osascript</code> on macOS, a terminal bell elsewhere - whose text is
-the short id and project only, never the agent's reason. Ctrl-C ends it. It
-decides nothing; it takes no request, <code>--for</code> or <code>--passkey</code>.</p>
+(with its warnings and <code>Claude Code asks; decide it with: seam approve R-7F3K</code>), and raises a notification - <code>osascript</code> on macOS, titled <code>Seamless access request</code>; a terminal bell elsewhere - whose text names the agent
+without its version (<code>An agent</code> when the daemon names none), the project and
+the command (<code>Claude Code asks for example-finance: seam approve R-7F3K</code>),
+never the agent's reason. Ctrl-C ends it. It decides nothing; it takes no
+request, <code>--for</code> or <code>--passkey</code>.</p>
 <p>Exit status: 0 when a request was approved or denied, when nothing changed,
 and when nothing is waiting; 1 on any error, including a request that is no
 longer pending (and 2, as everywhere, for a command line it cannot parse).</p>
@@ -622,23 +652,35 @@ must also pass Gatekeeper. When <code>seam</code> itself is unsigned (a <code>go
 a release asset is held to the team that signed it, and a local build's team
 is shown for you to confirm. It is installed at
 <code>~/Applications/Seamless Approve.app</code>, replacing an existing copy only after
-a y/N.</p>
-<p>It then prints the command that mints a one-time enrollment code as the
-daemon's account:</p>
+a y/N. A local build given with <code>--app</code> is checked first, so a bad one is
+refused before anything is asked; if you then keep the installed copy, <code>seam</code>
+says the <code>--app</code> build was not used and enrolls with the installed app.</p>
+<p>It then opens the app at once, whose dialog waits for the code, and prints the
+command that mints a one-time enrollment code as the daemon's account, to run
+in another terminal:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -k -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>&lt;config&gt; &lt;seamlessd&gt; approvers enroll-code touchid
 </span></span></code></pre></div>
-<p>and opens the app, which asks for the code in its own dialog, creates its key
-(one touch) and registers it. The key lives in the Secure Enclave, in a
-keychain group only the signed app can use, and needs your presence - finger,
-Apple Watch or login password - for every approval. <code>seam touchid enroll</code>
-finishes by confirming that the daemon lists the new key. <code>--name</code> labels it
-(default <code>Touch ID on &lt;host&gt;</code>; 1-64 printable characters, not starting with
-<code>-</code>).</p>
+<p>Type the code into the app's dialog: it creates its key (one touch) and
+registers it, while the first terminal waits for the app to close. The key
+lives in the Secure Enclave, in a keychain group only the signed app can use,
+and needs your presence - finger, Apple Watch or login password - for every
+approval. <code>seam touchid enroll</code> finishes by confirming that the daemon lists
+the new key. <code>--name</code> labels it (default <code>Touch ID on &lt;host&gt;</code>; 1-64 printable
+characters, not starting with <code>-</code>).</p>
+<p>Enrolling the same Mac again replaces its key: the app deletes the earlier key
+from the keychain, and that key signs its own retirement, so the daemon removes
+its credential in the same transaction that stores the new one, and
+<code>seam touchid enroll</code> names the key it retired. Only a credential whose own key
+signs is retired, so another Mac's Touch ID key and a passkey are never
+removed this way. If the earlier key does not sign (its prompt is cancelled),
+the daemon keeps it, and the app's closing alert gives the
+<code>seamlessd approvers remove</code> command for it.</p>
 <p>Once enrolled, accepting an access request's dialog with Touch ID opens the
 app for that request: it reads the request's facts from the daemon itself,
 shows them in the Touch ID prompt, and signs over the request and the
 duration you chose. A Touch ID approval is accepted on the <code>peer_auth</code> socket
-only.</p>
+only. If you cancel the Touch ID prompt, the agent's waiting call answers at
+once that Touch ID was cancelled and the request is still pending.</p>
 <h3 id="seam_touchid_status">seam touchid status</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam touchid status
 </span></span></code></pre></div>

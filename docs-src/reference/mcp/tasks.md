@@ -56,6 +56,12 @@ only the ids the caller may read, and `depends_on_withheld` counts the rest; and
 the claim's "task blocked" refusal names the readable blockers and counts the
 others. With nothing isolated or locked, every answer reads as it always has.
 
+The owner's own connection at a locked project it holds no lease on is told
+which one: the withheld entry reads `a task in locked project acme-finance
+blocks this one: <remedy>`, and the claim refusal names the project, with a
+`Remedy:` line. Every other caller, and every blocker an isolation fence alone
+withholds, gets the generic words.
+
 | Call | Refuses when |
 |---|---|
 | `tasks_add` | A blocker is missing or the new dependency would create a cycle |

@@ -46,14 +46,20 @@ func AccountLabel(account string) string {
 	return accountLabelPrefix + sanitizeAccount(account)
 }
 
-// accountMark is the label as a line suffix: " [written by account <name>]",
-// or "" for the owner's items, which keeps their lines byte-identical.
-func accountMark(account string) string {
+// AccountMark is the label as a line suffix: " [written by account <name>]",
+// or "" for the owner's items, which keeps their lines byte-identical. Every
+// surface that prints the label at the end of a text line uses it -- the
+// briefing, prompt recall and A2A's text part -- so the label reads the same,
+// brackets included, wherever an agent meets it.
+func AccountMark(account string) string {
 	if account == "" {
 		return ""
 	}
 	return " [" + AccountLabel(account) + "]"
 }
+
+// accountMark is AccountMark for this package's own renderers.
+func accountMark(account string) string { return AccountMark(account) }
 
 // sanitizeAccount renders an account name for a label. An OS account name is
 // letters, digits and _ . - (what the kernel-named socket peer resolves to),

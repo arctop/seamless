@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/arctop/seamless/internal/access"
@@ -45,7 +46,7 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 	if locked := policy.OwnerLocked(); len(locked) > 0 {
 		out = append(out, check{statusOK, "peer_auth.locked", fmt.Sprintf("locked: [%s]; closed to every owner request "+
 			"that holds no lease the owner approved (the TCP bearer key never holds one)", strings.Join(locked, ", "))})
-		out = append(out, approverCheck(ctx, db))
+		out = append(out, approverCheck(ctx, db, runtime.GOOS))
 	}
 	for _, a := range policy.Accounts() {
 		out = append(out, check{statusOK, "peer_auth.user", fmt.Sprintf("%s (uid %d): sealed [%s], shared [%s]; sessions land in %s",
@@ -89,9 +90,10 @@ func groupSuffix(g string) string {
 }
 
 // approverCheck reports the enrolled approver credentials while a project is
-// locked. None is a warning, not a failure: the terminal path (seam approve,
-// confirmed by a sudo to the daemon's account) needs no credential.
-func approverCheck(ctx context.Context, db *sql.DB) check {
+// locked (so under peer_auth). None is a warning, not a failure: the terminal
+// path (seam approve, confirmed by a sudo to the daemon's account) needs no
+// credential. goos is the daemon's platform, for how to enroll one.
+func approverCheck(ctx context.Context, db *sql.DB, goos string) check {
 	const name = "peer_auth.approvers"
 	if db == nil {
 		return check{statusInfo, name, "not checked: no database"}
@@ -102,7 +104,7 @@ func approverCheck(ctx context.Context, db *sql.DB) check {
 	}
 	if len(creds) == 0 {
 		return check{statusWarn, name, "no passkey or Touch ID key is enrolled: only the terminal path (seam approve) can approve " +
-			"access to a locked project; enroll one with `seamlessd approvers enroll-code passkey`, run as the daemon's account"}
+			"access to a locked project; to enroll one, " + firstApproverAdvice(goos, true)}
 	}
 	kinds := map[string]int{}
 	for _, c := range creds {

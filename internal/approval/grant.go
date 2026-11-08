@@ -156,7 +156,10 @@ func (g *Grants) eligible(ctx context.Context, target, from string) error {
 // RequestGrant files (or finds) the pending read grant request of the asker
 // ctx and in name, for in.Project from the asking session's project. A
 // pending request of that asker for that pair is returned as it is, so a
-// repeated refusal never piles up requests.
+// repeated refusal never piles up requests. An asker that already holds a
+// live grant of the pair files nothing while more than access.ExpiryWarning
+// of it remains: the answer is an *AccessLiveError naming it, as for a
+// lease (Service.Request).
 func (g *Grants) RequestGrant(ctx context.Context, in GrantInput) (store.AccessApproval, error) {
 	const op = "approval.RequestGrant"
 	if err := refuseRestricted(ctx); err != nil {
@@ -223,6 +226,11 @@ func (g *Grants) RequestGrant(ctx context.Context, in GrantInput) (store.AccessA
 	if err := g.eligible(ctx, target, from); err != nil {
 		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
 	}
+	if live, err := g.liveGrant(ctx, req, target, from, now); err != nil {
+		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
+	} else if live != nil {
+		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, live)
+	}
 	if pending, ok, err := store.PendingGrantRequest(ctx, db, req.ProcessKey, req.SessionID, target, from, now); err != nil {
 		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
 	} else if ok {
@@ -247,6 +255,32 @@ func (g *Grants) RequestGrant(ctx context.Context, in GrantInput) (store.AccessA
 	g.svc.record(ctx, core.Event{Kind: core.EventAccessRequested, ItemID: a.ID, SessionID: a.SessionID, ProjectSlug: a.Project,
 		Payload: map[string]any{"kind": store.AccessKindGrant, "via": via, "from_project": from}})
 	return a, nil
+}
+
+// liveGrant is the asker's live grant of target from from that covers a new
+// ask -- more than access.ExpiryWarning from its end -- as an
+// *AccessLiveError; nil when there is none. The asker is req's: its agent
+// process under peer_auth, else its session.
+func (g *Grants) liveGrant(ctx context.Context, req store.GrantRequest, target, from string, now time.Time) (*AccessLiveError, error) {
+	var keys []string
+	sessionID := req.SessionID
+	if req.ProcessKey != "" {
+		keys, sessionID = []string{req.ProcessKey}, ""
+	}
+	rows, err := store.AccessGrantsForHolder(ctx, g.svc.cfg.DB, keys, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	var live *AccessLiveError
+	for _, r := range rows {
+		if r.Project != target || r.FromProject != from || r.RevokedAt != nil || r.ExpiresAt.Sub(now) <= access.ExpiryWarning {
+			continue
+		}
+		if live == nil || r.ExpiresAt.After(live.Expires) {
+			live = &AccessLiveError{Project: target, From: from, AccessID: r.ID, ApprovalID: r.ApprovalID, Expires: r.ExpiresAt}
+		}
+	}
+	return live, nil
 }
 
 // Approve decides a read grant request: the facts digest the owner saw, the

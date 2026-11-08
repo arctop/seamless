@@ -349,8 +349,12 @@ func enrolls(d *stubDaemon) func([]string) {
 
 func TestTouchIDEnroll_ReleaseHappyPath(t *testing.T) {
 	d := happyDaemon()
-	rig := newTouchRig(t, d, "\n")
-	rig.runner.helper = enrolls(d)
+	rig := newTouchRig(t, d, "")
+	var shown string
+	rig.runner.helper = func(argv []string) {
+		shown = rig.out.String() // what the terminal said before the app opened
+		enrolls(d)(argv)
+	}
 
 	require.Equal(t, 0, rig.run("enroll", "--name", "Touch ID on laptop"), rig.errb.String())
 	stage := rig.staging(t)
@@ -383,8 +387,14 @@ func TestTouchIDEnroll_ReleaseHappyPath(t *testing.T) {
 
 	out := rig.out.String()
 	require.Contains(t, out, "Installed Seamless Approve at "+rig.target())
-	require.Contains(t, out, "sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid")
 	require.Contains(t, out, `Enrolled the Touch ID key "Touch ID on laptop" (01KTOUCHIDKEY0000000000001)`)
+	// The app opens at once, with nothing typed: its window waits for the
+	// code, and the terminal says so, with the command that mints it.
+	require.Contains(t, shown, "Opening Seamless Approve. Its window waits for a one-time enrollment code.")
+	require.Contains(t, shown, "in another terminal on this Mac, run\n\n  sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid\n")
+	require.Contains(t, shown, "Type the code into the Seamless Approve window, then touch the sensor. This terminal waits until Seamless Approve closes.")
+	require.NotContains(t, out, "Press Return")
+	require.NotContains(t, out, "Retired", "nothing was enrolled before")
 }
 
 // A tampered or foreign app is refused, and nothing is installed.
@@ -589,9 +599,73 @@ func TestTouchIDEnroll_ExistingInstall(t *testing.T) {
 		require.NoError(t, os.MkdirAll(rig.target(), 0o755))
 		rig.runner.selfTeam = ""
 		require.Equal(t, 1, rig.run("enroll"))
-		require.Contains(t, rig.out.String(), "Install and use it? [y/N]")
+		require.Contains(t, rig.out.String(), "Use it? [y/N]")
+		require.NotContains(t, rig.out.String(), "Install and use it?", "it is installed already")
 		require.Contains(t, rig.errb.String(), "not confirmed")
 		require.Empty(t, rig.sigCalls)
+	})
+}
+
+// --app with an app already installed: the local build is checked first, as a
+// fresh install checks it, so a bad one is refused before anything is asked;
+// a good one is installed only after a y/N, and declined, it is said plainly
+// not to be used.
+func TestTouchIDEnroll_LocalBuildOverAnInstall(t *testing.T) {
+	setup := func(t *testing.T, typed string) (*touchRig, *stubDaemon, string, string) {
+		d := happyDaemon()
+		rig := newTouchRig(t, d, typed)
+		rig.runner.helper = enrolls(d)
+		marker := filepath.Join(rig.target(), "Contents", "installed")
+		require.NoError(t, os.MkdirAll(filepath.Dir(marker), 0o755))
+		require.NoError(t, os.WriteFile(marker, nil, 0o600))
+		src := filepath.Join(t.TempDir(), "build", approverAppName)
+		require.NoError(t, os.MkdirAll(filepath.Join(src, "Contents"), 0o755))
+		return rig, d, src, marker
+	}
+	t.Run("a bad build is refused before the question", func(t *testing.T) {
+		for name, mutate := range map[string]func(*touchRunner){
+			"a signature that does not verify":  func(r *touchRunner) { r.verifyFails = true },
+			"a wrong identifier":                func(r *touchRunner) { r.identifier = "com.example.other" },
+			"a wrong team":                      func(r *touchRunner) { r.appTeam = otherTeam },
+			"a signature not chaining to Apple": func(r *touchRunner) { r.requirementBad = true },
+		} {
+			t.Run(name, func(t *testing.T) {
+				rig, _, src, marker := setup(t, "y\n")
+				mutate(rig.runner)
+				require.Equal(t, 1, rig.run("enroll", "--app", src))
+				require.Contains(t, rig.errb.String(), "refusing Seamless Approve")
+				require.NotContains(t, rig.out.String(), "Replace it", "nothing is asked about a build that is refused")
+				require.FileExists(t, marker, "the installed app is untouched")
+				require.Empty(t, rig.leftovers(t))
+				for _, c := range rig.runner.recorded() {
+					require.NotEqual(t, "open", c[0])
+					require.NotEqual(t, rig.target(), c[len(c)-1], "the installed app is not even checked: %v", c)
+				}
+			})
+		}
+	})
+	t.Run("declined", func(t *testing.T) {
+		rig, _, src, marker := setup(t, "n\n")
+		require.Equal(t, 0, rig.run("enroll", "--app", src), rig.errb.String())
+		out := rig.out.String()
+		require.Contains(t, out, "Seamless Approve is already installed at "+rig.target()+". Replace it with "+src+"? [y/N]")
+		require.Contains(t, out, "Keeping the installed app: "+src+" is not installed and not used; the app at "+rig.target()+" enrolls instead.")
+		require.FileExists(t, marker)
+		require.Empty(t, rig.leftovers(t), "the staged build is gone")
+		calls := rig.runner.recorded()
+		staged := filepath.Join(rig.staging(t), approverAppName)
+		require.Equal(t, []string{"ditto", src, staged}, calls[0], "the build was staged and checked first")
+		require.Contains(t, calls, []string{"codesign", "--verify", "--strict", "--deep", staged})
+		require.Contains(t, calls, []string{"codesign", "--verify", "--strict", "--deep", rig.target()}, "the kept app is checked too")
+		require.Equal(t, rig.target(), calls[len(calls)-1][4], "the installed app is the one opened")
+	})
+	t.Run("replaced", func(t *testing.T) {
+		rig, _, src, marker := setup(t, "y\n")
+		require.Equal(t, 0, rig.run("enroll", "--app", src), rig.errb.String())
+		require.Contains(t, rig.out.String(), "Replace it with "+src+"? [y/N]")
+		require.Contains(t, rig.out.String(), "Installed Seamless Approve at "+rig.target())
+		require.NoFileExists(t, marker, "the build replaced the installed app")
+		require.Empty(t, rig.leftovers(t))
 	})
 }
 
@@ -606,13 +680,39 @@ func TestTouchIDEnroll_CancelledOrFailed(t *testing.T) {
 	require.Equal(t, 1, rig.run("enroll"))
 	require.Contains(t, rig.errb.String(), "open could not start Seamless Approve")
 
-	// No Return: nothing opens.
-	rig = newTouchRig(t, happyDaemon(), "")
+	// Nothing typed at all: the app still opens, its window waiting for the
+	// code (the terminal asks nothing on the way there).
+	d := happyDaemon()
+	rig = newTouchRig(t, d, "")
+	rig.runner.helper = enrolls(d)
 	require.Equal(t, 0, rig.run("enroll"), rig.errb.String())
-	require.Contains(t, rig.out.String(), "Nothing enrolled. Seamless Approve stays installed")
-	for _, c := range rig.runner.recorded() {
-		require.NotEqual(t, "open", c[0])
+	calls := rig.runner.recorded()
+	require.Equal(t, "open", calls[len(calls)-1][0])
+	require.NotContains(t, rig.out.String(), "Nothing enrolled")
+}
+
+// Re-enrolling: the key the daemon no longer lists is named as retired, and
+// an older key still listed under the new key's name is pointed out with the
+// command that removes it, since only its date tells it apart.
+func TestTouchIDEnroll_ReportsTheKeyItReplaced(t *testing.T) {
+	d := happyDaemon()
+	d.addKey("01KPREVKEY0000000000000001", "Touch ID on laptop")
+	d.addKey("01KPREVKEY0000000000000002", "Touch ID on laptop")
+	d.addKey("01KM1N1KEY0000000000000003", "Touch ID on example-mini")
+	rig := newTouchRig(t, d, "")
+	rig.runner.helper = func(argv []string) {
+		d.mu.Lock()
+		d.keys = slices.DeleteFunc(d.keys, func(k approverKey) bool { return k.ID == "01KPREVKEY0000000000000001" })
+		d.mu.Unlock()
+		enrolls(d)(argv)
 	}
+	require.Equal(t, 0, rig.run("enroll", "--name", "Touch ID on laptop"), rig.errb.String())
+	out := rig.out.String()
+	require.Contains(t, out, `Enrolled the Touch ID key "Touch ID on laptop" (01KTOUCHIDKEY0000000000001)`)
+	require.Contains(t, out, `Retired the Touch ID key "Touch ID on laptop" (01KPREVKEY0000000000000001, added `)
+	require.Contains(t, out, `The daemon still lists an older Touch ID key named "Touch ID on laptop" (01KPREVKEY0000000000000002, added `)
+	require.Contains(t, out, "\n  sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers remove 01KPREVKEY0000000000000002\n")
+	require.NotContains(t, out, "01KM1N1KEY0000000000000003", "another Mac's key, under another name, is not this enrollment's business")
 }
 
 func TestTouchIDEnroll_Refusals(t *testing.T) {
@@ -763,24 +863,36 @@ func TestTouchIDEnroll_AgainstTheConsole(t *testing.T) {
 	rig := newTouchRig(t, daemon, "\n")
 	code, _, err := store.MintEnrollCode(ctx, db, store.ApproverTouchID, time.Now())
 	require.NoError(t, err)
-	var enrolled string
+	var (
+		enrolled string
+		held     *ecdsa.PrivateKey // the key this Mac's keychain holds, as the helper keeps it
+		heldID   string
+	)
 	rig.runner.helper = func(argv []string) {
 		// Seamless Approve: a new key, signed over the code the owner typed,
-		// posted over the socket it was given, the way the helper posts it.
+		// posted over the socket it was given, the way the helper posts it;
+		// the key it held before signs its own retirement.
 		i := slices.Index(argv, "--socket")
 		sock, name := argv[i+1], argv[slices.Index(argv, "--name")+1]
 		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		require.NoError(t, err)
 		pub, err := key.PublicKey.Bytes()
 		require.NoError(t, err)
-		digest := sha256.Sum256(approval.TouchIDEnrollMessage(code, pub))
-		sig, err := ecdsa.SignASN1(rand.Reader, key, digest[:])
-		require.NoError(t, err)
+		signWith := func(k *ecdsa.PrivateKey, msg []byte) string {
+			digest := sha256.Sum256(msg)
+			sig, err := ecdsa.SignASN1(rand.Reader, k, digest[:])
+			require.NoError(t, err)
+			return base64.StdEncoding.EncodeToString(sig)
+		}
 		client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", sock)
 		}}}
 		form := url.Values{"code": {code}, "name": {name}, "public_key": {base64.StdEncoding.EncodeToString(pub)},
-			"signature": {base64.StdEncoding.EncodeToString(sig)}}
+			"signature": {signWith(key, approval.TouchIDEnrollMessage(code, pub))}}
+		if held != nil {
+			form.Set("replace", heldID)
+			form.Set("replace_signature", signWith(held, approval.TouchIDReplaceMessage(code, pub, heldID)))
+		}
 		req, err := http.NewRequest(http.MethodPost, "http://localhost/console/approvers/touchid/enroll", strings.NewReader(form.Encode()))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -789,10 +901,17 @@ func TestTouchIDEnroll_AgainstTheConsole(t *testing.T) {
 		resp, err := client.Do(req)
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
-		var got map[string]string
+		var got struct {
+			ID      string   `json:"id"`
+			Error   string   `json:"error"`
+			Retired []string `json:"retired"`
+		}
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
-		require.Equal(t, http.StatusOK, resp.StatusCode, got["error"])
-		enrolled = got["id"]
+		require.Equal(t, http.StatusOK, resp.StatusCode, got.Error)
+		if held != nil {
+			require.Equal(t, []string{heldID}, got.Retired)
+		}
+		enrolled, held, heldID = got.ID, key, got.ID
 	}
 
 	require.Equal(t, 0, rig.run("enroll", "--name", "Touch ID on laptop"), rig.errb.String())
@@ -803,4 +922,30 @@ func TestTouchIDEnroll_AgainstTheConsole(t *testing.T) {
 	rig.out.Reset()
 	require.Equal(t, 0, rig.run("status"), rig.errb.String())
 	require.Contains(t, rig.out.String(), enrolled+`  "Touch ID on laptop"  added `)
+
+	// Enrolling this Mac again retires the first key with the new one: the
+	// daemon lists one key under the name, and seam says which went.
+	first := enrolled
+	code, _, err = store.MintEnrollCode(ctx, db, store.ApproverTouchID, time.Now())
+	require.NoError(t, err)
+	rig.out.Reset()
+	require.Equal(t, 0, rig.run("enroll", "--name", "Touch ID on laptop"), rig.errb.String())
+	require.NotEqual(t, first, enrolled)
+	require.Contains(t, rig.out.String(), `Retired the Touch ID key "Touch ID on laptop" (`+first+`, added `)
+	require.NotContains(t, rig.out.String(), "still lists an older")
+	rig.out.Reset()
+	require.Equal(t, 0, rig.run("status"), rig.errb.String())
+	require.Contains(t, rig.out.String(), enrolled+`  "Touch ID on laptop"  added `)
+	require.NotContains(t, rig.out.String(), first)
+}
+
+// An id that is not a ULID never becomes a pasteable command line.
+func TestTouchID_ReportReplacedOddID(t *testing.T) {
+	var out strings.Builder
+	added := []approverKey{{ID: "01KTOUCHIDKEY0000000000001", Name: "Touch ID on laptop"}}
+	after := append([]approverKey{{ID: "not-a-ulid", Name: "Touch ID on laptop"}}, added...)
+	reportReplaced(&out, *testTerminal, after, after, added)
+	require.Contains(t, out.String(), `older Touch ID key named "Touch ID on laptop" (not-a-ulid, added `)
+	require.Contains(t, out.String(), "remove it with `seamlessd approvers remove`, run as the daemon's account")
+	require.NotContains(t, out.String(), "sudo")
 }

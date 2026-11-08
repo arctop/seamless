@@ -3,14 +3,18 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -39,22 +43,36 @@ func approverAsk(params string) string {
 }
 
 // fakeOpen stands in for the program runner the bridge launches the approver
-// with: it records each command line, signals ran (when set) once per launch,
-// and, when release is set, holds every launch until release closes.
+// with: it records each command line (the --stderr path as stderrMark),
+// signals ran (when set) once per launch, and, when release is set, holds
+// every launch until release closes. helper, when set, plays the helper the
+// launch opened, given the path open --stderr names.
 type fakeOpen struct {
 	code    int
 	err     error
 	ran     chan struct{}
 	release chan struct{}
+	helper  func(stderr string)
 
 	mu    sync.Mutex
 	calls [][]string
 }
 
+// stderrMark stands for the FIFO path a launch hands the helper as stderr.
+const stderrMark = "<stderr>"
+
 func (f *fakeOpen) run(ctx context.Context, argv []string, _ io.Reader, _, _ io.Writer) (int, error) {
+	recorded := slices.Clone(argv)
+	stderr := ""
+	if i := slices.Index(recorded, "--stderr"); i >= 0 && i+1 < len(recorded) {
+		stderr, recorded[i+1] = recorded[i+1], stderrMark
+	}
 	f.mu.Lock()
-	f.calls = append(f.calls, slices.Clone(argv))
+	f.calls = append(f.calls, recorded)
 	f.mu.Unlock()
+	if f.helper != nil && stderr != "" {
+		f.helper(stderr)
+	}
 	if f.ran != nil {
 		f.ran <- struct{}{}
 	}
@@ -74,10 +92,14 @@ func (f *fakeOpen) recorded() [][]string {
 	return slices.Clone(f.calls)
 }
 
-// openArgv is the command line a launch for id and duration runs.
+// openArgv is the command line a launch for id and duration runs: the
+// helper's stderr goes to a FIFO where the bridge can make one.
 func openArgv(id, duration string) []string {
-	return []string{"open", "-n", "-a", approverAppPath(testHome), "--args",
-		"approve", "--socket", testSocket, "--request", id, "--for", duration}
+	argv := []string{"open", "-n", "-a", approverAppPath(testHome)}
+	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+		argv = append(argv, "--stderr", stderrMark)
+	}
+	return append(argv, "--args", "approve", "--socket", testSocket, "--request", id, "--for", duration)
 }
 
 // sseCallDaemon answers every request with an SSE stream: the given events,
@@ -293,4 +315,120 @@ func TestBridge_ApprovalDialogOverTheRealTransport(t *testing.T) {
 	require.Empty(t, out.rest(), "the ask never reaches the client")
 	require.Empty(t, errb.String())
 	require.Equal(t, [][]string{openArgv(testRequestID, "session")}, open.recorded())
+}
+
+// The bridge's word that the approver ended is pinned as the daemon pins it
+// (internal/mcp/elicit_test.go).
+func TestBridge_ApproverEndedMethodIsPinned(t *testing.T) {
+	require.Equal(t, "notifications/seamless/approver_ended", approverEndedMethod)
+}
+
+// How the helper ended, read from its stderr: its last "SeamApprove: " line,
+// a cancel's beginning "Not approved:". A helper that said nothing is not
+// reported.
+func TestApproverOutcome(t *testing.T) {
+	for _, c := range []struct {
+		name, stderr, want string
+	}{
+		{"the Touch ID prompt cancelled", "SeamApprove: Not approved: the Touch ID prompt was cancelled.\n", approverCancelled},
+		{"framework noise first", "2026-11-08 SeamApprove[812:4410] warning\nSeamApprove: Not approved: the Touch ID prompt was cancelled.\n", approverCancelled},
+		{"a failure, over two lines", "SeamApprove: The daemon refused it: this request was already decided.\n  seam approve R-7F3K\n", approverClosed},
+		{"approved", "SeamApprove: Approved access to acme-finance until 15:04.\n", approverClosed},
+		{"no newline at the end", "SeamApprove: Not approved: the Touch ID prompt was cancelled.", approverCancelled},
+		{"nothing", "", ""},
+		{"nothing of the helper's", "objc[812]: Class X is implemented in both\n", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, approverOutcome([]byte(c.stderr)))
+		})
+	}
+}
+
+// endedDaemon answers a tools/call with an SSE stream carrying the approver
+// ask, then the call's reply, and records every approver_ended notification
+// the bridge posts (202, no body), with the session it named.
+type endedDaemon struct {
+	url   string
+	ended chan map[string]any
+}
+
+func newEndedDaemon(t *testing.T, ask string) *endedDaemon {
+	t.Helper()
+	d := &endedDaemon{ended: make(chan map[string]any, 4)}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var msg struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+			Params map[string]any  `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if msg.Method == approverEndedMethod {
+			msg.Params["session"] = r.Header.Get(headerSessionID)
+			d.ended <- msg.Params
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		w.Header().Set(headerSessionID, "sess-1")
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprintf(w, "event: message\ndata: %s\n\n", ask)
+		_, _ = fmt.Fprintf(w, "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
+	}))
+	t.Cleanup(srv.Close)
+	d.url = srv.URL + "/api/mcp"
+	return d
+}
+
+// When the helper the bridge launched exits, the bridge tells the daemon how,
+// on the connection's own MCP session, and the client sees nothing of it.
+func TestBridge_ApproverEndIsReported(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("the helper's stderr is a FIFO, made on darwin and linux only")
+	}
+	for _, c := range []struct {
+		name, line, want string
+	}{
+		{"cancelled", "SeamApprove: Not approved: the Touch ID prompt was cancelled.\n", approverCancelled},
+		{"closed", "SeamApprove: Couldn't approve: the daemon refused it.\n", approverClosed},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d := newEndedDaemon(t, approverAsk(`{"request_id":"`+testRequestID+`","duration":"1h"}`))
+			exited := make(chan error, 1)
+			open := &fakeOpen{helper: func(stderr string) {
+				// The helper, opened by LaunchServices: it holds its stderr
+				// past open's return, then writes its outcome and exits.
+				go func() {
+					f, err := os.OpenFile(stderr, os.O_WRONLY, 0)
+					if err != nil {
+						exited <- err
+						return
+					}
+					_, err = f.WriteString(c.line)
+					exited <- errors.Join(err, f.Close())
+				}()
+			}}
+			var errb strings.Builder
+			b := approverBridge(d.url, open, &errb)
+			in, out := newFeedStdin(), newFrameSink()
+			done := runBridge(b, in, out)
+			in.send(`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"access_request"}}`)
+			require.JSONEq(t, `4`, string(decodeReply(t, out.next(t)).ID))
+			require.NoError(t, <-exited)
+
+			select {
+			case got := <-d.ended:
+				require.Equal(t, map[string]any{"request_id": testRequestID, "outcome": c.want, "session": "sess-1"}, got)
+			case <-time.After(10 * time.Second):
+				t.Fatal("the bridge did not report the helper's end")
+			}
+			in.close()
+			require.NoError(t, waitRun(t, done))
+			require.Empty(t, out.rest(), "the word never reaches the client")
+			require.Empty(t, errb.String())
+			require.Equal(t, [][]string{openArgv(testRequestID, "1h")}, open.recorded())
+		})
+	}
 }

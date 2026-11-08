@@ -108,6 +108,9 @@ func runPlanList(_ context.Context, e *env, o *planListOpts, _ []string) error {
 	}
 	var data struct {
 		Rows []cliPlanRow `json:"rows"`
+		// Locked names the locked projects whose plans the console left out
+		// (peer_auth.locked; absent otherwise).
+		Locked []string `json:"locked"`
 	}
 	if err := consoleJSON(cfg, path, &data); err != nil {
 		return err
@@ -125,11 +128,18 @@ func runPlanList(_ context.Context, e *env, o *planListOpts, _ []string) error {
 	if shown == 0 {
 		fmt.Fprintln(e.stdout, "(no captured plans)")
 	}
+	if line := lockedSkipped(data.Locked, *o.project); line != "" {
+		fmt.Fprintln(e.stdout, line)
+	}
 	return nil
 }
 
 // --- plan show ---
 
+// A plan in a locked project (peer_auth.locked) the calling tree holds no
+// lease on is refused with the lock named -- the console answers the lock
+// refusal the tool-backed commands print (answerLocked) -- never "not found";
+// plan check and plan approve read the same route family and say the same.
 var planShowCmd = spec("plan show", groupPlans, "one plan: body, attached notes, tasks",
 	exactly(1, "slug"), bindPlanShow, runPlanShow)
 

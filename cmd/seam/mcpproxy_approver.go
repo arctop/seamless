@@ -13,6 +13,17 @@ package main
 // of its own beyond launchApprover's argument checks: the helper is given the
 // request id and duration those checks passed and the socket from this
 // bridge's own config, and nothing else.
+//
+// When the helper exits, the bridge tells the daemon, on this connection's
+// MCP session, so a call that waits on the approval can answer at once rather
+// than wait out its dialog: approverEndedMethod, a notification with the
+// request_id and an outcome -- cancelled when the helper's last word is that
+// the owner cancelled ("Not approved: ..."), closed for any other end (it
+// failed, or it approved, which the daemon reads from the request itself).
+// The helper's exit status never reaches the bridge through LaunchServices;
+// its stderr does (mcpproxy_approver_fifo.go). A helper that says nothing is
+// not reported, and the call waits as before. The word grants and denies
+// nothing.
 
 import (
 	"context"
@@ -21,10 +32,57 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"slices"
+	"strings"
 	"time"
+
+	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/arctop/seamless/internal/core"
 )
+
+// approverEndedMethod is the bridge's word to the daemon that the helper it
+// launched for a request has exited (internal/mcp/elicit.go takes it; both
+// sides pin the string in a test).
+const approverEndedMethod = "notifications/seamless/approver_ended"
+
+// The outcomes approverEndedMethod carries.
+const (
+	approverCancelled = "cancelled"
+	approverClosed    = "closed"
+)
+
+// approverWatchLimit bounds how long the bridge watches one helper: a
+// request waits at most 15 minutes for the owner (approval.RequestTTL), so
+// past that nothing is waiting on the word.
+const approverWatchLimit = 15 * time.Minute
+
+// The helper's last line on stderr is "SeamApprove: " and its outcome's
+// message (macos/SeamApprove main.swift); a cancelled approval's message
+// begins "Not approved:" (Flows.approve). Its exit status (2 for a cancel)
+// does not survive LaunchServices, so this line is how a cancel is told.
+const (
+	approverLinePrefix   = "SeamApprove: "
+	approverCancelPrefix = "Not approved:"
+)
+
+// approverOutcome reads how the helper ended from its stderr: cancelled,
+// closed, or "" when it said nothing the bridge can read.
+func approverOutcome(stderr []byte) string {
+	last, found := "", false
+	for line := range strings.SplitSeq(string(stderr), "\n") {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), approverLinePrefix); ok {
+			last, found = rest, true
+		}
+	}
+	switch {
+	case !found:
+		return ""
+	case strings.HasPrefix(last, approverCancelPrefix):
+		return approverCancelled
+	}
+	return approverClosed
+}
 
 // approverLaunchTimeout bounds one launch. open returns once LaunchServices
 // has the app, well under a second; past this it is wedged, and a bridge whose
@@ -40,8 +98,10 @@ type approverHost struct {
 	socket string                 // the peer_auth socket this bridge dials; "" when server_url names none
 }
 
-// launch opens the approver for one ask.
-func (h approverHost) launch(ctx context.Context, ask core.ApproverLaunch) error {
+// launch opens the approver for one ask, and returns the helper's stderr to
+// watch for its end (nil when none could be made: the launch goes ahead
+// without one).
+func (h approverHost) launch(ctx context.Context, ask core.ApproverLaunch) (*approverStderr, error) {
 	run := h.run
 	if run == nil {
 		run = func(context.Context, []string, io.Reader, io.Writer, io.Writer) (int, error) {
@@ -58,11 +118,39 @@ func (h approverHost) launch(ctx context.Context, ask core.ApproverLaunch) error
 	}
 	home, err := homeDir()
 	if err != nil {
-		return fmt.Errorf("find the home the Touch ID approver is installed under: %w", err)
+		return nil, fmt.Errorf("find the home the Touch ID approver is installed under: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, approverLaunchTimeout)
 	defer cancel()
-	return launchApprover(ctx, run, goos, approverAppPath(home), h.socket, ask.RequestID, ask.Duration)
+	// The FIFO is made only once launchApprover's checks passed and it runs
+	// open: its stderr goes there.
+	var watch *approverStderr
+	withStderr := func(ctx context.Context, argv []string, in io.Reader, out, errw io.Writer) (int, error) {
+		if s, err := openApproverStderr(); err == nil {
+			watch = s
+			argv = withStderrArg(argv, s.stderrPath())
+		}
+		return run(ctx, argv, in, out, errw)
+	}
+	err = launchApprover(ctx, withStderr, goos, approverAppPath(home), h.socket, ask.RequestID, ask.Duration)
+	if watch != nil {
+		watch.handedOver()
+		if err != nil {
+			watch.close()
+			watch = nil
+		}
+	}
+	return watch, err
+}
+
+// withStderrArg adds open's --stderr path to an open command line, before
+// the arguments it passes to the app.
+func withStderrArg(argv []string, path string) []string {
+	i := slices.Index(argv, "--args")
+	if i < 0 {
+		return argv
+	}
+	return slices.Concat(argv[:i], []string{"--stderr", path}, argv[i:])
 }
 
 // takeApproverAsk reports whether msg is the daemon's ask to launch the Touch
@@ -102,11 +190,41 @@ func (b *bridge) goLaunch(ctx context.Context, ask core.ApproverLaunch) {
 	b.side.Add(1)
 	go func() {
 		defer b.side.Done()
-		if err := b.approver.launch(ctx, ask); err != nil {
+		watch, err := b.approver.launch(ctx, ask)
+		if err != nil {
 			b.logf("seam mcp-proxy: %s: %v", core.ApproverNotification, err)
 		}
 		b.mu.Lock()
 		delete(b.launching, ask.RequestID)
 		b.mu.Unlock()
+		if watch == nil {
+			return
+		}
+		defer watch.close()
+		stderr, ended := watch.wait(b.quit, approverWatchLimit)
+		if !ended {
+			return
+		}
+		outcome := approverOutcome(stderr)
+		if outcome == "" {
+			return
+		}
+		if err := b.sendApproverEnded(ctx, ask.RequestID, outcome); err != nil && ctx.Err() == nil {
+			b.logf("seam mcp-proxy: %s: %v", approverEndedMethod, err)
+		}
 	}()
+}
+
+// sendApproverEnded tells the daemon, on this bridge's MCP session, that the
+// helper launched for request id ended with outcome. It is a notification:
+// the daemon answers 202 and nothing reaches the client.
+func (b *bridge) sendApproverEnded(ctx context.Context, id, outcome string) error {
+	frame, err := json.Marshal(map[string]any{
+		"jsonrpc": mcp.JSONRPC_VERSION, "method": approverEndedMethod,
+		"params": map[string]string{"request_id": id, "outcome": outcome},
+	})
+	if err != nil {
+		return err
+	}
+	return b.exchange(ctx, frame, io.Discard)
 }

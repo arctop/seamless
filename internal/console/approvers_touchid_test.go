@@ -431,3 +431,73 @@ func (f *accessFixture) anotherRequest(t *testing.T) (id, short string) {
 	require.NoError(t, json.Unmarshal(out["short_id"], &short))
 	return id, short
 }
+
+// Re-enrolling this Mac retires its earlier key in the same request, when the
+// earlier key signs its own retirement: the answer names it, and the list no
+// longer does. Another Mac's key, and a passkey, stay whatever the form says.
+func TestTouchID_EnrollRetiresTheKeyItReplaces(t *testing.T) {
+	f := newAccessFixture(t)
+	ctx := context.Background()
+	old, mini, k := newTouchKey(t), newTouchKey(t), newTouchKey(t)
+	oldID := f.enrollTouch(t, old, "Touch ID on example-mac")
+	miniID := f.enrollTouch(t, mini, "Touch ID on example-mini")
+	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverTouchID, time.Now())
+	require.NoError(t, err)
+	pub := base64.StdEncoding.EncodeToString(k.pub)
+	form := func(replace ...string) url.Values {
+		v := url.Values{"code": {code}, "name": {"Touch ID on example-mac"}, "public_key": {pub},
+			"signature": {k.sign(t, approval.TouchIDEnrollMessage(code, k.pub))}}
+		for i := 0; i < len(replace); i += 2 {
+			v.Add("replace", replace[i])
+			v.Add("replace_signature", replace[i+1])
+		}
+		return v
+	}
+	oldSig := old.sign(t, approval.TouchIDReplaceMessage(code, k.pub, oldID))
+
+	// Malformed pairs are refused before anything is checked or consumed.
+	for name, v := range map[string]url.Values{
+		"an id without a signature": {"replace": {oldID}},
+		"a signature without an id": {"replace_signature": {oldSig}},
+		"an id that is not one":     form("not an id", oldSig),
+		"a signature not base64":    form(oldID, "%%%"),
+		"too many":                  form(oldID, oldSig, oldID, oldSig, oldID, oldSig, oldID, oldSig, oldID, oldSig),
+	} {
+		full := form()
+		for key, vals := range v {
+			full[key] = vals
+		}
+		status, out := f.socketJSON(t, formPost("/console/approvers/touchid/enroll", full))
+		require.Equal(t, http.StatusBadRequest, status, name)
+		require.Contains(t, errorOf(t, out), "replace", name)
+	}
+
+	// The other Mac's key, asked to retire by this Mac's key, stays.
+	status, out := f.socketJSON(t, formPost("/console/approvers/touchid/enroll",
+		form(miniID, old.sign(t, approval.TouchIDReplaceMessage(code, k.pub, miniID)), oldID, oldSig)))
+	require.Equal(t, http.StatusOK, status, string(out["error"]))
+	var retired []string
+	require.NoError(t, json.Unmarshal(out["retired"], &retired))
+	require.Equal(t, []string{oldID}, retired)
+	var newID string
+	require.NoError(t, json.Unmarshal(out["id"], &newID))
+
+	rows, err := store.ApproverCredentials(ctx, f.db, "")
+	require.NoError(t, err)
+	var ids []string
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+	require.ElementsMatch(t, []string{miniID, newID}, ids)
+
+	// A first enrollment's answer carries no retired field at all.
+	_, out = f.socketJSON(t, formPost("/console/approvers/touchid/enroll", func() url.Values {
+		c, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverTouchID, time.Now())
+		require.NoError(t, err)
+		k2 := newTouchKey(t)
+		return url.Values{"code": {c}, "name": {"third"}, "public_key": {base64.StdEncoding.EncodeToString(k2.pub)},
+			"signature": {k2.sign(t, approval.TouchIDEnrollMessage(c, k2.pub))}}
+	}()))
+	_, has := out["retired"]
+	require.False(t, has)
+}

@@ -117,7 +117,7 @@ func TestMessageSend_RestrictedAccountRecallsTheGlobalScope(t *testing.T) {
 	// data part; the owner's line carries no label.
 	var msg Message
 	require.NoError(t, json.Unmarshal(result, &msg))
-	require.Contains(t, msg.Parts[0].Text, "ops-ledger-note -- ledger reconcile ops note (example-ops) (written by account _example_agent)")
+	require.Contains(t, msg.Parts[0].Text, "ops-ledger-note -- ledger reconcile ops note (example-ops) [written by account _example_agent]")
 	for _, line := range strings.Split(msg.Parts[0].Text, "\n") {
 		if strings.Contains(line, "global-ledger-note") {
 			require.True(t, strings.HasSuffix(line, "global-ledger-note -- ledger reconcile shared note"),
@@ -148,7 +148,8 @@ func TestMessageSend_RestrictedAccountRecallsTheGlobalScope(t *testing.T) {
 }
 
 // The text part labels a restricted account's hit after its other suffixes,
-// in their style; the owner's hits render byte-identically to before.
+// bracketed exactly as the briefing and prompt recall print the label
+// (retrieve.AccountMark); the owner's hits render byte-identically to before.
 func TestRenderHits_LabelsARestrictedAccountsHits(t *testing.T) {
 	owner := []retrieve.Hit{
 		{Kind: "memory", Name: "ops-rule", Description: "the ops rule", Project: "example-ops"},
@@ -163,7 +164,7 @@ func TestRenderHits_LabelsARestrictedAccountsHits(t *testing.T) {
 		{Kind: "note", Name: "shared-note", Description: "a shared note"},
 	}
 	require.Equal(t, "3 hits for \"q\":\n"+
-		"1. [memory] ops-tip -- a tip (example-ops) (written by account _example_agent)\n"+
-		"2. [task] t1 -- a task (written by account _example_agent)\n"+
+		"1. [memory] ops-tip -- a tip (example-ops) [written by account _example_agent]\n"+
+		"2. [task] t1 -- a task [written by account _example_agent]\n"+
 		"3. [note] shared-note -- a shared note", renderHits("q", labeled))
 }
