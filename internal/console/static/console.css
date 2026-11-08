@@ -6580,6 +6580,43 @@ html:not(.js) .brief-preview { display: none; }
 .held-lockdown.is-on { border-left: 3px solid var(--warn); padding-left: 12px; }
 .held-corpus .held-list { margin-top: 12px; }
 
+/* Why a write is held, color coded by family (screening.Family): each reason
+   is a chip in its family's color, the preview marks what that reason matched
+   in the same color, and the card's edge takes its most serious reason's.
+   The text itself stays ink, so it reads in both themes; the color is the
+   dot, the border, the tint and the underline. */
+:is(.held-reason, .held-mark)[data-family="secret"], .held-card[data-accent="secret"] { --fam: var(--danger); }
+:is(.held-reason, .held-mark)[data-family="injection"], .held-card[data-accent="injection"] { --fam: var(--pop); }
+:is(.held-reason, .held-mark)[data-family="hidden"], .held-card[data-accent="hidden"] { --fam: var(--violet); }
+:is(.held-reason, .held-mark)[data-family="unicode"], .held-card[data-accent="unicode"] { --fam: var(--k-convention); }
+:is(.held-reason, .held-mark)[data-family="url"], .held-card[data-accent="url"] { --fam: var(--brand); }
+:is(.held-reason, .held-mark)[data-family="blob"], .held-card[data-accent="blob"] { --fam: var(--flow); }
+:is(.held-reason, .held-mark)[data-family="rule"], .held-card[data-accent="rule"] { --fam: var(--warn); }
+:is(.held-reason, .held-mark)[data-family="proposal"], .held-card[data-accent="proposal"] { --fam: var(--k-stage); }
+.held-card[data-accent] { border-left: 4px solid var(--fam); }
+.held-reasons:has(.held-reason) { list-style: none; padding-left: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.held-reason {
+  display: inline-flex; align-items: baseline; gap: 7px; max-width: 100%; padding: 3px 10px 3px 9px;
+  border: 1px solid color-mix(in oklab, var(--fam, var(--border-strong)) 50%, transparent); border-radius: 999px;
+  background: color-mix(in oklab, var(--fam, var(--surface-2)) 13%, transparent); color: var(--ink); line-height: 1.4;
+}
+.held-reason::before {
+  content: ""; flex: none; align-self: center; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--fam, var(--muted));
+}
+.held-reason code { color: var(--ink); font-weight: 650; }
+/* A mark is a tint and an underline in its reason's color. Marks nest where
+   matches overlap (an override phrase inside a hidden comment): the tints
+   stack and each level draws its underline lower, so every reason stays
+   visible where it applies. */
+.held-mark {
+  color: inherit; background: color-mix(in oklab, var(--fam) 22%, transparent);
+  text-decoration: underline 2px var(--fam); text-decoration-skip-ink: none; text-underline-offset: 3px;
+}
+.held-mark .held-mark { text-underline-offset: 6px; }
+.held-mark .held-mark .held-mark { text-underline-offset: 9px; }
+.held-preview:has(.held-mark) { line-height: 2; }
+
 /* Access requests, their passkey page and the unlock page: the facts as a
    label/value grid, the warnings in the warning color, rows as rows. */
 .access-page h2, .unlock-page h2 { margin: 18px 0 0; font-family: var(--font-serif); font-weight: 560; font-size: 19px; }

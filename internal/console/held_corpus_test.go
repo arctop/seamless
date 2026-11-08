@@ -54,7 +54,8 @@ func TestHeldPage_ReviewDriftAndLockdown(t *testing.T) {
 	require.Contains(t, page, `data-flagged="`+flagged.FilePath+`"`)
 	require.Contains(t, page, `data-drift="`+clean.FilePath+`"`)
 	require.NotContains(t, page, key, "the flagged item's secret is redacted on the page")
-	require.Contains(t, page, "[U&#43;202E]", "the drifted text's hidden character is spelled out")
+	require.Contains(t, page, `title="unicode.bidi: `+screening.Describe(screening.UnicodeBidi)+`">[U+202E]</mark>`,
+		"the drifted text's hidden character is spelled out, and marked in its finding's color")
 
 	rr := postForm(svcFix, "/console/held/corpus/safe", "path="+url.QueryEscape(flagged.FilePath))
 	require.Equal(t, http.StatusSeeOther, rr.Code)

@@ -3,6 +3,7 @@ package console
 import (
 	"errors"
 	"fmt"
+	"html/template"
 	"net/http"
 	"time"
 
@@ -53,7 +54,12 @@ type corpusRow struct {
 	At       *time.Time   `json:"at,omitempty"`
 	Codes    []heldReason `json:"codes"`
 	Preview  string       `json:"preview,omitempty"`
-	Missing  bool         `json:"missing,omitempty"`
+	// Marks, Marked and Accent are heldRow's: the preview with what each
+	// code matched marked, and the most serious code's color.
+	Marks   template.HTML `json:"-"`
+	Marked  bool          `json:"-"`
+	Accent  string        `json:"-"`
+	Missing bool          `json:"missing,omitempty"`
 	// Injected lists the sessions that received the item, newest first: who
 	// read it while it was in the corpus.
 	Injected      []injectedRow `json:"injected"`
@@ -119,15 +125,14 @@ func (s *Service) corpusRowOf(r *http.Request, rec store.CorpusRecord, codes []s
 	if rec.ItemID != "" {
 		row.Link = itemLink(rec.ItemKind, rec.ItemID)
 	}
-	for _, c := range codes {
-		row.Codes = append(row.Codes, heldReason{Code: c, Words: screening.Describe(screening.Code(c))})
-	}
+	row.Codes, row.Accent = heldReasons(codes), screening.MostSerious(codes)
 	if s.cfg.Files != nil {
 		raw, err := s.cfg.Files.Store().ReadFile(rec.FilePath)
 		if err != nil {
 			row.Missing = true
 		} else {
 			row.Preview = heldPreview(store.HeldWrite{Content: raw})
+			row.Marks, row.Marked = s.heldMarks(row.Preview, codes)
 		}
 	}
 	if rec.ItemKind == core.ItemKindMemory && rec.ItemID != "" {

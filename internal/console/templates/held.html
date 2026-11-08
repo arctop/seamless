@@ -24,23 +24,23 @@
 {{if .Pending}}
 <section class="held-list" aria-label="Writes waiting for your review">
   {{range .Pending}}
-  <article class="held-card{{if .Stale}} is-stale{{end}}" id="held-{{.ID}}" data-hold="{{.ID}}">
+  <article class="held-card{{if .Stale}} is-stale{{end}}" id="held-{{.ID}}" data-hold="{{.ID}}"{{if .Accent}} data-accent="{{.Accent}}"{{end}}>
     <header class="held-card-head">
       <span class="badge">{{.What}}</span>
       {{if .Link}}<a class="held-name" href="{{.Link}}">{{.Name}}</a>{{else}}<strong class="held-name">{{.Name}}</strong>{{end}}
       <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}} &middot; {{.Tool}}{{if .Session}} &middot; <span class="mono">{{.Session}}</span>{{end}} &middot; <span title="{{ts .CreatedAt}}">{{ago .CreatedAt}}</span></span>
     </header>{{if .Proposal}}
     <p class="held-note held-proposer" data-proposer="{{.Account}}">Proposed by {{if .Account}}account <strong class="mono">{{.Account}}</strong>{{else}}a restricted account{{end}}</p>{{end}}
-    <ul class="held-reasons">
-      {{range .Reasons}}<li><code>{{.Code}}</code>{{if .Words}} {{.Words}}{{end}}</li>{{end}}
+    <ul class="held-reasons" aria-label="Why it is held">
+      {{range .Reasons}}<li class="held-reason" data-family="{{.Family}}"><code>{{.Code}}</code>{{if .Words}} {{.Words}}{{end}}</li>{{end}}
     </ul>
     {{/* The note says what Release would do; a stale hold offers no Release,
          and its note would describe a target that has since moved on. */}}
     {{if and .Note (not .Stale)}}<p class="held-note">{{.Note}}</p>{{end}}
     {{if .Preview}}
     <details class="held-preview-box" open>
-      <summary>The write, as an agent would read it <small>(hidden characters spelled out, secrets redacted)</small></summary>
-      <pre class="held-preview">{{.Preview}}</pre>
+      <summary>The write, as an agent would read it <small>(hidden characters spelled out, secrets redacted{{if .Marked}}; what each reason matched is marked in its color{{end}})</small></summary>
+      <pre class="held-preview">{{.Marks}}</pre>
     </details>
     {{end}}
     <div class="held-actions">
@@ -70,18 +70,18 @@
   {{if .Drifted}}
   <div class="held-list">
     {{range .Drifted}}
-    <article class="held-card" data-drift="{{.Path}}">
+    <article class="held-card" data-drift="{{.Path}}"{{if .Accent}} data-accent="{{.Accent}}"{{end}}>
       <header class="held-card-head">
         <span class="badge">{{.ItemKind}} {{if eq .Change "unknown"}}appeared{{else}}changed{{end}}</span>
         {{if .Link}}<a class="held-name mono" href="{{.Link}}">{{.Path}}</a>{{else}}<strong class="held-name mono">{{.Path}}</strong>{{end}}
         <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .At}} &middot; <span title="{{ts .}}">{{ago .}}</span>{{end}}</span>
       </header>
-      {{if .Codes}}<ul class="held-reasons">{{range .Codes}}<li><code>{{.Code}}</code>{{if .Words}} {{.Words}}{{end}}</li>{{end}}</ul>{{else}}<p class="held-note">The screens found nothing in the changed text.</p>{{end}}
+      {{if .Codes}}<ul class="held-reasons" aria-label="What the screens found">{{range .Codes}}<li class="held-reason" data-family="{{.Family}}"><code>{{.Code}}</code>{{if .Words}} {{.Words}}{{end}}</li>{{end}}</ul>{{else}}<p class="held-note">The screens found nothing in the changed text.</p>{{end}}
       {{if .InjectedTotal}}<p class="held-note">Injected before it changed into {{.InjectedTotal}} session{{if ne .InjectedTotal 1}}s{{end}}:{{range .Injected}} <a class="mono" href="/console/sessions/{{.SessionID}}">{{.Name}}</a>{{end}}</p>{{end}}
       {{if .Preview}}
       <details class="held-preview-box" open>
-        <summary>The file, as an agent would read it <small>(hidden characters spelled out, secrets redacted)</small></summary>
-        <pre class="held-preview">{{.Preview}}</pre>
+        <summary>The file, as an agent would read it <small>(hidden characters spelled out, secrets redacted{{if .Marked}}; what each finding matched is marked in its color{{end}})</small></summary>
+        <pre class="held-preview">{{.Marks}}</pre>
       </details>
       {{end}}
       <div class="held-actions">
@@ -108,18 +108,18 @@
   {{if .Flagged}}
   <div class="held-list">
     {{range .Flagged}}
-    <article class="held-card" data-flagged="{{.Path}}">
+    <article class="held-card" data-flagged="{{.Path}}"{{if .Accent}} data-accent="{{.Accent}}"{{end}}>
       <header class="held-card-head">
         <span class="badge">{{.ItemKind}}</span>
         {{if .Link}}<a class="held-name mono" href="{{.Link}}">{{.Path}}</a>{{else}}<strong class="held-name mono">{{.Path}}</strong>{{end}}
         <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .At}} &middot; reviewed <span title="{{ts .}}">{{ago .}}</span>{{end}}</span>
       </header>
-      <ul class="held-reasons">{{range .Codes}}<li><code>{{.Code}}</code>{{if .Words}} {{.Words}}{{end}}</li>{{end}}</ul>
+      <ul class="held-reasons" aria-label="What the screens found">{{range .Codes}}<li class="held-reason" data-family="{{.Family}}"><code>{{.Code}}</code>{{if .Words}} {{.Words}}{{end}}</li>{{end}}</ul>
       {{if .InjectedTotal}}<p class="held-note">Injected into {{.InjectedTotal}} session{{if ne .InjectedTotal 1}}s{{end}}:{{range .Injected}} <a class="mono" href="/console/sessions/{{.SessionID}}">{{.Name}}</a>{{end}}</p>{{end}}
       {{if .Preview}}
       <details class="held-preview-box">
-        <summary>The item, as an agent would read it <small>(hidden characters spelled out, secrets redacted)</small></summary>
-        <pre class="held-preview">{{.Preview}}</pre>
+        <summary>The item, as an agent would read it <small>(hidden characters spelled out, secrets redacted{{if .Marked}}; what each finding matched is marked in its color{{end}})</small></summary>
+        <pre class="held-preview">{{.Marks}}</pre>
       </details>
       {{end}}
       <div class="held-actions">

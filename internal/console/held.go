@@ -3,9 +3,11 @@ package console
 import (
 	"errors"
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/arctop/seamless/internal/core"
@@ -33,6 +35,9 @@ const heldPreviewMaxRunes = 4000
 type heldReason struct {
 	Code  string `json:"code"`
 	Words string `json:"words"`
+	// Family is the code's color on the page (screening.Family): the chip
+	// and the preview's marks of one reason share it.
+	Family string `json:"-"`
 }
 
 // heldRow is one held write as the Held screen shows it.
@@ -53,8 +58,14 @@ type heldRow struct {
 	// What names the write in a few words ("constraint memory", "note").
 	What string `json:"what"`
 	// Preview is the held text, hidden characters made visible and secrets
-	// redacted ("" for a delete or a gardener apply).
-	Preview string `json:"preview,omitempty"`
+	// redacted ("" for a delete or a gardener apply). Marks is the same text
+	// with what each reason matched marked in its color (heldMarks); Marked
+	// says any reason did. Accent is the most serious reason's family, the
+	// card's color.
+	Preview string        `json:"preview,omitempty"`
+	Marks   template.HTML `json:"-"`
+	Marked  bool          `json:"-"`
+	Accent  string        `json:"-"`
 	// Note says what releasing does when there is no text to preview.
 	Note string `json:"note,omitempty"`
 	// Link points at what the hold acts on (a memory, a proposal).
@@ -180,9 +191,7 @@ func (s *Service) heldRowOf(r *http.Request, h store.HeldWrite, session string, 
 		ItemKind: h.ItemKind, ItemID: h.ItemID, Project: h.Project, Name: h.Name,
 		MemoryKind: string(h.MemoryKind), Session: session, Reasons: []heldReason{},
 	}
-	for _, code := range h.Reasons {
-		row.Reasons = append(row.Reasons, heldReason{Code: code, Words: screening.Describe(screening.Code(code))})
-	}
+	row.Reasons, row.Accent = heldReasons(h.Reasons), screening.MostSerious(h.Reasons)
 	if screening.IsProposal(h.Reasons) {
 		row.Proposal, row.Account = true, h.DetailValue(screening.DetailAccount)
 	}
@@ -216,8 +225,47 @@ func (s *Service) heldRowOf(r *http.Request, h store.HeldWrite, session string, 
 			row.Stale = s.cfg.Screening.Stale(r.Context(), h)
 		}
 		row.Preview = heldPreview(h)
+		row.Marks, row.Marked = s.heldMarks(row.Preview, h.Reasons)
 	}
 	return row
+}
+
+// heldReasons are a hold's reason codes as the page lists them: each with
+// its words and its color, the most serious first.
+func heldReasons(codes []string) []heldReason {
+	out := make([]heldReason, 0, len(codes))
+	for _, code := range codes {
+		out = append(out, heldReason{Code: code, Words: screening.Describe(screening.Code(code)),
+			Family: screening.Family(screening.Code(code))})
+	}
+	slices.SortStableFunc(out, func(a, b heldReason) int {
+		return screening.FamilyRank(a.Family) - screening.FamilyRank(b.Family)
+	})
+	return out
+}
+
+// heldMarks renders a preview with what each of its reasons matched marked
+// (screening.PreviewSegments): a run's covering reasons become nested
+// <mark>s, the widest outside, each carrying its family (the color) and its
+// words (the tooltip). The held text is an agent's and may be hostile, so
+// every run of it and every attribute value is escaped here; nothing else
+// reaches the markup. marked reports whether any reason marked something.
+func (s *Service) heldMarks(preview string, codes []string) (marks template.HTML, marked bool) {
+	var rules screening.Rules
+	if s.cfg.Screening != nil {
+		rules = s.cfg.Screening.Rules()
+	}
+	var b strings.Builder
+	for _, seg := range screening.PreviewSegments(preview, codes, rules) {
+		for _, c := range seg.Codes {
+			b.WriteString(`<mark class="held-mark" data-family="` + template.HTMLEscapeString(screening.Family(c)) +
+				`" title="` + template.HTMLEscapeString(string(c)+": "+screening.Describe(c)) + `">`)
+			marked = true
+		}
+		b.WriteString(template.HTMLEscapeString(seg.Text))
+		b.WriteString(strings.Repeat("</mark>", len(seg.Codes)))
+	}
+	return template.HTML(b.String()), marked
 }
 
 // heldPreview is the held text as the owner reviews it: secrets redacted and

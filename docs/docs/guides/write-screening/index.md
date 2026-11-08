@@ -174,7 +174,9 @@ corpus as it stands - the held text reaches no agent.
 lists each waiting write with what it would do, who wrote it, the reason codes
 in plain words, and the text exactly as an agent would read it: every hidden
 character is spelled out (`[U+200B]`), and secrets are redacted, so the screen
-can be reviewed - and captured - without the credential.
+can be reviewed - and captured - without the credential. The reasons are color
+coded by kind, most serious first, and the text marks what each one matched in
+the same color, so the issues read at first sight.
 
 - **Release** applies the write through the files layer, exactly as the agent
   sent it, and marks the memory owner-confirmed. A release whose target moved

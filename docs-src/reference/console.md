@@ -734,10 +734,18 @@ every level (whoever turns it on must reach what it holds).
 The owner's queue of agent writes kept out of the corpus. Each card says what
 the write would do (a constraint memory, a note, a delete, a gardener apply),
 which project, tool and session it came from, and why it was held - each
-reason code with its meaning in words. Below that is the write exactly as an
-agent would read it: every hidden character spelled out as `[U+XXXX]`, and
-secrets redacted, so the page can be reviewed and captured without the
-credential it holds.
+reason code with its meaning in words, the most serious first, each in its
+kind's color (a secret red, an injection marker orange, hidden text violet,
+hidden characters pink, an unlisted link indigo, an encoded blob teal, a
+binding-rule policy amber, a restricted account's proposal blue); the card's
+edge takes its most serious reason's color. Below that is the write exactly
+as an agent would read it: every hidden character spelled out as `[U+XXXX]`,
+and secrets redacted, so the page can be reviewed and captured without the
+credential it holds. What each reason matched is marked in the text in that
+reason's color (hover a mark for its reason), and where matches overlap - an
+override phrase inside a hidden comment - the marks nest, so none hides
+another. The Review and Changed outside Seamless cards mark their findings
+the same way.
 
 - **Release** lands it through the files layer as the agent wrote it, and the
   memory reads `[owner-confirmed]` in briefings from then on. A held supersede
