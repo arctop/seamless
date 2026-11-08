@@ -345,7 +345,7 @@ type releaseAssets struct {
 }
 
 // verifyDownload checks a download against its bundles with the exact tag
-// identity of d.version (verifyReleaseAsset, through verify) and returns what
+// identity of d.version (releasesig.VerifyAsset, through verify) and returns what
 // the installer is then run with. The installer must verify; so must
 // checksums.txt when it was fetched, which must then list this platform's
 // archive exactly once.

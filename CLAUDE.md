@@ -84,6 +84,10 @@ internal/update/   update check + automatic updates: GitHub release list,
                    installs in-process: the daemon spawns a detached `seamlessd
                    update --auto` (cmd/seamlessd/update_spawn*.go) to run the
                    release's installer. Imports config + core only
+internal/releasesig/ Sigstore check that a release asset came from this repo's
+                   release workflow on its exact tag (pinned trusted root,
+                   offline): the updater's, and the macOS seam's for the Touch
+                   ID approver download (linked there from a darwin-only file)
 internal/archive/  instance archives: VACUUM INTO snapshot + corpus + manifest
                    out; guarded tar extract and restore-or-merge back in.
                    Never imports config

@@ -31,6 +31,7 @@ import (
 
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/releasesig"
 	"github.com/arctop/seamless/internal/store/storetest"
 	"github.com/arctop/seamless/internal/update"
 )
@@ -271,7 +272,7 @@ func (w *world) serveAsset(rw http.ResponseWriter, r *http.Request) {
 // server serves for it.
 func (w *world) sign(identity string, artifact []byte) []byte {
 	w.t.Helper()
-	entity, err := w.virtual.Sign(identity, signingIssuer, artifact)
+	entity, err := w.virtual.Sign(identity, releasesig.SigningIssuer, artifact)
 	require.NoError(w.t, err)
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -281,7 +282,7 @@ func (w *world) sign(identity string, artifact []byte) []byte {
 }
 
 // verify is the updater's verifier over the virtual Sigstore: the production
-// verifier configuration and exact-tag policy (verifyReleaseEntity), with the
+// verifier configuration and exact-tag policy (releasesig.VerifyEntity), with the
 // bundle bytes mapped to the entity they stand for.
 func (w *world) verify(bundle, artifact []byte, v update.Version) error {
 	w.mu.Lock()
@@ -290,7 +291,7 @@ func (w *world) verify(bundle, artifact []byte, v update.Version) error {
 	if !ok {
 		return errors.New("parse sigstore bundle: unknown bundle")
 	}
-	return verifyReleaseEntity(w.virtual, entity, artifact, v)
+	return releasesig.VerifyEntity(w.virtual, entity, artifact, v)
 }
 
 // releaseOpts shapes a published release.

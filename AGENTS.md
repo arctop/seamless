@@ -359,13 +359,18 @@ any of it.
 - **The Touch ID approver is opt-in, socket-only, and keychain-bound**
   (`macos/`, `cmd/seam/touchid*.go`, `cmd/seam/approver_app.go`; console
   `approversTouchIDEnroll`, `touchIDProof`). Nothing installs or launches
-  Seamless Approve but `seam touchid enroll`, which checks the zip against the
-  release's checksums.txt (`update.VerifyChecksum`), then `codesign --verify
-  --strict --deep`, the identifier `com.arctop.seamless.approve`,
-  `spctl` for a release asset, and seam's own Developer ID team, pinned with
-  a `-R=anchor apple generic ... certificate leaf[subject.OU]` requirement
-  (an unsigned seam: the owner's y/N). seam does not link the Sigstore
-  verifier (+17 MB to every seam). The key is a Secure Enclave key in the
+  Seamless Approve but `seam touchid enroll`, which holds the release's
+  checksums.txt to its Sigstore bundle for seam's own tag (the updater's
+  check, `internal/releasesig`), checks the zip against it
+  (`update.VerifyChecksum`), then `codesign --verify --strict --deep`, the
+  identifier `com.arctop.seamless.approve`, `spctl` for a release asset, and
+  seam's own Developer ID team, pinned with a `-R=anchor apple generic ...
+  certificate leaf[subject.OU]` requirement. An unsigned seam pins a release
+  asset to the team that signed it (the Sigstore check vouches for the zip),
+  and asks the owner y/N only for a local `--app` build or a kept install.
+  Only the macOS seam links the verifier (`touchid_release_darwin.go`, about
+  +12 MB); keep `internal/releasesig` out of every file without a darwin
+  build tag, or the Linux and Windows seam grow by as much. The key is a Secure Enclave key in the
   data-protection keychain under an access group only the signed app may
   claim -- never a CryptoKit blob in a file, which any process of the owner's
   could load and sign with behind a prompt of its own wording. The helper

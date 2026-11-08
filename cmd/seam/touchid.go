@@ -8,7 +8,8 @@ package main
 //
 //  1. gets the Seamless Approve app: the release asset of this seam's own
 //     version (seamless-approve_<v>_darwin.zip), checked against the
-//     release's checksums.txt, or a local build with --app;
+//     release's checksums.txt, which must carry the release workflow's
+//     Sigstore signature for that tag, or a local build with --app;
 //  2. checks its code signature: intact (codesign --verify --strict --deep),
 //     the helper's bundle identifier, and the same Developer ID team as this
 //     seam binary (the keychain access group that holds the key is bound to
@@ -75,14 +76,16 @@ Apple Watch, or the login password), and enrolls that key with the daemon.
 Nothing installs it but this command.
 
 The app is this seam's own release (seamless-approve_<version>_darwin.zip),
-checked against the release's checksums.txt; a seam built from source has no
-release to fetch, and installs a local build with --app <path to
-Seamless Approve.app or its zip> instead. Before installing, its code
-signature must verify, name the helper
-(` + approverBundleID + `), and come from the same
-Developer ID team as this seam binary; a release asset must also pass
-Gatekeeper's notarization check. When this seam is not signed with a
-Developer ID, the app's team is shown and you are asked. It installs at
+checked against the release's checksums.txt, which must carry the release
+workflow's Sigstore signature for that version, as an update's does; a seam
+built from source has no release to fetch, and installs a local build with
+--app <path to Seamless Approve.app or its zip> instead. Before installing,
+its code signature must verify, name the helper
+(` + approverBundleID + `), and chain to Apple
+for the same Developer ID team as this seam binary; a release asset must also
+pass Gatekeeper's notarization check. When this seam is not signed with a
+Developer ID, a release asset is held to the team that signed the release,
+and for a local build the app's team is shown and you are asked. It installs at
 ~/Applications/Seamless Approve.app, replacing an installed one only after
 you confirm; keeping it enrolls with the installed app.
 

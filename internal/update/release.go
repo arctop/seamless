@@ -52,11 +52,6 @@ type Release struct {
 	ChecksumsBundle bool `json:"checksums_bundle,omitempty"`
 }
 
-// checksumsBundleAsset is the Sigstore bundle over checksums.txt that every
-// release after v0.6.0 carries (goreleaser signs it per tag; release.yml
-// re-verifies it against the tag's exact identity).
-const checksumsBundleAsset = "checksums.txt.sigstore.json"
-
 // filterRevision names what Filter records about a release. The cached list
 // in state.json is tagged with the revision that produced it; a list from
 // another revision -- an older release's, which never recorded
@@ -87,7 +82,7 @@ func requiredAssets(goos string) []string {
 //   - its tag is exactly vX.Y.Z (ParseTag), and it has a published_at;
 //   - every asset requiredAssets names for goos is present and uploaded.
 //
-// Each kept release records whether it carries checksumsBundleAsset
+// Each kept release records whether it carries ChecksumsBundleAsset
 // (ChecksumsBundle); a release without it is still kept, for the notice.
 // Two releases with the same version keep the earlier publication.
 func Filter(api []APIRelease, goos string) []Release {
@@ -104,7 +99,7 @@ func Filter(api []APIRelease, goos string) []Release {
 		rel := Release{
 			Version:         v,
 			PublishedAt:     r.PublishedAt.UTC(),
-			ChecksumsBundle: hasAssets(r.Assets, []string{checksumsBundleAsset}),
+			ChecksumsBundle: hasAssets(r.Assets, []string{ChecksumsBundleAsset}),
 		}
 		if i := slices.IndexFunc(out, func(o Release) bool { return o.Version == v }); i >= 0 {
 			if rel.PublishedAt.Before(out[i].PublishedAt) {

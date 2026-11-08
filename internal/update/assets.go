@@ -23,6 +23,11 @@ const ReleaseDownloadBase = "https://github.com/" + Repo + "/releases/download"
 // "<hex>  <name>" per line.
 const ChecksumsAsset = "checksums.txt"
 
+// ChecksumsBundleAsset is the Sigstore bundle over checksums.txt that every
+// release after v0.6.0 carries (goreleaser signs it per tag; release.yml
+// re-verifies it against the tag's exact identity).
+const ChecksumsBundleAsset = ChecksumsAsset + ".sigstore.json"
+
 // AssetURL is where release v's asset name downloads from under base
 // (ReleaseDownloadBase in production). It is built from a parsed version and
 // a name this binary chose, never from API text.

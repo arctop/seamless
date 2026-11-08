@@ -614,11 +614,13 @@ only, in the owner's own terminal, with <code>server_url: unix:///path</code> na
 <code>peer_auth</code> socket; nothing installs or launches the app unless you run this.</p>
 <p>A release build of <code>seam</code> fetches its own version's
 <code>seamless-approve_&lt;version&gt;_darwin.zip</code> and checks its SHA-256 against the
-release's <code>checksums.txt</code>; a source build passes <code>--app</code> with a local <code>.app</code>
-or zip. Either way the app must pass <code>codesign --verify --strict --deep</code>, be
-named <code>com.arctop.seamless.approve</code>, and carry the same Developer ID
-team as <code>seam</code> itself (an unsigned <code>seam</code> shows the app's team and asks); a
-release asset must also pass Gatekeeper. It is installed at
+release's <code>checksums.txt</code>, which must carry the release workflow's Sigstore
+signature for that version, as an update's does; a source build passes
+<code>--app</code> with a local <code>.app</code> or zip. Either way the app must pass <code>codesign --verify --strict --deep</code>, be named <code>com.arctop.seamless.approve</code>, and chain
+to Apple for the same Developer ID team as <code>seam</code> itself; a release asset
+must also pass Gatekeeper. When <code>seam</code> itself is unsigned (a <code>go install</code>),
+a release asset is held to the team that signed it, and a local build's team
+is shown for you to confirm. It is installed at
 <code>~/Applications/Seamless Approve.app</code>, replacing an existing copy only after
 a y/N.</p>
 <p>It then prints the command that mints a one-time enrollment code as the

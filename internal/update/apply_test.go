@@ -71,7 +71,7 @@ func (l *listServer) Fetch(_ context.Context, etag string) (Page, error) {
 func apiRel(tag string, pub time.Time, bundle bool) APIRelease {
 	assets := allAssets()
 	if bundle {
-		assets = append(assets, APIAsset{Name: checksumsBundleAsset, State: "uploaded"})
+		assets = append(assets, APIAsset{Name: ChecksumsBundleAsset, State: "uploaded"})
 	}
 	return APIRelease{TagName: tag, PublishedAt: &pub, Assets: assets}
 }

@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -116,18 +117,20 @@ func (d *stubDaemon) addKey(id, name string) {
 }
 
 // releaseHost stands in for GitHub's release downloads: zip under its asset
-// name, and a checksums.txt that lists sum for it.
+// name, a checksums.txt that lists sum for it, and checksums.txt's Sigstore
+// bundle (bytes the rig's fake verifier reads; nil serves a 404).
 type releaseHost struct {
-	srv  *httptest.Server
-	zip  []byte
-	sums string
-	seen []string
-	mu   sync.Mutex
+	srv    *httptest.Server
+	zip    []byte
+	sums   string
+	bundle []byte
+	seen   []string
+	mu     sync.Mutex
 }
 
 func newReleaseHost(t *testing.T, zip []byte) *releaseHost {
 	t.Helper()
-	h := &releaseHost{zip: zip}
+	h := &releaseHost{zip: zip, bundle: []byte("the v0.9.1 checksums bundle")}
 	sum := sha256.Sum256(zip)
 	h.sums = strings.Repeat("0", 64) + "  seamless_0.9.1_darwin_arm64.tar.gz\n" +
 		hex.EncodeToString(sum[:]) + "  " + update.ApproverAsset(fakeRelease) + "\n"
@@ -140,6 +143,12 @@ func newReleaseHost(t *testing.T, zip []byte) *releaseHost {
 			_, _ = w.Write(h.zip)
 		case "/v0.9.1/checksums.txt":
 			_, _ = w.Write([]byte(h.sums))
+		case "/v0.9.1/checksums.txt.sigstore.json":
+			if h.bundle == nil {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write(h.bundle)
 		default:
 			http.NotFound(w, r)
 		}
@@ -240,6 +249,16 @@ type touchRig struct {
 	home   string
 	host   *releaseHost
 	world  touchIDWorld
+	// sigErr is what the fake release-signature verifier answers; sigCalls
+	// records what it was asked to verify.
+	sigErr   error
+	sigCalls []sigCall
+}
+
+// sigCall is one release-signature check: the bundle, the asset and the tag.
+type sigCall struct {
+	bundle, artifact string
+	v                update.Version
 }
 
 func newTouchRig(t *testing.T, daemon http.Handler, typed string) *touchRig {
@@ -269,6 +288,10 @@ func newTouchRig(t *testing.T, daemon http.Handler, typed string) *touchRig {
 		version:      func() (update.Version, bool) { return fakeRelease, true },
 		client:       client,
 		downloadBase: rig.host.srv.URL,
+		verifyRelease: func(bundle, artifact []byte, v update.Version) error {
+			rig.sigCalls = append(rig.sigCalls, sigCall{string(bundle), string(artifact), v})
+			return rig.sigErr
+		},
 	}
 	prev := newTouchIDWorld
 	newTouchIDWorld = func() touchIDWorld { return rig.world }
@@ -347,11 +370,16 @@ func TestTouchIDEnroll_ReleaseHappyPath(t *testing.T) {
 	require.True(t, isDir(rig.target()), "installed")
 	require.Empty(t, rig.leftovers(t), "the staging directory is gone")
 
-	// The release host saw two anonymous fetches with the fixed User-Agent.
+	// The release host saw three anonymous fetches with the fixed User-Agent,
+	// and checksums.txt was held to its Sigstore bundle for this exact tag
+	// before the app was fetched.
 	require.Equal(t, []string{
 		"/v0.9.1/checksums.txt UA=" + touchIDUserAgent + " auth=",
+		"/v0.9.1/checksums.txt.sigstore.json UA=" + touchIDUserAgent + " auth=",
 		"/v0.9.1/" + update.ApproverAsset(fakeRelease) + " UA=" + touchIDUserAgent + " auth=",
 	}, rig.host.seen)
+	require.Equal(t, []sigCall{{string(rig.host.bundle), rig.host.sums, fakeRelease}}, rig.sigCalls)
+	require.NotContains(t, rig.out.String(), "not signed with a Developer ID", "a signed seam pins its own team silently")
 
 	out := rig.out.String()
 	require.Contains(t, out, "Installed Seamless Approve at "+rig.target())
@@ -365,6 +393,8 @@ func TestTouchIDEnroll_RefusesATamperedApp(t *testing.T) {
 		mutate func(*touchRig)
 		want   string
 	}{
+		"checksums.txt without the release signature": {func(r *touchRig) { r.sigErr = errors.New("sigstore verification for v0.9.1: no match") },
+			"checksums.txt of v0.9.1 does not carry the release workflow's signature: sigstore verification for v0.9.1: no match"},
 		"a checksum mismatch":                  {func(r *touchRig) { r.host.zip = []byte("PK\x03\x04 another app") }, "does not match its checksum"},
 		"an asset checksums.txt does not list": {func(r *touchRig) { r.host.sums = strings.Repeat("0", 64) + "  other.zip\n" }, "appears 0 times"},
 		"a signature that does not verify":     {func(r *touchRig) { r.runner.verifyFails = true }, "code signature does not verify"},
@@ -387,6 +417,69 @@ func TestTouchIDEnroll_RefusesATamperedApp(t *testing.T) {
 			for _, c := range rig.runner.recorded() {
 				require.NotEqual(t, "open", c[0], "the refused app never runs")
 			}
+		})
+	}
+}
+
+// checksums.txt is held to its signature before the app is fetched: a release
+// whose signature fails, or that carries none, never downloads the app.
+func TestTouchIDEnroll_ReleaseSignatureComesFirst(t *testing.T) {
+	t.Run("refused", func(t *testing.T) {
+		rig := newTouchRig(t, happyDaemon(), "\n")
+		rig.sigErr = errors.New("sigstore verification for v0.9.1: certificate identity mismatch")
+		require.Equal(t, 1, rig.run("enroll"))
+		require.Contains(t, rig.errb.String(), "refusing Seamless Approve")
+		require.Len(t, rig.host.seen, 2, "checksums.txt and its bundle only: %v", rig.host.seen)
+		require.Empty(t, rig.runner.recorded(), "nothing unpacked or run")
+		require.Empty(t, rig.leftovers(t))
+	})
+	t.Run("no bundle", func(t *testing.T) {
+		rig := newTouchRig(t, happyDaemon(), "\n")
+		rig.host.bundle = nil
+		require.Equal(t, 1, rig.run("enroll"))
+		require.Contains(t, rig.errb.String(), "checksums.txt.sigstore.json: not published")
+		require.Empty(t, rig.sigCalls)
+		require.Len(t, rig.host.seen, 2)
+		require.Empty(t, rig.runner.recorded())
+	})
+}
+
+// An unsigned seam (a go install of a release tag) fetching a release asset
+// asks nothing: the release signature vouches for the zip, so the app is held
+// to the team that signed it, and that signature must still chain to Apple.
+func TestTouchIDEnroll_UnsignedSeamReleaseIsPinnedToItsSigner(t *testing.T) {
+	d := happyDaemon()
+	rig := newTouchRig(t, d, "\n")
+	rig.runner.helper = enrolls(d)
+	rig.runner.selfTeam = ""
+	require.Equal(t, 0, rig.run("enroll"), rig.errb.String())
+	out := rig.out.String()
+	require.Contains(t, out, "This seam is not signed with a Developer ID. The release signature vouches for this app, "+
+		"so it is held to the team that signed it: team "+fakeTeam+" (Developer ID Application: Example ("+fakeTeam+")).")
+	require.NotContains(t, out, "[y/N]")
+	require.NotContains(t, out, "cannot be checked")
+	require.Len(t, rig.sigCalls, 1)
+	staged := filepath.Join(rig.staging(t), approverAppName)
+	require.Contains(t, rig.runner.recorded(), []string{"codesign", "--verify", "--strict", "--deep",
+		`-R=anchor apple generic and identifier "com.arctop.seamless.approve" and certificate leaf[subject.OU] = "` + fakeTeam + `"`, staged})
+	require.True(t, isDir(rig.target()))
+
+	for name, tc := range map[string]struct {
+		mutate func(*touchRig)
+		want   string
+	}{
+		"no team":                           {func(r *touchRig) { r.runner.appTeam = "" }, "no Developer ID team (ad hoc or unsigned), and a release's app must name its team"},
+		"a signature not chaining to Apple": {func(r *touchRig) { r.runner.requirementBad = true }, "does not chain to Apple for team " + fakeTeam},
+		"no notarization":                   {func(r *touchRig) { r.runner.spctlFails = true }, "Gatekeeper does not accept it"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rig := newTouchRig(t, happyDaemon(), "y\n\n")
+			rig.runner.selfTeam = ""
+			tc.mutate(rig)
+			require.Equal(t, 1, rig.run("enroll"))
+			require.Contains(t, rig.errb.String(), tc.want)
+			require.NotContains(t, rig.out.String(), "[y/N]", "a release asset is never left to a y/N")
+			require.False(t, isDir(rig.target()))
 		})
 	}
 }
@@ -488,6 +581,17 @@ func TestTouchIDEnroll_ExistingInstall(t *testing.T) {
 		for _, c := range rig.runner.recorded() {
 			require.NotEqual(t, "open", c[0])
 		}
+	})
+	// No release signature covers an app already on disk, so an unsigned seam
+	// still asks about a kept one.
+	t.Run("kept by an unsigned seam", func(t *testing.T) {
+		rig := newTouchRig(t, happyDaemon(), "n\nn\n")
+		require.NoError(t, os.MkdirAll(rig.target(), 0o755))
+		rig.runner.selfTeam = ""
+		require.Equal(t, 1, rig.run("enroll"))
+		require.Contains(t, rig.out.String(), "Install and use it? [y/N]")
+		require.Contains(t, rig.errb.String(), "not confirmed")
+		require.Empty(t, rig.sigCalls)
 	})
 }
 

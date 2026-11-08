@@ -83,14 +83,14 @@ func TestTarget(t *testing.T) {
 func TestTarget_FromTheReleaseList(t *testing.T) {
 	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
 	old := now.Add(-72 * time.Hour)
-	withBundle := append(allAssets(), APIAsset{Name: checksumsBundleAsset, State: "uploaded"})
-	posixOnly := append(append([]APIAsset{}, posixAssets...), APIAsset{Name: checksumsBundleAsset, State: "uploaded"})
+	withBundle := append(allAssets(), APIAsset{Name: ChecksumsBundleAsset, State: "uploaded"})
+	posixOnly := append(append([]APIAsset{}, posixAssets...), APIAsset{Name: ChecksumsBundleAsset, State: "uploaded"})
 	list := []APIRelease{
 		{TagName: "v0.6.9", PublishedAt: &old, Assets: withBundle}, // a backport, created last
 		{TagName: "v0.7.5", Draft: true, PublishedAt: &old, Assets: withBundle},
 		{TagName: "v0.7.4-rc1", PublishedAt: &old, Assets: withBundle},
 		{TagName: "v0.7.4", PublishedAt: &old, Assets: append(append([]APIAsset{}, posixAssets...),
-			APIAsset{Name: checksumsBundleAsset, State: "open"})}, // bundle still uploading
+			APIAsset{Name: ChecksumsBundleAsset, State: "open"})}, // bundle still uploading
 		{TagName: "v0.7.3", PublishedAt: &old, Assets: posixOnly},
 		{TagName: "v0.7.2", PublishedAt: &old, Assets: allAssets()}, // no bundle: up to v0.6.0's kind
 	}

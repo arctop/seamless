@@ -25,10 +25,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sigstore/sigstore-go/pkg/root"
-
 	"github.com/arctop/seamless/internal/archive"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/releasesig"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/update"
 )
@@ -81,7 +80,7 @@ type updaterDeps struct {
 	releases     releaseSource
 	listReleases func(ctx context.Context) ([]update.APIRelease, error)
 	// verify checks an asset against its Sigstore bundle with the exact
-	// identity of release v's tag (verifyReleaseAsset).
+	// identity of release v's tag (releasesig.VerifyAsset).
 	verify func(bundle, artifact []byte, v update.Version) error
 
 	// probe gathers update.Detect's probe for configPath (probeInstall).
@@ -121,7 +120,7 @@ func realUpdaterDeps(stdout io.Writer) updaterDeps {
 			page, err := update.NewFetcher().Fetch(ctx, "")
 			return page.Releases, err
 		},
-		verify: embeddedRootVerifier(),
+		verify: releasesig.Embedded(),
 		probe: func(configPath string, client bool) update.Probe {
 			return probeInstall(distribution, version, configPath, client)
 		},
@@ -139,23 +138,6 @@ func realUpdaterDeps(stdout io.Writer) updaterDeps {
 		freeBytes:    freeBytes,
 		sameFile:     sameFile,
 		timing:       defaultUpdaterTiming,
-	}
-}
-
-// embeddedRootVerifier verifies against the embedded Sigstore trusted root,
-// parsed once on first use.
-func embeddedRootVerifier() func(bundle, artifact []byte, v update.Version) error {
-	var (
-		once    sync.Once
-		trusted *root.TrustedRoot
-		err     error
-	)
-	return func(bundle, artifact []byte, v update.Version) error {
-		once.Do(func() { trusted, err = sigstoreTrustedRoot() })
-		if err != nil {
-			return err
-		}
-		return verifyReleaseAsset(trusted, bundle, artifact, v)
 	}
 }
 

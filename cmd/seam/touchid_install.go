@@ -8,12 +8,13 @@ package main
 // (cmd/seamlessd/update_fetch.go): anonymously (update.NewHTTPClient: default
 // TLS, the environment's proxy, https-only redirects, never a token, never
 // config.HTTPClient), from the tag's own download directory, size-capped, and
-// checked against the release's checksums.txt (update.VerifyChecksum, the
-// installers' rule). What this CLI does not do is the updater's Sigstore check
-// of checksums.txt: that verifier would more than double seam's size for
-// every install. The publisher check is Apple's instead, and it is the one the
-// key itself depends on -- the keychain access group that holds the Secure
-// Enclave key can be claimed only by an app signed by the same team.
+// checked the way the updater checks one: the release's checksums.txt must
+// carry the release workflow's Sigstore signature for this exact tag
+// (internal/releasesig, linked into the macOS seam only), and the zip must
+// match its line there (update.VerifyChecksum, the installers' rule). The app
+// inside is then held to Apple's code signature, the check the key itself
+// depends on -- the keychain access group that holds the Secure Enclave key
+// can be claimed only by an app signed by the same team.
 
 import (
 	"bufio"
@@ -36,8 +37,8 @@ import (
 // host or install identifier.
 const touchIDUserAgent = "seam-touchid-install"
 
-// Size caps: the app's zip is a few MB and checksums.txt a few KB; the caps
-// only bound a misrouted reply.
+// Size caps: the app's zip is a few MB, and checksums.txt and its Sigstore
+// bundle a few KB each; the caps only bound a misrouted reply.
 const (
 	maxApproverZipBytes = 64 << 20
 	maxChecksumsBytes   = 1 << 20
@@ -61,11 +62,15 @@ type touchIDWorld struct {
 	client  *http.Client
 	// downloadBase is update.ReleaseDownloadBase in production.
 	downloadBase string
+	// verifyRelease checks a release asset against its Sigstore bundle with
+	// the exact identity of release v's tag (releaseVerifier).
+	verifyRelease func(bundle, artifact []byte, v update.Version) error
 }
 
 var newTouchIDWorld = func() touchIDWorld {
 	return touchIDWorld{home: os.UserHomeDir, self: selfPath, version: ownReleaseVersion,
-		client: update.NewHTTPClient(), downloadBase: update.ReleaseDownloadBase}
+		client: update.NewHTTPClient(), downloadBase: update.ReleaseDownloadBase,
+		verifyRelease: releaseVerifier()}
 }
 
 // selfPath is this seam binary, symlinks resolved (a Homebrew or ~/.local/bin
@@ -154,14 +159,22 @@ func installApprover(ctx context.Context, e *env, w touchIDWorld, in *bufio.Read
 	return true, nil
 }
 
-// stageRelease fetches release v's app and its checksums.txt, checks the one
-// against the other, and unpacks the app into tmp.
+// stageRelease fetches release v's checksums.txt and checks it carries the
+// release signature for v, then fetches the app, checks it against its line
+// in checksums.txt, and unpacks it into tmp.
 func stageRelease(ctx context.Context, e *env, w touchIDWorld, v update.Version, tmp string) error {
 	name := update.ApproverAsset(v)
 	fmt.Fprintf(e.stdout, "Fetching %s from release v%s...\n", name, v)
 	sums, err := fetchReleaseAsset(ctx, w, update.AssetURL(w.downloadBase, v, update.ChecksumsAsset), maxChecksumsBytes)
 	if err != nil {
 		return err
+	}
+	bundle, err := fetchReleaseAsset(ctx, w, update.AssetURL(w.downloadBase, v, update.ChecksumsBundleAsset), maxChecksumsBytes)
+	if err != nil {
+		return err
+	}
+	if err := w.verifyRelease(bundle, sums, v); err != nil {
+		return fmt.Errorf("%w: %s of v%s does not carry the release workflow's signature: %w", errApproverRefused, update.ChecksumsAsset, v, err)
 	}
 	zip, err := fetchReleaseAsset(ctx, w, update.AssetURL(w.downloadBase, v, name), maxApproverZipBytes)
 	if err != nil {
@@ -310,9 +323,13 @@ func approverRequirement(team string) string {
 
 // verifyApprover checks the app at path before it is installed or used: its
 // signature intact, the helper's identifier, Gatekeeper's notarization check
-// for a release asset, and the publisher -- the same team as this seam, or,
-// when this seam has no Developer ID, the owner's y/N on the team shown.
-func verifyApprover(ctx context.Context, e *env, w touchIDWorld, in *bufio.Reader, path string, notarized bool) error {
+// for a release asset, and the publisher -- the same team as this seam, with
+// a signature chaining to Apple for that team. When this seam has no
+// Developer ID, a release asset is pinned to the team that signed it, since
+// the release signature on checksums.txt already vouches for the zip it came
+// in; anything else (a local build, an installed app) is the owner's y/N on
+// the team shown, since nothing vouches for it.
+func verifyApprover(ctx context.Context, e *env, w touchIDWorld, in *bufio.Reader, path string, release bool) error {
 	var errb strings.Builder
 	code, err := e.run(ctx, []string{"codesign", "--verify", "--strict", "--deep", path}, nil, io.Discard, &errb)
 	if err != nil {
@@ -329,7 +346,7 @@ func verifyApprover(ctx context.Context, e *env, w touchIDWorld, in *bufio.Reade
 	if sig.identifier != approverBundleID {
 		return fmt.Errorf("%w: it is signed as %q, not as %s", errApproverRefused, printable(sig.identifier), approverBundleID)
 	}
-	if notarized {
+	if release {
 		var serr strings.Builder
 		code, err := e.run(ctx, []string{"spctl", "--assess", "--type", "execute", path}, nil, io.Discard, &serr)
 		if err != nil {
@@ -340,7 +357,15 @@ func verifyApprover(ctx context.Context, e *env, w touchIDWorld, in *bufio.Reade
 		}
 	}
 	own := ownTeam(ctx, e, w)
-	if own == "" {
+	switch {
+	case own == "" && release:
+		if sig.team == "" {
+			return fmt.Errorf("%w: it is signed by %s, and a release's app must name its team", errApproverRefused, teamWords(sig.team))
+		}
+		fmt.Fprintf(e.stdout, "This seam is not signed with a Developer ID. The release signature vouches for this app, "+
+			"so it is held to the team that signed it: %s%s.\n", teamWords(sig.team), authorityWords(sig.authority))
+		own = sig.team
+	case own == "":
 		fmt.Fprintf(e.stdout, "This seam is not signed with a Developer ID, so the app's publisher cannot be checked against it.\n"+
 			"The app is signed by %s%s.\n", teamWords(sig.team), authorityWords(sig.authority))
 		ans, _ := prompt(e, in, "Install and use it? [y/N] ")
