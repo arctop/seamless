@@ -246,7 +246,11 @@ any of it.
   project. A new tool or route gets its probe there. `make defaults-golden`
   (build tag `defaultsgolden`, not in check) compares every surface with
   peer_auth and isolation.requests off against a golden written on main: run
-  it before branch locked-projects merges.
+  it before branch locked-projects merges. A difference the owner accepts as a
+  change for every install (not part of the opt-in feature) goes in
+  `dgAccepted` with the decision -- the branch's exact text, main's, and how
+  many times it occurs, so a stale entry fails; never regenerate the golden
+  on the branch.
 - **A restricted local account (`peer_auth.restricted`, `access.KindRestricted`)
   reaches the open projects that exist, per request** (`internal/access/restricted.go`).
   `peerHandler` loads `store.OpenProjectSlugs` for every request and

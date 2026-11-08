@@ -4,7 +4,8 @@
 // isolation.requests off -- the defaults -- every agent surface answers exactly
 // as it did on main before the plan. The golden files under testdata/defaults/
 // were written by THIS test running against `git archive main`; the branch
-// must reproduce them after normalization.
+// must reproduce them after normalization, less the few differences the owner
+// accepted as changes for every install (dgAccepted).
 //
 // The file compiles against main's API as well as the branch's: it names only
 // mcp.Config, hooks.Config and console.Config fields both sides have, and only
@@ -1283,11 +1284,59 @@ func (n *dgNormalizer) encode(t *testing.T, v any) []byte {
 }
 
 // ---------------------------------------------------------------------------
+// Accepted differences
+// ---------------------------------------------------------------------------
+
+// dgAccepted are the differences from main that the owner accepted as
+// legitimate changes for every install, not as part of the opt-in feature the
+// gate guards. The golden is written from main, so it cannot carry them: each
+// entry is the branch's exact text and main's, and the branch's file is mapped
+// back to main's text before the comparison.
+//
+// An entry is strict: its branch text must occur exactly n times, or the gate
+// fails, so it never hides anything beyond what was accepted and a stale entry
+// shows. Nothing is mapped while writing the golden from main. Once main
+// carries the change, drop the entry and regenerate the golden there.
+var dgAccepted = []struct {
+	file, why    string
+	branch, main string
+	n            int
+}{
+	{
+		file: "console.txt",
+		why: "the System and Privacy screens (e9ba8b0f) are new for every install at Standard, so the Settings " +
+			"page's Standard level card names them (owner decision 2026-11-08, task 01M6YG8XFZJ1GDJSXR1BE6X20D)",
+		branch: "<li>Trials</li><li>System</li><li>Privacy</li><li>Settings: Briefing and Workspaces</li>",
+		main:   "<li>Trials</li><li>Settings: Briefing and Workspaces</li>",
+		n:      1,
+	},
+}
+
+// dgAccept maps the accepted differences in file's normalized text back to
+// main's text.
+func dgAccept(t *testing.T, file, text string) string {
+	t.Helper()
+	for _, a := range dgAccepted {
+		if a.file != file {
+			continue
+		}
+		if got := strings.Count(text, a.branch); got != a.n {
+			t.Errorf("%s: the accepted difference (%s) occurs %d times, want %d: update or drop the entry", file, a.why, got, a.n)
+			continue
+		}
+		text = strings.ReplaceAll(text, a.branch, a.main)
+	}
+	return text
+}
+
+// ---------------------------------------------------------------------------
 // Golden comparison
 // ---------------------------------------------------------------------------
 
 // dgCompare compares got with the golden file name, or writes it when
-// updating. A mismatch reports the differing region, line-numbered.
+// updating. The accepted differences are mapped back to main's text first;
+// DG_OUT still gets the file as this tree renders it. A mismatch reports the
+// differing region, line-numbered.
 func dgCompare(t *testing.T, name string, got []byte) {
 	t.Helper()
 	path := filepath.Join(dgGoldenDir, name)
@@ -1300,6 +1349,7 @@ func dgCompare(t *testing.T, name string, got []byte) {
 		require.NoError(t, os.WriteFile(path, got, 0o644))
 		return
 	}
+	got = []byte(dgAccept(t, name, string(got)))
 	want, err := os.ReadFile(path)
 	require.NoError(t, err, "golden %s missing: generate it on a main extract with -dg.update", path)
 	if string(want) == string(got) {
