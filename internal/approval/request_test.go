@@ -418,8 +418,11 @@ func TestApprove_PasskeyBindsTheDurationAndTheFacts(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEqual(t, shown.Digest, fresh.Digest)
 
-		// The digest the owner saw no longer approves; the fresh one is not
-		// what the passkey signed; and no options are issued for stale facts.
+		// The digest the owner saw no longer approves (the facts-changed
+		// answer, 409 on the page); the fresh one is not what the passkey
+		// signed, a plain verification failure (400), since the daemon keeps
+		// no record of the digest the options were issued for (owner
+		// decision 2026-11-08); and no options are issued for stale facts.
 		_, err = f.svc.Approve(ctx, Decision{ID: a.ID, Duration: For1h, Digest: shown.Digest, Proof: Proof{Kind: ProofPasskey, Assertion: assertion}})
 		require.ErrorIs(t, err, ErrFactsChanged)
 		_, err = f.svc.Approve(ctx, Decision{ID: a.ID, Duration: For1h, Digest: fresh.Digest, Proof: Proof{Kind: ProofPasskey, Assertion: assertion}})

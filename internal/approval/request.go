@@ -93,6 +93,14 @@ var (
 	// grant request -- as the expiry notices say: nothing extends access
 	// silently.
 	ErrAccessLive = errors.New("this agent already holds access to the project")
+	// ErrDenied is a refusal's request (ViaRefusal) from an asker whose last
+	// request for the project the owner denied: nothing new is filed
+	// (*DeniedError names the denial), so a refused call never asks the owner
+	// again behind their back, and the agent hears that it was denied. The
+	// asker's explicit request (ViaRequest: access_request, seam access
+	// request) always files a new one -- what the owner, having denied a wrong
+	// request, asks the agent to send.
+	ErrDenied = errors.New("the owner denied this agent's last request for the project")
 	// ErrNoProof is an acceptance without a proof the core can check.
 	ErrNoProof = errors.New("an approval needs a proof")
 	// ErrDuration is a duration that is not one of Durations.
@@ -148,6 +156,54 @@ func (e *AccessLiveError) Answer() string {
 		"it ends, asking again files a new approval", open, access.Clock(e.Expires), by, access.Clock(e.AskAgainAt()),
 		int(access.ExpiryWarning/time.Minute))
 }
+
+// DeniedError is ErrDenied with the request the owner denied.
+type DeniedError struct {
+	Request store.AccessApproval
+}
+
+func (e *DeniedError) Error() string {
+	return fmt.Sprintf("%s: %s %s was denied", ErrDenied, e.What(), ShortID(e.Request.ID))
+}
+
+func (e *DeniedError) Unwrap() error { return ErrDenied }
+
+// What names the denied request's kind for an agent: "access request",
+// "refresh request" or "read request".
+func (e *DeniedError) What() string {
+	switch e.Request.Kind {
+	case store.AccessKindRefresh:
+		return "refresh request"
+	case store.AccessKindGrant:
+		return "read request"
+	}
+	return "access request"
+}
+
+// At is when the owner denied it; zero when the row does not say.
+func (e *DeniedError) At() time.Time {
+	if e.Request.DecidedAt == nil {
+		return time.Time{}
+	}
+	return *e.Request.DecidedAt
+}
+
+// LockRequest is the denial as a lock refusal names it (access.LockRequest's
+// Denied): the request, its kind, and when it was denied.
+func (e *DeniedError) LockRequest() access.LockRequest {
+	return access.LockRequest{ID: e.Request.ID, Short: ShortID(e.Request.ID), Denied: true, DeniedAt: e.At(), DeniedWhat: e.What()}
+}
+
+// How a request was filed (RequestInput.Via, GrantInput.Via).
+const (
+	// ViaRefusal is a request a refused call filed by itself: it has no
+	// reason to give, and after a denial it files nothing (ErrDenied).
+	ViaRefusal = "refusal"
+	// ViaRequest is the agent's explicit ask (access_request, seam access
+	// request), with its reason: it always files, a denial or not, and fills
+	// in the reason of a pending request a refusal filed without one.
+	ViaRequest = "request"
+)
 
 // refuseRestricted is the restricted-account refusal at every entry point of
 // the approval service -- filing a request or a read grant, deciding one,
@@ -298,17 +354,22 @@ type RequestInput struct {
 	Host string
 	// Reason is the agent's own words, at most store.MaxAccessReasonRunes.
 	Reason string
-	// Via says how it was filed: "refusal" (automatic) or "request".
+	// Via says how it was filed: ViaRefusal (automatic) or ViaRequest (the
+	// default).
 	Via string
 }
 
 // Request files (or finds) the pending request for in.Project from the
 // anchor in.View's chain names. A pending request of that anchor for that
 // project is returned as it is, so a repeated refusal never piles up
-// requests. A tree that already holds a live lease on the project files
-// nothing while more than access.ExpiryWarning of it remains: the answer is a
-// *AccessLiveError naming the lease. Within the warning it files a refresh,
-// which carries the earlier reason rather than new text.
+// requests -- except that an explicit request's reason fills in a pending
+// one's missing reason (store.FillAccessReason). A refusal whose anchor's
+// last request for the project the owner denied files nothing: the answer is
+// a *DeniedError, until an explicit request files a new one. A tree that
+// already holds a live lease on the project files nothing while more than
+// access.ExpiryWarning of it remains: the answer is a *AccessLiveError naming
+// the lease. Within the warning it files a refresh, which carries the earlier
+// reason rather than new text.
 func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApproval, error) {
 	const op = "approval.Request"
 	if err := refuseRestricted(ctx, in.View); err != nil {
@@ -340,7 +401,19 @@ func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApp
 		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
 	}
 	if ok {
+		if pending, err = s.explained(ctx, pending, in.Via, in.Reason, now); err != nil {
+			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
+		}
 		return pending, nil
+	}
+	if in.Via == ViaRefusal {
+		last, ok, err := store.LastAccessApproval(ctx, s.cfg.DB, anchor.Key(), in.Project)
+		if err != nil {
+			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
+		}
+		if ok && last.Status == store.ApprovalDenied {
+			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, &DeniedError{Request: last})
+		}
 	}
 
 	kind, reason := store.AccessKindRequest, strings.TrimSpace(in.Reason)
@@ -375,11 +448,31 @@ func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApp
 	}
 	via := in.Via
 	if via == "" {
-		via = "request"
+		via = ViaRequest
 	}
 	s.record(ctx, core.Event{Kind: core.EventAccessRequested, ItemID: a.ID, SessionID: in.SessionID, ProjectSlug: in.Project,
 		Payload: map[string]any{"kind": kind, "via": via}})
 	return a, nil
+}
+
+// explained is pending as an ask via found it: an explicit request
+// (ViaRequest) with a reason fills in the reason a refusal's request lacks,
+// so the agent's words reach the owner rather than "(no reason given)"
+// (owner decision 2026-11-08). A request that has its reason, and a
+// refusal's ask, leave it as it is.
+func (s *Service) explained(ctx context.Context, pending store.AccessApproval, via, reason string, now time.Time) (store.AccessApproval, error) {
+	reason = strings.TrimSpace(reason)
+	if via == ViaRefusal || reason == "" || pending.Reason != "" {
+		return pending, nil
+	}
+	filled, err := store.FillAccessReason(ctx, s.cfg.DB, pending.ID, reason, now)
+	if err != nil {
+		return store.AccessApproval{}, err
+	}
+	if filled.Reason == reason {
+		s.cfg.Logger.Debug("access request: reason filled in", "request", ShortID(filled.ID))
+	}
+	return filled, nil
 }
 
 // liveLease is the answer to a request a live lease already covers: the
@@ -782,6 +875,17 @@ func (s *Service) prove(ctx context.Context, a store.AccessApproval, facts Facts
 		}
 		// The assertion signs the decision, not only the request: the
 		// duration as submitted and the facts as they stand now.
+		//
+		// Facts that changed after the options were issued (a taint, a
+		// reason filled in) are answered by Approve's digest check before
+		// this, as ErrFactsChanged, for a client that posts the digest it
+		// showed -- the console's page does. A client that posts the FRESH
+		// digest with an assertion over the old one fails here as a plain
+		// verification failure instead: the old digest is gone, so a stale
+		// assertion cannot be told from a forged one without keeping the
+		// digest each options were issued for, and the daemon keeps no such
+		// state (owner decision 2026-11-08). signedOtherwise recognizes only
+		// what it can recompute: another duration, or the bare challenge.
 		binding := PasskeyApproveChallenge(a.ID, a.Challenge, facts.Digest, facts.Access, d.Duration)
 		used, err := s.cfg.Passkeys.FinishAssertion(binding, allowed, d.Proof.Assertion)
 		if err != nil {

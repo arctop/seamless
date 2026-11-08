@@ -162,12 +162,19 @@ func (d *lmDaemon) pendingFor(t *testing.T, key string) map[string]store.AccessA
 	return out
 }
 
-// clearPending denies every pending request anchored at key, so the next
-// probe's refusal can only name a request it filed itself.
+// clearPending retires every pending request anchored at key as expired, so
+// the next probe's refusal can only name a request it filed itself. Not
+// denied: after a denial a refusal files nothing and names the denial
+// (approval.ErrDenied), which is not what each probe checks.
 func (d *lmDaemon) clearPending(t *testing.T, key string) {
 	t.Helper()
 	for _, a := range d.pendingFor(t, key) {
-		require.NoError(t, store.DenyAccess(context.Background(), d.db, a.ID, "matrix", d.clock.now()))
+		res, err := d.db.ExecContext(context.Background(), `UPDATE access_approvals SET status = ?, decided_at = ?
+			WHERE id = ? AND status = ?`, store.ApprovalExpired, core.FormatTime(d.clock.now()), a.ID, store.ApprovalPending)
+		require.NoError(t, err)
+		n, err := res.RowsAffected()
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
 	}
 }
 

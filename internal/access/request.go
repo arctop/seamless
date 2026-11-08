@@ -41,6 +41,14 @@ type LockRequest struct {
 	// so the refusal says why and what to do, on its two lines, and names no
 	// request. UnfiledRemedy is that remedy.
 	Unfiled, UnfiledRemedy string
+	// Denied reports that ID names this process's last request for the
+	// project, which the owner denied at DeniedAt (zero when not known):
+	// nothing new was filed (approval.ErrDenied), and the refusal says so and
+	// how the agent asks again once the owner tells it to (AskAgain).
+	// DeniedWhat names its kind ("access request", "refresh request").
+	Denied     bool
+	DeniedAt   time.Time
+	DeniedWhat string
 }
 
 // Ways are the approval paths a daemon offers the owner for one request, as
@@ -73,7 +81,7 @@ func (w Ways) OwnerApproves(short string) string {
 	}
 	var ways []string
 	if w.TouchID {
-		ways = append(ways, "with Touch ID in the approval dialog (where this agent's client shows one)")
+		ways = append(ways, "with Touch ID in the approval dialog")
 	}
 	ways = append(ways, terminal)
 	switch {
@@ -97,6 +105,31 @@ func (w Ways) StillPending(short string) string {
 		ways = append(ways, "Touch ID in the next approval dialog")
 	}
 	return orList(ways)
+}
+
+// AskAgain is how an agent whose request the owner denied asks again, once
+// the owner tells it to (after correcting what it asked for, say): an
+// explicit request with a reason, which always files a new one. tool reports
+// that this daemon offers the access_request tool (it locks a project);
+// without it the shell's command is the way.
+func AskAgain(project string, tool bool) string {
+	cmd := "`seam access request " + project + " --reason \"...\"` from your shell"
+	if tool {
+		return "if the owner asks you to request again, call access_request with a reason, or run " + cmd
+	}
+	return "if the owner asks you to request again, run " + cmd
+}
+
+// DeniedRemedy is the remedy of a refusal whose last request the owner
+// denied: what was denied and when, that nothing new was filed, and how to
+// ask again (AskAgain). what names the request ("access request R-7F3K").
+func DeniedRemedy(what string, at time.Time, project string, tool bool) string {
+	when := ""
+	if !at.IsZero() {
+		when = " at " + clockDay(at)
+	}
+	return "the owner denied " + what + when + ", so nothing new was filed; keep to other projects, and " +
+		AskAgain(project, tool) + "."
 }
 
 // orList joins choices as prose: "a", "a, or b", "a, b, or c".
@@ -170,6 +203,14 @@ func lockedRefusalFor(project string, req LockRequest) error {
 	if !req.Ended.IsZero() {
 		rule = fmt.Sprintf("project %s is locked (access ended at %s): even the owner's own agents need the owner's "+
 			"approval, and this session's approval has ended.", project, clockDay(req.Ended))
+	}
+	if req.Denied {
+		what := req.DeniedWhat
+		if what == "" {
+			what = "access request"
+		}
+		// A lock is peer_auth's, whose daemon offers access_request.
+		return &RefusalError{msg: rule + "\nRemedy: " + DeniedRemedy(what+" "+req.Short, req.DeniedAt, project, true)}
 	}
 	what := "access request " + req.Short
 	if req.Refresh {

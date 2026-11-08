@@ -460,13 +460,12 @@ func TestDialog_AcceptWithoutProofGrantsNothing(t *testing.T) {
 	ls := lines(text)
 	require.Len(t, ls, 2, text)
 	require.Contains(t, ls[0], "project "+lkFin+" is locked")
-	require.True(t, strings.HasPrefix(ls[1], "Remedy: access request "+short+" is waiting"), ls[1])
-	require.Contains(t, ls[1], "The approval dialog stopped waiting at ")
-	require.Contains(t, ls[1], "-- the owner approves it with Touch ID in the approval dialog (where this agent's client "+
-		"shows one), or in their own terminal with `seam approve "+short+"`;", "Touch ID is offered: a key is enrolled")
+	require.True(t, strings.HasPrefix(ls[1], "Remedy: the approval dialog stopped waiting at "), ls[1])
+	require.NotContains(t, ls[1], " is waiting -- ", "one remedy, not the original with a second after it")
 	require.NotContains(t, ls[1], "passkey", "no passkey is enrolled: none is offered")
-	require.True(t, strings.HasSuffix(ls[1], "without a decision; access request "+short+
-		" stays pending for the owner: `seam approve "+short+"` in their own terminal, or Touch ID in the next approval dialog."), ls[1])
+	require.True(t, strings.HasSuffix(ls[1], " without a decision; access request "+short+
+		" stays pending for the owner: `seam approve "+short+"` in their own terminal, or Touch ID in the next approval "+
+		"dialog; retry once it is approved, and keep to other projects until then."), ls[1], "Touch ID is offered: a key is enrolled")
 }
 
 func TestDialog_DeclineOrCancelLeavesThePendingRequest(t *testing.T) {
@@ -489,7 +488,7 @@ func TestDialog_DeclineOrCancelLeavesThePendingRequest(t *testing.T) {
 			pending := d.pending()
 			require.Len(t, pending, 1, "declining denies nothing: an agent's connection may not deny")
 			short := approval.ShortID(pending[0].ID)
-			require.Contains(t, text, " The approval dialog was "+c.word+"; access request "+short+" stays pending for the owner")
+			require.Contains(t, text, "\nRemedy: the approval dialog was "+c.word+"; access request "+short+" stays pending for the owner")
 			require.Len(t, lines(text), 2)
 			require.Empty(t, o.asks, "no proof was asked for")
 			require.Empty(t, d.liveLeases())
@@ -529,11 +528,11 @@ func TestDialog_ClientCancelEndsTheWait(t *testing.T) {
 	var text string
 	for time.Now().Before(deadline) {
 		text = d.refused(agent, "tasks_list", nil)
-		if strings.Contains(text, "The approval dialog was declined") {
+		if strings.Contains(text, "the approval dialog was declined") {
 			break
 		}
 	}
-	require.Contains(t, text, "The approval dialog was declined", "the cancelled call's dialog was released")
+	require.Contains(t, text, "the approval dialog was declined", "the cancelled call's dialog was released")
 	require.Len(t, d.pending(), 1, "the same request, found again")
 	require.Empty(t, d.liveLeases())
 }
@@ -630,7 +629,7 @@ func TestDialog_AnotherConnectionsAnswerGrantsNothing(t *testing.T) {
 	require.NoError(t, r.err)
 	require.True(t, r.res.IsError)
 	text := r.res.Content[0].(mcp.TextContent).Text
-	require.Contains(t, text, "The approval dialog stopped waiting at ")
+	require.Contains(t, text, "\nRemedy: the approval dialog stopped waiting at ")
 	require.Empty(t, d.liveLeases(), "an answer is not a proof")
 	require.Len(t, d.pending(), 1)
 }
@@ -747,12 +746,12 @@ func TestDialog_PasskeyPage(t *testing.T) {
 			require.True(t, strings.HasPrefix(last, "Claude Code 2.1.319 asks for read-write "+
 				"access to "+lkFin+" (confidential, locked); "), "what is asked comes first: %s", last)
 			if withTouchID {
-				require.Contains(t, last, ". Approve it for 1 hour, or deny it, with your passkey on the page this opens")
+				require.Contains(t, last, ". Approve it for 1 hour with your passkey, or deny it, on the page this opens")
 				props := shown[0].Params.RequestedSchema.(map[string]any)["properties"].(map[string]any)
 				require.Equal(t, []any{"Touch ID", "Passkey (opens the approval page for the duration chosen here)"},
 					props["method"].(map[string]any)["enumNames"])
 			} else {
-				require.Contains(t, last, ". Approve or deny it with your passkey on the page this opens")
+				require.Contains(t, last, ". Approve it with your passkey, or deny it, on the page this opens")
 			}
 			require.Empty(t, o.asks, "no Touch ID ask")
 
@@ -956,9 +955,9 @@ func TestDialog_TouchIDEndAnswersAtOnce(t *testing.T) {
 	for _, c := range []struct {
 		outcome, answer, words, next string
 	}{
-		{"cancelled", "touchid_cancelled", " Touch ID was cancelled in the approval dialog, so nothing was approved; ",
+		{"cancelled", "touchid_cancelled", "Remedy: Touch ID was cancelled in the approval dialog, so nothing was approved; ",
 			"Touch ID was cancelled, so nothing was approved and access request "},
-		{"closed", "touchid_closed", " The Touch ID approver closed without approving; ",
+		{"closed", "touchid_closed", "Remedy: the Touch ID approver closed without approving; ",
 			"the Touch ID approver closed without approving, so access request "},
 	} {
 		t.Run(c.outcome, func(t *testing.T) {
@@ -988,8 +987,9 @@ func TestDialog_TouchIDEndAnswersAtOnce(t *testing.T) {
 			short := approval.ShortID(pending[0].ID)
 			ls := lines(text)
 			require.Len(t, ls, 2, text)
-			require.True(t, strings.HasSuffix(ls[1], c.words+"access request "+short+" stays pending for the owner: `seam approve "+
-				short+"` in their own terminal, or Touch ID in the next approval dialog."), ls[1])
+			require.Equal(t, c.words+"access request "+short+" stays pending for the owner: `seam approve "+short+
+				"` in their own terminal, or Touch ID in the next approval dialog; retry once it is approved, and keep to "+
+				"other projects until then.", ls[1])
 			require.Empty(t, d.liveLeases())
 
 			// access_request, the same way.
@@ -1030,7 +1030,7 @@ func TestDialog_TouchIDEndFromElsewhereIsDropped(t *testing.T) {
 		}
 	}()
 	text := d.refused(agent, "tasks_list", nil)
-	require.Contains(t, text, "The approval dialog stopped waiting at ")
+	require.Contains(t, text, "\nRemedy: the approval dialog stopped waiting at ")
 	require.NotContains(t, text, "Touch ID was cancelled")
 	require.Len(t, d.pending(), 1)
 }

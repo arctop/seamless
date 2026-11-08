@@ -354,7 +354,14 @@ any of it.
   An asker that already holds what it asks for (its tree's lease, or a read
   grant from the same project) more than `access.ExpiryWarning` from its end
   is answered with it (`approval.AccessLiveError`) and files nothing; from the
-  warning on it files a new approval.
+  warning on it files a new approval. A refusal (`approval.ViaRefusal`)
+  whose asker's last request for the project (or the read grant's pair) the
+  owner denied files nothing: it names the denial (`approval.DeniedError`,
+  `access.DeniedRemedy`) and how to ask again (`access.AskAgain`). The
+  agent's explicit request (`ViaRequest`: access_request, `seam access
+  request`) always files, and its reason fills in a pending request's
+  missing one (`store.FillAccessReason`: once, never on a refresh). The
+  reason is a fact, so an owner mid-review gets the facts-changed answer.
   `access_request` (`internal/mcp/access_request.go`) files one explicitly and
   is registered only while peer_auth locks a project
   (`Config.OfferAccessRequest`: the `offerCommits` pattern for a whole tool),
@@ -383,7 +390,10 @@ any of it.
   the form chose one). Only the approve core
   decides. Decline and cancel deny nothing. Without every precondition the
   call answers at once, word for word as before, and there is at most one
-  dialog per request per connection. mcp-go v1.1.1 drops a notification
+  dialog per request per connection. A dialog that ends with the request
+  still pending replaces the refusal's remedy with one saying how it ended
+  and the paths left (`refusalAfterDialog`), never a second remedy after
+  the first. mcp-go v1.1.1 drops a notification
   queued just before a handler returns, so the call stays open `notifyHold`
   after queueing one. The bridge reads stdin on its own goroutine for the same
   feature: the client's answer arrives behind the call that waits on it.

@@ -431,3 +431,55 @@ func TestActiveAccessLeasesFor_Chain(t *testing.T) {
 	_, err = ActiveAccessLeasesFor(ctx, db, long, fenceNow)
 	require.ErrorIs(t, err, ErrInvalidAccessRequest, "a list longer than any chain is refused, not truncated")
 }
+
+// FillAccessReason writes the reason a refusal's request lacks, once: never
+// over a reason, never on a refresh (which carries the earlier one), and
+// never once the request is decided or past its deadline.
+func TestFillAccessReason_OnlyAMissingOne(t *testing.T) {
+	db := leaseDB(t)
+	ctx := context.Background()
+	bare := leaseReq("example-finance", fenceProc)
+	bare.Reason = ""
+	a, err := CreateAccessApproval(ctx, db, bare, fenceNow)
+	require.NoError(t, err)
+
+	got, err := FillAccessReason(ctx, db, a.ID, "  the ledger  ", fenceNow)
+	require.NoError(t, err)
+	require.Equal(t, "the ledger", got.Reason)
+	got, err = FillAccessReason(ctx, db, a.ID, "something else", fenceNow)
+	require.NoError(t, err)
+	require.Equal(t, "the ledger", got.Reason, "a reason is written once")
+	_, err = FillAccessReason(ctx, db, a.ID, strings.Repeat("x", MaxAccessReasonRunes+1), fenceNow)
+	require.ErrorIs(t, err, ErrInvalidAccessRequest)
+
+	refresh := bare
+	refresh.Kind = AccessKindRefresh
+	r, err := CreateAccessApproval(ctx, db, refresh, fenceNow)
+	require.NoError(t, err)
+	got, err = FillAccessReason(ctx, db, r.ID, "new words", fenceNow)
+	require.NoError(t, err)
+	require.Empty(t, got.Reason, "a refresh carries no new free text")
+
+	late, err := CreateAccessApproval(ctx, db, bare, fenceNow)
+	require.NoError(t, err)
+	got, err = FillAccessReason(ctx, db, late.ID, "too late", late.ExpiresAt)
+	require.NoError(t, err)
+	require.Empty(t, got.Reason, "past its deadline")
+
+	// Requested a second later, so it is the newest (ids minted in the same
+	// millisecond do not sort by time).
+	denied, err := CreateAccessApproval(ctx, db, bare, fenceNow.Add(time.Second))
+	require.NoError(t, err)
+	require.NoError(t, DenyAccess(ctx, db, denied.ID, "cred-1", fenceNow.Add(time.Second)))
+	got, err = FillAccessReason(ctx, db, denied.ID, "after the fact", fenceNow.Add(time.Second))
+	require.NoError(t, err)
+	require.Empty(t, got.Reason, "decided")
+
+	last, ok, err := LastAccessApproval(ctx, db, fenceProc.Key(), "example-finance")
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, denied.ID, last.ID, "the newest, whatever its status")
+	_, ok, err = LastAccessApproval(ctx, db, fenceProc.Key(), "example-legal")
+	require.NoError(t, err)
+	require.False(t, ok)
+}

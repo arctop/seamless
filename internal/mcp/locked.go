@@ -83,13 +83,18 @@ func (s *Server) lockRequestMiddleware(next mcpserver.ToolHandlerFunc) mcpserver
 func (s *Server) lockRequester(ctx context.Context, project string) (access.LockRequest, error) {
 	ctx = access.WithLockRequester(ctx, nil)
 	v, _ := access.FromContext(ctx)
-	a, err := s.fileAccessRequest(ctx, project, "", "refusal")
+	a, err := s.fileAccessRequest(ctx, project, "", approval.ViaRefusal)
 	if err != nil {
 		s.logger.Debug("access request not filed", "project", project, "error", err)
 		// A process no approval may name (approval.AnchorError): the
 		// refusal says why nothing was filed, and what to do instead.
 		if unfiled, ok := unfiledRequest(err); ok {
 			return unfiled, nil
+		}
+		// The owner denied this agent's last request: the refusal says so,
+		// files nothing, and offers no dialog.
+		if denied, ok := deniedRequest(err); ok {
+			return denied, nil
 		}
 		return access.LockRequest{}, err
 	}
@@ -143,6 +148,16 @@ func unfiledRequest(err error) (access.LockRequest, bool) {
 		return access.LockRequest{}, false
 	}
 	return access.LockRequest{Unfiled: anchor.Rule(), UnfiledRemedy: anchor.Remedy()}, true
+}
+
+// deniedRequest is the lock refusal's account of a request the owner denied
+// (approval.DeniedError): which one and when; nothing new was filed.
+func deniedRequest(err error) (access.LockRequest, bool) {
+	var denied *approval.DeniedError
+	if !errors.As(err, &denied) {
+		return access.LockRequest{}, false
+	}
+	return denied.LockRequest(), true
 }
 
 // chainKeys are the lease keys of the view's kernel-verified process chain.

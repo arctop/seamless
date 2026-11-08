@@ -24,10 +24,10 @@ func TestWays_OwnerApproves(t *testing.T) {
 		{"passkey only", Ways{Passkey: true, Page: page},
 			"the owner approves it in their own terminal with `seam approve R-K71M`, or with a passkey at " + page},
 		{"Touch ID only", Ways{TouchID: true},
-			"the owner approves it with Touch ID in the approval dialog (where this agent's client shows one), " +
+			"the owner approves it with Touch ID in the approval dialog, " +
 				"or in their own terminal with `seam approve R-K71M`"},
 		{"both", Ways{TouchID: true, Passkey: true, Page: page},
-			"the owner approves it with Touch ID in the approval dialog (where this agent's client shows one), " +
+			"the owner approves it with Touch ID in the approval dialog, " +
 				"in their own terminal with `seam approve R-K71M`, or with a passkey at " + page},
 	} {
 		t.Run(c.name, func(t *testing.T) {

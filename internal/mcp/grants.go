@@ -150,7 +150,7 @@ func (s *Server) grantRequestRefusal(ctx context.Context, err error, target stri
 	}
 	a, rerr := s.cfg.Grants.RequestGrant(access.WithLockRequester(ctx, nil), approval.GrantInput{
 		Project: target, From: b.project, SessionID: b.sessionID,
-		AgentProcess: callerAgentProcess(ctx), Host: s.callerHost(ctx), Via: "refusal",
+		AgentProcess: callerAgentProcess(ctx), Host: s.callerHost(ctx), Via: approval.ViaRefusal,
 	})
 	if rerr != nil {
 		s.logger.Debug("read grant request not filed", "project", target, "error", rerr)
@@ -160,6 +160,14 @@ func (s *Server) grantRequestRefusal(ctx context.Context, err error, target stri
 		if errors.As(rerr, &anchor) {
 			return &fenceRefusal{reason: f.reason, err: fmt.Errorf("%w; %s.\nRemedy: %s", f.err,
 				strings.Replace(anchor.Rule(), "no access request", "no read request", 1), anchor.Remedy())}
+		}
+		// The owner denied this asker's last read request for the pair: the
+		// fence's refusal, then the denial and how to ask again; nothing new
+		// filed, no dialog.
+		var denied *approval.DeniedError
+		if errors.As(rerr, &denied) {
+			return &fenceRefusal{reason: f.reason, err: fmt.Errorf("%w\nRemedy: %s", f.err,
+				access.DeniedRemedy(denied.What()+" "+approval.ShortID(denied.Request.ID), denied.At(), target, s.cfg.OfferAccessRequest))}
 		}
 		return err
 	}

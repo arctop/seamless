@@ -121,10 +121,12 @@ func TestRemedies_OfferOnlyThePathsThatExist(t *testing.T) {
 	require.NotContains(t, remedy(plain), "Touch ID")
 	require.NotContains(t, listed(plain), "Touch ID")
 	got = remedy(decliner)
-	require.Contains(t, got, "-- the owner approves it with Touch ID in the approval dialog (where this agent's client "+
-		"shows one), or in their own terminal with `seam approve R-")
-	require.Contains(t, got, "The approval dialog was declined; access request R-")
-	require.True(t, strings.HasSuffix(got, "in their own terminal, or Touch ID in the next approval dialog."), got)
+	// One remedy, as the dialog left it: the paths still open, not the
+	// original remedy with a second one after it.
+	require.True(t, strings.HasPrefix(got, "Remedy: the approval dialog was declined; access request R-"), got)
+	require.NotContains(t, got, " is waiting -- ")
+	require.True(t, strings.HasSuffix(got, "in their own terminal, or Touch ID in the next approval dialog; retry once it is "+
+		"approved, and keep to other projects until then."), got)
 	require.Contains(t, listed(decliner), "explicitly; the owner approves it with Touch ID in the approval dialog")
 
 	// A passkey: its page, on every surface.

@@ -421,7 +421,7 @@ func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
 	a, err := s.cfg.Approvals.Request(r.Context(), approval.RequestInput{
 		Project: project, View: v, AgentProcess: proc,
 		Host:   host,
-		Reason: r.PostForm.Get("reason"), Via: "request",
+		Reason: r.PostForm.Get("reason"), Via: approval.ViaRequest,
 	})
 	if err != nil {
 		msg := err.Error()

@@ -129,7 +129,8 @@ type GrantInput struct {
 	AgentProcess, Host string
 	// Reason is the agent's own words, at most store.MaxAccessReasonRunes.
 	Reason string
-	// Via says how it was filed: "refusal" (automatic) or "request".
+	// Via says how it was filed: ViaRefusal (automatic) or ViaRequest (the
+	// default).
 	Via string
 }
 
@@ -156,7 +157,10 @@ func (g *Grants) eligible(ctx context.Context, target, from string) error {
 // RequestGrant files (or finds) the pending read grant request of the asker
 // ctx and in name, for in.Project from the asking session's project. A
 // pending request of that asker for that pair is returned as it is, so a
-// repeated refusal never piles up requests. An asker that already holds a
+// repeated refusal never piles up requests (an explicit request's reason
+// fills in a missing one, as for a lock's). A refusal whose asker's last
+// request for the pair the owner denied files nothing: the answer is a
+// *DeniedError, until an explicit request files a new one. An asker that already holds a
 // live grant of the pair files nothing while more than access.ExpiryWarning
 // of it remains: the answer is an *AccessLiveError naming it, as for a
 // lease (Service.Request).
@@ -234,7 +238,19 @@ func (g *Grants) RequestGrant(ctx context.Context, in GrantInput) (store.AccessA
 	if pending, ok, err := store.PendingGrantRequest(ctx, db, req.ProcessKey, req.SessionID, target, from, now); err != nil {
 		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
 	} else if ok {
+		if pending, err = g.svc.explained(ctx, pending, in.Via, in.Reason, now); err != nil {
+			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
+		}
 		return pending, nil
+	}
+	if in.Via == ViaRefusal {
+		last, ok, err := store.LastGrantRequest(ctx, db, req.ProcessKey, req.SessionID, target, from)
+		if err != nil {
+			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
+		}
+		if ok && last.Status == store.ApprovalDenied {
+			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, &DeniedError{Request: last})
+		}
 	}
 	req.From = from
 	req.Reason = strings.TrimSpace(in.Reason)
@@ -250,7 +266,7 @@ func (g *Grants) RequestGrant(ctx context.Context, in GrantInput) (store.AccessA
 	}
 	via := in.Via
 	if via == "" {
-		via = "request"
+		via = ViaRequest
 	}
 	g.svc.record(ctx, core.Event{Kind: core.EventAccessRequested, ItemID: a.ID, SessionID: a.SessionID, ProjectSlug: a.Project,
 		Payload: map[string]any{"kind": store.AccessKindGrant, "via": via, "from_project": from}})

@@ -176,10 +176,11 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 		require.Len(t, ls, 2, text)
 		require.Equal(t, "tasks_list: project "+pmLocked+" is locked: even the owner's own agents need the owner's approval, "+
 			"and this session holds none.", ls[0])
-		require.True(t, strings.HasPrefix(ls[1], "Remedy: access request "+short+" is waiting -- "), ls[1])
-		require.Contains(t, ls[1], " The approval dialog stopped waiting at ")
+		require.True(t, strings.HasPrefix(ls[1], "Remedy: the approval dialog stopped waiting at "), ls[1])
+		require.NotContains(t, ls[1], " is waiting -- ", "one remedy, as the dialog left it")
 		require.True(t, strings.HasSuffix(ls[1], " without a decision; access request "+short+" stays pending for the owner: `seam approve "+
-			short+"` in their own terminal, a passkey at "+page+", or Touch ID in the next approval dialog."), ls[1])
+			short+"` in their own terminal, a passkey at "+page+", or Touch ID in the next approval dialog; retry once it is "+
+			"approved, and keep to other projects until then."), ls[1])
 
 		// access_request, accepted the same way: still pending.
 		text, isErr := paCall(t, agent, "access_request", map[string]any{"project": pmLocked, "reason": "close the quarter"})
@@ -204,7 +205,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 		require.Len(t, shown, 2, "the form, then the page")
 		require.Equal(t, mcpgo.ElicitationModeURL, shown[1].Params.Mode)
 		require.Equal(t, page+"?for=1h", shown[1].Params.URL, "the page for the duration the form chose")
-		require.Contains(t, text, " The approval dialog stopped waiting at ")
+		require.Contains(t, text, "\nRemedy: the approval dialog stopped waiting at ")
 		require.Empty(t, po.asks, "no Touch ID ask for a passkey")
 		d.nothing("an opened passkey page", map[string]string{ask.RequestID: store.ApprovalPending})
 	})
@@ -818,12 +819,10 @@ func TestPeerAuthMatrix_Anchors(t *testing.T) {
 			a, err := d.svc.Resolve(ctx, short)
 			require.NoError(t, err)
 			page := pmOrigin + "/console/access/" + a.ID
-			remedy := func(touch bool) string {
-				ways := []string{}
-				if touch {
-					ways = append(ways, "with Touch ID in the approval dialog (where this agent's client shows one)")
-				}
-				ways = append(ways, "in their own terminal with `seam approve "+short+"`")
+			// Touch ID is never offered to a client with no elicitation; a
+			// form client that shows the dialog gets the dialog's remedy.
+			remedy := func() string {
+				ways := []string{"in their own terminal with `seam approve " + short + "`"}
 				if c.passkey {
 					ways = append(ways, "with a passkey at "+page)
 				}
@@ -834,7 +833,7 @@ func TestPeerAuthMatrix_Anchors(t *testing.T) {
 				"and this session holds none."
 
 			// A client with no elicitation: never Touch ID.
-			require.Equal(t, []string{rule, remedy(false)}, pmLines(text))
+			require.Equal(t, []string{rule, remedy()}, pmLines(text))
 			res, isErr := paCall(t, plain, "access_request", map[string]any{"project": pmLocked})
 			require.False(t, isErr, res)
 			var out struct {
@@ -869,7 +868,7 @@ func TestPeerAuthMatrix_Anchors(t *testing.T) {
 			form := d.agent(o, nil)
 			text = d.refused(form, "tasks_list", map[string]any{"project": pmLocked})
 			if !c.touchID {
-				require.Equal(t, []string{rule, remedy(false)}, pmLines(text), "no proof finishes in a form: no dialog")
+				require.Equal(t, []string{rule, remedy()}, pmLines(text), "no proof finishes in a form: no dialog")
 				require.Empty(t, o.dialogs())
 				return
 			}
@@ -879,8 +878,9 @@ func TestPeerAuthMatrix_Anchors(t *testing.T) {
 				still = append(still, "a passkey at "+page)
 			}
 			still = append(still, "Touch ID in the next approval dialog")
-			require.Equal(t, []string{rule, remedy(true) + " The approval dialog was declined; access request " + short +
-				" stays pending for the owner: " + pmOrList(still) + "."}, pmLines(text))
+			require.Equal(t, []string{rule, "Remedy: the approval dialog was declined; access request " + short +
+				" stays pending for the owner: " + pmOrList(still) + "; retry once it is approved, and keep to other " +
+				"projects until then."}, pmLines(text))
 			d.nothing("a declined dialog", map[string]string{a.ID: store.ApprovalPending})
 		})
 	}

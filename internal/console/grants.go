@@ -29,7 +29,7 @@ import (
 // agent-process header names.
 func (s *Service) grantRequest(w http.ResponseWriter, r *http.Request, project, proc, host string) {
 	a, err := s.cfg.Grants.RequestGrant(r.Context(), approval.GrantInput{
-		Project: project, AgentProcess: proc, Host: host, Reason: r.PostForm.Get("reason"), Via: "request",
+		Project: project, AgentProcess: proc, Host: host, Reason: r.PostForm.Get("reason"), Via: approval.ViaRequest,
 	})
 	if err != nil {
 		msg := err.Error()

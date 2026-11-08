@@ -60,15 +60,20 @@ func (h *Handler) lockedStart(ctx context.Context, w http.ResponseWriter, client
 	case h.approvals != nil:
 		a, err := h.approvals.Request(ctx, approval.RequestInput{
 			Project: project, View: v, SessionID: sessionID, AgentProcess: p.Identity.AgentProcess,
-			Host: host, Via: "refusal",
+			Host: host, Via: approval.ViaRefusal,
 		})
 		var anchor *approval.AnchorError
+		var denied *approval.DeniedError
 		switch {
 		case errors.As(err, &anchor):
 			// A process no approval may name: the notice says why nothing
 			// was filed, and what to do instead.
 			h.logger.Debug("hooks: access request not filed", "project", project, "error", err)
 			req = access.LockRequest{Unfiled: anchor.Rule(), UnfiledRemedy: anchor.Remedy()}
+		case errors.As(err, &denied):
+			// The owner denied this agent's last request (a compact or a
+			// clear in the same process): the notice says so and files nothing.
+			req = denied.LockRequest()
 		case err != nil:
 			// No request (the TCP key, no verified process): the notice
 			// carries the lock's plain remedy instead.

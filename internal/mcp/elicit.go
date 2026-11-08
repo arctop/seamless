@@ -184,7 +184,8 @@ func (s *Server) dialogMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.Tool
 		}
 		out := *res
 		out.Content = slices.Clone(res.Content)
-		out.Content[0] = mcp.NewTextContent(refusalAfterDialog(req.Params.Name, first.Text, t, end, callWays(ctx, s.cfg.Approvals.Ways(ctx, t.ID))))
+		out.Content[0] = mcp.NewTextContent(refusalAfterDialog(req.Params.Name, first.Text, t, end,
+			callWays(ctx, s.cfg.Approvals.Ways(ctx, t.ID)), s.cfg.OfferAccessRequest))
 		return &out, err
 	}
 }
@@ -449,20 +450,19 @@ func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSess
 	if err != nil {
 		return "", "", false
 	}
-	short := "approve or deny " + plain(t.Project)
-	decide := "Approve or deny it"
+	// Only the approval takes the passkey: the page denies without one.
+	approve, decide := "approve "+plain(t.Project), "Approve it"
 	if phrase, ok := durationPhrases[duration]; ok {
-		short = "approve " + plain(t.Project) + " " + phrase + ", or deny it,"
-		decide = "Approve it " + phrase + ", or deny it,"
+		approve, decide = approve+" "+phrase, decide+" "+phrase
 	}
-	msg := "Seamless access request " + t.Short + ": " + short + " with your passkey on the page this opens. " +
-		"Opening it grants nothing by itself."
+	msg := "Seamless access request " + t.Short + ": " + approve + " with your passkey, or deny it, on the page this " +
+		"opens. Opening it grants nothing by itself."
 	if f, err := s.cfg.Approvals.Facts(ctx, t.ID); err == nil {
 		// What is asked first, as in the form (dialogLead); the page shows
 		// every fact, and asks how long unless the form did.
 		msg = plain(askerName(f)) + " asks for " + plain(accessPhrase(f)) + "; " + warningCount(len(f.Warnings)) +
-			". " + decide + " with your passkey on the page this opens, which shows the request (" + plain(f.Short) +
-			") in full. Opening it grants nothing by itself."
+			". " + decide + " with your passkey, or deny it, on the page this opens, which shows the request (" +
+			plain(f.Short) + ") in full. Opening it grants nothing by itself."
 	}
 	res, err := s.mcp.RequestURLElicitation(ctx, session, elicitID, page, msg)
 	if err != nil {
@@ -974,9 +974,16 @@ func plain(v string) string {
 // refusalAfterDialog is a refused call's text once its dialog ended: the
 // rule, then the remedy as the dialog left it. text is the refusal as the
 // call made it (tool-prefixed, its rule and its remedy on two lines); ways
-// are the approval paths still open to the owner while it is pending.
-func refusalAfterDialog(tool, text string, t dialogTarget, end dialogEnd, ways access.Ways) string {
-	rule, _, _ := strings.Cut(text, "\nRemedy: ")
+// are the approval paths still open to the owner while it is pending, and
+// askTool reports that this daemon offers access_request (the way to ask
+// again after a denial).
+//
+// A request still pending gets one remedy, not two: how the dialog ended,
+// the paths left to the owner, and the original remedy's closing words (from
+// "retry once it is approved" on, which for a read request say what an
+// approval brings).
+func refusalAfterDialog(tool, text string, t dialogTarget, end dialogEnd, ways access.Ways, askTool bool) string {
+	rule, remedy, _ := strings.Cut(text, "\nRemedy: ")
 	what := t.what()
 	switch end.state {
 	case stateApproved:
@@ -987,24 +994,31 @@ func refusalAfterDialog(tool, text string, t dialogTarget, end dialogEnd, ways a
 		return prefix + "the owner approved " + what + ": " + openLine(t, end) +
 			".\nRemedy: this call ran before the approval and did nothing -- retry it now."
 	case stateDenied:
-		return rule + "\nRemedy: the owner denied " + what + "; keep to other projects."
+		return rule + "\nRemedy: the owner denied " + what + "; keep to other projects, and " +
+			access.AskAgain(t.Project, askTool) + "."
 	case stateExpired:
 		return rule + "\nRemedy: " + what + " expired before the owner decided; the next call that needs " +
 			t.Project + " files a new one."
 	}
-	pending := what + " stays pending for the owner: " + ways.StillPending(t.Short) + "."
+	var ended string
 	switch end.answer {
 	case answerDeclined, answerCancelled:
-		return text + " The approval dialog was " + end.answer + "; " + pending
+		ended = "the approval dialog was " + end.answer
 	case answerTouchIDCancelled:
-		return text + " Touch ID was cancelled in the approval dialog, so nothing was approved; " + pending
+		ended = "Touch ID was cancelled in the approval dialog, so nothing was approved"
 	case answerTouchIDClosed:
-		return text + " The Touch ID approver closed without approving; " + pending
+		ended = "the Touch ID approver closed without approving"
 	case answerUnoffered:
-		return text + " The approval dialog's answer was not one it offered; " + pending
+		ended = "the approval dialog's answer was not one it offered"
+	default:
+		ended = "the approval dialog stopped waiting at " + access.Clock(end.stopAt) + " without a decision"
 	}
-	return text + " The approval dialog stopped waiting at " + access.Clock(end.stopAt) +
-		" without a decision; " + pending
+	closing := "retry once it is approved, and keep to other projects until then."
+	if i := strings.Index(remedy, "retry once it is approved"); i >= 0 {
+		closing = remedy[i:]
+	}
+	return rule + "\nRemedy: " + ended + "; " + what + " stays pending for the owner: " + ways.StillPending(t.Short) +
+		"; " + closing
 }
 
 // openLine says what an approval opened, and until when.

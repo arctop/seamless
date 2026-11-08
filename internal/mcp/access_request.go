@@ -51,7 +51,9 @@ func accessRequestTool() mcp.Tool {
 			"(peer_auth.locked), and answered only on its peer_auth socket. A locked project is closed even to the owner's "+
 			"own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in "+
 			"their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to "+
-			"say why. Asking again finds the request already waiting rather than filing another. When this agent's client "+
+			"say why. Asking again finds the request already waiting rather than filing another, and a reason given then "+
+			"fills in one the waiting request lacks. Once the owner denies a request, refused calls file nothing more and "+
+			"say so: ask again here, with a reason, when the owner tells you to. When this agent's client "+
 			"can show an approval dialog, the call shows the owner the request and waits up to two minutes for the decision; "+
 			"otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the "+
 			"project to this agent's process tree until the time the result names: retry the work then. An agent that "+
@@ -122,7 +124,7 @@ func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolReques
 	if s.cfg.Grants != nil && !lockCovers(ctx, project) {
 		return s.accessRequestGrant(ctx, start, project, reason)
 	}
-	a, err := s.fileAccessRequest(ctx, project, reason, "request")
+	a, err := s.fileAccessRequest(ctx, project, reason, approval.ViaRequest)
 	var live *approval.AccessLiveError
 	if errors.As(err, &live) {
 		return jsonResult(s.liveAccessResult(ctx, live))
@@ -157,7 +159,7 @@ func lockCovers(ctx context.Context, project string) bool {
 func (s *Server) accessRequestGrant(ctx context.Context, start time.Time, project, reason string) (*mcp.CallToolResult, error) {
 	a, err := s.cfg.Grants.RequestGrant(ctx, approval.GrantInput{
 		Project: project, SessionID: s.boundSession(ctx), AgentProcess: callerAgentProcess(ctx), Host: s.callerHost(ctx),
-		Reason: reason, Via: "request",
+		Reason: reason, Via: approval.ViaRequest,
 	})
 	var live *approval.AccessLiveError
 	if errors.As(err, &live) {
@@ -223,7 +225,7 @@ func accessRequestNext(t dialogTarget, ways access.Ways, end dialogEnd) string {
 	case stateApproved:
 		return "the owner approved it: " + openLine(t, end) + "; retry the work that needs it"
 	case stateDenied:
-		return "the owner denied it: keep to other projects"
+		return "the owner denied it: keep to other projects, and " + access.AskAgain(t.Project, true)
 	case stateExpired:
 		return "it expired before the owner decided: ask again only if the work still needs " + t.Project
 	}

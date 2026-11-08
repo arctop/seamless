@@ -300,6 +300,55 @@ func PendingAccessApproval(ctx context.Context, db *sql.DB, processKey, project 
 	return a, true, nil
 }
 
+// LastAccessApproval returns the newest lock request for this process and
+// project, whatever its status: a refusal reads it to tell a request the owner
+// denied -- which it then names, filing nothing -- from one that only lapsed.
+// A grant request is never one (LastGrantRequest finds those).
+func LastAccessApproval(ctx context.Context, db *sql.DB, processKey, project string) (AccessApproval, bool, error) {
+	a, err := scanApproval(db.QueryRowContext(ctx, `SELECT `+approvalCols+` FROM access_approvals
+		WHERE process_key = ? AND project_slug = ? AND kind <> ?
+		ORDER BY requested_at DESC, id DESC LIMIT 1`, processKey, project, AccessKindGrant))
+	if errors.Is(err, sql.ErrNoRows) {
+		return AccessApproval{}, false, nil
+	}
+	if err != nil {
+		return AccessApproval{}, false, fmt.Errorf("store.LastAccessApproval: %w", err)
+	}
+	return a, true, nil
+}
+
+// FillAccessReason records reason on approval id, pending at now, when it
+// carries none: a request a refusal filed (a refusal has no reason to give)
+// that the agent then asks for in its own words. A request that already has a
+// reason, a refresh (which carries the earlier reason, never new text), and
+// one no longer pending are left as they are. The row is returned as it
+// stands either way. The reason is one of the facts the owner approves over,
+// so filling it changes their digest: an owner deciding over the facts as
+// they stood is asked to look again.
+func FillAccessReason(ctx context.Context, db *sql.DB, id, reason string, now time.Time) (AccessApproval, error) {
+	reason = strings.TrimSpace(reason)
+	if utf8.RuneCountInString(reason) > MaxAccessReasonRunes || !utf8.ValidString(reason) {
+		return AccessApproval{}, fmt.Errorf("store.FillAccessReason: %w: the reason is limited to %d characters of valid UTF-8",
+			ErrInvalidAccessRequest, MaxAccessReasonRunes)
+	}
+	if reason != "" {
+		res, err := db.ExecContext(ctx, `UPDATE access_approvals SET reason = ?
+			WHERE id = ? AND status = ? AND reason = '' AND kind <> ? AND expires_at > ?`,
+			reason, id, ApprovalPending, AccessKindRefresh, core.FormatTime(now))
+		if err != nil {
+			return AccessApproval{}, fmt.Errorf("store.FillAccessReason: %w", err)
+		}
+		if _, err := res.RowsAffected(); err != nil {
+			return AccessApproval{}, fmt.Errorf("store.FillAccessReason: %w", err)
+		}
+	}
+	a, err := AccessApprovalByID(ctx, db, id)
+	if err != nil {
+		return AccessApproval{}, fmt.Errorf("store.FillAccessReason: %w", err)
+	}
+	return a, nil
+}
+
 // AccessApprovalsSince returns every approval requested at or after since,
 // whatever its status, newest first: the requests a short id the owner was
 // shown may still name once they are decided or expired.

@@ -174,6 +174,35 @@ func PendingGrantRequest(ctx context.Context, db *sql.DB, processKey, sessionID,
 	return a, true, nil
 }
 
+// LastGrantRequest returns the newest grant request from this holder
+// (processKey under peer_auth, else sessionID) for project from from, whatever
+// its status: a refusal reads it to tell a request the owner denied -- which it
+// then names, filing nothing -- from one that only lapsed.
+func LastGrantRequest(ctx context.Context, db *sql.DB, processKey, sessionID, project, from string) (AccessApproval, bool, error) {
+	var keys []string
+	if processKey != "" {
+		keys = []string{processKey}
+	}
+	clause, args, ok, err := holderClause(keys, sessionID)
+	if err != nil {
+		return AccessApproval{}, false, fmt.Errorf("store.LastGrantRequest: %w", err)
+	}
+	if !ok {
+		return AccessApproval{}, false, nil
+	}
+	args = append(args, project, from, AccessKindGrant)
+	a, err := scanApproval(db.QueryRowContext(ctx, `SELECT `+approvalCols+` FROM access_approvals
+		WHERE `+clause+` AND project_slug = ? AND from_project = ? AND kind = ?
+		ORDER BY requested_at DESC, id DESC LIMIT 1`, args...))
+	if errors.Is(err, sql.ErrNoRows) {
+		return AccessApproval{}, false, nil
+	}
+	if err != nil {
+		return AccessApproval{}, false, fmt.Errorf("store.LastGrantRequest: %w", err)
+	}
+	return a, true, nil
+}
+
 // AccessGrant is one row of access_grants.
 type AccessGrant struct {
 	ID          string
