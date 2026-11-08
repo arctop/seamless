@@ -57,6 +57,14 @@ public enum Outcome: Equatable {
             return m
         }
     }
+
+    /// `stderrLine` is the last line the app writes to stderr, without its
+    /// newline. The `seam mcp-proxy` bridge reads it through `open --stderr`
+    /// (the exit status does not survive LaunchServices) and reports a line
+    /// that begins "SeamApprove: Not approved:" as a cancelled approval
+    /// (cmd/seam/mcpproxy_approver.go approverOutcome). Both sides pin the
+    /// cancelled line in a test: change them together.
+    public var stderrLine: String { "SeamApprove: " + message }
 }
 
 /// One key in the store: `handle` names it to the store (the keychain

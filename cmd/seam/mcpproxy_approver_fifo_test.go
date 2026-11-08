@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/arctop/seamless/internal/core"
 )
 
 // The helper's stderr FIFO ends when the helper's write end closes -- not
@@ -63,7 +65,7 @@ func TestApproverStderr_ALateHelperIsHeard(t *testing.T) {
 	require.NoError(t, helper.Close())
 	tail, ended := s.wait(quit, time.Minute)
 	require.True(t, ended)
-	require.Equal(t, approverCancelled, approverOutcome(tail))
+	require.Equal(t, core.ApproverEndedCancelled, approverOutcome(tail))
 }
 
 func TestApproverStderr_QuitEndsTheWatch(t *testing.T) {

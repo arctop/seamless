@@ -16,10 +16,11 @@ package main
 //
 // When the helper exits, the bridge tells the daemon, on this connection's
 // MCP session, so a call that waits on the approval can answer at once rather
-// than wait out its dialog: approverEndedMethod, a notification with the
-// request_id and an outcome -- cancelled when the helper's last word is that
-// the owner cancelled ("Not approved: ..."), closed for any other end (it
-// failed, or it approved, which the daemon reads from the request itself).
+// than wait out its dialog: core.ApproverEndedNotification, a notification
+// with the request_id and an outcome -- cancelled when the helper's last word
+// is that the owner cancelled ("Not approved: ...", pinned by the app's
+// FlowTests too), closed for any other end (it failed, or it approved, which
+// the daemon reads from the request itself).
 // The helper's exit status never reaches the bridge through LaunchServices;
 // its stderr does (mcpproxy_approver_fifo.go). A helper that says nothing is
 // not reported, and the call waits as before. The word grants and denies
@@ -39,17 +40,6 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/arctop/seamless/internal/core"
-)
-
-// approverEndedMethod is the bridge's word to the daemon that the helper it
-// launched for a request has exited (internal/mcp/elicit.go takes it; both
-// sides pin the string in a test).
-const approverEndedMethod = "notifications/seamless/approver_ended"
-
-// The outcomes approverEndedMethod carries.
-const (
-	approverCancelled = "cancelled"
-	approverClosed    = "closed"
 )
 
 // approverWatchLimit bounds how long the bridge watches one helper: a
@@ -79,9 +69,9 @@ func approverOutcome(stderr []byte) string {
 	case !found:
 		return ""
 	case strings.HasPrefix(last, approverCancelPrefix):
-		return approverCancelled
+		return core.ApproverEndedCancelled
 	}
-	return approverClosed
+	return core.ApproverEndedClosed
 }
 
 // approverLaunchTimeout bounds one launch. open returns once LaunchServices
@@ -210,7 +200,7 @@ func (b *bridge) goLaunch(ctx context.Context, ask core.ApproverLaunch) {
 			return
 		}
 		if err := b.sendApproverEnded(ctx, ask.RequestID, outcome); err != nil && ctx.Err() == nil {
-			b.logf("seam mcp-proxy: %s: %v", approverEndedMethod, err)
+			b.logf("seam mcp-proxy: %s: %v", core.ApproverEndedNotification, err)
 		}
 	}()
 }
@@ -220,7 +210,7 @@ func (b *bridge) goLaunch(ctx context.Context, ask core.ApproverLaunch) {
 // the daemon answers 202 and nothing reaches the client.
 func (b *bridge) sendApproverEnded(ctx context.Context, id, outcome string) error {
 	frame, err := json.Marshal(map[string]any{
-		"jsonrpc": mcp.JSONRPC_VERSION, "method": approverEndedMethod,
+		"jsonrpc": mcp.JSONRPC_VERSION, "method": core.ApproverEndedNotification,
 		"params": map[string]string{"request_id": id, "outcome": outcome},
 	})
 	if err != nil {

@@ -400,8 +400,10 @@ any of it.
   The bridge watches the helper it launched through its stderr (`open
   --stderr` to a FIFO; the exit status never survives LaunchServices) and,
   when it exits having written its outcome (a silent helper is not
-  reported), posts `notifications/seamless/approver_ended` (request_id,
-  outcome cancelled|closed) on its own MCP session; the daemon takes it only
+  reported), posts `core.ApproverEndedNotification` (request_id, outcome
+  cancelled|closed) on its own MCP session -- a cancel is the helper's last
+  stderr line beginning "SeamApprove: Not approved:", pinned on both sides
+  (the app's FlowTests, cmd/seam's approverOutcome tests); the daemon takes it only
   on the socket, from a chain holding the request's process, while that
   dialog waits, and ends the wait at once. It grants and denies nothing.
 - **The Touch ID approver is opt-in, socket-only, and keychain-bound**

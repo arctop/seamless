@@ -16,8 +16,8 @@ package mcp
 // elicitation), with the duration the dialog's form chose (?for=) when it
 // asked one. When the helper the bridge launched exits without an approval --
 // the owner cancelled the Touch ID prompt, or it could not finish -- the
-// bridge says so (approverEndedMethod) and the wait ends at once, the request
-// still pending. Only the approve core (approval.Service.Approve,
+// bridge says so (core.ApproverEndedNotification) and the wait ends at once,
+// the request still pending. Only the approve core (approval.Service.Approve,
 // approval.Grants.Approve) decides, and the wait reads the request's row:
 // approved, denied, expired, or still pending when the wait ends. A decline
 // denies nothing -- an agent's connection may not deny -- the request stays
@@ -67,22 +67,6 @@ const (
 	// owner cancelled its prompt, or it closed for another reason (it failed).
 	answerTouchIDCancelled = "touchid_cancelled"
 	answerTouchIDClosed    = "touchid_closed"
-)
-
-// approverEndedMethod is the bridge's word that the Touch ID helper it
-// launched for a request has exited (cmd/seam/mcpproxy_approver.go sends it;
-// both sides pin the string in a test). Its params are the request_id and the
-// outcome: approverCancelled when the helper reported that the owner
-// cancelled, approverClosed for any other exit -- a failure, or the approval
-// itself, which the request's row then shows. It grants and denies nothing:
-// all it does is end a dialog's wait early, which the agent could do anyway
-// by cancelling its own call.
-const approverEndedMethod = "notifications/seamless/approver_ended"
-
-// The outcomes approverEndedMethod reports.
-const (
-	approverCancelled = "cancelled"
-	approverClosed    = "closed"
 )
 
 // Where a request stood when its dialog ended.
@@ -312,11 +296,11 @@ func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (d
 	// Touch ID: the bridge launches the helper, which reads the facts from
 	// the daemon, shows them in the prompt, and signs over the duration. When
 	// it exits without approving, the bridge says so and the wait ends. The
-	// handler is registered when first needed, so a daemon that never shows
-	// a Touch ID dialog never has one.
+	// handler is registered once, when first needed, so a daemon that never
+	// shows a Touch ID dialog never has one.
 	ended, unwatch := s.watchApproverEnd(key)
 	defer unwatch()
-	s.mcp.AddNotificationHandler(approverEndedMethod, s.handleApproverEnded)
+	s.approverOnce.Do(func() { s.mcp.AddNotificationHandler(core.ApproverEndedNotification, s.handleApproverEnded) })
 	if err := s.sendApproverLaunch(dctx, t.ID, duration); err != nil {
 		// Not queued, so there is nothing to lose by returning: wait as for
 		// any other proof (the owner may still approve elsewhere).
@@ -335,39 +319,26 @@ func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (d
 	end = s.settle(ctx, wctx, t, end)
 	if outcome != "" && end.state == statePending {
 		end.answer = answerTouchIDClosed
-		if outcome == approverCancelled {
+		if outcome == core.ApproverEndedCancelled {
 			end.answer = answerTouchIDCancelled
 		}
 	}
 	return end, true
 }
 
-// approverEnds routes the bridge's approverEndedMethod to the dialog waiting
-// on that helper: by server, and by the dialog's key (the MCP session and the
-// request). An entry lives while its dialog waits.
-var approverEnds = struct {
-	mu sync.Mutex
-	m  map[approverEndKey]chan string
-}{m: map[approverEndKey]chan string{}}
-
-type approverEndKey struct {
-	srv *Server
-	key string
-}
-
-// watchApproverEnd opens the slot the dialog keyed key waits on for its
-// helper's end, and returns it with the func that closes it.
+// watchApproverEnd opens the slot the dialog keyed key (its MCP session and
+// request) waits on for its helper's end (Server.approverEnds), and returns it
+// with the func that closes it.
 func (s *Server) watchApproverEnd(key string) (<-chan string, func()) {
-	k := approverEndKey{srv: s, key: key}
 	ch := make(chan string, 1)
-	approverEnds.mu.Lock()
-	approverEnds.m[k] = ch
-	approverEnds.mu.Unlock()
+	s.approverMu.Lock()
+	s.approverEnds[key] = ch
+	s.approverMu.Unlock()
 	return ch, func() {
-		approverEnds.mu.Lock()
-		defer approverEnds.mu.Unlock()
-		if approverEnds.m[k] == ch {
-			delete(approverEnds.m, k)
+		s.approverMu.Lock()
+		defer s.approverMu.Unlock()
+		if s.approverEnds[key] == ch {
+			delete(s.approverEnds, key)
 		}
 	}
 }
@@ -388,13 +359,12 @@ func (s *Server) handleApproverEnded(ctx context.Context, n mcp.JSONRPCNotificat
 	}
 	id, _ := n.Params.AdditionalFields["request_id"].(string)
 	outcome, _ := n.Params.AdditionalFields["outcome"].(string)
-	if id == "" || (outcome != approverCancelled && outcome != approverClosed) {
+	if id == "" || (outcome != core.ApproverEndedCancelled && outcome != core.ApproverEndedClosed) {
 		return
 	}
-	k := approverEndKey{srv: s, key: session.SessionID() + "\x00" + id}
-	approverEnds.mu.Lock()
-	ch, waiting := approverEnds.m[k]
-	approverEnds.mu.Unlock()
+	s.approverMu.Lock()
+	ch, waiting := s.approverEnds[session.SessionID()+"\x00"+id]
+	s.approverMu.Unlock()
 	if !waiting {
 		return
 	}

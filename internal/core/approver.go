@@ -32,3 +32,20 @@ type ApproverLaunch struct {
 	RequestID string `json:"request_id"`
 	Duration  string `json:"duration"`
 }
+
+// ApproverEndedNotification is the bridge's word to the daemon that the Touch
+// ID helper it launched for a request has exited (cmd/seam sends it on its
+// own MCP session; internal/mcp's dialog takes it). Its params are the
+// request_id and the outcome: ApproverEndedCancelled when the helper's last
+// line says the owner cancelled, ApproverEndedClosed for any other exit -- a
+// failure, or the approval itself, which the request's row then shows. It
+// grants and denies nothing: all it does is end a dialog's wait early, which
+// the agent could do anyway by cancelling its own call. Both binaries pin the
+// method in a test.
+const ApproverEndedNotification = "notifications/seamless/approver_ended"
+
+// The outcomes ApproverEndedNotification reports.
+const (
+	ApproverEndedCancelled = "cancelled"
+	ApproverEndedClosed    = "closed"
+)

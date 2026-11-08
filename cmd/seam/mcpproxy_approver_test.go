@@ -320,7 +320,7 @@ func TestBridge_ApprovalDialogOverTheRealTransport(t *testing.T) {
 // The bridge's word that the approver ended is pinned as the daemon pins it
 // (internal/mcp/elicit_test.go).
 func TestBridge_ApproverEndedMethodIsPinned(t *testing.T) {
-	require.Equal(t, "notifications/seamless/approver_ended", approverEndedMethod)
+	require.Equal(t, "notifications/seamless/approver_ended", core.ApproverEndedNotification)
 }
 
 // How the helper ended, read from its stderr: its last "SeamApprove: " line,
@@ -330,11 +330,11 @@ func TestApproverOutcome(t *testing.T) {
 	for _, c := range []struct {
 		name, stderr, want string
 	}{
-		{"the Touch ID prompt cancelled", "SeamApprove: Not approved: the Touch ID prompt was cancelled.\n", approverCancelled},
-		{"framework noise first", "2026-11-08 SeamApprove[812:4410] warning\nSeamApprove: Not approved: the Touch ID prompt was cancelled.\n", approverCancelled},
-		{"a failure, over two lines", "SeamApprove: The daemon refused it: this request was already decided.\n  seam approve R-7F3K\n", approverClosed},
-		{"approved", "SeamApprove: Approved access to acme-finance until 15:04.\n", approverClosed},
-		{"no newline at the end", "SeamApprove: Not approved: the Touch ID prompt was cancelled.", approverCancelled},
+		{"the Touch ID prompt cancelled", "SeamApprove: Not approved: the Touch ID prompt was cancelled.\n", core.ApproverEndedCancelled},
+		{"framework noise first", "2026-11-08 SeamApprove[812:4410] warning\nSeamApprove: Not approved: the Touch ID prompt was cancelled.\n", core.ApproverEndedCancelled},
+		{"a failure, over two lines", "SeamApprove: The daemon refused it: this request was already decided.\n  seam approve R-7F3K\n", core.ApproverEndedClosed},
+		{"approved", "SeamApprove: Approved access to acme-finance until 15:04.\n", core.ApproverEndedClosed},
+		{"no newline at the end", "SeamApprove: Not approved: the Touch ID prompt was cancelled.", core.ApproverEndedCancelled},
 		{"nothing", "", ""},
 		{"nothing of the helper's", "objc[812]: Class X is implemented in both\n", ""},
 	} {
@@ -365,7 +365,7 @@ func newEndedDaemon(t *testing.T, ask string) *endedDaemon {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if msg.Method == approverEndedMethod {
+		if msg.Method == core.ApproverEndedNotification {
 			msg.Params["session"] = r.Header.Get(headerSessionID)
 			d.ended <- msg.Params
 			w.WriteHeader(http.StatusAccepted)
@@ -391,8 +391,8 @@ func TestBridge_ApproverEndIsReported(t *testing.T) {
 	for _, c := range []struct {
 		name, line, want string
 	}{
-		{"cancelled", "SeamApprove: Not approved: the Touch ID prompt was cancelled.\n", approverCancelled},
-		{"closed", "SeamApprove: Couldn't approve: the daemon refused it.\n", approverClosed},
+		{"cancelled", "SeamApprove: Not approved: the Touch ID prompt was cancelled.\n", core.ApproverEndedCancelled},
+		{"closed", "SeamApprove: Couldn't approve: the daemon refused it.\n", core.ApproverEndedClosed},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			d := newEndedDaemon(t, approverAsk(`{"request_id":"`+testRequestID+`","duration":"1h"}`))

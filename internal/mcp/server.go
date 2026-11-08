@@ -335,6 +335,15 @@ type Server struct {
 	// for one request at once.
 	dialogMu sync.Mutex
 	dialogs  map[string]struct{}
+
+	// approverMu guards approverEnds: the Touch ID dialogs waiting on the
+	// helper the bridge launched (elicit.go), by dialog key (MCP session and
+	// request); an entry lives while its dialog waits. approverOnce registers
+	// the bridge's core.ApproverEndedNotification handler the first time a
+	// dialog waits on one.
+	approverMu   sync.Mutex
+	approverEnds map[string]chan string
+	approverOnce sync.Once
 }
 
 // NumTools returns the number of registered MCP tools. doctor asserts it equals
@@ -385,14 +394,15 @@ func New(cfg Config) *Server {
 		version = serverVersion
 	}
 	s := &Server{
-		cfg:         cfg,
-		logger:      logger,
-		fetcher:     capture.NewURLFetcher(cfg.CaptureAllowedPorts),
-		bindings:    make(map[string]binding),
-		toolSchemas: make(map[string]mcp.ToolInputSchema),
-		leaseSeen:   make(map[string]time.Time),
-		grantSeen:   make(map[string]time.Time),
-		dialogs:     make(map[string]struct{}),
+		cfg:          cfg,
+		logger:       logger,
+		fetcher:      capture.NewURLFetcher(cfg.CaptureAllowedPorts),
+		bindings:     make(map[string]binding),
+		toolSchemas:  make(map[string]mcp.ToolInputSchema),
+		leaseSeen:    make(map[string]time.Time),
+		grantSeen:    make(map[string]time.Time),
+		dialogs:      make(map[string]struct{}),
+		approverEnds: make(map[string]chan string),
 	}
 	s.mcp = mcpserver.NewMCPServer(
 		ServerName, version,

@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func finish(_ outcome: Outcome) {
-        FileHandle.standardError.write(Data(("SeamApprove: " + outcome.message + "\n").utf8))
+        FileHandle.standardError.write(Data((outcome.stderrLine + "\n").utf8))
         // A cancel shows nothing: the owner just chose it.
         if !interactive, let notice = outcome.notice {
             ui.show(notice)

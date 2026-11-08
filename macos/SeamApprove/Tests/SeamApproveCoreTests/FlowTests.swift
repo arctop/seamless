@@ -168,6 +168,9 @@ final class FlowTests: XCTestCase {
         server.stop()
         XCTAssertEqual(out.exitCode, 2)
         XCTAssertEqual(server.requests.count, 1, "a cancel posts nothing")
+        // The bridge tells a cancel by this line's beginning, "SeamApprove:
+        // Not approved:" (cmd/seam/mcpproxy_approver.go, pinned there too).
+        XCTAssertEqual(out.stderrLine, "SeamApprove: Not approved: the Touch ID prompt was cancelled.")
     }
 
     func testApproveReportsTheDaemonsRefusal() throws {
