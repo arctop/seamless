@@ -76,7 +76,9 @@ func (s *Server) handleTasksAdd(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 	s.record(ctx, core.EventTaskTransition, s.boundSession(ctx), project, id,
 		map[string]any{"to": string(core.TaskOpen), "created": true})
-	return jsonResult(taskJSON(created))
+	out := taskJSON(created)
+	s.fenceWrittenTaskDeps(ctx, created, out)
+	return jsonResult(out)
 }
 
 func tasksUpdateTool() mcp.Tool {
@@ -228,25 +230,36 @@ func (s *Server) handleTasksReady(ctx context.Context, req mcp.CallToolRequest) 
 	if err != nil {
 		return errResult("tasks_ready", err)
 	}
-	readyJSON := make([]map[string]any, 0, len(ready))
-	for _, t := range ready {
-		readyJSON = append(readyJSON, taskJSON(t))
+	readable := s.taskReader(ctx)
+	readyJSON, err := s.tasksJSON(ctx, readable, ready)
+	if err != nil {
+		return errResult("tasks_ready", err)
 	}
-	blockedJSON := make([]map[string]any, 0, len(blocked))
-	for _, b := range blocked {
-		j := taskJSON(b.Task)
+	blockedTasks := make([]core.Task, len(blocked))
+	for i, b := range blocked {
+		blockedTasks[i] = b.Task
+	}
+	blockedJSON, err := s.tasksJSON(ctx, readable, blockedTasks)
+	if err != nil {
+		return errResult("tasks_ready", err)
+	}
+	for i, b := range blocked {
 		blockers := make([]map[string]any, 0, len(b.Blockers))
 		for _, bl := range b.Blockers {
-			// A restricted account is not told what blocks its task from a
-			// project it may not reach: a title is that project's content.
-			if access.AccountOf(ctx) != "" && !access.Visible(ctx, bl.ProjectSlug) {
+			// A blocker from a project the caller may not read is withheld --
+			// its title is that project's content, and its id the handle to it
+			// -- while the entry itself stays, so the count is true.
+			ok, err := readable(bl.ProjectSlug)
+			if err != nil {
+				return errResult("tasks_ready", err)
+			}
+			if !ok {
 				blockers = append(blockers, map[string]any{withheldKey: unreachableBlocker})
 				continue
 			}
 			blockers = append(blockers, map[string]any{"id": bl.ID, "title": bl.Title, "status": string(bl.Status)})
 		}
-		j["blockers"] = blockers
-		blockedJSON = append(blockedJSON, j)
+		blockedJSON[i]["blockers"] = blockers
 	}
 	return jsonResult(map[string]any{"project": project, "ready": readyJSON, "blocked": blockedJSON})
 }
@@ -274,10 +287,11 @@ func (s *Server) handleTasksList(ctx context.Context, req mcp.CallToolRequest) (
 		if err := s.fenceRead(ctx, task.ProjectSlug); err != nil {
 			return errResult("tasks_list", err)
 		}
-		return jsonResult(map[string]any{
-			"project": task.ProjectSlug,
-			"tasks":   []map[string]any{taskJSON(task)},
-		})
+		out, err := s.tasksJSON(ctx, s.taskReader(ctx), []core.Task{task})
+		if err != nil {
+			return errResult("tasks_list", err)
+		}
+		return jsonResult(map[string]any{"project": task.ProjectSlug, "tasks": out})
 	}
 	project, err := s.resolveReadScope(ctx, argString(req, "project"))
 	if err != nil {
@@ -299,9 +313,9 @@ func (s *Server) handleTasksList(ctx context.Context, req mcp.CallToolRequest) (
 	if err != nil {
 		return errResult("tasks_list", err)
 	}
-	out := make([]map[string]any, 0, len(tasks))
-	for _, t := range tasks {
-		out = append(out, taskJSON(t))
+	out, err := s.tasksJSON(ctx, s.taskReader(ctx), tasks)
+	if err != nil {
+		return errResult("tasks_list", err)
 	}
 	return jsonResult(map[string]any{"project": project, "tasks": out})
 }
@@ -359,7 +373,7 @@ func (s *Server) handleTasksClaim(ctx context.Context, req mcp.CallToolRequest) 
 	}
 	res, err := store.ClaimTask(ctx, s.cfg.DB, id, sessionID, lease, time.Now().UTC())
 	if err != nil {
-		return errResult("tasks_claim", err)
+		return errResult("tasks_claim", s.fenceBlockedClaim(ctx, err))
 	}
 	payload := map[string]any{"to": string(res.Task.Status), "claimed_by": sessionID}
 	if res.Reclaimed {
@@ -465,20 +479,166 @@ func taskJSON(t core.Task) map[string]any {
 // whether a withheld task had them.
 var taskAccountFields = []string{"account", "updated_account"}
 
-// withholdTask is withholdContent for a task response.
+// withholdTask is withholdContent for a task response. A task the caller may
+// read still lists only the dependencies it may read (fenceWrittenTaskDeps).
 func (s *Server) withholdTask(ctx context.Context, project string, t core.Task) map[string]any {
 	out := s.withholdContent(ctx, project, taskJSON(t), taskContentFields)
 	if _, withheld := out[withheldKey]; withheld {
 		for _, f := range taskAccountFields {
 			delete(out, f)
 		}
+		return out
 	}
+	s.fenceWrittenTaskDeps(ctx, t, out)
 	return out
 }
 
-// unreachableBlocker is what tasks_ready shows a restricted account in place
-// of a blocker that lies in a project it may not reach.
+// unreachableBlocker is what tasks_ready shows, for every caller, in place of
+// a blocker that lies in a project the caller may not read. The words are the
+// ones a restricted account (peer_auth.restricted) has always been shown.
 const unreachableBlocker = "a task in a project this connection may not reach blocks this one"
+
+// withheldBlockers is tasks_claim's "task blocked" refusal's words for the n
+// blockers it may not name: the count, never an id.
+func withheldBlockers(n int) string {
+	if n == 1 {
+		return "a task in a project this connection may not reach"
+	}
+	return fmt.Sprintf("%d tasks in projects this connection may not reach", n)
+}
+
+// depsWithheldKey is the count a task answer carries in place of the
+// depends_on ids it leaves out. It is present only when one was left out, so
+// an answer whose dependencies are all readable reads exactly as before.
+const depsWithheldKey = "depends_on_withheld"
+
+// taskReader answers, for one call, whether its caller may read the tasks of
+// a project: store.CanRead from callerScope -- the question withholdContent
+// asks of a write's answer -- asked once per project. The caller's scope is
+// resolved on the first question, so an answer that names no other task costs
+// nothing. Under peer_auth CanRead asks the request's View first: a locked
+// project without a lease, a project sealed to another account, or (for a
+// restricted account) any project that is not open, reads as no.
+func (s *Server) taskReader(ctx context.Context) func(project string) (bool, error) {
+	var caller string
+	scoped := false
+	memo := map[string]bool{}
+	return func(project string) (bool, error) {
+		if ok, seen := memo[project]; seen {
+			return ok, nil
+		}
+		if !scoped {
+			caller, scoped = s.callerScope(ctx), true
+		}
+		ok, err := store.CanRead(ctx, s.cfg.DB, caller, project)
+		if err != nil {
+			return false, err
+		}
+		memo[project] = ok
+		return ok, nil
+	}
+}
+
+// tasksJSON renders tasks for a read answer, each listing only the
+// dependencies its caller may read (fenceTaskDeps).
+func (s *Server) tasksJSON(ctx context.Context, readable func(string) (bool, error), tasks []core.Task) ([]map[string]any, error) {
+	out := make([]map[string]any, len(tasks))
+	for i, t := range tasks {
+		out[i] = taskJSON(t)
+	}
+	if err := s.fenceTaskDeps(ctx, readable, tasks, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// fenceTaskDeps trims each answer's depends_on (out[i] renders tasks[i]) to
+// the dependencies whose project the caller may read, and counts the rest
+// under depsWithheldKey. A dependency id is the handle to a task in its own
+// project -- by id alone an agent asks for it, or hangs work on it -- so a
+// project's fence covers the ids of its tasks as much as their titles. An id
+// that names no task row anymore has no project to judge and stays.
+func (s *Server) fenceTaskDeps(ctx context.Context, readable func(string) (bool, error), tasks []core.Task, out []map[string]any) error {
+	var ids []string
+	for _, t := range tasks {
+		ids = append(ids, t.DependsOn...)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	projects, err := store.TaskProjects(ctx, s.cfg.DB, ids)
+	if err != nil {
+		return err
+	}
+	for i, t := range tasks {
+		kept := make([]string, 0, len(t.DependsOn))
+		for _, dep := range t.DependsOn {
+			if project, known := projects[dep]; known {
+				ok, err := readable(project)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					continue
+				}
+			}
+			kept = append(kept, dep)
+		}
+		n := len(t.DependsOn) - len(kept)
+		if n == 0 {
+			continue
+		}
+		if len(kept) == 0 {
+			delete(out[i], "depends_on")
+		} else {
+			out[i]["depends_on"] = kept
+		}
+		out[i][depsWithheldKey] = n
+	}
+	return nil
+}
+
+// fenceWrittenTaskDeps is fenceTaskDeps for a write's answer, which cannot fail
+// the call: the write already landed. A lookup that fails withholds every
+// dependency, failing closed as withholdContent does.
+func (s *Server) fenceWrittenTaskDeps(ctx context.Context, t core.Task, out map[string]any) {
+	if err := s.fenceTaskDeps(ctx, s.taskReader(ctx), []core.Task{t}, []map[string]any{out}); err != nil {
+		s.logger.Warn("mcp: response dependency fence", "task", t.ID, "error", err)
+		delete(out, "depends_on")
+		out[depsWithheldKey] = len(t.DependsOn)
+	}
+}
+
+// fenceBlockedClaim withholds, from tasks_claim's "task blocked" refusal, the
+// blockers its caller may not read: the refusal names the rest as before and
+// counts these. Any other error, and a refusal whose blockers are all
+// readable, is returned unchanged. A lookup that fails withholds every
+// blocker: the refusal's cause stays true, and nothing it cannot vouch for is
+// named.
+func (s *Server) fenceBlockedClaim(ctx context.Context, err error) error {
+	var blocked *store.TaskBlockedError
+	if !errors.As(err, &blocked) {
+		return err
+	}
+	readable := s.taskReader(ctx)
+	kept := make([]core.Task, 0, len(blocked.Blockers))
+	for _, b := range blocked.Blockers {
+		ok, rerr := readable(b.ProjectSlug)
+		if rerr != nil {
+			s.logger.Warn("mcp: claim refusal fence", "task", blocked.TaskID, "error", rerr)
+			kept = kept[:0]
+			break
+		}
+		if ok {
+			kept = append(kept, b)
+		}
+	}
+	n := len(blocked.Blockers) - len(kept)
+	if n == 0 {
+		return err
+	}
+	return &store.TaskBlockedError{TaskID: blocked.TaskID, Blockers: kept, Withheld: withheldBlockers(n)}
+}
 
 // taskByIDFor is store.TaskByID for the caller in ctx. A restricted account
 // (peer_auth.restricted) is told that a task in a project it may not reach

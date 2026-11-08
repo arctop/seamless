@@ -28,6 +28,35 @@ var ErrTaskClaimConflict = errors.New("task already claimed")
 // -- it becomes claimable the moment its blockers close.
 var ErrTaskBlocked = errors.New("task blocked")
 
+// TaskBlockedError is ClaimTask's ErrTaskBlocked refusal, carrying the blockers
+// it names so a surface can judge each against its caller's read fence before
+// the message reaches anyone: a blocker in a project the caller may not read
+// is that project's content, its id included. A surface that withholds some
+// keeps the rest in Blockers and describes the ones it left out in Withheld,
+// which the message renders after them; the store itself sets only TaskID and
+// Blockers.
+type TaskBlockedError struct {
+	TaskID   string
+	Blockers []core.Task
+	// Withheld is rendered verbatim after the named blockers ("" renders
+	// nothing): the surface's words for the blockers it may not name.
+	Withheld string
+}
+
+func (e *TaskBlockedError) Error() string {
+	parts := make([]string, 0, len(e.Blockers)+1)
+	for _, b := range e.Blockers {
+		parts = append(parts, fmt.Sprintf("%s (%s)", b.ID, b.Status))
+	}
+	if e.Withheld != "" {
+		parts = append(parts, e.Withheld)
+	}
+	return fmt.Sprintf("store.ClaimTask: %s: task %q waits on %s", ErrTaskBlocked, e.TaskID, strings.Join(parts, ", "))
+}
+
+// Unwrap makes errors.Is(err, ErrTaskBlocked) hold.
+func (e *TaskBlockedError) Unwrap() error { return ErrTaskBlocked }
+
 // ErrTaskClosed is returned when a claim targets a done/dropped task. No one
 // holds it either; there is simply nothing left to claim.
 var ErrTaskClosed = errors.New("task closed")
@@ -53,9 +82,9 @@ type ClaimResult struct {
 //
 // Otherwise it returns an error naming the actual refusal: ErrTaskClaimConflict
 // when another live lease holds the task, ErrTaskBlocked when the task is open
-// with an unfinished dependency (naming the blockers), ErrTaskClosed when it is
-// done/dropped. Lease expiry is enforced lazily here -- there is no background
-// sweeper. sessionID must be non-empty.
+// with an unfinished dependency (a *TaskBlockedError naming the blockers),
+// ErrTaskClosed when it is done/dropped. Lease expiry is enforced lazily here
+// -- there is no background sweeper. sessionID must be non-empty.
 //
 // core.Task.ClaimLive is the single authority on whether a task is held, and
 // branches (b)+(c) are exactly its negation for an in_progress row: an empty
@@ -165,12 +194,7 @@ func claimRefusal(ctx context.Context, db *sql.DB, id string, now time.Time) (co
 			return core.Task{}, err
 		}
 		if bs := blockers[id]; len(bs) > 0 {
-			parts := make([]string, len(bs))
-			for i, b := range bs {
-				parts[i] = fmt.Sprintf("%s (%s)", b.ID, b.Status)
-			}
-			return cur, fmt.Errorf("store.ClaimTask: %w: task %q waits on %s",
-				ErrTaskBlocked, id, strings.Join(parts, ", "))
+			return cur, &TaskBlockedError{TaskID: id, Blockers: bs}
 		}
 	}
 	// The re-read no longer explains the miss: the row changed between the CAS

@@ -1,0 +1,201 @@
+{
+  "elicitations": 0,
+  "event_kinds": {
+    "agent.mishap @example-open-alpha": 1,
+    "favorite.changed @example-open-alpha": 2,
+    "hook.prompt @example-confidential": 1,
+    "memory.archived @example-open-alpha": 1,
+    "memory.read @example-open-alpha": 5,
+    "memory.superseded @example-open-alpha": 1,
+    "memory.written @": 1,
+    "memory.written @example-confidential": 1,
+    "memory.written @example-open-alpha": 8,
+    "memory.written @example-sealed": 1,
+    "note.read @example-open-alpha": 2,
+    "note.written @example-confidential": 2,
+    "note.written @example-open-alpha": 6,
+    "plan.approved @example-open-alpha": 1,
+    "plan.captured @example-open-alpha": 1,
+    "plan.presented @example-open-alpha": 1,
+    "recall.miss @example-open-alpha": 1,
+    "retrieval.injected @": 2,
+    "retrieval.injected @example-confidential": 3,
+    "retrieval.injected @example-open-alpha": 9,
+    "retrieval.injected @example-open-beta": 1,
+    "session.ended @example-confidential": 2,
+    "session.ended @example-open-alpha": 2,
+    "session.ended @example-open-beta": 1,
+    "session.ended @example-sealed": 1,
+    "session.started @example-confidential": 2,
+    "session.started @example-open-alpha": 4,
+    "session.started @example-open-beta": 1,
+    "session.started @example-sealed": 1,
+    "task.transition @example-confidential": 2,
+    "task.transition @example-open-alpha": 8,
+    "task.transition @example-open-beta": 2,
+    "tool.call @": 6,
+    "tool.call @example-confidential": 10,
+    "tool.call @example-open-alpha": 76,
+    "tool.call @example-sealed": 6,
+    "trial.recorded @example-open-alpha": 1
+  },
+  "event_payload_keys": {
+    "agent.mishap": [
+      "description"
+    ],
+    "favorite.changed": [
+      "by",
+      "favorite",
+      "id",
+      "kind"
+    ],
+    "hook.prompt": [
+      "claude_session_id",
+      "external_client",
+      "hook",
+      "matched",
+      "prompt"
+    ],
+    "memory.archived": [
+      "name"
+    ],
+    "memory.read": [
+      "name"
+    ],
+    "memory.superseded": [
+      "name",
+      "superseded_by"
+    ],
+    "memory.written": [
+      "appended",
+      "diff",
+      "edited",
+      "kind",
+      "name",
+      "updated"
+    ],
+    "note.read": [
+      "slug"
+    ],
+    "note.written": [
+      "appended",
+      "deleted",
+      "diff",
+      "edited",
+      "slug",
+      "title",
+      "updated"
+    ],
+    "plan.approved": [
+      "basename",
+      "claude_session_id",
+      "content",
+      "external_client",
+      "iteration",
+      "plan_slug",
+      "title"
+    ],
+    "plan.captured": [
+      "basename",
+      "claude_session_id",
+      "content",
+      "external_client",
+      "iteration",
+      "plan_slug",
+      "title"
+    ],
+    "plan.presented": [
+      "basename",
+      "claude_session_id",
+      "external_client",
+      "plan_slug"
+    ],
+    "recall.miss": [
+      "limit",
+      "query",
+      "scope",
+      "source"
+    ],
+    "retrieval.injected": [
+      "claude_session_id",
+      "content",
+      "emitted_estimated_tokens",
+      "external_client",
+      "hook",
+      "item_ids",
+      "item_ids_exact",
+      "item_scores",
+      "original_estimated_tokens",
+      "original_item_count",
+      "prompt",
+      "query",
+      "source",
+      "transport",
+      "truncated"
+    ],
+    "session.ended": [
+      "ambient",
+      "claims_released",
+      "findings",
+      "harvested",
+      "linked",
+      "reason"
+    ],
+    "session.started": [
+      "adopted",
+      "ambient",
+      "resumed"
+    ],
+    "task.transition": [
+      "claimed_by",
+      "claude_session_id",
+      "created",
+      "external_client",
+      "plan_slug",
+      "released",
+      "to"
+    ],
+    "tool.call": [
+      "args",
+      "duration_ms",
+      "error",
+      "is_error",
+      "result",
+      "tool"
+    ],
+    "trial.recorded": [
+      "lab",
+      "outcome",
+      "title"
+    ]
+  },
+  "held_writes": 0,
+  "notifications": null,
+  "row_counts": {
+    "commit_records": 0,
+    "corpus_records": 0,
+    "embeddings": 0,
+    "events": 176,
+    "fts": 22,
+    "fts_config": 1,
+    "fts_content": 22,
+    "fts_data": 9,
+    "fts_docsize": 22,
+    "fts_idx": 7,
+    "gardener_proposals": 0,
+    "held_writes": 0,
+    "jobs": 0,
+    "memories_index": 7,
+    "notes_index": 3,
+    "owner_confirmations": 0,
+    "projects": 6,
+    "repo_map": 3,
+    "retrieval_stats": 18,
+    "session_taints": 0,
+    "sessions": 6,
+    "settings": 2,
+    "task_deps": 2,
+    "tasks": 7,
+    "trials": 1
+  }
+}

@@ -248,8 +248,10 @@ seam ready [--project P] [--blocked] [--plan S] [--json]
 
 Calls `tasks_ready` and lists the actionable queue by short id and title.
 `--blocked` additionally lists blocked tasks, each followed by its blockers and
-their statuses. `--plan S` shows that plan's step tasks instead of the default
-queue - plan steps are excluded from the default view. Prints
+their statuses; a blocker in a project this connection may not read prints the
+server's one-line notice in its place. `--plan S` shows that plan's step tasks
+instead of the default queue - plan steps are excluded from the default view.
+Prints
 `ready: (nothing actionable)` when the queue is empty.
 
 ### seam task list {#seam_task_list}

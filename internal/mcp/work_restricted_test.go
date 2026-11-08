@@ -808,22 +808,37 @@ func TestRestricted_TasksByIDAndDependencies(t *testing.T) {
 	require.Zero(t, r.count(`SELECT COUNT(*) FROM task_deps WHERE depends_on = ?`, closed))
 
 	// A dependency the owner made from an open task onto the confidential one
-	// shows the account that something blocks the open task, never its title.
+	// shows the account that something blocks the open task, never its title
+	// or its id.
 	blocked := r.ok(owner, "tasks_add", map[string]any{"project": wkOpen, "title": "waits on the vault",
 		"depends_on": []string{closed}})["id"].(string)
-	blockerOf := func(cli *mcpclient.Client) map[string]any {
+	blockerOf := func(cli *mcpclient.Client) (task, blocker map[string]any) {
 		out := r.ok(cli, "tasks_ready", map[string]any{"project": wkOpen})
 		for _, b := range out["blocked"].([]any) {
 			if b.(map[string]any)["id"] == blocked {
 				bl := b.(map[string]any)["blockers"].([]any)
 				require.Len(t, bl, 1)
-				return bl[0].(map[string]any)
+				return b.(map[string]any), bl[0].(map[string]any)
 			}
 		}
 		t.Fatalf("task %s not in the blocked list", blocked)
-		return nil
+		return nil, nil
 	}
-	require.Equal(t, map[string]any{"withheld": "a task in a project this connection may not reach blocks this one"},
-		blockerOf(acct))
-	require.Equal(t, "confidential work", blockerOf(owner)["title"], "the owner's view is as before")
+	withheld := map[string]any{"withheld": "a task in a project this connection may not reach blocks this one"}
+	task, blocker := blockerOf(acct)
+	require.Equal(t, withheld, blocker)
+	require.NotContains(t, task, "depends_on", "nor the blocker's id")
+	require.Equal(t, float64(1), task["depends_on_withheld"])
+	// The confidential fence covers blocker listings for every caller: the
+	// owner unbound (the global scope) is withheld the same way, and a session
+	// bound to the confidential project reads it.
+	task, blocker = blockerOf(owner)
+	require.Equal(t, withheld, blocker)
+	require.NotContains(t, task, "depends_on")
+	inside := r.owner("")
+	r.ok(inside, "session_start", map[string]any{"project": wkConf, "name": "cc/inside-conf"})
+	task, blocker = blockerOf(inside)
+	require.Equal(t, "confidential work", blocker["title"])
+	require.Equal(t, []any{closed}, task["depends_on"])
+	require.NotContains(t, task, "depends_on_withheld")
 }

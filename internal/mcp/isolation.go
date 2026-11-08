@@ -350,6 +350,12 @@ func (s *Server) ambientFenceErr(ctx context.Context, project string) error {
 // so narrowing spends the query's LIMIT on rows the caller can actually get.
 // CanRead makes both decisions; nothing here restates the policy.
 func (s *Server) trialsForCaller(ctx context.Context, f store.TrialFilter) ([]core.Trial, error) {
+	// A call whose session is in a locked project is refused at the lock, as
+	// every scoped read is: callerScope would judge it as global and answer an
+	// empty lab, a plausible result for a project the caller may not reach.
+	if b, ok := s.lockedBinding(ctx); ok {
+		return nil, s.lockedScopeRefusal(ctx, b.project)
+	}
 	caller := s.callerScope(ctx)
 	allowed := make(map[string]bool, 2)
 	readable := func(project string) (bool, error) {

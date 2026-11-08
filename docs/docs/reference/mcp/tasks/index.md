@@ -39,6 +39,14 @@ either tool to see that plan's steps instead.
 Every successful task mutation returns the resulting task row, including its id,
 status, dependency state, claim holder, and lease fields when present.
 
+No task answer names a task its caller may not read: one in a confidential
+project, read from a session bound elsewhere, or in a locked project without a
+lease. Where such a task blocks another, `tasks_ready` lists the blocker as
+`{"withheld": "..."}` in its place, so the count stays true; `depends_on` lists
+only the ids the caller may read, and `depends_on_withheld` counts the rest; and
+the claim's "task blocked" refusal names the readable blockers and counts the
+others. With nothing isolated or locked, every answer reads as it always has.
+
 | Call | Refuses when |
 |---|---|
 | `tasks_add` | A blocker is missing or the new dependency would create a cycle |

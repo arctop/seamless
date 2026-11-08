@@ -23,6 +23,11 @@ func gardenerProposalsTool() mcp.Tool {
 
 func (s *Server) handleGardenerProposals(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	kind := argString(req, "kind")
+	// A session in a locked project is refused at the lock rather than judged
+	// as global (callerScope) and handed a filtered, plausible listing.
+	if b, ok := s.lockedBinding(ctx); ok {
+		return errResult("gardener_proposals", s.lockedScopeRefusal(ctx, b.project))
+	}
 	proposals, err := store.PendingProposals(ctx, s.cfg.DB, kind)
 	if err != nil {
 		return errResult("gardener_proposals", err)

@@ -63,6 +63,12 @@ func runReady(ctx context.Context, e *env, o *readyOpts, _ []string) error {
 			if bl, ok := m["blockers"].([]any); ok {
 				for _, b := range bl {
 					bm, _ := b.(map[string]any)
+					// A blocker from a project this connection may not read
+					// comes without title or status, only the server's words.
+					if w := str(bm["withheld"]); w != "" {
+						fmt.Fprintf(e.stdout, "      %s\n", w)
+						continue
+					}
 					fmt.Fprintf(e.stdout, "      blocked by %s (%s)\n", str(bm["title"]), str(bm["status"]))
 				}
 			}

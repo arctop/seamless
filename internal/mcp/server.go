@@ -950,7 +950,28 @@ func (s *Server) knownProjects(ctx context.Context) string {
 // console renders is where a wrong one can be noticed and merged, rather than
 // lingering as a directory nothing lists. EnsureProject is idempotent, and a
 // no-op for the global scope.
+//
+// A read grant's confinement (isolation.requests) holds whichever way the
+// scope was found: an explicit project meets it in fenceWrite, and a scope
+// inherited from the binding, an ambient session or the peer's home meets it
+// here -- otherwise a confined holder could rebind (session_start, or session=
+// naming another session) and write wherever it landed, global included.
 func (s *Server) resolveWriteScope(ctx context.Context, explicit string) (string, error) {
+	project, err := s.resolveWriteScopeUnconfined(ctx, explicit)
+	if err != nil || explicit != "" {
+		return project, err
+	}
+	if access.WriteConfined(ctx, project) {
+		ferr := &fenceRefusal{reason: screening.RefusedFenceWrite, err: s.confinedRefusal(ctx, project)}
+		s.noteRefusal(ctx, ferr, project)
+		return "", ferr
+	}
+	return project, nil
+}
+
+// resolveWriteScopeUnconfined is resolveWriteScope before a read grant's
+// confinement is applied to an inherited scope.
+func (s *Server) resolveWriteScopeUnconfined(ctx context.Context, explicit string) (string, error) {
 	if explicit != "" {
 		project, err := validateProjectArg(explicit)
 		if err != nil {

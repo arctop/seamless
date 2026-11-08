@@ -1,0 +1,1347 @@
+{
+  "count": 33,
+  "next_cursor": "",
+  "tools": [
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Fetch a web page (SSRF-guarded: private/loopback addresses are rejected) and save its readable content as a note. Returns the new note's id.",
+      "inputSchema": {
+        "properties": {
+          "project": {
+            "description": "project slug; defaults to the bound/ambient session's project. An unknown slug CREATES that project -- naming a new one is normal and never an error. Pass project=global ONLY for knowledge that belongs in EVERY project's briefing; it is not a neutral default. With no session and no explicit project the call is rejected as ambiguous. A session bound to a confidential or sealed project can write ONLY into that project.",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          },
+          "url": {
+            "description": "http(s) URL to capture",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "name": "capture_url"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Star or unstar an item. Favorites sort first in the console, are pinned into session briefings (memories), and get a mild recall rank boost. For memories and notes the flag is stored in the file's frontmatter; starring never bumps an item's updated time.",
+      "inputSchema": {
+        "properties": {
+          "favorite": {
+            "description": "true to star, false to unstar",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "the item's identifier: memory name, note id (or slug), project slug, plan slug, task id, session id (or name), trial id",
+            "type": "string"
+          },
+          "kind": {
+            "description": "what kind of item to star",
+            "enum": [
+              "memory",
+              "note",
+              "project",
+              "plan",
+              "task",
+              "session",
+              "trial"
+            ],
+            "type": "string"
+          },
+          "project": {
+            "description": "project scope for memory-name/note-slug resolution; defaults to the bound session's project",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "favorite"
+        ],
+        "type": "object"
+      },
+      "name": "favorite_set"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Resolve a gardener proposal. action=apply carries out the effect (archive -> retire the memory; merge -> supersede the older by the newer; consolidate -> write a unified memory superseding its sources; digest -> save the summary as a note; reproject -> move the memory to another project; rekind -> reclassify the memory's kind in place; split -> create the child/shared projects, link the family, parent the children, retire the source; memory_wanted -> open a task to write the missing memory; tool_error -> open a task to fix the recurring error; merge_plans -> retag a stranded captured plan's notes onto the plan that holds the steps and settle the capture as merged). A proposal whose memory has gone inactive since it was raised is settled as dismissed instead, with the reason under settled. Rejecting has two strengths: action=dismiss discards this proposal and the evidence behind it, so a pattern that keeps recurring is raised again later; action=hide blocks the pattern permanently, so no recurrence re-raises it. Prefer dismiss unless the suggestion is wrong in principle rather than wrong for now. Both are reversible by the owner from the console.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "description": "apply (default), dismiss (until it recurs), or hide (forever)",
+            "enum": [
+              "apply",
+              "dismiss",
+              "hide"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "description": "proposal id (ULID)",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "gardener_apply"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List pending gardener proposals (merge/consolidate duplicate memories, archive stale memories, write a monthly session digest, reproject a memory to another project, rekind a memory to a different kind, set up a project split, abandon a never-approved captured plan, fold a stranded captured plan into the composition that carries its steps, write a memory agents keep searching for in vain, or fix an error agents keep hitting). Review, then apply, dismiss or hide each with gardener_apply. Read-only.",
+      "inputSchema": {
+        "properties": {
+          "kind": {
+            "description": "filter by proposal kind (default: all pending)",
+            "enum": [
+              "merge",
+              "archive",
+              "digest",
+              "consolidate",
+              "reproject",
+              "split",
+              "abandon_plan",
+              "memory_wanted",
+              "tool_error",
+              "rekind",
+              "ship_plan",
+              "relocate",
+              "merge_plans"
+            ],
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "gardener_proposals"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "The natural-language entry point for REORGANIZING memory. Describe the change in plain language and it returns reviewable pending proposals -- fold duplicates together (\"these two memories are duplicates -- keep the newer\"), retire stale memories (\"archive anything about the old port 8080\"), synthesize several into one (\"combine the three auth-flow notes\"), move a mis-filed memory to another EXISTING project (\"the iOS DFU memory belongs in arctop-ios\"), or reclassify a memory's kind (\"the wordmark memory is a convention, not a constraint\"). Use this whenever the user describes how they want their knowledge organized; if the intended change is ambiguous, ask them a clarifying question first. It NEVER mutates memories: it only creates pending proposals -- review with gardener_proposals, resolve with gardener_apply. If the request is to split one project into NEW child projects, it recognizes that and returns guidance (splitSource) pointing you at gardener_split instead. Needs an LLM chat client.",
+      "inputSchema": {
+        "properties": {
+          "project": {
+            "description": "scope candidate memories: a project slug (its memories + globals), \"global\" for globals only, or \"all\" for every project on the machine. Omit to use the session's project.",
+            "type": "string"
+          },
+          "request": {
+            "description": "the reorganization request in plain language",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "type": "object"
+      },
+      "name": "gardener_request"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Plan a project SPLIT: divide one existing project into two or more NEW child projects, keeping cross-platform memories in a shared parent (e.g. split arctop-app into arctop-ios + arctop-android with shared arctop-mobile-apps). Use this when the user wants to break one project into several -- gardener_request points you here (via splitSource) when it detects that intent. It NEVER creates a project or moves a memory: it only creates reviewable pending proposals -- one 'split' setup proposal plus one 'reproject' per memory, all under plan 'split-<source>'. Review with gardener_proposals, then apply each with gardener_apply (or retarget a memory first in the console). Needs an LLM chat client and a known source project slug (see project_list).",
+      "inputSchema": {
+        "properties": {
+          "instruction": {
+            "description": "optional guidance: which children, what stays shared",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          },
+          "source": {
+            "description": "the project slug to split (its own memories are classified into the children/shared parent)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
+      "name": "gardener_split"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Open a research lab and get its recent trial history for context -- including trials other agents recorded, so parallel agents can share one investigation. Use a lab for systematic investigations whose expected-vs-actual results must outlive the session. Binds the lab to this connection so later trial_record calls inherit it. A lab is just a label -- a new one needs no setup; it exists once its first trial is recorded.",
+      "inputSchema": {
+        "properties": {
+          "goal": {
+            "description": "optional note on what this lab is investigating",
+            "type": "string"
+          },
+          "lab": {
+            "description": "lab name (a stable label for a line of investigation)",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lab"
+        ],
+        "type": "object"
+      },
+      "name": "lab_open"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Append markdown to an existing memory's body. The memory keeps its id. To create a new memory, use memory_write.",
+      "inputSchema": {
+        "properties": {
+          "body": {
+            "description": "markdown to append (aliases: content, text)",
+            "type": "string"
+          },
+          "name": {
+            "description": "memory name",
+            "type": "string"
+          },
+          "project": {
+            "description": "project slug; defaults to the bound/ambient session's project, then global. Pass project=global to target a global memory.",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "body"
+        ],
+        "type": "object"
+      },
+      "name": "memory_append"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Delete a memory by name: the markdown file leaves the disk and its index row goes with it, with no provenance and no pointer left behind. Prefer nearly anything else. To replace knowledge that turned out to be wrong, use memory_write with supersedes -- the old memory drops out of every index (briefings, recall) but stays readable, pointing at what replaced it, which is how a later reader learns the thing was reconsidered rather than that it was never believed. To retire something merely stale, leave it for the gardener's archive proposal. Reserve deletion for memories written by mistake: a duplicate, a test, a write into the wrong project.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "description": "memory name",
+            "type": "string"
+          },
+          "project": {
+            "description": "project slug; defaults to the bound session's project",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "memory_delete"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Edit an existing memory in place with exact search/replace, instead of resending its whole body through memory_write. Each edit's old_string must match the current body exactly and uniquely (or pass replace_all); all edits apply together or none do, so a failed match changes nothing. It is also the only way to change a memory's description or tags on their own: send description/tags_add/tags_remove with no edits and the body is left untouched (memory_write requires a body, so there was no metadata-only path before this), and tags_remove is the only way to clear a tag at all. Returns a unified diff of what landed plus the new content_hash. Use this for corrections that do not change what the item CLAIMS: typos, broken formatting, a stale path or command, a stage's Status flip, metadata. If the MEANING changes -- the conclusion is now different, the advice reversed -- that is a new memory: use memory_write with supersedes, which retires the old one into readable history instead of erasing what it used to say.",
+      "inputSchema": {
+        "properties": {
+          "description": {
+            "description": "replace the one-line description (<=150 chars -- the only text shown in indexes); omit to leave it untouched",
+            "type": "string"
+          },
+          "edits": {
+            "description": "ordered list of exact search/replace edits, applied in order to the CURRENT body. Each is {old_string, new_string, replace_all?}. old_string must match the body EXACTLY (whitespace and indentation included) and must be unique unless replace_all is true; include surrounding lines to make it unique. All-or-nothing: if any edit fails to match, nothing is written.",
+            "items": {
+              "properties": {
+                "new_string": {
+                  "description": "replacement text; must differ from old_string. Empty string deletes the match.",
+                  "type": "string"
+                },
+                "old_string": {
+                  "description": "exact text to find in the current body (verbatim, including whitespace)",
+                  "type": "string"
+                },
+                "replace_all": {
+                  "description": "replace every occurrence instead of requiring exactly one (default false)",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "old_string",
+                "new_string"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "expect_hash": {
+            "description": "optional precondition: the content_hash you last read for this item (memory_read/notes_read return it). The write is refused if the stored file has changed since -- another agent or the owner edited it -- so re-read and re-apply your change instead of overwriting theirs. Omit it to write unconditionally.",
+            "type": "string"
+          },
+          "name": {
+            "description": "memory name (kebab-case, as memory_read takes it)",
+            "type": "string"
+          },
+          "project": {
+            "description": "project slug; defaults to the bound/ambient session's project, then global. Pass project=global to target a global memory.",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          },
+          "tags_add": {
+            "description": "tags to add, leaving the rest in place (a comma-separated string is also accepted)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tags_remove": {
+            "description": "tags to remove, leaving the rest in place; this is how a tag gets cleared (a comma-separated string is also accepted)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "memory_edit"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Read a memory by name within the current project (falling back to a global memory of the same name), or directly by id. It reads Seamless memories only -- a name listed in your client's own MEMORY.md (Claude Code's file-based auto-memory) is a local file, not a Seamless memory: open it with your file tools.",
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "description": "memory id (ULID), as carried by events, recall results, and gardener proposals; bypasses name/project resolution",
+            "type": "string"
+          },
+          "name": {
+            "description": "memory name; pass exactly one of name or id",
+            "type": "string"
+          },
+          "project": {
+            "description": "project slug; defaults to the bound session's project",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "memory_read"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Create or update a durable memory -- the compact knowledge a future session must not miss (a constraint, gotcha, decision, runbook). Long-form write-ups belong in notes_create; put the one-line lesson here. Writing an existing name updates it in place (its id is stable). On a new name, a semantically similar existing memory is reported as an advisory hint; the write still proceeds. The hint is withheld when the target project's content is fenced from you (see the withheld marker on the response) -- the write lands either way. Pass supersedes to replace a DIFFERENT, now-outdated memory: it is marked invalid and leaves every index (briefing, recall) but stays readable with a pointer here. If superseding fails, the new memory is still written and kept; the error says how to retry.",
+      "inputSchema": {
+        "properties": {
+          "body": {
+            "description": "markdown body (aliases: content, text)",
+            "type": "string"
+          },
+          "description": {
+            "description": "one line, <=150 chars -- the only text shown in indexes",
+            "type": "string"
+          },
+          "kind": {
+            "description": "memory kind; constraint = what any agent must or must not do regardless of task; convention = a project-local choice or layout fact (naming, branding, where things live or deploy, which files sync together); for kind=stage, open the body with Status: open|in_progress|blocked|done and optionally Gate: human|ai, and flip the status with memory_edit (or a full memory_write) -- append cannot change the header, which is parsed from the top of the body",
+            "enum": [
+              "constraint",
+              "convention",
+              "runbook",
+              "protocol",
+              "gotcha",
+              "decision",
+              "refuted",
+              "reference",
+              "stage"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "description": "kebab-case identifier, unique within the project",
+            "type": "string"
+          },
+          "project": {
+            "description": "project slug; defaults to the bound/ambient session's project. An unknown slug CREATES that project -- naming a new one is normal and never an error. Pass project=global ONLY for knowledge that belongs in EVERY project's briefing; it is not a neutral default. With no session and no explicit project the call is rejected as ambiguous. A session bound to a confidential or sealed project can write ONLY into that project.",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          },
+          "supersedes": {
+            "description": "name of an existing memory this one replaces; that memory is marked superseded (invalid) and pointed here",
+            "type": "string"
+          },
+          "tags": {
+            "description": "tags, replacing all (a comma-separated string is also accepted); omit to leave an existing memory's tags untouched, and note an empty list reads as absent, not as a clear",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "description",
+          "body"
+        ],
+        "type": "object"
+      },
+      "name": "memory_write"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Append a UTC-timestamped line to an existing note's body, by id. Use it when a note is already the right home for what you learned -- a running investigation log, a decision record gaining one more data point -- so the note keeps its id, slug, and place in any plan composition instead of fragmenting into near-duplicates. Appending only ever adds: use notes_update to correct or restructure what is already there, and notes_create when the finding deserves an artifact of its own. Needs the note's id (ULID), which notes_create returns and briefings and plan compositions carry; notes_read resolves one from a slug.",
+      "inputSchema": {
+        "properties": {
+          "body": {
+            "description": "text to append (aliases: content, text)",
+            "type": "string"
+          },
+          "id": {
+            "description": "note id (ULID)",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "body"
+        ],
+        "type": "object"
+      },
+      "name": "notes_append"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Create a work note -- a research finding, decision record, meeting summary, or any artifact long enough to deserve its own file. Auto-tagged created-by:agent. Notes carry the long form; memory_write carries the compact durable knowledge a future session must not miss, so put the write-up here and the one-line lesson there rather than duplicating either. Pass plan=<slug> when the note is a plan's narrative or supporting context, so it joins that plan's composition beside its tasks. Do not use this for what the repo, AGENTS.md/CLAUDE.md, or the current conversation already records, and use notes_append to extend an existing note rather than creating a near-duplicate of it.",
+      "inputSchema": {
+        "properties": {
+          "body": {
+            "description": "markdown body (aliases: content, text)",
+            "type": "string"
+          },
+          "description": {
+            "description": "optional one-line summary",
+            "type": "string"
+          },
+          "plan": {
+            "description": "optional plan slug (plan:<slug> convention): tags this note into that plan's composition so it surfaces on the Plans screen alongside its tasks_add plan=<slug> steps. Use it whenever this note is a plan's narrative or supporting context.",
+            "type": "string"
+          },
+          "project": {
+            "description": "project slug; defaults to the bound/ambient session's project. An unknown slug CREATES that project -- naming a new one is normal and never an error. Pass project=global ONLY for knowledge that belongs in EVERY project's briefing; it is not a neutral default. With no session and no explicit project the call is rejected as ambiguous. A session bound to a confidential or sealed project can write ONLY into that project.",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          },
+          "source_url": {
+            "description": "optional source URL",
+            "type": "string"
+          },
+          "tags": {
+            "description": "tags (a comma-separated string is also accepted)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "description": "note title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "type": "object"
+      },
+      "name": "notes_create"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Delete a note by id: the markdown file leaves the disk and its index row goes with it. Permanent, and it leaves no pointer behind, so reserve it for notes that should never have existed -- a duplicate, a write into the wrong project, an agent's own scratch. To fix a note's content use notes_update, and to add to it notes_append; neither loses the artifact. A note tagged into a plan (plan:<slug>) is that plan's narrative for whoever inherits it, so read it with notes_read before deciding it is disposable.",
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "description": "note id (ULID)",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "notes_delete"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Edit an existing note in place with exact search/replace, by id, instead of resending its whole body through notes_update. Each edit's old_string must match the current body exactly and uniquely (or pass replace_all); all edits apply together or none do, so a failed match changes nothing. This is the tool for correcting or restructuring part of a long note -- notes_append only ever adds, and notes_update replaces the whole body. Returns a unified diff of what landed plus the new content_hash.",
+      "inputSchema": {
+        "properties": {
+          "edits": {
+            "description": "ordered list of exact search/replace edits, applied in order to the CURRENT body. Each is {old_string, new_string, replace_all?}. old_string must match the body EXACTLY (whitespace and indentation included) and must be unique unless replace_all is true; include surrounding lines to make it unique. All-or-nothing: if any edit fails to match, nothing is written.",
+            "items": {
+              "properties": {
+                "new_string": {
+                  "description": "replacement text; must differ from old_string. Empty string deletes the match.",
+                  "type": "string"
+                },
+                "old_string": {
+                  "description": "exact text to find in the current body (verbatim, including whitespace)",
+                  "type": "string"
+                },
+                "replace_all": {
+                  "description": "replace every occurrence instead of requiring exactly one (default false)",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "old_string",
+                "new_string"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "expect_hash": {
+            "description": "optional precondition: the content_hash you last read for this item (memory_read/notes_read return it). The write is refused if the stored file has changed since -- another agent or the owner edited it -- so re-read and re-apply your change instead of overwriting theirs. Omit it to write unconditionally.",
+            "type": "string"
+          },
+          "id": {
+            "description": "note id (ULID), as notes_create returns and briefings and plan compositions carry",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "edits"
+        ],
+        "type": "object"
+      },
+      "name": "notes_edit"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Read a note by id, or by slug within the current project (falling back to a global note of the same slug). A plan's slug is not a note's: a miss on one names the plan's narrative note.",
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "description": "note id (ULID); pass exactly one of id or slug",
+            "type": "string"
+          },
+          "project": {
+            "description": "project slug for the slug lookup; defaults to the bound session's project",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          },
+          "slug": {
+            "description": "note slug, as briefings, plan compositions, and notes_create responses name notes (alias: name)",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "notes_read"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Update a note's fields by id (title, description, body, project, tags). Omitted fields are untouched; the slug and id stay stable. body replaces the WHOLE body, so pass expect_hash (notes_read returns it) to have the write refused rather than silently overwriting an edit that landed after you read the note -- and use notes_append when you only mean to add to it. Tags come in three flavors: tags replaces the whole set, while tags_add and tags_remove edit it in place; prefer add/remove, since a replace discards whatever another agent tagged in between and tags_remove is the only way to clear a tag at all.",
+      "inputSchema": {
+        "properties": {
+          "body": {
+            "description": "new body, replacing the whole body (aliases: content, text)",
+            "type": "string"
+          },
+          "description": {
+            "description": "new description",
+            "type": "string"
+          },
+          "expect_hash": {
+            "description": "optional precondition: the content_hash you last read for this item (memory_read/notes_read return it). The write is refused if the stored file has changed since -- another agent or the owner edited it -- so re-read and re-apply your change instead of overwriting theirs. Omit it to write unconditionally.",
+            "type": "string"
+          },
+          "id": {
+            "description": "note id (ULID)",
+            "type": "string"
+          },
+          "project": {
+            "description": "new project slug (\"\" or \"global\" = global scope)",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          },
+          "tags": {
+            "description": "tags, replacing all (a comma-separated string is also accepted); an empty list is read as absent and leaves the tags untouched -- to drop a tag use tags_remove",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tags_add": {
+            "description": "tags to add, leaving the rest in place; a tag already on the note is not duplicated. Applied after tags.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tags_remove": {
+            "description": "tags to drop, matched exactly; a tag the note does not carry is ignored. Applied last, so it also removes what tags/tags_add just set.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "description": "new title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "notes_update"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Register a project up front, with a human-readable name and an optional description. You rarely need this: any durable write naming an unknown project slug (memory_write, notes_create, tasks_add, capture_url, trial_record) already registers that project, and a git repo maps itself to one on its first session. Reach for this only to give a project a proper name and description BEFORE anything is written into it, or to create one you will not write to yet -- an auto-registered project is named after its own slug until someone fixes it. Call project_list first: coining a near-duplicate of an existing slug is the failure mode here. To divide an existing project into children, use gardener_split rather than creating them by hand. The slug defaults to a slugified name; \"global\" and \"all\" are reserved, and an existing slug is an error, not an update -- this never renames or edits a project.",
+      "inputSchema": {
+        "properties": {
+          "description": {
+            "description": "optional one-line description",
+            "type": "string"
+          },
+          "isolation": {
+            "description": "optional isolation state (open|confidential|sealed); omit for open. open shares normally. confidential means nothing leaves: agents in other projects never read this one, and agents bound to it cannot write outside it. sealed adds the inbound half -- agents here see only this project: no global memories, no family, no cross-project reads. Set it at creation for work that is sensitive from the start; there is no tool to change it afterwards, because tightening detaches family and parent links and is an owner decision, made on an owner surface. Isolation requires a standalone project, so do not create an isolated child of another project.",
+            "enum": [
+              "open",
+              "confidential",
+              "sealed"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "description": "human-readable project name",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          },
+          "slug": {
+            "description": "optional explicit slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "project_create"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List every project (slug, name, description, isolation). Use it to learn the exact slug before a deliberate cross-project write or a project_create -- coining a near-duplicate of a slug that already exists is the failure this prevents -- and to see whether work already has a home. You usually do NOT need it to pick a scope: memory, note, and task calls inherit the project from the session binding, and passing project= is for writing outside that on purpose. Each row carries its isolation state (open|confidential|sealed), which is what a cross-project call has to respect: a confidential or sealed project is readable only from a session bound to it, and a sealed one takes no writes from outside either. It returns identity, not contents; to search what is inside a project, use recall.",
+      "inputSchema": {
+        "properties": {
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "project_list"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Search durable knowledge (memories, notes) and the work record (tasks, trials, session findings) by meaning and keyword (fused), scoped to the current project plus global items. This is the single search entry point. Work-record hits carry a status (a task's status, a trial's outcome) and match on keyword only. With kind set and no query it lists that memory kind newest-first instead (browse).",
+      "inputSchema": {
+        "properties": {
+          "kind": {
+            "description": "only memories of this frontmatter kind (e.g. convention); implies memories-only, so any scope that excludes memories is rejected; with no query, lists the kind newest-first",
+            "enum": [
+              "constraint",
+              "convention",
+              "runbook",
+              "protocol",
+              "gotcha",
+              "decision",
+              "refuted",
+              "reference",
+              "stage"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "description": "maximum results (default 10, max 100)",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "project": {
+            "description": "project slug; defaults to the bound session's project",
+            "type": "string"
+          },
+          "query": {
+            "description": "what you are looking for; required unless kind is set (kind alone lists that kind newest-first)",
+            "type": "string"
+          },
+          "scope": {
+            "description": "what to search (default all)",
+            "enum": [
+              "all",
+              "memories",
+              "notes",
+              "tasks",
+              "trials",
+              "sessions"
+            ],
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "recall"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Complete the current session, persisting its findings for future briefings. Uses the bound session unless you pass one.",
+      "inputSchema": {
+        "properties": {
+          "findings": {
+            "description": "Final findings: what was learned, decided, or left open. Prefer a tight summary (briefings show a short preview), but long findings are stored in full -- they are not rejected.",
+            "type": "string"
+          },
+          "mishaps": {
+            "description": "Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. \"violated chroma-boot-race by ...\") -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "session": {
+            "description": "Session to operate on: a name (the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a sess/* name) or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- so pass it only to act on another session, or when a call reports the session as ambiguous",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session ULID to operate on; takes precedence over session and the bound session",
+            "type": "string"
+          }
+        },
+        "required": [
+          "findings"
+        ],
+        "type": "object"
+      },
+      "name": "session_end"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Bind this connection to a work session and return its project briefing. Claude Code and Codex agents running the Seamless hooks are bound to their own session automatically (the 'Seam session' line in the briefing) and do not need this. Call it to bind a client without hooks, to move this connection to another project, or to resume a named session. Later calls inherit the session's project, so they need no project argument.",
+      "inputSchema": {
+        "properties": {
+          "cwd": {
+            "description": "Absolute working directory. The git repository it is in decides the project, and a repository maps itself to a project on its first session -- no setup step (`seamlessd map-repo` only overrides the derived slug)",
+            "type": "string"
+          },
+          "host": {
+            "description": "Machine this agent runs on (hostname). Defaults to the X-Seamless-Host header, then to the daemon's own host; pass it only when dialling a daemon on another machine",
+            "type": "string"
+          },
+          "main_worktree_root": {
+            "description": "Absolute root of the repository's MAIN checkout when repo_root is a linked worktree; defaults to repo_root",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model id powering this agent, exactly as the provider names it (e.g. claude-fable-5, gpt-5.5). Stamped onto memories/notes this session writes; hooks keep it current for Claude Code/Codex sessions, so pass it mainly from other clients",
+            "type": "string"
+          },
+          "name": {
+            "description": "Resume the session with this name: a sess/* name from an earlier call, or the cc/... or cx/... on your briefing's 'Seam session' line. A new name starts a separate session under that name; omit it to use your own session, or a fresh one",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project slug to bind. Defaults to the project of the git repository cwd is in, then to your own session's project. If cwd is in a repository too, the two must agree. project=global binds the global scope; an unknown slug creates that project.",
+            "type": "string"
+          },
+          "repo_origin": {
+            "description": "The repository's origin remote URL, which is how the same repo checked out on two machines is recognized as one project",
+            "type": "string"
+          },
+          "repo_root": {
+            "description": "Absolute git repository root enclosing cwd, resolved on YOUR machine. Required when host is not the daemon's: the daemon cannot read your filesystem to find it",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "session_start"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Record interim progress on the current session (working findings so far). Uses the bound session unless you pass one.",
+      "inputSchema": {
+        "properties": {
+          "findings": {
+            "description": "Working findings / progress note so far",
+            "type": "string"
+          },
+          "session": {
+            "description": "Session to operate on: a name (the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a sess/* name) or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- so pass it only to act on another session, or when a call reports the session as ambiguous",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session ULID to operate on; takes precedence over session and the bound session",
+            "type": "string"
+          }
+        },
+        "required": [
+          "findings"
+        ],
+        "type": "object"
+      },
+      "name": "session_update"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Add a task to the dependency-aware ready queue. depends_on lists task ids that must finish first (done or dropped unblocks); each must exist and must not create a cycle. The task is 'ready' once it has no open/in_progress blocker.",
+      "inputSchema": {
+        "properties": {
+          "body": {
+            "description": "optional details / acceptance criteria (aliases: content, text)",
+            "type": "string"
+          },
+          "depends_on": {
+            "description": "task ids this task is blocked by (a comma-separated string is also accepted)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "plan": {
+            "description": "optional plan slug (plan:<slug> convention) that composes this task as a step of a plan. Plan steps are excluded from the default ready-queue and surfaced under the plan filter.",
+            "type": "string"
+          },
+          "project": {
+            "description": "project slug; defaults to the bound/ambient session's project. An unknown slug CREATES that project -- naming a new one is normal and never an error. Pass project=global ONLY for knowledge that belongs in EVERY project's briefing; it is not a neutral default. With no session and no explicit project the call is rejected as ambiguous. A session bound to a confidential or sealed project can write ONLY into that project.",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          },
+          "title": {
+            "description": "short task title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      },
+      "name": "tasks_add"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Atomically claim a task for the current session, moving it to in_progress with a lease. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims.",
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "description": "task id to claim",
+            "type": "string"
+          },
+          "lease_seconds": {
+            "description": "lease duration in seconds before the claim lapses and the task becomes reclaimable (default 900)",
+            "type": "number"
+          },
+          "session": {
+            "description": "the acting agent's session: the cc/<id> or cx/<id> on your briefing's 'Seam session' line, another session name, or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- then a sole active ambient. Pass it when a call reports the agent as ambiguous: the bare call then fails rather than guesses.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "the acting agent's session ULID; takes precedence over session and the bound session",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "tasks_claim"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List a project's tasks, optionally filtered by status, newest first. By default plan-step tasks are excluded; pass plan=<slug> to list that plan's steps instead. Pass id=<task id> to load a single task by its globally-unique id (a direct lookup that ignores project/status/plan and needs no session scope).",
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "description": "load exactly one task by its globally-unique id; when set, project/status/plan are ignored and the response's tasks array holds just that task",
+            "type": "string"
+          },
+          "plan": {
+            "description": "optional plan slug: list that plan's step tasks instead of the default (non-plan) tasks",
+            "type": "string"
+          },
+          "project": {
+            "description": "project slug; defaults to the bound session's project",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          },
+          "status": {
+            "description": "optional status filter",
+            "enum": [
+              "open",
+              "in_progress",
+              "done",
+              "dropped"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "tasks_list"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List the actionable (ready) tasks for a project -- open tasks with no unfinished blocker -- oldest first, plus the blocked tasks with their still-open blockers. By default plan-step tasks are excluded; pass plan=<slug> to list that plan's steps instead.",
+      "inputSchema": {
+        "properties": {
+          "plan": {
+            "description": "optional plan slug: return that plan's ready/blocked step tasks instead of the default (non-plan) queue",
+            "type": "string"
+          },
+          "project": {
+            "description": "project slug; defaults to the bound session's project",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "tasks_ready"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Release a task the current session holds, reopening it (status back to open, claim cleared) so another agent can claim it. Only the current holder may release.",
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "description": "task id to release",
+            "type": "string"
+          },
+          "session": {
+            "description": "the acting agent's session: the cc/<id> or cx/<id> on your briefing's 'Seam session' line, another session name, or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- then a sole active ambient. Pass it when a call reports the agent as ambiguous: the bare call then fails rather than guesses.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "the acting agent's session ULID; takes precedence over session and the bound session",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "tasks_release"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Update a task: change status (open|in_progress|done|dropped), edit title/body, or add dependencies. Moving to done/dropped closes it and unblocks its dependents. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.",
+      "inputSchema": {
+        "properties": {
+          "add_depends_on": {
+            "description": "task ids to add as blockers (a comma-separated string is also accepted)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "body": {
+            "description": "new body (aliases: content, text)",
+            "type": "string"
+          },
+          "id": {
+            "description": "task id",
+            "type": "string"
+          },
+          "project": {
+            "description": "reassign the task to another project slug (used when a split moves a project's open work to a child)",
+            "type": "string"
+          },
+          "session": {
+            "description": "the acting agent's session (the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session name); needed only to mutate a task you hold a live claim on when several agents are active",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "the acting agent's session ULID; takes precedence over session and the bound session",
+            "type": "string"
+          },
+          "status": {
+            "description": "new status",
+            "enum": [
+              "open",
+              "in_progress",
+              "done",
+              "dropped"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "description": "new title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "tasks_update"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Query recorded trials, filtered by lab, outcome, and/or an exact-match metrics filter over the metrics recorded by trial_record.",
+      "inputSchema": {
+        "properties": {
+          "lab": {
+            "description": "lab name; defaults to the lab opened on this connection",
+            "type": "string"
+          },
+          "limit": {
+            "description": "max results (default 20, max 200)",
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "metrics_filter": {
+            "description": "optional object; trials whose metrics equal every given key match, e.g. {\"hz\":497} (a JSON-object string is also accepted)",
+            "properties": {},
+            "type": "object"
+          },
+          "outcome": {
+            "description": "filter by outcome (e.g. fail)",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "trial_query"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Record one experiment in a research lab: what changed, expected vs actual, outcome, and optional structured metrics for later querying. Inherits the lab from lab_open unless you pass one.",
+      "inputSchema": {
+        "properties": {
+          "actual": {
+            "description": "observed result",
+            "type": "string"
+          },
+          "changes": {
+            "description": "what was changed for this trial",
+            "type": "string"
+          },
+          "expected": {
+            "description": "expected result",
+            "type": "string"
+          },
+          "lab": {
+            "description": "lab name; defaults to the lab opened on this connection",
+            "type": "string"
+          },
+          "metrics": {
+            "description": "optional object of structured metrics, e.g. {\"hz\":497,\"err_pct\":0.2} (a JSON-object string is also accepted)",
+            "properties": {},
+            "type": "object"
+          },
+          "outcome": {
+            "description": "suggested values pass|fail|partial|inconclusive; free text accepted",
+            "type": "string"
+          },
+          "project": {
+            "description": "project slug; defaults to the bound/ambient session's project. An unknown slug CREATES that project -- naming a new one is normal and never an error. Pass project=global ONLY for knowledge that belongs in EVERY project's briefing; it is not a neutral default. With no session and no explicit project the call is rejected as ambiguous. A session bound to a confidential or sealed project can write ONLY into that project.",
+            "type": "string"
+          },
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          },
+          "title": {
+            "description": "short trial title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      },
+      "name": "trial_record"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Report a roll-up of activity: memory/note/session/task counts, retrieval totals with the most-injected memories, pending gardener proposals, and events by kind. Every count is machine-wide and identical for every caller; only the named memory lists (topInjected, topUtility) are fenced, so memories this session may not read under project isolation are dropped from them and those lists can come back shorter than the counts imply. Read-only.",
+      "inputSchema": {
+        "properties": {
+          "session": {
+            "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "usage_summary"
+    }
+  ]
+}

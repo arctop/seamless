@@ -421,8 +421,10 @@ blocked, and claimed mean.</p>
 </span></span></code></pre></div>
 <p>Calls <code>tasks_ready</code> and lists the actionable queue by short id and title.
 <code>--blocked</code> additionally lists blocked tasks, each followed by its blockers and
-their statuses. <code>--plan S</code> shows that plan's step tasks instead of the default
-queue - plan steps are excluded from the default view. Prints
+their statuses; a blocker in a project this connection may not read prints the
+server's one-line notice in its place. <code>--plan S</code> shows that plan's step tasks
+instead of the default queue - plan steps are excluded from the default view.
+Prints
 <code>ready: (nothing actionable)</code> when the queue is empty.</p>
 <h3 id="seam_task_list">seam task list</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam task list <span class="o">[</span>--id ID<span class="o">]</span> <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--status S<span class="o">]</span> <span class="o">[</span>--plan S<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span>

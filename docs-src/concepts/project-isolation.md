@@ -139,6 +139,11 @@ nothing.
   outside agent refused at the fence is told to bind to the project with
   `session_start project=<slug>` if its task really is that project, and to
   leave it alone otherwise.
+- **Task answers withhold what blocks across the fence.** A confidential
+  project's task that blocks an outside project's task reaches an outside
+  session as a withheld entry in `tasks_ready`, a `depends_on_withheld` count in
+  place of its id, and a count in the claim's "task blocked" refusal - never its
+  title or its id.
 
 ## Asking for access
 

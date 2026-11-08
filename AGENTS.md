@@ -238,6 +238,15 @@ any of it.
   `access.Visible(ctx, p)`) and never compare principal kinds or slugs
   themselves. `store.CanRead`/`CanWrite` consult the View FIRST -- including
   for the caller's own bound project -- so every isolation fence inherits it.
+- **The peer_auth matrix and the defaults row.** `cmd/seamlessd`'s
+  `TestPeerAuthMatrix_{Leases,Console,CLI,Proofs,Anchors,Grants,Advisory}`
+  drive every `mcp.Catalog()` tool (a tool without a probe fails the
+  coverage check), every console route, the hooks, A2A, the live feed and a
+  real `seam` binary over a real socket, with secrets planted in every closed
+  project. A new tool or route gets its probe there. `make defaults-golden`
+  (build tag `defaultsgolden`, not in check) compares every surface with
+  peer_auth and isolation.requests off against a golden written on main: run
+  it before branch locked-projects merges.
 - **A restricted local account (`peer_auth.restricted`, `access.KindRestricted`)
   reaches the open projects that exist, per request** (`internal/access/restricted.go`).
   `peerHandler` loads `store.OpenProjectSlugs` for every request and
@@ -413,6 +422,10 @@ any of it.
   never asks whether a grant is live: it consults only `access.WriteConfined`,
   the confinement every grant a holder was ever approved leaves, which only
   refuses (writes only into those `from_project`s, for the holder's life).
+  The MCP write funnel applies it to an inherited scope too
+  (`resolveWriteScope`: the binding, an ambient session or the peer's home),
+  so a confined holder that rebinds with `session_start` or names another
+  session with `session=` still writes only into its `from_project`s.
   Requests are filed only by `fenceRead` (an explicit `project=` or a by-ULID
   read), never by a filter (`fenceReadQuiet`) or the read half of a move or
   apply (`fenceReadNoAsk`). Without peer_auth the decision is the bearer
@@ -434,7 +447,11 @@ any of it.
 - **Lists filter.** Anything that enumerates projects or sessions applies
   `access.Visible` (project_list, scope-error project lists, ambient
   candidates). A sealed project's name is not shown to an account that cannot
-  reach it.
+  reach it. A task answer is a read of every task it names: a blocker or a
+  `depends_on` id in a project the caller may not read (`taskReader`, which is
+  `store.CanRead` from `callerScope`) is withheld for every caller, the count
+  kept (`internal/mcp/tools_tasks.go`; the store's `TaskBlockedError` carries
+  the claim refusal's blockers for it).
 - **The console reads through `store.OpenView`**: TEMP VIEWs that shadow every
   project-scoped table on a read-only handle. While a project is locked it
   reads through a `store.Views` pool instead (one handle per hidden set),
@@ -470,6 +487,11 @@ any of it.
   (`cmd/seam/hook_capture.go`), and read only on a request carrying a View
   (`internal/hooks/pushed.go`). A push is the caller's claim and lands through
   `sessionReachOf` and `fenceNotePush`: a locked session takes the model only;
+  a session in a project locked to the caller is the caller's own only when
+  its stamped agent process is in the caller's kernel chain
+  (`sessionInChain`), so another tree's hook -- or a TCP hook, which has no
+  chain -- that names it is foreign, and can neither end it nor revoke its
+  lease;
   a refused capture gets the one-line `harvest.RefusedHeader` notice and is
   never retried; a note lands where `View.SessionScope` places it; a leased
   locked project takes a note only from a session recorded in it. A field that

@@ -101,7 +101,7 @@
       </section>
       {{end}}{{else}}<div class="empty dotgrid"><span class="empty-ico">{{icon "folder-tree"}}</span><div>No projects{{if .Query}} match &ldquo;{{.Query}}&rdquo;{{end}} yet.</div></div>{{end}}
     {{end}}
-    {{if .Locked}}{{template "lockedrows" .Locked}}{{end}}
+    {{- if .Locked}}{{template "lockedrows" .Locked}}{{end}}
   </div>
 </section>
 </div><!-- .ops-page -->

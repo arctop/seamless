@@ -202,6 +202,14 @@ test:
 test-race:
 	$(GO) test -race $(PKG)
 
+# The defaults row of plan seamless-sealed-unlock: with peer_auth and
+# isolation.requests off, every agent surface must match the golden written on
+# main (cmd/seamlessd/testdata/defaults/). Not part of check: it is the merge
+# gate for branch locked-projects, and legitimate changes move it.
+.PHONY: defaults-golden
+defaults-golden:
+	$(GO) test -tags defaultsgolden ./cmd/seamlessd -run TestDefaults -count=1
+
 # Hot-path baseline benchmarks (recall, briefing, prompt matcher, event
 # append + SSE fan-out). -run '^$' skips unit tests so only benchmarks run.
 # Override BENCHTIME (e.g. BENCHTIME=1x) for a quick compile/smoke check.

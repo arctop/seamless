@@ -1,0 +1,208 @@
+{
+  "memory/_global/example-style-reference.md": {
+    "lines": [
+      "---",
+      "id: <id:6>",
+      "kind: reference",
+      "name: example-style-reference",
+      "description: Where the shared example style guide lives",
+      "created: <time>",
+      "updated: <time>",
+      "valid_from: <time>",
+      "invalid_at: null",
+      "superseded_by: null",
+      "source_session: <id:1>",
+      "model: example-model-1",
+      "---",
+      "The shared example style guide is in docs/example-style.md.",
+      ""
+    ]
+  },
+  "memory/example-confidential/example-confidential-gotcha.md": {
+    "lines": [
+      "---",
+      "id: <id:21>",
+      "kind: gotcha",
+      "name: example-confidential-gotcha",
+      "description: The confidential example ledger closes on the fifth",
+      "project: example-confidential",
+      "created: <time>",
+      "updated: <time>",
+      "valid_from: <time>",
+      "invalid_at: null",
+      "superseded_by: null",
+      "source_session: <id:20>",
+      "---",
+      "The confidential example ledger closes on the fifth of each month.",
+      ""
+    ]
+  },
+  "memory/example-open-alpha/example-cache-gotcha.md": {
+    "lines": [
+      "---",
+      "id: <id:5>",
+      "kind: gotcha",
+      "name: example-cache-gotcha",
+      "description: The example cache keeps stale entries for ten minutes after a deploy",
+      "project: example-open-alpha",
+      "created: <time>",
+      "updated: <time>",
+      "valid_from: <time>",
+      "invalid_at: <time>",
+      "superseded_by: <id:7>",
+      "source_session: <id:1>",
+      "model: example-model-1",
+      "---",
+      "After a deploy the example cache serves stale entries for ten minutes; flush it by hand.",
+      "The flush command is example-cache flush --all.",
+      "",
+      "> Superseded by example-open-alpha/example-cache-gotcha-v2 (<id:7>) on <date>",
+      ""
+    ]
+  },
+  "memory/example-open-alpha/example-deploy-gate.md": {
+    "lines": [
+      "---",
+      "id: <id:2>",
+      "kind: constraint",
+      "name: example-deploy-gate",
+      "description: Every example deploy goes through the staging gate first",
+      "project: example-open-alpha",
+      "created: <time>",
+      "updated: <time>",
+      "valid_from: <time>",
+      "invalid_at: null",
+      "superseded_by: null",
+      "source_session: <id:1>",
+      "model: example-model-1",
+      "tags: [deploy, example]",
+      "---",
+      "Never deploy the example service straight to production; stage it first.",
+      ""
+    ]
+  },
+  "memory/example-open-alpha/example-layout-convention.md": {
+    "lines": [
+      "---",
+      "id: <id:3>",
+      "kind: convention",
+      "name: example-layout-convention",
+      "description: Example services keep their configs under deploy/example",
+      "project: example-open-alpha",
+      "created: <time>",
+      "updated: <time>",
+      "valid_from: <time>",
+      "invalid_at: null",
+      "superseded_by: null",
+      "source_session: <id:1>",
+      "model: example-model-1",
+      "---",
+      "Configs for the example services live in deploy/example, one file per service, named after it.",
+      ""
+    ]
+  },
+  "memory/example-open-alpha/example-migration-stage.md": {
+    "lines": [
+      "---",
+      "id: <id:4>",
+      "kind: stage",
+      "name: example-migration-stage",
+      "description: The example data migration waits on the owner's sign-off",
+      "project: example-open-alpha",
+      "created: <time>",
+      "updated: <time>",
+      "valid_from: <time>",
+      "invalid_at: null",
+      "superseded_by: null",
+      "source_session: <id:1>",
+      "model: example-model-1",
+      "tags: [migration]",
+      "---",
+      "Status: in_progress",
+      "Gate: human",
+      "",
+      "The example data migration is staged and waits on the owner's sign-off.",
+      ""
+    ]
+  },
+  "memory/example-sealed/example-sealed-rule.md": {
+    "lines": [
+      "---",
+      "id: <id:26>",
+      "kind: gotcha",
+      "name: example-sealed-rule",
+      "description: The sealed example vault rotates keys weekly",
+      "project: example-sealed",
+      "created: <time>",
+      "updated: <time>",
+      "valid_from: <time>",
+      "invalid_at: null",
+      "superseded_by: null",
+      "source_session: <id:25>",
+      "---",
+      "The sealed example vault rotates its keys every week.",
+      ""
+    ]
+  },
+  "notes/example-confidential/confidential-example-ledger-notes.md": {
+    "lines": [
+      "---",
+      "id: <id:22>",
+      "title: Confidential example ledger notes",
+      "slug: confidential-example-ledger-notes",
+      "description: Inbound description",
+      "project: example-confidential",
+      "created: <time>",
+      "updated: <time>",
+      "tags: ['created-by:agent']",
+      "---",
+      "The confidential ledger notes.",
+      ""
+    ]
+  },
+  "notes/example-open-alpha/cc-plan-example-deploy-plan.md": {
+    "lines": [
+      "---",
+      "id: <id:29>",
+      "title: Example deploy plan",
+      "slug: cc-plan-example-deploy-plan",
+      "description: Captured Claude Code plan example-deploy-plan.md (iteration 1, approved)",
+      "project: example-open-alpha",
+      "created: <time>",
+      "updated: <time>",
+      "tags: ['plan:example-deploy-plan', cc-plan, 'created-by:agent', 'plan-status:approved']",
+      "plan_iteration: 1",
+      "---",
+      "> captured from cc/dg-claud-393af69c59c44e2b | example-deploy-plan.md | iter 1 | git unknown | <time>",
+      "",
+      "# Example deploy plan",
+      "",
+      "1. Stage the example deploy.",
+      "2. Promote it.",
+      ""
+    ]
+  },
+  "notes/example-open-alpha/example-rollout-narrative.md": {
+    "lines": [
+      "---",
+      "id: <id:8>",
+      "title: Example rollout narrative",
+      "slug: example-rollout-narrative",
+      "description: How the example rollout goes",
+      "project: example-open-alpha",
+      "created: <time>",
+      "updated: <time>",
+      "model: example-model-1",
+      "tags: [rollout, 'created-by:agent', 'plan:example-rollout', waves]",
+      "---",
+      "The example rollout runs in three waves.",
+      "",
+      "Wave one is the staging gate.",
+      "",
+      "Wave two widens it to half.",
+      "",
+      "<time> -- Wave three is everyone.",
+      ""
+    ]
+  }
+}

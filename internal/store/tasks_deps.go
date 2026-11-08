@@ -135,6 +135,43 @@ func dependsOnForTasks(ctx context.Context, q rowQuerier, taskIDs []string) (map
 	return out, nil
 }
 
+// TaskProjects returns the project of each task among ids, keyed by id, in a
+// handful of batched IN queries; unknown ids are absent. It is the read fence's
+// input for a dependency list: a depends_on edge names only the task id, and a
+// surface judges each against its caller by the project the task sits in.
+func TaskProjects(ctx context.Context, db *sql.DB, ids []string) (map[string]string, error) {
+	ids = dedupeStrings(ids)
+	out := make(map[string]string, len(ids))
+	for start := 0; start < len(ids); start += depsBatchSize {
+		batch := ids[start:min(start+depsBatchSize, len(ids))]
+		args := make([]any, len(batch))
+		for i, id := range batch {
+			args[i] = id
+		}
+		//nolint:sqlclosecheck // closed by the closure's defer, as in dependsOnForTasks
+		rows, err := db.QueryContext(ctx, `SELECT id, project_slug FROM tasks
+			WHERE id IN (`+placeholders(len(batch))+`)`, args...)
+		if err != nil {
+			return nil, fmt.Errorf("store.TaskProjects: %w", err)
+		}
+		err = func() error {
+			defer func() { _ = rows.Close() }()
+			for rows.Next() {
+				var id, project string
+				if err := rows.Scan(&id, &project); err != nil {
+					return fmt.Errorf("store.TaskProjects: scan: %w", err)
+				}
+				out[id] = project
+			}
+			return rows.Err()
+		}()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 func taskExists(ctx context.Context, q rowQuerier, id string) (bool, error) {
 	rows, err := q.QueryContext(ctx, `SELECT 1 FROM tasks WHERE id = ? LIMIT 1`, id)
 	if err != nil {

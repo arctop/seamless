@@ -1,0 +1,17 @@
+{
+  "capabilities": {
+    "tools": {}
+  },
+  "instructions": {
+    "lines": [
+      "Use Seamless as durable context. Recall before guessing: call recall before asking users to re-find knowledge. memory_write stores compact durable knowledge; notes_create stores long artifacts. Do not duplicate code, AGENTS.md/CLAUDE.md, or this conversation. If scope is ambiguous, pass project explicitly; project=global is only for cross-project knowledge. Use sessions/findings for handoff. Compose plans as notes + tasks with plan:<slug>. Trust each tool's inputSchema required fields and enums over prose.",
+      "",
+      "For non-trivial work, read injected briefing/recall context before searching again. Claude Code and Codex hooks start your session and bind your tool calls to it, so you rarely need session_start: call it only from a client without hooks (with cwd or project) or to move this connection to another project. Close with session_end and concise findings when the work needs a handoff. If this session caused any mishaps (an action a warning said not to take, live state touched by mistake), self-report them in session_end's mishaps field -- recurrence review is how they get fixed. Claim shared plan steps with tasks_claim before working them. When writing a memory, constraint = what any agent must or must not do regardless of task; convention = a project-local choice or layout fact (naming, branding, where things live or deploy, which files sync together); for kind=stage, open the body with Status: open|in_progress|blocked|done and optionally Gate: human|ai, and flip the status with memory_edit (or a full memory_write) -- append cannot change the header, which is parsed from the top of the body. Task vs stage: task = work someone here can claim and finish; stage = a state of the world you wait on that every session must know while it holds. Edit vs supersede: memory_edit and notes_edit are for corrections that do not change what an item CLAIMS -- typos, formatting, a stale path or command, a stage's Status flip, metadata. When the MEANING changes, write the new knowledge with memory_write supersedes so the outdated memory retires into readable history instead of being silently rewritten."
+    ]
+  },
+  "protocol_version": "<date>",
+  "server_info": {
+    "name": "Seamless",
+    "version": "0.0.0-dg"
+  }
+}

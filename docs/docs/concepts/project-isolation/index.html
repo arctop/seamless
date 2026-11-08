@@ -367,6 +367,11 @@ very thing the fence exists to keep in. They do not hide that the project
 outside agent refused at the fence is told to bind to the project with
 <code>session_start project=&lt;slug&gt;</code> if its task really is that project, and to
 leave it alone otherwise.</li>
+<li><strong>Task answers withhold what blocks across the fence.</strong> A confidential
+project's task that blocks an outside project's task reaches an outside
+session as a withheld entry in <code>tasks_ready</code>, a <code>depends_on_withheld</code> count in
+place of its id, and a count in the claim's &quot;task blocked&quot; refusal - never its
+title or its id.</li>
 </ul>
 <h2 id="asking-for-access">Asking for access</h2>
 <p>A refusal at a confidential project's fence can become a request you approve,

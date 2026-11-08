@@ -1,0 +1,3371 @@
+[
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-open-alpha",
+        "session_id": "dg-claude-0001",
+        "source": "startup"
+      },
+      "query": {
+        "agent_process": [
+          "4242.1700000000"
+        ]
+      }
+    },
+    "result": {
+      "continue": true,
+      "hookSpecificOutput": {
+        "additionalContext": {
+          "lines": [
+            "<seam-briefing>",
+            "Seam session: cc/dg-claud-393af69c59c44e2b (ambient) -- this agent's Seamless tool calls bind to it automatically; no session_start needed",
+            "</seam-briefing>"
+          ]
+        },
+        "hookEventName": "SessionStart"
+      },
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "001-hook-session-start-empty",
+    "surface": "hook session-start"
+  },
+  {
+    "request": {
+      "model": "example-model-1",
+      "project": "example-open-alpha"
+    },
+    "result": [
+      {
+        "text": {
+          "briefing": "",
+          "name": "<sess:1>",
+          "project": "example-open-alpha",
+          "scope": "project \"example-open-alpha\", as named.",
+          "session_id": "<id:1>"
+        }
+      }
+    ],
+    "step": "002-session-start-alpha",
+    "surface": "mcp session_start"
+  },
+  {
+    "request": {
+      "body": "Never deploy the example service straight to production; stage it first.",
+      "description": "Every example deploy goes through the staging gate first",
+      "kind": "constraint",
+      "name": "example-deploy-gate",
+      "tags": [
+        "deploy",
+        "example"
+      ]
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:2>",
+          "name": "example-deploy-gate",
+          "project": "example-open-alpha",
+          "updated": false
+        }
+      }
+    ],
+    "step": "003-memory-write-constraint",
+    "surface": "mcp memory_write"
+  },
+  {
+    "request": {
+      "id": "<id:2>"
+    },
+    "result": [
+      {
+        "text": {
+          "body": {
+            "lines": [
+              "Never deploy the example service straight to production; stage it first.",
+              ""
+            ]
+          },
+          "content_hash": "<hash:1>",
+          "description": "Every example deploy goes through the staging gate first",
+          "id": "<id:2>",
+          "kind": "constraint",
+          "model": "example-model-1",
+          "name": "example-deploy-gate",
+          "project": "example-open-alpha",
+          "source_session": "<id:1>",
+          "tags": [
+            "deploy",
+            "example"
+          ]
+        }
+      }
+    ],
+    "step": "004-memory-read-by-id",
+    "surface": "mcp memory_read"
+  },
+  {
+    "request": {
+      "body": "Configs for the example services live in deploy/example, one file per service.",
+      "description": "Example services keep their configs under deploy/example",
+      "kind": "convention",
+      "name": "example-layout-convention"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:3>",
+          "name": "example-layout-convention",
+          "project": "example-open-alpha",
+          "updated": false
+        }
+      }
+    ],
+    "step": "005-memory-write-convention",
+    "surface": "mcp memory_write"
+  },
+  {
+    "request": {
+      "body": {
+        "lines": [
+          "Status: blocked",
+          "Gate: human",
+          "",
+          "The example data migration is staged and waits on the owner's sign-off."
+        ]
+      },
+      "description": "The example data migration waits on the owner's sign-off",
+      "kind": "stage",
+      "name": "example-migration-stage"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:4>",
+          "name": "example-migration-stage",
+          "project": "example-open-alpha",
+          "updated": false
+        }
+      }
+    ],
+    "step": "006-memory-write-stage",
+    "surface": "mcp memory_write"
+  },
+  {
+    "request": {
+      "body": "After a deploy the example cache serves stale entries for ten minutes; flush it by hand.",
+      "description": "The example cache keeps stale entries for ten minutes after a deploy",
+      "kind": "gotcha",
+      "name": "example-cache-gotcha"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:5>",
+          "name": "example-cache-gotcha",
+          "project": "example-open-alpha",
+          "updated": false
+        }
+      }
+    ],
+    "step": "007-memory-write-gotcha",
+    "surface": "mcp memory_write"
+  },
+  {
+    "request": {
+      "body": "The shared example style guide is in docs/example-style.md.",
+      "description": "Where the shared example style guide lives",
+      "kind": "reference",
+      "name": "example-style-reference",
+      "project": "global"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:6>",
+          "name": "example-style-reference",
+          "project": "",
+          "updated": false
+        }
+      }
+    ],
+    "step": "008-memory-write-global-reference",
+    "surface": "mcp memory_write"
+  },
+  {
+    "request": {
+      "name": "example-deploy-gate"
+    },
+    "result": [
+      {
+        "text": {
+          "body": {
+            "lines": [
+              "Never deploy the example service straight to production; stage it first.",
+              ""
+            ]
+          },
+          "content_hash": "<hash:1>",
+          "description": "Every example deploy goes through the staging gate first",
+          "id": "<id:2>",
+          "kind": "constraint",
+          "model": "example-model-1",
+          "name": "example-deploy-gate",
+          "project": "example-open-alpha",
+          "source_session": "<id:1>",
+          "tags": [
+            "deploy",
+            "example"
+          ]
+        }
+      }
+    ],
+    "step": "009-memory-read-constraint",
+    "surface": "mcp memory_read"
+  },
+  {
+    "request": {
+      "edits": [
+        {
+          "new_string": "Status: in_progress",
+          "old_string": "Status: blocked"
+        }
+      ],
+      "name": "example-migration-stage",
+      "tags_add": [
+        "migration"
+      ]
+    },
+    "result": [
+      {
+        "text": {
+          "content_hash": "<hash:2>",
+          "diff": {
+            "lines": [
+              "@@ -1,4 +1,4 @@",
+              "-Status: blocked",
+              "+Status: in_progress",
+              " Gate: human",
+              " ",
+              " The example data migration is staged and waits on the owner's sign-off.",
+              ""
+            ]
+          },
+          "id": "<id:4>",
+          "name": "example-migration-stage",
+          "project": "example-open-alpha"
+        }
+      }
+    ],
+    "step": "010-memory-edit-stage",
+    "surface": "mcp memory_edit"
+  },
+  {
+    "request": {
+      "body": "The flush command is example-cache flush --all.",
+      "name": "example-cache-gotcha"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:5>",
+          "name": "example-cache-gotcha",
+          "status": "appended"
+        }
+      }
+    ],
+    "step": "011-memory-append-gotcha",
+    "surface": "mcp memory_append"
+  },
+  {
+    "request": {
+      "body": "After a deploy the example cache serves stale entries for five minutes.",
+      "description": "The example cache keeps stale entries for five minutes after a deploy",
+      "kind": "gotcha",
+      "name": "example-cache-gotcha-v2",
+      "supersedes": "example-cache-gotcha"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:7>",
+          "name": "example-cache-gotcha-v2",
+          "project": "example-open-alpha",
+          "superseded": "example-open-alpha/example-cache-gotcha",
+          "updated": false
+        }
+      }
+    ],
+    "step": "012-memory-write-supersede",
+    "surface": "mcp memory_write"
+  },
+  {
+    "request": {
+      "name": "example-cache-gotcha"
+    },
+    "result": [
+      {
+        "text": {
+          "body": {
+            "lines": [
+              "After a deploy the example cache serves stale entries for ten minutes; flush it by hand.",
+              "The flush command is example-cache flush --all.",
+              "",
+              "> Superseded by example-open-alpha/example-cache-gotcha-v2 (<id:7>) on <date>",
+              ""
+            ]
+          },
+          "content_hash": "<hash:3>",
+          "description": "The example cache keeps stale entries for ten minutes after a deploy",
+          "id": "<id:5>",
+          "kind": "gotcha",
+          "model": "example-model-1",
+          "name": "example-cache-gotcha",
+          "project": "example-open-alpha",
+          "source_session": "<id:1>",
+          "tags": null,
+          "warning": "superseded by example-open-alpha/example-cache-gotcha-v2 on <date>; read that instead"
+        }
+      }
+    ],
+    "step": "013-memory-read-superseded",
+    "surface": "mcp memory_read"
+  },
+  {
+    "request": {
+      "body": "Configs for the example services live in deploy/example, one file per service, named after it.",
+      "description": "Example services keep their configs under deploy/example",
+      "kind": "convention",
+      "name": "example-layout-convention"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:3>",
+          "name": "example-layout-convention",
+          "project": "example-open-alpha",
+          "updated": true
+        }
+      }
+    ],
+    "step": "014-memory-write-duplicate-name",
+    "surface": "mcp memory_write"
+  },
+  {
+    "request": {
+      "body": {
+        "lines": [
+          "The example rollout runs in three waves.",
+          "",
+          "Wave one is the staging gate."
+        ]
+      },
+      "description": "How the example rollout goes",
+      "plan": "example-rollout",
+      "tags": [
+        "rollout"
+      ],
+      "title": "Example rollout narrative"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:8>",
+          "plan": "example-rollout",
+          "project": "example-open-alpha",
+          "slug": "example-rollout-narrative",
+          "title": "Example rollout narrative"
+        }
+      }
+    ],
+    "step": "015-notes-create",
+    "surface": "mcp notes_create"
+  },
+  {
+    "request": {
+      "id": "<id:8>"
+    },
+    "result": [
+      {
+        "text": {
+          "body": {
+            "lines": [
+              "The example rollout runs in three waves.",
+              "",
+              "Wave one is the staging gate.",
+              ""
+            ]
+          },
+          "content_hash": "<hash:4>",
+          "description": "How the example rollout goes",
+          "id": "<id:8>",
+          "model": "example-model-1",
+          "project": "example-open-alpha",
+          "slug": "example-rollout-narrative",
+          "source_url": "",
+          "tags": [
+            "rollout",
+            "created-by:agent",
+            "plan:example-rollout"
+          ],
+          "title": "Example rollout narrative"
+        }
+      }
+    ],
+    "step": "016-notes-read-id",
+    "surface": "mcp notes_read"
+  },
+  {
+    "request": {
+      "body": {
+        "lines": [
+          "The example rollout runs in three waves.",
+          "",
+          "Wave one is the staging gate.",
+          "",
+          "Wave two widens it."
+        ]
+      },
+      "id": "<id:8>",
+      "tags_add": [
+        "waves"
+      ]
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:8>",
+          "title": "Example rollout narrative"
+        }
+      }
+    ],
+    "step": "017-notes-update",
+    "surface": "mcp notes_update"
+  },
+  {
+    "request": {
+      "body": "Wave three is everyone.",
+      "id": "<id:8>"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:8>",
+          "title": "Example rollout narrative"
+        }
+      }
+    ],
+    "step": "018-notes-append",
+    "surface": "mcp notes_append"
+  },
+  {
+    "request": {
+      "edits": [
+        {
+          "new_string": "Wave two widens it to half.",
+          "old_string": "Wave two widens it."
+        }
+      ],
+      "id": "<id:8>"
+    },
+    "result": [
+      {
+        "text": {
+          "content_hash": "<hash:5>",
+          "diff": {
+            "lines": [
+              "@@ -2,6 +2,6 @@",
+              " ",
+              " Wave one is the staging gate.",
+              " ",
+              "-Wave two widens it.",
+              "+Wave two widens it to half.",
+              " ",
+              " <time> -- Wave three is everyone.",
+              ""
+            ]
+          },
+          "id": "<id:8>",
+          "title": "Example rollout narrative"
+        }
+      }
+    ],
+    "step": "019-notes-edit",
+    "surface": "mcp notes_edit"
+  },
+  {
+    "request": {
+      "slug": "example-rollout-narrative"
+    },
+    "result": [
+      {
+        "text": {
+          "body": {
+            "lines": [
+              "The example rollout runs in three waves.",
+              "",
+              "Wave one is the staging gate.",
+              "",
+              "Wave two widens it to half.",
+              "",
+              "<time> -- Wave three is everyone.",
+              ""
+            ]
+          },
+          "content_hash": "<hash:5>",
+          "description": "How the example rollout goes",
+          "id": "<id:8>",
+          "model": "example-model-1",
+          "project": "example-open-alpha",
+          "slug": "example-rollout-narrative",
+          "source_url": "",
+          "tags": [
+            "rollout",
+            "created-by:agent",
+            "plan:example-rollout",
+            "waves"
+          ],
+          "title": "Example rollout narrative"
+        }
+      }
+    ],
+    "step": "020-notes-read-slug",
+    "surface": "mcp notes_read"
+  },
+  {
+    "request": {
+      "body": "Stage the example deploy.",
+      "title": "Example: stage the deploy"
+    },
+    "result": [
+      {
+        "text": {
+          "body": "Stage the example deploy.",
+          "created_by": "<sess:1>",
+          "id": "<id:9>",
+          "project": "example-open-alpha",
+          "status": "open",
+          "title": "Example: stage the deploy"
+        }
+      }
+    ],
+    "step": "021-tasks-add-first",
+    "surface": "mcp tasks_add"
+  },
+  {
+    "request": {
+      "depends_on": [
+        "<id:9>"
+      ],
+      "title": "Example: promote the deploy"
+    },
+    "result": [
+      {
+        "text": {
+          "created_by": "<sess:1>",
+          "depends_on": [
+            "<id:9>"
+          ],
+          "id": "<id:10>",
+          "project": "example-open-alpha",
+          "status": "open",
+          "title": "Example: promote the deploy"
+        }
+      }
+    ],
+    "step": "022-tasks-add-second",
+    "surface": "mcp tasks_add"
+  },
+  {
+    "request": {
+      "depends_on": [
+        "<id:10>"
+      ],
+      "project": "example-open-beta",
+      "title": "Example: announce the deploy"
+    },
+    "result": [
+      {
+        "text": {
+          "created_by": "<sess:1>",
+          "depends_on": [
+            "<id:10>"
+          ],
+          "id": "<id:11>",
+          "project": "example-open-beta",
+          "status": "open",
+          "title": "Example: announce the deploy"
+        }
+      }
+    ],
+    "step": "023-tasks-add-beta",
+    "surface": "mcp tasks_add"
+  },
+  {
+    "request": {
+      "plan": "example-rollout",
+      "title": "Example: wave one"
+    },
+    "result": [
+      {
+        "text": {
+          "created_by": "<sess:1>",
+          "id": "<id:12>",
+          "plan": "example-rollout",
+          "project": "example-open-alpha",
+          "status": "open",
+          "title": "Example: wave one"
+        }
+      }
+    ],
+    "step": "024-tasks-add-plan-step",
+    "surface": "mcp tasks_add"
+  },
+  {
+    "request": {},
+    "result": [
+      {
+        "text": {
+          "blocked": [
+            {
+              "blockers": [
+                {
+                  "id": "<id:9>",
+                  "status": "open",
+                  "title": "Example: stage the deploy"
+                }
+              ],
+              "created_by": "<sess:1>",
+              "depends_on": [
+                "<id:9>"
+              ],
+              "id": "<id:10>",
+              "project": "example-open-alpha",
+              "status": "open",
+              "title": "Example: promote the deploy"
+            }
+          ],
+          "project": "example-open-alpha",
+          "ready": [
+            {
+              "body": "Stage the example deploy.",
+              "created_by": "<sess:1>",
+              "id": "<id:9>",
+              "project": "example-open-alpha",
+              "status": "open",
+              "title": "Example: stage the deploy"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "025-tasks-ready-alpha",
+    "surface": "mcp tasks_ready"
+  },
+  {
+    "request": {},
+    "result": [
+      {
+        "text": {
+          "project": "example-open-alpha",
+          "tasks": [
+            {
+              "created_by": "<sess:1>",
+              "depends_on": [
+                "<id:9>"
+              ],
+              "id": "<id:10>",
+              "project": "example-open-alpha",
+              "status": "open",
+              "title": "Example: promote the deploy"
+            },
+            {
+              "body": "Stage the example deploy.",
+              "created_by": "<sess:1>",
+              "id": "<id:9>",
+              "project": "example-open-alpha",
+              "status": "open",
+              "title": "Example: stage the deploy"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "026-tasks-list-alpha",
+    "surface": "mcp tasks_list"
+  },
+  {
+    "request": {
+      "id": "<id:10>"
+    },
+    "result": [
+      {
+        "text": {
+          "project": "example-open-alpha",
+          "tasks": [
+            {
+              "created_by": "<sess:1>",
+              "depends_on": [
+                "<id:9>"
+              ],
+              "id": "<id:10>",
+              "project": "example-open-alpha",
+              "status": "open",
+              "title": "Example: promote the deploy"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "027-tasks-list-blocked-id",
+    "surface": "mcp tasks_list"
+  },
+  {
+    "request": {
+      "project": "example-open-beta"
+    },
+    "result": [
+      {
+        "text": {
+          "project": "example-open-beta",
+          "tasks": [
+            {
+              "created_by": "<sess:1>",
+              "depends_on": [
+                "<id:10>"
+              ],
+              "id": "<id:11>",
+              "project": "example-open-beta",
+              "status": "open",
+              "title": "Example: announce the deploy"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "028-tasks-list-beta",
+    "surface": "mcp tasks_list"
+  },
+  {
+    "request": {
+      "plan": "example-rollout"
+    },
+    "result": [
+      {
+        "text": {
+          "project": "example-open-alpha",
+          "tasks": [
+            {
+              "created_by": "<sess:1>",
+              "id": "<id:12>",
+              "plan": "example-rollout",
+              "project": "example-open-alpha",
+              "status": "open",
+              "title": "Example: wave one"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "029-tasks-list-plan",
+    "surface": "mcp tasks_list"
+  },
+  {
+    "request": {
+      "id": "<id:9>",
+      "lease_seconds": 600
+    },
+    "result": [
+      {
+        "text": {
+          "body": "Stage the example deploy.",
+          "claimed_by": "<id:1>",
+          "created_by": "<sess:1>",
+          "id": "<id:9>",
+          "lease_expires_at": "<time>",
+          "project": "example-open-alpha",
+          "status": "in_progress",
+          "title": "Example: stage the deploy"
+        }
+      }
+    ],
+    "step": "030-tasks-claim",
+    "surface": "mcp tasks_claim"
+  },
+  {
+    "request": {
+      "id": "<id:9>"
+    },
+    "result": [
+      {
+        "text": {
+          "body": "Stage the example deploy.",
+          "created_by": "<sess:1>",
+          "id": "<id:9>",
+          "project": "example-open-alpha",
+          "status": "open",
+          "title": "Example: stage the deploy"
+        }
+      }
+    ],
+    "step": "031-tasks-release",
+    "surface": "mcp tasks_release"
+  },
+  {
+    "request": {
+      "id": "<id:9>"
+    },
+    "result": [
+      {
+        "text": {
+          "body": "Stage the example deploy.",
+          "claimed_by": "<id:1>",
+          "created_by": "<sess:1>",
+          "id": "<id:9>",
+          "lease_expires_at": "<time>",
+          "project": "example-open-alpha",
+          "status": "in_progress",
+          "title": "Example: stage the deploy"
+        }
+      }
+    ],
+    "step": "032-tasks-claim-again",
+    "surface": "mcp tasks_claim"
+  },
+  {
+    "request": {
+      "body": "Staged.",
+      "id": "<id:9>",
+      "status": "done"
+    },
+    "result": [
+      {
+        "text": {
+          "body": "Staged.",
+          "created_by": "<sess:1>",
+          "id": "<id:9>",
+          "project": "example-open-alpha",
+          "status": "done",
+          "title": "Example: stage the deploy"
+        }
+      }
+    ],
+    "step": "033-tasks-update-done",
+    "surface": "mcp tasks_update"
+  },
+  {
+    "request": {},
+    "result": [
+      {
+        "text": {
+          "blocked": [],
+          "project": "example-open-alpha",
+          "ready": [
+            {
+              "created_by": "<sess:1>",
+              "depends_on": [
+                "<id:9>"
+              ],
+              "id": "<id:10>",
+              "project": "example-open-alpha",
+              "status": "open",
+              "title": "Example: promote the deploy"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "034-tasks-ready-after",
+    "surface": "mcp tasks_ready"
+  },
+  {
+    "request": {
+      "id": "<id:10>"
+    },
+    "result": [
+      {
+        "text": {
+          "project": "example-open-alpha",
+          "tasks": [
+            {
+              "created_by": "<sess:1>",
+              "depends_on": [
+                "<id:9>"
+              ],
+              "id": "<id:10>",
+              "project": "example-open-alpha",
+              "status": "open",
+              "title": "Example: promote the deploy"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "035-tasks-list-unblocked-id",
+    "surface": "mcp tasks_list"
+  },
+  {
+    "request": {
+      "id": "<id:11>",
+      "title": "Example: announce the promoted deploy"
+    },
+    "result": [
+      {
+        "text": {
+          "created_by": "<sess:1>",
+          "depends_on": [
+            "<id:10>"
+          ],
+          "id": "<id:11>",
+          "project": "example-open-beta",
+          "status": "open",
+          "title": "Example: announce the promoted deploy"
+        }
+      }
+    ],
+    "step": "036-tasks-update-retitle",
+    "surface": "mcp tasks_update"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "id": "<id:11>"
+    },
+    "result": [
+      {
+        "text": "tasks_claim: store.ClaimTask: task blocked: task \"<id:11>\" waits on <id:10> (open)"
+      }
+    ],
+    "step": "037-tasks-claim-blocked",
+    "surface": "mcp tasks_claim"
+  },
+  {
+    "request": {
+      "findings": "Staged the example deploy; promotion is next."
+    },
+    "result": [
+      {
+        "text": {
+          "session_id": "<id:1>",
+          "status": "active"
+        }
+      }
+    ],
+    "step": "038-session-update",
+    "surface": "mcp session_update"
+  },
+  {
+    "request": {
+      "query": "example deploy staging gate"
+    },
+    "result": [
+      {
+        "text": {
+          "hits": [
+            {
+              "age": "<age>",
+              "description": "Every example deploy goes through the staging gate first",
+              "id": "<id:2>",
+              "kind": "memory",
+              "name": "example-deploy-gate",
+              "project": "example-open-alpha",
+              "score": 0.0164,
+              "source": "fts",
+              "title": "example-deploy-gate"
+            },
+            {
+              "age": "<age>",
+              "description": "The example data migration waits on the owner's sign-off",
+              "id": "<id:4>",
+              "kind": "memory",
+              "name": "example-migration-stage",
+              "project": "example-open-alpha",
+              "score": 0.0161,
+              "source": "fts",
+              "title": "example-migration-stage"
+            },
+            {
+              "age": "<age>",
+              "description": "How the example rollout goes",
+              "id": "<id:8>",
+              "kind": "note",
+              "name": "example-rollout-narrative",
+              "project": "example-open-alpha",
+              "score": 0.0159,
+              "source": "fts",
+              "title": "Example rollout narrative"
+            },
+            {
+              "age": "<age>",
+              "description": "Staged.",
+              "id": "<id:9>",
+              "kind": "task",
+              "name": "",
+              "project": "example-open-alpha",
+              "score": 0.0156,
+              "source": "fts",
+              "status": "done",
+              "title": "Example: stage the deploy"
+            },
+            {
+              "age": "<age>",
+              "description": "Staged the example deploy; promotion is next.",
+              "id": "<id:1>",
+              "kind": "session",
+              "name": "<sess:1>",
+              "project": "example-open-alpha",
+              "score": 0.0154,
+              "source": "fts",
+              "status": "active",
+              "title": "<sess:1>"
+            },
+            {
+              "age": "<age>",
+              "description": "",
+              "id": "<id:10>",
+              "kind": "task",
+              "name": "",
+              "project": "example-open-alpha",
+              "score": 0.0152,
+              "source": "fts",
+              "status": "open",
+              "title": "Example: promote the deploy"
+            },
+            {
+              "age": "<age>",
+              "description": "Example services keep their configs under deploy/example",
+              "id": "<id:3>",
+              "kind": "memory",
+              "name": "example-layout-convention",
+              "project": "example-open-alpha",
+              "score": 0.0149,
+              "source": "fts",
+              "title": "example-layout-convention"
+            },
+            {
+              "age": "<age>",
+              "description": "The example cache keeps stale entries for five minutes after a deploy",
+              "id": "<id:7>",
+              "kind": "memory",
+              "name": "example-cache-gotcha-v2",
+              "project": "example-open-alpha",
+              "score": 0.0147,
+              "source": "fts",
+              "title": "example-cache-gotcha-v2"
+            },
+            {
+              "age": "<age>",
+              "description": "",
+              "id": "<id:12>",
+              "kind": "task",
+              "name": "example-rollout",
+              "project": "example-open-alpha",
+              "score": 0.0145,
+              "source": "fts",
+              "status": "open",
+              "title": "Example: wave one"
+            },
+            {
+              "age": "<age>",
+              "description": "Where the shared example style guide lives",
+              "id": "<id:6>",
+              "kind": "memory",
+              "name": "example-style-reference",
+              "score": 0.0143,
+              "source": "fts",
+              "title": "example-style-reference"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "039-recall-all",
+    "surface": "mcp recall"
+  },
+  {
+    "request": {
+      "query": "example cache stale",
+      "scope": "memories"
+    },
+    "result": [
+      {
+        "text": {
+          "hits": [
+            {
+              "age": "<age>",
+              "description": "The example cache keeps stale entries for five minutes after a deploy",
+              "id": "<id:7>",
+              "kind": "memory",
+              "name": "example-cache-gotcha-v2",
+              "project": "example-open-alpha",
+              "score": 0.0164,
+              "source": "fts",
+              "title": "example-cache-gotcha-v2"
+            },
+            {
+              "age": "<age>",
+              "description": "Example services keep their configs under deploy/example",
+              "id": "<id:3>",
+              "kind": "memory",
+              "name": "example-layout-convention",
+              "project": "example-open-alpha",
+              "score": 0.0161,
+              "source": "fts",
+              "title": "example-layout-convention"
+            },
+            {
+              "age": "<age>",
+              "description": "Where the shared example style guide lives",
+              "id": "<id:6>",
+              "kind": "memory",
+              "name": "example-style-reference",
+              "score": 0.0159,
+              "source": "fts",
+              "title": "example-style-reference"
+            },
+            {
+              "age": "<age>",
+              "description": "Every example deploy goes through the staging gate first",
+              "id": "<id:2>",
+              "kind": "memory",
+              "name": "example-deploy-gate",
+              "project": "example-open-alpha",
+              "score": 0.0156,
+              "source": "fts",
+              "title": "example-deploy-gate"
+            },
+            {
+              "age": "<age>",
+              "description": "The example data migration waits on the owner's sign-off",
+              "id": "<id:4>",
+              "kind": "memory",
+              "name": "example-migration-stage",
+              "project": "example-open-alpha",
+              "score": 0.0154,
+              "source": "fts",
+              "title": "example-migration-stage"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "040-recall-memories",
+    "surface": "mcp recall"
+  },
+  {
+    "request": {
+      "query": "promote deploy",
+      "scope": "tasks"
+    },
+    "result": [
+      {
+        "text": {
+          "hits": [
+            {
+              "age": "<age>",
+              "description": "",
+              "id": "<id:10>",
+              "kind": "task",
+              "name": "",
+              "project": "example-open-alpha",
+              "score": 0.0164,
+              "source": "fts",
+              "status": "open",
+              "title": "Example: promote the deploy"
+            },
+            {
+              "age": "<age>",
+              "description": "Staged.",
+              "id": "<id:9>",
+              "kind": "task",
+              "name": "",
+              "project": "example-open-alpha",
+              "score": 0.0161,
+              "source": "fts",
+              "status": "done",
+              "title": "Example: stage the deploy"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "041-recall-tasks",
+    "surface": "mcp recall"
+  },
+  {
+    "request": {
+      "query": "rollout waves",
+      "scope": "notes"
+    },
+    "result": [
+      {
+        "text": {
+          "hits": [
+            {
+              "age": "<age>",
+              "description": "How the example rollout goes",
+              "id": "<id:8>",
+              "kind": "note",
+              "name": "example-rollout-narrative",
+              "project": "example-open-alpha",
+              "score": 0.0164,
+              "source": "fts",
+              "title": "Example rollout narrative"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "042-recall-notes-kind",
+    "surface": "mcp recall"
+  },
+  {
+    "request": {},
+    "result": [
+      {
+        "text": {
+          "projects": [
+            {
+              "description": "",
+              "id": "<id:13>",
+              "isolation": "confidential",
+              "name": "example-confidential",
+              "slug": "example-confidential"
+            },
+            {
+              "description": "",
+              "id": "<id:14>",
+              "isolation": "open",
+              "name": "example-open-alpha",
+              "slug": "example-open-alpha"
+            },
+            {
+              "description": "",
+              "id": "<id:15>",
+              "isolation": "open",
+              "name": "example-open-beta",
+              "slug": "example-open-beta"
+            },
+            {
+              "description": "",
+              "id": "<id:16>",
+              "isolation": "open",
+              "name": "example-open-gamma",
+              "slug": "example-open-gamma"
+            },
+            {
+              "description": "",
+              "id": "<id:17>",
+              "isolation": "sealed",
+              "name": "example-sealed",
+              "slug": "example-sealed"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "043-project-list",
+    "surface": "mcp project_list"
+  },
+  {
+    "request": {
+      "description": "A fourth open example project",
+      "name": "Example Open Delta",
+      "slug": "example-open-delta"
+    },
+    "result": [
+      {
+        "text": {
+          "isolation": "open",
+          "name": "Example Open Delta",
+          "project_id": "<id:18>",
+          "slug": "example-open-delta"
+        }
+      }
+    ],
+    "step": "044-project-create",
+    "surface": "mcp project_create"
+  },
+  {
+    "request": {
+      "goal": "Find the cache flush window",
+      "lab": "example-cache-lab"
+    },
+    "result": [
+      {
+        "text": {
+          "lab": "example-cache-lab",
+          "recent_trials": [],
+          "trial_count": 0
+        }
+      }
+    ],
+    "step": "045-lab-open",
+    "surface": "mcp lab_open"
+  },
+  {
+    "request": {
+      "actual": "no stale entries",
+      "changes": "flush delay 5m",
+      "expected": "no stale entries",
+      "metrics": {
+        "stale_entries": 0
+      },
+      "outcome": "pass",
+      "title": "Flush after five minutes"
+    },
+    "result": [
+      {
+        "text": {
+          "actual": "no stale entries",
+          "changes": "flush delay 5m",
+          "expected": "no stale entries",
+          "id": "<id:19>",
+          "lab": "example-cache-lab",
+          "metrics": {
+            "stale_entries": 0
+          },
+          "outcome": "pass",
+          "title": "Flush after five minutes"
+        }
+      }
+    ],
+    "step": "046-trial-record",
+    "surface": "mcp trial_record"
+  },
+  {
+    "request": {
+      "lab": "example-cache-lab"
+    },
+    "result": [
+      {
+        "text": {
+          "lab": "example-cache-lab",
+          "trials": [
+            {
+              "actual": "no stale entries",
+              "changes": "flush delay 5m",
+              "expected": "no stale entries",
+              "id": "<id:19>",
+              "lab": "example-cache-lab",
+              "metrics": {
+                "stale_entries": 0
+              },
+              "outcome": "pass",
+              "title": "Flush after five minutes"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "047-trial-query",
+    "surface": "mcp trial_query"
+  },
+  {
+    "request": {
+      "favorite": true,
+      "id": "example-deploy-gate",
+      "kind": "memory"
+    },
+    "result": [
+      {
+        "text": {
+          "favorite": true,
+          "id": "example-deploy-gate",
+          "kind": "memory"
+        }
+      }
+    ],
+    "step": "048-favorite-set",
+    "surface": "mcp favorite_set"
+  },
+  {
+    "request": {},
+    "result": [
+      {
+        "text": {
+          "count": 0,
+          "proposals": []
+        }
+      }
+    ],
+    "step": "049-gardener-proposals",
+    "surface": "mcp gardener_proposals"
+  },
+  {
+    "request": {},
+    "result": [
+      {
+        "text": {
+          "eventsByKind": {
+            "favorite.changed": 1,
+            "memory.read": 3,
+            "memory.superseded": 1,
+            "memory.written": 9,
+            "note.read": 2,
+            "note.written": 4,
+            "retrieval.injected": 4,
+            "session.started": 2,
+            "task.transition": 9,
+            "tool.call": 48,
+            "trial.recorded": 1
+          },
+          "gardenerPending": {},
+          "memories": {
+            "active": 5,
+            "byKind": {
+              "constraint": 1,
+              "convention": 1,
+              "gotcha": 1,
+              "reference": 1,
+              "stage": 1
+            }
+          },
+          "notes": 1,
+          "retrieval": {
+            "funnelBySurface": [
+              {
+                "injections": 0,
+                "items": 0,
+                "itemsRead": 0,
+                "readRate": 0,
+                "surface": "session-start"
+              },
+              {
+                "injections": 0,
+                "items": 0,
+                "itemsRead": 0,
+                "readRate": 0,
+                "surface": "subagent-start"
+              }
+            ],
+            "injections": 18,
+            "reads": 5,
+            "topInjected": [
+              {
+                "count": 2,
+                "id": "<id:2>",
+                "name": "example-deploy-gate"
+              },
+              {
+                "count": 2,
+                "id": "<id:3>",
+                "name": "example-layout-convention"
+              },
+              {
+                "count": 2,
+                "id": "<id:4>",
+                "name": "example-migration-stage"
+              },
+              {
+                "count": 2,
+                "id": "<id:6>",
+                "name": "example-style-reference"
+              },
+              {
+                "count": 2,
+                "id": "<id:7>",
+                "name": "example-cache-gotcha-v2"
+              }
+            ],
+            "topUtility": [
+              {
+                "id": "<id:2>",
+                "name": "example-deploy-gate",
+                "score": 0.5294
+              },
+              {
+                "id": "<id:3>",
+                "name": "example-layout-convention",
+                "score": 0.2727
+              },
+              {
+                "id": "<id:4>",
+                "name": "example-migration-stage",
+                "score": 0.2727
+              },
+              {
+                "id": "<id:6>",
+                "name": "example-style-reference",
+                "score": 0.2727
+              },
+              {
+                "id": "<id:7>",
+                "name": "example-cache-gotcha-v2",
+                "score": 0.2727
+              }
+            ]
+          },
+          "sessions": {
+            "active": 2
+          },
+          "tasks": {
+            "done": 1,
+            "open": 3
+          }
+        }
+      }
+    ],
+    "step": "050-usage-summary",
+    "surface": "mcp usage_summary"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "url": "http://127.0.0.1:9/example"
+    },
+    "result": [
+      {
+        "text": "capture_url: capture.FetchURL: URL fetch failed: Get \"http://127.0.0.1:9/example\": capture.ssrfSafeDialer: URL port not allowed: \"9\""
+      }
+    ],
+    "step": "051-capture-url-loopback",
+    "surface": "mcp capture_url"
+  },
+  {
+    "request": {
+      "project": "example-confidential"
+    },
+    "result": [
+      {
+        "text": {
+          "briefing": {
+            "lines": [
+              "<seam-briefing>",
+              "Seam project: example-confidential -- 1 memories, 0 recent findings.",
+              "Isolation: confidential -- writes outside this project are disabled",
+              "",
+              "Memories (example-confidential):",
+              "- example-style-reference: Where the shared example style guide lives",
+              "Recall on demand with recall; read a memory with memory_read. Trust a tool's inputSchema (required + enums) over prose when building a call.",
+              "</seam-briefing>"
+            ]
+          },
+          "name": "<sess:2>",
+          "project": "example-confidential",
+          "scope": "project \"example-confidential\", as named.",
+          "session_id": "<id:20>"
+        }
+      }
+    ],
+    "step": "052-session-start-confidential",
+    "surface": "mcp session_start"
+  },
+  {
+    "request": {
+      "body": "The confidential example ledger closes on the fifth of each month.",
+      "description": "The confidential example ledger closes on the fifth",
+      "kind": "gotcha",
+      "name": "example-confidential-gotcha"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:21>",
+          "name": "example-confidential-gotcha",
+          "project": "example-confidential",
+          "updated": false
+        }
+      }
+    ],
+    "step": "053-memory-write-confidential",
+    "surface": "mcp memory_write"
+  },
+  {
+    "request": {
+      "body": "The confidential ledger notes.",
+      "title": "Confidential example ledger notes"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:22>",
+          "project": "example-confidential",
+          "slug": "confidential-example-ledger-notes",
+          "title": "Confidential example ledger notes"
+        }
+      }
+    ],
+    "step": "054-notes-create-confidential",
+    "surface": "mcp notes_create"
+  },
+  {
+    "request": {
+      "title": "Example: close the confidential ledger"
+    },
+    "result": [
+      {
+        "text": {
+          "created_by": "<sess:2>",
+          "id": "<id:23>",
+          "project": "example-confidential",
+          "status": "open",
+          "title": "Example: close the confidential ledger"
+        }
+      }
+    ],
+    "step": "055-tasks-add-confidential",
+    "surface": "mcp tasks_add"
+  },
+  {
+    "request": {
+      "query": "confidential ledger"
+    },
+    "result": [
+      {
+        "text": {
+          "hits": [
+            {
+              "age": "<age>",
+              "description": "",
+              "id": "<id:22>",
+              "kind": "note",
+              "name": "confidential-example-ledger-notes",
+              "project": "example-confidential",
+              "score": 0.0164,
+              "source": "fts",
+              "title": "Confidential example ledger notes"
+            },
+            {
+              "age": "<age>",
+              "description": "",
+              "id": "<id:23>",
+              "kind": "task",
+              "name": "",
+              "project": "example-confidential",
+              "score": 0.0161,
+              "source": "fts",
+              "status": "open",
+              "title": "Example: close the confidential ledger"
+            },
+            {
+              "age": "<age>",
+              "description": "The confidential example ledger closes on the fifth",
+              "id": "<id:21>",
+              "kind": "memory",
+              "name": "example-confidential-gotcha",
+              "project": "example-confidential",
+              "score": 0.0159,
+              "source": "fts",
+              "title": "example-confidential-gotcha"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "056-recall-confidential-own",
+    "surface": "mcp recall"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "name": "example-confidential-gotcha",
+      "project": "example-confidential"
+    },
+    "result": [
+      {
+        "text": "memory_read: project example-confidential is confidential: reads require a session bound to it -- if your task is about example-confidential, bind this connection to it with session_start project=example-confidential; otherwise leave it alone"
+      }
+    ],
+    "step": "057-refuse-read-confidential-memory",
+    "surface": "mcp memory_read"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "id": "<id:22>"
+    },
+    "result": [
+      {
+        "text": "notes_read: project example-confidential is confidential: reads require a session bound to it -- if your task is about example-confidential, bind this connection to it with session_start project=example-confidential; otherwise leave it alone"
+      }
+    ],
+    "step": "058-refuse-read-confidential-note",
+    "surface": "mcp notes_read"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "id": "<id:23>"
+    },
+    "result": [
+      {
+        "text": "tasks_list: project example-confidential is confidential: reads require a session bound to it -- if your task is about example-confidential, bind this connection to it with session_start project=example-confidential; otherwise leave it alone"
+      }
+    ],
+    "step": "059-refuse-list-confidential-task",
+    "surface": "mcp tasks_list"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "project": "example-confidential",
+      "query": "confidential ledger"
+    },
+    "result": [
+      {
+        "text": "recall: project example-confidential is confidential: reads require a session bound to it -- if your task is about example-confidential, bind this connection to it with session_start project=example-confidential; otherwise leave it alone"
+      }
+    ],
+    "step": "060-refuse-recall-confidential",
+    "surface": "mcp recall"
+  },
+  {
+    "request": {
+      "query": "confidential ledger"
+    },
+    "result": [
+      {
+        "text": {
+          "hits": []
+        }
+      }
+    ],
+    "step": "061-recall-unscoped-filters-confidential",
+    "surface": "mcp recall"
+  },
+  {
+    "request": {
+      "project": "example-confidential",
+      "title": "Example: inbound confidential task"
+    },
+    "result": [
+      {
+        "text": {
+          "created_by": "<sess:1>",
+          "id": "<id:24>",
+          "project": "example-confidential",
+          "status": "open",
+          "title": "Example: inbound confidential task"
+        }
+      }
+    ],
+    "step": "062-tasks-add-into-confidential",
+    "surface": "mcp tasks_add"
+  },
+  {
+    "request": {
+      "description": "Inbound description",
+      "id": "<id:22>"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:22>",
+          "withheld": {
+            "fields": [
+              "title"
+            ],
+            "reason": "project example-confidential is confidential: the write landed, but this project's content is not returned to a session bound elsewhere. The listed fields are omitted whether or not they are set; read them from a session bound to it."
+          }
+        }
+      }
+    ],
+    "step": "063-notes-update-confidential-withheld",
+    "surface": "mcp notes_update"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "body": "leak",
+      "description": "leak",
+      "kind": "gotcha",
+      "name": "example-leak",
+      "project": "example-open-alpha"
+    },
+    "result": [
+      {
+        "text": "memory_write: this session is bound to confidential project example-confidential: writes outside it are disabled"
+      }
+    ],
+    "step": "064-refuse-confidential-write-out",
+    "surface": "mcp memory_write"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "body": "leak",
+      "description": "leak",
+      "kind": "gotcha",
+      "name": "example-leak-global",
+      "project": "global"
+    },
+    "result": [
+      {
+        "text": "memory_write: this session is bound to confidential project example-confidential: writes outside it are disabled"
+      }
+    ],
+    "step": "065-refuse-confidential-write-global",
+    "surface": "mcp memory_write"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "project": "example-open-beta",
+      "title": "leak"
+    },
+    "result": [
+      {
+        "text": "tasks_add: this session is bound to confidential project example-confidential: writes outside it are disabled"
+      }
+    ],
+    "step": "066-refuse-confidential-task-out",
+    "surface": "mcp tasks_add"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "id": "<id:10>",
+      "title": "leak"
+    },
+    "result": [
+      {
+        "text": "tasks_update: this session is bound to confidential project example-confidential: writes outside it are disabled"
+      }
+    ],
+    "step": "067-refuse-confidential-update-out",
+    "surface": "mcp tasks_update"
+  },
+  {
+    "request": {
+      "project": "example-sealed"
+    },
+    "result": [
+      {
+        "text": {
+          "briefing": "",
+          "name": "<sess:3>",
+          "project": "example-sealed",
+          "scope": "project \"example-sealed\", as named.",
+          "session_id": "<id:25>"
+        }
+      }
+    ],
+    "step": "068-session-start-sealed",
+    "surface": "mcp session_start"
+  },
+  {
+    "request": {
+      "body": "The sealed example vault rotates its keys every week.",
+      "description": "The sealed example vault rotates keys weekly",
+      "kind": "gotcha",
+      "name": "example-sealed-rule"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:26>",
+          "name": "example-sealed-rule",
+          "project": "example-sealed",
+          "updated": false
+        }
+      }
+    ],
+    "step": "069-memory-write-sealed",
+    "surface": "mcp memory_write"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "name": "example-deploy-gate",
+      "project": "example-open-alpha"
+    },
+    "result": [
+      {
+        "text": "memory_read: this session is bound to sealed project example-sealed: reads outside it are disabled"
+      }
+    ],
+    "step": "070-refuse-sealed-read-out",
+    "surface": "mcp memory_read"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "name": "example-style-reference",
+      "project": "global"
+    },
+    "result": [
+      {
+        "text": "memory_read: this session is bound to sealed project example-sealed: reads outside it are disabled"
+      }
+    ],
+    "step": "071-refuse-sealed-read-global",
+    "surface": "mcp memory_read"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "body": "leak",
+      "description": "leak",
+      "kind": "gotcha",
+      "name": "example-sealed-leak",
+      "project": "example-open-alpha"
+    },
+    "result": [
+      {
+        "text": "memory_write: this session is bound to sealed project example-sealed: writes outside it are disabled"
+      }
+    ],
+    "step": "072-refuse-sealed-write-out",
+    "surface": "mcp memory_write"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "body": "inbound",
+      "description": "inbound",
+      "kind": "gotcha",
+      "name": "example-sealed-inbound",
+      "project": "example-sealed"
+    },
+    "result": [
+      {
+        "text": "memory_write: project example-sealed is sealed: writes into it require a session bound to it -- if your task is about example-sealed, bind this connection to it with session_start project=example-sealed; otherwise leave it alone"
+      }
+    ],
+    "step": "073-refuse-write-into-sealed",
+    "surface": "mcp memory_write"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "name": "example-sealed-rule",
+      "project": "example-sealed"
+    },
+    "result": [
+      {
+        "text": "memory_read: project example-sealed is sealed: reads require a session bound to it -- if your task is about example-sealed, bind this connection to it with session_start project=example-sealed; otherwise leave it alone"
+      }
+    ],
+    "step": "074-refuse-read-sealed",
+    "surface": "mcp memory_read"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "project": "example-sealed",
+      "query": "vault keys"
+    },
+    "result": [
+      {
+        "text": "recall: project example-sealed is sealed: reads require a session bound to it -- if your task is about example-sealed, bind this connection to it with session_start project=example-sealed; otherwise leave it alone"
+      }
+    ],
+    "step": "075-refuse-recall-sealed",
+    "surface": "mcp recall"
+  },
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-open-alpha",
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "dg-claude-0001",
+        "user_prompt": "Before I deploy to production: does the staging gate apply, and when do stale cache entries clear?"
+      }
+    },
+    "result": {
+      "continue": true,
+      "hookSpecificOutput": {
+        "additionalContext": {
+          "lines": [
+            "<seam-recall>Seam has possibly relevant memories:",
+            "- example-cache-gotcha-v2 (<age>): The example cache keeps stale entries for five minutes after a deploy",
+            "- example-deploy-gate (<age>): Every example deploy goes through the staging gate first",
+            "Read with memory_read before re-deriving.</seam-recall>"
+          ]
+        },
+        "hookEventName": "UserPromptSubmit"
+      },
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "076-hook-user-prompt-submit",
+    "surface": "hook user-prompt-submit"
+  },
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-open-alpha",
+        "session_id": "dg-claude-0001",
+        "source": "resume"
+      },
+      "query": {
+        "agent_process": [
+          "4242.1700000000"
+        ]
+      }
+    },
+    "result": {
+      "continue": true,
+      "hookSpecificOutput": {
+        "additionalContext": {
+          "lines": [
+            "<seam-briefing>",
+            "Seam project: example-open-alpha -- 5 memories (1 constraint, 1 convention, 1 stage), 0 recent findings.",
+            "",
+            "Constraints (binding for every session):",
+            "- example-deploy-gate: Every example deploy goes through the staging gate first",
+            "",
+            "Stages (world-state gates):",
+            "- example-migration-stage -- in_progress, gate human",
+            "(details: memory_read name=<stage>)",
+            "",
+            "Plans:",
+            "- example-rollout -- 0/1 done, 1 claimable, 0 in flight",
+            "(steps: tasks_ready plan=<slug>; claim: tasks_claim id=<task id> session=<your Seam session>; attach work via the plan:<slug> tag)",
+            "",
+            "Conventions (project-local choices):",
+            "- example-layout-convention: Example services keep their configs under deploy/example",
+            "(1 total -- recall kind=convention lists them)",
+            "",
+            "Ready tasks (1):",
+            "- Example: promote the deploy",
+            "(full queue with ids: tasks_ready; claim: tasks_claim id=<id> session=<your Seam session>)",
+            "",
+            "Memories (example-open-alpha):",
+            "- example-cache-gotcha-v2: The example cache keeps stale entries for five minutes after a deploy",
+            "- example-style-reference: Where the shared example style guide lives",
+            "Recall on demand with recall; read a memory with memory_read. Trust a tool's inputSchema (required + enums) over prose when building a call.",
+            "(resumed session -- earlier context may be summarized; recall to re-ground.)",
+            "Seam session: cc/dg-claud-393af69c59c44e2b (ambient) -- this agent's Seamless tool calls bind to it automatically; no session_start needed",
+            "</seam-briefing>"
+          ]
+        },
+        "hookEventName": "SessionStart"
+      },
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "077-hook-session-start-resume",
+    "surface": "hook session-start"
+  },
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-confidential",
+        "session_id": "dg-claude-0002",
+        "source": "startup"
+      }
+    },
+    "result": {
+      "continue": true,
+      "hookSpecificOutput": {
+        "additionalContext": {
+          "lines": [
+            "<seam-briefing>",
+            "Seam project: example-confidential -- 2 memories, 0 recent findings.",
+            "Isolation: confidential -- writes outside this project are disabled",
+            "",
+            "Ready tasks (2):",
+            "- Example: inbound confidential task",
+            "- Example: close the confidential ledger",
+            "(full queue with ids: tasks_ready; claim: tasks_claim id=<id> session=<your Seam session>)",
+            "",
+            "Memories (example-confidential):",
+            "- example-confidential-gotcha: The confidential example ledger closes on the fifth",
+            "- example-style-reference: Where the shared example style guide lives",
+            "Recall on demand with recall; read a memory with memory_read. Trust a tool's inputSchema (required + enums) over prose when building a call.",
+            "Seam session: cc/dg-claud-e62f1f8d52a16194 (ambient) -- if a tool reports an ambiguous scope, session, or agent, bind once with session_start name=cc/dg-claud-e62f1f8d52a16194",
+            "</seam-briefing>"
+          ]
+        },
+        "hookEventName": "SessionStart"
+      },
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "078-hook-session-start-confidential",
+    "surface": "hook session-start"
+  },
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-confidential",
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "dg-claude-0002",
+        "user_prompt": "Which day of the month the confidential ledger closes on?"
+      }
+    },
+    "result": {
+      "continue": true,
+      "hookSpecificOutput": {
+        "additionalContext": "",
+        "hookEventName": "UserPromptSubmit"
+      },
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "079-hook-user-prompt-confidential",
+    "surface": "hook user-prompt-submit"
+  },
+  {
+    "request": {
+      "name": "example-deploy-gate"
+    },
+    "result": [
+      {
+        "text": {
+          "body": {
+            "lines": [
+              "Never deploy the example service straight to production; stage it first.",
+              ""
+            ]
+          },
+          "content_hash": "<hash:6>",
+          "description": "Every example deploy goes through the staging gate first",
+          "favorite": true,
+          "id": "<id:2>",
+          "kind": "constraint",
+          "model": "example-model-1",
+          "name": "example-deploy-gate",
+          "project": "example-open-alpha",
+          "source_session": "<id:1>",
+          "tags": [
+            "deploy",
+            "example"
+          ]
+        }
+      }
+    ],
+    "step": "080-process-memory-read",
+    "surface": "mcp memory_read"
+  },
+  {
+    "request": {
+      "findings": "Read the deploy gate."
+    },
+    "result": [
+      {
+        "text": {
+          "session_id": "<id:27>",
+          "status": "active"
+        }
+      }
+    ],
+    "step": "081-process-session-update",
+    "surface": "mcp session_update"
+  },
+  {
+    "request": {},
+    "result": [
+      {
+        "text": {
+          "blocked": [],
+          "project": "example-open-alpha",
+          "ready": [
+            {
+              "created_by": "<sess:1>",
+              "depends_on": [
+                "<id:9>"
+              ],
+              "id": "<id:10>",
+              "project": "example-open-alpha",
+              "status": "open",
+              "title": "Example: promote the deploy"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "082-process-tasks-ready",
+    "surface": "mcp tasks_ready"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "name": "example-confidential-gotcha",
+      "project": "example-confidential"
+    },
+    "result": [
+      {
+        "text": "memory_read: project example-confidential is confidential: reads require a session bound to it -- if your task is about example-confidential, bind this connection to it with session_start project=example-confidential; otherwise leave it alone"
+      }
+    ],
+    "step": "083-process-refuse-read-confidential",
+    "surface": "mcp memory_read"
+  },
+  {
+    "request": {
+      "name": "<sess:1>"
+    },
+    "result": [
+      {
+        "text": {
+          "briefing": {
+            "lines": [
+              "<seam-briefing>",
+              "Seam project: example-open-alpha -- 5 memories (1 constraint, 1 convention, 1 stage), 0 recent findings.",
+              "",
+              "Constraints (binding for every session):",
+              "- example-deploy-gate: Every example deploy goes through the staging gate first",
+              "",
+              "Stages (world-state gates):",
+              "- example-migration-stage -- in_progress, gate human",
+              "(details: memory_read name=<stage>)",
+              "",
+              "Plans:",
+              "- example-rollout -- 0/1 done, 1 claimable, 0 in flight",
+              "(steps: tasks_ready plan=<slug>; claim: tasks_claim id=<task id> session=<your Seam session>; attach work via the plan:<slug> tag)",
+              "",
+              "Conventions (project-local choices):",
+              "- example-layout-convention: Example services keep their configs under deploy/example",
+              "(1 total -- recall kind=convention lists them)",
+              "",
+              "Ready tasks (1):",
+              "- Example: promote the deploy",
+              "(full queue with ids: tasks_ready; claim: tasks_claim id=<id> session=<your Seam session>)",
+              "",
+              "Memories (example-open-alpha):",
+              "- example-cache-gotcha-v2: The example cache keeps stale entries for five minutes after a deploy",
+              "- example-style-reference: Where the shared example style guide lives",
+              "Recall on demand with recall; read a memory with memory_read. Trust a tool's inputSchema (required + enums) over prose when building a call.",
+              "(resumed session -- earlier context may be summarized; recall to re-ground.)",
+              "</seam-briefing>"
+            ]
+          },
+          "name": "<sess:1>",
+          "project": "example-open-alpha",
+          "resumed": true,
+          "scope": "project \"example-open-alpha\", the resumed session's.",
+          "session_id": "<id:1>"
+        }
+      }
+    ],
+    "step": "084-session-start-resume-name",
+    "surface": "mcp session_start"
+  },
+  {
+    "request": {
+      "name": "example-layout-convention"
+    },
+    "result": [
+      {
+        "text": {
+          "body": {
+            "lines": [
+              "Configs for the example services live in deploy/example, one file per service, named after it.",
+              ""
+            ]
+          },
+          "content_hash": "<hash:7>",
+          "description": "Example services keep their configs under deploy/example",
+          "id": "<id:3>",
+          "kind": "convention",
+          "model": "example-model-1",
+          "name": "example-layout-convention",
+          "project": "example-open-alpha",
+          "source_session": "<id:1>",
+          "tags": null
+        }
+      }
+    ],
+    "step": "085-memory-read-after-resume",
+    "surface": "mcp memory_read"
+  },
+  {
+    "request": {
+      "name": "example-cache-gotcha-v2"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:7>",
+          "name": "example-cache-gotcha-v2",
+          "project": "example-open-alpha",
+          "status": "deleted"
+        }
+      }
+    ],
+    "step": "086-memory-delete",
+    "surface": "mcp memory_delete"
+  },
+  {
+    "request": {
+      "body": "scratch",
+      "title": "Example scratch"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:28>",
+          "project": "example-open-alpha",
+          "slug": "example-scratch",
+          "title": "Example scratch"
+        }
+      }
+    ],
+    "step": "087-notes-create-scratch",
+    "surface": "mcp notes_create"
+  },
+  {
+    "request": {
+      "id": "<id:28>"
+    },
+    "result": [
+      {
+        "text": {
+          "id": "<id:28>",
+          "status": "deleted"
+        }
+      }
+    ],
+    "step": "088-notes-delete",
+    "surface": "mcp notes_delete"
+  },
+  {
+    "request": {
+      "favorite": false,
+      "id": "example-deploy-gate",
+      "kind": "memory"
+    },
+    "result": [
+      {
+        "text": {
+          "favorite": false,
+          "id": "example-deploy-gate",
+          "kind": "memory"
+        }
+      }
+    ],
+    "step": "089-favorite-unset",
+    "surface": "mcp favorite_set"
+  },
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-open-alpha",
+        "session_id": "dg-claude-0001",
+        "tool_input": {
+          "content": "# Example deploy plan",
+          "file_path": "<home>/.claude/plans/example-deploy-plan.md"
+        },
+        "tool_name": "Write"
+      }
+    },
+    "result": {
+      "continue": true,
+      "hookSpecificOutput": {
+        "additionalContext": {
+          "lines": [
+            "<seam-plan-context>",
+            "Seamless filed this plan as composition plan:example-deploy-plan. Attach its steps with tasks_add plan=example-deploy-plan and supporting notes with the tag plan:example-deploy-plan -- do not mint a second slug for this work.",
+            "Seamless has prior knowledge related to this plan; check before finalizing:",
+            "- [memory] example-deploy-gate (<age>): Every example deploy goes through the staging gate first -- memory_read name=example-deploy-gate",
+            "- [task] Example: promote the deploy (<age>):  -- memory_read name=",
+            "- [task] Example: stage the deploy (<age>): Staged. -- memory_read name=",
+            "- [session] <sess:1> (<age>): Staged the example deploy; promotion is next. -- memory_read name=<sess:1>",
+            "- [session] cc/dg-claud-393af69c59c44e2b (<age>): Read the deploy gate. -- memory_read name=cc/dg-claud-393af69c59c44e2b",
+            "</seam-plan-context>"
+          ]
+        },
+        "hookEventName": "PostToolUse"
+      },
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "090-hook-post-tool-use-plan-write",
+    "surface": "hook post-tool-use"
+  },
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-open-alpha",
+        "session_id": "dg-claude-0001",
+        "tool_input": {
+          "plan": "# Example deploy plan"
+        },
+        "tool_name": "ExitPlanMode"
+      }
+    },
+    "result": {
+      "continue": true,
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "091-hook-permission-request-plan",
+    "surface": "hook permission-request"
+  },
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-open-alpha",
+        "session_id": "dg-claude-0001",
+        "tool_input": {
+          "plan": "# Example deploy plan"
+        },
+        "tool_name": "ExitPlanMode",
+        "tool_response": {
+          "filePath": "<home>/.claude/plans/example-deploy-plan.md",
+          "plan": "# Example deploy plan"
+        }
+      }
+    },
+    "result": {
+      "continue": true,
+      "hookSpecificOutput": {
+        "additionalContext": {
+          "lines": [
+            "<seam-plan-context>",
+            "Seamless filed this plan as composition plan:example-deploy-plan. Attach its steps with tasks_add plan=example-deploy-plan and supporting notes with the tag plan:example-deploy-plan -- do not mint a second slug for this work.",
+            "</seam-plan-context>"
+          ]
+        },
+        "hookEventName": "PostToolUse"
+      },
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "092-hook-post-tool-use-plan-approve",
+    "surface": "hook post-tool-use"
+  },
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-open-alpha",
+        "session_id": "dg-claude-0001",
+        "tool_input": {
+          "file_path": "/work/example-open-alpha/README.md"
+        },
+        "tool_name": "Read"
+      }
+    },
+    "result": {
+      "continue": true,
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "093-hook-post-tool-use-read",
+    "surface": "hook post-tool-use"
+  },
+  {
+    "request": {
+      "plan": "example-deploy-plan"
+    },
+    "result": [
+      {
+        "text": {
+          "project": "example-open-alpha",
+          "tasks": [
+            {
+              "body": "Plan note: cc-plan-example-deploy-plan (id <id:29>). Agent caches: notes tagged plan:example-deploy-plan. Check git stamps for staleness before trusting caches.",
+              "created_by": "cc/dg-claud-393af69c59c44e2b",
+              "id": "<id:30>",
+              "plan": "example-deploy-plan",
+              "project": "example-open-alpha",
+              "status": "open",
+              "title": "Implement plan: Example deploy plan"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "094-tasks-list-captured-plan",
+    "surface": "mcp tasks_list"
+  },
+  {
+    "request": {
+      "body": {
+        "agent_id": "dg-agent-01",
+        "agent_type": "general-purpose",
+        "cwd": "/work/example-open-alpha",
+        "session_id": "dg-claude-0001"
+      }
+    },
+    "result": {
+      "continue": true,
+      "hookSpecificOutput": {
+        "additionalContext": {
+          "lines": [
+            "<seam-briefing>",
+            "Seam project: example-open-alpha -- 1 constraint (subagent scope).",
+            "",
+            "Constraints (binding for every session):",
+            "- example-deploy-gate: Every example deploy goes through the staging gate first",
+            "Recall on demand with recall; read a memory with memory_read.",
+            "</seam-briefing>"
+          ]
+        },
+        "hookEventName": "SubagentStart"
+      },
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "095-hook-subagent-start",
+    "surface": "hook subagent-start"
+  },
+  {
+    "request": {
+      "body": {
+        "agent_id": "dg-agent-01",
+        "agent_transcript_path": "<home>/no-such-transcript.jsonl",
+        "agent_type": "general-purpose",
+        "cwd": "/work/example-open-alpha",
+        "session_id": "dg-claude-0001"
+      }
+    },
+    "result": {
+      "continue": true,
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "096-hook-subagent-stop",
+    "surface": "hook subagent-stop"
+  },
+  {
+    "request": {
+      "body": {
+        "reason": "web_fetch",
+        "session_id": "dg-claude-0001"
+      }
+    },
+    "result": {
+      "continue": true,
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "097-hook-session-taint",
+    "surface": "hook session-taint"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "commits": [
+        "abababababababababababababababababababab"
+      ],
+      "id": "<id:11>"
+    },
+    "result": [
+      {
+        "text": "tasks_update: unknown parameter \"commits\": valid parameters are: add_depends_on, body, content, id, project, session, session_id, status, text, title"
+      }
+    ],
+    "step": "098-refuse-commits-argument",
+    "surface": "mcp tasks_update"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "project": "example-confidential",
+      "reason": "example"
+    },
+    "result": {
+      "rpc_error": "invalid params: tool 'access_request' not found: tool not found"
+    },
+    "step": "099-refuse-access-request-tool",
+    "surface": "mcp access_request"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "name": "example-no-such-memory"
+    },
+    "result": [
+      {
+        "text": "memory_read: no memory named \"example-no-such-memory\" in project \"example-open-alpha\" (also searched global); check the name, pass project=<slug> or project=global, read by id=<ULID>, or use recall to search by text; a name listed in your client's own MEMORY.md (Claude Code's file-based auto-memory) is a local file, not a Seamless memory: open it with your file tools"
+      }
+    ],
+    "step": "100-refuse-memory-read-missing",
+    "surface": "mcp memory_read"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "request": "tidy the example cache memories"
+    },
+    "result": [
+      {
+        "text": "gardener_request: gardener: natural-language requests need an LLM chat client"
+      }
+    ],
+    "step": "101-refuse-gardener-request-no-llm",
+    "surface": "mcp gardener_request"
+  },
+  {
+    "request": {
+      "cwd": "/work/example-open-alpha"
+    },
+    "result": [
+      {
+        "text": {
+          "briefing": {
+            "lines": [
+              "<seam-briefing>",
+              "Seam project: example-open-alpha -- 4 memories (1 constraint, 1 convention, 1 stage), 0 recent findings.",
+              "",
+              "Constraints (binding for every session):",
+              "- example-deploy-gate: Every example deploy goes through the staging gate first",
+              "",
+              "Stages (world-state gates):",
+              "- example-migration-stage -- in_progress, gate human",
+              "(details: memory_read name=<stage>)",
+              "",
+              "Plans:",
+              "- example-deploy-plan -- 0/1 done, 1 claimable, 0 in flight",
+              "- example-rollout -- 0/1 done, 1 claimable, 0 in flight",
+              "(steps: tasks_ready plan=<slug>; claim: tasks_claim id=<task id> session=<your Seam session>; attach work via the plan:<slug> tag)",
+              "",
+              "Conventions (project-local choices):",
+              "- example-layout-convention: Example services keep their configs under deploy/example",
+              "(1 total -- recall kind=convention lists them)",
+              "",
+              "Ready tasks (1):",
+              "- Example: promote the deploy",
+              "(full queue with ids: tasks_ready; claim: tasks_claim id=<id> session=<your Seam session>)",
+              "",
+              "Memories (example-open-alpha):",
+              "- example-style-reference: Where the shared example style guide lives",
+              "Recall on demand with recall; read a memory with memory_read. Trust a tool's inputSchema (required + enums) over prose when building a call.",
+              "</seam-briefing>"
+            ]
+          },
+          "name": "cc/dg-claud-393af69c59c44e2b",
+          "project": "example-open-alpha",
+          "resumed": true,
+          "scope": "project \"example-open-alpha\". Repo->project mapping is automatic -- a repo maps itself to a project on its first session, so there is no setup step. `seamlessd map-repo` only overrides a repo's derived slug.",
+          "session_id": "<id:27>"
+        }
+      }
+    ],
+    "step": "102-session-start-cwd",
+    "surface": "mcp session_start"
+  },
+  {
+    "request": {
+      "body": {
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "message/send",
+        "params": {
+          "message": {
+            "kind": "message",
+            "messageId": "m1",
+            "parts": [
+              {
+                "kind": "text",
+                "text": "example style guide"
+              }
+            ],
+            "role": "user"
+          }
+        }
+      },
+      "method": "POST",
+      "path": "/api/a2a"
+    },
+    "result": {
+      "id": 1,
+      "jsonrpc": "2.0",
+      "result": {
+        "contextId": "<id:32>",
+        "kind": "message",
+        "messageId": "<id:31>",
+        "parts": [
+          {
+            "kind": "text",
+            "text": {
+              "lines": [
+                "1 hits for \"example style guide\":",
+                "1. [memory] example-style-reference -- Where the shared example style guide lives"
+              ]
+            }
+          },
+          {
+            "data": {
+              "hits": [
+                {
+                  "age": "<age>",
+                  "description": "Where the shared example style guide lives",
+                  "id": "<id:6>",
+                  "kind": "memory",
+                  "name": "example-style-reference",
+                  "score": 0.0168,
+                  "source": "fts",
+                  "title": "example-style-reference"
+                }
+              ]
+            },
+            "kind": "data"
+          }
+        ],
+        "role": "agent"
+      }
+    },
+    "status": 200,
+    "step": "103-a2a-recall",
+    "surface": "http /api/a2a"
+  },
+  {
+    "request": {
+      "body": {
+        "id": 2,
+        "jsonrpc": "2.0",
+        "method": "message/send",
+        "params": {
+          "message": {
+            "kind": "message",
+            "messageId": "m2",
+            "metadata": {
+              "project": "example-open-alpha"
+            },
+            "parts": [
+              {
+                "kind": "text",
+                "text": "example deploy staging"
+              }
+            ],
+            "role": "user"
+          }
+        }
+      },
+      "method": "POST",
+      "path": "/api/a2a"
+    },
+    "result": {
+      "id": 2,
+      "jsonrpc": "2.0",
+      "result": {
+        "contextId": "<id:34>",
+        "kind": "message",
+        "messageId": "<id:33>",
+        "parts": [
+          {
+            "kind": "text",
+            "text": {
+              "lines": [
+                "10 hits for \"example deploy staging\":",
+                "1. [memory] example-deploy-gate -- Every example deploy goes through the staging gate first (example-open-alpha)",
+                "2. [task]  -- Staged. (example-open-alpha)",
+                "3. [session] <sess:1> -- Staged the example deploy; promotion is next. (example-open-alpha)",
+                "4. [note] example-rollout-narrative -- How the example rollout goes (example-open-alpha)",
+                "5. [memory] example-migration-stage -- The example data migration waits on the owner's sign-off (example-open-alpha)",
+                "6. [note] cc-plan-example-deploy-plan -- Captured Claude Code plan example-deploy-plan.md (iteration 1, approved) (example-open-alpha)",
+                "7. [task]  --  (example-open-alpha)",
+                "8. [task] example-deploy-plan -- Plan note: cc-plan-example-deploy-plan (id <id:29>). Agent caches: notes tagged plan:example-deploy-plan. Check git stamps for staleness before trusting caches. (example-open-alpha)",
+                "9. [memory] example-layout-convention -- Example services keep their configs under deploy/example (example-open-alpha)",
+                "10. [task] example-rollout --  (example-open-alpha)"
+              ]
+            }
+          },
+          {
+            "data": {
+              "hits": [
+                {
+                  "age": "<age>",
+                  "description": "Every example deploy goes through the staging gate first",
+                  "id": "<id:2>",
+                  "kind": "memory",
+                  "name": "example-deploy-gate",
+                  "project": "example-open-alpha",
+                  "score": 0.017,
+                  "source": "fts",
+                  "title": "example-deploy-gate"
+                },
+                {
+                  "age": "<age>",
+                  "description": "Staged.",
+                  "id": "<id:9>",
+                  "kind": "task",
+                  "name": "",
+                  "project": "example-open-alpha",
+                  "score": 0.0168,
+                  "source": "fts",
+                  "status": "done",
+                  "title": "Example: stage the deploy"
+                },
+                {
+                  "age": "<age>",
+                  "description": "Staged the example deploy; promotion is next.",
+                  "id": "<id:1>",
+                  "kind": "session",
+                  "name": "<sess:1>",
+                  "project": "example-open-alpha",
+                  "score": 0.0163,
+                  "source": "fts",
+                  "status": "active",
+                  "title": "<sess:1>"
+                },
+                {
+                  "age": "<age>",
+                  "description": "How the example rollout goes",
+                  "id": "<id:8>",
+                  "kind": "note",
+                  "name": "example-rollout-narrative",
+                  "project": "example-open-alpha",
+                  "score": 0.0162,
+                  "source": "fts",
+                  "title": "Example rollout narrative"
+                },
+                {
+                  "age": "<age>",
+                  "description": "The example data migration waits on the owner's sign-off",
+                  "id": "<id:4>",
+                  "kind": "memory",
+                  "name": "example-migration-stage",
+                  "project": "example-open-alpha",
+                  "score": 0.0161,
+                  "source": "fts",
+                  "title": "example-migration-stage"
+                },
+                {
+                  "age": "<age>",
+                  "description": "Captured Claude Code plan example-deploy-plan.md (iteration 1, approved)",
+                  "id": "<id:29>",
+                  "kind": "note",
+                  "name": "cc-plan-example-deploy-plan",
+                  "project": "example-open-alpha",
+                  "score": 0.0152,
+                  "source": "fts",
+                  "title": "Example deploy plan"
+                },
+                {
+                  "age": "<age>",
+                  "description": "",
+                  "id": "<id:10>",
+                  "kind": "task",
+                  "name": "",
+                  "project": "example-open-alpha",
+                  "score": 0.0151,
+                  "source": "fts",
+                  "status": "open",
+                  "title": "Example: promote the deploy"
+                },
+                {
+                  "age": "<age>",
+                  "description": "Plan note: cc-plan-example-deploy-plan (id <id:29>). Agent caches: notes tagged plan:example-deploy-plan. Check git stamps for staleness before trusting caches.",
+                  "id": "<id:30>",
+                  "kind": "task",
+                  "name": "example-deploy-plan",
+                  "project": "example-open-alpha",
+                  "score": 0.0149,
+                  "source": "fts",
+                  "status": "open",
+                  "title": "Implement plan: Example deploy plan"
+                },
+                {
+                  "age": "<age>",
+                  "description": "Example services keep their configs under deploy/example",
+                  "id": "<id:3>",
+                  "kind": "memory",
+                  "name": "example-layout-convention",
+                  "project": "example-open-alpha",
+                  "score": 0.0149,
+                  "source": "fts",
+                  "title": "example-layout-convention"
+                },
+                {
+                  "age": "<age>",
+                  "description": "",
+                  "id": "<id:12>",
+                  "kind": "task",
+                  "name": "example-rollout",
+                  "project": "example-open-alpha",
+                  "score": 0.0147,
+                  "source": "fts",
+                  "status": "open",
+                  "title": "Example: wave one"
+                }
+              ]
+            },
+            "kind": "data"
+          }
+        ],
+        "role": "agent"
+      }
+    },
+    "status": 200,
+    "step": "104-a2a-recall-project",
+    "surface": "http /api/a2a"
+  },
+  {
+    "request": {
+      "body": {
+        "id": 3,
+        "jsonrpc": "2.0",
+        "method": "message/send",
+        "params": {
+          "message": {
+            "kind": "message",
+            "messageId": "m3",
+            "metadata": {
+              "project": "example-confidential"
+            },
+            "parts": [
+              {
+                "kind": "text",
+                "text": "confidential ledger"
+              }
+            ],
+            "role": "user"
+          }
+        }
+      },
+      "method": "POST",
+      "path": "/api/a2a"
+    },
+    "result": {
+      "id": 3,
+      "jsonrpc": "2.0",
+      "result": {
+        "contextId": "<id:36>",
+        "kind": "message",
+        "messageId": "<id:35>",
+        "parts": [
+          {
+            "kind": "text",
+            "text": {
+              "lines": [
+                "4 hits for \"confidential ledger\":",
+                "1. [note] confidential-example-ledger-notes -- Inbound description (example-confidential)",
+                "2. [task]  --  (example-confidential)",
+                "3. [memory] example-confidential-gotcha -- The confidential example ledger closes on the fifth (example-confidential)",
+                "4. [task]  --  (example-confidential)"
+              ]
+            }
+          },
+          {
+            "data": {
+              "hits": [
+                {
+                  "age": "<age>",
+                  "description": "Inbound description",
+                  "id": "<id:22>",
+                  "kind": "note",
+                  "name": "confidential-example-ledger-notes",
+                  "project": "example-confidential",
+                  "score": 0.0164,
+                  "source": "fts",
+                  "title": "Confidential example ledger notes"
+                },
+                {
+                  "age": "<age>",
+                  "description": "",
+                  "id": "<id:23>",
+                  "kind": "task",
+                  "name": "",
+                  "project": "example-confidential",
+                  "score": 0.0161,
+                  "source": "fts",
+                  "status": "open",
+                  "title": "Example: close the confidential ledger"
+                },
+                {
+                  "age": "<age>",
+                  "description": "The confidential example ledger closes on the fifth",
+                  "id": "<id:21>",
+                  "kind": "memory",
+                  "name": "example-confidential-gotcha",
+                  "project": "example-confidential",
+                  "score": 0.0159,
+                  "source": "fts",
+                  "title": "example-confidential-gotcha"
+                },
+                {
+                  "age": "<age>",
+                  "description": "",
+                  "id": "<id:24>",
+                  "kind": "task",
+                  "name": "",
+                  "project": "example-confidential",
+                  "score": 0.0156,
+                  "source": "fts",
+                  "status": "open",
+                  "title": "Example: inbound confidential task"
+                }
+              ]
+            },
+            "kind": "data"
+          }
+        ],
+        "role": "agent"
+      }
+    },
+    "status": 200,
+    "step": "105-a2a-recall-confidential",
+    "surface": "http /api/a2a"
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/.well-known/agent-card.json"
+    },
+    "result": {
+      "capabilities": {
+        "pushNotifications": false,
+        "stateTransitionHistory": false,
+        "streaming": false
+      },
+      "defaultInputModes": [
+        "text/plain"
+      ],
+      "defaultOutputModes": [
+        "application/json",
+        "text/plain"
+      ],
+      "description": "Local-first shared memory and task coordination for AI coding agents. The one A2A skill is recall: send a text query with message/send and the reply is a completed message carrying the owner's fused memory and note search results. The endpoint is per-install: each Seamless daemon serves A2A locally on the machine it runs on; there is no hosted remote.",
+      "documentationUrl": "https://thereisnospoon.org/docs/",
+      "name": "Seamless",
+      "preferredTransport": "JSONRPC",
+      "protocolVersion": "0.3.0",
+      "provider": {
+        "organization": "Arctop",
+        "url": "https://arctop.com"
+      },
+      "security": [
+        {
+          "bearer": []
+        }
+      ],
+      "securitySchemes": {
+        "bearer": {
+          "description": "The install's static bearer key (mcp.api_key in seamless.yaml) -- the same credential every local surface shares. See https://thereisnospoon.org/auth.md.",
+          "scheme": "bearer",
+          "type": "http"
+        }
+      },
+      "skills": [
+        {
+          "description": "Search the owner's durable knowledge and work record by meaning and keyword (RRF-fused). Send the query as a text part; optional message metadata scopes it (project, scope: all|memories|notes|tasks|trials|sessions, limit). The reply carries a data part ({\"hits\": [...]}) and a text summary of the same hits.",
+          "examples": [
+            "What did we decide about the retry backoff?"
+          ],
+          "id": "recall",
+          "inputModes": [
+            "text/plain"
+          ],
+          "name": "Recall",
+          "outputModes": [
+            "application/json",
+            "text/plain"
+          ],
+          "tags": [
+            "memory",
+            "search",
+            "knowledge"
+          ]
+        }
+      ],
+      "supportedInterfaces": [
+        {
+          "protocolBinding": "json-rpc",
+          "transport": "JSONRPC",
+          "url": "http://127.0.0.1:8081/api/a2a"
+        }
+      ],
+      "supportsAuthenticatedExtendedCard": false,
+      "url": "http://127.0.0.1:8081/api/a2a",
+      "version": "0.0.0-dg"
+    },
+    "status": 200,
+    "step": "106-agent-card",
+    "surface": "http /.well-known/agent-card.json"
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/healthz"
+    },
+    "result": {
+      "built": "unknown",
+      "commit": "unknown",
+      "distribution": "source",
+      "instance": "dg-instance",
+      "status": "ok",
+      "version": "0.0.0-dev"
+    },
+    "status": 200,
+    "step": "107-healthz",
+    "surface": "http /healthz"
+  },
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-open-beta",
+        "session_id": "dg-claude-0003",
+        "source": "startup"
+      }
+    },
+    "result": {
+      "continue": true,
+      "hookSpecificOutput": {
+        "additionalContext": {
+          "lines": [
+            "<seam-briefing>",
+            "Seam project: example-open-beta -- 1 memories, 0 recent findings.",
+            "",
+            "Memories (example-open-beta):",
+            "- example-style-reference: Where the shared example style guide lives",
+            "Recall on demand with recall; read a memory with memory_read. Trust a tool's inputSchema (required + enums) over prose when building a call.",
+            "Seam session: cc/dg-claud-84915c73e46aa6d5 (ambient) -- if a tool reports an ambiguous scope, session, or agent, bind once with session_start name=cc/dg-claud-84915c73e46aa6d5",
+            "</seam-briefing>"
+          ]
+        },
+        "hookEventName": "SessionStart"
+      },
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "108-hook-session-start-beta",
+    "surface": "hook session-start"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "body": "ambiguous",
+      "description": "ambiguous",
+      "kind": "gotcha",
+      "name": "example-ambiguous"
+    },
+    "result": [
+      {
+        "text": "memory_write: ambiguous scope: no bound session, and active ambient sessions span multiple projects (concurrent agents); name the scope with project=<slug> or project=global, or bind this connection once with session_start (name=<the cc/... or cx/... on your briefing's 'Seam session' line>, or project=<slug>); an unknown slug CREATES that project, so a new project is always an available choice and never an error; project=global is not a neutral fallback -- it puts the item in EVERY project's briefing, so choose it only for genuinely cross-project knowledge; the exception is a session bound to a confidential or sealed project, which can write only into that project; known projects: example-confidential, example-open-alpha, example-open-beta, example-open-delta, example-open-gamma, example-sealed"
+      }
+    ],
+    "step": "109-refuse-ambiguous-scope",
+    "surface": "mcp memory_write"
+  },
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-open-alpha",
+        "session_id": "dg-claude-0001"
+      }
+    },
+    "result": {
+      "continue": true,
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "110-hook-stop",
+    "surface": "hook stop"
+  },
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-open-alpha",
+        "reason": "other",
+        "session_id": "dg-claude-0001"
+      }
+    },
+    "result": {
+      "continue": true,
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "111-hook-session-end",
+    "surface": "hook session-end"
+  },
+  {
+    "request": {
+      "findings": "Staged the example deploy and recorded the cache trial.",
+      "mishaps": [
+        "none worth noting"
+      ]
+    },
+    "result": [
+      {
+        "text": {
+          "claims_released": 0,
+          "mishaps_recorded": 1,
+          "session_id": "<id:27>",
+          "status": "completed"
+        }
+      }
+    ],
+    "step": "112-session-end-alpha",
+    "surface": "mcp session_end"
+  },
+  {
+    "request": {
+      "findings": "Closed the confidential ledger."
+    },
+    "result": [
+      {
+        "text": {
+          "claims_released": 0,
+          "mishaps_recorded": 0,
+          "session_id": "<id:20>",
+          "status": "completed"
+        }
+      }
+    ],
+    "step": "113-session-end-confidential",
+    "surface": "mcp session_end"
+  },
+  {
+    "request": {
+      "findings": "Rotated the sealed vault keys."
+    },
+    "result": [
+      {
+        "text": {
+          "claims_released": 0,
+          "mishaps_recorded": 0,
+          "session_id": "<id:25>",
+          "status": "completed"
+        }
+      }
+    ],
+    "step": "114-session-end-sealed",
+    "surface": "mcp session_end"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "body": "after",
+      "description": "after",
+      "kind": "gotcha",
+      "name": "example-after-end"
+    },
+    "result": [
+      {
+        "text": "memory_write: ambiguous scope: no bound session, and active ambient sessions span multiple projects (concurrent agents); name the scope with project=<slug> or project=global, or bind this connection once with session_start (name=<the cc/... or cx/... on your briefing's 'Seam session' line>, or project=<slug>); an unknown slug CREATES that project, so a new project is always an available choice and never an error; project=global is not a neutral fallback -- it puts the item in EVERY project's briefing, so choose it only for genuinely cross-project knowledge; the exception is a session bound to a confidential or sealed project, which can write only into that project; known projects: example-confidential, example-open-alpha, example-open-beta, example-open-delta, example-open-gamma, example-sealed"
+      }
+    ],
+    "step": "115-refuse-ambient-after-end",
+    "surface": "mcp memory_write"
+  },
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-open-beta",
+        "reason": "other",
+        "session_id": "dg-claude-0003"
+      }
+    },
+    "result": {
+      "continue": true,
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "116-hook-session-end-beta",
+    "surface": "hook session-end"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "body": "fenced",
+      "description": "fenced",
+      "kind": "gotcha",
+      "name": "example-ambient-fenced"
+    },
+    "result": [
+      {
+        "text": "memory_write: project example-confidential is confidential: start a session bound to it -- if your task is about example-confidential, bind this connection to it with session_start project=example-confidential; otherwise leave it alone"
+      }
+    ],
+    "step": "117-refuse-ambient-confidential",
+    "surface": "mcp memory_write"
+  },
+  {
+    "request": {
+      "body": {
+        "cwd": "/work/example-confidential",
+        "reason": "other",
+        "session_id": "dg-claude-0002"
+      }
+    },
+    "result": {
+      "continue": true,
+      "suppressOutput": true
+    },
+    "status": 200,
+    "step": "118-hook-session-end-confidential",
+    "surface": "hook session-end"
+  },
+  {
+    "is_error": true,
+    "request": {
+      "body": "none",
+      "description": "none",
+      "kind": "gotcha",
+      "name": "example-no-scope"
+    },
+    "result": [
+      {
+        "text": "memory_write: ambiguous scope: no bound or ambient session to infer the project from; name the scope with project=<slug> or project=global, or bind this connection once with session_start project=<slug>; an unknown slug CREATES that project, so a new project is always an available choice and never an error; project=global is not a neutral fallback -- it puts the item in EVERY project's briefing, so choose it only for genuinely cross-project knowledge; the exception is a session bound to a confidential or sealed project, which can write only into that project; known projects: example-confidential, example-open-alpha, example-open-beta, example-open-delta, example-open-gamma, example-sealed"
+      }
+    ],
+    "step": "119-refuse-no-scope",
+    "surface": "mcp memory_write"
+  },
+  {
+    "request": {
+      "query": "example style guide"
+    },
+    "result": [
+      {
+        "text": {
+          "hits": [
+            {
+              "age": "<age>",
+              "description": "Where the shared example style guide lives",
+              "id": "<id:6>",
+              "kind": "memory",
+              "name": "example-style-reference",
+              "score": 0.0168,
+              "source": "fts",
+              "title": "example-style-reference"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "120-recall-unbound-global",
+    "surface": "mcp recall"
+  },
+  {
+    "request": {},
+    "result": [
+      {
+        "text": {
+          "projects": [
+            {
+              "description": "",
+              "id": "<id:13>",
+              "isolation": "confidential",
+              "name": "example-confidential",
+              "slug": "example-confidential"
+            },
+            {
+              "description": "",
+              "id": "<id:14>",
+              "isolation": "open",
+              "name": "example-open-alpha",
+              "slug": "example-open-alpha"
+            },
+            {
+              "description": "",
+              "id": "<id:15>",
+              "isolation": "open",
+              "name": "example-open-beta",
+              "slug": "example-open-beta"
+            },
+            {
+              "description": "A fourth open example project",
+              "id": "<id:18>",
+              "isolation": "open",
+              "name": "Example Open Delta",
+              "slug": "example-open-delta"
+            },
+            {
+              "description": "",
+              "id": "<id:16>",
+              "isolation": "open",
+              "name": "example-open-gamma",
+              "slug": "example-open-gamma"
+            },
+            {
+              "description": "",
+              "id": "<id:17>",
+              "isolation": "sealed",
+              "name": "example-sealed",
+              "slug": "example-sealed"
+            }
+          ]
+        }
+      }
+    ],
+    "step": "121-project-list-unbound",
+    "surface": "mcp project_list"
+  }
+]

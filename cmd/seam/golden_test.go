@@ -34,7 +34,8 @@ const (
 		`{"id":"01KDDDDDDDDDDDDDDDDDDDDDDD","title":"write the migration","status":"open","project":"example-project"},` +
 		`{"id":"01KEEEEEEEEEEEEEEEEEEEEEEE","title":"wire the console","status":"open"}` +
 		`],"blocked":[` +
-		`{"id":"01KFFFFFFFFFFFFFFFFFFFFFFF","title":"ship it","status":"open","blockers":[{"id":"01KDDDDDDDDDDDDDDDDDDDDDDD","title":"write the migration","status":"open"}]}` +
+		`{"id":"01KFFFFFFFFFFFFFFFFFFFFFFF","title":"ship it","status":"open","blockers":[{"id":"01KDDDDDDDDDDDDDDDDDDDDDDD","title":"write the migration","status":"open"},` +
+		`{"withheld":"a task in a project this connection may not reach blocks this one"}]}` +
 		`]}`
 	fxReadyEmpty = `{"ready":[],"blocked":[]}`
 
@@ -184,7 +185,8 @@ var goldenCases = []struct {
 			"  01KEEEEE  wire the console\n" +
 			"blocked (1):\n" +
 			"  01KFFFFF  ship it\n" +
-			"      blocked by write the migration (open)\n"},
+			"      blocked by write the migration (open)\n" +
+			"      a task in a project this connection may not reach blocks this one\n"},
 	{"ready empty", []string{"ready", "--plan", "empty-plan"}, 0,
 		"ready: (nothing actionable)\n"},
 	{"task list", []string{"task", "list"}, 0,

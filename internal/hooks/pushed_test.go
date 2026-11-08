@@ -350,7 +350,10 @@ func TestPushedCapture_OutsideTheLeasedTreeRefused(t *testing.T) {
 	e.fromChain(other...)
 	_, refused := e.send("post-tool-use", "", plan, map[string]any{"version": 1,
 		"plan": map[string]any{"basename": "fin-plan", "content": "# Fin plan\n\nFrom another tree."}})
-	require.Contains(t, refused, "Seamless did not record this plan: project "+lkFin+" is locked")
+	// The session the hook names is another tree's (its stamped agent process
+	// is not in this chain), so it is foreign: refused silently, as another
+	// account's session is -- nothing about it is this tree's to learn.
+	require.Empty(t, refused)
 	_, ok := e.note(lkFin, plans.NotePrefix+"fin-plan")
 	require.False(t, ok)
 

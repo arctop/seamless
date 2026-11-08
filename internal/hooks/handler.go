@@ -861,7 +861,7 @@ func (h *Handler) sessionReachOf(ctx context.Context, client Client, externalID 
 			return reachForeign
 		case v.Writable(project):
 			return reachOK
-		case v.Locked(project):
+		case v.Locked(project) && h.sessionInChain(ctx, v, sess.ID):
 			return reachLocked
 		default:
 			return reachForeign
@@ -895,6 +895,34 @@ func (h *Handler) sessionReachOf(ctx context.Context, client Client, externalID 
 		}
 	}
 	return reach, lockedProject
+}
+
+// sessionInChain reports whether the agent process stamped on session id is
+// in the caller's kernel-verified chain: whether a session in a project locked
+// to the caller is the caller's own pre-approval session. Only then may its
+// hooks act on it (complete it, refuse its capture with the notice); a hook
+// from any other tree -- a sibling, an orphan, a TCP caller, which has no
+// chain -- that names it is foreign, or it could end another tree's leased
+// session and revoke its lease. A failed lookup is foreign too.
+func (h *Handler) sessionInChain(ctx context.Context, v access.View, id string) bool {
+	chain := v.Principal().Chain
+	if len(chain) == 0 {
+		return false
+	}
+	procs, err := store.SessionAgentProcesses(ctx, h.db, []string{id})
+	if err != nil {
+		return false
+	}
+	stamped := procs[id].AgentProcess
+	if stamped == "" {
+		return false
+	}
+	for _, tok := range chain {
+		if tok.AgentID() == stamped {
+			return true
+		}
+	}
+	return false
 }
 
 // peerUser reports whether the request is a configured peer_auth account's (not
