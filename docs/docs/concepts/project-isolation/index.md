@@ -167,6 +167,21 @@ Remedy: read request R-7F3K is waiting -- the owner approves it in their own ter
 An agent can also ask explicitly, with its reason, from its own shell:
 `seam access request example-finance --reason "..."`.
 
+**Asking again.** One request waits per asker and project: a repeated refusal
+names the request already waiting rather than filing another, and an explicit
+ask with a reason fills in the reason of a waiting request that has none (the
+refusal never has one to give). That reason is one of the facts you approve,
+so if you were looking at the request when it arrived, the approval asks you
+to look again. A session that already holds a live read grant of the project
+from the same project is answered with it, and nothing is filed, until 30
+minutes before it ends; from then on asking again files a new request.
+
+**After you deny one.** The agent's next refused read of that project says you
+denied it, and when, and files nothing: a refused call never asks you again
+behind your back. If you denied it because it asked for the wrong thing, tell
+the agent what to ask for instead; its explicit request
+(`seam access request ... --reason "..."`) always files a new one.
+
 **Who may ask:** a session bound to an open or a confidential project. Nothing
 that involves a sealed project is ever offered, on either side: a sealed
 project's refusal stays final, and a sealed project's session cannot ask for

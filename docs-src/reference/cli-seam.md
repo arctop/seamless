@@ -434,7 +434,11 @@ or with a passkey: https://seamless.example.org/console/access/01K...
 
 The second line appears only when a passkey can approve the request there:
 passkeys are set up and at least one is enrolled. Asking again while a request
-is pending answers with that same request. An agent that already holds the
+is pending answers with that same request, and `--reason` then fills in the
+reason of one a refused call filed without any. It always files, even right
+after the owner denied the agent's last request: a refused call files nothing
+after a denial, so this is how the agent asks again once the owner tells it
+to. An agent that already holds the
 project's lease (or, with read grants on, a live read grant from its project)
 is answered with it, and nothing is filed, until 30 minutes before it ends,
 when the expiry notices start; from then on asking again files a new approval

@@ -390,6 +390,19 @@ nothing:</p>
 </span></span></code></pre></div>
 <p>An agent can also ask explicitly, with its reason, from its own shell:
 <code>seam access request example-finance --reason &quot;...&quot;</code>.</p>
+<p><strong>Asking again.</strong> One request waits per asker and project: a repeated refusal
+names the request already waiting rather than filing another, and an explicit
+ask with a reason fills in the reason of a waiting request that has none (the
+refusal never has one to give). That reason is one of the facts you approve,
+so if you were looking at the request when it arrived, the approval asks you
+to look again. A session that already holds a live read grant of the project
+from the same project is answered with it, and nothing is filed, until 30
+minutes before it ends; from then on asking again files a new request.</p>
+<p><strong>After you deny one.</strong> The agent's next refused read of that project says you
+denied it, and when, and files nothing: a refused call never asks you again
+behind your back. If you denied it because it asked for the wrong thing, tell
+the agent what to ask for instead; its explicit request
+(<code>seam access request ... --reason &quot;...&quot;</code>) always files a new one.</p>
 <p><strong>Who may ask:</strong> a session bound to an open or a confidential project. Nothing
 that involves a sealed project is ever offered, on either side: a sealed
 project's refusal stays final, and a sealed project's session cannot ask for
