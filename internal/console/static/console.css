@@ -6658,6 +6658,24 @@ html:not(.js) .brief-preview { display: none; }
   background: color-mix(in oklab, var(--ink) 4%, var(--surface-solid)); font-family: var(--font-mono);
   font-size: var(--text-xs); overflow-wrap: anywhere;
 }
+/* The Approvers page: enrolled credentials as rows, and the passkey form's
+   fields as the console's own inputs. */
+.approvers-page h2 { margin: 18px 0 0; font-family: var(--font-serif); font-weight: 560; font-size: 19px; }
+.approvers-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.approver {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
+}
+.approver small { color: var(--muted); font-size: var(--text-xs); }
+.approver-id { margin-left: auto; color: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); overflow-wrap: anywhere; }
+.approver-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin: 12px 0 0; }
+.approver-form label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: var(--text-xs); }
+.approver-form input {
+  min-width: 0; width: 16rem; max-width: 100%; padding: 8px 11px; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary);
+  font-family: var(--font-sans); font-size: var(--text-sm);
+}
+#approver-code { font-family: var(--font-mono); }
 @media (max-width: 560px) {
   .access-facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .access-facts dd { margin-bottom: 8px; }
