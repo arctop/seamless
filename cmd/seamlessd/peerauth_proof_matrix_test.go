@@ -528,10 +528,13 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 			digest := d.readAccess(d.tcp.URL, pmKey, short).Request.Digest
 			d.runAhead(late)
 			var out bytes.Buffer
-			// seam approve names the short id, which no longer resolves; the
-			// full id reaches the core, which expires the request.
-			require.ErrorIs(t, approve(ctx, d.svc, &out, []string{short, "--for", approval.For1h, "--digest", digest}), store.ErrApprovalNotFound)
-			require.ErrorIs(t, approve(ctx, d.svc, &out, []string{a.ID, "--for", approval.For1h, "--digest", digest}), store.ErrApprovalExpired)
+			// seam approve names the short id, which still names the request
+			// after it stopped waiting (approval.ShortIDMemory): the core
+			// expires it. Asked again by the full id, it was expired already.
+			require.ErrorIs(t, approve(ctx, d.svc, &out, []string{short, "--for", approval.For1h, "--digest", digest}), store.ErrApprovalExpired)
+			again := approve(ctx, d.svc, &out, []string{a.ID, "--for", approval.For1h, "--digest", digest})
+			require.ErrorIs(t, again, store.ErrApprovalNotPending)
+			require.ErrorContains(t, again, short+" expired at ", "the owner reads that it expired, by either id")
 			require.Empty(t, out.String())
 			d.nothing("an expired request", map[string]string{a.ID: store.ApprovalExpired})
 		})

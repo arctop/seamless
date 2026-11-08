@@ -300,6 +300,30 @@ func PendingAccessApproval(ctx context.Context, db *sql.DB, processKey, project 
 	return a, true, nil
 }
 
+// AccessApprovalsSince returns every approval requested at or after since,
+// whatever its status, newest first: the requests a short id the owner was
+// shown may still name once they are decided or expired.
+func AccessApprovalsSince(ctx context.Context, db *sql.DB, since time.Time) ([]AccessApproval, error) {
+	rows, err := db.QueryContext(ctx, `SELECT `+approvalCols+` FROM access_approvals
+		WHERE requested_at >= ? ORDER BY requested_at DESC, id DESC`, core.FormatTime(since))
+	if err != nil {
+		return nil, fmt.Errorf("store.AccessApprovalsSince: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []AccessApproval
+	for rows.Next() {
+		a, err := scanApproval(rows)
+		if err != nil {
+			return nil, fmt.Errorf("store.AccessApprovalsSince: %w", err)
+		}
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store.AccessApprovalsSince: %w", err)
+	}
+	return out, nil
+}
+
 // PendingAccessApprovals returns every approval still waiting for a decision
 // at now, oldest first: what `seam approve` and the console list.
 func PendingAccessApprovals(ctx context.Context, db *sql.DB, now time.Time) ([]AccessApproval, error) {

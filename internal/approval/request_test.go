@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -285,6 +286,34 @@ func TestFacts_Warnings(t *testing.T) {
 	require.Equal(t, a.ID, got.ID)
 	_, err = f.svc.Resolve(ctx, "R-ZZZZ")
 	require.ErrorIs(t, err, store.ErrApprovalNotFound)
+}
+
+// A short id keeps naming its request once it is decided or expired, for
+// ShortIDMemory: `seam approve R-7F3K` rerun after a Deny reads "was denied",
+// and a page opened by the short id still loads after its Deny.
+func TestResolve_ShortIDOfADecidedRequest(t *testing.T) {
+	f := newReqFixture(t)
+	ctx := context.Background()
+	start := f.now
+	denied := f.request(t, lockLeg, f.session(t, "cc/d", "/work/ops", agent), bridge, agent, shell)
+	require.NoError(t, f.svc.Deny(ctx, denied.ID, "console"))
+	got, err := f.svc.Resolve(ctx, strings.ToLower(ShortID(denied.ID)))
+	require.NoError(t, err)
+	require.Equal(t, denied.ID, got.ID)
+	require.Equal(t, store.ApprovalDenied, got.Status)
+
+	expired := f.request(t, lockFin, f.session(t, "cc/e", "/work/ops", other), otherBr, other, shell)
+	f.now = f.now.Add(RequestTTL + time.Minute)
+	got, err = f.svc.Resolve(ctx, ShortID(expired.ID))
+	require.NoError(t, err)
+	require.Equal(t, expired.ID, got.ID)
+
+	f.now = start.Add(ShortIDMemory + time.Minute)
+	_, err = f.svc.Resolve(ctx, ShortID(denied.ID))
+	require.ErrorIs(t, err, store.ErrApprovalNotFound, "past ShortIDMemory only the full id names it")
+	got, err = f.svc.Resolve(ctx, denied.ID)
+	require.NoError(t, err)
+	require.Equal(t, denied.ID, got.ID)
 }
 
 func TestApprove_PasskeyPath(t *testing.T) {

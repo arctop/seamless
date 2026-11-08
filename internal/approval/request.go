@@ -613,22 +613,34 @@ func (s *Service) Pending(ctx context.Context) ([]Facts, error) {
 	return out, nil
 }
 
-// Resolve finds a pending request by its id or short id (R-7F3K, any case).
-// A short id two pending requests share is refused as ambiguous.
+// ShortIDMemory is how long a short id keeps naming a request after it stops
+// waiting: the owner reruns `seam approve R-7F3K` from a notification, or a
+// page opened by its short id reloads after a Deny, and should read what
+// became of it (denied, approved, expired) rather than "no such request".
+const ShortIDMemory = 24 * time.Hour
+
+// Resolve finds a request by its id or short id (R-7F3K, any case). A short
+// id names a pending request first; failing that, the newest request filed
+// within ShortIDMemory that carries it, whatever became of it. A short id two
+// pending requests share, or two decided ones with none pending, is refused
+// as ambiguous.
 func (s *Service) Resolve(ctx context.Context, ref string) (store.AccessApproval, error) {
 	ref = strings.TrimSpace(ref)
 	if a, err := store.AccessApprovalByID(ctx, s.cfg.DB, ref); err == nil {
 		return a, nil
 	}
-	rows, err := store.PendingAccessApprovals(ctx, s.cfg.DB, s.cfg.Now())
+	now := s.cfg.Now()
+	rows, err := store.PendingAccessApprovals(ctx, s.cfg.DB, now)
 	if err != nil {
 		return store.AccessApproval{}, fmt.Errorf("approval.Resolve: %w", err)
 	}
-	var hits []store.AccessApproval
-	for _, a := range rows {
-		if strings.EqualFold(ShortID(a.ID), ref) {
-			hits = append(hits, a)
+	hits := withShortID(rows, ref)
+	if len(hits) == 0 {
+		recent, err := store.AccessApprovalsSince(ctx, s.cfg.DB, now.Add(-ShortIDMemory))
+		if err != nil {
+			return store.AccessApproval{}, fmt.Errorf("approval.Resolve: %w", err)
 		}
+		hits = withShortID(recent, ref)
 	}
 	switch len(hits) {
 	case 1:
@@ -636,8 +648,19 @@ func (s *Service) Resolve(ctx context.Context, ref string) (store.AccessApproval
 	case 0:
 		return store.AccessApproval{}, fmt.Errorf("approval.Resolve: %w: %q", store.ErrApprovalNotFound, ref)
 	default:
-		return store.AccessApproval{}, fmt.Errorf("approval.Resolve: %q names %d pending requests: use the full id", ref, len(hits))
+		return store.AccessApproval{}, fmt.Errorf("approval.Resolve: %q names %d requests: use the full id", ref, len(hits))
 	}
+}
+
+// withShortID keeps the requests whose short id is ref (any case).
+func withShortID(rows []store.AccessApproval, ref string) []store.AccessApproval {
+	var hits []store.AccessApproval
+	for _, a := range rows {
+		if strings.EqualFold(ShortID(a.ID), ref) {
+			hits = append(hits, a)
+		}
+	}
+	return hits
 }
 
 // Proof is what decides an approval.
