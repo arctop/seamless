@@ -69,6 +69,7 @@ type memoryDetail struct {
 	SourceID     string      `json:"sourceSessionId,omitempty"` // resolved ULID, for a link
 	Model        string      `json:"model,omitempty"`           // producing model, as the provider names it
 	Harness      string      `json:"harness,omitempty"`         // producing client, resolved from the source session
+	Account      string      `json:"account,omitempty"`         // restricted account that wrote the content ("" = owner)
 	Favorite     bool        `json:"favorite,omitempty"`
 	ReplacedBy   string      `json:"replacedBy,omitempty"` // name of the superseder
 	ReplacedByID string      `json:"replacedById,omitempty"`
@@ -100,7 +101,7 @@ func (s *Service) memoryDetailData(ctx context.Context, m core.Memory) (memoryDe
 		ID:    m.ID, Kind: string(m.Kind), Name: m.Name, Description: m.Description,
 		Project: m.Project, Status: status, Tags: m.Tags,
 		Created: m.Created, Updated: m.Updated, Source: m.SourceSession, Model: m.Model,
-		Favorite: m.Favorite,
+		Account: m.Account, Favorite: m.Favorite,
 		FilePath: m.FilePath, AbsPath: abs, EditURL: edit,
 		CanArchive: s.cfg.Files != nil && m.Active(),
 	}
@@ -229,7 +230,8 @@ type noteDetail struct {
 	Words       int           `json:"words,omitempty"`
 	Tags        []string      `json:"tags,omitempty"`
 	SourceURL   string        `json:"sourceUrl,omitempty"`
-	Model       string        `json:"model,omitempty"` // producing model, as the provider names it
+	Model       string        `json:"model,omitempty"`   // producing model, as the provider names it
+	Account     string        `json:"account,omitempty"` // restricted account that wrote the content ("" = owner)
 	Favorite    bool          `json:"favorite,omitempty"`
 	Created     time.Time     `json:"created"`
 	Updated     time.Time     `json:"updated"`
@@ -245,7 +247,7 @@ func (s *Service) noteDetailData(ctx context.Context, n core.Note) noteDetail {
 	d := noteDetail{
 		ID: n.ID, Title: n.Title, Slug: n.Slug, Description: n.Description,
 		Project: n.Project, Tags: n.Tags, SourceURL: n.SourceURL, Model: n.Model,
-		Favorite: n.Favorite, Created: n.Created, Updated: n.Updated,
+		Account: n.Account, Favorite: n.Favorite, Created: n.Created, Updated: n.Updated,
 		FilePath: n.FilePath, AbsPath: abs, EditURL: edit,
 	}
 	if s.cfg.Files != nil {
@@ -338,6 +340,10 @@ type taskDetail struct {
 	Created     time.Time     `json:"created"`
 	Updated     time.Time     `json:"updated"`
 	Closed      *time.Time    `json:"closed,omitempty"`
+	// Account is the restricted local account that created the task and
+	// UpdatedAccount the one that last changed it; "" for the owner.
+	Account        string `json:"account,omitempty"`
+	UpdatedAccount string `json:"updatedAccount,omitempty"`
 	// Next is where this fragment's owner actions (star, release) return to,
 	// when the surface that fetched it asked for one. Empty leaves each action
 	// on its own default -- the task page or the tasks library.
@@ -352,6 +358,7 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 		Favorite: t.Favorite,
 		BodyText: t.Body, PlanSlug: t.PlanSlug, CreatedBy: t.CreatedBy,
 		ClaimedBy: t.ClaimedBy, LeaseExpiry: t.LeaseExpiresAt,
+		Account: t.Account, UpdatedAccount: t.UpdatedAccount,
 		ClaimLive: t.ClaimLive(time.Now().UTC()),
 		Created:   t.CreatedAt, Updated: t.UpdatedAt, Closed: t.ClosedAt,
 	}

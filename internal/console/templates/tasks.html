@@ -33,7 +33,7 @@
           {{range .InProgress}}
           <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}" data-title="{{.Title}}" data-context="In progress"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span> &middot; {{if .Project}}{{.Project}}{{else}}global{{end}} &middot; <span title="{{ts .Created}}">{{ago .Created}}</span></span>
+            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span> &middot; {{if .Project}}{{.Project}}{{else}}global{{end}} &middot; <span title="{{ts .Created}}">{{ago .Created}}</span>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
         </div>
@@ -46,7 +46,7 @@
           {{range .Ready}}
           <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}" data-title="{{.Title}}" data-context="Ready"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span> &middot; {{if .Project}}{{.Project}}{{else}}global{{end}}{{if .Deps}} &middot; {{.Deps}} dep{{if ne .Deps 1}}s{{end}}{{end}} &middot; <span title="{{ts .Created}}">{{ago .Created}}</span></span>
+            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span> &middot; {{if .Project}}{{.Project}}{{else}}global{{end}}{{if .Deps}} &middot; {{.Deps}} dep{{if ne .Deps 1}}s{{end}}{{end}} &middot; <span title="{{ts .Created}}">{{ago .Created}}</span>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
         </div>
@@ -61,7 +61,7 @@
           {{range .Blocked}}
           <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}" data-title="{{.Title}}" data-context="Blocked"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span> &middot; {{if .Project}}{{.Project}}{{else}}global{{end}} &middot; blocked by {{len .Blockers}} &middot; <span title="{{ts .Created}}">{{ago .Created}}</span></span>
+            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span> &middot; {{if .Project}}{{.Project}}{{else}}global{{end}} &middot; blocked by {{len .Blockers}} &middot; <span title="{{ts .Created}}">{{ago .Created}}</span>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
         </div>
@@ -74,7 +74,7 @@
           {{range .Closed}}
           <a class="rail-item dim{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}" data-title="{{.Title}}" data-context="Recently closed"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta">{{.Status}} &middot; {{if .Project}}{{.Project}}{{else}}global{{end}}{{if .Closed}} &middot; <span title="{{ts .Closed}}">{{ago .Closed}}</span>{{end}}</span>
+            <span class="ri-meta">{{.Status}} &middot; {{if .Project}}{{.Project}}{{else}}global{{end}}{{if .Closed}} &middot; <span title="{{ts .Closed}}">{{ago .Closed}}</span>{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
         </div>
@@ -102,7 +102,7 @@
     <div class="reader-eyebrow">
       <span class="mono-id">{{shortID .ID}}</span>{{copyBtn .ID}}
       <span class="badge {{taskTone .Status}}">{{.Status}}</span>
-      {{if .PlanSlug}}<a class="kind" href="/console/plans/{{.PlanSlug}}">plan:{{.PlanSlug}}</a>{{end}}
+      {{if .PlanSlug}}<a class="kind" href="/console/plans/{{.PlanSlug}}">plan:{{.PlanSlug}}</a>{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .UpdatedAccount}} <span class="kind faint" data-updated-account="{{.}}" title="Last changed by a restricted local account (peer_auth.restricted)">updated by account {{.}}</span>{{end}}
       {{if .Project}}<a class="chip-parent" href="/console/projects/{{.Project}}">{{icon "git-branch"}}{{.Project}}</a>{{else}}<span class="chip-parent">{{icon "git-branch"}}global</span>{{end}}
       {{if .ClaimedBy}}
       <span class="reader-actions">

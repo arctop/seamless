@@ -23,6 +23,15 @@
 //     owner's included, so a global write from a sealed system is the loudest
 //     possible way for its content to leave.
 //
+// peer_auth.restricted adds a third principal (KindRestricted, 2026-11-07): a
+// restricted local account, a second OS account on the machine whose agents
+// work beside the owner's. It reaches every project that is open (isolation)
+// and not locked, reading and writing, and the global scope read-only -- the
+// same rule 2 above, over a reach the transport loads from the projects table
+// for every request (View.WithOpenProjects) instead of an allow-list in the
+// config. It files no access requests, gets no read grants and holds no leases,
+// and every write it makes is labeled with its name (View.Account).
+//
 // peer_auth.locked is the other design (2026-11-04; lease.go). There, a project
 // is locked rather than sealed to another account: closed to every owner
 // request -- listed, never read, never written -- unless the request rides a
@@ -65,6 +74,9 @@ const (
 	KindOwner
 	// KindUser is an OS user configured under peer_auth.users, on the socket.
 	KindUser
+	// KindRestricted is a restricted local account (peer_auth.restricted), on
+	// the socket: open projects read-write, global read-only, writes labeled.
+	KindRestricted
 )
 
 // String names the kind for logs and doctor rows.
@@ -74,6 +86,8 @@ func (k Kind) String() string {
 		return "owner"
 	case KindUser:
 		return "user"
+	case KindRestricted:
+		return "restricted"
 	default:
 		return "none"
 	}
@@ -110,6 +124,13 @@ type View struct {
 	// leases are the owner's live unlocks of locked projects, by project, as
 	// WithLeases judged them. Nil for every other view.
 	leases map[string]Lease
+	// acct is a restricted account's own account (KindRestricted only), and
+	// open its reach: the projects that were open and not locked when the
+	// transport built this request's view (WithOpenProjects). Nil open reaches
+	// no project at all -- a restricted view the transport never filled fails
+	// closed to the global scope, read-only.
+	acct Account
+	open map[string]bool
 }
 
 // Principal returns who the view speaks for.
@@ -120,7 +141,7 @@ func (v View) Principal() Principal { return v.who }
 // another user or locked (peer_auth.locked).
 func (v View) Restricted() bool {
 	switch v.who.Kind {
-	case KindUser:
+	case KindUser, KindRestricted:
 		return true
 	case KindOwner:
 		return len(v.Hidden()) > 0
@@ -147,17 +168,23 @@ func (v View) Visible(project string) bool {
 		return !v.policy.ownerLocked[project] || v.leased(project)
 	case KindUser:
 		return v.user != nil && v.user.allowed[project]
+	case KindRestricted:
+		return v.open[project]
 	default:
 		return true
 	}
 }
 
 // Writable reports whether this view may write into project. The owner writes
-// wherever it reads; a configured user writes only its own projects, never the
-// global scope (see the package comment, rule 2).
+// wherever it reads; a configured user writes only its own projects, and a
+// restricted account only the open projects it reaches -- neither ever writes
+// the global scope (see the package comment, rule 2).
 func (v View) Writable(project string) bool {
-	if v.who.Kind == KindUser {
+	switch v.who.Kind {
+	case KindUser:
 		return project != "" && v.user != nil && v.user.allowed[project]
+	case KindRestricted:
+		return project != "" && v.open[project]
 	}
 	return v.Visible(project)
 }
@@ -181,9 +208,18 @@ func (v View) Hidden() []string {
 	return out
 }
 
-// Allowed returns a configured user's projects, sorted, and true. Any other view
-// returns false: it is not bounded by an allow-list.
+// Allowed returns a configured user's projects, or a restricted account's
+// reach (the open projects WithOpenProjects kept), sorted, and true. Any other
+// view returns false: it is not bounded by an allow-list.
 func (v View) Allowed() ([]string, bool) {
+	if v.who.Kind == KindRestricted {
+		out := make([]string, 0, len(v.open))
+		for p := range v.open {
+			out = append(out, p)
+		}
+		slices.Sort(out)
+		return out, true
+	}
 	if v.who.Kind != KindUser {
 		return nil, false
 	}
@@ -213,7 +249,10 @@ func (v View) Home() string {
 // A project this view may write is kept. A configured user's session never lands
 // outside its own projects, so anything else -- global included -- becomes its
 // home project. The owner cannot be placed in a project sealed to another user
-// at all, and gets the refusal.
+// at all, and gets the refusal. A restricted account has no home: a session it
+// starts anywhere but an open project it reaches -- the global scope, an
+// unmapped directory, a project it may not reach -- is refused, in words that
+// never tell a project it may not reach from one that does not exist.
 func (v View) SessionScope(project string) (string, error) {
 	if v.Writable(project) {
 		return project, nil
@@ -229,6 +268,9 @@ func (v View) SessionScope(project string) (string, error) {
 // other user: the seal is the owner's configuration, not something a refused
 // caller needs to learn more of.
 func (v View) Refusal(project string) error {
+	if v.who.Kind == KindRestricted {
+		return restrictedRefusal(v.who.User, project)
+	}
 	if v.who.Kind == KindUser {
 		allowed, _ := v.Allowed()
 		if project == "" {
@@ -314,8 +356,9 @@ func PeerAuthenticated(ctx context.Context) bool {
 }
 
 // OwnerOnly reports whether ctx may use an owner-only surface (the console): no
-// View at all (peer_auth off), or the owner's.
+// View at all (peer_auth off), or the owner's. A configured user and a
+// restricted account never may.
 func OwnerOnly(ctx context.Context) bool {
 	v, ok := FromContext(ctx)
-	return !ok || v.who.Kind != KindUser
+	return !ok || v.who.Kind == KindOwner || v.who.Kind == KindNone
 }

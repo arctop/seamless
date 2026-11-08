@@ -3,7 +3,7 @@
   <header class="peek-head">
     <span class="mono-id">{{shortID .ID}}</span>{{copyBtn .ID}}
     {{if .Outcome}}<span class="badge {{outcomeTone .Outcome}}">{{.Outcome}}</span>{{end}}
-    <span class="kind">lab:{{.Lab}}</span>
+    <span class="kind">lab:{{.Lab}}</span>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
   </header>
   <h2 class="peek-title">{{.Title}}{{copyBtn .Title}}</h2>
   {{template "detail-body" .}}

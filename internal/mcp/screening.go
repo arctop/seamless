@@ -97,51 +97,77 @@ func (s *Server) recordScreened(ctx context.Context, tool, itemKind, itemID, pro
 
 // judgeMemoryWrite judges a memory write about to land (mem) against the file
 // it replaces (replaced; zero for a create) and, when the call also
-// supersedes, the memory it retires. A held write is stored in the owner's
+// supersedes, the memory it retires. Two things can hold it: write screening
+// (when on), and -- whether or not screening is on -- a restricted account
+// touching a briefing-injected kind, which makes the write a proposal (see
+// proposals.go). Both fold into ONE hold. A held write is stored in the owner's
 // queue and returned as a heldError; nil means write it.
-func (s *Server) judgeMemoryWrite(ctx context.Context, tool string, mem, replaced, supersedes core.Memory,
-	sessionID string, tainted bool, jd *judged) error {
-	extra := screening.MemoryReasons(tainted, mem.Kind, replaced.Kind)
-	lockdown := s.cfg.Screening.LockdownOn(ctx)
-	if lockdown && (screening.IsBriefingKind(mem.Kind) || screening.IsBriefingKind(replaced.Kind)) {
-		extra = append(extra, screening.ReasonLockdown)
+func (s *Server) judgeMemoryWrite(ctx context.Context, j *memoryJudge, mem, replaced, supersedes core.Memory) error {
+	retires := supersedes.ID != "" && supersedes.ID != mem.ID
+	var retiredKind core.MemoryKind
+	if retires {
+		retiredKind = supersedes.Kind
+	}
+	propose := j.proposes(mem.Kind, replaced.Kind, retiredKind)
+	if !j.screen && !propose {
+		return nil
+	}
+	if propose && s.cfg.Screening == nil {
+		return errNoProposalQueue
 	}
 	detail := map[string]string{"path": files.MemoryRelPath(mem.Project, mem.Name)}
-	if supersedes.ID != "" && supersedes.ID != mem.ID {
-		if supersedes.Kind == core.KindConstraint {
-			extra = append(extra, screening.ReasonConstraintSupersede)
-		}
-		if tainted && screening.IsBriefingKind(supersedes.Kind) {
-			extra = append(extra, screening.ReasonTaintedSession)
-		}
-		if lockdown && screening.IsBriefingKind(supersedes.Kind) {
-			extra = append(extra, screening.ReasonLockdown)
-		}
+	if retires {
 		detail["supersedes_id"] = supersedes.ID
 		detail["supersedes_name"] = supersedes.Name
 		detail["supersedes_project"] = supersedes.Project
 	}
-	text := screening.MemoryText(mem)
-	base := ""
-	if replaced.ID != "" && !s.drifted(ctx, replaced.FilePath) {
-		// A file in drift quarantine changed outside Seamless and was never
-		// screened, so it is no baseline: judged against it, an edit would carry
-		// the drifted text into the corpus as if it were already there.
-		base = screening.MemoryText(replaced)
+	var verdict screening.Verdict
+	if j.screen {
+		extra := screening.MemoryReasons(j.tainted, mem.Kind, replaced.Kind)
+		lockdown := s.cfg.Screening.LockdownOn(ctx)
+		if lockdown && (screening.IsBriefingKind(mem.Kind) || screening.IsBriefingKind(replaced.Kind)) {
+			extra = append(extra, screening.ReasonLockdown)
+		}
+		if retires {
+			if supersedes.Kind == core.KindConstraint {
+				extra = append(extra, screening.ReasonConstraintSupersede)
+			}
+			if j.tainted && screening.IsBriefingKind(supersedes.Kind) {
+				extra = append(extra, screening.ReasonTaintedSession)
+			}
+			if lockdown && screening.IsBriefingKind(supersedes.Kind) {
+				extra = append(extra, screening.ReasonLockdown)
+			}
+		}
+		text := screening.MemoryText(mem)
+		base := ""
+		if replaced.ID != "" && !s.drifted(ctx, replaced.FilePath) {
+			// A file in drift quarantine changed outside Seamless and was never
+			// screened, so it is no baseline: judged against it, an edit would carry
+			// the drifted text into the corpus as if it were already there.
+			base = screening.MemoryText(replaced)
+		}
+		verdict = screening.Judge(text, base, s.cfg.Screening.Rules(), extra...)
+		j.jd.size = len(text)
 	}
-	jd.verdict = screening.Judge(text, base, s.cfg.Screening.Rules(), extra...)
-	jd.size = len(text)
-	if !jd.verdict.Held() {
+	if propose {
+		verdict.Reasons = proposalReasons(verdict.Reasons)
+		detail[screening.DetailAccount] = j.account
+	}
+	j.jd.verdict = verdict
+	if !verdict.Held() {
 		return nil
 	}
+	// Rendered from the struct about to land, so a proposal's content carries
+	// the account label and keeps it when the owner promotes it.
 	content, err := files.RenderMemory(mem)
 	if err != nil {
 		return err
 	}
 	h, err := s.cfg.Screening.Hold(ctx, store.HeldWrite{
-		Op: store.HeldOpWrite, Tool: tool, ItemKind: core.ItemKindMemory, ItemID: mem.ID,
-		Project: mem.Project, Name: mem.Name, MemoryKind: mem.Kind, SessionID: sessionID,
-		Reasons: screening.Strings(jd.verdict.Reasons), BaseHash: replaced.ContentHash,
+		Op: store.HeldOpWrite, Tool: j.tool, ItemKind: core.ItemKindMemory, ItemID: mem.ID,
+		Project: mem.Project, Name: mem.Name, MemoryKind: mem.Kind, SessionID: j.session,
+		Reasons: screening.Strings(verdict.Reasons), BaseHash: replaced.ContentHash,
 		Content: content, Detail: detail,
 	})
 	if err != nil {

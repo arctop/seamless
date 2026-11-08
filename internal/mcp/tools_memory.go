@@ -9,6 +9,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/agentguide"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/files"
@@ -89,15 +90,14 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 	// supersede of a constraint (or, from a session marked as having read
 	// outside text, of any briefing-injected kind) holds the WHOLE call, so the
 	// old memory stays valid and in every briefing until the owner releases
-	// both halves together. The target is resolved here, ahead of the lock,
-	// only to judge; the supersede itself still runs after the write as always.
-	screen := s.screeningOn(ctx)
-	var screenSession string
-	var tainted bool
+	// both halves together. A restricted account's supersede of any
+	// briefing-injected kind is held the same way, as its proposal. The target
+	// is resolved here, ahead of the lock, only to judge; the supersede itself
+	// still runs after the write as always.
+	account := access.AccountOf(ctx)
+	judge := s.newMemoryJudge(ctx, "memory_write")
 	var supersedeTarget core.Memory
-	if screen {
-		screenSession = s.boundSession(ctx)
-		tainted = s.sessionTainted(ctx, screenSession)
+	if judge.active() {
 		target, terr := memoryName(argString(req, "supersedes"))
 		if terr != nil {
 			return errResult("memory_write", terr)
@@ -118,7 +118,6 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 	}
 	var written core.Memory
 	var found bool
-	var jd judged
 	// Resolve, read, build and write as one serialized step. Split apart, two
 	// concurrent writers of the same name both saw the same starting file and the
 	// second rename won: the first write's body, tags and star were gone with no
@@ -134,10 +133,14 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 		found = ok
 		var replaced core.Memory // the file this write replaces, read under the lock (screening's base)
 
+		// Account follows the content like Model, but with no "unknown" value to
+		// fall back from: this write replaces the whole content, so it carries the
+		// writer's label, and an owner's rewrite of a restricted account's memory
+		// clears it.
 		mem := core.Memory{
 			Kind: kind, Name: name, Description: desc, Project: project, Body: body,
 			Updated: now, ValidFrom: now, SourceSession: s.boundSession(ctx),
-			Model: s.boundSessionModel(ctx),
+			Model: s.boundSessionModel(ctx), Account: account,
 		}
 		if found {
 			// Update in place: the ULID and creation provenance are identity and
@@ -210,8 +213,8 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 			mem.Tags = argStrings(req, "tags")
 		}
 
-		if screen {
-			if herr := s.judgeMemoryWrite(ctx, "memory_write", mem, replaced, supersedeTarget, screenSession, tainted, &jd); herr != nil {
+		if judge.active() {
+			if herr := s.judgeMemoryWrite(ctx, judge, mem, replaced, supersedeTarget); herr != nil {
 				return herr
 			}
 		}
@@ -223,8 +226,10 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 		return nil
 	})
 	if held, ok := asHeld(err); ok {
-		s.recordScreened(ctx, "memory_write", core.ItemKindMemory, held.hold.ItemID, project, screenSession, kind, jd)
-		return heldResult(held.hold, map[string]any{"id": held.hold.ItemID, "name": name, "project": project, "updated": found})
+		if judge.screen {
+			s.recordScreened(ctx, "memory_write", core.ItemKindMemory, held.hold.ItemID, project, judge.session, kind, judge.jd)
+		}
+		return heldAnswer(held.hold, map[string]any{"id": held.hold.ItemID, "name": name, "project": project, "updated": found})
 	}
 	if err != nil {
 		if errors.Is(err, files.ErrPathOccupied) {
@@ -233,8 +238,8 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 		}
 		return errResult("memory_write", err)
 	}
-	if screen {
-		s.recordScreened(ctx, "memory_write", core.ItemKindMemory, written.ID, project, screenSession, kind, jd)
+	if judge.screen {
+		s.recordScreened(ctx, "memory_write", core.ItemKindMemory, written.ID, project, judge.session, kind, judge.jd)
 	}
 	s.record(ctx, core.EventMemoryWritten, s.boundSession(ctx), project, written.ID,
 		map[string]any{"name": name, "kind": kindStr, "updated": found})
@@ -321,6 +326,13 @@ func (s *Server) supersedeMemory(ctx context.Context, project, target string, re
 	if err := s.fenceWrite(ctx, old.Project); err != nil {
 		return "", err
 	}
+	// A restricted account's supersede of a briefing-injected kind is filed as a
+	// proposal before the write (memory_write judges the target it resolves
+	// ahead of the lock). Meeting one here means the target changed kind, or
+	// appeared, after that judgment: refuse rather than retire it unheld.
+	if access.AccountOf(ctx) != "" && screening.IsBriefingKind(old.Kind) {
+		return "", errSupersedeIsProposal(target, old.Kind)
+	}
 	// Index rows carry no body; read the file so the tombstone appends to the
 	// real content rather than truncating it. Read and rewrite are one serialized
 	// step because Supersede renders the WHOLE file from what this read returned:
@@ -392,14 +404,7 @@ func (s *Server) handleMemoryAppend(ctx context.Context, req mcp.CallToolRequest
 	// two agents adding findings to the same memory is the normal case, not the
 	// pathological one -- and unserialized both read the same starting body and
 	// the second rename kept only its own addition.
-	screen := s.screeningOn(ctx)
-	var screenSession string
-	var tainted bool
-	if screen {
-		screenSession = s.boundSession(ctx)
-		tainted = s.sessionTainted(ctx, screenSession)
-	}
-	var jd judged
+	judge := s.newMemoryJudge(ctx, "memory_append")
 	mem, err := s.cfg.Files.MutateMemory(ctx, idx.FilePath, func(ctx context.Context, cur core.Memory) (core.Memory, error) {
 		before := cur
 		cur.Body = strings.TrimRight(cur.Body, "\n") + "\n" + content + "\n"
@@ -413,23 +418,29 @@ func (s *Server) handleMemoryAppend(ctx context.Context, req mcp.CallToolRequest
 		if model := s.boundSessionModel(ctx); model != "" {
 			cur.Model = model
 		}
-		if screen {
-			if herr := s.judgeMemoryWrite(ctx, "memory_append", cur, before, core.Memory{}, screenSession, tainted, &jd); herr != nil {
+		// The account label follows the body the same way (accountAfter).
+		cur.Account = accountAfter(cur.Account, judge.account, true, false)
+		// A restricted account's append to a briefing-injected kind -- its own
+		// promoted constraint included -- changes binding text: a proposal.
+		if judge.active() {
+			if herr := s.judgeMemoryWrite(ctx, judge, cur, before, core.Memory{}); herr != nil {
 				return core.Memory{}, herr
 			}
 		}
 		return cur, nil
 	})
 	if held, ok := asHeld(err); ok {
-		s.recordScreened(ctx, "memory_append", core.ItemKindMemory, held.hold.ItemID, held.hold.Project, screenSession,
-			held.hold.MemoryKind, jd)
-		return heldResult(held.hold, map[string]any{"id": held.hold.ItemID, "name": name})
+		if judge.screen {
+			s.recordScreened(ctx, "memory_append", core.ItemKindMemory, held.hold.ItemID, held.hold.Project, judge.session,
+				held.hold.MemoryKind, judge.jd)
+		}
+		return heldAnswer(held.hold, map[string]any{"id": held.hold.ItemID, "name": name})
 	}
 	if err != nil {
 		return errResult("memory_append", err)
 	}
-	if screen {
-		s.recordScreened(ctx, "memory_append", core.ItemKindMemory, mem.ID, mem.Project, screenSession, mem.Kind, jd)
+	if judge.screen {
+		s.recordScreened(ctx, "memory_append", core.ItemKindMemory, mem.ID, mem.Project, judge.session, mem.Kind, judge.jd)
 	}
 	s.record(ctx, core.EventMemoryWritten, s.boundSession(ctx), mem.Project, mem.ID,
 		map[string]any{"name": name, "appended": true})
@@ -484,7 +495,7 @@ func (s *Server) handleMemoryRead(ctx context.Context, req mcp.CallToolRequest) 
 		if err != nil {
 			return errResult("memory_read", err)
 		}
-		if !found {
+		if !found || hiddenByID(ctx, m.Project) {
 			return errResult("memory_read", fmt.Errorf("no memory with id %q; use recall to search by text, or memory_read name=<name>", id))
 		}
 		// A ULID is globally unique, so this lookup resolves no scope and would
@@ -547,6 +558,11 @@ func (s *Server) handleMemoryRead(ctx context.Context, req mcp.CallToolRequest) 
 	}
 	if mem.Model != "" {
 		out["model"] = mem.Model
+	}
+	// The restricted account that wrote the current content; the owner's own
+	// memories carry none, so their output is what it always was.
+	if mem.Account != "" {
+		out["account"] = mem.Account
 	}
 	if mem.Favorite {
 		out["favorite"] = true
@@ -639,30 +655,45 @@ func (s *Server) handleMemoryDelete(ctx context.Context, req mcp.CallToolRequest
 	}
 	// Write screening, when on: deleting a constraint -- or, from a session
 	// marked as having read outside text, any briefing-injected kind -- is held,
-	// and the memory stays exactly where it is until the owner releases it.
-	if s.screeningOn(ctx) {
+	// and the memory stays exactly where it is until the owner releases it. A
+	// restricted account's delete of any briefing-injected kind is held the same
+	// way, screening on or off, as its proposal; both fold into one hold.
+	screen := s.screeningOn(ctx)
+	account := access.AccountOf(ctx)
+	propose := account != "" && screening.IsBriefingKind(idx.Kind)
+	if propose && s.cfg.Screening == nil {
+		return errResult("memory_delete", errNoProposalQueue)
+	}
+	if screen || propose {
 		session := s.boundSession(ctx)
 		var reasons []screening.Code
-		if idx.Kind == core.KindConstraint {
-			reasons = append(reasons, screening.ReasonConstraintDelete)
+		if screen {
+			if idx.Kind == core.KindConstraint {
+				reasons = append(reasons, screening.ReasonConstraintDelete)
+			}
+			if screening.IsBriefingKind(idx.Kind) && s.sessionTainted(ctx, session) {
+				reasons = append(reasons, screening.ReasonTaintedSession)
+			}
+			if screening.IsBriefingKind(idx.Kind) && s.cfg.Screening.LockdownOn(ctx) {
+				reasons = append(reasons, screening.ReasonLockdown)
+			}
 		}
-		if screening.IsBriefingKind(idx.Kind) && s.sessionTainted(ctx, session) {
-			reasons = append(reasons, screening.ReasonTaintedSession)
-		}
-		if screening.IsBriefingKind(idx.Kind) && s.cfg.Screening.LockdownOn(ctx) {
-			reasons = append(reasons, screening.ReasonLockdown)
+		detail := map[string]string{"path": idx.FilePath}
+		if propose {
+			reasons = proposalReasons(reasons)
+			detail[screening.DetailAccount] = account
 		}
 		if len(reasons) > 0 {
 			h, herr := s.cfg.Screening.Hold(ctx, store.HeldWrite{
 				Op: store.HeldOpDelete, Tool: "memory_delete", ItemKind: core.ItemKindMemory, ItemID: idx.ID,
 				Project: idx.Project, Name: idx.Name, MemoryKind: idx.Kind, SessionID: session,
 				Reasons: screening.Strings(reasons), BaseHash: idx.ContentHash,
-				Detail: map[string]string{"path": idx.FilePath},
+				Detail: detail,
 			})
 			if herr != nil {
 				return errResult("memory_delete", herr)
 			}
-			return heldResult(h, map[string]any{"id": idx.ID, "name": name, "project": idx.Project})
+			return heldAnswer(h, map[string]any{"id": idx.ID, "name": name, "project": idx.Project})
 		}
 	}
 	if err := s.cfg.Files.Remove(ctx, idx.FilePath); err != nil {

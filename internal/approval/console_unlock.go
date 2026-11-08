@@ -50,6 +50,9 @@ func (s *Service) ConsoleLeaseLength() time.Duration {
 // locked.
 func (s *Service) BeginConsoleUnlock(ctx context.Context, project, tokenHash string) (Begun, error) {
 	const op = "approval.BeginConsoleUnlock"
+	if err := refuseRestricted(ctx); err != nil {
+		return Begun{}, fmt.Errorf("%s: %w", op, err)
+	}
 	if !s.PasskeysOn() {
 		return Begun{}, fmt.Errorf("%s: %w", op, ErrPasskeysOff)
 	}
@@ -76,6 +79,9 @@ func (s *Service) BeginConsoleUnlock(ctx context.Context, project, tokenHash str
 // passkey's use (a compare-and-set on its counter), and makes the unlock live.
 func (s *Service) FinishConsoleUnlock(ctx context.Context, id, project, tokenHash string, response []byte) (store.ConsoleUnlock, error) {
 	const op = "approval.FinishConsoleUnlock"
+	if err := refuseRestricted(ctx); err != nil {
+		return store.ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
+	}
 	if !s.PasskeysOn() {
 		return store.ConsoleUnlock{}, fmt.Errorf("%s: %w", op, ErrPasskeysOff)
 	}

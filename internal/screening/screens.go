@@ -622,6 +622,7 @@ var codeWords = map[Code]string{
 	ReasonConstraintDelete:    "deletes or archives a constraint",
 	ReasonConstraintDemote:    "turns a constraint into another kind",
 	ReasonLockdown:            "changes a binding rule while lockdown is on",
+	ReasonRestrictedAccount:   "a restricted account proposed a binding rule; it waits for your promotion",
 }
 
 // Describe returns a code's owner-facing description ("" for an unknown one).

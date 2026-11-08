@@ -21,10 +21,11 @@ func (s *Service) SetBodyReader(r MemoryBodyReader) { s.bodyReader = r }
 
 // stageLine is one pinned stage rendered in the briefing.
 type stageLine struct {
-	id     string // memory ULID, for retrieval instrumentation
-	name   string
-	status string
-	gate   string
+	id      string // memory ULID, for retrieval instrumentation
+	name    string
+	status  string
+	gate    string
+	account string // the restricted account that wrote it ("" = the owner): the line's label
 }
 
 // pinnedStages reads each stage memory's body, parses its Status/Gate header
@@ -59,7 +60,7 @@ func (s *Service) pinnedStages(stages []core.Memory, maxUnknownAgeDays int, now 
 		if !core.StageStatusLive(status) && maxUnknownAgeDays > 0 && !m.Updated.After(cutoff) {
 			continue // no live gate and past the grace window
 		}
-		out = append(out, stageLine{id: m.ID, name: m.Name, status: status, gate: gate})
+		out = append(out, stageLine{id: m.ID, name: m.Name, status: status, gate: gate, account: m.Account})
 	}
 	return out
 }
@@ -87,7 +88,7 @@ func stagesSection(stages []stageLine, marks map[string]string) string {
 		if st.gate != "" {
 			b.WriteString(", gate " + sanitizeField(st.gate, 40))
 		}
-		b.WriteString(marks[st.id] + "\n")
+		b.WriteString(marks[st.id] + accountMark(st.account) + "\n")
 	}
 	b.WriteString("(details: memory_read name=<stage>)\n")
 	return b.String()

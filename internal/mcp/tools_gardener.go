@@ -147,6 +147,16 @@ func gardenerApplyTool() mcp.Tool {
 }
 
 func (s *Server) handleGardenerApply(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// The gardener's queue is the owner's curation: applying, dismissing or
+	// hiding a proposal changes what every session is briefed with. A
+	// restricted account reviews (gardener_proposals) and raises proposals
+	// (gardener_request, gardener_split), and is refused here before the
+	// proposal is loaded, so the answer says nothing about the id it named.
+	if account := access.AccountOf(ctx); account != "" {
+		return errResult("gardener_apply", ownerCurationRefusal(account,
+			"resolving a gardener proposal (apply, dismiss or hide) is the owner's curation",
+			"review proposals with gardener_proposals and raise new ones with gardener_request; the owner resolves them on the console's Gardener screen"))
+	}
 	id := argString(req, "id")
 	if id == "" {
 		return errResult("gardener_apply", errors.New("id is required"))

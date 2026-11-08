@@ -61,6 +61,17 @@ func printField(w io.Writer, label, value string) {
 	fmt.Fprintf(w, "%-*s%s\n", fieldWidth, label+":", value)
 }
 
+// writtenBy labels an item a restricted local account (peer_auth.restricted)
+// wrote: "written by account <name>", the wording every surface uses. The
+// owner's items carry no account, and get no label -- "" here, which
+// printField skips -- so their rendering is what it always was.
+func writtenBy(account string) string {
+	if account == "" {
+		return ""
+	}
+	return "written by account " + printable(account)
+}
+
 // printBody prints a record's markdown body under a blank line, as plan show
 // prints a plan's, ending in exactly one newline whatever the file ended in.
 func printBody(w io.Writer, body string) {

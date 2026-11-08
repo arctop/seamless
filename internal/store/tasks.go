@@ -11,12 +11,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 )
 
 // taskCols is the SELECT list for the tasks table, matching scanTask.
 const taskCols = `id, project_slug, title, body, status, created_by,
-	plan_slug, claimed_by, lease_expires_at, favorite, created_at, updated_at, closed_at`
+	plan_slug, claimed_by, lease_expires_at, favorite, created_at, updated_at, closed_at,
+	account, updated_account`
 
 // ErrTaskNotFound is returned when a task id does not exist (e.g. a dangling
 // depends_on reference).
@@ -50,7 +52,15 @@ type TaskPatch struct {
 // CreateTask inserts a task and its dependency edges in one transaction. Every
 // depends_on must reference an existing task (dangling references are rejected)
 // and must not create a cycle. The caller mints the ULID id and timestamps.
+//
+// The task's account is the restricted account the request in ctx speaks for
+// (access.AccountOf) unless the caller set one; every later change stamps
+// updated_account the same way, so a plan step a restricted account created,
+// claimed or closed says so whichever tool did it.
 func CreateTask(ctx context.Context, db *sql.DB, t core.Task) error {
+	if t.Account == "" {
+		t.Account = access.AccountOf(ctx)
+	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("store.CreateTask: begin: %w", err)
@@ -68,11 +78,11 @@ func CreateTask(ctx context.Context, db *sql.DB, t core.Task) error {
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO tasks (id, project_slug, title, body, status, created_by,
 		                   plan_slug, claimed_by, lease_expires_at,
-		                   created_at, updated_at, closed_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                   created_at, updated_at, closed_at, account)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.ID, t.ProjectSlug, t.Title, t.Body, string(t.Status), t.CreatedBy,
 		t.PlanSlug, t.ClaimedBy, leaseAt,
-		core.FormatTime(t.CreatedAt), core.FormatTime(t.UpdatedAt), closedAt); err != nil {
+		core.FormatTime(t.CreatedAt), core.FormatTime(t.UpdatedAt), closedAt, t.Account); err != nil {
 		return fmt.Errorf("store.CreateTask: insert: %w", err)
 	}
 	if err := addDeps(ctx, tx, t.ID, t.DependsOn); err != nil {
@@ -159,10 +169,10 @@ func UpdateTask(ctx context.Context, db *sql.DB, id string, patch TaskPatch, act
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE tasks SET title = ?, body = ?, project_slug = ?, status = ?, updated_at = ?, closed_at = ?,
-		                 claimed_by = ?, lease_expires_at = ?
+		                 claimed_by = ?, lease_expires_at = ?, updated_account = ?
 		 WHERE id = ?`,
 		t.Title, t.Body, t.ProjectSlug, string(t.Status), core.FormatTime(t.UpdatedAt), closedAt,
-		t.ClaimedBy, leaseAt, t.ID); err != nil {
+		t.ClaimedBy, leaseAt, access.AccountOf(ctx), t.ID); err != nil {
 		return core.Task{}, fmt.Errorf("store.UpdateTask: update: %w", err)
 	}
 	if err := addDeps(ctx, tx, t.ID, patch.AddDependsOn); err != nil {

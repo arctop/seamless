@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 )
 
@@ -28,7 +29,7 @@ var ErrInvalidTrialQueryLimit = errors.New("invalid trial query limit")
 
 // trialCols is the SELECT list for the trials table, matching scanTrial.
 const trialCols = `id, lab, title, changes, expected, actual, outcome, metrics,
-	session_id, project_slug, favorite, created_at`
+	session_id, project_slug, favorite, created_at, account`
 
 // TrialFilter parameterizes QueryTrials. Empty string fields are not filtered;
 // MetricsEquals matches trials whose metrics contain each given key with an
@@ -44,17 +45,22 @@ type TrialFilter struct {
 }
 
 // CreateTrial inserts a trial row. The caller mints the ULID id and timestamp.
+// The trial's account is the restricted account the request in ctx speaks for
+// (access.AccountOf) unless the caller set one.
 func CreateTrial(ctx context.Context, db *sql.DB, tr core.Trial) error {
+	if tr.Account == "" {
+		tr.Account = access.AccountOf(ctx)
+	}
 	metrics, err := marshalMetrics(tr.Metrics)
 	if err != nil {
 		return fmt.Errorf("store.CreateTrial: %w", err)
 	}
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO trials (id, lab, title, changes, expected, actual, outcome,
-		                    metrics, session_id, project_slug, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                    metrics, session_id, project_slug, created_at, account)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		tr.ID, tr.Lab, tr.Title, tr.Changes, tr.Expected, tr.Actual, string(tr.Outcome),
-		metrics, tr.SessionID, tr.ProjectSlug, core.FormatTime(tr.CreatedAt))
+		metrics, tr.SessionID, tr.ProjectSlug, core.FormatTime(tr.CreatedAt), tr.Account)
 	if err != nil {
 		return fmt.Errorf("store.CreateTrial: %w", err)
 	}
@@ -244,7 +250,7 @@ func scanTrial(rows *sql.Rows) (core.Trial, error) {
 		created string
 	)
 	if err := rows.Scan(&tr.ID, &tr.Lab, &tr.Title, &tr.Changes, &tr.Expected,
-		&tr.Actual, &outcome, &metrics, &tr.SessionID, &tr.ProjectSlug, &tr.Favorite, &created); err != nil {
+		&tr.Actual, &outcome, &metrics, &tr.SessionID, &tr.ProjectSlug, &tr.Favorite, &created, &tr.Account); err != nil {
 		return core.Trial{}, err
 	}
 	tr.Outcome = core.TrialOutcome(outcome)

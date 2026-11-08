@@ -71,6 +71,15 @@ type Config struct {
 	// held queue's release and discard, and clearing a session's
 	// outside-text mark. It writes through the main database handle.
 	Screening *screening.Service
+	// RestrictedAccounts reports that peer_auth names restricted local
+	// accounts (peer_auth.restricted). Their changes to briefing-injected
+	// kinds wait in the held queue as proposals whether or not write
+	// screening is on, so the Held screen's list, release (Promote) and
+	// discard are served even while the screening feature is off -- showing
+	// only the proposals (held_proposals.go). The screening-only routes
+	// (lockdown, the review, corpus marks, session marks) stay behind the
+	// feature. False is exactly the previous behavior.
+	RestrictedAccounts bool
 	// Retrieve backs the search page and command palette: the same fused
 	// FTS+semantic engine recall uses, through its human-facing Search entry
 	// point. A nil Retrieve degrades search to the structured entities only.
@@ -287,10 +296,12 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/approvers/passkey/finish", formBodyPasskey, s.approversFinish)
 	post("POST /console/approvers/passkey/approve", formBodyPasskey, s.approversApprove)
 	post("POST /console/approvers/touchid/enroll", formBodySmall, s.approversTouchIDEnroll)
-	handle("GET /console/held", s.auth(gated(features.Screening, s.heldPage)))
-	handle("GET /console/held/{id}", s.auth(gated(features.Screening, s.heldOne)))
-	post("POST /console/held/{id}/release", formBodySmall, gated(features.Screening, s.heldRelease))
-	post("POST /console/held/{id}/discard", formBodySmall, gated(features.Screening, s.heldDiscard))
+	// The queue itself is also the restricted accounts' proposals queue, so
+	// heldGate serves it while either reason holds; the rest is screening's.
+	handle("GET /console/held", s.auth(s.heldGate(s.heldPage)))
+	handle("GET /console/held/{id}", s.auth(s.heldGate(s.heldOne)))
+	post("POST /console/held/{id}/release", formBodySmall, s.heldGate(s.heldRelease))
+	post("POST /console/held/{id}/discard", formBodySmall, s.heldGate(s.heldDiscard))
 	post("POST /console/held/sessions/{id}/clear", formBodySmall, gated(features.Screening, s.heldUntaint))
 	post("POST /console/held/lockdown", formBodySmall, gated(features.Screening, s.heldLockdown))
 	post("POST /console/held/review", formBodySmall, gated(features.Screening, s.heldReview))
@@ -1306,13 +1317,22 @@ func (s *Service) navCounts(ctx context.Context, feats config.Features) navCount
 	if !features.Enabled(feats, features.Research) {
 		counts.Labs, counts.Trials = 0, 0
 	}
-	// The held queue is counted only while its feature is on: off, the table
-	// is not consulted at all.
-	if features.Enabled(feats, features.Screening) {
+	// The held queue is counted only while its screen is offered: off, the
+	// table is not consulted at all. With screening off and restricted
+	// accounts configured, the screen shows proposals only, and so does the
+	// count.
+	switch s.heldModeFor(feats) {
+	case heldScreening:
 		if held, herr := store.CountPendingHolds(ctx, s.db(ctx)); herr != nil {
 			s.logger.Warn("console: nav held count", "error", herr)
 		} else {
 			counts.Held = held
+		}
+	case heldProposals:
+		if held, herr := s.pendingProposals(ctx); herr != nil {
+			s.logger.Warn("console: nav held count", "error", herr)
+		} else {
+			counts.Held = len(held)
 		}
 	}
 	// Locked projects: the Access requests badge counts what waits for the

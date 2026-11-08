@@ -107,6 +107,12 @@ func (s *Server) listedProcessSession(ctx context.Context) (core.Session, bool) 
 	if ok && !access.Visible(ctx, sess.ProjectSlug) && !access.Locked(ctx, sess.ProjectSlug) {
 		sess, ok = core.Session{}, false
 	}
+	// Nor may it name a session another principal started in a project both
+	// reach (access.SessionAccountOK): a restricted account's agent and the
+	// owner's never bind to each other's sessions. The call proceeds unbound.
+	if ok && !access.SessionAccountOK(ctx, sess.Account) {
+		sess, ok = core.Session{}, false
+	}
 	if memo {
 		slot.done, slot.sess, slot.ok = true, sess, ok
 	}
@@ -137,7 +143,17 @@ func (s *Server) lookupProcessSession(ctx context.Context, proc string) (core.Se
 // recorded as the mirror of the reaper's session.ended, so the console's
 // timeline shows the session coming back rather than a heartbeat from nowhere.
 // If a concurrent call revived it first, the live row is simply read again.
+//
+// A restricted account's call revives nothing. The agent-process header is
+// the client's own claim, and the revival is a write the store makes before
+// anyone could see whose session it reopened: a header naming the owner's
+// agent would reopen the owner's session on a restricted account's behalf.
+// Such an account's agent whose session the reaper expired binds again on its
+// next SessionStart, or by resuming it with session_start name=<its name>.
 func (s *Server) reviveProcessSession(ctx context.Context, host, proc string) (core.Session, bool) {
+	if access.AccountOf(ctx) != "" {
+		return core.Session{}, false
+	}
 	sess, ok, err := store.ReviveExpiredAgentSession(ctx, s.cfg.DB, host, proc, time.Now().UTC())
 	if err != nil {
 		s.logger.Warn("mcp: process binding revive", "error", err)

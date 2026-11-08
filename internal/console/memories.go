@@ -38,6 +38,7 @@ type memoryRow struct {
 	Status       string       `json:"status"`            // active|superseded|archived
 	Harness      string       `json:"harness,omitempty"` // producing client, resolved from the source session
 	Model        string       `json:"model,omitempty"`   // producing model, verbatim
+	Account      string       `json:"account,omitempty"` // restricted account that wrote the content ("" = owner)
 	ReplacedBy   string       `json:"replacedBy,omitempty"`
 	ReplacedByID string       `json:"replacedById,omitempty"`
 	Favorite     bool         `json:"favorite,omitempty"`
@@ -223,6 +224,7 @@ func toMemoryRow(m core.Memory, stat store.RetrievalStat, nameByID map[string]st
 		ID: m.ID, Kind: string(m.Kind), Name: m.Name, Description: m.Description,
 		Project: m.Project, FilePath: m.FilePath, Updated: m.Updated, Status: status,
 		Model:      m.Model, // Harness is filled by the caller (it needs a session resolver)
+		Account:    m.Account,
 		Favorite:   m.Favorite,
 		ReplacedBy: nameByID[m.SupersededBy], ReplacedByID: m.SupersededBy,
 		Injects: stat.InjectCount, Reads: stat.ReadCount, Utility: stat.Utility,

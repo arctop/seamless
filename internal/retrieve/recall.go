@@ -62,15 +62,25 @@ const recallUtilityBoost = 0.10
 // (tasks_list id=), a trial by its lab (trial_query lab=), a session by the
 // findings already carried in Description.
 type Hit struct {
-	Kind        string  `json:"kind"` // core.ItemKind*: memory | note | task | trial | session
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`  // memory name / note slug / task plan slug / trial lab / session name
-	Title       string  `json:"title"` // display title
-	Description string  `json:"description"`
-	Project     string  `json:"project,omitempty"`
-	Age         string  `json:"age"`
-	Source      string  `json:"source"` // semantic | fts | fused | identifier | link | browse
-	Score       float64 `json:"score"`
+	Kind        string `json:"kind"` // core.ItemKind*: memory | note | task | trial | session
+	ID          string `json:"id"`
+	Name        string `json:"name"`  // memory name / note slug / task plan slug / trial lab / session name
+	Title       string `json:"title"` // display title
+	Description string `json:"description"`
+	Project     string `json:"project,omitempty"`
+	// Account is the restricted local account (peer_auth.restricted) behind
+	// the hit: the one that wrote a memory's or note's current content, created
+	// a task, recorded a trial, or started a session. "" for the owner's items,
+	// and omitempty keeps their payload byte-identical to an install without
+	// restricted accounts. Unlike the briefing's provenance marks it is not
+	// gated on the screening feature. Sanitized like the label
+	// (sanitizeAccount), so a hand-edited frontmatter value cannot carry text
+	// an OS account name cannot. A surface that prints a hit as text renders
+	// it with AccountLabel ("written by account <name>").
+	Account string  `json:"account,omitempty"`
+	Age     string  `json:"age"`
+	Source  string  `json:"source"` // semantic | fts | fused | identifier | link | browse
+	Score   float64 `json:"score"`
 	// Status is the work-record kinds' lifecycle word -- a task's status, a
 	// trial's outcome, a session's status. It is what tells an agent whether the
 	// task it just found is still open or was dropped two months ago, which is
@@ -516,6 +526,12 @@ func (s *Service) browseKind(ctx context.Context, kind, project string, also []s
 		if string(m.Kind) != kind {
 			continue
 		}
+		// peer_auth: the scope query reads the slugs it is given, so the
+		// caller's reach is applied per row, as Recall's final guard applies it
+		// -- the extra (granted) slugs included.
+		if !access.Visible(ctx, m.Project) {
+			continue
+		}
 		h := memoryHit(m)
 		h.Source = "browse"
 		cost := estTokens(h.Title + h.Description)
@@ -566,7 +582,7 @@ func fusedSource(f *fusedItem) string {
 func memoryHit(m core.Memory) Hit {
 	return Hit{
 		Kind: core.ItemKindMemory, ID: m.ID, Name: m.Name, Title: m.Name,
-		Description: sanitizeField(m.Description, 200), Project: m.Project,
+		Description: sanitizeField(m.Description, 200), Project: m.Project, Account: sanitizeAccount(m.Account),
 		Age: humanAge(m.Updated), Favorite: m.Favorite, Updated: m.Updated,
 	}
 }
@@ -574,7 +590,7 @@ func memoryHit(m core.Memory) Hit {
 func noteHit(n core.Note) Hit {
 	return Hit{
 		Kind: core.ItemKindNote, ID: n.ID, Name: n.Slug, Title: n.Title,
-		Description: sanitizeField(n.Description, 200), Project: n.Project,
+		Description: sanitizeField(n.Description, 200), Project: n.Project, Account: sanitizeAccount(n.Account),
 		Age: humanAge(n.Updated), Favorite: n.Favorite, Updated: n.Updated,
 	}
 }
@@ -583,11 +599,12 @@ func noteHit(n core.Note) Hit {
 // body's opening stands in -- the same role Memory.Description plays, sourced
 // from the only prose a task has. Name carries the plan slug (empty for a
 // standalone task), which is how a hit announces that it is a step of a
-// composition rather than a loose queue item.
+// composition rather than a loose queue item. Account is the task's creator
+// (core.Task.Account), not its last changer: the task's text is the creator's.
 func taskHit(t core.Task) Hit {
 	return Hit{
 		Kind: core.ItemKindTask, ID: t.ID, Name: t.PlanSlug, Title: t.Title,
-		Description: sanitizeField(t.Body, 200), Project: t.ProjectSlug,
+		Description: sanitizeField(t.Body, 200), Project: t.ProjectSlug, Account: sanitizeAccount(t.Account),
 		Age: humanAge(t.UpdatedAt), Status: string(t.Status),
 		Favorite: t.Favorite, Updated: t.UpdatedAt,
 	}
@@ -599,7 +616,7 @@ func taskHit(t core.Task) Hit {
 func trialHit(tr core.Trial) Hit {
 	return Hit{
 		Kind: core.ItemKindTrial, ID: tr.ID, Name: tr.Lab, Title: tr.Title,
-		Description: sanitizeField(tr.Actual, 200), Project: tr.ProjectSlug,
+		Description: sanitizeField(tr.Actual, 200), Project: tr.ProjectSlug, Account: sanitizeAccount(tr.Account),
 		Age: humanAge(tr.CreatedAt), Status: string(tr.Outcome),
 		Favorite: tr.Favorite, Updated: tr.CreatedAt,
 	}
@@ -611,7 +628,7 @@ func trialHit(tr core.Trial) Hit {
 func sessionHit(s core.Session) Hit {
 	return Hit{
 		Kind: core.ItemKindSession, ID: s.ID, Name: s.Name, Title: s.Name,
-		Description: sanitizeField(s.Findings, 200), Project: s.ProjectSlug,
+		Description: sanitizeField(s.Findings, 200), Project: s.ProjectSlug, Account: sanitizeAccount(s.Account),
 		Age: humanAge(s.UpdatedAt), Status: string(s.Status), Updated: s.UpdatedAt,
 	}
 }

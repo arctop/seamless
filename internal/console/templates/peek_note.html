@@ -1,6 +1,6 @@
 {{define "peek-body"}}
 <article class="peek-entity">
-  <header class="peek-head"><span class="kind">note</span>{{agentPill "" .Model}}</header>
+  <header class="peek-head"><span class="kind">note</span>{{agentPill "" .Model}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</header>
   <h2 class="peek-title">{{.Title}}{{copyBtn .Title}}</h2>
   {{if .Description}}<p class="peek-desc">{{.Description}}</p>{{end}}
   {{template "detail-body" .}}

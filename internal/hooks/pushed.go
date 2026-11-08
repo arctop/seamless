@@ -14,9 +14,11 @@ package hooks
 // only through the fences every other hook write meets:
 //
 //   - The session the hook names decides first (sessionReachOf): another
-//     account's session takes nothing, and the owner's session in a locked
-//     project takes metadata only -- the heartbeat, the model, the completion
-//     -- until the owner approves a lease for the pushing process's tree. A
+//     account's session takes nothing -- nor does one another principal
+//     started (a restricted local account's for the owner, the owner's for a
+//     restricted account) -- and the owner's session in a locked project
+//     takes metadata only -- the heartbeat, the model, the completion --
+//     until the owner approves a lease for the pushing process's tree. A
 //     capture refused there is answered with a one-line notice
 //     (harvest.RefusedHeader, and the context of a hook that has one) and is
 //     never retried: the next capture after the approval carries the current
@@ -24,10 +26,13 @@ package hooks
 //   - A plan or subagent note lands in the project its cwd resolves to, placed
 //     the way a session is (View.SessionScope): the owner's only where it may
 //     write, a configured account's in its home project when the cwd maps to
-//     none of its own. Its events are filed under the session's project, so a
-//     note in a leased locked project is accepted only from a session recorded
-//     in that same project: never a locked project's content in another
-//     project's records.
+//     none of its own, a restricted account's only in an open project it
+//     reaches (anywhere else it is dropped without a word, as a closed
+//     project must read like a missing one), labeled with its account. Its
+//     events are filed under the session's project, so a note in a leased
+//     locked project is accepted only from a session recorded in that same
+//     project: never a locked project's content in another project's
+//     records.
 //
 // With peer_auth off no request carries a View, so pushedCapture never looks
 // at the body, every payload's Capture stays nil, and every hook runs exactly

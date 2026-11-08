@@ -391,6 +391,17 @@ out of a project): a locked project is normally <code>confidential</code>. File-
 and never beside <code>users</code>: a config names one design or the other.</li>
 <li><code>max_lease</code> caps every lease the owner approves on a locked project, &quot;until
 this session ends&quot; included: at most <code>24h</code>, unset <code>8h</code>. File-only.</li>
+<li><code>restricted</code> lists restricted local accounts, each an OS user name or a
+numeric uid: a second account on the machine whose agents work beside
+yours. It connects over the socket only - the kernel names it, and it never
+holds the bearer key - and reaches every project that is <code>open</code> and not
+locked, reading and writing, plus the global scope read-only. It cannot
+create a project, files no access requests and holds no leases. Its writes
+are labeled with its name, and a constraint, convention, protocol or stage it
+writes waits for you to promote it
+(<a href="../../guides/peer-auth/#restricted-local-accounts">Restricted local accounts</a>).
+Refused while <code>enabled</code> is false, for the owner, and beside <code>users</code>.
+File-only.</li>
 <li><code>passkeys.rp_id</code> and <code>passkeys.origins</code> name the WebAuthn relying party of
 the owner's approver passkeys (<a href="../../reference/cli-seamlessd/#seamlessd_approvers">seamlessd approvers</a>).
 Unset, they are <code>localhost</code> and the console's own address on localhost.
@@ -870,6 +881,11 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <tr>
 <td><code>peer_auth.users</code></td>
 <td>map of string to {sealed []string, projects []string}</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>peer_auth.restricted</code></td>
+<td>[]string</td>
 <td>-</td>
 </tr>
 <tr>
@@ -1361,6 +1377,15 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c">#   passkeys:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#     rp_id: &#34;&#34;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#     origins: []</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # Restricted local accounts (user names or numeric uids): a second OS</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # account whose agents work beside the owner&#39;s. It connects over the socket</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # only (the kernel names it; it never holds the bearer key), reads and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # writes every open project that is not locked, and reads the global scope.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # It cannot create projects, files no access requests and holds no leases.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # Its writes are labeled with its name, and a constraint, convention,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # protocol or stage it writes is a proposal until you promote it. Refused</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # while peer_auth is disabled, for the owner, and beside users. File only.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   restricted: []</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # OS account (user name or numeric uid) -&gt; its reach. File only (no env).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # sealed: reachable ONLY from this account&#39;s socket connections; a project</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # is sealed to at most one account, and never also listed for another.</span><span class="w">

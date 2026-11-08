@@ -12,7 +12,7 @@ import (
 // not in the index (it lives in the file), so a scanned memory has Body == "".
 const memoryCols = `id, kind, name, description, project, file_path, tags,
 	valid_from, invalid_at, superseded_by, source_session, model, favorite,
-	content_hash, created_at, updated_at`
+	content_hash, created_at, updated_at, account`
 
 // scanMemory scans one memories_index row (memoryCols order) into a core.Memory.
 func scanMemory(rows *sql.Rows) (core.Memory, error) {
@@ -25,7 +25,7 @@ func scanMemory(rows *sql.Rows) (core.Memory, error) {
 	if err := rows.Scan(
 		&m.ID, &kind, &m.Name, &m.Description, &m.Project, &m.FilePath, &tags,
 		&validFrom, &invalidAt, &supersededBy, &srcSession, &m.Model, &m.Favorite,
-		&hash, &created, &updated,
+		&hash, &created, &updated, &m.Account,
 	); err != nil {
 		return core.Memory{}, err
 	}

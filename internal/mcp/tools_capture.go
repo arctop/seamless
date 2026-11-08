@@ -8,6 +8,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/capture"
 	"github.com/arctop/seamless/internal/core"
 )
 
@@ -39,21 +41,9 @@ func (s *Server) handleCaptureURL(ctx context.Context, req mcp.CallToolRequest) 
 	if err != nil {
 		return errResult("capture_url", err)
 	}
-
-	body := fmt.Sprintf("Source: %s\n\n---\n\n%s", content.URL, content.Body)
-	if r := []rune(body); len(r) > captureBodyMaxRunes {
-		body = string(r[:captureBodyMaxRunes]) + "\n\n[content truncated]"
-	}
-
-	id, err := core.NewID()
+	note, err := s.capturedNote(ctx, content, project)
 	if err != nil {
 		return errResult("capture_url", err)
-	}
-	now := time.Now().UTC()
-	note := core.Note{
-		ID: id, Title: content.Title, Slug: core.Slugify(content.Title), Description: "Captured from " + content.URL,
-		Project: project, Body: body, Tags: []string{"created-by:agent", "captured-url"},
-		SourceURL: content.URL, Model: s.boundSessionModel(ctx), Created: now, Updated: now,
 	}
 	// A captured page is outside text by definition, landing straight in the
 	// corpus where recall can serve it to every later session: it is screened
@@ -87,4 +77,26 @@ func (s *Server) handleCaptureURL(ctx context.Context, req mcp.CallToolRequest) 
 		"id": written.ID, "slug": written.Slug, "title": written.Title,
 		"project": project, "source_url": content.URL,
 	})
+}
+
+// capturedNote builds the note capture_url writes for a fetched page: the
+// page's text under a source line, capped, tagged as a capture and attributed
+// to the writer -- the bound session's model and, for a restricted account,
+// its account label.
+func (s *Server) capturedNote(ctx context.Context, content *capture.URLContent, project string) (core.Note, error) {
+	body := fmt.Sprintf("Source: %s\n\n---\n\n%s", content.URL, content.Body)
+	if r := []rune(body); len(r) > captureBodyMaxRunes {
+		body = string(r[:captureBodyMaxRunes]) + "\n\n[content truncated]"
+	}
+	id, err := core.NewID()
+	if err != nil {
+		return core.Note{}, err
+	}
+	now := time.Now().UTC()
+	return core.Note{
+		ID: id, Title: content.Title, Slug: core.Slugify(content.Title), Description: "Captured from " + content.URL,
+		Project: project, Body: body, Tags: []string{"created-by:agent", "captured-url"},
+		SourceURL: content.URL, Model: s.boundSessionModel(ctx), Account: access.AccountOf(ctx),
+		Created: now, Updated: now,
+	}, nil
 }

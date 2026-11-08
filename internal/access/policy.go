@@ -71,6 +71,9 @@ type Policy struct {
 	// owner except under a lease (lease.go).
 	ownerLocked     map[string]bool
 	ownerLockedList []string // the same, sorted
+	// restricted is peer_auth.restricted: the restricted local accounts, by
+	// uid (restricted.go).
+	restricted map[uint32]Account
 }
 
 type userRule struct {
@@ -103,6 +106,7 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 		users:       map[uint32]*userRule{},
 		sealedTo:    map[string]Account{},
 		ownerLocked: map[string]bool{},
+		restricted:  map[uint32]Account{},
 	}
 	// The two designs never mix (config.validatePeerLocked refuses it at load;
 	// this is the same refusal for a block that did not come through a load).
@@ -161,7 +165,36 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 		p.ownerHidden = append(p.ownerHidden, slug)
 	}
 	slices.Sort(p.ownerHidden)
+	if err := p.resolveRestricted(cfg, resolve); err != nil {
+		return nil, err
+	}
 	return p, nil
+}
+
+// resolveRestricted resolves peer_auth.restricted. Every entry must resolve, and
+// none may be the owner's uid or a uid listed twice (a numeric entry and a name
+// can name one account) -- the same refusals the users map gets, for the same
+// reason: one uid carries one reach. The users map and this list never mix
+// (config.validatePeerRestricted refuses it at load; this is the same refusal
+// for a block that did not come through a load).
+func (p *Policy) resolveRestricted(cfg config.PeerAuth, resolve Resolver) error {
+	if len(cfg.Restricted) > 0 && len(cfg.Users) > 0 {
+		return fmt.Errorf("%w: peer_auth names both restricted and users: use one design", ErrInvalidPolicy)
+	}
+	for _, name := range cfg.Restricted {
+		acct, err := resolve(strings.TrimSpace(name))
+		if err != nil {
+			return fmt.Errorf("%w: peer_auth.restricted %s: %w", ErrInvalidPolicy, name, err)
+		}
+		if acct.UID == p.owner.UID {
+			return fmt.Errorf("%w: peer_auth.restricted %s is uid %d, the owner's: the owner is never restricted", ErrInvalidPolicy, name, acct.UID)
+		}
+		if prev, dup := p.restricted[acct.UID]; dup {
+			return fmt.Errorf("%w: peer_auth.restricted lists uid %d twice (%s and %s): name each account once", ErrInvalidPolicy, acct.UID, prev.Name, name)
+		}
+		p.restricted[acct.UID] = acct
+	}
+	return nil
 }
 
 // Owner returns the owner account.
@@ -212,6 +245,10 @@ func (p *Policy) PeerView(uid uint32) (View, bool) {
 	}
 	if rule, ok := p.users[uid]; ok {
 		return View{policy: p, user: rule, who: Principal{Kind: KindUser, UID: uid, HasUID: true, User: rule.acct.Name, Socket: true}}, true
+	}
+	if acct, ok := p.restricted[uid]; ok {
+		// No reach yet: the transport fills it per request (WithOpenProjects).
+		return View{policy: p, acct: acct, who: Principal{Kind: KindRestricted, UID: uid, HasUID: true, User: acct.Name, Socket: true}}, true
 	}
 	return View{}, false
 }
@@ -275,6 +312,8 @@ func (v View) HomeFor() string {
 		if v.user != nil {
 			return v.user.acct.Home
 		}
+	case KindRestricted:
+		return v.acct.Home
 	case KindOwner:
 		if v.policy != nil {
 			return v.policy.owner.Home

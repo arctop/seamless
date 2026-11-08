@@ -100,6 +100,7 @@ func sessionDetail(out io.Writer, cfg config.Config, id string) error {
 			ProjectSlug string `json:"projectSlug"`
 			Status      string `json:"status"`
 			Model       string `json:"model"`
+			Account     string `json:"account"`
 		} `json:"session"`
 		Findings  string `json:"findings"`
 		ToolCalls int    `json:"toolCalls"`
@@ -118,6 +119,9 @@ func sessionDetail(out io.Writer, cfg config.Config, id string) error {
 	fmt.Fprintf(out, "%s  [%s]  %s\n", name, d.Session.Status, orDash(d.Session.ProjectSlug))
 	if d.Session.Model != "" {
 		fmt.Fprintf(out, "model: %s\n", d.Session.Model)
+	}
+	if by := writtenBy(d.Session.Account); by != "" {
+		fmt.Fprintln(out, by)
 	}
 	fmt.Fprintf(out, "tool calls: %d  writes: %d  reads: %d  read-after-inject: %d/%d\n",
 		d.ToolCalls, d.Writes, d.Reads, d.ReadBack, d.Injected)

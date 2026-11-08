@@ -9,6 +9,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -49,6 +50,9 @@ func (s *Server) handleTasksAdd(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 	project, err := s.resolveWriteScope(ctx, argString(req, "project"))
 	if err != nil {
+		return errResult("tasks_add", err)
+	}
+	if err := s.restrictedDeps(ctx, argStrings(req, "depends_on")); err != nil {
 		return errResult("tasks_add", err)
 	}
 	id, err := core.NewID()
@@ -122,6 +126,9 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 		patch.ProjectSlug = &project
 	}
 	patch.AddDependsOn = argStrings(req, "add_depends_on")
+	if err := s.restrictedDeps(ctx, patch.AddDependsOn); err != nil {
+		return errResult("tasks_update", err)
+	}
 	commits, err := s.commitsArg(req)
 	if err != nil {
 		return errResult("tasks_update", err)
@@ -138,7 +145,7 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 	// A task id is globally unique, so nothing above resolved a write scope. The
 	// row is loaded first purely to learn the project the fence judges against;
 	// UpdateTask still owns the update itself.
-	current, err := store.TaskByID(ctx, s.cfg.DB, id)
+	current, err := s.taskByIDFor(ctx, id)
 	if err != nil {
 		return errResult("tasks_update", err)
 	}
@@ -182,7 +189,7 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 	// The response is judged against the project the task now sits in: a move
 	// INTO a fenced project is sanctioned, but the item it lands on is that
 	// project's content from the moment it arrives.
-	out := s.withholdContent(ctx, updated.ProjectSlug, taskJSON(updated), taskContentFields)
+	out := s.withholdTask(ctx, updated.ProjectSlug, updated)
 	if len(commits) > 0 {
 		out["commits_recorded"] = len(commits)
 	}
@@ -230,6 +237,12 @@ func (s *Server) handleTasksReady(ctx context.Context, req mcp.CallToolRequest) 
 		j := taskJSON(b.Task)
 		blockers := make([]map[string]any, 0, len(b.Blockers))
 		for _, bl := range b.Blockers {
+			// A restricted account is not told what blocks its task from a
+			// project it may not reach: a title is that project's content.
+			if access.AccountOf(ctx) != "" && !access.Visible(ctx, bl.ProjectSlug) {
+				blockers = append(blockers, map[string]any{withheldKey: unreachableBlocker})
+				continue
+			}
 			blockers = append(blockers, map[string]any{"id": bl.ID, "title": bl.Title, "status": string(bl.Status)})
 		}
 		j["blockers"] = blockers
@@ -252,7 +265,7 @@ func (s *Server) handleTasksList(ctx context.Context, req mcp.CallToolRequest) (
 	// id is a globally-unique ULID, so a by-id load is a direct lookup that needs
 	// no project scope -- an agent can load a task it only knows the id of.
 	if id := argString(req, "id"); id != "" {
-		task, err := store.TaskByID(ctx, s.cfg.DB, id)
+		task, err := s.taskByIDFor(ctx, id)
 		if err != nil {
 			return errResult("tasks_list", err)
 		}
@@ -318,7 +331,7 @@ func (s *Server) handleTasksClaim(ctx context.Context, req mcp.CallToolRequest) 
 	// write half is refused here; the read half is trimmed out of the response
 	// below, because a confidential project takes the claim but never answers with
 	// its content.
-	target, err := store.TaskByID(ctx, s.cfg.DB, id)
+	target, err := s.taskByIDFor(ctx, id)
 	if err != nil {
 		return errResult("tasks_claim", err)
 	}
@@ -354,7 +367,7 @@ func (s *Server) handleTasksClaim(ctx context.Context, req mcp.CallToolRequest) 
 		payload["prior_holder"] = res.PriorHolder
 	}
 	s.record(ctx, core.EventTaskTransition, sessionID, res.Task.ProjectSlug, id, payload)
-	return jsonResult(s.withholdContent(ctx, res.Task.ProjectSlug, taskJSON(res.Task), taskContentFields))
+	return jsonResult(s.withholdTask(ctx, res.Task.ProjectSlug, res.Task))
 }
 
 func tasksReleaseTool() mcp.Tool {
@@ -375,7 +388,7 @@ func (s *Server) handleTasksRelease(ctx context.Context, req mcp.CallToolRequest
 	// successful release still returns the task body, so the response is a read
 	// across the fence even when the mutation is benign -- hence the withhold on
 	// the way out as well as the refusal on the way in.
-	target, err := store.TaskByID(ctx, s.cfg.DB, id)
+	target, err := s.taskByIDFor(ctx, id)
 	if err != nil {
 		return errResult("tasks_release", err)
 	}
@@ -395,7 +408,7 @@ func (s *Server) handleTasksRelease(ctx context.Context, req mcp.CallToolRequest
 	}
 	s.record(ctx, core.EventTaskTransition, sessionID, released.ProjectSlug, id,
 		map[string]any{"to": string(released.Status), "released": true})
-	return jsonResult(s.withholdContent(ctx, released.ProjectSlug, taskJSON(released), taskContentFields))
+	return jsonResult(s.withholdTask(ctx, released.ProjectSlug, released))
 }
 
 // taskContentFields are the taskJSON keys a caller that may WRITE a task's
@@ -432,7 +445,73 @@ func taskJSON(t core.Task) map[string]any {
 	if t.Favorite {
 		j["favorite"] = true
 	}
+	// Provenance (peer_auth.restricted): the restricted account that created
+	// the task, and the one that last changed it. The owner's tasks carry
+	// neither key.
+	if t.Account != "" {
+		j["account"] = t.Account
+	}
+	if t.UpdatedAccount != "" {
+		j["updated_account"] = t.UpdatedAccount
+	}
 	return j
+}
+
+// taskAccountFields are the provenance keys taskJSON adds only when set. A
+// trimmed response (withholdContent) drops them like created_by, but they are
+// not in taskContentFields: that list is named back to the caller verbatim,
+// and the owner's withheld responses must read exactly as they always did.
+// Dropping keys that are absent anyway is a no-op, so this says nothing about
+// whether a withheld task had them.
+var taskAccountFields = []string{"account", "updated_account"}
+
+// withholdTask is withholdContent for a task response.
+func (s *Server) withholdTask(ctx context.Context, project string, t core.Task) map[string]any {
+	out := s.withholdContent(ctx, project, taskJSON(t), taskContentFields)
+	if _, withheld := out[withheldKey]; withheld {
+		for _, f := range taskAccountFields {
+			delete(out, f)
+		}
+	}
+	return out
+}
+
+// unreachableBlocker is what tasks_ready shows a restricted account in place
+// of a blocker that lies in a project it may not reach.
+const unreachableBlocker = "a task in a project this connection may not reach blocks this one"
+
+// taskByIDFor is store.TaskByID for the caller in ctx. A restricted account
+// (peer_auth.restricted) is told that a task in a project it may not reach
+// does not exist, in exactly the words a missing id gets: its refusals never
+// tell a closed project from a missing one, and the fence refusal that would
+// follow the load names the task's project. Everyone else gets TaskByID, and
+// the fence after it, as before.
+func (s *Server) taskByIDFor(ctx context.Context, id string) (core.Task, error) {
+	t, err := store.TaskByID(ctx, s.cfg.DB, id)
+	if err == nil && access.AccountOf(ctx) != "" && !access.Visible(ctx, t.ProjectSlug) {
+		return core.Task{}, fmt.Errorf("store.TaskByID: %w: %q", store.ErrTaskNotFound, id)
+	}
+	return t, err
+}
+
+// restrictedDeps refuses, for a restricted account, a dependency on a task it
+// may not reach: an edge to it would put that task's title in the account's
+// tasks_ready. A missing task gets the same text, checked here first, so the
+// refusal never tells the account the task exists. Everyone else's
+// dependencies are checked by the store alone, as before.
+func (s *Server) restrictedDeps(ctx context.Context, deps []string) error {
+	if access.AccountOf(ctx) == "" {
+		return nil
+	}
+	for _, dep := range deps {
+		if _, err := s.taskByIDFor(ctx, dep); err != nil {
+			if errors.Is(err, store.ErrTaskNotFound) {
+				return fmt.Errorf("depends_on %q: %w", dep, store.ErrTaskNotFound)
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 // boundSessionName resolves the bound (or ambient-fallback) session's name for a

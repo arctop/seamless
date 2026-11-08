@@ -169,6 +169,23 @@ const writeScopeHelp = "an unknown slug CREATES that project, so a new project i
 	"the exception is a session bound to a confidential or sealed project, which can write only into " +
 	"that project"
 
+// restrictedWriteScopeHelp is writeScopeHelp for a restricted local account
+// (peer_auth.restricted): neither of writeScopeHelp's two facts holds for it.
+// It may not create a project -- the owner creates and maps them -- and the
+// global scope is read-only for it, so the help it gets names what it may do.
+const restrictedWriteScopeHelp = "this connection is restricted account %s: it writes only into open projects " +
+	"that already exist -- an unknown slug is refused, never created -- and the global scope is read-only for it, " +
+	"so name one of the projects below with project=<slug>"
+
+// writeScopeHelpFor is the scope-error help for the caller in ctx:
+// writeScopeHelp, or restrictedWriteScopeHelp for a restricted account.
+func writeScopeHelpFor(ctx context.Context) string {
+	if account := access.AccountOf(ctx); account != "" {
+		return fmt.Sprintf(restrictedWriteScopeHelp, account)
+	}
+	return writeScopeHelp
+}
+
 // maxScopeErrorProjects caps the slug list a scope error carries, so a machine
 // with many projects still returns an error an agent can actually read.
 const maxScopeErrorProjects = 30
@@ -349,6 +366,12 @@ type binding struct {
 	project   string    // resolved project slug ("" = global)
 	lab       string    // current research lab (set by lab_open), inherited by trial_record
 	touchedAt time.Time // last set/lookup; the sweep's staleness signal for session-less bindings
+	// account is the restricted account (access.AccountOf) whose session_start
+	// made the binding, "" for everyone else. A session belongs to the
+	// principal that started it, and so does a binding to one: a request
+	// speaking for anyone else that reaches this entry -- by presenting the
+	// same MCP session id -- is not bound by it (resolveBinding).
+	account string
 }
 
 // New constructs a Server and registers the tool surface.
@@ -597,7 +620,7 @@ func (s *Server) setBinding(ctx context.Context, sessionID, project string) {
 		return
 	}
 	s.mu.Lock()
-	s.bindings[id] = binding{sessionID: sessionID, project: project, touchedAt: time.Now()}
+	s.bindings[id] = binding{sessionID: sessionID, project: project, touchedAt: time.Now(), account: access.AccountOf(ctx)}
 	s.mu.Unlock()
 	s.maybeSweepBindings(ctx)
 }
@@ -625,6 +648,14 @@ func (s *Server) setBinding(ctx context.Context, sessionID, project string) {
 // here either -- nothing may read or write through it -- but lockedBinding
 // still finds it, so the call is refused at the lock instead of inferred
 // somewhere else.
+//
+// A session belongs to the principal that started it (core.Session.Account,
+// access.SessionAccountOK), so none of the three routes binds a call to
+// another principal's session: the session= handle refuses one outright
+// (sessionByRef), the process binding skips one (listedProcessSession), and an
+// explicit binding counts only for the principal whose session_start made it.
+// Whichever route would have bound to a foreign session, the call proceeds
+// unbound, exactly as with no binding at all.
 func (s *Server) getBinding(ctx context.Context) (binding, bool) {
 	b, ok := s.resolveBinding(ctx)
 	if ok && !access.Visible(ctx, b.project) {
@@ -637,7 +668,7 @@ func (s *Server) resolveBinding(ctx context.Context) (binding, bool) {
 	if b, ok := handleBinding(ctx); ok {
 		return b, true
 	}
-	if b, ok := s.rawBinding(ctx); ok && b.sessionID != "" {
+	if b, ok := s.rawBinding(ctx); ok && b.sessionID != "" && b.account == access.AccountOf(ctx) {
 		return b, true
 	}
 	if sess, ok := s.listedProcessSession(ctx); ok {
@@ -954,12 +985,12 @@ func (s *Server) resolveWriteScope(ctx context.Context, explicit string) (string
 		return "", fenced
 	}
 	if ambiguity != nil {
-		return "", s.scopeErr(ctx, ambiguity, writeScopeHelp)
+		return "", s.scopeErr(ctx, ambiguity, writeScopeHelpFor(ctx))
 	}
 	if home := peerHome(ctx); home != "" {
 		return home, nil
 	}
-	return "", s.scopeErr(ctx, errNoScope, writeScopeHelp)
+	return "", s.scopeErr(ctx, errNoScope, writeScopeHelpFor(ctx))
 }
 
 // setBindingLab records the current research lab on the connection's binding, so
@@ -1147,11 +1178,33 @@ func (s *Server) ambientFallback(ctx context.Context) (sess core.Session, ok boo
 		return core.Session{}, false, nil, s.ambientFenceErr(ctx, projects[0])
 	}
 	sess, ok, err = store.LatestActiveAmbientSessionForProject(ctx, s.cfg.DB, scope, projects[0], ambientFallbackWindow)
+	if err == nil && ok && !access.SessionAccountOK(ctx, sess.Account) {
+		// The latest is another principal's (a restricted account's, or the
+		// owner's when a restricted account calls): never inferred into. The
+		// caller's own latest session in the project, if any, is the answer.
+		sess, ok, err = s.latestOwnAmbient(ctx, scope, projects[0])
+	}
 	if err != nil {
 		s.logger.Warn("mcp: ambient fallback lookup", "error", err)
 		return core.Session{}, false, nil, nil
 	}
 	return sess, ok, nil, nil
+}
+
+// latestOwnAmbient is store.LatestActiveAmbientSessionForProject narrowed to
+// the sessions the caller may act in (access.SessionAccountOK): the most
+// recently updated one, in the same order.
+func (s *Server) latestOwnAmbient(ctx context.Context, scope store.AmbientScope, project string) (core.Session, bool, error) {
+	sessions, err := store.ActiveAmbientSessionsForProject(ctx, s.cfg.DB, scope, project, ambientFallbackWindow)
+	if err != nil {
+		return core.Session{}, false, err
+	}
+	for _, sess := range sessions {
+		if access.SessionAccountOK(ctx, sess.Account) {
+			return sess, true, nil
+		}
+	}
+	return core.Session{}, false, nil
 }
 
 // ambientProjectsNearestFirst asks the CALLER's own machine first and widens to
@@ -1199,12 +1252,35 @@ func (s *Server) ambientProjectsNearestFirst(ctx context.Context) (projects []st
 
 // activeAmbientProjects is store.ActiveAmbientProjects narrowed to the projects
 // this connection's OS account may reach (all of them with peer_auth off).
+//
+// Under peer_auth it is also narrowed to the projects holding a session this
+// caller may act in (access.SessionAccountOK): a restricted account works in
+// open projects beside the owner, and neither one's sessions are candidates for
+// the other's inference, so they can neither be inferred into nor make an
+// otherwise single answer ambiguous. That costs a lookup per candidate project,
+// so it runs only where a second principal can exist at all; with peer_auth off
+// the session pick (ambientFallback, ambientSessionTarget) still never lands on
+// a session some account started.
 func (s *Server) activeAmbientProjects(ctx context.Context, scope store.AmbientScope) ([]string, error) {
 	projects, err := store.ActiveAmbientProjects(ctx, s.cfg.DB, scope, ambientFallbackWindow)
 	if err != nil {
 		return nil, err
 	}
-	return slices.DeleteFunc(projects, func(p string) bool { return !access.Visible(ctx, p) }), nil
+	projects = slices.DeleteFunc(projects, func(p string) bool { return !access.Visible(ctx, p) })
+	if _, peer := access.FromContext(ctx); !peer || len(projects) == 0 {
+		return projects, nil
+	}
+	kept := projects[:0]
+	for _, p := range projects {
+		sessions, err := store.ActiveAmbientSessionsForProject(ctx, s.cfg.DB, scope, p, ambientFallbackWindow)
+		if err != nil {
+			return nil, err
+		}
+		if slices.ContainsFunc(sessions, func(sess core.Session) bool { return access.SessionAccountOK(ctx, sess.Account) }) {
+			kept = append(kept, p)
+		}
+	}
+	return kept, nil
 }
 
 // record appends an event best-effort; a logging failure never fails a tool.

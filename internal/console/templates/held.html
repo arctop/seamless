@@ -2,11 +2,11 @@
 {{with .Data}}
 <div class="held-page" data-held>
 <header class="mv2-bar">
-  <h1>{{icon "lock"}}Held</h1>{{about "Agent writes kept out of briefings, recall and the gardener until you decide. Release one to let it land exactly as the agent wrote it; discard it to erase it."}}
+  <h1>{{icon "lock"}}Held</h1>{{if .ProposalsOnly}}{{about "Proposals from restricted accounts: their changes to constraints, conventions, protocols and stages, kept out of briefings, recall and the gardener until you decide. Promote one to let it land exactly as the account wrote it; discard it to erase it."}}{{else}}{{about "Agent writes kept out of briefings, recall and the gardener until you decide. Release one to let it land exactly as the agent wrote it; discard it to erase it."}}{{end}}
   <span class="mv2-count" aria-label="{{len .Pending}} writes waiting"><strong>{{len .Pending}}</strong>waiting</span>
 </header>
 
-<section class="held-lockdown{{if .Lockdown.On}} is-on{{end}}" aria-labelledby="held-lockdown-title" data-lockdown="{{if .Lockdown.On}}on{{else}}off{{end}}">
+{{if not .ProposalsOnly}}<section class="held-lockdown{{if .Lockdown.On}} is-on{{end}}" aria-labelledby="held-lockdown-title" data-lockdown="{{if .Lockdown.On}}on{{else}}off{{end}}">
   <h2 id="held-lockdown-title">{{icon "lock"}}Lockdown {{if .Lockdown.On}}<span class="badge warn">on</span>{{else}}<span class="badge">off</span>{{end}}</h2>
   <p class="held-sub">During an incident: changes to constraints, conventions, protocols and stages wait here for you, and briefings and prompt recall inject only memories you confirmed or the review marked safe.</p>
   {{if .Lockdown.File}}<p class="held-sub">{{icon "triangle-alert"}} Held on by the lockdown file{{if .Lockdown.FilePath}} <code>{{.Lockdown.FilePath}}</code>{{end}}. It lifts when that file goes; your switch cannot lift it.</p>{{end}}
@@ -19,7 +19,7 @@
     <button class="btn small" type="submit" onclick="return confirm('Turn lockdown on? Agents receive only confirmed or reviewed memories, and their changes to binding rules wait for you.');">Turn lockdown on</button>
     {{end}}
   </form>
-</section>
+</section>{{end}}
 
 {{if .Pending}}
 <section class="held-list" aria-label="Writes waiting for your review">
@@ -29,7 +29,8 @@
       <span class="badge">{{.What}}</span>
       {{if .Link}}<a class="held-name" href="{{.Link}}">{{.Name}}</a>{{else}}<strong class="held-name">{{.Name}}</strong>{{end}}
       <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}} &middot; {{.Tool}}{{if .Session}} &middot; <span class="mono">{{.Session}}</span>{{end}} &middot; <span title="{{ts .CreatedAt}}">{{ago .CreatedAt}}</span></span>
-    </header>
+    </header>{{if .Proposal}}
+    <p class="held-note held-proposer" data-proposer="{{.Account}}">Proposed by {{if .Account}}account <strong class="mono">{{.Account}}</strong>{{else}}a restricted account{{end}}</p>{{end}}
     <ul class="held-reasons">
       {{range .Reasons}}<li><code>{{.Code}}</code>{{if .Words}} {{.Words}}{{end}}</li>{{end}}
     </ul>
@@ -47,11 +48,11 @@
       <p class="held-stale">{{icon "triangle-alert"}} The {{.ItemKind}} changed after this was held, so releasing it would undo that change. Discard it; the agent can write again.</p>
       {{else}}
       <form method="post" action="/console/held/{{.ID}}/release">
-        <button class="btn primary small" type="submit">{{icon "check"}} Release</button>
+        <button class="btn primary small" type="submit">{{icon "check"}} {{if .Proposal}}Promote{{else}}Release{{end}}</button>
       </form>
       {{end}}
       <form method="post" action="/console/held/{{.ID}}/discard">
-        <button class="btn small" type="submit" onclick="return confirm('Discard this held write? Nothing lands, and its text is erased.');">{{icon "x"}} Discard</button>
+        <button class="btn small" type="submit" onclick="return confirm('{{if .Proposal}}Discard this proposal? Nothing lands, and its text is erased.{{else}}Discard this held write? Nothing lands, and its text is erased.{{end}}');">{{icon "x"}} Discard</button>
       </form>
     </div>
   </article>
@@ -59,11 +60,11 @@
 </section>
 {{else}}
 <section class="held-empty">
-  <div class="empty dotgrid"><span class="empty-ico">{{icon "lock"}}</span><div>Nothing is waiting. A write lands here when it fails a screen (a secret, an injection marker, hidden characters, an encoded blob, an unlisted link), when a session that read outside text changes a constraint, convention, protocol or stage, and when any agent supersedes or deletes a constraint.</div></div>
+  <div class="empty dotgrid"><span class="empty-ico">{{icon "lock"}}</span><div>{{if .ProposalsOnly}}Nothing is waiting. A restricted account's change to a constraint, convention, protocol or stage lands here as a proposal, and stays out of every briefing until you promote or discard it.{{else}}Nothing is waiting. A write lands here when it fails a screen (a secret, an injection marker, hidden characters, an encoded blob, an unlisted link), when a session that read outside text changes a constraint, convention, protocol or stage, and when any agent supersedes or deletes a constraint.{{if .Restricted}} A restricted account's change to a constraint, convention, protocol or stage waits here too, as a proposal for you to promote or discard.{{end}}{{end}}</div></div>
 </section>
 {{end}}
 
-<section class="held-corpus" aria-labelledby="held-drift-title">
+{{if not .ProposalsOnly}}<section class="held-corpus" aria-labelledby="held-drift-title">
   <h2 id="held-drift-title">Changed outside Seamless</h2>
   <p class="held-sub">A memory or note file that changed on disk without going through Seamless (an editor, a script, another program), or appeared there. It stays exactly as it is on disk, but no briefing or prompt recall injects it until you accept it. Accept records it as it stands; if it should not stand, edit or delete the file and it leaves this list by itself.</p>
   {{if .Drifted}}
@@ -153,14 +154,14 @@
   {{else}}
   <p class="held-none">No session carries the mark.</p>
   {{end}}
-</section>
+</section>{{end}}
 
 {{if .Recent}}
 <section class="held-recent" aria-labelledby="held-recent-title">
   <h2 id="held-recent-title">Recently decided</h2>
   <ul class="held-history">
     {{range .Recent}}
-    <li><span class="badge{{if eq .Status "released"}} ok{{end}}">{{.Status}}</span> {{.What}} <strong>{{.Name}}</strong> <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{range .Reasons}} &middot; <code>{{.Code}}</code>{{end}}{{with .ResolvedAt}} &middot; <span title="{{ts .}}">{{ago .}}</span>{{end}}</span></li>
+    <li><span class="badge{{if eq .Status "released"}} ok{{end}}">{{if and .Proposal (eq .Status "released")}}promoted{{else}}{{.Status}}{{end}}</span> {{.What}} <strong>{{.Name}}</strong> <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{if .Proposal}} &middot; proposed by {{if .Account}}account {{.Account}}{{else}}a restricted account{{end}}{{end}}{{range .Reasons}} &middot; <code>{{.Code}}</code>{{end}}{{with .ResolvedAt}} &middot; <span title="{{ts .}}">{{ago .}}</span>{{end}}</span></li>
     {{end}}
   </ul>
 </section>

@@ -115,14 +115,7 @@ func (s *Server) handleMemoryEdit(ctx context.Context, req mcp.CallToolRequest) 
 	}
 
 	now := time.Now().UTC()
-	screen := s.screeningOn(ctx)
-	var screenSession string
-	var tainted bool
-	if screen {
-		screenSession = s.boundSession(ctx)
-		tainted = s.sessionTainted(ctx, screenSession)
-	}
-	var jd judged
+	judge := s.newMemoryJudge(ctx, "memory_edit")
 	var oldBody, newBody string
 	// MutateMemory hands over the memory as the FILE carries it and writes back
 	// whatever this returns, so the edit mutates `cur` in place. That is what
@@ -187,23 +180,32 @@ func (s *Server) handleMemoryEdit(ctx context.Context, req mcp.CallToolRequest) 
 				cur.Model = model
 			}
 		}
-		if screen {
-			if herr := s.judgeMemoryWrite(ctx, "memory_edit", cur, before, core.Memory{}, screenSession, tainted, &jd); herr != nil {
+		// The account label follows the body like Model; a restricted account's
+		// new description stamps it too, since that line is what every index
+		// shows (accountAfter).
+		cur.Account = accountAfter(cur.Account, judge.account, newBody != oldBody,
+			cur.Description != before.Description)
+		// A restricted account's edit of a briefing-injected kind -- its own
+		// promoted constraint included, metadata-only edits too -- is a proposal.
+		if judge.active() {
+			if herr := s.judgeMemoryWrite(ctx, judge, cur, before, core.Memory{}); herr != nil {
 				return core.Memory{}, herr
 			}
 		}
 		return cur, nil
 	})
 	if held, ok := asHeld(err); ok {
-		s.recordScreened(ctx, "memory_edit", core.ItemKindMemory, held.hold.ItemID, held.hold.Project, screenSession,
-			held.hold.MemoryKind, jd)
-		return heldResult(held.hold, map[string]any{"id": held.hold.ItemID, "name": name, "project": held.hold.Project})
+		if judge.screen {
+			s.recordScreened(ctx, "memory_edit", core.ItemKindMemory, held.hold.ItemID, held.hold.Project, judge.session,
+				held.hold.MemoryKind, judge.jd)
+		}
+		return heldAnswer(held.hold, map[string]any{"id": held.hold.ItemID, "name": name, "project": held.hold.Project})
 	}
 	if err != nil {
 		return errResult("memory_edit", err)
 	}
-	if screen {
-		s.recordScreened(ctx, "memory_edit", core.ItemKindMemory, mem.ID, mem.Project, screenSession, mem.Kind, jd)
+	if judge.screen {
+		s.recordScreened(ctx, "memory_edit", core.ItemKindMemory, mem.ID, mem.Project, judge.session, mem.Kind, judge.jd)
 	}
 	diff := unifiedDiff(oldBody, newBody)
 	// The diff rides in the payload so the console can render edit history later

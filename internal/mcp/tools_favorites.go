@@ -7,6 +7,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/plans"
@@ -36,6 +37,15 @@ func favoriteSetTool() mcp.Tool {
 }
 
 func (s *Server) handleFavoriteSet(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Stars are the owner's curation: a starred memory pins into every
+	// session's briefing, and a star sorts any item first on every surface. A
+	// restricted account is refused before anything is resolved, so the answer
+	// says nothing about the item it named.
+	if account := access.AccountOf(ctx); account != "" {
+		return errResult("favorite_set", ownerCurationRefusal(account,
+			"a star is the owner's curation (a starred memory pins into every session's briefing and boosts in recall)",
+			"tell the user which item deserves a star; the owner sets it from the console"))
+	}
 	kind := argString(req, "kind")
 	id := argString(req, "id")
 	fav := argBool(req, "favorite", false)

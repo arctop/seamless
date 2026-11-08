@@ -238,6 +238,33 @@ any of it.
   `access.Visible(ctx, p)`) and never compare principal kinds or slugs
   themselves. `store.CanRead`/`CanWrite` consult the View FIRST -- including
   for the caller's own bound project -- so every isolation fence inherits it.
+- **A restricted local account (`peer_auth.restricted`, `access.KindRestricted`)
+  reaches the open projects that exist, per request** (`internal/access/restricted.go`).
+  `peerHandler` loads `store.OpenProjectSlugs` for every request and
+  `View.WithOpenProjects` drops the locked ones; a failed load answers 503. It
+  reads and writes those, reads global, and nothing else: one refusal text for
+  a confidential, sealed, locked or unregistered slug, none listed, and it
+  CANNOT CREATE a project (every creation path -- write scope, session_start,
+  project_create, the repo map -- refuses it first). No requests, grants or
+  leases. `access.AccountOf(ctx) != ""` is the one test for it, and the
+  account name is the label every write carries: sessions, tasks
+  (`account`/`updated_account`) and trials are stamped by the store from ctx;
+  memory and note content by the MCP and hook write paths (frontmatter
+  `account`, following the content like `model`, plus a restricted account's
+  description/title change). The owner's writes carry no label.
+- **A restricted account's binding rule is a proposal, never a write.** Any
+  write, append, edit, overwrite, supersede or delete that touches a
+  `screening.BriefingKinds` memory (constraint, convention, protocol, stage)
+  goes to the held queue with `screening.ReasonRestrictedAccount` and
+  `Detail["account"]`, whether or not write screening is on; no Screening
+  service means the write is refused, never landed. Promote is the held
+  queue's Release (console, `seam promote`, TTY only), the owner's alone. It
+  may not star (favorite_set) or apply gardener proposals.
+- **A session belongs to the principal that started it**
+  (`core.Session.Account`, set once by `store.CreateSession`). Every surface
+  that resumes, binds to, names or writes into a session checks
+  `access.SessionAccountOK` -- MCP refuses a named one, implicit bindings and
+  hooks treat a mismatch as foreign -- in both directions.
 - **A lease is judged, never trusted** (`peer_auth.locked`, the approval
   design being built; `internal/access/lease.go`, migration 031). A locked
   project is closed to the owner: `View.Listed` (name and counts) is true,

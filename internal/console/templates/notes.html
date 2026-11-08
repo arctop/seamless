@@ -43,7 +43,7 @@
           <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/notes/{{.ID}}{{$qs}}" data-title="{{.Title}}" data-context="{{if .Project}}{{.Project}}{{else}}Global inbox{{end}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
             {{if .Description}}<span class="ri-desc">{{.Description}}</span>{{end}}
-            <span class="ri-meta"><span title="{{ts .Updated}}">updated {{ago .Updated}}</span>{{with agentPill "" .Model}} {{.}}{{end}}</span>
+            <span class="ri-meta"><span title="{{ts .Updated}}">updated {{ago .Updated}}</span>{{with agentPill "" .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
         </div>
@@ -73,7 +73,7 @@
   <header class="reader-head">
     <div class="reader-eyebrow">
       <span class="kind">note</span>
-      {{agentPill "" .Model}}
+      {{agentPill "" .Model}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
       {{if .Project}}<a class="chip-parent" href="/console/projects/{{.Project}}">{{icon "git-branch"}}{{.Project}}</a>{{else}}<span class="chip-parent">{{icon "git-branch"}}inbox</span>{{end}}
       {{range .Tags}}<span class="badge">{{.}}</span>{{end}}
       <span class="reader-actions">

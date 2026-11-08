@@ -18,7 +18,7 @@
             <span class="badge accent">completed</span>
           {{end}}
           {{if .Session.Ambient}}<span class="kind faint">ambient</span>{{end}}
-          {{agentPill .Harness .Session.Model}}
+          {{agentPill .Harness .Session.Model}}{{with .Session.Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
         </div>
         <div class="session-detail-facts">
           <span>{{icon "folder-tree"}}{{if .Session.ProjectSlug}}<a href="/console/projects/{{.Session.ProjectSlug}}" data-peek>{{.Session.ProjectSlug}}</a>{{else}}global{{end}}</span>
@@ -39,7 +39,7 @@
     <article class="card session-outcome-card">
       <header class="session-card-head">
         <div><span class="session-card-eyebrow">Session outcome</span><h2>{{if .Findings}}Findings{{else if eq .Session.Status "active"}}Work in progress{{else}}No recorded findings{{end}}</h2></div>
-        {{if .Findings}}<span class="session-review-cue">Start here</span>{{end}}
+        {{if .Findings}}<span class="session-review-cue">Start here</span>{{with .Session.Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{end}}
       </header>
       {{if .Findings}}
         <div class="prose session-findings">{{.FindingsHTML}}</div>

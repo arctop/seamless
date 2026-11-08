@@ -9,14 +9,16 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/features"
 	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
 )
 
-// The Held screen (the screening optional feature): the owner's queue of agent
-// writes kept out of the corpus, and the sessions marked as having read
-// outside text. Releasing lands a write exactly as the agent sent it and marks
-// the memory owner-confirmed; discarding erases its text and lands nothing.
+// The Held screen (the screening optional feature, and the queue of restricted
+// accounts' proposals: held_proposals.go): the owner's queue of agent writes
+// kept out of the corpus, and the sessions marked as having read outside text.
+// Releasing lands a write exactly as the agent sent it and marks the memory
+// owner-confirmed; discarding erases its text and lands nothing.
 // Both are owner writes, through the same form-POST path as every other
 // console action, and both read their target through the console's (possibly
 // filtered) handle first, so a project hidden from this console cannot be
@@ -60,6 +62,12 @@ type heldRow struct {
 	// Stale: the target moved on after the write was held; only Discard is
 	// offered, since a release would undo the later change.
 	Stale bool `json:"stale,omitempty"`
+	// Proposal marks a restricted account's proposal (screening.IsProposal):
+	// its release is a promotion. Account names the account that proposed it.
+	// Both are absent on every other hold, so a daemon without restricted
+	// accounts answers exactly as before.
+	Proposal bool   `json:"proposal,omitempty"`
+	Account  string `json:"account,omitempty"`
 }
 
 // taintRow is one session carrying the outside-text mark.
@@ -81,10 +89,17 @@ type heldPageData struct {
 	Review   reviewView   `json:"review"`
 	Flagged  []corpusRow  `json:"flagged"`
 	Drifted  []corpusRow  `json:"drifted"`
+	// ProposalsOnly: screening is off and the screen serves restricted
+	// accounts' proposals alone (held_proposals.go); the screening-only
+	// sections are not rendered. Restricted: restricted accounts are
+	// configured, so the copy names proposals. Presentation only.
+	ProposalsOnly bool `json:"-"`
+	Restricted    bool `json:"-"`
 }
 
 func (s *Service) heldPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	proposalsOnly := s.heldModeFor(s.effectiveFeatures(ctx)) == heldProposals
 	pending, err := store.HeldWrites(ctx, s.db(ctx), store.HeldStatusHeld, 0)
 	if err != nil {
 		s.serverError(w, r, err)
@@ -99,14 +114,20 @@ func (s *Service) heldPage(w http.ResponseWriter, r *http.Request) {
 		}
 		recent = append(recent, rows...)
 	}
+	if proposalsOnly {
+		// Screening's own holds wait for screening to come back on.
+		pending, recent = onlyProposals(pending), onlyProposals(recent)
+	}
 	slices.SortFunc(recent, func(a, b store.HeldWrite) int { return resolvedAt(b).Compare(resolvedAt(a)) })
 	if len(recent) > heldRecentLimit {
 		recent = recent[:heldRecentLimit]
 	}
-	tainted, err := store.TaintedSessions(ctx, s.db(ctx))
-	if err != nil {
-		s.serverError(w, r, err)
-		return
+	var tainted []store.TaintedSession
+	if !proposalsOnly {
+		if tainted, err = store.TaintedSessions(ctx, s.db(ctx)); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
 	}
 	var sessionIDs []string
 	for _, h := range append(slices.Clone(pending), recent...) {
@@ -119,10 +140,13 @@ func (s *Service) heldPage(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	data := heldPageData{Pending: []heldRow{}, Recent: []heldRow{}, Tainted: []taintRow{}, Flagged: []corpusRow{}, Drifted: []corpusRow{}}
-	if err := s.corpusSections(r, &data); err != nil {
-		s.serverError(w, r, err)
-		return
+	data := heldPageData{Pending: []heldRow{}, Recent: []heldRow{}, Tainted: []taintRow{}, Flagged: []corpusRow{}, Drifted: []corpusRow{},
+		ProposalsOnly: proposalsOnly, Restricted: s.cfg.RestrictedAccounts}
+	if !proposalsOnly {
+		if err := s.corpusSections(r, &data); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
 	}
 	for _, h := range pending {
 		data.Pending = append(data.Pending, s.heldRowOf(r, h, refs[h.SessionID].Name, true))
@@ -154,6 +178,9 @@ func (s *Service) heldRowOf(r *http.Request, h store.HeldWrite, session string, 
 	}
 	for _, code := range h.Reasons {
 		row.Reasons = append(row.Reasons, heldReason{Code: code, Words: screening.Describe(screening.Code(code))})
+	}
+	if screening.IsProposal(h.Reasons) {
+		row.Proposal, row.Account = true, h.DetailValue(screening.DetailAccount)
 	}
 	row.What = h.ItemKind
 	if h.MemoryKind != "" {
@@ -239,6 +266,12 @@ func (s *Service) heldTarget(w http.ResponseWriter, r *http.Request) (store.Held
 		s.notFound(w, r, "No held write with id "+id+".")
 		return store.HeldWrite{}, false
 	}
+	// With screening off the queue serves proposals alone: a write screening
+	// held before it was switched off waits for it to come back on.
+	if !screening.IsProposal(h.Reasons) && s.heldModeFor(s.effectiveFeatures(r.Context())) == heldProposals {
+		s.featureOff(w, r, features.Screening)
+		return store.HeldWrite{}, false
+	}
 	return h, true
 }
 
@@ -264,6 +297,9 @@ func (s *Service) heldRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	msg := "Released: " + h.Name + " landed as written."
+	if screening.IsProposal(h.Reasons) {
+		msg = "Promoted: " + h.Name + " landed as " + proposerOf(h) + " wrote it."
+	}
 	if rel.Superseded != "" {
 		msg += " " + rel.Superseded + " is now superseded."
 	}
@@ -288,6 +324,15 @@ func (s *Service) heldDiscard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	heldNotice(w, r, "Discarded: nothing landed, and its text is gone.")
+}
+
+// proposerOf names who proposed a hold, for the owner: "account <name>", or
+// "the restricted account" when the hold does not say.
+func proposerOf(h store.HeldWrite) string {
+	if a := h.DetailValue(screening.DetailAccount); a != "" {
+		return "account " + a
+	}
+	return "the restricted account"
 }
 
 // heldUntaint clears a session's outside-text mark: the owner's call, and the

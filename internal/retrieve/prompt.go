@@ -104,6 +104,8 @@ type promptCand struct {
 	id          string
 	name        string
 	description string
+	project     string // the memory's scope ("" = global), for the reach check at render
+	account     string // the restricted account that wrote it ("" = the owner), for the line's label
 	updatedAt   time.Time
 	tokens      []string
 	tokenSet    map[string]struct{}
@@ -114,6 +116,8 @@ type promptHit struct {
 	id          string
 	name        string
 	description string
+	project     string
+	account     string
 	updatedAt   time.Time
 	score       float64
 	utility     float64
@@ -146,7 +150,13 @@ func (s *Service) PromptRecall(ctx context.Context, host, cwd, prompt string) (s
 	if err != nil {
 		return "", nil, err
 	}
-	hits := scorePrompt(tokens, corpus)
+	// peer_auth: the corpus is cached per project scope, not per caller, so every
+	// hit is checked against the caller's own reach before it renders -- ahead of
+	// the cap, so a dropped hit never costs a reachable one its slot.
+	hits := visiblePromptHits(ctx, scorePromptAll(tokens, corpus))
+	if len(hits) > promptMaxHits {
+		hits = hits[:promptMaxHits]
+	}
 	// Write screening, when on: drift quarantine and lockdown apply here as in
 	// the briefing (the prompt corpus is cached, so the filter runs per prompt).
 	hits = s.filterHits(ctx, s.newWithholding(ctx), hits)
@@ -155,6 +165,21 @@ func (s *Service) PromptRecall(ctx context.Context, host, cwd, prompt string) (s
 		marks = s.provenanceMarks(ctx, s.hitMemories(ctx, hits))
 	}
 	return renderPromptRecall(hits, marks), promptHitIDs(hits), nil
+}
+
+// visiblePromptHits keeps the hits the request in ctx may read (access.Visible
+// of each memory's scope). The corpus a hit came from was built for the bound
+// project's scope, which the caller already reaches, so with or without
+// peer_auth this normally keeps every hit; it is the per-caller check a shared
+// cache cannot make at build time.
+func visiblePromptHits(ctx context.Context, hits []promptHit) []promptHit {
+	kept := hits[:0:0]
+	for _, h := range hits {
+		if access.Visible(ctx, h.project) {
+			kept = append(kept, h)
+		}
+	}
+	return kept
 }
 
 // promptHitIDs returns the memory ids of the surfaced hits, in render order.
@@ -298,8 +323,8 @@ func (s *Service) buildPromptCorpus(ctx context.Context, project string) (*promp
 			df[t]++
 		}
 		cands = append(cands, promptCand{
-			id: m.ID, name: m.Name, description: m.Description, updatedAt: m.Updated,
-			tokens: toks, tokenSet: set, utility: utility[m.ID],
+			id: m.ID, name: m.Name, description: m.Description, project: m.Project, account: m.Account,
+			updatedAt: m.Updated, tokens: toks, tokenSet: set, utility: utility[m.ID],
 		})
 	}
 	numDocs := len(cands)
@@ -349,6 +374,7 @@ func scorePromptAll(promptTokens []string, c *promptCorpus) []promptHit {
 		}
 		hits = append(hits, promptHit{
 			id: cand.id, name: cand.name, description: cand.description,
+			project: cand.project, account: cand.account,
 			updatedAt: cand.updatedAt, score: score, utility: cand.utility,
 		})
 	}
@@ -374,8 +400,9 @@ func renderPromptRecall(hits []promptHit, marks map[string]string) string {
 	var b strings.Builder
 	b.WriteString("<seam-recall>Seam has possibly relevant memories:")
 	for _, h := range hits {
-		fmt.Fprintf(&b, "\n- %s (%s): %s%s",
-			sanitizeName(h.name, 80), humanAge(h.updatedAt), sanitizeField(h.description, 160), marks[h.id])
+		fmt.Fprintf(&b, "\n- %s (%s): %s%s%s",
+			sanitizeName(h.name, 80), humanAge(h.updatedAt), sanitizeField(h.description, 160), marks[h.id],
+			accountMark(h.account))
 	}
 	b.WriteString("\nRead with memory_read before re-deriving.</seam-recall>")
 	return b.String()

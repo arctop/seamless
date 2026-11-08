@@ -140,7 +140,14 @@ type Memory struct {
 	SourceSession string     `json:"sourceSession"`      // provenance
 	Model         string     `json:"model"`              // model that produced the content, as the provider names it (e.g. "claude-fable-5")
 	Favorite      bool       `json:"favorite,omitempty"` // owner/agent star; frontmatter is authoritative, never bumps Updated
-	ContentHash   string     `json:"contentHash"`
+	// Account is the restricted local account (peer_auth.restricted) that
+	// wrote the current content, as the kernel named it on the socket; "" for
+	// the owner, background work and every install without restricted
+	// accounts. It follows the content the way Model does: a content write
+	// re-stamps it, metadata (tags, a star, a supersede pointer) leaves it.
+	// Frontmatter `account`, mirrored to the index.
+	Account     string `json:"account,omitempty"`
+	ContentHash string `json:"contentHash"`
 	// Extra preserves unknown frontmatter keys (e.g. Obsidian plugin fields) so
 	// a parse -> render round-trip is lossless. Not mirrored to the index.
 	Extra map[string]any `json:"extra,omitempty"`
@@ -158,17 +165,24 @@ func (m Memory) Active() bool { return m.InvalidAt == nil }
 // stored one-per-file with YAML frontmatter; this struct mirrors that
 // frontmatter plus the body. Unlike a Memory it has no lifecycle/validity.
 type Note struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	Slug        string    `json:"slug"`
-	Description string    `json:"description"`
-	Project     string    `json:"project"` // empty = global
-	Body        string    `json:"body"`
-	FilePath    string    `json:"filePath"`
-	Tags        []string  `json:"tags"`
-	SourceURL   string    `json:"sourceUrl"`
-	Model       string    `json:"model"`              // model that produced the content, as the provider names it (e.g. "claude-fable-5")
-	Favorite    bool      `json:"favorite,omitempty"` // owner/agent star; frontmatter is authoritative, never bumps Updated
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Slug        string   `json:"slug"`
+	Description string   `json:"description"`
+	Project     string   `json:"project"` // empty = global
+	Body        string   `json:"body"`
+	FilePath    string   `json:"filePath"`
+	Tags        []string `json:"tags"`
+	SourceURL   string   `json:"sourceUrl"`
+	Model       string   `json:"model"`              // model that produced the content, as the provider names it (e.g. "claude-fable-5")
+	Favorite    bool     `json:"favorite,omitempty"` // owner/agent star; frontmatter is authoritative, never bumps Updated
+	// Account is the restricted local account (peer_auth.restricted) that
+	// wrote the current content, as the kernel named it on the socket; "" for
+	// the owner, background work and every install without restricted
+	// accounts. It follows the content the way Model does: a content write
+	// re-stamps it, metadata (tags, a star, a supersede pointer) leaves it.
+	// Frontmatter `account`, mirrored to the index.
+	Account     string    `json:"account,omitempty"`
 	Created     time.Time `json:"created"`
 	Updated     time.Time `json:"updated"`
 	ContentHash string    `json:"contentHash"`
@@ -266,6 +280,11 @@ type Session struct {
 	Model    string `json:"model"`
 	Ambient  bool   `json:"ambient"`
 	Favorite bool   `json:"favorite,omitempty"` // owner/agent star; never bumps UpdatedAt
+	// Account is the restricted local account (peer_auth.restricted) that
+	// started the session, "" for the owner and every install without one. It
+	// is set once, at creation, and the session -- its findings included --
+	// belongs to that principal alone (access.SessionAccountOK).
+	Account string `json:"account,omitempty"`
 	// Tokens is the real model token consumption harvested from the agent's
 	// transcript (Claude Code at SessionEnd, Codex every Stop) -- the actual burn,
 	// not the injection estimate. Zero until harvested, or for a client with no
@@ -357,6 +376,12 @@ type Task struct {
 	LeaseExpiresAt *time.Time `json:"leaseExpiresAt,omitempty"`
 	Favorite       bool       `json:"favorite,omitempty"` // owner/agent star; never bumps UpdatedAt
 	DependsOn      []string   `json:"dependsOn,omitempty"`
+	// Account is the restricted local account (peer_auth.restricted) that
+	// created the task, and UpdatedAccount the one that last changed it
+	// (status, body, a claim); "" for the owner, background work and every
+	// install without restricted accounts.
+	Account        string     `json:"account,omitempty"`
+	UpdatedAccount string     `json:"updatedAccount,omitempty"`
 	CreatedAt      time.Time  `json:"createdAt"`
 	UpdatedAt      time.Time  `json:"updatedAt"`
 	ClosedAt       *time.Time `json:"closedAt,omitempty"`
@@ -399,7 +424,10 @@ type Trial struct {
 	SessionID   string         `json:"sessionId"`
 	ProjectSlug string         `json:"projectSlug"`
 	Favorite    bool           `json:"favorite,omitempty"` // owner/agent star
-	CreatedAt   time.Time      `json:"createdAt"`
+	// Account is the restricted local account (peer_auth.restricted) that
+	// recorded the trial, "" for the owner.
+	Account   string    `json:"account,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // ---------------------------------------------------------------------------

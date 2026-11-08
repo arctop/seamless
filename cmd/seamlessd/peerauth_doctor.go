@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/arctop/seamless/internal/access"
@@ -50,7 +51,15 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 		out = append(out, check{statusOK, "peer_auth.user", fmt.Sprintf("%s (uid %d): sealed [%s], shared [%s]; sessions land in %s",
 			a.Account.Name, a.Account.UID, strings.Join(a.Sealed, ", "), strings.Join(a.Projects, ", "), a.Home)})
 	}
+	for _, a := range policy.RestrictedAccounts() {
+		out = append(out, check{statusOK, "peer_auth.restricted", fmt.Sprintf("%s (uid %d): restricted -- the socket only; "+
+			"reads and writes every open project that is not locked, reads global; its writes are labeled with its name, "+
+			"and its constraints, conventions, protocols and stages wait for the owner's promotion", a.Name, a.UID)})
+	}
 	rt := &peerAuthRuntime{policy: policy, cfg: pa, env: env}
+	for _, w := range rt.restrictedReachWarnings() {
+		out = append(out, check{statusWarn, "peer_auth.restricted", w})
+	}
 	problems := rt.filesystemProblems(cfg, false)
 	if db != nil {
 		pp, perr := projectProblems(ctx, db, policy)
@@ -101,4 +110,43 @@ func approverCheck(ctx context.Context, db *sql.DB) check {
 	}
 	return check{statusOK, name, fmt.Sprintf("%d enrolled (passkeys %d, Touch ID keys %d)",
 		len(creds), kinds[store.ApproverPasskey], kinds[store.ApproverTouchID])}
+}
+
+// restrictedReachWarnings reports why a restricted account might not reach the
+// socket at all: a socket under the owner's home directory (which the account
+// cannot traverse), or a directory on the way to it that other accounts cannot
+// search. They are warnings, not preflight failures -- a socket group the
+// account belongs to can open a 0750 directory, and the owner may add the
+// account to it later -- and they say nothing while no account is restricted.
+func (rt *peerAuthRuntime) restrictedReachWarnings() []string {
+	if !rt.policy.HasRestricted() {
+		return nil
+	}
+	var out []string
+	sock := filepath.Clean(rt.cfg.Socket.Path)
+	if home := strings.TrimSpace(rt.policy.Owner().Home); home != "" && home != "/" && pathWithin(sock, home) {
+		out = append(out, fmt.Sprintf("socket %s is inside the owner's home %s, which a restricted account cannot traverse: "+
+			"put the socket in a directory of its own outside every home (such as /opt/seamless/run)", sock, home))
+	}
+	if strings.TrimSpace(rt.cfg.Socket.Group) != "" {
+		return out // reach goes through the group; membership is the owner's to check
+	}
+	for dir := filepath.Dir(sock); ; dir = filepath.Dir(dir) {
+		facts, err := rt.env.inspect(dir)
+		if err == nil && facts.isDir && facts.mode.Perm()&0o001 == 0 {
+			out = append(out, fmt.Sprintf("directory %s (mode %#o) is not searchable by other accounts, so a restricted "+
+				"account cannot reach the socket under it: allow others to search it (o+x), or hand the socket to a group "+
+				"the account is in (peer_auth.socket.group)", dir, facts.mode.Perm()))
+		}
+		if parent := filepath.Dir(dir); parent == dir {
+			break
+		}
+	}
+	return out
+}
+
+// pathWithin reports whether path is dir or lies inside it, lexically.
+func pathWithin(path, dir string) bool {
+	rel, err := filepath.Rel(filepath.Clean(dir), filepath.Clean(path))
+	return err == nil && (rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))))
 }

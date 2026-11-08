@@ -125,6 +125,10 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 	if err != nil {
 		return "", nil, err
 	}
+	// peer_auth, per item: every section below is loaded already fenced, and
+	// each is re-checked against the caller's reach (reachable) before it can
+	// render -- the last word on what a restricted account's briefing names.
+	mems = reachable(ctx, mems, memoryProject)
 	// Write screening, when on: a memory in drift quarantine -- and, under
 	// lockdown, every memory the owner has not confirmed or the review not
 	// marked safe -- is left out before anything is partitioned or ranked.
@@ -215,7 +219,7 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 		if err != nil {
 			return "", nil, err
 		}
-		findings = filterFindingsByAge(findings, cfg.FindingsMaxAgeDays, time.Now())
+		findings = reachable(ctx, filterFindingsByAge(findings, cfg.FindingsMaxAgeDays, time.Now()), sessionProject)
 	}
 	var ready []core.Task
 	if cfg.ReadyTasksShown > 0 {
@@ -223,16 +227,18 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 		if err != nil {
 			return "", nil, err
 		}
+		ready = reachable(ctx, ready, taskProject)
 	}
 	siblings, err := s.siblingFindings(ctx, project, cfg.SiblingFindingsCount)
 	if err != nil {
 		return "", nil, err
 	}
+	siblings = reachable(ctx, siblings, sessionProject)
 	siblingMems, err := s.siblingMemories(ctx, project, extra, cfg)
 	if err != nil {
 		return "", nil, err
 	}
-	siblingMems = s.filter(ctx, hold, siblingMems)
+	siblingMems = s.filter(ctx, hold, reachable(ctx, siblingMems, memoryProject))
 	rollups, err := store.ActivePlans(ctx, s.db, project)
 	if err != nil {
 		return "", nil, err
@@ -241,6 +247,7 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 	if err != nil {
 		return "", nil, err
 	}
+	pending = reachable(ctx, pending, noteProject)
 	stages := s.pinnedStages(stageMems, cfg.StageUnknownMaxAgeDays, time.Now())
 	if len(constraints) == 0 && len(favorites) == 0 && len(conventions) == 0 &&
 		len(index) == 0 && omitted == 0 &&
@@ -478,7 +485,7 @@ func alsoBindingLine(compact []core.Memory) string {
 	}
 	names := make([]string, 0, len(compact))
 	for _, c := range compact {
-		names = append(names, sanitizeName(c.Name, 80))
+		names = append(names, sanitizeName(c.Name, 80)+accountMark(c.Account))
 	}
 	return fmt.Sprintf("- +%d more, equally binding -- memory_read name=<name> before working near one: %s\n",
 		len(compact), strings.Join(names, ", "))
@@ -729,7 +736,9 @@ type briefingSections struct {
 	provenance   map[string]string  // memory id -> provenance mark (screening on); nil renders no marks
 }
 
-// mark is a memory line's provenance suffix: "" while provenance is off.
+// mark is a memory line's provenance suffix: "" while provenance is off. The
+// account label (accountMark) is a separate suffix after it, rendered whether
+// provenance is on or not, and only for an item a restricted account wrote.
 func (sec briefingSections) mark(id string) string { return sec.provenance[id] }
 
 // assembleBriefing packs the grouped sections against the token budget. The
@@ -785,7 +794,7 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 		constraintsSec.WriteString("\nConstraints (binding for every session):\n")
 		full, compact := constraintTiers(constraints, cfg.ConstraintMaxFull)
 		for _, c := range full {
-			constraintsSec.WriteString("- " + sanitizeName(c.Name, 80) + ": " + sanitizeField(c.Description, 160) + sec.mark(c.ID) + "\n")
+			constraintsSec.WriteString("- " + sanitizeName(c.Name, 80) + ": " + sanitizeField(c.Description, 160) + sec.mark(c.ID) + accountMark(c.Account) + "\n")
 			ids = append(ids, c.ID)
 		}
 		// The compact tier is part of the same pinned section -- budget can drop
@@ -912,7 +921,7 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 		full, _ := conventionTiers(sec.conventions, cfg.ConventionMaxFull)
 		shown := 0
 		for _, m := range full {
-			line := "- " + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + sec.mark(m.ID) + "\n"
+			line := "- " + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + sec.mark(m.ID) + accountMark(m.Account) + "\n"
 			if !m.Favorite && used+estTokens(line) > budget {
 				break
 			}
@@ -936,7 +945,7 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 			body.WriteString(lead)
 			used += estTokens(lead)
 			for _, f := range findings {
-				line := "- " + sanitizeName(f.Name, 80) + " (" + humanAge(f.UpdatedAt) + "): " + clipWords(sanitizeField(f.Findings, 0), 200) + "\n"
+				line := "- " + sanitizeName(f.Name, 80) + " (" + humanAge(f.UpdatedAt) + "): " + clipWords(sanitizeField(f.Findings, 0), 200) + accountMark(f.Account) + "\n"
 				if used+estTokens(line) > budget {
 					break
 				}
@@ -973,13 +982,13 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 		// favorite pin folded into the section (partitioned out before the
 		// recency/count trims, so those never saw them either).
 		for _, m := range sec.favorites {
-			line := "- " + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + sec.mark(m.ID) + "\n"
+			line := "- " + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + sec.mark(m.ID) + accountMark(m.Account) + "\n"
 			body.WriteString(line)
 			used += estTokens(line)
 			ids = append(ids, m.ID)
 		}
 		for i, m := range index {
-			line := "- " + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + sec.mark(m.ID) + "\n"
+			line := "- " + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + sec.mark(m.ID) + accountMark(m.Account) + "\n"
 			if used+estTokens(line) > budget && (i > 0 || len(sec.favorites) > 0) {
 				dropped = len(index) - i
 				break
@@ -1003,7 +1012,7 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 			body.WriteString(lead)
 			used += estTokens(lead)
 			for _, f := range sec.siblings {
-				line := "- " + sanitizeName(f.ProjectSlug, 60) + " (" + humanAge(f.UpdatedAt) + "): " + clipWords(sanitizeField(f.Findings, 0), 150) + "\n"
+				line := "- " + sanitizeName(f.ProjectSlug, 60) + " (" + humanAge(f.UpdatedAt) + "): " + clipWords(sanitizeField(f.Findings, 0), 150) + accountMark(f.Account) + "\n"
 				if used+estTokens(line) > budget {
 					break
 				}
@@ -1021,7 +1030,7 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 			body.WriteString(lead)
 			used += estTokens(lead)
 			for _, m := range sec.siblingMems {
-				line := "- " + sanitizeName(m.Project, 60) + "/" + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + sec.mark(m.ID) + "\n"
+				line := "- " + sanitizeName(m.Project, 60) + "/" + sanitizeName(m.Name, 80) + ": " + sanitizeField(m.Description, 160) + sec.mark(m.ID) + accountMark(m.Account) + "\n"
 				if used+estTokens(line) > budget {
 					break
 				}
@@ -1039,9 +1048,9 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 // the Plans section -- a hint, not a commitment, so unlike the rollup rows it
 // budget-competes (see assembleBriefing).
 func pendingPlanLine(n core.Note) string {
-	return fmt.Sprintf("- %s -- awaiting approval: %s (%s, %s)\n",
+	return fmt.Sprintf("- %s -- awaiting approval: %s (%s, %s)%s\n",
 		sanitizeName(plans.SlugFromTags(n.Tags), 80), sanitizeField(n.Title, 80),
-		plans.StatusFromTags(n.Tags), humanAge(n.Updated))
+		plans.StatusFromTags(n.Tags), humanAge(n.Updated), accountMark(n.Account))
 }
 
 // readyTasksSection renders the briefing's ready-queue section ("Ready tasks
@@ -1066,7 +1075,7 @@ func readyTasksSection(ready []core.Task, shown int) string {
 		if i == shown {
 			break
 		}
-		b.WriteString("- " + sanitizeField(t.Title, 60) + "\n")
+		b.WriteString("- " + sanitizeField(t.Title, 60) + accountMark(t.Account) + "\n")
 	}
 	b.WriteString("(full queue with ids: tasks_ready; claim: tasks_claim id=<id> session=<your Seam session>)\n")
 	return b.String()
@@ -1114,7 +1123,7 @@ func (s *Service) subagentRelevant(ctx context.Context, project, prompt string, 
 		pinned[c.ID] = struct{}{}
 	}
 	var out []promptHit
-	for _, h := range scorePromptAll(tokens, corpus) {
+	for _, h := range visiblePromptHits(ctx, scorePromptAll(tokens, corpus)) {
 		if _, ok := pinned[h.id]; ok {
 			continue
 		}
@@ -1177,7 +1186,7 @@ func (s *Service) assembleSubagent(project string, iso core.Isolation, constrain
 	b.WriteString("\nConstraints (binding for every session):\n")
 	full, compact := constraintTiers(constraints, cfg.ConstraintMaxFull)
 	for _, c := range full {
-		b.WriteString("- " + sanitizeName(c.Name, 80) + ": " + sanitizeField(c.Description, 160) + marks[c.ID] + "\n")
+		b.WriteString("- " + sanitizeName(c.Name, 80) + ": " + sanitizeField(c.Description, 160) + marks[c.ID] + accountMark(c.Account) + "\n")
 		ids = append(ids, c.ID)
 	}
 	b.WriteString(alsoBindingLine(compact))
@@ -1187,7 +1196,7 @@ func (s *Service) assembleSubagent(project string, iso core.Isolation, constrain
 	if len(relevant) > 0 {
 		b.WriteString("\nRelevant to this task:\n")
 		for _, h := range relevant {
-			b.WriteString("- " + sanitizeName(h.name, 80) + ": " + sanitizeField(h.description, 160) + marks[h.id] + "\n")
+			b.WriteString("- " + sanitizeName(h.name, 80) + ": " + sanitizeField(h.description, 160) + marks[h.id] + accountMark(h.account) + "\n")
 			ids = append(ids, h.id)
 		}
 	}

@@ -54,10 +54,11 @@ func scanTask(rows *sql.Rows, lead ...any) (core.Task, error) {
 		created, updated string
 		lease, closed    sql.NullString
 	)
-	dest := make([]any, 0, len(lead)+13)
+	dest := make([]any, 0, len(lead)+15)
 	dest = append(dest, lead...)
 	dest = append(dest, &t.ID, &t.ProjectSlug, &t.Title, &t.Body, &status,
-		&t.CreatedBy, &t.PlanSlug, &t.ClaimedBy, &lease, &t.Favorite, &created, &updated, &closed)
+		&t.CreatedBy, &t.PlanSlug, &t.ClaimedBy, &lease, &t.Favorite, &created, &updated, &closed,
+		&t.Account, &t.UpdatedAccount)
 	if err := rows.Scan(dest...); err != nil {
 		return core.Task{}, err
 	}

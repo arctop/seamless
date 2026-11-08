@@ -206,7 +206,9 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request, id json.RawM
 	}
 	// A configured peer_auth account that names no project recalls in its own
 	// project (plus global), the scope every other surface places it in; with
-	// no project named anyone else recalls the global scope, as before.
+	// no project named anyone else recalls the global scope, as before -- a
+	// restricted local account included: it has no home project, and reads the
+	// global scope. A project named here is judged by retrieve.Recall's fence.
 	if !projectPresent {
 		if v, ok := access.FromContext(r.Context()); ok && v.Principal().Kind == access.KindUser {
 			project = v.Home()
@@ -280,6 +282,11 @@ func renderHits(query string, hits []retrieve.Hit) string {
 		fmt.Fprintf(&b, "%d. [%s] %s -- %s", i+1, h.Kind, h.Name, h.Description)
 		if h.Project != "" {
 			fmt.Fprintf(&b, " (%s)", h.Project)
+		}
+		// A restricted local account's item says so; the owner's carry no
+		// account, and their lines are unchanged.
+		if label := retrieve.AccountLabel(h.Account); label != "" {
+			fmt.Fprintf(&b, " (%s)", label)
 		}
 		b.WriteString("\n")
 	}

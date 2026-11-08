@@ -308,8 +308,10 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 	// mean reading THIS machine's disk for another machine's path.
 	//
 	// A configured peer_auth account never grows the map: it works only inside
-	// its own projects, and a repository it opens must not mint a project.
-	if !peerUser(ctx) {
+	// its own projects, and a repository it opens must not mint a project. Nor
+	// does a restricted local account: it cannot create projects at all, so
+	// the map is read for it (restrictedReaches), never grown.
+	if growsRepoMap(ctx) {
 		if _, moved, err := store.RegisterProjectForCWD(ctx, h.db, p.identity(host), h.localHost); err != nil {
 			stage := "register-project"
 			if errors.Is(err, store.ErrRemoteRootUnknown) {
@@ -319,6 +321,17 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 		} else if moved != nil {
 			h.recordRepoMoved(ctx, client, moved)
 		}
+	}
+
+	// A restricted local account works only in the open projects it reaches.
+	// Anywhere else -- an unmapped directory, the global scope, a closed
+	// project's repository -- the session is not recorded and the notice says
+	// so in words that never name the project, so a closed project reads
+	// exactly like a directory nothing maps.
+	if acct := access.AccountOf(ctx); acct != "" && !h.restrictedReaches(ctx, host, p.CWD) {
+		h.writeContextResponse(ctx, w, "SessionStart", "session-start", client,
+			p.SessionID, "", restrictedNotice(acct), false, nil)
+		return
 	}
 
 	// peer_auth: the owner opening a repository whose project is sealed to
@@ -591,17 +604,22 @@ func (h *Handler) ensureAmbientSessionIn(ctx context.Context, client Client, hos
 	project = placed
 
 	// Resume: reactivate and re-scope, so a compact/resume continues the same
-	// ambient session rather than forking a new one.
+	// ambient session rather than forking a new one -- but only the caller's
+	// own (ownAmbient): a session another principal started is never resumed.
 	now := time.Now().UTC()
-	resumed, found, err := store.ReactivateAmbientSession(
-		ctx, h.db, externalClient, p.SessionID, project, now)
-	if err != nil {
-		h.recordHookError(ctx, "ambient-resume", client, err)
+	if own, exists := h.ownAmbient(ctx, client, p.SessionID); !own {
 		return "", ""
-	}
-	if found {
-		h.stampAgentProcess(ctx, client, resumed.ID, p.Identity.AgentProcess)
-		return resumed.ID, resumed.Name
+	} else if exists {
+		resumed, found, err := store.ReactivateAmbientSession(
+			ctx, h.db, externalClient, p.SessionID, project, now)
+		if err != nil {
+			h.recordHookError(ctx, "ambient-resume", client, err)
+			return "", ""
+		}
+		if found {
+			h.stampAgentProcess(ctx, client, resumed.ID, p.Identity.AgentProcess)
+			return resumed.ID, resumed.Name
+		}
 	}
 
 	name = ambientName(client, p.SessionID)
@@ -624,7 +642,13 @@ func (h *Handler) ensureAmbientSessionIn(ctx context.Context, client Client, hos
 		// resume and collide on its UNIQUE identity/name. The loser resumes the
 		// winner's row instead of dropping its ambient line. A display-name
 		// collision belonging to another identity remains an error.
+		// The winner is checked like any resume: a row another principal won
+		// the race with stays its own.
 		if errors.Is(err, store.ErrSessionIdentityExists) || errors.Is(err, store.ErrSessionNameExists) {
+			if own, exists := h.ownAmbient(ctx, client, p.SessionID); !own || !exists {
+				h.recordHookError(ctx, "ambient-create", client, err)
+				return "", ""
+			}
 			if existing, ok, rerr := store.ReactivateAmbientSession(
 				ctx, h.db, externalClient, p.SessionID, project, now,
 			); rerr == nil && ok {
@@ -638,6 +662,27 @@ func (h *Handler) ensureAmbientSessionIn(ctx context.Context, client Client, hos
 	h.stampAgentProcess(ctx, client, id, p.Identity.AgentProcess)
 	h.recordSession(ctx, core.EventSessionStarted, sess, map[string]any{"ambient": true})
 	return id, name
+}
+
+// ownAmbient reports whether the ambient session a client's id names may be
+// resumed by the principal the request speaks for (own), and whether it exists
+// at all. A session belongs to the principal that started it
+// (access.SessionAccountOK): a restricted account's hook never resumes,
+// re-scopes or stamps the owner's session, nor the owner's hook a restricted
+// account's, whatever id the hook body names. ReactivateAmbientSession
+// re-scopes as it resumes, so the check comes before it, never after. A
+// lookup failure fails closed (own false). Every session lacks an account
+// while no restricted account is configured, so there own is always true.
+func (h *Handler) ownAmbient(ctx context.Context, client Client, externalID string) (own, exists bool) {
+	sess, found, err := store.AmbientSessionByExternalIdentity(ctx, h.db, client.externalIdentity(), externalID)
+	if err != nil {
+		h.recordHookError(ctx, "ambient-resume", client, err)
+		return false, false
+	}
+	if !found {
+		return true, false
+	}
+	return access.SessionAccountOK(ctx, sess.Account), true
 }
 
 // stampAgentProcess records which agent process now runs an ambient session, so
@@ -786,7 +831,10 @@ const (
 	// (peer_auth.locked, no lease) -- recorded there metadata only, so a hook
 	// may heartbeat, stamp and complete it, and write nothing into it.
 	reachLocked
-	// reachForeign: another account's session, or a lookup that failed.
+	// reachForeign: another account's session -- one in a project the caller
+	// may not write, or one another principal started (a restricted account's
+	// for the owner, the owner's for a restricted account) -- or a lookup that
+	// failed.
 	reachForeign
 )
 
@@ -795,13 +843,22 @@ const (
 // out of them decides. lockedProject is the ambient row's project when that
 // row is the locked one. With peer_auth off it is reachOK without touching the
 // database.
+//
+// A session another principal started is foreign whatever its project
+// (access.SessionAccountOK): a restricted account and the owner both write an
+// open project, and the project alone would let either act in the other's
+// session. A restricted account's own session in an open project it reaches
+// is reachOK (View.Writable).
 func (h *Handler) sessionReachOf(ctx context.Context, client Client, externalID string) (reach sessionReach, lockedProject string) {
 	v, ok := access.FromContext(ctx)
 	if !ok || h.db == nil || strings.TrimSpace(externalID) == "" {
 		return reachOK, ""
 	}
-	judge := func(project string) sessionReach {
+	judge := func(sess core.Session) sessionReach {
+		project := sess.ProjectSlug
 		switch {
+		case !access.SessionAccountOK(ctx, sess.Account):
+			return reachForeign
 		case v.Writable(project):
 			return reachOK
 		case v.Locked(project):
@@ -816,7 +873,7 @@ func (h *Handler) sessionReachOf(ctx context.Context, client Client, externalID 
 		return reachForeign, ""
 	}
 	if found {
-		reach = judge(ambient.ProjectSlug)
+		reach = judge(ambient)
 		if reach == reachLocked {
 			lockedProject = ambient.ProjectSlug
 		}
@@ -830,7 +887,7 @@ func (h *Handler) sessionReachOf(ctx context.Context, client Client, externalID 
 		return reachForeign, ""
 	}
 	for _, sess := range linked {
-		switch judge(sess.ProjectSlug) {
+		switch judge(sess) {
 		case reachForeign:
 			return reachForeign, ""
 		case reachLocked:
@@ -847,11 +904,51 @@ func peerUser(ctx context.Context) bool {
 	return ok && v.Principal().Kind == access.KindUser
 }
 
+// growsRepoMap reports whether a SessionStart may grow the repo->project map:
+// for the owner and with peer_auth off, as always; never for a configured
+// account (it works only in its own projects) or a restricted local account
+// (it cannot create projects -- the owner creates and maps them).
+func growsRepoMap(ctx context.Context) bool {
+	return !peerUser(ctx) && access.AccountOf(ctx) == ""
+}
+
+// restrictedReaches reports whether a restricted account's cwd maps to a
+// project it may work in: an open, unlocked project the map already places the
+// cwd in (View.Writable). An unmapped cwd resolves to the global scope, which it
+// may only read, and a failed lookup fails closed.
+func (h *Handler) restrictedReaches(ctx context.Context, host, cwd string) bool {
+	if h.db == nil {
+		return false
+	}
+	project, err := store.ResolveProjectForCWD(ctx, h.db, host, cwd)
+	if err != nil {
+		h.recordHookError(ctx, "ambient-project-resolve", "", err, "cwd", cwd)
+		return false
+	}
+	return access.Writable(ctx, project)
+}
+
+// restrictedNotice is the SessionStart context for a restricted local account
+// anywhere but an open project it reaches. It names no project: it reads the
+// same in a confidential, sealed or locked project's repository as in a
+// directory nothing maps, so it never tells the account which projects exist
+// beyond its reach.
+func restrictedNotice(account string) string {
+	return "<seam-briefing>\nSeamless: this directory maps to no project account " + account + " may reach, " +
+		"so this session is not recorded and Seamless refuses the writes it would place here; the global scope is " +
+		"read-only for this account. " +
+		"A restricted account works only in the owner's open projects: to work here with Seamless, the owner maps " +
+		"this clone of an open project with `seamlessd map-repo --path <repo> --project <slug>`, and the next " +
+		"session started in it is recorded.\n</seam-briefing>"
+}
+
 // refusedCWD reports the project a cwd resolves to when the caller may not be
 // placed in it: the owner in a repository sealed to another OS account, or in
 // the repository of a project the owner has locked and this connection holds
 // no lease on (locked). A configured account is never refused here -- its
-// session lands in its own project wherever it opens.
+// session lands in its own project wherever it opens. A restricted local
+// account never gets this far: sessionStart answers it first
+// (restrictedReaches), with a notice that names no project.
 func (h *Handler) refusedCWD(ctx context.Context, host, cwd string) (project string, locked, ok bool) {
 	if _, on := access.FromContext(ctx); !on || h.db == nil {
 		return "", false, false

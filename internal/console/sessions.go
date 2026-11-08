@@ -47,6 +47,7 @@ type sessionRow struct {
 	Harness  string    `json:"harness,omitempty"` // client discriminator (claude-code|codex)
 	Model    string    `json:"model,omitempty"`   // model powering the session, verbatim
 	Host     string    `json:"host,omitempty"`    // machine the agent ran on ("" = before host scoping)
+	Account  string    `json:"account,omitempty"` // restricted account that started it ("" = owner)
 	Live     bool      `json:"live"`
 	Findings string    `json:"findings"`
 	Tokens   int       `json:"tokens"` // real model tokens harvested from the transcript (0 = none)
@@ -235,7 +236,7 @@ func (s *Service) sessionsList(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, sessionRow{
 			ID: sess.ID, Name: sess.Name, Project: sess.ProjectSlug,
 			Status: string(sess.Status), Source: sess.Source, Ambient: sess.Ambient,
-			Harness: harnessOf(sess), Model: sess.Model, Host: sess.Host,
+			Harness: harnessOf(sess), Model: sess.Model, Host: sess.Host, Account: sess.Account,
 			Live: live, Findings: snippet(plain, 120), Tokens: sess.Tokens.Total,
 			Updated: sess.UpdatedAt,
 		})

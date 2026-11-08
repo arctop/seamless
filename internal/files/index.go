@@ -65,18 +65,20 @@ func (ix *Indexer) IndexMemory(ctx context.Context, m core.Memory) error {
 		INSERT INTO memories_index
 		    (id, kind, name, description, project, file_path, tags,
 		     valid_from, invalid_at, superseded_by, source_session, model,
-		     favorite, content_hash, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		     favorite, content_hash, created_at, updated_at, account)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 		    kind=excluded.kind, name=excluded.name, description=excluded.description,
 		    project=excluded.project, file_path=excluded.file_path, tags=excluded.tags,
 		    valid_from=excluded.valid_from, invalid_at=excluded.invalid_at,
 		    superseded_by=excluded.superseded_by, source_session=excluded.source_session,
 		    model=excluded.model, favorite=excluded.favorite,
-		    content_hash=excluded.content_hash, updated_at=excluded.updated_at`,
+		    content_hash=excluded.content_hash, updated_at=excluded.updated_at,
+		    account=excluded.account`,
 		m.ID, string(m.Kind), m.Name, m.Description, m.Project, m.FilePath, tags,
 		core.FormatTime(m.ValidFrom), invalidAt, nullStr(m.SupersededBy), m.SourceSession,
 		m.Model, m.Favorite, m.ContentHash, core.FormatTime(m.Created), core.FormatTime(m.Updated),
+		m.Account,
 	)
 	if err != nil {
 		return fmt.Errorf("files.IndexMemory: upsert: %w", err)
@@ -110,15 +112,17 @@ func (ix *Indexer) IndexNote(ctx context.Context, n core.Note) error {
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO notes_index
 		    (id, title, slug, description, project, file_path, tags,
-		     source_url, model, favorite, content_hash, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		     source_url, model, favorite, content_hash, created_at, updated_at, account)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 		    title=excluded.title, slug=excluded.slug, description=excluded.description,
 		    project=excluded.project, file_path=excluded.file_path, tags=excluded.tags,
 		    source_url=excluded.source_url, model=excluded.model, favorite=excluded.favorite,
-		    content_hash=excluded.content_hash, updated_at=excluded.updated_at`,
+		    content_hash=excluded.content_hash, updated_at=excluded.updated_at,
+		    account=excluded.account`,
 		n.ID, n.Title, n.Slug, n.Description, n.Project, n.FilePath, tags,
 		nullStr(n.SourceURL), n.Model, n.Favorite, n.ContentHash, core.FormatTime(n.Created), core.FormatTime(n.Updated),
+		n.Account,
 	)
 	if err != nil {
 		return fmt.Errorf("files.IndexNote: upsert: %w", err)

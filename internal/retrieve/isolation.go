@@ -3,6 +3,7 @@ package retrieve
 import (
 	"context"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -76,6 +77,32 @@ func (s *Service) familyPeers(ctx context.Context, project string, peers []strin
 	}
 	return kept, nil
 }
+
+// reachable keeps the items whose scope the request in ctx may read
+// (access.Visible of scope(item)). Every briefing section is fenced where it is
+// loaded -- the bound project is checked before anything is read, the global
+// scope and each family member through store.CanRead -- so this normally keeps
+// everything; it is the per-item check no section's query can skip, so a
+// restricted account (or any other peer_auth view) never reads an item of a
+// project outside its reach through a section that forgot to ask. With no
+// View (peer_auth off, background work) it returns items untouched.
+func reachable[T any](ctx context.Context, items []T, scope func(T) string) []T {
+	if _, ok := access.FromContext(ctx); !ok || len(items) == 0 {
+		return items
+	}
+	kept := make([]T, 0, len(items))
+	for _, it := range items {
+		if access.Visible(ctx, scope(it)) {
+			kept = append(kept, it)
+		}
+	}
+	return kept
+}
+
+func memoryProject(m core.Memory) string   { return m.Project }
+func noteProject(n core.Note) string       { return n.Project }
+func sessionProject(s core.Session) string { return s.ProjectSlug }
+func taskProject(t core.Task) string       { return t.ProjectSlug }
 
 // isolationLine renders the isolation header for a fenced project. Both
 // assemblers write it directly under their header line -- a subagent is an

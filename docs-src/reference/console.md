@@ -759,6 +759,21 @@ marked, with its reason and a **Clear mark** button - the only way a mark
 comes off. **Recently decided** keeps the last twenty releases and discards,
 without their text. The sidebar badge counts what is waiting.
 
+**Proposals from restricted accounts.** Under `peer_auth`, a [restricted local
+account](/guides/peer-auth/#restricted-local-accounts)'s change to a
+constraint, convention, protocol or stage waits here too, as a proposal: its
+card says "Proposed by account <name>", and its button reads **Promote**
+instead of Release. Promoting lands it exactly as written, still labeled with
+the account; `seam promote` does the same from your terminal. While write
+screening is off, a daemon that lists restricted accounts still serves this
+screen, showing the proposals only - no lockdown, review or session marks -
+and the sidebar badge counts the proposals.
+
+Elsewhere on the console, a memory, note, task, session or trial that a
+restricted account wrote carries a small "written by account <name>" chip (a
+task the account last changed, "updated by account <name>"); your own items
+show none.
+
 ## Settings
 
 `/console/settings?s=<section>`

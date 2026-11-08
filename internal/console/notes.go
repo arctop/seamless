@@ -23,7 +23,8 @@ type noteRow struct {
 	Description string    `json:"description"`
 	Project     string    `json:"project"`
 	Tags        []string  `json:"tags,omitempty"`
-	Model       string    `json:"model,omitempty"` // producing model, verbatim
+	Model       string    `json:"model,omitempty"`   // producing model, verbatim
+	Account     string    `json:"account,omitempty"` // restricted account that wrote the content ("" = owner)
 	Favorite    bool      `json:"favorite,omitempty"`
 	Updated     time.Time `json:"updated"`
 }
@@ -96,7 +97,7 @@ func (s *Service) notesPage(ctx context.Context, sortKey, query string) (notesDa
 	for _, n := range notes {
 		row := noteRow{
 			ID: n.ID, Title: n.Title, Description: n.Description,
-			Project: n.Project, Tags: n.Tags, Model: n.Model, Favorite: n.Favorite,
+			Project: n.Project, Tags: n.Tags, Model: n.Model, Account: n.Account, Favorite: n.Favorite,
 			Updated: n.Updated,
 		}
 		if !noteMatches(row, q) {

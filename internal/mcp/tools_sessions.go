@@ -122,8 +122,22 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 	// write. A configured account's session outside its own projects -- an
 	// unmapped cwd, another repository -- lands in its own project instead; the
 	// owner is refused a project sealed to another account outright.
+	//
+	// A restricted account (peer_auth.restricted) has no project of its own to
+	// land in and cannot create one, so a cwd that places it nowhere it may
+	// write -- unmapped, outside any repository, or mapped to a project it does
+	// not reach -- is refused. The refusal waits for the one thing that can
+	// still place the call: a session of its own being resumed or adopted
+	// below, which brings its project with it. (A project argument it may not
+	// write was refused already, by sessionProjectArg.)
+	var unplaced error
 	if placed, perr := access.SessionScope(ctx, project); perr != nil {
-		return errResult("session_start", perr)
+		account := access.AccountOf(ctx)
+		if account == "" || how == scopeFromArg {
+			return errResult("session_start", perr)
+		}
+		unplaced = restrictedPlacementRefusal(account, cwd)
+		project, warning = "", ""
 	} else if placed != project {
 		project, how = placed, scopeFromAccount
 		warning = ""
@@ -148,9 +162,18 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 			return errResult("session_start", fmt.Errorf("session %q is not reachable from this connection: "+
 				"it belongs to a project this OS account may not reach -- choose another name", name))
 		}
+		// A session belongs to the principal that started it: resuming
+		// another's -- the owner's by a restricted account, or a restricted
+		// account's by the owner -- would be working in it.
+		if ok && !access.SessionAccountOK(ctx, existing.Account) {
+			return errResult("session_start", access.SessionAccountRefusal(name))
+		}
 		if ok {
 			if !pinned {
 				project, how = existing.ProjectSlug, scopeFromSession
+			}
+			if unplaced != nil && !access.Writable(ctx, project) {
+				return errResult("session_start", unplaced)
 			}
 			// Reactivate: a resumed session is live again. Without this a
 			// completed/expired session stays terminal -- the per-call heartbeat
@@ -164,11 +187,11 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 			s.stampSessionModel(ctx, existing.ID, model)
 			s.setBinding(ctx, existing.ID, project)
 			s.record(ctx, core.EventSessionStarted, existing.ID, project, "", map[string]any{"resumed": true})
-			return jsonResult(s.withStatelessHint(ctx, withWarning(map[string]any{
+			return jsonResult(s.withStatelessHint(ctx, withWarning(withAccount(map[string]any{
 				"session_id": existing.ID, "name": existing.Name,
 				"project": project, "resumed": true, "scope": scopeNote(project, how),
 				"briefing": s.briefing(ctx, host, project, "resume"),
-			}, warning), existing.Name, project, existing.ProjectSlug))
+			}, existing.Account), warning), existing.Name, project, existing.ProjectSlug))
 		}
 	}
 
@@ -181,16 +204,19 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 	// which keep describing the repository it runs in, at odds with the binding.
 	own, hasOwn := s.processSession(ctx)
 	if name == "" && hasOwn && (!pinned || project == own.ProjectSlug) {
+		if unplaced != nil && !access.Writable(ctx, own.ProjectSlug) {
+			return errResult("session_start", unplaced)
+		}
 		s.clearBinding(ctx)
 		stashAttribution(ctx, own.ID, own.ProjectSlug)
 		s.stampSessionModel(ctx, own.ID, model)
 		s.record(ctx, core.EventSessionStarted, own.ID, own.ProjectSlug, "",
 			map[string]any{"resumed": true, "adopted": true, "agent_process": true})
-		return jsonResult(withWarning(map[string]any{
+		return jsonResult(withWarning(withAccount(map[string]any{
 			"session_id": own.ID, "name": own.Name,
 			"project": own.ProjectSlug, "resumed": true, "scope": scopeNote(own.ProjectSlug, scopeFromOwn),
 			"briefing": s.briefing(ctx, host, own.ProjectSlug, "explicit"),
-		}, warning))
+		}, own.Account), warning))
 	}
 
 	// Without an agent process to identify the caller (an older seam, or a
@@ -206,6 +232,9 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 			if project == "" {
 				project = ambient.ProjectSlug
 			}
+			if unplaced != nil && !access.Writable(ctx, project) {
+				return errResult("session_start", unplaced)
+			}
 			ambient.ProjectSlug = project
 			ambient.UpdatedAt = time.Now().UTC()
 			if err := store.UpdateSession(ctx, s.cfg.DB, ambient); err != nil {
@@ -215,14 +244,19 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 			s.setBinding(ctx, ambient.ID, project)
 			s.record(ctx, core.EventSessionStarted, ambient.ID, project, "",
 				map[string]any{"resumed": true, "adopted": true})
-			return jsonResult(s.withStatelessHint(ctx, withWarning(map[string]any{
+			return jsonResult(s.withStatelessHint(ctx, withWarning(withAccount(map[string]any{
 				"session_id": ambient.ID, "name": ambient.Name,
 				"project": project, "resumed": true, "scope": scopeNote(project, how),
 				"briefing": s.briefing(ctx, host, project, "explicit"),
-			}, warning), ambient.Name, project, ambient.ProjectSlug))
+			}, ambient.Account), warning), ambient.Name, project, ambient.ProjectSlug))
 		}
 	}
 
+	// Nothing of its own placed a restricted account's session: nothing is
+	// created.
+	if unplaced != nil {
+		return errResult("session_start", unplaced)
+	}
 	id, err := core.NewID()
 	if err != nil {
 		return errResult("session_start", err)
@@ -236,6 +270,9 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 		ID: id, Name: name, ProjectSlug: project, Status: core.SessionActive,
 		CWD: cwd, Host: host, Source: "explicit", Model: model,
 		ExternalSessionID: externalSessionID, ExternalClient: externalClient,
+		// The principal starting it, which store.CreateSession would stamp
+		// anyway; set here so the result can say so.
+		Account:   access.AccountOf(ctx),
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := store.CreateSession(ctx, s.cfg.DB, sess); err != nil {
@@ -243,10 +280,36 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 	}
 	s.setBinding(ctx, id, project)
 	s.record(ctx, core.EventSessionStarted, id, project, "", nil)
-	return jsonResult(s.withStatelessHint(ctx, withWarning(map[string]any{
+	return jsonResult(s.withStatelessHint(ctx, withWarning(withAccount(map[string]any{
 		"session_id": id, "name": name, "project": project, "scope": scopeNote(project, how),
 		"briefing": s.briefing(ctx, host, project, "explicit"),
-	}, warning), name, project, project))
+	}, sess.Account), warning), name, project, project))
+}
+
+// restrictedPlacementRefusal is session_start's refusal for a restricted
+// account whose call nothing places in a project it may write: no project
+// argument, and a cwd that is outside any repository, in one the owner has not
+// mapped, or in one mapped to a project the account does not reach. It reads
+// the same for all three, so it never tells the account which repositories are
+// mapped to projects beyond its reach.
+func restrictedPlacementRefusal(account, cwd string) error {
+	rule := "the global scope is read-only for account " + account + ": a restricted account works only in " +
+		"open projects that already exist -- name one with project=<slug> (project_list lists the ones it reaches)"
+	if cwd == "" {
+		return errors.New("no cwd or project was given, and " + rule)
+	}
+	return errors.New("this cwd is not in a repository the owner has mapped to a project account " + account +
+		" reaches, and " + rule + ", or ask the owner to map this repository to one (`seamlessd map-repo`)")
+}
+
+// withAccount adds the restricted account a session belongs to
+// (core.Session.Account) to a session result, when it has one. The owner's
+// sessions carry none, so their results are exactly what they were.
+func withAccount(out map[string]any, account string) map[string]any {
+	if account != "" {
+		out["account"] = account
+	}
+	return out
 }
 
 // sessionProjectArg resolves session_start's project argument: validated like
@@ -267,7 +330,11 @@ func (s *Server) sessionProjectArg(ctx context.Context, raw, cwd, cwdProject str
 	if !access.Writable(ctx, project) {
 		return "", false, access.Refusal(ctx, project)
 	}
-	if cwdProject != "" && project != cwdProject {
+	// A restricted account is never told the project a cwd maps to when it may
+	// not reach that project: the argument places it, and the mapping is the
+	// owner's (the same reason restrictedPlacementRefusal names no project).
+	hidden := access.AccountOf(ctx) != "" && !access.Visible(ctx, cwdProject)
+	if cwdProject != "" && project != cwdProject && !hidden {
 		return "", false, fmt.Errorf("project %q conflicts with cwd %q, which is in project %q: "+
 			"pass one or the other (cwd places the session in its repository's project)", raw, cwd, cwdProject)
 	}
@@ -288,9 +355,11 @@ func (s *Server) sessionProjectArg(ctx context.Context, raw, cwd, cwdProject str
 // registers a not-yet-mapped repository as a project (store.RegisterProjectForCWD).
 // A configured peer_auth account only ever works inside its own projects, so
 // for it the map is read and never grown: a repository it opens must not mint a
-// project, and a mapping the owner made is all it needs.
+// project, and a mapping the owner made is all it needs. A restricted account
+// (peer_auth.restricted) reads it the same way: it cannot create a project, so
+// a repository the owner has not mapped places it nowhere.
 func (s *Server) cwdProject(ctx context.Context, id store.CWDIdentity) (string, *store.RepoMapAdoption, error) {
-	if v, ok := access.FromContext(ctx); ok && v.Principal().Kind == access.KindUser {
+	if v, ok := access.FromContext(ctx); (ok && v.Principal().Kind == access.KindUser) || access.AccountOf(ctx) != "" {
 		project, err := store.ResolveProjectForCWD(ctx, s.cfg.DB, id.Host, id.CWD)
 		return project, nil, err
 	}
@@ -395,8 +464,11 @@ func (s *Server) soleAmbientByCWD(ctx context.Context, host, cwd string) (core.S
 		s.logger.Warn("session_start: ambient lookup", "error", err)
 		return core.Session{}, false
 	}
-	// Another OS account's sessions are never candidates (peer_auth).
-	ambients = slices.DeleteFunc(ambients, func(a core.Session) bool { return !access.Visible(ctx, a.ProjectSlug) })
+	// Another OS account's sessions are never candidates (peer_auth), nor is a
+	// session another principal started in a project both reach.
+	ambients = slices.DeleteFunc(ambients, func(a core.Session) bool {
+		return !access.Visible(ctx, a.ProjectSlug) || !access.SessionAccountOK(ctx, a.Account)
+	})
 	if len(ambients) != 1 {
 		return core.Session{}, false
 	}
@@ -457,7 +529,7 @@ func (s *Server) handleSessionUpdate(ctx context.Context, req mcp.CallToolReques
 	if err := store.UpdateSession(ctx, s.cfg.DB, sess); err != nil {
 		return errResult("session_update", err)
 	}
-	return jsonResult(map[string]any{"session_id": sess.ID, "status": string(sess.Status)})
+	return jsonResult(withAccount(map[string]any{"session_id": sess.ID, "status": string(sess.Status)}, sess.Account))
 }
 
 func sessionEndTool() mcp.Tool {
@@ -552,7 +624,8 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 		s.record(ctx, core.EventAgentMishap, sess.ID, sess.ProjectSlug, "", payload)
 	}
 	ended := map[string]any{"claims_released": released, "findings": events.Truncate(findings, s.cfg.ToolEventMaxChars)}
-	out := map[string]any{"status": "completed", "session_id": sess.ID, "claims_released": released, "mishaps_recorded": len(mishaps)}
+	out := withAccount(map[string]any{"status": "completed", "session_id": sess.ID, "claims_released": released,
+		"mishaps_recorded": len(mishaps)}, sess.Account)
 	if len(commits) > 0 {
 		ended["commits_recorded"] = len(commits)
 		out["commits_recorded"] = len(commits)
@@ -645,6 +718,9 @@ func (s *Server) ambientSessionTarget(ctx context.Context) (sess core.Session, o
 	if err != nil {
 		return core.Session{}, false, false, err
 	}
+	// Another principal's sessions are neither a target nor a reason to call
+	// the caller's own ambiguous (access.SessionAccountOK).
+	sessions = slices.DeleteFunc(sessions, func(a core.Session) bool { return !access.SessionAccountOK(ctx, a.Account) })
 	if len(sessions) != 1 {
 		return core.Session{}, false, len(sessions) > 1, nil
 	}
@@ -663,6 +739,13 @@ func (s *Server) ambientSessionTarget(ctx context.Context) (sess core.Session, o
 // way around every fence. A session in a project the owner has locked is the
 // owner's own and is found; it binds nothing (getBinding drops it), and every
 // use of it is refused at the lock (lockedBinding, the write fence).
+//
+// A session in a reachable project that another principal started -- a
+// restricted account's, named by the owner, or the owner's, named by a
+// restricted account (access.SessionAccountOK) -- is refused outright with
+// access.SessionAccountRefusal: a session belongs to the principal that
+// started it, and every caller that names a session (the session= handle,
+// resolveSession, resolveActor) acts in it.
 func sessionByRef(ctx context.Context, db *sql.DB, ref string) (core.Session, bool, error) {
 	sess, ok, err := store.SessionByName(ctx, db, ref)
 	if err == nil && !ok && store.LooksLikeSessionULID(ref) {
@@ -671,22 +754,29 @@ func sessionByRef(ctx context.Context, db *sql.DB, ref string) (core.Session, bo
 	if err != nil || !ok {
 		return core.Session{}, false, err
 	}
-	if !access.Visible(ctx, sess.ProjectSlug) && !access.Locked(ctx, sess.ProjectSlug) {
-		return core.Session{}, false, nil
-	}
-	return sess, true, nil
+	return reachableSession(ctx, sess, ref)
 }
 
-// sessionByID is store.SessionByID under the same peer_auth rule as
+// sessionByID is store.SessionByID under the same peer_auth rules as
 // sessionByRef: a session this connection's OS account may not reach is not
-// found.
+// found, and another principal's session is refused.
 func sessionByID(ctx context.Context, db *sql.DB, id string) (core.Session, bool, error) {
 	sess, ok, err := store.SessionByID(ctx, db, id)
 	if err != nil || !ok {
 		return core.Session{}, false, err
 	}
+	return reachableSession(ctx, sess, id)
+}
+
+// reachableSession applies sessionByRef's two peer_auth rules to a loaded
+// session the caller named as ref: an unreachable project's session is not
+// found, another principal's is refused.
+func reachableSession(ctx context.Context, sess core.Session, ref string) (core.Session, bool, error) {
 	if !access.Visible(ctx, sess.ProjectSlug) && !access.Locked(ctx, sess.ProjectSlug) {
 		return core.Session{}, false, nil
+	}
+	if !access.SessionAccountOK(ctx, sess.Account) {
+		return core.Session{}, false, access.SessionAccountRefusal(ref)
 	}
 	return sess, true, nil
 }

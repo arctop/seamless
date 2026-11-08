@@ -213,6 +213,81 @@ Then run the session as the account: `sudo -u _payroll -H claude`. The account
 needs its own Claude Code sign-in, and its own copy of anything the session
 reads - it cannot traverse your home directory, which is the point.
 
+## Restricted local accounts
+
+A **restricted local account** is a second OS account on the machine whose
+agents work beside yours: a separate login for unattended agents, say, so that
+nothing they run can read your home directory. List it under
+`peer_auth.restricted`, by user name or numeric uid:
+
+```yaml
+peer_auth:
+  enabled: true
+  owner: alice
+  socket:
+    path: /opt/seamless/run/seamlessd.sock
+  locked: [example-finance]
+  restricted: [_example_agent]
+```
+
+What such an account reaches:
+
+- **Every open project that is not locked**, reading and writing. A project
+  whose isolation is `confidential` or `sealed`, and every project under
+  `peer_auth.locked`, is out of its reach and is not listed for it. Its refusal
+  reads the same for those projects and for a slug nobody registered, so it
+  never learns which closed projects exist.
+- **The global scope, read-only.** Its briefing, recall and reads include
+  global memories and notes; every global write is refused.
+- **No new projects.** A write or a session naming a project that does not
+  exist is refused rather than creating it. You create the projects and map
+  the account's clones of your repositories to them, as the daemon's account:
+
+  ```bash
+  sudo -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml \
+    /opt/seamless/bin/seamlessd map-repo --path /Users/_example_agent/repos/example-app --project example-app
+  ```
+
+  A session started anywhere else - an unmapped directory, a closed project's
+  repository - is not recorded.
+- **No approvals.** It files no access requests, gets no read grants and holds
+  no leases, so nothing it does can open a locked or confidential project.
+
+It is known only through the socket. The kernel names it by its uid, exactly as
+it names you; it never holds the bearer key, and a TCP request is always yours.
+Its client config is a sealed account's (above): `server_url:
+unix:///opt/seamless/run/seamlessd.sock` and no key, with hooks and the MCP
+bridge installed as the account. Keep the socket outside every home directory:
+the account cannot traverse yours.
+
+**Everything it writes is labeled.** Memories, notes, tasks and their updates,
+plan steps, sessions and their findings, and trials record the account that
+wrote them, and every surface shows it: "written by account _example_agent" in
+briefings, recall, tool results and the console. Your own writes look exactly as
+they always have.
+
+**Binding rules are proposals.** A constraint, convention, protocol or stage
+steers every session's briefing, so one from a restricted account does not land
+on its own. When the account writes one, or edits, appends to, supersedes,
+overwrites or deletes one (yours or its own), the write waits on the console's
+Held screen as a proposal, "proposed by account _example_agent", and nothing in
+the corpus changes. It is in no briefing or recall, the account's own included,
+until you promote it:
+
+```bash
+seam proposals              # pending proposals, newest first
+seam promote <id>           # land it as written, labeled with the account
+seam proposals discard <id> # drop it
+```
+
+Promoting is yours alone, on the console or in your terminal; the account can
+neither promote a proposal nor undo a promotion. Every other kind of memory,
+and notes, tasks and findings, lands at once, labeled.
+
+Sessions belong to the account that started them: a restricted account's agents
+cannot resume, bind to or write findings into your sessions, and yours cannot
+act in theirs.
+
 ## Verify
 
 ```bash

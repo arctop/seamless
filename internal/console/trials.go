@@ -38,6 +38,7 @@ type trialRow struct {
 	Project  string    `json:"project,omitempty"`
 	Favorite bool      `json:"favorite,omitempty"`
 	Metrics  int       `json:"metrics,omitempty"` // structured metric count
+	Account  string    `json:"account,omitempty"` // restricted account that recorded it ("" = owner)
 	Created  time.Time `json:"created"`
 }
 
@@ -85,6 +86,7 @@ type trialDetailData struct {
 	Metrics     []kvPair      `json:"metrics,omitempty"`
 	SessionID   string        `json:"sessionId,omitempty"`
 	SessionName string        `json:"sessionName,omitempty"`
+	Account     string        `json:"account,omitempty"` // restricted account that recorded it ("" = owner)
 	Created     time.Time     `json:"created"`
 }
 
@@ -120,7 +122,7 @@ func (s *Service) trialsPage(ctx context.Context, lab, outcome string) (trialsDa
 		row := trialRow{
 			ID: tr.ID, Lab: tr.Lab, Title: tr.Title, Outcome: string(tr.Outcome),
 			Project: tr.ProjectSlug, Favorite: tr.Favorite,
-			Metrics: len(tr.Metrics), Created: tr.CreatedAt,
+			Metrics: len(tr.Metrics), Account: tr.Account, Created: tr.CreatedAt,
 		}
 		i, ok := idx[tr.Lab]
 		if !ok {
@@ -165,7 +167,7 @@ func (s *Service) trialDetailData(ctx context.Context, tr core.Trial) trialDetai
 	d := trialDetailData{
 		ID: tr.ID, Lab: tr.Lab, Title: tr.Title, Outcome: string(tr.Outcome),
 		Project: tr.ProjectSlug, Favorite: tr.Favorite,
-		SessionID: tr.SessionID, Created: tr.CreatedAt,
+		SessionID: tr.SessionID, Account: tr.Account, Created: tr.CreatedAt,
 		ChangesText: tr.Changes, ExpText: tr.Expected, ActText: tr.Actual,
 	}
 	if tr.Changes != "" {

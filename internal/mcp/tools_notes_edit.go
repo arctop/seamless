@@ -9,6 +9,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -70,7 +71,7 @@ func (s *Server) handleNotesEdit(ctx context.Context, req mcp.CallToolRequest) (
 	if err != nil {
 		return errResult("notes_edit", err)
 	}
-	if !ok {
+	if !ok || hiddenByID(ctx, idx.Project) {
 		return errResult("notes_edit", fmt.Errorf(
 			"no note with id %q; read by slug=<slug>, or use recall to search by text", id))
 	}
@@ -123,6 +124,8 @@ func (s *Server) handleNotesEdit(ctx context.Context, req mcp.CallToolRequest) (
 		if model := s.boundSessionModel(ctx); model != "" {
 			cur.Model = model
 		}
+		// The account label follows the body the same way (accountAfter).
+		cur.Account = accountAfter(cur.Account, access.AccountOf(ctx), true, false)
 		if screen {
 			if herr := s.judgeNoteWrite(ctx, "notes_edit", cur, before, "", screenSession, &jd); herr != nil {
 				return core.Note{}, herr

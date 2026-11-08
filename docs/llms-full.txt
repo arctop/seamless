@@ -6269,6 +6269,81 @@ Then run the session as the account: `sudo -u _payroll -H claude`. The account
 needs its own Claude Code sign-in, and its own copy of anything the session
 reads - it cannot traverse your home directory, which is the point.
 
+## Restricted local accounts
+
+A **restricted local account** is a second OS account on the machine whose
+agents work beside yours: a separate login for unattended agents, say, so that
+nothing they run can read your home directory. List it under
+`peer_auth.restricted`, by user name or numeric uid:
+
+```yaml
+peer_auth:
+  enabled: true
+  owner: alice
+  socket:
+    path: /opt/seamless/run/seamlessd.sock
+  locked: [example-finance]
+  restricted: [_example_agent]
+```
+
+What such an account reaches:
+
+- **Every open project that is not locked**, reading and writing. A project
+  whose isolation is `confidential` or `sealed`, and every project under
+  `peer_auth.locked`, is out of its reach and is not listed for it. Its refusal
+  reads the same for those projects and for a slug nobody registered, so it
+  never learns which closed projects exist.
+- **The global scope, read-only.** Its briefing, recall and reads include
+  global memories and notes; every global write is refused.
+- **No new projects.** A write or a session naming a project that does not
+  exist is refused rather than creating it. You create the projects and map
+  the account's clones of your repositories to them, as the daemon's account:
+
+  ```bash
+  sudo -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml \
+    /opt/seamless/bin/seamlessd map-repo --path /Users/_example_agent/repos/example-app --project example-app
+  ```
+
+  A session started anywhere else - an unmapped directory, a closed project's
+  repository - is not recorded.
+- **No approvals.** It files no access requests, gets no read grants and holds
+  no leases, so nothing it does can open a locked or confidential project.
+
+It is known only through the socket. The kernel names it by its uid, exactly as
+it names you; it never holds the bearer key, and a TCP request is always yours.
+Its client config is a sealed account's (above): `server_url:
+unix:///opt/seamless/run/seamlessd.sock` and no key, with hooks and the MCP
+bridge installed as the account. Keep the socket outside every home directory:
+the account cannot traverse yours.
+
+**Everything it writes is labeled.** Memories, notes, tasks and their updates,
+plan steps, sessions and their findings, and trials record the account that
+wrote them, and every surface shows it: "written by account _example_agent" in
+briefings, recall, tool results and the console. Your own writes look exactly as
+they always have.
+
+**Binding rules are proposals.** A constraint, convention, protocol or stage
+steers every session's briefing, so one from a restricted account does not land
+on its own. When the account writes one, or edits, appends to, supersedes,
+overwrites or deletes one (yours or its own), the write waits on the console's
+Held screen as a proposal, "proposed by account _example_agent", and nothing in
+the corpus changes. It is in no briefing or recall, the account's own included,
+until you promote it:
+
+```bash
+seam proposals              # pending proposals, newest first
+seam promote <id>           # land it as written, labeled with the account
+seam proposals discard <id> # drop it
+```
+
+Promoting is yours alone, on the console or in your terminal; the account can
+neither promote a proposal nor undo a promotion. Every other kind of memory,
+and notes, tasks and findings, lands at once, labeled.
+
+Sessions belong to the account that started them: a restricted account's agents
+cannot resume, bind to or write findings into your sessions, and yours cannot
+act in theirs.
+
 ## Verify
 
 ```bash
@@ -8663,9 +8738,10 @@ seam memory read --id ID [--json]
 
 Calls `memory_read`. A name resolves in the project (`--project`, else the
 session's) and falls back to a global memory of the same name. Prints the name,
-kind and project, then the id, description, tags, model and - for a superseded
-memory, which still reads - a warning naming its replacement, then the body.
-Empty fields print no line.
+kind and project, then the id, description, tags, model, a `provenance:
+written by account <name>` line for a memory a restricted local account wrote,
+and - for a superseded memory, which still reads - a warning naming its
+replacement, then the body. Empty fields print no line.
 
 ### seam memory list {#seam_memory_list}
 
@@ -9022,6 +9098,52 @@ seam touchid status
 
 Says whether the app is installed and how it is signed, whether `server_url`
 names the socket, and which Touch ID keys the daemon has enrolled.
+
+## Restricted accounts' proposals
+
+A [restricted local account](/guides/peer-auth/#restricted-local-accounts)
+(`peer_auth.restricted`) cannot change a constraint, convention, protocol or
+stage on its own: each such change waits as a **proposal** on the console's
+Held screen, out of every briefing, recall and gardener pass, until you promote
+it. These commands are yours, over the console's JSON endpoints with the bearer
+key; the account has no console, so it cannot run them. A proposal is named by
+its full id or a unique prefix of it.
+
+### seam proposals {#seam_proposals}
+
+```bash
+seam proposals [--project P] [--json]
+```
+
+Lists the proposals waiting for you, newest first: the id, what it changes,
+the project and name, "proposed by account <name>", and its age. `--json`
+prints `{"proposals": [...]}`, each row as the console sent it. A daemon with
+no restricted accounts (and write screening off) keeps no proposals and says
+so.
+
+### seam promote {#seam_promote}
+
+```bash
+seam promote <proposal>
+```
+
+Shows the proposal and the text as an agent would read it, then asks you to
+confirm. Yes lands it exactly as written, still labeled "written by account
+<name>", and superseding what it replaces when it was proposed that way. It
+refuses a write that write screening held (decide that one on the console) and
+a proposal whose target changed since it was filed (discard it; the account
+writes again). It needs a terminal: run from an agent, with no TTY, it refuses
+before reaching the daemon.
+
+### seam proposals discard {#seam_proposals_discard}
+
+```bash
+seam proposals discard <proposal>
+```
+
+Confirms, then discards the proposal: nothing lands and its text is erased; the
+row stays as the record. The same refusals and the same terminal requirement as
+`seam promote`.
 
 ## Observability
 
@@ -10204,6 +10326,17 @@ in short:
   and never beside `users`: a config names one design or the other.
 - `max_lease` caps every lease the owner approves on a locked project, "until
   this session ends" included: at most `24h`, unset `8h`. File-only.
+- `restricted` lists restricted local accounts, each an OS user name or a
+  numeric uid: a second account on the machine whose agents work beside
+  yours. It connects over the socket only - the kernel names it, and it never
+  holds the bearer key - and reaches every project that is `open` and not
+  locked, reading and writing, plus the global scope read-only. It cannot
+  create a project, files no access requests and holds no leases. Its writes
+  are labeled with its name, and a constraint, convention, protocol or stage it
+  writes waits for you to promote it
+  ([Restricted local accounts](/guides/peer-auth/#restricted-local-accounts)).
+  Refused while `enabled` is false, for the owner, and beside `users`.
+  File-only.
 - `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
   the owner's approver passkeys ([seamlessd approvers](/reference/cli-seamlessd/#seamlessd_approvers)).
   Unset, they are `localhost` and the console's own address on localhost.
@@ -10352,6 +10485,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `peer_auth.passkeys.rp_id` | string | - |
 | `peer_auth.passkeys.origins` | []string | - |
 | `peer_auth.users` | map of string to {sealed []string, projects []string} | - |
+| `peer_auth.restricted` | []string | - |
 | `isolation.requests` | bool | - |
 
 ## Annotated example
@@ -10838,6 +10972,15 @@ update:
 #   passkeys:
 #     rp_id: ""
 #     origins: []
+#   # Restricted local accounts (user names or numeric uids): a second OS
+#   # account whose agents work beside the owner's. It connects over the socket
+#   # only (the kernel names it; it never holds the bearer key), reads and
+#   # writes every open project that is not locked, and reads the global scope.
+#   # It cannot create projects, files no access requests and holds no leases.
+#   # Its writes are labeled with its name, and a constraint, convention,
+#   # protocol or stage it writes is a proposal until you promote it. Refused
+#   # while peer_auth is disabled, for the owner, and beside users. File only.
+#   restricted: []
 #   # OS account (user name or numeric uid) -> its reach. File only (no env).
 #   # sealed: reachable ONLY from this account's socket connections; a project
 #   # is sealed to at most one account, and never also listed for another.
@@ -12710,6 +12853,21 @@ the same way with **Mark safe**, and offers **Re-run review**.
 marked, with its reason and a **Clear mark** button - the only way a mark
 comes off. **Recently decided** keeps the last twenty releases and discards,
 without their text. The sidebar badge counts what is waiting.
+
+**Proposals from restricted accounts.** Under `peer_auth`, a [restricted local
+account](/guides/peer-auth/#restricted-local-accounts)'s change to a
+constraint, convention, protocol or stage waits here too, as a proposal: its
+card says "Proposed by account <name>", and its button reads **Promote**
+instead of Release. Promoting lands it exactly as written, still labeled with
+the account; `seam promote` does the same from your terminal. While write
+screening is off, a daemon that lists restricted accounts still serves this
+screen, showing the proposals only - no lockdown, review or session marks -
+and the sidebar badge counts the proposals.
+
+Elsewhere on the console, a memory, note, task, session or trial that a
+restricted account wrote carries a small "written by account <name>" chip (a
+task the account last changed, "updated by account <name>"); your own items
+show none.
 
 ## Settings
 

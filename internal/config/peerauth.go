@@ -69,6 +69,17 @@ type PeerAuth struct {
 	// reach over the socket. An account not listed here, and not the owner, is
 	// refused at the door.
 	Users map[string]PeerUser `yaml:"users"`
+	// Restricted lists restricted local accounts, each by OS user name or
+	// numeric uid: a second account on the machine whose agents work beside the
+	// owner's. Such an account connects over the socket only (the kernel's peer
+	// uid names it; it never holds the bearer key), and reaches every project
+	// that is open and not locked, reading and writing, plus the global scope
+	// read-only. Its writes are labeled with its name, and a constraint,
+	// convention or stage it writes is a proposal until the owner promotes it
+	// (internal/access, KindRestricted). It files no access requests, gets no
+	// read grants and holds no leases. Refused at load while peer_auth is
+	// disabled, for the owner, and beside Users. File only (no env).
+	Restricted []string `yaml:"restricted"`
 }
 
 // PeerPasskeys is the WebAuthn relying party of the approver passkeys. A
@@ -352,6 +363,9 @@ func (c Config) validatePeerAuth() error {
 	if err := validatePeerUsers(p); err != nil {
 		return err
 	}
+	if err := validatePeerRestricted(p); err != nil {
+		return err
+	}
 	if err := validatePeerPasskeys(p.Passkeys); err != nil {
 		return err
 	}
@@ -415,6 +429,43 @@ func validatePeerLocked(p PeerAuth) error {
 			return fmt.Errorf("config: peer_auth.locked lists project %q twice: name it once", slug)
 		}
 		seen[slug] = true
+	}
+	return nil
+}
+
+// validatePeerRestricted is the restricted list's shape: every entry an OS
+// account name or numeric uid, none twice, none the owner's, and none at all
+// while peer_auth is disabled or beside a users map. A restricted account is
+// known only through the socket's kernel credential, so a list that no listener
+// could ever serve is a mistake to say out loud, not a setting to keep; and the
+// users map is the earlier design, retired before this one ships. Whether an
+// entry resolves to the owner's uid (a numeric id naming the owner, say) needs
+// the OS and is checked when the policy is built (access.New).
+func validatePeerRestricted(p PeerAuth) error {
+	if len(p.Restricted) == 0 {
+		return nil
+	}
+	if !p.Enabled {
+		return fmt.Errorf("config: peer_auth.restricted lists accounts while peer_auth is disabled: a restricted account " +
+			"reaches Seamless only over the peer_auth socket -- enable peer_auth, or remove restricted")
+	}
+	if len(p.Users) > 0 {
+		return fmt.Errorf("config: peer_auth names both restricted and users: users seals projects to other OS accounts " +
+			"(the earlier design) -- remove users; a restricted account reaches the open projects instead")
+	}
+	owner := strings.TrimSpace(p.Owner)
+	seen := map[string]bool{}
+	for _, raw := range p.Restricted {
+		if err := validateAccount("peer_auth.restricted entry", raw); err != nil {
+			return err
+		}
+		if raw == owner {
+			return fmt.Errorf("config: peer_auth.restricted lists %q, the owner: the owner is never restricted -- remove it", raw)
+		}
+		if seen[raw] {
+			return fmt.Errorf("config: peer_auth.restricted lists %q twice: name each account once", raw)
+		}
+		seen[raw] = true
 	}
 	return nil
 }

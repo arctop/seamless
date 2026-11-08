@@ -46,7 +46,7 @@
           <span class="now-beat" title="last heartbeat {{ts .Beat}}"><span class="live-dot"></span></span>
           <a class="now-agent-name mono" href="/console/sessions/{{.ID}}" title="open session">{{.Name}}</a>
           {{copyBtn .Name}}
-          {{agentPill .Harness .Model}}
+          {{agentPill .Harness .Model}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
           <form class="star-form" method="post" action="/console/favorites/session/{{.ID}}">
             <input type="hidden" name="favorite" value="{{if .Favorite}}0{{else}}1{{end}}">
             <input type="hidden" name="next" value="/console/now">

@@ -477,6 +477,15 @@ update:
 #   passkeys:
 #     rp_id: ""
 #     origins: []
+#   # Restricted local accounts (user names or numeric uids): a second OS
+#   # account whose agents work beside the owner's. It connects over the socket
+#   # only (the kernel names it; it never holds the bearer key), reads and
+#   # writes every open project that is not locked, and reads the global scope.
+#   # It cannot create projects, files no access requests and holds no leases.
+#   # Its writes are labeled with its name, and a constraint, convention,
+#   # protocol or stage it writes is a proposal until you promote it. Refused
+#   # while peer_auth is disabled, for the owner, and beside users. File only.
+#   restricted: []
 #   # OS account (user name or numeric uid) -> its reach. File only (no env).
 #   # sealed: reachable ONLY from this account's socket connections; a project
 #   # is sealed to at most one account, and never also listed for another.

@@ -163,6 +163,41 @@ func TestPeerAuth_LockedList(t *testing.T) {
 	}
 }
 
+// peer_auth.restricted lists restricted local accounts beside the locked
+// projects. It is refused while disabled, for the owner, twice, beside the
+// earlier design's users map, and with a field the block does not have.
+func TestPeerAuth_RestrictedAccounts(t *testing.T) {
+	cfg, err := loadYAML(t, peerBase+"  locked: [example-finance]\n  restricted: [_example_agent, \"502\"]\n")
+	require.NoError(t, err)
+	require.Equal(t, []string{"_example_agent", "502"}, cfg.PeerAuth.Restricted)
+	require.Equal(t, []string{"example-finance"}, cfg.PeerAuth.ReferencedProjects(),
+		"a restricted account names no project: its reach is every open one")
+
+	for _, tc := range []struct {
+		name, yaml, want string
+	}{
+		{"while disabled", "peer_auth:\n  enabled: false\n  restricted: [_example_agent]\n",
+			"peer_auth.restricted lists accounts while peer_auth is disabled"},
+		{"while disabled, the block otherwise unset", "peer_auth:\n  restricted: [_example_agent]\n",
+			"while peer_auth is disabled"},
+		{"the owner", peerBase + "  restricted: [katata]\n", `lists "katata", the owner`},
+		{"twice", peerBase + "  restricted: [_example_agent, _example_agent]\n", "twice"},
+		{"not an account name", peerBase + "  restricted: [\"a b\"]\n", "not an OS account name"},
+		{"padded", peerBase + "  restricted: [\" _example_agent\"]\n", "not an OS account name"},
+		{"empty", peerBase + "  restricted: [\"\"]\n", "not an OS account name"},
+		{"beside the users map", peerBase + "  restricted: [_example_agent]\n  users:\n    _b: {projects: [example-hq]}\n",
+			"both restricted and users"},
+		{"an unknown field", peerBase + "  restricted_accounts: [_example_agent]\n", "restricted_accounts"},
+		{"an entry with fields", peerBase + "  restricted:\n    - name: _example_agent\n", "cannot unmarshal !!map into string"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := loadYAML(t, tc.yaml)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.want)
+		})
+	}
+}
+
 // The lock was spelled peer_auth.sealed before any release shipped it. A config
 // that still says so is refused with the new name rather than a bare "field
 // sealed not found", enabled or not, whatever the list holds. The earlier

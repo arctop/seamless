@@ -159,6 +159,9 @@ func (g *Grants) eligible(ctx context.Context, target, from string) error {
 // repeated refusal never piles up requests.
 func (g *Grants) RequestGrant(ctx context.Context, in GrantInput) (store.AccessApproval, error) {
 	const op = "approval.RequestGrant"
+	if err := refuseRestricted(ctx); err != nil {
+		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
+	}
 	db, now := g.svc.cfg.DB, g.svc.cfg.Now()
 	target := strings.TrimSpace(in.Project)
 	if target == "" {
@@ -252,6 +255,9 @@ func (g *Grants) RequestGrant(ctx context.Context, in GrantInput) (store.AccessA
 // written by store.ApproveAccessGrant (single use, bound to the challenge).
 func (g *Grants) Approve(ctx context.Context, d Decision) (store.AccessGrant, error) {
 	const op = "approval.Grants.Approve"
+	if err := refuseRestricted(ctx); err != nil {
+		return store.AccessGrant{}, fmt.Errorf("%s: %w", op, err)
+	}
 	db := g.svc.cfg.DB
 	length, err := g.svc.LeaseLength(d.Duration)
 	if err != nil {

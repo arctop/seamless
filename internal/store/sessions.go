@@ -8,12 +8,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 )
 
 const sessionCols = `id, name, project_slug, status, findings, claude_session_id,
 	external_client, cwd, host, source, model, ambient, favorite, metadata, created_at, updated_at,
-	input_tokens, cached_input_tokens, cache_creation_tokens, output_tokens, total_tokens`
+	input_tokens, cached_input_tokens, cache_creation_tokens, output_tokens, total_tokens, account`
 
 // ErrSessionNameExists is returned by CreateSession when the name is already
 // taken (sessions.name is UNIQUE). It mirrors ErrSlugExists so a caller racing
@@ -35,7 +36,15 @@ var ErrSessionIdentityExists = errors.New("store: ambient session identity alrea
 // CreateSession inserts a session. The caller mints the ULID id; a duplicate
 // name returns ErrSessionNameExists, while a duplicate authoritative ambient
 // identity returns ErrSessionIdentityExists.
+//
+// The session's account is the restricted account the request in ctx speaks
+// for (access.AccountOf) unless the caller set one: a session belongs to the
+// principal that started it, whichever surface created the row, so no caller
+// has to remember to stamp it. Nothing ever changes it afterwards.
 func CreateSession(ctx context.Context, db *sql.DB, s core.Session) error {
+	if s.Account == "" {
+		s.Account = access.AccountOf(ctx)
+	}
 	meta, err := marshalMetadata(s.Metadata)
 	if err != nil {
 		return fmt.Errorf("store.CreateSession: %w", err)
@@ -43,13 +52,13 @@ func CreateSession(ctx context.Context, db *sql.DB, s core.Session) error {
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO sessions
 		    (id, name, project_slug, status, findings, claude_session_id,
-		     external_client, cwd, host, source, model, ambient, metadata, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		     external_client, cwd, host, source, model, ambient, metadata, created_at, updated_at, account)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		// claude_session_id column holds core.Session.ExternalSessionID (the column
 		// name predates Codex; see the field's doc for the intentional mismatch).
 		s.ID, s.Name, s.ProjectSlug, string(s.Status), s.Findings, s.ExternalSessionID,
 		s.ExternalClient, s.CWD, s.Host, s.Source, s.Model, boolToInt(s.Ambient), meta,
-		core.FormatTime(s.CreatedAt), core.FormatTime(s.UpdatedAt))
+		core.FormatTime(s.CreatedAt), core.FormatTime(s.UpdatedAt), s.Account)
 	if err != nil {
 		if isUniqueViolation(err) {
 			if s.Ambient && s.ExternalClient != "" && s.ExternalSessionID != "" {
@@ -906,7 +915,7 @@ func scanSession(rows *sql.Rows) (core.Session, error) {
 	if err := rows.Scan(
 		&s.ID, &s.Name, &s.ProjectSlug, &status, &s.Findings, &s.ExternalSessionID,
 		&s.ExternalClient, &s.CWD, &s.Host, &s.Source, &s.Model, &ambient, &s.Favorite, &meta, &created, &updated,
-		&s.Tokens.Input, &s.Tokens.Cached, &s.Tokens.CacheCreation, &s.Tokens.Output, &s.Tokens.Total,
+		&s.Tokens.Input, &s.Tokens.Cached, &s.Tokens.CacheCreation, &s.Tokens.Output, &s.Tokens.Total, &s.Account,
 	); err != nil {
 		return core.Session{}, err
 	}

@@ -621,7 +621,11 @@ func runServe(args []string) error {
 		Grants:        consoleGrants,
 		Terminal:      terminal,
 		Views:         consoleViews,
-		Logger:        logger,
+		// Restricted local accounts file proposals into the held queue, so the
+		// queue's list and Promote/Discard are served even with write screening
+		// off whenever peer_auth lists one.
+		RestrictedAccounts: peer != nil && peer.policy.HasRestricted(),
+		Logger:             logger,
 	})
 	if err != nil {
 		return fmt.Errorf("seamlessd.serve: console: %w", err)

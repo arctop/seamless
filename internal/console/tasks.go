@@ -21,6 +21,7 @@ type taskRow struct {
 	Status   string     `json:"status"`
 	Favorite bool       `json:"favorite,omitempty"`
 	Deps     int        `json:"deps"`
+	Account  string     `json:"account,omitempty"` // restricted account that created it ("" = owner)
 	Created  time.Time  `json:"created"`
 	Closed   *time.Time `json:"closed,omitempty"`
 	Blockers []blocker  `json:"blockers,omitempty"`
@@ -236,7 +237,7 @@ func taskRows(tasks []core.Task) []taskRow {
 	for _, t := range tasks {
 		out = append(out, taskRow{
 			ID: t.ID, Title: t.Title, Project: t.ProjectSlug, Status: string(t.Status),
-			Favorite: t.Favorite, Deps: len(t.DependsOn), Created: t.CreatedAt, Closed: t.ClosedAt,
+			Favorite: t.Favorite, Deps: len(t.DependsOn), Account: t.Account, Created: t.CreatedAt, Closed: t.ClosedAt,
 		})
 	}
 	return out
@@ -248,7 +249,7 @@ func blockedRows(blocked []store.BlockedTask) []taskRow {
 		row := taskRow{
 			ID: b.Task.ID, Title: b.Task.Title, Project: b.Task.ProjectSlug,
 			Status: string(b.Task.Status), Favorite: b.Task.Favorite,
-			Deps: len(b.Task.DependsOn), Created: b.Task.CreatedAt,
+			Deps: len(b.Task.DependsOn), Account: b.Task.Account, Created: b.Task.CreatedAt,
 		}
 		for _, bl := range b.Blockers {
 			row.Blockers = append(row.Blockers, blocker{ID: bl.ID, Title: bl.Title, Status: string(bl.Status)})

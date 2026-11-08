@@ -373,6 +373,11 @@ type peerLeases struct {
 	// chains walks the owner's process chain even while nothing is locked:
 	// read grants (isolation.requests) under peer_auth are keyed on it.
 	chains bool
+	// open loads every project whose isolation is open (store.OpenProjectSlugs):
+	// a restricted account's reach for one request, from which the View drops
+	// the locked ones. Nil loads none, so such an account reaches only the
+	// global scope, read-only.
+	open func(ctx context.Context) ([]string, error)
 }
 
 // storeLeases is the daemon's peerLeases: rows from the database, judged
@@ -387,6 +392,9 @@ func storeLeases(db *sql.DB) peerLeases {
 			return store.AccessLeases(rows), nil
 		},
 		now: time.Now,
+		open: func(ctx context.Context) ([]string, error) {
+			return store.OpenProjectSlugs(ctx, db)
+		},
 	}
 }
 
@@ -413,6 +421,21 @@ func peerHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger, 
 		}
 		if view.Principal().Kind == access.KindOwner && (policy.HasLocked() || leases.chains) {
 			view = leasedView(r.Context(), policy, cred, leases, logger, view)
+		}
+		if view.Principal().Kind == access.KindRestricted {
+			// A restricted account's reach is the projects open right now, judged
+			// per request like a lease. A lookup that fails refuses the request
+			// rather than serving it a reach it would misread as "no projects".
+			var open []string
+			if leases.open != nil {
+				var err error
+				if open, err = leases.open(r.Context()); err != nil {
+					logger.Warn("peer_auth: open projects unavailable; refusing a restricted account's request", "uid", cred.uid, "error", err)
+					http.Error(w, "service unavailable: the project list could not be read", http.StatusServiceUnavailable)
+					return
+				}
+			}
+			view = view.WithOpenProjects(open)
 		}
 		next.ServeHTTP(w, r.WithContext(access.WithView(r.Context(), view)))
 	})
@@ -463,5 +486,8 @@ func (rt *peerAuthRuntime) logPolicy(logger *slog.Logger) {
 	for _, a := range rt.policy.Accounts() {
 		logger.Info("peer_auth account", "user", a.Account.Name, "uid", a.Account.UID,
 			"sealed", strings.Join(a.Sealed, ","), "projects", strings.Join(a.Projects, ","), "home", a.Home)
+	}
+	for _, a := range rt.policy.RestrictedAccounts() {
+		logger.Info("peer_auth restricted account", "user", a.Name, "uid", a.UID)
 	}
 }

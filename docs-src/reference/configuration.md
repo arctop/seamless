@@ -148,6 +148,17 @@ in short:
   and never beside `users`: a config names one design or the other.
 - `max_lease` caps every lease the owner approves on a locked project, "until
   this session ends" included: at most `24h`, unset `8h`. File-only.
+- `restricted` lists restricted local accounts, each an OS user name or a
+  numeric uid: a second account on the machine whose agents work beside
+  yours. It connects over the socket only - the kernel names it, and it never
+  holds the bearer key - and reaches every project that is `open` and not
+  locked, reading and writing, plus the global scope read-only. It cannot
+  create a project, files no access requests and holds no leases. Its writes
+  are labeled with its name, and a constraint, convention, protocol or stage it
+  writes waits for you to promote it
+  ([Restricted local accounts](/guides/peer-auth/#restricted-local-accounts)).
+  Refused while `enabled` is false, for the owner, and beside `users`.
+  File-only.
 - `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
   the owner's approver passkeys ([seamlessd approvers](/reference/cli-seamlessd/#seamlessd_approvers)).
   Unset, they are `localhost` and the console's own address on localhost.

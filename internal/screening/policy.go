@@ -24,10 +24,28 @@ const (
 	// briefing-injected kind (writes it, replaces it, supersedes or deletes
 	// it). Every such write waits for the owner until lockdown lifts.
 	ReasonLockdown Code = "lockdown"
+	// ReasonRestrictedAccount: a restricted local account (peer_auth.restricted)
+	// wrote, replaced, superseded or deleted a briefing-injected kind. The hold
+	// is that account's proposal: it waits for the owner's promotion (the
+	// release) whether or not write screening is on, and its Detail["account"]
+	// names the account that proposed it (DetailAccount).
+	ReasonRestrictedAccount Code = "account.restricted"
 )
 
+// DetailAccount is the held write's Detail key naming the restricted account
+// whose proposal it is (ReasonRestrictedAccount).
+const DetailAccount = "account"
+
 // Reasons lists the non-verdict hold reasons.
-var Reasons = []Code{ReasonTaintedSession, ReasonConstraintSupersede, ReasonConstraintDelete, ReasonConstraintDemote, ReasonLockdown}
+var Reasons = []Code{ReasonTaintedSession, ReasonConstraintSupersede, ReasonConstraintDelete, ReasonConstraintDemote, ReasonLockdown,
+	ReasonRestrictedAccount}
+
+// IsProposal reports whether a held write's reasons make it a restricted
+// account's proposal (ReasonRestrictedAccount): the owner promotes it rather
+// than releasing a screened write.
+func IsProposal(reasons []string) bool {
+	return slices.Contains(reasons, string(ReasonRestrictedAccount))
+}
 
 // BriefingKinds are the memory kinds that bind or steer every session:
 // constraints and conventions (each its own briefing section), stages (pinned

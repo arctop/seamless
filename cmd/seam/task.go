@@ -65,7 +65,11 @@ func runTaskList(ctx context.Context, e *env, o *taskListOpts, _ []string) error
 	}
 	for _, t := range tasks {
 		m, _ := t.(map[string]any)
-		fmt.Fprintf(e.stdout, "  %s  [%-11s] %s\n", shortID(str(m["id"])), str(m["status"]), str(m["title"]))
+		line := fmt.Sprintf("  %s  [%-11s] %s", shortID(str(m["id"])), str(m["status"]), str(m["title"]))
+		if by := writtenBy(str(m["account"])); by != "" {
+			line += "  (" + by + ")"
+		}
+		fmt.Fprintln(e.stdout, line)
 	}
 	return nil
 }

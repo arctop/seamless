@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
@@ -249,6 +250,10 @@ func (h *Handler) writeSubagentNote(ctx context.Context, p subagentPayload, meta
 			"\n\n## Prompt\n\n" + prompt + "\n\n## Report\n\n" + report
 		note.Tags = agentNoteTags(meta.PlanSlug, p.AgentType)
 		note.Updated = now
+		// Every capture rewrites the content, so it re-stamps the account
+		// label: a restricted account's capture carries its name, the owner's
+		// none.
+		note.Account = access.AccountOf(ctx)
 
 		w, werr := h.files.WriteNote(ctx, note)
 		if werr != nil {

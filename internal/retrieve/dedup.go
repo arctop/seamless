@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -52,9 +53,9 @@ func (s *Service) DedupHint(ctx context.Context, project, name, description stri
 			return nil, err
 		}
 		// CosineSearch already excludes invalidated memories and out-of-scope
-		// ones; this is the residual guard for a memory superseded between that
-		// query and this read.
-		if !ok || m.InvalidAt != nil || !scopeVisible(m.Project, project, globalVisible) {
+		// ones (the caller's peer_auth reach included); this is the residual
+		// guard for a memory superseded between that query and this read.
+		if !ok || m.InvalidAt != nil || !scopeVisible(m.Project, project, globalVisible) || !access.Visible(ctx, m.Project) {
 			continue
 		}
 		hit := memoryHit(m)

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
@@ -108,6 +109,12 @@ func (h *Handler) upsertPlanNote(ctx context.Context, p toolPayload, basename, c
 			if m := h.ambientModel(ctx, ClientClaudeCode, p.SessionID); m != "" {
 				note.Model = m
 			}
+			// The account label follows the content the way the model does,
+			// except that it is always re-stamped: a restricted account's
+			// capture is labeled with it, and the owner's own capture over
+			// that content clears it. A status flip below (an approval with no
+			// text, a retag) is metadata and keeps it.
+			note.Account = access.AccountOf(ctx)
 		}
 		if planSlug == "" {
 			planSlug = core.Slugify(note.Title)

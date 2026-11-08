@@ -7,6 +7,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -90,6 +91,9 @@ func (s *Server) handleTrialRecord(ctx context.Context, req mcp.CallToolRequest)
 		Actual:   argRaw(req, "actual"),
 		Outcome:  core.TrialOutcome(argString(req, "outcome")),
 		Metrics:  argObject(req, "metrics"), SessionID: s.boundSession(ctx), ProjectSlug: project,
+		// The recording principal, which store.CreateTrial would stamp anyway;
+		// set here so the result can say so.
+		Account:   access.AccountOf(ctx),
 		CreatedAt: time.Now().UTC(),
 	}
 	if err := store.CreateTrial(ctx, s.cfg.DB, tr); err != nil {
@@ -151,6 +155,11 @@ func trialJSON(tr core.Trial) map[string]any {
 	}
 	if len(tr.Metrics) > 0 {
 		j["metrics"] = tr.Metrics
+	}
+	// Provenance (peer_auth.restricted): the restricted account that recorded
+	// it. The owner's trials carry no such key.
+	if tr.Account != "" {
+		j["account"] = tr.Account
 	}
 	return j
 }

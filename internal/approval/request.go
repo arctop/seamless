@@ -84,7 +84,33 @@ var (
 	// ErrIsGrant is a lease approval of a read grant request: a grant is
 	// decided by Grants.Approve and never becomes a lease.
 	ErrIsGrant = errors.New("this is a read grant request, not a lock's")
+	// ErrRestricted is a restricted local account (peer_auth.restricted)
+	// filing or deciding an approval. Its reach is the open projects and
+	// nothing else: no request of its is filed, no lease or read grant ever
+	// names it, and it decides none.
+	ErrRestricted = errors.New("a restricted local account files no access requests and holds no lease or read " +
+		"grant: it reaches the open projects only, and the owner decides every approval")
 )
+
+// refuseRestricted is the restricted-account refusal at every entry point of
+// the approval service -- filing a request or a read grant, deciding one,
+// enrolling an approver, unlocking a console -- for a call whose context, or
+// whose stated view, speaks for a restricted account. The access layer
+// already keeps such an account out (View.Locked is the owner's alone,
+// JudgeGrants keeps owner grants and WithLeases owner leases, the console is
+// owner-only), so this is defense in depth: the caller gets a plain refusal,
+// and no access_approvals row is written.
+func refuseRestricted(ctx context.Context, views ...access.View) error {
+	if access.AccountOf(ctx) != "" {
+		return ErrRestricted
+	}
+	for _, v := range views {
+		if v.Account() != "" {
+			return ErrRestricted
+		}
+	}
+	return nil
+}
 
 // The access a decision opens, as the facts name it.
 const (
@@ -226,6 +252,9 @@ type RequestInput struct {
 // refresh, and carries the earlier reason rather than new text.
 func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApproval, error) {
 	const op = "approval.Request"
+	if err := refuseRestricted(ctx, in.View); err != nil {
+		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
+	}
 	now := s.cfg.Now()
 	chain := in.View.Principal().Chain
 	if len(chain) == 0 || !in.View.Principal().Socket {
@@ -566,6 +595,9 @@ func TouchIDApproveMessage(id string, challenge []byte, digest, accessWord, dura
 // lease through store.ApproveAccessFor (single use, bound to the challenge).
 func (s *Service) Approve(ctx context.Context, d Decision) (store.AccessLease, error) {
 	const op = "approval.Approve"
+	if err := refuseRestricted(ctx); err != nil {
+		return store.AccessLease{}, fmt.Errorf("%s: %w", op, err)
+	}
 	length, err := s.LeaseLength(d.Duration)
 	if err != nil {
 		return store.AccessLease{}, fmt.Errorf("%s: %w", op, err)
@@ -660,6 +692,9 @@ func (s *Service) prove(ctx context.Context, a store.AccessApproval, facts Facts
 // Deny ends a pending request without a lease. by names who decided (a
 // proof kind); a denial needs no cryptographic proof -- it only ever closes.
 func (s *Service) Deny(ctx context.Context, id, by string) error {
+	if err := refuseRestricted(ctx); err != nil {
+		return fmt.Errorf("approval.Deny: %w", err)
+	}
 	a, err := store.AccessApprovalByID(ctx, s.cfg.DB, id)
 	if err != nil {
 		return fmt.Errorf("approval.Deny: %w", err)

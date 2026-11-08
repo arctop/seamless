@@ -51,7 +51,7 @@
           <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/memories/{{.ID}}{{$qs}}" data-title="{{.Name}}" data-context="{{if .Project}}{{.Project}}{{else}}Shared globally{{end}} / {{.Kind}}" data-memory-kind="{{.Kind}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title mono">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Name}}</span>
             {{if .Description}}<span class="ri-desc">{{.Description}}</span>{{end}}
-            <span class="ri-meta"><span title="{{ts .Updated}}">updated {{ago .Updated}}</span>{{if $.Level.AtLeast "standard"}}{{if .Injects}} &middot; surfaced {{.Injects}}&times;{{else}} &middot; never surfaced{{end}}{{end}}{{with agentPill .Harness .Model}} {{.}}{{end}}</span>
+            <span class="ri-meta"><span title="{{ts .Updated}}">updated {{ago .Updated}}</span>{{if $.Level.AtLeast "standard"}}{{if .Injects}} &middot; surfaced {{.Injects}}&times;{{else}} &middot; never surfaced{{end}}{{end}}{{with agentPill .Harness .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
           </div>
@@ -67,7 +67,7 @@
           {{range .Inactive}}
           <a class="rail-item dim{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/memories/{{.ID}}{{$qs}}" data-title="{{.Name}}" data-context="Historical / {{.Kind}}" data-memory-kind="{{.Kind}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title mono"><i class="kdot" data-kind="{{.Kind}}" title="{{.Kind}}"></i>{{.Name}}</span>
-            <span class="ri-meta">{{.Status}}{{if .ReplacedBy}} by {{.ReplacedBy}}{{end}} &middot; <span title="{{ts .Updated}}">{{ago .Updated}}</span>{{with agentPill .Harness .Model}} {{.}}{{end}}</span>
+            <span class="ri-meta">{{.Status}}{{if .ReplacedBy}} by {{.ReplacedBy}}{{end}} &middot; <span title="{{ts .Updated}}">{{ago .Updated}}</span>{{with agentPill .Harness .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
         </div>
@@ -104,7 +104,7 @@
     <div class="reader-eyebrow">
       <span class="kind">{{.Kind}}</span>
       <span class="badge {{if eq .Status "active"}}ok{{else if eq .Status "superseded"}}warn{{end}}">{{.Status}}</span>
-      {{agentPill .Harness .Model}}
+      {{agentPill .Harness .Model}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
       {{if .Project}}<a class="chip-parent" href="/console/projects/{{.Project}}">{{icon "git-branch"}}{{.Project}}</a>{{else}}<span class="chip-parent">{{icon "share-2"}}Shared globally</span>{{end}}
       {{range .Tags}}<span class="badge">{{.}}</span>{{end}}
       {{/* The reader's actions sit where the eye starts, not below the body. */}}

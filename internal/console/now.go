@@ -81,7 +81,8 @@ type nowAgentVM struct {
 	Project  string       `json:"project"` // "global" for the empty scope
 	Harness  string       `json:"harness,omitempty"`
 	Model    string       `json:"model,omitempty"`
-	Fresh    string       `json:"fresh"` // "hot" | "warm" | "quiet"
+	Account  string       `json:"account,omitempty"` // restricted account that started it ("" = owner)
+	Fresh    string       `json:"fresh"`             // "hot" | "warm" | "quiet"
 	Beat     time.Time    `json:"lastBeat"`
 	Dur      string       `json:"duration,omitempty"`
 	Tokens   int          `json:"tokens,omitempty"`
@@ -315,7 +316,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		}
 		vm := nowAgentVM{
 			ID: sess.ID, Name: sess.Name, Project: scopeName(sess.ProjectSlug),
-			Harness: harnessOf(sess), Model: sess.Model,
+			Harness: harnessOf(sess), Model: sess.Model, Account: sess.Account,
 			Fresh: nowFreshness(now.Sub(sess.UpdatedAt)), Beat: sess.UpdatedAt,
 			Dur: sessionDuration(sess, now), Tokens: sess.Tokens.Total, Favorite: sess.Favorite,
 		}

@@ -59,6 +59,7 @@ func runNoteRead(ctx context.Context, e *env, o *noteReadOpts, pos []string) err
 	printField(e.stdout, "tags", strings.Join(strs(out["tags"]), ", "))
 	printField(e.stdout, "source", str(out["source_url"]))
 	printField(e.stdout, "model", str(out["model"]))
+	printField(e.stdout, "provenance", writtenBy(str(out["account"])))
 	printBody(e.stdout, str(out["body"]))
 	return nil
 }

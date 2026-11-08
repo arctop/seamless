@@ -12,7 +12,7 @@ import (
 // noteCols is the SELECT list for notes_index, matching scanNote. Body is not in
 // the index (it lives in the file), so a scanned note has Body == "".
 const noteCols = `id, title, slug, description, project, file_path, tags,
-	source_url, model, favorite, content_hash, created_at, updated_at`
+	source_url, model, favorite, content_hash, created_at, updated_at, account`
 
 // scanNote scans one notes_index row (noteCols order) into a core.Note.
 func scanNote(rows *sql.Rows) (core.Note, error) {
@@ -24,7 +24,7 @@ func scanNote(rows *sql.Rows) (core.Note, error) {
 	)
 	if err := rows.Scan(
 		&n.ID, &n.Title, &n.Slug, &n.Description, &n.Project, &n.FilePath, &tags,
-		&sourceURL, &n.Model, &n.Favorite, &hash, &created, &updated,
+		&sourceURL, &n.Model, &n.Favorite, &hash, &created, &updated, &n.Account,
 	); err != nil {
 		return core.Note{}, err
 	}

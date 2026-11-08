@@ -193,6 +193,12 @@ func (h *Handler) taintTarget(ctx context.Context, client Client, extID, ref str
 	if v, ok := access.FromContext(ctx); ok && !v.Writable(sess.ProjectSlug) {
 		return core.Session{}, false, nil
 	}
+	// A session another principal started is not found either, whichever way
+	// it was named: a restricted account and the owner share the open
+	// projects, and a mark on the other's session would hold its writes.
+	if !access.SessionAccountOK(ctx, sess.Account) {
+		return core.Session{}, false, nil
+	}
 	return sess, true, nil
 }
 

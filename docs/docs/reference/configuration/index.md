@@ -146,6 +146,17 @@ in short:
   and never beside `users`: a config names one design or the other.
 - `max_lease` caps every lease the owner approves on a locked project, "until
   this session ends" included: at most `24h`, unset `8h`. File-only.
+- `restricted` lists restricted local accounts, each an OS user name or a
+  numeric uid: a second account on the machine whose agents work beside
+  yours. It connects over the socket only - the kernel names it, and it never
+  holds the bearer key - and reaches every project that is `open` and not
+  locked, reading and writing, plus the global scope read-only. It cannot
+  create a project, files no access requests and holds no leases. Its writes
+  are labeled with its name, and a constraint, convention, protocol or stage it
+  writes waits for you to promote it
+  ([Restricted local accounts](https://thereisnospoon.org/docs/guides/peer-auth/#restricted-local-accounts)).
+  Refused while `enabled` is false, for the owner, and beside `users`.
+  File-only.
 - `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
   the owner's approver passkeys ([seamlessd approvers](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_approvers)).
   Unset, they are `localhost` and the console's own address on localhost.
@@ -294,6 +305,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `peer_auth.passkeys.rp_id` | string | - |
 | `peer_auth.passkeys.origins` | []string | - |
 | `peer_auth.users` | map of string to {sealed []string, projects []string} | - |
+| `peer_auth.restricted` | []string | - |
 | `isolation.requests` | bool | - |
 
 ## Annotated example
@@ -780,6 +792,15 @@ update:
 #   passkeys:
 #     rp_id: ""
 #     origins: []
+#   # Restricted local accounts (user names or numeric uids): a second OS
+#   # account whose agents work beside the owner's. It connects over the socket
+#   # only (the kernel names it; it never holds the bearer key), reads and
+#   # writes every open project that is not locked, and reads the global scope.
+#   # It cannot create projects, files no access requests and holds no leases.
+#   # Its writes are labeled with its name, and a constraint, convention,
+#   # protocol or stage it writes is a proposal until you promote it. Refused
+#   # while peer_auth is disabled, for the owner, and beside users. File only.
+#   restricted: []
 #   # OS account (user name or numeric uid) -> its reach. File only (no env).
 #   # sealed: reachable ONLY from this account's socket connections; a project
 #   # is sealed to at most one account, and never also listed for another.

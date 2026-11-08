@@ -10,6 +10,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/plans"
@@ -59,7 +60,7 @@ func (s *Server) handleNotesCreate(ctx context.Context, req mcp.CallToolRequest)
 		ID: id, Title: title, Slug: core.Slugify(title), Description: argString(req, "description"),
 		Project: project, Body: body, Tags: tags,
 		SourceURL: argString(req, "source_url"), Model: s.boundSessionModel(ctx),
-		Created: now, Updated: now,
+		Account: access.AccountOf(ctx), Created: now, Updated: now,
 	}
 	screen := s.screeningOn(ctx)
 	var screenSession string
@@ -141,6 +142,11 @@ func (s *Server) handleNotesRead(ctx context.Context, req mcp.CallToolRequest) (
 	}
 	if note.Model != "" {
 		out["model"] = note.Model
+	}
+	// The restricted account that wrote the current content; the owner's own
+	// notes carry none, so their output is what it always was.
+	if note.Account != "" {
+		out["account"] = note.Account
 	}
 	if note.Favorite {
 		out["favorite"] = true
@@ -351,6 +357,10 @@ func (p noteUpdatePatch) empty() bool {
 // applyNoteUpdate applies a parsed patch to the note read under the mutation
 // lock. It is a method because the body case needs the bound session's model.
 func (s *Server) applyNoteUpdate(ctx context.Context, note *core.Note, p noteUpdatePatch) {
+	// The account label follows the content fields: a replaced body re-stamps
+	// it (the owner's clears it), and a restricted account's new title or
+	// description stamps it too; tags and a move keep it (accountAfter).
+	note.Account = accountAfter(note.Account, access.AccountOf(ctx), p.body != nil, noteTextChanged(*note, p))
 	if p.title != nil {
 		note.Title = *p.title
 	}
@@ -435,6 +445,8 @@ func (s *Server) handleNotesAppend(ctx context.Context, req mcp.CallToolRequest)
 		if model := s.boundSessionModel(ctx); model != "" {
 			note.Model = model
 		}
+		// The account label follows the appended text the same way (accountAfter).
+		note.Account = accountAfter(note.Account, access.AccountOf(ctx), true, false)
 		if screen {
 			if herr := s.judgeNoteWrite(ctx, "notes_append", note, before, "", screenSession, &jd); herr != nil {
 				return core.Note{}, herr
@@ -476,7 +488,7 @@ func (s *Server) handleNotesDelete(ctx context.Context, req mcp.CallToolRequest)
 	if err != nil {
 		return errResult("notes_delete", err)
 	}
-	if !ok {
+	if !ok || hiddenByID(ctx, idx.Project) {
 		return errResult("notes_delete", fmt.Errorf("no note with id %q", id))
 	}
 	// The most consequential of the three: a delete leaves no pointer behind, so
@@ -514,7 +526,7 @@ func (s *Server) noteIndexByID(ctx context.Context, id string) (core.Note, error
 	if err != nil {
 		return core.Note{}, err
 	}
-	if !ok {
+	if !ok || hiddenByID(ctx, idx.Project) {
 		return core.Note{}, fmt.Errorf("no note with id %q; read by slug=<slug>, or use recall to search by text", id)
 	}
 	return idx, nil

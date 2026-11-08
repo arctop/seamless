@@ -195,6 +195,9 @@ func (s *Service) passkeys(ctx context.Context) ([]passkey.Credential, error) {
 // enrolled. Every enrolled passkey is excluded, so an authenticator that holds
 // one already is not enrolled twice.
 func (s *Service) BeginPasskey(ctx context.Context, name, code string) (Begun, error) {
+	if err := refuseRestricted(ctx); err != nil {
+		return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", err)
+	}
 	if !s.PasskeysOn() {
 		return Begun{}, ErrPasskeysOff
 	}
@@ -241,6 +244,9 @@ func (s *Service) BeginPasskey(ctx context.Context, name, code string) (Begun, e
 // transaction. Without one, the new credential waits for an existing
 // passkey's approval (ApprovePasskey) over a challenge that binds it.
 func (s *Service) FinishPasskey(ctx context.Context, id string, response []byte) (Finished, error) {
+	if err := refuseRestricted(ctx); err != nil {
+		return Finished{}, fmt.Errorf("approval.FinishPasskey: %w", err)
+	}
 	if !s.PasskeysOn() {
 		return Finished{}, ErrPasskeysOff
 	}
@@ -284,6 +290,9 @@ func (s *Service) FinishPasskey(ctx context.Context, id string, response []byte)
 // credential -- an assertion over the challenge that binds it -- records the
 // approving credential's use, and stores the new one as added by it.
 func (s *Service) ApprovePasskey(ctx context.Context, id string, response []byte) (store.ApproverCredential, error) {
+	if err := refuseRestricted(ctx); err != nil {
+		return store.ApproverCredential{}, fmt.Errorf("approval.ApprovePasskey: %w", err)
+	}
 	if !s.PasskeysOn() {
 		return store.ApproverCredential{}, ErrPasskeysOff
 	}
@@ -357,6 +366,9 @@ func TouchIDEnrollMessage(code string, publicKey []byte) []byte {
 // TouchIDEnrollMessage(code, publicKey). The code must be a live touchid code;
 // it is consumed with the insert.
 func (s *Service) EnrollTouchID(ctx context.Context, name, code string, publicKey, signature []byte) (store.ApproverCredential, error) {
+	if err := refuseRestricted(ctx); err != nil {
+		return store.ApproverCredential{}, fmt.Errorf("approval.EnrollTouchID: %w", err)
+	}
 	if err := VerifyTouchID(publicKey, TouchIDEnrollMessage(code, publicKey), signature); err != nil {
 		return store.ApproverCredential{}, fmt.Errorf("approval.EnrollTouchID: %w", err)
 	}

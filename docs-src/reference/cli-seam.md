@@ -193,9 +193,10 @@ seam memory read --id ID [--json]
 
 Calls `memory_read`. A name resolves in the project (`--project`, else the
 session's) and falls back to a global memory of the same name. Prints the name,
-kind and project, then the id, description, tags, model and - for a superseded
-memory, which still reads - a warning naming its replacement, then the body.
-Empty fields print no line.
+kind and project, then the id, description, tags, model, a `provenance:
+written by account <name>` line for a memory a restricted local account wrote,
+and - for a superseded memory, which still reads - a warning naming its
+replacement, then the body. Empty fields print no line.
 
 ### seam memory list {#seam_memory_list}
 
@@ -552,6 +553,52 @@ seam touchid status
 
 Says whether the app is installed and how it is signed, whether `server_url`
 names the socket, and which Touch ID keys the daemon has enrolled.
+
+## Restricted accounts' proposals
+
+A [restricted local account](/guides/peer-auth/#restricted-local-accounts)
+(`peer_auth.restricted`) cannot change a constraint, convention, protocol or
+stage on its own: each such change waits as a **proposal** on the console's
+Held screen, out of every briefing, recall and gardener pass, until you promote
+it. These commands are yours, over the console's JSON endpoints with the bearer
+key; the account has no console, so it cannot run them. A proposal is named by
+its full id or a unique prefix of it.
+
+### seam proposals {#seam_proposals}
+
+```bash
+seam proposals [--project P] [--json]
+```
+
+Lists the proposals waiting for you, newest first: the id, what it changes,
+the project and name, "proposed by account <name>", and its age. `--json`
+prints `{"proposals": [...]}`, each row as the console sent it. A daemon with
+no restricted accounts (and write screening off) keeps no proposals and says
+so.
+
+### seam promote {#seam_promote}
+
+```bash
+seam promote <proposal>
+```
+
+Shows the proposal and the text as an agent would read it, then asks you to
+confirm. Yes lands it exactly as written, still labeled "written by account
+<name>", and superseding what it replaces when it was proposed that way. It
+refuses a write that write screening held (decide that one on the console) and
+a proposal whose target changed since it was filed (discard it; the account
+writes again). It needs a terminal: run from an agent, with no TTY, it refuses
+before reaching the daemon.
+
+### seam proposals discard {#seam_proposals_discard}
+
+```bash
+seam proposals discard <proposal>
+```
+
+Confirms, then discards the proposal: nothing lands and its text is erased; the
+row stays as the record. The same refusals and the same terminal requirement as
+`seam promote`.
 
 ## Observability
 

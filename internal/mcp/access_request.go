@@ -73,6 +73,13 @@ type accessRequestResult struct {
 
 func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	start := time.Now()
+	// A restricted account (peer_auth.restricted) files nothing: a lock is
+	// the owner's, and no approval opens one -- or anything else beyond the
+	// open projects -- to such an account. Refused before the project is even
+	// read, so the answer is the same whatever it names.
+	if account := access.AccountOf(ctx); account != "" {
+		return errResult(AccessRequestTool, restrictedAccessRequestRefusal(account))
+	}
 	// Resolving the session may meet a refusal at the lock: it must not file
 	// a second request, nor offer a dialog of its own.
 	ctx = access.WithLockRequester(ctx, nil)
@@ -112,6 +119,14 @@ func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolReques
 	}
 	out.Next = accessRequestNext(t, ways, dialogEnd{state: out.Status})
 	return jsonResult(out)
+}
+
+// restrictedAccessRequestRefusal is access_request's answer to a restricted
+// account: nothing is filed, and nothing it could file would open a project.
+func restrictedAccessRequestRefusal(account string) error {
+	return fmt.Errorf("account %s files no access requests: a restricted account reaches the open projects that "+
+		"are not locked, and reads the global scope; the owner's approval never opens anything else to it, so "+
+		"there is nothing to request -- keep to the projects project_list shows", account)
 }
 
 // accessRequestNext says what the agent does once the request is where end
