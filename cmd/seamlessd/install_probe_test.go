@@ -21,7 +21,7 @@ const installerPlist = `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>org.thereisnospoon.seamless</string>
+  <string>com.arctop.seamless</string>
   <key>ProgramArguments</key>
   <array>
     <string>/h/.local/bin/seamlessd</string>
@@ -193,9 +193,9 @@ func TestForeignSeamlessEnv(t *testing.T) {
 // passing; tests break one fact at a time.
 func fakeProbeEnv(goos string) installProbeEnv {
 	files := map[string]string{
-		"/h/Library/LaunchAgents/org.thereisnospoon.seamless.plist": installerPlist,
-		"/h/.config/systemd/user/seamless.service":                  installerUnit,
-		"/proc/self/cgroup": cgroupV2,
+		"/h/Library/LaunchAgents/com.arctop.seamless.plist": installerPlist,
+		"/h/.config/systemd/user/seamless.service":          installerUnit,
+		"/proc/self/cgroup":                                 cgroupV2,
 	}
 	env := installProbeEnv{
 		goos: goos,
@@ -224,7 +224,7 @@ func fakeProbeEnv(goos string) installProbeEnv {
 	}
 	switch goos {
 	case "darwin":
-		env.environ = []string{"XPC_SERVICE_NAME=org.thereisnospoon.seamless", "SEAMLESS_CONFIG=/h/.config/seamless/seamless.yaml"}
+		env.environ = []string{"XPC_SERVICE_NAME=com.arctop.seamless", "SEAMLESS_CONFIG=/h/.config/seamless/seamless.yaml"}
 	case "linux":
 		env.environ = []string{"INVOCATION_ID=abc", "SEAMLESS_CONFIG=/h/.config/seamless/seamless.yaml"}
 	case "windows":
@@ -238,6 +238,20 @@ func fakeProbeEnv(goos string) installProbeEnv {
 		env.isCurrentUser = func(account string) (bool, error) { return account == "S-1-5-21-1-2-3-1001", nil }
 	}
 	return env
+}
+
+// legacyLabelInstall turns a darwin fakeProbeEnv into an install made before
+// the label rename: the plist exists only under the legacy label, carrying
+// that label, and launchd names the job by it.
+func legacyLabelInstall(e *installProbeEnv) {
+	plist := strings.Replace(installerPlist, "<string>com.arctop.seamless</string>", "<string>org.thereisnospoon.seamless</string>", 1)
+	e.readFile = func(p string) ([]byte, error) {
+		if filepath.ToSlash(p) == "/h/Library/LaunchAgents/org.thereisnospoon.seamless.plist" {
+			return []byte(plist), nil
+		}
+		return nil, fs.ErrNotExist
+	}
+	e.environ = []string{"XPC_SERVICE_NAME=org.thereisnospoon.seamless", "SEAMLESS_CONFIG=/h/.config/seamless/seamless.yaml"}
 }
 
 func TestProbeInstall(t *testing.T) {
@@ -274,6 +288,28 @@ func TestProbeInstall(t *testing.T) {
 		{"custom config", "linux", nil, "/srv/seamless.yaml", "release", update.KindUnknown, "/srv/seamless.yaml"},
 		{"started by hand on darwin", "darwin", func(e *installProbeEnv) { e.environ = nil },
 			cfgPath, "release", update.KindUnknown, "launchd job"},
+		// A Mac the installer has not run on since the label rename: only the
+		// legacy plist, and launchd runs the job under the legacy label.
+		{"darwin installer on the legacy label", "darwin", legacyLabelInstall,
+			cfgPath, "release", update.KindInstaller, ""},
+		{"darwin legacy plist, started by hand", "darwin", func(e *installProbeEnv) {
+			legacyLabelInstall(e)
+			e.environ = nil
+		}, cfgPath, "release", update.KindUnknown, "not running as the launchd job com.arctop.seamless"},
+		{"darwin job under a label that is neither", "darwin", func(e *installProbeEnv) {
+			e.environ = []string{"XPC_SERVICE_NAME=com.example.other", "SEAMLESS_CONFIG=/h/.config/seamless/seamless.yaml"}
+		}, cfgPath, "release", update.KindUnknown, "launchd job"},
+		// An unreadable current plist is reported, not passed over for the
+		// legacy one.
+		{"darwin current plist unreadable", "darwin", func(e *installProbeEnv) {
+			legacy := e.readFile
+			e.readFile = func(p string) ([]byte, error) {
+				if filepath.ToSlash(p) == "/h/Library/LaunchAgents/com.arctop.seamless.plist" {
+					return nil, fs.ErrPermission
+				}
+				return legacy(p)
+			}
+		}, cfgPath, "release", update.KindUnknown, "com.arctop.seamless.plist could not be read"},
 		{"darwin parent is not launchd", "darwin", func(e *installProbeEnv) { e.ppid = 4242 },
 			cfgPath, "release", update.KindUnknown, "not a child of launchd"},
 		{"linux outside the unit", "linux", func(e *installProbeEnv) {

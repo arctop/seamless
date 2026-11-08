@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -22,7 +23,7 @@ func TestServiceControl(t *testing.T) {
 	const (
 		home  = "/home/tester"
 		uid   = 501
-		label = "org.thereisnospoon.seamless"
+		label = "com.arctop.seamless"
 	)
 	plist := filepath.Join(home, "Library", "LaunchAgents", label+".plist")
 	domain := "gui/501"
@@ -81,7 +82,7 @@ func TestServiceControlProbe(t *testing.T) {
 	const home = "/home/tester"
 
 	dar := serviceControl(actionStatus, "darwin", home, 501)
-	require.Equal(t, filepath.Join(home, "Library", "LaunchAgents", "org.thereisnospoon.seamless.plist"), dar.DefFile)
+	require.Equal(t, filepath.Join(home, "Library", "LaunchAgents", "com.arctop.seamless.plist"), dar.DefFile)
 	require.Nil(t, dar.ProbeCmd)
 
 	lin := serviceControl(actionStatus, "linux", home, 501)
@@ -92,6 +93,68 @@ func TestServiceControlProbe(t *testing.T) {
 	require.Empty(t, win.DefFile)
 	require.NotNil(t, win.ProbeCmd)
 	require.Equal(t, []string{"schtasks", "/Query", "/TN", "Seamless"}, win.ProbeCmd.Args)
+}
+
+// A Mac still on the pre-rename label is controlled under that label, until
+// the current label's plist appears; with neither, the plan names the
+// current one (the plist an install writes today).
+func TestServiceControl_LegacyLaunchdLabel(t *testing.T) {
+	home := t.TempDir()
+	agents := filepath.Join(home, "Library", "LaunchAgents")
+	require.NoError(t, os.MkdirAll(agents, 0o755))
+
+	none := serviceControl(actionRestart, "darwin", home, 501)
+	require.Equal(t, "launchd (com.arctop.seamless)", none.Label)
+	require.False(t, serviceInstalled(none))
+
+	legacy := filepath.Join(agents, "org.thereisnospoon.seamless.plist")
+	require.NoError(t, os.WriteFile(legacy, []byte("x"), 0o644))
+	p := serviceControl(actionRestart, "darwin", home, 501)
+	require.Equal(t, "launchd (org.thereisnospoon.seamless)", p.Label)
+	require.Equal(t, legacy, p.DefFile)
+	require.True(t, serviceInstalled(p))
+	require.Equal(t, [][]string{{"launchctl", "kickstart", "-k", "gui/501/org.thereisnospoon.seamless"}}, argvs(p.Cmds))
+	require.Equal(t, [][]string{{"launchctl", "bootstrap", "gui/501", legacy}}, argvs(p.Fallback))
+
+	current := filepath.Join(agents, "com.arctop.seamless.plist")
+	require.NoError(t, os.WriteFile(current, []byte("x"), 0o644))
+	both := serviceControl(actionStop, "darwin", home, 501)
+	require.Equal(t, current, both.DefFile, "the current label wins once its plist exists")
+	require.Equal(t, [][]string{{"launchctl", "bootout", "gui/501/com.arctop.seamless"}}, argvs(both.Cmds))
+}
+
+func TestLaunchdJob(t *testing.T) {
+	const home = "/h"
+	cur := "/h/Library/LaunchAgents/com.arctop.seamless.plist"
+	old := "/h/Library/LaunchAgents/org.thereisnospoon.seamless.plist"
+	for _, tt := range []struct {
+		name    string
+		present []string
+		want    string
+	}{
+		{"neither", nil, launchdLabel},
+		{"current only", []string{cur}, launchdLabel},
+		{"legacy only", []string{old}, legacyLaunchdLabel},
+		{"both", []string{cur, old}, launchdLabel},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			exists := func(p string) bool { return slices.Contains(tt.present, filepath.ToSlash(p)) }
+			require.Equal(t, tt.want, launchdJob(home, exists))
+		})
+	}
+}
+
+// docs/install's launchd_label greps `seamlessd status -h` for this exact line
+// to tell a binary that knows the current label from a pre-rename one.
+func TestServiceUsageNamesTheLaunchdLabel(t *testing.T) {
+	for _, action := range []serviceAction{actionStart, actionStop, actionRestart, actionStatus} {
+		var buf bytes.Buffer
+		serviceUsage(&buf, action)
+		require.Contains(t, buf.String(), "usage: seamlessd "+string(action)+"\n")
+		require.Contains(t, buf.String(), "\nlaunchd label: com.arctop.seamless\n")
+	}
+	err := runServiceAction(actionStatus, []string{"-h"})
+	require.ErrorIs(t, err, flag.ErrHelp, "-h returns before anything is looked up or run")
 }
 
 // TestServiceInstalled covers the file-stat path (darwin/linux) and the

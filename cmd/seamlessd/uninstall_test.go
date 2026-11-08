@@ -24,12 +24,17 @@ func TestServiceTeardown(t *testing.T) {
 	}{
 		{
 			// The darwin updater is a process in a session of its own: there
-			// is no launchd job or plist of its own to remove.
-			name:      "darwin launchd",
+			// is no launchd job or plist of its own to remove. Both labels
+			// go: a Mac not migrated since the rename has only the legacy one.
+			name:      "darwin launchd, current and legacy label",
 			goos:      "darwin",
-			wantLabel: "launchd (org.thereisnospoon.seamless)",
-			wantStop:  [][]string{{"launchctl", "bootout", "gui/501/org.thereisnospoon.seamless"}},
+			wantLabel: "launchd (com.arctop.seamless)",
+			wantStop: [][]string{
+				{"launchctl", "bootout", "gui/501/com.arctop.seamless"},
+				{"launchctl", "bootout", "gui/501/org.thereisnospoon.seamless"},
+			},
 			wantRemove: []string{
+				filepath.Join(home, "Library", "LaunchAgents", "com.arctop.seamless.plist"),
 				filepath.Join(home, "Library", "LaunchAgents", "org.thereisnospoon.seamless.plist"),
 			},
 		},

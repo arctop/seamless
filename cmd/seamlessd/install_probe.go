@@ -153,9 +153,18 @@ func probeService(env installProbeEnv) update.ServiceProbe {
 	)
 	switch env.goos {
 	case "darwin":
-		sp.Path = filepath.Join(env.home, "Library", "LaunchAgents", launchdLabel+".plist")
+		// The current label's plist, else the legacy one's: a Mac the
+		// installer has not run on since the rename still has only that.
+		sp.Path = launchdPlist(env.home, launchdLabel)
 		var err error
-		if data, err = env.readFile(sp.Path); err != nil {
+		data, err = env.readFile(sp.Path)
+		if errors.Is(err, fs.ErrNotExist) {
+			legacy := launchdPlist(env.home, legacyLaunchdLabel)
+			if ldata, lerr := env.readFile(legacy); !errors.Is(lerr, fs.ErrNotExist) {
+				sp.Path, data, err = legacy, ldata, lerr
+			}
+		}
+		if err != nil {
 			return absentOrErr(sp, err)
 		}
 		program = plistProgram(data)
@@ -206,8 +215,8 @@ const taskSchedulerImage = "svchost.exe"
 // probeSupervised reports whether this process is the service's own instance,
 // not a release binary someone started by hand next to it.
 //
-//   - darwin: launchd names the job in XPC_SERVICE_NAME and is the parent
-//     (ppid 1) of a job it spawned.
+//   - darwin: launchd names the job in XPC_SERVICE_NAME (the current label
+//     or the legacy one) and is the parent (ppid 1) of a job it spawned.
 //   - linux: systemd places the unit's processes in its cgroup, under the
 //     user's manager (inSystemdUnit), and sets INVOCATION_ID.
 //   - windows: the parent is the Task Scheduler (svchost.exe) and the
@@ -217,7 +226,7 @@ const taskSchedulerImage = "svchost.exe"
 func probeSupervised(env installProbeEnv) (bool, string) {
 	switch env.goos {
 	case "darwin":
-		if envValue(env.environ, "XPC_SERVICE_NAME") != launchdLabel {
+		if job := envValue(env.environ, "XPC_SERVICE_NAME"); job != launchdLabel && job != legacyLaunchdLabel {
 			return false, "not running as the launchd job " + launchdLabel
 		}
 		if env.ppid != 1 {

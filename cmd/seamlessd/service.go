@@ -50,7 +50,9 @@ type serviceControlPlan struct {
 // serviceControl builds the steps for action on goos. It mirrors serviceTeardown
 // (same identifiers, same gui/<uid>/<label> target and unit path); the two are
 // the only Go code that manages the service. The launchd/systemd/schtasks handles
-// are the shared consts from uninstall.go -- no new definition site.
+// are the shared consts from uninstall.go -- no new definition site. On darwin
+// the label is the installed job's (launchdJob, a stat under home), so a Mac
+// still on the legacy label is controlled under that one.
 //
 // darwin uses launchctl because the plist declares KeepAlive: bootout truly stops
 // the job (a plain kill would be resurrected), kickstart -k restarts a loaded job
@@ -62,11 +64,12 @@ type serviceControlPlan struct {
 func serviceControl(action serviceAction, goos, home string, uid int) serviceControlPlan {
 	switch goos {
 	case "darwin":
-		plist := filepath.Join(home, "Library", "LaunchAgents", launchdLabel+".plist")
+		label := launchdJob(home, fileExists)
+		plist := launchdPlist(home, label)
 		domain := fmt.Sprintf("gui/%d", uid)
-		target := fmt.Sprintf("gui/%d/%s", uid, launchdLabel)
+		target := fmt.Sprintf("gui/%d/%s", uid, label)
 		p := serviceControlPlan{
-			Label:       "launchd (" + launchdLabel + ")",
+			Label:       "launchd (" + label + ")",
 			DefFile:     plist,
 			InstallHint: "run 'make install' in the repo, or: curl -fsSL https://thereisnospoon.org/install | sh",
 		}
@@ -145,6 +148,7 @@ func serviceInstalled(p serviceControlPlan) bool {
 // not installed it returns a clear install hint instead of a cryptic tool error.
 func runServiceAction(action serviceAction, args []string) error {
 	fs := flag.NewFlagSet(string(action), flag.ContinueOnError)
+	fs.Usage = func() { serviceUsage(fs.Output(), action) }
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -178,6 +182,26 @@ func runServiceAction(action serviceAction, args []string) error {
 		}
 	}
 	return nil
+}
+
+// launchdLabelLine is the line of the service verbs' usage that names the
+// LaunchAgent label this binary installs under. docs/install's launchd_label
+// asks a binary it unpacked for it (`seamlessd status -h`) and installs the
+// legacy label for one whose help lacks it -- a pinned pre-rename release,
+// which only knows that one -- so keep this exact wording, or change both.
+const launchdLabelLine = "launchd label: " + launchdLabel
+
+// serviceUsage is the -h text of `seamlessd <action>`.
+func serviceUsage(w io.Writer, action serviceAction) {
+	verb := map[serviceAction]string{
+		actionStart: "Starts", actionStop: "Stops", actionRestart: "Restarts", actionStatus: "Reports on",
+	}[action]
+	fmt.Fprintf(w, "usage: seamlessd %s\n\n%s the per-user service the installer registered:\n"+
+		"  macOS    the launchd job %s, or %s\n"+
+		"           on a Mac installed before the label rename\n"+
+		"  Linux    the systemd --user unit %s\n"+
+		"  Windows  the Scheduled Task %s\n\n%s\n",
+		action, verb, launchdLabel, legacyLaunchdLabel, systemdUnit, scheduledTask, launchdLabelLine)
 }
 
 // runControlCmds runs each command, best-effort, and returns whether the LAST

@@ -55,7 +55,10 @@
 set -eu
 
 REPO=arctop/seamless
-LABEL=org.thereisnospoon.seamless
+# The LaunchAgent label, and the one releases before the rename used
+# (plan:move-to-arctop). launchd_label picks which one this install writes.
+LABEL=com.arctop.seamless
+LEGACY_LABEL=org.thereisnospoon.seamless
 DOCS=https://thereisnospoon.org/docs/
 
 # The canonical config path: the one EnsureAPIKey writes on first run, and the
@@ -650,22 +653,64 @@ read_addr() {
 	[ -n "${ADDR:-}" ] || ADDR=$DEFAULT_ADDR
 }
 
-# Keep in step with deploy/launchd/org.thereisnospoon.seamless.plist, which is
-# what `make install` renders from a clone. The duplication is deliberate: this
+# The label to install under. A binary from before the rename finds its job
+# only under $LEGACY_LABEL -- seamlessd start/stop/status/uninstall, and the
+# updater's check that this installer manages the install -- and this script
+# is fetched from main and can install any pinned SEAMLESS_VERSION. So ask the
+# binary we just unpacked, like the install-hooks probes: one that knows
+# $LABEL prints "launchd label: $LABEL" in `status -h` (launchdLabelLine in
+# cmd/seamlessd/service.go). -h returns before the command looks anything up,
+# so the probe is side-effect free; an empty probe failed to run and proves
+# nothing, so it assumes the modern binary.
+launchd_label() {
+	probe=$("$INSTALL_DIR/seamlessd" status -h 2>&1 || true)
+	if [ -n "$probe" ] && ! printf '%s\n' "$probe" | grep -qxF "launchd label: $LABEL"; then
+		printf '%s' "$LEGACY_LABEL"
+	else
+		printf '%s' "$LABEL"
+	fi
+}
+
+# retire_launchd_label <uid> <label>: boot out and delete the LaunchAgent this
+# install does not use -- the legacy one on a Mac installed before the rename,
+# or the current one when a pinned pre-rename release goes back on. Its job runs
+# the same seamlessd serve on the same data dir and port, so it must be gone
+# before ours starts, and its plist with it, or the next login loads it again.
+# bootout is asynchronous (see service_launchd), so wait until launchd has let
+# go of the label, which it holds until the daemon has exited. Sets RETIRED.
+RETIRED=""
+retire_launchd_label() {
+	agent=$HOME/Library/LaunchAgents/$2.plist
+	[ -f "$agent" ] || launchctl print "gui/$1/$2" >/dev/null 2>&1 || return 0
+	launchctl bootout "gui/$1/$2" 2>/dev/null || true
+	i=0
+	while [ "$i" -lt 100 ] && launchctl print "gui/$1/$2" >/dev/null 2>&1; do
+		i=$((i + 1))
+		sleep 0.1
+	done
+	rm -f "$agent"
+	RETIRED=$2
+}
+
+# Keep in step with deploy/launchd/com.arctop.seamless.plist, which is what
+# `make install` renders from a clone. The duplication is deliberate: this
 # script is fetched on its own, with no repo and no checkout to read a template
 # out of, and inlining beats shipping a template only future releases would
 # carry.
 service_launchd() {
-	plist=$HOME/Library/LaunchAgents/$LABEL.plist
+	label=$(launchd_label)
+	other=$LEGACY_LABEL
+	[ "$label" = "$LABEL" ] || other=$LABEL
+	plist=$HOME/Library/LaunchAgents/$label.plist
 	mkdir -p "$HOME/Library/LaunchAgents" "$HOME/.seamless"
-	cat >"$TMP/$LABEL.plist" <<EOF
+	cat >"$TMP/$label.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- Written by https://thereisnospoon.org/install. Re-run it to update. -->
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>$LABEL</string>
+  <string>$label</string>
   <key>ProgramArguments</key>
   <array>
     <string>$INSTALL_DIR/seamlessd</string>
@@ -691,7 +736,7 @@ EOF
 	# Items notice for every rewritten LaunchAgent, and an update that changed
 	# nothing in it has nothing to announce. The reload below runs regardless,
 	# because the binary underneath did change.
-	cmp -s "$TMP/$LABEL.plist" "$plist" 2>/dev/null || cat "$TMP/$LABEL.plist" >"$plist"
+	cmp -s "$TMP/$label.plist" "$plist" 2>/dev/null || cat "$TMP/$label.plist" >"$plist"
 
 	# bootout is asynchronous: it returns before the old daemon has exited, the
 	# label lingers until it has, and bootstrapping too soon fails with
@@ -711,7 +756,8 @@ EOF
 	# which macOS 26 kills. Same rule as the Makefile's _reload-service, which
 	# has the full story.
 	uid=$(id -u)
-	launchctl bootout "gui/$uid/$LABEL" 2>/dev/null || true
+	retire_launchd_label "$uid" "$other"
+	launchctl bootout "gui/$uid/$label" 2>/dev/null || true
 	booted=0
 	i=0
 	while [ "$i" -lt 100 ]; do
@@ -722,11 +768,15 @@ EOF
 		i=$((i + 1))
 		sleep 0.1
 	done
-	[ "$booted" = 1 ] || launchctl kickstart -k "gui/$uid/$LABEL" 2>/dev/null || true
-	launchctl print "gui/$uid/$LABEL" >/dev/null 2>&1 ||
-		die "$LABEL failed to bootstrap; check $LOG"
+	[ "$booted" = 1 ] || launchctl kickstart -k "gui/$uid/$label" 2>/dev/null || true
+	launchctl print "gui/$uid/$label" >/dev/null 2>&1 ||
+		die "$label failed to bootstrap; check $LOG"
 	SERVICE_STARTED=1
-	step service "$LABEL (launchd)"
+	if [ -n "$RETIRED" ]; then
+		step service "$label (launchd, replaced $RETIRED)"
+	else
+		step service "$label (launchd)"
+	fi
 }
 
 service_systemd() {

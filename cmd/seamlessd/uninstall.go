@@ -19,15 +19,45 @@ import (
 )
 
 // Service identifiers, duplicated on purpose from the three install surfaces that
-// each own a copy: the Makefile + deploy/launchd/org.thereisnospoon.seamless.plist
-// (launchd), docs/install (systemd --user), and docs/install.ps1 (Scheduled Task).
+// each own a copy: the Makefile + deploy/launchd/com.arctop.seamless.plist and
+// docs/install (launchd, systemd --user), and docs/install.ps1 (Scheduled Task).
 // Each installer is fetched standalone with no shared template to read, so the
 // names live at every site; keep these in sync when any installer renames one.
+//
+// legacyLaunchdLabel is the LaunchAgent label every release before the rename
+// (plan:move-to-arctop) installed under. A Mac keeps it until an installer or
+// `make install` that knows launchdLabel runs there again, and a rollback to a
+// pre-rename release puts it back, so everything that finds, controls or
+// removes the job accepts both (launchdJob), and the installers boot out and
+// delete whichever one they are not installing.
 const (
-	launchdLabel  = "org.thereisnospoon.seamless"
-	systemdUnit   = "seamless.service"
-	scheduledTask = "Seamless"
+	launchdLabel       = "com.arctop.seamless"
+	legacyLaunchdLabel = "org.thereisnospoon.seamless"
+	systemdUnit        = "seamless.service"
+	scheduledTask      = "Seamless"
 )
+
+// launchdPlist is label's LaunchAgent definition under home.
+func launchdPlist(home, label string) string {
+	return filepath.Join(home, "Library", "LaunchAgents", label+".plist")
+}
+
+// launchdJob is the label of the LaunchAgent installed under home: the legacy
+// label only when its plist is there and the current one's is not, else the
+// current label (also when neither is installed, so a not-installed message
+// names the plist an install writes today). exists is a stat.
+func launchdJob(home string, exists func(string) bool) string {
+	if !exists(launchdPlist(home, launchdLabel)) && exists(launchdPlist(home, legacyLaunchdLabel)) {
+		return legacyLaunchdLabel
+	}
+	return launchdLabel
+}
+
+// fileExists is launchdJob's stat on the real filesystem.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
 
 // runUninstall reverses a full install on any supported OS: it stops and removes
 // the per-user service, strips the Claude Code / Codex hook entries, deregisters
@@ -285,12 +315,15 @@ type serviceTeardownPlan struct {
 func serviceTeardown(goos, home string, uid int, installDir, updateTask string) serviceTeardownPlan {
 	switch goos {
 	case "darwin":
-		plist := filepath.Join(home, "Library", "LaunchAgents", launchdLabel+".plist")
-		return serviceTeardownPlan{
-			Label:       "launchd (" + launchdLabel + ")",
-			StopCmds:    []*exec.Cmd{exec.Command("launchctl", "bootout", fmt.Sprintf("gui/%d/%s", uid, launchdLabel))},
-			RemoveFiles: []string{plist},
+		// Both labels, the legacy one too: a Mac not yet migrated has only
+		// that one, and one a cross-rename rollback left behind can have both
+		// loaded. A label that is not loaded fails its bootout, harmlessly.
+		p := serviceTeardownPlan{Label: "launchd (" + launchdLabel + ")"}
+		for _, label := range []string{launchdLabel, legacyLaunchdLabel} {
+			p.StopCmds = append(p.StopCmds, exec.Command("launchctl", "bootout", fmt.Sprintf("gui/%d/%s", uid, label)))
+			p.RemoveFiles = append(p.RemoveFiles, launchdPlist(home, label))
 		}
+		return p
 	case "windows":
 		stop := []*exec.Cmd{
 			exec.Command("schtasks", "/End", "/TN", scheduledTask),

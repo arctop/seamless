@@ -43,15 +43,22 @@ them only when you want to talk to the service manager directly.
 
 **macOS:**
 
-A user LaunchAgent labelled `org.thereisnospoon.seamless` in
+A user LaunchAgent labelled `com.arctop.seamless` in
 `~/Library/LaunchAgents/`, logging to `~/.seamless/seamlessd.log` (`make logs`
 follows it from a clone). The universal verbs wrap:
 
 ```bash
-launchctl print gui/$(id -u)/org.thereisnospoon.seamless        # state
-launchctl kickstart -k gui/$(id -u)/org.thereisnospoon.seamless # restart
-launchctl bootout gui/$(id -u)/org.thereisnospoon.seamless      # stop
+launchctl print gui/$(id -u)/com.arctop.seamless        # state
+launchctl kickstart -k gui/$(id -u)/com.arctop.seamless # restart
+launchctl bootout gui/$(id -u)/com.arctop.seamless      # stop
 ```
+
+Installs made before the label was renamed run under `org.thereisnospoon.seamless`.
+The next installer run, automatic update or `make install` moves the service to
+`com.arctop.seamless`: it stops the old job, deletes its plist and loads the new
+one, and macOS shows a Background Items notice once for the new one. Until then
+every `seamlessd` command finds the service under either label, and
+`seamlessd doctor` says which one your Mac has.
 
 
 **Linux:**
@@ -263,7 +270,7 @@ walks through the outcomes. What the service manager can tell you:
 [Sealing projects to OS accounts](https://thereisnospoon.org/docs/guides/peer-auth/) needs the daemon to run as
 an account of its own, so the per-user service above cannot host it. On macOS it
 is a LaunchDaemon that names the account; it runs whether or not anyone is
-logged in. Install it as `/Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist`
+logged in. Install it as `/Library/LaunchDaemons/com.arctop.seamless.daemon.plist`
 (`root:wheel`, `0644`):
 
 ```xml
@@ -271,7 +278,7 @@ logged in. Install it as `/Library/LaunchDaemons/org.thereisnospoon.seamless.dae
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key>             <string>org.thereisnospoon.seamless.daemon</string>
+  <key>Label</key>             <string>com.arctop.seamless.daemon</string>
   <key>UserName</key>          <string>_seamless</string>
   <key>GroupName</key>         <string>_seamless</string>
   <key>InitGroups</key>        <true/>
@@ -298,18 +305,23 @@ logged in. Install it as `/Library/LaunchDaemons/org.thereisnospoon.seamless.dae
 `Umask` 63 is `077`. The controls are the system domain's, all with `sudo`:
 
 ```bash
-sudo plutil -lint /Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist
-sudo launchctl bootstrap system /Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist
-sudo launchctl kickstart -k system/org.thereisnospoon.seamless.daemon   # restart
-sudo launchctl print system/org.thereisnospoon.seamless.daemon          # state, pid, last exit
-sudo launchctl bootout system/org.thereisnospoon.seamless.daemon        # stop and unload
+sudo plutil -lint /Library/LaunchDaemons/com.arctop.seamless.daemon.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.arctop.seamless.daemon.plist
+sudo launchctl kickstart -k system/com.arctop.seamless.daemon   # restart
+sudo launchctl print system/com.arctop.seamless.daemon          # state, pid, last exit
+sudo launchctl bootout system/com.arctop.seamless.daemon        # stop and unload
 ```
+
+Nothing in Seamless reads this label, so a LaunchDaemon you already loaded
+under `org.thereisnospoon.seamless.daemon`, the name these docs gave before the
+rename, keeps working as it is.
 
 `seamlessd start|stop|restart|status` manage the per-user service, not this one.
 Before loading it, stop and remove the per-user service, or it starts again at
 your next login: `seamlessd stop`, then
-`launchctl bootout gui/$(id -u)/org.thereisnospoon.seamless` and delete
-`~/Library/LaunchAgents/org.thereisnospoon.seamless.plist`.
+`launchctl bootout gui/$(id -u)/com.arctop.seamless` and delete
+`~/Library/LaunchAgents/com.arctop.seamless.plist` (on a Mac installed before
+the rename, the same for `org.thereisnospoon.seamless`).
 
 On Linux the same daemon is a system unit with `User=` and `Group=` set to the
 account, `UMask=0077`, `Environment=SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml`
@@ -347,7 +359,8 @@ to remove. For a bare binary you never registered a service for, or a machine
 you are cleaning by hand, the native teardown is:
 
 ```bash
-launchctl bootout gui/$(id -u)/org.thereisnospoon.seamless   # macOS
+launchctl bootout gui/$(id -u)/com.arctop.seamless           # macOS
+launchctl bootout gui/$(id -u)/org.thereisnospoon.seamless   # macOS: the label before the rename
 systemctl --user stop 'seamless-update-*'                    # Linux: an update still running
 systemctl --user disable --now seamless                      # Linux
 ```

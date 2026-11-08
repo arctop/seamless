@@ -12,7 +12,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>org.thereisnospoon.seamless</string>
+  <string>com.arctop.seamless</string>
   <key>ProgramArguments</key>
   <array>
     <string>__BINARY__</string>

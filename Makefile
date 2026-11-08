@@ -30,11 +30,14 @@ VERSION   := $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' |
 VERSION   := $(if $(VERSION),$(VERSION),0.0.0-dev)
 LDFLAGS   := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildDate=$(BUILDDATE)
 
-# launchd service (macOS user LaunchAgent)
+# launchd service (macOS user LaunchAgent). LEGACY_SVC_LABEL is the label before
+# the rename (plan:move-to-arctop); _reload-service retires it.
 UID           := $(shell id -u)
-SVC_LABEL     := org.thereisnospoon.seamless
+SVC_LABEL     := com.arctop.seamless
 SVC_TEMPLATE  := deploy/launchd/$(SVC_LABEL).plist
 SVC_PLIST     := $(HOME)/Library/LaunchAgents/$(SVC_LABEL).plist
+LEGACY_SVC_LABEL := org.thereisnospoon.seamless
+LEGACY_SVC_PLIST := $(HOME)/Library/LaunchAgents/$(LEGACY_SVC_LABEL).plist
 SVC_LOG       := $(HOME)/.seamless/seamlessd.log
 
 # Install locations: stable paths, independent of this working tree. `make
@@ -512,7 +515,22 @@ console-chrome: build
 # listening, measured on a make install on 2026-10-09). Go binaries are adhoc
 # linker-signed with no CMS blob, which is what the constraint rejects; nothing
 # here can be signed away.
+#
+# First, retire $(LEGACY_SVC_LABEL), the label before the rename: its job runs
+# the same seamlessd serve on the same data dir and port, so it is booted out
+# and waited out (launchd holds the label until the daemon has exited), and its
+# plist deleted so the next login does not load it again. docs/install's
+# retire_launchd_label does the same for curl installs.
 _reload-service:
+	@if [ -f $(LEGACY_SVC_PLIST) ] || launchctl print gui/$(UID)/$(LEGACY_SVC_LABEL) >/dev/null 2>&1; then \
+	    echo "retiring $(LEGACY_SVC_LABEL) (renamed $(SVC_LABEL))"; \
+	    launchctl bootout gui/$(UID)/$(LEGACY_SVC_LABEL) 2>/dev/null || true; \
+	    for i in $$(seq 1 100); do \
+	        launchctl print gui/$(UID)/$(LEGACY_SVC_LABEL) >/dev/null 2>&1 || break; \
+	        sleep 0.1; \
+	    done; \
+	    rm -f $(LEGACY_SVC_PLIST); \
+	fi
 	@launchctl bootout gui/$(UID)/$(SVC_LABEL) 2>/dev/null || true
 	@booted=0; \
 	for i in $$(seq 1 100); do \

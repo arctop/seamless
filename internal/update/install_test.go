@@ -16,7 +16,7 @@ func installerProbe() Probe {
 		ConfigIsInstallers: true,
 		ConfigPath:         "/Users/me/.config/seamless/seamless.yaml",
 		Service: ServiceProbe{
-			Path:        "/Users/me/Library/LaunchAgents/org.thereisnospoon.seamless.plist",
+			Path:        "/Users/me/Library/LaunchAgents/com.arctop.seamless.plist",
 			Found:       true,
 			Marker:      true,
 			Program:     "/Users/me/.local/bin/seamlessd",

@@ -290,13 +290,19 @@ them only when you want to talk to the service manager directly.</p>
 <h2 id="the-service-on-your-os">The service on your OS</h2>
 <div class="ctx-variant" data-ctx-os="macos">
 <p class="ctx-label"><span class="ctx-chip">macOS</span></p>
-<p>A user LaunchAgent labelled <code>org.thereisnospoon.seamless</code> in
+<p>A user LaunchAgent labelled <code>com.arctop.seamless</code> in
 <code>~/Library/LaunchAgents/</code>, logging to <code>~/.seamless/seamlessd.log</code> (<code>make logs</code>
 follows it from a clone). The universal verbs wrap:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">launchctl print gui/<span class="k">$(</span>id -u<span class="k">)</span>/org.thereisnospoon.seamless        <span class="c1"># state</span>
-</span></span><span class="line"><span class="cl">launchctl kickstart -k gui/<span class="k">$(</span>id -u<span class="k">)</span>/org.thereisnospoon.seamless <span class="c1"># restart</span>
-</span></span><span class="line"><span class="cl">launchctl bootout gui/<span class="k">$(</span>id -u<span class="k">)</span>/org.thereisnospoon.seamless      <span class="c1"># stop</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">launchctl print gui/<span class="k">$(</span>id -u<span class="k">)</span>/com.arctop.seamless        <span class="c1"># state</span>
+</span></span><span class="line"><span class="cl">launchctl kickstart -k gui/<span class="k">$(</span>id -u<span class="k">)</span>/com.arctop.seamless <span class="c1"># restart</span>
+</span></span><span class="line"><span class="cl">launchctl bootout gui/<span class="k">$(</span>id -u<span class="k">)</span>/com.arctop.seamless      <span class="c1"># stop</span>
 </span></span></code></pre></div>
+<p>Installs made before the label was renamed run under <code>org.thereisnospoon.seamless</code>.
+The next installer run, automatic update or <code>make install</code> moves the service to
+<code>com.arctop.seamless</code>: it stops the old job, deletes its plist and loads the new
+one, and macOS shows a Background Items notice once for the new one. Until then
+every <code>seamlessd</code> command finds the service under either label, and
+<code>seamlessd doctor</code> says which one your Mac has.</p>
 </div>
 <div class="ctx-variant" data-ctx-os="linux">
 <p class="ctx-label"><span class="ctx-chip">Linux</span></p>
@@ -476,13 +482,13 @@ then <code>seamlessd start</code>.</li>
 <p><a href="../../guides/peer-auth/">Sealing projects to OS accounts</a> needs the daemon to run as
 an account of its own, so the per-user service above cannot host it. On macOS it
 is a LaunchDaemon that names the account; it runs whether or not anyone is
-logged in. Install it as <code>/Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist</code>
+logged in. Install it as <code>/Library/LaunchDaemons/com.arctop.seamless.daemon.plist</code>
 (<code>root:wheel</code>, <code>0644</code>):</p>
 <div class="code-block" data-lang="xml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="cp">&lt;?xml version=&#34;1.0&#34; encoding=&#34;UTF-8&#34;?&gt;</span>
 </span></span><span class="line"><span class="cl"><span class="cp">&lt;!DOCTYPE plist PUBLIC &#34;-//Apple//DTD PLIST 1.0//EN&#34; &#34;http://www.apple.com/DTDs/PropertyList-1.0.dtd&#34;&gt;</span>
 </span></span><span class="line"><span class="cl"><span class="nt">&lt;plist</span> <span class="na">version=</span><span class="s">&#34;1.0&#34;</span><span class="nt">&gt;</span>
 </span></span><span class="line"><span class="cl"><span class="nt">&lt;dict&gt;</span>
-</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>Label<span class="nt">&lt;/key&gt;</span>             <span class="nt">&lt;string&gt;</span>org.thereisnospoon.seamless.daemon<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>Label<span class="nt">&lt;/key&gt;</span>             <span class="nt">&lt;string&gt;</span>com.arctop.seamless.daemon<span class="nt">&lt;/string&gt;</span>
 </span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>UserName<span class="nt">&lt;/key&gt;</span>          <span class="nt">&lt;string&gt;</span>_seamless<span class="nt">&lt;/string&gt;</span>
 </span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>GroupName<span class="nt">&lt;/key&gt;</span>         <span class="nt">&lt;string&gt;</span>_seamless<span class="nt">&lt;/string&gt;</span>
 </span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>InitGroups<span class="nt">&lt;/key&gt;</span>        <span class="nt">&lt;true/&gt;</span>
@@ -506,17 +512,21 @@ logged in. Install it as <code>/Library/LaunchDaemons/org.thereisnospoon.seamles
 </span></span><span class="line"><span class="cl"><span class="nt">&lt;/plist&gt;</span>
 </span></span></code></pre></div>
 <p><code>Umask</code> 63 is <code>077</code>. The controls are the system domain's, all with <code>sudo</code>:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo plutil -lint /Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist
-</span></span><span class="line"><span class="cl">sudo launchctl bootstrap system /Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist
-</span></span><span class="line"><span class="cl">sudo launchctl kickstart -k system/org.thereisnospoon.seamless.daemon   <span class="c1"># restart</span>
-</span></span><span class="line"><span class="cl">sudo launchctl print system/org.thereisnospoon.seamless.daemon          <span class="c1"># state, pid, last exit</span>
-</span></span><span class="line"><span class="cl">sudo launchctl bootout system/org.thereisnospoon.seamless.daemon        <span class="c1"># stop and unload</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo plutil -lint /Library/LaunchDaemons/com.arctop.seamless.daemon.plist
+</span></span><span class="line"><span class="cl">sudo launchctl bootstrap system /Library/LaunchDaemons/com.arctop.seamless.daemon.plist
+</span></span><span class="line"><span class="cl">sudo launchctl kickstart -k system/com.arctop.seamless.daemon   <span class="c1"># restart</span>
+</span></span><span class="line"><span class="cl">sudo launchctl print system/com.arctop.seamless.daemon          <span class="c1"># state, pid, last exit</span>
+</span></span><span class="line"><span class="cl">sudo launchctl bootout system/com.arctop.seamless.daemon        <span class="c1"># stop and unload</span>
 </span></span></code></pre></div>
+<p>Nothing in Seamless reads this label, so a LaunchDaemon you already loaded
+under <code>org.thereisnospoon.seamless.daemon</code>, the name these docs gave before the
+rename, keeps working as it is.</p>
 <p><code>seamlessd start|stop|restart|status</code> manage the per-user service, not this one.
 Before loading it, stop and remove the per-user service, or it starts again at
 your next login: <code>seamlessd stop</code>, then
-<code>launchctl bootout gui/$(id -u)/org.thereisnospoon.seamless</code> and delete
-<code>~/Library/LaunchAgents/org.thereisnospoon.seamless.plist</code>.</p>
+<code>launchctl bootout gui/$(id -u)/com.arctop.seamless</code> and delete
+<code>~/Library/LaunchAgents/com.arctop.seamless.plist</code> (on a Mac installed before
+the rename, the same for <code>org.thereisnospoon.seamless</code>).</p>
 <p>On Linux the same daemon is a system unit with <code>User=</code> and <code>Group=</code> set to the
 account, <code>UMask=0077</code>, <code>Environment=SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml</code>
 and <code>ExecStart=/opt/seamless/bin/seamlessd serve</code>, enabled with
@@ -592,7 +602,8 @@ caught mid-update cannot restart the service it is removing. On Windows it
 deletes your <code>SeamlessUpdate-&lt;SID&gt;</code> task. On macOS the updater leaves nothing
 to remove. For a bare binary you never registered a service for, or a machine
 you are cleaning by hand, the native teardown is:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">launchctl bootout gui/<span class="k">$(</span>id -u<span class="k">)</span>/org.thereisnospoon.seamless   <span class="c1"># macOS</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">launchctl bootout gui/<span class="k">$(</span>id -u<span class="k">)</span>/com.arctop.seamless           <span class="c1"># macOS</span>
+</span></span><span class="line"><span class="cl">launchctl bootout gui/<span class="k">$(</span>id -u<span class="k">)</span>/org.thereisnospoon.seamless   <span class="c1"># macOS: the label before the rename</span>
 </span></span><span class="line"><span class="cl">systemctl --user stop <span class="s1">&#39;seamless-update-*&#39;</span>                    <span class="c1"># Linux: an update still running</span>
 </span></span><span class="line"><span class="cl">systemctl --user disable --now seamless                      <span class="c1"># Linux</span>
 </span></span></code></pre></div>
