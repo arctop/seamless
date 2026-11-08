@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // Restricted local accounts (peer_auth.restricted, 2026-11-07).
@@ -83,6 +84,84 @@ func SessionAccountOK(ctx context.Context, account string) bool {
 func SessionAccountRefusal(session string) error {
 	return &RefusalError{msg: fmt.Sprintf("session %s is not reachable from this connection: a session belongs to the "+
 		"account that started it -- start your own with session_start", session)}
+}
+
+// A restricted account's sessions live in a namespace of their own (SEAL A2).
+// Session names are unique across the instance, so a name another principal
+// holds -- in a project the account may not reach as much as in one it does --
+// would otherwise answer differently from a free one: an oracle for which
+// names exist where it cannot look. Every session such an account starts is
+// stored under "<account>:<name>" (its name and the agent's external session
+// id both), and every name it gives is read inside that namespace, so nothing
+// it names can reach a session it did not start. The owner names one by that
+// qualified name; console and CLI show it. The owner's names are stored and
+// read exactly as given, so with peer_auth off -- and for every owner surface
+// -- nothing changes.
+//
+// An OS account name never contains ":" (config.validateAccount refuses it, and
+// a passwd entry cannot hold one), so the first ":" always ends the account.
+const sessionNamespaceSep = ":"
+
+// QualifiedSessionName returns name inside account's session namespace:
+// "<account>:<name>", or name itself when it already carries that prefix, when
+// it is empty, or when account is "" (the owner, background work, peer_auth
+// off). Applying it twice changes nothing, so a restricted account may name
+// its own session either way: by the name it gave, or by the qualified name
+// the session reports.
+func QualifiedSessionName(account, name string) string {
+	if account == "" || name == "" {
+		return name
+	}
+	prefix := account + sessionNamespaceSep
+	if strings.HasPrefix(name, prefix) {
+		return name
+	}
+	return prefix + name
+}
+
+// QualifySessionName is QualifiedSessionName for the caller in ctx: a
+// restricted account's name, or agent session id, inside its namespace; every
+// other caller's unchanged.
+func QualifySessionName(ctx context.Context, name string) string {
+	return QualifiedSessionName(AccountOf(ctx), name)
+}
+
+// SessionNamespace returns the prefix the caller in ctx's sessions carry --
+// "<account>:" for a restricted account -- and "" for every other caller.
+func SessionNamespace(ctx context.Context) string {
+	if account := AccountOf(ctx); account != "" {
+		return account + sessionNamespaceSep
+	}
+	return ""
+}
+
+// ReservedSessionName reports the restricted account whose namespace name lies
+// in, when the caller in ctx is not that account: a name beginning
+// "<account>:" for an account peer_auth.restricted lists. A session the owner
+// started under such a name would sit in the account's namespace, where the
+// account's own name would collide with it, so the owner may name one there
+// (to be refused it, SessionAccountRefusal) but never start one. A restricted
+// caller's names are always qualified with its own account first, so they are
+// never reserved. With peer_auth off, or no restricted account listed, no name
+// is.
+func ReservedSessionName(ctx context.Context, name string) (account string, reserved bool) {
+	v, ok := FromContext(ctx)
+	if !ok || v.policy == nil || v.who.Kind == KindRestricted {
+		return "", false
+	}
+	for _, acct := range v.policy.restricted {
+		if acct.Name != "" && strings.HasPrefix(name, acct.Name+sessionNamespaceSep) {
+			return acct.Name, true
+		}
+	}
+	return "", false
+}
+
+// ReservedSessionNameRefusal is the error for a session name another
+// account's namespace holds (ReservedSessionName).
+func ReservedSessionNameRefusal(name, account string) error {
+	return &RefusalError{msg: fmt.Sprintf("session name %s is in restricted account %s's namespace: names beginning %s%s "+
+		"are its sessions -- choose another name", name, account, account, sessionNamespaceSep)}
 }
 
 // restrictedRefusal is a restricted account's refusal. It reads the same for a

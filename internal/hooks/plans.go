@@ -181,6 +181,7 @@ func (h *Handler) decodeToolPayload(w http.ResponseWriter, r *http.Request) tool
 		body = nil // over the cap or unreadable: the zero payload, as a decode error leaves it
 	}
 	_ = json.NewDecoder(bytes.NewReader(body)).Decode(&p) //nolint:errcheck // tolerant, as above
+	p.SessionID = namespacedExternalID(r, p.SessionID)
 	p.Identity = identityFromRequest(r)
 	p.Capture = h.pushedCapture(r.Context(), ClientClaudeCode, body)
 	return p

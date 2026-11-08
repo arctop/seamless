@@ -55,15 +55,18 @@ func TestRunHook_RestrictedAccountOnTheSocketNeedsNoKey(t *testing.T) {
 		require.Empty(t, runHookCall(t, cfg, c), "%s (%s): no refusal, no error", c.event, c.client)
 	}
 
-	cc := d.ambient(t, "claude-code", "cc-1")
+	// Its sessions live in its own namespace (SEAL A2): the agent's id and
+	// the session's name both carry the account.
+	cc := d.ambient(t, "claude-code", access.QualifiedSessionName(acct, "cc-1"))
 	require.Equal(t, acct, cc.Account)
+	require.Regexp(t, `^`+acct+`:cc/cc-1-[0-9a-f]+$`, cc.Name)
 	require.Equal(t, "example-ops", cc.ProjectSlug)
 	require.Equal(t, core.SessionCompleted, cc.Status)
 	require.Equal(t, "(auto-harvested) Deployed the ops service; the health check race is fixed.", cc.Findings)
 	require.Equal(t, "claude-late", cc.Model)
 	require.False(t, cc.Tokens.Empty())
 
-	cx := d.ambient(t, "codex", "cx-1")
+	cx := d.ambient(t, "codex", access.QualifiedSessionName(acct, "cx-1"))
 	require.Equal(t, acct, cx.Account)
 	require.NotEmpty(t, cx.Findings)
 	require.False(t, cx.Tokens.Empty())

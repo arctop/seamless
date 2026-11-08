@@ -6347,7 +6347,14 @@ and notes, tasks and findings, lands at once, labeled.
 
 Sessions belong to the account that started them: a restricted account's agents
 cannot resume, bind to or write findings into your sessions, and yours cannot
-act in theirs.
+act in theirs. Its sessions also have names of their own: every one is stored
+as `_example_agent:<name>` (`_example_agent:cc/...` for its Claude Code
+sessions), and every session name its agents give is read inside that
+namespace. A name you already use, in any project, is simply free for it, so
+the account cannot learn which session names exist where it cannot look. The
+console and `seam` show its sessions by the qualified name, and that is the name
+you use for them. You cannot start a session of your own under a name beginning
+`_example_agent:`.
 
 ## Verify
 

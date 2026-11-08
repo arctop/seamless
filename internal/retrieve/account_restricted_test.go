@@ -362,8 +362,9 @@ func TestAccountLabels_EveryBriefingLine(t *testing.T) {
 		"- app-stage -- open, gate human" + acctMark + "\n",
 		"- app-ship -- awaiting approval: Ship zephyr (presented, 1h)" + acctMark + "\n",
 		"- app-conv: zephyr indent with tabs" + acctMark + "\n",
-		// Recent findings: the session's account.
-		"- cc/app-one (1h): zephyr app finding by the account" + acctMark + "\n",
+		// Recent findings: the session's account, and its session's name
+		// inside the account's namespace (SEAL A2).
+		"- " + acctName + ":cc/app-one (1h): zephyr app finding by the account" + acctMark + "\n",
 		// Ready tasks: the creator's account.
 		"- zephyr ready task" + acctMark + "\n",
 		// The starred head of the Memories list, the parent's memory, the index.
@@ -389,13 +390,17 @@ func TestAccountLabels_EveryBriefingLine(t *testing.T) {
 		require.Contains(t, b, line, "an owner item renders exactly as before")
 	}
 
-	// The labels are the only difference: strip them and the briefing is the
-	// unlabeled fixture's, byte for byte.
+	// The labels, and the account's session names inside its namespace
+	// (SEAL A2), are the only differences: strip both and the briefing is
+	// the unlabeled fixture's, byte for byte.
+	unlabeled := func(s string) string {
+		return strings.ReplaceAll(strings.ReplaceAll(s, acctMark, ""), acctName+":cc/", "cc/")
+	}
 	want := acctGolden
-	require.Equal(t, want.Briefing, strings.ReplaceAll(b, acctMark, ""))
-	require.Equal(t, want.Resumed, strings.ReplaceAll(got.Resumed, acctMark, ""))
-	require.Equal(t, want.Subagent, strings.ReplaceAll(got.Subagent, acctMark, ""))
-	require.Equal(t, want.Prompt, strings.ReplaceAll(got.Prompt, acctMark, ""))
+	require.Equal(t, want.Briefing, unlabeled(b))
+	require.Equal(t, want.Resumed, unlabeled(got.Resumed))
+	require.Equal(t, want.Subagent, unlabeled(got.Subagent))
+	require.Equal(t, want.Prompt, unlabeled(got.Prompt))
 	require.Equal(t, want.BriefingIDs, got.BriefingIDs)
 
 	// The subagent briefing: both constraint tiers and the RELEVANT section.

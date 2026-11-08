@@ -99,6 +99,10 @@ func (e *restrictedHooks) restrictedView() access.View {
 	return v.WithOpenProjects(open)
 }
 
+// rExt is the restricted account's agent session id, or session name, as the
+// hooks store it: inside the account's namespace (SEAL A2).
+func rExt(id string) string { return access.QualifiedSessionName(rAcct, id) }
+
 // asRestricted serves every later request as the restricted account.
 func (e *restrictedHooks) asRestricted() {
 	e.mu.Lock()
@@ -223,9 +227,9 @@ func TestRestrictedSessionStart_OutsideItsReachRecordsNothing(t *testing.T) {
 	// session, labeled with its account, stamped with its agent process.
 	briefing, _ := e.sendAs(rAgent, "session-start", "", map[string]any{"session_id": "r-ops", "cwd": "/work/ops", "source": "startup"}, nil)
 	require.Contains(t, briefing, "ops-rule")
-	require.Contains(t, briefing, "Seam session: cc/")
+	require.Contains(t, briefing, "Seam session: "+rAcct+":cc/r-ops-", "its session is named inside its namespace")
 	require.NotContains(t, briefing, "maps to no project")
-	sess := requireAmbientSession(t, e.db, ClientClaudeCode, "r-ops")
+	sess := requireAmbientSession(t, e.db, ClientClaudeCode, rExt("r-ops"))
 	require.Equal(t, lkOps, sess.ProjectSlug)
 	require.Equal(t, rAcct, sess.Account)
 	require.Equal(t, rAgent.AgentID(), e.agentProcess(sess.ID))
@@ -234,16 +238,18 @@ func TestRestrictedSessionStart_OutsideItsReachRecordsNothing(t *testing.T) {
 	// A resume from a closed repository does not move it there: the notice,
 	// and the session stays where it was.
 	e.age(sess.ID)
-	before := requireAmbientSession(t, e.db, ClientClaudeCode, "r-ops")
+	before := requireAmbientSession(t, e.db, ClientClaudeCode, rExt("r-ops"))
 	notice, _ = e.sendAs(rAgent, "session-start", "", map[string]any{"session_id": "r-ops", "cwd": "/work/finance", "source": "resume"}, nil)
 	require.Equal(t, restrictedNotice(rAcct), notice)
-	require.Equal(t, before, requireAmbientSession(t, e.db, ClientClaudeCode, "r-ops"))
+	require.Equal(t, before, requireAmbientSession(t, e.db, ClientClaudeCode, rExt("r-ops")))
 }
 
-// A session belongs to the principal that started it: a restricted account's
-// hooks never resume, reactivate, heartbeat, stamp, capture into or complete
-// the owner's session, though both work in the same open project -- and the
-// owner's hooks never touch a restricted account's.
+// A session belongs to the principal that started it, and a restricted
+// account's agent session ids live in a namespace of its own (SEAL A2): its
+// hooks naming the id of the owner's session work in the account's OWN session
+// under that id -- they never resume, reactivate, heartbeat, stamp, capture
+// into or complete the owner's, though both work in the same open project --
+// and the owner's hooks never touch a restricted account's.
 func TestRestrictedHooks_NeverActInAnotherPrincipalsSession(t *testing.T) {
 	e := newRestrictedHooks(t)
 
@@ -255,33 +261,38 @@ func TestRestrictedHooks_NeverActInAnotherPrincipalsSession(t *testing.T) {
 	e.age(owner.ID)
 	owner = requireAmbientSession(t, e.db, ClientClaudeCode, "shared-1")
 
-	// The restricted account's hooks name it.
+	// The restricted account's hooks name its id: they get a session of the
+	// account's own, exactly as a free id would.
 	e.asRestricted()
 	out, _ := e.sendAs(rAgent, "session-start", "", map[string]any{"session_id": "shared-1", "cwd": "/work/ops", "source": "resume"},
-		map[string]any{"version": 1, "model": "claude-intruder"})
-	require.NotContains(t, out, "Seam session:", "no ambient line: no session was resumed")
-	require.Contains(t, out, "ops-rule", "the project's briefing still comes: the account reaches the project")
+		map[string]any{"version": 1, "model": "claude-restricted"})
+	require.Contains(t, out, "Seam session: "+rAcct+":cc/shared-1-", "the account's own session, under the same id")
+	require.Contains(t, out, "ops-rule", "the project's briefing comes: the account reaches the project")
 	e.sendAs(rAgent, "user-prompt-submit", "", map[string]any{"session_id": "shared-1", "cwd": "/work/ops",
-		"prompt": "ops deploy pipeline health check"}, map[string]any{"version": 1, "model": "claude-intruder"})
+		"prompt": "ops deploy pipeline health check"}, map[string]any{"version": 1, "model": "claude-restricted"})
 	_, refused := e.sendAs(rAgent, "post-tool-use", "", map[string]any{"session_id": "shared-1", "cwd": "/work/ops",
 		"tool_name": "Write", "tool_input": map[string]any{"file_path": "/home/agent/.claude/plans/example-plan.md"}},
-		planPush("# Example plan\n\nINTRUDER"))
-	require.Empty(t, refused, "refused without a word: nothing about another principal's session is the caller's")
-	e.sendAs(rAgent, "subagent-stop", "", map[string]any{"session_id": "shared-1", "cwd": "/work/ops",
-		"agent_id": "a9", "agent_type": "Explore", "permission_mode": "plan"},
-		map[string]any{"version": 1, "prompt": "p", "report": "INTRUDER", "git_head": pushHead})
+		planPush("# Example plan\n\nTHE ACCOUNT'S OWN"))
+	require.Empty(t, refused)
 	e.sendAs(rAgent, "session-end", "", map[string]any{"session_id": "shared-1"},
-		map[string]any{"version": 1, "findings": "(auto-harvested) INTRUDER", "tokens": pushTokens, "model": "claude-intruder"})
+		map[string]any{"version": 1, "findings": "(auto-harvested) THE ACCOUNT'S OWN", "tokens": pushTokens, "model": "claude-restricted"})
 
 	require.Equal(t, owner, requireAmbientSession(t, e.db, ClientClaudeCode, "shared-1"),
 		"the owner's session is exactly as it was: not resumed, touched, re-modeled, harvested or completed")
 	require.Equal(t, lkAgent.AgentID(), e.agentProcess(owner.ID), "never stamped with the restricted agent")
-	_, found := e.note(lkOps, plans.NotePrefix+"example-plan")
-	require.False(t, found, "no capture through another principal's session")
-	_, found = e.note(lkOps, plans.AgentNotePrefix+"a9")
-	require.False(t, found)
+	theirs := requireAmbientSession(t, e.db, ClientClaudeCode, rExt("shared-1"))
+	require.NotEqual(t, owner.ID, theirs.ID)
+	require.Equal(t, rAcct+":"+owner.Name, theirs.Name, "the same handle, inside the account's namespace")
+	require.Equal(t, rAcct, theirs.Account)
+	require.Equal(t, core.SessionCompleted, theirs.Status)
+	require.Equal(t, "(auto-harvested) THE ACCOUNT'S OWN", theirs.Findings)
+	require.Equal(t, "claude-restricted", theirs.Model)
+	require.Equal(t, rAgent.AgentID(), e.agentProcess(theirs.ID))
+	n, found := e.note(lkOps, plans.NotePrefix+"example-plan")
+	require.True(t, found, "the capture went through the account's own session")
+	require.Equal(t, rAcct, n.Account)
 
-	// Ended, it stays ended: the restricted hook does not reactivate it.
+	// Ended, the owner's stays ended: the restricted hook resumes its own.
 	e.asOwner()
 	e.sendAs(lkAgent, "session-end", "", map[string]any{"session_id": "shared-1"}, nil)
 	ended := requireAmbientSession(t, e.db, ClientClaudeCode, "shared-1")
@@ -290,29 +301,40 @@ func TestRestrictedHooks_NeverActInAnotherPrincipalsSession(t *testing.T) {
 	e.sendAs(rAgent, "session-start", "", map[string]any{"session_id": "shared-1", "cwd": "/work/ops", "source": "resume"}, nil)
 	require.Equal(t, ended, requireAmbientSession(t, e.db, ClientClaudeCode, "shared-1"))
 	require.Equal(t, lkAgent.AgentID(), e.agentProcess(owner.ID))
+	require.Equal(t, core.SessionActive, requireAmbientSession(t, e.db, ClientClaudeCode, rExt("shared-1")).Status)
 
 	// And the other way round: the restricted account's session, which the
 	// owner's hooks cannot touch.
 	e.sendAs(rAgent, "session-start", "", map[string]any{"session_id": "mine-1", "cwd": "/work/ops", "source": "startup"}, nil)
-	mine := requireAmbientSession(t, e.db, ClientClaudeCode, "mine-1")
+	mine := requireAmbientSession(t, e.db, ClientClaudeCode, rExt("mine-1"))
 	require.Equal(t, rAcct, mine.Account)
 	e.age(mine.ID)
-	mine = requireAmbientSession(t, e.db, ClientClaudeCode, "mine-1")
+	mine = requireAmbientSession(t, e.db, ClientClaudeCode, rExt("mine-1"))
 	e.asOwner()
-	out, _ = e.sendAs(lkAgent, "session-start", "", map[string]any{"session_id": "mine-1", "cwd": "/work/ops", "source": "resume"},
+	// Naming it by its qualified id -- the one way the owner can -- reaches
+	// nothing.
+	out, _ = e.sendAs(lkAgent, "session-start", "", map[string]any{"session_id": rExt("mine-1"), "cwd": "/work/ops", "source": "resume"},
 		map[string]any{"version": 1, "model": "claude-owner"})
 	require.NotContains(t, out, "Seam session:")
-	e.sendAs(lkAgent, "user-prompt-submit", "", map[string]any{"session_id": "mine-1", "cwd": "/work/ops", "prompt": "ops deploy race"}, nil)
+	e.sendAs(lkAgent, "user-prompt-submit", "", map[string]any{"session_id": rExt("mine-1"), "cwd": "/work/ops", "prompt": "ops deploy race"}, nil)
+	e.sendAs(lkAgent, "session-end", "", map[string]any{"session_id": rExt("mine-1")},
+		map[string]any{"version": 1, "findings": "(auto-harvested) OWNER", "model": "claude-owner"})
+	// Naming the bare id is the owner's own id: a session of its own.
+	out, _ = e.sendAs(lkAgent, "session-start", "", map[string]any{"session_id": "mine-1", "cwd": "/work/ops", "source": "startup"}, nil)
+	require.Contains(t, out, "Seam session: cc/mine-1-")
+	ownersMine := requireAmbientSession(t, e.db, ClientClaudeCode, "mine-1")
+	require.Empty(t, ownersMine.Account)
+	require.NotEqual(t, mine.ID, ownersMine.ID)
 	e.sendAs(lkAgent, "session-end", "", map[string]any{"session_id": "mine-1"},
 		map[string]any{"version": 1, "findings": "(auto-harvested) OWNER", "model": "claude-owner"})
-	require.Equal(t, mine, requireAmbientSession(t, e.db, ClientClaudeCode, "mine-1"))
+	require.Equal(t, mine, requireAmbientSession(t, e.db, ClientClaudeCode, rExt("mine-1")))
 	require.Equal(t, rAgent.AgentID(), e.agentProcess(mine.ID))
 
 	// Its own hooks still end it.
 	e.asRestricted()
 	e.sendAs(rAgent, "session-end", "", map[string]any{"session_id": "mine-1"},
 		map[string]any{"version": 1, "findings": "(auto-harvested) DONE"})
-	done := requireAmbientSession(t, e.db, ClientClaudeCode, "mine-1")
+	done := requireAmbientSession(t, e.db, ClientClaudeCode, rExt("mine-1"))
 	require.Equal(t, core.SessionCompleted, done.Status)
 	require.Equal(t, "(auto-harvested) DONE", done.Findings)
 	require.Equal(t, rAcct, done.Account)
@@ -335,7 +357,7 @@ func TestEnsureAmbientSession_ResumesOnlyItsOwn(t *testing.T) {
 	e.asRestricted()
 	e.sendAs(rAgent, "session-start", "", map[string]any{"session_id": "r-1", "cwd": "/work/ops", "source": "startup"}, nil)
 	e.sendAs(rAgent, "session-end", "", map[string]any{"session_id": "r-1"}, nil)
-	restrictedRow := requireAmbientSession(t, e.db, ClientClaudeCode, "r-1")
+	restrictedRow := requireAmbientSession(t, e.db, ClientClaudeCode, rExt("r-1"))
 
 	for _, tc := range []struct {
 		name string
@@ -343,8 +365,10 @@ func TestEnsureAmbientSession_ResumesOnlyItsOwn(t *testing.T) {
 		id   string
 		row  core.Session
 	}{
+		// The raw id, as a caller that skipped namespacedExternalID would
+		// pass it: the resume's own check still refuses.
 		{"a restricted account, the owner's session", rctx, "o-1", ownerRow},
-		{"the owner, a restricted account's session", octx, "r-1", restrictedRow},
+		{"the owner, a restricted account's session", octx, rExt("r-1"), restrictedRow},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			id, name := h.ensureAmbientSessionIn(tc.ctx, ClientClaudeCode, localHostName, hookPayload{
@@ -359,11 +383,11 @@ func TestEnsureAmbientSession_ResumesOnlyItsOwn(t *testing.T) {
 
 	// Its own resumes as always.
 	id, name := h.ensureAmbientSessionIn(rctx, ClientClaudeCode, localHostName, hookPayload{
-		SessionID: "r-1", CWD: "/work/ops", Source: "resume", Identity: hookIdentity{AgentProcess: rAgent.AgentID()},
+		SessionID: rExt("r-1"), CWD: "/work/ops", Source: "resume", Identity: hookIdentity{AgentProcess: rAgent.AgentID()},
 	}, "")
 	require.Equal(t, restrictedRow.ID, id)
 	require.Equal(t, restrictedRow.Name, name)
-	require.Equal(t, core.SessionActive, requireAmbientSession(t, e.db, ClientClaudeCode, "r-1").Status)
+	require.Equal(t, core.SessionActive, requireAmbientSession(t, e.db, ClientClaudeCode, rExt("r-1")).Status)
 
 	// The session-taint target is resolved the same way: by name too.
 	_, found, err := h.taintTarget(rctx, ClientClaudeCode, "", ownerRow.Name)
@@ -389,7 +413,7 @@ func TestRestrictedCaptures_LandInItsOwnSessionLabeled(t *testing.T) {
 
 	e.sendAs(rAgent, "session-start", "", map[string]any{"session_id": "r-cap", "cwd": "/work/ops", "source": "startup"},
 		map[string]any{"version": 1, "model": "claude-pushed"})
-	sess := requireAmbientSession(t, e.db, ClientClaudeCode, "r-cap")
+	sess := requireAmbientSession(t, e.db, ClientClaudeCode, rExt("r-cap"))
 	require.Equal(t, "claude-pushed", sess.Model)
 	require.Equal(t, rAcct, sess.Account)
 
@@ -441,7 +465,7 @@ func TestRestrictedCaptures_LandInItsOwnSessionLabeled(t *testing.T) {
 	_, refused = e.sendAs(rAgent, "session-end", "", map[string]any{"session_id": "r-cap"},
 		map[string]any{"version": 1, "findings": "(auto-harvested) PUSHED-FINDINGS", "tokens": pushTokens, "model": "claude-final"})
 	require.Empty(t, refused)
-	sess = requireAmbientSession(t, e.db, ClientClaudeCode, "r-cap")
+	sess = requireAmbientSession(t, e.db, ClientClaudeCode, rExt("r-cap"))
 	require.Equal(t, core.SessionCompleted, sess.Status)
 	require.Equal(t, "(auto-harvested) PUSHED-FINDINGS", sess.Findings)
 	require.Equal(t, core.TokenUsage{Input: 7, Cached: 100, CacheCreation: 20, Output: 3, Total: 130}, sess.Tokens)
@@ -452,7 +476,7 @@ func TestRestrictedCaptures_LandInItsOwnSessionLabeled(t *testing.T) {
 	e.sendAs(rAgent, "session-start", "codex", map[string]any{"session_id": "r-cx", "cwd": "/work/ops", "source": "startup"}, nil)
 	e.sendAs(rAgent, "stop", "codex", map[string]any{"session_id": "r-cx", "cwd": "/work/ops", "last_assistant_message": "PAYLOAD"},
 		map[string]any{"version": 1, "findings": "(auto-harvested) CODEX-PUSHED", "tokens": pushTokens})
-	cx := requireAmbientSession(t, e.db, ClientCodex, "r-cx")
+	cx := requireAmbientSession(t, e.db, ClientCodex, rExt("r-cx"))
 	require.Equal(t, "(auto-harvested) CODEX-PUSHED", cx.Findings)
 	require.Equal(t, rAcct, cx.Account)
 

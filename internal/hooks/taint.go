@@ -123,6 +123,9 @@ func (h *Handler) sessionTaint(w http.ResponseWriter, r *http.Request) {
 		writeTaintOutcome(w, http.StatusBadRequest, taintInvalid)
 		return
 	}
+	// Both ways of naming a session read inside the caller's namespace: the
+	// client's id here, a Seamless name in store.SessionByName.
+	extID = namespacedExternalID(r, extID)
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
 	if h.screening == nil || !h.screeningOn(ctx) {

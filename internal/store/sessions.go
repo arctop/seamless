@@ -41,10 +41,18 @@ var ErrSessionIdentityExists = errors.New("store: ambient session identity alrea
 // for (access.AccountOf) unless the caller set one: a session belongs to the
 // principal that started it, whichever surface created the row, so no caller
 // has to remember to stamp it. Nothing ever changes it afterwards.
+//
+// A restricted account's session is stored inside its namespace
+// (access.QualifiedSessionName): its name and its agent's external session id
+// both carry "<account>:", so no name or id it gives can collide with, or
+// find, a session another principal started. Callers that report the name
+// qualify it first; qualifying again here changes nothing.
 func CreateSession(ctx context.Context, db *sql.DB, s core.Session) error {
 	if s.Account == "" {
 		s.Account = access.AccountOf(ctx)
 	}
+	s.Name = access.QualifiedSessionName(s.Account, s.Name)
+	s.ExternalSessionID = access.QualifiedSessionName(s.Account, s.ExternalSessionID)
 	meta, err := marshalMetadata(s.Metadata)
 	if err != nil {
 		return fmt.Errorf("store.CreateSession: %w", err)
@@ -593,8 +601,15 @@ func SessionByID(ctx context.Context, db *sql.DB, id string) (core.Session, bool
 
 // SessionByName returns the session with the given (unique) name. found is false
 // when absent.
+//
+// The name is read inside the namespace of the caller in ctx
+// (access.QualifySessionName): a restricted account's "sess/x" is its own
+// "<account>:sess/x", never the owner's "sess/x", so a name another principal
+// holds reads exactly like a free one. The owner, background work and every
+// call with peer_auth off look the name up as given.
 func SessionByName(ctx context.Context, db *sql.DB, name string) (core.Session, bool, error) {
-	return sessionOne(ctx, db, `SELECT `+sessionCols+` FROM sessions WHERE name = ? LIMIT 1`, name)
+	return sessionOne(ctx, db, `SELECT `+sessionCols+` FROM sessions WHERE name = ? LIMIT 1`,
+		access.QualifySessionName(ctx, name))
 }
 
 // AmbientSessionByExternalIdentity resolves the authoritative ambient row for

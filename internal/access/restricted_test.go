@@ -179,3 +179,51 @@ func TestRestricted_UnlistedUIDStillRefused(t *testing.T) {
 	require.Empty(t, other.Account(), "WithOpenProjects leaves every other view unchanged")
 	require.True(t, other.Visible("example-confidential"))
 }
+
+// A restricted account's session names live in a namespace of their own
+// (SEAL A2); the owner's are read as given, and may not be started inside an
+// account's namespace.
+func TestRestricted_SessionNamespace(t *testing.T) {
+	require.Equal(t, "_example_agent:sess/x", QualifiedSessionName("_example_agent", "sess/x"))
+	require.Equal(t, "_example_agent:sess/x", QualifiedSessionName("_example_agent", "_example_agent:sess/x"),
+		"qualifying twice changes nothing")
+	require.Equal(t, "_example_agent:_other_agent:x", QualifiedSessionName("_example_agent", "_other_agent:x"),
+		"another account's prefix is just part of the name")
+	require.Equal(t, "sess/x", QualifiedSessionName("", "sess/x"), "the owner's names are as given")
+	require.Empty(t, QualifiedSessionName("_example_agent", ""), "no name stays no name")
+
+	p := restrictedPolicy(t)
+	v, ok := p.PeerView(502)
+	require.True(t, ok)
+	acct := WithView(context.Background(), v.WithOpenProjects([]string{"example-open"}))
+	owner := WithView(context.Background(), p.OwnerView())
+	off := context.Background()
+
+	require.Equal(t, "_example_agent:cc/abc", QualifySessionName(acct, "cc/abc"))
+	require.Equal(t, "_example_agent:", SessionNamespace(acct))
+	for _, ctx := range []context.Context{owner, off} {
+		require.Equal(t, "cc/abc", QualifySessionName(ctx, "cc/abc"))
+		require.Empty(t, SessionNamespace(ctx))
+	}
+
+	account, reserved := ReservedSessionName(owner, "_example_agent:sess/squat")
+	require.True(t, reserved, "the owner may not start a session in the account's namespace")
+	require.Equal(t, "_example_agent", account)
+	err := ReservedSessionNameRefusal("_example_agent:sess/squat", account)
+	require.ErrorIs(t, err, ErrNotReachable)
+	require.Equal(t, "session name _example_agent:sess/squat is in restricted account _example_agent's namespace: "+
+		"names beginning _example_agent: are its sessions -- choose another name", err.Error())
+	for _, c := range []struct {
+		ctx  context.Context
+		name string
+	}{
+		{owner, "sess/mine"},
+		{owner, "_other_agent:x"}, // not a restricted account
+		{owner, "_example_agentx:y"},
+		{acct, "_example_agent:sess/x"}, // its own, qualified already
+		{off, "_example_agent:sess/x"},  // peer_auth off: no policy, no reservation
+	} {
+		_, reserved := ReservedSessionName(c.ctx, c.name)
+		require.False(t, reserved, c.name)
+	}
+}

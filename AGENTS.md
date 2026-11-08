@@ -274,6 +274,21 @@ any of it.
   that resumes, binds to, names or writes into a session checks
   `access.SessionAccountOK` -- MCP refuses a named one, implicit bindings and
   hooks treat a mismatch as foreign -- in both directions.
+- **A restricted account's session names are a namespace of its own**
+  (SEAL A2; `access.QualifiedSessionName`). Session names (and ambient
+  identities) are unique instance-wide, so a name another principal holds
+  would answer apart from a free one: an existence oracle. Every session it
+  starts is stored as `<account>:<name>`, its agent's external session id
+  too (`store.CreateSession` qualifies both); `store.SessionByName` reads a
+  name inside the caller's namespace; the hooks qualify the client's
+  `session_id` once, right after decoding (`namespacedExternalID`), and name
+  its ambient session `<account>:cc/...` (`ambientNameIn`). Qualifying is
+  idempotent, so the account may name its session either way. The owner's
+  names are read as given; the owner names an account's session by its
+  qualified name, and may not start one inside a listed account's namespace
+  (`access.ReservedSessionName`). An OS account name never holds ":", so the
+  first one ends the account. A new hook route that reads a session id from
+  its body must qualify it the same way.
 - **A lease is judged, never trusted** (`peer_auth.locked`, the approval
   design being built; `internal/access/lease.go`, migration 031). A locked
   project is closed to the owner: `View.Listed` (name and counts) is true,

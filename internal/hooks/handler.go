@@ -283,6 +283,7 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 	}
 	body := readHookBody(w, r)
 	p := decodeSessionStart(client, body)
+	p.SessionID = namespacedExternalID(r, p.SessionID)
 	p.Identity = identityFromRequest(r)
 	host := h.hostOf(p.Identity)
 
@@ -403,6 +404,7 @@ func (h *Handler) sessionEnd(w http.ResponseWriter, r *http.Request) {
 	}
 	body := readHookBody(w, r)
 	p := decodeSessionEnd(client, body)
+	p.SessionID = namespacedExternalID(r, p.SessionID)
 	p.Identity = identityFromRequest(r)
 
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
@@ -443,6 +445,7 @@ func (h *Handler) stop(w http.ResponseWriter, r *http.Request) {
 	}
 	body := readHookBody(w, r)
 	p := decodeStop(client, body)
+	p.SessionID = namespacedExternalID(r, p.SessionID)
 	p.Identity = identityFromRequest(r)
 	host := h.hostOf(p.Identity)
 
@@ -622,7 +625,7 @@ func (h *Handler) ensureAmbientSessionIn(ctx context.Context, client Client, hos
 		}
 	}
 
-	name = ambientName(client, p.SessionID)
+	name = ambientNameIn(ctx, client, p.SessionID)
 	id, err = core.NewID()
 	if err != nil {
 		return "", ""
@@ -1018,6 +1021,30 @@ func ambientName(client Client, externalSessionID string) string {
 	return client.ambientPrefix() + strings.ToLower(prefix) + "-" + suffix
 }
 
+// ambientNameIn is ambientName inside the caller's session namespace
+// (access.QualifySessionName): a restricted account's ambient session is
+// "<account>:cc/<handle>", the handle derived from the id its agent sent, as
+// the owner's is. externalSessionID is the namespaced id
+// (namespacedExternalID); the owner's names are exactly ambientName's.
+func ambientNameIn(ctx context.Context, client Client, externalSessionID string) string {
+	ns := access.SessionNamespace(ctx)
+	if ns == "" {
+		return ambientName(client, externalSessionID)
+	}
+	return access.QualifySessionName(ctx, ambientName(client, strings.TrimPrefix(externalSessionID, ns)))
+}
+
+// namespacedExternalID returns the session id a hook body names inside the
+// caller's session namespace (access.QualifySessionName). A restricted
+// account's agent ids are its own -- stored and looked up as "<account>:<id>"
+// -- so an id another principal's agent holds reads exactly like a free one:
+// it names, resumes and creates only the account's own ambient session. The
+// owner's ids pass through exactly as sent. Every handler applies it once,
+// right after decoding the body, so everything downstream sees one id.
+func namespacedExternalID(r *http.Request, id string) string {
+	return access.QualifySessionName(r.Context(), id)
+}
+
 // injectAmbientLine adds the "Seam session: cc/<handle> (ambient)" line to a briefing,
 // placing it just before the closing tag, or wrapping a fresh minimal briefing
 // when there was none. The line names the reading agent's own identity -- the
@@ -1060,6 +1087,7 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	body := readHookBody(w, r)
 	p := decodePrompt(client, body)
+	p.SessionID = namespacedExternalID(r, p.SessionID)
 	if p.UserPrompt == "" {
 		h.writeContextResponse(r.Context(), w, "UserPromptSubmit", "user-prompt-submit",
 			client, p.SessionID, "", "", false, nil)
@@ -1284,7 +1312,7 @@ func (h *Handler) ambientDisplayName(ctx context.Context, client Client, externa
 			return sess.Name
 		}
 	}
-	return ambientName(client, externalSessionID)
+	return ambientNameIn(ctx, client, externalSessionID)
 }
 
 // hostOf resolves the machine a hook call speaks for: the host the client sent,

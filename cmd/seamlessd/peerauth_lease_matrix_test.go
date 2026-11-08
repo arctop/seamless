@@ -574,6 +574,12 @@ func TestPeerAuthMatrix_Leases(t *testing.T) {
 	}
 
 	t.Run("restricted account: every tool at every closed project", func(t *testing.T) { d.restrictedSweep(t, w) })
+	// After the sweep, before any lease expires: the account's hooks start
+	// sessions of its own under the agent ids the owner's leased sessions
+	// hold, whose handles are the owner's, qualified (SEAL A2). The sweep
+	// names the owner's handles and compares them with a ghost's the account
+	// never used, so it must run while the account holds none of them.
+	t.Run("restricted account's hooks and a2a", func(t *testing.T) { d.restrictedHooks(t, w) })
 
 	// The expired lease, last: the daemon's clock moves past B's hour. A's
 	// lease (the session, capped at eight hours) carries on.
@@ -836,8 +842,6 @@ func (d *lmDaemon) hookRows(t *testing.T, w *lmWorld) {
 			}
 		})
 	}
-
-	t.Run("restricted account's hooks and a2a", func(t *testing.T) { d.restrictedHooks(t, w) })
 }
 
 // restrictedSweep drives every Catalog tool's probes at every project the
@@ -863,7 +867,14 @@ func (d *lmDaemon) restrictedSweep(t *testing.T, w *lmWorld) {
 	for _, tool := range mcp.Catalog() {
 		for i := range lmToolProbes(w.fin)[tool.Name] {
 			n++
-			sets[len(sets)-1] = lmGhostItems(t, lmNone, fmt.Sprintf("ghost%d", n))
+			ghost := lmGhostItems(t, lmNone, fmt.Sprintf("ghost%d", n))
+			// Session names keep one history across the sweep, as a closed
+			// project's do: a probe that starts the account's own session
+			// under a name (session_start {project: open, name}) leaves it,
+			// inside the account's namespace, for every later probe naming it
+			// -- at a closed project and at the ghost alike.
+			ghost.sessName, ghost.leaseSessName = w.ghost.sessName, w.ghost.leaseSessName
+			sets[len(sets)-1] = ghost
 			probes := make([][]map[string]any, len(sets))
 			for j, it := range sets {
 				probes[j] = lmToolProbes(it)[tool.Name]
@@ -887,9 +898,6 @@ func (d *lmDaemon) restrictedSweep(t *testing.T, w *lmWorld) {
 			// must answer exactly as it does.
 			ref := len(sets) - 1
 			for j := range sets[:ref] {
-				if lmKnownNameOracle(tool.Name, probes[j][i], sets[j]) {
-					continue
-				}
 				switch {
 				case errs[j] != errs[ref]:
 					oracles = append(oracles, fmt.Sprintf("%s probe %d: %s answers error=%v, %s error=%v:\n  %s\n  %s",
@@ -916,21 +924,6 @@ func (d *lmDaemon) restrictedSweep(t *testing.T, w *lmWorld) {
 	text, isErr = paCall(t, cli, "memory_read", map[string]any{"project": "global", "name": "house-style"})
 	require.False(t, isErr, text)
 	require.Contains(t, text, lmGlobalToken)
-}
-
-// lmKnownNameOracle reports the one known oracle the restricted sweep allows:
-// session_start naming a session that exists in a closed project answers
-// apart from a free name, because session names are unique across the
-// instance. Task 01M6WEWMVNDRHDC9WG5XPV1V85 (SEAL A2) gives restricted
-// accounts a namespace of their own and removes this allowance; it covers
-// only session_start probes whose name is one of the closed project's own
-// sessions, so any other oracle still fails the sweep.
-func lmKnownNameOracle(tool string, args map[string]any, it lmItems) bool {
-	if tool != "session_start" {
-		return false
-	}
-	name, _ := args["name"].(string)
-	return name != "" && (name == it.sessName || name == it.leaseSessName)
 }
 
 // lmNormalize replaces it's identifiers in text with placeholders, longest
@@ -980,15 +973,47 @@ func (d *lmDaemon) restrictedHooks(t *testing.T, w *lmWorld) {
 	for _, n := range notices[1:] {
 		require.Equal(t, notices[0], n, "the restricted notice is one text for every closed or unmapped repository")
 	}
-	// Its own session, in the open project, and the leased sessions by name:
-	// nothing closed comes back, and nothing of theirs moves.
-	for _, id := range []string{"claude-r", "claude-a", "claude-p"} {
-		for _, ev := range lmHookEvents {
-			status, out := d.hookStatus(t, w.srv["hookR"].URL, "", ev, &lmAgentR, lmHookBody(id, "/work/open"))
+	// Its own session, in the open project, and the agent ids the owner's
+	// leased sessions hold (claude-a, claude-p): nothing closed comes back,
+	// nothing of theirs moves, and a taken id answers every hook exactly as a
+	// free one does -- the account's agent ids are its own (SEAL A2).
+	type answer struct {
+		status int
+		out    string
+	}
+	taken := map[string]string{"claude-a": "claude-free-a", "claude-p": "claude-free-p"}
+	answers := map[string][]answer{}
+	for _, ev := range lmHookEvents {
+		for _, id := range []string{"claude-r", "claude-a", "claude-free-a", "claude-p", "claude-free-p"} {
+			body := lmHookBody(id, "/work/open")
+			if ev == "session-start" {
+				// The agent's own start (lmHookBody's agent_type is a
+				// subagent's, which starts nothing): it records the session
+				// every later event acts in.
+				body = map[string]any{"session_id": id, "cwd": "/work/open", "source": "startup"}
+			}
+			status, out := d.hookStatus(t, w.srv["hookR"].URL, "", ev, &lmAgentR, body)
 			require.Less(t, status, 500, "%s naming %s: %s", ev, id, out)
 			for _, s := range secrets {
 				require.NotContains(t, out, s, "%s naming %s", ev, id)
 			}
+			answers[id] = append(answers[id], answer{status, out})
+		}
+	}
+	ownName := func(id string) string {
+		sess, found, err := store.AmbientSessionByExternalIdentity(ctx, d.db, "claude-code", access.QualifiedSessionName(lmAccount, id))
+		require.NoError(t, err)
+		require.True(t, found, "%s: the account's own session", id)
+		require.Equal(t, lmAccount, sess.Account)
+		return sess.Name
+	}
+	for id, free := range taken {
+		takenName, freeName := ownName(id), ownName(free)
+		for i, ev := range lmHookEvents {
+			got, want := answers[id][i], answers[free][i]
+			require.Equal(t, want.status, got.status, "%s naming %s answers apart from a free id", ev, id)
+			require.Equal(t, strings.ReplaceAll(want.out, freeName, "<own>"), strings.ReplaceAll(got.out, takenName, "<own>"),
+				"%s naming %s answers apart from a free id", ev, id)
 		}
 	}
 	for _, x := range []string{"A", "P"} {

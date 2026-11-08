@@ -53,6 +53,7 @@ func (h *Handler) subagentStart(w http.ResponseWriter, r *http.Request) {
 	}
 	body := readHookBody(w, r)
 	p := decodeSubagentStart(client, body)
+	p.ParentSessionID = namespacedExternalID(r, p.ParentSessionID)
 	p.Identity = identityFromRequest(r)
 	host := h.hostOf(p.Identity)
 
@@ -107,6 +108,7 @@ func (h *Handler) subagentStop(w http.ResponseWriter, r *http.Request) {
 	}
 	body := readHookBody(w, r)
 	p := decodeSubagentStop(client, body)
+	p.ParentSessionID = namespacedExternalID(r, p.ParentSessionID)
 	p.Identity = identityFromRequest(r)
 	p.Capture = h.pushedCapture(r.Context(), client, body)
 	reach, lockedProject := h.sessionReachOf(r.Context(), client, p.ParentSessionID)

@@ -148,9 +148,10 @@ func TestAccountChips_LabelAccountItemsAndLeaveOwnerItemsAlone(t *testing.T) {
 		{"/console/memories", "account-gotcha", "owner-gotcha"},
 		{"/console/notes", "Note account-note", "Note owner-note"},
 		{"/console/tasks", "account task", "owner task"},
-		{"/console/sessions", "cc/account01", "cc/owner001"},
+		// The account's session by its qualified name (SEAL A2).
+		{"/console/sessions", exampleAccount + ":cc/account01", "cc/owner001"},
 		{"/console/trials", "account trial", "owner trial"},
-		{"/console/now", "cc/account01", "cc/owner001"},
+		{"/console/now", exampleAccount + ":cc/account01", "cc/owner001"},
 	} {
 		page := getPeek(t, f.mux, tc.list).Body.String()
 		require.Contains(t, rowAround(t, page, tc.labeledName), chip, "%s: the account's row", tc.list)

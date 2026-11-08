@@ -564,7 +564,14 @@ neither promote a proposal nor undo a promotion. Every other kind of memory,
 and notes, tasks and findings, lands at once, labeled.</p>
 <p>Sessions belong to the account that started them: a restricted account's agents
 cannot resume, bind to or write findings into your sessions, and yours cannot
-act in theirs.</p>
+act in theirs. Its sessions also have names of their own: every one is stored
+as <code>_example_agent:&lt;name&gt;</code> (<code>_example_agent:cc/...</code> for its Claude Code
+sessions), and every session name its agents give is read inside that
+namespace. A name you already use, in any project, is simply free for it, so
+the account cannot learn which session names exist where it cannot look. The
+console and <code>seam</code> show its sessions by the qualified name, and that is the name
+you use for them. You cannot start a session of your own under a name beginning
+<code>_example_agent:</code>.</p>
 <h2 id="verify">Verify</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="c1"># As root or the daemon&#39;s account: the policy, and nothing serve would refuse.</span>
 </span></span><span class="line"><span class="cl">sudo -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd doctor

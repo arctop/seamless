@@ -257,6 +257,11 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 	if unplaced != nil {
 		return errResult("session_start", unplaced)
 	}
+	// A name in a restricted account's namespace is that account's: the owner
+	// may name its session there (and is refused it, above), never start one.
+	if account, reserved := access.ReservedSessionName(ctx, name); reserved {
+		return errResult("session_start", access.ReservedSessionNameRefusal(name, account))
+	}
 	id, err := core.NewID()
 	if err != nil {
 		return errResult("session_start", err)
@@ -264,6 +269,9 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 	if name == "" {
 		name = "sess/" + shortID(id)
 	}
+	// A restricted account's session is stored, and reported, inside its own
+	// namespace (store.CreateSession would qualify it anyway).
+	name = access.QualifySessionName(ctx, name)
 	now := time.Now().UTC()
 	externalSessionID, externalClient := s.linkedExternalIdentity(ctx, host, cwd)
 	sess := core.Session{
@@ -740,12 +748,16 @@ func (s *Server) ambientSessionTarget(ctx context.Context) (sess core.Session, o
 // owner's own and is found; it binds nothing (getBinding drops it), and every
 // use of it is refused at the lock (lockedBinding, the write fence).
 //
-// A session in a reachable project that another principal started -- a
-// restricted account's, named by the owner, or the owner's, named by a
-// restricted account (access.SessionAccountOK) -- is refused outright with
-// access.SessionAccountRefusal: a session belongs to the principal that
-// started it, and every caller that names a session (the session= handle,
-// resolveSession, resolveActor) acts in it.
+// A restricted account's names read inside its own namespace
+// (store.SessionByName, access.QualifySessionName), so by name it finds only
+// sessions it started, and the owner's "sess/x" is simply not found for it,
+// wherever that session is. A session in a reachable project that another
+// principal started and that the caller still reached -- a restricted
+// account's, named by the owner by its qualified name, or the owner's, named
+// by a restricted account by its ULID (access.SessionAccountOK) -- is refused
+// outright with access.SessionAccountRefusal: a session belongs to the
+// principal that started it, and every caller that names a session (the
+// session= handle, resolveSession, resolveActor) acts in it.
 func sessionByRef(ctx context.Context, db *sql.DB, ref string) (core.Session, bool, error) {
 	sess, ok, err := store.SessionByName(ctx, db, ref)
 	if err == nil && !ok && store.LooksLikeSessionULID(ref) {

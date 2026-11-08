@@ -224,8 +224,16 @@ func (r *wkRig) ambient(name, project, account, proc string, status core.Session
 	if proc != "" {
 		require.NoError(r.t, store.SetSessionAgentProcess(ctx, r.db, id, proc))
 	}
-	return sess
+	// As stored: a restricted account's name inside its namespace.
+	stored, ok, err := store.SessionByID(ctx, r.db, id)
+	require.NoError(r.t, err)
+	require.True(r.t, ok)
+	return stored
 }
+
+// wkQual is a restricted account's session name as it is stored and as the
+// owner names it: inside the account's namespace (SEAL A2).
+func wkQual(name string) string { return access.QualifiedSessionName(wkAcct, name) }
 
 func (r *wkRig) session(name string) core.Session {
 	r.t.Helper()
@@ -411,7 +419,8 @@ func TestRestricted_SessionStartPlacement(t *testing.T) {
 	out := r.ok(acct, "session_start", map[string]any{"cwd": "/work/open", "name": "sess/acct-one"})
 	require.Equal(t, wkOpen, out["project"])
 	require.Equal(t, wkAcct, out["account"])
-	require.Equal(t, wkAcct, r.session("sess/acct-one").Account)
+	require.Equal(t, wkQual("sess/acct-one"), out["name"], "named inside its namespace")
+	require.Equal(t, wkAcct, r.session(wkQual("sess/acct-one")).Account)
 
 	// A project argument it reaches places it whatever a closed project the
 	// cwd maps to: no conflict error that would name that project. The owner
@@ -436,8 +445,9 @@ func TestRestricted_SessionBelongsToItsPrincipal(t *testing.T) {
 	acct := r.acct("")
 	r.ok(owner, "session_start", map[string]any{"project": wkOpen, "name": "sess/owner-one"})
 	ownerSess := r.session("sess/owner-one")
-	r.ok(acct, "session_start", map[string]any{"project": wkOpen, "name": "sess/acct-one"})
-	acctSess := r.session("sess/acct-one")
+	out := r.ok(acct, "session_start", map[string]any{"project": wkOpen, "name": "sess/acct-one"})
+	require.Equal(t, wkQual("sess/acct-one"), out["name"], "its session is named inside its namespace")
+	acctSess := r.session(wkQual("sess/acct-one"))
 	task := r.ok(owner, "tasks_add", map[string]any{"project": wkOpen, "title": "shared work"})
 	taskID := task["id"].(string)
 
@@ -447,23 +457,35 @@ func TestRestricted_SessionBelongsToItsPrincipal(t *testing.T) {
 	}
 
 	t.Run("restricted to owner", func(t *testing.T) {
-		require.Equal(t, "session_update: "+refusal("sess/owner-one"), r.refused(acct, "session_update",
-			map[string]any{"session": "sess/owner-one", "findings": "injected"}))
+		// By name, the owner's session is not the account's to find: every
+		// call naming it answers exactly as for a name nobody holds (SEAL A2).
+		for _, c := range []struct {
+			tool string
+			args func(name string) map[string]any
+		}{
+			{"session_update", func(n string) map[string]any { return map[string]any{"session": n, "findings": "injected"} }},
+			{"session_end", func(n string) map[string]any { return map[string]any{"session": n, "findings": "ended by another"} }},
+			{"session_start", func(n string) map[string]any { return map[string]any{"name": n} }},
+			{"tasks_claim", func(n string) map[string]any { return map[string]any{"id": taskID, "session": n} }},
+			// The session= handle on any other tool: refused before it runs.
+			{"tasks_add", func(n string) map[string]any {
+				return map[string]any{"project": wkOpen, "title": "as the owner", "session": n}
+			}},
+			{"tasks_list", func(n string) map[string]any { return map[string]any{"project": wkOpen, "session": n} }},
+			{"trial_record", func(n string) map[string]any {
+				return map[string]any{"project": wkOpen, "title": "t", "lab": "lab-x", "session": n}
+			}},
+		} {
+			taken := r.refused(acct, c.tool, c.args("sess/owner-one"))
+			free := r.refused(acct, c.tool, c.args("sess/never-was"))
+			require.Equal(t, strings.ReplaceAll(free, "sess/never-was", "sess/owner-one"), taken,
+				"%s: a name the owner holds reads like a free one", c.tool)
+			require.NotContains(t, taken, "not reachable", c.tool)
+		}
+		// By its ULID the session is the owner's, and refused as such: an id
+		// names one session instance-wide.
 		require.Equal(t, "session_update: "+refusal(ownerSess.ID), r.refused(acct, "session_update",
 			map[string]any{"session_id": ownerSess.ID, "findings": "injected"}))
-		require.Equal(t, "session_end: "+refusal("sess/owner-one"), r.refused(acct, "session_end",
-			map[string]any{"session": "sess/owner-one", "findings": "ended by another"}))
-		require.Equal(t, "session_start: "+refusal("sess/owner-one"), r.refused(acct, "session_start",
-			map[string]any{"name": "sess/owner-one"}))
-		require.Equal(t, "tasks_claim: "+refusal("sess/owner-one"), r.refused(acct, "tasks_claim",
-			map[string]any{"id": taskID, "session": "sess/owner-one"}))
-		// The session= handle on any other tool: refused before it runs.
-		require.Equal(t, "tasks_add: "+refusal("sess/owner-one"), r.refused(acct, "tasks_add",
-			map[string]any{"project": wkOpen, "title": "as the owner", "session": "sess/owner-one"}))
-		require.Equal(t, "tasks_list: "+refusal("sess/owner-one"), r.refused(acct, "tasks_list",
-			map[string]any{"project": wkOpen, "session": "sess/owner-one"}))
-		require.Equal(t, "trial_record: "+refusal("sess/owner-one"), r.refused(acct, "trial_record",
-			map[string]any{"project": wkOpen, "title": "t", "lab": "lab-x", "session": "sess/owner-one"}))
 
 		after := r.session("sess/owner-one")
 		require.Equal(t, core.SessionActive, after.Status)
@@ -473,6 +495,17 @@ func TestRestricted_SessionBelongsToItsPrincipal(t *testing.T) {
 		require.Equal(t, core.TaskOpen, got.Status)
 		require.Empty(t, got.ClaimedBy)
 		require.Zero(t, r.count(`SELECT COUNT(*) FROM tasks WHERE title = 'as the owner'`))
+
+		// The same name, where the account may write, is a session of its own.
+		before := r.session("sess/owner-one")
+		mine := r.ok(acct, "session_start", map[string]any{"project": wkOpen, "name": "sess/owner-one"})
+		require.Equal(t, wkQual("sess/owner-one"), mine["name"])
+		require.NotEqual(t, ownerSess.ID, mine["session_id"])
+		require.Nil(t, mine["resumed"], "a fresh session, never the owner's resumed")
+		require.Equal(t, before, r.session("sess/owner-one"), "the owner's is untouched")
+		r.ok(acct, "session_end", map[string]any{"session": "sess/owner-one", "findings": "its own"})
+		require.Equal(t, "its own", r.session(wkQual("sess/owner-one")).Findings)
+		require.Empty(t, r.session("sess/owner-one").Findings)
 	})
 
 	t.Run("restricted in its own", func(t *testing.T) {
@@ -480,26 +513,41 @@ func TestRestricted_SessionBelongsToItsPrincipal(t *testing.T) {
 		require.Equal(t, acctSess.ID, claim["claimed_by"])
 		require.Equal(t, wkAcct, claim["updated_account"])
 		require.NotContains(t, claim, "account", "the owner created the task")
+		// By the name it gave, or the qualified name its session reports.
 		upd := r.ok(acct, "session_update", map[string]any{"session": "sess/acct-one", "findings": "progress"})
 		require.Equal(t, wkAcct, upd["account"])
+		upd = r.ok(acct, "session_update", map[string]any{"session": wkQual("sess/acct-one"), "findings": "progress"})
+		require.Equal(t, acctSess.ID, upd["session_id"])
 	})
 
 	t.Run("owner to restricted", func(t *testing.T) {
-		require.Equal(t, "session_update: "+refusal("sess/acct-one"), r.refused(owner, "session_update",
-			map[string]any{"session": "sess/acct-one", "findings": "overwritten"}))
+		// The owner names the account's session by its qualified name, and is
+		// refused it.
+		qual := wkQual("sess/acct-one")
+		require.Equal(t, "session_update: "+refusal(qual), r.refused(owner, "session_update",
+			map[string]any{"session": qual, "findings": "overwritten"}))
 		require.Equal(t, "session_end: "+refusal(acctSess.ID), r.refused(owner, "session_end",
 			map[string]any{"session_id": acctSess.ID, "findings": "ended by the owner"}))
-		require.Equal(t, "session_start: "+refusal("sess/acct-one"), r.refused(owner, "session_start",
-			map[string]any{"name": "sess/acct-one"}))
-		require.Equal(t, "tasks_release: "+refusal("sess/acct-one"), r.refused(owner, "tasks_release",
-			map[string]any{"id": taskID, "session": "sess/acct-one"}))
-		require.Equal(t, "recall: "+refusal("sess/acct-one"), r.refused(owner, "recall",
-			map[string]any{"query": "anything", "session": "sess/acct-one"}))
+		require.Equal(t, "session_start: "+refusal(qual), r.refused(owner, "session_start",
+			map[string]any{"name": qual}))
+		require.Equal(t, "tasks_release: "+refusal(qual), r.refused(owner, "tasks_release",
+			map[string]any{"id": taskID, "session": qual}))
+		require.Equal(t, "recall: "+refusal(qual), r.refused(owner, "recall",
+			map[string]any{"query": "anything", "session": qual}))
+		// The bare name is the owner's own namespace, where nothing holds it.
+		require.Contains(t, r.refused(owner, "session_update", map[string]any{"session": "sess/acct-one", "findings": "x"}),
+			`session "sess/acct-one" not found`)
+		// Nor may the owner start a session inside the account's namespace,
+		// where it would collide with the account's own name.
+		require.Equal(t, "session_start: session name "+wkQual("sess/squat")+" is in restricted account "+wkAcct+
+			"'s namespace: names beginning "+wkAcct+": are its sessions -- choose another name",
+			r.refused(owner, "session_start", map[string]any{"project": wkOpen, "name": wkQual("sess/squat")}))
+		require.Zero(t, r.count(`SELECT COUNT(*) FROM sessions WHERE name = ?`, wkQual("sess/squat")))
 		// Nor with peer_auth off: the session is the account's whoever asks.
-		require.Equal(t, "session_update: "+refusal("sess/acct-one"), r.refused(r.dial(r.off(), true, ""),
-			"session_update", map[string]any{"session": "sess/acct-one", "findings": "overwritten"}))
+		require.Equal(t, "session_update: "+refusal(qual), r.refused(r.dial(r.off(), true, ""),
+			"session_update", map[string]any{"session": qual, "findings": "overwritten"}))
 
-		after := r.session("sess/acct-one")
+		after := r.session(qual)
 		require.Equal(t, core.SessionActive, after.Status)
 		require.Equal(t, "progress", after.Findings)
 		got, err := store.TaskByID(ctx, r.db, taskID)
