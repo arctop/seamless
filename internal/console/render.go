@@ -43,6 +43,12 @@ var shellJS []byte
 //go:embed static/sky.js
 var skyJS []byte
 
+//go:embed static/orrery.js
+var orreryJS []byte
+
+//go:embed static/privacy.js
+var privacyJS []byte
+
 //go:embed static/favicon.svg
 var faviconSVG []byte
 
@@ -52,7 +58,7 @@ var faviconSVG []byte
 var pageNames = []string{
 	"login", "overview", "now", "search", "interactions", "projects", "projectdetail", "context", "sessions", "session",
 	"memories", "notes", "retrieval", "tasks", "plans", "labs", "trials", "gardener", "settings", "event", "error",
-	"feature_off", "held", "approvers", "access", "access_one", "unlock",
+	"feature_off", "held", "approvers", "access", "access_one", "unlock", "system", "privacy",
 }
 
 // peekNames are the entity detail templates. Each templates/peek_<name>.html

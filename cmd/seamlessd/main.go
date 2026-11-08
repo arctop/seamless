@@ -633,6 +633,7 @@ func runServe(args []string) error {
 		// queue's list and Promote/Discard are served even with write screening
 		// off whenever peer_auth lists one.
 		RestrictedAccounts: peer != nil && peer.policy.HasRestricted(),
+		Deployment:         consoleDeployment(cfg, bind, mcpSrv.NumTools(), garden.CanRequest()),
 		Logger:             logger,
 	})
 	if err != nil {

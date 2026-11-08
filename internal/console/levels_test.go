@@ -104,7 +104,7 @@ func TestScreenRegistry_WellFormed(t *testing.T) {
 	}
 	// The existing chords survive the move to the registry.
 	require.Equal(t, map[string]bool{"o": true, "n": true, "i": true, "m": true, "e": true, "r": true, "g": true,
-		"w": true, "p": true, "t": true, "s": true, "l": true, "x": true, ",": true, "h": true}, keys)
+		"w": true, "p": true, "t": true, "s": true, "l": true, "x": true, ",": true, "h": true, "y": true, "v": true}, keys)
 }
 
 // Monotonic: each level shows everything the previous one does, with every

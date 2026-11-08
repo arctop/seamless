@@ -65,6 +65,9 @@ const (
 	groupKnowledge = "Knowledge"
 	groupWork      = "Work"
 	groupResearch  = "Research"
+	// groupServer is this machine's own picture: the parts of Seamless and
+	// what agents can reach.
+	groupServer = "Server"
 )
 
 // screens is the ordered registry: the sidebar order at every level.
@@ -100,6 +103,11 @@ var screens = []screen{
 		Min: levelStandard, Feature: features.Research, NavRow: true, Badge: "labs"},
 	{ID: "trials", Label: "Trials", Icon: "test-tube", Href: "/console/trials", Group: groupResearch, Key: "x",
 		Min: levelStandard, Feature: features.Research, NavRow: true, Badge: "trials", Scope: "trials"},
+	// Standard: a default (Basic) install's sidebar stays as it was.
+	{ID: "system", Label: "System", Icon: "orbit", Href: "/console/system", Group: groupServer, Key: "y",
+		Min: levelStandard, NavRow: true},
+	{ID: "privacy", Label: "Privacy", Icon: "shield", Href: "/console/privacy", Group: groupServer, Key: "v",
+		Min: levelStandard, NavRow: true},
 	{ID: "settings", Label: "Settings", Icon: "settings", Href: "/console/settings", Key: ",",
 		Min: levelBasic, NavRow: true, Class: "nav-settings"},
 	// Real pages with no sidebar row.

@@ -788,6 +788,72 @@ task the account last changed, "updated by account <name>"), including search
 results, a lab's trial list and the project workspace's tabs; events and a
 session's activity timeline carry none. Your own items show none.
 
+## System
+
+`/console/system`
+
+Every part of Seamless on this server, drawn as one 3D base: the **doors**
+where agents and you come in (MCP, hooks, the peer_auth socket, the listener,
+the console, A2A), the **work** the daemon does (retrieval, tasks and plans,
+sessions, labs, approvals, write screening, updates, commit records, the
+metadata feed, URL capture, the gardener, lifecycle), the **core** that keeps
+knowledge on disk (the database, the file watcher, memory and note files,
+embeddings, the search index, the chat model, backups, the event log), and
+the **outside** services it calls (the LLM provider, GitHub releases).
+
+- **State is the server's.** Each part is running, quiet (on, with nothing in
+  the event log for the last 15 minutes), needs attention, or off - drawn grey,
+  with what turning it on takes. The header counts each state; click a count
+  to light only those parts.
+- **Motion is evidence.** A part moves only while it works, and light runs
+  along a trace only along the path a recorded event's data took: a memory
+  write runs from MCP through the memory files, the watcher and the database
+  to the search index, and on to embeddings and the provider. With nothing
+  recorded the view is still and draws no frames.
+- **Pick a part** - on the deck or in the list under it - for its readout: what
+  it does, its numbers for the last 24 hours, events per minute for the last 30,
+  its settings, the parts it works with, and the screen that holds more.
+  `#<part>` on the URL opens one directly.
+- **Light on the GPU.** It draws only while something changes, never while the
+  tab is hidden or the view is scrolled away, keeps to a pixel budget on very
+  large displays, and asks for the low-power GPU. **Still** (and the system's
+  reduced-motion setting) keeps everything in place.
+
+It is a Standard screen: Basic installs reach it by URL.
+
+## Privacy
+
+`/console/privacy`
+
+What your agents can reach on this server, what one could do if it were
+compromised, and where each project's knowledge may go.
+
+- **Your setup** - whether Seamless runs as your own account or as its own
+  ([peer_auth](/guides/peer-auth/)), and five protection layers: project
+  fences, write screening, Seamless in its own account, locked projects, and a
+  restricted agent account, each on, off, or waiting on an earlier one.
+- **Who can reach what** - the machine drawn as a plan: rooms are OS accounts,
+  walls are what the operating system enforces, doors are how Seamless is
+  reached. Switch between your account, a dedicated account and a dedicated
+  account with restricted agents, and turn on **Compromised agent** to see how
+  far one gets in each: in your own account it reads every project's files
+  directly, sealed ones too, and takes the bearer key; in a dedicated account
+  the data folder is out of its reach and a locked project waits for your
+  approval.
+- **Where knowledge is allowed to go** - your projects around the global
+  scope, with the flows each fence allows.
+- **The four fences** - open, confidential, sealed and locked, always all
+  four, empty or not: what each promises, what kind of project belongs there,
+  the projects in it, and how to put a project there. A locked project shows
+  by name and counts only. A project sealed to another OS account never
+  appears, not even as a count.
+- **Find the fence for a project** - three yes-or-no questions that end in a
+  recommendation and its command.
+- **What to do next** - the steps that would tighten this server, in order.
+
+It reads; it changes nothing. It is a Standard screen: Basic installs reach it
+by URL.
+
 ## Settings
 
 `/console/settings?s=<section>`

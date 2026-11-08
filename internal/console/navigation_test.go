@@ -200,16 +200,17 @@ func TestNav_RendersExactlyTheVisibleScreensPerLevel(t *testing.T) {
 		"/console/sessions", "/console/settings"}
 	standard := []string{"/console/", "/console/now", "/console/memories", "/console/notes",
 		"/console/gardener", "/console/projects", "/console/plans", "/console/tasks", "/console/sessions",
-		"/console/settings"}
+		"/console/system", "/console/privacy", "/console/settings"}
 	standardResearch := []string{"/console/", "/console/now", "/console/memories", "/console/notes",
 		"/console/gardener", "/console/projects", "/console/plans", "/console/tasks", "/console/sessions",
-		"/console/labs", "/console/trials", "/console/settings"}
+		"/console/labs", "/console/trials", "/console/system", "/console/privacy", "/console/settings"}
 	advanced := []string{"/console/", "/console/now", "/console/interactions", "/console/memories",
 		"/console/notes", "/console/retrieval", "/console/gardener", "/console/projects", "/console/plans",
-		"/console/tasks", "/console/sessions", "/console/settings"}
+		"/console/tasks", "/console/sessions", "/console/system", "/console/privacy", "/console/settings"}
 	advancedResearch := []string{"/console/", "/console/now", "/console/interactions", "/console/memories",
 		"/console/notes", "/console/retrieval", "/console/gardener", "/console/projects", "/console/plans",
-		"/console/tasks", "/console/sessions", "/console/labs", "/console/trials", "/console/settings"}
+		"/console/tasks", "/console/sessions", "/console/labs", "/console/trials", "/console/system", "/console/privacy",
+		"/console/settings"}
 
 	navRe := regexp.MustCompile(`<nav class="nav".*?</nav>`)
 	linkRe := regexp.MustCompile(`<a href="(/console/[^"]*)" data-key="([^"]*)" data-tip="([^"]*)"`)

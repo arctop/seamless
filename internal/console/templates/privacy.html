@@ -1,0 +1,145 @@
+{{define "content"}}
+{{with .Data}}
+<div class="pv-page">
+  <header class="mv2-bar pv-bar">
+    <h1>{{icon "shield"}}Privacy</h1>{{about "What your agents can reach on this server, what one could do if it were compromised, and where each project's knowledge may go. Projects sealed to another OS account never appear here."}}
+  </header>
+
+  <section class="pv-panel pv-posture" aria-label="Your setup">
+    <div class="pv-say{{if .Dedicated}} is-dedicated{{end}}">
+      {{if .Dedicated}}
+      <span class="pv-mode ok">Own account</span>
+      <p class="pv-big">Seamless runs as its own account, <span class="mono">{{.DaemonUser}}</span>.</p>
+      <p>The operating system keeps your agents out of <span class="mono">{{.DataDir}}</span>{{with .DataDirMode}} (mode {{.}}){{end}}. They reach Seamless only through its doors, where every project&rsquo;s fence and lock apply.</p>
+      {{else}}
+      <span class="pv-mode risk">Shared account</span>
+      <p class="pv-big">Seamless and your agents run as the same account, <span class="mono">{{.Owner}}</span>.</p>
+      <p>Isolation keeps careful agents out of each other&rsquo;s projects. It can&rsquo;t stop an agent that opens the files: they live in <span class="mono">{{.DataDir}}</span>, and anything running as {{.Owner}} can read them.</p>
+      {{end}}
+      <div class="pv-acts">
+        <a class="btn primary" href="#pv-machine">See what an agent can reach</a>
+        <a class="btn" href="#pv-next">What to do next</a>
+      </div>
+    </div>
+    <ol class="pv-layers" aria-label="Protection layers">
+      {{range .Layers}}
+      <li class="pv-layer{{if .On}} on{{end}}{{if .Later}} later{{end}}"><span class="ix" aria-hidden="true">{{.N}}</span><span class="nm">{{.Name}}</span><span class="st">{{.State}}</span><p class="what">{{.What}}</p></li>
+      {{end}}
+    </ol>
+  </section>
+
+  <section class="pv-band" id="pv-machine" aria-labelledby="pv-machine-h">
+    <div class="pv-head">
+      <p class="pv-kicker">The machine</p>
+      <h2 id="pv-machine-h">Who can reach what</h2>
+      <p>Rooms are operating-system accounts, and walls are what the system enforces. Switch the setup to compare, and turn on a compromised agent to see how far it gets.</p>
+    </div>
+    <div class="pv-panel pv-machine" data-live-skip>
+      <div class="pv-stage">
+        <div class="pv-modes">
+          <div class="pv-seg" role="group" aria-label="Setup">
+            <button type="button" data-pv-mode="shared" aria-pressed="false">Your account{{if not .Dedicated}} <span class="pv-here">Now</span>{{end}}</button>
+            <button type="button" data-pv-mode="dedicated" aria-pressed="false">Dedicated account{{if and .Dedicated (not .Restricted)}} <span class="pv-here">Now</span>{{end}}</button>
+            <button type="button" data-pv-mode="restricted" aria-pressed="false">+ Restricted agents{{if .Restricted}} <span class="pv-here">Now</span>{{end}}</button>
+          </div>
+          <button type="button" class="pv-switch" id="pv-breach" role="switch" aria-checked="false"><span class="tr" aria-hidden="true"></span>Compromised agent</button>
+        </div>
+        <div class="pv-plan-wrap"><svg class="pv-plan" id="pv-plan" viewBox="0 0 960 440" role="img" aria-labelledby="pv-plan-title"><title id="pv-plan-title">Accounts, files and Seamless on this server</title></svg></div>
+        <div class="pv-legend" aria-hidden="true"><span><i class="ok"></i>Normal use</span><span><i class="risk"></i>A compromised agent reaches it</span><span><i class="gate"></i>Waits for your approval</span><span><i class="wall"></i>Account wall</span></div>
+      </div>
+      <aside class="pv-reach" id="pv-reach" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <section class="pv-band" aria-labelledby="pv-flow-h">
+    <div class="pv-head">
+      <p class="pv-kicker">Your projects</p>
+      <h2 id="pv-flow-h">Where knowledge is allowed to go</h2>
+      <p>Global memories reach every open project, and agents read across open projects freely. Each fence narrows that.</p>
+    </div>
+    <div class="pv-panel pv-flow" data-live-skip>
+      <div class="pv-flow-map"><svg id="pv-flowmap" viewBox="0 0 960 520" role="img" aria-labelledby="pv-fm-title"><title id="pv-fm-title">Knowledge flow between the global scope and your projects</title></svg></div>
+      <aside class="pv-flow-side">
+        <h3>{{.Total}} project{{if ne .Total 1}}s{{end}}, {{.Global}} global memor{{if eq .Global 1}}y{{else}}ies{{end}}</h3>
+        {{with .Fence "open"}}<p><b>{{.Count}} open</b> share with each other and receive global knowledge.</p>{{end}}
+        {{with .Fence "confidential"}}<p><b>{{.Count}} confidential</b> receive global knowledge; nothing leaves them.</p>{{end}}
+        {{with .Fence "sealed"}}<p><b>{{.Count}} sealed</b> see only themselves.</p>{{end}}
+        {{with .Fence "locked"}}<p><b>{{.Count}} locked</b> open only with your approval.{{if .Needs}} Locking needs Seamless in its own account.{{end}}</p>{{end}}
+      </aside>
+    </div>
+  </section>
+
+  <section class="pv-band" aria-labelledby="pv-fences-h">
+    <div class="pv-head">
+      <p class="pv-kicker">The four fences</p>
+      <h2 id="pv-fences-h">Which kind of project belongs where</h2>
+    </div>
+    <div class="pv-fences">
+      {{range .Fences}}
+      <article class="pv-panel pv-fence" data-f="{{.Key}}">
+        <div class="pv-fence-art" data-live-skip><svg viewBox="0 0 260 92" data-fence-art="{{.Key}}" aria-hidden="true"></svg></div>
+        <div class="pv-fence-name"><h3>{{.Name}}</h3><span class="count">{{.Count}} project{{if ne .Count 1}}s{{end}}</span></div>
+        <p class="pv-promise">{{.Promise}}</p>
+        <p class="pv-fits">{{.Fits}}</p>
+        <div>
+          <p class="pv-lbl">On this server</p>
+          {{if .Projects}}
+          <div class="pv-projs">{{range .Projects}}<a class="pv-proj" href="{{.Href}}">{{.Slug}} <small>{{.Memories}}</small></a>{{end}}</div>
+          {{with .Note}}<p class="pv-note-line">{{.}}</p>{{end}}
+          {{else}}
+          <div class="pv-empty"><b>{{.Empty}}</b></div>
+          {{end}}
+        </div>
+        <div class="pv-howto">
+          {{with .Needs}}<span class="pv-needs">{{.}}</span>{{end}}
+          <p>{{.How}}</p>
+          <pre class="pv-code">{{.Code}}</pre>
+        </div>
+      </article>
+      {{end}}
+    </div>
+  </section>
+
+  <section class="pv-band" aria-labelledby="pv-choose-h">
+    <div class="pv-head">
+      <p class="pv-kicker">Not sure?</p>
+      <h2 id="pv-choose-h">Find the fence for a project</h2>
+    </div>
+    <div class="pv-panel pv-chooser" id="pv-chooser" data-live-skip>
+      <div class="pv-qs">
+        <div class="pv-q" data-q="1"><p>Would it matter if an agent working on another project read this one?<small>Client code, an employer&rsquo;s systems, personal records: yes. Your own side project: probably not.</small></p><div class="pv-seg" role="group" aria-label="Question 1"><button type="button" data-a="yes" aria-pressed="false">Yes</button><button type="button" data-a="no" aria-pressed="false">No</button></div></div>
+        <div class="pv-q" data-q="2" aria-disabled="true"><p>Should its agents still get your global conventions and read your open projects?<small>Usually yes. Say no for a clean room that must not be shaped by anything else.</small></p><div class="pv-seg" role="group" aria-label="Question 2"><button type="button" data-a="yes" aria-pressed="false">Yes</button><button type="button" data-a="no" aria-pressed="false">No</button></div></div>
+        <div class="pv-q" data-q="3" aria-disabled="true"><p>Should even its own agents wait for your approval each time?<small>For money, health or credentials, where a mistaken read is the risk.</small></p><div class="pv-seg" role="group" aria-label="Question 3"><button type="button" data-a="yes" aria-pressed="false">Yes</button><button type="button" data-a="no" aria-pressed="false">No</button></div></div>
+      </div>
+      <div class="pv-answer" id="pv-answer"><p class="pv-kicker">Recommendation</p><p class="pv-verdict">Answer the first question.</p></div>
+    </div>
+  </section>
+
+  <section class="pv-band" id="pv-next" aria-labelledby="pv-next-h">
+    <div class="pv-head">
+      <p class="pv-kicker">For this server</p>
+      <h2 id="pv-next-h">What to do next</h2>
+    </div>
+    <ol class="pv-steps">
+      {{range .Steps}}
+      <li class="pv-step {{.State}}">
+        <details>
+          <summary><span class="ck" aria-hidden="true">{{if eq .State "done"}}&#10003;{{else if eq .State "later"}}{{else}}!{{end}}</span><span><span class="t1">{{.Title}}</span><span class="t2">{{.Sub}}</span></span><span class="chev" aria-hidden="true">{{icon "chevron-right"}}</span></summary>
+          <div class="more">
+            <p>{{.Text}}</p>
+            {{with .Code}}<pre class="pv-code">{{.}}</pre>{{end}}
+            {{if .Link}}<a href="{{.Link}}" target="_blank" rel="noopener">{{.LinkLabel}} {{icon "external-link"}}</a>{{end}}
+          </div>
+        </details>
+      </li>
+      {{end}}
+    </ol>
+  </section>
+  <script type="application/json" id="pv-data">{{.}}</script>
+</div>
+{{end}}
+{{end}}
+{{define "scripts"}}
+<script>window.SEAM_NO_LIVE_REFRESH = true;</script>
+<script src="/console/static/privacy.js"></script>
+{{end}}

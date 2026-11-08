@@ -1,0 +1,53 @@
+{{define "content"}}
+{{with .Data}}
+<div class="sys-page">
+  <header class="mv2-bar sys-bar">
+    <h1>{{icon "orbit"}}System</h1>{{about "Every part of Seamless on this server, drawn as one base. A part moves only while it works, and light runs along a trace only while data does. Pick a part for its readout."}}
+    <div class="sys-tally" role="group" aria-label="Show parts by state">
+      <button type="button" data-tally="on" aria-pressed="false"><span class="sys-sw on"></span><strong>{{index .Tally "on"}}</strong> running</button>
+      <button type="button" data-tally="idle" aria-pressed="false"><span class="sys-sw idle"></span><strong>{{index .Tally "idle"}}</strong> quiet</button>
+      <button type="button" data-tally="warn" aria-pressed="false"><span class="sys-sw warn"></span><strong>{{index .Tally "warn"}}</strong> need attention</button>
+      <button type="button" data-tally="off" aria-pressed="false"><span class="sys-sw off"></span><strong>{{index .Tally "off"}}</strong> off</button>
+    </div>
+  </header>
+
+  {{/* The stage is this page's script's own: the canvas, the labels pinned to
+       the parts, and the readout. data-live-skip keeps any morph off it, and
+       the page opts out of the live refresh altogether (scripts block): the
+       script refreshes the numbers itself. */}}
+  <section class="sys-stage" id="sys-stage" data-live-skip aria-label="The parts of Seamless, in 3D">
+    <canvas id="sys-canvas" tabindex="0" aria-label="The system deck. Drag to turn, scroll to zoom, arrow keys to orbit, Escape to reset. Every part also has a button below the view."></canvas>
+    <div class="sys-captions" id="sys-captions" aria-hidden="true"></div>
+    <div class="sys-labels" id="sys-labels"></div>
+    <div class="sys-tools">
+      <button class="sys-tool" type="button" id="sys-home">{{icon "refresh-cw"}}Reset view</button>
+      <button class="sys-tool" type="button" id="sys-calm" aria-pressed="false" title="No motion: parts change state without animating">{{icon "eye-off"}}Still</button>
+    </div>
+    <p class="sys-hint">Drag to turn &middot; right-drag to pan &middot; scroll to zoom &middot; click a part</p>
+    <div class="sys-nogl" id="sys-nogl" hidden><p>This browser can&rsquo;t draw the 3D view. Every part is listed below with the same readouts.</p></div>
+    <aside class="sys-readout" id="sys-readout" aria-hidden="true" aria-live="polite" aria-label="Part details">
+      <div class="sys-ro-scroll" id="sys-ro-body"></div>
+    </aside>
+  </section>
+
+  <div class="sys-index" aria-label="Every part, by ring">
+    {{range $ring := $.Data.Rings}}
+    <section class="sys-ring">
+      <h2><span>{{if eq $ring "doors"}}Doors{{else if eq $ring "work"}}Work{{else if eq $ring "core"}}Core{{else}}Outside{{end}}</span><span>{{$.Data.RingOn $ring}} of {{len ($.Data.RingParts $ring)}} on</span></h2>
+      <p>{{if eq $ring "doors"}}Where your agents and you come in.{{else if eq $ring "work"}}What Seamless does with what comes in.{{else if eq $ring "core"}}Where knowledge is kept on disk.{{else}}Services on the internet it calls.{{end}}</p>
+      <ul>
+        {{range $.Data.RingParts $ring}}
+        <li><button type="button" data-pick="{{.ID}}" aria-current="false"><span class="sys-sw {{if eq .State "absent"}}off{{else}}{{.State}}{{end}}"></span><span>{{.Label}}</span><span class="sys-st">{{.StateWord}}</span></button></li>
+        {{end}}
+      </ul>
+    </section>
+    {{end}}
+  </div>
+  <script type="application/json" id="sys-data">{{.}}</script>
+</div>
+{{end}}
+{{end}}
+{{define "scripts"}}
+<script>window.SEAM_NO_LIVE_REFRESH = true;</script>
+<script src="/console/static/orrery.js"></script>
+{{end}}

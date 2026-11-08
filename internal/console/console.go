@@ -140,6 +140,10 @@ type Config struct {
 	// Terminal tells seam approve how to run the terminal path's commit
 	// (the daemon's account, its seamlessd, its config); nil omits it.
 	Terminal *TerminalApprover
+	// Deployment says how this daemon runs, for the System and Privacy
+	// screens: where it listens, the peer_auth socket and the OS accounts
+	// involved. A zero value reads as a default install.
+	Deployment Deployment
 	// Views is the pool of filtered handles while peer_auth locks a project
 	// (store.Views): each request reads the one that leaves out exactly the
 	// locked projects it holds nothing open on (reach.go). DB is the pool's
@@ -234,6 +238,8 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/static/navigation.js", s.serveNavigationJS)
 	handle("GET /console/static/shell.js", s.serveShellJS)
 	handle("GET /console/static/sky.js", s.serveSkyJS)
+	handle("GET /console/static/orrery.js", s.serveOrreryJS)
+	handle("GET /console/static/privacy.js", s.servePrivacyJS)
 	handle("GET /console/static/favicon.svg", s.serveFavicon)
 	handle("GET /console/login", s.loginForm)
 	handle("POST /console/login", s.parseForm(formBodySmall, s.loginSubmit))
@@ -244,6 +250,8 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/since", s.auth(s.sinceDigest))
 	handle("GET /console/search", s.auth(s.searchPage))
 	handle("GET /console/interactions", s.auth(s.interactions))
+	handle("GET /console/system", s.auth(s.systemPage))
+	handle("GET /console/privacy", s.auth(s.privacyPage))
 	handle("GET /console/sessions", s.auth(s.sessionsList))
 	handle("GET /console/sessions/{id}", s.auth(s.sessionDetail))
 	handle("GET /console/memories", s.auth(s.memoriesList))
@@ -660,6 +668,18 @@ func (s *Service) serveSkyJS(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	_, _ = w.Write(skyJS)
+}
+
+func (s *Service) serveOrreryJS(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	_, _ = w.Write(orreryJS)
+}
+
+func (s *Service) servePrivacyJS(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	_, _ = w.Write(privacyJS)
 }
 
 func (s *Service) serveFavicon(w http.ResponseWriter, _ *http.Request) {

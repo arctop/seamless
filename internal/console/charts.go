@@ -35,6 +35,8 @@ func anyCoverage(buckets []store.CoverageBucket) bool {
 var lucidePaths = map[string]string{
 	"layout-dashboard":      `<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>`,
 	"terminal":              `<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>`,
+	"orbit":                 `<circle cx="12" cy="12" r="2.6"/><ellipse cx="12" cy="12" rx="9.5" ry="4.4" transform="rotate(-24 12 12)"/><circle cx="19.4" cy="7.4" r="1.5"/>`,
+	"shield":                `<path d="M12 3l7.5 3v5.4c0 4.4-3.1 8-7.5 9.6-4.4-1.6-7.5-5.2-7.5-9.6V6z"/>`,
 	"activity":              `<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>`,
 	"database":              `<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/>`,
 	"arrow-down-to-line":    `<path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/>`,
