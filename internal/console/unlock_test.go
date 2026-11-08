@@ -672,3 +672,20 @@ func TestUnlockHelpers(t *testing.T) {
 	require.Equal(t, `'it'\''s'`, shellWord("it's"))
 	require.Equal(t, `''`, shellWord(""))
 }
+
+// The locked project's briefing preview says why it does not preview, in a
+// locked browser and in one unlocked for it alike -- never "unknown project",
+// which the board's locked row would contradict -- and shows nothing of it.
+func TestBriefingPreview_LockedProjectSaysWhy(t *testing.T) {
+	lc := newLockedConsole(t)
+	unlock := lc.unlockLink(t)
+	for _, cookie := range []string{"", unlock} {
+		code, body := lc.get(t, "/console/settings/briefing/preview?project="+lockedSlug+"&format=json", cookie)
+		require.Equal(t, http.StatusForbidden, code, "unlocked=%v", cookie != "")
+		require.Contains(t, body, "project "+lockedSlug+" is locked: its briefing reaches an agent session only after")
+		require.NotContains(t, body, "unknown project")
+		require.NotContains(t, body, lockedSecret)
+	}
+	code, _ := lc.get(t, "/console/settings/briefing/preview?project="+openSlug+"&format=json", "")
+	require.Equal(t, http.StatusOK, code, "an open project still previews")
+}

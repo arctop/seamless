@@ -213,9 +213,7 @@ func (s *Server) accessRequestAnswer(ctx context.Context, start time.Time, t dia
 // restrictedAccessRequestRefusal is access_request's answer to a restricted
 // account: nothing is filed, and nothing it could file would open a project.
 func restrictedAccessRequestRefusal(account string) error {
-	return fmt.Errorf("account %s files no access requests: a restricted account reaches the open projects that "+
-		"are not locked, and reads the global scope; the owner's approval never opens anything else to it, so "+
-		"there is nothing to request -- keep to the projects project_list shows", account)
+	return errors.New(access.RestrictedNoRequests(account))
 }
 
 // accessRequestNext says what the agent does once the request is where end

@@ -123,6 +123,18 @@ func (s *Service) settingsBriefingPreview(w http.ResponseWriter, r *http.Request
 		}
 		knobs = b
 	}
+	// A locked project's briefing is what an agent session gets once the owner
+	// approves it, and the preview assembles it as an agent would: under the
+	// request's own view, where the lock holds. A browser unlocked for the
+	// project reaches it through its handle, never through the preview; without
+	// this the lock refusal would surface as a 500. It is checked before the
+	// project list, which leaves a locked project out unless this browser
+	// unlocked it: either way the owner reads why, not "unknown project".
+	if len(projectValues) == 1 && access.Locked(ctx, projectValues[0]) {
+		s.previewError(w, r, http.StatusForbidden, fmt.Sprintf("project %s is locked: its briefing reaches an agent "+
+			"session only after the owner approves that agent's request, so this console does not preview it", projectValues[0]))
+		return
+	}
 	projects, err := store.ListProjects(ctx, s.db(ctx))
 	if err != nil {
 		s.serverError(w, r, err)
@@ -131,16 +143,6 @@ func (s *Service) settingsBriefingPreview(w http.ResponseWriter, r *http.Request
 	project, err := pickPreviewProject(liveProjectSlugs(projects), projectValues, projectPresent)
 	if err != nil {
 		s.previewError(w, r, http.StatusBadRequest, err.Error())
-		return
-	}
-	// A locked project's briefing is what an agent session gets once the owner
-	// approves it, and the preview assembles it as an agent would: under the
-	// request's own view, where the lock holds. A browser unlocked for the
-	// project reaches it through its handle, never through the preview; without
-	// this the lock refusal would surface as a 500.
-	if access.Locked(ctx, project) {
-		s.previewError(w, r, http.StatusForbidden, fmt.Sprintf("project %s is locked: its briefing reaches an agent "+
-			"session only after the owner approves that agent's request, so this console does not preview it", project))
 		return
 	}
 	text, err := s.cfg.Retrieve.PreviewBriefing(ctx, project, knobs)

@@ -405,11 +405,18 @@ func (s *Service) auth(next http.HandlerFunc) http.HandlerFunc {
 		// the console's pages are built for the owner's.
 		if !access.OwnerOnly(r.Context()) {
 			access.NoteRefusal(r.Context(), screening.RefusedOwnerOnly)
+			msg := "forbidden: the console is the owner's surface"
+			// The request route is the agent's own (seam access request from
+			// its shell), so a restricted account hears access_request's
+			// answer there, not the console's.
+			if acct := access.AccountOf(r.Context()); acct != "" && r.URL.Path == "/console/access/request" {
+				msg = access.RestrictedNoRequests(acct)
+			}
 			if wantsJSON(r) {
-				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden: the console is the owner's surface"})
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": msg})
 				return
 			}
-			http.Error(w, "forbidden: the console is the owner's surface", http.StatusForbidden)
+			http.Error(w, msg, http.StatusForbidden)
 			return
 		}
 		switch cred := s.classify(r); cred {

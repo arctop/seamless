@@ -393,3 +393,18 @@ func restrictedConsoleView(t *testing.T) access.View {
 	require.Equal(t, exampleAccount, v.Account())
 	return v.WithOpenProjects([]string{"app"})
 }
+
+// seam access request is the agent's own route (an agent's shell, not the
+// owner's console): a restricted account hears access_request's refusal
+// there, never the console's generic one.
+func TestAccessRequest_RestrictedAccountHearsTheRequestRefusal(t *testing.T) {
+	f := newRestrictedConsole(t, config.Features{}, true)
+	req := httptest.NewRequest(http.MethodPost, "/console/access/request?format=json", strings.NewReader("project=app"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req = req.WithContext(access.WithView(req.Context(), restrictedConsoleView(t)))
+	rr := do(f.mux, req)
+	require.Equal(t, http.StatusForbidden, rr.Code)
+	require.Contains(t, rr.Body.String(), "account "+exampleAccount+" files no access requests")
+	require.NotContains(t, rr.Body.String(), "owner's surface")
+}

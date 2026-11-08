@@ -398,6 +398,16 @@ func (s *Service) settings(w http.ResponseWriter, r *http.Request) {
 	if herr != nil {
 		s.logger.Warn("console: settings held count", "error", herr)
 	}
+	// The screening card counts what screening holds: a restricted account's
+	// proposals wait on the Held screen whether screening is on or off, so
+	// they are not screening's data to keep or release.
+	if s.cfg.RestrictedAccounts && heldCount > 0 {
+		if proposals, perr := s.pendingProposals(ctx); perr != nil {
+			s.logger.Warn("console: settings proposal count", "error", perr)
+		} else {
+			heldCount = max(0, heldCount-len(proposals))
+		}
+	}
 
 	var previewProjects []string
 	var previewProject string

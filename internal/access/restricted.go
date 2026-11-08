@@ -164,6 +164,15 @@ func ReservedSessionNameRefusal(name, account string) error {
 		"are its sessions -- choose another name", name, account, account, sessionNamespaceSep)}
 }
 
+// RestrictedNoRequests is the answer to a restricted account that asks for
+// access (access_request, or seam access request from its shell): nothing
+// is filed, and nothing it could file would open a project.
+func RestrictedNoRequests(account string) string {
+	return fmt.Sprintf("account %s files no access requests: a restricted account reaches the open projects that "+
+		"are not locked, and reads the global scope; the owner's approval never opens anything else to it, so "+
+		"there is nothing to request -- keep to the projects project_list shows", account)
+}
+
 // restrictedRefusal is a restricted account's refusal. It reads the same for a
 // confidential, sealed or locked project and for a slug nobody registered, so a
 // refusal never tells the account which projects exist beyond its reach.
