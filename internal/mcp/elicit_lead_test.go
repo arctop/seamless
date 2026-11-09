@@ -74,3 +74,52 @@ func TestDialogLead_CountFirstThenWhatIsAsked(t *testing.T) {
 	require.Contains(t, dialogMessage(f, dialogShown{capped: time.Hour}), "\nAgent process: pid 4242\n")
 	require.NotContains(t, dialogMessage(f, dialogShown{capped: time.Hour}), "\nProgram:")
 }
+
+// The dialog's durations say what each grants under the lease cap: a fixed
+// length the cap cuts short reads as the cap, and a longer one that would
+// grant the same is not offered. The 8h default offers every duration as it
+// is; the answer is read against what was offered.
+func TestDialogDurations_FollowTheLeaseCap(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		capped time.Duration
+		values []string
+		names  []string
+	}{
+		{"the 8h default", 8 * time.Hour, []string{"session", "1h", "4h"},
+			[]string{"Until this session ends", "1 hour", "4 hours"}},
+		{"a 2h cap", 2 * time.Hour, []string{"session", "1h", "4h"},
+			[]string{"Until this session ends", "1 hour", "2 hours (the max_lease cap)"}},
+		{"a 1h cap: 1 hour is the cap itself", time.Hour, []string{"session", "1h"},
+			[]string{"Until this session ends", "1 hour"}},
+		{"a 20m cap", 20 * time.Minute, []string{"session", "1h"},
+			[]string{"Until this session ends", "20 minutes (the max_lease cap)"}},
+		{"no cap known", 0, []string{"session", "1h", "4h"},
+			[]string{"Until this session ends", "1 hour", "4 hours"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			values, names := durationChoices(c.capped)
+			require.Equal(t, c.values, values)
+			require.Equal(t, c.names, names)
+			req := formElicitation(approval.Facts{Short: "R-K71M", Project: "demo-vault"}, []string{approval.ProofTouchID},
+				dialogShown{capped: c.capped})
+			field := req.Params.RequestedSchema.(map[string]any)["properties"].(map[string]any)["duration"].(map[string]any)
+			require.Equal(t, c.values, field["enum"])
+			require.Equal(t, c.names, field["enumNames"])
+			require.Equal(t, approval.ForSession, field["default"])
+		})
+	}
+
+	offered, _ := durationChoices(20 * time.Minute)
+	_, _, ok := dialogChoice(map[string]any{"duration": "4h", "method": "touchid"}, offered, []string{"touchid"})
+	require.False(t, ok, "a duration the dialog did not offer")
+	d, _, ok := dialogChoice(map[string]any{"duration": "1h", "method": "touchid"}, offered, []string{"touchid"})
+	require.True(t, ok)
+	require.Equal(t, "1h", d)
+
+	require.Equal(t, "for 20 minutes (the max_lease cap)", durationPhrase("1h", 20*time.Minute))
+	require.Equal(t, "for 1 hour", durationPhrase("1h", 8*time.Hour))
+	require.Equal(t, "for 1 hour", durationPhrase("1h", time.Hour), "the cap itself is not cut short")
+	require.Equal(t, "until its session ends", durationPhrase("session", 20*time.Minute))
+	require.Empty(t, durationPhrase("", 20*time.Minute))
+}

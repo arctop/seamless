@@ -232,7 +232,7 @@ func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (d
 	if !form || !slices.Contains(methods, approval.ProofTouchID) {
 		// A passkey only: its page shows the facts and asks the duration, so
 		// the dialog is the page itself.
-		elicitID, accepted, ok := s.passkeyDialog(dctx, session, t, page, "")
+		elicitID, accepted, ok := s.passkeyDialog(dctx, session, t, page, "", 0)
 		if !ok {
 			return dialogEnd{}, false
 		}
@@ -277,7 +277,8 @@ func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (d
 		end.answer = answerUnoffered
 		return s.settle(ctx, dctx, t, end), true
 	}
-	duration, method, ok := dialogChoice(res.Content, methods)
+	offered, _ := durationChoices(capped)
+	duration, method, ok := dialogChoice(res.Content, offered, methods)
 	if !ok {
 		end.answer = answerUnoffered
 		return s.settle(ctx, dctx, t, end), true
@@ -287,7 +288,7 @@ func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (d
 	if method == approval.ProofPasskey {
 		// The page for the duration chosen here: it shows it read-only, and
 		// the passkey signs it.
-		elicitID, accepted, ok := s.passkeyDialog(dctx, session, t, pageFor(page, duration), duration)
+		elicitID, accepted, ok := s.passkeyDialog(dctx, session, t, pageFor(page, duration), duration, capped)
 		if !ok || !accepted.answered() {
 			if ok {
 				end.answer = accepted.answer()
@@ -417,16 +418,18 @@ func (u urlAnswer) answer() string { return string(u) }
 
 // passkeyDialog sends the owner to the request's passkey page: a URL
 // elicitation. duration is the one the dialog's form chose, which page
-// carries (pageFor), "" when the page asks it. ok is false when the client
-// did not take it (nothing shown).
-func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSession, t dialogTarget, page, duration string) (string, urlAnswer, bool) {
+// carries (pageFor), "" when the page asks it; capped is the lease cap it is
+// worded against. ok is false when the client did not take it (nothing
+// shown).
+func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSession, t dialogTarget, page, duration string,
+	capped time.Duration) (string, urlAnswer, bool) {
 	elicitID, err := core.NewID()
 	if err != nil {
 		return "", "", false
 	}
 	// Only the approval takes the passkey: the page denies without one.
 	approve, decide := "approve "+plain(t.Project), "Approve it"
-	if phrase, ok := durationPhrases[duration]; ok {
+	if phrase := durationPhrase(duration, capped); phrase != "" {
 		approve, decide = approve+" "+phrase, decide+" "+phrase
 	}
 	msg := "Seamless access request " + t.Short + ": " + approve + " with your passkey, or deny it, on the page this " +
@@ -481,6 +484,50 @@ var durationPhrases = map[string]string{
 	approval.ForSession: "until its session ends",
 	approval.For1h:      "for 1 hour",
 	approval.For4h:      "for 4 hours",
+}
+
+// durationPhrase words a duration choice inside a sentence, as long as it
+// grants: a fixed length the lease cap cuts short is the cap ("for 20
+// minutes (the max_lease cap)"). "" for a choice that is none.
+func durationPhrase(choice string, capped time.Duration) string {
+	if d, ok := fixedLength(choice); ok && capped > 0 && d > capped {
+		return "for " + spanWords(capped) + " (the max_lease cap)"
+	}
+	return durationPhrases[choice]
+}
+
+// fixedLength is a fixed duration choice's length before the lease cap;
+// ok is false for the session and for anything that is not a choice.
+func fixedLength(choice string) (time.Duration, bool) {
+	if choice == approval.ForSession || !slices.Contains(approval.Durations, choice) {
+		return 0, false
+	}
+	d, err := time.ParseDuration(choice)
+	return d, err == nil && d > 0
+}
+
+// durationChoices are the durations the dialog offers under the lease cap,
+// with the words for each: the session, then the fixed lengths up to the
+// first one that reaches the cap, which grants the cap and is worded as it
+// when it is longer ("20 minutes (the max_lease cap)"). A longer one would
+// grant the same, so it is not offered. With no cap (0) every duration is
+// offered as it is.
+func durationChoices(capped time.Duration) (values, names []string) {
+	for _, choice := range approval.Durations {
+		d, fixed := fixedLength(choice)
+		switch {
+		case !fixed:
+			values, names = append(values, choice), append(names, titles([]string{choice}, durationTitles)[0])
+		case capped > 0 && d > capped:
+			return append(values, choice), append(names, spanWords(capped)+" (the max_lease cap)")
+		default:
+			values, names = append(values, choice), append(names, titles([]string{choice}, durationTitles)[0])
+			if capped > 0 && d == capped {
+				return values, names
+			}
+		}
+	}
+	return values, names
 }
 
 // completeURL tells the client a passkey page's interaction is over once the
@@ -738,6 +785,7 @@ type dialogShown struct {
 // warnings first, the agent's reason quoted and labeled as its own; and two
 // fields, how long and with which proof.
 func formElicitation(f approval.Facts, methods []string, shown dialogShown) mcp.ElicitationRequest {
+	durations, durationNames := durationChoices(shown.capped)
 	return mcp.ElicitationRequest{
 		Request: mcp.Request{Method: string(mcp.MethodElicitationCreate)},
 		Params: mcp.ElicitationParams{
@@ -747,8 +795,8 @@ func formElicitation(f approval.Facts, methods []string, shown dialogShown) mcp.
 				"properties": map[string]any{
 					"duration": map[string]any{
 						"type": "string", "title": "Approve for",
-						"description": "how long the access lasts, capped by the daemon's maximum",
-						"enum":        approval.Durations, "enumNames": titles(approval.Durations, durationTitles),
+						"description": "how long the access lasts",
+						"enum":        durations, "enumNames": durationNames,
 						"default": approval.ForSession,
 					},
 					"method": map[string]any{
@@ -764,9 +812,10 @@ func formElicitation(f approval.Facts, methods []string, shown dialogShown) mcp.
 	}
 }
 
-// dialogChoice reads the accepted form: a duration the service offers and one
-// of the offered methods (the only one, when the form came back without it).
-func dialogChoice(content any, methods []string) (duration, method string, ok bool) {
+// dialogChoice reads the accepted form: one of the offered durations
+// (durationChoices) and one of the offered methods (the only one, when the
+// form came back without it).
+func dialogChoice(content any, durations, methods []string) (duration, method string, ok bool) {
 	fields, _ := content.(map[string]any)
 	duration, _ = fields["duration"].(string)
 	method, _ = fields["method"].(string)
@@ -776,7 +825,7 @@ func dialogChoice(content any, methods []string) (duration, method string, ok bo
 	if method == "" && len(methods) == 1 {
 		method = methods[0]
 	}
-	return duration, method, slices.Contains(approval.Durations, duration) && slices.Contains(methods, method)
+	return duration, method, slices.Contains(durations, duration) && slices.Contains(methods, method)
 }
 
 // dialogMessage renders the request's facts for the dialog. Its first line
