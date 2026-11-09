@@ -48,7 +48,7 @@ final class PresentationTests: XCTestCase {
                                  expires: "2026-11-07T19:09:00Z", clock: c)
         XCTAssertEqual(n, Notice(title: "Approved", body: "Read-write access to demo-vault is open to Claude Code 2.1.319 until 2:09\u{00A0}PM.",
                                  succeeded: true))
-        XCTAssertTrue(n.autoCloses)
+        XCTAssertFalse(n.autoCloses, "what was opened, and until when, stays until the owner dismisses it")
         XCTAssertEqual(Notices.approved(access: "read-only", project: "acme", from: "beta", who: "Codex", expires: "2026-11-08T14:15:00Z", clock: c).body,
                        "Read-only access to acme from project beta is open to Codex until tomorrow 9:15\u{00A0}AM.")
         XCTAssertEqual(Notices.approved(access: "", project: "", from: "", who: "process 66124", expires: nil, clock: c).body,
@@ -60,7 +60,7 @@ final class PresentationTests: XCTestCase {
         XCTAssertEqual(first, Notice(title: "Touch ID enrolled",
                                      body: "This Mac's Touch ID can now approve access to locked projects. The daemon lists it as \u{201C}Owner\u{2019}s MacBook\u{201D}.",
                                      succeeded: true))
-        XCTAssertTrue(first.autoCloses)
+        XCTAssertFalse(first.autoCloses, "a key enrolled stays until the owner dismisses it")
 
         let two = Notices.enrolled(name: "Touch ID", removals: ["sudo -k -u _seamless seamlessd approvers remove 01A", "sudo -k -u _seamless seamlessd approvers remove 01B"])
         XCTAssertEqual(two.body, "This Mac's Touch ID can now approve access to locked projects. The daemon lists it as \u{201C}Touch ID\u{201D}. "
@@ -73,7 +73,7 @@ final class PresentationTests: XCTestCase {
                                         body: "This Mac's Touch ID can now approve access to locked projects. The daemon lists it as \u{201C}Touch ID\u{201D}. "
                                             + "It replaces the key this Mac enrolled before, which is deleted from this Mac and from the daemon.",
                                         succeeded: true))
-        XCTAssertTrue(replaced.autoCloses, "nothing is left for the owner to do")
+        XCTAssertFalse(replaced.autoCloses)
         XCTAssertTrue(Notices.enrolled(name: "Touch ID", removals: [], retired: 2).body
             .hasSuffix(" It replaces the keys this Mac enrolled before, which are deleted from this Mac and from the daemon."))
     }
@@ -91,7 +91,9 @@ final class PresentationTests: XCTestCase {
         XCTAssertEqual(two.setApart, ["seamlessd approvers remove 01A", "seamlessd approvers remove 01B"])
         XCTAssertEqual(Notices.noKey(), Notice(title: "No key to delete",
                                                body: "No Touch ID approver key is stored on this Mac, so there is nothing to delete.",
-                                               succeeded: true))
+                                               succeeded: true, changedNothing: true))
+        XCTAssertFalse(Notices.keyDeleted(credentials: []).autoCloses, "a key deleted stays until the owner dismisses it")
+        XCTAssertTrue(Notices.noKey().autoCloses, "nothing changed: the one alert that closes by itself")
     }
 
     func testFailureAlerts() {
@@ -120,10 +122,14 @@ final class PresentationTests: XCTestCase {
         XCTAssertFalse(usage.autoCloses)
     }
 
-    /// Only a success that asks nothing of the owner closes by itself.
+    /// Only a success that changed nothing and asks nothing of the owner
+    /// closes by itself.
     func testAutoCloseRule() {
         XCTAssertEqual(Notice.autoCloseSeconds, 6)
-        XCTAssertTrue(Notice(title: "t", body: "b.", succeeded: true).autoCloses)
+        XCTAssertTrue(Notice(title: "t", body: "b.", succeeded: true, changedNothing: true).autoCloses)
+        XCTAssertFalse(Notice(title: "t", body: "b.", succeeded: true).autoCloses)
+        XCTAssertFalse(Notice(title: "t", body: "b.", succeeded: true, instructs: true, changedNothing: true).autoCloses)
+        XCTAssertFalse(Notice(title: "t", body: "b.", succeeded: false, changedNothing: true).autoCloses)
         XCTAssertFalse(Notice(title: "t", body: "b.", succeeded: true, instructs: true).autoCloses)
         XCTAssertFalse(Notice(title: "t", body: "b.", succeeded: false).autoCloses)
         XCTAssertFalse(Notice(title: "t", body: "b.", succeeded: false, instructs: true).autoCloses)

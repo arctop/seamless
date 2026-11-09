@@ -52,7 +52,7 @@ final class FlowTests: XCTestCase {
         XCTAssertEqual(out, .done(Notice(title: "Approved",
                                          body: "Read-write access to acme is open to Claude Code 2.1.319 in session \u{201C}cc/2252a8cb\u{201D} until 2:09\u{00A0}PM.",
                                          succeeded: true)))
-        XCTAssertTrue(try XCTUnwrap(out.notice).autoCloses, "an approval asks nothing more of the owner")
+        XCTAssertFalse(try XCTUnwrap(out.notice).autoCloses, "an approval stays until the owner dismisses it")
 
         let reqs = server.requestStrings
         XCTAssertEqual(reqs.count, 2)
@@ -263,7 +263,7 @@ final class FlowTests: XCTestCase {
             body: "This Mac's Touch ID can now approve access to locked projects. The daemon lists it as \u{201C}Test Mac\u{201D}. "
                 + "It replaces the key this Mac enrolled before, which is deleted from this Mac and from the daemon.",
             succeeded: true)))
-        XCTAssertTrue(try XCTUnwrap(out.notice).autoCloses)
+        XCTAssertFalse(try XCTUnwrap(out.notice).autoCloses)
         XCTAssertEqual(try keys.keys().map(\.credential), ["01NEWAPPROVER0000000000000"])
     }
 
@@ -303,7 +303,7 @@ final class FlowTests: XCTestCase {
             XCTAssertEqual(out, .done(Notice(title: "Touch ID enrolled",
                                              body: "This Mac's Touch ID can now approve access to locked projects. The daemon lists it as \u{201C}Test Mac\u{201D}.",
                                              succeeded: true)), typed)
-            XCTAssertTrue(try XCTUnwrap(out.notice).autoCloses, typed)
+            XCTAssertFalse(try XCTUnwrap(out.notice).autoCloses, typed)
             XCTAssertEqual(ui.asked.count, 1, typed)
             XCTAssertEqual(formOf(server.requestStrings[1])["code"], "ABCDEFGHJKMNPQRS", typed)
         }
@@ -321,7 +321,7 @@ final class FlowTests: XCTestCase {
         defer { server.stop() }
         let out = flows(server, keys: keys, ui: FakeUI(codes: ["ABCD-EFGH-JKMN-PQRS"])).enroll(name: nil)
         XCTAssertEqual(out.notice?.setApart, [])
-        XCTAssertEqual(out.notice?.autoCloses, true)
+        XCTAssertEqual(out.notice?.autoCloses, false)
         XCTAssertEqual(try keys.keys().map(\.credential), ["01NEWAPPROVER0000000000000"])
         XCTAssertNil(formOf(server.requestStrings[1])["replace"], "a key the daemon never knew has nothing to retire")
         XCTAssertEqual(keys.reasons, [Reason.enrollment(account: "_seamless")])
@@ -390,7 +390,7 @@ final class FlowTests: XCTestCase {
         XCTAssertEqual(ui.forgetAsked, [["01APPROVERID000000000000AA"], ["01APPROVERID000000000000AA"]])
         XCTAssertEqual(f.forget(), .done(Notice(title: "No key to delete",
                                                 body: "No Touch ID approver key is stored on this Mac, so there is nothing to delete.",
-                                                succeeded: true)))
+                                                succeeded: true, changedNothing: true)))
     }
 
     /// A key that was never enrolled is deleted with nothing left to do.
@@ -401,7 +401,7 @@ final class FlowTests: XCTestCase {
         let f = Flows(transport: UnixSocketTransport(path: "/nonexistent", userAgent: "t", admit: { _ in }), keys: keys, ui: ui)
         let out = f.forget()
         XCTAssertEqual(out, .done(Notice(title: "Key deleted", body: "This Mac's Touch ID approver key is deleted.", succeeded: true)))
-        XCTAssertTrue(try XCTUnwrap(out.notice).autoCloses)
+        XCTAssertFalse(try XCTUnwrap(out.notice).autoCloses)
         XCTAssertEqual(ui.forgetAsked, [[]])
     }
 }

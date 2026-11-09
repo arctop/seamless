@@ -47,19 +47,23 @@ final class AppUI: ApproverUI {
     }
 
     /// `show` tells the owner how the run ended, since a helper that
-    /// LaunchServices started has no terminal. It closes by itself after
-    /// Notice.autoCloseSeconds only when it asks nothing of the owner
-    /// (Notice.autoCloses).
+    /// LaunchServices started has no terminal. A failure is marked as one:
+    /// the critical style's caution badge on the app icon, and the title in
+    /// red. It closes by itself after Notice.autoCloseSeconds only when it
+    /// changed nothing and asks nothing of the owner (Notice.autoCloses).
     func show(_ notice: Notice) {
         onMain {
             let alert = NSAlert()
-            alert.alertStyle = notice.succeeded ? .informational : .warning
+            alert.alertStyle = notice.succeeded ? .informational : .critical
             alert.messageText = notice.title
             alert.informativeText = notice.body
             if !notice.setApart.isEmpty {
                 alert.accessoryView = SetApartView(lines: notice.setApart, copyable: notice.copyable, width: App.accessoryWidth)
             }
             alert.addButton(withTitle: "OK")
+            if !notice.succeeded {
+                App.tintTitle(of: alert, .systemRed)
+            }
             var timer: Timer?
             if notice.autoCloses {
                 let t = Timer(timeInterval: Notice.autoCloseSeconds, repeats: false) { _ in
@@ -95,6 +99,26 @@ enum App {
             NSApp.activate()
         } else {
             NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    /// `tintTitle` colors an alert's title. NSAlert has no setting for it,
+    /// so this lays the alert out and colors the label that shows the
+    /// title; on a system that builds the alert some other way, the title
+    /// keeps its color and the critical style's badge still marks it.
+    static func tintTitle(of alert: NSAlert, _ color: NSColor) {
+        alert.layout()
+        guard let root = alert.window.contentView else {
+            return
+        }
+        var queue: [NSView] = [root]
+        while !queue.isEmpty {
+            let v = queue.removeFirst()
+            if let label = v as? NSTextField, !label.isEditable, label.stringValue == alert.messageText {
+                label.textColor = color
+                return
+            }
+            queue.append(contentsOf: v.subviews)
         }
     }
 

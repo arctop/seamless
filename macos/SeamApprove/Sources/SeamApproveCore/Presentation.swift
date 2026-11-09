@@ -115,20 +115,26 @@ public struct Notice: Equatable {
     public var succeeded: Bool
     /// `instructs` is whether the alert tells the owner to do something.
     public var instructs: Bool
+    /// `changedNothing` is whether the run changed nothing anywhere: the
+    /// only kind of alert the owner may miss without losing anything.
+    public var changedNothing: Bool
 
-    public init(title: String, body: String, setApart: [String] = [], succeeded: Bool, instructs: Bool = false) {
+    public init(title: String, body: String, setApart: [String] = [], succeeded: Bool, instructs: Bool = false,
+                changedNothing: Bool = false) {
         self.title = title
         self.body = body
         self.setApart = setApart
         self.succeeded = succeeded
         self.instructs = instructs
+        self.changedNothing = changedNothing
     }
 
     /// `autoCloses` is the rule for the 6-second close: only a success that
-    /// asks nothing of the owner closes by itself. A failure, or an alert
-    /// with an instruction, stays until the owner dismisses it.
+    /// changed nothing and asks nothing of the owner closes by itself. What
+    /// was opened and until when, a key enrolled or deleted, a failure, and
+    /// an alert with an instruction all stay until the owner dismisses them.
     public var autoCloses: Bool {
-        succeeded && !instructs
+        succeeded && changedNothing && !instructs
     }
 
     /// `copyable` is whether a click on the set-apart lines copies them: when
@@ -211,7 +217,7 @@ public enum Notices {
     /// Forget found no key.
     public static func noKey() -> Notice {
         Notice(title: "No key to delete", body: "No Touch ID approver key is stored on this Mac, so there is nothing to delete.",
-               succeeded: true)
+               succeeded: true, changedNothing: true)
     }
 
     /// A run failed with `message`, a sentence or a clause.
