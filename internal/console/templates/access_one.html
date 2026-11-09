@@ -141,17 +141,26 @@ window.SEAM_NO_LIVE_REFRESH = true; // an approval in progress must not be clobb
     }
     return Promise.resolve(false);
   }
+  // Each control is wired once, by itself rather than by the page: choosing
+  // a duration morphs the same page in place (navigation.js keeps an element
+  // whose tag matches), so a page-wide "already wired" mark would leave the
+  // passkey form that arrives with ?for= unwired, and its native submit
+  // would reload the duration choices instead of asking for the passkey.
+  function wireOnce(el) {
+    if (!el || el._seamWired) return false;
+    el._seamWired = true;
+    return true;
+  }
   function enhance() {
     var root = document.querySelector('[data-access-id]');
-    if (!root || root._seamWired) return;
-    root._seamWired = true;
-    var status = document.getElementById('access-status');
-    function say(msg) { if (status) status.textContent = msg; }
-    var id = root.getAttribute('data-access-id');
+    if (!root) return;
+    function say(msg) { var s = document.getElementById('access-status'); if (s) s.textContent = msg; }
     // The passkey form exists only once the duration is chosen (?for=): its
     // options sign that duration, so it is the one sent with the assertion.
+    // Every value is read when it is used, since a morph may change them.
     var form = document.getElementById('access-form');
-    if (form) form.addEventListener('submit', function (e) {
+    if (wireOnce(form)) form.addEventListener('submit', function (e) {
+      var id = document.querySelector('[data-access-id]').getAttribute('data-access-id');
       e.preventDefault();
       var raw = form.getAttribute('data-options');
       if (!raw || !window.PublicKeyCredential) { say('This browser cannot use a passkey here.'); return; }
@@ -169,7 +178,9 @@ window.SEAM_NO_LIVE_REFRESH = true; // an approval in progress must not be clobb
       });
     });
     var deny = document.getElementById('access-deny');
-    if (deny) deny.addEventListener('click', function () {
+    if (wireOnce(deny)) deny.addEventListener('click', function () {
+      var root = document.querySelector('[data-access-id]');
+      var id = root.getAttribute('data-access-id');
       if (!confirm(root.getAttribute('data-deny-confirm') || 'Deny this request?')) return;
       post('/console/access/' + id + '/deny', {}).then(function () { refresh(); })
         .catch(function (err) { say(err.message); });

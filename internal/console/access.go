@@ -187,11 +187,21 @@ type accessOneData struct {
 // durationChoice is one duration radio: its value and its words.
 type durationChoice struct{ Value, Words string }
 
-// durationChoices words every duration the daemon offers, the default first.
+// durationChoices words the durations the daemon offers, the default first,
+// as max_lease grants them: the fixed lengths up to the first one that
+// reaches the cap, which reads as the cap when it is cut short. A longer one
+// would grant the same, so it is not offered twice (the approval dialog's
+// choices are the same, internal/mcp durationChoices).
 func durationChoices(maxLease string) []durationChoice {
-	out := make([]durationChoice, len(approval.Durations))
-	for i, c := range approval.Durations {
-		out[i] = durationChoice{Value: c, Words: durationWords(c, maxLease)}
+	limit, err := time.ParseDuration(maxLease)
+	capped := err == nil && limit > 0
+	fixed := map[string]time.Duration{approval.For1h: time.Hour, approval.For4h: 4 * time.Hour}
+	var out []durationChoice
+	for _, c := range approval.Durations {
+		out = append(out, durationChoice{Value: c, Words: durationWords(c, maxLease)})
+		if d, ok := fixed[c]; ok && capped && d >= limit {
+			break
+		}
 	}
 	return out
 }

@@ -603,7 +603,7 @@ func printable(s string) string {
 // ("1" for 1h granting the session). ok is false when the owner gave no
 // answer at all (end of input): nothing is decided.
 func askDuration(e *env, in *bufio.Reader, one accessOne) (string, bool, error) {
-	ds := one.Durations
+	ds := offeredDurations(one.Durations, one.MaxLease)
 	if len(ds) == 0 {
 		return "", false, errors.New("the daemon offered no durations to approve for")
 	}
@@ -645,6 +645,23 @@ func askDuration(e *env, in *bufio.Reader, one accessOne) (string, bool, error) 
 			fmt.Fprintf(e.stderr, "answer with one of %s, or the start of one\n", listed)
 		}
 	}
+}
+
+// offeredDurations are the daemon's durations as max_lease grants them:
+// each one up to the first fixed length the cap reaches, which grants the
+// cap. A longer one would grant the same, so it is not offered twice (the
+// console's choices and the approval dialog's are the same).
+func offeredDurations(ds []string, maxLease string) []string {
+	limit, err := time.ParseDuration(maxLease)
+	capped := err == nil && limit > 0
+	var out []string
+	for _, d := range ds {
+		out = append(out, d)
+		if v, err := time.ParseDuration(d); d != durationSession && err == nil && capped && v >= limit {
+			break
+		}
+	}
+	return out
 }
 
 // matchDuration finds the duration ans names: a name exactly, else the one

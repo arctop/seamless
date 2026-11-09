@@ -509,12 +509,23 @@ func TestDurationWords_MaxLeaseCap(t *testing.T) {
 	} {
 		require.Equal(t, tc.want, durationWords(tc.choice, tc.maxLease), "%s capped at %q", tc.choice, tc.maxLease)
 	}
-	got := durationChoices("20m0s")
+	// A length the cap reaches is offered once, as the cap: a longer one
+	// would grant the same.
 	require.Equal(t, []durationChoice{
 		{approval.ForSession, "until this session ends (at most 20m)"},
 		{approval.For1h, "20m (the max_lease cap)"},
-		{approval.For4h, "20m (the max_lease cap)"},
-	}, got)
+	}, durationChoices("20m0s"))
+	require.Equal(t, []durationChoice{
+		{approval.ForSession, "until this session ends (at most 1h)"},
+		{approval.For1h, "1 hour"},
+	}, durationChoices("1h0m0s"))
+	require.Equal(t, []durationChoice{
+		{approval.ForSession, "until this session ends (at most 2h)"},
+		{approval.For1h, "1 hour"},
+		{approval.For4h, "2h (the max_lease cap)"},
+	}, durationChoices("2h0m0s"))
+	require.Len(t, durationChoices("8h0m0s"), 3)
+	require.Len(t, durationChoices(""), 3, "no cap known: every duration")
 }
 
 // Passkeys set up and one enrolled, but no origin to verify it on: the

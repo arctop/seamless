@@ -1016,3 +1016,14 @@ func TestAgentFamily(t *testing.T) {
 		require.Equal(t, tc.want, agentFamily(accessFacts{Agent: tc.agent, PID: tc.pid}), "%q", tc.agent)
 	}
 }
+
+// A fixed length the cap reaches is offered once, as the cap: a longer one
+// would grant the same.
+func TestOfferedDurations(t *testing.T) {
+	all := []string{"session", "1h", "4h"}
+	require.Equal(t, []string{"session", "1h"}, offeredDurations(all, "20m0s"))
+	require.Equal(t, []string{"session", "1h"}, offeredDurations(all, "1h0m0s"))
+	require.Equal(t, all, offeredDurations(all, "2h0m0s"))
+	require.Equal(t, all, offeredDurations(all, "8h0m0s"))
+	require.Equal(t, all, offeredDurations(all, ""), "no cap known: every duration")
+}
