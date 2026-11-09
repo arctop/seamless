@@ -37,9 +37,9 @@ final class ReasonTests: XCTestCase {
 
     func testApprovalSentence() {
         XCTAssertEqual(Reason.approval(facts, duration: "session", maxLease: "8h0m0s"),
-                       "approve read-write access to acme (confidential) for the program \u{201C}claude\u{201D} in session cc/2252a8cb until the session ends (at most 8 hours)")
+                       "approve read-write access to acme (confidential) for the program \u{201C}claude\u{201D} in session cc/\u{2060}2252a8cb until the session ends (at most 8 hours)")
         XCTAssertEqual(Reason.approval(facts, duration: "1h", maxLease: "8h0m0s"),
-                       "approve read-write access to acme (confidential) for the program \u{201C}claude\u{201D} in session cc/2252a8cb for 1 hour")
+                       "approve read-write access to acme (confidential) for the program \u{201C}claude\u{201D} in session cc/\u{2060}2252a8cb for 1 hour")
         XCTAssertTrue(Reason.approval(facts, duration: "4h", maxLease: nil).hasSuffix(" for 4 hours"))
     }
 
@@ -55,9 +55,9 @@ final class ReasonTests: XCTestCase {
                        "approve read-write access to demo-vault (confidential) for Claude Code 2.1.319 for 1 hour. Warning: no session named this agent; its cwd and model are unknown")
 
         let cases: [(session: String?, agent: String?, program: String?, pid: Int64?, want: String)] = [
-            ("cc/1234", "Claude Code 2.1.319", "/x/versions/2.1.319", 66124, "Claude Code 2.1.319 in session cc/1234"),
-            ("cc/1234", nil, "/usr/local/bin/codex", 66124, "the program \u{201C}codex\u{201D} in session cc/1234"),
-            ("cc/1234", nil, nil, 66124, "session cc/1234"),
+            ("cc/1234", "Claude Code 2.1.319", "/x/versions/2.1.319", 66124, "Claude Code 2.1.319 in session cc/\u{2060}1234"),
+            ("cc/1234", nil, "/usr/local/bin/codex", 66124, "the program \u{201C}codex\u{201D} in session cc/\u{2060}1234"),
+            ("cc/1234", nil, nil, 66124, "session cc/\u{2060}1234"),
             (nil, "Codex", "/usr/local/bin/codex", 66124, "Codex"),
             (nil, nil, "/usr/local/bin/codex", 66124, "the program \u{201C}codex\u{201D}"),
             (nil, nil, nil, 66124, "process 66124"),
@@ -119,7 +119,7 @@ final class ReasonTests: XCTestCase {
         var f = facts
         f.session = "cc/08eb9006-5c473accb1746e1b"
         f.agent = "Claude Code 2.1.319"
-        XCTAssertEqual(Reason.who(f), "Claude Code 2.1.319 in session cc/08eb9006")
+        XCTAssertEqual(Reason.who(f), "Claude Code 2.1.319 in session cc/\u{2060}08eb9006")
     }
 
     func testAgentReasonIsLeftOut() {
@@ -136,7 +136,7 @@ final class ReasonTests: XCTestCase {
             Warning(code: "refresh", text: "this session already holds a lease on the project; approving replaces it"),
             Warning(code: "no_session", text: "no session named this agent;\nits cwd and model are unknown"),
         ]
-        let three = "approve read-write access to acme (confidential) for Claude Code 2.1.319 in session cc/2252a8cb for 1 hour"
+        let three = "approve read-write access to acme (confidential) for Claude Code 2.1.319 in session cc/\u{2060}2252a8cb for 1 hour"
             + ". Warning: the process asking is zsh, not an agent: a lease on it covers every program it started"
             + ". Warning: this session already holds a lease on the project; approving replaces it"
             + ". Warning: no session named this agent; its cwd and model are unknown"

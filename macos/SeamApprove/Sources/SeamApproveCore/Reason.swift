@@ -68,7 +68,11 @@ public enum Reason {
     public static func who(_ f: Facts) -> String {
         let name = agentName(f.agent) ?? programName(f.program)
         if let session = sessionName(f.session) {
-            let s = "session " + session
+            // A word joiner after the slash keeps a bare name on one line
+            // ("cx/" / "01a1c190" wrapped apart in an alert); a quoted one
+            // is left as it is.
+            let glued = session.hasPrefix("\u{201C}") ? session : session.replacingOccurrences(of: "/", with: "/\u{2060}")
+            let s = "session " + glued
             return name.map { $0 + " in " + s } ?? s
         }
         if let name = name {
