@@ -212,6 +212,12 @@ code (`web_fetch`, `mail`); without one, the payload's `tool_name` becomes the
 reason (`tool:webfetch`). The first mark stands. With the feature off the
 endpoint marks nothing and says so.
 
+Under a lock (`peer_auth.locked`), an agent in a locked project's repository
+has its session recorded there before you approve its access. Its own guard
+marks that session all the same, so the access request you are shown carries
+the "session tainted" warning. A process outside the agent's process tree
+finds no such session, as with every other hook.
+
 Setting the mark only lowers trust, so a session's own hook may set it.
 Clearing it is yours: the Held screen lists every marked session with a
 **Clear mark** button, and nothing else - no endpoint, flag or MCP tool -

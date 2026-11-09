@@ -2,13 +2,17 @@ package hooks
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
@@ -129,4 +133,63 @@ func TestSessionTaint_ToolNameBecomesTheReason(t *testing.T) {
 	require.Len(t, list, 1)
 	require.Equal(t, "tool:mcp__mail__read_inbox", list[0].Reason)
 	require.Equal(t, "", toolReason("  "))
+}
+
+// An agent in a locked project's repository, before the owner approves its
+// lease, is marked by its own guard: its session is recorded in the locked
+// project (lockedStart), which the guard's process cannot reach yet, and the
+// request the owner is about to decide must show the mark. As every hook
+// reaches such a session (reachLocked), only the agent's own process chain
+// does: an owner process outside it finds no session.
+func TestSessionTaint_MarksALockedSessionBeforeItsLease(t *testing.T) {
+	ctx := context.Background()
+	e := newLockHooksWith(t, true, func(db *sql.DB, cfg *Config) {
+		cfg.Features = config.Features{Screening: true}
+		cfg.Screening = screening.New(screening.Config{DB: db, Events: cfg.Events})
+	})
+	notice := e.hook("session-start", "", map[string]any{"session_id": "fin-taint", "cwd": "/work/finance", "source": "startup"})
+	require.Contains(t, notice, "is locked")
+	sess := requireAmbientSession(t, e.db, ClientClaudeCode, "fin-taint")
+	require.Equal(t, lkFin, sess.ProjectSlug)
+	pending := e.pending()
+	require.Len(t, pending, 1)
+	facts, err := e.svc.Facts(ctx, pending[0].ID)
+	require.NoError(t, err)
+	require.NotContains(t, warningCodesOf(facts), approval.WarnTainted)
+
+	q := url.Values{"host": {localHostName}, "agent_process": {lkAgent.AgentID()}, "client": {string(ClientClaudeCode)}}
+	resp, _ := post(t, e.url+"/api/hooks/session-taint?"+q.Encode(), testKey, map[string]any{
+		"session_id": "fin-taint", "tool_name": "WebFetch"})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "marked", resp.Header.Get(TaintHeader), "the agent's own guard, with no lease on the project")
+	resp, _ = post(t, e.url+"/api/hooks/session-taint?client="+string(ClientClaudeCode), testKey, map[string]any{"session": sess.Name})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "already-marked", resp.Header.Get(TaintHeader), "by name, from the agent's chain")
+
+	// An owner process outside the agent's tree: no lease, not its session.
+	e.mu.Lock()
+	e.view = func() (access.View, bool) {
+		v, ok := e.policy.PeerChainView(501, []access.ProcessToken{{PID: 900, Version: 9000, Boot: lkBoot}})
+		require.True(t, ok)
+		return v, true
+	}
+	e.mu.Unlock()
+	for _, body := range []map[string]any{{"session": sess.Name}, {"session_id": "fin-taint"}} {
+		resp, _ = post(t, e.url+"/api/hooks/session-taint?client="+string(ClientClaudeCode), testKey, body)
+		require.Equal(t, http.StatusNotFound, resp.StatusCode, body)
+		require.Equal(t, "unknown-session", resp.Header.Get(TaintHeader), body)
+	}
+
+	after, err := e.svc.Facts(ctx, pending[0].ID)
+	require.NoError(t, err)
+	require.Contains(t, warningCodesOf(after), approval.WarnTainted)
+	require.NotEqual(t, facts.Digest, after.Digest, "an approval begun before the mark is refused as changed facts")
+}
+
+func warningCodesOf(f approval.Facts) []string {
+	var out []string
+	for _, w := range f.Warnings {
+		out = append(out, w.Code)
+	}
+	return out
 }

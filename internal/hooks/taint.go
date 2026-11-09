@@ -180,7 +180,7 @@ func (h *Handler) taintTarget(ctx context.Context, client Client, extID, ref str
 	var err error
 	switch {
 	case extID != "":
-		if h.foreignSession(ctx, client, extID) {
+		if reach, _ := h.sessionReachOf(ctx, client, extID); reach == reachForeign {
 			return core.Session{}, false, nil
 		}
 		sess, found, err = store.AmbientSessionByExternalIdentity(ctx, h.db, client.externalIdentity(), extID)
@@ -193,7 +193,14 @@ func (h *Handler) taintTarget(ctx context.Context, client Client, extID, ref str
 	if err != nil || !found {
 		return core.Session{}, false, err
 	}
-	if v, ok := access.FromContext(ctx); ok && !v.Writable(sess.ProjectSlug) {
+	// A session in a project locked to the caller is reached the way every
+	// hook reaches one (reachLocked): from the agent's own process chain. The
+	// owner's agent in a locked project's repository before its lease
+	// (lockedStart records the session there) is exactly the session whose
+	// approval must show the mark, and its own guard runs with no lease. The
+	// mark reads nothing from the project and writes nothing into it.
+	if v, ok := access.FromContext(ctx); ok && !v.Writable(sess.ProjectSlug) &&
+		(!v.Locked(sess.ProjectSlug) || !h.sessionInChain(ctx, v, sess.ID)) {
 		return core.Session{}, false, nil
 	}
 	// A session another principal started is not found either, whichever way
