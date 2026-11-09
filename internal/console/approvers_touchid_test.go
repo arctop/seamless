@@ -293,7 +293,7 @@ func TestTouchID_ApproveALockRequest(t *testing.T) {
 		{"a wrong key", with("signature", touchApproval(t, stranger, cred, v, "1h").Get("signature")), http.StatusBadRequest, "does not verify"},
 		{"a signature over another request", with("signature", touchApproval(t, k, cred, ov, "1h").Get("signature")), http.StatusBadRequest, "does not verify"},
 		{"a changed duration", with("duration", "4h"), http.StatusBadRequest, "does not verify"},
-		{"a changed digest", with("digest", strings.Repeat("0", 64)), http.StatusConflict, "facts changed"},
+		{"a changed digest", with("digest", strings.Repeat("0", 64)), http.StatusConflict, "the request changed while Touch ID showed it"},
 		{"a signature that is not base64", with("signature", "not base64!"), http.StatusBadRequest, "standard base64"},
 		{"no credential", with("credential", ""), http.StatusBadRequest, "credential"},
 		{"an unknown credential", with("credential", "01KNOSUCHKEY00000000000000"), http.StatusBadRequest, "does not verify"},
@@ -306,6 +306,11 @@ func TestTouchID_ApproveALockRequest(t *testing.T) {
 		require.Zero(t, leases(), tc.name)
 	}
 
+	// The helper has no page: its facts-changed refusal never says to reload one.
+	_, msg := approve(with("digest", strings.Repeat("0", 64)))
+	require.NotContains(t, msg, "page")
+	require.Contains(t, msg, "seam approve")
+
 	// Over TCP, even with the owner's key and a good signature: refused.
 	status, out := f.jsonDo(t, f.asOwnerTCP(formPost("/console/access/"+id+"/approve", good)))
 	require.Equal(t, http.StatusForbidden, status)
@@ -315,7 +320,7 @@ func TestTouchID_ApproveALockRequest(t *testing.T) {
 	require.Contains(t, errorOf(t, out), "peer_auth socket only")
 	require.Zero(t, leases())
 
-	status, msg := approve(good)
+	status, msg = approve(good)
 	require.Equal(t, http.StatusOK, status, msg)
 	require.Equal(t, 1, leases(), "the agent's tree now holds the lease")
 	a, err := store.AccessApprovalByID(ctx, f.db, id)

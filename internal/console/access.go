@@ -632,6 +632,12 @@ func (s *Service) accessError(w http.ResponseWriter, r *http.Request, err error)
 		// what was sent.
 		msg = "the passkey approved this request for another duration, or other facts, than this approval names: " +
 			"nothing was approved; reload the page, check the duration and approve again"
+	case errors.Is(err, approval.ErrFactsChanged) && r.PostForm.Get("proof") == proofTouchIDValue:
+		// The Touch ID helper, which has no page to reload: it showed the
+		// facts in its prompt, and its call has ended by the time it says so.
+		msg = "the request changed while Touch ID showed it (a new warning, or the agent's reason filled in), " +
+			"so nothing was approved: run seam approve in your own terminal to see it as it stands now, " +
+			"or have the agent ask again"
 	case errors.Is(err, approval.ErrFactsChanged):
 		msg = "the request's facts changed since this page loaded: reload and look at them again"
 	case errors.Is(err, store.ErrApprovalNotPending):
