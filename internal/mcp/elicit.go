@@ -232,17 +232,7 @@ func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (d
 	if !form || !slices.Contains(methods, approval.ProofTouchID) {
 		// A passkey only: its page shows the facts and asks the duration, so
 		// the dialog is the page itself.
-		elicitID, accepted, ok := s.passkeyDialog(dctx, session, t, page, "", 0)
-		if !ok {
-			return dialogEnd{}, false
-		}
-		if !accepted.answered() {
-			end.answer = accepted.answer()
-			return s.settle(ctx, dctx, t, end), true
-		}
-		end.answer = answerAccepted
-		s.awaitDecision(dctx, t.ID)
-		return s.completeURL(ctx, session, elicitID, s.settle(ctx, dctx, t, end)), true
+		return s.passkeyWait(ctx, dctx, session, t, page, "", 0, end, false)
 	}
 
 	facts, err := s.cfg.Approvals.Facts(ctx, t.ID)
@@ -288,15 +278,7 @@ func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (d
 	if method == approval.ProofPasskey {
 		// The page for the duration chosen here: it shows it read-only, and
 		// the passkey signs it.
-		elicitID, accepted, ok := s.passkeyDialog(dctx, session, t, pageFor(page, duration), duration, capped)
-		if !ok || !accepted.answered() {
-			if ok {
-				end.answer = accepted.answer()
-			}
-			return s.settle(ctx, dctx, t, end), true
-		}
-		s.awaitDecision(dctx, t.ID)
-		return s.completeURL(ctx, session, elicitID, s.settle(ctx, dctx, t, end)), true
+		return s.passkeyWait(ctx, dctx, session, t, pageFor(page, duration), duration, capped, end, true)
 	}
 	// Touch ID: the bridge launches the helper, which reads the facts from
 	// the daemon, shows them in the prompt, and signs over the duration. When
@@ -416,17 +398,69 @@ type urlAnswer string
 func (u urlAnswer) answered() bool { return u == answerAccepted }
 func (u urlAnswer) answer() string { return string(u) }
 
-// passkeyDialog sends the owner to the request's passkey page: a URL
-// elicitation. duration is the one the dialog's form chose, which page
-// carries (pageFor), "" when the page asks it; capped is the lease cap it is
-// worded against. ok is false when the client did not take it (nothing
-// shown).
-func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSession, t dialogTarget, page, duration string,
-	capped time.Duration) (string, urlAnswer, bool) {
+// passkeyWait sends the owner to the request's passkey page (passkeyDialog)
+// and waits for the request's decision at the same time, until the dialog's
+// bound. The two are not waited on in turn: Claude Code holds its answer to a
+// URL dialog until the server says the page's work is over
+// (notifications/elicitation/complete) or the owner skips that, so waiting
+// for the answer first waited out the whole call while the owner approved on
+// the page, and left the client "waiting for the server to confirm
+// completion" for good. However the wait ends, short of the owner declining
+// or cancelling the page, the client is told the interaction is over
+// (completeURL): the call is ending, and the page still decides the request.
+// formShown is whether the dialog's form came first (and was accepted), so a
+// page the client did not take still leaves a dialog that ran.
+func (s *Server) passkeyWait(ctx, dctx context.Context, session mcpserver.ClientSession, t dialogTarget, page,
+	duration string, capped time.Duration, end dialogEnd, formShown bool) (dialogEnd, bool) {
 	elicitID, err := core.NewID()
 	if err != nil {
-		return "", "", false
+		if formShown {
+			return s.settle(ctx, dctx, t, end), true
+		}
+		return dialogEnd{}, false
 	}
+	type pageAnswer struct {
+		answer urlAnswer
+		ok     bool
+	}
+	answered := make(chan pageAnswer, 1)
+	go func() {
+		answer, ok := s.passkeyDialog(dctx, session, t, elicitID, page, duration, capped)
+		answered <- pageAnswer{answer, ok}
+	}()
+	decided := make(chan struct{})
+	go func() {
+		s.awaitDecision(dctx, t.ID)
+		close(decided)
+	}()
+	select {
+	case got := <-answered:
+		switch {
+		case !got.ok && !formShown:
+			return dialogEnd{}, false
+		case !got.ok:
+			return s.settle(ctx, dctx, t, end), true
+		case got.answer == answerDeclined, got.answer == answerCancelled, got.answer == answerUnoffered:
+			end.answer = got.answer.answer()
+			return s.settle(ctx, dctx, t, end), true
+		case got.answer.answered():
+			end.answer = answerAccepted
+		}
+		<-decided
+	case <-decided:
+		// Decided on the page (or the bound reached) with the client still
+		// holding its answer: completeURL below releases it.
+	}
+	return s.completeURL(ctx, session, elicitID, s.settle(ctx, dctx, t, end)), true
+}
+
+// passkeyDialog sends the owner to the request's passkey page: a URL
+// elicitation with id elicitID. duration is the one the dialog's form chose,
+// which page carries (pageFor), "" when the page asks it; capped is the lease
+// cap it is worded against. ok is false when the client did not take it
+// (nothing shown).
+func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSession, t dialogTarget, elicitID, page,
+	duration string, capped time.Duration) (urlAnswer, bool) {
 	// Only the approval takes the passkey: the page denies without one.
 	approve, decide := "approve "+plain(t.Project), "Approve it"
 	if phrase := durationPhrase(duration, capped); phrase != "" {
@@ -446,19 +480,19 @@ func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSess
 	if err != nil {
 		if ctx.Err() == nil {
 			s.logger.Debug("access dialog: passkey page not shown", "request", t.Short, "error", err)
-			return "", "", false
+			return "", false
 		}
-		return elicitID, answerNone, true
+		return answerNone, true
 	}
 	switch res.Action {
 	case mcp.ElicitationResponseActionAccept:
-		return elicitID, answerAccepted, true
+		return answerAccepted, true
 	case mcp.ElicitationResponseActionDecline:
-		return elicitID, answerDeclined, true
+		return answerDeclined, true
 	case mcp.ElicitationResponseActionCancel:
-		return elicitID, answerCancelled, true
+		return answerCancelled, true
 	default:
-		return elicitID, answerUnoffered, true
+		return answerUnoffered, true
 	}
 }
 
@@ -530,10 +564,11 @@ func durationChoices(capped time.Duration) (values, names []string) {
 	return values, names
 }
 
-// completeURL tells the client a passkey page's interaction is over once the
-// request was decided.
+// completeURL tells the client a passkey page's interaction is over: the
+// request was decided, or the dialog's bound ended the call's wait (the page
+// still decides it, and the call's answer says so).
 func (s *Server) completeURL(ctx context.Context, session mcpserver.ClientSession, elicitID string, end dialogEnd) dialogEnd {
-	if elicitID == "" || end.state == statePending || ctx.Err() != nil {
+	if elicitID == "" || ctx.Err() != nil {
 		return end
 	}
 	if err := s.mcp.SendElicitationComplete(ctx, session, elicitID); err != nil {
@@ -757,7 +792,7 @@ var (
 	}
 	methodTitles = map[string]string{
 		approval.ProofTouchID: "Touch ID",
-		approval.ProofPasskey: "Passkey (opens the approval page for the duration chosen here)",
+		approval.ProofPasskey: "Passkey (opens the approval page)",
 	}
 )
 

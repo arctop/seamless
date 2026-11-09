@@ -748,7 +748,7 @@ func TestDialog_PasskeyPage(t *testing.T) {
 			if withTouchID {
 				require.Contains(t, last, ".\nApprove it for 1 hour with your passkey, or deny it, on the page this opens")
 				props := shown[0].Params.RequestedSchema.(map[string]any)["properties"].(map[string]any)
-				require.Equal(t, []any{"Touch ID", "Passkey (opens the approval page for the duration chosen here)"},
+				require.Equal(t, []any{"Touch ID", "Passkey (opens the approval page)"},
 					props["method"].(map[string]any)["enumNames"])
 			} else {
 				require.Contains(t, last, ".\nApprove it with your passkey, or deny it, on the page this opens")
@@ -1138,4 +1138,74 @@ func TestAccessRequest_ReadGrantOfAConfidentialProject(t *testing.T) {
 	require.Equal(t, "access_request: that project is not locked: nothing to request",
 		off.refused(offAgent, mcpserver.AccessRequestTool, map[string]any{"project": dlgLegal}))
 	require.Empty(t, off.pending())
+}
+
+// A client that holds its answer to the passkey page's URL dialog until the
+// server says the page's work is over, as Claude Code does ("waiting for the
+// server to confirm completion"): the approval on the page still ends the
+// wait, the completion releases the client's answer, and a wait that reaches
+// its bound undecided releases it too, so the client is never left waiting.
+func TestDialog_PasskeyPageClientHoldsItsAnswer(t *testing.T) {
+	for _, approve := range []bool{true, false} {
+		t.Run(fmt.Sprintf("approved on the page %v", approve), func(t *testing.T) {
+			wait := dlgLong
+			if !approve {
+				wait = 1500 * time.Millisecond
+			}
+			d := newDialogRig(t, dialogOpts{wait: wait, passkeys: true})
+			d.seed()
+			d.session("cc/fin", lkFin)
+			auth := d.enrollPasskey()
+			d.enrollTouchID()
+			pages := make(chan string, 1)
+			released := make(chan string, 1)
+			var o *owner
+			o = newOwner(func(ctx context.Context, req mcp.ElicitationRequest) (*mcp.ElicitationResult, error) {
+				if req.Params.Mode != mcp.ElicitationModeURL {
+					return accepting(approval.For1h, approval.ProofPasskey)(ctx, req)
+				}
+				pages <- req.Params.URL
+				select {
+				case id := <-o.completions:
+					released <- id
+					return answerWith(mcp.ElicitationResponseActionAccept, nil)(ctx, req)
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			})
+			agent := d.dialOwner(d.agentSocket(), o, &mcp.ElicitationCapability{Form: &struct{}{}, URL: &struct{}{}})
+
+			proved := make(chan error, 1)
+			go func() {
+				select {
+				case page := <-pages:
+					if !approve {
+						proved <- nil
+						return
+					}
+					u, err := url.Parse(page)
+					if err != nil {
+						proved <- err
+						return
+					}
+					proved <- d.provePasskey(auth, path.Base(u.Path), approval.For1h)
+				case <-time.After(20 * time.Second):
+					proved <- fmt.Errorf("no passkey page")
+				}
+			}()
+			text := d.refused(agent, "tasks_list", nil)
+			require.NoError(t, within(t, proved, "the page"))
+			id := within(t, released, "the client's held answer, released by the completion")
+			require.NotEmpty(t, id)
+			if approve {
+				leases := d.liveLeases()
+				require.Len(t, leases, 1, "the page's approval ended the wait: %s", text)
+				require.Equal(t, d.clock().Add(time.Hour), leases[0].ExpiresAt)
+				require.True(t, strings.HasPrefix(lines(text)[0], "tasks_list: the owner approved access request "), text)
+				return
+			}
+			require.Empty(t, d.liveLeases())
+			require.Contains(t, text, "\nRemedy: the approval dialog stopped waiting at ")
+		})
+	}
 }
