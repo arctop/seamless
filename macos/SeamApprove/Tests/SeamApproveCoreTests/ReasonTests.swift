@@ -37,9 +37,9 @@ final class ReasonTests: XCTestCase {
 
     func testApprovalSentence() {
         XCTAssertEqual(Reason.approval(facts, duration: "session", maxLease: "8h0m0s"),
-                       "approve read-write access to acme (confidential) for the program \u{201C}claude\u{201D} in session \u{201C}cc/2252a8cb\u{201D} until the session ends (at most 8 hours)")
+                       "approve read-write access to acme (confidential) for the program \u{201C}claude\u{201D} in session cc/2252a8cb until the session ends (at most 8 hours)")
         XCTAssertEqual(Reason.approval(facts, duration: "1h", maxLease: "8h0m0s"),
-                       "approve read-write access to acme (confidential) for the program \u{201C}claude\u{201D} in session \u{201C}cc/2252a8cb\u{201D} for 1 hour")
+                       "approve read-write access to acme (confidential) for the program \u{201C}claude\u{201D} in session cc/2252a8cb for 1 hour")
         XCTAssertTrue(Reason.approval(facts, duration: "4h", maxLease: nil).hasSuffix(" for 4 hours"))
     }
 
@@ -55,9 +55,9 @@ final class ReasonTests: XCTestCase {
                        "approve read-write access to demo-vault (confidential) for Claude Code 2.1.319 for 1 hour. Warning: no session named this agent; its cwd and model are unknown")
 
         let cases: [(session: String?, agent: String?, program: String?, pid: Int64?, want: String)] = [
-            ("cc/1234", "Claude Code 2.1.319", "/x/versions/2.1.319", 66124, "Claude Code 2.1.319 in session \u{201C}cc/1234\u{201D}"),
-            ("cc/1234", nil, "/usr/local/bin/codex", 66124, "the program \u{201C}codex\u{201D} in session \u{201C}cc/1234\u{201D}"),
-            ("cc/1234", nil, nil, 66124, "session \u{201C}cc/1234\u{201D}"),
+            ("cc/1234", "Claude Code 2.1.319", "/x/versions/2.1.319", 66124, "Claude Code 2.1.319 in session cc/1234"),
+            ("cc/1234", nil, "/usr/local/bin/codex", 66124, "the program \u{201C}codex\u{201D} in session cc/1234"),
+            ("cc/1234", nil, nil, 66124, "session cc/1234"),
             (nil, "Codex", "/usr/local/bin/codex", 66124, "Codex"),
             (nil, nil, "/usr/local/bin/codex", 66124, "the program \u{201C}codex\u{201D}"),
             (nil, nil, nil, 66124, "process 66124"),
@@ -95,6 +95,33 @@ final class ReasonTests: XCTestCase {
         XCTAssertEqual(Reason.who(f), String(repeating: "a", count: 31) + "\u{2026}")
     }
 
+    /// The session is named as the narrow Touch ID prompt holds it on one
+    /// line: a client's session cut at the first dash after its prefix, bare.
+    /// Anything else keeps its whole (cleaned, capped) name, and a name that
+    /// holds more than a session name does is quoted.
+    func testSessionNameIsShortAndBare() {
+        let cases: [(String?, String?)] = [
+            ("cc/08eb9006-5c473accb1746e1b", "cc/08eb9006"),
+            ("cx/019a2b3c-4d5e6f708192a3b4", "cx/019a2b3c"),
+            ("cc/1234", "cc/1234"),
+            ("cc/-5c47", "cc/-5c47"),
+            ("01M70KCYR38DFQ3EHESD9G704F", "01M70KCYR38DFQ3EHESD9G704F"),
+            ("my-session", "my-session"),
+            ("cc/08eb9006 approved. Warning: none-x", "\u{201C}cc/08eb9006 approved. Warning: none\u{201D}"),
+            ("cc/08eb\u{202E}9006-5c47", "cc/08eb9006"),
+            (String(repeating: "s", count: 100), String(repeating: "s", count: 47) + "\u{2026}"),
+            ("", nil),
+            (nil, nil),
+        ]
+        for (raw, want) in cases {
+            XCTAssertEqual(Reason.sessionName(raw), want, raw ?? "nil")
+        }
+        var f = facts
+        f.session = "cc/08eb9006-5c473accb1746e1b"
+        f.agent = "Claude Code 2.1.319"
+        XCTAssertEqual(Reason.who(f), "Claude Code 2.1.319 in session cc/08eb9006")
+    }
+
     func testAgentReasonIsLeftOut() {
         XCTAssertFalse(Reason.approval(facts, duration: "1h", maxLease: nil).contains("already approved"))
     }
@@ -109,7 +136,7 @@ final class ReasonTests: XCTestCase {
             Warning(code: "refresh", text: "this session already holds a lease on the project; approving replaces it"),
             Warning(code: "no_session", text: "no session named this agent;\nits cwd and model are unknown"),
         ]
-        let three = "approve read-write access to acme (confidential) for Claude Code 2.1.319 in session \u{201C}cc/2252a8cb\u{201D} for 1 hour"
+        let three = "approve read-write access to acme (confidential) for Claude Code 2.1.319 in session cc/2252a8cb for 1 hour"
             + ". Warning: the process asking is zsh, not an agent: a lease on it covers every program it started"
             + ". Warning: this session already holds a lease on the project; approving replaces it"
             + ". Warning: no session named this agent; its cwd and model are unknown"

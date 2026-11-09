@@ -16,12 +16,12 @@ final class PresentationTests: XCTestCase {
     func testTimePhrases() {
         let c = Self.clock()
         let cases: [(String, String)] = [
-            ("2026-11-07T19:09:00Z", "2:09\u{00A0}PM"),
-            ("2026-11-07T19:09:00.250Z", "2:09\u{00A0}PM"),
-            ("2026-11-08T14:15:00Z", "tomorrow 9:15\u{00A0}AM"),
-            ("2026-11-06T23:40:00Z", "yesterday 6:40\u{00A0}PM"),
-            ("2026-11-09T14:15:00Z", "Mon, Nov 9, 9:15\u{00A0}AM"),
-            ("2027-01-02T14:15:00Z", "Sat, Jan 2, 2027, 9:15\u{00A0}AM"),
+            ("2026-11-07T19:09:00Z", "14:09"),
+            ("2026-11-07T19:09:00.250Z", "14:09"),
+            ("2026-11-08T14:15:00Z", "tomorrow 09:15"),
+            ("2026-11-06T23:40:00Z", "yesterday 18:40"),
+            ("2026-11-09T14:15:00Z", "Mon, Nov 9, 09:15"),
+            ("2027-01-02T14:15:00Z", "Sat, Jan 2, 2027, 09:15"),
             ("not a\ntime", "not a time"),
         ]
         for (at, want) in cases {
@@ -29,15 +29,20 @@ final class PresentationTests: XCTestCase {
         }
     }
 
-    /// The day is the owner's: 12:30 AM local is tomorrow at 11:30 PM even
-    /// when both instants share a UTC date, and a 24-hour locale keeps its
-    /// own clock.
+    /// The day is the owner's: 00:30 local is tomorrow at 23:30 even when
+    /// both instants share a UTC date. The time is on the 24-hour clock in
+    /// every locale (the CLI's, the console's and the agent's clock); the
+    /// locale words only the day and date.
     func testTimePhrasesFollowTheZoneAndLocale() {
         let late = Self.clock(now: "2026-11-08T04:30:00Z") // 11:30 PM on Nov 7 in New York
-        XCTAssertEqual(late.phrase("2026-11-08T05:30:00Z"), "tomorrow 12:30\u{00A0}AM")
+        XCTAssertEqual(late.phrase("2026-11-08T05:30:00Z"), "tomorrow 00:30")
         let gb = Self.clock("en_GB")
         XCTAssertEqual(gb.phrase("2026-11-07T19:09:00Z"), "14:09")
         XCTAssertEqual(gb.phrase("2026-11-08T14:15:00Z"), "tomorrow 09:15")
+        XCTAssertEqual(gb.phrase("2026-11-09T14:15:00Z"), "Mon 9 Nov, 09:15")
+        // A 12-hour locale, and one with other digits, still read 24-hour ASCII.
+        XCTAssertEqual(Self.clock("en_US").phrase("2026-11-08T07:53:00Z"), "tomorrow 02:53")
+        XCTAssertEqual(Self.clock("ar_EG").phrase("2026-11-07T21:49:00Z"), "16:49")
     }
 
     // MARK: alerts
@@ -46,11 +51,11 @@ final class PresentationTests: XCTestCase {
         let c = Self.clock()
         let n = Notices.approved(access: "read-write", project: "demo-vault", from: "", who: "Claude Code 2.1.319",
                                  expires: "2026-11-07T19:09:00Z", clock: c)
-        XCTAssertEqual(n, Notice(title: "Approved", body: "Read-write access to demo-vault is open to Claude Code 2.1.319 until 2:09\u{00A0}PM.",
+        XCTAssertEqual(n, Notice(title: "Approved", body: "Read-write access to demo-vault is open to Claude Code 2.1.319 until 14:09.",
                                  succeeded: true))
         XCTAssertFalse(n.autoCloses, "what was opened, and until when, stays until the owner dismisses it")
         XCTAssertEqual(Notices.approved(access: "read-only", project: "acme", from: "beta", who: "Codex", expires: "2026-11-08T14:15:00Z", clock: c).body,
-                       "Read-only access to acme from project beta is open to Codex until tomorrow 9:15\u{00A0}AM.")
+                       "Read-only access to acme from project beta is open to Codex until tomorrow 09:15.")
         XCTAssertEqual(Notices.approved(access: "", project: "", from: "", who: "process 66124", expires: nil, clock: c).body,
                        "Access to the project is open to process 66124.")
     }

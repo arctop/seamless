@@ -50,7 +50,7 @@ final class FlowTests: XCTestCase {
 
         let out = flows(server, keys: keys).approve(id: id, duration: "1h")
         XCTAssertEqual(out, .done(Notice(title: "Approved",
-                                         body: "Read-write access to acme is open to Claude Code 2.1.319 in session \u{201C}cc/2252a8cb\u{201D} until 2:09\u{00A0}PM.",
+                                         body: "Read-write access to acme is open to Claude Code 2.1.319 in session cc/2252a8cb until 14:09.",
                                          succeeded: true)))
         XCTAssertFalse(try XCTUnwrap(out.notice).autoCloses, "an approval stays until the owner dismisses it")
 
@@ -66,7 +66,7 @@ final class FlowTests: XCTestCase {
         let sig = try XCTUnwrap(Data(base64Encoded: form["signature"] ?? ""))
         let want = Messages.touchIDApproveMessage(id: id, challenge: challenge, digest: digest, access: "read-write", duration: "1h")
         XCTAssertTrue(keys.verifies(sig, want, handle: key.handle), "the signature covers TouchIDApproveMessage of the daemon's facts")
-        XCTAssertEqual(keys.reasons, ["approve read-write access to acme (confidential) for Claude Code 2.1.319 in session \u{201C}cc/2252a8cb\u{201D} for 1 hour. Warning: careful"])
+        XCTAssertEqual(keys.reasons, ["approve read-write access to acme (confidential) for Claude Code 2.1.319 in session cc/2252a8cb for 1 hour. Warning: careful"])
     }
 
     /// A daemon from before the agent fact: the program's name stands in,
@@ -82,8 +82,8 @@ final class FlowTests: XCTestCase {
 
         let out = flows(server, keys: keys).approve(id: id, duration: "4h")
         XCTAssertEqual(out.notice?.body,
-                       "Read-write access to acme is open to the program \u{201C}claude\u{201D} in session \u{201C}cc/2252a8cb\u{201D} until tomorrow 9:15\u{00A0}AM.")
-        XCTAssertEqual(keys.reasons, ["approve read-write access to acme (confidential) for the program \u{201C}claude\u{201D} in session \u{201C}cc/2252a8cb\u{201D} for 4 hours. Warning: careful"])
+                       "Read-write access to acme is open to the program \u{201C}claude\u{201D} in session cc/2252a8cb until tomorrow 09:15.")
+        XCTAssertEqual(keys.reasons, ["approve read-write access to acme (confidential) for the program \u{201C}claude\u{201D} in session cc/2252a8cb for 4 hours. Warning: careful"])
         let sig = try XCTUnwrap(Data(base64Encoded: formOf(server.requestStrings[1])["signature"] ?? ""))
         let want = Messages.touchIDApproveMessage(id: id, challenge: challenge, digest: digest, access: "read-write", duration: "4h")
         XCTAssertTrue(keys.verifies(sig, want, handle: key.handle))
@@ -104,8 +104,8 @@ final class FlowTests: XCTestCase {
 
         let out = flows(server, keys: keys).approve(id: id, duration: "session")
         XCTAssertEqual(out.notice?.body,
-                       "Read-only access to acme from project beta is open to Codex in session \u{201C}cc/2252a8cb\u{201D} until Mon, Nov 9, 9:15\u{00A0}AM.")
-        XCTAssertEqual(keys.reasons, ["approve read-only access to acme (confidential) from project beta for Codex in session \u{201C}cc/2252a8cb\u{201D} until the session ends (at most 8 hours). Warning: careful"])
+                       "Read-only access to acme from project beta is open to Codex in session cc/2252a8cb until Mon, Nov 9, 09:15.")
+        XCTAssertEqual(keys.reasons, ["approve read-only access to acme (confidential) from project beta for Codex in session cc/2252a8cb until the session ends (at most 8 hours). Warning: careful"])
     }
 
     func testApproveRefusesBeforeSigning() throws {

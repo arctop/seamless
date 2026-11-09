@@ -61,14 +61,14 @@ public enum Reason {
 
     /// `who` names the asking agent by the best name the daemon gives: the
     /// agent's name ("Claude Code 2.1.319"), else its program's base name,
-    /// with the session it works in when there is one. The pid is a name only
-    /// when there is nothing better: no session, no agent name, no program.
-    /// A daemon too old to send the agent's name gets the program's name.
+    /// with the session it works in when there is one (sessionName). The pid
+    /// is a name only when there is nothing better: no session, no agent
+    /// name, no program. A daemon too old to send the agent's name gets the
+    /// program's name.
     public static func who(_ f: Facts) -> String {
-        let session = Text.clean(f.session ?? "", max: 48)
         let name = agentName(f.agent) ?? programName(f.program)
-        if !session.isEmpty {
-            let s = "session " + Text.quoted(session, max: 48)
+        if let session = sessionName(f.session) {
+            let s = "session " + session
             return name.map { $0 + " in " + s } ?? s
         }
         if let name = name {
@@ -92,6 +92,27 @@ public enum Reason {
             (u.isASCII && (Validate.isAlnum(UInt8(u.value)) || " .-_+".unicodeScalars.contains(u))) || u == "\u{2026}"
         }
         return plain ? name : Text.quoted(name, max: 32)
+    }
+
+    /// `sessionName` is the session as the narrow Touch ID prompt can hold
+    /// it on one line: a client's session ("cc/08eb9006-5c473accb1746e1b")
+    /// cut at the first dash after its prefix ("cc/08eb9006"), the part
+    /// every surface's full name starts with. It is bare when it holds only
+    /// what a session name holds (ASCII letters, digits and / - _ ., and the
+    /// ellipsis of a cut), else between quotes, so that no name can pass for
+    /// the prompt's own words. Nil when there is none.
+    static func sessionName(_ raw: String?) -> String? {
+        var name = Text.clean(raw ?? "", max: 48)
+        guard !name.isEmpty else { return nil }
+        if let slash = name.firstIndex(of: "/"), name.distance(from: name.startIndex, to: slash) == 2,
+           name[..<slash].allSatisfy({ $0.isASCII && $0.isLowercase }),
+           let dash = name[slash...].firstIndex(of: "-"), name.index(after: slash) < dash {
+            name = String(name[..<dash])
+        }
+        let plain = name.unicodeScalars.allSatisfy { u in
+            (u.isASCII && (Validate.isAlnum(UInt8(u.value)) || "/-_.".unicodeScalars.contains(u))) || u == "\u{2026}"
+        }
+        return plain ? name : Text.quoted(name, max: 48)
     }
 
     /// `programName` is the program's base name, quoted, or nil.

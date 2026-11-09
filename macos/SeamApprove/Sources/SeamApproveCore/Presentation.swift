@@ -4,9 +4,11 @@ import Foundation
 // pin every word. The SeamApprove executable only renders these: AppUI turns
 // a Notice into an NSAlert and a Prompt into a dialog.
 
-/// `WallClock` says an instant as the owner reads a clock: in this Mac's time
-/// zone, in its locale's format, with the day when it is not today. Tests pass
-/// a fixed now, zone and locale.
+/// `WallClock` says an instant as the owner reads it on every other Seamless
+/// surface: in this Mac's time zone, on the 24-hour clock ("16:49") that the
+/// CLI, the console and the agent's answers use, so a time can be matched
+/// across them at a glance; with the day when it is not today, the day and
+/// date in the locale's words. Tests pass a fixed now, zone and locale.
 public struct WallClock {
     public var now: () -> Date
     public var timeZone: TimeZone
@@ -19,13 +21,14 @@ public struct WallClock {
         self.locale = locale
     }
 
-    /// This Mac's clock, zone and locale (the locale's 12- or 24-hour choice
-    /// included).
+    /// This Mac's clock, zone and locale. The time is on the 24-hour clock
+    /// whatever the locale's 12- or 24-hour choice; the locale words the day
+    /// and date.
     public static var system: WallClock { WallClock() }
 
-    /// `phrase` says an RFC 3339 instant the way an alert does: "2:09 PM"
-    /// today, "tomorrow 9:15 AM", "yesterday 11:40 PM", else with the day and
-    /// date ("Mon, Nov 9, 9:15 AM", and the year when it is not this one). A
+    /// `phrase` says an RFC 3339 instant the way an alert does: "16:49"
+    /// today, "tomorrow 02:53", "yesterday 23:40", else with the day and
+    /// date ("Mon, Nov 9, 09:15", and the year when it is not this one). A
     /// value that does not parse is shown cleaned.
     public func phrase(_ rfc3339: String) -> String {
         guard let d = WallClock.parse(rfc3339) else {
@@ -41,12 +44,13 @@ public struct WallClock {
         let today = now()
         let days = cal.dateComponents([.day], from: cal.startOfDay(for: today), to: cal.startOfDay(for: d)).day ?? 0
 
+        // A fixed format in the POSIX locale: two-digit hours and minutes,
+        // ASCII digits and a colon, whatever the owner's locale prefers.
         let tf = DateFormatter()
-        tf.locale = locale
+        tf.locale = Locale(identifier: "en_US_POSIX")
         tf.timeZone = timeZone
-        tf.dateStyle = .none
-        tf.timeStyle = .short
-        let time = WallClock.spaces(tf.string(from: d), as: "\u{00A0}")
+        tf.dateFormat = "HH:mm"
+        let time = tf.string(from: d)
         switch days {
         case 0:
             return time
@@ -77,9 +81,8 @@ public struct WallClock {
     }
 
     /// `spaces` replaces every kind of space in a formatted date with one
-    /// kind. A time keeps a no-break space, so "2:09" and "PM" never land on
-    /// two lines; newer systems format en_US with U+202F, older ones with
-    /// U+0020, and the tests pin one.
+    /// kind: newer systems format en_US with U+202F in places, older ones
+    /// with U+0020, and the tests pin one.
     static func spaces(_ s: String, as space: Character) -> String {
         String(s.map { $0.unicodeScalars.allSatisfy { $0.properties.generalCategory == .spaceSeparator } ? space : $0 })
     }
