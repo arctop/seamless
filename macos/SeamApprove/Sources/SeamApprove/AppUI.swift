@@ -14,7 +14,8 @@ final class AppUI: ApproverUI {
             let field = NSTextField(frame: NSRect(x: 0, y: 0, width: App.accessoryWidth, height: 24))
             field.placeholderString = p.placeholder
             field.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-            alert.accessoryView = App.stack([App.setApartField(p.setApart), field])
+            let command = SetApartView(lines: p.setApart, copyable: p.copyable, width: App.accessoryWidth)
+            alert.accessoryView = App.stack([command, field])
             alert.addButton(withTitle: p.accept)
             alert.addButton(withTitle: p.cancel)
             alert.window.initialFirstResponder = field
@@ -56,7 +57,7 @@ final class AppUI: ApproverUI {
             alert.messageText = notice.title
             alert.informativeText = notice.body
             if !notice.setApart.isEmpty {
-                alert.accessoryView = App.setApartField(notice.setApart)
+                alert.accessoryView = SetApartView(lines: notice.setApart, copyable: notice.copyable, width: App.accessoryWidth)
             }
             alert.addButton(withTitle: "OK")
             var timer: Timer?
@@ -83,9 +84,10 @@ func onMain<T>(_ body: () -> T) -> T {
 
 enum App {
     /// The width of an alert's accessory view. At 12 points a monospaced
-    /// character is about 7.2 points wide, so a line holds some 47 of them:
-    /// a 26-symbol credential id always fits on one line, and word wrapping
-    /// breaks a command only at its spaces.
+    /// character is about 7.2 points wide, so a line in the set-apart box
+    /// holds some 45 of them: a 26-symbol credential id always fits on one
+    /// line. Word wrapping breaks a command at its spaces, and inside a path
+    /// longer than a line, after a slash.
     static let accessoryWidth: CGFloat = 340
 
     static func bringForward() {
@@ -94,27 +96,6 @@ enum App {
         } else {
             NSApp.activate(ignoringOtherApps: true)
         }
-    }
-
-    /// `setApartField` shows lines the owner must type or match: monospaced,
-    /// selectable (to copy), not editable, one paragraph per line, wrapped at
-    /// spaces only where a line is longer than the field.
-    static func setApartField(_ lines: [String]) -> NSTextField {
-        let field = NSTextField(wrappingLabelWithString: lines.joined(separator: "\n"))
-        field.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        field.isEditable = false
-        field.isSelectable = true
-        field.isBezeled = true
-        field.bezelStyle = .squareBezel
-        field.drawsBackground = true
-        field.backgroundColor = .textBackgroundColor
-        field.textColor = .labelColor
-        field.lineBreakMode = .byWordWrapping
-        field.preferredMaxLayoutWidth = accessoryWidth
-        let bounds = NSRect(x: 0, y: 0, width: accessoryWidth, height: 10_000)
-        let height = ceil(field.cell?.cellSize(forBounds: bounds).height ?? 24)
-        field.frame = NSRect(x: 0, y: 0, width: accessoryWidth, height: height)
-        return field
     }
 
     /// `stack` lays views out top to bottom in one accessory view.
@@ -133,7 +114,7 @@ enum App {
 
     /// An Edit menu, never shown (the app has no menu bar: LSUIElement), so
     /// that Command-V pastes into the enrollment code's field and Command-C
-    /// copies from a set-apart command.
+    /// copies a selection from set-apart lines that a click does not copy.
     static func editMenu() -> NSMenu {
         let main = NSMenu()
         let editItem = NSMenuItem()

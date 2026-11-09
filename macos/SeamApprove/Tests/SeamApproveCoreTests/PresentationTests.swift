@@ -166,6 +166,23 @@ final class PresentationTests: XCTestCase {
                        "That is not an enrollment code. A code has 16 letters and digits, printed as XXXX-XXXX-XXXX-XXXX.\n\n" + p.body)
     }
 
+    func testCopyableSetApartLines() {
+        let command = "sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid"
+        XCTAssertTrue(Prompts.enrollCode(command: command, problem: nil).copyable, "the enrollment command is copied by a click")
+        XCTAssertFalse(Prompts.confirmForget(keptByDaemon: true).copyable, "nothing set apart, nothing to copy")
+        XCTAssertTrue(Notices.enrolled(name: "Touch ID", removals: ["seamlessd approvers remove 01A"]).copyable)
+        XCTAssertTrue(Notices.keyDeleted(credentials: ["01A"]).copyable)
+        XCTAssertFalse(Notices.keyDeleted(credentials: []).copyable)
+        XCTAssertFalse(Notices.badArguments("no command given").copyable, "a usage list is lines to match, not commands to run")
+
+        XCTAssertEqual(CopyHint.before(lines: 1), "Click the command to copy it.")
+        XCTAssertEqual(CopyHint.before(lines: 2), "Click the commands to copy them.")
+        XCTAssertEqual(CopyHint.after, "Copied to the clipboard.")
+        XCTAssertEqual(CopyHint.clipboard([command]), command, "no trailing newline: a paste does not run it")
+        XCTAssertEqual(CopyHint.clipboard(["seamlessd approvers remove 01A", "seamlessd approvers remove 01B"]),
+                       "seamlessd approvers remove 01A\nseamlessd approvers remove 01B")
+    }
+
     func testConfirmForgetPrompt() {
         XCTAssertEqual(Prompts.confirmForget(keptByDaemon: false),
                        Prompt(title: "Delete this Mac's Touch ID approver key?",

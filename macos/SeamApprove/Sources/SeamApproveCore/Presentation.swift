@@ -131,6 +131,13 @@ public struct Notice: Equatable {
         succeeded && !instructs
     }
 
+    /// `copyable` is whether a click on the set-apart lines copies them: when
+    /// the alert instructs, they are the commands it asks the owner to run.
+    /// A usage list (badArguments) is lines to match, not to run.
+    public var copyable: Bool {
+        instructs && !setApart.isEmpty
+    }
+
     /// `text` is the notice as plain text, for stderr: the body, then each
     /// set-apart line indented on its own line.
     public var text: String {
@@ -232,6 +239,31 @@ public struct Prompt: Equatable {
     public var placeholder: String?
     public var accept: String
     public var cancel: String
+
+    /// `copyable` is whether a click on the set-apart lines copies them: a
+    /// dialog's set-apart lines are the command it asks the owner to run.
+    public var copyable: Bool {
+        !setApart.isEmpty
+    }
+}
+
+/// The words under set-apart commands the owner runs, and what a click on
+/// them puts on the clipboard.
+public enum CopyHint {
+    /// `before` sits under the commands until they are clicked.
+    public static func before(lines: Int) -> String {
+        lines == 1 ? "Click the command to copy it." : "Click the commands to copy them."
+    }
+
+    /// `after` replaces it once they are copied.
+    public static let after = "Copied to the clipboard."
+
+    /// `clipboard` is what a click copies: the lines as shown, one per line,
+    /// with no newline after the last, so pasting into a terminal does not
+    /// run the last command before the owner reads it.
+    public static func clipboard(_ lines: [String]) -> String {
+        lines.joined(separator: "\n")
+    }
 }
 
 public enum Prompts {
