@@ -62,7 +62,12 @@ final class AppUI: ApproverUI {
             }
             alert.addButton(withTitle: "OK")
             if !notice.succeeded {
+                // Once now and again once the modal session runs: runModal
+                // lays the alert out afresh and resets the title's style.
                 App.tintTitle(of: alert, .systemRed)
+                RunLoop.main.perform(inModes: [.modalPanel]) {
+                    App.tintTitle(of: alert, .systemRed, layout: false)
+                }
             }
             var timer: Timer?
             if notice.autoCloses {
@@ -103,11 +108,16 @@ enum App {
     }
 
     /// `tintTitle` colors an alert's title. NSAlert has no setting for it,
-    /// so this lays the alert out and colors the label that shows the
-    /// title; on a system that builds the alert some other way, the title
-    /// keeps its color and the critical style's badge still marks it.
-    static func tintTitle(of alert: NSAlert, _ color: NSColor) {
-        alert.layout()
+    /// so this finds the label that shows the title (laying the alert out
+    /// first when asked) and colors its text, as an attribute of the text
+    /// as well as the label's color, since the alert styles the title with
+    /// attributes of its own. On a system that builds the alert some other
+    /// way the title keeps its color, and the critical style's badge still
+    /// marks the failure.
+    static func tintTitle(of alert: NSAlert, _ color: NSColor, layout: Bool = true) {
+        if layout {
+            alert.layout()
+        }
         guard let root = alert.window.contentView else {
             return
         }
@@ -115,7 +125,10 @@ enum App {
         while !queue.isEmpty {
             let v = queue.removeFirst()
             if let label = v as? NSTextField, !label.isEditable, label.stringValue == alert.messageText {
+                let text = NSMutableAttributedString(attributedString: label.attributedStringValue)
+                text.addAttribute(.foregroundColor, value: color, range: NSRange(location: 0, length: text.length))
                 label.textColor = color
+                label.attributedStringValue = text
                 return
             }
             queue.append(contentsOf: v.subviews)
