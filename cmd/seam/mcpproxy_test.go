@@ -3,11 +3,17 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,11 +21,23 @@ import (
 	"testing"
 	"time"
 
+	mcpclient "github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/agentguide"
+	"github.com/arctop/seamless/internal/approval"
+	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/events"
+	"github.com/arctop/seamless/internal/files"
+	seamlessmcp "github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/retrieve"
+	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // jsonRPCID pulls the id out of one relayed frame, so a test can assert the
@@ -939,4 +957,375 @@ func TestBridge_BrokenStdoutUnderAnAnswerEndsTheBridge(t *testing.T) {
 		strings.NewReader(`{"jsonrpc":"2.0","id":0,"result":{"action":"accept"}}`+"\n"), brokenStdout{})
 	require.ErrorIs(t, err, errWriteStdout)
 	require.ErrorIs(t, err, io.ErrClosedPipe)
+}
+
+// ---------------------------------------------------------------------------
+// A daemon restart under a live bridge (the real bridge, the real daemon MCP
+// surface, the real approval service; only the socket's kernel facts and the
+// Touch ID helper are played by the test)
+// ---------------------------------------------------------------------------
+
+const (
+	rdProject = "example-vault"
+	rdBoot    = "6c2f1a3e-0b7d-4c55-9a51-3d8f00a1b2c3"
+	rdOwner   = 501
+)
+
+// rdHost is this machine: the bridge names it on every request (X-Seamless-Host),
+// and the agent's session is looked up on it.
+var rdHost = config.Hostname()
+
+var (
+	rdBridge = access.ProcessToken{PID: 900, Version: 9000, Boot: rdBoot}
+	rdAgent  = access.ProcessToken{PID: 800, Version: 8000, Boot: rdBoot}
+)
+
+// restartDaemon is a daemon's MCP surface whose process the test can replace
+// under a live connection: restart() builds a new server over the same
+// database and puts it behind the same listener, as the new process of a real
+// restart does. Everything in memory -- the old transport's sessions and what
+// their initialize left on them -- goes with the old server.
+type restartDaemon struct {
+	t       *testing.T
+	db      *sql.DB
+	mgr     *files.Manager
+	ret     *retrieve.Service
+	rec     *events.Recorder
+	policy  *access.Policy
+	svc     *approval.Service
+	program string
+	handler atomic.Pointer[http.Handler]
+}
+
+func newRestartDaemon(t *testing.T, program string) *restartDaemon {
+	t.Helper()
+	ctx := context.Background()
+	dir := t.TempDir()
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	mgr, err := files.NewManager(dir, db, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
+	_, err = store.EnsureProject(ctx, db, rdProject, rdProject)
+	require.NoError(t, err)
+	require.NoError(t, store.SetProjectIsolation(ctx, db, rdProject, core.IsolationConfidential))
+	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{rdProject}}, func(n string) (access.Account, error) {
+		if n == "owner" {
+			return access.Account{UID: rdOwner, Name: "owner"}, nil
+		}
+		return access.Account{}, fmt.Errorf("no account %s", n)
+	})
+	require.NoError(t, err)
+	d := &restartDaemon{t: t, db: db, mgr: mgr, rec: events.NewRecorder(db), policy: policy, program: program}
+	d.ret = retrieve.New(db, nil, config.Budgets{MaxBriefingTokens: 1500, RecallBudgetTokens: 1000}, nil)
+	d.ret.SetBodyReader(mgr.Store())
+	d.svc = approval.New(approval.Config{DB: db, Events: d.rec, Host: rdHost, LeaseCap: 8 * time.Hour,
+		Programs: func(tok access.ProcessToken) string {
+			if tok == rdAgent {
+				return program
+			}
+			return ""
+		}})
+	return d
+}
+
+func (d *restartDaemon) newServer() *seamlessmcp.Server {
+	return seamlessmcp.New(seamlessmcp.Config{
+		DB: d.db, Files: d.mgr, Retrieve: d.ret, Events: d.rec, APIKey: "k", LocalHost: rdHost,
+		Approvals: d.svc, OfferAccessRequest: true, DialogWait: time.Minute, DialogPoll: 5 * time.Millisecond,
+	})
+}
+
+// restart replaces the running daemon's in-memory state with a fresh server.
+func (d *restartDaemon) restart() {
+	h := d.newServer().Handler()
+	d.handler.Store(&h)
+}
+
+// listen serves the daemon, attaching the owner's socket view of the agent's
+// process chain to every request as peerHandler does.
+func (d *restartDaemon) listen() string {
+	d.restart()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if v, ok := d.view(); ok {
+			r = r.WithContext(access.WithView(r.Context(), v))
+		}
+		(*d.handler.Load()).ServeHTTP(w, r)
+	}))
+	d.t.Cleanup(ts.Close)
+	d.t.Cleanup(ts.CloseClientConnections)
+	return ts.URL
+}
+
+func (d *restartDaemon) view() (access.View, bool) {
+	v, ok := d.policy.PeerChainView(rdOwner, []access.ProcessToken{rdBridge, rdAgent})
+	if !ok {
+		return access.View{}, false
+	}
+	now := time.Now()
+	rows, err := store.ActiveAccessLeasesFor(context.Background(), d.db, []string{rdBridge.Key(), rdAgent.Key()}, now)
+	if err != nil {
+		return access.View{}, false
+	}
+	return v.WithLeases(now, store.AccessLeases(rows)), true
+}
+
+// seed writes a memory in the locked project, so its briefing has content.
+func (d *restartDaemon) seed() {
+	d.t.Helper()
+	ts := httptest.NewServer(d.newServer().Handler())
+	d.t.Cleanup(ts.Close)
+	ctx := context.Background()
+	cli, err := mcpclient.NewStreamableHttpClient(ts.URL, transport.WithHTTPHeaders(map[string]string{"Authorization": "Bearer k"}))
+	require.NoError(d.t, err)
+	d.t.Cleanup(func() { _ = cli.Close() })
+	require.NoError(d.t, cli.Start(ctx))
+	var ini mcp.InitializeRequest
+	ini.Params.ProtocolVersion = mcp.LATEST_LEGACY_PROTOCOL_VERSION
+	ini.Params.ClientInfo = mcp.Implementation{Name: "seed", Version: "0"}
+	_, err = cli.Initialize(ctx, ini)
+	require.NoError(d.t, err)
+	res, err := cli.CallTool(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Name: "memory_write", Arguments: map[string]any{
+		"project": rdProject, "name": "vault-rule", "kind": "constraint",
+		"description": "the vault rule", "body": "Keep the vault closed.\n",
+	}}})
+	require.NoError(d.t, err)
+	require.False(d.t, res.IsError, "%v", res.Content)
+}
+
+// session records the agent's session the way the SessionStart hook does in a
+// locked repository, stamped with the agent process.
+func (d *restartDaemon) session() {
+	d.t.Helper()
+	ctx := context.Background()
+	id, err := core.NewID()
+	require.NoError(d.t, err)
+	now := time.Now()
+	require.NoError(d.t, store.CreateSession(ctx, d.db, core.Session{
+		ID: id, Name: "cc/vault", ProjectSlug: rdProject, Status: core.SessionActive, Ambient: true, Host: rdHost,
+		ExternalSessionID: "cc-vault-x", ExternalClient: "claude-code", CWD: "/work/" + rdProject, CreatedAt: now, UpdatedAt: now,
+	}))
+	require.NoError(d.t, store.SetSessionAgentProcess(ctx, d.db, id, rdAgent.AgentID()))
+}
+
+// enrollTouchID enrolls a software key as the helper's Secure Enclave key.
+func (d *restartDaemon) enrollTouchID() (*ecdsa.PrivateKey, store.ApproverCredential) {
+	d.t.Helper()
+	ctx := context.Background()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(d.t, err)
+	pub, err := key.PublicKey.Bytes()
+	require.NoError(d.t, err)
+	code, _, err := store.MintEnrollCode(ctx, d.db, store.ApproverTouchID, time.Now())
+	require.NoError(d.t, err)
+	msg := sha256.Sum256(approval.TouchIDEnrollMessage(code, pub))
+	sig, err := ecdsa.SignASN1(rand.Reader, key, msg[:])
+	require.NoError(d.t, err)
+	cred, err := d.svc.EnrollTouchID(ctx, "this Mac", code, pub, sig)
+	require.NoError(d.t, err)
+	return key, cred
+}
+
+// prove signs request id over duration and hands it to the approve core: what
+// the helper the bridge launched does.
+func (d *restartDaemon) prove(key *ecdsa.PrivateKey, cred store.ApproverCredential, id, duration string) error {
+	ctx := context.Background()
+	a, err := store.AccessApprovalByID(ctx, d.db, id)
+	if err != nil {
+		return err
+	}
+	facts, err := d.svc.Facts(ctx, id)
+	if err != nil {
+		return err
+	}
+	dgst := sha256.Sum256(approval.TouchIDApproveMessage(a.ID, a.Challenge, facts.Digest, facts.Access, duration))
+	sig, err := ecdsa.SignASN1(rand.Reader, key, dgst[:])
+	if err != nil {
+		return err
+	}
+	_, err = d.svc.Approve(ctx, approval.Decision{ID: id, Duration: duration, Digest: facts.Digest,
+		Proof: approval.Proof{Kind: approval.ProofTouchID, CredentialID: cred.ID, Signature: sig}})
+	return err
+}
+
+// toolResultText is every text item of a tools/call reply, and whether it is
+// an error.
+func toolResultText(t *testing.T, reply rpcReply) ([]string, bool) {
+	t.Helper()
+	require.Nil(t, reply.Error, "tools/call answered with a JSON-RPC error: %s", reply.Result)
+	var res struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+		IsError bool `json:"isError"`
+	}
+	require.NoError(t, json.Unmarshal(reply.Result, &res))
+	items := make([]string, len(res.Content))
+	for i, c := range res.Content {
+		items[i] = c.Text
+	}
+	return items, res.IsError
+}
+
+// briefingCount counts the one-time briefing's notices in a result.
+func briefingCount(items []string) int {
+	n := 0
+	for _, it := range items {
+		if strings.Contains(it, "This is its briefing, sent once:") {
+			n++
+		}
+	}
+	return n
+}
+
+// A live bridge that declared form elicitation keeps the approval dialog across
+// a daemon restart: the next refused call shows the form, the approver is
+// launched through the bridge when the owner picks Touch ID, and the access is
+// approved. The one-time briefing goes out once, restart or no restart. Claude
+// Code and Codex use the same bridge; what differs is the declared capability
+// and the agent process the facts name.
+//
+// Not covered: the kernel's socket facts (the chain is played; peerauth_tree_unix_test
+// covers those) and the helper app itself (mcpproxy_approver_test covers the
+// launch; here the test plays its proof through the approve core).
+func TestBridge_RestartKeepsTheApprovalDialog(t *testing.T) {
+	for _, c := range []struct {
+		name, caps, program, asker string
+	}{
+		{"claude code", `{"elicitation":{"form":{},"url":{}}}`, "/home/owner/.local/share/claude/versions/2.1.319", "Claude Code 2.1.319"},
+		{"codex", `{"elicitation":{}}`, "/opt/homebrew/Caskroom/codex/0.46.0/codex-aarch64-apple-darwin", "Codex 0.46.0"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d := newRestartDaemon(t, c.program)
+			d.seed()
+			d.session()
+			key, cred := d.enrollTouchID()
+
+			open := &fakeOpen{ran: make(chan struct{}, 1)}
+			var errb strings.Builder
+			b := approverBridge(d.listen(), open, &errb)
+			b.agentProcess = rdAgent.AgentID()
+			in, out := newFeedStdin(), newFrameSink()
+			done := runBridge(b, in, out)
+
+			in.send(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + mcp.LATEST_LEGACY_PROTOCOL_VERSION +
+				`","capabilities":` + c.caps + `,"clientInfo":{"name":"t","version":"0"}}}`)
+			require.Nil(t, decodeReply(t, out.next(t)).Error)
+			in.send(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
+
+			d.restart() // with the connection idle: the bridge sees no failed dial
+
+			// The owner accepts with Touch ID; the helper the bridge launches
+			// proves it, as the real one does over the socket.
+			proved := make(chan error, 1)
+			go func() {
+				select {
+				case <-open.ran:
+				case <-time.After(20 * time.Second):
+					proved <- fmt.Errorf("the bridge did not launch the approver")
+					return
+				}
+				rows, err := store.PendingAccessApprovals(context.Background(), d.db, time.Now())
+				if err != nil {
+					proved <- fmt.Errorf("pending requests: %w", err)
+					return
+				}
+				if len(rows) != 1 {
+					proved <- fmt.Errorf("pending requests: %d, want 1", len(rows))
+					return
+				}
+				proved <- d.prove(key, cred, rows[0].ID, approval.ForSession)
+			}()
+			in.send(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"tasks_list","arguments":{}}}`)
+			var ask struct {
+				ID     json.RawMessage `json:"id"`
+				Method string          `json:"method"`
+				Params struct {
+					Message string `json:"message"`
+				} `json:"params"`
+			}
+			frame := out.next(t)
+			require.NoError(t, json.Unmarshal([]byte(frame), &ask), frame)
+			require.Equal(t, string(mcp.MethodElicitationCreate), ask.Method, "the refused call raised the form dialog: %s", frame)
+			require.Contains(t, ask.Params.Message, c.asker+" asks for read-write access to "+rdProject)
+			in.send(`{"jsonrpc":"2.0","id":` + string(ask.ID) + `,"result":{"action":"accept","content":{"duration":"session","method":"touchid"}}}`)
+
+			reply := decodeReply(t, out.next(t))
+			require.JSONEq(t, "2", string(reply.ID))
+			items, isErr := toolResultText(t, reply)
+			require.True(t, isErr, "%v", items)
+			require.Contains(t, items[0], "the owner approved access request")
+			require.Contains(t, items[0], "is open to this agent until")
+			select {
+			case err := <-proved:
+				require.NoError(t, err)
+			case <-time.After(20 * time.Second):
+				t.Fatal("the proof did not finish")
+			}
+			rows, err := store.LiveAccessLeases(context.Background(), d.db, time.Now())
+			require.NoError(t, err)
+			require.Len(t, rows, 1, "the approved lease")
+
+			// The briefing comes on the first result under the lease, and
+			// never again, across another restart.
+			in.send(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"project_list","arguments":{}}}`)
+			items, isErr = toolResultText(t, decodeReply(t, out.next(t)))
+			require.False(t, isErr, "%v", items)
+			require.Equal(t, 1, briefingCount(items), "%v", items)
+
+			d.restart()
+			in.send(`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"project_list","arguments":{}}}`)
+			items, isErr = toolResultText(t, decodeReply(t, out.next(t)))
+			require.False(t, isErr, "%v", items)
+			require.Zero(t, briefingCount(items), "%v", items)
+
+			in.close()
+			require.NoError(t, waitRun(t, done))
+			require.Empty(t, out.rest())
+			require.Empty(t, errb.String())
+			approved, err := store.AccessApprovalByID(context.Background(), d.db, rows[0].ApprovalID)
+			require.NoError(t, err)
+			require.Equal(t, [][]string{openArgv(approved.ID, "session")}, open.recorded(),
+				"the approver was launched for that request, for the duration the form chose, and only once")
+		})
+	}
+}
+
+// The control: a client that declared no elicitation shows no dialog after a
+// restart either, so a dialog on the bridge above came from what was kept
+// rather than from the restart having no effect.
+func TestBridge_RestartWithNoDeclaredDialogStaysOnTheTextPath(t *testing.T) {
+	d := newRestartDaemon(t, "/home/owner/.local/share/claude/versions/2.1.319")
+	d.seed()
+	d.session()
+	d.enrollTouchID()
+
+	open := &fakeOpen{}
+	var errb strings.Builder
+	b := approverBridge(d.listen(), open, &errb)
+	b.agentProcess = rdAgent.AgentID()
+	in, out := newFeedStdin(), newFrameSink()
+	done := runBridge(b, in, out)
+
+	in.send(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + mcp.LATEST_LEGACY_PROTOCOL_VERSION +
+		`","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`)
+	require.Nil(t, decodeReply(t, out.next(t)).Error)
+	in.send(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
+
+	d.restart()
+
+	in.send(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"tasks_list","arguments":{}}}`)
+	reply := decodeReply(t, out.next(t))
+	require.JSONEq(t, "2", string(reply.ID))
+	items, isErr := toolResultText(t, reply)
+	require.True(t, isErr, "%v", items)
+	require.Contains(t, items[0], "seam approve", "the terminal way, named as ever")
+	require.NotContains(t, items[0], "Touch ID")
+
+	in.close()
+	require.NoError(t, waitRun(t, done))
+	require.Empty(t, out.rest(), "no dialog")
+	require.Empty(t, open.recorded(), "no approver")
+	require.Empty(t, errb.String())
 }

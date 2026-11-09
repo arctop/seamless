@@ -223,16 +223,15 @@ func (s *Server) revokeSessionLeases(ctx context.Context, sessionID string) {
 // connection that holds a lease (only ever while a project is locked):
 //
 //   - the project's briefing, on the first result after a lease lands. "Once"
-//     is an in-memory set of lease ids on this server (leaseSeen): a lease is
-//     claimed under the lock before its briefing renders, so of two concurrent
-//     calls exactly one carries it. Every lease is new to it, a refresh
-//     included: a refresh may follow a /clear in the same agent process, whose
-//     new session has no briefing, so "same process, same project" cannot
-//     tell a renewal from a fresh start. The set is not persisted: after a
-//     daemon restart a live lease's next result carries the briefing once
-//     more, a harmless repeat, where persisting it would need a schema or an
-//     event kind for a convenience.
-//   - from access.ExpiryWarning before a lease ends, the expiry notice.
+//     is the lease row's briefed_at (store.ClaimAccessLeaseBriefing): the
+//     claim is atomic and comes before its briefing renders, so of two
+//     concurrent calls exactly one carries it, and a daemon restart does not
+//     send it again. Every lease is new to it, a refresh included: a refresh
+//     may follow a /clear in the same agent process, whose new session has
+//     no briefing, so "same process, same project" cannot tell a renewal
+//     from a fresh start.
+//   - from access.ExpiryWarning before a lease ends, the expiry notice,
+//     recomputed from the leases live when the call ends (leaseExpiryNotice).
 //
 // The notices are separate text items after the result's own, so a client
 // parsing the first item as JSON reads exactly what it did before. It runs
@@ -264,7 +263,7 @@ func (s *Server) leaseNoticeMiddleware(next mcpserver.ToolHandlerFunc) mcpserver
 				notes = append(notes, text)
 			}
 		}
-		if text := access.ExpiryNotice(leases, now); text != "" {
+		if text := s.leaseExpiryNotice(ctx, v, leases, now); text != "" {
 			notes = append(notes, text)
 		}
 		for _, n := range notes {
@@ -274,11 +273,35 @@ func (s *Server) leaseNoticeMiddleware(next mcpserver.ToolHandlerFunc) mcpserver
 	}
 }
 
-// leaseNews is what a result says about a lease the first time this server
-// sees it: that access was approved, until when, and the project's briefing.
-// "" when the lease was seen already.
+// leaseExpiryNotice is the expiry notice for the leases the call holds as it
+// ends. leases is the View taken when the call began, and an approval inside
+// the call (a refresh, through its dialog) replaces a lease that View still
+// holds, so the View's notice would warn about a lease the call has just
+// replaced. Only a notice about to be sent is worth the read: a lease that is
+// not expiring gets none either way. A failed read sends none, since every
+// later result warns again.
+func (s *Server) leaseExpiryNotice(ctx context.Context, v access.View, leases []access.Lease, now time.Time) string {
+	if access.ExpiryNotice(leases, now) == "" {
+		return ""
+	}
+	rows, err := store.ActiveAccessLeasesFor(ctx, s.cfg.DB, chainKeys(v), now)
+	if err != nil {
+		s.logger.Warn("mcp: lease expiry notice", "error", err)
+		return ""
+	}
+	return access.ExpiryNotice(v.WithLeases(now, store.AccessLeases(rows)).Leases(), now)
+}
+
+// leaseNews is what a result says about a lease the first time any call
+// reaches it: that access was approved, until when, and the project's
+// briefing. "" when the lease was briefed already.
 func (s *Server) leaseNews(ctx context.Context, l access.Lease, now time.Time) string {
-	if !s.claimLease(l, now) {
+	won, err := store.ClaimAccessLeaseBriefing(ctx, s.cfg.DB, l.ID, now)
+	if err != nil {
+		s.logger.Warn("mcp: claim lease briefing", "project", l.Project, "error", err)
+		return ""
+	}
+	if !won {
 		return ""
 	}
 	head := "Access to " + l.Project + " was approved until " + access.Clock(l.Expires) +
@@ -287,8 +310,11 @@ func (s *Server) leaseNews(ctx context.Context, l access.Lease, now time.Time) s
 		retrieve.BriefingInput{Host: s.callerHost(ctx), Source: "approval"})
 	if err != nil {
 		// Not sent: let the next result try again rather than claim a
-		// briefing nobody received.
-		s.forgetLease(l.ID)
+		// briefing nobody received. The call's context may be why it failed,
+		// and must not stop the claim being given back.
+		if ferr := store.ForgetAccessLeaseBriefing(context.WithoutCancel(ctx), s.cfg.DB, l.ID); ferr != nil {
+			s.logger.Warn("mcp: release lease briefing", "project", l.Project, "error", ferr)
+		}
 		s.logger.Warn("mcp: briefing after approval", "project", l.Project, "error", err)
 		return ""
 	}
@@ -296,29 +322,4 @@ func (s *Server) leaseNews(ctx context.Context, l access.Lease, now time.Time) s
 		return "Access to " + l.Project + " was approved until " + access.Clock(l.Expires) + "."
 	}
 	return head + "\n" + briefing
-}
-
-// claimLease records l as seen and reports whether this call is the first to
-// see it. Entries for leases that have ended are dropped on the way, so the
-// set holds at most the live leases.
-func (s *Server) claimLease(l access.Lease, now time.Time) bool {
-	s.leaseMu.Lock()
-	defer s.leaseMu.Unlock()
-	if _, seen := s.leaseSeen[l.ID]; seen {
-		return false
-	}
-	for id, expires := range s.leaseSeen {
-		if !expires.After(now) {
-			delete(s.leaseSeen, id)
-		}
-	}
-	s.leaseSeen[l.ID] = l.Expires
-	return true
-}
-
-// forgetLease drops a claim whose briefing could not be sent.
-func (s *Server) forgetLease(id string) {
-	s.leaseMu.Lock()
-	defer s.leaseMu.Unlock()
-	delete(s.leaseSeen, id)
 }

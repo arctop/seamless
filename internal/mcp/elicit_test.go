@@ -55,6 +55,7 @@ type dialogRig struct {
 	grants *approval.Grants
 	srv    *mcpserver.Server
 	tap    *elicitTap
+	cfg    mcpserver.Config // what srv was built from: a restart builds another
 }
 
 type dialogOpts struct {
@@ -89,6 +90,7 @@ func newDialogRig(t *testing.T, o dialogOpts) *dialogRig {
 		d.grants = approval.NewGrants(approval.GrantsConfig{Approvals: d.svc})
 		cfg.Grants = d.grants
 	}
+	d.cfg = cfg
 	d.srv = mcpserver.New(cfg)
 	return d
 }

@@ -591,6 +591,33 @@ func scanLeases(rows *sql.Rows) ([]AccessLease, error) {
 	return out, rows.Err()
 }
 
+// ClaimAccessLeaseBriefing reports whether this caller is the first to brief
+// lease id, and records that it is at now. The row is the claim, so it holds
+// across a daemon restart, and two concurrent calls cannot both win. A failure
+// claims nothing.
+func ClaimAccessLeaseBriefing(ctx context.Context, db *sql.DB, id string, now time.Time) (bool, error) {
+	res, err := db.ExecContext(ctx, `UPDATE access_leases SET briefed_at = ? WHERE id = ? AND briefed_at IS NULL`,
+		core.FormatTime(now), id)
+	if err != nil {
+		return false, fmt.Errorf("store.ClaimAccessLeaseBriefing: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("store.ClaimAccessLeaseBriefing: %w", err)
+	}
+	return n == 1, nil
+}
+
+// ForgetAccessLeaseBriefing undoes a claim whose briefing could not be built,
+// so the next result tries again rather than a briefing nobody received
+// counting as sent.
+func ForgetAccessLeaseBriefing(ctx context.Context, db *sql.DB, id string) error {
+	if _, err := db.ExecContext(ctx, `UPDATE access_leases SET briefed_at = NULL WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("store.ForgetAccessLeaseBriefing: %w", err)
+	}
+	return nil
+}
+
 // ActiveAccessLeases returns the leases live at now for one process: not
 // revoked, expiring after now. An empty key -- a connection whose process the
 // kernel did not name -- holds none.

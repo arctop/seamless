@@ -116,6 +116,9 @@ var viewExempt = map[string]string{
 	// A console unlock names a LOCKED project, and the console reads it to
 	// decide which handle a browser gets: the handle that would hide it.
 	"console_unlocks": "per-browser console unlocks of locked projects: a slug, cookie and link hashes, a credential id and times; no corpus content, and the console reads it to choose the handle",
+	// An MCP connection's declared capabilities, about no project: which
+	// dialog modes its client can show.
+	"mcp_sessions": "MCP connection ids and the elicitation modes their clients declared, about no project; no corpus content",
 }
 
 const (

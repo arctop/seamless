@@ -102,11 +102,12 @@ const (
 )
 
 // dgPlanTables are the tables plan seamless-sealed-unlock added (migrations
-// 031-034). They do not exist on main; on the branch, with the defaults, they
-// must hold no row after the whole script.
+// 031-034 and 036). They do not exist on main; on the branch, with the
+// defaults, they must hold no row after the whole script.
 var dgPlanTables = []string{
 	"access_approvals", "access_leases", "approver_credentials",
 	"approver_enroll_codes", "console_unlocks", "access_grants",
+	"mcp_sessions",
 }
 
 // dgForbiddenKeys are the response keys SEAL A (restricted accounts, commit

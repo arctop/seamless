@@ -243,8 +243,8 @@ func capitalize(s string) string {
 }
 
 // claimGrant records a grant as announced and reports whether this call is
-// the first to see it. As with leases (claimLease) the set is in memory: a
-// daemon restart announces a live grant once more, a harmless repeat.
+// the first to see it. The set is in memory: a daemon restart announces a
+// live grant once more, a harmless repeat.
 func (s *Server) claimGrant(l access.Grant, now time.Time) bool {
 	s.grantMu.Lock()
 	defer s.grantMu.Unlock()

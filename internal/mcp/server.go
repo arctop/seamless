@@ -320,11 +320,6 @@ type Server struct {
 	bindings  map[string]binding // mcp client-session id -> binding
 	lastSweep time.Time          // last opportunistic bindings sweep (guarded by mu)
 
-	// leaseMu guards leaseSeen: the leases whose project briefing a tool
-	// result already carried (locked.go), by lease id, with their expiry.
-	leaseMu   sync.Mutex
-	leaseSeen map[string]time.Time
-
 	// grantMu guards grantSeen: the read grants a tool result already
 	// announced (grants.go), by grant id, with their expiry.
 	grantMu   sync.Mutex
@@ -399,13 +394,11 @@ func New(cfg Config) *Server {
 		fetcher:      capture.NewURLFetcher(cfg.CaptureAllowedPorts),
 		bindings:     make(map[string]binding),
 		toolSchemas:  make(map[string]mcp.ToolInputSchema),
-		leaseSeen:    make(map[string]time.Time),
 		grantSeen:    make(map[string]time.Time),
 		dialogs:      make(map[string]struct{}),
 		approverEnds: make(map[string]chan string),
 	}
-	s.mcp = mcpserver.NewMCPServer(
-		ServerName, version,
+	opts := []mcpserver.ServerOption{
 		mcpserver.WithInstructions(agentguide.MCPInstructions),
 		mcpserver.WithToolCapabilities(false),
 		mcpserver.WithRecovery(),
@@ -431,11 +424,15 @@ func New(cfg Config) *Server {
 		//   - the approval dialog (elicit.go) around the lock requester and the
 		//     grants, so it sees the request either filed during the call. Off
 		//     (no approval service, or not the peer_auth socket) it adds nothing.
+		//   - the client's capabilities (client_caps.go) just outside it, so
+		//     after a daemon restart the dialog and the remedies read what the
+		//     connection declared. Off, as for the dialog, it adds nothing.
 		mcpserver.WithToolHandlerMiddleware(s.authMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.leaseNoticeMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.logMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.validateMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.sessionHandleMiddleware),
+		mcpserver.WithToolHandlerMiddleware(s.clientCapsMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.dialogMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.lockRequestMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.grantsMiddleware),
@@ -444,7 +441,15 @@ func New(cfg Config) *Server {
 		// disabled feature's tools are neither advertised nor callable, with one
 		// piece of logic. See exposedTools for the semantics and the tradeoff.
 		mcpserver.WithToolFilter(s.exposedTools),
-	)
+	}
+	// The one hook, and only while a dialog is possible: every other install's
+	// server is built without any.
+	if s.keepsClientCaps() {
+		hooks := &mcpserver.Hooks{}
+		hooks.AddAfterInitialize(s.saveClientCaps)
+		opts = append(opts, mcpserver.WithHooks(hooks))
+	}
+	s.mcp = mcpserver.NewMCPServer(ServerName, version, opts...)
 	s.registerTools()
 	return s
 }

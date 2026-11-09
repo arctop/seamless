@@ -39,7 +39,10 @@ package main
 // not whether this process minted it. What the restart does lose is the
 // daemon's in-memory connection state: a session_start binding (calls fall back
 // to the agent-process binding, which lives in the session row) and a lab_open
-// lab.
+// lab. The client's declared elicitation capability is not lost: the daemon
+// keeps it by session id and restores it call by call (internal/mcp's
+// client_caps.go), so a running agent keeps its approval dialog with nothing
+// here knowing a restart happened.
 
 import (
 	"bufio"

@@ -103,6 +103,51 @@ func TestAccessApproval_CreateAndPending(t *testing.T) {
 	require.ErrorIs(t, err, ErrApprovalNotFound)
 }
 
+// The briefing claim lives on the lease row: the first caller wins, however
+// many ask at once, and a claim given back lets the next caller win.
+func TestAccessLeaseBriefing_ClaimedOnceOnTheRow(t *testing.T) {
+	db := leaseDB(t)
+	ctx := context.Background()
+	a, err := CreateAccessApproval(ctx, db, leaseReq("example-finance", fenceProc), fenceNow)
+	require.NoError(t, err)
+	lease, err := ApproveAccess(ctx, db, a.ID, a.Challenge, "cred-1", fenceNow)
+	require.NoError(t, err)
+
+	type claim struct {
+		won bool
+		err error
+	}
+	claims := make(chan claim, 8)
+	for range 8 {
+		go func() {
+			ok, err := ClaimAccessLeaseBriefing(ctx, db, lease.ID, fenceNow)
+			claims <- claim{ok, err}
+		}()
+	}
+	first := 0
+	for range 8 {
+		c := <-claims
+		require.NoError(t, c.err)
+		if c.won {
+			first++
+		}
+	}
+	require.Equal(t, 1, first, "exactly one caller carries the briefing")
+
+	ok, err := ClaimAccessLeaseBriefing(ctx, db, lease.ID, fenceNow.Add(time.Minute))
+	require.NoError(t, err)
+	require.False(t, ok, "claimed already")
+
+	require.NoError(t, ForgetAccessLeaseBriefing(ctx, db, lease.ID))
+	ok, err = ClaimAccessLeaseBriefing(ctx, db, lease.ID, fenceNow.Add(2*time.Minute))
+	require.NoError(t, err)
+	require.True(t, ok, "a briefing that could not be built is retried")
+
+	ok, err = ClaimAccessLeaseBriefing(ctx, db, "01NOSUCHLEASE", fenceNow)
+	require.NoError(t, err)
+	require.False(t, ok, "no such lease: nothing to brief")
+}
+
 func TestAccessApproval_Refusals(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
