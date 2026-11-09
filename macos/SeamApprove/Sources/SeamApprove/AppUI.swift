@@ -56,7 +56,7 @@ final class AppUI: ApproverUI {
             let alert = NSAlert()
             alert.alertStyle = notice.succeeded ? .informational : .critical
             alert.messageText = notice.title
-            alert.informativeText = notice.body
+            alert.informativeText = notice.alertBody
             if !notice.setApart.isEmpty {
                 alert.accessoryView = SetApartView(lines: notice.setApart, copyable: notice.copyable, width: App.accessoryWidth)
             }
@@ -64,9 +64,9 @@ final class AppUI: ApproverUI {
             if !notice.succeeded {
                 // Once now and again once the modal session runs: runModal
                 // lays the alert out afresh and resets the title's style.
-                App.tintTitle(of: alert, .systemRed)
+                App.tintTitle(of: alert, App.failureRed)
                 RunLoop.main.perform(inModes: [.modalPanel]) {
-                    App.tintTitle(of: alert, .systemRed, layout: false)
+                    App.tintTitle(of: alert, App.failureRed, layout: false)
                 }
             }
             var timer: Timer?
@@ -98,6 +98,19 @@ enum App {
     /// line. Word wrapping breaks a command at its spaces, and inside a path
     /// longer than a line, after a slash.
     static let accessoryWidth: CGFloat = 340
+
+    /// The red of a failure alert's title. An alert draws its title lighter
+    /// than the color it is given, so in the light appearance the system red
+    /// came out at 1.4 to 2:1 against the alert's glass. This darker red, as
+    /// drawn, measures 3:1 on glass over a dark window and better than 4.5:1
+    /// on lighter glass. The dark appearance keeps the system red: reaching
+    /// 3:1 there takes a pale salmon that no longer reads as red.
+    static let failureRed = NSColor(name: nil) { appearance in
+        if appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua {
+            return .systemRed
+        }
+        return NSColor(srgbRed: 160.0 / 255.0, green: 0, blue: 0, alpha: 1)
+    }
 
     static func bringForward() {
         if #available(macOS 14.0, *) {

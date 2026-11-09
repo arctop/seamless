@@ -163,6 +163,15 @@ final class PresentationTests: XCTestCase {
         }
     }
 
+    func testAlertBodyKeepsAQuotedPathsFirstSlashOnItsLine() {
+        let n = Notices.failed(.enroll, "There is no daemon socket at \u{201C}/tmp/nope\u{201D}.")
+        XCTAssertEqual(n.alertBody, "There is no daemon socket at \u{201C}/\u{2060}tmp/nope\u{201D}.")
+        XCTAssertEqual(n.text, "There is no daemon socket at \u{201C}/tmp/nope\u{201D}.", "stderr keeps the path as it is")
+
+        let plain = Notices.failed(.approve, "the daemon refused: no such access request")
+        XCTAssertEqual(plain.alertBody, plain.body, "a body with no quoted path is shown as it is")
+    }
+
     // MARK: dialogs
 
     func testEnrollCodePrompt() {

@@ -147,6 +147,15 @@ public struct Notice: Equatable {
         instructs && !setApart.isEmpty
     }
 
+    /// `alertBody` is the body as an alert lays it out: a word joiner after
+    /// the slash that opens a quoted path, so wrapping never leaves an opening
+    /// quote and slash alone at the end of a line. A path too long for one
+    /// line can still wrap at its later slashes. Only the alert gets the
+    /// joiner: `text` keeps a path as it is, to be copied or searched.
+    public var alertBody: String {
+        body.replacingOccurrences(of: "\u{201C}/", with: "\u{201C}/\u{2060}")
+    }
+
     /// `text` is the notice as plain text, for stderr: the body, then each
     /// set-apart line indented on its own line.
     public var text: String {
