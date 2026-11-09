@@ -323,9 +323,9 @@ func TestBridge_ApproverEndedMethodIsPinned(t *testing.T) {
 	require.Equal(t, "notifications/seamless/approver_ended", core.ApproverEndedNotification)
 }
 
-// How the helper ended, read from its stderr: its last "SeamApprove: " line,
-// a cancel's beginning "Not approved:". A helper that said nothing is not
-// reported.
+// How a helper that ended ended, read from its stderr: its last "SeamApprove: "
+// line, a cancel's beginning "Not approved:". One killed before it said
+// anything is closed: the bridge asks this only of a helper it saw end.
 func TestApproverOutcome(t *testing.T) {
 	for _, c := range []struct {
 		name, stderr, want string
@@ -335,8 +335,8 @@ func TestApproverOutcome(t *testing.T) {
 		{"a failure, over two lines", "SeamApprove: The daemon refused it: this request was already decided.\n  seam approve R-7F3K\n", core.ApproverEndedClosed},
 		{"approved", "SeamApprove: Approved access to acme-finance until 15:04.\n", core.ApproverEndedClosed},
 		{"no newline at the end", "SeamApprove: Not approved: the Touch ID prompt was cancelled.", core.ApproverEndedCancelled},
-		{"nothing", "", ""},
-		{"nothing of the helper's", "objc[812]: Class X is implemented in both\n", ""},
+		{"nothing", "", core.ApproverEndedClosed},
+		{"nothing of the helper's", "objc[812]: Class X is implemented in both\n", core.ApproverEndedClosed},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			require.Equal(t, c.want, approverOutcome([]byte(c.stderr)))

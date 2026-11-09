@@ -38,8 +38,15 @@ final class TestServer {
         Thread.detachNewThread { [self] in
             for reply in replies {
                 let c = accept(listener, nil, nil)
-                if c < 0 || stopping { break }
+                if c < 0 { break }
+                // A reply to a client that has gone must fail a test, not kill it.
+                var on: Int32 = 1
+                _ = setsockopt(c, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
                 let req = TestServer.readRequest(c)
+                if req == TestServer.stopWord {
+                    close(c)
+                    break
+                }
                 lock.lock()
                 received.append(req)
                 lock.unlock()
@@ -52,12 +59,15 @@ final class TestServer {
         }
     }
 
-    private var stopping = false
+    /// What `stop`'s connection says, which no request does. A client that
+    /// connected and closed without a byte is a request to record (PeerTests),
+    /// and accept may only now be returning it: connections come off the
+    /// backlog in order, so it is still recorded, ahead of this one.
+    private static let stopWord = Data("stop-test-server".utf8)
 
     /// `stop` wakes the accept loop with one last connection and removes the
     /// socket. Every test that makes a server calls it.
     func stop() {
-        stopping = true
         let c = socket(AF_UNIX, SOCK_STREAM, 0)
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
@@ -67,6 +77,7 @@ final class TestServer {
         _ = withUnsafePointer(to: &addr) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(c, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
         }
+        TestServer.stopWord.withUnsafeBytes { _ = send(c, $0.baseAddress, $0.count, 0) }
         close(c)
         _ = done.wait(timeout: .now() + 5)
         close(fd)

@@ -11,10 +11,13 @@ package main
 // and the FIFO's end is the helper's exit.
 //
 // The bridge holds a write end of its own until open has handed the FIFO
-// over, and an end counts only once the helper has written to it (it always
-// writes its outcome before it exits): a helper that opens its stderr late is
-// still heard, and one that never writes is never reported -- the dialog then
-// waits out its bound, as before. The read end is non-blocking and polled:
+// over, and an end counts only once the helper has been seen there: it wrote
+// to the FIFO, or, the bridge's own end closed, a read would block because
+// another write end is open. A helper killed before it said anything, SIGKILL
+// included, is seen that way, and the kernel closes its stderr for it. A
+// helper that opens its stderr late is still heard, and one never seen is
+// never reported -- the dialog then waits out its bound, as before.
+// The read end is non-blocking and polled:
 // on Darwin kqueue reports no event
 // when a FIFO's last writer closes (Go's poller leaves FIFOs alone there for
 // that reason), and a blocked read could not be stopped when the bridge
@@ -42,9 +45,9 @@ type approverStderr struct {
 	path string
 	rfd  int
 	wfd  int // the bridge's own write end until handedOver; -1 after
-	// heard is set once the helper wrote anything: only then is an end the
-	// helper's exit.
-	heard bool
+	// seen is set once the helper wrote anything or held a write end after
+	// handedOver: only then is an end the helper's exit.
+	seen bool
 }
 
 // openApproverStderr makes the FIFO a launch hands the helper as its stderr.
@@ -84,8 +87,8 @@ func (s *approverStderr) handedOver() {
 	}
 }
 
-// wait reads the helper's stderr until it ends after the helper wrote to it
-// (the helper exited: ended is true), quit closes, or limit passes. It
+// wait reads the helper's stderr until it ends after the helper was seen
+// there (the helper exited: ended is true), quit closes, or limit passes. It
 // returns the tail it read.
 func (s *approverStderr) wait(quit <-chan struct{}, limit time.Duration) (tail []byte, ended bool) {
 	tick := time.NewTicker(approverStderrPoll)
@@ -95,8 +98,10 @@ func (s *approverStderr) wait(quit <-chan struct{}, limit time.Duration) (tail [
 	buf := make([]byte, 4096)
 	for {
 		read, eof, err := s.drain(&tail, buf)
-		s.heard = s.heard || read > 0
-		if err != nil || (eof && s.heard) {
+		// With the bridge's own end closed, a read that would block means a
+		// write end is open elsewhere: the helper holds its stderr.
+		s.seen = s.seen || read > 0 || (s.wfd < 0 && !eof)
+		if err != nil || (eof && s.seen) {
 			return tail, err == nil
 		}
 		select {
@@ -116,7 +121,9 @@ func (s *approverStderr) drain(tail *[]byte, buf []byte) (int, bool, error) {
 	for {
 		n, err := syscall.Read(s.rfd, buf)
 		switch {
-		case errors.Is(err, syscall.EAGAIN), errors.Is(err, syscall.EINTR):
+		case errors.Is(err, syscall.EINTR):
+			continue
+		case errors.Is(err, syscall.EAGAIN):
 			return total, false, nil
 		case err != nil:
 			return total, false, err

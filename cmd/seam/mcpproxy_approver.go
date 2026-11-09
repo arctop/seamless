@@ -19,12 +19,13 @@ package main
 // than wait out its dialog: core.ApproverEndedNotification, a notification
 // with the request_id and an outcome -- cancelled when the helper's last word
 // is that the owner cancelled ("Not approved: ...", pinned by the app's
-// FlowTests too), closed for any other end (it failed, or it approved, which
-// the daemon reads from the request itself).
+// FlowTests too), closed for any other end (it failed, it was killed before it
+// said anything, or it approved, which the daemon reads from the request
+// itself).
 // The helper's exit status never reaches the bridge through LaunchServices;
-// its stderr does (mcpproxy_approver_fifo.go). A helper that says nothing is
-// not reported, and the call waits as before. The word grants and denies
-// nothing.
+// its stderr does (mcpproxy_approver_fifo.go). A helper the bridge never saw
+// holding that stderr is not reported, and the call waits as before. The word
+// grants and denies nothing.
 
 import (
 	"context"
@@ -56,19 +57,17 @@ const (
 	approverCancelPrefix = "Not approved:"
 )
 
-// approverOutcome reads how the helper ended from its stderr: cancelled,
-// closed, or "" when it said nothing the bridge can read.
+// approverOutcome reads how a helper that has ended ended, from its stderr:
+// cancelled when its last word says the owner cancelled, closed otherwise,
+// including when it was killed before it said anything.
 func approverOutcome(stderr []byte) string {
-	last, found := "", false
+	last := ""
 	for line := range strings.SplitSeq(string(stderr), "\n") {
 		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), approverLinePrefix); ok {
-			last, found = rest, true
+			last = rest
 		}
 	}
-	switch {
-	case !found:
-		return ""
-	case strings.HasPrefix(last, approverCancelPrefix):
+	if strings.HasPrefix(last, approverCancelPrefix) {
 		return core.ApproverEndedCancelled
 	}
 	return core.ApproverEndedClosed
@@ -195,11 +194,7 @@ func (b *bridge) goLaunch(ctx context.Context, ask core.ApproverLaunch) {
 		if !ended {
 			return
 		}
-		outcome := approverOutcome(stderr)
-		if outcome == "" {
-			return
-		}
-		if err := b.sendApproverEnded(ctx, ask.RequestID, outcome); err != nil && ctx.Err() == nil {
+		if err := b.sendApproverEnded(ctx, ask.RequestID, approverOutcome(stderr)); err != nil && ctx.Err() == nil {
 			b.logf("seam mcp-proxy: %s: %v", core.ApproverEndedNotification, err)
 		}
 	}()

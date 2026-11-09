@@ -4,6 +4,8 @@ package main
 
 import (
 	"os"
+	"os/exec"
+	"syscall"
 	"testing"
 	"time"
 
@@ -66,6 +68,42 @@ func TestApproverStderr_ALateHelperIsHeard(t *testing.T) {
 	tail, ended := s.wait(quit, time.Minute)
 	require.True(t, ended)
 	require.Equal(t, core.ApproverEndedCancelled, approverOutcome(tail))
+}
+
+// A helper killed before it said anything still ends the watch, as closed: a
+// real process holds the write end and dies of each signal, and the one that
+// cannot be caught is why the bridge cannot rely on a last word.
+func TestApproverStderr_AKilledHelperThatSaidNothingEnds(t *testing.T) {
+	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGKILL} {
+		t.Run(sig.String(), func(t *testing.T) {
+			s, err := openApproverStderr()
+			require.NoError(t, err)
+			defer s.close()
+			quit := make(chan struct{})
+
+			stderr, err := os.OpenFile(s.stderrPath(), os.O_WRONLY, 0)
+			require.NoError(t, err)
+			helper := exec.Command("sleep", "60")
+			helper.Stderr = stderr
+			require.NoError(t, helper.Start())
+			t.Cleanup(func() { _ = helper.Process.Kill() })
+			require.NoError(t, stderr.Close())
+			s.handedOver()
+
+			tail, ended := s.wait(quit, 3*approverStderrPoll)
+			require.False(t, ended, "alive and silent is not an end")
+			require.Empty(t, tail)
+
+			require.NoError(t, helper.Process.Signal(sig))
+			var exit *exec.ExitError
+			require.ErrorAs(t, helper.Wait(), &exit, "the helper died of the signal")
+
+			tail, ended = s.wait(quit, time.Minute)
+			require.True(t, ended, "the helper is gone")
+			require.Empty(t, tail)
+			require.Equal(t, core.ApproverEndedClosed, approverOutcome(tail))
+		})
+	}
 }
 
 func TestApproverStderr_QuitEndsTheWatch(t *testing.T) {

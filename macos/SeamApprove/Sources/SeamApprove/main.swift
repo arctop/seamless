@@ -33,7 +33,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func finish(_ outcome: Outcome) {
-        FileHandle.standardError.write(Data((outcome.stderrLine + "\n").utf8))
+        // The throwing write: the bridge may have closed this FIFO already, and
+        // the non-throwing one raises an exception on a broken pipe, which would
+        // end the app before the alert below.
+        try? FileHandle.standardError.write(contentsOf: Data((outcome.stderrLine + "\n").utf8))
         // A cancel shows nothing: the owner just chose it.
         if !interactive, let notice = outcome.notice {
             ui.show(notice)
