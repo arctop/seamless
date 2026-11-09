@@ -156,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
         
-        <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
+        <li><a href="../../guides/peer-auth/">Lock projects behind your approval</a></li>
         
         <li><a href="../../guides/write-screening/" class="current" aria-current="page">Screen writes and hold the suspicious ones</a></li>
         
@@ -675,7 +675,7 @@ on, with a reason code:</p>
 </tr>
 <tr>
 <td><code>peer.owner_only</code></td>
-<td>A configured account reaching the owner's console.</td>
+<td>A restricted account reaching the owner's console.</td>
 </tr>
 <tr>
 <td><code>auth.failed</code></td>
@@ -693,8 +693,8 @@ ten seconds, with the refusals in between counted in <code>suppressed</code>.</p
 to that Unix socket, for a monitor that should see what agents do without
 reading Seamless. A frame carries the event's kind (as <code>activity</code>), time,
 class, severity and outcome; the session's name and agent process; the
-project - <strong>a confidential or sealed project, or one sealed to another OS
-account, as a keyed hash</strong> (<code>h:</code> and 24 hex characters, keyed by a random key
+project - <strong>a confidential or sealed project, or one locked under
+peer_auth, as a keyed hash</strong> (<code>h:</code> and 24 hex characters, keyed by a random key
 in the spool folder); the item kind and id; and the codes, counts, sizes and
 flags the event carries. It never carries arguments, results, bodies,
 prompts, queries, names or titles: each frame is built from an allowlist of
@@ -817,7 +817,7 @@ injected; <code>recall</code> and <code>memory_read</code> still answer an agent
 
     
     <nav class="page-nav" aria-label="Pagination">
-      <a class="prev" href="../../guides/peer-auth/"><span class="dir">Previous</span><span class="t">Seal projects to OS accounts</span></a>
+      <a class="prev" href="../../guides/peer-auth/"><span class="dir">Previous</span><span class="t">Lock projects behind your approval</span></a>
       <a class="next" href="../../guides/commit-records/"><span class="dir">Next</span><span class="t">Record commits for an integrity monitor</span></a>
     </nav>
     

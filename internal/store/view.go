@@ -15,8 +15,8 @@ import (
 	sqlite "modernc.org/sqlite"
 )
 
-// A filtered read handle: the owner's view of the database while peer_auth seals
-// projects to other OS accounts or locks them (peer_auth.locked).
+// A filtered read handle: the owner's view of the database while peer_auth
+// locks projects (peer_auth.locked).
 //
 // The console reads the database through roughly a hundred and fifty store
 // functions -- lists, details, counts, charts, timelines -- and filtering each by
@@ -236,20 +236,17 @@ func normalizeSlugs(slugs []string) []string {
 
 // Views is a pool of filtered read handles over one database, one per hidden
 // set (peer_auth.locked). The console reads each request through the handle
-// that hides exactly what that request may not read: every project sealed to
-// another OS account (fixed, never opened by anything) plus every locked
-// project the request holds nothing open on -- an agent tree's lease on the
-// socket, or a browser's console unlock. A request with nothing open reads the
-// base handle, the one serve built before (OpenView over the whole set).
+// that hides exactly what that request may not read: every locked project the
+// request holds nothing open on -- an agent tree's lease on the socket, or a
+// browser's console unlock. A request with nothing open reads the base handle,
+// the one serve built before (OpenView over the whole set).
 //
 // Handles open lazily, on the first request that needs a given set, and stay
-// cached until Close: a set is fixed plus a subset of lockable, so the pool
-// never holds more than 2^len(lockable) handles. A request can only ever narrow
-// lockable -- a project For is asked to open that is not lockable stays as
-// hidden as before (a sealed one) or was never hidden at all.
+// cached until Close: a set is a subset of lockable, so the pool never holds
+// more than 2^len(lockable) handles. A request can only ever narrow lockable --
+// a project For is asked to open that is not lockable was never hidden at all.
 type Views struct {
 	path     string
-	fixed    []string
 	lockable []string
 
 	mu      sync.Mutex
@@ -261,16 +258,15 @@ type Views struct {
 var ErrViewsClosed = errors.New("store.Views: closed")
 
 // OpenViews opens the pool over the existing database at dbPath and builds its
-// base handle -- fixed and every lockable project hidden -- now, so a schema
-// the views cannot be built over fails at serve start. A pool that would hide
-// nothing at all is refused, as OpenView refuses one.
-func OpenViews(dbPath string, fixed, lockable []string) (*Views, error) {
-	fixed, lockable = normalizeSlugs(fixed), normalizeSlugs(lockable)
-	lockable = slices.DeleteFunc(lockable, func(s string) bool { return slices.Contains(fixed, s) })
-	if len(fixed) == 0 && len(lockable) == 0 {
+// base handle -- every lockable project hidden -- now, so a schema the views
+// cannot be built over fails at serve start. A pool that would hide nothing at
+// all is refused, as OpenView refuses one.
+func OpenViews(dbPath string, lockable []string) (*Views, error) {
+	lockable = normalizeSlugs(lockable)
+	if len(lockable) == 0 {
 		return nil, errors.New("store.OpenViews: no hidden projects: use the main handle")
 	}
-	v := &Views{path: dbPath, fixed: fixed, lockable: lockable, handles: map[string]*sql.DB{}}
+	v := &Views{path: dbPath, lockable: lockable, handles: map[string]*sql.DB{}}
 	if _, err := v.For(nil); err != nil {
 		return nil, fmt.Errorf("store.OpenViews: %w", err)
 	}
@@ -280,23 +276,21 @@ func OpenViews(dbPath string, fixed, lockable []string) (*Views, error) {
 // Lockable returns the projects a request may open (the locked ones), sorted.
 func (v *Views) Lockable() []string { return slices.Clone(v.lockable) }
 
-// Hidden returns the set the handle For(open) hides, sorted: fixed plus every
-// lockable project open does not name.
+// Hidden returns the set the handle For(open) hides, sorted: every lockable
+// project open does not name.
 func (v *Views) Hidden(open []string) []string {
-	out := slices.Clone(v.fixed)
+	var out []string
 	for _, slug := range v.lockable {
 		if !slices.Contains(open, slug) {
 			out = append(out, slug)
 		}
 	}
-	slices.Sort(out)
 	return out
 }
 
 // For returns the read-only handle on which Hidden(open) does not exist,
 // opening it on first use. Every handle is read-only, including the one a
-// request with every locked project open gets (it hides only fixed, or
-// nothing).
+// request with every locked project open gets (it hides nothing).
 func (v *Views) For(open []string) (*sql.DB, error) {
 	hidden := v.Hidden(open)
 	key := strings.Join(hidden, "\x00")

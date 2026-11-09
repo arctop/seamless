@@ -6,8 +6,8 @@ import "github.com/arctop/seamless/internal/access"
 // SessionStart hook in a locked project's repository is about to stamp on
 // the session it records there: agentProcess, a process of v's
 // kernel-verified chain. The hook asks before it records anything (owner
-// decision 2026-11-08): an agent started straight from a tmux pane, its hook
-// naming the tmux server, could never have a request filed or a lease
+// decision 2026-11-08): a hook with no agent above it, run from a tmux pane
+// and naming the tmux server say, could never have a request filed or a lease
 // approved, so its session is not recorded at all, and the notice says why.
 //
 // The process is judged as filing judges it once the session is stamped

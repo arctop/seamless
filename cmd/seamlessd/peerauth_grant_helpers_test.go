@@ -274,7 +274,7 @@ func newGMRig(t *testing.T, peer, requests bool) *gmRig {
 	var views *store.Views
 	if peer && len(r.policy.ConsoleHidden()) > 0 {
 		locked := r.policy.OwnerLocked()
-		views, err = store.OpenViews(dbPath, nil, locked)
+		views, err = store.OpenViews(dbPath, locked)
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = views.Close() })
 		base, err := views.For(nil)

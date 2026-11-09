@@ -162,7 +162,7 @@ func TestAccessFilter_FTSAndCosine(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
-	for _, row := range []struct{ id, project string }{{"m-fin", "example-finance"}, {"m-ops", "example-ops"}, {"m-glob", ""}} {
+	for _, row := range []struct{ id, project string }{{"m-fin", "example-finance"}, {"m-ops", "example-ops"}, {"m-conf", "example-conf"}, {"m-glob", ""}} {
 		_, err := db.ExecContext(ctx, `INSERT INTO fts (item_id, kind, project, title, name, description, body) VALUES (?, 'memory', ?, '', 'ledger', '', 'ledger body')`, row.id, row.project)
 		require.NoError(t, err)
 		_, err = db.ExecContext(ctx, `INSERT INTO embeddings (item_id, kind, model, dims, vec, updated_at) VALUES (?, 'memory', 'm', 2, ?, 'x')`, row.id, EncodeVector([]float32{1, 0}))
@@ -172,7 +172,7 @@ func TestAccessFilter_FTSAndCosine(t *testing.T) {
 		require.NoError(t, err)
 	}
 	p := testPeerPolicy(t)
-	fin, _ := p.PeerView(470)
+	agent := testPeerAgent(t, p, "example-ops")
 	ids := func(ctx context.Context) []string {
 		hits, err := FTSSearch(ctx, db, "ledger", nil, nil, 10)
 		require.NoError(t, err)
@@ -189,17 +189,15 @@ func TestAccessFilter_FTSAndCosine(t *testing.T) {
 		require.ElementsMatch(t, out, cout, "the two legs agree on reach")
 		return out
 	}
-	require.ElementsMatch(t, []string{"m-fin", "m-ops", "m-glob"}, ids(ctx), "no View: everything")
-	require.ElementsMatch(t, []string{"m-ops", "m-glob"}, ids(access.WithView(ctx, p.OwnerView())), "the owner: all but the seal")
-	require.ElementsMatch(t, []string{"m-fin", "m-glob"}, ids(access.WithView(ctx, fin)), "the account: its own plus global")
+	require.ElementsMatch(t, []string{"m-fin", "m-ops", "m-conf", "m-glob"}, ids(ctx), "no View: everything")
+	require.ElementsMatch(t, []string{"m-ops", "m-conf", "m-glob"}, ids(access.WithView(ctx, p.OwnerView())), "the owner: all but the locked project")
+	require.ElementsMatch(t, []string{"m-ops", "m-glob"}, ids(access.WithView(ctx, agent)), "the restricted account: the open project it reaches plus global")
 }
 
 func testPeerPolicy(t *testing.T) *access.Policy {
 	t.Helper()
-	accounts := map[string]access.Account{"owner": {UID: 501, Name: "owner"}, "_example_finance": {UID: 470, Name: "_example_finance"}}
-	p, err := access.New(config.PeerAuth{Owner: "owner", Users: map[string]config.PeerUser{
-		"_example_finance": {Sealed: []string{"example-finance"}},
-	}}, func(n string) (access.Account, error) {
+	accounts := map[string]access.Account{"owner": {UID: 501, Name: "owner"}, "_example_agent": {UID: 470, Name: "_example_agent"}}
+	p, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{"example-finance"}, Restricted: []string{"_example_agent"}}, func(n string) (access.Account, error) {
 		if a, ok := accounts[n]; ok {
 			return a, nil
 		}
@@ -209,8 +207,16 @@ func testPeerPolicy(t *testing.T) *access.Policy {
 	return p
 }
 
-// CanRead/CanWrite give the View the first word: an account's own confidential
-// project reads and writes; the owner's open project, and global writes, do not.
+func testPeerAgent(t *testing.T, p *access.Policy, open ...string) access.View {
+	t.Helper()
+	v, ok := p.PeerView(470)
+	require.True(t, ok)
+	return v.WithOpenProjects(open)
+}
+
+// CanRead/CanWrite give the View the first word: a restricted account's open
+// project reads and writes, a locked one and global writes do not, and the
+// owner reaches a locked project only under a lease.
 func TestCanReadCanWrite_PeerAuth(t *testing.T) {
 	db, err := Open(filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
@@ -222,8 +228,7 @@ func TestCanReadCanWrite_PeerAuth(t *testing.T) {
 	}
 	require.NoError(t, SetProjectIsolation(ctx, db, "example-finance", core.IsolationConfidential))
 	p := testPeerPolicy(t)
-	fin, _ := p.PeerView(470)
-	finCtx := access.WithView(ctx, fin)
+	agentCtx := access.WithView(ctx, testPeerAgent(t, p, "example-ops"))
 	ownCtx := access.WithView(ctx, p.OwnerView())
 
 	for _, tc := range []struct {
@@ -232,11 +237,11 @@ func TestCanReadCanWrite_PeerAuth(t *testing.T) {
 		caller, target string
 		read, write    bool
 	}{
-		{"account in its own project", finCtx, "example-finance", "example-finance", true, true},
-		{"account reading global", finCtx, "example-finance", "", true, false},
-		{"account reaching the owner's open project", finCtx, "example-finance", "example-ops", false, false},
-		{"owner bound to its project reaching the seal", ownCtx, "example-ops", "example-finance", false, false},
-		{"owner bound INTO the seal still reads nothing", ownCtx, "example-finance", "example-finance", false, false},
+		{"restricted account in an open project", agentCtx, "example-ops", "example-ops", true, true},
+		{"restricted account reading global", agentCtx, "example-ops", "", true, false},
+		{"restricted account reaching a locked project", agentCtx, "example-ops", "example-finance", false, false},
+		{"owner bound to its project reaching the lock", ownCtx, "example-ops", "example-finance", false, false},
+		{"owner bound INTO the lock still reads nothing", ownCtx, "example-finance", "example-finance", false, false},
 		{"owner in its own project", ownCtx, "example-ops", "example-ops", true, true},
 		{"no View: the isolation matrix alone", ctx, "example-ops", "example-finance", false, true},
 	} {
@@ -252,8 +257,8 @@ func TestCanReadCanWrite_PeerAuth(t *testing.T) {
 }
 
 // The pool hands each request the handle that hides exactly what it may not
-// read: the fixed (sealed) set always, and every locked project it holds
-// nothing open on. Handles are cached per hidden set, at most 2^len(locked).
+// read: every locked project it holds nothing open on. Handles are cached per
+// hidden set, at most 2^len(locked).
 func TestOpenViews_PoolByHiddenSet(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "seam.db")
 	db, err := Open(path)
@@ -266,10 +271,10 @@ func TestOpenViews_PoolByHiddenSet(t *testing.T) {
 	_, err = db.ExecContext(ctx, `INSERT INTO tasks (id, project_slug, title, created_at, updated_at) VALUES ('t-legal','example-legal','legal task','x','x')`)
 	require.NoError(t, err)
 
-	_, err = OpenViews(path, nil, nil)
+	_, err = OpenViews(path, nil)
 	require.Error(t, err, "a pool that hides nothing is refused")
 
-	views, err := OpenViews(path, nil, []string{"example-legal", "example-finance", "example-finance"})
+	views, err := OpenViews(path, []string{"example-legal", "example-finance", "example-finance"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"example-finance", "example-legal"}, views.Lockable())
 	require.Equal(t, 1, views.Open(), "the base handle opens at once")
@@ -317,24 +322,4 @@ func TestOpenViews_PoolByHiddenSet(t *testing.T) {
 	require.NoError(t, views.Close(), "closing twice is harmless")
 	_, err = views.For(nil)
 	require.ErrorIs(t, err, ErrViewsClosed)
-}
-
-// A project sealed to another account stays hidden whatever a request opens:
-// only the locked ones can be.
-func TestOpenViews_FixedNeverOpens(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "seam.db")
-	db, err := Open(path)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	seedViewFixture(t, db)
-	views, err := OpenViews(path, []string{"example-finance"}, []string{"example-finance"})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = views.Close() })
-	require.Empty(t, views.Lockable(), "a sealed project is not lockable")
-	h, err := views.For([]string{"example-finance"})
-	require.NoError(t, err)
-	var n int
-	require.NoError(t, h.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM tasks WHERE project_slug = 'example-finance'`).Scan(&n))
-	require.Zero(t, n)
-	require.Equal(t, 1, views.Open())
 }

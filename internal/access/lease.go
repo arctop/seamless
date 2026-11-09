@@ -78,8 +78,7 @@ type Lease struct {
 // which every process it started shares) and a project peer_auth.locked
 // lists, and it ends after now. Every other lease is dropped,
 // and every other view comes back unchanged, so a lease can never reach a TCP
-// request, another process, a project sealed to an OS account, or a project
-// that is not locked at all.
+// request, another process, or a project that is not locked at all.
 //
 // The leases are judged once, at now: a request that began before a lease
 // ended finishes under it. The transport builds a View per request, so the
@@ -136,8 +135,8 @@ func (v View) Leases() []Lease {
 
 // Locked reports whether project is locked (peer_auth.locked) and v holds no
 // lease on it: the owner may see that it exists, and nothing inside.
-// It is false for every non-owner view (they never list such a project: a
-// configured account reaches only its own projects).
+// It is false for every non-owner view (a restricted account never lists such
+// a project: its reach is the open projects that are not locked).
 func (v View) Locked(project string) bool {
 	return v.who.Kind == KindOwner && v.policy != nil && v.policy.ownerLocked[project] && !v.leased(project)
 }
@@ -145,8 +144,7 @@ func (v View) Locked(project string) bool {
 // Listed reports whether v may show that project exists: its slug, name and
 // item counts, never anything inside it. Every project v may read is listed;
 // beyond that, the owner sees a locked project -- locked, not hidden -- so an
-// agent can name it in an access request. A project sealed to another OS
-// account stays unlisted, as before.
+// agent can name it in an access request.
 func (v View) Listed(project string) bool {
 	return v.Visible(project) || v.Locked(project)
 }

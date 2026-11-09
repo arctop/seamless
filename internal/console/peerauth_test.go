@@ -14,10 +14,8 @@ import (
 
 func consolePolicy(t *testing.T) *access.Policy {
 	t.Helper()
-	accounts := map[string]access.Account{"katata": {UID: 501, Name: "katata"}, "_arctop_finance": {UID: 470, Name: "_arctop_finance"}}
-	p, err := access.New(config.PeerAuth{Owner: "katata", Users: map[string]config.PeerUser{
-		"_arctop_finance": {Sealed: []string{"arctop-finance"}},
-	}}, func(n string) (access.Account, error) {
+	accounts := map[string]access.Account{"owner": {UID: 501, Name: "owner"}, "_example_agent": {UID: 470, Name: "_example_agent"}}
+	p, err := access.New(config.PeerAuth{Owner: "owner", Restricted: []string{"_example_agent"}}, func(n string) (access.Account, error) {
 		if a, ok := accounts[n]; ok {
 			return a, nil
 		}
@@ -27,7 +25,7 @@ func consolePolicy(t *testing.T) *access.Policy {
 	return p
 }
 
-// The console is the owner's surface. Under peer_auth a configured account on
+// The console is the owner's surface. Under peer_auth a restricted account on
 // the socket is refused it outright, key or no key; the owner on the socket
 // needs no key, because the kernel already named it; the owner on TCP still
 // needs one.
@@ -35,7 +33,7 @@ func TestConsole_PeerAuthGate(t *testing.T) {
 	mux := newTestMux(t)
 	p := consolePolicy(t)
 	ownerSock, _ := p.PeerView(501)
-	fin, _ := p.PeerView(470)
+	agent, _ := p.PeerView(470)
 
 	for _, tc := range []struct {
 		name   string
@@ -43,7 +41,7 @@ func TestConsole_PeerAuthGate(t *testing.T) {
 		key    string
 		status int
 	}{
-		{"a configured account, even with the key", &fin, testKey, http.StatusForbidden},
+		{"a restricted account, even with the key", &agent, testKey, http.StatusForbidden},
 		{"the owner on the socket, no key", &ownerSock, "", http.StatusOK},
 		{"the owner on TCP, no key", ptr(p.OwnerView()), "", http.StatusUnauthorized},
 		{"the owner on TCP, with the key", ptr(p.OwnerView()), testKey, http.StatusOK},

@@ -207,9 +207,7 @@ func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account)
 	})
 	// serve's wiring while projects are locked: a pool of filtered handles,
 	// the base one hiding every locked project.
-	locked := policy.OwnerLocked()
-	fixed := slices.DeleteFunc(policy.ConsoleHidden(), func(slug string) bool { return slices.Contains(locked, slug) })
-	views, err := store.OpenViews(path, fixed, locked)
+	views, err := store.OpenViews(path, policy.OwnerLocked())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = views.Close() })
 	base, err := views.For(nil)

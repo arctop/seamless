@@ -45,7 +45,6 @@ func TestRestricted_PolicyResolves(t *testing.T) {
 	p := restrictedPolicy(t)
 	require.True(t, p.HasRestricted())
 	require.Equal(t, []Account{restrictedAccounts["_example_agent"]}, p.RestrictedAccounts())
-	require.Empty(t, p.Accounts(), "a restricted account is not a users-map account")
 
 	for _, tc := range []struct {
 		name string
@@ -55,8 +54,6 @@ func TestRestricted_PolicyResolves(t *testing.T) {
 		{"the owner by uid", config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"501"}}, "the owner's"},
 		{"one account twice", config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"_example_agent", "502"}}, "twice"},
 		{"unknown", config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"_nobody"}}, "unknown account"},
-		{"beside users", config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"_example_agent"},
-			Users: map[string]config.PeerUser{"_other_agent": {Projects: []string{"example-hq"}}}}, "both restricted and users"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := New(tc.cfg, restrictedResolve)

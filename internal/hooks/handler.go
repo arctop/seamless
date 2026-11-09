@@ -312,10 +312,8 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 	// nothing was written and nothing could be, because deriving the roots would
 	// mean reading THIS machine's disk for another machine's path.
 	//
-	// A configured peer_auth account never grows the map: it works only inside
-	// its own projects, and a repository it opens must not mint a project. Nor
-	// does a restricted local account: it cannot create projects at all, so
-	// the map is read for it (restrictedReaches), never grown.
+	// A restricted local account never grows the map: it cannot create projects
+	// at all, so the map is read for it (restrictedReaches), never grown.
 	if growsRepoMap(ctx) {
 		if _, moved, err := store.RegisterProjectForCWD(ctx, h.db, p.identity(host), h.localHost); err != nil {
 			stage := "register-project"
@@ -339,24 +337,17 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// peer_auth: the owner opening a repository whose project is sealed to
-	// another OS account gets a notice instead of a briefing, and no session --
-	// a session there would be the owner working inside the seal. A project
-	// the owner has locked (peer_auth.locked) gets the locked notice instead:
-	// the session is recorded there, metadata only, and an access request is
-	// filed for it (lockedStart).
-	if refused, locked, ok := h.refusedCWD(ctx, host, p.CWD); ok {
-		if locked {
-			// A session already locked elsewhere is not moved here: it keeps
-			// its project, and this start records none.
-			if reach == reachLocked && reachProject != refused {
-				p.SessionID = ""
-			}
-			h.lockedStart(ctx, w, client, host, p, refused)
-			return
+	// peer_auth: a project the owner has locked (peer_auth.locked) and this
+	// connection holds no lease on gets the locked notice: the session is
+	// recorded there, metadata only, and an access request is filed for it
+	// (lockedStart).
+	if locked, ok := h.lockedCWD(ctx, host, p.CWD); ok {
+		// A session already locked elsewhere is not moved here: it keeps
+		// its project, and this start records none.
+		if reach == reachLocked && reachProject != locked {
+			p.SessionID = ""
 		}
-		h.writeContextResponse(ctx, w, "SessionStart", "session-start", client,
-			p.SessionID, "", sealedNotice(refused), false, nil)
+		h.lockedStart(ctx, w, client, host, p, locked)
 		return
 	}
 	// A session in a locked project never moves out of it: resuming it here
@@ -596,9 +587,8 @@ func (h *Handler) ensureAmbientSessionIn(ctx context.Context, client Client, hos
 		h.recordHookError(ctx, "ambient-project-resolve", client, err, "cwd", p.CWD)
 		project = ""
 	}
-	// peer_auth: a configured account's session lands in its own project; the
-	// owner is never given a session inside a project sealed to another account
-	// (sessionStart answered that case with a notice already -- this is the
+	// peer_auth: a caller is never given a session where it may not write
+	// (sessionStart answered those cases with a notice already -- this is the
 	// backstop). The one exception is the locked project the caller named: the
 	// owner's own, where the session is recorded but reaches nothing.
 	placed, err := access.SessionScope(ctx, project)
@@ -813,15 +803,16 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 }
 
 // foreignSession reports whether the agent session a hook names belongs to a
-// project the caller's OS account may not write (peer_auth). A hook identifies
-// its session only by the client's session id, which travels in the body; under
-// peer_auth that id must not be enough to act on -- resume, re-scope, complete,
-// harvest into, or attribute to -- another account's session. The callers blank
-// the id instead, so every session-touching step downstream no-ops and the hook
-// still answers. A lookup failure fails closed. With peer_auth off it is false
-// without touching the database. A session in a project the owner has locked
-// counts as foreign here too: every content path (plan capture, subagent
-// reports, a taint mark, a Codex harvest) refuses it until the owner approves.
+// project the caller's OS account may not write, or to another principal
+// (peer_auth). A hook identifies its session only by the client's session id,
+// which travels in the body; under peer_auth that id must not be enough to act
+// on -- resume, re-scope, complete, harvest into, or attribute to -- such a
+// session. The callers blank the id instead, so every session-touching step
+// downstream no-ops and the hook still answers. A lookup failure fails closed.
+// With peer_auth off it is false without touching the database. A session in a
+// project the owner has locked counts as foreign here too: every content path
+// (plan capture, subagent reports, a taint mark, a Codex harvest) refuses it
+// until the owner approves.
 func (h *Handler) foreignSession(ctx context.Context, client Client, externalID string) bool {
 	reach, _ := h.sessionReachOf(ctx, client, externalID)
 	return reach != reachOK
@@ -838,7 +829,7 @@ const (
 	// (peer_auth.locked, no lease) -- recorded there metadata only, so a hook
 	// may heartbeat, stamp and complete it, and write nothing into it.
 	reachLocked
-	// reachForeign: another account's session -- one in a project the caller
+	// reachForeign: a session the caller may not act on -- one in a project it
 	// may not write, or one another principal started (a restricted account's
 	// for the owner, the owner's for a restricted account) -- or a lookup that
 	// failed.
@@ -932,19 +923,11 @@ func (h *Handler) sessionInChain(ctx context.Context, v access.View, id string) 
 	return false
 }
 
-// peerUser reports whether the request is a configured peer_auth account's (not
-// the owner's, and not peer_auth off).
-func peerUser(ctx context.Context) bool {
-	v, ok := access.FromContext(ctx)
-	return ok && v.Principal().Kind == access.KindUser
-}
-
 // growsRepoMap reports whether a SessionStart may grow the repo->project map:
-// for the owner and with peer_auth off, as always; never for a configured
-// account (it works only in its own projects) or a restricted local account
-// (it cannot create projects -- the owner creates and maps them).
+// for the owner and with peer_auth off, as always; never for a restricted local
+// account (it cannot create projects -- the owner creates and maps them).
 func growsRepoMap(ctx context.Context) bool {
-	return !peerUser(ctx) && access.AccountOf(ctx) == ""
+	return access.AccountOf(ctx) == ""
 }
 
 // restrictedReaches reports whether a restricted account's cwd maps to a
@@ -977,35 +960,22 @@ func restrictedNotice(account string) string {
 		"session started in it is recorded.\n</seam-briefing>"
 }
 
-// refusedCWD reports the project a cwd resolves to when the caller may not be
-// placed in it: the owner in a repository sealed to another OS account, or in
-// the repository of a project the owner has locked and this connection holds
-// no lease on (locked). A configured account is never refused here -- its
-// session lands in its own project wherever it opens. A restricted local
-// account never gets this far: sessionStart answers it first
-// (restrictedReaches), with a notice that names no project.
-func (h *Handler) refusedCWD(ctx context.Context, host, cwd string) (project string, locked, ok bool) {
+// lockedCWD reports the project a cwd resolves to when the owner has locked it
+// and this connection holds no lease on it. A restricted local account never
+// gets here: sessionStart answers it first (restrictedReaches), with a notice
+// that names no project.
+func (h *Handler) lockedCWD(ctx context.Context, host, cwd string) (project string, ok bool) {
 	if _, on := access.FromContext(ctx); !on || h.db == nil {
-		return "", false, false
+		return "", false
 	}
 	project, err := store.ResolveProjectForCWD(ctx, h.db, host, cwd)
 	if err != nil {
-		return "", false, false
+		return "", false
 	}
-	if _, err := access.SessionScope(ctx, project); errors.Is(err, access.ErrNotReachable) {
-		return project, access.Locked(ctx, project), true
+	if access.Locked(ctx, project) {
+		return project, true
 	}
-	return "", false, false
-}
-
-// sealedNotice is the SessionStart context for the owner inside a repository
-// sealed to another OS account: what happened, and what to do instead. It names
-// the project (the owner mapped this repository; the slug is not news) and
-// nothing from inside it.
-func sealedNotice(project string) string {
-	return "<seam-briefing>\nSeamless: project " + project + " is sealed to its own system's OS account (peer_auth), " +
-		"so this session is not recorded and Seamless tools from this account cannot reach that project. " +
-		"To work on it with its memory, run the agent as that system's account (sudo -u).\n</seam-briefing>"
+	return "", false
 }
 
 // ambientName constructs a collision-resistant display name for a NEW ambient
@@ -1365,7 +1335,7 @@ func (h *Handler) sameHost(host string) bool {
 // Under peer_auth the answer is always no. The daemon then runs as its own OS
 // account, so every path a hook names is a path some OTHER account chose -- and
 // the daemon can read its own data directory. A transcript_path, plan file or
-// rollout pointing (or symlinked) into it would have the daemon read a sealed
+// rollout pointing (or symlinked) into it would have the daemon read a locked
 // project's files and file the result as the caller's findings or notes: the
 // confused deputy the whole boundary exists to rule out. Nothing is opened, and
 // nothing is recorded per call either (it would be every call). The captures

@@ -434,8 +434,11 @@ or with a passkey: https://seamless.example.org/console/access/01K...
 
 The second line appears only when a passkey can approve the request there:
 passkeys are set up and at least one is enrolled. Asking again while a request
-is pending answers with that same request, and `--reason` then fills in the
-reason of one a refused call filed without any. It always files, even right
+is pending finds that same request (`R-7F3K for example-finance (request) was
+already waiting. ...`), and `--reason` then fills in the reason of one a refused
+call filed without any (`Your reason was added to it.`) or is not used when the
+request already has one (`It already had a reason, so yours was not used.`). It
+always files, even right
 after the owner denied the agent's last request: a refused call files nothing
 after a denial, so this is how the agent asks again once the owner tells it
 to. An agent that already holds the
@@ -443,7 +446,8 @@ project's lease (or, with read grants on, a live read grant from its project)
 is answered with it, and nothing is filed, until 30 minutes before it ends,
 when the expiry notices start; from then on asking again files a new approval
 (a `refresh` of a lease, or a new read grant request). `--json` prints the
-console's answer as received ([JSON output](#json-output)). The console's
+console's answer as received ([JSON output](#json-output)), including `filed`
+and `reason`, as the `access_request` tool's are. The console's
 refusal is printed as it is: the project is not locked; the project is already
 open to this agent until `HH:MM` (a grant: already readable from its project),
 so nothing was filed; or the connection has no agent process the daemon could

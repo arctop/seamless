@@ -156,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
         
-        <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
+        <li><a href="../../guides/peer-auth/">Lock projects behind your approval</a></li>
         
         <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
@@ -548,8 +548,10 @@ refused before anything is sent.</p>
 </span></span></code></pre></div>
 <p>The second line appears only when a passkey can approve the request there:
 passkeys are set up and at least one is enrolled. Asking again while a request
-is pending answers with that same request, and <code>--reason</code> then fills in the
-reason of one a refused call filed without any. It always files, even right
+is pending finds that same request (<code>R-7F3K for example-finance (request) was already waiting. ...</code>), and <code>--reason</code> then fills in the reason of one a refused
+call filed without any (<code>Your reason was added to it.</code>) or is not used when the
+request already has one (<code>It already had a reason, so yours was not used.</code>). It
+always files, even right
 after the owner denied the agent's last request: a refused call files nothing
 after a denial, so this is how the agent asks again once the owner tells it
 to. An agent that already holds the
@@ -557,7 +559,8 @@ project's lease (or, with read grants on, a live read grant from its project)
 is answered with it, and nothing is filed, until 30 minutes before it ends,
 when the expiry notices start; from then on asking again files a new approval
 (a <code>refresh</code> of a lease, or a new read grant request). <code>--json</code> prints the
-console's answer as received (<a href="#json-output">JSON output</a>). The console's
+console's answer as received (<a href="#json-output">JSON output</a>), including <code>filed</code>
+and <code>reason</code>, as the <code>access_request</code> tool's are. The console's
 refusal is printed as it is: the project is not locked; the project is already
 open to this agent until <code>HH:MM</code> (a grant: already readable from its project),
 so nothing was filed; or the connection has no agent process the daemon could

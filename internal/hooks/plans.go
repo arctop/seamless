@@ -46,7 +46,7 @@ func (h *Handler) postToolUse(w http.ResponseWriter, r *http.Request) {
 	p := h.decodeToolPayload(w, r)
 	reach, lockedProject := h.sessionReachOf(r.Context(), ClientClaudeCode, p.SessionID)
 	if reach != reachOK {
-		p.SessionID = "" // foreignSession: another account's, or locked
+		p.SessionID = "" // foreignSession: another principal's, or locked
 	}
 
 	// Heartbeat the ambient session on any tool activity, so a long turn that never
@@ -101,7 +101,7 @@ func (h *Handler) permissionRequest(w http.ResponseWriter, r *http.Request) {
 	p := h.decodeToolPayload(w, r)
 	reach, lockedProject := h.sessionReachOf(r.Context(), ClientClaudeCode, p.SessionID)
 	if reach != reachOK {
-		p.SessionID = "" // foreignSession: another account's, or locked
+		p.SessionID = "" // foreignSession: another principal's, or locked
 	}
 
 	// Presenting carries no plan text: a refusal here has nothing to name, so

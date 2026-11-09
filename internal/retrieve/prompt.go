@@ -139,8 +139,9 @@ func (s *Service) PromptRecall(ctx context.Context, host, cwd, prompt string) (s
 	}
 	project, err := s.cwdProject(ctx, host, cwd)
 	if errors.Is(err, access.ErrNotReachable) {
-		// The owner prompting inside a repository sealed to another OS account:
-		// nothing to recall from here, which is not a failure of the hook.
+		// A caller prompting inside a repository it may not reach (locked to the
+		// owner, closed to a restricted account): nothing to recall from here,
+		// which is not a failure of the hook.
 		return "", nil, nil
 	}
 	if err != nil {

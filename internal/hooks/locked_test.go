@@ -297,32 +297,6 @@ func TestLockedSessionStart_LeasedGetsTheBriefing(t *testing.T) {
 	require.Empty(t, e.pending())
 }
 
-// The 6afda40 design is unchanged: the owner in a repository sealed to another
-// OS account gets the sealed notice and no session.
-func TestSealedToAccountSessionStart_KeepsItsNotice(t *testing.T) {
-	e := newLockHooks(t, false)
-	legacy, err := access.New(config.PeerAuth{Owner: "owner", Users: map[string]config.PeerUser{
-		"_example_finance": {Sealed: []string{lkFin}},
-	}}, func(n string) (access.Account, error) {
-		switch n {
-		case "owner":
-			return access.Account{UID: 501, Name: "owner"}, nil
-		case "_example_finance":
-			return access.Account{UID: 470, Name: "_example_finance"}, nil
-		}
-		return access.Account{}, fmt.Errorf("no account %s", n)
-	})
-	require.NoError(t, err)
-	e.mu.Lock()
-	e.view = func() (access.View, bool) { return legacy.OwnerView(), true }
-	e.mu.Unlock()
-	notice := e.hook("session-start", "", map[string]any{"session_id": "fin-3", "cwd": "/work/finance", "source": "startup"})
-	require.Equal(t, sealedNotice(lkFin), notice)
-	_, ok, err := store.AmbientSessionByExternalIdentity(context.Background(), e.db, ClientClaudeCode.externalIdentity(), "fin-3")
-	require.NoError(t, err)
-	require.False(t, ok)
-}
-
 // Step 8 at the hooks, on a fake clock: a lease of the session's ending within
 // 30 minutes puts the warning in the prompt injection and the briefing; at
 // T-31m there is none; with no project locked (no approval service) nothing
@@ -362,9 +336,9 @@ func TestLeaseExpiry_HookInjections(t *testing.T) {
 	}
 }
 
-// A SessionStart whose agent process is a broad ancestor -- an agent started
-// straight from a tmux pane, so the process its hook names is the tmux server
-// -- is refused before anything is recorded (owner decision 2026-11-08): no
+// A SessionStart whose agent process is a broad ancestor -- a hook with no
+// agent above it, so the process it names is the tmux server -- is refused
+// before anything is recorded (owner decision 2026-11-08): no
 // session, no request, and the notice says why and what to do. A resume of
 // a session an older daemon recorded there is not reactivated either.
 func TestLockedSessionStart_ABroadAnchorRecordsNothing(t *testing.T) {

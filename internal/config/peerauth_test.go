@@ -39,18 +39,14 @@ func TestPeerAuth_DefaultIsOff(t *testing.T) {
 }
 
 func TestPeerAuth_LoadsAFullBlock(t *testing.T) {
-	cfg, err := loadYAML(t, peerBase+`  users:
-    _arctop_finance:
-      sealed: [arctop-finance]
-    _arctop_hq:
-      projects: [arctop-hq, arctop-ops]
+	cfg, err := loadYAML(t, peerBase+`  locked: [example-finance, example-ops]
+  restricted: [_example_agent]
 `)
 	require.NoError(t, err)
 	pa := cfg.PeerAuth
 	require.True(t, pa.Enabled)
 	require.Equal(t, "katata", pa.Owner)
-	require.Equal(t, map[string]string{"arctop-finance": "_arctop_finance"}, pa.SealedTo())
-	require.Equal(t, []string{"arctop-finance", "arctop-hq", "arctop-ops"}, pa.ReferencedProjects())
+	require.Equal(t, []string{"example-finance", "example-ops"}, pa.ReferencedProjects())
 	mode, err := pa.Socket.SocketFileMode()
 	require.NoError(t, err)
 	require.Equal(t, uint32(0o666), mode, "an unset mode is the default")
@@ -83,35 +79,6 @@ peer_auth: {enabled: true, owner: katata, socket: {path: /opt/seamless/data/run/
 		{"mode not octal", peerBase + "    mode: rw-rw-rw-\n", "not an octal mode"},
 		{"mode beyond 0777", peerBase + "    mode: \"4777\"\n", "beyond 0777"},
 		{"mode without owner rw", peerBase + "    mode: \"0066\"\n", "owner read and write"},
-		{"owner listed as a user", peerBase + `  users:
-    katata: {sealed: [x]}
-`, "the owner"},
-		{"a project sealed to two users", peerBase + `  users:
-    _a: {sealed: [arctop-finance]}
-    _b: {sealed: [arctop-finance]}
-`, "sealed to two accounts"},
-		{"sealed to one user and shared with another", peerBase + `  users:
-    _a: {sealed: [arctop-finance]}
-    _b: {projects: [arctop-finance]}
-`, "also listed under"},
-		{"listed twice for one user", peerBase + `  users:
-    _a: {sealed: [arctop-finance], projects: [arctop-finance]}
-`, "twice"},
-		{"global listed", peerBase + `  users:
-    _a: {projects: [global]}
-`, "global scope"},
-		{"the widening token listed", peerBase + `  users:
-    _a: {sealed: [all]}
-`, "reserved"},
-		{"a traversal slug", peerBase + `  users:
-    _a: {sealed: ["../notes"]}
-`, "invalid project"},
-		{"a user reaching nothing", peerBase + `  users:
-    _a: {}
-`, "reaches no project"},
-		{"an account name with a space", peerBase + `  users:
-    "_a b": {sealed: [x]}
-`, "not an OS account name"},
 		// An unknown key under peer_auth is refused (KnownFields). Top-level
 		// "sealed" was this row's sample until it became the lock's pre-release
 		// name, which now has its own refusal (TestPeerAuth_SealedKeyRenamed);
@@ -126,28 +93,18 @@ peer_auth: {enabled: true, owner: katata, socket: {path: /opt/seamless/data/run/
 	}
 }
 
-// peer_auth.locked (the approval design): locked projects, checked like the
-// users map -- always, enabled or not -- and never beside it, so a 6afda40 users
-// block cannot be read as the new design or the other way round.
+// peer_auth.locked (the approval design): locked projects, checked always,
+// enabled or not.
 func TestPeerAuth_LockedList(t *testing.T) {
 	cfg, err := loadYAML(t, peerBase+"  locked: [example-finance, \" example-legal\", example-ip]\n")
 	require.NoError(t, err)
 	require.Equal(t, []string{"example-finance", " example-legal", "example-ip"}, cfg.PeerAuth.Locked)
 	require.Equal(t, []string{"example-finance", "example-ip", "example-legal"}, cfg.PeerAuth.ReferencedProjects(),
 		"serve and doctor check every locked slug against the projects table")
-	require.Empty(t, cfg.PeerAuth.SealedTo(), "no project is sealed to an OS account")
 
 	for _, tc := range []struct {
 		name, yaml, want string
 	}{
-		{"both designs at once", peerBase + `  locked: [example-finance]
-  users:
-    _a: {sealed: [example-legal]}
-`, "both locked and users"},
-		{"the old design's seal moved up beside its users map", peerBase + `  locked: [example-finance]
-  users:
-    _a: {sealed: [example-finance]}
-`, "both locked and users"},
 		{"global", peerBase + "  locked: [global]\n", "global scope"},
 		{"the _global alias", peerBase + "  locked: [_global]\n", "global scope"},
 		{"the widening token", peerBase + "  locked: [all]\n", "reserved"},
@@ -164,8 +121,8 @@ func TestPeerAuth_LockedList(t *testing.T) {
 }
 
 // peer_auth.restricted lists restricted local accounts beside the locked
-// projects. It is refused while disabled, for the owner, twice, beside the
-// earlier design's users map, and with a field the block does not have.
+// projects. It is refused while disabled, for the owner, twice, and with a
+// field the block does not have.
 func TestPeerAuth_RestrictedAccounts(t *testing.T) {
 	cfg, err := loadYAML(t, peerBase+"  locked: [example-finance]\n  restricted: [_example_agent, \"502\"]\n")
 	require.NoError(t, err)
@@ -185,8 +142,6 @@ func TestPeerAuth_RestrictedAccounts(t *testing.T) {
 		{"not an account name", peerBase + "  restricted: [\"a b\"]\n", "not an OS account name"},
 		{"padded", peerBase + "  restricted: [\" _example_agent\"]\n", "not an OS account name"},
 		{"empty", peerBase + "  restricted: [\"\"]\n", "not an OS account name"},
-		{"beside the users map", peerBase + "  restricted: [_example_agent]\n  users:\n    _b: {projects: [example-hq]}\n",
-			"both restricted and users"},
 		{"an unknown field", peerBase + "  restricted_accounts: [_example_agent]\n", "restricted_accounts"},
 		{"an entry with fields", peerBase + "  restricted:\n    - name: _example_agent\n", "cannot unmarshal !!map into string"},
 	} {
@@ -200,8 +155,8 @@ func TestPeerAuth_RestrictedAccounts(t *testing.T) {
 
 // The lock was spelled peer_auth.sealed before any release shipped it. A config
 // that still says so is refused with the new name rather than a bare "field
-// sealed not found", enabled or not, whatever the list holds. The earlier
-// design's users.<account>.sealed is a different key and still loads.
+// sealed not found", enabled or not, whatever the list holds. A nested
+// users.<account>.sealed is not that key: it draws the retired users refusal.
 func TestPeerAuth_SealedKeyRenamed(t *testing.T) {
 	for name, body := range map[string]string{
 		"enabled":                 peerBase + "  sealed: [example-finance]\n",
@@ -217,38 +172,54 @@ func TestPeerAuth_SealedKeyRenamed(t *testing.T) {
 		})
 	}
 
-	cfg, err := loadYAML(t, peerBase+"  users:\n    _example_finance:\n      sealed: [example-finance]\n")
-	require.NoError(t, err, "users.<account>.sealed is the earlier design's key, not the renamed one")
-	require.Equal(t, map[string]string{"example-finance": "_example_finance"}, cfg.PeerAuth.SealedTo())
+	_, err := loadYAML(t, peerBase+"  users:\n    _example_finance:\n      sealed: [example-finance]\n")
+	require.ErrorIs(t, err, ErrPeerAuthUsersRetired, "users.<account>.sealed is not the renamed key")
 }
 
-// A config written for 6afda40 -- the users map alone -- loads exactly as it
-// did: no project lands in the approval design's locked list, and every seal
-// stays with its account. (internal/access's TestLegacyUsersConfig_KeepsItsMeaning
-// carries the same file through the policy.)
-func TestPeerAuth_UsersOnlyConfigKeepsItsMeaning(t *testing.T) {
-	cfg, err := loadYAML(t, peerBase+`  users:
-    _arctop_finance:
-      sealed: [arctop-finance]
-    _arctop_hq:
-      projects: [arctop-hq, arctop-ops]
-`)
-	require.NoError(t, err)
-	require.Empty(t, cfg.PeerAuth.Locked, "the users map never fills the approval design's list")
-	require.Equal(t, map[string]string{"arctop-finance": "_arctop_finance"}, cfg.PeerAuth.SealedTo())
-	require.Equal(t, []string{"arctop-finance", "arctop-hq", "arctop-ops"}, cfg.PeerAuth.ReferencedProjects())
-}
+// peer_auth.users is the retired 2026-10-31 design: anything in it is refused
+// at load in one sentence, whether peer_auth is on or off and whatever else
+// the block holds (owner decision, 2026-11-06). Absent or empty it loads, and
+// the key stays known: a config that names it is not an unknown-field error.
+func TestPeerAuth_UsersRefused(t *testing.T) {
+	const refusal = "config: peer_auth.users was the 2026-10-31 design, which sealed projects to other OS accounts, " +
+		"and is no longer supported: list the projects under peer_auth.locked and remove users"
+	require.EqualError(t, ErrPeerAuthUsersRetired, refusal, "the sentence the guide quotes")
+	for name, body := range map[string]string{
+		"enabled":                         peerBase + "  users:\n    _example_finance:\n      sealed: [example-finance]\n",
+		"disabled":                        "peer_auth:\n  enabled: false\n  users:\n    _example_finance:\n      sealed: [example-finance]\n",
+		"the block otherwise unset":       "peer_auth:\n  users:\n    _example_hq: {projects: [example-hq]}\n",
+		"an entry reaching nothing":       peerBase + "  users:\n    _example_hq: {}\n",
+		"an entry with no value":          peerBase + "  users:\n    _example_hq:\n      sealed: []\n",
+		"a value of a shape it never had": peerBase + "  users:\n    _example_hq: {nonsense: true}\n",
+		"beside locked":                   peerBase + "  locked: [example-finance]\n  users:\n    _a: {sealed: [example-legal]}\n",
+		"beside restricted":               peerBase + "  restricted: [_example_agent]\n  users:\n    _a: {projects: [example-hq]}\n",
+		"before any other shape error":    "data_dir: /opt/seamless/data\npeer_auth:\n  enabled: true\n  users:\n    _a: {sealed: [x]}\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := loadYAML(t, body)
+			require.EqualError(t, err, refusal)
+			require.ErrorIs(t, err, ErrPeerAuthUsersRetired)
+		})
+	}
 
-// A disabled block is still checked: a typo is caught the day it is written.
-func TestPeerAuth_DisabledUsersStillValidated(t *testing.T) {
-	_, err := loadYAML(t, `
-peer_auth:
-  enabled: false
-  users:
-    _a: {sealed: [arctop-finance]}
-    _b: {sealed: [arctop-finance]}
-`)
-	require.ErrorContains(t, err, "sealed to two accounts")
+	for name, body := range map[string]string{
+		"absent, enabled":  peerBase,
+		"absent, disabled": "peer_auth:\n  enabled: false\n",
+		"empty, enabled":   peerBase + "  users: {}\n",
+		"empty, disabled":  "peer_auth:\n  enabled: false\n  users: {}\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg, err := loadYAML(t, body)
+			require.NoError(t, err)
+			require.Empty(t, cfg.PeerAuth.Users)
+			require.NoError(t, cfg.PeerAuth.RetiredUsersRefusal())
+		})
+	}
+
+	// A null is refused as every config key's null is: leaving the key out is
+	// how to say "unset".
+	_, err := loadYAML(t, peerBase+"  users:\n")
+	require.ErrorContains(t, err, "peer_auth.users must not be null")
 }
 
 func TestPeerAuth_EnvOverrides(t *testing.T) {

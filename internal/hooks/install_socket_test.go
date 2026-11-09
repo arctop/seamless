@@ -12,7 +12,7 @@ import (
 
 const socketBase = "unix:///opt/seamless/run/seamlessd.sock"
 
-// A role account's install reaches its daemon over the peer_auth socket, which
+// A socket client's install reaches its daemon over the peer_auth socket, which
 // Claude Code's http hook cannot dial: every hook becomes a `seam hook` command,
 // and no key is needed -- or written -- because the daemon names the caller by
 // its uid.

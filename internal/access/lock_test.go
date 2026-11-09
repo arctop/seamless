@@ -3,8 +3,6 @@ package access
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -24,13 +22,10 @@ const (
 	lockOps   = "example-ops"
 )
 
-// lockAccounts are this file's OS accounts: the owner, and the earlier design's
-// role accounts for the rows that prove a users-map policy keeps its meaning.
+// lockAccounts are this file's OS accounts: the owner, for the policy, and
+// nobody else.
 var lockAccounts = map[string]Account{
-	"owner":            {UID: 501, Name: "owner"},
-	"_example_finance": {UID: 470, Name: "_example_finance"},
-	"_example_legal":   {UID: 471, Name: "_example_legal"},
-	"_example_hq":      {UID: 475, Name: "_example_hq"},
+	"owner": {UID: 501, Name: "owner"},
 }
 
 func lockResolve(name string) (Account, error) {
@@ -38,23 +33,6 @@ func lockResolve(name string) (Account, error) {
 		return a, nil
 	}
 	return Account{}, fmt.Errorf("unknown account %q", name)
-}
-
-// lockLegacyPolicy is a users-map policy (the 2026-10-31 design): two projects
-// sealed to role accounts, two shared with a third.
-func lockLegacyPolicy(t *testing.T) *Policy {
-	t.Helper()
-	p, err := New(config.PeerAuth{
-		Enabled: true,
-		Owner:   "owner",
-		Users: map[string]config.PeerUser{
-			"_example_finance": {Sealed: []string{lockFin}},
-			"_example_legal":   {Sealed: []string{lockLegal}},
-			"_example_hq":      {Projects: []string{"example-hq", lockOps}},
-		},
-	}, lockResolve)
-	require.NoError(t, err)
-	return p
 }
 
 var (
@@ -202,7 +180,6 @@ func TestLockedView_RefusalAndSessionScope(t *testing.T) {
 	require.ErrorIs(t, err, ErrNotReachable)
 	require.Contains(t, err.Error(), "is locked")
 	require.Contains(t, err.Error(), "approv")
-	require.NotContains(t, err.Error(), "sudo -u", "the old design's remedy does not apply")
 
 	_, err = sock.SessionScope(lockFin)
 	require.ErrorIs(t, err, ErrNotReachable, "a locked project takes no session (fail closed until the owner decides)")
@@ -212,28 +189,6 @@ func TestLockedView_RefusalAndSessionScope(t *testing.T) {
 	got, err = sock.SessionScope(lockOps)
 	require.NoError(t, err)
 	require.Equal(t, lockOps, got)
-}
-
-func TestLockedView_LegacyUsersUnchanged(t *testing.T) {
-	// A users-map policy (the 2026-10-31 design) never grows a lock: leases
-	// are ignored, and its sealed projects stay unlisted for the owner.
-	p := lockLegacyPolicy(t)
-	v, ok := p.PeerProcessView(501, lockProc)
-	require.True(t, ok)
-	v = v.WithLeases(lockNow, []Lease{lockLease(lockFin, lockProc, lockNow.Add(time.Hour))})
-	require.False(t, v.Visible(lockFin))
-	require.False(t, v.Listed(lockFin), "sealed to another account: not even listed")
-	require.False(t, v.Locked(lockFin))
-	require.Empty(t, v.Leases())
-	require.Equal(t, []string{lockFin, lockLegal}, v.Hidden())
-	require.Contains(t, v.Refusal(lockFin).Error(), "sudo -u")
-
-	fin, ok := p.PeerProcessView(470, lockProc)
-	require.True(t, ok)
-	fin = fin.WithLeases(lockNow, []Lease{lockLease(lockLegal, lockProc, lockNow.Add(time.Hour))})
-	require.False(t, fin.Visible(lockLegal), "a configured account never takes a lease")
-	require.False(t, fin.Listed(lockLegal))
-	require.True(t, fin.Listed(lockFin))
 }
 
 func TestProcessToken(t *testing.T) {
@@ -277,12 +232,6 @@ func TestLockedPolicy_Listings(t *testing.T) {
 	p := lockPolicy(t)
 	require.Equal(t, []string{lockFin, lockLegal}, p.OwnerLocked())
 	require.Equal(t, []string{lockFin, lockLegal}, p.ConsoleHidden(), "the console and the background surfaces hide them")
-	require.Equal(t, []string{lockFin, lockLegal}, p.Projects(), "serve checks they exist and are fenced")
-	require.Empty(t, p.Accounts())
-
-	legacy := lockLegacyPolicy(t)
-	require.Empty(t, legacy.OwnerLocked())
-	require.Equal(t, []string{lockFin, lockLegal}, legacy.ConsoleHidden())
 }
 
 func TestLockedPolicy_Refusals(t *testing.T) {
@@ -291,8 +240,6 @@ func TestLockedPolicy_Refusals(t *testing.T) {
 		cfg  config.PeerAuth
 		want string
 	}{
-		{"both designs at once", config.PeerAuth{Owner: "owner", Locked: []string{"x"},
-			Users: map[string]config.PeerUser{"_example_legal": {Sealed: []string{"y"}}}}, "both locked and users"},
 		{"a slug twice", config.PeerAuth{Owner: "owner", Locked: []string{"x", " x"}}, "distinct"},
 		{"a blank slug", config.PeerAuth{Owner: "owner", Locked: []string{" "}}, "distinct"},
 	} {
@@ -302,63 +249,6 @@ func TestLockedPolicy_Refusals(t *testing.T) {
 			require.Contains(t, err.Error(), tc.want)
 		})
 	}
-}
-
-// A config written for 6afda40 (the users map, no locked list) loads and
-// resolves to exactly its old meaning: the owner never reaches the account's
-// seal -- not listed, not locked, no lease taken -- and the account reaches its
-// own project. The approval design does not leak into it.
-func TestLegacyUsersConfig_KeepsItsMeaning(t *testing.T) {
-	for _, kv := range os.Environ() {
-		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, "SEAMLESS_") {
-			t.Setenv(k, "")
-			require.NoError(t, os.Unsetenv(k))
-		}
-	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	path := filepath.Join(t.TempDir(), "seamless.yaml")
-	require.NoError(t, os.WriteFile(path, []byte(`
-data_dir: /opt/seamless/data
-peer_auth:
-  enabled: true
-  owner: owner
-  socket:
-    path: /opt/seamless/run/seamlessd.sock
-  users:
-    _example_finance:
-      sealed: [example-finance]
-    _example_hq:
-      projects: [example-hq, example-ops]
-`), 0o600))
-	cfg, err := config.LoadFrom(path)
-	require.NoError(t, err)
-	p, err := New(cfg.PeerAuth, lockResolve)
-	require.NoError(t, err)
-
-	require.Empty(t, p.OwnerLocked())
-	require.Equal(t, []string{lockFin}, p.ConsoleHidden())
-	for name, v := range map[string]View{
-		"owner over TCP":                      p.OwnerView().WithLeases(lockNow, []Lease{lockLease(lockFin, lockProc, lockNow.Add(time.Hour))}),
-		"owner on the socket, handed a lease": socketView(t, p, lockProc, lockLease(lockFin, lockProc, lockNow.Add(time.Hour))),
-	} {
-		t.Run(name, func(t *testing.T) {
-			require.False(t, v.Visible(lockFin), "the owner never reaches a project sealed to an account")
-			require.False(t, v.Writable(lockFin))
-			require.False(t, v.Listed(lockFin), "nor sees its name")
-			require.False(t, v.Locked(lockFin), "it is sealed to an account, not locked")
-			require.Empty(t, v.Leases())
-			require.True(t, v.Visible(lockOps))
-			require.Contains(t, v.Refusal(lockFin).Error(), "sudo -u", "the old design's remedy")
-		})
-	}
-	fin, ok := p.PeerView(470)
-	require.True(t, ok)
-	require.True(t, fin.Visible(lockFin))
-	require.True(t, fin.Writable(lockFin))
-	require.False(t, fin.Writable(""), "the account still never writes global")
-	require.Equal(t, lockFin, fin.Home())
 }
 
 // A refusal at a lock files the request through the requester the surface

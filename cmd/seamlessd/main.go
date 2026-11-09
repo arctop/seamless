@@ -318,7 +318,7 @@ func runServe(args []string) error {
 	}
 
 	// peer_auth, second half of the preflight: the policy against the projects
-	// table. A seal naming a project that does not exist protects nothing.
+	// table. A lock naming a project that does not exist protects nothing.
 	if peer != nil {
 		problems, perr := projectProblems(ctx, db, peer.policy)
 		if perr != nil {
@@ -448,14 +448,14 @@ func runServe(args []string) error {
 	if feedSpool == "" {
 		feedSpool = filepath.Join(cfg.DataDir, "feed")
 	}
-	var sealedSlugs func(string) bool
+	var lockedSlugs func(string) bool
 	if peer != nil {
 		hidden := peer.policy.ConsoleHidden()
-		sealedSlugs = func(slug string) bool { return slices.Contains(hidden, slug) }
+		lockedSlugs = func(slug string) bool { return slices.Contains(hidden, slug) }
 	}
 	metaFeed := feed.New(feed.Config{
 		DB: db, Events: rec, Socket: cfg.Screening.FeedSocket, Spool: feedSpool,
-		Host: feed.HostName(config.Hostname()), Enabled: screeningOn, Sealed: sealedSlugs, Logger: logger,
+		Host: feed.HostName(config.Hostname()), Enabled: screeningOn, Locked: lockedSlugs, Logger: logger,
 	})
 	if ferr := metaFeed.Run(ctx); ferr != nil {
 		// The daemon serves without the feed rather than not at all; the
@@ -471,7 +471,7 @@ func runServe(args []string) error {
 		// The reaper's liveness threshold: a session idle past it has ended,
 		// in the snapshot as in the console, whether or not the reaper runs.
 		Idle:   time.Duration(cfg.Gardener.SessionIdleMinutes) * time.Minute,
-		Sealed: sealedSlugs, Logger: logger,
+		Locked: lockedSlugs, Logger: logger,
 	})
 	if cerr := commitSnap.Run(ctx); cerr != nil {
 		// Like the feed: the daemon serves without it, and the log says why.
@@ -569,19 +569,16 @@ func runServe(args []string) error {
 		PlanCapture: cfg.PlanCapture, LocalHost: config.Hostname(), Logger: logger,
 		Features: cfg.Features, Screening: screen, RevokeSessionLeases: revokeLeases, Approvals: hookApprovals,
 	})
-	// The console reads through a handle on which projects sealed to other OS
-	// accounts, and locked projects, do not exist, when there are any
-	// (store.OpenView); its writes go to the main handle after reading their
-	// target through the filtered one. While projects are locked the handles
+	// The console reads through a handle on which locked projects do not
+	// exist, when there are any (store.OpenView); its writes go to the main
+	// handle after reading their target through the filtered one. The handles
 	// form a pool (store.Views), and each request reads the one that leaves
 	// in what its agent tree's lease or its browser's console unlock opens.
 	consoleDB, consoleEvents := db, rec
 	var consoleWriteDB *sql.DB
 	var consoleViews *store.Views
-	if peer != nil && len(peer.policy.ConsoleHidden()) > 0 {
-		locked := peer.policy.OwnerLocked()
-		fixed := slices.DeleteFunc(peer.policy.ConsoleHidden(), func(slug string) bool { return slices.Contains(locked, slug) })
-		views, verr := store.OpenViews(cfg.DBPath(), fixed, locked)
+	if peer != nil && peer.policy.HasLocked() {
+		views, verr := store.OpenViews(cfg.DBPath(), peer.policy.OwnerLocked())
 		if verr != nil {
 			return fmt.Errorf("seamlessd.serve: %w", verr)
 		}
@@ -591,9 +588,7 @@ func runServe(args []string) error {
 			return fmt.Errorf("seamlessd.serve: %w", verr)
 		}
 		consoleDB, consoleWriteDB, consoleEvents = viewDB, db, rec.ReadingFrom(viewDB)
-		if len(locked) > 0 {
-			consoleViews = views
-		}
+		consoleViews = views
 	}
 	// The Approvers and access pages exist only while a project is locked:
 	// off, the console has no such pages and nothing on another page changes.

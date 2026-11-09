@@ -131,8 +131,8 @@ func (s *Server) handleProjectCreate(ctx context.Context, req mcp.CallToolReques
 		return errResult("project_create", fmt.Errorf("invalid slug %q: %w", slug, err))
 	}
 	// peer_auth: creating a project is a write into it. Judged before the
-	// existence check, so a slug sealed to another OS account answers with the
-	// seal whether or not it exists yet.
+	// existence check, so a slug out of the caller's reach answers with its
+	// refusal whether or not it exists yet.
 	if !access.Writable(ctx, slug) {
 		return errResult("project_create", access.Refusal(ctx, slug))
 	}

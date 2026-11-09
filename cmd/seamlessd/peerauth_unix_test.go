@@ -31,7 +31,7 @@ type paLayout struct {
 	base, data, run, sock, cfgPath, exe string
 }
 
-func newPALayout(t *testing.T, users string) (paLayout, config.Config) {
+func newPALayout(t *testing.T, extra string) (paLayout, config.Config) {
 	t.Helper()
 	// Short: macOS caps a socket path at 104 bytes and t.TempDir() nests deep.
 	base, err := os.MkdirTemp("", "pa")
@@ -51,7 +51,7 @@ func newPALayout(t *testing.T, users string) (paLayout, config.Config) {
 	require.NoError(t, os.WriteFile(l.exe, []byte("#!/bin/sh\n"), 0o755))
 	require.NoError(t, os.Chmod(l.exe, 0o755))
 	yaml := fmt.Sprintf("data_dir: %s\naddr: 127.0.0.1:0\nmcp:\n  api_key: k\npeer_auth:\n  enabled: true\n  owner: katata\n  socket:\n    path: %s\n%s",
-		l.data, l.sock, users)
+		l.data, l.sock, extra)
 	require.NoError(t, os.WriteFile(l.cfgPath, []byte(yaml), 0o600))
 	require.NoError(t, os.Chmod(l.cfgPath, 0o600))
 	clearServeEnv(t)
@@ -83,8 +83,8 @@ func paTestEnv(l paLayout, ownerUID uint32) peerAuthEnv {
 				return access.Account{UID: ownerUID, Name: "katata"}, nil
 			case "me":
 				return access.Account{UID: me, Name: "me"}, nil
-			case "_arctop_finance":
-				return access.Account{UID: 470, Name: "_arctop_finance"}, nil
+			case "_example_agent":
+				return access.Account{UID: 470, Name: "_example_agent"}, nil
 			}
 			return access.Account{}, fmt.Errorf("unknown account %q", name)
 		},
@@ -93,13 +93,15 @@ func paTestEnv(l paLayout, ownerUID uint32) peerAuthEnv {
 	}
 }
 
-const paFinanceUsers = "  users:\n    _arctop_finance:\n      sealed: [arctop-finance]\n"
+// paLockedAndRestricted is the rest of a fixture's peer_auth block: one locked
+// project, one restricted account.
+const paLockedAndRestricted = "  locked: [example-finance]\n  restricted: [_example_agent]\n"
 
 func TestPreparePeerAuth_AcceptsTheRunbookLayout(t *testing.T) {
-	l, cfg := newPALayout(t, paFinanceUsers)
+	l, cfg := newPALayout(t, paLockedAndRestricted)
 	rt, err := preparePeerAuth(cfg, paTestEnv(l, uint32(os.Geteuid())+1000))
 	require.NoError(t, err)
-	require.Equal(t, []string{"arctop-finance"}, rt.policy.ConsoleHidden())
+	require.Equal(t, []string{"example-finance"}, rt.policy.ConsoleHidden())
 }
 
 func TestPreparePeerAuth_Refusals(t *testing.T) {
@@ -156,15 +158,15 @@ func TestPreparePeerAuth_Refusals(t *testing.T) {
 		{"an account does not resolve", func(t *testing.T, l paLayout, env *peerAuthEnv) {
 			base := env.resolve
 			env.resolve = func(n string) (access.Account, error) {
-				if n == "_arctop_finance" {
+				if n == "_example_agent" {
 					return access.Account{}, fmt.Errorf("no such user")
 				}
 				return base(n)
 			}
-		}, "peer_auth.users._arctop_finance"},
+		}, "peer_auth.restricted _example_agent"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			l, cfg := newPALayout(t, paFinanceUsers)
+			l, cfg := newPALayout(t, paLockedAndRestricted)
 			env := paTestEnv(l, uint32(os.Geteuid())+1000)
 			tc.mutate(t, l, &env)
 			_, err := preparePeerAuth(cfg, env)
@@ -177,7 +179,7 @@ func TestPreparePeerAuth_Refusals(t *testing.T) {
 // A missing data dir is created 0700 by serve once its parents pass; doctor
 // only reports it.
 func TestPreparePeerAuth_CreatesAMissingDataDir(t *testing.T) {
-	l, cfg := newPALayout(t, paFinanceUsers)
+	l, cfg := newPALayout(t, paLockedAndRestricted)
 	require.NoError(t, os.Remove(l.data))
 	env := paTestEnv(l, uint32(os.Geteuid())+1000)
 	policy, err := access.New(cfg.PeerAuth, env.resolve)
@@ -210,17 +212,17 @@ func TestPeerAuthSocket_KernelNamesThePeer(t *testing.T) {
 	me := uint32(os.Geteuid())
 	for _, tc := range []struct {
 		name     string
-		users    string
+		extra    string
 		ownerUID uint32
 		status   int
 		kind     string
 	}{
 		{"this uid is the owner", "", me, http.StatusOK, "owner"},
-		{"this uid is a configured account", "  users:\n    me:\n      sealed: [arctop-finance]\n", me + 1000, http.StatusOK, "user"},
-		{"this uid is unknown", paFinanceUsers, me + 1000, http.StatusForbidden, ""},
+		{"this uid is a restricted account", "  restricted: [me]\n", me + 1000, http.StatusOK, "restricted"},
+		{"this uid is unknown", paLockedAndRestricted, me + 1000, http.StatusForbidden, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			l, cfg := newPALayout(t, tc.users)
+			l, cfg := newPALayout(t, tc.extra)
 			env := paTestEnv(l, tc.ownerUID)
 			policy, err := access.New(cfg.PeerAuth, env.resolve)
 			require.NoError(t, err)
@@ -263,7 +265,7 @@ func TestPeerAuthSocket_KernelNamesThePeer(t *testing.T) {
 }
 
 func TestListenSocket_StaleAndForeignFiles(t *testing.T) {
-	l, cfg := newPALayout(t, paFinanceUsers)
+	l, cfg := newPALayout(t, paLockedAndRestricted)
 	env := paTestEnv(l, uint32(os.Geteuid())+1000)
 	policy, err := access.New(cfg.PeerAuth, env.resolve)
 	require.NoError(t, err)
@@ -299,7 +301,7 @@ func TestListenSocket_StaleAndForeignFiles(t *testing.T) {
 }
 
 func TestPeerAuthChecks_DoctorRows(t *testing.T) {
-	l, cfg := newPALayout(t, paFinanceUsers)
+	l, cfg := newPALayout(t, paLockedAndRestricted)
 	env := paTestEnv(l, uint32(os.Geteuid())+1000)
 	rows := peerAuthChecks(context.Background(), cfg, nil, env)
 	var text strings.Builder
@@ -307,7 +309,8 @@ func TestPeerAuthChecks_DoctorRows(t *testing.T) {
 		require.NotEqual(t, statusFail, r.status, "%s: %s", r.name, r.detail)
 		fmt.Fprintf(&text, "%s %s\n", r.name, r.detail)
 	}
-	require.Contains(t, text.String(), "_arctop_finance (uid 470): sealed [arctop-finance]")
+	require.Contains(t, text.String(), "_example_agent (uid 470): restricted")
+	require.Contains(t, text.String(), "locked: [example-finance]")
 	require.Contains(t, text.String(), "preflight passes")
 	require.Contains(t, text.String(), "reads no agent files")
 
@@ -322,20 +325,23 @@ func TestPeerAuthChecks_DoctorRows(t *testing.T) {
 }
 
 // The daemon's real route table over a real socket, the kernel naming the
-// peer: the test's own uid is configured as the sealed account, and an MCP
+// peer: the test's own uid is listed as the restricted account, and an MCP
 // client built the way the seam CLI builds one (the shared client constructor,
-// a socket server_url, no key) works in its project and is refused the owner's.
+// a socket server_url, no key) reads and writes an open project and is refused
+// a closed one.
 func TestPeerAuthSocket_MCPOverTheRealSocket(t *testing.T) {
-	d := newPADaemon(t)
-	d.plant(t)
+	d := newRADaemon(t)
+	d.plantClosed(t)
+	own := paClient(t, d.owner.URL, raKey)
+	paCallOK(t, own, "memory_write", map[string]any{"project": raOpen, "name": "open-fact", "kind": "gotcha",
+		"description": "open " + raOpenToken, "body": "open body " + raOpenToken})
 
 	me := uint32(os.Geteuid())
 	accounts := map[string]access.Account{
-		"katata":          {UID: me + 1000, Name: "katata"},
-		"_arctop_finance": {UID: me, Name: "_arctop_finance"},
-		"_arctop_legal":   {UID: paUIDLegal, Name: "_arctop_legal"},
+		"katata":  {UID: me + 1000, Name: "katata"},
+		raAccount: {UID: me, Name: raAccount},
 	}
-	policy, err := access.New(paPolicyConfig(), func(n string) (access.Account, error) {
+	policy, err := access.New(raPolicy(), func(n string) (access.Account, error) {
 		if a, ok := accounts[n]; ok {
 			return a, nil
 		}
@@ -349,7 +355,7 @@ func TestPeerAuthSocket_MCPOverTheRealSocket(t *testing.T) {
 	sock := filepath.Join(dir, "d.sock")
 	ln, err := net.Listen("unix", sock)
 	require.NoError(t, err)
-	srv := &http.Server{Handler: peerHandler(policy, peerLeases{}, slog.New(slog.NewTextHandler(io.Discard, nil)), d.mux), ConnContext: peerConnContext}
+	srv := &http.Server{Handler: peerHandler(policy, storeLeases(d.db), slog.New(slog.NewTextHandler(io.Discard, nil)), d.mux), ConnContext: peerConnContext}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close() })
 
@@ -367,12 +373,12 @@ func TestPeerAuthSocket_MCPOverTheRealSocket(t *testing.T) {
 	_, err = cli.Initialize(ctx, init)
 	require.NoError(t, err)
 
-	text, isErr := paCall(t, cli, "memory_read", map[string]any{"name": d.sealed.memName})
+	text, isErr := paCall(t, cli, "memory_read", map[string]any{"project": raOpen, "name": "open-fact"})
 	require.False(t, isErr, text)
-	require.Contains(t, text, paSecret, "the sealed account reads its own project over the socket")
-	text, isErr = paCall(t, cli, "recall", map[string]any{"query": paSearch, "project": paOpen})
-	require.True(t, isErr)
-	require.NotContains(t, text, paOwnSecret)
-	out := paCallOK(t, cli, "memory_write", map[string]any{"name": "over-the-socket", "kind": "gotcha", "description": "d", "body": "b"})
-	require.Equal(t, paSealed, out["project"], "an unbound write lands in the account's own project")
+	require.Contains(t, text, raOpenToken, "the restricted account reads an open project over the socket")
+	text, isErr = paCall(t, cli, "memory_read", map[string]any{"project": raConf, "name": "closed-" + raConf})
+	require.True(t, isErr, text)
+	require.NotContains(t, text, raSecret)
+	out := paCallOK(t, cli, "memory_write", map[string]any{"project": raOpen, "name": "over-the-socket", "kind": "gotcha", "description": "d", "body": "b"})
+	require.Equal(t, raOpen, out["project"], "a write lands where it says")
 }

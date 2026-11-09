@@ -99,7 +99,7 @@ func newLockedConsole(t *testing.T) *lockedConsole {
 		return access.Account{}, fmt.Errorf("no %s", n)
 	})
 	require.NoError(t, err)
-	views, err := store.OpenViews(path, nil, lc.policy.OwnerLocked())
+	views, err := store.OpenViews(path, lc.policy.OwnerLocked())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = views.Close() })
 	base, err := views.For(nil)

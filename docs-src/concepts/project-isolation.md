@@ -47,6 +47,13 @@ The briefing carries a line stating the mode, on both the main and subagent
 surfaces, so an agent inside understands why a write outside will be refused
 rather than discovering it as an unexplained error.
 
+Isolation is about what flows in and out of a project. Whether even the
+project's own agents need a fresh approval from you first is a second setting,
+the **lock** (`peer_auth.locked`), and "locked" never means `sealed`. A sensitive
+project is normally `confidential` and locked:
+[Lock projects behind your approval](/guides/peer-auth/#two-settings-isolation-and-the-lock)
+says when to use which.
+
 ## The console is exempt
 
 The threat model is **agent-to-agent leakage, not hiding from you.** Console
@@ -54,9 +61,9 @@ search and views still see everything; isolated projects are simply badged with 
 lock pill. Nothing about an isolated project's pages turns scary or
 half-rendered - the pill and the Overview control are the whole story.
 
-The one exception is a project [sealed to another OS account](/guides/peer-auth/)
-under `peer_auth`: there the threat *is* your own account, so the console shows
-no trace of it.
+The one exception is a [locked project](/guides/peer-auth/) under `peer_auth`:
+there the threat *is* your own account, so the console shows its name and counts,
+and nothing inside it until you unlock it in that browser.
 
 ## Isolation requires a standalone project
 
@@ -197,9 +204,9 @@ You choose how long: until the session ends, 1 hour or 4 hours.
 **What a grant is.** Read-only, one project, to the one session that asked
 (under `peer_auth`, to the asking agent and the programs it started), until it
 expires, you revoke it from the Access requests page, or the session ends.
-While it lives, the granted project also joins that session's `recall` scope
-and its trials show in `trial_query`; the briefing does not change. Another
-session is still refused.
+While it lives, the granted project also joins that session's `recall` scope,
+its trials show in `trial_query`, and its proposals show in `gardener_proposals`;
+the briefing does not change. Another session is still refused.
 
 **Writes are never granted.** A grant never lets a session write into the
 project it reads. A session in an open project that receives a grant is
@@ -213,10 +220,14 @@ revocation end the read, never the confinement - what was read stays read.
 without one) and commits over the console with the bearer key, and the
 console's Approve does the same. Any process that holds the key - which every
 local agent can read - can make that call, so an approval guards against an
-agent wandering into a confidential project, not against one set on it. Under
-`peer_auth` a grant needs the same proofs as a
+agent wandering into a confidential project, not against one set on it. The
+holder of such a grant is also the session a call speaks for, which is
+self-reported: an agent that rebinds with `session_start`, or names another
+session with `session=`, writes where that session may, past the grant's write
+confinement. Under `peer_auth` a grant needs the same proofs as a
 [locked project's lease](/guides/peer-auth/): your terminal through `sudo` to
-the daemon's account, a passkey, or a Touch ID key.
+the daemon's account, a passkey, or a Touch ID key. Its holder is then the
+asking agent's process tree, and those moves are refused.
 
 ## Honest limits
 
@@ -227,7 +238,9 @@ tool reads and writes, the gardener. That is where accidental cross-contaminatio
 actually happens, and it is now closed.
 
 **What this is not.** It is **not** a defense against a local agent reading
-`~/.seamless/memory/<project>/*.md` directly. Every MCP caller shares one static
+`~/.seamless/memory/<project>/*.md` directly. A2A's recall names its scope in
+the request's `metadata.project`, and the fence does not judge it there: the
+bearer key can read a confidential project that way. Every MCP caller shares one static
 bearer key, and the fence keys off the **self-reported session binding** - an
 explicit `session_start`, or the agent-process identity a Claude Code or Codex
 agent's `seam` transport sends, which is just as self-reported
@@ -242,10 +255,10 @@ means the fence cannot recognize it as belonging to one.
 **What makes it stronger.** [peer_auth](/guides/peer-auth/) puts an
 authentication boundary under the fence: the daemon runs as its own OS account,
 names each caller by the uid the kernel reports for its Unix-socket connection,
-and reserves a project for one account - so a project's own agents run as that
-account, and nothing running as you reaches it, through a tool or through a
-file. Use it with isolation, not instead of it: a sealed-to-an-account project
-must also be confidential or sealed.
+and lets you **lock** a project, so that even your own agents reach it only
+with an approval you prove, through a tool or through a file. Use it with
+isolation, not instead of it: a locked project must also be confidential or
+sealed.
 
 **Without it**, the hard boundary is a separate Seamless instance - its own data
 dir, port, and key, run as its own account.

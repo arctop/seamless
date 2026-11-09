@@ -156,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../guides/network-install/">Share one daemon across a LAN</a></li>
         
-        <li><a href="../guides/peer-auth/">Seal projects to OS accounts</a></li>
+        <li><a href="../guides/peer-auth/">Lock projects behind your approval</a></li>
         
         <li><a href="../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
@@ -321,8 +321,8 @@ silence, not an error message.</p>
   </a>
   
   <a class="doc-card" href="../guides/peer-auth/">
-    <h2>Seal projects to OS accounts</h2>
-    <p>peer_auth - one daemon, a Unix socket that names each caller by its uid, projects only their own OS account can reach, and the deployment that makes the files hold too.</p>
+    <h2>Lock projects behind your approval</h2>
+    <p>peer_auth - the daemon in its own OS account, a Unix socket that names each caller by its uid, and locked projects your own agents reach only with an approval you prove.</p>
   </a>
   
   <a class="doc-card" href="../guides/write-screening/">

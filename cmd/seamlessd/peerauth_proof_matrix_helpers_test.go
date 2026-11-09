@@ -214,7 +214,7 @@ func newPMDaemon(t *testing.T, o pmOpts) *pmDaemon {
 		DB: db, Retrieve: ret, Events: rec, Files: mgr, APIKey: pmKey, LocalHost: pmHost, Logger: logger,
 		Approvals: d.svc, RevokeSessionLeases: d.svc.RevokeSession,
 	})
-	views, err := store.OpenViews(dbPath, nil, policy.OwnerLocked())
+	views, err := store.OpenViews(dbPath, policy.OwnerLocked())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = views.Close() })
 	base, err := views.For(nil)

@@ -395,14 +395,15 @@ var durationType = reflect.TypeFor[config.Duration]()
 // setting decides -- so *bool reads "bool, optional".
 //
 // A map reads as what its YAML looks like: the key type, then the value's own
-// keys when it is a struct (peer_auth.users maps an account to {sealed,
-// projects}), rather than a Go type name the YAML never spells.
+// keys when it is a struct, rather than a Go type name the YAML never spells.
 func configType(t reflect.Type) string {
 	switch {
 	case t == durationType:
 		return "duration"
 	case t.Kind() == reflect.Pointer:
 		return configType(t.Elem()) + ", optional"
+	case t.Kind() == reflect.Interface:
+		return "any"
 	case t.Kind() == reflect.Map:
 		elem := t.Elem()
 		if elem.Kind() != reflect.Struct {

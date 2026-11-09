@@ -103,7 +103,7 @@ func TestBuild_ListsTheWindowAndNamesOnlyWhatMayLeave(t *testing.T) {
 	ended := addSession(t, db, "cx/bbbb-2222", "plain", "/work/plain", core.SessionCompleted, taken.Add(-3*day), taken.Add(-3*day+time.Hour))
 	addSession(t, db, "sess/cccc3333", "secret", "/work/secret", core.SessionExpired, taken.Add(-day), taken.Add(-day+time.Minute))
 	odd := addSession(t, db, "a name with spaces", "app", "/elsewhere", core.SessionCompleted, taken.Add(-day), taken.Add(-day))
-	addSession(t, db, "cc/dddd-4444", "sealed-acct", "/work/app", core.SessionActive, taken.Add(-time.Hour), taken.Add(-time.Minute))
+	addSession(t, db, "cc/dddd-4444", "locked-proj", "/work/app", core.SessionActive, taken.Add(-time.Hour), taken.Add(-time.Minute))
 	addSession(t, db, "cc/eeee-5555", "app", "/work/app", core.SessionCompleted, taken.Add(-90*day), taken.Add(-60*day))
 
 	open := addTask(t, db, "two", core.TaskOpen, taken.Add(-200*day))
@@ -119,13 +119,13 @@ func TestBuild_ListsTheWindowAndNamesOnlyWhatMayLeave(t *testing.T) {
 
 	snap, trim, err := Build(ctx, db, Options{
 		Host: "host-1.example", Window: 30 * day, Now: taken,
-		Sealed: func(p string) bool { return p == "sealed-acct" },
+		Locked: func(p string) bool { return p == "locked-proj" },
 	})
 	require.NoError(t, err)
 	require.Equal(t, Trimmed{}, trim)
 	raw := encode(t, snap)
 	require.NoError(t, CheckJSON(raw, taken), "the snapshot passes the contract: %s", raw)
-	for _, never := range []string{"body", "work ", "/work/", "secret-repo", "first", "second", "sealed-acct", "a name with spaces"} {
+	for _, never := range []string{"body", "work ", "/work/", "secret-repo", "first", "second", "locked-proj", "a name with spaces"} {
 		require.NotContains(t, string(raw), never, "identifiers and times only")
 	}
 
@@ -155,7 +155,7 @@ func TestBuild_ListsTheWindowAndNamesOnlyWhatMayLeave(t *testing.T) {
 	require.Equal(t, "2026-10-30T12:01:00.000Z", byID["sess/cccc3333"]["ended_at"], "an expired session ended at its last activity")
 	require.Contains(t, byID, odd, "a name outside the pattern: its ULID")
 	require.Nil(t, byID[odd]["repo"], "a working directory no repository covers")
-	require.Nil(t, byID["cc/dddd-4444"]["repo"], "a project sealed to another account: never named, even in a named repository")
+	require.Nil(t, byID["cc/dddd-4444"]["repo"], "a locked project: never named, even in a named repository")
 	require.NotContains(t, byID, ended, "a named session is listed by its name, not its ULID")
 
 	tasks := got["tasks"].([]any)

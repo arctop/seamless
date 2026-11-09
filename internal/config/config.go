@@ -1041,9 +1041,8 @@ func (c *Config) applyEnv() error {
 	if err := envDuration("SEAMLESS_UPDATE_MIN_AGE", &c.Update.MinAge); err != nil {
 		return err
 	}
-	// peer_auth: the scalar keys only. The users map stays file-only -- a map of
-	// lists has no honest single-variable spelling, and the account-to-project
-	// map is the one part of the policy that must be read in one place.
+	// peer_auth: the scalar keys only. The locked and restricted lists stay
+	// file-only: they are the part of the policy that must be read in one place.
 	if err := envBool("SEAMLESS_PEER_AUTH_ENABLED", &c.PeerAuth.Enabled); err != nil {
 		return err
 	}

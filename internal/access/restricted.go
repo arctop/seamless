@@ -29,9 +29,9 @@ import (
 // as a proposal).
 
 // WithOpenProjects returns a restricted account's view with its reach for this
-// request: the projects among open that peer_auth does not lock (or seal to a
-// users account). The transport passes every project whose isolation is open;
-// the policy, not the caller, decides what of it the account may reach. Every
+// request: the projects among open that peer_auth does not lock. The transport
+// passes every project whose isolation is open; the policy, not the caller,
+// decides what of it the account may reach. Every
 // other view comes back unchanged. A restricted view never given its projects
 // reaches none of them.
 func (v View) WithOpenProjects(open []string) View {
@@ -41,9 +41,6 @@ func (v View) WithOpenProjects(open []string) View {
 	reach := make(map[string]bool, len(open))
 	for _, slug := range open {
 		if slug == "" || v.policy == nil || v.policy.ownerLocked[slug] {
-			continue
-		}
-		if _, sealed := v.policy.sealedTo[slug]; sealed {
 			continue
 		}
 		reach[slug] = true

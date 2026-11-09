@@ -168,9 +168,9 @@ func writeTaintOutcome(w http.ResponseWriter, status int, outcome string) {
 }
 
 // taintTarget resolves the session a taint call names, under the caller's
-// peer_auth reach: another account's session is not found, exactly as every
-// other hook treats it (foreignSession) -- a mark across the seal would let
-// one account hold another's writes.
+// peer_auth reach: a session the caller may not act on is not found, exactly
+// as every other hook treats it (foreignSession) -- a mark from outside would
+// let one principal hold another's writes.
 func (h *Handler) taintTarget(ctx context.Context, client Client, extID, ref string) (core.Session, bool, error) {
 	if h.db == nil {
 		return core.Session{}, false, errors.New("no database")

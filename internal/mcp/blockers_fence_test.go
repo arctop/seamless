@@ -4,10 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -15,15 +11,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
 
-	"github.com/arctop/seamless/internal/access"
-	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
-	"github.com/arctop/seamless/internal/events"
-	"github.com/arctop/seamless/internal/files"
-	mcpserver "github.com/arctop/seamless/internal/mcp"
-	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
-	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // Blocker listings under the read fence: a task that blocks another, from a
@@ -388,83 +377,4 @@ func TestBlockerFence_LockAloneWithholds(t *testing.T) {
 	text, _ = r.ok(off, "tasks_ready", map[string]any{"project": lkOps})
 	require.Contains(t, text, secret)
 	require.Contains(t, text, `"depends_on":["`+fin+`"]`)
-}
-
-// The users map (peer_auth.users, the model locked projects replace): an
-// account is withheld a blocker from a project outside its reach, and the
-// owner is withheld one from a project sealed to that account.
-func TestBlockerFence_UsersMap(t *testing.T) {
-	ctx := context.Background()
-	dir := t.TempDir()
-	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	mgr, err := files.NewManager(dir, db, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = mgr.Close() })
-	const (
-		role  = "example-role"
-		vault = "example-vault"
-	)
-	for _, slug := range []string{bfAlpha, role, vault} {
-		_, err := store.EnsureProject(ctx, db, slug, slug)
-		require.NoError(t, err)
-	}
-	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Users: map[string]config.PeerUser{
-		"_example_role": {Sealed: []string{vault}, Projects: []string{role}},
-	}}, func(n string) (access.Account, error) {
-		switch n {
-		case "owner":
-			return access.Account{UID: 501, Name: "owner"}, nil
-		case "_example_role":
-			return access.Account{UID: 502, Name: "_example_role"}, nil
-		}
-		return access.Account{}, fmt.Errorf("no account %s", n)
-	})
-	require.NoError(t, err)
-	now := time.Now().UTC()
-	newTask := func(project, title string, deps ...string) string {
-		id, err := core.NewID()
-		require.NoError(t, err)
-		require.NoError(t, store.CreateTask(ctx, db, core.Task{ID: id, ProjectSlug: project, Title: title,
-			Status: core.TaskOpen, DependsOn: deps, CreatedAt: now, UpdatedAt: now}))
-		now = now.Add(time.Second)
-		return id
-	}
-	ownerTask := newTask(bfAlpha, "the owner's alpha work")
-	vaultTask := newTask(vault, "the vault's sealed work")
-	newTask(role, "role waits on both", ownerTask, vaultTask)
-
-	srv := mcpserver.New(mcpserver.Config{DB: db, Files: mgr, Events: events.NewRecorder(db), APIKey: testKey,
-		Retrieve: retrieve.New(db, nil, config.Budgets{MaxBriefingTokens: 1500, RecallBudgetTokens: 1000}, nil)})
-	serve := func(view access.View) string {
-		h := srv.Handler()
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			h.ServeHTTP(w, req.WithContext(access.WithView(req.Context(), view)))
-		}))
-		t.Cleanup(ts.Close)
-		return ts.URL
-	}
-	roleView, ok := policy.PeerView(502)
-	require.True(t, ok)
-
-	for name, c := range map[string]struct {
-		view         access.View
-		hidden, seen []string
-	}{
-		"the account": {roleView, []string{ownerTask, "the owner's alpha work"}, []string{vaultTask, "the vault's sealed work"}},
-		"the owner":   {policy.OwnerView(), []string{vaultTask, "the vault's sealed work"}, []string{ownerTask, "the owner's alpha work"}},
-	} {
-		cli := dialClient(t, ctx, serve(c.view), testKey)
-		text, isErr := bfText(t, cli, "tasks_ready", map[string]any{"project": role})
-		require.False(t, isErr, "%s: %s", name, text)
-		for _, s := range c.hidden {
-			require.NotContains(t, text, s, name)
-		}
-		for _, s := range c.seen {
-			require.Contains(t, text, s, name)
-		}
-		require.Contains(t, text, bfWithheldBlocker, name)
-		require.Contains(t, text, `"depends_on_withheld":1`, name)
-	}
 }

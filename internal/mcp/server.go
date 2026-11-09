@@ -859,25 +859,7 @@ func (s *Server) resolveReadScope(ctx context.Context, explicit string) (string,
 	if ambiguity != nil {
 		return "", s.scopeErr(ctx, ambiguity, "")
 	}
-	// A configured peer_auth account with nothing else to go on is in its own
-	// project: it can be nowhere else, so this is identification, not a guess.
-	if home := peerHome(ctx); home != "" {
-		return home, nil
-	}
 	return "", nil
-}
-
-// peerHome is the home project of a configured peer_auth account's connection,
-// and "" for every other caller (the owner, or peer_auth off). Such an account
-// reaches only its own projects, so when no binding, handle or ambient session
-// places one of its calls, the call is in its home project -- the same answer
-// access.View.SessionScope gives a session it starts.
-func peerHome(ctx context.Context) string {
-	v, ok := access.FromContext(ctx)
-	if !ok || v.Principal().Kind != access.KindUser {
-		return ""
-	}
-	return v.Home()
 }
 
 // scopeErr decorates a scope sentinel with the guidance an agent needs to answer
@@ -1022,9 +1004,6 @@ func (s *Server) resolveWriteScopeUnconfined(ctx context.Context, explicit strin
 	}
 	if ambiguity != nil {
 		return "", s.scopeErr(ctx, ambiguity, writeScopeHelpFor(ctx))
-	}
-	if home := peerHome(ctx); home != "" {
-		return home, nil
 	}
 	return "", s.scopeErr(ctx, errNoScope, writeScopeHelpFor(ctx))
 }
@@ -1200,10 +1179,7 @@ func (s *Server) ambientFallback(ctx context.Context) (sess core.Session, ok boo
 	// "Would a session bound elsewhere be allowed to read this project?" is the
 	// same question as "may an unbound connection be resolved into it?", so the
 	// probe is CanRead from the global scope rather than a second policy rule.
-	// A configured peer_auth account probes from its own home project instead:
-	// its unbound calls are in that project already (peerHome), so its own
-	// confidential project is no "elsewhere" to it.
-	visible, err := store.CanRead(ctx, s.cfg.DB, peerHome(ctx), projects[0])
+	visible, err := store.CanRead(ctx, s.cfg.DB, "", projects[0])
 	if err != nil {
 		// Decline rather than grant: a fence that fails open on a database error
 		// is not a fence.
@@ -1263,8 +1239,8 @@ func (s *Server) latestOwnAmbient(ctx context.Context, scope store.AmbientScope,
 // into a refusal instead.
 //
 // Under peer_auth the inference only ever sees projects this connection's OS
-// account may reach: another account's sessions are not candidates at all, so
-// they can neither be inferred into nor make an otherwise single answer
+// account may reach: a session in any other project is not a candidate at all,
+// so it can neither be inferred into nor make an otherwise single answer
 // ambiguous.
 func (s *Server) ambientProjectsNearestFirst(ctx context.Context) (projects []string, scope store.AmbientScope, othersOnly bool, err error) {
 	scope = store.AmbientScope{Host: s.callerHost(ctx), Caller: callerAgentProcess(ctx)}

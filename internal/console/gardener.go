@@ -1563,8 +1563,8 @@ func payloadFloat(p map[string]any, key string) float64 {
 // proposalReachable reports whether the console's own (read) handle can see the
 // proposal a gardener action names, answering 404 when it cannot. The gardener
 // service loads proposals from the unfiltered store, so under peer_auth -- where
-// the console reads through a handle on which projects sealed to other OS
-// accounts do not exist -- an id is the one thing that could reach past the
+// the console reads through a handle on which locked projects do not exist
+// -- an id is the one thing that could reach past the
 // filter, and this is the check that stops it. With nothing filtered (peer_auth
 // off) there is nothing to check, and the action behaves exactly as it did.
 func (s *Service) proposalReachable(w http.ResponseWriter, r *http.Request, id string) bool {

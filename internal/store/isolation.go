@@ -436,9 +436,9 @@ func GlobalMemoriesFromProjectSessions(ctx context.Context, db *sql.DB, project 
 // outside, while a confidential target stays writable from outside (inbound
 // is unchanged -- relocating knowledge INTO the fence is how it gets there).
 //
-// The peer_auth View has the first word here too: a configured OS user writes
-// only into its own projects (never the global scope), and the owner never
-// writes into a project sealed to another user.
+// The peer_auth View has the first word here too: a restricted account writes
+// only into the open projects it reaches (never the global scope), and the
+// owner never writes into a locked project without a lease.
 //
 // A read grant never opens a write: nothing here asks whether one is live. The
 // one thing a grant leaves behind that this consults is its confinement

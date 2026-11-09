@@ -55,12 +55,12 @@ const (
 // Config wires the console's dependencies. Files/Gardener/Events are used by the
 // write actions (archive, apply/dismiss) and the live feed; DB backs every read.
 type Config struct {
-	// DB serves every console read. Under peer_auth, with projects sealed to
-	// other OS accounts, it is a filtered read-only handle on which those
-	// projects do not exist (store.OpenView), and the writes go to WriteDB.
+	// DB serves every console read. Under peer_auth, while projects are locked,
+	// it is a filtered read-only handle on which those projects do not exist
+	// (store.OpenView), and the writes go to WriteDB.
 	DB *sql.DB
 	// WriteDB is where console writes go when DB is a read-only filtered
-	// handle; nil means DB itself (peer_auth off, or nothing sealed). A write
+	// handle; nil means DB itself (peer_auth off, or nothing locked). A write
 	// names its target by id or slug, and the handler reads that target through
 	// DB first, so a project hidden from DB cannot be written either.
 	WriteDB  *sql.DB
@@ -408,7 +408,7 @@ func (s *Service) formError(w http.ResponseWriter, r *http.Request, status int, 
 // so it cannot be forged by a page the operator merely visited.
 func (s *Service) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// peer_auth: the console is the owner's surface. A configured OS account
+		// peer_auth: the console is the owner's surface. A restricted account
 		// on the socket works through its agents' tools, which carry its reach;
 		// the console's pages are built for the owner's.
 		if !access.OwnerOnly(r.Context()) {

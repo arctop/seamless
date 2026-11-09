@@ -17,7 +17,6 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -230,15 +229,14 @@ func (rt *peerAuthRuntime) ancestorProblem(key, path string) string {
 }
 
 // projectProblems checks the policy against the projects table: every project
-// it names must exist -- a misspelled entry leaves the project it meant open,
-// which is exactly the failure peer_auth exists to prevent -- and every project
-// sealed to an account or locked must carry an isolation fence (confidential
-// or sealed), which keeps it out of the family, parent and cross-project
-// gardener surfaces the policy does not reach on its own.
+// it locks must exist -- a misspelled entry leaves the project it meant open,
+// which is exactly the failure peer_auth exists to prevent -- and must carry an
+// isolation fence (confidential or sealed), which keeps it out of the family,
+// parent and cross-project gardener surfaces the policy does not reach on its
+// own.
 func projectProblems(ctx context.Context, db *sql.DB, policy *access.Policy) ([]string, error) {
 	var problems []string
-	fenced, locked := policy.ConsoleHidden(), policy.OwnerLocked()
-	for _, slug := range policy.Projects() {
+	for _, slug := range policy.OwnerLocked() {
 		p, found, err := store.ProjectBySlug(ctx, db, slug)
 		if err != nil {
 			return nil, err
@@ -247,12 +245,8 @@ func projectProblems(ctx context.Context, db *sql.DB, policy *access.Policy) ([]
 			problems = append(problems, fmt.Sprintf("peer_auth names project %q, which does not exist: if that is a typo, the project it meant is NOT protected", slug))
 			continue
 		}
-		if slices.Contains(fenced, slug) && !p.Isolation.FencesOutbound() {
-			what := "sealed to an OS account"
-			if slices.Contains(locked, slug) {
-				what = "locked"
-			}
-			problems = append(problems, fmt.Sprintf("project %q is %s (peer_auth) but its isolation is %s: make it confidential first (seam project isolation %s confidential --yes)", slug, what, isolationWord(p.Isolation), slug))
+		if !p.Isolation.FencesOutbound() {
+			problems = append(problems, fmt.Sprintf("project %q is locked (peer_auth) but its isolation is %s: make it confidential first (seam project isolation %s confidential --yes)", slug, isolationWord(p.Isolation), slug))
 		}
 	}
 	return problems, nil
@@ -478,15 +472,11 @@ func leasedView(ctx context.Context, policy *access.Policy, cred peerCred, lease
 }
 
 // logPolicy writes the policy into the startup log: which account is the owner,
-// and each configured account's reach. Slugs and account names only.
+// what is locked, and each restricted account. Slugs and account names only.
 func (rt *peerAuthRuntime) logPolicy(logger *slog.Logger) {
 	owner := rt.policy.Owner()
 	logger.Info("peer_auth enabled", "socket", rt.cfg.Socket.Path, "owner", owner.Name, "owner_uid", owner.UID,
-		"hidden", strings.Join(rt.policy.ConsoleHidden(), ","), "locked", strings.Join(rt.policy.OwnerLocked(), ","))
-	for _, a := range rt.policy.Accounts() {
-		logger.Info("peer_auth account", "user", a.Account.Name, "uid", a.Account.UID,
-			"sealed", strings.Join(a.Sealed, ","), "projects", strings.Join(a.Projects, ","), "home", a.Home)
-	}
+		"locked", strings.Join(rt.policy.OwnerLocked(), ","))
 	for _, a := range rt.policy.RestrictedAccounts() {
 		logger.Info("peer_auth restricted account", "user", a.Name, "uid", a.UID)
 	}

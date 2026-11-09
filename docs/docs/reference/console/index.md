@@ -907,8 +907,7 @@ compromised, and where each project's knowledge may go.
 - **The four fences** - open, confidential, sealed and locked, always all
   four, empty or not: what each promises, what kind of project belongs there,
   the projects in it, and how to put a project there. A locked project shows
-  by name and counts only. A project sealed to another OS account never
-  appears, not even as a count.
+  by name and counts only.
 - **Find the fence for a project** - three yes-or-no questions that end in a
   recommendation and its command.
 - **What to do next** - the steps that would tighten this server, in order.

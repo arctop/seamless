@@ -3,14 +3,11 @@ package hooks
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,13 +16,10 @@ import (
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
-	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/harvest"
 	"github.com/arctop/seamless/internal/plans"
-	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
-	"github.com/arctop/seamless/internal/store/storetest"
 )
 
 // pushHooks is lockHooks (example-finance locked, the owner's socket View
@@ -413,80 +407,4 @@ func TestPushedCapture_InvalidPushDroppedWhole(t *testing.T) {
 	require.NoError(t, rows.Scan(&n))
 	require.NoError(t, rows.Err())
 	require.Equal(t, 5, n)
-}
-
-// The sealed-account design (peer_auth.users): a configured account's pushed
-// capture lands in its home project when its cwd maps to none of its own --
-// as its sessions do, never in the global scope -- and the owner's push into a
-// project sealed to that account is refused without a word about it.
-func TestPushedCapture_SealedAccountLandsHomeOwnerRefusedSilently(t *testing.T) {
-	ctx := context.Background()
-	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	require.NoError(t, store.AdoptLocalHost(ctx, db, localHostName))
-	for slug, repo := range map[string]string{lkFin: "/work/finance", lkOps: "/work/ops"} {
-		_, err := store.EnsureProject(ctx, db, slug, slug)
-		require.NoError(t, err)
-		require.NoError(t, store.AddRepoMapping(ctx, db, repo, slug))
-	}
-	accounts := map[string]access.Account{"owner": {UID: 501, Name: "owner"}, "_example_finance": {UID: 470, Name: "_example_finance"}}
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Users: map[string]config.PeerUser{
-		"_example_finance": {Sealed: []string{lkFin}},
-	}}, func(n string) (access.Account, error) {
-		if a, ok := accounts[n]; ok {
-			return a, nil
-		}
-		return access.Account{}, fmt.Errorf("no account %s", n)
-	})
-	require.NoError(t, err)
-	mgr, err := files.NewManager(filepath.Join(t.TempDir(), "data"), db, nil)
-	require.NoError(t, err)
-	h := NewHandler(Config{
-		DB: db, Retrieve: retrieve.New(db, nil, config.Budgets{MaxBriefingTokens: 1500, RecallBudgetTokens: 1000}, nil),
-		Events: events.NewRecorder(db), Files: mgr, APIKey: testKey, LocalHost: localHostName,
-		PlanCapture: config.PlanCapture{Enabled: true}, PlansDir: t.TempDir(),
-	})
-	mux := http.NewServeMux()
-	h.Register(mux)
-	var uid atomic.Uint32
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		v, ok := policy.PeerView(uid.Load())
-		if !ok {
-			http.Error(w, "unknown uid", http.StatusForbidden)
-			return
-		}
-		mux.ServeHTTP(w, r.WithContext(access.WithView(r.Context(), v)))
-	}))
-	t.Cleanup(ts.Close)
-	hook := func(endpoint string, body map[string]any) string {
-		q := url.Values{"host": {localHostName}}
-		resp, _ := post(t, ts.URL+"/api/hooks/"+endpoint+"?"+q.Encode(), "", body)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		return resp.Header.Get(harvest.RefusedHeader)
-	}
-	planWrite := func(sid, cwd, basename string) string {
-		return hook("post-tool-use", map[string]any{"session_id": sid, "cwd": cwd, "tool_name": "Write",
-			"tool_input":  map[string]any{"file_path": "/home/x/.claude/plans/" + basename + ".md"},
-			harvest.Field: map[string]any{"version": 1, "plan": map[string]any{"basename": basename, "content": "# " + basename + "\n\nx"}}})
-	}
-	noteIn := func(project, slug string) bool {
-		_, ok, err := store.NoteBySlug(ctx, db, project, slug)
-		require.NoError(t, err)
-		return ok
-	}
-
-	uid.Store(470)
-	hook("session-start", map[string]any{"session_id": "acct-1", "cwd": "/opt/example/app", "source": "startup"})
-	require.Equal(t, lkFin, requireAmbientSession(t, db, ClientClaudeCode, "acct-1").ProjectSlug)
-	require.Empty(t, planWrite("acct-1", "/opt/example/app", "acct-plan"))
-	require.True(t, noteIn(lkFin, plans.NotePrefix+"acct-plan"), "the account's home project")
-	require.False(t, noteIn("", plans.NotePrefix+"acct-plan"), "never the global scope")
-
-	uid.Store(501)
-	hook("session-start", map[string]any{"session_id": "own-1", "cwd": "/work/ops", "source": "startup"})
-	require.Empty(t, planWrite("own-1", "/work/finance", "owner-plan"), "nothing to say about a sealed project")
-	require.False(t, noteIn(lkFin, plans.NotePrefix+"owner-plan"))
-	require.Empty(t, planWrite("own-1", "/work/ops", "ops-plan"))
-	require.True(t, noteIn(lkOps, plans.NotePrefix+"ops-plan"), "the owner's own project takes it")
 }

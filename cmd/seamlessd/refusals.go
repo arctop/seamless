@@ -15,7 +15,7 @@ import (
 //   - a 401 on any route: no valid bearer key (every 401 the daemon answers is
 //     a bearer refusal -- the MCP, hook, A2A and console handlers alike);
 //   - a reason a handler noted in the request (access.NoteRefusal): a socket
-//     caller whose OS account peer_auth does not know, a configured account
+//     caller whose OS account peer_auth does not know, a restricted account
 //     at the owner's console.
 //
 // The fence refusals inside the MCP tools are recorded where they happen,

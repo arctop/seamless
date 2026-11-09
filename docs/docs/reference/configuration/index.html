@@ -156,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
         
-        <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
+        <li><a href="../../guides/peer-auth/">Lock projects behind your approval</a></li>
         
         <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
@@ -364,10 +364,10 @@ The example file spells out the keys whose default has a value and leaves
 <code>check</code> and <code>auto</code>, whose default is unset, commented out.</p>
 <h3 id="peer-auth">Peer-user authentication</h3>
 <p>The <code>peer_auth:</code> block turns on a Unix-socket listener whose callers the daemon
-identifies by the uid the kernel reports, and maps OS accounts to the projects
-they may reach. It is off by default, and off is exactly the behavior of every
-earlier release. The guide is <a href="../../guides/peer-auth/">Seal projects to OS accounts</a>;
-in short:</p>
+identifies by the uid the kernel reports, and locks the projects you list until
+you approve an agent's access. It is off by default, and off is exactly the
+behavior of every earlier release. The guide is
+<a href="../../guides/peer-auth/">Lock projects behind your approval</a>; in short:</p>
 <ul>
 <li><code>enabled</code> (<code>SEAMLESS_PEER_AUTH_ENABLED</code>) switches it on.</li>
 <li><code>owner</code> (<code>SEAMLESS_PEER_AUTH_OWNER</code>) is the OS account - a user name or a
@@ -379,16 +379,16 @@ outside <code>data_dir</code>. Required when enabled.</li>
 octal, default <code>0666</code>: every local account may knock, and the kernel still
 names each one. <code>socket.group</code> (<code>SEAMLESS_PEER_AUTH_SOCKET_GROUP</code>) hands the
 socket to a group, for a mode such as <code>0660</code>.</li>
-<li><code>users</code> maps an OS account (name or uid) to <code>sealed</code> - projects reachable only
-from that account - and <code>projects</code> - projects it shares with the owner. It is
-file-only: a map of lists has no single-variable spelling.</li>
-<li><code>locked</code> lists locked projects instead (the approval design, being built):
-each is closed to every owner request - its name shows, its content does
-not, writes are refused - unless the request rides a socket connection whose
-process holds a lease the owner approved. The TCP bearer key never holds one.
-The lock is not the <code>sealed</code> isolation state (which says what flows in and
-out of a project): a locked project is normally <code>confidential</code>. File-only,
-and never beside <code>users</code>: a config names one design or the other.</li>
+<li><code>locked</code> lists locked projects: each is closed to every owner request - its
+name shows, its content does not, writes are refused - unless the request
+rides a socket connection whose process holds a lease the owner approved. The
+TCP bearer key never holds one. The lock is not the <code>sealed</code> isolation state
+(which says what flows in and out of a project): a locked project is normally
+<code>confidential</code>, and <code>serve</code> refuses one that is <code>open</code>. File-only.</li>
+<li><code>users</code> is a retired key. A config that sets it to a non-empty map is refused
+when it loads, even while the block is disabled, with a message that says
+to list the projects under <code>locked</code> and remove <code>users</code>
+(<a href="../../guides/peer-auth/#configure-it">the guide</a> has it word for word).</li>
 <li><code>max_lease</code> caps every lease the owner approves on a locked project, &quot;until
 this session ends&quot; included: at most <code>24h</code>, unset <code>8h</code>. File-only.</li>
 <li><code>restricted</code> lists restricted local accounts, each an OS user name or a
@@ -400,8 +400,7 @@ create a project, files no access requests and holds no leases. Its writes
 are labeled with its name, and a constraint, convention, protocol or stage it
 writes waits for you to promote it
 (<a href="../../guides/peer-auth/#restricted-local-accounts">Restricted local accounts</a>).
-Refused while <code>enabled</code> is false, for the owner, and beside <code>users</code>.
-File-only.</li>
+Refused while <code>enabled</code> is false, and for the owner. File-only.</li>
 <li><code>passkeys.rp_id</code> and <code>passkeys.origins</code> name the WebAuthn relying party of
 the owner's approver passkeys (<a href="../../reference/cli-seamlessd/#seamlessd_approvers">seamlessd approvers</a>).
 Unset, they are <code>localhost</code> and the console's own address on localhost.
@@ -880,7 +879,7 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </tr>
 <tr>
 <td><code>peer_auth.users</code></td>
-<td>map of string to {sealed []string, projects []string}</td>
+<td>map of string to any</td>
 <td>-</td>
 </tr>
 <tr>
@@ -1316,25 +1315,31 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">min_age</span><span class="p">:</span><span class="w"> </span><span class="l">24h</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># Peer-user authentication: a Unix socket whose callers the daemon identifies by</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c"># the uid the kernel reports (never by anything the client sends), and the map of</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c"># which OS accounts may reach which projects. Off by default, and off is exactly</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c"># the behavior of every earlier release. On:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   - the TCP bearer key is the owner account: it reaches every project except</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#     those sealed to another account, and so does the owner on the socket;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   - a configured account reaches only its own projects (sealed plus shared)</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#     and reads -- never writes -- the global scope;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   - any other uid on the socket is refused (403);</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   - the console is the owner&#39;s alone, and shows no project sealed to another</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#     account;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   - the daemon reads no agent files (transcripts, plan files): findings</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#     harvest, token totals, model sniffing, plan and subagent capture are off.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># the uid the kernel reports (never by anything the client sends), and the</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># projects locked behind the owner&#39;s approval. Off by default, and off is</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># exactly the behavior of every earlier release. On:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   - the TCP bearer key is the owner account: it reaches every project that is</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     not locked, and so does the owner on the socket;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   - a locked project is closed to every owner request -- its name shows, its</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     content does not, writes are refused -- unless the request rides a socket</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     connection whose process holds a lease the owner approved; the TCP bearer</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     key never holds one;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   - an account under restricted reaches the open projects that are not locked</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     and reads -- never writes -- the global scope; any other uid on the socket</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     is refused (403);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   - the console is the owner&#39;s alone, and shows a locked project by name and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     counts only until it is unlocked in that browser;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   - the daemon reads no agent files (transcripts, plan files): seam hook reads</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     them and sends the findings, token totals, model, plan and subagent</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     captures, from clients whose server_url is the socket.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># serve refuses to start unless the boundary would hold on disk too: the daemon</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># runs as its own account (not the owner, not root), data_dir is that account&#39;s</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># and 0700, the socket&#39;s directory and every directory above the data, the</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># config file and the seamlessd binary are writable by nobody but root and the</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c"># daemon&#39;s account, every named project exists, and every sealed project is</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># daemon&#39;s account, every named project exists, and every locked project is</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># confidential or sealed. `seamlessd doctor`, run as the daemon&#39;s account,</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c"># reports each of those. See the peer_auth guide in the docs for the deployment.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># reports each of those. See the peer_auth guide in the docs for the deployment</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># and the cutover from an existing install.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># The block is new after v0.7.4 and releases before it refuse config keys they</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># do not know, so it is left commented out here.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># peer_auth:</span><span class="w">
@@ -1363,8 +1368,7 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # unless the request rides a socket connection whose process holds a lease</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # the owner approved; the TCP bearer key never holds one. The lock is not</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # the sealed isolation state: a locked project is normally confidential.</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # File only (no env). Never beside users below: a config names one design</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # or the other.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # File only (no env).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   locked: []</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # Caps every lease the owner approves on a locked project, &#34;until this</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # session ends&#34; included. At most 24h; unset means 8h. File only (no env).</span><span class="w">
@@ -1384,18 +1388,11 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # It cannot create projects, files no access requests and holds no leases.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # Its writes are labeled with its name, and a constraint, convention,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # protocol or stage it writes is a proposal until you promote it. Refused</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # while peer_auth is disabled, for the owner, and beside users. File only.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # while peer_auth is disabled, and for the owner. File only (no env).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   restricted: []</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # OS account (user name or numeric uid) -&gt; its reach. File only (no env).</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # sealed: reachable ONLY from this account&#39;s socket connections; a project</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # is sealed to at most one account, and never also listed for another.</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # projects: also reachable from this account, and still the owner&#39;s too.</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # The first sealed project (else the first shared one) is the account&#39;s</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # home: where its sessions and unplaced calls land.</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   users:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#     _example_role:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#       sealed: [example-project]</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#       projects: []</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # users is retired: a non-empty users map is refused at load, even while the</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # block is disabled. List those projects under locked and remove users (the</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # peer_auth guide has the steps).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># Project isolation beyond each project&#39;s own state (open, confidential or</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># sealed, set on the console&#39;s project Overview or with seam project</span><span class="w">

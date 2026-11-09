@@ -204,16 +204,9 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request, id json.RawM
 		s.writeError(w, id, codeInvalidParams, err.Error())
 		return
 	}
-	// A configured peer_auth account that names no project recalls in its own
-	// project (plus global), the scope every other surface places it in; with
-	// no project named anyone else recalls the global scope, as before -- a
-	// restricted local account included: it has no home project, and reads the
-	// global scope. A project named here is judged by retrieve.Recall's fence.
-	if !projectPresent {
-		if v, ok := access.FromContext(r.Context()); ok && v.Principal().Kind == access.KindUser {
-			project = v.Home()
-		}
-	}
+	// With no project named a request recalls the global scope, a restricted
+	// local account's included: it has no home project, and reads the global
+	// scope. A project named here is judged by retrieve.Recall's fence.
 	if scopePresent && !slices.Contains(retrieve.RecallScopes, scope) {
 		s.writeError(w, id, codeInvalidParams,
 			"metadata.scope must be one of "+strings.Join(retrieve.RecallScopes, "|"))

@@ -156,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
         
-        <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
+        <li><a href="../../guides/peer-auth/">Lock projects behind your approval</a></li>
         
         <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
@@ -1181,7 +1181,12 @@ Any HTTP response counts as reachable, including a degraded 503.</p>
 <p>While <code>peer_auth</code> is on and a project is locked, it signs in on the passkey
 origin (<code>http://localhost:&lt;port&gt;</code> by default) instead of the server URL: the
 console's cookie belongs to one host, and browsers refuse passkeys on an IP
-address such as <code>127.0.0.1</code>.</p>
+address such as <code>127.0.0.1</code>. A client's config carries no <code>peer_auth</code> block, so
+there it asks the daemon for that origin, and uses <code>localhost</code> only when the
+daemon is on this machine. A socket <code>server_url</code> is refused: a browser cannot
+dial one, so the command says where the console is and to sign in with the
+daemon's key, or to run it with a config that names the TCP <code>server_url</code> and
+<code>mcp.api_key</code> (set <code>SEAMLESS_CONFIG</code>).</p>
 <p><code>--unlock PROJECT</code> is the terminal way to open a locked project in one
 browser's console, without a passkey. Run it as the daemon's own account,
 through <code>sudo -k</code> so it asks for your password or Touch ID every time:</p>

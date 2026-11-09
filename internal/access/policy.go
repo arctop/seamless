@@ -26,7 +26,7 @@ type Resolver func(name string) (Account, error)
 
 // LookupAccount resolves name through the OS user database: a numeric value is
 // a uid, anything else a user name. On macOS this reaches the directory service
-// (the hidden role accounts live there, not in /etc/passwd).
+// (hidden service accounts live there, not in /etc/passwd).
 func LookupAccount(name string) (Account, error) {
 	var (
 		u   *user.User
@@ -59,14 +59,11 @@ func isNumeric(s string) bool {
 	return true
 }
 
-// Policy is peer_auth resolved: the owner account, each configured account with
-// its reach, and which projects are sealed to whom. It is immutable once built,
-// so one value serves every request without a lock.
+// Policy is peer_auth resolved: the owner account, the locked projects and the
+// restricted accounts. It is immutable once built, so one value serves every
+// request without a lock.
 type Policy struct {
-	owner       Account
-	users       map[uint32]*userRule
-	sealedTo    map[string]Account // project -> the one account that may reach it
-	ownerHidden []string           // every project sealed to an account, sorted: none is the owner's
+	owner Account
 	// ownerLocked is peer_auth.locked: the locked projects, closed to the
 	// owner except under a lease (lease.go).
 	ownerLocked     map[string]bool
@@ -74,14 +71,6 @@ type Policy struct {
 	// restricted is peer_auth.restricted: the restricted local accounts, by
 	// uid (restricted.go).
 	restricted map[uint32]Account
-}
-
-type userRule struct {
-	acct     Account
-	allowed  map[string]bool
-	sealed   []string
-	projects []string
-	home     string
 }
 
 // ErrInvalidPolicy marks a peer_auth block whose accounts do not resolve or
@@ -92,8 +81,14 @@ var ErrInvalidPolicy = errors.New("invalid peer_auth")
 // refused at config load (config.Config.Validate); what is checked here needs
 // the OS: every account must resolve, and no two entries -- the owner included
 // -- may resolve to one uid, since a uid listed twice would carry two reaches
-// and only one could be enforced.
+// and only one could be enforced. A filled-in users key (the retired design) is
+// refused here too, for a block that did not come through a load: there is
+// nothing left to enforce it with, and leaving it out would quietly open what
+// it meant to close.
 func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
+	if err := cfg.RetiredUsersRefusal(); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidPolicy, err)
+	}
 	if resolve == nil {
 		resolve = LookupAccount
 	}
@@ -103,15 +98,8 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 	}
 	p := &Policy{
 		owner:       owner,
-		users:       map[uint32]*userRule{},
-		sealedTo:    map[string]Account{},
 		ownerLocked: map[string]bool{},
 		restricted:  map[uint32]Account{},
-	}
-	// The two designs never mix (config.validatePeerLocked refuses it at load;
-	// this is the same refusal for a block that did not come through a load).
-	if len(cfg.Locked) > 0 && len(cfg.Users) > 0 {
-		return nil, fmt.Errorf("%w: peer_auth names both locked and users: use one design", ErrInvalidPolicy)
 	}
 	for _, slug := range cfg.Locked {
 		slug = strings.TrimSpace(slug)
@@ -122,49 +110,6 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 		p.ownerLockedList = append(p.ownerLockedList, slug)
 	}
 	slices.Sort(p.ownerLockedList)
-	names := make([]string, 0, len(cfg.Users))
-	for name := range cfg.Users {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	for _, name := range names {
-		acct, err := resolve(name)
-		if err != nil {
-			return nil, fmt.Errorf("%w: peer_auth.users.%s: %w", ErrInvalidPolicy, name, err)
-		}
-		if acct.UID == owner.UID {
-			return nil, fmt.Errorf("%w: peer_auth.users.%s is uid %d, the owner's: the owner takes no users entry", ErrInvalidPolicy, name, acct.UID)
-		}
-		if prev, dup := p.users[acct.UID]; dup {
-			return nil, fmt.Errorf("%w: peer_auth.users lists uid %d twice (%s and %s): give each account one entry", ErrInvalidPolicy, acct.UID, prev.acct.Name, name)
-		}
-		u := cfg.Users[name]
-		rule := &userRule{acct: acct, allowed: map[string]bool{}}
-		for _, slug := range u.Sealed {
-			slug = strings.TrimSpace(slug)
-			rule.sealed = append(rule.sealed, slug)
-			rule.allowed[slug] = true
-			p.sealedTo[slug] = acct
-		}
-		for _, slug := range u.Projects {
-			slug = strings.TrimSpace(slug)
-			rule.projects = append(rule.projects, slug)
-			rule.allowed[slug] = true
-		}
-		switch {
-		case len(rule.sealed) > 0:
-			rule.home = rule.sealed[0]
-		case len(rule.projects) > 0:
-			rule.home = rule.projects[0]
-		default:
-			return nil, fmt.Errorf("%w: peer_auth.users.%s reaches no project", ErrInvalidPolicy, name)
-		}
-		p.users[acct.UID] = rule
-	}
-	for slug := range p.sealedTo {
-		p.ownerHidden = append(p.ownerHidden, slug)
-	}
-	slices.Sort(p.ownerHidden)
 	if err := p.resolveRestricted(cfg, resolve); err != nil {
 		return nil, err
 	}
@@ -173,14 +118,8 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 
 // resolveRestricted resolves peer_auth.restricted. Every entry must resolve, and
 // none may be the owner's uid or a uid listed twice (a numeric entry and a name
-// can name one account) -- the same refusals the users map gets, for the same
-// reason: one uid carries one reach. The users map and this list never mix
-// (config.validatePeerRestricted refuses it at load; this is the same refusal
-// for a block that did not come through a load).
+// can name one account): one uid carries one reach.
 func (p *Policy) resolveRestricted(cfg config.PeerAuth, resolve Resolver) error {
-	if len(cfg.Restricted) > 0 && len(cfg.Users) > 0 {
-		return fmt.Errorf("%w: peer_auth names both restricted and users: use one design", ErrInvalidPolicy)
-	}
 	for _, name := range cfg.Restricted {
 		acct, err := resolve(strings.TrimSpace(name))
 		if err != nil {
@@ -243,9 +182,6 @@ func (p *Policy) PeerView(uid uint32) (View, bool) {
 	if uid == p.owner.UID {
 		return View{policy: p, who: Principal{Kind: KindOwner, UID: uid, HasUID: true, User: p.owner.Name, Socket: true}}, true
 	}
-	if rule, ok := p.users[uid]; ok {
-		return View{policy: p, user: rule, who: Principal{Kind: KindUser, UID: uid, HasUID: true, User: rule.acct.Name, Socket: true}}, true
-	}
 	if acct, ok := p.restricted[uid]; ok {
 		// No reach yet: the transport fills it per request (WithOpenProjects).
 		return View{policy: p, acct: acct, who: Principal{Kind: KindRestricted, UID: uid, HasUID: true, User: acct.Name, Socket: true}}, true
@@ -254,64 +190,19 @@ func (p *Policy) PeerView(uid uint32) (View, bool) {
 }
 
 // ConsoleHidden returns every project whose content no owner surface shows
-// without a lease, sorted: those sealed to a configured account and every
-// locked project. It is the console's hidden set (store.OpenView), what the
-// background surfaces that serve no caller (the metadata feed, the commit
-// snapshot) leave out, and what serve's preflight requires to be fenced.
-func (p *Policy) ConsoleHidden() []string {
-	out := slices.Concat(p.ownerHidden, p.ownerLockedList)
-	slices.Sort(out)
-	return slices.Compact(out)
-}
+// without a lease, sorted: the locked projects. It is the console's hidden set
+// (store.OpenView), what the background surfaces that serve no caller (the
+// metadata feed, the commit snapshot) leave out, and what serve's preflight
+// requires to be fenced.
+func (p *Policy) ConsoleHidden() []string { return slices.Clone(p.ownerLockedList) }
 
 // OwnerLocked returns the locked projects (peer_auth.locked), sorted.
 func (p *Policy) OwnerLocked() []string { return slices.Clone(p.ownerLockedList) }
-
-// Projects returns every project the policy names, sorted and de-duplicated.
-func (p *Policy) Projects() []string {
-	out := slices.Clone(p.ownerLockedList)
-	for _, rule := range p.users {
-		for slug := range rule.allowed {
-			if !slices.Contains(out, slug) {
-				out = append(out, slug)
-			}
-		}
-	}
-	slices.Sort(out)
-	return out
-}
-
-// AccountRow describes one configured account for doctor and the startup log.
-type AccountRow struct {
-	Account  Account
-	Sealed   []string
-	Projects []string
-	Home     string
-}
-
-// Accounts returns the configured accounts (the owner excluded), by uid.
-func (p *Policy) Accounts() []AccountRow {
-	uids := make([]uint32, 0, len(p.users))
-	for uid := range p.users {
-		uids = append(uids, uid)
-	}
-	slices.Sort(uids)
-	out := make([]AccountRow, 0, len(uids))
-	for _, uid := range uids {
-		r := p.users[uid]
-		out = append(out, AccountRow{Account: r.acct, Sealed: slices.Clone(r.sealed), Projects: slices.Clone(r.projects), Home: r.home})
-	}
-	return out
-}
 
 // HomeFor returns the home directory of the account a view speaks for, as the
 // directory service reported it when the policy was built ("" when unknown).
 func (v View) HomeFor() string {
 	switch v.who.Kind {
-	case KindUser:
-		if v.user != nil {
-			return v.user.acct.Home
-		}
 	case KindRestricted:
 		return v.acct.Home
 	case KindOwner:

@@ -30,10 +30,10 @@ import (
 //
 // The agent process the session would be stamped with is judged first
 // (approval's anchor rule, owner decision 2026-11-08): one no approval may
-// name -- a shell, a terminal, a multiplexer; an agent started straight from
-// a tmux pane names the tmux server -- could never have a request filed or a
-// lease approved, so nothing is recorded, and the notice says why and what to
-// do instead.
+// name -- a shell, a terminal, a multiplexer, which is what the walk finds when
+// `seam` runs with no agent above it, in a tmux pane say -- could never have a
+// request filed or a lease approved, so nothing is recorded, and the notice
+// says why and what to do instead.
 //
 // The notice offers Touch ID only to an agent host that may show the approval
 // dialog's form (formDialogClient), hedged for a host the hook cannot judge

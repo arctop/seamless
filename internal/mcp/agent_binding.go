@@ -102,8 +102,8 @@ func (s *Server) listedProcessSession(ctx context.Context) (core.Session, bool) 
 	sess, ok := s.lookupProcessSession(ctx, proc)
 	// The agent-process header is the client's own claim. Under peer_auth it may
 	// name only a session this connection's OS account may reach: a forged
-	// identity pointing at another account's agent binds nothing. A locked
-	// project is the owner's own, so the owner's session there is kept.
+	// identity pointing at an agent elsewhere binds nothing. A locked project
+	// is the owner's own, so the owner's session there is kept.
 	if ok && !access.Visible(ctx, sess.ProjectSlug) && !access.Locked(ctx, sess.ProjectSlug) {
 		sess, ok = core.Session{}, false
 	}

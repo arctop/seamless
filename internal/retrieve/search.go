@@ -106,7 +106,7 @@ func (s *Service) Search(ctx context.Context, in SearchInput) ([]Hit, error) {
 		h, ok := hyd.hit(id, f.kind)
 		// peer_auth: the identifier leg reads every project, so the caller's
 		// reach is applied to the hydrated hit -- the console owner's search must
-		// not surface a project sealed to another OS account.
+		// not surface a locked project without a lease.
 		if !ok || !access.Visible(ctx, h.Project) {
 			continue
 		}

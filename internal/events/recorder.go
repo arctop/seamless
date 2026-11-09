@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
@@ -94,8 +93,8 @@ func NewRecorder(db *sql.DB) *Recorder { return &Recorder{db: db, hub: &hub{}} }
 // ReadingFrom returns a Recorder that answers every read from db -- a filtered
 // handle (store.OpenView) on the same database -- while recording, milestones
 // and the live fan-out stay this Recorder's. The console reads the event log
-// through one, so an event about a project sealed to another OS account never
-// reaches its pages.
+// through one, so an event about a locked project never reaches its pages
+// without a lease.
 func (r *Recorder) ReadingFrom(db *sql.DB) *Recorder {
 	return &Recorder{db: r.db, reader: db, hub: r.hub}
 }
@@ -106,25 +105,6 @@ func (r *Recorder) rdb() *sql.DB {
 		return r.reader
 	}
 	return r.db
-}
-
-// refile files an event recorded on behalf of a configured peer_auth account
-// under that account's own project whenever it named another scope -- the
-// global scope, typically, for an unattributed tool call. A sealed system's
-// tool calls, prompts and reads are its content as much as its memories are,
-// and the event log is read by the owner's console: an event filed under the
-// global scope would carry a sealed agent's arguments to the one account the
-// seal exists to keep them from. The owner's own events, and every event
-// recorded for no caller, are left exactly as given.
-func refile(ctx context.Context, e core.Event) core.Event {
-	v, ok := access.FromContext(ctx)
-	if !ok || v.Principal().Kind != access.KindUser {
-		return e
-	}
-	if !v.Writable(e.ProjectSlug) {
-		e.ProjectSlug = v.Home()
-	}
-	return e
 }
 
 // The milestone layer mints through RecordOnce (store.OnceRecorder).
@@ -207,7 +187,6 @@ func (r *Recorder) Record(ctx context.Context, e core.Event) (string, error) {
 	if e.Kind == "" {
 		return "", fmt.Errorf("events.Record: empty kind")
 	}
-	e = refile(ctx, e)
 	if e.ID == "" {
 		id, err := core.NewID()
 		if err != nil {
@@ -255,7 +234,6 @@ func (r *Recorder) RecordOnce(ctx context.Context, e core.Event) (id string, rec
 	if e.ItemID == "" {
 		return "", false, fmt.Errorf("events.RecordOnce: empty item id (the latch is per item)")
 	}
-	e = refile(ctx, e)
 	if e.ID == "" {
 		nid, err := core.NewID()
 		if err != nil {

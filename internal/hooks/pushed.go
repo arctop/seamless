@@ -25,8 +25,7 @@ package hooks
 //     state.
 //   - A plan or subagent note lands in the project its cwd resolves to, placed
 //     the way a session is (View.SessionScope): the owner's only where it may
-//     write, a configured account's in its home project when the cwd maps to
-//     none of its own, a restricted account's only in an open project it
+//     write, a restricted account's only in an open project it
 //     reaches (anywhere else it is dropped without a word, as a closed
 //     project must read like a missing one), labeled with its account. Its
 //     events are filed under the session's project, so a note in a leased
@@ -85,8 +84,8 @@ func pushCarries(push *harvest.Push) bool {
 type pushVerdict struct {
 	ok bool // the capture lands
 	// notice is the one-line refusal for a capture refused at a lock; "" for a
-	// silent refusal (another account's session or project: nothing about it
-	// is the caller's to learn).
+	// silent refusal (a session or project out of the caller's reach: nothing
+	// about it is the caller's to learn).
 	notice string
 }
 
@@ -95,8 +94,7 @@ type pushVerdict struct {
 // (sessionReachOf, before any blanking), the locked project that reach found,
 // and its id (blank when the reach is not reachOK). what names the capture in
 // the notice. A capture that passes lands in project: target, placed as a
-// session would be (View.SessionScope) -- a configured account's lands in its
-// home project when its cwd maps to none of its own, as its sessions do.
+// session would be (View.SessionScope).
 func (h *Handler) fenceNotePush(ctx context.Context, client Client, reach sessionReach, lockedProject, sessionID, target, what string) (project string, verdict pushVerdict) {
 	v, _ := access.FromContext(ctx)
 	switch {
@@ -111,7 +109,7 @@ func (h *Handler) fenceNotePush(ctx context.Context, client Client, reach sessio
 	// access request.
 	project, err := v.SessionScope(target)
 	if err != nil {
-		return "", pushVerdict{} // sealed to another account: nothing about it is the caller's to learn
+		return "", pushVerdict{} // out of reach: nothing about it is the caller's to learn
 	}
 	if _, leased := v.Lease(project); leased {
 		if _, sessionProject := h.ambientRef(ctx, client, sessionID); sessionProject != project {

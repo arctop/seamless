@@ -39,10 +39,10 @@ type Config struct {
 	// Enabled reports whether the screening feature is on: the feed spools
 	// nothing while it is off.
 	Enabled func(context.Context) bool
-	// Sealed reports whether a project is sealed to another OS account
-	// (peer_auth); such a project's slug leaves only as a keyed hash, like a
-	// confidential or sealed project's. nil means none.
-	Sealed func(project string) bool
+	// Locked reports whether peer_auth locks a project; such a project's slug
+	// leaves only as a keyed hash, like a confidential or sealed project's. nil
+	// means none.
+	Locked func(project string) bool
 	Logger *slog.Logger
 	Now    func() time.Time
 }
@@ -104,13 +104,13 @@ func New(cfg Config) *Feed {
 }
 
 // hashedProject reports whether a project's slug leaves only as a keyed hash:
-// a confidential or sealed project, or one sealed to another OS account. The
-// isolation states are cached for a minute; an unreadable state hashes.
+// a confidential or sealed project, or a locked one. The isolation states are
+// cached for a minute; an unreadable state hashes.
 func (f *Feed) hashedProject(slug string) bool {
 	if slug == "" {
 		return false
 	}
-	if f.cfg.Sealed != nil && f.cfg.Sealed(slug) {
+	if f.cfg.Locked != nil && f.cfg.Locked(slug) {
 		return true
 	}
 	f.isoMu.Lock()

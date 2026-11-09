@@ -77,7 +77,7 @@ func TestConsoleLock_LeasedTreeReadsThroughTheConsole(t *testing.T) {
 	_, err = store.ApproveAccessFor(ctx, db, a.ID, a.Challenge, "daemon-account", time.Hour, now)
 	require.NoError(t, err)
 
-	views, err := store.OpenViews(path, nil, policy.OwnerLocked())
+	views, err := store.OpenViews(path, policy.OwnerLocked())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = views.Close() })
 	base, err := views.For(nil)

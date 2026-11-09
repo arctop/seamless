@@ -156,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
         
-        <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
+        <li><a href="../../guides/peer-auth/">Lock projects behind your approval</a></li>
         
         <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
@@ -479,8 +479,8 @@ populated one it merges). Run <code>seamlessd stop</code>, then move <code>~/.se
 then <code>seamlessd start</code>.</li>
 </ul>
 <h2 id="peer-auth-daemon">A system service for peer_auth</h2>
-<p><a href="../../guides/peer-auth/">Sealing projects to OS accounts</a> needs the daemon to run as
-an account of its own, so the per-user service above cannot host it. On macOS it
+<p><a href="../../guides/peer-auth/">Locked projects</a> need the daemon to run as an account of
+its own, so the per-user service above cannot host it. On macOS it
 is a LaunchDaemon that names the account; it runs whether or not anyone is
 logged in. Install it as <code>/Library/LaunchDaemons/com.arctop.seamless.daemon.plist</code>
 (<code>root:wheel</code>, <code>0644</code>):</p>
@@ -530,7 +530,10 @@ the rename, the same for <code>org.thereisnospoon.seamless</code>).</p>
 <p>On Linux the same daemon is a system unit with <code>User=</code> and <code>Group=</code> set to the
 account, <code>UMask=0077</code>, <code>Environment=SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml</code>
 and <code>ExecStart=/opt/seamless/bin/seamlessd serve</code>, enabled with
-<code>sudo systemctl enable --now</code>.</p>
+<code>sudo systemctl enable --now</code>; <a href="../../guides/peer-auth/#deploy-it-the-daemon-runs-as-its-own-account">the guide</a>
+has a complete unit. Retire the per-user service first
+(<a href="#removing-the-service-by-hand">by hand</a>), or it starts again at your next
+login.</p>
 <p>Automatic updates do not manage this install (the daemon only notifies): replace
 the binaries in <code>/opt/seamless/bin</code> with <code>sudo</code> and restart it.</p>
 <h2 id="where-things-live">Where things live</h2>

@@ -84,12 +84,17 @@ confidential project no lock covers (kind `grant`, with `from`), the request a
 read refused at the project's fence files; with them off, such a project is
 not locked and nothing is filed.
 
+The answer says what the call did: `filed` is `true` when it filed a new
+request, and `false` when it found one already waiting or the agent already
+holds the access; `reason` is `added` when this call's reason was stored on the
+request, `kept` when a waiting request already had one, and `none` otherwise.
 An agent that already holds the access it asks for is answered
 `status: approved` with `open_until`, and nothing is filed, until 30 minutes
 before it ends.
 
-When the agent's client supports MCP elicitation (Claude Code does), the
-request opens an approval dialog in the session: the owner sees the daemon's
+When the agent's client supports MCP elicitation (Claude Code does, and so do
+Codex builds that declare it), the request opens an approval dialog in the
+session: the owner sees the daemon's
 facts, warnings first, and chooses a duration and Touch ID or a passkey. The
 dialog's answer is never the approval - any process of the owner's account
 could answer it - the proof is: the Touch ID helper's signature or the
@@ -102,9 +107,12 @@ the only way the dialog can finish, the dialog is that page, which asks the
 duration. Cancelling the Touch ID prompt ends the wait at once
 (`dialog: touchid_cancelled`; `touchid_closed` when the helper closed without
 approving for another reason), the request still pending. A call refused at a
-lock opens the same dialog. Once approved, retry the call. A call whose asking
-process is not an agent's (a tmux pane, a terminal, an ssh login) files nothing
-and says why: an approval would cover every program that process started.
+lock opens the same dialog. The dialog works across a daemon restart: the daemon
+keeps a connection's declared dialog modes while a lock or read grants are
+configured, for clients on the socket, so an agent that was already connected
+keeps the dialog. Once approved, retry the call. A call whose asking process is
+not an agent's (a tmux pane, a terminal, an ssh login) files nothing and says
+why: an approval would cover every program that process started.
 
 ## capture_url is SSRF-safe on purpose
 

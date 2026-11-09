@@ -156,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
         
-        <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
+        <li><a href="../../guides/peer-auth/">Lock projects behind your approval</a></li>
         
         <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
@@ -296,14 +296,20 @@ direction. A clean room.</p>
 The briefing carries a line stating the mode, on both the main and subagent
 surfaces, so an agent inside understands why a write outside will be refused
 rather than discovering it as an unexplained error.</p>
+<p>Isolation is about what flows in and out of a project. Whether even the
+project's own agents need a fresh approval from you first is a second setting,
+the <strong>lock</strong> (<code>peer_auth.locked</code>), and &quot;locked&quot; never means <code>sealed</code>. A sensitive
+project is normally <code>confidential</code> and locked:
+<a href="../../guides/peer-auth/#two-settings-isolation-and-the-lock">Lock projects behind your approval</a>
+says when to use which.</p>
 <h2 id="the-console-is-exempt">The console is exempt</h2>
 <p>The threat model is <strong>agent-to-agent leakage, not hiding from you.</strong> Console
 search and views still see everything; isolated projects are simply badged with a
 lock pill. Nothing about an isolated project's pages turns scary or
 half-rendered - the pill and the Overview control are the whole story.</p>
-<p>The one exception is a project <a href="../../guides/peer-auth/">sealed to another OS account</a>
-under <code>peer_auth</code>: there the threat <em>is</em> your own account, so the console shows
-no trace of it.</p>
+<p>The one exception is a <a href="../../guides/peer-auth/">locked project</a> under <code>peer_auth</code>:
+there the threat <em>is</em> your own account, so the console shows its name and counts,
+and nothing inside it until you unlock it in that browser.</p>
 <h2 id="isolation-requires-a-standalone-project">Isolation requires a standalone project</h2>
 <p>A project cannot be isolated while it is entangled in a family: no family
 membership, no parent, no children.</p>
@@ -415,9 +421,9 @@ You choose how long: until the session ends, 1 hour or 4 hours.</p>
 <p><strong>What a grant is.</strong> Read-only, one project, to the one session that asked
 (under <code>peer_auth</code>, to the asking agent and the programs it started), until it
 expires, you revoke it from the Access requests page, or the session ends.
-While it lives, the granted project also joins that session's <code>recall</code> scope
-and its trials show in <code>trial_query</code>; the briefing does not change. Another
-session is still refused.</p>
+While it lives, the granted project also joins that session's <code>recall</code> scope,
+its trials show in <code>trial_query</code>, and its proposals show in <code>gardener_proposals</code>;
+the briefing does not change. Another session is still refused.</p>
 <p><strong>Writes are never granted.</strong> A grant never lets a session write into the
 project it reads. A session in an open project that receives a grant is
 write-confined like a confidential project's session, for the rest of its
@@ -429,17 +435,23 @@ revocation end the read, never the confinement - what was read stays read.</p>
 without one) and commits over the console with the bearer key, and the
 console's Approve does the same. Any process that holds the key - which every
 local agent can read - can make that call, so an approval guards against an
-agent wandering into a confidential project, not against one set on it. Under
-<code>peer_auth</code> a grant needs the same proofs as a
+agent wandering into a confidential project, not against one set on it. The
+holder of such a grant is also the session a call speaks for, which is
+self-reported: an agent that rebinds with <code>session_start</code>, or names another
+session with <code>session=</code>, writes where that session may, past the grant's write
+confinement. Under <code>peer_auth</code> a grant needs the same proofs as a
 <a href="../../guides/peer-auth/">locked project's lease</a>: your terminal through <code>sudo</code> to
-the daemon's account, a passkey, or a Touch ID key.</p>
+the daemon's account, a passkey, or a Touch ID key. Its holder is then the
+asking agent's process tree, and those moves are refused.</p>
 <h2 id="honest-limits">Honest limits</h2>
 <p>This matters more than the feature list, so it is stated plainly.</p>
 <p><strong>What this is.</strong> A policy fence at every Seamless surface - briefings, recall,
 tool reads and writes, the gardener. That is where accidental cross-contamination
 actually happens, and it is now closed.</p>
 <p><strong>What this is not.</strong> It is <strong>not</strong> a defense against a local agent reading
-<code>~/.seamless/memory/&lt;project&gt;/*.md</code> directly. Every MCP caller shares one static
+<code>~/.seamless/memory/&lt;project&gt;/*.md</code> directly. A2A's recall names its scope in
+the request's <code>metadata.project</code>, and the fence does not judge it there: the
+bearer key can read a confidential project that way. Every MCP caller shares one static
 bearer key, and the fence keys off the <strong>self-reported session binding</strong> - an
 explicit <code>session_start</code>, or the agent-process identity a Claude Code or Codex
 agent's <code>seam</code> transport sends, which is just as self-reported
@@ -453,10 +465,10 @@ means the fence cannot recognize it as belonging to one.</p>
 <p><strong>What makes it stronger.</strong> <a href="../../guides/peer-auth/">peer_auth</a> puts an
 authentication boundary under the fence: the daemon runs as its own OS account,
 names each caller by the uid the kernel reports for its Unix-socket connection,
-and reserves a project for one account - so a project's own agents run as that
-account, and nothing running as you reaches it, through a tool or through a
-file. Use it with isolation, not instead of it: a sealed-to-an-account project
-must also be confidential or sealed.</p>
+and lets you <strong>lock</strong> a project, so that even your own agents reach it only
+with an approval you prove, through a tool or through a file. Use it with
+isolation, not instead of it: a locked project must also be confidential or
+sealed.</p>
 <p><strong>Without it</strong>, the hard boundary is a separate Seamless instance - its own data
 dir, port, and key, run as its own account.</p>
 

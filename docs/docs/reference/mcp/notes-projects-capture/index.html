@@ -156,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../../guides/network-install/">Share one daemon across a LAN</a></li>
         
-        <li><a href="../../../guides/peer-auth/">Seal projects to OS accounts</a></li>
+        <li><a href="../../../guides/peer-auth/">Lock projects behind your approval</a></li>
         
         <li><a href="../../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
@@ -360,11 +360,16 @@ With read grants on (<code>isolation.requests</code>), it also asks for a read o
 confidential project no lock covers (kind <code>grant</code>, with <code>from</code>), the request a
 read refused at the project's fence files; with them off, such a project is
 not locked and nothing is filed.</p>
-<p>An agent that already holds the access it asks for is answered
+<p>The answer says what the call did: <code>filed</code> is <code>true</code> when it filed a new
+request, and <code>false</code> when it found one already waiting or the agent already
+holds the access; <code>reason</code> is <code>added</code> when this call's reason was stored on the
+request, <code>kept</code> when a waiting request already had one, and <code>none</code> otherwise.
+An agent that already holds the access it asks for is answered
 <code>status: approved</code> with <code>open_until</code>, and nothing is filed, until 30 minutes
 before it ends.</p>
-<p>When the agent's client supports MCP elicitation (Claude Code does), the
-request opens an approval dialog in the session: the owner sees the daemon's
+<p>When the agent's client supports MCP elicitation (Claude Code does, and so do
+Codex builds that declare it), the request opens an approval dialog in the
+session: the owner sees the daemon's
 facts, warnings first, and chooses a duration and Touch ID or a passkey. The
 dialog's answer is never the approval - any process of the owner's account
 could answer it - the proof is: the Touch ID helper's signature or the
@@ -377,9 +382,12 @@ the only way the dialog can finish, the dialog is that page, which asks the
 duration. Cancelling the Touch ID prompt ends the wait at once
 (<code>dialog: touchid_cancelled</code>; <code>touchid_closed</code> when the helper closed without
 approving for another reason), the request still pending. A call refused at a
-lock opens the same dialog. Once approved, retry the call. A call whose asking
-process is not an agent's (a tmux pane, a terminal, an ssh login) files nothing
-and says why: an approval would cover every program that process started.</p>
+lock opens the same dialog. The dialog works across a daemon restart: the daemon
+keeps a connection's declared dialog modes while a lock or read grants are
+configured, for clients on the socket, so an agent that was already connected
+keeps the dialog. Once approved, retry the call. A call whose asking process is
+not an agent's (a tmux pane, a terminal, an ssh login) files nothing and says
+why: an approval would cover every program that process started.</p>
 <h2 id="capture-url-is-ssrf-safe-on-purpose">capture_url is SSRF-safe on purpose</h2>
 <p><code>capture_url</code> fetches a URL and returns its content as markdown. It is the one
 tool that makes an outbound request on an agent's behalf, so it is guarded:

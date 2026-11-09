@@ -9,7 +9,7 @@
 // The snapshot is identifiers and times: session names, task ids, repository
 // names, start and end times, commit ids. Never a finding, a title, a body, a
 // path or a project slug. The repository of a confidential or sealed project,
-// or of one sealed to another OS account, is never named (its repo is null),
+// or of a locked one, is never named (its repo is null),
 // the way the metadata feed sends such a project's slug only as a keyed hash.
 //
 // One JSON object, contract version 1:
@@ -122,9 +122,9 @@ type Options struct {
 	// at its last activity, as the idle reaper would expire it, whether or not
 	// the reaper runs. 0 trusts the status alone.
 	Idle time.Duration
-	// Sealed reports whether a project is sealed to another OS account
-	// (peer_auth); its repository is never named. nil means none.
-	Sealed func(project string) bool
+	// Locked reports whether peer_auth locks a project; its repository is
+	// never named. nil means none.
+	Locked func(project string) bool
 }
 
 // Trimmed counts what a snapshot left out to stay inside the contract.
@@ -182,7 +182,7 @@ func Build(ctx context.Context, db *sql.DB, opts Options) (Snapshot, Trimmed, er
 	if err != nil {
 		return Snapshot{}, trim, fmt.Errorf("commitfeed.Build: %w", err)
 	}
-	fence := newFence(db, opts.Sealed)
+	fence := newFence(db, opts.Locked)
 
 	sessionIDs := make([]string, len(sessions))
 	for i, s := range sessions {
@@ -375,16 +375,16 @@ func projectRepos(rows []store.RepoMapRow) map[string]*string {
 }
 
 // fence decides which projects' repositories the snapshot never names: a
-// confidential or sealed project, or one sealed to another OS account. An
+// confidential or sealed project, or a locked one. An
 // isolation state that cannot be read hides, and each project is read once.
 type fence struct {
 	db     *sql.DB
-	sealed func(string) bool
+	locked func(string) bool
 	known  map[string]bool
 }
 
-func newFence(db *sql.DB, sealed func(string) bool) *fence {
-	return &fence{db: db, sealed: sealed, known: map[string]bool{}}
+func newFence(db *sql.DB, locked func(string) bool) *fence {
+	return &fence{db: db, locked: locked, known: map[string]bool{}}
 }
 
 func (f *fence) hides(ctx context.Context, project string) bool {
@@ -394,7 +394,7 @@ func (f *fence) hides(ctx context.Context, project string) bool {
 	if v, ok := f.known[project]; ok {
 		return v
 	}
-	hidden := f.sealed != nil && f.sealed(project)
+	hidden := f.locked != nil && f.locked(project)
 	if !hidden {
 		iso, err := store.IsolationOf(ctx, f.db, project)
 		hidden = err != nil || iso.FencesOutbound()

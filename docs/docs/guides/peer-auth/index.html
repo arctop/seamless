@@ -4,21 +4,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Seal projects to OS accounts - Seamless docs</title>
-<meta name="description" content="peer_auth - one daemon, a Unix socket that names each caller by its uid, projects only their own OS account can reach, and the deployment that makes the files hold too.">
+<title>Lock projects behind your approval - Seamless docs</title>
+<meta name="description" content="peer_auth - the daemon in its own OS account, a Unix socket that names each caller by its uid, and locked projects your own agents reach only with an approval you prove.">
 <link rel="canonical" href="https://thereisnospoon.org/docs/guides/peer-auth/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://thereisnospoon.org/docs/guides/peer-auth/">
-<meta property="og:title" content="Seal projects to OS accounts - Seamless docs">
-<meta property="og:description" content="peer_auth - one daemon, a Unix socket that names each caller by its uid, projects only their own OS account can reach, and the deployment that makes the files hold too.">
+<meta property="og:title" content="Lock projects behind your approval - Seamless docs">
+<meta property="og:description" content="peer_auth - the daemon in its own OS account, a Unix socket that names each caller by its uid, and locked projects your own agents reach only with an approval you prove.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Seal projects to OS accounts","item":"https://thereisnospoon.org/docs/guides/peer-auth/"}]},{"@type":"TechArticle","headline":"Seal projects to OS accounts - Seamless docs","description":"peer_auth - one daemon, a Unix socket that names each caller by its uid, projects only their own OS account can reach, and the deployment that makes the files hold too.","url":"https://thereisnospoon.org/docs/guides/peer-auth/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Lock projects behind your approval","item":"https://thereisnospoon.org/docs/guides/peer-auth/"}]},{"@type":"TechArticle","headline":"Lock projects behind your approval - Seamless docs","description":"peer_auth - the daemon in its own OS account, a Unix socket that names each caller by its uid, and locked projects your own agents reach only with an approval you prove.","url":"https://thereisnospoon.org/docs/guides/peer-auth/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
 <link rel="icon" type="image/svg+xml" href="../../../static/favicon.svg">
@@ -156,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
         
-        <li><a href="../../guides/peer-auth/" class="current" aria-current="page">Seal projects to OS accounts</a></li>
+        <li><a href="../../guides/peer-auth/" class="current" aria-current="page">Lock projects behind your approval</a></li>
         
         <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
@@ -227,32 +227,87 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   <ol>
     <li><a href="../../">Docs</a></li>
     <li><a href="../../guides/">Guides</a></li>
-    <li aria-current="page">Seal projects to OS accounts</li>
+    <li aria-current="page">Lock projects behind your approval</li>
   </ol>
 </nav>
 
-  <h1>Seal projects to OS accounts</h1>
-  <p class="lede">peer_auth - one daemon, a Unix socket that names each caller by its uid, projects only their own OS account can reach, and the deployment that makes the files hold too.</p>
+  <h1>Lock projects behind your approval</h1>
+  <p class="lede">peer_auth - the daemon in its own OS account, a Unix socket that names each caller by its uid, and locked projects your own agents reach only with an approval you prove.</p>
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#connect-a-sealed-accounts-agents">Connect a sealed account&#39;s agents</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </details>
   <p><a href="../../concepts/project-isolation/">Project isolation</a> keeps agents working on one
 project out of another's knowledge. It is a policy fence: it trusts the session
 binding an agent reports, every caller shares one bearer key, and the corpus is
 files in your home directory that any process of yours can read.</p>
-<p><strong>peer_auth</strong> is the boundary underneath it, for when the threat is an <em>account</em>
-rather than a stray agent: you run a sensitive system's agents under their own
-macOS or Linux user, and nothing running as you - no agent, no script, no tool -
-may read that system's memory, through Seamless or through a file. One daemon
-serves everyone. It identifies each caller by the uid the kernel reports for its
-Unix-socket connection, never by anything the caller sends, and it maps OS
-accounts to the projects they may reach.</p>
-<p>It is off by default, and off means exactly the behavior every release before it
-had. It also asks for a different deployment: the daemon has to run as an account
-of its own, or the files would not hold.</p>
+<p><strong>peer_auth</strong> is the boundary underneath it, for when the threat is your own
+account: an agent of yours reading a project it should not, through Seamless or
+through a file. One daemon serves everyone, running as an OS account of its
+own. It identifies each caller by the uid the kernel reports for its
+Unix-socket connection, never by anything the caller sends.</p>
+<p>On that boundary you can <strong>lock</strong> a project. A locked project stays closed to
+every agent of yours until you approve one agent's access, for a limited time,
+with a proof the agent cannot produce: Touch ID, a passkey, or your own <code>sudo</code>.
+The approval covers that agent and the programs it started, and nothing else.</p>
+<p>It is off by default, and off means exactly the behavior every release before
+it had. It asks for a different deployment (the daemon needs an account of its
+own, or the files would not hold), and it runs on macOS and Linux only: Windows
+has no Unix-socket peer credentials Seamless can read.</p>
+<h2 id="two-settings-isolation-and-the-lock">Two settings: isolation and the lock</h2>
+<p>Isolation says what flows in and out of a project. The lock says whether even
+its own agents need a fresh approval from you before reaching it. They are two
+settings, with two words: &quot;sealed&quot; is an isolation state, and the lock is never
+called that.</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Isolation</th>
+<th>The lock</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Question</td>
+<td>What flows in and out of this project?</td>
+<td>Must even this project's own agents get your approval first?</td>
+</tr>
+<tr>
+<td>Values</td>
+<td><code>open</code>, <code>confidential</code>, <code>sealed</code></td>
+<td>locked (<code>peer_auth.locked</code>) or not</td>
+</tr>
+<tr>
+<td>Set</td>
+<td>on the console's project Overview, or with <code>seam project isolation</code></td>
+<td>in the daemon's config file</td>
+</tr>
+<tr>
+<td>Needs peer_auth</td>
+<td>no</td>
+<td>yes</td>
+</tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li><strong><code>confidential</code></strong> is for sensitive work your agents should still do freely:
+nothing leaves the project, and its sessions still read open projects and the
+global scope. It needs no extra deployment.</li>
+<li><strong><code>sealed</code></strong> is a clean room: nothing in or out.</li>
+<li><strong>Locked</strong> is for what no agent should touch without you saying so now:
+money, legal matters, credentials. Reaching one takes your approval, session
+by session.</li>
+</ul>
+<p>Sensitive projects are normally <code>confidential</code> and locked: once you approve an
+agent, its session still reads your open projects and the global scope. <code>serve</code>
+refuses a locked project that is <code>open</code>, because the isolation fence is what
+keeps it out of the family, parent and cross-project gardener surfaces the lock
+does not reach on its own.</p>
 <h2 id="how-it-decides">How it decides</h2>
 <p>Every request carries a <strong>principal</strong>, set by the transport before any route
 runs:</p>
@@ -271,11 +326,11 @@ runs:</p>
 </tr>
 <tr>
 <td>The socket, from the owner's uid</td>
-<td>the owner</td>
+<td>the owner, with its kernel-reported process chain</td>
 </tr>
 <tr>
-<td>The socket, from a uid listed under <code>peer_auth.users</code></td>
-<td>that account</td>
+<td>The socket, from a uid listed under <code>peer_auth.restricted</code></td>
+<td>that <a href="#restricted-local-accounts">restricted account</a></td>
 </tr>
 <tr>
 <td>The socket, from any other uid</td>
@@ -284,63 +339,20 @@ runs:</p>
 </tbody>
 </table>
 </div>
-<p>Two rules follow, and they are the whole policy:</p>
-<ol>
-<li><strong>A project sealed to an account is reachable only from that account's socket
-connections.</strong> The owner - TCP key and socket alike - never reaches it.</li>
-<li><strong>A configured account reaches only its own projects</strong> (the ones sealed to it
-plus any it shares), and it <strong>reads</strong> the global scope but never <strong>writes</strong> it:
-a global memory is injected into every project's briefing, the owner's
-included.</li>
-</ol>
-<div class="table-wrap">
-<table>
-<thead>
-<tr>
-<th></th>
-<th>A project sealed to this account</th>
-<th>Sealed to another account</th>
-<th>The owner's projects</th>
-<th>Global, read</th>
-<th>Global, write</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Owner</td>
-<td>-</td>
-<td>no</td>
-<td>yes</td>
-<td>yes</td>
-<td>yes</td>
-</tr>
-<tr>
-<td>Configured account</td>
-<td>yes</td>
-<td>no</td>
-<td>only if listed under <code>projects</code></td>
-<td>yes</td>
-<td>no</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>&quot;Reach&quot; means everything: recall, briefings, the prompt matcher, every MCP tool
-by name or by id, tasks, trials, sessions, the gardener's proposals, the hooks,
-A2A, the console and its live feed. A project an account may not reach is simply
-absent from what it lists, and a call that names one is refused with the rule and
-the remedy, never with any of its content.</p>
-<p>A configured account works in its own projects whatever its working directory:
-its sessions, and any call nothing else places, land in its <strong>home</strong> project - its
-first sealed project, else its first shared one. It never grows the repo map. The
-owner opening a repository whose project is sealed to another account gets a
-one-line notice in place of a briefing, and no session.</p>
-<p>The console belongs to the owner: a configured account gets <code>403</code>, and the
-owner's console shows no project sealed to another account - not in a list, a
-count's detail, a search, a chart, the event log or the live feed.</p>
-<p>Sealing works with isolation rather than replacing it: every sealed project must
-also be <code>confidential</code> or <code>sealed</code>, which keeps it standalone (no family, no
-parent) and inside the existing fences between agents.</p>
+<p>For the owner, the rule is simple. Every project that is not locked behaves
+exactly as it does without peer_auth, isolation fences included. A locked
+project is closed to every owner request: its name, description, isolation and
+item counts show, nothing inside it does, and writes into it are refused,
+unless the request rides a socket connection whose process holds a live
+<a href="#leases-and-the-process-tree">lease</a>. A TCP request never holds one, because a
+shared key cannot be tied to one process.</p>
+<p>&quot;Closed&quot; means every surface: recall, briefings, the prompt matcher, every MCP
+tool by name or by id, tasks, trials, sessions, the gardener's proposals, the
+hooks, A2A, the console and its live feed. A call that names a locked project is
+refused with the rule and the remedy, never with any of its content. A <code>recall</code>
+that names no project answers from the rest of its scope and says
+<code>&lt;project&gt; (locked) may hold results</code>; <code>project_list</code> lists the project with the
+way in.</p>
 <h2 id="configure-it">Configure it</h2>
 <div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">peer_auth</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
@@ -348,30 +360,36 @@ parent) and inside the existing fences between agents.</p>
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">socket</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l">/opt/seamless/run/seamlessd.sock</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;0666&#34;</span><span class="w">                    </span><span class="c"># who may knock; the kernel still names each one</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">users</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">_payroll</span><span class="p">:</span><span class="w">                       </span><span class="c"># an OS user name, or a numeric uid</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">sealed</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">payroll]            </span><span class="w"> </span><span class="c"># reachable only from _payroll</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">_ops_bot</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">projects</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">ops]              </span><span class="w"> </span><span class="c"># shared: _ops_bot and the owner both reach it</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">locked</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">example-finance]        </span><span class="w"> </span><span class="c"># each must be confidential or sealed</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">max_lease</span><span class="p">:</span><span class="w"> </span><span class="l">8h                    </span><span class="w"> </span><span class="c"># optional: caps every approval, at most 24h</span><span class="w">
 </span></span></span></code></pre></div>
-<p>Checked when the file loads. The <code>users</code> map always, whether or not <code>enabled</code>
-is set: a project sealed to two accounts, a project sealed to one account and
-listed for another, a project listed twice for one account, the global scope or
-the reserved <code>all</code> listed, and an account reaching nothing. With <code>enabled</code> set,
-also: the owner is named and not listed under <code>users</code>, the socket path is
-absolute and outside <code>data_dir</code>, and the mode is octal and keeps owner read and
-write.</p>
+<p>Every key is in <a href="../../reference/configuration/#peer-auth">the configuration reference</a>.</p>
+<p>Checked when the file loads, whether or not <code>enabled</code> is set: <code>locked</code> names
+real projects, never the global scope, and none twice; <code>restricted</code> is listed
+only with <code>enabled</code> set, and never names the owner or the same account twice;
+<code>max_lease</code> and <code>passkeys</code> are well formed. With <code>enabled</code> set, also: the owner
+is named, the socket path is absolute and outside <code>data_dir</code>, and the mode is
+octal and keeps owner read and write.</p>
 <p>Checked when <code>serve</code> starts, and refused if any fails:</p>
 <ul>
 <li>every account resolves on this machine (macOS role accounts live in the
 directory service, and are found there), and no two entries share a uid;</li>
-<li>every project the block names exists - a misspelled seal would leave the
+<li>every project the block names exists - a misspelled lock would leave the
 project it meant open, which is exactly what this feature exists to prevent;</li>
-<li>every sealed project is <code>confidential</code> or <code>sealed</code>;</li>
+<li>every locked project is <code>confidential</code> or <code>sealed</code>;</li>
 <li>the files would hold too (the next section).</li>
 </ul>
 <p><code>seamlessd doctor</code>, run as the daemon's account against the daemon's config,
 prints the policy as it resolved and every reason <code>serve</code> would refuse.</p>
+<p><strong>Coming from <code>peer_auth.users</code>.</strong> A config with a non-empty <code>users</code> map is
+refused when it loads, even while peer_auth is disabled, with:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">config: peer_auth.users was the 2026-10-31 design, which sealed projects to other OS accounts, and is no longer supported: list the projects under peer_auth.locked and remove users
+</span></span></code></pre></div>
+<p>That map reserved projects for other OS accounts, and you could never reach them.
+It is gone. List those projects under <code>peer_auth.locked</code>, keep each one
+<code>confidential</code> or <code>sealed</code>, delete <code>users</code>, and restart. An account that was
+listed there is then refused at the socket unless you list it under
+<code>peer_auth.restricted</code>, which reaches only open projects that are not locked.</p>
 <h2 id="deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</h2>
 <p>The data directory holds every project's memory in plain files and a SQLite
 database. If the daemon runs as you, every process of yours reads them. So with
@@ -389,8 +407,7 @@ a directory you own anywhere above the data is one you can rename it out of;</li
 account and are not group- or world-writable: whoever can rewrite either can
 switch the boundary off at the next start.</li>
 </ul>
-<p>A layout that satisfies all of it (macOS shown; Linux is the same with
-<code>useradd --system</code> and a systemd unit):</p>
+<p>A layout that satisfies all of it:</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -404,19 +421,19 @@ switch the boundary off at the next start.</li>
 <tbody>
 <tr>
 <td><code>/opt/seamless</code></td>
-<td><code>root:wheel</code></td>
+<td>root</td>
 <td><code>0755</code></td>
 <td></td>
 </tr>
 <tr>
 <td><code>/opt/seamless/bin</code></td>
-<td><code>root:wheel</code></td>
+<td>root</td>
 <td><code>0755</code></td>
 <td><code>seamlessd</code>, <code>seam</code> (both <code>0755</code>, root's)</td>
 </tr>
 <tr>
 <td><code>/opt/seamless/etc</code></td>
-<td><code>root:wheel</code></td>
+<td>root</td>
 <td><code>0755</code></td>
 <td><code>seamless.yaml</code> (<code>root:_seamless</code>, <code>0640</code>)</td>
 </tr>
@@ -441,8 +458,8 @@ switch the boundary off at the next start.</li>
 </tbody>
 </table>
 </div>
-<p>Create the account (macOS, as an administrator; pick an unused uid in the role
-range - <code>dscl . -list /Users UniqueID</code> lists the taken ones):</p>
+<p>Create the account. On macOS, as an administrator, pick an unused uid in the
+role range (<code>dscl . -list /Users UniqueID</code> lists the taken ones):</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo dscl . -create /Groups/_seamless PrimaryGroupID <span class="m">480</span>
 </span></span><span class="line"><span class="cl">sudo dscl . -create /Users/_seamless UniqueID <span class="m">480</span>
 </span></span><span class="line"><span class="cl">sudo dscl . -create /Users/_seamless PrimaryGroupID <span class="m">480</span>
@@ -451,52 +468,345 @@ range - <code>dscl . -list /Users UniqueID</code> lists the taken ones):</p>
 </span></span><span class="line"><span class="cl">sudo dscl . -create /Users/_seamless Password <span class="s1">&#39;*&#39;</span>
 </span></span><span class="line"><span class="cl">sudo dscl . -create /Users/_seamless IsHidden <span class="m">1</span>
 </span></span></code></pre></div>
-<p>The service is a LaunchDaemon that names the account (on Linux, a system unit
-with <code>User=</code>), so it runs whether or not anyone is logged in. The plist, its
-controls, and how to retire the per-user service first are in
-<a href="../../reference/service/#peer-auth-daemon">the service reference</a>.</p>
+<p>On Linux:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo useradd --system --user-group --shell /usr/sbin/nologin --home-dir /opt/seamless/home _seamless
+</span></span></code></pre></div>
+<p>Then the layout (<code>root</code>'s group is <code>wheel</code> on macOS, <code>root</code> on Linux). Leave
+out <code>/opt/seamless/data</code> when you are <a href="#move-an-existing-install-over">moving an existing install</a>,
+whose data directory arrives there as a whole:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo install -d -o root -g wheel -m <span class="m">0755</span> /opt/seamless /opt/seamless/bin /opt/seamless/etc
+</span></span><span class="line"><span class="cl">sudo install -d -o _seamless -g _seamless -m <span class="m">0700</span> /opt/seamless/home /opt/seamless/data
+</span></span><span class="line"><span class="cl">sudo install -d -o _seamless -g _seamless -m <span class="m">0755</span> /opt/seamless/run
+</span></span></code></pre></div>
+<p>The service runs as that account whether or not anyone is logged in. On macOS
+it is a LaunchDaemon: the plist, its controls, and how to retire the per-user
+service first are in <a href="../../reference/service/#peer-auth-daemon">the service reference</a>.
+On Linux it is a system unit, <code>/etc/systemd/system/seamless-daemon.service</code>:</p>
+<div class="code-block" data-lang="ini"><pre class="chroma"><code><span class="line"><span class="cl"><span class="k">[Unit]</span>
+</span></span><span class="line"><span class="cl"><span class="na">Description</span><span class="o">=</span><span class="s">Seamless daemon (peer_auth)</span>
+</span></span><span class="line"><span class="cl"><span class="na">After</span><span class="o">=</span><span class="s">network.target</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">[Service]</span>
+</span></span><span class="line"><span class="cl"><span class="na">User</span><span class="o">=</span><span class="s">_seamless</span>
+</span></span><span class="line"><span class="cl"><span class="na">Group</span><span class="o">=</span><span class="s">_seamless</span>
+</span></span><span class="line"><span class="cl"><span class="na">UMask</span><span class="o">=</span><span class="s">0077</span>
+</span></span><span class="line"><span class="cl"><span class="na">Environment</span><span class="o">=</span><span class="s">SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml</span>
+</span></span><span class="line"><span class="cl"><span class="na">Environment</span><span class="o">=</span><span class="s">HOME=/opt/seamless/home</span>
+</span></span><span class="line"><span class="cl"><span class="na">ExecStart</span><span class="o">=</span><span class="s">/opt/seamless/bin/seamlessd serve</span>
+</span></span><span class="line"><span class="cl"><span class="na">Restart</span><span class="o">=</span><span class="s">always</span>
+</span></span><span class="line"><span class="cl"><span class="na">RestartSec</span><span class="o">=</span><span class="s">10</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">[Install]</span>
+</span></span><span class="line"><span class="cl"><span class="na">WantedBy</span><span class="o">=</span><span class="s">multi-user.target</span>
+</span></span></code></pre></div>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo systemctl daemon-reload
+</span></span><span class="line"><span class="cl">sudo systemctl <span class="nb">enable</span> --now seamless-daemon
+</span></span></code></pre></div>
+<p>Retire any per-user service first, or it starts again at your next login
+(<a href="../../reference/service/#peer-auth-daemon">how</a>).</p>
 <h2 id="connect-the-owner">Connect the owner</h2>
-<p>Nothing changes for the owner's agents. They keep the TCP listener and the bearer
-key, and they are the owner: every project except the sealed ones. Their config
-becomes a client's, because the owner's account no longer runs the daemon - and a
-server-role config there would have <code>seamlessd doctor</code> open (and create) a
-database in the owner's home:</p>
+<p>Your agents connect through the socket: a locked project opens only to a process
+the kernel names, which a TCP connection never is. Your config becomes a
+client's, because your account no longer runs the daemon - and a server-role
+config there would have <code>seamlessd doctor</code> open (and create) a database in your
+home:</p>
 <div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">client</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;unix:///opt/seamless/run/seamlessd.sock&#34;</span><span class="w">
+</span></span></span></code></pre></div>
+<p>No key: the daemon names the caller by its uid. Then install the hooks and MCP
+registration:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd install-hooks --client claude    <span class="c1"># or codex, or all</span>
+</span></span></code></pre></div>
+<p>With a socket <code>server_url</code> every hook is a <code>seam hook &lt;event&gt;</code> command (Claude
+Code's own http hook cannot dial a socket), and the MCP registration is the
+<code>seam mcp-proxy</code> stdio bridge. Under peer_auth the
+<a href="#what-changes-with-peer-auth-on">daemon reads no agent files</a>, so <code>seam hook</code>
+reads them and sends what it found.</p>
+<p>The console still needs TCP and the bearer key: a browser cannot dial a socket,
+and <code>seamlessd console-open</code> refuses a socket <code>server_url</code> with instructions.
+Keep the daemon's key in a second config of your own, used only for the console,
+and name it when you open the console:</p>
+<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="c"># ~/.config/seamless/console.yaml, mode 0600</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">client</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;http://127.0.0.1:8081&#34;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">mcp</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;&lt;the same key as the daemon&#39;s config&gt;&#34;</span><span class="w">
 </span></span></span></code></pre></div>
-<p>The owner can use the socket instead (<code>server_url: unix:///opt/seamless/run/seamlessd.sock</code>, no key): same principal, no key on disk.
-The console still needs TCP - a browser cannot dial a socket.</p>
-<h2 id="connect-a-sealed-accounts-agents">Connect a sealed account's agents</h2>
-<p>An agent for a sealed system runs <strong>as that system's account</strong>. That is also how
-a person works on the system with its memory: they run the session as the
-account, with <code>sudo -u</code>, and their own account's sessions cannot reach it.</p>
-<p>The account's config, in its own home (<code>~/.config/seamless/seamless.yaml</code>, mode
-<code>0600</code>):</p>
-<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">client</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;unix:///opt/seamless/run/seamlessd.sock&#34;</span><span class="w">
-</span></span></span></code></pre></div>
-<p>No key: the daemon names the caller by its uid. Then install its hooks and MCP
-registration, as the account:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _payroll -H /opt/seamless/bin/seamlessd install-hooks --client claude <span class="se">\
-</span></span></span><span class="line"><span class="cl">  --seam /opt/seamless/bin/seam
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>~/.config/seamless/console.yaml seamlessd console-open
 </span></span></code></pre></div>
-<p>With a socket <code>server_url</code> every hook is a <code>seam hook &lt;event&gt;</code> command (Claude
-Code's own http hook cannot dial a socket) and the MCP registration is the <code>seam mcp-proxy</code> stdio bridge. If you write them by hand, the account's
-<code>~/.claude/settings.json</code> hook entries look like:</p>
-<div class="code-block" data-lang="json"><pre class="chroma"><code><span class="line"><span class="cl"><span class="p">{</span><span class="nt">&#34;type&#34;</span><span class="p">:</span> <span class="s2">&#34;command&#34;</span><span class="p">,</span> <span class="nt">&#34;command&#34;</span><span class="p">:</span> <span class="s2">&#34;/opt/seamless/bin/seam&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl"> <span class="nt">&#34;args&#34;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&#34;hook&#34;</span><span class="p">,</span> <span class="s2">&#34;session-start&#34;</span><span class="p">,</span> <span class="s2">&#34;--config&#34;</span><span class="p">,</span> <span class="s2">&#34;/home/of/_payroll/.config/seamless/seamless.yaml&#34;</span><span class="p">]}</span>
+<p>On a daemon that locks a project, <code>console-open</code> signs in on the passkey origin
+the daemon names (<code>http://localhost:&lt;port&gt;</code> by default) instead of <code>127.0.0.1</code>:
+the console's cookie belongs to one host, and browsers refuse passkeys on an IP
+address.</p>
+<p>If your agents would write scripts over the data directory, tell them to use the
+tools or <code>seam ... --json | jq</code> instead:
+<a href="../../guides/integrate-your-agent/#optional-tell-your-agent-where-to-read-from">integrate your agent</a>
+has the line to paste. Under peer_auth the directory is out of their reach
+either way.</p>
+<h2 id="enroll-an-approver">Enroll an approver</h2>
+<p>An approver credential is what signs your approval: a passkey, or a Touch ID
+key. None is required: the terminal path below always works, and
+<code>seamlessd doctor</code> warns only that it is the one path left. Enrolling needs the
+daemon running with a project locked (or read grants on), so do it after the
+<a href="#move-an-existing-install-over">cutover</a>.</p>
+<p>A first credential needs a one-time enrollment code, and only the daemon's
+account can mint one; no route, over the socket or with the TCP key, can. A code
+works once, for 10 minutes, and only its hash is stored. <code>seamlessd approvers</code>
+also lists credentials and removes them, and <code>reset --yes</code> drops every credential
+and revokes every live lease
+(<a href="../../reference/cli-seamlessd/#seamlessd_approvers">reference</a>).</p>
+<p><strong>Passkeys</strong> work with hardware keys, phones and password managers:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -k -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml <span class="se">\
+</span></span></span><span class="line"><span class="cl">  /opt/seamless/bin/seamlessd approvers enroll-code passkey
 </span></span></code></pre></div>
-<p>one per event (session-start, user-prompt-submit, session-end, post-tool-use,
-subagent-start, subagent-stop, permission-request), and its <code>~/.claude.json</code>
-MCP server is:</p>
-<div class="code-block" data-lang="json"><pre class="chroma"><code><span class="line"><span class="cl"><span class="s2">&#34;seamless&#34;</span><span class="err">:</span> <span class="p">{</span><span class="nt">&#34;type&#34;</span><span class="p">:</span> <span class="s2">&#34;stdio&#34;</span><span class="p">,</span> <span class="nt">&#34;command&#34;</span><span class="p">:</span> <span class="s2">&#34;/opt/seamless/bin/seam&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">             <span class="nt">&#34;args&#34;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&#34;mcp-proxy&#34;</span><span class="p">,</span> <span class="s2">&#34;--config&#34;</span><span class="p">,</span> <span class="s2">&#34;/home/of/_payroll/.config/seamless/seamless.yaml&#34;</span><span class="p">]}</span>
+<p>Open <code>/console/approvers</code> on the passkey origin in your browser and enter the
+code there. The origin is <code>http://localhost:&lt;port&gt;</code> unless <code>peer_auth.passkeys</code>
+says otherwise, and browsers refuse passkeys on <code>127.0.0.1</code>. A later passkey can
+be approved by one already enrolled instead of a code. A passkey is bound to its
+<code>rp_id</code> for life: changing <code>rp_id</code> later strands every passkey enrolled under the
+old one.</p>
+<p><strong>Touch ID on a Mac</strong> (optional) goes through Seamless Approve, a small macOS app
+that approves a request with Touch ID, an Apple Watch or the login password. A
+default install neither contains nor launches it, and Linux and Windows never
+see it. In your own terminal, with <code>server_url</code> naming the socket:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam touchid enroll
 </span></span></code></pre></div>
-<p>Then run the session as the account: <code>sudo -u _payroll -H claude</code>. The account
-needs its own Claude Code sign-in, and its own copy of anything the session
-reads - it cannot traverse your home directory, which is the point.</p>
+<p>It installs your <code>seam</code>'s own release of the app
+(<code>seamless-approve_&lt;version&gt;_darwin.zip</code>, checked against the release's signed
+<code>checksums.txt</code> and against Apple's signature) at
+<code>~/Applications/Seamless Approve.app</code>, and prints the command that mints its
+code, to run in another terminal. Details, including how the app is checked and
+how a Mac re-enrolls, are in the
+<a href="../../reference/cli-seam/#seam_touchid_enroll">CLI reference</a>.</p>
+<p>The app takes nothing from its command line but the socket and the request. It
+reads the request's facts and challenge from the daemon over the socket, refuses
+a socket served by your own account or by any account but the one the daemon
+names, and shows only the daemon's facts in the Touch ID prompt: the grant first,
+then the first three warnings. The agent's own reason is left out of that prompt
+on purpose. Its key is made in the Mac's Secure Enclave and kept in the data
+protection keychain under an access group only the signed app can claim, so
+another program running as you cannot sign with it, even behind a prompt of its
+own.</p>
+<p>To build the app yourself you need macOS and Xcode's command-line tools.
+<code>make approver-test</code> runs its unit tests (no keychain, no prompt); <code>make approver</code>
+builds <code>bin/approver/Seamless Approve.app</code>, ad-hoc signed, and that build has no
+key store and says so. A usable build needs an Apple Developer account, an
+explicit macOS App ID <code>com.arctop.seamless.approve</code>, and a Developer ID
+provisioning profile for it whose keychain group covers the app's:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nv">APPROVER_SIGN_IDENTITY</span><span class="o">=</span>&lt;identity hash&gt; <span class="nv">APPROVER_TEAM_ID</span><span class="o">=</span>&lt;team id&gt; <span class="nv">APPROVER_PROFILE</span><span class="o">=</span>&lt;file&gt; make approver
+</span></span><span class="line"><span class="cl">seam touchid enroll --app <span class="s2">&#34;bin/approver/Seamless Approve.app&#34;</span>
+</span></span></code></pre></div>
+<p><code>scripts/approver/notarize.sh</code> notarizes and staples a Developer ID build
+(<code>APPROVER_NOTARY_KEY</code>, <code>APPROVER_NOTARY_KEY_ID</code>, <code>APPROVER_NOTARY_ISSUER_ID</code>). A
+source or prerelease <code>seam</code> has no release of the app to fetch: pass <code>--app</code> with
+a downloaded zip or a local build.</p>
+<h2 id="requests">Requests</h2>
+<p>When an agent reaches a locked project without a lease, Seamless files an access
+request, and the refusal says so. Asking needs no privilege, and the daemon, not
+the agent, supplies the facts you will see.</p>
+<ul>
+<li><strong>A call refused at the lock</strong> files one by itself, on the socket: a tool call
+that names the project, or that resolves its scope or session through a session
+recorded in it.</li>
+<li><strong>A session starting in the project's repository</strong> is recorded there, its name,
+cwd and model only, and the SessionStart hook files the request and answers with
+the <a href="../../reference/hooks/">locked notice</a> instead of a briefing. The project's
+briefing arrives with the first Seamless tool result after the approval, once
+per lease, even across a daemon restart.</li>
+<li><strong>The agent can ask ahead</strong>, with the <code>access_request</code> tool (present only on a
+daemon that locks a project) or <code>seam access request &lt;project&gt; --reason &quot;...&quot;</code>
+from its own shell. The reason is at most 200 characters, and you see it quoted
+and labeled as the agent's own words.</li>
+</ul>
+<p><code>access_request</code>, and <code>seam access request --json</code>, answer with <code>filed</code> (true
+when this call filed a new request, false when it found one waiting or the agent
+already holds the access) and <code>reason</code> (<code>added</code>, <code>kept</code> or <code>none</code>). The rest of
+the behavior is the same for every path:</p>
+<ul>
+<li>A request waits 15 minutes for your decision. One request waits per agent and
+project: asking again finds it, and an explicit reason fills in a waiting
+request's missing one.</li>
+<li>After you deny one, the agent's next refused call says you denied it, and when,
+and files nothing: a refused call never asks you again behind your back. Its
+explicit request always files a new one, which is how it asks once you have
+told it what to ask for.</li>
+<li>An agent that already holds the access it asks for is answered with it, and
+nothing is filed, until 30 minutes before it ends. From then on an explicit
+request files a <strong>refresh</strong>. A refresh carries the reason it was given; given
+none it shows &quot;(no reason given)&quot;, and a later explicit reason fills that blank.
+Approving a refresh replaces the lease.</li>
+</ul>
+<p><strong>Requests name agents, not shells.</strong> A lease covers a process and everything it
+started, so a lease on a tmux server would open the project to every program in
+every pane, other agent sessions included. Seamless therefore files a request
+only for an agent: Claude Code, Codex, the Claude app's per-server wrapper, a
+process with one of those above it in the kernel-verified chain, or the JavaScript
+runtime a live session's hook stamped (Claude Code installed with npm runs as
+<code>node</code>). A process with no agent above it - <code>seam</code> run by hand in a tmux pane, a
+script from a login shell - is refused with the rule and this remedy: run the
+work from an agent session, which asks for itself. A shell, a multiplexer, a
+terminal or an editor that hosts terminals, a login process, the system's
+process manager, or any other application's own executable is never named by a
+request and never approved, on any path; deny one an older daemon filed. A
+session starting in a locked repository under such a process is not recorded at
+all.</p>
+<p><strong>What you are shown.</strong> Every approval surface shows the daemon's facts - the
+project, its isolation and the access asked for, the agent the daemon names, its
+pid and uid, the session and model, the working directory, whether this is a
+first request or a refresh, and until when it waits - with the agent's reason
+quoted and labeled as its own. Warnings come first, most serious first:</p>
+<ol>
+<li>the asking process is a broad process, on a request an older daemon filed (an
+approval will be refused);</li>
+<li>for a read grant, the project's content may be copied into the asking
+project's memories;</li>
+<li>the session read text from outside (a web page, a file it was handed), so its
+reason may not be its own;</li>
+<li>the same agent is also asking for another project;</li>
+<li>the session works outside the project's repository;</li>
+<li>no session names the agent, so its cwd and model are unknown;</li>
+<li>the agent already holds a lease on the project, and approving replaces it.</li>
+</ol>
+<p>The facts carry a digest. When any of them changes before you decide (a reason
+filled in, a new mark on the session, another request from the same agent), the
+approval is refused and you look again.</p>
+<h2 id="approve-three-paths-one-core">Approve: three paths, one core</h2>
+<p>Every path ends in the same check: the facts you saw still hold, the proof is
+valid, and the lease is written once, bound to the request. Answering a dialog is
+never the approval, because any process of your account, or a client hook, could
+answer one.</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>The proof</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The dialog in the agent's session</td>
+<td>Touch ID, or a passkey on the request's page</td>
+<td>the agent's client, on the socket</td>
+</tr>
+<tr>
+<td><code>seam approve</code></td>
+<td><code>sudo -k</code> to the daemon's account, every time</td>
+<td>your own terminal</td>
+</tr>
+<tr>
+<td>The passkey page</td>
+<td>a passkey</td>
+<td>the request's console page, in your browser</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>The dialog.</strong> When the agent's client declared MCP elicitation on the socket
+and a proof can finish in the dialog, a refused call (or <code>access_request</code>) shows
+you the request's facts, warnings first, in the client itself: Claude Code shows
+it, and so do Codex builds that declare form elicitation. You choose a duration
+and Touch ID or a passkey. Touch ID runs the Seamless Approve app, which reads the
+facts from the daemon and signs over the request, the facts' digest, the access
+and the duration. A passkey opens the request's page for the duration you chose,
+and it signs the duration and the facts' digest too, so a tampered duration fails
+verification. Where a passkey is the only way the dialog can finish, the dialog
+is that page.</p>
+<p>The call waits up to 110 seconds from its start, then answers with the request
+still pending for the paths below. Declining or dismissing denies nothing, and an
+agent's connection cannot deny at all: the request waits for you. Cancelling the
+Touch ID prompt, or the helper closing or being killed after it was seen, ends the
+wait at once, the request still pending. There is at most one dialog per request
+per connection, and it survives a daemon restart: the daemon keeps a connection's
+declared dialog modes, for clients on the socket only and only while a lock or
+read grants are configured, until the connection has gone unused for 30 days. An
+agent connected before the release that keeps them shows the plain refusal until
+its next initialize.</p>
+<p><strong><code>seam approve</code>.</strong> In your own terminal (it refuses without one, so an agent
+cannot use it), <code>seam approve</code> lists what is waiting and shows the facts, asks for
+a duration, and commits the decision with <code>sudo -k -u &lt;daemon account&gt; seamlessd approve</code>. The <code>sudo -k</code> asks for your Touch ID or password every time, and
+becoming the daemon's account is the proof. Typing <code>deny</code> in full at the
+duration question, or <code>d</code> at the confirmation, denies. <code>seam approve --watch</code>
+prints each new request and raises a notification. Every flag and message is in
+<a href="../../reference/cli-seam/#seam_approve">the CLI reference</a>.</p>
+<p><strong>The passkey page.</strong> <code>/console/access/&lt;id&gt;</code> shows the request's facts; choose a
+duration and sign with an enrolled passkey (<code>seam approve --passkey</code> opens it, and
+<code>--for</code> chooses the duration, which the page then shows read-only). The page
+denies without a passkey. <code>/console/access</code> lists every waiting request, every
+live lease with <strong>Revoke</strong>, and every console unlock with <strong>Lock again</strong>.</p>
+<p><strong>Which paths a refusal offers, and when.</strong> Every remedy offers only the paths this
+daemon has for this call:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Offered when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>seam approve &lt;id&gt;</code> in your terminal</td>
+<td>always</td>
+</tr>
+<tr>
+<td>Touch ID in the approval dialog</td>
+<td>a Touch ID key is enrolled, and the client declared form elicitation on the socket. The SessionStart notice runs before MCP connects, so it offers Touch ID to Claude Code, and to Codex with &quot;if this Codex shows one&quot;</td>
+</tr>
+<tr>
+<td>A passkey at the request's page</td>
+<td>passkeys are set up and at least one is enrolled</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A call over the TCP key, whose bearer key can never hold a lease, is told to work
+from an agent session on the socket instead, and no request is filed. Once a dialog
+ends with the request still pending, the remedy says how it ended and which paths
+are left.</p>
+<p>The durations are: until the session ends (the default, at most
+<code>peer_auth.max_lease</code>), 1 hour, or 4 hours, each capped by <code>max_lease</code>.</p>
+<h2 id="leases-and-the-process-tree">Leases and the process tree</h2>
+<p>An approval is a <strong>lease</strong> on one agent process. It covers that process and every
+process it started: the MCP bridge, <code>seam</code> commands, the hooks and the agent's own
+scripts share one approval, and nothing outside the tree does.</p>
+<p>The daemon learns the tree from the kernel alone. At accept it reads which process
+opened the socket connection (the audit token on macOS, <code>SO_PEERCRED</code> and a pidfd
+on Linux) and pins that pid to the process, so a later walk can tell it from one
+that reused the pid. Per request it walks the parent chain from there, verifying
+every link. A link that does not verify ends the chain, so an orphan reparented to
+init, or a reused pid, reaches nothing above it. Nothing the client sends, the
+self-reported agent-process header included, enters the chain. Only the owner's
+socket connections can hold a lease; a TCP request never can.</p>
+<p>A lease ends at its expiry, when its session ends (<code>session_end</code>, or the client's
+own session-end hook), when you Revoke it on <code>/console/access</code>, when you run
+<code>seamlessd approvers reset --yes</code>, or when the database is restored from a
+snapshot (a rollback or <code>seamlessd import</code>). Nothing extends one silently. From 30
+minutes before it ends, every tool result and hook injection says when it ends and
+how to ask again.</p>
+<p>A console unlock is separate. A browser opens a locked project with
+<code>/console/unlock/&lt;project&gt;</code> and a passkey, or with
+<code>sudo -k -u _seamless seamlessd console-open --unlock &lt;project&gt;</code> from the terminal,
+for at most three hours (less when <code>max_lease</code> is shorter). It is a cookie in that
+one browser, never a lease, and it never opens the project to an agent. A locked
+plan or session page in the console takes you to that unlock page.</p>
+<h2 id="read-grants-and-the-advisory-tier">Read grants and the advisory tier</h2>
+<p><a href="../../concepts/project-isolation/#asking-for-access">Read grants</a>
+(<code>isolation.requests: true</code>) turn a read refused at a confidential project's fence
+into a request. A grant is read-only, one project, for a limited time, and never
+involves a <code>sealed</code> project on either side.</p>
+<p>Under peer_auth a grant is bound to the asking agent's process tree, as a lease is,
+and takes the same proofs: <code>seam approve</code>, a passkey or a Touch ID key. Without
+peer_auth the approval is <strong>advisory</strong>. <code>seam approve</code> asks for a y/N in a terminal
+and commits over the console with the bearer key, and the console's Approve does
+the same, so any process that holds the key can approve a request, its own
+included. The holder of an advisory grant is also the session a call speaks for,
+which is self-reported: an agent that rebinds with <code>session_start</code>, or names another
+session with <code>session=</code>, writes where that session may, past the grant's write
+confinement. Under peer_auth the holder is the process tree, and the same moves are
+refused. Use the advisory tier to keep an agent from wandering into a confidential
+project, not against one set on it.</p>
 <h2 id="restricted-local-accounts">Restricted local accounts</h2>
 <p>A <strong>restricted local account</strong> is a second OS account on the machine whose
 agents work beside yours: a separate login for unattended agents, say, so that
@@ -540,9 +850,17 @@ no leases, so nothing it does can open a locked or confidential project.</p>
 </ul>
 <p>It is known only through the socket. The kernel names it by its uid, exactly as
 it names you; it never holds the bearer key, and a TCP request is always yours.
-Its client config is a sealed account's (above): <code>server_url: unix:///opt/seamless/run/seamlessd.sock</code> and no key, with hooks and the MCP
-bridge installed as the account. Keep the socket outside every home directory:
-the account cannot traverse yours.</p>
+Its config lives in its own home (<code>~/.config/seamless/seamless.yaml</code>, mode <code>0600</code>):</p>
+<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">client</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;unix:///opt/seamless/run/seamlessd.sock&#34;</span><span class="w">
+</span></span></span></code></pre></div>
+<p>No key. Then install its hooks and MCP bridge as the account, and run the session
+as the account (<code>sudo -u _example_agent -H claude</code>). The account needs its own
+Claude Code sign-in and its own copy of anything the session reads:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _example_agent -H /opt/seamless/bin/seamlessd install-hooks --client claude <span class="se">\
+</span></span></span><span class="line"><span class="cl">  --seam /opt/seamless/bin/seam
+</span></span></code></pre></div>
+<p>Keep the socket outside every home directory: the account cannot traverse yours.</p>
 <p><strong>Everything it writes is labeled.</strong> Memories, notes, tasks and their updates,
 plan steps, sessions and their findings, and trials record the account that
 wrote them, and every surface shows it: &quot;[written by account _example_agent]&quot;
@@ -578,50 +896,15 @@ you use for them. You cannot start a session of your own under a name beginning
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="c1"># As root or the daemon&#39;s account: the policy, and nothing serve would refuse.</span>
 </span></span><span class="line"><span class="cl">sudo -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd doctor
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># As the owner: the files are out of reach, and so is the sealed project.</span>
-</span></span><span class="line"><span class="cl">ls /opt/seamless/data                         <span class="c1"># Permission denied</span>
-</span></span><span class="line"><span class="cl">seam recall something --project payroll      <span class="c1"># refused: not reachable from this connection</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># As the sealed account: its own project, and the global scope.</span>
-</span></span><span class="line"><span class="cl">sudo -u _payroll -H /opt/seamless/bin/seam doctor
-</span></span><span class="line"><span class="cl">sudo -u _payroll -H /opt/seamless/bin/seam recall something
+</span></span><span class="line"><span class="cl"><span class="c1"># As the owner: the files are out of reach, and the lock holds.</span>
+</span></span><span class="line"><span class="cl">ls /opt/seamless/data                               <span class="c1"># Permission denied</span>
+</span></span><span class="line"><span class="cl">seam recall something --project example-finance     <span class="c1"># refused at the lock</span>
 </span></span><span class="line"><span class="cl">
 </span></span><span class="line"><span class="cl"><span class="c1"># As any other account: refused at the door.</span>
 </span></span><span class="line"><span class="cl">curl --unix-socket /opt/seamless/run/seamlessd.sock http://localhost/healthz   <span class="c1"># 403</span>
 </span></span></code></pre></div>
-<h2 id="move-an-existing-install-over">Move an existing install over</h2>
-<p>The data directory moves as a whole; the database stores paths relative to it,
-so nothing inside needs rewriting. On one volume the move is a rename.</p>
-<ol>
-<li><strong>Seal first, in the old world.</strong> Make each sealed project <code>confidential</code> or
-<code>sealed</code> (<code>seam project isolation &lt;slug&gt; confidential --yes</code>) and run
-<code>seamlessd doctor</code> with the new config to catch a misspelled slug.</li>
-<li><strong>Back up</strong>, as the owner, while the old daemon still serves:
-<code>seamlessd export -o ~/seamless-before-peer-auth.tar.gz</code>. The archive holds
-every project, the sealed ones included - keep it where the sealed accounts'
-data would be kept.</li>
-<li><strong>Create the account and the layout</strong> above, and install root-owned copies of
-both binaries in <code>/opt/seamless/bin</code>.</li>
-<li><strong>Write the daemon's config</strong> at <code>/opt/seamless/etc/seamless.yaml</code>
-(<code>root:_seamless 0640</code>): the owner's old config with <code>data_dir: /opt/seamless/data</code>, the <code>peer_auth</code> block, and the same <code>mcp.api_key</code> and LLM
-keys.</li>
-<li><strong>Stop the old service and move the data</strong>: stop and remove the per-user
-service (<a href="../../reference/service/#peer-auth-daemon">how</a>), then
-<code>sudo mv ~/.seamless /opt/seamless/data</code>,
-<code>sudo chown -R _seamless:_seamless /opt/seamless/data</code> and
-<code>sudo chmod -R go-rwx /opt/seamless/data</code>.</li>
-<li><strong>Start the daemon</strong>: install and load
-<a href="../../reference/service/#peer-auth-daemon">the LaunchDaemon</a>, then
-<code>curl -s http://127.0.0.1:8081/healthz</code> and the doctor line above.</li>
-<li><strong>Switch the owner's config</strong> to the client config above.</li>
-<li><strong>Wire each sealed account</strong> as described above, and verify.</li>
-</ol>
-<h3 id="roll-back">Roll back</h3>
-<p>Unload the LaunchDaemon (<a href="../../reference/service/#peer-auth-daemon">how</a>), move the
-data back (<code>sudo mv /opt/seamless/data ~/.seamless</code> and <code>sudo chown -R $(id -un):staff ~/.seamless</code>), restore the owner's server config without the
-<code>peer_auth</code> block - a release that predates it refuses the key - and reinstall
-the per-user service (<code>make install</code>, or the installer). The export from step 2
-is the fallback if anything in the move went wrong.</p>
+<p>Then start an agent in the locked project's repository: its session starts with
+the locked notice, and <code>seam approve</code> in your own terminal shows its request.</p>
 <h2 id="what-changes-with-peer-auth-on">What changes with peer_auth on</h2>
 <ul>
 <li><strong>The daemon reads no agent files; your hooks do.</strong> Under peer_auth every
@@ -638,21 +921,84 @@ recorded; nothing is retried, and the next capture after the approval
 carries the current state. Agents on the TCP key make none of these
 captures; point their <code>server_url</code> at the socket. Agents can still record
 findings with <code>session_end</code>.</li>
-<li><strong>Updates are an administrator's step.</strong> A LaunchDaemon install is not one the
-installer made, so the daemon only notifies; replace <code>/opt/seamless/bin</code> with
-<code>sudo</code> and restart it. Run <code>make install</code> only with a client-role config, so it
-updates your own <code>seam</code> and hooks and leaves the service alone.</li>
+<li><strong>Updates are an administrator's step.</strong> A LaunchDaemon or system-unit install
+is not one the installer made, so the daemon only notifies; replace
+<code>/opt/seamless/bin</code> with <code>sudo</code> and restart it. Run <code>make install</code> only with a
+client-role config, so it updates your own <code>seam</code> and hooks and leaves the
+service alone.</li>
 <li><strong>Counts stay machine-wide in <code>usage_summary</code></strong>, as they are for isolation:
 volume, never content, and the same number for every caller.</li>
-<li><strong>The boundary is the OS account.</strong> Root, and anyone who can become the
-daemon's account or a sealed account, reads everything; passwordless <code>sudo</code>
-voids the whole arrangement. Whoever holds the bearer key acts as the owner
-(which reaches no seal). Backups of the data directory, and exports, hold
-every project - treat them as the most sealed thing in them.</li>
 <li><strong>The gardener still runs over every project</strong>, as the daemon, for no caller.
-Its proposals about a sealed project reach only that account's agents
-(<code>gardener_proposals</code>); the owner's console does not show them.</li>
+Its proposals about a locked project reach a client only through a lease, and
+the console shows them only in a browser that has unlocked the project.</li>
 </ul>
+<h2 id="limits">Limits</h2>
+<ul>
+<li><strong>The transcript holds what a session read.</strong> Once you approve an agent, its
+project's content is in that session's transcript and any tool result it kept.
+A lease ending does not unread it.</li>
+<li><strong>An approval is only as strong as its proof.</strong> <code>seam approve</code> proves itself
+only through <code>sudo -k</code>, so a passwordless or <code>seamlessd</code>-only sudoers rule voids
+it. <code>seam approve</code> warns when <code>sudo -n</code> shows it needs no authentication, which
+a rule scoped to <code>seamlessd</code> alone does not trigger. Touch ID and passkeys are
+as strong as your device and the user verification they require.</li>
+<li><strong>A debugger running as you can act inside an approval.</strong> It can attach to any
+process in the agent's tree. macOS limits this with the hardened runtime and SIP,
+and Linux with yama's <code>ptrace_scope</code> (1 or higher); neither stops root.</li>
+<li><strong>The boundary is the OS account.</strong> Root, and anyone who can become the daemon's
+account, reads everything; a passwordless <code>sudo</code> to it voids the whole
+arrangement. Whoever holds the bearer key acts as the owner, and reaches every
+project but the locked ones. Backups of the data directory, and exports, hold
+every project: keep them as carefully as the most sensitive project in them.</li>
+</ul>
+<h2 id="move-an-existing-install-over">Move an existing install over</h2>
+<p>The data directory moves as a whole; the database stores paths relative to it,
+so nothing inside needs rewriting. On one volume the move is a rename.</p>
+<ol>
+<li><strong>Fence first, in the old world.</strong> Make each project you will lock
+<code>confidential</code> or <code>sealed</code> (<code>seam project isolation &lt;slug&gt; confidential --yes</code>).</li>
+<li><strong>Back up</strong>, as the owner, while the old daemon still serves:
+<code>seamlessd export -o ~/seamless-before-peer-auth.tar.gz</code>. The archive holds
+every project, the locked ones included: keep it as carefully as they are.</li>
+<li><strong>Create the account and the layout</strong> above, leaving out <code>/opt/seamless/data</code>,
+and install root-owned copies of both binaries in <code>/opt/seamless/bin</code>
+(<code>sudo install -o root -m 0755 &lt;seamlessd&gt; &lt;seam&gt; /opt/seamless/bin/</code>). Keep a
+copy of the current <code>mcp.api_key</code> for the console.</li>
+<li><strong>Write the daemon's config</strong> at <code>/opt/seamless/etc/seamless.yaml</code>
+(<code>root:_seamless 0640</code>): your old config with <code>data_dir: /opt/seamless/data</code>,
+the <code>peer_auth</code> block listing the projects to lock, and the same <code>mcp.api_key</code>
+and LLM keys. Check the slugs against your project list now: a misspelled
+entry is refused at startup, and <code>doctor</code> names it.</li>
+<li><strong>Stop the old service and move the data</strong>: stop and remove the per-user
+service (<a href="../../reference/service/#peer-auth-daemon">how</a>), then
+<code>sudo mv ~/.seamless /opt/seamless/data</code>,
+<code>sudo chown -R _seamless:_seamless /opt/seamless/data</code> and
+<code>sudo chmod -R go-rwx /opt/seamless/data</code>.</li>
+<li><strong>Start the daemon</strong>: install and load
+<a href="../../reference/service/#peer-auth-daemon">the LaunchDaemon</a> or the system unit
+above, then <code>curl -s http://127.0.0.1:8081/healthz</code> and the doctor line in
+<a href="#verify">Verify</a>.</li>
+<li><strong>Switch your own config to the socket</strong> and reinstall the hooks and MCP
+registration (<a href="#connect-the-owner">Connect the owner</a>). This is the step that
+puts your agents on <code>seam mcp-proxy</code>.</li>
+<li><strong>Enroll an approver</strong> (<a href="#enroll-an-approver">how</a>). Until you do, the terminal
+path still approves.</li>
+<li><strong>Verify</strong> (<a href="#verify">above</a>), then start an agent in a locked repository and
+approve its request end to end.</li>
+<li><strong>Optional: list a restricted account.</strong> Add it to <code>peer_auth.restricted</code> and
+restart the daemon. Give the account its own client config (socket
+<code>server_url</code>, no key), run <code>install-hooks</code> as the account, and map each of its
+clones with <code>seamlessd map-repo --path &lt;its clone&gt; --project &lt;slug&gt;</code> as the
+daemon's account (<a href="#restricted-local-accounts">details</a>).</li>
+</ol>
+<h3 id="roll-back">Roll back</h3>
+<p>Unload the LaunchDaemon or disable the system unit
+(<a href="../../reference/service/#peer-auth-daemon">how</a>), move the data back
+(<code>sudo mv /opt/seamless/data ~/.seamless</code> and <code>sudo chown -R $(id -un) ~/.seamless</code>),
+restore your server config without the <code>peer_auth</code> block - a release that predates
+it refuses the key - and reinstall the per-user service (<code>make install</code>, or the
+installer). The export from step 2 is the fallback if anything in the move went
+wrong.</p>
 
 </article>
 
@@ -670,7 +1016,7 @@ Its proposals about a sealed project reach only that account's agents
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#connect-a-sealed-accounts-agents">Connect a sealed account&#39;s agents</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </aside>
   

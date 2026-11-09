@@ -91,10 +91,9 @@ func TestLockedRefusal_TwoLines(t *testing.T) {
 	}
 
 	// RefusalFor on a project that is not locked is the plain refusal.
-	legacy := lockLegacyPolicy(t)
-	v, ok := legacy.PeerProcessView(501, lockProc)
-	require.True(t, ok)
-	require.Contains(t, v.RefusalFor(lockFin, LockRequest{ID: "01REQ", Short: "R-7F3K"}).Error(), "sudo -u")
+	plain := sock.RefusalFor(lockOps, LockRequest{ID: "01REQ", Short: "R-7F3K"})
+	require.ErrorIs(t, plain, ErrNotReachable)
+	require.Equal(t, "project "+lockOps+" is not reachable from this connection", plain.Error(), "no request, no lock wording")
 
 	// Through the context, a refusal carries what the requester reported.
 	ctx := WithLockRequester(WithView(context.Background(), sock), func(context.Context, string) (LockRequest, error) {

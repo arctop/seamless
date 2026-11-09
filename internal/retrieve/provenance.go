@@ -110,8 +110,8 @@ func (s *Service) MemoryProvenance(ctx context.Context, mems []core.Memory) map[
 		// A session is named only when it ran in the memory's own scope: anyone
 		// reading the memory reaches that scope already. A global memory written
 		// from inside a project would otherwise carry that project's session
-		// name into every other project's briefing -- across an isolation fence,
-		// or another OS account's seal, as easily as anywhere.
+		// name into every other project's briefing -- across an isolation fence
+		// or a lock as easily as anywhere.
 		if ref, ok := refs[writerOf[m.ID]]; ok && ref.Project == m.Project {
 			p.Session = ref.Name
 		}

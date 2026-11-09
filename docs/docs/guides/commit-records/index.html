@@ -156,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
         
-        <li><a href="../../guides/peer-auth/">Seal projects to OS accounts</a></li>
+        <li><a href="../../guides/peer-auth/">Lock projects behind your approval</a></li>
         
         <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
@@ -387,8 +387,8 @@ origin recorded, the last segment of its path. Configure the monitor with the
 same names. A working directory outside every mapped repository gives <code>null</code>,
 and so does a name outside the contract's pattern.</p>
 <p>A confidential or sealed project's repository is never named, and neither is
-that of a project sealed to another OS account under
-<a href="../../guides/peer-auth/">peer_auth</a>: their sessions and tasks are still listed - by
+that of a project locked under <a href="../../guides/peer-auth/">peer_auth</a>: their sessions
+and tasks are still listed - by
 name or id, with their times and recorded commits - with <code>repo</code> <code>null</code>, the way
 the metadata feed sends such a project's slug only as a keyed hash. A monitor
 that matches by time cannot match those sessions; a recorded commit, or one

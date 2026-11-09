@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -17,10 +18,10 @@ import (
 )
 
 // PeerAuth is peer-user authentication: a Unix-socket listener whose callers
-// the daemon identifies by the uid the kernel reports, plus which projects are
-// fenced off -- sealed to other OS users (Users), or locked until the owner
-// approves an agent's access (Locked) (internal/access holds the policy
-// itself).
+// the daemon identifies by the uid the kernel reports, the projects locked
+// until the owner approves an agent's access (Locked), and the restricted
+// local accounts that work beside the owner (Restricted) (internal/access
+// holds the policy itself).
 //
 // Off by default, and off means exactly the behavior every earlier release had:
 // no socket, no per-caller filtering, one static bearer key on TCP. On, every
@@ -37,7 +38,8 @@ type PeerAuth struct {
 	// stands for, and whose socket connections act as the owner. Required when
 	// enabled.
 	Owner string `yaml:"owner"`
-	// Socket is the listener the role users (and, optionally, the owner) dial.
+	// Socket is the listener the owner's agents and the restricted accounts
+	// dial.
 	Socket PeerSocket `yaml:"socket"`
 	// Locked lists the locked projects (the 2026-11-04 design): even the
 	// owner's own agents reach one only through a lease the owner approved,
@@ -52,10 +54,6 @@ type PeerAuth struct {
 	// global. The key was called "sealed" before any release shipped it; a
 	// config that still says peer_auth.sealed is refused at load
 	// (renamedPeerAuthKey).
-	//
-	// It replaces Users, which sealed projects to other OS accounts that the
-	// owner never reaches (the 2026-10-31 design). The two never mix: a config
-	// naming both is refused, so neither can take on the other's meaning.
 	Locked []string `yaml:"locked"`
 	// MaxLease caps every lease the owner approves on a locked project, the
 	// "until this session ends" choice included: past it, a session asks again.
@@ -65,10 +63,12 @@ type PeerAuth struct {
 	// are registered to (the console's enrollment and approval pages). Unset,
 	// it is the console itself on localhost (RelyingParty). File only.
 	Passkeys PeerPasskeys `yaml:"passkeys"`
-	// Users maps an OS account (user name or numeric uid) to the projects it may
-	// reach over the socket. An account not listed here, and not the owner, is
-	// refused at the door.
-	Users map[string]PeerUser `yaml:"users"`
+	// Users is retired: the 2026-10-31 design sealed projects to other OS
+	// accounts the owner never reached. The key stays known so a config that
+	// still names it reads how to move, not an unknown-field error. Anything in
+	// it is refused at load, even while peer_auth is disabled (owner decision,
+	// 2026-11-06; ErrPeerAuthUsersRetired). Absent or empty it means nothing.
+	Users map[string]any `yaml:"users"`
 	// Restricted lists restricted local accounts, each by OS user name or
 	// numeric uid: a second account on the machine whose agents work beside the
 	// owner's. Such an account connects over the socket only (the kernel's peer
@@ -78,7 +78,7 @@ type PeerAuth struct {
 	// convention or stage it writes is a proposal until the owner promotes it
 	// (internal/access, KindRestricted). It files no access requests, gets no
 	// read grants and holds no leases. Refused at load while peer_auth is
-	// disabled, for the owner, and beside Users. File only (no env).
+	// disabled and for the owner. File only (no env).
 	Restricted []string `yaml:"restricted"`
 }
 
@@ -114,17 +114,21 @@ type PeerSocket struct {
 	Group string `yaml:"group"`
 }
 
-// PeerUser is one OS account's reach.
-type PeerUser struct {
-	// Sealed lists projects reachable ONLY from this account's socket
-	// connections: the owner and every other account are refused them. A
-	// project is sealed to at most one account. (Not the "sealed" isolation
-	// state: that one is about agents in one project reading others; this one is
-	// about which OS user may reach a project at all.)
-	Sealed []string `yaml:"sealed"`
-	// Projects lists projects this account may also reach without sealing them:
-	// the owner keeps them too.
-	Projects []string `yaml:"projects"`
+// ErrPeerAuthUsersRetired is the refusal of a filled-in peer_auth.users: the
+// design that key belonged to is gone, and locking is what replaced it. The
+// guide quotes the sentence, so the two change together.
+var ErrPeerAuthUsersRetired = errors.New("config: peer_auth.users was the 2026-10-31 design, which sealed projects to " +
+	"other OS accounts, and is no longer supported: list the projects under peer_auth.locked and remove users")
+
+// RetiredUsersRefusal returns ErrPeerAuthUsersRetired while peer_auth.users
+// names anything, and nil when it is absent or empty. It is the one reader of
+// Users: config load and access.New both refuse through it, so a block that
+// did not come through a load fails the same way.
+func (p PeerAuth) RetiredUsersRefusal() error {
+	if len(p.Users) > 0 {
+		return ErrPeerAuthUsersRetired
+	}
+	return nil
 }
 
 // DefaultPeerSocketMode is the socket mode when peer_auth.socket.mode is unset:
@@ -152,17 +156,6 @@ func (s PeerSocket) SocketFileMode() (uint32, error) {
 	return uint32(n), nil
 }
 
-// SealedTo returns the configured account each sealed project belongs to.
-func (p PeerAuth) SealedTo() map[string]string {
-	out := map[string]string{}
-	for account, u := range p.Users {
-		for _, slug := range u.Sealed {
-			out[strings.TrimSpace(slug)] = account
-		}
-	}
-	return out
-}
-
 // ReferencedProjects returns every project slug the block names, sorted and
 // de-duplicated: what serve and doctor check against the projects table.
 func (p PeerAuth) ReferencedProjects() []string {
@@ -170,13 +163,6 @@ func (p PeerAuth) ReferencedProjects() []string {
 	for _, slug := range p.Locked {
 		if s := strings.TrimSpace(slug); s != "" && !slices.Contains(out, s) {
 			out = append(out, s)
-		}
-	}
-	for _, u := range p.Users {
-		for _, slug := range slices.Concat(u.Sealed, u.Projects) {
-			if s := strings.TrimSpace(slug); s != "" && !slices.Contains(out, s) {
-				out = append(out, s)
-			}
 		}
 	}
 	slices.Sort(out)
@@ -188,7 +174,7 @@ func (p PeerAuth) ReferencedProjects() []string {
 // before any release shipped it, because "sealed" is an isolation state and the
 // lock is a separate setting. Without this, KnownFields would refuse the old
 // key as an unknown field and leave the owner to guess the new name. A key
-// nested deeper (users.<account>.sealed, the earlier design's) is not this one.
+// nested deeper is not this one.
 // Syntax errors are left to the strict decode, as in explicitNullPath.
 func renamedPeerAuthKey(data []byte) (old, now string) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
@@ -352,15 +338,16 @@ func validPasskeyOrigin(o, rpID string) error {
 // validatePeerAuth checks the block's SHAPE: everything that can be judged from
 // the file alone. Resolving accounts to uids (internal/access.New) and checking
 // slugs against the projects table (serve, doctor) come later, because neither
-// belongs in a config load. The locked list and the users map are checked even
-// while the block is disabled, so a typo is caught the day it is written rather
-// than the day it is switched on.
+// belongs in a config load. The locked list is checked even while the block is
+// disabled, so a typo is caught the day it is written rather
+// than the day it is switched on. A filled-in users key is refused first, and
+// alone: nothing else in such a block can be read the way it was written.
 func (c Config) validatePeerAuth() error {
 	p := c.PeerAuth
-	if err := validatePeerLocked(p); err != nil {
+	if err := p.RetiredUsersRefusal(); err != nil {
 		return err
 	}
-	if err := validatePeerUsers(p); err != nil {
+	if err := validatePeerLocked(p); err != nil {
 		return err
 	}
 	if err := validatePeerRestricted(p); err != nil {
@@ -380,9 +367,6 @@ func (c Config) validatePeerAuth() error {
 	}
 	if err := validateAccount("peer_auth.owner", p.Owner); err != nil {
 		return err
-	}
-	if _, listed := p.Users[strings.TrimSpace(p.Owner)]; listed {
-		return fmt.Errorf("config: peer_auth.users lists %q, the owner: the owner reaches every project not sealed to another account, so it takes no users entry", p.Owner)
 	}
 	path := strings.TrimSpace(p.Socket.Path)
 	if path == "" {
@@ -406,16 +390,8 @@ func (c Config) validatePeerAuth() error {
 }
 
 // validatePeerLocked is the locked list's shape: real project slugs, never the
-// global scope, none twice -- and never beside a users map. The two keys are
-// the two designs (projects locked until the owner approves an agent's access,
-// projects sealed to other OS accounts), and a config naming both would leave
-// a reader, and the policy, to guess which one a project is under.
+// global scope, none twice.
 func validatePeerLocked(p PeerAuth) error {
-	if len(p.Locked) > 0 && len(p.Users) > 0 {
-		return fmt.Errorf("config: peer_auth names both locked and users: locked puts projects behind the owner's approval, " +
-			"users seals them to other OS accounts the owner never reaches (the earlier design) -- use one; " +
-			"for the approval design, list every users.<account>.sealed project under peer_auth.locked and remove users")
-	}
 	seen := map[string]bool{}
 	for _, raw := range p.Locked {
 		slug, err := validate.Project(raw)
@@ -435,10 +411,9 @@ func validatePeerLocked(p PeerAuth) error {
 
 // validatePeerRestricted is the restricted list's shape: every entry an OS
 // account name or numeric uid, none twice, none the owner's, and none at all
-// while peer_auth is disabled or beside a users map. A restricted account is
-// known only through the socket's kernel credential, so a list that no listener
-// could ever serve is a mistake to say out loud, not a setting to keep; and the
-// users map is the earlier design, retired before this one ships. Whether an
+// while peer_auth is disabled. A restricted account is known only through the
+// socket's kernel credential, so a list that no listener could ever serve is a
+// mistake to say out loud, not a setting to keep. Whether an
 // entry resolves to the owner's uid (a numeric id naming the owner, say) needs
 // the OS and is checked when the policy is built (access.New).
 func validatePeerRestricted(p PeerAuth) error {
@@ -448,10 +423,6 @@ func validatePeerRestricted(p PeerAuth) error {
 	if !p.Enabled {
 		return fmt.Errorf("config: peer_auth.restricted lists accounts while peer_auth is disabled: a restricted account " +
 			"reaches Seamless only over the peer_auth socket -- enable peer_auth, or remove restricted")
-	}
-	if len(p.Users) > 0 {
-		return fmt.Errorf("config: peer_auth names both restricted and users: users seals projects to other OS accounts " +
-			"(the earlier design) -- remove users; a restricted account reaches the open projects instead")
 	}
 	owner := strings.TrimSpace(p.Owner)
 	seen := map[string]bool{}
@@ -466,64 +437,6 @@ func validatePeerRestricted(p PeerAuth) error {
 			return fmt.Errorf("config: peer_auth.restricted lists %q twice: name each account once", raw)
 		}
 		seen[raw] = true
-	}
-	return nil
-}
-
-// validatePeerUsers is the users map's shape: every account named sanely, every
-// slug a real project slug, no account reaching nothing, no project listed twice
-// for one account, no project sealed to two accounts, and no project sealed to
-// one account and shared with another.
-func validatePeerUsers(p PeerAuth) error {
-	accounts := make([]string, 0, len(p.Users))
-	for account := range p.Users {
-		accounts = append(accounts, account)
-	}
-	slices.Sort(accounts) // a deterministic first error
-	sealedTo := map[string]string{}
-	for _, account := range accounts {
-		if err := validateAccount("peer_auth.users key", account); err != nil {
-			return err
-		}
-		u := p.Users[account]
-		if len(u.Sealed)+len(u.Projects) == 0 {
-			return fmt.Errorf("config: peer_auth.users.%s reaches no project: list its sealed projects (or shared projects), or remove the entry", account)
-		}
-		seen := map[string]bool{}
-		for _, list := range []struct {
-			key   string
-			slugs []string
-		}{{"sealed", u.Sealed}, {"projects", u.Projects}} {
-			for _, raw := range list.slugs {
-				slug, err := validate.Project(raw)
-				if err != nil {
-					return fmt.Errorf("config: peer_auth.users.%s.%s: %w", account, list.key, err)
-				}
-				if slug == "" {
-					return fmt.Errorf("config: peer_auth.users.%s.%s names the global scope: global is readable by every account and writable only by the owner, so it is never listed", account, list.key)
-				}
-				if seen[slug] {
-					return fmt.Errorf("config: peer_auth.users.%s lists project %q twice: name it once, under sealed or under projects", account, slug)
-				}
-				seen[slug] = true
-				if list.key == "sealed" {
-					if other, dup := sealedTo[slug]; dup {
-						return fmt.Errorf("config: project %q is sealed to two accounts (%s and %s): a sealed project belongs to exactly one", slug, other, account)
-					}
-					sealedTo[slug] = account
-				}
-			}
-		}
-	}
-	// Overlap: a project sealed to one account and shared with another would put
-	// it within reach of both, which is what sealing exists to rule out.
-	for _, account := range accounts {
-		for _, raw := range p.Users[account].Projects {
-			slug := strings.TrimSpace(raw)
-			if owner, sealed := sealedTo[slug]; sealed && owner != account {
-				return fmt.Errorf("config: project %q is sealed to %s and also listed under peer_auth.users.%s.projects: a sealed project is reachable from its own account only", slug, owner, account)
-			}
-		}
 	}
 	return nil
 }

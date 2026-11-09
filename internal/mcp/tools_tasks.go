@@ -597,8 +597,8 @@ const depsWithheldKey = "depends_on_withheld"
 // asks of a write's answer -- asked once per project. The caller's scope is
 // resolved on the first question, so an answer that names no other task costs
 // nothing. Under peer_auth CanRead asks the request's View first: a locked
-// project without a lease, a project sealed to another account, or (for a
-// restricted account) any project that is not open, reads as no.
+// project without a lease, or (for a restricted account) any project that is
+// not open, reads as no.
 func (s *Server) taskReader(ctx context.Context) func(project string) (bool, error) {
 	var caller string
 	scoped := false

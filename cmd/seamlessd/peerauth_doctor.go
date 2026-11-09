@@ -21,9 +21,6 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 	const name = "peer_auth"
 	pa := cfg.PeerAuth
 	if !pa.Enabled {
-		if len(pa.Users) > 0 {
-			return []check{{statusWarn, name, "off, but peer_auth.users is filled in: nothing is sealed until peer_auth.enabled is true"}}
-		}
 		if len(pa.Locked) > 0 {
 			return []check{{statusWarn, name, "off, but peer_auth.locked is filled in: nothing is locked until peer_auth.enabled is true"}}
 		}
@@ -47,10 +44,6 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 		out = append(out, check{statusOK, "peer_auth.locked", fmt.Sprintf("locked: [%s]; closed to every owner request "+
 			"that holds no lease the owner approved (the TCP bearer key never holds one)", strings.Join(locked, ", "))})
 		out = append(out, approverCheck(ctx, db, runtime.GOOS))
-	}
-	for _, a := range policy.Accounts() {
-		out = append(out, check{statusOK, "peer_auth.user", fmt.Sprintf("%s (uid %d): sealed [%s], shared [%s]; sessions land in %s",
-			a.Account.Name, a.Account.UID, strings.Join(a.Sealed, ", "), strings.Join(a.Projects, ", "), a.Home)})
 	}
 	for _, a := range policy.RestrictedAccounts() {
 		out = append(out, check{statusOK, "peer_auth.restricted", fmt.Sprintf("%s (uid %d): restricted -- the socket only; "+

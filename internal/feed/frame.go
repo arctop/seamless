@@ -180,7 +180,7 @@ type mapper struct {
 	host string
 	key  []byte
 	// hashed reports whether a project's slug must not leave in the clear
-	// (a confidential or sealed project, or one sealed to another OS account).
+	// (a confidential or sealed project, or a locked one).
 	hashed func(project string) bool
 }
 

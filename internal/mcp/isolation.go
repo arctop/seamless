@@ -44,9 +44,7 @@ func (s *Server) callerScope(ctx context.Context) string {
 	if sess, ok, _, _ := s.ambientFallback(ctx); ok { //nolint:errcheck // a fenced refusal already forces ok=false, and "" is the fail-closed scope this returns anyway
 		return sess.ProjectSlug
 	}
-	// A configured peer_auth account is in its own project (peerHome); everyone
-	// else unpinned is judged as global.
-	return peerHome(ctx)
+	return ""
 }
 
 // fenceRead refuses a read that would cross an isolation fence. It backs the

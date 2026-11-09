@@ -34,9 +34,11 @@ docs-src/          docs site markdown + nav.yaml (source; docs/docs/ is output)
 internal/core/     domain types: Project, Memory, Session, Task, Trial, Event
 internal/config/   single YAML + env config (static key, budgets, briefing tunables, llm,
                    peer_auth)
-internal/access/   peer_auth policy: who a request speaks for (the owner on TCP, a
-                   kernel-named uid on the Unix socket) and which projects it may
-                   reach (View); Unix-socket peer credentials. Foundation layer
+internal/access/   peer_auth policy: who a request speaks for (the owner on TCP or the
+                   Unix socket, a restricted local account named by its kernel uid)
+                   and which projects it may reach (View); leases on locked
+                   projects, judged per request; Unix-socket peer credentials.
+                   Foundation layer
 internal/passkey/  WebAuthn passkey ceremonies over go-webauthn (approver passkeys
                    for locked projects); stateless, imports nothing internal
 internal/approval/ approver credentials for locked projects: passkey and Touch ID
@@ -191,8 +193,9 @@ override (Settings -> Updates) merges the other way round: `check: false` or
 no update traffic at all). Durations are `config.Duration` ("6h"; a bare
 number other than 0 is refused). The `peer_auth:` block (off by default; see
 docs-src/guides/peer-auth.md) adds a Unix-socket listener whose callers are
-named by the kernel's peer uid and maps OS accounts to the projects they may
-reach; a client of it sets `server_url: unix:///path.sock` and needs no key.
+named by the kernel's peer uid, locks the projects it lists until the owner
+approves an agent's access, and lists restricted local accounts; a client of it
+sets `server_url: unix:///path.sock` and needs no key.
 The `commits:` block (off by default; docs-src/guides/commit-records.md) offers
 session_end and tasks_update a `commits` argument (`record`) and writes the
 commit-matching snapshot to `snapshot_file`.

@@ -101,7 +101,7 @@ func (s *Server) grantsMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.Tool
 }
 
 // loadGrants judges the grants of the holder this call speaks for: the owner's
-// socket process chain under peer_auth (a TCP request or a configured account
+// socket process chain under peer_auth (a TCP request or a restricted account
 // holds none), else the bound session.
 func (s *Server) loadGrants(ctx context.Context) (access.Grants, error) {
 	v, hasView := access.FromContext(ctx)

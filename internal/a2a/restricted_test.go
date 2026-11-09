@@ -107,7 +107,7 @@ func TestMessageSend_RestrictedAccountRecallsTheGlobalScope(t *testing.T) {
 	require.Equal(t, []string{"global-ledger-note"}, names(result))
 	injected := eventRows(t, db, core.EventInjected)
 	require.Len(t, injected, 1)
-	require.Equal(t, "", injected[0]["_project"], "its recall's event keeps the global scope it recalled (refile is the users map's)")
+	require.Equal(t, "", injected[0]["_project"], "its recall's event keeps the global scope it recalled")
 
 	// An open project it reaches: that project plus global.
 	result, rpcErr = rpc(t, ts.URL, "", sendBody("ledger reconcile", map[string]any{"project": "example-ops"}))

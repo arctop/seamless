@@ -8,10 +8,10 @@ import (
 
 // accessFilter renders the peer_auth reach of the request in ctx as a SQL
 // predicate over column (a project slug column), with its arguments: " AND
-// column NOT IN (...)" for the owner while projects are sealed to other
-// accounts, " AND column IN (..., ”)" for a configured account (its own
-// projects plus the global scope it may read), and nothing at all with no View
-// -- peer_auth off, or background work serving no caller.
+// column NOT IN (...)" for the owner while projects are locked, " AND column IN
+// (..., ”)" for a restricted account (the open projects it reaches plus the
+// global scope it may read), and nothing at all with no View -- peer_auth off,
+// or background work serving no caller.
 //
 // It is for the few reads that cannot lean on a filtered handle (OpenView): the
 // fts virtual table has no view to hide behind, because MATCH, bm25() and

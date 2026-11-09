@@ -12,12 +12,9 @@ import (
 )
 
 var testAccounts = map[string]Account{
-	"katata":          {UID: 501, Name: "katata", Home: "/Users/katata"},
-	"501":             {UID: 501, Name: "katata", Home: "/Users/katata"},
-	"_arctop_finance": {UID: 470, Name: "_arctop_finance"},
-	"470":             {UID: 470, Name: "_arctop_finance"},
-	"_arctop_legal":   {UID: 471, Name: "_arctop_legal"},
-	"_arctop_hq":      {UID: 475, Name: "_arctop_hq"},
+	"owner":          {UID: 501, Name: "owner", Home: "/home/owner"},
+	"501":            {UID: 501, Name: "owner", Home: "/home/owner"},
+	"_example_agent": {UID: 470, Name: "_example_agent"},
 }
 
 func testResolve(name string) (Account, error) {
@@ -30,16 +27,22 @@ func testResolve(name string) (Account, error) {
 func testPolicy(t *testing.T) *Policy {
 	t.Helper()
 	p, err := New(config.PeerAuth{
-		Enabled: true,
-		Owner:   "katata",
-		Users: map[string]config.PeerUser{
-			"_arctop_finance": {Sealed: []string{"arctop-finance"}},
-			"_arctop_legal":   {Sealed: []string{"arctop-legal"}},
-			"_arctop_hq":      {Projects: []string{"arctop-hq", "arctop-ops"}},
-		},
+		Enabled:    true,
+		Owner:      "owner",
+		Locked:     []string{"example-finance", "example-legal"},
+		Restricted: []string{"_example_agent"},
 	}, testResolve)
 	require.NoError(t, err)
 	return p
+}
+
+// testAgent is the restricted account's view with its reach filled in, the way
+// the transport fills it: the locked slug handed in is dropped by the policy.
+func testAgent(t *testing.T, p *Policy) View {
+	t.Helper()
+	v, ok := p.PeerView(470)
+	require.True(t, ok)
+	return v.WithOpenProjects([]string{"example-ops", "example-finance"})
 }
 
 func TestView_Matrix(t *testing.T) {
@@ -47,10 +50,7 @@ func TestView_Matrix(t *testing.T) {
 	owner := p.OwnerView()
 	ownerSock, ok := p.PeerView(501)
 	require.True(t, ok)
-	fin, ok := p.PeerView(470)
-	require.True(t, ok)
-	hq, ok := p.PeerView(475)
-	require.True(t, ok)
+	agent := testAgent(t, p)
 
 	for _, tc := range []struct {
 		name            string
@@ -58,18 +58,16 @@ func TestView_Matrix(t *testing.T) {
 		project         string
 		visible, writes bool
 	}{
-		{"owner reads an open project", owner, "arctop-ops", true, true},
+		{"owner reads an open project", owner, "example-ops", true, true},
 		{"owner reads global", owner, "", true, true},
-		{"owner never reaches a project sealed to another account", owner, "arctop-finance", false, false},
-		{"owner on the socket is the same owner", ownerSock, "arctop-legal", false, false},
-		{"owner reaches an unknown slug (not sealed)", owner, "brand-new", true, true},
-		{"a sealed account reaches its own project", fin, "arctop-finance", true, true},
-		{"a sealed account reads global", fin, "", true, false},
-		{"a sealed account never reaches the owner's projects", fin, "arctop-ops", false, false},
-		{"a sealed account never reaches another account's seal", fin, "arctop-legal", false, false},
-		{"a shared account reaches its shared projects", hq, "arctop-ops", true, true},
-		{"a shared account does not reach a seal", hq, "arctop-finance", false, false},
-		{"no view reaches everything", View{}, "arctop-finance", true, true},
+		{"owner never reaches a locked project without a lease", owner, "example-finance", false, false},
+		{"owner on the socket is the same owner", ownerSock, "example-legal", false, false},
+		{"owner reaches an unknown slug (not locked)", owner, "brand-new", true, true},
+		{"a restricted account reaches an open project", agent, "example-ops", true, true},
+		{"a restricted account reads global and never writes it", agent, "", true, false},
+		{"a restricted account never reaches a locked project", agent, "example-finance", false, false},
+		{"a restricted account reaches no unknown slug", agent, "brand-new", false, false},
+		{"no view reaches everything", View{}, "example-finance", true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, tc.visible, tc.v.Visible(tc.project), "visible")
@@ -78,80 +76,74 @@ func TestView_Matrix(t *testing.T) {
 	}
 }
 
-func TestView_HiddenAllowedHome(t *testing.T) {
+func TestView_HiddenAllowed(t *testing.T) {
 	p := testPolicy(t)
 	owner := p.OwnerView()
-	require.Equal(t, []string{"arctop-finance", "arctop-legal"}, owner.Hidden())
+	require.Equal(t, []string{"example-finance", "example-legal"}, owner.Hidden())
 	_, bounded := owner.Allowed()
 	require.False(t, bounded)
 	require.True(t, owner.Restricted())
 	require.False(t, owner.Principal().Socket, "the TCP owner is not kernel-authenticated")
 
-	fin, _ := p.PeerView(470)
-	allowed, bounded := fin.Allowed()
+	agent := testAgent(t, p)
+	allowed, bounded := agent.Allowed()
 	require.True(t, bounded)
-	require.Equal(t, []string{"arctop-finance"}, allowed)
-	require.Nil(t, fin.Hidden())
-	require.Equal(t, "arctop-finance", fin.Home())
-	require.True(t, fin.Principal().Socket)
-	require.Equal(t, KindUser, fin.Principal().Kind)
-
-	hq, _ := p.PeerView(475)
-	require.Equal(t, "arctop-hq", hq.Home(), "no seal: the first shared project is home")
+	require.Equal(t, []string{"example-ops"}, allowed)
+	require.Nil(t, agent.Hidden())
+	require.True(t, agent.Principal().Socket)
+	require.Equal(t, KindRestricted, agent.Principal().Kind)
 
 	_, ok := p.PeerView(9999)
-	require.False(t, ok, "an unconfigured uid has no view")
+	require.False(t, ok, "a uid the policy does not list has no view: it is refused at the door")
 	require.False(t, View{}.Restricted())
 }
 
 func TestView_SessionScopeAndRefusal(t *testing.T) {
 	p := testPolicy(t)
-	fin, _ := p.PeerView(470)
-	for _, in := range []string{"", "arctop-ops", "arctop-legal", "somewhere"} {
-		got, err := fin.SessionScope(in)
-		require.NoError(t, err)
-		require.Equal(t, "arctop-finance", got, "a sealed account's session lands in its own project from %q", in)
-	}
-	got, err := fin.SessionScope("arctop-finance")
+	agent := testAgent(t, p)
+	got, err := agent.SessionScope("example-ops")
 	require.NoError(t, err)
-	require.Equal(t, "arctop-finance", got)
+	require.Equal(t, "example-ops", got)
+	for _, in := range []string{"", "example-finance", "somewhere"} {
+		_, err := agent.SessionScope(in)
+		require.ErrorIs(t, err, ErrNotReachable, "a restricted account has no project to be placed in from %q", in)
+	}
 
 	owner := p.OwnerView()
-	got, err = owner.SessionScope("arctop-ops")
+	got, err = owner.SessionScope("example-ops")
 	require.NoError(t, err)
-	require.Equal(t, "arctop-ops", got)
-	_, err = owner.SessionScope("arctop-finance")
+	require.Equal(t, "example-ops", got)
+	_, err = owner.SessionScope("example-finance")
 	require.ErrorIs(t, err, ErrNotReachable)
-	require.NotContains(t, err.Error(), "_arctop_finance", "a refusal names no other account")
+	require.Contains(t, err.Error(), "is locked", "the owner is only ever refused at a lock")
+	var re *RefusalError
+	require.True(t, errors.As(owner.Refusal("example-finance"), &re))
 
-	err = fin.Refusal("")
+	err = agent.Refusal("")
 	require.ErrorIs(t, err, ErrNotReachable)
 	require.Contains(t, err.Error(), "read-only")
-	var re *RefusalError
-	require.True(t, errors.As(fin.Refusal("arctop-ops"), &re))
 }
 
 func TestContextHelpers(t *testing.T) {
 	ctx := context.Background()
-	require.True(t, Visible(ctx, "arctop-finance"), "no view in ctx reaches everything")
+	require.True(t, Visible(ctx, "example-finance"), "no view in ctx reaches everything")
 	require.True(t, Writable(ctx, ""))
 	require.False(t, PeerAuthenticated(ctx))
 	require.True(t, OwnerOnly(ctx))
 
 	p := testPolicy(t)
 	octx := WithView(ctx, p.OwnerView())
-	require.False(t, Visible(octx, "arctop-finance"))
+	require.False(t, Visible(octx, "example-finance"))
 	require.False(t, PeerAuthenticated(octx), "the TCP owner still needs the key")
 	require.True(t, OwnerOnly(octx))
 
-	fin, _ := p.PeerView(470)
-	fctx := WithView(ctx, fin)
-	require.True(t, PeerAuthenticated(fctx))
-	require.False(t, OwnerOnly(fctx))
-	require.False(t, Writable(fctx, ""))
-	got, err := SessionScope(fctx, "")
+	actx := WithView(ctx, testAgent(t, p))
+	require.True(t, PeerAuthenticated(actx))
+	require.False(t, OwnerOnly(actx))
+	require.False(t, Writable(actx, ""))
+	got, err := SessionScope(actx, "example-ops")
 	require.NoError(t, err)
-	require.Equal(t, "arctop-finance", got)
+	require.Equal(t, "example-ops", got)
 }
 
 func TestNew_ResolutionRefusals(t *testing.T) {
@@ -161,27 +153,28 @@ func TestNew_ResolutionRefusals(t *testing.T) {
 		want string
 	}{
 		{"owner does not resolve", config.PeerAuth{Owner: "nobody-here"}, "peer_auth.owner"},
-		{"user does not resolve", config.PeerAuth{Owner: "katata", Users: map[string]config.PeerUser{"ghost": {Sealed: []string{"x"}}}}, "peer_auth.users.ghost"},
-		{"user resolves to the owner's uid", config.PeerAuth{Owner: "katata", Users: map[string]config.PeerUser{"501": {Sealed: []string{"x"}}}}, "the owner's"},
-		{"one uid listed twice", config.PeerAuth{Owner: "katata", Users: map[string]config.PeerUser{
-			"_arctop_finance": {Sealed: []string{"a"}}, "470": {Sealed: []string{"b"}},
-		}}, "uid 470 twice"},
+		{"a filled-in users key", config.PeerAuth{Owner: "owner", Users: map[string]any{"_example_agent": nil}},
+			"peer_auth.users was the 2026-10-31 design"},
+		{"users beside locked", config.PeerAuth{Owner: "owner", Locked: []string{"x"}, Users: map[string]any{"_a": "x"}},
+			"peer_auth.users was the 2026-10-31 design"},
+		{"users beside restricted", config.PeerAuth{Owner: "owner", Restricted: []string{"_example_agent"}, Users: map[string]any{"_a": "x"}},
+			"peer_auth.users was the 2026-10-31 design"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := New(tc.cfg, testResolve)
 			require.ErrorIs(t, err, ErrInvalidPolicy)
 			require.Contains(t, err.Error(), tc.want)
+			if len(tc.cfg.Users) > 0 {
+				require.ErrorIs(t, err, config.ErrPeerAuthUsersRetired)
+			}
 		})
 	}
 }
 
 func TestPolicy_Listings(t *testing.T) {
 	p := testPolicy(t)
-	require.Equal(t, []string{"arctop-finance", "arctop-legal"}, p.ConsoleHidden())
-	require.Equal(t, []string{"arctop-finance", "arctop-hq", "arctop-legal", "arctop-ops"}, p.Projects())
-	rows := p.Accounts()
-	require.Len(t, rows, 3)
-	require.Equal(t, uint32(470), rows[0].Account.UID)
-	require.Equal(t, "katata", p.Owner().Name)
-	require.Equal(t, "/Users/katata", p.OwnerView().HomeFor())
+	require.Equal(t, []string{"example-finance", "example-legal"}, p.ConsoleHidden())
+	require.Equal(t, p.OwnerLocked(), p.ConsoleHidden(), "the locked projects are the whole hidden set")
+	require.Equal(t, "owner", p.Owner().Name)
+	require.Equal(t, "/home/owner", p.OwnerView().HomeFor())
 }

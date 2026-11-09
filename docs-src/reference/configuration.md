@@ -121,10 +121,10 @@ The example file spells out the keys whose default has a value and leaves
 ### Peer-user authentication {#peer-auth}
 
 The `peer_auth:` block turns on a Unix-socket listener whose callers the daemon
-identifies by the uid the kernel reports, and maps OS accounts to the projects
-they may reach. It is off by default, and off is exactly the behavior of every
-earlier release. The guide is [Seal projects to OS accounts](/guides/peer-auth/);
-in short:
+identifies by the uid the kernel reports, and locks the projects you list until
+you approve an agent's access. It is off by default, and off is exactly the
+behavior of every earlier release. The guide is
+[Lock projects behind your approval](/guides/peer-auth/); in short:
 
 - `enabled` (`SEAMLESS_PEER_AUTH_ENABLED`) switches it on.
 - `owner` (`SEAMLESS_PEER_AUTH_OWNER`) is the OS account - a user name or a
@@ -136,16 +136,16 @@ in short:
   octal, default `0666`: every local account may knock, and the kernel still
   names each one. `socket.group` (`SEAMLESS_PEER_AUTH_SOCKET_GROUP`) hands the
   socket to a group, for a mode such as `0660`.
-- `users` maps an OS account (name or uid) to `sealed` - projects reachable only
-  from that account - and `projects` - projects it shares with the owner. It is
-  file-only: a map of lists has no single-variable spelling.
-- `locked` lists locked projects instead (the approval design, being built):
-  each is closed to every owner request - its name shows, its content does
-  not, writes are refused - unless the request rides a socket connection whose
-  process holds a lease the owner approved. The TCP bearer key never holds one.
-  The lock is not the `sealed` isolation state (which says what flows in and
-  out of a project): a locked project is normally `confidential`. File-only,
-  and never beside `users`: a config names one design or the other.
+- `locked` lists locked projects: each is closed to every owner request - its
+  name shows, its content does not, writes are refused - unless the request
+  rides a socket connection whose process holds a lease the owner approved. The
+  TCP bearer key never holds one. The lock is not the `sealed` isolation state
+  (which says what flows in and out of a project): a locked project is normally
+  `confidential`, and `serve` refuses one that is `open`. File-only.
+- `users` is a retired key. A config that sets it to a non-empty map is refused
+  when it loads, even while the block is disabled, with a message that says
+  to list the projects under `locked` and remove `users`
+  ([the guide](/guides/peer-auth/#configure-it) has it word for word).
 - `max_lease` caps every lease the owner approves on a locked project, "until
   this session ends" included: at most `24h`, unset `8h`. File-only.
 - `restricted` lists restricted local accounts, each an OS user name or a
@@ -157,8 +157,7 @@ in short:
   are labeled with its name, and a constraint, convention, protocol or stage it
   writes waits for you to promote it
   ([Restricted local accounts](/guides/peer-auth/#restricted-local-accounts)).
-  Refused while `enabled` is false, for the owner, and beside `users`.
-  File-only.
+  Refused while `enabled` is false, and for the owner. File-only.
 - `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
   the owner's approver passkeys ([seamlessd approvers](/reference/cli-seamlessd/#seamlessd_approvers)).
   Unset, they are `localhost` and the console's own address on localhost.

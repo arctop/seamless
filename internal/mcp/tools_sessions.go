@@ -56,7 +56,6 @@ const (
 	scopeFromArg                        // the project argument
 	scopeFromSession                    // the session being resumed
 	scopeFromOwn                        // the agent's own process-bound session
-	scopeFromAccount                    // peer_auth: the caller's OS account's own project
 )
 
 func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -119,9 +118,7 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 		}
 	}
 	// peer_auth: a session lands only where this connection's OS account may
-	// write. A configured account's session outside its own projects -- an
-	// unmapped cwd, another repository -- lands in its own project instead; the
-	// owner is refused a project sealed to another account outright.
+	// write. The owner is refused a locked project it holds no lease on.
 	//
 	// A restricted account (peer_auth.restricted) has no project of its own to
 	// land in and cannot create one, so a cwd that places it nowhere it may
@@ -131,20 +128,17 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 	// below, which brings its project with it. (A project argument it may not
 	// write was refused already, by sessionProjectArg.)
 	var unplaced error
-	if placed, perr := access.SessionScope(ctx, project); perr != nil {
+	if _, perr := access.SessionScope(ctx, project); perr != nil {
 		account := access.AccountOf(ctx)
 		if account == "" || how == scopeFromArg {
 			return errResult("session_start", perr)
 		}
 		unplaced = restrictedPlacementRefusal(account, cwd)
 		project, warning = "", ""
-	} else if placed != project {
-		project, how = placed, scopeFromAccount
-		warning = ""
 	}
 	// Whether the caller chose a scope at all. A cwd outside any repository chose
 	// nothing, and neither did a call with no cwd and no project.
-	pinned := how == scopeFromArg || how == scopeFromAccount || project != ""
+	pinned := how == scopeFromArg || project != ""
 
 	// Resume a named session if it already exists.
 	if name != "" {
@@ -361,13 +355,10 @@ func (s *Server) sessionProjectArg(ctx context.Context, raw, cwd, cwdProject str
 
 // cwdProject resolves a session_start cwd to its project. Normally that
 // registers a not-yet-mapped repository as a project (store.RegisterProjectForCWD).
-// A configured peer_auth account only ever works inside its own projects, so
-// for it the map is read and never grown: a repository it opens must not mint a
-// project, and a mapping the owner made is all it needs. A restricted account
-// (peer_auth.restricted) reads it the same way: it cannot create a project, so
-// a repository the owner has not mapped places it nowhere.
+// A restricted account (peer_auth.restricted) only reads the map: it cannot
+// create a project, so a repository the owner has not mapped places it nowhere.
 func (s *Server) cwdProject(ctx context.Context, id store.CWDIdentity) (string, *store.RepoMapAdoption, error) {
-	if v, ok := access.FromContext(ctx); (ok && v.Principal().Kind == access.KindUser) || access.AccountOf(ctx) != "" {
+	if access.AccountOf(ctx) != "" {
 		project, err := store.ResolveProjectForCWD(ctx, s.cfg.DB, id.Host, id.CWD)
 		return project, nil, err
 	}
@@ -412,9 +403,6 @@ func scopeNote(project string, how scopeSource) string {
 			"Pass project=<slug> here, or on each durable write, to target a project."
 	case how == scopeFromArg:
 		return fmt.Sprintf("project %q, as named.", project)
-	case how == scopeFromAccount:
-		return fmt.Sprintf("project %q: this connection's OS account works only in its own projects "+
-			"(peer_auth), so its sessions land here whatever the cwd.", project)
 	case how == scopeFromSession:
 		return fmt.Sprintf("project %q, the resumed session's.", project)
 	default:
@@ -472,8 +460,9 @@ func (s *Server) soleAmbientByCWD(ctx context.Context, host, cwd string) (core.S
 		s.logger.Warn("session_start: ambient lookup", "error", err)
 		return core.Session{}, false
 	}
-	// Another OS account's sessions are never candidates (peer_auth), nor is a
-	// session another principal started in a project both reach.
+	// A session in a project this OS account may not reach is never a candidate
+	// (peer_auth), nor is a session another principal started in a project both
+	// reach.
 	ambients = slices.DeleteFunc(ambients, func(a core.Session) bool {
 		return !access.Visible(ctx, a.ProjectSlug) || !access.SessionAccountOK(ctx, a.Account)
 	})

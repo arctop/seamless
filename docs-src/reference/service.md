@@ -274,8 +274,8 @@ walks through the outcomes. What the service manager can tell you:
 
 ## A system service for peer_auth {#peer-auth-daemon}
 
-[Sealing projects to OS accounts](/guides/peer-auth/) needs the daemon to run as
-an account of its own, so the per-user service above cannot host it. On macOS it
+[Locked projects](/guides/peer-auth/) need the daemon to run as an account of
+its own, so the per-user service above cannot host it. On macOS it
 is a LaunchDaemon that names the account; it runs whether or not anyone is
 logged in. Install it as `/Library/LaunchDaemons/com.arctop.seamless.daemon.plist`
 (`root:wheel`, `0644`):
@@ -333,7 +333,10 @@ the rename, the same for `org.thereisnospoon.seamless`).
 On Linux the same daemon is a system unit with `User=` and `Group=` set to the
 account, `UMask=0077`, `Environment=SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml`
 and `ExecStart=/opt/seamless/bin/seamlessd serve`, enabled with
-`sudo systemctl enable --now`.
+`sudo systemctl enable --now`; [the guide](/guides/peer-auth/#deploy-it-the-daemon-runs-as-its-own-account)
+has a complete unit. Retire the per-user service first
+([by hand](#removing-the-service-by-hand)), or it starts again at your next
+login.
 
 Automatic updates do not manage this install (the daemon only notifies): replace
 the binaries in `/opt/seamless/bin` with `sudo` and restart it.

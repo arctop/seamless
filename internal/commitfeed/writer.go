@@ -31,9 +31,8 @@ type WriterConfig struct {
 	Idle time.Duration
 	// Host is the envelope's host: a lowercase host name.
 	Host string
-	// Sealed reports whether a project is sealed to another OS account
-	// (peer_auth). nil means none.
-	Sealed func(project string) bool
+	// Locked reports whether peer_auth locks a project. nil means none.
+	Locked func(project string) bool
 	Logger *slog.Logger
 	Now    func() time.Time
 }
@@ -107,7 +106,7 @@ func (w *Writer) WriteOnce(ctx context.Context) error {
 	}
 	now := w.cfg.Now()
 	snap, trim, err := Build(ctx, w.cfg.DB, Options{
-		Host: w.cfg.Host, Window: w.cfg.Window, Idle: w.cfg.Idle, Now: now, Sealed: w.cfg.Sealed,
+		Host: w.cfg.Host, Window: w.cfg.Window, Idle: w.cfg.Idle, Now: now, Locked: w.cfg.Locked,
 	})
 	if err != nil {
 		return err

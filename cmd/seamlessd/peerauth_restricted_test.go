@@ -7,9 +7,6 @@ package main
 // locked, confidential, isolation-sealed) and a restricted local account on the
 // socket beside the owner. Write screening is OFF: a restricted account's
 // binding rules must still wait for the owner's promotion.
-//
-// Step 10 (TestPeerAuthMatrix's rewrite) folds these rows into the full
-// matrix; until then they live here.
 
 import (
 	"context"
@@ -77,6 +74,17 @@ var raAccounts = map[string]access.Account{
 	raAccount: {UID: raUIDAgent, Name: raAccount, Home: "/Users/" + raAccount},
 }
 
+// raPolicy is the block every raDaemon policy is built from: the owner, the
+// locked projects, and the restricted account.
+func raPolicy() config.PeerAuth {
+	return config.PeerAuth{
+		Enabled: true, Owner: "katata",
+		Socket:     config.PeerSocket{Path: "/opt/seamless/run/seamlessd.sock"},
+		Locked:     []string{raLocked, raLockedOpen},
+		Restricted: []string{raAccount},
+	}
+}
+
 func raResolve(name string) (access.Account, error) {
 	if a, ok := raAccounts[name]; ok {
 		return a, nil
@@ -89,6 +97,7 @@ type raDaemon struct {
 	mgr    *files.Manager
 	screen *screening.Service
 	policy *access.Policy
+	mux    *http.ServeMux
 	owner  *httptest.Server // TCP, the bearer key
 	agent  *httptest.Server // the socket, the restricted account's uid
 	// stranger is the socket for a uid nobody listed.
@@ -115,12 +124,7 @@ func newRADaemon(t *testing.T) *raDaemon {
 	require.NoError(t, store.AddRepoMapping(ctx, db, "/Users/"+raAccount+"/repos/open", raOpen))
 	require.NoError(t, store.AddRepoMapping(ctx, db, "/Users/"+raAccount+"/repos/conf", raConf))
 
-	policy, err := access.New(config.PeerAuth{
-		Enabled: true, Owner: "katata",
-		Socket:     config.PeerSocket{Path: "/opt/seamless/run/seamlessd.sock"},
-		Locked:     []string{raLocked, raLockedOpen},
-		Restricted: []string{raAccount},
-	}, raResolve)
+	policy, err := access.New(raPolicy(), raResolve)
 	require.NoError(t, err)
 
 	mgr, err := files.NewManager(dir, db, nil)
@@ -162,7 +166,7 @@ func newRADaemon(t *testing.T) *raDaemon {
 		agentCard: a2aSrv.CardHandler(), hooks: hooksH, console: consoleSrv,
 	}.mux()
 
-	d := &raDaemon{db: db, mgr: mgr, screen: screen, policy: policy}
+	d := &raDaemon{db: db, mgr: mgr, screen: screen, policy: policy, mux: mux}
 	d.owner = httptest.NewServer(ownerHandler(policy, mux))
 	t.Cleanup(func() { closeServer(d.owner) })
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -383,7 +387,7 @@ func TestPeerAuthMatrix_Restricted(t *testing.T) {
 
 		// The owner's briefing in the open project shows the label beside the
 		// account's memory.
-		ownerHook := (&paDaemon{}).hook(t, d.owner.URL, raKey, "session-start", map[string]any{
+		ownerHook := paHook(t, d.owner.URL, raKey, "session-start", map[string]any{
 			"session_id": "owner-claude-1", "cwd": "/work/open", "source": "startup", "hook_event_name": "SessionStart"})
 		require.Contains(t, ownerHook, "written by account "+raAccount)
 	})
@@ -421,7 +425,7 @@ func TestPeerAuthMatrix_Restricted(t *testing.T) {
 			text, _ = paCall(t, cli, "recall", map[string]any{"query": "zz9prop", "project": raOpen})
 			require.NotContains(t, text, "zz9prop")
 		}
-		brief := (&paDaemon{}).hook(t, d.owner.URL, raKey, "session-start", map[string]any{
+		brief := paHook(t, d.owner.URL, raKey, "session-start", map[string]any{
 			"session_id": "owner-claude-2", "cwd": "/work/open", "source": "startup", "hook_event_name": "SessionStart"})
 		require.NotContains(t, brief, "zz9prop")
 

@@ -445,7 +445,7 @@ func clientServerURLCheck(cfg config.Config) check {
 			base, cfg.ServerHost())}
 	case resp.StatusCode == http.StatusForbidden && cfg.SocketPath() != "":
 		return check{statusFail, name, fmt.Sprintf(
-			"%s refused this OS account (403): it is not the owner and not configured under the server's peer_auth.users", base)}
+			"%s refused this OS account (403): it is not the owner and not listed under the server's peer_auth.restricted", base)}
 	case resp.StatusCode != http.StatusOK:
 		return check{statusWarn, name, fmt.Sprintf("%s answered %s", base, resp.Status)}
 	}

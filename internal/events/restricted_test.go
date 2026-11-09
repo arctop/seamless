@@ -12,10 +12,9 @@ import (
 	"github.com/arctop/seamless/internal/core"
 )
 
-// refile is the users-map design's (a sealed system's events stay out of the
-// owner's global scope). A restricted local account is not that: it has no
-// home project, and the owner reads everything it does, so its events keep
-// exactly the project they were recorded with -- the global scope included.
+// A restricted local account has no home project, and the owner reads
+// everything it does, so its events keep exactly the project they were
+// recorded with -- the global scope included.
 func TestRecord_LeavesARestrictedAccountsEventsAlone(t *testing.T) {
 	r := newRecorder(t)
 	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"_example_agent"}},

@@ -695,7 +695,12 @@ Any HTTP response counts as reachable, including a degraded 503.
 While `peer_auth` is on and a project is locked, it signs in on the passkey
 origin (`http://localhost:<port>` by default) instead of the server URL: the
 console's cookie belongs to one host, and browsers refuse passkeys on an IP
-address such as `127.0.0.1`.
+address such as `127.0.0.1`. A client's config carries no `peer_auth` block, so
+there it asks the daemon for that origin, and uses `localhost` only when the
+daemon is on this machine. A socket `server_url` is refused: a browser cannot
+dial one, so the command says where the console is and to sign in with the
+daemon's key, or to run it with a config that names the TCP `server_url` and
+`mcp.api_key` (set `SEAMLESS_CONFIG`).
 
 `--unlock PROJECT` is the terminal way to open a locked project in one
 browser's console, without a passkey. Run it as the daemon's own account,

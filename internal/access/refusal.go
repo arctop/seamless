@@ -7,7 +7,7 @@ import (
 
 // A refusal note: the daemon's outermost handler plants one in each request's
 // context, and the code that refuses a caller for who it is -- an OS account
-// peer_auth does not know, a configured account at the owner's console --
+// peer_auth does not know, a restricted account at the owner's console --
 // writes its reason there. The outer handler reads it back once the request
 // is done and records the refusal (write screening's access.refused, while
 // that feature is on). A note set by nobody records nothing.

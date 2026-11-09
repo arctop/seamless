@@ -127,7 +127,7 @@ func bfNewDaemon(t *testing.T) *bfDaemon {
 	require.NoError(t, err)
 	hooksH := hooks.NewHandler(hooks.Config{DB: db, Retrieve: ret, Events: rec, Files: mgr, APIKey: bfKey, LocalHost: bfHost})
 	// The console's handles as serve opens them while a project is locked.
-	views, err := store.OpenViews(dbPath, nil, policy.OwnerLocked())
+	views, err := store.OpenViews(dbPath, policy.OwnerLocked())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = views.Close() })
 	viewDB, err := views.For(nil)

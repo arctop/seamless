@@ -157,6 +157,13 @@ func TestGenerateConfigCoversExample(t *testing.T) {
 // real config does not exercise yet: a SET optional key renders its value the
 // way a plain key would (a zero one included, as a dash), and a zero duration
 // is a dash like any other zero.
+// exampleMapValue is a struct a config map might hold: its yaml keys are what
+// the type column shows.
+type exampleMapValue struct {
+	Path string `yaml:"path"`
+	Mode string `yaml:"mode"`
+}
+
 func TestConfigTypeAndDefault(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -170,8 +177,9 @@ func TestConfigTypeAndDefault(t *testing.T) {
 		{"duration", config.Duration(90 * time.Minute), "duration", "`1h30m`"},
 		{"zero duration", config.Duration(0), "duration", "-"},
 		{"plain int", 60, "int", "`60`"},
-		{"map of structs", map[string]config.PeerUser(nil), "map of string to {sealed []string, projects []string}", "-"},
+		{"map of structs", map[string]exampleMapValue(nil), "map of string to {path string, mode string}", "-"},
 		{"map of scalars", map[string]int(nil), "map of string to int", "-"},
+		{"map of anything", map[string]any(nil), "map of string to any", "-"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

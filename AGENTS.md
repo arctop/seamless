@@ -293,8 +293,8 @@ any of it.
   (`access.ReservedSessionName`). An OS account name never holds ":", so the
   first one ends the account. A new hook route that reads a session id from
   its body must qualify it the same way.
-- **A lease is judged, never trusted** (`peer_auth.locked`, the approval
-  design being built; `internal/access/lease.go`, migration 031). A locked
+- **A lease is judged, never trusted** (`peer_auth.locked`;
+  `internal/access/lease.go`, migration 031). A locked
   project is closed to the owner: `View.Listed` (name and counts) is true,
   `Visible`/`Writable` are false. A View opens it only through
   `View.WithLeases`, which keeps a lease only on the owner's socket view with a
@@ -314,15 +314,18 @@ any of it.
   the chain and its leases (`leasedView`) and fails closed on every error. A
   lease names the AGENT process (claude/codex), never a shell, terminal or
   multiplexer above it -- one of those would lease every process under it --
-  and the self-reported agent-process header is never part of the chain. The
-  residual risk is a same-uid debugger attaching to a process in the tree;
-  the guide states it.
+  and the self-reported agent-process header is never part of the chain. That
+  rule is enforced at filing (`approval.judgeAnchor`) and again in the approve
+  core (`approval.storedAnchorRefusal`, for a row an older daemon filed);
+  `internal/approval/anchor.go` is the one classifier, and it also yields
+  `Facts.Agent`. The residual risk is a same-uid debugger attaching to a
+  process in the tree; the guide states it.
 - **Locked is not sealed.** Isolation (open / confidential / sealed) says what
   flows in and out of a project; the lock (`peer_auth.locked`) says whether
   even its own agents need a fresh owner approval. Two settings, two words:
   never call the lock "sealed" in code, text or config. A locked project is
   normally confidential. `Policy.ConsoleHidden` is the set no owner surface
-  shows without a lease (projects sealed to an account plus the locked ones).
+  shows without a lease (the locked projects).
 - **Approver credentials are enrolled by the daemon's account, never by a
   route** (`store/approvers.go`, `internal/approval`, migration 032). A first
   passkey or Touch ID key needs a one-time code that only
@@ -345,7 +348,11 @@ any of it.
   runs with none in its own context, so resolving the session cannot file
   again. The lease's anchor is the session's stamped agent process (else the
   agent-process header), and only when it equals `AgentID()` of a hop in the
-  kernel chain. `approval.Approve` is the one approve core: a proof
+  kernel chain. A request is filed only for an agent program (Claude Code,
+  Codex, the Claude app's disclaimer), a process with one above it in the
+  kernel chain, or a stamped node, bun or deno. Broad ancestors (shells,
+  multiplexers, terminals, editor helpers, login processes, pid 1, other app
+  executables) are never filed or approved (`anchor.go`). `approval.Approve` is the one approve core: a proof
   (`ProofDaemon` only from `seamlessd approve`, run as the daemon's account
   and checked by `approverAccountCheck`; a passkey assertion over
   `approval.PasskeyApproveChallenge` (the request's challenge, the facts
@@ -364,8 +371,10 @@ any of it.
   `access.DeniedRemedy`) and how to ask again (`access.AskAgain`). The
   agent's explicit request (`ViaRequest`: access_request, `seam access
   request`) always files, and its reason fills in a pending request's
-  missing one (`store.FillAccessReason`: once, never on a refresh). The
-  reason is a fact, so an owner mid-review gets the facts-changed answer.
+  missing one (`store.FillAccessReason`, once, including a refresh filed
+  with none: a refresh carries the reason it was given, and given none it
+  shows "(no reason given)"). The reason is a fact, so an owner mid-review
+  gets the facts-changed answer.
   `access_request` (`internal/mcp/access_request.go`) files one explicitly and
   is registered only while peer_auth locks a project
   (`Config.OfferAccessRequest`: the `offerCommits` pattern for a whole tool),
@@ -385,7 +394,7 @@ any of it.
   characters -- only when the client declared elicitation and a proof can
   finish in the dialog (an enrolled Touch ID key; or passkeys on, one
   enrolled, and a URL-capable client). It then polls the request's row until
-  it leaves pending, up to `DialogWait` (two minutes) from the start of the
+  it leaves pending, up to `DialogWait` (110 seconds) from the start of the
   call. Any process of the owner's account, or a client hook, can answer an
   elicitation, so the answer only starts a proof: Touch ID sends
   `core.ApproverNotification` on the call's own reply, which the `seam
@@ -393,8 +402,10 @@ any of it.
   sends the request's page as a URL elicitation (with `?for=<duration>` when
   the form chose one). Only the approve core
   decides. Decline and cancel deny nothing. Without every precondition the
-  call answers at once, word for word as before, and there is at most one
-  dialog per request per connection. A dialog that ends with the request
+  call answers at once with the plain refusal, whose remedy offers only the
+  paths that exist (a passkey URL only with a passkey enrolled, Touch ID only
+  with a Touch ID key enrolled and a form-elicitation client), and there is
+  at most one dialog per request per connection. A dialog that ends with the request
   still pending replaces the refusal's remedy with one saying how it ended
   and the paths left (`refusalAfterDialog`), never a second remedy after
   the first. mcp-go v1.1.1 drops a notification
@@ -403,8 +414,9 @@ any of it.
   feature: the client's answer arrives behind the call that waits on it.
   The bridge watches the helper it launched through its stderr (`open
   --stderr` to a FIFO; the exit status never survives LaunchServices) and,
-  when it exits having written its outcome (a silent helper is not
-  reported), posts `core.ApproverEndedNotification` (request_id, outcome
+  when it exits having been seen there (it wrote, or held the FIFO's write
+  end after the bridge closed its own, so a killed helper counts; one never
+  seen is not reported), posts `core.ApproverEndedNotification` (request_id, outcome
   cancelled|closed) on its own MCP session -- a cancel is the helper's last
   stderr line beginning "SeamApprove: Not approved:", pinned on both sides
   (the app's FlowTests, cmd/seam's approverOutcome tests); the daemon takes it only
@@ -459,8 +471,8 @@ any of it.
   agent process it would stamp fails the anchor rule
   (`approval.Service.JudgeStart`, judged as filing judges a stamped session):
   then nothing is recorded and the notice says why. The notice offers Touch
-  ID only to Claude Code (`formDialogClient`), as MCP offers it only to a
-  form-capable client (`callWays`). Hooks treat that
+  ID to Claude Code and, hedged, to Codex (`formDialogClient`, `touchIDIf`), as
+  MCP offers it only to a form-capable client (`callWays`). Hooks treat that
   session as `reachLocked` (heartbeat, model, completion; no findings or
   captures). Over MCP it binds nothing (`getBinding`), but `lockedBinding`
   finds it: a call resolving its scope, session or actor through it is refused
@@ -469,7 +481,8 @@ any of it.
   hold results`) without filing. project_list and scope errors list locked
   projects, marked. Every lock refusal is two lines, the rule then the remedy.
   A leased connection's first tool result carries the project's briefing once
-  per lease (in memory), and from `access.ExpiryWarning` every tool result and
+  per lease, recorded on the lease row (`access_leases.briefed_at`), so a
+  restart does not send it again, and from `access.ExpiryWarning` every tool result and
   hook injection says when the lease ends. The notices ride as extra text
   items outside `logMiddleware`, and a leased connection's tool.call events
   keep no arguments, result or error text: the event is filed under the bound
@@ -508,13 +521,14 @@ any of it.
   found; the process binding, ambient inference and `soleAmbientByCWD` skip
   sessions the caller may not reach; hooks blank a session id that names one
   (`foreignSession`).
-- **A configured account never writes the global scope**, and anything nothing
-  else places lands in its home project (`peerHome`, `View.SessionScope`). It
-  never grows the repo map (`cwdProject`).
+- **A restricted account never writes the global scope** and has no home
+  project: a write or session nothing places in an open project it reaches is
+  refused (`View.SessionScope`), never landed somewhere else. It never grows
+  the repo map (`cwdProject`).
 - **Lists filter.** Anything that enumerates projects or sessions applies
   `access.Visible` (project_list, scope-error project lists, ambient
-  candidates). A sealed project's name is not shown to an account that cannot
-  reach it. A task answer is a read of every task it names: a blocker or a
+  candidates). A project a restricted account cannot reach is not listed for
+  it at all, and the owner's lists mark a locked project. A task answer is a read of every task it names: a blocker or a
   `depends_on` id in a project the caller may not read (`taskReader`, which is
   `store.CanRead` from `callerScope`) is withheld for every caller, the count
   kept (`internal/mcp/tools_tasks.go`; the store's `TaskBlockedError` carries
@@ -541,8 +555,9 @@ any of it.
   `seamless_unlock` cookie. Console reads go through `s.db(ctx)` and
   `s.eventLog(ctx)`, never `s.cfg.DB`. A console unlock is a cookie, never a
   lease: it never reaches an agent. Console writes go to
-  `s.writeDB()`, after reading their target through `s.cfg.DB`; a gardener
-  action by id checks `proposalReachable` first. A store function that both
+  `s.writeDB()`, after reading their target through `s.db(ctx)`, the handle
+  the request's reach chose; a gardener action by id checks `proposalReachable`
+  first. A store function that both
   reads and caches takes both handles (`CaptureStreakWith` and its siblings).
   A new table must be classified in `viewTables` or `viewExempt`
   (`TestViewCoversEveryTable`), and the one table a view cannot shadow -- `fts`
@@ -551,11 +566,11 @@ any of it.
   what it is about: an event recorded without a project is still hidden by its
   session, its item, or -- for the gardener's own events, whose payload carries
   the proposal key -- the proposal it concerns.
-- **The event log files a configured account's events under its own project**
-  (`events.refile` in `Record`/`RecordOnce`), so nothing it does lands in the
-  global scope the owner reads. Never insert into `events` anywhere else; the
-  console's live feed re-reads each event through the filtered handle
-  (`liveEventVisible`).
+- **Events reach the console through the filtered handle.** The console's live
+  feed re-reads each event through it (`liveEventVisible`) and the event log's
+  reads go through `events.ReadingFrom`, so an event about a locked project
+  reaches no page without a lease. Never insert into `events` anywhere but the
+  recorder.
 - **No agent-disk reads under peer_auth; the client pushes the captures.**
   `localDiskOK` answers no for every hook: the daemon runs as its own account,
   so every path a hook names was chosen by another account, and the daemon
@@ -577,11 +592,11 @@ any of it.
   never retried; a note lands where `View.SessionScope` places it; a leased
   locked project takes a note only from a session recorded in it. A field that
   does not validate refuses the whole push, and the format is additive.
-- **Prove it in the matrix.** `cmd/seamlessd/peerauth_matrix_test.go` drives
-  every tool in `mcp.Catalog()` (a tool without a probe row fails it), every
-  console route (read from console.go), the hooks, A2A and the live feed, in
-  both directions, and checks state after every write. A new surface gets a
-  row there.
+- **Prove it in the matrix.** The `TestPeerAuthMatrix_*` tests above drive
+  every tool in `mcp.Catalog()` (a tool without a probe row fails the coverage
+  check), every console route (read from console.go), the hooks, A2A and the
+  live feed, and check state after every write. A new surface gets a row
+  there.
 
 ### Write screening (`internal/screening`)
 

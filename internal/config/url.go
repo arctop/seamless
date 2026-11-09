@@ -60,7 +60,7 @@ func (c Config) ServerURL() string {
 const SocketBaseURL = "http://localhost"
 
 // SocketPath is the Unix socket a `server_url: unix:///path` names, or "" when
-// server_url is an http(s) URL or unset. It is how a role user's install (the
+// server_url is an http(s) URL or unset. It is how a socket client's install (the
 // seam CLI, its hooks, its mcp-proxy bridge) reaches a daemon that tells
 // callers apart by peer uid: the kernel, not a key, authenticates the dial.
 func (c Config) SocketPath() string {

@@ -5,10 +5,6 @@ package console
 // go. Every project appears in exactly one of four fences -- open,
 // confidential, sealed, locked -- and all four always show, empty or not, each
 // with what it is for and how to put a project there.
-//
-// A project sealed to another OS account (the earlier peer_auth.users design)
-// leaves no trace here: it is absent from the request's handle, and this page
-// never counts or names what that handle hides.
 
 import (
 	"context"
@@ -344,7 +340,7 @@ func privacySteps(d privacyData) []privacyStep {
 	} else {
 		out = append(out, privacyStep{State: "todo", Title: "Run Seamless as its own account", Sub: "the operating system then keeps agents out of the data folder",
 			Text: "Create a service account, move the data folder to it (mode 0700), run the daemon as that account and turn on peer_auth. The guide walks through every command, with a rollback.",
-			Link: peerAuthGuide, LinkLabel: "Seal projects to OS accounts"})
+			Link: peerAuthGuide, LinkLabel: "Lock projects behind your approval"})
 	}
 	locked := len(d.Fence(fenceLocked).Projects)
 	switch {

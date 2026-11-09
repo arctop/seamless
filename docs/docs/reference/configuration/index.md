@@ -119,10 +119,10 @@ The example file spells out the keys whose default has a value and leaves
 ### Peer-user authentication {#peer-auth}
 
 The `peer_auth:` block turns on a Unix-socket listener whose callers the daemon
-identifies by the uid the kernel reports, and maps OS accounts to the projects
-they may reach. It is off by default, and off is exactly the behavior of every
-earlier release. The guide is [Seal projects to OS accounts](https://thereisnospoon.org/docs/guides/peer-auth/);
-in short:
+identifies by the uid the kernel reports, and locks the projects you list until
+you approve an agent's access. It is off by default, and off is exactly the
+behavior of every earlier release. The guide is
+[Lock projects behind your approval](https://thereisnospoon.org/docs/guides/peer-auth/); in short:
 
 - `enabled` (`SEAMLESS_PEER_AUTH_ENABLED`) switches it on.
 - `owner` (`SEAMLESS_PEER_AUTH_OWNER`) is the OS account - a user name or a
@@ -134,16 +134,16 @@ in short:
   octal, default `0666`: every local account may knock, and the kernel still
   names each one. `socket.group` (`SEAMLESS_PEER_AUTH_SOCKET_GROUP`) hands the
   socket to a group, for a mode such as `0660`.
-- `users` maps an OS account (name or uid) to `sealed` - projects reachable only
-  from that account - and `projects` - projects it shares with the owner. It is
-  file-only: a map of lists has no single-variable spelling.
-- `locked` lists locked projects instead (the approval design, being built):
-  each is closed to every owner request - its name shows, its content does
-  not, writes are refused - unless the request rides a socket connection whose
-  process holds a lease the owner approved. The TCP bearer key never holds one.
-  The lock is not the `sealed` isolation state (which says what flows in and
-  out of a project): a locked project is normally `confidential`. File-only,
-  and never beside `users`: a config names one design or the other.
+- `locked` lists locked projects: each is closed to every owner request - its
+  name shows, its content does not, writes are refused - unless the request
+  rides a socket connection whose process holds a lease the owner approved. The
+  TCP bearer key never holds one. The lock is not the `sealed` isolation state
+  (which says what flows in and out of a project): a locked project is normally
+  `confidential`, and `serve` refuses one that is `open`. File-only.
+- `users` is a retired key. A config that sets it to a non-empty map is refused
+  when it loads, even while the block is disabled, with a message that says
+  to list the projects under `locked` and remove `users`
+  ([the guide](https://thereisnospoon.org/docs/guides/peer-auth/#configure-it) has it word for word).
 - `max_lease` caps every lease the owner approves on a locked project, "until
   this session ends" included: at most `24h`, unset `8h`. File-only.
 - `restricted` lists restricted local accounts, each an OS user name or a
@@ -155,8 +155,7 @@ in short:
   are labeled with its name, and a constraint, convention, protocol or stage it
   writes waits for you to promote it
   ([Restricted local accounts](https://thereisnospoon.org/docs/guides/peer-auth/#restricted-local-accounts)).
-  Refused while `enabled` is false, for the owner, and beside `users`.
-  File-only.
+  Refused while `enabled` is false, and for the owner. File-only.
 - `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
   the owner's approver passkeys ([seamlessd approvers](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_approvers)).
   Unset, they are `localhost` and the console's own address on localhost.
@@ -304,7 +303,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `peer_auth.max_lease` | duration | - |
 | `peer_auth.passkeys.rp_id` | string | - |
 | `peer_auth.passkeys.origins` | []string | - |
-| `peer_auth.users` | map of string to {sealed []string, projects []string} | - |
+| `peer_auth.users` | map of string to any | - |
 | `peer_auth.restricted` | []string | - |
 | `isolation.requests` | bool | - |
 
@@ -731,25 +730,31 @@ update:
   min_age: 24h
 
 # Peer-user authentication: a Unix socket whose callers the daemon identifies by
-# the uid the kernel reports (never by anything the client sends), and the map of
-# which OS accounts may reach which projects. Off by default, and off is exactly
-# the behavior of every earlier release. On:
-#   - the TCP bearer key is the owner account: it reaches every project except
-#     those sealed to another account, and so does the owner on the socket;
-#   - a configured account reaches only its own projects (sealed plus shared)
-#     and reads -- never writes -- the global scope;
-#   - any other uid on the socket is refused (403);
-#   - the console is the owner's alone, and shows no project sealed to another
-#     account;
-#   - the daemon reads no agent files (transcripts, plan files): findings
-#     harvest, token totals, model sniffing, plan and subagent capture are off.
+# the uid the kernel reports (never by anything the client sends), and the
+# projects locked behind the owner's approval. Off by default, and off is
+# exactly the behavior of every earlier release. On:
+#   - the TCP bearer key is the owner account: it reaches every project that is
+#     not locked, and so does the owner on the socket;
+#   - a locked project is closed to every owner request -- its name shows, its
+#     content does not, writes are refused -- unless the request rides a socket
+#     connection whose process holds a lease the owner approved; the TCP bearer
+#     key never holds one;
+#   - an account under restricted reaches the open projects that are not locked
+#     and reads -- never writes -- the global scope; any other uid on the socket
+#     is refused (403);
+#   - the console is the owner's alone, and shows a locked project by name and
+#     counts only until it is unlocked in that browser;
+#   - the daemon reads no agent files (transcripts, plan files): seam hook reads
+#     them and sends the findings, token totals, model, plan and subagent
+#     captures, from clients whose server_url is the socket.
 # serve refuses to start unless the boundary would hold on disk too: the daemon
 # runs as its own account (not the owner, not root), data_dir is that account's
 # and 0700, the socket's directory and every directory above the data, the
 # config file and the seamlessd binary are writable by nobody but root and the
-# daemon's account, every named project exists, and every sealed project is
+# daemon's account, every named project exists, and every locked project is
 # confidential or sealed. `seamlessd doctor`, run as the daemon's account,
-# reports each of those. See the peer_auth guide in the docs for the deployment.
+# reports each of those. See the peer_auth guide in the docs for the deployment
+# and the cutover from an existing install.
 # The block is new after v0.7.4 and releases before it refuse config keys they
 # do not know, so it is left commented out here.
 # peer_auth:
@@ -778,8 +783,7 @@ update:
 #   # unless the request rides a socket connection whose process holds a lease
 #   # the owner approved; the TCP bearer key never holds one. The lock is not
 #   # the sealed isolation state: a locked project is normally confidential.
-#   # File only (no env). Never beside users below: a config names one design
-#   # or the other.
+#   # File only (no env).
 #   locked: []
 #   # Caps every lease the owner approves on a locked project, "until this
 #   # session ends" included. At most 24h; unset means 8h. File only (no env).
@@ -799,18 +803,11 @@ update:
 #   # It cannot create projects, files no access requests and holds no leases.
 #   # Its writes are labeled with its name, and a constraint, convention,
 #   # protocol or stage it writes is a proposal until you promote it. Refused
-#   # while peer_auth is disabled, for the owner, and beside users. File only.
+#   # while peer_auth is disabled, and for the owner. File only (no env).
 #   restricted: []
-#   # OS account (user name or numeric uid) -> its reach. File only (no env).
-#   # sealed: reachable ONLY from this account's socket connections; a project
-#   # is sealed to at most one account, and never also listed for another.
-#   # projects: also reachable from this account, and still the owner's too.
-#   # The first sealed project (else the first shared one) is the account's
-#   # home: where its sessions and unplaced calls land.
-#   users:
-#     _example_role:
-#       sealed: [example-project]
-#       projects: []
+#   # users is retired: a non-empty users map is refused at load, even while the
+#   # block is disabled. List those projects under locked and remove users (the
+#   # peer_auth guide has the steps).
 
 # Project isolation beyond each project's own state (open, confidential or
 # sealed, set on the console's project Overview or with seam project

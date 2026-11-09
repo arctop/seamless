@@ -420,7 +420,7 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 	// there is refused like an explicit one.
 	//
 	// FAILS on the branch as of 4989ebee: resolveWriteScope
-	// (internal/mcp/server.go) returns the bound, ambient or home project
+	// (internal/mcp/server.go) returns the bound or ambient project
 	// without asking CanWrite, so WriteConfined is never consulted for a create
 	// that names no project -- every create lands in the rebound project,
 	// the global scope included.

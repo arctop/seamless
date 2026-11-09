@@ -57,12 +57,14 @@ cannot spend the whole hook budget.
 Under `peer_auth`, a `SessionStart` in a locked project's repository answers
 with the locked notice instead of the briefing. The notice gives the lock's
 rule and remedy, and names the access request it files for the session, which
-it records with its name, cwd and model only. The remedy offers Touch ID only
-to Claude Code, the client that shows the approval dialog Touch ID runs in (not
-Codex), and only when a Touch ID key is enrolled. It offers a passkey only when
-one is enrolled, and `seam approve <id>` always. A hook whose agent process is
-one no approval may name - a shell, a terminal, a multiplexer or a login
-process; an agent started straight from a tmux pane names the tmux server -
+it records with its name, cwd and model only. The remedy offers Touch ID to
+Claude Code, the client that shows the approval dialog Touch ID runs in, and to
+Codex with `if this Codex shows one` (the hook runs before MCP connects, so it
+cannot see whether this Codex declares the dialog; a tool call's remedy can),
+and only when a Touch ID key is enrolled. It offers a passkey only when one is
+enrolled, and `seam approve <id>` always. A hook whose agent process is one no
+approval may name - a shell, a terminal, a multiplexer or a login process, as
+when `seam hook` is run by hand in a tmux pane and names the tmux server -
 records nothing: the notice says why, what to do instead, and `This session is
 not recorded, and Seamless tools cannot read or write <project> from this
 process.`

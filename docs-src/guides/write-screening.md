@@ -339,7 +339,7 @@ on, with a reason code:
 | `fence.read`, `fence.write` | A read or write across a [project isolation](/concepts/project-isolation/) fence. `fence.write` is also every cross-project write attempt. |
 | `peer.unreachable` | Under [peer_auth](/guides/peer-auth/), an account reaching a project it may not. |
 | `peer.unknown` | A socket caller whose OS account peer_auth does not know, or with no peer credential. |
-| `peer.owner_only` | A configured account reaching the owner's console. |
+| `peer.owner_only` | A restricted account reaching the owner's console. |
 | `auth.failed` | A request with no valid bearer key, on any surface. |
 
 The event names the surface (`mcp`, `hooks`, `a2a`, `console`), the tool and
@@ -353,8 +353,8 @@ With `screening.feed_socket` set, the daemon delivers every event's metadata
 to that Unix socket, for a monitor that should see what agents do without
 reading Seamless. A frame carries the event's kind (as `activity`), time,
 class, severity and outcome; the session's name and agent process; the
-project - **a confidential or sealed project, or one sealed to another OS
-account, as a keyed hash** (`h:` and 24 hex characters, keyed by a random key
+project - **a confidential or sealed project, or one locked under
+peer_auth, as a keyed hash** (`h:` and 24 hex characters, keyed by a random key
 in the spool folder); the item kind and id; and the codes, counts, sizes and
 flags the event carries. It never carries arguments, results, bodies,
 prompts, queries, names or titles: each frame is built from an allowlist of

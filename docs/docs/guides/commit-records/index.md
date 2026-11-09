@@ -130,8 +130,8 @@ same names. A working directory outside every mapped repository gives `null`,
 and so does a name outside the contract's pattern.
 
 A confidential or sealed project's repository is never named, and neither is
-that of a project sealed to another OS account under
-[peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/): their sessions and tasks are still listed - by
+that of a project locked under [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/): their sessions
+and tasks are still listed - by
 name or id, with their times and recorded commits - with `repo` `null`, the way
 the metadata feed sends such a project's slug only as a keyed hash. A monitor
 that matches by time cannot match those sessions; a recorded commit, or one

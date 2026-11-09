@@ -57,9 +57,9 @@ func (s *Service) Briefing(ctx context.Context, in BriefingInput) (string, []str
 }
 
 // cwdProject resolves the project a cwd places an agent in, under the caller's
-// peer_auth reach: a configured OS account working outside its own projects is
-// placed in its own project, and the owner in a repository sealed to another
-// account gets the refusal (access.ErrNotReachable) rather than that project.
+// peer_auth reach: a project the caller may not write -- locked to the owner,
+// out of a restricted account's reach -- is the refusal
+// (access.ErrNotReachable) rather than that project.
 func (s *Service) cwdProject(ctx context.Context, host, cwd string) (string, error) {
 	project, err := store.ResolveProjectForCWD(ctx, s.db, host, cwd)
 	if err != nil {

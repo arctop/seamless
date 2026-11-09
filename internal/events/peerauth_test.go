@@ -2,76 +2,15 @@ package events
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/arctop/seamless/internal/access"
-	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/store/storetest"
 )
-
-func peerPolicy(t *testing.T) *access.Policy {
-	t.Helper()
-	accounts := map[string]access.Account{
-		"katata":          {UID: 501, Name: "katata"},
-		"_arctop_finance": {UID: 470, Name: "_arctop_finance"},
-	}
-	p, err := access.New(config.PeerAuth{Owner: "katata", Users: map[string]config.PeerUser{
-		"_arctop_finance": {Sealed: []string{"arctop-finance"}},
-	}}, func(name string) (access.Account, error) {
-		if a, ok := accounts[name]; ok {
-			return a, nil
-		}
-		return access.Account{}, fmt.Errorf("no %s", name)
-	})
-	require.NoError(t, err)
-	return p
-}
-
-// A configured account's event never lands outside its own projects: an
-// unattributed one (the global scope) or one naming another project is filed
-// under its home project. The owner's events, and events for no caller, keep
-// the project they were given.
-func TestRecord_RefilesAConfiguredAccountsEvents(t *testing.T) {
-	r := newRecorder(t)
-	p := peerPolicy(t)
-	fin, ok := p.PeerView(470)
-	require.True(t, ok)
-
-	for _, tc := range []struct {
-		name    string
-		ctx     context.Context
-		project string
-		want    string
-	}{
-		{"an account's unattributed event", access.WithView(context.Background(), fin), "", "arctop-finance"},
-		{"an account's event naming another project", access.WithView(context.Background(), fin), "arctop-ops", "arctop-finance"},
-		{"an account's event in its own project", access.WithView(context.Background(), fin), "arctop-finance", "arctop-finance"},
-		{"the owner's global event", access.WithView(context.Background(), p.OwnerView()), "", ""},
-		{"an event for no caller", context.Background(), "", ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			id, err := r.Record(tc.ctx, core.Event{Kind: core.EventToolCall, ProjectSlug: tc.project, Payload: map[string]any{"tool": "recall"}})
-			require.NoError(t, err)
-			e, found, err := r.ByID(context.Background(), id)
-			require.NoError(t, err)
-			require.True(t, found)
-			require.Equal(t, tc.want, e.ProjectSlug)
-
-			onceID, recorded, err := r.RecordOnce(tc.ctx, core.Event{Kind: core.EventMemoryFirstReuse, ItemID: "item-" + id, ProjectSlug: tc.project})
-			require.NoError(t, err)
-			require.True(t, recorded)
-			e, _, err = r.ByID(context.Background(), onceID)
-			require.NoError(t, err)
-			require.Equal(t, tc.want, e.ProjectSlug, "RecordOnce files the same way")
-		})
-	}
-}
 
 // ReadingFrom answers reads from the filtered handle and shares everything else:
 // an event recorded through either reaches both's subscribers, and the reads

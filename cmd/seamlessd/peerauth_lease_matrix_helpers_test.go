@@ -301,7 +301,7 @@ func newLMDaemon(t *testing.T) *lmDaemon {
 	})
 	// The console as serve wires it under locked projects: a view pool, the
 	// base handle for unleased reads, writes to the main handle.
-	views, err := store.OpenViews(dbPath, nil, policy.OwnerLocked())
+	views, err := store.OpenViews(dbPath, policy.OwnerLocked())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = views.Close() })
 	base, err := views.For(nil)

@@ -113,7 +113,7 @@ func (h *Handler) subagentStop(w http.ResponseWriter, r *http.Request) {
 	p.Capture = h.pushedCapture(r.Context(), client, body)
 	reach, lockedProject := h.sessionReachOf(r.Context(), client, p.ParentSessionID)
 	if reach != reachOK {
-		p.ParentSessionID = "" // foreignSession: another account's, or locked
+		p.ParentSessionID = "" // foreignSession: another principal's, or locked
 	}
 
 	if client == ClientCodex {
