@@ -13,7 +13,7 @@ import (
 )
 
 // A tool call that waits past the server's ReadTimeout still returns its
-// result: an approval dialog waits up to two minutes, and the daemon's
+// result: an approval dialog waits up to 110 seconds, and the daemon's
 // ReadTimeout is 30s (cmd/seamlessd newHTTPServer). ReadTimeout is a deadline
 // on the connection; it holds because net/http clears that deadline itself
 // when the request body hits EOF and its background read (the disconnect

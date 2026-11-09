@@ -50,8 +50,12 @@ import (
 )
 
 const (
-	// defaultDialogWait bounds a dialog from the start of its tool call.
-	defaultDialogWait = 2 * time.Minute
+	// defaultDialogWait bounds a dialog from the start of its tool call. It
+	// ends before Claude Code moves a tool call that has run for 120 seconds
+	// to the background: a wait as long as that raced the move, and the
+	// call's answer arrived as a background task's notification instead of
+	// in the call (seen in the owner's macOS check, U3).
+	defaultDialogWait = 110 * time.Second
 	// defaultDialogPoll is how often a waiting dialog reads its request.
 	defaultDialogPoll = 500 * time.Millisecond
 )
@@ -428,10 +432,11 @@ func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSess
 	msg := "Seamless access request " + t.Short + ": " + approve + " with your passkey, or deny it, on the page this " +
 		"opens. Opening it grants nothing by itself."
 	if f, err := s.cfg.Approvals.Facts(ctx, t.ID); err == nil {
-		// What is asked first, as in the form (dialogLead); the page shows
-		// every fact, and asks how long unless the form did.
-		msg = plain(askerName(f)) + " asks for " + plain(accessPhrase(f)) + "; " + warningCount(len(f.Warnings)) +
-			". " + decide + " with your passkey, or deny it, on the page this opens, which shows the request (" +
+		// The warning count and what is asked first, as in the form
+		// (dialogLead); the page shows every fact, and asks how long unless
+		// the form did.
+		msg = warningCount(len(f.Warnings)) + ". " + plain(askerName(f)) + " asks for " + plain(accessPhrase(f)) +
+			".\n" + decide + " with your passkey, or deny it, on the page this opens, which shows the request (" +
 			plain(f.Short) + ") in full. Opening it grants nothing by itself."
 	}
 	res, err := s.mcp.RequestURLElicitation(ctx, session, elicitID, page, msg)
@@ -827,35 +832,42 @@ func dialogMessage(f approval.Facts, shown dialogShown) string {
 	return b.String()
 }
 
-// dialogLead is the dialog's first line: "Claude Code 2.1.319 asks for
-// read-write access to demo-vault (confidential, locked) until its session
-// ends (8 hours at most) unless you pick less below; 2 warnings." The
-// duration is the form's default, "until the session ends", which the lease
-// cap bounds; a request no session names has nothing to end it sooner.
+// dialogLead is the dialog's first two lines, short ones: Claude Code shows
+// a dialog collapsed to its first lines, cut at the terminal's edge, and
+// does not expand the message (ctrl+o opens the transcript instead). So the
+// warning count comes first, then who asks for what, then for how long:
+//
+//	2 warnings. Claude Code 2.1.319 asks for read-write access to demo-vault.
+//	Until its session ends (8 hours at most), unless you pick less below.
+//
+// The project's isolation and lock are on the Project line further down.
+// The duration is the form's default, "until the session ends", which the
+// lease cap bounds; a request no session names has nothing to end it sooner.
 func dialogLead(f approval.Facts, capped time.Duration) string {
 	asks := "asks for"
 	if f.Kind == store.AccessKindRefresh {
 		asks = "asks again for"
 	}
-	long := "until its session ends (" + spanWords(capped) + " at most)"
+	long := "Until its session ends (" + spanWords(capped) + " at most)"
 	if f.SessionID == "" {
-		long = "for " + spanWords(capped)
+		long = "For " + spanWords(capped)
 	}
-	return plain(askerName(f)) + " " + asks + " " + plain(accessPhrase(f)) + " " + long + " unless you pick less below; " +
-		warningCount(len(f.Warnings)) + "."
+	return warningCount(len(f.Warnings)) + ". " + plain(askerName(f)) + " " + asks + " " + plain(accessPhrase(f)) + ".\n" +
+		long + ", unless you pick less below."
 }
 
 // accessPhrase is the access a request asks for, and where: "read-write
-// access to demo-vault (confidential, locked)".
+// access to demo-vault", "read-only access to example-legal from project
+// example-ops". The isolation is left to the facts below it.
 func accessPhrase(f approval.Facts) string {
 	if f.Kind == store.AccessKindGrant {
-		return f.Access + " access to " + f.Project + " (" + f.Isolation + ") from project " + f.From
+		return f.Access + " access to " + f.Project + " from project " + f.From
 	}
-	return f.Access + " access to " + f.Project + " (" + f.Isolation + ", locked)"
+	return f.Access + " access to " + f.Project
 }
 
-// warningCount counts the warnings for the lead: "no warnings", "1
-// warning", "2 warnings".
+// warningCount counts the warnings to open a sentence with: "No warnings",
+// "1 warning", "2 warnings".
 func warningCount(n int) string {
 	switch {
 	case n == 1:
@@ -863,7 +875,7 @@ func warningCount(n int) string {
 	case n > 1:
 		return fmt.Sprintf("%d warnings", n)
 	}
-	return "no warnings"
+	return "No warnings"
 }
 
 // askerName names the asking process for a person: its agent's name, else

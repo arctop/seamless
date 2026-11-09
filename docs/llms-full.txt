@@ -8114,7 +8114,7 @@ request opens an approval dialog in the session: the owner sees the daemon's
 facts, warnings first, and chooses a duration and Touch ID or a passkey. The
 dialog's answer is never the approval - any process of the owner's account
 could answer it - the proof is: the Touch ID helper's signature or the
-passkey's assertion, checked by the daemon. The call waits up to two minutes
+passkey's assertion, checked by the daemon. The call waits up to 110 seconds
 for it, then answers with the request id; the owner can still decide later
 with `seam approve`, or with a passkey on the request's console page when one
 is enrolled. Choosing a passkey in the dialog opens the request's page for the
@@ -8249,7 +8249,7 @@ Fetch a web page (SSRF-guarded: private/loopback addresses are rejected) and sav
 
 ## access_request {#access_request}
 
-Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth.locked), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another, and a reason given then fills in one the waiting request lacks. Once the owner denies a request, refused calls file nothing more and say so: ask again here, with a reason, when the owner tells you to. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to two minutes for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then. An agent that already holds the access it asks for is answered with it, and nothing is filed, until 30 minutes before it ends. With read grants on (isolation.requests), it also asks for a read of a confidential project no lock covers.
+Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth.locked), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another, and a reason given then fills in one the waiting request lacks. Once the owner denies a request, refused calls file nothing more and say so: ask again here, with a reason, when the owner tells you to. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to 110 seconds for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then. An agent that already holds the access it asks for is answered with it, and nothing is filed, until 30 minutes before it ends. With read grants on (isolation.requests), it also asks for a read of a confidential project no lock covers.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -9094,14 +9094,22 @@ Only the warnings are colored, and not with `NO_COLOR` set or `TERM=dumb`.
 Every value is printed with control characters escaped, so nothing an agent
 wrote can repaint the terminal.
 
-Next it lists the durations the daemon offers, numbered (`session`, the
+Next it lists the durations the daemon offers by name (`session`, the
 default: until the asking session ends, at most `peer_auth.max_lease`; `1h`;
-`4h`), and takes the number or the name; Enter takes the default; `--for`
-skips the question, and takes only a duration the daemon offers. Then it says
-in one line what an approval grants, and asks:
+`4h`), and takes a name or the start of one, in any case: `1` is `1h`, `s` is
+`session`. The list is not numbered, so a digit always means hours. Enter
+takes the default; an answer that names none of them, or more than one, asks
+again. `--for` skips the question, and takes only a duration the daemon
+offers. Then it says in one line what an approval grants - for a fixed
+duration, until what time - and asks:
 
 ```text
-If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance until the session ends, at most 8h.
+For how long?
+  session  until the session ends, at most 8h (the default)
+  1h       for 1 hour
+  4h       for 4 hours
+Duration [session, 1h, 4h; Enter for session]: 1
+If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance for 1 hour, until 15:05.
 Approve R-7F3K? [y/N/d=deny]
 ```
 

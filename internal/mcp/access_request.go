@@ -54,7 +54,7 @@ func accessRequestTool() mcp.Tool {
 			"say why. Asking again finds the request already waiting rather than filing another, and a reason given then "+
 			"fills in one the waiting request lacks. Once the owner denies a request, refused calls file nothing more and "+
 			"say so: ask again here, with a reason, when the owner tells you to. When this agent's client "+
-			"can show an approval dialog, the call shows the owner the request and waits up to two minutes for the decision; "+
+			"can show an approval dialog, the call shows the owner the request and waits up to 110 seconds for the decision; "+
 			"otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the "+
 			"project to this agent's process tree until the time the result names: retry the work then. An agent that "+
 			"already holds the access it asks for is answered with it, and nothing is filed, until 30 minutes before it "+

@@ -106,7 +106,7 @@ request opens an approval dialog in the session: the owner sees the daemon's
 facts, warnings first, and chooses a duration and Touch ID or a passkey. The
 dialog's answer is never the approval - any process of the owner's account
 could answer it - the proof is: the Touch ID helper's signature or the
-passkey's assertion, checked by the daemon. The call waits up to two minutes
+passkey's assertion, checked by the daemon. The call waits up to 110 seconds
 for it, then answers with the request id; the owner can still decide later
 with `seam approve`, or with a passkey on the request's console page when one
 is enrolled. Choosing a passkey in the dialog opens the request's page for the

@@ -412,11 +412,11 @@ func TestDialog_TouchIDProofApproves(t *testing.T) {
 	shown := o.dialogs()
 	require.Len(t, shown, 1)
 	msg := shown[0].Params.Message
-	// Claude Code collapses the dialog to its first line: one sentence that
-	// says what is asked.
-	lead, _, _ := strings.Cut(msg, "\n")
-	require.Equal(t, "Claude Code 2.1.319 asks for read-write access to "+lkFin+" (confidential, locked) until its "+
-		"session ends (8 hours at most) unless you pick less below; 1 warning.", lead)
+	// Claude Code collapses the dialog to its first lines, cut at the
+	// terminal's edge: the warning count first, then what is asked.
+	lead, _, _ := strings.Cut(msg, "\n\n")
+	require.Equal(t, "1 warning. Claude Code 2.1.319 asks for read-write access to "+lkFin+".\n"+
+		"Until its session ends (8 hours at most), unless you pick less below.", lead)
 	require.NotContains(t, lead, short, "the request's id is not the lead")
 	require.Contains(t, msg, "Project: "+lkFin+" (confidential, locked)")
 	require.Contains(t, msg, "Session: cc/fin\n")
@@ -743,15 +743,15 @@ func TestDialog_PasskeyPage(t *testing.T) {
 			}
 			require.Equal(t, mcp.ElicitationModeURL, shown[len(shown)-1].Params.Mode)
 			last := shown[len(shown)-1].Params.Message
-			require.True(t, strings.HasPrefix(last, "Claude Code 2.1.319 asks for read-write "+
-				"access to "+lkFin+" (confidential, locked); "), "what is asked comes first: %s", last)
+			require.True(t, strings.HasPrefix(last, "1 warning. Claude Code 2.1.319 asks for read-write "+
+				"access to "+lkFin+".\n"), "the warning count and what is asked come first: %s", last)
 			if withTouchID {
-				require.Contains(t, last, ". Approve it for 1 hour with your passkey, or deny it, on the page this opens")
+				require.Contains(t, last, ".\nApprove it for 1 hour with your passkey, or deny it, on the page this opens")
 				props := shown[0].Params.RequestedSchema.(map[string]any)["properties"].(map[string]any)
 				require.Equal(t, []any{"Touch ID", "Passkey (opens the approval page for the duration chosen here)"},
 					props["method"].(map[string]any)["enumNames"])
 			} else {
-				require.Contains(t, last, ". Approve it with your passkey, or deny it, on the page this opens")
+				require.Contains(t, last, ".\nApprove it with your passkey, or deny it, on the page this opens")
 			}
 			require.Empty(t, o.asks, "no Touch ID ask")
 

@@ -282,7 +282,7 @@ type Config struct {
 	// NumTools (ToolCount) and every refusal are exactly as before.
 	OfferAccessRequest bool
 	// DialogWait bounds an in-session approval dialog (elicit.go), counted
-	// from the start of the tool call; 0 means two minutes. DialogPoll is how
+	// from the start of the tool call; 0 means 110 seconds. DialogPoll is how
 	// often the waiting dialog reads its request; 0 means half a second. Both
 	// exist for tests.
 	DialogWait, DialogPoll time.Duration
