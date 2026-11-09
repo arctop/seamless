@@ -141,8 +141,8 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 		require.Equal(t, "Remedy: this call ran before the approval and did nothing -- retry it now.", ls[1])
 		shown := o.dialogs()
 		require.Len(t, shown, 1)
-		require.True(t, strings.HasPrefix(shown[0].Params.Message, "Claude Code 2.1.319 asks for read-write access to "+pmLocked+
-			" (confidential, locked) until its session ends (8 hours at most)"), shown[0].Params.Message)
+		require.True(t, strings.HasPrefix(shown[0].Params.Message, "No warnings. Claude Code 2.1.319 asks for read-write access to "+pmLocked+
+			".\nUntil its session ends (8 hours at most), unless you pick less below."), shown[0].Params.Message)
 		d.requireTreeOpen(agent, sibling)
 
 		// "Until the session ends" means it: session_end revokes the lease.
@@ -387,7 +387,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 			require.Equal(t, pmTouchIDBad, pmErrorText(t, body))
 			status, body = d.touchIDPost(helper, a.ID, pmTouchIDForm(key.id, sigB, approval.For1h, oneB.Request.Digest))
 			require.Equal(t, http.StatusConflict, status, body)
-			require.Equal(t, pmFactsChanged, pmErrorText(t, body))
+			require.Equal(t, pmTouchIDFactsChanged, pmErrorText(t, body))
 			d.nothing("B's signature on A", map[string]string{a.ID: store.ApprovalPending, b.ID: store.ApprovalPending})
 
 			// On its own request it is a proof: B's tree is leased, A's is not.
@@ -460,7 +460,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 		// A digest that is not the facts': every path refuses it.
 		status, body := d.touchIDPost(helper, a.ID, pmTouchIDForm(key.id, sig, approval.For1h, garbage))
 		require.Equal(t, http.StatusConflict, status, body)
-		require.Equal(t, pmFactsChanged, pmErrorText(t, body))
+		require.Equal(t, pmTouchIDFactsChanged, pmErrorText(t, body))
 		status, body = d.passkeyPost(a.ID, assertion, approval.For1h, garbage)
 		require.Equal(t, http.StatusConflict, status, body)
 		require.Equal(t, pmFactsChanged, pmErrorText(t, body))
@@ -478,7 +478,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 		require.Equal(t, approval.WarnTainted, fresh.Request.Warnings[0].Code)
 		status, body = d.touchIDPost(helper, a.ID, pmTouchIDForm(key.id, sig, approval.For1h, one.Request.Digest))
 		require.Equal(t, http.StatusConflict, status, body)
-		require.Equal(t, pmFactsChanged, pmErrorText(t, body))
+		require.Equal(t, pmTouchIDFactsChanged, pmErrorText(t, body))
 		status, body = d.touchIDPost(helper, a.ID, pmTouchIDForm(key.id, sig, approval.For1h, fresh.Request.Digest))
 		require.Equal(t, http.StatusBadRequest, status, "the fresh digest, under a signature over the stale one: %s", body)
 		require.Equal(t, pmTouchIDBad, pmErrorText(t, body))

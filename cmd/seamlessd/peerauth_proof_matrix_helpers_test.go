@@ -95,6 +95,11 @@ const (
 	pmDecided      = "this request was already decided"
 	pmExpired      = "this request expired: the agent can ask again"
 	pmFactsChanged = "the request's facts changed since this page loaded: reload and look at them again"
+	// pmTouchIDFactsChanged is the same 409 said to the Touch ID helper, which
+	// has no page to reload.
+	pmTouchIDFactsChanged = "the request changed while Touch ID showed it (a new warning, or the agent's reason filled in), " +
+		"so nothing was approved: run seam approve in your own terminal to see it as it stands now, " +
+		"or have the agent ask again"
 )
 
 var (
