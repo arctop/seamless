@@ -484,14 +484,22 @@ Only the warnings are colored, and not with `NO_COLOR` set or `TERM=dumb`.
 Every value is printed with control characters escaped, so nothing an agent
 wrote can repaint the terminal.
 
-Next it lists the durations the daemon offers, numbered (`session`, the
+Next it lists the durations the daemon offers by name (`session`, the
 default: until the asking session ends, at most `peer_auth.max_lease`; `1h`;
-`4h`), and takes the number or the name; Enter takes the default; `--for`
-skips the question, and takes only a duration the daemon offers. Then it says
-in one line what an approval grants, and asks:
+`4h`), and takes a name or the start of one, in any case: `1` is `1h`, `s` is
+`session`. The list is not numbered, so a digit always means hours. Enter
+takes the default; an answer that names none of them, or more than one, asks
+again. `--for` skips the question, and takes only a duration the daemon
+offers. Then it says in one line what an approval grants - for a fixed
+duration, until what time - and asks:
 
 ```text
-If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance until the session ends, at most 8h.
+For how long?
+  session  until the session ends, at most 8h (the default)
+  1h       for 1 hour
+  4h       for 4 hours
+Duration [session, 1h, 4h; Enter for session]: 1
+If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance for 1 hour, until 15:05.
 Approve R-7F3K? [y/N/d=deny]
 ```
 

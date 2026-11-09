@@ -590,12 +590,20 @@ warnings are indented like the facts, and every value lines up in one column.
 Only the warnings are colored, and not with <code>NO_COLOR</code> set or <code>TERM=dumb</code>.
 Every value is printed with control characters escaped, so nothing an agent
 wrote can repaint the terminal.</p>
-<p>Next it lists the durations the daemon offers, numbered (<code>session</code>, the
+<p>Next it lists the durations the daemon offers by name (<code>session</code>, the
 default: until the asking session ends, at most <code>peer_auth.max_lease</code>; <code>1h</code>;
-<code>4h</code>), and takes the number or the name; Enter takes the default; <code>--for</code>
-skips the question, and takes only a duration the daemon offers. Then it says
-in one line what an approval grants, and asks:</p>
-<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance until the session ends, at most 8h.
+<code>4h</code>), and takes a name or the start of one, in any case: <code>1</code> is <code>1h</code>, <code>s</code> is
+<code>session</code>. The list is not numbered, so a digit always means hours. Enter
+takes the default; an answer that names none of them, or more than one, asks
+again. <code>--for</code> skips the question, and takes only a duration the daemon
+offers. Then it says in one line what an approval grants - for a fixed
+duration, until what time - and asks:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">For how long?
+</span></span><span class="line"><span class="cl">  session  until the session ends, at most 8h (the default)
+</span></span><span class="line"><span class="cl">  1h       for 1 hour
+</span></span><span class="line"><span class="cl">  4h       for 4 hours
+</span></span><span class="line"><span class="cl">Duration [session, 1h, 4h; Enter for session]: 1
+</span></span><span class="line"><span class="cl">If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance for 1 hour, until 15:05.
 </span></span><span class="line"><span class="cl">Approve R-7F3K? [y/N/d=deny]
 </span></span></code></pre></div>
 <p><code>y</code> approves and <code>d</code> denies; any other answer prints <code>Nothing changed.</code> and

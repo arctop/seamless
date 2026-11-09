@@ -195,7 +195,7 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 
 	// What y grants, said before anything runs: the agent, the project, the
 	// access and the duration. sudo's prompt follows only after the answer.
-	fmt.Fprintln(e.stdout, "If approved: "+grantWords(f, duration, one.MaxLease))
+	fmt.Fprintln(e.stdout, "If approved: "+grantWords(f, duration, one.MaxLease, e.clock()))
 	answer, _ := prompt(e, in, "Approve "+printable(f.Short)+"? [y/N/d=deny] ")
 	if one.Advisory {
 		return decideOverConsole(e, cfg, f, strings.ToLower(answer), duration)
@@ -236,8 +236,9 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 
 // grantWords is what approving f for duration grants, as one sentence: who
 // (the agent and its pid; a grant's asking project), what access to which
-// project, and until when.
-func grantWords(f accessFacts, duration, maxLease string) string {
+// project, and until when -- for a fixed duration, the wall-clock end too,
+// counted from now.
+func grantWords(f accessFacts, duration, maxLease string, now time.Time) string {
 	who := askerWords(f)
 	if f.From != "" {
 		who += ", working in " + printable(f.From) + ","
@@ -253,6 +254,9 @@ func grantWords(f accessFacts, duration, maxLease string) string {
 		reach = "reach " + project + " (" + printable(orDash(f.Access)) + ")"
 	}
 	s := who + " may " + reach + " " + durationWords(duration, maxLease)
+	if length, ok := grantLength(duration, maxLease); ok {
+		s += ", until " + clockTime(now.Add(length))
+	}
 	if f.Kind == "refresh" {
 		s += ", in place of the lease it holds now"
 	}
@@ -591,11 +595,13 @@ func printable(s string) string {
 	return q[1 : len(q)-1]
 }
 
-// askDuration asks how long to approve for: the daemon's durations,
-// numbered, each with what it grants; the answer is a number or a duration's
-// name, and an empty one is the default (until the session ends) when the
-// daemon offers it. ok is false when the owner gave no answer at all (end of
-// input): nothing is decided.
+// askDuration asks how long to approve for: the daemon's durations, listed
+// by name, each with what it grants. The answer is a duration's name or the
+// start of one, in any case ("1" is 1h, "s" is session), and an empty one is
+// the default (until the session ends) when the daemon offers it. The list
+// is not numbered: a number that picked the first line would read as hours
+// ("1" for 1h granting the session). ok is false when the owner gave no
+// answer at all (end of input): nothing is decided.
 func askDuration(e *env, in *bufio.Reader, one accessOne) (string, bool, error) {
 	ds := one.Durations
 	if len(ds) == 0 {
@@ -603,8 +609,10 @@ func askDuration(e *env, in *bufio.Reader, one accessOne) (string, bool, error) 
 	}
 	hasDefault := slices.Contains(ds, durationSession)
 	width := 0
-	for _, d := range ds {
-		width = max(width, len(printable(d)))
+	names := make([]string, len(ds))
+	for i, d := range ds {
+		names[i] = printable(d)
+		width = max(width, len(names[i]))
 	}
 	fmt.Fprintln(e.stdout, "For how long?")
 	for i, d := range ds {
@@ -612,31 +620,55 @@ func askDuration(e *env, in *bufio.Reader, one accessOne) (string, bool, error) 
 		if d == durationSession {
 			words += " (the default)"
 		}
-		fmt.Fprintf(e.stdout, "  %d  %-*s  %s\n", i+1, width, printable(d), words)
+		fmt.Fprintf(e.stdout, "  %-*s  %s\n", width, names[i], words)
 	}
-	choices := "1"
-	if len(ds) > 1 {
-		choices = fmt.Sprintf("1-%d", len(ds))
-	}
-	q := "Duration [" + choices + "]: "
+	listed := strings.Join(names, ", ")
+	q := "Duration [" + listed + "]: "
 	if hasDefault {
-		q = "Duration [" + choices + ", Enter for " + durationSession + "]: "
+		q = "Duration [" + listed + "; Enter for " + durationSession + "]: "
 	}
 	for {
 		ans, ok := prompt(e, in, q)
 		if !ok {
 			return "", false, nil
 		}
-		switch n, err := strconv.Atoi(ans); {
-		case ans == "" && hasDefault:
+		if ans == "" && hasDefault {
 			return durationSession, true, nil
-		case slices.Contains(ds, ans):
-			return ans, true, nil
-		case err == nil && n >= 1 && n <= len(ds):
-			return ds[n-1], true, nil
 		}
-		fmt.Fprintf(e.stderr, "answer with %s or one of %s\n", choices, strings.Join(ds, ", "))
+		d, matches := matchDuration(ds, ans)
+		switch {
+		case matches == 1:
+			return d, true, nil
+		case matches > 1:
+			fmt.Fprintf(e.stderr, "%q starts more than one of %s: type more of it\n", ans, listed)
+		default:
+			fmt.Fprintf(e.stderr, "answer with one of %s, or the start of one\n", listed)
+		}
 	}
+}
+
+// matchDuration finds the duration ans names: a name exactly, else the one
+// name ans starts, in any case. matches is how many it could be; d is set
+// only when that is one.
+func matchDuration(ds []string, ans string) (d string, matches int) {
+	if ans == "" {
+		return "", 0
+	}
+	for _, c := range ds {
+		if strings.EqualFold(c, ans) {
+			return c, 1
+		}
+	}
+	for _, c := range ds {
+		if len(c) >= len(ans) && strings.EqualFold(c[:len(ans)], ans) {
+			d = c
+			matches++
+		}
+	}
+	if matches != 1 {
+		d = ""
+	}
+	return d, matches
 }
 
 // durationWords says what a duration choice grants, capped by max_lease.
@@ -661,6 +693,23 @@ func durationWords(choice, maxLease string) string {
 	default:
 		return "for " + compactDuration(d)
 	}
+}
+
+// grantLength is how long a fixed duration choice grants, capped by
+// max_lease; ok is false for the session (its end is not a clock time) and
+// for a choice that is not a duration.
+func grantLength(choice, maxLease string) (time.Duration, bool) {
+	if choice == durationSession {
+		return 0, false
+	}
+	d, err := time.ParseDuration(choice)
+	if err != nil || d <= 0 {
+		return 0, false
+	}
+	if maxD, err := time.ParseDuration(maxLease); err == nil && maxD > 0 && d > maxD {
+		d = maxD
+	}
+	return d, true
 }
 
 // compactDuration renders 8h0m0s as 8h and 1h30m0s as 1h30m.

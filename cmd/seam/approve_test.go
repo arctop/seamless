@@ -323,19 +323,21 @@ func TestApprove_DurationPrompt(t *testing.T) {
 		name, typed, duration, words string
 	}{
 		{"empty is the session", "\ny\n", "session", "until the session ends, at most 8h"},
-		{"a listed choice", "4h\ny\n", "4h", "for 4 hours"},
-		{"its number", "2\ny\n", "1h", "for 1 hour"},
-		{"anything else asks again", "2h\n0\n1h\ny\n", "1h", "for 1 hour"},
+		{"a listed choice", "4h\ny\n", "4h", "for 4 hours, until " + clockTime(fixedNow.Add(4*time.Hour))},
+		{"its start: 1 is 1h, never the first line", "1\ny\n", "1h", "for 1 hour, until " + clockTime(fixedNow.Add(time.Hour))},
+		{"its start, any case", "S\ny\n", "session", "until the session ends, at most 8h"},
+		{"a name, any case", "4H\ny\n", "4h", "for 4 hours, until " + clockTime(fixedNow.Add(4*time.Hour))},
+		{"anything else asks again", "2h\n2\n0\n1h\ny\n", "1h", "for 1 hour, until " + clockTime(fixedNow.Add(time.Hour))},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rig := newApproveRig(t, routes(t, table), tc.typed)
 			require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
 			out := rig.out.String()
 			require.Contains(t, out, "For how long?\n"+
-				"  1  session  until the session ends, at most 8h (the default)\n"+
-				"  2  1h       for 1 hour\n"+
-				"  3  4h       for 4 hours\n"+
-				"Duration [1-3, Enter for session]: ")
+				"  session  until the session ends, at most 8h (the default)\n"+
+				"  1h       for 1 hour\n"+
+				"  4h       for 4 hours\n"+
+				"Duration [session, 1h, 4h; Enter for session]: ")
 			require.Contains(t, out, "If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance "+tc.words+".\n"+
 				"Approve R-7F3K? [y/N/d=deny] ")
 			calls := rig.runner.recorded()
@@ -344,9 +346,80 @@ func TestApprove_DurationPrompt(t *testing.T) {
 	}
 	rig := newApproveRig(t, routes(t, table), "2h\n")
 	require.Equal(t, 0, rig.run("R-7F3K"))
-	require.Contains(t, rig.errb.String(), "answer with 1-3 or one of session, 1h, 4h\n")
+	require.Contains(t, rig.errb.String(), "answer with one of session, 1h, 4h, or the start of one\n")
 	require.True(t, strings.HasSuffix(rig.out.String(), "Nothing changed.\n"), "end of input decides nothing")
 	require.Empty(t, rig.runner.recorded())
+}
+
+// The answer names a duration, or starts one, in any case; a bare number is
+// never an index into the list.
+func TestMatchDuration(t *testing.T) {
+	ds := []string{"session", "1h", "4h"}
+	capped := []string{"session", "1h", "4h", "20m"}
+	for _, tc := range []struct {
+		ds      []string
+		ans     string
+		want    string
+		matches int
+	}{
+		{ds, "session", "session", 1},
+		{ds, "s", "session", 1},
+		{ds, "SESS", "session", 1},
+		{ds, "1", "1h", 1},
+		{ds, "1H", "1h", 1},
+		{ds, "4", "4h", 1},
+		{ds, "2", "", 0},
+		{ds, "3", "", 0},
+		{ds, "1h30m", "", 0},
+		{ds, "", "", 0},
+		{capped, "2", "20m", 1},
+		{[]string{"session", "1h", "12h"}, "1", "", 2},
+		{[]string{"session", "1h", "12h"}, "1h", "1h", 1},
+	} {
+		got, n := matchDuration(tc.ds, tc.ans)
+		require.Equal(t, tc.want, got, "%v / %q", tc.ds, tc.ans)
+		require.Equal(t, tc.matches, n, "%v / %q", tc.ds, tc.ans)
+	}
+}
+
+// An ambiguous start asks again, naming the choices; a max_lease cap's
+// duration is listed and answered like the others.
+func TestApprove_DurationPromptAmbiguousAndCapped(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	twelve := byRef(t, a, func(o *accessOne) { o.Durations = []string{"session", "1h", "12h"}; o.MaxLease = "24h0m0s" })
+	rig := newApproveRig(t, routes(t, twelve), "1\n1h\ny\n")
+	require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+	require.Contains(t, rig.errb.String(), `"1" starts more than one of session, 1h, 12h: type more of it`+"\n")
+	require.Equal(t, approveArgvFor(reqA, "1h", a.Digest), rig.runner.recorded()[len(rig.runner.recorded())-1])
+
+	capped := byRef(t, a, func(o *accessOne) { o.Durations = []string{"session", "20m"}; o.MaxLease = "20m0s" })
+	rig = newApproveRig(t, routes(t, capped), "2\ny\n")
+	require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+	require.Contains(t, rig.out.String(), "  session  until the session ends, at most 20m (the default)\n"+
+		"  20m      for 20m\n"+
+		"Duration [session, 20m; Enter for session]: ")
+	require.Contains(t, rig.out.String(), "for 20m, until "+clockTime(fixedNow.Add(20*time.Minute))+".\n")
+	require.Equal(t, approveArgvFor(reqA, "20m", a.Digest), rig.runner.recorded()[len(rig.runner.recorded())-1])
+}
+
+// A fixed duration's end is said as a clock time, capped by max_lease; the
+// session's is not a clock time.
+func TestGrantLength(t *testing.T) {
+	for _, tc := range []struct {
+		choice, max string
+		want        time.Duration
+		ok          bool
+	}{
+		{"1h", "8h0m0s", time.Hour, true},
+		{"4h", "2h0m0s", 2 * time.Hour, true},
+		{"20m", "", 20 * time.Minute, true},
+		{"session", "8h0m0s", 0, false},
+		{"week", "8h0m0s", 0, false},
+	} {
+		got, ok := grantLength(tc.choice, tc.max)
+		require.Equal(t, tc.ok, ok, tc.choice)
+		require.Equal(t, tc.want, got, tc.choice)
+	}
 }
 
 func TestDurationWords(t *testing.T) {
@@ -373,7 +446,8 @@ func TestApprove_RunsSudoWithTheExactArgv(t *testing.T) {
 	require.Equal(t, 0, rig.run("R-7F3K", "--for", "1h"), rig.errb.String())
 	require.Equal(t, append(slices.Clone(passwordlessProbe), approveArgvFor(reqA, "1h", a.Digest)), rig.runner.recorded())
 	require.Equal(t, []bool{false, false, true}, rig.runner.attached, "only the commit gets the terminal, for sudo's prompt")
-	require.Contains(t, rig.out.String(), "If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance for 1 hour.\n"+
+	require.Contains(t, rig.out.String(), "If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance for 1 hour, until "+
+		clockTime(fixedNow.Add(time.Hour))+".\n"+
 		"Approve R-7F3K? [y/N/d=deny] ")
 	require.NotContains(t, rig.out.String(), "For how long?", "--for skips the question")
 
@@ -700,7 +774,8 @@ func TestApprove_AdvisoryGrantCommitsOverTheConsole(t *testing.T) {
 	require.Contains(t, out, "  Asking          a session (without peer_auth the daemon knows no process)\n")
 	require.Contains(t, out, "  Kind            a read-only grant of a confidential project\n")
 	require.Contains(t, out, "  ! This approval is advisory: without peer_auth it is made with the bearer key, and any process holding the key could make it.\n")
-	require.Contains(t, out, "If approved: the session cc/quiet-otter, working in example-ops, may read example-finance (read-only) for 1 hour.\n"+
+	require.Contains(t, out, "If approved: the session cc/quiet-otter, working in example-ops, may read example-finance (read-only) for 1 hour, until "+
+		clockTime(fixedNow.Add(time.Hour))+".\n"+
 		"Approve R-7F3K? [y/N/d=deny] ")
 	require.NotContains(t, out, "sudo asks", "no sudo: the bearer key commits it")
 	require.Contains(t, out, "Approved R-7F3K: sessions working in example-ops may read example-finance (read-only) until "+clockTime(fixedNow.Add(time.Hour))+".\n")
@@ -751,7 +826,7 @@ func TestApprove_PeerGrantGoesThroughSudo(t *testing.T) {
 
 // The whole transcript of one approval, with and without color: the warnings
 // first and indented like the facts, the facts' values aligned past the
-// widest label, the numbered durations, what the approval grants, and the
+// widest label, the durations by name, what the approval grants, and the
 // line announcing sudo's prompt -- all before sudo runs. Color is the
 // warnings' alone, and never their indent.
 func TestApprove_TranscriptGolden(t *testing.T) {
@@ -768,7 +843,7 @@ func TestApprove_TranscriptGolden(t *testing.T) {
 		{"color", map[string]string{"TERM": "xterm-256color"}, func(s string) string { return "\x1b[1;31m! " + s + "\x1b[0m" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			rig := newApproveRig(t, routes(t, byRef(t, a)), "2\ny\n")
+			rig := newApproveRig(t, routes(t, byRef(t, a)), "1\ny\n")
 			rig.vars = tc.vars
 			var atSudo string
 			rig.runner.code = func(argv []string) (int, error) {
@@ -796,12 +871,13 @@ func TestApprove_TranscriptGolden(t *testing.T) {
 				"  Waits until     " + clockTime(expiresAt) + " (12m left)\n" +
 				"\n" +
 				"For how long?\n" +
-				"  1  session  until the session ends, at most 8h (the default)\n" +
-				"  2  1h       for 1 hour\n" +
-				"  3  4h       for 4 hours\n" +
+				"  session  until the session ends, at most 8h (the default)\n" +
+				"  1h       for 1 hour\n" +
+				"  4h       for 4 hours\n" +
 				// The owner's typed answers echo on the terminal, not here.
-				"Duration [1-3, Enter for session]: " +
-				"If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance for 1 hour.\n" +
+				"Duration [session, 1h, 4h; Enter for session]: " +
+				"If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance for 1 hour, until " +
+				clockTime(fixedNow.Add(time.Hour)) + ".\n" +
 				"Approve R-7F3K? [y/N/d=deny] " +
 				"sudo asks for your Touch ID or password next: it commits the approval as _seamless.\n"
 			require.Equal(t, want, atSudo, "everything is said before sudo runs")
@@ -840,6 +916,7 @@ func TestGrantWords(t *testing.T) {
 	peerGrant.Program, peerGrant.Agent, peerGrant.PID, peerGrant.UID = "/opt/homebrew/bin/codex", "Codex", 4300, 501
 	advisory := grantFacts()
 	advisory.Session = ""
+	h1, h4 := clockTime(fixedNow.Add(time.Hour)), clockTime(fixedNow.Add(4*time.Hour))
 	for _, tc := range []struct {
 		name     string
 		f        accessFacts
@@ -847,18 +924,18 @@ func TestGrantWords(t *testing.T) {
 		want     string
 	}{
 		{"a lock's request", lock, "session", "Claude Code 2.1.319 (pid 4242) may read and write example-finance until the session ends, at most 8h."},
-		{"for an hour", lock, "1h", "Claude Code 2.1.319 (pid 4242) may read and write example-finance for 1 hour."},
-		{"a refresh", refresh, "4h", "Claude Code 2.1.319 (pid 4242) may read and write example-finance for 4 hours, in place of the lease it holds now."},
-		{"no agent named: the program", unnamed, "1h", "claude (pid 4242) may read and write example-finance for 1 hour."},
-		{"no program known: the pid", bare, "1h", "pid 4242 may read and write example-finance for 1 hour."},
-		{"an access it does not know", odd, "1h", "Claude Code 2.1.319 (pid 4242) may reach example-finance (write-only) for 1 hour."},
-		{"a read grant under peer_auth", peerGrant, "1h", "Codex (pid 4300), working in example-ops, may read example-finance (read-only) for 1 hour."},
+		{"for an hour", lock, "1h", "Claude Code 2.1.319 (pid 4242) may read and write example-finance for 1 hour, until " + h1 + "."},
+		{"a refresh", refresh, "4h", "Claude Code 2.1.319 (pid 4242) may read and write example-finance for 4 hours, until " + h4 + ", in place of the lease it holds now."},
+		{"no agent named: the program", unnamed, "1h", "claude (pid 4242) may read and write example-finance for 1 hour, until " + h1 + "."},
+		{"no program known: the pid", bare, "1h", "pid 4242 may read and write example-finance for 1 hour, until " + h1 + "."},
+		{"an access it does not know", odd, "1h", "Claude Code 2.1.319 (pid 4242) may reach example-finance (write-only) for 1 hour, until " + h1 + "."},
+		{"a read grant under peer_auth", peerGrant, "1h", "Codex (pid 4300), working in example-ops, may read example-finance (read-only) for 1 hour, until " + h1 + "."},
 		{"an advisory read grant", grantFacts(), "session",
 			"the session cc/quiet-otter, working in example-ops, may read example-finance (read-only) until the session ends, at most 8h."},
 		{"an advisory read grant, no session named", advisory, "1h",
-			"the asking session, working in example-ops, may read example-finance (read-only) for 1 hour."},
+			"the asking session, working in example-ops, may read example-finance (read-only) for 1 hour, until " + h1 + "."},
 	} {
-		require.Equal(t, tc.want, grantWords(tc.f, tc.duration, "8h0m0s"), tc.name)
+		require.Equal(t, tc.want, grantWords(tc.f, tc.duration, "8h0m0s", fixedNow), tc.name)
 	}
 }
 
