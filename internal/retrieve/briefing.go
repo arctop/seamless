@@ -1075,7 +1075,7 @@ func readyTasksSection(ready []core.Task, shown int) string {
 		if i == shown {
 			break
 		}
-		b.WriteString("- " + sanitizeField(t.Title, 60) + accountMark(t.Account) + "\n")
+		b.WriteString("- " + sanitizeField(t.Title, 60) + accountMark(taskAccount(t)) + "\n")
 	}
 	b.WriteString("(full queue with ids: tasks_ready; claim: tasks_claim id=<id> session=<your Seam session>)\n")
 	return b.String()

@@ -724,10 +724,10 @@ func TestRestricted_CurationRefused(t *testing.T) {
 	require.Contains(t, r.refused(r.owner, "gardener_apply", map[string]any{"id": "01K000000000000000000NOPE0"}), "no proposal with id")
 }
 
-// The gardener tools a restricted account keeps -- the read and the two
-// propose-only planners -- stay inside its reach: a confidential project's
-// proposals are not listed for it, naming that project is refused, and the
-// whole-machine request reads none of its memories.
+// The gardener tool a restricted account keeps, the read, stays inside its
+// reach: a confidential project's proposals are not listed for it. The two
+// planners are the owner's curation, refused before anything is looked up: one
+// text whichever project is named, and no memory reaches the chat client.
 func TestRestricted_GardenerReadsStayFenced(t *testing.T) {
 	r := newKARig(t, kaOpts{})
 	seed := func(project, name string) core.Memory {
@@ -754,28 +754,27 @@ func TestRestricted_GardenerReadsStayFenced(t *testing.T) {
 	require.Contains(t, mustJSON(t, listed), "open-gotcha")
 	require.NotContains(t, mustJSON(t, listed), "conf-secret-gotcha")
 
-	for _, c := range []struct {
-		tool string
-		args map[string]any
-	}{
-		{"gardener_request", map[string]any{"request": "archive stale ones", "project": kaConf}},
-		{"gardener_request", map[string]any{"request": "archive stale ones", "project": "example-nowhere"}},
-		{"gardener_split", map[string]any{"source": kaConf}},
+	for tool, argss := range map[string][]map[string]any{
+		"gardener_request": {
+			{"request": "archive stale ones", "project": kaOpen},
+			{"request": "archive stale ones", "project": kaConf},
+			{"request": "archive stale ones", "project": "example-nowhere"},
+			{"request": "archive stale ones", "project": "all"},
+		},
+		"gardener_split": {{"source": kaOpen}, {"source": kaConf}, {"source": "example-nowhere"}},
 	} {
-		text := r.refused(r.agent, c.tool, c.args)
-		require.Contains(t, text, "is not reachable from account "+kaAccount, "%s %v", c.tool, c.args)
-		require.NotContains(t, text, "conf-secret-gotcha")
+		first := r.refused(r.agent, tool, argss[0])
+		require.Contains(t, first, "not open to account "+kaAccount, tool)
+		require.Contains(t, first, "gardener_proposals", tool)
+		require.Contains(t, first, "Gardener screen", tool)
+		for _, args := range argss[1:] {
+			require.Equal(t, first, r.refused(r.agent, tool, args), "%s %v answers alike", tool, args)
+		}
 	}
-
-	r.call(r.agent, "gardener_request", map[string]any{"request": "archive stale ones", "project": "all"})
 	r.chat.mu.Lock()
 	prompts := slices.Clone(r.chat.prompts)
 	r.chat.mu.Unlock()
-	require.Len(t, prompts, 1)
-	require.Contains(t, prompts[0], "open-gotcha")
-	require.NotContains(t, prompts[0], "conf-secret-gotcha", "the whole-machine request reads only what the account reaches")
-	require.NotContains(t, prompts[0], "Body of conf-secret-gotcha")
-	require.NotContains(t, prompts[0], kaConf, "an unreachable project is not offered as a move destination")
+	require.Empty(t, prompts, "a refused planner reads no memory")
 
 	// The owner, bound to the confidential project, reads both proposals: what
 	// kept one from the account above is its reach, not the queue. (Last, so no

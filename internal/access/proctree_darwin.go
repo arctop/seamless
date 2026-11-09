@@ -55,7 +55,9 @@ const (
 
 // ReadPeer reads the process at the other end of a Unix-socket connection
 // from the kernel: LOCAL_PEERTOKEN's audit token, cross-checked against
-// LOCAL_PEERCRED's uid.
+// LOCAL_PEERCRED's uid. The token names the process that last used the socket,
+// which is the one that connected unless it handed the descriptor to a child
+// first, so it can only ever name a process that holds the connection.
 func ReadPeer(conn net.Conn) (Peer, error) {
 	raw, err := rawConn(conn)
 	if err != nil {

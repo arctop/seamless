@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -863,6 +864,11 @@ func (h *Handler) sessionReachOf(ctx context.Context, client Client, externalID 
 		case !access.SessionAccountOK(ctx, sess.Account):
 			return reachForeign
 		case v.Writable(project):
+			// A session holding a lease or a read grant is its own tree's to
+			// end: another process naming its id would revoke that access.
+			if h.holdsAccess(ctx, sess.ID) && !h.sessionInChain(ctx, v, sess.ID) {
+				return reachForeign
+			}
 			return reachOK
 		case v.Locked(project) && h.sessionInChain(ctx, v, sess.ID):
 			return reachLocked
@@ -926,6 +932,24 @@ func (h *Handler) sessionInChain(ctx context.Context, v access.View, id string) 
 		}
 	}
 	return false
+}
+
+// holdsAccess reports whether session id holds a live lease or read grant. A
+// lookup that fails counts as holding one, so the caller refuses.
+func (h *Handler) holdsAccess(ctx context.Context, id string) bool {
+	now := time.Now()
+	if h.now != nil {
+		now = h.now()
+	}
+	leases, err := store.AccessLeasesForSession(ctx, h.db, id, now)
+	if err != nil || len(leases) > 0 {
+		return true
+	}
+	grants, err := store.LiveAccessGrants(ctx, h.db, now)
+	if err != nil {
+		return true
+	}
+	return slices.ContainsFunc(grants, func(g store.AccessGrant) bool { return g.SessionID == id })
 }
 
 // growsRepoMap reports whether a SessionStart may grow the repo->project map:

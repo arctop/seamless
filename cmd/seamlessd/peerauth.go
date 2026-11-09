@@ -19,9 +19,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/screening"
@@ -106,7 +108,7 @@ func (rt *peerAuthRuntime) filesystemProblems(cfg config.Config, create bool) []
 		problems = append(problems, p)
 	}
 	if src := cfg.SourcePath(); src != "" {
-		if p := rt.trustedFileProblem("config file", src); p != "" {
+		if p := rt.trustedFileProblem(configFileWhat, src); p != "" {
 			problems = append(problems, p)
 		}
 	}
@@ -174,6 +176,10 @@ func (rt *peerAuthRuntime) socketDirProblem(dir string) string {
 	return ""
 }
 
+// configFileWhat is how the preflight names the config file. It alone holds
+// secrets, so it alone must also be unreadable by other accounts.
+const configFileWhat = "config file"
+
 // trustedFileProblem checks a file the daemon trusts (its config, its own
 // binary): whoever can rewrite it can switch the boundary off at the next
 // start, so it must belong to root or the daemon's account and be writable by
@@ -186,6 +192,12 @@ func (rt *peerAuthRuntime) trustedFileProblem(what, path string) string {
 	if p := rt.ancestorProblem(what, real); p != "" {
 		return p
 	}
+	// A symlink's own directory decides what the link points at next start.
+	if real != filepath.Clean(path) {
+		if p := rt.ancestorProblem(what, path); p != "" {
+			return p
+		}
+	}
 	facts, err := rt.env.inspect(real)
 	if err != nil {
 		return fmt.Sprintf("%s %s: %v", what, real, err)
@@ -195,6 +207,8 @@ func (rt *peerAuthRuntime) trustedFileProblem(what, path string) string {
 		return fmt.Sprintf("%s %s is owned by uid %d: it must belong to root or the daemon's account, or that account can rewrite the daemon's rules", what, real, facts.uid)
 	case facts.mode.Perm()&0o022 != 0:
 		return fmt.Sprintf("%s %s is mode %04o: it must not be group- or world-writable", what, real, facts.mode.Perm())
+	case what == configFileWhat && facts.mode.Perm()&0o004 != 0:
+		return fmt.Sprintf("%s %s is mode %04o: every account can read it, and it holds the bearer key; make it 0640, readable by the daemon's group only", what, real, facts.mode.Perm())
 	}
 	return ""
 }
@@ -431,8 +445,31 @@ func peerHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger, 
 			}
 			view = view.WithOpenProjects(open)
 		}
-		next.ServeHTTP(w, r.WithContext(access.WithView(r.Context(), view)))
+		ctx := access.WithView(r.Context(), view)
+		if view.Principal().Kind == access.KindOwner {
+			ctx = access.WithAgentChain(ctx, sync.OnceValue(func() bool { return chainHasAgent(cred) }))
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// chainHasAgent reports whether an agent program is in the connection's process
+// chain as the kernel names it. A chain that cannot be walked counts as an
+// agent's: the guards that ask would rather send the owner to the console.
+func chainHasAgent(cred peerCred) bool {
+	if cred.chain == nil {
+		return true
+	}
+	hops, err := cred.chain()
+	if err != nil {
+		return true
+	}
+	for _, h := range hops {
+		if approval.IsAgentProgram(h.Name) {
+			return true
+		}
+	}
+	return false
 }
 
 // leasedView is the owner's socket view with the connection's process chain

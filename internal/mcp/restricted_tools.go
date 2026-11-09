@@ -17,6 +17,9 @@ const (
 		"and the global scope is read-only for it. With no session and no explicit project the call is rejected as ambiguous."
 	restrictedProjectCreateDesc = "Not available to this restricted account, so a call is refused: the owner creates projects " +
 		"and maps repositories to them. Use project_list to see the projects it may write to."
+	restrictedGardenerPlanDesc = "Not available to this restricted account, so a call is refused: reorganizing memory is " +
+		"the owner's curation. Use gardener_proposals to review what is pending; the owner raises and resolves proposals " +
+		"on the console's Gardener screen."
 
 	sessionUnknownSlugCreates = "an unknown slug creates that project."
 	sessionUnknownSlugRefused = "an unknown slug is refused for this restricted account."
@@ -28,8 +31,11 @@ const (
 func restrictedToolText(tools []mcp.Tool) []mcp.Tool {
 	out := make([]mcp.Tool, len(tools))
 	for i, t := range tools {
-		if t.Name == "project_create" {
+		switch t.Name {
+		case "project_create":
 			t.Description = restrictedProjectCreateDesc
+		case "gardener_request", "gardener_split":
+			t.Description = restrictedGardenerPlanDesc
 		}
 		if prop, ok := t.InputSchema.Properties["project"].(map[string]any); ok {
 			if desc, ok := restrictedProjectDesc(prop); ok {

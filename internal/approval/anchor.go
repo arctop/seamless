@@ -319,6 +319,19 @@ func judgeAnchor(chain []access.ProcessToken, i int, name func(access.ProcessTok
 	return prog, &AnchorError{Program: c.base, What: c.base}
 }
 
+// IsAgentProgram reports whether the kernel's name for a process is an agent's,
+// or a JS runtime one may run on (Claude Code installed with npm is node).
+func IsAgentProgram(prog string) bool {
+	c := classify(prog)
+	return c.kind == programAgent || jsRuntimes[strings.ToLower(c.base)]
+}
+
+// jsRuntimeBase is a program's base name when it is a JS runtime.
+func jsRuntimeBase(prog string) (string, bool) {
+	c := classify(prog)
+	return c.base, jsRuntimes[strings.ToLower(c.base)]
+}
+
 // storedBroad says what a stored request's process is when it is a broad
 // ancestor, or pid 1: the approve core's half of the rule, and the facts'
 // anchor_is_shell warning. The row carries no chain, so the positive half

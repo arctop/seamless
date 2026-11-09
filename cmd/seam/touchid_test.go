@@ -275,6 +275,10 @@ func newTouchRig(t *testing.T, daemon http.Handler, typed string) *touchRig {
 	e.terminal = func() bool { return true }
 	e.goos = "darwin"
 	e.exec = rig.runner.exec
+	// This socket's server is the test itself, so the kernel would name the
+	// caller: the check of who answers is faked here, as it is for seam approve.
+	e.dialDaemon = fakeDaemonPeer(testDaemonUID)
+	e.lookupAccount = fakeAccounts
 	cfg := config.Defaults()
 	cfg.Addr = "127.0.0.1:1" // nothing listens: only the socket can answer
 	cfg.AdvertisedURL = "unix://" + rig.sock
@@ -368,6 +372,12 @@ func TestTouchIDEnroll_ReleaseHappyPath(t *testing.T) {
 		{"codesign", "-dvv", fakeSelf},
 		{"codesign", "--verify", "--strict", "--deep",
 			`-R=anchor apple generic and identifier "com.arctop.seamless.approve" and certificate leaf[subject.OU] = "` + fakeTeam + `"`, staged},
+		// Checked again right before it opens, at the installed path.
+		{"codesign", "--verify", "--strict", "--deep", rig.target()},
+		{"codesign", "-dvv", rig.target()},
+		{"codesign", "-dvv", fakeSelf},
+		{"codesign", "--verify", "--strict", "--deep",
+			`-R=anchor apple generic and identifier "com.arctop.seamless.approve" and certificate leaf[subject.OU] = "` + fakeTeam + `"`, rig.target()},
 		{"open", "-W", "-n", "-a", rig.target(), "--args", "enroll", "--socket", rig.sock, "--name", "Touch ID on laptop"},
 	}, rig.runner.recorded())
 	require.Equal(t, filepath.Join(rig.home, "Applications"), filepath.Dir(stage), "staged beside the target, so the install is one rename")

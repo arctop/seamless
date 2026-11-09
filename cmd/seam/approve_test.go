@@ -142,6 +142,10 @@ func newApproveRig(t *testing.T, h http.HandlerFunc, typed string) *approveRig {
 	rig := &approveRig{e: e, out: out, errb: errb, runner: &fakeRunner{}, ac: ac, vars: map[string]string{"NO_COLOR": "1"}}
 	e.terminal = func() bool { return true }
 	e.exec = rig.runner.exec(e.stdin)
+	// The stand-in console is on TCP: the check of who answers is faked here,
+	// and the real one is exercised in daemon_peer_test.go.
+	e.dialDaemon = fakeDaemonPeer(testDaemonUID)
+	e.lookupAccount = fakeAccounts
 	e.getenv = func(k string) string { return rig.vars[k] }
 	e.now = func() time.Time { return fixedNow }
 	e.goos = "darwin"
@@ -575,7 +579,7 @@ func TestApprove_WithoutATerminalApprover(t *testing.T) {
 			require.Equal(t, 1, rig.run("R-7F3K", "--for", "1h"))
 			require.Contains(t, rig.errb.String(), "the daemon did not say how to reach the terminal path ("+tc.want+")")
 			require.Contains(t, rig.errb.String(), "on the console's passkey page instead: https://seamless.example.org/console/access/"+reqA)
-			require.Contains(t, rig.out.String(), "Access request R-7F3K", "the facts are still shown")
+			require.NotContains(t, rig.out.String(), "Access request R-7F3K", "a daemon that names no account is not verified, so nothing is shown")
 			require.Empty(t, rig.runner.recorded())
 		})
 	}
@@ -934,6 +938,8 @@ func TestApprove_TranscriptGolden(t *testing.T) {
 				"  The agent says  \"reconcile the Q3 ledger\"  (the agent's own words, not checked)\n" +
 				"  Kind            first request\n" +
 				"  Waits until     " + clockTime(expiresAt) + " (12m left)\n" +
+				"\n" +
+				selfReportedNote + "\n" +
 				"\n" +
 				"For how long?\n" +
 				"  session  until the session ends, at most 8h (the default)\n" +

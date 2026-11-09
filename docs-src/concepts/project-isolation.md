@@ -236,7 +236,9 @@ session with `session=`, writes where that session may, past the grant's write
 confinement. Under `peer_auth` a grant needs the same proofs as a
 [locked project's lease](/guides/peer-auth/): your terminal through `sudo` to
 the daemon's account, a passkey, or a Touch ID key. Its holder is then the
-asking agent's process tree, and those moves are refused.
+asking agent's process tree, and those moves are refused. No tier stops an agent
+running as you from naming the confidential project as its own with
+`session_start`; only a [lock](/guides/peer-auth/) holds against that.
 
 ## Honest limits
 

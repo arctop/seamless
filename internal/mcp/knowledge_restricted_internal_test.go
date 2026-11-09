@@ -64,10 +64,11 @@ func TestRestricted_CapturedNoteLabeled(t *testing.T) {
 	}
 }
 
-// gardener_request's scope argument meets the account's reach before any
-// candidate is read: a project it may not reach (or that does not exist) is
-// refused with one text, and the whole-machine token stays a token (the
-// candidate scan then filters by the same reach, store.CanRead).
+// gardener_request's handler refuses a restricted account first; the scope
+// resolver behind it still holds the account's reach on its own: a project it
+// may not reach (or that does not exist) is refused with one text, and the
+// whole-machine token stays a token (the candidate scan then filters by the
+// same reach, store.CanRead).
 func TestRestricted_GardenerRequestScope(t *testing.T) {
 	ctx := context.Background()
 	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))

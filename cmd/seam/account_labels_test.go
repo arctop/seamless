@@ -27,7 +27,9 @@ func TestAccountLabels_TextRendering(t *testing.T) {
 		"memory_read": fixedReply(fxAccountMemory),
 		"notes_read":  fixedReply(fxAccountNote),
 		"tasks_list": fixedReply(`{"tasks":[{"id":"01KDDDDDDDDDDDDDDDDDDDDDDD","title":"write the migration","status":"open",` +
-			`"account":"_example_agent"},{"id":"01KGGGGGGGGGGGGGGGGGGGGGGG","title":"owner idea","status":"open"}]}`),
+			`"account":"_example_agent"},{"id":"01KGGGGGGGGGGGGGGGGGGGGGGG","title":"owner idea","status":"open"},` +
+			`{"id":"01KJJJJJJJJJJJJJJJJJJJJJJJ","title":"owner task an agent moved","status":"in_progress","updated_account":"_example_agent"},` +
+			`{"id":"01KKKKKKKKKKKKKKKKKKKKKKKK","title":"both","status":"open","account":"_example_agent","updated_account":"_other_agent"}]}`),
 	}, map[string]string{
 		"GET /console/sessions/01KHHHHHHHHHHHHHHHHHHHHHHH?format=json": fxAccountSession,
 	}, fxHealthz)
@@ -43,7 +45,9 @@ func TestAccountLabels_TextRendering(t *testing.T) {
 	out, errb, code = fx.run(t, "task", "list")
 	require.Equal(t, 0, code, errb)
 	require.Equal(t, "  01KDDDDD  [open       ] write the migration  [written by account _example_agent]\n"+
-		"  01KGGGGG  [open       ] owner idea\n", out)
+		"  01KGGGGG  [open       ] owner idea\n"+
+		"  01KJJJJJ  [in_progress] owner task an agent moved  [updated by account _example_agent]\n"+
+		"  01KKKKKK  [open       ] both  [written by account _example_agent]  [updated by account _other_agent]\n", out)
 
 	out, errb, code = fx.run(t, "sessions", "01KHHHHHHHHHHHHHHHHHHHHHHH")
 	require.Equal(t, 0, code, errb)
@@ -54,6 +58,12 @@ func TestWrittenBy(t *testing.T) {
 	require.Empty(t, writtenBy(""), "the owner's items carry no label")
 	require.Equal(t, "written by account _example_agent", writtenBy("_example_agent"))
 	require.Equal(t, `written by account a\x1b[2Jb`, writtenBy("a\x1b[2Jb"), "a terminal escape is spelled out")
+}
+
+func TestUpdatedBy(t *testing.T) {
+	require.Empty(t, updatedBy(""), "the owner's changes carry no label")
+	require.Equal(t, "updated by account _example_agent", updatedBy("_example_agent"))
+	require.Equal(t, `updated by account a\x1b[2Jb`, updatedBy("a\x1b[2Jb"), "a terminal escape is spelled out")
 }
 
 func firstLines(s string, n int) string {

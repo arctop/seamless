@@ -16,7 +16,7 @@
   <dt>Project</dt><dd>{{.Project}} ({{.Isolation}}), {{.Access}}</dd>{{if .From}}<dt>For</dt><dd>sessions working in {{.From}}</dd>{{end}}{{if .Agent}}<dt>Agent</dt><dd>{{.Agent}}</dd>{{end}}
   <dt>Asking</dt><dd>{{if not .PID}}a session (without peer_auth the daemon knows no process){{else}}{{if .Program}}<code>{{.Program}}</code>{{else}}a process{{end}}, pid {{.PID}}, uid {{.UID}}{{end}}</dd>
   <dt>Session</dt><dd>{{if .Session}}{{.Session}}{{else}}none{{end}}{{if .Model}} &middot; {{.Model}}{{end}}</dd>
-  <dt>Working in</dt><dd>{{if .CWD}}<code>{{.CWD}}</code>{{else}}unknown{{end}}</dd>
+  <dt>Working in</dt><dd>{{if .CWD}}<code>{{.CWD}}</code>{{else}}unknown{{end}} <span class="faint">The working directory, repository and model are what the agent reported. The daemon cannot check them.</span></dd>
   <dt>The agent says</dt><dd>{{if .Reason}}<q>{{.Reason}}</q> <span class="faint">(the agent's own words, not checked)</span>{{else}}(no reason given){{end}}</dd>
   <dt>Kind</dt><dd>{{if eq .Kind "refresh"}}a refresh of a lease it holds{{else if eq .Kind "grant"}}a read-only grant of a confidential project{{else}}a first request{{end}}</dd>
   <dt>{{if eq $.Data.Status "pending"}}Waits until{{else}}Waited until{{end}}</dt><dd>{{clock .ExpiresAt}}</dd>

@@ -36,7 +36,7 @@ func Unsupersede(ctx context.Context, w MemoryWriter, old core.Memory, now time.
 	if old.InvalidAt == nil || old.SupersededBy == "" {
 		return core.Memory{}, fmt.Errorf("lifecycle.Unsupersede: %s: %w", old.Name, ErrNotSuperseded)
 	}
-	return restore(ctx, w, old, "> Superseded by", now)
+	return restore(ctx, w, old, supersededPrefix, now)
 }
 
 // restore reactivates a memory: invalid_at and superseded_by are cleared, the

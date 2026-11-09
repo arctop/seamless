@@ -291,9 +291,9 @@ type codeSignature struct {
 
 // describeSignature reads a signature with codesign -dvv. A binary or bundle
 // codesign cannot describe at all (unsigned) is an error.
-func describeSignature(ctx context.Context, e *env, path string) (codeSignature, error) {
+func describeSignature(ctx context.Context, run approverRunner, path string) (codeSignature, error) {
 	var out strings.Builder
-	code, err := e.run(ctx, []string{"codesign", "-dvv", path}, nil, &out, &out)
+	code, err := run(ctx, []string{"codesign", "-dvv", path}, nil, &out, &out)
 	if err != nil {
 		return codeSignature{}, fmt.Errorf("run codesign: %w", err)
 	}
@@ -325,12 +325,12 @@ func parseSignature(out string) codeSignature {
 
 // ownTeam is this seam binary's Developer ID team, "" when it has none (a
 // source build, or a release built without the signing secret).
-func ownTeam(ctx context.Context, e *env, w touchIDWorld) string {
-	self, err := w.self()
+func ownTeam(ctx context.Context, run approverRunner, selfBinary func() (string, error)) string {
+	self, err := selfBinary()
 	if err != nil {
 		return ""
 	}
-	sig, err := describeSignature(ctx, e, self)
+	sig, err := describeSignature(ctx, run, self)
 	if err != nil {
 		return ""
 	}
@@ -353,21 +353,9 @@ func approverRequirement(team string) string {
 // the team shown, since nothing vouches for it. installed is whether path is
 // the app already in place, which the y/N asks to use rather than install.
 func verifyApprover(ctx context.Context, e *env, w touchIDWorld, in *bufio.Reader, path string, release, installed bool) error {
-	var errb strings.Builder
-	code, err := e.run(ctx, []string{"codesign", "--verify", "--strict", "--deep", path}, nil, io.Discard, &errb)
+	sig, err := approverIntact(ctx, e.run, path)
 	if err != nil {
-		return fmt.Errorf("run codesign: %w", err)
-	}
-	if code != 0 {
-		return fmt.Errorf("%w: its code signature does not verify (it was changed after signing, or is not signed): %s",
-			errApproverRefused, strings.TrimSpace(errb.String()))
-	}
-	sig, err := describeSignature(ctx, e, path)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errApproverRefused, err)
-	}
-	if sig.identifier != approverBundleID {
-		return fmt.Errorf("%w: it is signed as %q, not as %s", errApproverRefused, printable(sig.identifier), approverBundleID)
+		return err
 	}
 	if release {
 		var serr strings.Builder
@@ -379,7 +367,7 @@ func verifyApprover(ctx context.Context, e *env, w touchIDWorld, in *bufio.Reade
 			return fmt.Errorf("%w: Gatekeeper does not accept it as notarized: %s", errApproverRefused, strings.TrimSpace(serr.String()))
 		}
 	}
-	own := ownTeam(ctx, e, w)
+	own := ownTeam(ctx, e.run, w.self)
 	switch {
 	case own == "" && release:
 		if sig.team == "" {
@@ -401,18 +389,73 @@ func verifyApprover(ctx context.Context, e *env, w touchIDWorld, in *bufio.Reade
 		}
 		return nil
 	}
+	return approverPinned(ctx, e.run, sig, own, path)
+}
+
+// verifyApproverForLaunch holds the app at path, right before it is opened, to
+// what verifyApprover holds an install to and needs nobody to answer: an intact
+// signature, the helper's identifier, and, when this seam has a Developer ID
+// team, that team, chaining to Apple. Nobody can be asked at a launch (the
+// bridge has no terminal), so a seam with no team to pin rests on the first two,
+// as the install does before its y/N: a local build keeps working as it
+// installed. Gatekeeper's notarization check is the install's alone, for a
+// release asset.
+func verifyApproverForLaunch(ctx context.Context, run approverRunner, self func() (string, error), path string) error {
+	sig, err := approverIntact(ctx, run, path)
+	if err == nil {
+		if own := ownTeam(ctx, run, self); own != "" {
+			err = approverPinned(ctx, run, sig, own, path)
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("%w: run seam touchid enroll to install it again", err)
+	}
+	return nil
+}
+
+// approverIntact checks the app at path before anything else about it: its
+// signature verifies and names the helper.
+func approverIntact(ctx context.Context, run approverRunner, path string) (codeSignature, error) {
+	var errb strings.Builder
+	code, err := run(ctx, []string{"codesign", "--verify", "--strict", "--deep", path}, nil, io.Discard, &errb)
+	if err != nil {
+		return codeSignature{}, fmt.Errorf("run codesign: %w", err)
+	}
+	if code != 0 {
+		return codeSignature{}, fmt.Errorf("%w: its code signature does not verify (it was changed after signing, or is not signed): %s",
+			errApproverRefused, oneLine(errb.String()))
+	}
+	sig, err := describeSignature(ctx, run, path)
+	if err != nil {
+		return codeSignature{}, fmt.Errorf("%w: %w", errApproverRefused, err)
+	}
+	if sig.identifier != approverBundleID {
+		return codeSignature{}, fmt.Errorf("%w: it is signed as %q, not as %s", errApproverRefused, printable(sig.identifier), approverBundleID)
+	}
+	return sig, nil
+}
+
+// approverPinned checks the publisher of the app at path: team own, in a
+// signature chaining to Apple.
+func approverPinned(ctx context.Context, run approverRunner, sig codeSignature, own, path string) error {
 	if sig.team != own {
 		return fmt.Errorf("%w: it is signed by %s, and this seam by team %s", errApproverRefused, teamWords(sig.team), own)
 	}
-	errb.Reset()
-	code, err = e.run(ctx, []string{"codesign", "--verify", "--strict", "--deep", "-R=" + approverRequirement(own), path}, nil, io.Discard, &errb)
+	var errb strings.Builder
+	code, err := run(ctx, []string{"codesign", "--verify", "--strict", "--deep", "-R=" + approverRequirement(own), path}, nil, io.Discard, &errb)
 	if err != nil {
 		return fmt.Errorf("run codesign: %w", err)
 	}
 	if code != 0 {
-		return fmt.Errorf("%w: its signature does not chain to Apple for team %s: %s", errApproverRefused, own, strings.TrimSpace(errb.String()))
+		return fmt.Errorf("%w: its signature does not chain to Apple for team %s: %s", errApproverRefused, own, oneLine(errb.String()))
 	}
 	return nil
+}
+
+// oneLine folds a program's output into one line of an error message: the
+// bridge reports a refused launch as one line on its stderr.
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 func authorityWords(authority string) string {

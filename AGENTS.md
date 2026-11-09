@@ -272,7 +272,15 @@ any of it.
   `Detail["account"]`, whether or not write screening is on; no Screening
   service means the write is refused, never landed. Promote is the held
   queue's Release (console, `seam promote`, TTY only), the owner's alone. It
-  may not star (favorite_set) or apply gardener proposals.
+  may not star (favorite_set), apply gardener proposals, or plan them
+  (gardener_request, gardener_split). It may not give a project memory the name
+  of a live global briefing-kind memory (the shadow would answer by-name reads),
+  and a memory whose content it changes loses its star.
+- **The owner's decisions are refused from an agent's process.** On the socket,
+  bringing a fence down, deciding held writes and changing features go through
+  `refusedFromAgent`/`ownerHands` (`access.FromAgent`, the kernel's process chain,
+  true when the chain cannot be read). It stops ordinary tool calls and is not a
+  wall: a detached process or the TCP key passes. The lock is the wall.
 - **A session belongs to the principal that started it**
   (`core.Session.Account`, set once by `store.CreateSession`). Every surface
   that resumes, binds to, names or writes into a session checks

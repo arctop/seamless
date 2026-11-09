@@ -423,6 +423,10 @@ func TestDialog_TouchIDProofApproves(t *testing.T) {
 	require.Contains(t, msg, "Project: "+lkFin+" (confidential, locked)")
 	require.Contains(t, msg, "Session: cc/fin\n")
 	require.Contains(t, msg, "Working directory: /work/"+lkFin)
+	const selfReported = "The working directory, repository and model are what the agent reported. The daemon cannot check them.\n"
+	require.Contains(t, msg, selfReported, "the agent's own claims are labeled as such")
+	require.Less(t, strings.Index(msg, "Working directory:"), strings.Index(msg, selfReported))
+	require.Less(t, strings.Index(msg, selfReported), strings.Index(msg, "Agent process:"))
 	require.Contains(t, msg, "Agent process: Claude Code 2.1.319\n")
 	require.Contains(t, msg, "Program: "+lkClaude+"\n", "the full path, so a borrowed name shows")
 	require.Contains(t, msg, "Request: "+short+", a new request\n")

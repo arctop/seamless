@@ -53,6 +53,9 @@ type fakeOpen struct {
 	ran     chan struct{}
 	release chan struct{}
 	helper  func(stderr string)
+	// sig answers the codesign calls of the check before open, which are not
+	// launches and are not recorded; nil is a good signature.
+	sig *touchRunner
 
 	mu    sync.Mutex
 	calls [][]string
@@ -61,7 +64,14 @@ type fakeOpen struct {
 // stderrMark stands for the FIFO path a launch hands the helper as stderr.
 const stderrMark = "<stderr>"
 
-func (f *fakeOpen) run(ctx context.Context, argv []string, _ io.Reader, _, _ io.Writer) (int, error) {
+func (f *fakeOpen) run(ctx context.Context, argv []string, in io.Reader, out, errw io.Writer) (int, error) {
+	if argv[0] == "codesign" {
+		sig := f.sig
+		if sig == nil {
+			sig = newTouchRunner()
+		}
+		return sig.exec(ctx, argv, in, out, errw)
+	}
 	recorded := slices.Clone(argv)
 	stderr := ""
 	if i := slices.Index(recorded, "--stderr"); i >= 0 && i+1 < len(recorded) {
@@ -134,6 +144,7 @@ func approverBridge(url string, open *fakeOpen, errb io.Writer) *bridge {
 		goos:   "darwin",
 		home:   func() (string, error) { return testHome, nil },
 		socket: testSocket,
+		self:   func() (string, error) { return fakeSelf, nil },
 	}
 	return b
 }
@@ -182,6 +193,13 @@ func TestBridge_ApproverAsk(t *testing.T) {
 				b.approver.home = func() (string, error) { return "", io.ErrUnexpectedEOF }
 			},
 			wantErr: "find the home the Touch ID approver is installed under"},
+		{name: "a substitute app is refused and never opened",
+			params: `{"request_id":"` + testRequestID + `","duration":"1h"}`,
+			mutate: func(_ *bridge, o *fakeOpen) {
+				o.sig = newTouchRunner()
+				o.sig.appTeam = otherTeam
+			},
+			wantErr: "run seam touchid enroll to install it again"},
 		{name: "open fails",
 			params:  `{"request_id":"` + testRequestID + `","duration":"1h"}`,
 			mutate:  func(_ *bridge, o *fakeOpen) { o.code = 1 },

@@ -649,3 +649,12 @@ func TestAccess_LeaseRowNamesTheAgent(t *testing.T) {
 	row := between(t, rr.Body.String(), "Claude Code 2.1.319 (pid 200)", `<li class="access-item"`, "</li>")
 	require.Contains(t, row, "session cc/fin &middot; granted ")
 }
+
+// The request's page says which of its facts are the agent's own report.
+func TestAccess_PageSaysWhatTheAgentReported(t *testing.T) {
+	f := newAccessFixture(t)
+	id, _ := f.file(t)
+	rr := do(f.mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/access/"+id, nil)))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Contains(t, rr.Body.String(), approval.SelfReportedNote)
+}

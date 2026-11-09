@@ -88,6 +88,9 @@ type accessList struct {
 	Terminal  *terminalApprover `json:"terminal"`
 	Durations []string          `json:"durations"`
 	MaxLease  string            `json:"max_lease"`
+	// Advisory marks the daemon as the tier without peer_auth (accessOne's
+	// Advisory, for the whole list).
+	Advisory bool `json:"advisory"`
 }
 
 // accessOne is GET /console/access/{id}?format=json.
@@ -151,6 +154,13 @@ func accessOnePath(ref string) string {
 // included: "no project is locked" and "no such access request" are the answer,
 // where consoleRequest would report a bare "not found".
 func accessCall(cfg config.Config, method, path string, form url.Values) ([]byte, error) {
+	return accessCallVia(nil, cfg, method, path, form)
+}
+
+// accessCallVia is accessCall through client: a verifiedDaemon's, whose every
+// connection the kernel has named. A nil client is cfg's own, which checks
+// nothing about who answers.
+func accessCallVia(client *http.Client, cfg config.Config, method, path string, form url.Values) ([]byte, error) {
 	var body io.Reader
 	if form != nil {
 		body = strings.NewReader(form.Encode())
@@ -166,9 +176,10 @@ func accessCall(cfg config.Config, method, path string, form url.Values) ([]byte
 	if form != nil {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
-	client, err := cfg.HTTPClient(consoleTimeout)
-	if err != nil {
-		return nil, err
+	if client == nil {
+		if client, err = cfg.HTTPClient(consoleTimeout); err != nil {
+			return nil, err
+		}
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -190,7 +201,12 @@ func accessCall(cfg config.Config, method, path string, form url.Values) ([]byte
 
 // accessGet fetches an access route and decodes it into v.
 func accessGet(cfg config.Config, path string, v any) error {
-	b, err := accessCall(cfg, http.MethodGet, path, nil)
+	return accessGetVia(nil, cfg, path, v)
+}
+
+// accessGetVia is accessGet through client (accessCallVia).
+func accessGetVia(client *http.Client, cfg config.Config, path string, v any) error {
+	b, err := accessCallVia(client, cfg, http.MethodGet, path, nil)
 	if err != nil {
 		return err
 	}

@@ -73,6 +73,14 @@ func TestDialogLead_CountFirstThenWhatIsAsked(t *testing.T) {
 	f.Agent, f.Program = "", ""
 	require.Contains(t, dialogMessage(f, dialogShown{capped: time.Hour}), "\nAgent process: pid 4242\n")
 	require.NotContains(t, dialogMessage(f, dialogShown{capped: time.Hour}), "\nProgram:")
+
+	// The note on the agent's own claims comes with them: a dialog showing none
+	// of the three has nothing for it to describe.
+	require.NotContains(t, dialogMessage(base, dialogShown{capped: time.Hour}), approval.SelfReportedNote)
+	withClaim := base
+	withClaim.CWD = "/work/demo-vault"
+	claimed := dialogMessage(withClaim, dialogShown{capped: time.Hour})
+	require.Contains(t, claimed, "\nWorking directory: /work/demo-vault\n"+approval.SelfReportedNote+"\n")
 }
 
 // The dialog's durations say what each grants under the lease cap: a fixed

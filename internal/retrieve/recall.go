@@ -627,12 +627,13 @@ func noteHit(n core.Note) Hit {
 // body's opening stands in -- the same role Memory.Description plays, sourced
 // from the only prose a task has. Name carries the plan slug (empty for a
 // standalone task), which is how a hit announces that it is a step of a
-// composition rather than a loose queue item. Account is the task's creator
-// (core.Task.Account), not its last changer: the task's text is the creator's.
+// composition rather than a loose queue item. Account is taskAccount: its text
+// may have been rewritten since it was created, so a restricted account's
+// change of an owner's task is labeled too.
 func taskHit(t core.Task) Hit {
 	return Hit{
 		Kind: core.ItemKindTask, ID: t.ID, Name: t.PlanSlug, Title: t.Title,
-		Description: sanitizeField(t.Body, 200), Project: t.ProjectSlug, Account: sanitizeAccount(t.Account),
+		Description: sanitizeField(t.Body, 200), Project: t.ProjectSlug, Account: sanitizeAccount(taskAccount(t)),
 		Age: humanAge(t.UpdatedAt), Status: string(t.Status),
 		Favorite: t.Favorite, Updated: t.UpdatedAt,
 	}

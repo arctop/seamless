@@ -333,6 +333,11 @@ func (s *Service) projectIsolationSet(w http.ResponseWriter, r *http.Request) {
 
 // isolationLoosen applies a loosening (or an already-held open state) directly.
 func (s *Service) isolationLoosen(w http.ResponseWriter, r *http.Request, slug string, from, to core.Isolation) {
+	// A fence coming down is the owner's call: it opens the project to every
+	// other agent from then on.
+	if refusedFromAgent(w, r) {
+		return
+	}
 	ctx := r.Context()
 	if err := store.SetProjectIsolation(ctx, s.writeDB(), slug, to); err != nil {
 		if errors.Is(err, store.ErrProjectNotFound) {

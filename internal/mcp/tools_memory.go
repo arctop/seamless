@@ -131,6 +131,15 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 			return err
 		}
 		found = ok
+		// Ahead of the judge, so a binding kind is refused here too rather than
+		// filed as a proposal that would shadow on its promotion. found is the
+		// answer under the lock: over a project memory already of this name, the
+		// shadow is not new.
+		if !found && account != "" {
+			if serr := s.refuseGlobalShadow(ctx, project, name); serr != nil {
+				return serr
+			}
+		}
 		var replaced core.Memory // the file this write replaces, read under the lock (screening's base)
 
 		// Account follows the content like Model, but with no "unknown" value to
@@ -195,6 +204,7 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 				mem.Tags, mem.Favorite, mem.Extra = onDisk.Tags, onDisk.Favorite, onDisk.Extra
 				replaced = onDisk
 			}
+			mem.Favorite = starAfter(mem.Favorite, account, true)
 		} else {
 			id, err := core.NewID()
 			if err != nil {
@@ -420,6 +430,7 @@ func (s *Server) handleMemoryAppend(ctx context.Context, req mcp.CallToolRequest
 		}
 		// The account label follows the body the same way (accountAfter).
 		cur.Account = accountAfter(cur.Account, judge.account, true, false)
+		cur.Favorite = starAfter(cur.Favorite, judge.account, true)
 		// A restricted account's append to a briefing-injected kind -- its own
 		// promoted constraint included -- changes binding text: a proposal.
 		if judge.active() {
@@ -568,7 +579,12 @@ func (s *Server) handleMemoryRead(ctx context.Context, req mcp.CallToolRequest) 
 		out["favorite"] = true
 	}
 	if !mem.Active() {
-		out["warning"] = s.supersededWarning(ctx, mem)
+		warning, fenced := s.supersededWarning(ctx, mem)
+		out["warning"] = warning
+		// The body's tombstone line names the replacement as well; the file keeps it.
+		if fenced {
+			out["body"] = lifecycle.WithoutTombstone(mem.Body, mem.SupersededBy)
+		}
 	}
 	// Write screening, when on: who stands behind this content -- the owner,
 	// or an agent and which session -- read the same way the briefing marks it.
@@ -604,20 +620,35 @@ func (s *Server) resolveSupersededMemory(ctx context.Context, project, name stri
 }
 
 // supersededWarning renders the read warning for an invalid memory, naming the
-// replacement when superseded_by resolves to a known memory.
-func (s *Server) supersededWarning(ctx context.Context, mem core.Memory) string {
+// replacement when superseded_by resolves to a known memory the caller may read.
+// fenced reports that it may not: a superseded memory stays readable where its
+// replacement may not be, so the answer then carries none of the replacement's
+// project, name or id, and the caller drops the body's tombstone line too. A
+// replacement that cannot be looked up counts as fenced, since nothing can say
+// it is not. The fence is a filter here, so it files no request and records no
+// refusal.
+func (s *Server) supersededWarning(ctx context.Context, mem core.Memory) (warning string, fenced bool) {
 	when := ""
 	if mem.InvalidAt != nil {
 		when = " on " + mem.InvalidAt.Format("2006-01-02")
 	}
-	if mem.SupersededBy != "" {
-		if repl, ok, err := store.MemoryByID(ctx, s.cfg.DB, mem.SupersededBy); err == nil && ok {
-			return fmt.Sprintf("superseded by %s%s; read that instead",
-				lifecycle.MemoryRef(repl.Project, repl.Name), when)
-		}
-		return fmt.Sprintf("superseded by %s%s; read that instead", mem.SupersededBy, when)
+	if mem.SupersededBy == "" {
+		return fmt.Sprintf("archived%s; this memory is no longer active", when), false
 	}
-	return fmt.Sprintf("archived%s; this memory is no longer active", when)
+	unreachable := fmt.Sprintf("superseded%s; the replacement is not reachable from here", when)
+	repl, ok, err := store.MemoryByID(ctx, s.cfg.DB, mem.SupersededBy)
+	if err != nil {
+		s.logger.Warn("mcp: superseded memory's replacement", "id", mem.ID, "error", err)
+		return unreachable, true
+	}
+	if !ok {
+		return fmt.Sprintf("superseded by %s%s; read that instead", mem.SupersededBy, when), false
+	}
+	if s.fenceReadQuiet(access.WithLockRequester(ctx, nil), repl.Project) != nil {
+		return unreachable, true
+	}
+	return fmt.Sprintf("superseded by %s%s; read that instead",
+		lifecycle.MemoryRef(repl.Project, repl.Name), when), false
 }
 
 func memoryDeleteTool() mcp.Tool {

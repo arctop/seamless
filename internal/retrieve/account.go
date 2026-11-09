@@ -61,6 +61,17 @@ func AccountMark(account string) string {
 // accountMark is AccountMark for this package's own renderers.
 func accountMark(account string) string { return AccountMark(account) }
 
+// taskAccount is the account a task's lines name: its creator, else the
+// restricted account that last changed it. An owner's task can be rewritten
+// by a restricted account (core.Task.UpdatedAccount) and must not then read
+// as the owner's words.
+func taskAccount(t core.Task) string {
+	if t.Account != "" {
+		return t.Account
+	}
+	return t.UpdatedAccount
+}
+
 // sanitizeAccount renders an account name for a label. An OS account name is
 // letters, digits and _ . - (what the kernel-named socket peer resolves to),
 // so anything else -- whitespace, brackets, punctuation a hand edit put in the

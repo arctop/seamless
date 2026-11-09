@@ -273,6 +273,14 @@ type Facts struct {
 	From string `json:"from,omitempty"`
 }
 
+// SelfReportedNote says, on every approval surface that shows them, that the
+// working directory, the repository and the model are the agent's own report:
+// the daemon has no way to check them, so an agent can claim the locked
+// project's repository, and a missing cwd_outside_repo or no_session warning is
+// not evidence that the claim is true. What the daemon does know is the project,
+// the access, the process and the program the kernel names.
+const SelfReportedNote = "The working directory, repository and model are what the agent reported. The daemon cannot check them."
+
 // Warning is one thing the owner should weigh before approving: a code and
 // its text.
 type Warning struct {
@@ -290,6 +298,7 @@ const (
 	WarnTainted        = "session_tainted"
 	WarnOtherPending   = "other_pending"
 	WarnAnchorIsShell  = "anchor_is_shell"
+	WarnAnchorRuntime  = "anchor_is_runtime"
 	WarnNoSession      = "no_session"
 	WarnRefreshOfLease = "refresh"
 )
@@ -301,6 +310,9 @@ const (
 //
 //   - anchor_is_shell: a lease on that process would cover every program it
 //     started, other agent sessions included (and is refused);
+//   - anchor_is_runtime: the process is a JS runtime that only its own hook
+//     calls an agent, and an editor's server is one too, so one approval could
+//     cover everything that server started;
 //   - copy_into: an approved read lets the project's content leave, into
 //     another project's memories;
 //   - session_tainted: the session read text from outside, so the request and
@@ -314,7 +326,7 @@ const (
 //   - refresh: the agent holds a lease on the project already; approving
 //     replaces it and adds no reach.
 var WarningOrder = []string{
-	WarnAnchorIsShell, WarnCopyInto, WarnTainted, WarnOtherPending, WarnCWDOutside, WarnNoSession, WarnRefreshOfLease,
+	WarnAnchorIsShell, WarnAnchorRuntime, WarnCopyInto, WarnTainted, WarnOtherPending, WarnCWDOutside, WarnNoSession, WarnRefreshOfLease,
 }
 
 // warningRank is a warning's place in WarningOrder; a code it does not list
@@ -697,6 +709,10 @@ func (s *Service) factsOf(ctx context.Context, a store.AccessApproval) (Facts, e
 	if what, broad := storedBroad(a.PeerPID, a.Program); broad {
 		warn(WarnAnchorIsShell, "the process asking is "+what+", not an agent: a lease on it would cover every program "+
 			"it started, so Seamless refuses to approve it")
+	}
+	if base, runtime := jsRuntimeBase(a.Program); runtime {
+		warn(WarnAnchorRuntime, "the process asking is "+base+", and only its own hook says it is an agent: every program it "+
+			"started would share this approval, so approve only if this is the agent you started")
 	}
 	if a.SessionID == "" {
 		warn(WarnNoSession, "no session named this agent; its cwd and model are unknown")

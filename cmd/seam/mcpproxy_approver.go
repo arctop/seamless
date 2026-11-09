@@ -85,6 +85,7 @@ type approverHost struct {
 	goos   string                 // the platform; "" is runtime.GOOS
 	home   func() (string, error) // the owner's home, where the app is installed; nil is os.UserHomeDir
 	socket string                 // the peer_auth socket this bridge dials; "" when server_url names none
+	self   func() (string, error) // this seam binary, whose team the app is pinned to; nil is selfPath
 }
 
 // launch opens the approver for one ask, and returns the helper's stderr to
@@ -109,19 +110,25 @@ func (h approverHost) launch(ctx context.Context, ask core.ApproverLaunch) (*app
 	if err != nil {
 		return nil, fmt.Errorf("find the home the Touch ID approver is installed under: %w", err)
 	}
+	self := h.self
+	if self == nil {
+		self = selfPath
+	}
 	ctx, cancel := context.WithTimeout(ctx, approverLaunchTimeout)
 	defer cancel()
 	// The FIFO is made only once launchApprover's checks passed and it runs
-	// open: its stderr goes there.
+	// open: its stderr goes there. codesign, run before that, gets none.
 	var watch *approverStderr
 	withStderr := func(ctx context.Context, argv []string, in io.Reader, out, errw io.Writer) (int, error) {
-		if s, err := openApproverStderr(); err == nil {
-			watch = s
-			argv = withStderrArg(argv, s.stderrPath())
+		if argv[0] == "open" {
+			if s, err := openApproverStderr(); err == nil {
+				watch = s
+				argv = withStderrArg(argv, s.stderrPath())
+			}
 		}
 		return run(ctx, argv, in, out, errw)
 	}
-	err = launchApprover(ctx, withStderr, goos, approverAppPath(home), h.socket, ask.RequestID, ask.Duration)
+	err = launchApprover(ctx, withStderr, self, goos, approverAppPath(home), h.socket, ask.RequestID, ask.Duration)
 	if watch != nil {
 		watch.handedOver()
 		if err != nil {

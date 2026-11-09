@@ -293,6 +293,30 @@ func PeerAuthenticated(ctx context.Context) bool {
 	return ok && v.who.Socket
 }
 
+// agentChainKey carries a request's FromAgent answer.
+type agentChainKey struct{}
+
+// WithAgentChain records how to tell whether this socket request came from a
+// process an agent started: fromAgent asks the kernel's process chain.
+func WithAgentChain(ctx context.Context, fromAgent func() bool) context.Context {
+	return context.WithValue(ctx, agentChainKey{}, fromAgent)
+}
+
+// FromAgent reports whether this socket request came from a process an agent
+// started, by the kernel's process chain. It answers true when the chain cannot
+// be read, and false for a request that did not arrive on the socket. It guards
+// the owner's own decisions against an agent's ordinary tool calls, and it is
+// not a wall: a process that detaches from its agent has no agent above it, and
+// whoever holds the bearer key does not come through here. The lock is what
+// holds against an agent set on getting in.
+func FromAgent(ctx context.Context) bool {
+	if !PeerAuthenticated(ctx) {
+		return false
+	}
+	fromAgent, _ := ctx.Value(agentChainKey{}).(func() bool)
+	return fromAgent == nil || fromAgent()
+}
+
 // OwnerOnly reports whether ctx may use an owner-only surface (the console): no
 // View at all (peer_auth off), or the owner's. A restricted account never may.
 func OwnerOnly(ctx context.Context) bool {

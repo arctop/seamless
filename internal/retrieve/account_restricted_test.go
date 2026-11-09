@@ -767,3 +767,25 @@ func TestRestrictedAccount_ProposalsReachNoSurface(t *testing.T) {
 		require.Contains(t, got.Briefing, "3 constraints", "%s: the held constraint is not counted", name)
 	}
 }
+
+// A task's lines name its creator, else the restricted account that last
+// changed it: a rewrite of the owner's task must not read as the owner's words.
+func TestAccountLabels_TaskNamesItsRewriter(t *testing.T) {
+	const other = "_example_other"
+	for _, tc := range []struct {
+		name            string
+		account, update string
+		want            string
+	}{
+		{"the owner's task, untouched", "", "", ""},
+		{"rewritten by an account", "", acctName, acctName},
+		{"the creator's account stays", acctName, other, acctName},
+		{"created by an account, later the owner's change", acctName, "", acctName},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			task := core.Task{ID: "01TSK", Title: "a task", Status: core.TaskOpen, Account: tc.account, UpdatedAccount: tc.update}
+			require.Equal(t, tc.want, taskHit(task).Account)
+			require.Contains(t, readyTasksSection([]core.Task{task}, 1), "- a task"+AccountMark(tc.want)+"\n")
+		})
+	}
+}

@@ -895,6 +895,9 @@ func dialogMessage(f approval.Facts, shown dialogShown) string {
 	line("Repository", f.Repo)
 	line("Working directory", f.CWD)
 	line("Model", f.Model)
+	if plain(f.Repo)+plain(f.CWD)+plain(f.Model) != "" {
+		b.WriteString(approval.SelfReportedNote + "\n")
+	}
 	line("Agent process", agentProcessName(f))
 	if strings.ContainsAny(f.Program, `/\`) {
 		// The full path, so a program that only borrows an agent's name

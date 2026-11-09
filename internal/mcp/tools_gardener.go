@@ -52,6 +52,14 @@ func gardenerRequestTool() mcp.Tool {
 }
 
 func (s *Server) handleGardenerRequest(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// A proposal carries no origin, so an owner's apply would land a restricted
+	// account's rekind or consolidate as a binding memory that never met the
+	// proposal queue. Refused before any lookup, so no answer can tell one
+	// project from another.
+	if account := access.AccountOf(ctx); account != "" {
+		return errResult("gardener_request", ownerCurationRefusal(account,
+			"asking the gardener to reorganize memory is the owner's curation", gardenerCurationRemedy))
+	}
 	if s.cfg.Gardener == nil {
 		return errResult("gardener_request", errors.New("gardener is not configured on this server"))
 	}
@@ -122,6 +130,12 @@ func gardenerSplitTool() mcp.Tool {
 }
 
 func (s *Server) handleGardenerSplit(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// The owner's curation, as at gardener_request, and before the source is
+	// looked up: its answer told a closed project from a missing one.
+	if account := access.AccountOf(ctx); account != "" {
+		return errResult("gardener_split", ownerCurationRefusal(account,
+			"planning a project split is the owner's curation", gardenerCurationRemedy))
+	}
 	if s.cfg.Gardener == nil {
 		return errResult("gardener_split", errors.New("gardener is not configured on this server"))
 	}
@@ -154,13 +168,12 @@ func gardenerApplyTool() mcp.Tool {
 func (s *Server) handleGardenerApply(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	// The gardener's queue is the owner's curation: applying, dismissing or
 	// hiding a proposal changes what every session is briefed with. A
-	// restricted account reviews (gardener_proposals) and raises proposals
-	// (gardener_request, gardener_split), and is refused here before the
-	// proposal is loaded, so the answer says nothing about the id it named.
+	// restricted account reviews (gardener_proposals) and is refused here
+	// before the proposal is loaded, so the answer says nothing about the id
+	// it named.
 	if account := access.AccountOf(ctx); account != "" {
 		return errResult("gardener_apply", ownerCurationRefusal(account,
-			"resolving a gardener proposal (apply, dismiss or hide) is the owner's curation",
-			"review proposals with gardener_proposals and raise new ones with gardener_request; the owner resolves them on the console's Gardener screen"))
+			"resolving a gardener proposal (apply, dismiss or hide) is the owner's curation", gardenerCurationRemedy))
 	}
 	id := argString(req, "id")
 	if id == "" {

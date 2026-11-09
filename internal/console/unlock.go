@@ -352,6 +352,28 @@ func ownerDecision(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
+// ownerHands refuses, for next, a request from a process an agent started: the
+// decision is the owner's, from their own terminal or the browser. It stops an
+// agent's ordinary tool calls and is not a wall (access.FromAgent says why).
+func ownerHands(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if refusedFromAgent(w, r) {
+			return
+		}
+		next(w, r)
+	}
+}
+
+// refusedFromAgent answers a request from a process an agent started, and
+// reports that it did.
+func refusedFromAgent(w http.ResponseWriter, r *http.Request) bool {
+	if !access.FromAgent(r.Context()) {
+		return false
+	}
+	writeJSON(w, http.StatusForbidden, map[string]string{"error": "this is the owner's decision, and this request came from a process an agent started: run it in your own terminal, or on the console"})
+	return true
+}
+
 // afterAccessWrite answers an access-page write: JSON for a script, else the
 // page the form named (the access page by default) with a notice.
 func afterAccessWrite(w http.ResponseWriter, r *http.Request, payload map[string]any, notice string) {

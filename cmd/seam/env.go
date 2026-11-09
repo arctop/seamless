@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
@@ -44,7 +45,8 @@ type env struct {
 	// in a test env unless the test sets it. A nil terminal, getenv or exec
 	// degrades to the safe answer, never to the real world: not a terminal, an
 	// empty environment, and no program run at all -- so a test that forgets to
-	// fake sudo fails rather than running it. A nil now or tick is the real
+	// fake sudo fails rather than running it. A nil dialDaemon or lookupAccount
+	// refuses, so no daemon is believed unchecked. A nil now or tick is the real
 	// clock, which runs nothing.
 
 	// terminal reports whether stdin and stdout are both terminals.
@@ -59,6 +61,12 @@ type env struct {
 	now func() time.Time
 	// tick paces seam approve --watch: a channel that fires every d, and its stop.
 	tick func(d time.Duration) (<-chan time.Time, func())
+	// dialDaemon asks the kernel who answers at cfg's server_url: the peer's
+	// uid and a client to read from it (daemon_peer.go). It refuses a server_url
+	// that is not a socket, with errServerNotSocket.
+	dialDaemon func(ctx context.Context, cfg config.Config) (uint32, *http.Client, error)
+	// lookupAccount resolves an OS account's name to its uid.
+	lookupAccount func(name string) (uint32, error)
 }
 
 // newEnv returns the real world.
@@ -72,6 +80,9 @@ func newEnv() *env {
 		terminal:   stdioIsTerminal,
 		exec:       runProgram,
 		getenv:     os.Getenv,
+
+		dialDaemon:    dialSocketDaemon,
+		lookupAccount: lookupAccountUID,
 	}
 }
 

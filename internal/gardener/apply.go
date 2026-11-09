@@ -278,11 +278,16 @@ func (s *Service) applyConsolidate(ctx context.Context, p store.Proposal, now ti
 		if nerr != nil {
 			return nil, nerr
 		}
+		account, aerr := s.sourcesAccount(ctx, payloadList(p.Payload, "sources"))
+		if aerr != nil {
+			return nil, aerr
+		}
 		written, werr := s.files.WriteMemory(ctx, core.Memory{
 			ID: id, Kind: core.MemoryKind(payloadString(p.Payload, "kind")),
 			Name: name, Description: payloadString(p.Payload, "description"),
 			Project: project, Body: body,
 			Model:   payloadString(p.Payload, "model"),
+			Account: account,
 			Created: now, Updated: now, ValidFrom: now,
 		})
 		if werr != nil {
@@ -338,6 +343,27 @@ func (s *Service) applyConsolidate(ctx context.Context, p store.Proposal, now ti
 		"created":    lifecycle.MemoryRef(target.Project, target.Name),
 		"superseded": superseded,
 	}, nil
+}
+
+// sourcesAccount is the restricted account a consolidated memory is labeled
+// with: the first any source carries, in the sources' order. The new body is
+// built from the sources' words, so it keeps their label. A source already
+// retired still counts, because the proposal's body was written from it.
+func (s *Service) sourcesAccount(ctx context.Context, sources []map[string]any) (string, error) {
+	for _, src := range sources {
+		id := payloadString(src, "id")
+		if id == "" {
+			continue
+		}
+		m, found, err := store.MemoryByID(ctx, s.db, id)
+		if err != nil {
+			return "", err
+		}
+		if found && m.Account != "" {
+			return m.Account, nil
+		}
+	}
+	return "", nil
 }
 
 // applyReproject relocates a memory to another project. Unlike archive/merge this

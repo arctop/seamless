@@ -71,11 +71,42 @@ func Supersede(ctx context.Context, w MemoryWriter, old, replacement core.Memory
 	return w.WriteMemory(ctx, old)
 }
 
+// supersededPrefix opens the tombstone line Supersede appends.
+const supersededPrefix = "> Superseded by"
+
 // tombstone is the body line appended to a superseded memory, keeping the file
 // truthful about what replaced it.
 func tombstone(replacement core.Memory, at time.Time) string {
-	return fmt.Sprintf("> Superseded by %s (%s) on %s",
+	return fmt.Sprintf(supersededPrefix+" %s (%s) on %s",
 		MemoryRef(replacement.Project, replacement.Name), replacement.ID, at.Format("2006-01-02"))
+}
+
+// WithoutTombstone is body without the tombstone line naming replacementID, for
+// a reader who may not read that replacement: the line carries its project, its
+// name and its id. The line is found by the id rather than by being last, so a
+// file edited by hand after the supersede is still covered, and prose that only
+// looks like a tombstone stays. It changes the reader's copy, never the file.
+func WithoutTombstone(body, replacementID string) string {
+	if replacementID == "" {
+		return body
+	}
+	id := "(" + replacementID + ")"
+	lines := strings.Split(body, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if t := strings.TrimSpace(line); strings.HasPrefix(t, supersededPrefix) && strings.Contains(t, id) {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if len(kept) == len(lines) {
+		return body
+	}
+	out := strings.TrimRight(strings.Join(kept, "\n"), "\n")
+	if out == "" {
+		return ""
+	}
+	return out + "\n"
 }
 
 // MemoryRef renders a project-qualified memory reference (project/name), or just

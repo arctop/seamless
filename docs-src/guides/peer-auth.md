@@ -491,8 +491,8 @@ process it started: the MCP bridge, `seam` commands, the hooks and the agent's o
 scripts share one approval, and nothing outside the tree does.
 
 The daemon learns the tree from the kernel alone. At accept it reads which process
-opened the socket connection (the audit token on macOS, `SO_PEERCRED` and a pidfd
-on Linux) and pins that pid to the process, so a later walk can tell it from one
+holds the socket connection (the audit token on macOS, which names the last process
+to use it, and `SO_PEERCRED` and a pidfd on Linux) and pins that pid to the process, so a later walk can tell it from one
 that reused the pid. Per request it walks the parent chain from there, verifying
 every link. A link that does not verify ends the chain, so an orphan reparented to
 init, or a reused pid, reaches nothing above it. Nothing the client sends, the
@@ -531,6 +531,17 @@ session with `session=`, writes where that session may, past the grant's write
 confinement. Under peer_auth the holder is the process tree, and the same moves are
 refused. Use the advisory tier to keep an agent from wandering into a confidential
 project, not against one set on it.
+
+Neither tier stops an agent running as you from reading a `confidential` or
+`sealed` project. A session's project is the agent's word, so `session_start
+project=<slug>`, a hook naming that repository, or `session=` on a tool reads the
+project with no grant at all, and the console answers your account for every
+project that is not locked. The fence keeps a careful agent out. The lock holds
+against one set on it, because it asks the kernel who is calling, so lock a
+project that must stay shut. A restricted account has none of these ways in.
+
+A grant's write confinement binds the asking agent's process tree. A process that
+detaches from that tree, or a call over TCP with the bearer key, is not confined.
 
 A2A speaks for no session, so under peer_auth it refuses a `confidential` or
 `sealed` project unless the caller holds a lease on it.
@@ -621,6 +632,12 @@ Promoting is yours alone, on the console or in your terminal; the account can
 neither promote a proposal nor undo a promotion. Every other kind of memory,
 and notes, tasks and findings, lands at once, labeled.
 
+Three more rules keep its text from passing as yours. It cannot give a project
+memory the name of a live global constraint, convention, protocol or stage, because
+a read by that name would then answer with its text. It cannot ask the gardener to
+plan a change (`gardener_request`, `gardener_split`), and it still sees proposals
+with `gardener_proposals`. A memory it rewrites loses its star.
+
 Sessions belong to the account that started them: a restricted account's agents
 cannot resume, bind to or write findings into your sessions, and yours cannot
 act in theirs. Its sessions also have names of their own: every one is stored
@@ -694,6 +711,21 @@ the locked notice, and `seam approve` in your own terminal shows its request.
   arrangement. Whoever holds the bearer key acts as the owner, and reaches every
   project but the locked ones. Backups of the data directory, and exports, hold
   every project: keep them as carefully as the most sensitive project in them.
+- **Anything running as you can watch your terminal.** An enrollment code and a
+  `console-open --unlock` link are shown once, and whoever uses one first gets what
+  it opens. Make them in a terminal your agents cannot read: a `tmux` server they
+  share lets them capture the pane. After enrolling, check that
+  `seamlessd approvers list` shows only what you enrolled.
+- **Your shell is yours to guard.** Under peer_auth `seam approve` works only over
+  the socket, and refuses one that the daemon's account does not serve, so a changed
+  `server_url` cannot show it false facts. An agent running as you can still edit your shell's startup files, or
+  replace a `seam` you own. Run the root-owned `/opt/seamless/bin/seam approve` by
+  its full path if you doubt yours.
+- **Some decisions refuse a process an agent started**: bringing a fence down,
+  releasing or discarding a held write, clearing a session's mark, and changing
+  which features are on. Make them in your own terminal or the console. This stops
+  an agent's ordinary tool calls, not one that detaches a process from its tree or
+  reads the key in your `console.yaml`.
 
 ## Move an existing install over
 
@@ -730,7 +762,12 @@ so nothing inside needs rewriting. On one volume the move is a rename.
    path still approves.
 9. **Verify** ([above](#verify)), then start an agent in a locked repository and
    approve its request end to end.
-10. **Optional: list a restricted account.** Add it to `peer_auth.restricted` and
+10. **Put the export out of your agents' reach.** The archive from step 2 sits in
+    your home, readable by anything that runs as you, with every locked project in
+    it. Move it now (`sudo mv ~/seamless-before-peer-auth.tar.gz /opt/seamless/` and
+    `sudo chown root` and `sudo chmod 600` the file there),
+    and delete it once the new install has proved itself.
+11. **Optional: list a restricted account.** Add it to `peer_auth.restricted` and
     restart the daemon. Give the account its own client config (socket
     `server_url`, no key), run `install-hooks` as the account, and map each of its
     clones with `seamlessd map-repo --path <its clone> --project <slug>` as the
@@ -743,5 +780,5 @@ Unload the LaunchDaemon or disable the system unit
 (`sudo mv /opt/seamless/data ~/.seamless` and `sudo chown -R $(id -un) ~/.seamless`),
 restore your server config without the `peer_auth` block - a release that predates
 it refuses the key - and reinstall the per-user service (`make install`, or the
-installer). The export from step 2 is the fallback if anything in the move went
-wrong.
+installer). The export from step 2, wherever step 10 put it, is the fallback if
+anything in the move went wrong.

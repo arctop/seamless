@@ -73,6 +73,15 @@ func writtenBy(account string) string {
 	return "written by account " + printable(account)
 }
 
+// updatedBy labels an item a restricted local account last changed, in the
+// wording the console's task pages use: "" for the owner, as writtenBy.
+func updatedBy(account string) string {
+	if account == "" {
+		return ""
+	}
+	return "updated by account " + printable(account)
+}
+
 // lockedSkipped is the line a console-backed list adds for the locked projects
 // (peer_auth.locked) its answer left out: "(not shown: locked project
 // acme-finance)". It names them and never counts what they hold -- a count

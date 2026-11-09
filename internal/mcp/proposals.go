@@ -130,11 +130,35 @@ func errSupersedeIsProposal(target string, kind core.MemoryKind) error {
 		"retry the memory_write to file it for the owner's promotion", target, kind)
 }
 
+// refuseGlobalShadow refuses a restricted account a new project memory whose
+// name is a live global memory of a briefing-injected kind. By-name reads try
+// the project first, so the account's text would answer every agent the
+// briefing sent to read the global rule, with no proposal in between. The
+// account reads the global scope, so the refusal tells it nothing new.
+func (s *Server) refuseGlobalShadow(ctx context.Context, project, name string) error {
+	if project == "" {
+		return nil
+	}
+	global, ok, err := store.MemoryByName(ctx, s.cfg.DB, "", name)
+	if err != nil {
+		return err
+	}
+	if !ok || !screening.IsBriefingKind(global.Kind) {
+		return nil
+	}
+	return fmt.Errorf("the name %q belongs to a global %s, and a memory of that name in project %s would answer "+
+		"by-name reads in its place -- nothing was written; choose another name", name, global.Kind, project)
+}
+
 // ownerCurationRefusal refuses a restricted account a tool that curates what
 // every session sees: the owner's alone.
 func ownerCurationRefusal(account, rule, remedy string) error {
 	return fmt.Errorf("not open to account %s: %s -- %s", account, rule, remedy)
 }
+
+// gardenerCurationRemedy is what a refused gardener tool leaves a restricted
+// account: the queue stays readable, and the owner works it.
+const gardenerCurationRemedy = "review proposals with gardener_proposals; the owner raises and resolves them on the console's Gardener screen"
 
 // noteTextChanged reports whether a notes_update patch rewrites the note's
 // title or description: authored text every index line shows, so a
@@ -155,4 +179,12 @@ func accountAfter(current, account string, bodyChanged, textChanged bool) string
 		return account
 	}
 	return current
+}
+
+// starAfter is a memory's star after a write: a restricted account's change of
+// its content drops it. A star pins a memory into briefings and the account
+// may not set one, so it must not inherit one for words the owner did not
+// star. Metadata (tags) changes nothing the star vouches for.
+func starAfter(current bool, account string, contentChanged bool) bool {
+	return current && (account == "" || !contentChanged)
 }

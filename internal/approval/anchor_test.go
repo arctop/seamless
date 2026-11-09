@@ -179,6 +179,12 @@ func TestRequest_AnchorRule(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, c.agent, facts.Agent)
 			require.NotContains(t, warningCodes(facts), WarnAnchorIsShell)
+			if _, runtime := jsRuntimeBase(c.chain[c.header].prog); runtime {
+				require.Contains(t, warningCodes(facts), WarnAnchorRuntime,
+					"only its own hook says a JS runtime is an agent, so the owner is told before approving")
+			} else {
+				require.NotContains(t, warningCodes(facts), WarnAnchorRuntime)
+			}
 		})
 	}
 }
@@ -282,7 +288,7 @@ func TestGrantApprove_RefusesAStoredBroadAnchor(t *testing.T) {
 // The facts serve their warnings most serious first (WarningOrder), whatever
 // order they were found in.
 func TestFacts_WarningOrder(t *testing.T) {
-	require.Equal(t, []string{"anchor_is_shell", "copy_into", "session_tainted", "other_pending", "cwd_outside_repo",
+	require.Equal(t, []string{"anchor_is_shell", "anchor_is_runtime", "copy_into", "session_tainted", "other_pending", "cwd_outside_repo",
 		"no_session", "refresh"}, WarningOrder, "the order is a contract: the Touch ID prompt shows the first three")
 
 	f := newReqFixture(t)
@@ -402,5 +408,19 @@ func TestAgentLabel(t *testing.T) {
 		{"/usr/local/bin/python3", 0, ""},
 	} {
 		require.Equal(t, tc.want, AgentLabel(tc.program, tc.pid), "%q %d", tc.program, tc.pid)
+	}
+}
+
+func TestIsAgentProgram(t *testing.T) {
+	for prog, want := range map[string]bool{
+		"/Users/owner/.local/share/claude/versions/2.1.319": true,
+		"/opt/homebrew/bin/node":                            true,
+		"/usr/local/bin/bun":                                true,
+		"/bin/zsh":                                          false,
+		"/Users/owner/.local/bin/seam":                      false,
+		"/Applications/Ghostty.app/Contents/MacOS/ghostty":  false,
+		"": false,
+	} {
+		require.Equal(t, want, IsAgentProgram(prog), prog)
 	}
 }

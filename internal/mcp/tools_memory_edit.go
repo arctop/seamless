@@ -185,6 +185,8 @@ func (s *Server) handleMemoryEdit(ctx context.Context, req mcp.CallToolRequest) 
 		// shows (accountAfter).
 		cur.Account = accountAfter(cur.Account, judge.account, newBody != oldBody,
 			cur.Description != before.Description)
+		cur.Favorite = starAfter(cur.Favorite, judge.account,
+			newBody != oldBody || cur.Description != before.Description)
 		// A restricted account's edit of a briefing-injected kind -- its own
 		// promoted constraint included, metadata-only edits too -- is a proposal.
 		if judge.active() {

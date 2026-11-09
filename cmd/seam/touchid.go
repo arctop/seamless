@@ -156,7 +156,7 @@ func runTouchIDEnroll(ctx context.Context, e *env, o *touchIDEnrollOpts, _ []str
 
 	// The daemon first: how the owner mints the code, and the keys enrolled so
 	// far. A daemon that locks nothing answers here, before anything installs.
-	t, err := enrollCodeApprover(cfg)
+	t, err := enrollCodeApprover(ctx, e, cfg)
 	if err != nil {
 		return err
 	}
@@ -174,6 +174,12 @@ func runTouchIDEnroll(ctx context.Context, e *env, o *touchIDEnrollOpts, _ []str
 	in := bufio.NewReader(e.stdin)
 	installed, err := installApprover(ctx, e, w, in, o.app, target)
 	if err != nil || !installed {
+		return err
+	}
+
+	// Checked again just before it opens, here as in the bridge's launch: the
+	// app is on disk under ~/Applications, where the owner's agents can write.
+	if err := verifyApproverForLaunch(ctx, e.run, w.self, target); err != nil {
 		return err
 	}
 
@@ -265,10 +271,15 @@ func validKeyName(name string) error {
 
 // enrollCodeApprover reads, from the daemon's access JSON, the account and
 // paths the enrollment code is minted with, held to the shapes seam approve
-// holds them to before they become a command line.
-func enrollCodeApprover(cfg config.Config) (terminalApprover, error) {
+// holds them to before they become a command line. The daemon is verified
+// first, as seam approve verifies it: they become that command line either way.
+func enrollCodeApprover(ctx context.Context, e *env, cfg config.Config) (terminalApprover, error) {
+	daemon, err := verifyDaemon(ctx, e, cfg)
+	if err != nil {
+		return terminalApprover{}, err
+	}
 	var list accessList
-	if err := accessGet(cfg, accessListPath, &list); err != nil {
+	if err := accessGetVia(daemon.client, cfg, accessListPath, &list); err != nil {
 		return terminalApprover{}, err
 	}
 	t := list.Terminal
@@ -279,10 +290,15 @@ func enrollCodeApprover(cfg config.Config) (terminalApprover, error) {
 	switch {
 	case !accountName.MatchString(t.Account):
 		return terminalApprover{}, fmt.Errorf("the daemon named %q as its account, which is not an account name", t.Account)
+	case isRootAccount(t.Account):
+		return terminalApprover{}, errRootAccount(t.Account)
 	case !absPath(t.Seamlessd):
 		return terminalApprover{}, fmt.Errorf("the daemon named %q as its seamlessd, which is not an absolute path", t.Seamlessd)
 	case !absPath(t.Config):
 		return terminalApprover{}, fmt.Errorf("the daemon named %q as its config, which is not an absolute path", t.Config)
+	}
+	if err := daemon.accountIsPeer(e, t.Account); err != nil {
+		return terminalApprover{}, err
 	}
 	return *t, nil
 }
@@ -374,7 +390,7 @@ func runTouchIDStatus(ctx context.Context, e *env, _ *noOpts, _ []string) error 
 	if !isDir(target) {
 		fmt.Fprintf(e.stdout, "Seamless Approve: not installed at %s (seam touchid enroll installs it)\n", printable(target))
 	} else {
-		sig, err := describeSignature(ctx, e, target)
+		sig, err := describeSignature(ctx, e.run, target)
 		intact := false
 		if err == nil {
 			code, rerr := e.run(ctx, []string{"codesign", "--verify", "--strict", "--deep", target}, nil, io.Discard, io.Discard)

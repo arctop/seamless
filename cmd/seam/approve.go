@@ -24,6 +24,12 @@ package main
 //
 // The terminal check below is a courtesy, not the boundary: it stops an agent's
 // shell from wandering into prompts it cannot answer, and says where to go.
+//
+// What the daemon says becomes that command line, and server_url is in a file an
+// agent running as the owner can edit, so the daemon is verified first
+// (daemon_peer.go): nothing it says is shown as fact until the kernel has named
+// who answered. The advisory path may stay unverified: it never runs sudo, and
+// only posts back to the daemon that asked.
 
 import (
 	"bufio"
@@ -91,6 +97,12 @@ it is committed over the console with the bearer key instead of through sudo,
 and seam approve says so: that approval is advisory, since any process holding
 the key could make it.
 
+Before anything is shown it asks the kernel who answers on server_url's socket,
+and refuses a socket served by your own account or by root, or by an account
+other than the one the daemon names. A server_url that is not a socket says
+nothing of who answered, so only an advisory request may go on: otherwise point
+it at the socket, or use --passkey.
+
 It needs a terminal on stdin and stdout: an agent cannot use it. --passkey
 opens the request's passkey page in the browser instead, with --for's duration
 chosen there when given; --watch polls for new requests every 3 seconds,
@@ -154,16 +166,41 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 		return watchAccess(ctx, e, cfg)
 	}
 
+	// Who answers, before anything it says is read. A passkey run only opens a
+	// page and builds no sudo command line. A TCP server_url cannot be verified,
+	// which only an advisory request survives: unverified holds the refusal
+	// until the daemon has said which this is, and nothing is shown before then.
+	var daemon verifiedDaemon
+	var unverified error
+	if !*o.passkey {
+		daemon, err = verifyDaemon(ctx, e, cfg)
+		if errors.Is(err, errServerNotSocket) {
+			unverified, err = err, nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+
 	in := bufio.NewReader(e.stdin)
 	ref := ""
 	if len(pos) == 1 {
 		ref = pos[0]
-	} else if ref, err = pickRequest(e, cfg, in); err != nil || ref == "" {
+	} else if ref, err = pickRequest(e, cfg, daemon.client, unverified, in); err != nil || ref == "" {
 		return err
 	}
 	var one accessOne
-	if err := accessGet(cfg, accessOnePath(ref), &one); err != nil {
+	if err := accessGetVia(daemon.client, cfg, accessOnePath(ref), &one); err != nil {
 		return err
+	}
+	var t terminalApprover
+	if !*o.passkey && !one.Advisory {
+		if unverified != nil {
+			return unverified
+		}
+		if t, err = daemon.terminal(e, one); err != nil {
+			return err
+		}
 	}
 	f := one.Request
 	if err := decidable(e, one); err != nil {
@@ -178,11 +215,8 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 	}
 
 	renderFacts(e, f)
-	var t terminalApprover
 	if one.Advisory {
 		warnAdvisory(e)
-	} else if t, err = terminalOf(one); err != nil {
-		return err
 	}
 	answer := ""
 	if !o.duration.set {
@@ -375,11 +409,16 @@ func decideOverConsole(e *env, cfg config.Config, f accessFacts, answer, duratio
 
 // pickRequest lists the pending requests and returns the id of the one to
 // decide: the only one, or the one the owner names. "" (with no error) is
-// nothing to decide, already said.
-func pickRequest(e *env, cfg config.Config, in *bufio.Reader) (string, error) {
+// nothing to decide, already said. It reads through client (accessCallVia), and
+// unverified, when set, is why this daemon's list may be shown only as the
+// advisory tier's: it is the answer, before anything is printed, for any other.
+func pickRequest(e *env, cfg config.Config, client *http.Client, unverified error, in *bufio.Reader) (string, error) {
 	var list accessList
-	if err := accessGet(cfg, accessListPath, &list); err != nil {
+	if err := accessGetVia(client, cfg, accessListPath, &list); err != nil {
 		return "", err
+	}
+	if unverified != nil && !list.Advisory {
+		return "", unverified
 	}
 	reqs := list.Requests
 	if len(reqs) == 0 {
@@ -484,6 +523,11 @@ func closedWord(kind string) string {
 	return "locked for"
 }
 
+// selfReportedNote says which facts are the agent's own report
+// (approval.SelfReportedNote, pinned by a test: this CLI must not import
+// internal/approval).
+const selfReportedNote = "The working directory, repository and model are what the agent reported. The daemon cannot check them."
+
 // factLabelWidth is the facts' label column, label and gap together: seam
 // proposals prints its facts in the same column. A label that would leave
 // less than factGap before its value widens the column for every row.
@@ -497,7 +541,9 @@ const (
 // except the reason, which is quoted and labeled as the agent's own words.
 // Every value is also made printable: a program name, a cwd and above all the
 // reason are the agent's to choose, and a terminal escape among them could
-// repaint the lines above it. Only the warnings are colored (useColor).
+// repaint the lines above it. Only the warnings are colored (useColor). The
+// working directory and the model are the agent's own report too, as the
+// closing note says.
 func renderFacts(e *env, f accessFacts) {
 	fmt.Fprintf(e.stdout, "\nAccess request %s\n\n", printable(f.Short))
 	for _, w := range f.Warnings {
@@ -549,6 +595,8 @@ func renderFacts(e *env, f accessFacts) {
 	for _, line := range alignFacts(rows) {
 		fmt.Fprintln(e.stdout, line)
 	}
+	fmt.Fprintln(e.stdout)
+	fmt.Fprintln(e.stdout, selfReportedNote)
 	fmt.Fprintln(e.stdout)
 }
 
@@ -818,6 +866,8 @@ func terminalOf(one accessOne) (terminalApprover, error) {
 	switch {
 	case !accountName.MatchString(t.Account):
 		return terminalApprover{}, fmt.Errorf("the daemon named %q as its account, which is not an account name", t.Account)
+	case isRootAccount(t.Account):
+		return terminalApprover{}, errRootAccount(t.Account)
 	case !absPath(t.Seamlessd):
 		return terminalApprover{}, fmt.Errorf("the daemon named %q as its seamlessd, which is not an absolute path", t.Seamlessd)
 	case !absPath(t.Config):

@@ -2,6 +2,7 @@ package gardener
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"testing"
@@ -431,4 +432,99 @@ func TestApplyArchive_MissingMemoryErrors(t *testing.T) {
 	got, _, err := store.ProposalByID(ctx, g.db, p.ID)
 	require.NoError(t, err)
 	require.Equal(t, store.ProposalPending, got.Status)
+}
+
+// writeLabeled writes a memory carrying a restricted account's label.
+func writeLabeled(t *testing.T, mgr *files.Manager, name, project, account string, kind core.MemoryKind, now time.Time) core.Memory {
+	t.Helper()
+	m, err := mgr.WriteMemory(context.Background(), core.Memory{
+		ID: mustID(t), Kind: kind, Name: name, Description: name, Project: project, Body: "body of " + name + "\n",
+		Account: account, Created: now, Updated: now, ValidFrom: now,
+	})
+	require.NoError(t, err)
+	return m
+}
+
+// A consolidated memory is built from its sources' words, so a new target
+// takes the first account any source carries, in the sources' order. An
+// existing target it reuses keeps the label it has.
+func TestApplyConsolidate_CarriesTheSourceAccount(t *testing.T) {
+	const agent, other = "_example_agent", "_example_other"
+	for _, tc := range []struct {
+		name     string
+		accounts []string
+		want     string
+	}{
+		{"the owner's sources", []string{"", ""}, ""},
+		{"the first source's account", []string{agent, other}, agent},
+		{"the first non-empty, in order", []string{"", other, agent}, other},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g, mgr, cx := newApplyFixture(t)
+			ctx := cx()
+			now := time.Now().UTC()
+			sources := make([]any, 0, len(tc.accounts))
+			for i, account := range tc.accounts {
+				m := writeLabeled(t, mgr, fmt.Sprintf("part-%d", i), "seamless", account, core.KindGotcha, now)
+				sources = append(sources, map[string]any{"id": m.ID, "name": m.Name})
+			}
+			p, err := store.CreateProposal(ctx, g.db, store.ProposalConsolidate, map[string]any{
+				"key": "consolidate:" + tc.name, "name": "unified", "kind": "constraint",
+				"project": "seamless", "description": "one", "body": "combined\n", "sources": sources,
+			})
+			require.NoError(t, err)
+			_, err = g.Apply(ctx, p.ID)
+			require.NoError(t, err)
+
+			idx, found, err := store.MemoryByName(ctx, g.db, "seamless", "unified")
+			require.NoError(t, err)
+			require.True(t, found)
+			require.Equal(t, tc.want, idx.Account, "index")
+			disk, err := mgr.Store().ReadMemory(idx.FilePath)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, disk.Account, "file")
+		})
+	}
+
+	t.Run("a target it reuses keeps its label", func(t *testing.T) {
+		g, mgr, cx := newApplyFixture(t)
+		ctx := cx()
+		now := time.Now().UTC()
+		writeLabeled(t, mgr, "unified", "seamless", "", core.KindRunbook, now)
+		src := writeLabeled(t, mgr, "part", "seamless", agent, core.KindGotcha, now)
+		p, err := store.CreateProposal(ctx, g.db, store.ProposalConsolidate, map[string]any{
+			"key": "consolidate:reuse", "name": "unified", "kind": "runbook", "project": "seamless",
+			"description": "one", "body": "combined\n",
+			"sources": []any{map[string]any{"id": src.ID, "name": src.Name}},
+		})
+		require.NoError(t, err)
+		_, err = g.Apply(ctx, p.ID)
+		require.NoError(t, err)
+		idx, found, err := store.MemoryByName(ctx, g.db, "seamless", "unified")
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Empty(t, idx.Account)
+	})
+}
+
+// A rekind changes the kind and nothing else, so the writer label stays.
+func TestApplyRekind_KeepsTheAccount(t *testing.T) {
+	g, mgr, cx := newApplyFixture(t)
+	ctx := cx()
+	m := writeLabeled(t, mgr, "note-to-self", "seamless", "_example_agent", core.KindGotcha, time.Now().UTC())
+	p, err := store.CreateProposal(ctx, g.db, store.ProposalRekind, map[string]any{
+		"key": "rekind:" + m.ID, "id": m.ID, "name": m.Name, "project": "seamless", "from": "gotcha", "to": "constraint",
+	})
+	require.NoError(t, err)
+	_, err = g.Apply(ctx, p.ID)
+	require.NoError(t, err)
+
+	idx, found, err := store.MemoryByName(ctx, g.db, "seamless", "note-to-self")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, core.KindConstraint, idx.Kind)
+	require.Equal(t, "_example_agent", idx.Account, "index")
+	disk, err := mgr.Store().ReadMemory(idx.FilePath)
+	require.NoError(t, err)
+	require.Equal(t, "_example_agent", disk.Account, "file")
 }

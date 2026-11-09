@@ -14,7 +14,9 @@ package main
 // challenge from the daemon itself and refuses a socket whose peer is not the
 // daemon's account; the key it signs with is one only the signed helper can
 // use. A wrong argument therefore yields a refusal, or a truthful prompt the
-// owner may decline.
+// owner may decline. What the launch does check is the app itself, right before
+// open (verifyApproverForLaunch): a substitute under ~/Applications could
+// capture an enrollment code or phish a password before any of that applies.
 
 import (
 	"context"
@@ -59,8 +61,9 @@ type approverRunner func(ctx context.Context, argv []string, stdin io.Reader, st
 
 // launchApprover opens the Touch ID helper at app for one approval, through
 // LaunchServices, and returns once open has handed it over (open does not wait
-// for the app). goos is the platform: the helper exists only on macOS.
-func launchApprover(ctx context.Context, run approverRunner, goos, app, socket, requestID, duration string) error {
+// for the app). goos is the platform: the helper exists only on macOS. self is
+// this seam binary, whose Developer ID team the app is pinned to.
+func launchApprover(ctx context.Context, run approverRunner, self func() (string, error), goos, app, socket, requestID, duration string) error {
 	switch {
 	case goos != "darwin":
 		return errors.New("the Touch ID approver exists only on macOS")
@@ -72,6 +75,9 @@ func launchApprover(ctx context.Context, run approverRunner, goos, app, socket, 
 		return fmt.Errorf("refusing to launch the Touch ID approver for duration %q", duration)
 	case !filepath.IsAbs(socket):
 		return fmt.Errorf("the peer_auth socket %q is not an absolute path", socket)
+	}
+	if err := verifyApproverForLaunch(ctx, run, self, app); err != nil {
+		return err
 	}
 	argv := append([]string{"open", "-n", "-a", app, "--args"}, approverApproveArgs(socket, requestID, duration)...)
 	code, err := run(ctx, argv, nil, io.Discard, io.Discard)

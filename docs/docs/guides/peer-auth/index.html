@@ -772,8 +772,8 @@ are left.</p>
 process it started: the MCP bridge, <code>seam</code> commands, the hooks and the agent's own
 scripts share one approval, and nothing outside the tree does.</p>
 <p>The daemon learns the tree from the kernel alone. At accept it reads which process
-opened the socket connection (the audit token on macOS, <code>SO_PEERCRED</code> and a pidfd
-on Linux) and pins that pid to the process, so a later walk can tell it from one
+holds the socket connection (the audit token on macOS, which names the last process
+to use it, and <code>SO_PEERCRED</code> and a pidfd on Linux) and pins that pid to the process, so a later walk can tell it from one
 that reused the pid. Per request it walks the parent chain from there, verifying
 every link. A link that does not verify ends the chain, so an orphan reparented to
 init, or a reused pid, reaches nothing above it. Nothing the client sends, the
@@ -807,6 +807,14 @@ session with <code>session=</code>, writes where that session may, past the gran
 confinement. Under peer_auth the holder is the process tree, and the same moves are
 refused. Use the advisory tier to keep an agent from wandering into a confidential
 project, not against one set on it.</p>
+<p>Neither tier stops an agent running as you from reading a <code>confidential</code> or
+<code>sealed</code> project. A session's project is the agent's word, so <code>session_start project=&lt;slug&gt;</code>, a hook naming that repository, or <code>session=</code> on a tool reads the
+project with no grant at all, and the console answers your account for every
+project that is not locked. The fence keeps a careful agent out. The lock holds
+against one set on it, because it asks the kernel who is calling, so lock a
+project that must stay shut. A restricted account has none of these ways in.</p>
+<p>A grant's write confinement binds the asking agent's process tree. A process that
+detaches from that tree, or a call over TCP with the bearer key, is not confined.</p>
 <p>A2A speaks for no session, so under peer_auth it refuses a <code>confidential</code> or
 <code>sealed</code> project unless the caller holds a lease on it.</p>
 <h2 id="restricted-local-accounts">Restricted local accounts</h2>
@@ -884,6 +892,11 @@ until you promote it:</p>
 <p>Promoting is yours alone, on the console or in your terminal; the account can
 neither promote a proposal nor undo a promotion. Every other kind of memory,
 and notes, tasks and findings, lands at once, labeled.</p>
+<p>Three more rules keep its text from passing as yours. It cannot give a project
+memory the name of a live global constraint, convention, protocol or stage, because
+a read by that name would then answer with its text. It cannot ask the gardener to
+plan a change (<code>gardener_request</code>, <code>gardener_split</code>), and it still sees proposals
+with <code>gardener_proposals</code>. A memory it rewrites loses its star.</p>
 <p>Sessions belong to the account that started them: a restricted account's agents
 cannot resume, bind to or write findings into your sessions, and yours cannot
 act in theirs. Its sessions also have names of their own: every one is stored
@@ -952,6 +965,21 @@ account, reads everything; a passwordless <code>sudo</code> to it voids the whol
 arrangement. Whoever holds the bearer key acts as the owner, and reaches every
 project but the locked ones. Backups of the data directory, and exports, hold
 every project: keep them as carefully as the most sensitive project in them.</li>
+<li><strong>Anything running as you can watch your terminal.</strong> An enrollment code and a
+<code>console-open --unlock</code> link are shown once, and whoever uses one first gets what
+it opens. Make them in a terminal your agents cannot read: a <code>tmux</code> server they
+share lets them capture the pane. After enrolling, check that
+<code>seamlessd approvers list</code> shows only what you enrolled.</li>
+<li><strong>Your shell is yours to guard.</strong> Under peer_auth <code>seam approve</code> works only over
+the socket, and refuses one that the daemon's account does not serve, so a changed
+<code>server_url</code> cannot show it false facts. An agent running as you can still edit your shell's startup files, or
+replace a <code>seam</code> you own. Run the root-owned <code>/opt/seamless/bin/seam approve</code> by
+its full path if you doubt yours.</li>
+<li><strong>Some decisions refuse a process an agent started</strong>: bringing a fence down,
+releasing or discarding a held write, clearing a session's mark, and changing
+which features are on. Make them in your own terminal or the console. This stops
+an agent's ordinary tool calls, not one that detaches a process from its tree or
+reads the key in your <code>console.yaml</code>.</li>
 </ul>
 <h2 id="move-an-existing-install-over">Move an existing install over</h2>
 <p>The data directory moves as a whole; the database stores paths relative to it,
@@ -987,6 +1015,11 @@ puts your agents on <code>seam mcp-proxy</code>.</li>
 path still approves.</li>
 <li><strong>Verify</strong> (<a href="#verify">above</a>), then start an agent in a locked repository and
 approve its request end to end.</li>
+<li><strong>Put the export out of your agents' reach.</strong> The archive from step 2 sits in
+your home, readable by anything that runs as you, with every locked project in
+it. Move it now (<code>sudo mv ~/seamless-before-peer-auth.tar.gz /opt/seamless/</code> and
+<code>sudo chown root</code> and <code>sudo chmod 600</code> the file there),
+and delete it once the new install has proved itself.</li>
 <li><strong>Optional: list a restricted account.</strong> Add it to <code>peer_auth.restricted</code> and
 restart the daemon. Give the account its own client config (socket
 <code>server_url</code>, no key), run <code>install-hooks</code> as the account, and map each of its
@@ -999,8 +1032,8 @@ daemon's account (<a href="#restricted-local-accounts">details</a>).</li>
 (<code>sudo mv /opt/seamless/data ~/.seamless</code> and <code>sudo chown -R $(id -un) ~/.seamless</code>),
 restore your server config without the <code>peer_auth</code> block - a release that predates
 it refuses the key - and reinstall the per-user service (<code>make install</code>, or the
-installer). The export from step 2 is the fallback if anything in the move went
-wrong.</p>
+installer). The export from step 2, wherever step 10 put it, is the fallback if
+anything in the move went wrong.</p>
 
 </article>
 
