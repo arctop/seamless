@@ -122,27 +122,47 @@ public enum Reason {
     }
 
     /// `durationPhrase` says how long the grant lasts, for the durations the
-    /// daemon offers (approval.Durations); the session's cap is maxLease, a Go
-    /// duration ("8h0m0s").
+    /// daemon offers (approval.Durations), as long as it grants: maxLease, a
+    /// Go duration ("8h0m0s"), caps every one of them, so a fixed length it
+    /// cuts short is said as the cap ("for 20 minutes (the max_lease cap)"),
+    /// never as the length asked for. With no readable maxLease, the length
+    /// asked for.
     public static func durationPhrase(_ d: String, maxLease: String?) -> String {
-        switch d {
-        case "session":
+        let fixed: [String: (minutes: Int, words: String)] = ["1h": (60, "1 hour"), "4h": (240, "4 hours")]
+        if d == "session" {
             if let cap = leaseWords(maxLease) {
                 return "until the session ends (at most \(cap))"
             }
             return "until the session ends"
-        case "1h":
-            return "for 1 hour"
-        case "4h":
-            return "for 4 hours"
-        default:
+        }
+        guard let length = fixed[d] else {
             return "for " + Text.clean(d, max: 16)
         }
+        if let cap = leaseMinutes(maxLease), cap < length.minutes, let words = leaseWords(maxLease) {
+            return "for \(words) (the max_lease cap)"
+        }
+        return "for " + length.words
     }
 
     /// `leaseWords` reads a Go time.Duration string of whole hours and
     /// minutes ("8h0m0s", "1h30m0s", "45m0s") as words, or nil.
     static func leaseWords(_ s: String?) -> String? {
+        guard let total = leaseMinutes(s) else { return nil }
+        let hours = total / 60, minutes = total % 60
+        var words: [String] = []
+        if hours > 0 {
+            words.append(hours == 1 ? "1 hour" : "\(hours) hours")
+        }
+        if minutes > 0 {
+            words.append(minutes == 1 ? "1 minute" : "\(minutes) minutes")
+        }
+        return words.isEmpty ? nil : words.joined(separator: " ")
+    }
+
+    /// `leaseMinutes` reads a Go time.Duration string of whole hours and
+    /// minutes ("8h0m0s", "1h30m0s", "45m0s") as minutes; nil for anything
+    /// else, and for none at all.
+    static func leaseMinutes(_ s: String?) -> Int? {
         guard var rest = s?.trimmingCharacters(in: .whitespaces), !rest.isEmpty else { return nil }
         func take(_ unit: Character) -> Int? {
             guard let i = rest.firstIndex(of: unit), let n = Int(rest[..<i]), n >= 0 else { return nil }
@@ -152,14 +172,9 @@ public enum Reason {
         let h = rest.contains("h") ? take("h") : 0
         let m = rest.contains("m") ? take("m") : 0
         guard let hours = h, let minutes = m, rest == "0s" || rest.isEmpty else { return nil }
-        var words: [String] = []
-        if hours > 0 {
-            words.append(hours == 1 ? "1 hour" : "\(hours) hours")
-        }
-        if minutes > 0 {
-            words.append(minutes == 1 ? "1 minute" : "\(minutes) minutes")
-        }
-        return words.isEmpty ? nil : words.joined(separator: " ")
+        let (byHours, over) = hours.multipliedReportingOverflow(by: 60)
+        guard !over, byHours <= Int.max - minutes, byHours + minutes > 0 else { return nil }
+        return byHours + minutes
     }
 
     static func warningText(_ w: Warning) -> String {

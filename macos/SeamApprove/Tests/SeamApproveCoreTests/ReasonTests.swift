@@ -233,6 +233,22 @@ final class ReasonTests: XCTestCase {
         XCTAssertEqual(Reason.durationPhrase("2d", maxLease: nil), "for 2d")
     }
 
+    /// A fixed length the lease cap cuts short is said as the cap: the
+    /// prompt never says "for 1 hour" when the grant is 20 minutes.
+    func testDurationPhraseUnderTheCap() {
+        XCTAssertEqual(Reason.durationPhrase("1h", maxLease: "20m0s"), "for 20 minutes (the max_lease cap)")
+        XCTAssertEqual(Reason.durationPhrase("4h", maxLease: "20m0s"), "for 20 minutes (the max_lease cap)")
+        XCTAssertEqual(Reason.durationPhrase("4h", maxLease: "2h0m0s"), "for 2 hours (the max_lease cap)")
+        XCTAssertEqual(Reason.durationPhrase("1h", maxLease: "2h0m0s"), "for 1 hour")
+        XCTAssertEqual(Reason.durationPhrase("1h", maxLease: "1h0m0s"), "for 1 hour", "the cap itself is not cut short")
+        XCTAssertEqual(Reason.durationPhrase("4h", maxLease: "8h0m0s"), "for 4 hours")
+        XCTAssertEqual(Reason.durationPhrase("1h", maxLease: nil), "for 1 hour", "no cap known: the length asked for")
+        XCTAssertEqual(Reason.durationPhrase("1h", maxLease: "500ms"), "for 1 hour")
+        XCTAssertEqual(Reason.durationPhrase("session", maxLease: "20m0s"), "until the session ends (at most 20 minutes)")
+        XCTAssertEqual(Reason.leaseMinutes("1h30m0s"), 90)
+        XCTAssertNil(Reason.leaseMinutes("0s"))
+    }
+
     func testEnrollment() {
         XCTAssertEqual(Reason.enrollment(account: "_seamless"),
                        "add this Mac's Touch ID key as an approver for the Seamless daemon running as _seamless")
