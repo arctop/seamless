@@ -477,9 +477,8 @@ func TestActiveAccessLeasesFor_Chain(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidAccessRequest, "a list longer than any chain is refused, not truncated")
 }
 
-// FillAccessReason writes the reason a refusal's request lacks, once: never
-// over a reason, never on a refresh (which carries the earlier one), and
-// never once the request is decided or past its deadline.
+// FillAccessReason writes the reason a request lacks, once: never over a
+// reason, and never once the request is decided or past its deadline.
 func TestFillAccessReason_OnlyAMissingOne(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
@@ -503,7 +502,7 @@ func TestFillAccessReason_OnlyAMissingOne(t *testing.T) {
 	require.NoError(t, err)
 	got, err = FillAccessReason(ctx, db, r.ID, "new words", fenceNow)
 	require.NoError(t, err)
-	require.Empty(t, got.Reason, "a refresh carries no new free text")
+	require.Equal(t, "new words", got.Reason, "a refresh's blank is filled like any request's")
 
 	late, err := CreateAccessApproval(ctx, db, bare, fenceNow)
 	require.NoError(t, err)

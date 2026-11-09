@@ -52,7 +52,11 @@ func accessRequestTool() mcp.Tool {
 			"own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in "+
 			"their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to "+
 			"say why. Asking again finds the request already waiting rather than filing another, and a reason given then "+
-			"fills in one the waiting request lacks. Once the owner denies a request, refused calls file nothing more and "+
+			"fills in one the waiting request lacks. The answer says which: filed is true when this call filed a new "+
+			"request, false when it found one already waiting or the access is already held (nothing filed); reason is "+
+			"added when this call's reason was stored on the request, kept when the waiting request already had one, so "+
+			"this one was not used, and none when this call gave no reason or nothing was filed. Once the owner denies a "+
+			"request, refused calls file nothing more and "+
 			"say so: ask again here, with a reason, when the owner tells you to. When this agent's client "+
 			"can show an approval dialog, the call shows the owner the request and waits up to 110 seconds for the decision; "+
 			"otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the "+
@@ -80,6 +84,13 @@ type accessRequestResult struct {
 	// Status is pending, approved, denied or expired. A live lease that
 	// covers the ask answers approved, with the request that opened it.
 	Status string `json:"status"`
+	// Filed is true when this call filed a new request, false when it found
+	// one already waiting or live access already covers the ask (nothing
+	// filed).
+	Filed bool `json:"filed"`
+	// Reason says what became of this call's reason: approval.ReasonAdded,
+	// approval.ReasonKept or approval.ReasonNone.
+	Reason string `json:"reason"`
 	// OpenUntil is when the approved access ends (RFC 3339).
 	OpenUntil string `json:"open_until,omitempty"`
 	// Dialog is how the in-session approval dialog ended (accepted, declined,
@@ -124,7 +135,8 @@ func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolReques
 	if s.cfg.Grants != nil && !lockCovers(ctx, project) {
 		return s.accessRequestGrant(ctx, start, project, reason)
 	}
-	a, err := s.fileAccessRequest(ctx, project, reason, approval.ViaRequest)
+	var asked approval.Asked
+	a, err := s.fileAccessRequest(approval.WithAsked(ctx, &asked), project, reason, approval.ViaRequest)
 	var live *approval.AccessLiveError
 	if errors.As(err, &live) {
 		return jsonResult(s.liveAccessResult(ctx, live))
@@ -137,6 +149,7 @@ func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolReques
 	out := accessRequestResult{
 		ID: a.ID, ShortID: t.Short, Project: a.Project, Kind: a.Kind, Status: s.stateOf(a), Page: ways.Page,
 	}
+	out.Filed, out.Reason = asked.Outcome(a)
 	return s.accessRequestAnswer(ctx, start, t, ways, out)
 }
 
@@ -157,7 +170,8 @@ func lockCovers(ctx context.Context, project string) bool {
 // (grantRequestRefusal), and answers like a lock's request: the dialog when
 // it can run, else at once.
 func (s *Server) accessRequestGrant(ctx context.Context, start time.Time, project, reason string) (*mcp.CallToolResult, error) {
-	a, err := s.cfg.Grants.RequestGrant(ctx, approval.GrantInput{
+	var asked approval.Asked
+	a, err := s.cfg.Grants.RequestGrant(approval.WithAsked(ctx, &asked), approval.GrantInput{
 		Project: project, SessionID: s.boundSession(ctx), AgentProcess: callerAgentProcess(ctx), Host: s.callerHost(ctx),
 		Reason: reason, Via: approval.ViaRequest,
 	})
@@ -173,6 +187,7 @@ func (s *Server) accessRequestGrant(ctx context.Context, start time.Time, projec
 	out := accessRequestResult{
 		ID: a.ID, ShortID: t.Short, Project: a.Project, Kind: a.Kind, From: a.FromProject, Status: s.stateOf(a), Page: ways.Page,
 	}
+	out.Filed, out.Reason = asked.Outcome(a)
 	return s.accessRequestAnswer(ctx, start, t, ways, out)
 }
 
@@ -181,8 +196,8 @@ func (s *Server) accessRequestGrant(ctx context.Context, start time.Time, projec
 // approved, until it ends; nothing filed.
 func (s *Server) liveAccessResult(ctx context.Context, live *approval.AccessLiveError) accessRequestResult {
 	out := accessRequestResult{
-		Project: live.Project, From: live.From, Status: stateApproved, OpenUntil: live.Expires.UTC().Format(time.RFC3339),
-		Next: live.Answer() + "; keep working there until then",
+		Project: live.Project, From: live.From, Status: stateApproved, Reason: approval.ReasonNone,
+		OpenUntil: live.Expires.UTC().Format(time.RFC3339), Next: live.Answer() + "; keep working there until then",
 	}
 	if live.ApprovalID != "" {
 		out.ID, out.ShortID = live.ApprovalID, approval.ShortID(live.ApprovalID)

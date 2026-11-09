@@ -127,11 +127,12 @@ func TestGrantsConsole_AdvisoryRequestApproveRevoke(t *testing.T) {
 	rr = g.post(t, "/console/access/request", url.Values{"project": {"example-finance"}, "reason": {"check the invoice totals"}}, true)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	var filed struct {
-		ID, Short, Kind, From string
+		ID    string `json:"id"`
+		Short string `json:"short_id"`
+		Kind  string `json:"kind"`
+		From  string `json:"from"`
 	}
-	var raw map[string]string
-	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &raw))
-	filed.ID, filed.Short, filed.Kind, filed.From = raw["id"], raw["short_id"], raw["kind"], raw["from"]
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &filed))
 	require.Equal(t, store.AccessKindGrant, filed.Kind)
 	require.Equal(t, "example-ops", filed.From)
 	rr = g.post(t, "/console/access/request", url.Values{"project": {"example-ops"}}, true)
@@ -191,10 +192,10 @@ func TestGrantsConsole_AdvisoryRequestApproveRevoke(t *testing.T) {
 	// Deny, through the plain form.
 	rr = g.post(t, "/console/access/request", url.Values{"project": {"example-finance"}}, true)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &raw))
-	rr = g.post(t, "/console/access/"+raw["id"]+"/deny", url.Values{"next": {"/console/access/" + raw["id"]}}, false)
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &filed))
+	rr = g.post(t, "/console/access/"+filed.ID+"/deny", url.Values{"next": {"/console/access/" + filed.ID}}, false)
 	require.Equal(t, http.StatusSeeOther, rr.Code)
-	a, err := store.AccessApprovalByID(ctx, g.db, raw["id"])
+	a, err := store.AccessApprovalByID(ctx, g.db, filed.ID)
 	require.NoError(t, err)
 	require.Equal(t, store.ApprovalDenied, a.Status)
 }
@@ -226,12 +227,13 @@ func TestGrantsConsole_PeerTierNeedsAProof(t *testing.T) {
 	req.Header.Set("Accept", "application/json")
 	rr := do(mux, f.asAgent(t, req))
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	var filed map[string]string
+	var filed map[string]any
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &filed))
-	facts, err := grants.Facts(ctx, filed["id"])
+	filedID := filed["id"].(string)
+	facts, err := grants.Facts(ctx, filedID)
 	require.NoError(t, err)
 
-	req = authedReq(httptest.NewRequest(http.MethodPost, "/console/access/"+filed["id"]+"/approve",
+	req = authedReq(httptest.NewRequest(http.MethodPost, "/console/access/"+filedID+"/approve",
 		strings.NewReader(url.Values{"duration": {"1h"}, "digest": {facts.Digest}}.Encode())))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")

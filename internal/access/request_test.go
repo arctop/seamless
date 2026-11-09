@@ -26,6 +26,9 @@ func TestWays_OwnerApproves(t *testing.T) {
 		{"Touch ID only", Ways{TouchID: true},
 			"the owner approves it with Touch ID in the approval dialog, " +
 				"or in their own terminal with `seam approve R-K71M`"},
+		{"Touch ID, hedged", Ways{TouchID: true, TouchIDIf: "if this Codex shows one"},
+			"the owner approves it with Touch ID in the approval dialog if this Codex shows one, " +
+				"or in their own terminal with `seam approve R-K71M`"},
 		{"both", Ways{TouchID: true, Passkey: true, Page: page},
 			"the owner approves it with Touch ID in the approval dialog, " +
 				"in their own terminal with `seam approve R-K71M`, or with a passkey at " + page},

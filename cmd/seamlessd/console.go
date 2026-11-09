@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"html/template"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -78,10 +80,13 @@ func runConsoleOpen(args []string) error {
 		}
 		return nil
 	}
+	if cfg.SocketPath() != "" {
+		return fmt.Errorf("seamlessd.console-open: %w", socketConsoleRefusal(cfg))
+	}
 	if strings.TrimSpace(cfg.MCP.APIKey) == "" {
 		return fmt.Errorf("seamlessd.console-open: mcp.api_key is empty; run `seamlessd serve` once to generate it, or set it in seamless.yaml")
 	}
-	base := consoleBase(cfg)
+	base := consoleOpenBase(cfg)
 	if !serverReachable(urlHostPort(base)) {
 		return fmt.Errorf("seamlessd.console-open: console not reachable at %s -- start it with `make run` or `make start`", base)
 	}
@@ -278,6 +283,92 @@ func consoleBase(cfg config.Config) string {
 		}
 	}
 	return cfg.ServerURL()
+}
+
+// consoleOpenBase is where console-open signs in, for this config: consoleBase
+// when the config is the daemon's own, else whatever the daemon it dials says
+// its passkey origin is. A peer_auth owner's config is a client's -- its
+// server_url and key, no peer_auth block -- so consoleBase alone would sign it
+// in on 127.0.0.1, where passkeys cannot be created. A daemon that locks
+// nothing answers no origin (the access routes are 404), so a default install
+// signs in exactly where it always did.
+func consoleOpenBase(cfg config.Config) string {
+	base := consoleBase(cfg)
+	if cfg.PeerAuth.Enabled {
+		return base
+	}
+	if origin := daemonOrigin(cfg); usableOrigin(origin, cfg) && serverReachable(urlHostPort(origin)) {
+		return origin
+	}
+	return base
+}
+
+// daemonOrigin asks the daemon cfg dials for its passkey relying party's
+// origin: the origin field of GET /console/access?format=json. "" means no
+// answer: a daemon that locks nothing, one that predates the field, or any
+// failure, for which the config's own URL stands. The request carries the
+// console's key and, like every dial of a Seamless daemon, follows no
+// redirect that could carry it elsewhere.
+func daemonOrigin(cfg config.Config) string {
+	client, err := cfg.HTTPClient(2 * time.Second)
+	if err != nil {
+		return ""
+	}
+	client.CheckRedirect = config.RefuseRedirect
+	req, err := http.NewRequest(http.MethodGet, cfg.ServerURL()+"/console/access?format=json", nil)
+	if err != nil {
+		return ""
+	}
+	if key := strings.TrimSpace(cfg.MCP.APIKey); key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	var got struct {
+		Origin string `json:"origin"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&got); err != nil {
+		return ""
+	}
+	return got.Origin
+}
+
+// usableOrigin reports whether the daemon's answer may be where the browser
+// signs in: scheme://host[:port] and nothing more, https or http on localhost
+// (the shape peer_auth.passkeys.origins has), and localhost only when this
+// config dials the daemon on this machine -- a client elsewhere has its own
+// localhost, which is not this daemon.
+func usableOrigin(origin string, cfg config.Config) bool {
+	u, err := url.Parse(origin)
+	if err != nil || origin == "" || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+		return false
+	}
+	local := strings.EqualFold(u.Hostname(), "localhost")
+	switch {
+	case u.Scheme == "https", u.Scheme == "http" && local:
+		return !local || isLoopbackServerHost(cfg.ServerHost())
+	}
+	return false
+}
+
+// socketConsoleRefusal is console-open on a config whose server_url is the
+// daemon's socket: a browser cannot dial a socket, so there is nothing to
+// open from this config. It names where the daemon says its console is, when
+// the daemon can be asked.
+func socketConsoleRefusal(cfg config.Config) error {
+	where := "the daemon's TCP address"
+	if origin := daemonOrigin(cfg); usableOrigin(origin, cfg) {
+		where = origin + "/console/"
+	}
+	return fmt.Errorf("this config's server_url is the daemon's socket (%s), which a browser cannot dial: "+
+		"open %s and sign in with the daemon's key, or run console-open with a config that names the TCP server_url and "+
+		"mcp.api_key (set SEAMLESS_CONFIG)", cfg.DaemonAddress(), where)
 }
 
 // consoleUnlockLinkTTL is how long an unlock link waits to be opened. Once

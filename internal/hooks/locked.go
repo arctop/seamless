@@ -35,9 +35,10 @@ import (
 // lease approved, so nothing is recorded, and the notice says why and what to
 // do instead.
 //
-// The notice offers Touch ID only to an agent host known to show the approval
-// dialog's form (formDialogClient), as MCP offers it only to a client that
-// declared form elicitation (internal/mcp callWays).
+// The notice offers Touch ID only to an agent host that may show the approval
+// dialog's form (formDialogClient), hedged for a host the hook cannot judge
+// (touchIDIf), as MCP offers it only to a client that declared form
+// elicitation (internal/mcp callWays).
 func (h *Handler) lockedStart(ctx context.Context, w http.ResponseWriter, client Client, host string, p hookPayload, project string) {
 	v, _ := access.FromContext(ctx)
 	var refused *approval.AnchorError
@@ -82,7 +83,7 @@ func (h *Handler) lockedStart(ctx context.Context, w http.ResponseWriter, client
 			ways := h.approvals.Ways(ctx, a.ID)
 			req = access.LockRequest{ID: a.ID, Short: approval.ShortID(a.ID),
 				Refresh: a.Kind == store.AccessKindRefresh, Page: ways.Page,
-				TouchID: ways.TouchID && formDialogClient(client)}
+				TouchID: ways.TouchID && formDialogClient(client), TouchIDIf: touchIDIf(client)}
 		}
 	}
 	outcome := lockedUnrecorded
@@ -102,15 +103,27 @@ func (h *Handler) lockedStart(ctx context.Context, w http.ResponseWriter, client
 		p.SessionID, "", notice, false, nil)
 }
 
-// formDialogClient reports whether an agent host is known to show an MCP form
-// dialog (elicitation), the one Touch ID approval runs through: Claude Code
-// does (the owner approved in it on 2026-11-07). Codex is not counted: nothing
-// Seamless has captured of it (internal/hooks/testdata/codex) shows it
-// declaring form elicitation, and a remedy may offer less, never a path that
-// is not there. The client is what the hook already knows of the agent, and
-// unlike the program's name it holds for Claude Code installed with npm,
-// which runs as node.
-func formDialogClient(c Client) bool { return c == ClientClaudeCode }
+// formDialogClient reports whether an agent host may show an MCP form dialog
+// (elicitation), the one Touch ID approval runs through: Claude Code does (the
+// owner approved in it on 2026-11-07), and so does Codex (owner decision
+// 2026-11-09: 0.163.0-alpha.10.2 renders the whole form and completed Touch ID
+// through it) -- though older captured builds (internal/hooks/testdata/codex)
+// declare no form elicitation, so its offer is hedged (touchIDIf). The client
+// is what the hook already knows of the agent, and unlike the program's name
+// it holds for Claude Code installed with npm, which runs as node.
+func formDialogClient(c Client) bool { return c == ClientClaudeCode || c == ClientCodex }
+
+// touchIDIf is the condition a host's Touch ID offer is hedged with: the
+// SessionStart hook runs before MCP connects, so it has no client version and
+// cannot see whether this Codex declares form elicitation (the tool-call
+// answers can: callWays gates on the declared capability). "" for a host that
+// needs no hedge.
+func touchIDIf(c Client) string {
+	if c == ClientCodex {
+		return "if this Codex shows one"
+	}
+	return ""
+}
 
 // lockedOutcome is what a locked project's SessionStart did with the session.
 type lockedOutcome int

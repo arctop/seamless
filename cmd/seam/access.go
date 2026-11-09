@@ -104,15 +104,27 @@ type accessOne struct {
 	Advisory bool `json:"advisory"`
 }
 
-// accessFiled is POST /console/access/request's answer.
+// accessFiled is POST /console/access/request's answer. Filed and Reason
+// mirror the access_request tool's answer: Filed is absent from a daemon that
+// predates them, which is why it is a pointer; Reason is added, kept or none
+// (approval.ReasonAdded and friends, pinned by a test).
 type accessFiled struct {
 	ID      string `json:"id"`
 	Short   string `json:"short_id"`
 	Project string `json:"project"`
 	Kind    string `json:"kind"`
 	From    string `json:"from"`
+	Filed   *bool  `json:"filed"`
+	Reason  string `json:"reason"`
 	Page    string `json:"page"`
 }
+
+// The Reason values of accessFiled the answer says something about; "none"
+// says nothing.
+const (
+	reasonAdded = "added"
+	reasonKept  = "kept"
+)
 
 // kindGrant is a read grant request's kind (store.AccessKindGrant).
 const kindGrant = "grant"
@@ -200,9 +212,10 @@ On a daemon that offers read grants (isolation.requests), a confidential
 project can be asked for the same way: read-only, for the asking session's own
 project, whose writes then stay inside that project.
 
-Asking again while a request is pending answers with that request. The owner
-decides it with seam approve <short id> in their own terminal, or on the
-console's passkey page when the daemon names one.`)
+Asking again while a request is pending answers with that request and says
+what became of this call's reason. The owner decides it with seam approve
+<short id> in their own terminal, or on the console's passkey page when the
+daemon names one.`)
 
 type accessRequestOpts struct {
 	reason *string
@@ -240,12 +253,27 @@ func runAccessRequest(_ context.Context, e *env, o *accessRequestOpts, pos []str
 	if err := json.NewDecoder(bytes.NewReader(b)).Decode(&got); err != nil {
 		return fmt.Errorf("unreadable console response from %s: %w", accessRequestPath, err)
 	}
-	if got.Kind == kindGrant {
+	short := printable(got.Short)
+	waiting := got.Filed != nil && !*got.Filed
+	switch {
+	case got.Kind == kindGrant && waiting:
+		fmt.Fprintf(e.stdout, "Read access to %s for %s (%s, read-only) was already waiting. The owner approves it with: seam approve %s\n",
+			printable(got.Project), printable(got.From), short, short)
+	case got.Kind == kindGrant:
 		fmt.Fprintf(e.stdout, "Requested read access to %s for %s (%s, read-only). The owner approves it with: seam approve %s\n",
-			printable(got.Project), printable(got.From), printable(got.Short), printable(got.Short))
-	} else {
+			printable(got.Project), printable(got.From), short, short)
+	case waiting:
+		fmt.Fprintf(e.stdout, "%s for %s (%s) was already waiting. The owner approves it with: seam approve %s\n",
+			short, printable(got.Project), printable(got.Kind), short)
+	default:
 		fmt.Fprintf(e.stdout, "Requested %s for %s (%s). The owner approves it with: seam approve %s\n",
-			printable(got.Short), printable(got.Project), printable(got.Kind), printable(got.Short))
+			short, printable(got.Project), printable(got.Kind), short)
+	}
+	switch got.Reason {
+	case reasonAdded:
+		fmt.Fprintln(e.stdout, "Your reason was added to it.")
+	case reasonKept:
+		fmt.Fprintln(e.stdout, "It already had a reason, so yours was not used.")
 	}
 	if got.Page != "" {
 		fmt.Fprintf(e.stdout, "or with a passkey: %s\n", printable(got.Page))

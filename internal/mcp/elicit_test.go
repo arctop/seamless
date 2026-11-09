@@ -1060,6 +1060,7 @@ func TestAccessRequest_LiveLeaseAnswersUntilTheExpiryWarning(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &res))
 	require.Equal(t, map[string]any{
 		"id": id, "short_id": short, "project": lkFin, "kind": "request", "status": "approved",
+		"filed": false, "reason": "none",
 		"open_until": lease.ExpiresAt.UTC().Format(time.RFC3339),
 		"next": "project " + lkFin + " is already open to this agent until " + access.Clock(lease.ExpiresAt) + " (approved as " +
 			short + "), so nothing was filed. Nothing extends it silently: from " + access.Clock(lease.ExpiresAt.Add(-30*time.Minute)) +

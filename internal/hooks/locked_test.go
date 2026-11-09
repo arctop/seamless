@@ -413,10 +413,12 @@ func TestLockedSessionStart_ABroadAnchorRecordsNothing(t *testing.T) {
 	require.Empty(t, e.pending())
 }
 
-// The notice offers Touch ID only to an agent host known to show the approval
-// dialog's form, as MCP offers it only to a form-capable client: Claude Code
-// with a key enrolled; never Codex, whose remedy names the terminal path (and
-// a passkey only when one is enrolled, here none).
+// The notice offers Touch ID only to an agent host that may show the approval
+// dialog's form, as MCP offers it only to a form-capable client. Claude Code's
+// words are the plain offer, byte-identical to before; Codex's are hedged,
+// because the hook has no client version and older Codex builds declare no
+// form elicitation (owner decision 2026-11-09). A passkey appears only when
+// one is enrolled, here none.
 func TestLockedSessionStart_OffersTouchIDOnlyWhereTheDialogShows(t *testing.T) {
 	for _, tc := range []struct {
 		name, client string
@@ -428,9 +430,9 @@ func TestLockedSessionStart_OffersTouchIDOnlyWhereTheDialogShows(t *testing.T) {
 				"approval dialog, or in their own terminal with `seam approve " + short + "`;"
 		}, true},
 		{"Codex", string(ClientCodex), func(short string) string {
-			return "Remedy: access request " + short + " is waiting -- the owner approves it in their own terminal with " +
-				"`seam approve " + short + "`;"
-		}, false},
+			return "Remedy: access request " + short + " is waiting -- the owner approves it with Touch ID in the " +
+				"approval dialog if this Codex shows one, or in their own terminal with `seam approve " + short + "`;"
+		}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newLockHooks(t, true)
@@ -461,6 +463,9 @@ func TestLockedSessionStart_OffersTouchIDOnlyWhereTheDialogShows(t *testing.T) {
 // formDialogClient is the hook's half of MCP's form-capable check.
 func TestFormDialogClient(t *testing.T) {
 	for _, c := range HookClients {
-		require.Equal(t, c == ClientClaudeCode, formDialogClient(c), c)
+		require.True(t, formDialogClient(c), c)
 	}
+	require.False(t, formDialogClient("some-other-host"), "a host Seamless knows nothing of is offered nothing")
+	require.Equal(t, "if this Codex shows one", touchIDIf(ClientCodex))
+	require.Empty(t, touchIDIf(ClientClaudeCode), "Claude Code's offer is unhedged")
 }

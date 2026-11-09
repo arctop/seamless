@@ -165,3 +165,135 @@ func TestRequestGrant_AskingAgain(t *testing.T) {
 	require.NotEqual(t, a.ID, asked.ID)
 	require.Equal(t, store.AccessKindGrant, asked.Kind)
 }
+
+// What an ask did, for the answer to say so (access_request, seam access
+// request): filed or found waiting, and what became of the reason. A
+// refresh's reason is its own, like any request's (owner decision 2026-11-09).
+func TestRequest_AskedSaysWhatTheAskDid(t *testing.T) {
+	f := newReqFixture(t)
+	ctx := context.Background()
+	sess := f.session(t, "cc/fin", "/work/ops", agent)
+	ask := func(project, reason string, view access.View, via string) (store.AccessApproval, Asked) {
+		t.Helper()
+		var asked Asked
+		a, err := f.svc.Request(WithAsked(ctx, &asked), RequestInput{Project: project, View: view, SessionID: sess, Reason: reason, Via: via})
+		require.NoError(t, err)
+		return a, asked
+	}
+	v := f.view(t, bridge, agent, shell)
+
+	// A new request, with a reason, then the same project asked again.
+	a, asked := ask(lockFin, "  the ledger  ", v, ViaRequest)
+	filed, reason := asked.Outcome(a)
+	require.True(t, filed)
+	require.Equal(t, ReasonAdded, reason)
+	require.Equal(t, "the ledger", a.Reason)
+
+	found, asked := ask(lockFin, "", v, ViaRequest)
+	require.Equal(t, a.ID, found.ID)
+	filed, reason = asked.Outcome(found)
+	require.False(t, filed)
+	require.Equal(t, ReasonNone, reason)
+
+	found, asked = ask(lockFin, "another reason", v, ViaRequest)
+	filed, reason = asked.Outcome(found)
+	require.False(t, filed)
+	require.Equal(t, ReasonKept, reason, "the waiting request keeps its own")
+	require.Equal(t, "the ledger", found.Reason)
+
+	// A new request with no reason.
+	b, asked := ask(lockLeg, "", v, ViaRequest)
+	filed, reason = asked.Outcome(b)
+	require.True(t, filed)
+	require.Equal(t, ReasonNone, reason)
+
+	// A refusal's blank request takes the explicit reason when it is asked
+	// for properly.
+	sess2 := f.session(t, "cc/other", "/work/ops", other)
+	vo := f.view(t, otherBr, other, shell)
+	blank, err := f.svc.Request(ctx, RequestInput{Project: lockFin, View: vo, SessionID: sess2, Via: ViaRefusal})
+	require.NoError(t, err)
+	require.Empty(t, blank.Reason)
+	var filled Asked
+	got, err := f.svc.Request(WithAsked(ctx, &filled), RequestInput{Project: lockFin, View: vo, SessionID: sess2, Via: ViaRequest, Reason: "reconcile the quarter"})
+	require.NoError(t, err)
+	require.Equal(t, blank.ID, got.ID)
+	require.Equal(t, "reconcile the quarter", got.Reason)
+	filed, reason = filled.Outcome(got)
+	require.False(t, filed)
+	require.Equal(t, ReasonAdded, reason, "filled in: the words are this call's")
+
+	// A context without an Asked changes nothing.
+	again, err := f.svc.Request(ctx, RequestInput{Project: lockFin, View: v, SessionID: sess, Via: ViaRequest})
+	require.NoError(t, err)
+	require.Equal(t, a.ID, again.ID)
+}
+
+// A refresh is filed from the expiry warning on. It carries the reason it was
+// given, labeled like any request's, or no reason at all: the earlier request's
+// words are not reused (owner decision 2026-11-09). A later explicit reason
+// finds it waiting; as of this change FillAccessReason leaves a refresh alone,
+// so the answer truthfully says the reason was not stored (kept).
+func TestRequest_RefreshCarriesItsOwnReason(t *testing.T) {
+	f := newReqFixture(t)
+	ctx := context.Background()
+	sess := f.session(t, "cc/fin", "/work/ops", agent)
+	v := f.view(t, bridge, agent, shell)
+	a, err := f.svc.Request(ctx, RequestInput{Project: lockFin, View: v, SessionID: sess, Reason: "reconcile the ledger notes"})
+	require.NoError(t, err)
+	lease := f.approveDaemon(t, a.ID, For1h)
+
+	f.now = lease.ExpiresAt.Add(-access.ExpiryWarning)
+	var asked Asked
+	refresh, err := f.svc.Request(WithAsked(ctx, &asked), RequestInput{Project: lockFin, View: f.view(t, bridge, agent, shell), SessionID: sess, Via: ViaRequest})
+	require.NoError(t, err)
+	require.Equal(t, store.AccessKindRefresh, refresh.Kind)
+	require.Empty(t, refresh.Reason, "given no reason, a refresh shows none: the old one is not reused")
+	filed, reason := asked.Outcome(refresh)
+	require.True(t, filed)
+	require.Equal(t, ReasonNone, reason)
+	shown, err := f.svc.Facts(ctx, refresh.ID)
+	require.NoError(t, err)
+	require.Empty(t, shown.Reason)
+
+	// A later reason, given to the waiting refresh: it fills the blank, as on
+	// any waiting request, and the answer says so.
+	var later Asked
+	got, err := f.svc.Request(WithAsked(ctx, &later), RequestInput{Project: lockFin, View: f.view(t, bridge, agent, shell), SessionID: sess, Via: ViaRequest, Reason: "still reconciling"})
+	require.NoError(t, err)
+	require.Equal(t, refresh.ID, got.ID)
+	filed, reason = later.Outcome(got)
+	require.False(t, filed)
+	require.Equal(t, ReasonAdded, reason)
+	require.Equal(t, "still reconciling", got.Reason)
+}
+
+func TestRequestGrant_AskedSaysWhatTheAskDid(t *testing.T) {
+	f := newGrantFixture(t)
+	g := NewGrants(GrantsConfig{Approvals: f.svc})
+	ctx := access.WithView(context.Background(), f.view(t, bridge, agent, shell))
+	sess := f.session(t, "cc/ops", "/work/ops", agent)
+	ask := func(reason string) (store.AccessApproval, Asked) {
+		t.Helper()
+		var asked Asked
+		a, err := g.RequestGrant(WithAsked(ctx, &asked), GrantInput{Project: confHR, SessionID: sess, Via: ViaRequest, Reason: reason})
+		require.NoError(t, err)
+		return a, asked
+	}
+
+	a, asked := ask("the hiring plan")
+	filed, reason := asked.Outcome(a)
+	require.True(t, filed)
+	require.Equal(t, ReasonAdded, reason)
+
+	again, asked := ask("")
+	require.Equal(t, a.ID, again.ID)
+	filed, reason = asked.Outcome(again)
+	require.False(t, filed)
+	require.Equal(t, ReasonNone, reason)
+
+	again, asked = ask("another reason")
+	filed, reason = asked.Outcome(again)
+	require.False(t, filed)
+	require.Equal(t, ReasonKept, reason)
+}

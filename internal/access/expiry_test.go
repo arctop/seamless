@@ -39,7 +39,7 @@ func TestExpiryNotice(t *testing.T) {
 				return
 			}
 			require.Contains(t, got, "Access to "+lockFin+" ends at "+Clock(end)+" "+tc.want)
-			require.Contains(t, got, "run `seam access request "+lockFin+"` from your shell to ask the owner again (a new approval)")
+			require.Contains(t, got, "run `seam access request "+lockFin+"` with your own shell tool to ask the owner again (a new approval)")
 			require.Contains(t, got, "Nothing extends it silently")
 		})
 	}

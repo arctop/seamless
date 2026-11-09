@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
@@ -41,7 +42,7 @@ func TestLockRefusal_AfterADenialNamesItAndFilesNothing(t *testing.T) {
 	require.True(t, strings.HasPrefix(ls[1], "Remedy: the owner denied access request "+short+" at "), ls[1])
 	require.True(t, strings.HasSuffix(ls[1], ", so nothing new was filed; keep to other projects, and if the owner asks you "+
 		"to request again, call access_request with a reason, or run `seam access request "+lkFin+" --reason \"...\"` "+
-		"from your shell."), ls[1])
+		"with your own shell tool."), ls[1])
 	require.Len(t, o.dialogs(), 1, "a denial offers no dialog")
 	require.Empty(t, d.pending(), "nothing new for the owner")
 
@@ -74,7 +75,7 @@ func TestDialog_DeniedSaysHowToAskAgain(t *testing.T) {
 	require.Len(t, ls, 2, text)
 	require.True(t, strings.HasPrefix(ls[1], "Remedy: the owner denied access request R-"), ls[1])
 	require.True(t, strings.HasSuffix(ls[1], "; keep to other projects, and if the owner asks you to request again, call "+
-		"access_request with a reason, or run `seam access request "+lkFin+" --reason \"...\"` from your shell."), ls[1])
+		"access_request with a reason, or run `seam access request "+lkFin+" --reason \"...\"` with your own shell tool."), ls[1])
 }
 
 // The read grant's fence names a denial the same way.
@@ -100,6 +101,73 @@ func TestGrantRefusal_AfterADenialNamesItAndFilesNothing(t *testing.T) {
 	require.True(t, strings.HasPrefix(ls[1], "Remedy: the owner denied read request "+approval.ShortID(pending[0].ID)+" at "), ls[1])
 	require.True(t, strings.HasSuffix(ls[1], ", so nothing new was filed; keep to other projects, and if the owner asks you "+
 		"to request again, call access_request with a reason, or run `seam access request "+dlgLegal+" --reason \"...\"` "+
-		"from your shell."), ls[1])
+		"with your own shell tool."), ls[1])
 	require.Empty(t, d.pending(), "nothing new for the owner")
+}
+
+// access_request's answer says what the call did: filed or found waiting,
+// and what became of its reason. Live access answers filed:false, none.
+func TestAccessRequest_AnswerSaysWhatItDid(t *testing.T) {
+	d := newDialogRig(t, dialogOpts{wait: dlgLong})
+	d.session("cc/fin", lkFin)
+	agent := d.dialOwner(d.agentSocket(), nil, nil)
+	ask := func(args map[string]any) map[string]any {
+		t.Helper()
+		out, _ := d.ok(agent, mcpserver.AccessRequestTool, args)
+		var res map[string]any
+		require.NoError(t, json.Unmarshal([]byte(out), &res))
+		return res
+	}
+
+	first := ask(map[string]any{"project": lkFin})
+	require.Equal(t, true, first["filed"])
+	require.Equal(t, "none", first["reason"])
+
+	again := ask(map[string]any{"project": lkFin})
+	require.Equal(t, false, again["filed"], "found the one already waiting")
+	require.Equal(t, "none", again["reason"])
+
+	filled := ask(map[string]any{"project": lkFin, "reason": "reconcile the quarter"})
+	require.Equal(t, false, filled["filed"])
+	require.Equal(t, "added", filled["reason"], "it filled the waiting request's blank")
+	pending := d.pending()
+	require.Len(t, pending, 1)
+	require.Equal(t, "reconcile the quarter", pending[0].Reason)
+
+	kept := ask(map[string]any{"project": lkFin, "reason": "a different reason"})
+	require.Equal(t, false, kept["filed"])
+	require.Equal(t, "kept", kept["reason"], "the waiting request keeps its own")
+	require.Equal(t, "reconcile the quarter", d.pending()[0].Reason)
+
+	id := pending[0].ID
+	d.approve(id, 4*time.Hour)
+	live := ask(map[string]any{"project": lkFin, "reason": "one more look"})
+	require.Equal(t, false, live["filed"], "live access answers: nothing filed")
+	require.Equal(t, "none", live["reason"])
+	require.Equal(t, "approved", live["status"])
+}
+
+// A new request with a reason says added; the grant path answers the same.
+func TestAccessRequest_AnswerSaysWhatItDid_Grant(t *testing.T) {
+	d := newDialogRig(t, dialogOpts{wait: dlgLong, grants: true})
+	d.session("cc/ops", lkOps)
+	agent := d.dialOwner(d.agentSocket(), nil, nil)
+	ask := func(args map[string]any) map[string]any {
+		t.Helper()
+		out, _ := d.ok(agent, mcpserver.AccessRequestTool, args)
+		var res map[string]any
+		require.NoError(t, json.Unmarshal([]byte(out), &res))
+		return res
+	}
+	first := ask(map[string]any{"project": dlgLegal, "reason": "read the vendor contract"})
+	require.Equal(t, true, first["filed"])
+	require.Equal(t, "added", first["reason"])
+
+	again := ask(map[string]any{"project": dlgLegal})
+	require.Equal(t, false, again["filed"])
+	require.Equal(t, "none", again["reason"])
+
+	kept := ask(map[string]any{"project": dlgLegal, "reason": "and the addendum"})
+	require.Equal(t, false, kept["filed"])
+	require.Equal(t, "kept", kept["reason"])
 }

@@ -86,7 +86,7 @@ func (s *Server) handleProjectList(ctx context.Context, _ mcp.CallToolRequest) (
 // offering only the approval paths ways holds.
 func lockedListRemedy(slug string, ways access.Ways) string {
 	return "locked: even the owner's own agents need the owner's approval to read or write it. A call into it " +
-		"files an access request automatically, and `seam access request " + slug + "` from your shell files one " +
+		"files an access request automatically, and `seam access request " + slug + "` with your own shell tool files one " +
 		"explicitly; " + ways.OwnerApproves("") + "."
 }
 

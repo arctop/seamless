@@ -73,7 +73,8 @@ several); a request is its short id (R-7F3K) or its full id.
 
 It shows the request's facts, warnings first, with the agent's reason quoted
 and labeled as the agent's own words; asks for a duration (default: until the
-asking session ends, capped by the daemon's max_lease) unless --for names one;
+asking session ends, capped by the daemon's max_lease) unless --for names one
+(the word deny, typed in full there, denies the request without choosing one);
 says in one line what an approval grants (the agent, the project, the access
 and the duration); and asks to confirm: y approves, d denies, anything else
 changes nothing.
@@ -183,20 +184,30 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 	} else if t, err = terminalOf(one); err != nil {
 		return err
 	}
+	answer := ""
 	if !o.duration.set {
-		var ok bool
-		if duration, ok, err = askDuration(e, in, one); err != nil {
+		d, got, err := askDuration(e, in, one)
+		switch {
+		case err != nil:
 			return err
-		} else if !ok {
+		case got == durationNoAnswer:
 			fmt.Fprintln(e.stdout, "Nothing changed.")
 			return nil
+		case got == durationDenied:
+			// The picker's own word: the same decision as d at the question
+			// below, and the same denial commit, without choosing a duration.
+			answer = "deny"
+		default:
+			duration = d
 		}
 	}
 
 	// What y grants, said before anything runs: the agent, the project, the
 	// access and the duration. sudo's prompt follows only after the answer.
-	fmt.Fprintln(e.stdout, "If approved: "+grantWords(f, duration, one.MaxLease, e.clock()))
-	answer, _ := prompt(e, in, "Approve "+printable(f.Short)+"? [y/N/d=deny] ")
+	if answer == "" {
+		fmt.Fprintln(e.stdout, "If approved: "+grantWords(f, duration, one.MaxLease, e.clock()))
+		answer, _ = prompt(e, in, "Approve "+printable(f.Short)+"? [y/N/d=deny] ")
+	}
 	if one.Advisory {
 		return decideOverConsole(e, cfg, f, strings.ToLower(answer), duration)
 	}
@@ -595,17 +606,37 @@ func printable(s string) string {
 	return q[1 : len(q)-1]
 }
 
+// durationAnswer is how the owner answered the duration question.
+type durationAnswer int
+
+const (
+	// durationNoAnswer: end of input, nothing is decided.
+	durationNoAnswer durationAnswer = iota
+	// durationChosen: a duration was named.
+	durationChosen
+	// durationDenied: the word deny, spelled out, instead of a duration.
+	durationDenied
+)
+
+// denyWord denies a request from the duration question, in any case and only
+// in full: it is the one answer that is not a duration, so nothing typed for
+// a duration can turn into a denial.
+const denyWord = "deny"
+
 // askDuration asks how long to approve for: the daemon's durations, listed
 // by name, each with what it grants. The answer is a duration's name or the
 // start of one, in any case ("1" is 1h, "s" is session), and an empty one is
 // the default (until the session ends) when the daemon offers it. The list
 // is not numbered: a number that picked the first line would read as hours
-// ("1" for 1h granting the session). ok is false when the owner gave no
-// answer at all (end of input): nothing is decided.
-func askDuration(e *env, in *bufio.Reader, one accessOne) (string, bool, error) {
+// ("1" for 1h granting the session). denyWord, in full, denies instead (a
+// duration match wins first, so a duration can never read as a denial); no
+// other input decides anything, and an approval still waits for the y/N
+// question. durationNoAnswer is the owner giving no answer at all (end of
+// input): nothing is decided.
+func askDuration(e *env, in *bufio.Reader, one accessOne) (string, durationAnswer, error) {
 	ds := offeredDurations(one.Durations, one.MaxLease)
 	if len(ds) == 0 {
-		return "", false, errors.New("the daemon offered no durations to approve for")
+		return "", durationNoAnswer, errors.New("the daemon offered no durations to approve for")
 	}
 	hasDefault := slices.Contains(ds, durationSession)
 	width := 0
@@ -623,26 +654,28 @@ func askDuration(e *env, in *bufio.Reader, one accessOne) (string, bool, error) 
 		fmt.Fprintf(e.stdout, "  %-*s  %s\n", width, names[i], words)
 	}
 	listed := strings.Join(names, ", ")
-	q := "Duration [" + listed + "]: "
+	q := "Duration [" + listed + "; deny to deny it]: "
 	if hasDefault {
-		q = "Duration [" + listed + "; Enter for " + durationSession + "]: "
+		q = "Duration [" + listed + "; Enter for " + durationSession + "; deny to deny it]: "
 	}
 	for {
 		ans, ok := prompt(e, in, q)
 		if !ok {
-			return "", false, nil
+			return "", durationNoAnswer, nil
 		}
 		if ans == "" && hasDefault {
-			return durationSession, true, nil
+			return durationSession, durationChosen, nil
 		}
 		d, matches := matchDuration(ds, ans)
 		switch {
 		case matches == 1:
-			return d, true, nil
+			return d, durationChosen, nil
 		case matches > 1:
 			fmt.Fprintf(e.stderr, "%q starts more than one of %s: type more of it\n", ans, listed)
+		case strings.EqualFold(ans, denyWord):
+			return "", durationDenied, nil
 		default:
-			fmt.Fprintf(e.stderr, "answer with one of %s, or the start of one\n", listed)
+			fmt.Fprintf(e.stderr, "answer with one of %s, or the start of one (or %s, in full, to deny it)\n", listed, denyWord)
 		}
 	}
 }

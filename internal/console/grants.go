@@ -28,7 +28,8 @@ import (
 // <confidential project>`, run from the agent's own shell, whose session the
 // agent-process header names.
 func (s *Service) grantRequest(w http.ResponseWriter, r *http.Request, project, proc, host string) {
-	a, err := s.cfg.Grants.RequestGrant(r.Context(), approval.GrantInput{
+	var asked approval.Asked
+	a, err := s.cfg.Grants.RequestGrant(approval.WithAsked(r.Context(), &asked), approval.GrantInput{
 		Project: project, AgentProcess: proc, Host: host, Reason: r.PostForm.Get("reason"), Via: approval.ViaRequest,
 	})
 	if err != nil {
@@ -60,9 +61,10 @@ func (s *Service) grantRequest(w http.ResponseWriter, r *http.Request, project, 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
 		return
 	}
+	filed, reason := asked.Outcome(a)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": a.ID, "short_id": approval.ShortID(a.ID), "project": a.Project, "kind": a.Kind, "from": a.FromProject,
-		"page": s.cfg.Grants.Ways(r.Context(), a.ID).Page,
+		"page": s.cfg.Grants.Ways(r.Context(), a.ID).Page, "filed": filed, "reason": reason,
 	})
 }
 

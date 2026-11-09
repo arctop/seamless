@@ -135,6 +135,51 @@ func TestAccessRequest_NoPageNoPasskeyLine(t *testing.T) {
 	require.False(t, sent, "an absent reason is not sent as an empty one")
 }
 
+// The answer says what the call did (filed or found waiting), and what became
+// of its reason, in the daemon's words: seam access request mirrors
+// access_request. A daemon that predates the fields answers as before.
+func TestAccessRequest_SaysWhatTheCallDid(t *testing.T) {
+	for _, tc := range []struct {
+		name, answer, want string
+	}{
+		{"filed, reason added",
+			`{"id":"01KX","short_id":"R-0001","project":"example-finance","kind":"request","filed":true,"reason":"added","page":""}`,
+			"Requested R-0001 for example-finance (request). The owner approves it with: seam approve R-0001\n" +
+				"Your reason was added to it.\n"},
+		{"found waiting, reason added to its blank",
+			`{"id":"01KX","short_id":"R-0001","project":"example-finance","kind":"request","filed":false,"reason":"added","page":""}`,
+			"R-0001 for example-finance (request) was already waiting. The owner approves it with: seam approve R-0001\n" +
+				"Your reason was added to it.\n"},
+		{"found waiting, keeps its own reason",
+			`{"id":"01KX","short_id":"R-0001","project":"example-finance","kind":"request","filed":false,"reason":"kept","page":""}`,
+			"R-0001 for example-finance (request) was already waiting. The owner approves it with: seam approve R-0001\n" +
+				"It already had a reason, so yours was not used.\n"},
+		{"found waiting, none",
+			`{"id":"01KX","short_id":"R-0001","project":"example-finance","kind":"request","filed":false,"reason":"none","page":""}`,
+			"R-0001 for example-finance (request) was already waiting. The owner approves it with: seam approve R-0001\n"},
+		{"a grant found waiting",
+			`{"id":"01KX","short_id":"R-0001","project":"example-finance","kind":"grant","from":"example-ops","filed":false,"reason":"kept","page":""}`,
+			"Read access to example-finance for example-ops (R-0001, read-only) was already waiting. The owner approves it with: seam approve R-0001\n" +
+				"It already had a reason, so yours was not used.\n"},
+		{"a daemon that predates the fields",
+			`{"id":"01KX","short_id":"R-0001","project":"example-finance","kind":"request","page":""}`,
+			"Requested R-0001 for example-finance (request). The owner approves it with: seam approve R-0001\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ac := newAccessConsole(t, func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(tc.answer)) })
+			e, out, errb := ac.env()
+			require.Equal(t, 0, dispatch(context.Background(), e, []string{"access", "request", "example-finance"}), errb.String())
+			require.Equal(t, tc.want, out.String())
+		})
+	}
+}
+
+// The words seam prints are keyed by the daemon's reason values.
+func TestAccessFiled_ReasonWordsMatchTheDaemons(t *testing.T) {
+	require.Equal(t, approval.ReasonAdded, reasonAdded)
+	require.Equal(t, approval.ReasonKept, reasonKept)
+}
+
 func TestAccessRequest_JSONPrintsTheAnswerAsSent(t *testing.T) {
 	ac := newAccessConsole(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(filedAnswer + "\n"))

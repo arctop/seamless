@@ -58,6 +58,11 @@ type accessListData struct {
 	// approvals the bearer key makes.
 	Grants   []grantRow `json:"grants,omitempty"`
 	Advisory bool       `json:"advisory,omitempty"`
+	// Origin is the passkey relying party's origin, while a project is locked:
+	// where a browser signs in for a passkey ceremony. An owner's client
+	// config holds no peer_auth block to work it out from, so console-open
+	// asks here, and the console's cookie stays on the host passkeys work on.
+	Origin string `json:"origin,omitempty"`
 	// LockOn and GrantsOn say which halves the page shows.
 	LockOn   bool `json:"-"`
 	GrantsOn bool `json:"-"`
@@ -284,6 +289,9 @@ func (s *Service) accessList(w http.ResponseWriter, r *http.Request) {
 			s.serverError(w, r, err)
 			return
 		}
+		if origins := s.cfg.Approvals.Origins(); len(origins) > 0 {
+			d.Origin = origins[0]
+		}
 	} else {
 		d.Leases, d.Unlocks = []leaseRow{}, []unlockRow{}
 	}
@@ -461,7 +469,8 @@ func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "that project is not confidential: nothing to request"})
 		return
 	}
-	a, err := s.cfg.Approvals.Request(r.Context(), approval.RequestInput{
+	var asked approval.Asked
+	a, err := s.cfg.Approvals.Request(approval.WithAsked(r.Context(), &asked), approval.RequestInput{
 		Project: project, View: v, AgentProcess: proc,
 		Host:   host,
 		Reason: r.PostForm.Get("reason"), Via: approval.ViaRequest,
@@ -489,8 +498,10 @@ func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The passkey page only when a passkey can approve the request there.
+	filed, reason := asked.Outcome(a)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": a.ID, "short_id": approval.ShortID(a.ID), "project": a.Project, "kind": a.Kind,
+		"filed": filed, "reason": reason,
 		"page": s.cfg.Approvals.Ways(r.Context(), a.ID).Page,
 	})
 }

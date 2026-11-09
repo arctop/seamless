@@ -142,6 +142,58 @@ func TestAccess_RequestNamesThePasskeyPageOnlyWithAPasskey(t *testing.T) {
 	require.Equal(t, approverOrigin+"/console/access/"+id, f.svc.Ways(ctx, id).Page)
 }
 
+// The request route's answer says what the ask did, as access_request's does:
+// filed or found waiting, and what became of its reason.
+func TestAccess_RequestAnswerSaysWhatItDid(t *testing.T) {
+	f := newAccessFixture(t)
+	post := func(form url.Values) (bool, string, map[string]json.RawMessage) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/console/access/request", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		status, out := f.jsonDo(t, f.asAgent(t, req))
+		require.Equal(t, http.StatusOK, status, string(out["error"]))
+		var filed bool
+		var reason string
+		require.NoError(t, json.Unmarshal(out["filed"], &filed))
+		require.NoError(t, json.Unmarshal(out["reason"], &reason))
+		return filed, reason, out
+	}
+	filed, reason, _ := post(url.Values{"project": {"example-finance"}})
+	require.True(t, filed)
+	require.Equal(t, "none", reason)
+
+	filed, reason, _ = post(url.Values{"project": {"example-finance"}, "reason": {"reconcile the ledger notes"}})
+	require.False(t, filed)
+	require.Equal(t, "added", reason)
+
+	filed, reason, _ = post(url.Values{"project": {"example-finance"}, "reason": {"something else"}})
+	require.False(t, filed)
+	require.Equal(t, "kept", reason)
+	var n int
+	require.NoError(t, f.db.QueryRow(`SELECT COUNT(*) FROM access_approvals`).Scan(&n))
+	require.Equal(t, 1, n)
+}
+
+// The access list names the relying party's origin, for console-open.
+func TestAccess_ListNamesThePasskeyOrigin(t *testing.T) {
+	f := newAccessFixture(t)
+	rr := do(f.mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/access?format=json", nil)))
+	require.Equal(t, http.StatusOK, rr.Code)
+	var list struct {
+		Origin string `json:"origin"`
+	}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &list))
+	require.Equal(t, approverOrigin, list.Origin)
+
+	// No project locked, read grants only: no origin named.
+	g := newGrantConsole(t)
+	rr = do(g.mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/access?format=json", nil)))
+	require.Equal(t, http.StatusOK, rr.Code)
+	var off map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &off))
+	require.NotContains(t, off, "origin")
+}
+
 func TestAccess_OffIsNotFound(t *testing.T) {
 	_, mux := newConsole(t)
 	for _, path := range []string{"/console/access", "/console/access/R-AAAA"} {

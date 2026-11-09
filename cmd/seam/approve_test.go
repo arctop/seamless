@@ -337,7 +337,7 @@ func TestApprove_DurationPrompt(t *testing.T) {
 				"  session  until the session ends, at most 8h (the default)\n"+
 				"  1h       for 1 hour\n"+
 				"  4h       for 4 hours\n"+
-				"Duration [session, 1h, 4h; Enter for session]: ")
+				"Duration [session, 1h, 4h; Enter for session; deny to deny it]: ")
 			require.Contains(t, out, "If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance "+tc.words+".\n"+
 				"Approve R-7F3K? [y/N/d=deny] ")
 			calls := rig.runner.recorded()
@@ -346,7 +346,7 @@ func TestApprove_DurationPrompt(t *testing.T) {
 	}
 	rig := newApproveRig(t, routes(t, table), "2h\n")
 	require.Equal(t, 0, rig.run("R-7F3K"))
-	require.Contains(t, rig.errb.String(), "answer with one of session, 1h, 4h, or the start of one\n")
+	require.Contains(t, rig.errb.String(), "answer with one of session, 1h, 4h, or the start of one (or deny, in full, to deny it)\n")
 	require.True(t, strings.HasSuffix(rig.out.String(), "Nothing changed.\n"), "end of input decides nothing")
 	require.Empty(t, rig.runner.recorded())
 }
@@ -382,6 +382,55 @@ func TestMatchDuration(t *testing.T) {
 	}
 }
 
+// The word deny, in full and in any case, denies straight from the duration
+// question: no duration is chosen, no "If approved" is said, and the denial
+// commits as d at the y/N question does. Nothing else typed at the question
+// can deny, and no duration ever reads as a denial.
+func TestApprove_DenyFromTheDurationPrompt(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	for _, typed := range []string{"deny\n", "DENY\n", "Deny\n"} {
+		rig := newApproveRig(t, routes(t, byRef(t, a)), typed)
+		require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+		out := rig.out.String()
+		require.NotContains(t, out, "If approved", "%q", typed)
+		require.NotContains(t, out, "Approve R-7F3K?", "%q", typed)
+		require.Contains(t, out, "sudo asks for your Touch ID or password next: it commits the denial as _seamless.\n", "%q", typed)
+		require.Equal(t, append(slices.Clone(passwordlessProbe), denyArgvFor(reqA)), rig.runner.recorded(), "%q", typed)
+	}
+
+	// Only the word in full: "d" and "den" are not denials, and "deny" never
+	// starts a duration.
+	for _, typed := range []string{"d\ndeny\n", "den\nDENY\n", "denied\ndeny\n"} {
+		rig := newApproveRig(t, routes(t, byRef(t, a)), typed)
+		require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+		require.Contains(t, rig.errb.String(), "answer with one of session, 1h, 4h, or the start of one (or deny, in full, to deny it)\n", "%q", typed)
+		require.Equal(t, append(slices.Clone(passwordlessProbe), denyArgvFor(reqA)), rig.runner.recorded(), "%q", typed)
+	}
+
+	// A duration the daemon offers wins over the word: a typed duration can
+	// never become a denial.
+	odd := byRef(t, a, func(o *accessOne) { o.Durations = []string{"session", "deny", "1h"} })
+	rig := newApproveRig(t, routes(t, odd), "deny\ny\n")
+	require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+	require.Contains(t, rig.out.String(), "If approved:", "deny is a duration here: the approval still asks y/N")
+	require.Equal(t, approveArgvFor(reqA, "deny", a.Digest), rig.runner.recorded()[len(rig.runner.recorded())-1])
+	require.NotEqual(t, denyArgvFor(reqA), rig.runner.recorded()[len(rig.runner.recorded())-1])
+
+	// Without the default: the same word on the shorter prompt.
+	short := byRef(t, a, func(o *accessOne) { o.Durations = []string{"1h", "4h"} })
+	rig = newApproveRig(t, routes(t, short), "deny\n")
+	require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+	require.Contains(t, rig.out.String(), "Duration [1h, 4h; deny to deny it]: ")
+	require.Equal(t, denyArgvFor(reqA), rig.runner.recorded()[len(rig.runner.recorded())-1])
+
+	// With --for there is no duration question: d at the y/N question denies,
+	// as it always did, and so does the word (it is the same answer).
+	rig = newApproveRig(t, routes(t, byRef(t, a)), "deny\n")
+	require.Equal(t, 0, rig.run("R-7F3K", "--for", "1h"), rig.errb.String())
+	require.Contains(t, rig.out.String(), "Approve R-7F3K? [y/N/d=deny] ")
+	require.Equal(t, denyArgvFor(reqA), rig.runner.recorded()[len(rig.runner.recorded())-1])
+}
+
 // An ambiguous start asks again, naming the choices; a max_lease cap's
 // duration is listed and answered like the others.
 func TestApprove_DurationPromptAmbiguousAndCapped(t *testing.T) {
@@ -397,7 +446,7 @@ func TestApprove_DurationPromptAmbiguousAndCapped(t *testing.T) {
 	require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
 	require.Contains(t, rig.out.String(), "  session  until the session ends, at most 20m (the default)\n"+
 		"  20m      for 20m\n"+
-		"Duration [session, 20m; Enter for session]: ")
+		"Duration [session, 20m; Enter for session; deny to deny it]: ")
 	require.Contains(t, rig.out.String(), "for 20m, until "+clockTime(fixedNow.Add(20*time.Minute))+".\n")
 	require.Equal(t, approveArgvFor(reqA, "20m", a.Digest), rig.runner.recorded()[len(rig.runner.recorded())-1])
 }
@@ -809,6 +858,22 @@ func TestApprove_AdvisoryGrantDenyAndNo(t *testing.T) {
 	for _, r := range rig.ac.requests() {
 		require.Equal(t, http.MethodGet, r.method, "an answer other than y or d posts nothing")
 	}
+
+	// The word deny at the duration question commits the denial here too,
+	// with no duration in the form.
+	rig = newApproveRig(t, routes(t, table), "deny\n")
+	require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+	require.Contains(t, rig.out.String(), "Denied R-7F3K: example-finance stays closed to that session.\n")
+	require.NotContains(t, rig.out.String(), "If approved")
+	var denied *seenRequest
+	for _, r := range rig.ac.requests() {
+		if r.method == http.MethodPost {
+			denied = &r
+		}
+	}
+	require.NotNil(t, denied)
+	require.Equal(t, "/console/access/"+reqA+"/deny?format=json", denied.uri)
+	require.Empty(t, denied.form["duration"], "a denial chooses no duration")
 }
 
 // A grant request on a daemon under peer_auth is not advisory: it goes
@@ -875,7 +940,7 @@ func TestApprove_TranscriptGolden(t *testing.T) {
 				"  1h       for 1 hour\n" +
 				"  4h       for 4 hours\n" +
 				// The owner's typed answers echo on the terminal, not here.
-				"Duration [session, 1h, 4h; Enter for session]: " +
+				"Duration [session, 1h, 4h; Enter for session; deny to deny it]: " +
 				"If approved: Claude Code 2.1.319 (pid 4242) may read and write example-finance for 1 hour, until " +
 				clockTime(fixedNow.Add(time.Hour)) + ".\n" +
 				"Approve R-7F3K? [y/N/d=deny] " +

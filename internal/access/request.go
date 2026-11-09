@@ -30,8 +30,10 @@ type LockRequest struct {
 	// approve it there (passkeys set up, one enrolled: approval.Service.Ways).
 	Page string
 	// TouchID reports an enrolled Touch ID key: the approval dialog can
-	// approve the request with it.
-	TouchID bool
+	// approve the request with it. TouchIDIf, when set, is the condition the
+	// remedy hedges that offer with (Ways.TouchIDIf).
+	TouchID   bool
+	TouchIDIf string
 	// Ended is when this tree's last lease on the project ended (expired or
 	// revoked), zero when it never held one: the refusal then says when
 	// access ended, so the agent can tell a lapsed approval from none.
@@ -59,6 +61,11 @@ type Ways struct {
 	// approval dialog Seamless shows in an agent's session (the agent's MCP
 	// bridge launches the helper), so the words say where.
 	TouchID bool
+	// TouchIDIf, when set, is the condition the Touch ID offer is hedged
+	// with: a surface that cannot see whether the client shows the dialog
+	// (the SessionStart hook runs before MCP connects) says so rather than
+	// promising a path that may not be there. "" offers it plainly.
+	TouchIDIf string
 	// Passkey reports that passkeys are set up and one is enrolled; Page is
 	// the request's passkey page ("" before a request exists).
 	Passkey bool
@@ -67,7 +74,7 @@ type Ways struct {
 
 // ways is the request's approval paths.
 func (r LockRequest) ways() Ways {
-	return Ways{TouchID: r.TouchID, Passkey: r.Page != "", Page: r.Page}
+	return Ways{TouchID: r.TouchID, TouchIDIf: r.TouchIDIf, Passkey: r.Page != "", Page: r.Page}
 }
 
 // OwnerApproves says how the owner approves request short, offering only the
@@ -81,7 +88,11 @@ func (w Ways) OwnerApproves(short string) string {
 	}
 	var ways []string
 	if w.TouchID {
-		ways = append(ways, "with Touch ID in the approval dialog")
+		touch := "with Touch ID in the approval dialog"
+		if w.TouchIDIf != "" {
+			touch += " " + w.TouchIDIf
+		}
+		ways = append(ways, touch)
 	}
 	ways = append(ways, terminal)
 	switch {
@@ -113,7 +124,7 @@ func (w Ways) StillPending(short string) string {
 // that this daemon offers the access_request tool (it locks a project);
 // without it the shell's command is the way.
 func AskAgain(project string, tool bool) string {
-	cmd := "`seam access request " + project + " --reason \"...\"` from your shell"
+	cmd := "`seam access request " + project + " --reason \"...\"` with your own shell tool"
 	if tool {
 		return "if the owner asks you to request again, call access_request with a reason, or run " + cmd
 	}

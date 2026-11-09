@@ -368,8 +368,9 @@ type RequestInput struct {
 // a *DeniedError, until an explicit request files a new one. A tree that
 // already holds a live lease on the project files nothing while more than
 // access.ExpiryWarning of it remains: the answer is a *AccessLiveError naming
-// the lease. Within the warning it files a refresh, which carries the earlier
-// reason rather than new text.
+// the lease. Within the warning it files a refresh, which carries the reason
+// this ask gave, labeled as the agent's own words like any request (owner
+// decision 2026-11-09); given none, it shows "(no reason given)".
 func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApproval, error) {
 	const op = "approval.Request"
 	if err := refuseRestricted(ctx, in.View); err != nil {
@@ -419,9 +420,6 @@ func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApp
 	kind, reason := store.AccessKindRequest, strings.TrimSpace(in.Reason)
 	if leased {
 		kind = store.AccessKindRefresh
-		if reason, err = store.LastAccessReason(ctx, s.cfg.DB, anchor.Key(), in.Project); err != nil {
-			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
-		}
 	}
 	if utf8.RuneCountInString(reason) > store.MaxAccessReasonRunes {
 		return store.AccessApproval{}, fmt.Errorf("%s: %w: the reason is limited to %d characters", op,
@@ -459,10 +457,16 @@ func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApp
 // (ViaRequest) with a reason fills in the reason a refusal's request lacks,
 // so the agent's words reach the owner rather than "(no reason given)"
 // (owner decision 2026-11-08). A request that has its reason, and a
-// refusal's ask, leave it as it is.
+// refusal's ask, leave it as it is. It reports what became of the ask's
+// reason to the Asked in ctx, if any.
 func (s *Service) explained(ctx context.Context, pending store.AccessApproval, via, reason string, now time.Time) (store.AccessApproval, error) {
 	reason = strings.TrimSpace(reason)
-	if via == ViaRefusal || reason == "" || pending.Reason != "" {
+	if via == ViaRefusal || reason == "" {
+		noteFound(ctx, ReasonNone)
+		return pending, nil
+	}
+	if pending.Reason != "" {
+		noteFound(ctx, ReasonKept)
 		return pending, nil
 	}
 	filled, err := store.FillAccessReason(ctx, s.cfg.DB, pending.ID, reason, now)
@@ -470,9 +474,65 @@ func (s *Service) explained(ctx context.Context, pending store.AccessApproval, v
 		return store.AccessApproval{}, err
 	}
 	if filled.Reason == reason {
+		noteFound(ctx, ReasonAdded)
 		s.cfg.Logger.Debug("access request: reason filled in", "request", ShortID(filled.ID))
+		return filled, nil
 	}
+	// Not stored: the row left pending meanwhile, or FillAccessReason declined.
+	noteFound(ctx, ReasonKept)
 	return filled, nil
+}
+
+// What became of an explicit ask's reason (Asked.Outcome).
+const (
+	// ReasonAdded: this ask's reason is on the request, because it filed a
+	// new one, or filled a waiting request's blank.
+	ReasonAdded = "added"
+	// ReasonKept: this ask gave a reason, but the request stays as it was (it
+	// had its own), so this one was not stored.
+	ReasonKept = "kept"
+	// ReasonNone: this ask's reason reached no request: it gave none, or
+	// nothing was filed for it to go on.
+	ReasonNone = "none"
+)
+
+// Asked is what one explicit ask found, for the surface answering the agent
+// (access_request, seam access request): Request and RequestGrant fill it in
+// when their ctx carries one (WithAsked), so the answer can say whether it
+// filed a new request and what became of its reason. It rides the context so
+// the Approvals and Grants interfaces every surface holds keep their shape.
+type Asked struct {
+	found  bool
+	reason string
+}
+
+// Outcome is what the ask did, given the request it returned: filed is true
+// when it filed a new one, false when it found one already waiting; reason
+// is ReasonAdded, ReasonKept or ReasonNone. A new request carries its ask's
+// reason, so the row alone says it; only a found request needs the report.
+func (a Asked) Outcome(row store.AccessApproval) (filed bool, reason string) {
+	if a.found {
+		return false, a.reason
+	}
+	if row.Reason != "" {
+		return true, ReasonAdded
+	}
+	return true, ReasonNone
+}
+
+type askedKey struct{}
+
+// WithAsked returns ctx asking Request or RequestGrant to report into a.
+func WithAsked(ctx context.Context, a *Asked) context.Context {
+	return context.WithValue(ctx, askedKey{}, a)
+}
+
+// noteFound reports into ctx's Asked that an ask found a request already
+// waiting, and what became of its reason.
+func noteFound(ctx context.Context, reason string) {
+	if a, ok := ctx.Value(askedKey{}).(*Asked); ok && a != nil {
+		a.found, a.reason = true, reason
+	}
 }
 
 // liveLease is the answer to a request a live lease already covers: the

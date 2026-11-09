@@ -56,7 +56,7 @@ func ExpiryNotice(leases []Lease, now time.Time) string {
 	lines := make([]string, 0, len(expiring))
 	for _, l := range expiring {
 		lines = append(lines, fmt.Sprintf("Access to %s ends at %s (%s left). Nothing extends it silently: to keep "+
-			"working there, run `seam access request %s` from your shell to ask the owner again (a new approval).",
+			"working there, run `seam access request %s` with your own shell tool to ask the owner again (a new approval).",
 			l.Project, clock(l.Expires), minutesLeft(l.Expires.Sub(now)), l.Project))
 	}
 	return strings.Join(lines, "\n")

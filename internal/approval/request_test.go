@@ -176,12 +176,12 @@ func TestApprove_DaemonPath_TheTreeReadsAndWrites(t *testing.T) {
 	require.True(t, f.policy.OwnerView().WithLeases(f.now, []access.Lease{lease.Lease()}).Locked(lockFin), "TCP is refused")
 
 	// A request from the leased tree, inside the expiry warning, is a
-	// refresh, carrying the old reason.
+	// refresh, carrying the reason it was given (owner decision 2026-11-09).
 	f.now = lease.ExpiresAt.Add(-access.ExpiryWarning)
 	refresh, err := f.svc.Request(ctx, RequestInput{Project: lockFin, View: f.view(t, bridge, agent, shell), SessionID: sess, Reason: "new text"})
 	require.NoError(t, err)
 	require.Equal(t, store.AccessKindRefresh, refresh.Kind)
-	require.Equal(t, "reconcile the ledger notes", refresh.Reason, "a refresh carries no new free text")
+	require.Equal(t, "new text", refresh.Reason, "a refresh carries the reason it was given")
 
 	// session_end revokes.
 	n, err := f.svc.RevokeSession(ctx, sess)

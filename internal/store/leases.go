@@ -318,11 +318,11 @@ func LastAccessApproval(ctx context.Context, db *sql.DB, processKey, project str
 }
 
 // FillAccessReason records reason on approval id, pending at now, when it
-// carries none: a request a refusal filed (a refusal has no reason to give)
-// that the agent then asks for in its own words. A request that already has a
-// reason, a refresh (which carries the earlier reason, never new text), and
-// one no longer pending are left as they are. The row is returned as it
-// stands either way. The reason is one of the facts the owner approves over,
+// carries none: a request a refusal filed (a refusal has no reason to give),
+// or a refresh filed without one, that the agent then asks for in its own
+// words. A request that already has a reason, and one no longer pending, are
+// left as they are. The row is returned as it stands either way. The reason
+// is one of the facts the owner approves over,
 // so filling it changes their digest: an owner deciding over the facts as
 // they stood is asked to look again.
 func FillAccessReason(ctx context.Context, db *sql.DB, id, reason string, now time.Time) (AccessApproval, error) {
@@ -333,8 +333,8 @@ func FillAccessReason(ctx context.Context, db *sql.DB, id, reason string, now ti
 	}
 	if reason != "" {
 		res, err := db.ExecContext(ctx, `UPDATE access_approvals SET reason = ?
-			WHERE id = ? AND status = ? AND reason = '' AND kind <> ? AND expires_at > ?`,
-			reason, id, ApprovalPending, AccessKindRefresh, core.FormatTime(now))
+			WHERE id = ? AND status = ? AND reason = '' AND expires_at > ?`,
+			reason, id, ApprovalPending, core.FormatTime(now))
 		if err != nil {
 			return AccessApproval{}, fmt.Errorf("store.FillAccessReason: %w", err)
 		}
@@ -394,22 +394,6 @@ func PendingAccessApprovals(ctx context.Context, db *sql.DB, now time.Time) ([]A
 		return nil, fmt.Errorf("store.PendingAccessApprovals: %w", err)
 	}
 	return out, nil
-}
-
-// LastAccessReason returns the reason of the newest lock request for this
-// process and project, approved or not: what a refresh reuses, since a
-// refresh carries no new free text.
-func LastAccessReason(ctx context.Context, db *sql.DB, processKey, project string) (string, error) {
-	var reason string
-	err := db.QueryRowContext(ctx, `SELECT reason FROM access_approvals WHERE process_key = ? AND project_slug = ? AND kind <> ?
-		ORDER BY requested_at DESC, id DESC LIMIT 1`, processKey, project, AccessKindGrant).Scan(&reason)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("store.LastAccessReason: %w", err)
-	}
-	return reason, nil
 }
 
 // ApproveAccess turns a pending approval into a lease, in one transaction:
