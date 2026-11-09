@@ -139,7 +139,18 @@ func (h *Handler) captureLocal(ctx context.Context, what string, id hookIdentity
 // as the hook's context; nil refuses silently.
 func (h *Handler) planCaptureRuns(ctx context.Context, w http.ResponseWriter, what string, p *toolPayload, reach sessionReach, lockedProject string, notice *preparedHookContext) bool {
 	if p.Capture == nil {
-		return h.captureLocal(ctx, what, p.Identity)
+		if !h.captureLocal(ctx, what, p.Identity) {
+			return false
+		}
+		if !h.readGrants {
+			return true
+		}
+		refusal := h.captureConfined(ctx, ClientClaudeCode, p.SessionID, h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD), "this plan")
+		if refusal != "" && notice != nil {
+			h.refuseCapture(w, refusal)
+			*notice = refusalContext(refusal)
+		}
+		return refusal == ""
 	}
 	if !h.captureEnabled() || (p.Capture.Plan == nil && p.ToolName != "ExitPlanMode") {
 		return false // an iteration whose plan file the client could not read: nothing to capture

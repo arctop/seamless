@@ -242,7 +242,7 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 		require.NotEmpty(t, short, ls[1])
 		require.Equal(t, "Remedy: read request "+short+" is waiting -- the owner approves it in their own terminal with "+
 			"`seam approve "+short+"`; retry once it is approved. An approved read is read-only, and confines this agent's "+
-			"writes to "+gmOpen+" for the rest of its life.", ls[1])
+			"writes to "+gmOpen+" for the rest of its life. "+approval.CiteByReferenceLine(gmConf, gmOpen), ls[1])
 		gmNoSecretsBut(t, items[0], "the refusal")
 		// A repeated refusal names the same request.
 		items, _ = gmCall(t, agent, "memory_read", map[string]any{"id": conf.memID})
@@ -671,8 +671,10 @@ func TestPeerAuthMatrix_Advisory(t *testing.T) {
 		// its example's id and asking project:
 		doc := "Remedy: read request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, " +
 			"or with Approve on the console's Access requests page; retry once it is approved. An approved read is read-only, " +
-			"and confines this session's writes to example-ops for the rest of its life."
-		require.Equal(t, strings.ReplaceAll(strings.ReplaceAll(doc, "R-7F3K", short), "example-ops", gmOpen), ls[1])
+			"and confines this session's writes to example-ops for the rest of its life. When you document this work in example-ops " +
+			"(task details, memories, notes, findings), refer to example-finance's items by reference -- project slug plus the " +
+			"item's name or id -- and leave out example-finance's confidential details."
+		require.Equal(t, strings.NewReplacer("R-7F3K", short, "example-ops", gmOpen, "example-finance", gmConf).Replace(doc), ls[1])
 		a, err := r.grants.Resolve(r.ctx, short)
 		require.NoError(t, err)
 		require.Equal(t, s1, a.SessionID, "keyed on the session")
@@ -722,7 +724,7 @@ func TestPeerAuthMatrix_Advisory(t *testing.T) {
 		require.False(t, isErr, "%v", items)
 		require.Len(t, items, 2)
 		require.Equal(t, "Read access to "+gmConf+" was approved until "+access.Clock(r.liveGrantFor(s1).ExpiresAt)+
-			", read-only. Content from "+gmConf+" may be copied into "+gmOpen+"'s memories, and nowhere else. This session "+
+			", read-only. Nothing read from "+gmConf+" may be written anywhere but "+gmOpen+". "+approval.CiteByReferenceLine(gmConf, gmOpen)+" This session "+
 			"now writes only into "+gmOpen+", for the rest of its life: a write to another project or the global scope is refused.", items[1])
 		r.reads(cli1, "the grantee session", conf, true)
 	})

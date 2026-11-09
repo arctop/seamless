@@ -149,6 +149,11 @@ type RecallInput struct {
 	// Project: the targets of its live read grants (isolation.requests). The
 	// caller has judged each with store.CanRead; nil is the old scope exactly.
 	Also []string
+	// Unbound marks a caller that names Project but speaks for no session
+	// (A2A). Under peer_auth it may not read a confidential or sealed project,
+	// which only a session bound to it can; with peer_auth off it changes
+	// nothing.
+	Unbound bool
 }
 
 type fusedItem struct {
@@ -352,12 +357,35 @@ func (s *Service) hydrate(ctx context.Context, ordered []string, acc map[string]
 // validity are both enforced inside the candidate queries, so the fused depth is
 // entirely in-scope and entirely live. With no embedder configured it degrades
 // to FTS only.
+func (s *Service) unboundFence(ctx context.Context, project string) error {
+	v, on := access.FromContext(ctx)
+	if !on || project == "" {
+		return nil
+	}
+	if _, leased := v.Lease(project); leased {
+		return nil
+	}
+	iso, err := store.IsolationOf(ctx, s.db, project)
+	if err != nil {
+		return fmt.Errorf("retrieve.Recall: %w", err)
+	}
+	if !iso.FencesOutbound() {
+		return nil
+	}
+	return fmt.Errorf("project %s is %s: reads require a session bound to it, and A2A speaks for no session", project, iso)
+}
+
 func (s *Service) Recall(ctx context.Context, in RecallInput) ([]Hit, error) {
 	// peer_auth: a project the caller's OS account may not read is refused here,
 	// whichever surface asked (MCP recall resolved the scope through its own
 	// fence first; A2A names it straight from the message metadata).
 	if !access.Visible(ctx, in.Project) {
 		return nil, access.Refusal(ctx, in.Project)
+	}
+	if in.Unbound {
+		if err := s.unboundFence(ctx, in.Project); err != nil {
+			return nil, err
+		}
 	}
 	kinds := recallScopeKinds(in.Scope)
 	if in.Kind != "" {

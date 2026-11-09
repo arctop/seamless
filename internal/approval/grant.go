@@ -56,6 +56,15 @@ func CopyIntoLine(target, from string) string {
 	return "content from " + target + " may be copied into " + from + "'s memories"
 }
 
+// CiteByReferenceLine is the instruction a read grant's holder gets for
+// writing up its work in the project it asked from. CopyIntoLine stays the
+// owner's warning, because nothing inspects what the agent writes; this is
+// what the agent is asked to do.
+func CiteByReferenceLine(target, from string) string {
+	return "When you document this work in " + from + " (task details, memories, notes, findings), refer to " + target +
+		"'s items by reference -- project slug plus the item's name or id -- and leave out " + target + "'s confidential details."
+}
+
 var (
 	// ErrNotConfidential is a read grant asked for a project that is not
 	// confidential: an open project needs none, and a sealed one is never

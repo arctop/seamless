@@ -249,7 +249,9 @@ curl -s -X POST http://127.0.0.1:8081/api/a2a \
 There is no session binding on this surface: scope comes entirely from message
 metadata. `metadata.project` widens the search from global-only to a project
 plus global, `metadata.scope` narrows the kinds (`all|memories|notes`), and
-`metadata.limit` caps the hits. The rest of A2A - tasks, streaming, push
+`metadata.limit` caps the hits. Under `peer_auth`, naming a confidential or
+sealed project is refused, because this surface speaks for no session. The rest
+of A2A - tasks, streaming, push
 notifications - is deliberately absent, and the card declares every one of
 those capabilities false rather than advertising an operation that would fail.
 

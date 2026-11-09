@@ -491,7 +491,9 @@ completed message - a text summary plus a data part carrying the same
 <p>There is no session binding on this surface: scope comes entirely from message
 metadata. <code>metadata.project</code> widens the search from global-only to a project
 plus global, <code>metadata.scope</code> narrows the kinds (<code>all|memories|notes</code>), and
-<code>metadata.limit</code> caps the hits. The rest of A2A - tasks, streaming, push
+<code>metadata.limit</code> caps the hits. Under <code>peer_auth</code>, naming a confidential or
+sealed project is refused, because this surface speaks for no session. The rest
+of A2A - tasks, streaming, push
 notifications - is deliberately absent, and the card declares every one of
 those capabilities false rather than advertising an operation that would fail.</p>
 <h2 id="skills-over-the-web">Skills over the web</h2>

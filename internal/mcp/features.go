@@ -6,6 +6,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/features"
 	"github.com/arctop/seamless/internal/store"
@@ -67,6 +68,9 @@ func (s *Server) researchEnabled(ctx context.Context) bool {
 // Registration is untouched by all of this. ToolCount stays the registered count
 // and Catalog() stays full; only the live list shrinks.
 func (s *Server) exposedTools(ctx context.Context, tools []mcp.Tool) []mcp.Tool {
+	if access.AccountOf(ctx) != "" {
+		tools = restrictedToolText(tools)
+	}
 	hidden := features.HiddenTools(s.effectiveFeatures(ctx))
 	if len(hidden) == 0 {
 		return tools

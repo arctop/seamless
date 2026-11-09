@@ -93,6 +93,10 @@ type Config struct {
 	// (the locked notice and its automatic request, the lease expiry
 	// warnings); nil changes nothing.
 	Approvals Approvals
+	// ReadGrants is isolation.requests: a capture by a holder a read grant
+	// confined elsewhere is refused (captureConfined). Off, no capture looks
+	// at a grant.
+	ReadGrants bool
 	// Now is the clock the lease expiry warnings read; nil means time.Now.
 	Now    func() time.Time
 	Logger *slog.Logger
@@ -124,6 +128,7 @@ type Handler struct {
 	screening     *screening.Service
 	revokeLeases  func(ctx context.Context, sessionID string) (int64, error)
 	approvals     Approvals
+	readGrants    bool
 	now           func() time.Time
 	logger        *slog.Logger
 }
@@ -146,7 +151,7 @@ func NewHandler(cfg Config) *Handler {
 		apiKey: cfg.APIKey, maxEventChars: cfg.MaxEventChars,
 		planCapture: cfg.PlanCapture, plansDir: cfg.PlansDir,
 		localHost: strings.ToLower(strings.TrimSpace(cfg.LocalHost)),
-		features:  cfg.Features, screening: cfg.Screening, revokeLeases: cfg.RevokeSessionLeases, approvals: cfg.Approvals, now: cfg.Now, logger: cfg.Logger,
+		features:  cfg.Features, screening: cfg.Screening, revokeLeases: cfg.RevokeSessionLeases, approvals: cfg.Approvals, readGrants: cfg.ReadGrants, now: cfg.Now, logger: cfg.Logger,
 	}
 }
 

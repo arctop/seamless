@@ -168,7 +168,7 @@ nothing:
 
 ```text
 project example-finance is confidential: reads require a session bound to it -- ...
-Remedy: read request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console's Access requests page; retry once it is approved. An approved read is read-only, and confines this session's writes to example-ops for the rest of its life.
+Remedy: read request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console's Access requests page; retry once it is approved. An approved read is read-only, and confines this session's writes to example-ops for the rest of its life. When you document this work in example-ops (task details, memories, notes, findings), refer to example-finance's items by reference -- project slug plus the item's name or id -- and leave out example-finance's confidential details.
 ```
 
 An agent can also ask explicitly, with its reason, from its own shell:
@@ -214,6 +214,15 @@ life: no writes to other projects, and none to the global scope. Its next tool
 result says so, and the confinement is recorded as an event. Expiry and
 revocation end the read, never the confinement - what was read stays read.
 
+**Writing up the work.** The session documents what it did in the project it
+asked from: task details, memories, notes and findings there stay open to it,
+during the grant and after it. The grant tells the agent to cite the
+confidential project by reference, with the project slug and the item's name or
+id, and to leave that project's confidential details out. That is an instruction
+to the agent, not a filter, which is why the line you approve still says content
+may be copied. A plan or planning-subagent report captured from a directory that
+belongs to any other project is dropped, and the agent is told why.
+
 **How much an approval proves.** Without `peer_auth` the approval is
 **advisory**: `seam approve` asks for a y/N in a terminal (it refuses to run
 without one) and commits over the console with the bearer key, and the
@@ -237,9 +246,11 @@ tool reads and writes, the gardener. That is where accidental cross-contaminatio
 actually happens, and it is now closed.
 
 **What this is not.** It is **not** a defense against a local agent reading
-`~/.seamless/memory/<project>/*.md` directly. A2A's recall names its scope in
-the request's `metadata.project`, and the fence does not judge it there: the
-bearer key can read a confidential project that way. Every MCP caller shares one static
+`~/.seamless/memory/<project>/*.md` directly. Without `peer_auth`, A2A's recall
+names its scope in the request's `metadata.project`, and the fence does not
+judge it there: the bearer key can read a confidential project that way. Under
+`peer_auth` A2A speaks for no session, so it refuses a confidential or sealed
+project. Every MCP caller shares one static
 bearer key, and the fence keys off the **self-reported session binding** - an
 explicit `session_start`, or the agent-process identity a Claude Code or Codex
 agent's `seam` transport sends, which is just as self-reported

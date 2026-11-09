@@ -199,8 +199,10 @@ build:
 test:
 	$(GO) test $(PKG)
 
+# go test's default limit is 10 minutes per package; internal/console alone has
+# taken about 9 under the race detector in CI.
 test-race:
-	$(GO) test -race $(PKG)
+	$(GO) test -race -timeout 20m $(PKG)
 
 # The defaults row of plan seamless-sealed-unlock: with peer_auth and
 # isolation.requests off, every agent surface must match the golden written on

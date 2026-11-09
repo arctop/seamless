@@ -243,7 +243,7 @@ func TestMessageSend_RepliesWithHits(t *testing.T) {
 	require.Nil(t, rpcErr)
 
 	// The recall was scoped by the metadata.
-	require.Equal(t, retrieve.RecallInput{Query: "boot race", Project: "demo", Scope: "all", Limit: 5}, stub.in)
+	require.Equal(t, retrieve.RecallInput{Query: "boot race", Project: "demo", Scope: "all", Limit: 5, Unbound: true}, stub.in)
 
 	var msg Message
 	require.NoError(t, json.Unmarshal(result, &msg))

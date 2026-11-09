@@ -807,6 +807,8 @@ session with <code>session=</code>, writes where that session may, past the gran
 confinement. Under peer_auth the holder is the process tree, and the same moves are
 refused. Use the advisory tier to keep an agent from wandering into a confidential
 project, not against one set on it.</p>
+<p>A2A speaks for no session, so under peer_auth it refuses a <code>confidential</code> or
+<code>sealed</code> project unless the caller holds a lease on it.</p>
 <h2 id="restricted-local-accounts">Restricted local accounts</h2>
 <p>A <strong>restricted local account</strong> is a second OS account on the machine whose
 agents work beside yours: a separate login for unattended agents, say, so that

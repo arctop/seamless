@@ -416,6 +416,32 @@ func AccessGrantsForHolder(ctx context.Context, db *sql.DB, processKeys []string
 	return out, nil
 }
 
+// HolderGrants judges the read grants of the holder ctx speaks for: the
+// owner's socket process chain under peer_auth (a TCP request or a restricted
+// account holds none), else sessionID. Every surface that confines or opens by
+// a grant reads it here, so they cannot disagree about who holds one.
+func HolderGrants(ctx context.Context, db *sql.DB, sessionID string, now time.Time) (access.Grants, error) {
+	var keys []string
+	if v, hasView := access.FromContext(ctx); hasView {
+		p := v.Principal()
+		if p.Kind != access.KindOwner || !p.HasProcess {
+			return access.Grants{}, nil
+		}
+		if keys = p.ChainKeys(); len(keys) == 0 {
+			return access.Grants{}, nil
+		}
+		sessionID = ""
+	}
+	rows, err := AccessGrantsForHolder(ctx, db, keys, sessionID)
+	if err != nil {
+		return access.Grants{}, err
+	}
+	if len(rows) == 0 {
+		return access.Grants{}, nil
+	}
+	return access.JudgeGrants(ctx, sessionID, now, AccessGrants(rows)), nil
+}
+
 // LiveAccessGrants returns every grant live at now, soonest to end first: the
 // access page's list, each with Revoke.
 func LiveAccessGrants(ctx context.Context, db *sql.DB, now time.Time) ([]AccessGrant, error) {

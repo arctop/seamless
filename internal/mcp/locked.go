@@ -162,14 +162,7 @@ func deniedRequest(err error) (access.LockRequest, bool) {
 
 // chainKeys are the lease keys of the view's kernel-verified process chain.
 func chainKeys(v access.View) []string {
-	chain := v.Principal().Chain
-	keys := make([]string, 0, len(chain))
-	for _, t := range chain {
-		if k := t.Key(); k != "" {
-			keys = append(keys, k)
-		}
-	}
-	return keys
+	return v.Principal().ChainKeys()
 }
 
 // lockedBinding returns the binding a call would have but for a lock: the

@@ -116,6 +116,9 @@ func (h *Handler) fenceNotePush(ctx context.Context, client Client, reach sessio
 			return "", pushVerdict{notice: crossProjectNotice(what, project)}
 		}
 	}
+	if refusal := h.captureConfined(ctx, client, sessionID, project, what); refusal != "" {
+		return "", pushVerdict{notice: refusal}
+	}
 	return project, pushVerdict{ok: true}
 }
 

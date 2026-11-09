@@ -54,7 +54,7 @@ func (s *Server) handleTasksAdd(ctx context.Context, req mcp.CallToolRequest) (*
 	if err != nil {
 		return errResult("tasks_add", err)
 	}
-	if err := s.restrictedDeps(ctx, argStrings(req, "depends_on")); err != nil {
+	if err := s.reachableDeps(ctx, argStrings(req, "depends_on")); err != nil {
 		return errResult("tasks_add", err)
 	}
 	id, err := core.NewID()
@@ -130,7 +130,7 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 		patch.ProjectSlug = &project
 	}
 	patch.AddDependsOn = argStrings(req, "add_depends_on")
-	if err := s.restrictedDeps(ctx, patch.AddDependsOn); err != nil {
+	if err := s.reachableDeps(ctx, patch.AddDependsOn); err != nil {
 		return errResult("tasks_update", err)
 	}
 	commits, err := s.commitsArg(req)
@@ -743,22 +743,26 @@ func (s *Server) taskByIDFor(ctx context.Context, id string) (core.Task, error) 
 	return t, err
 }
 
-// restrictedDeps refuses, for a restricted account, a dependency on a task it
-// may not reach: an edge to it would put that task's title in the account's
-// tasks_ready. A missing task gets the same text, checked here first, so the
-// refusal never tells the account the task exists. Everyone else's
-// dependencies are checked by the store alone, as before.
-func (s *Server) restrictedDeps(ctx context.Context, deps []string) error {
-	if access.AccountOf(ctx) == "" {
+// reachableDeps refuses a dependency on a task the caller may not reach under
+// peer_auth: a restricted account's closed projects, and a project locked to
+// this connection. An edge to such a task would confirm its id exists and let
+// the caller watch it close, and for a restricted account would put its title
+// in tasks_ready. A missing task gets the same text, so the refusal never
+// tells the two apart. With peer_auth off the store alone checks dependencies,
+// as before; confidential projects are not judged here.
+func (s *Server) reachableDeps(ctx context.Context, deps []string) error {
+	if _, on := access.FromContext(ctx); !on {
 		return nil
 	}
 	for _, dep := range deps {
-		if _, err := s.taskByIDFor(ctx, dep); err != nil {
-			if errors.Is(err, store.ErrTaskNotFound) {
-				return fmt.Errorf("depends_on %q: %w", dep, store.ErrTaskNotFound)
-			}
-			return err
+		t, err := store.TaskByID(ctx, s.cfg.DB, dep)
+		if err == nil && access.Visible(ctx, t.ProjectSlug) {
+			continue
 		}
+		if err == nil || errors.Is(err, store.ErrTaskNotFound) {
+			return fmt.Errorf("depends_on %q: %w", dep, store.ErrTaskNotFound)
+		}
+		return err
 	}
 	return nil
 }

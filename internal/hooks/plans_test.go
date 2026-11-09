@@ -59,6 +59,13 @@ func (b *logBuffer) String() string {
 
 func newCaptureEnv(t *testing.T, pc config.PlanCapture) *captureEnv {
 	t.Helper()
+	return newCaptureEnvWith(t, pc, nil)
+}
+
+// newCaptureEnvWith is newCaptureEnv with change applied to the handler's
+// config.
+func newCaptureEnvWith(t *testing.T, pc config.PlanCapture, change func(*Config)) *captureEnv {
+	t.Helper()
 	dir := t.TempDir()
 	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
@@ -75,11 +82,15 @@ func newCaptureEnv(t *testing.T, pc config.PlanCapture) *captureEnv {
 	rec := events.NewRecorder(db)
 	ret := retrieve.New(db, nil, config.Budgets{MaxBriefingTokens: 1500, RecallBudgetTokens: 1000}, nil)
 	logs := &logBuffer{}
-	h := NewHandler(Config{
+	cfg := Config{
 		DB: db, Retrieve: ret, Events: rec, Files: mgr,
 		APIKey: testKey, PlanCapture: pc, PlansDir: plansDir,
 		Logger: slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-	})
+	}
+	if change != nil {
+		change(&cfg)
+	}
+	h := NewHandler(cfg)
 	mux := http.NewServeMux()
 	h.Register(mux)
 	ts := httptest.NewServer(mux)

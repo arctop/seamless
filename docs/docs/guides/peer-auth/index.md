@@ -531,6 +531,9 @@ confinement. Under peer_auth the holder is the process tree, and the same moves 
 refused. Use the advisory tier to keep an agent from wandering into a confidential
 project, not against one set on it.
 
+A2A speaks for no session, so under peer_auth it refuses a `confidential` or
+`sealed` project unless the caller holds a lease on it.
+
 ## Restricted local accounts
 
 A **restricted local account** is a second OS account on the machine whose

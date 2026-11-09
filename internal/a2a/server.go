@@ -206,7 +206,9 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request, id json.RawM
 	}
 	// With no project named a request recalls the global scope, a restricted
 	// local account's included: it has no home project, and reads the global
-	// scope. A project named here is judged by retrieve.Recall's fence.
+	// scope. A project named here is judged by retrieve.Recall's fence, and
+	// under peer_auth a confidential or sealed one is refused: a request here
+	// speaks for no session (Unbound).
 	if scopePresent && !slices.Contains(retrieve.RecallScopes, scope) {
 		s.writeError(w, id, codeInvalidParams,
 			"metadata.scope must be one of "+strings.Join(retrieve.RecallScopes, "|"))
@@ -219,7 +221,7 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request, id json.RawM
 	}
 
 	hits, err := s.cfg.Retrieve.Recall(r.Context(), retrieve.RecallInput{
-		Query: query, Project: project, Scope: scope, Limit: limit,
+		Query: query, Project: project, Scope: scope, Limit: limit, Unbound: true,
 	})
 	if err != nil {
 		s.logger.Warn("a2a: recall", "error", err)

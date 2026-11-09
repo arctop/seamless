@@ -890,3 +890,27 @@ func TestRestricted_TasksByIDAndDependencies(t *testing.T) {
 	require.Equal(t, []any{closed}, task["depends_on"])
 	require.NotContains(t, task, "depends_on_withheld")
 }
+
+// A restricted account's tool list tells it what it may do with a project
+// slug, and producing that list changes nothing the owner sees.
+func TestRestrictedAccountSeesItsOwnToolText(t *testing.T) {
+	r := newWkRig(t)
+	list := func(cli *mcpclient.Client) string {
+		res, err := cli.ListTools(context.Background(), mcp.ListToolsRequest{})
+		require.NoError(t, err)
+		raw, err := json.Marshal(res.Tools)
+		require.NoError(t, err)
+		return string(raw)
+	}
+	before := list(r.owner(""))
+	restricted := list(r.acct(""))
+	require.Equal(t, before, list(r.owner("")), "the shared list is copied, never written through")
+
+	require.Contains(t, before, "An unknown slug CREATES that project")
+	for _, promise := range []string{"An unknown slug CREATES", "creates that project", "already registers that project"} {
+		require.NotContains(t, restricted, promise)
+	}
+	require.Contains(t, restricted, "an unknown slug is refused, never created")
+	require.Contains(t, restricted, "an unknown slug is refused for this restricted account")
+	require.Contains(t, restricted, "Not available to this restricted account")
+}

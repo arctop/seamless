@@ -176,9 +176,14 @@ func (h *Handler) captureSubagent(ctx context.Context, p subagentPayload, reach 
 	}
 	if p.Capture == nil {
 		prompt, report, ok := h.subagentReportFromDisk(ctx, p)
-		if ok {
-			h.writeSubagentNote(ctx, p, meta, h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD), prompt, report)
+		if !ok {
+			return ""
 		}
+		project := h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD)
+		if refusal := h.captureConfined(ctx, ClientClaudeCode, p.ParentSessionID, project, "this subagent's report"); refusal != "" {
+			return refusal
+		}
+		h.writeSubagentNote(ctx, p, meta, project, prompt, report)
 		return ""
 	}
 	if p.Capture.Prompt == "" && p.Capture.Report == "" {

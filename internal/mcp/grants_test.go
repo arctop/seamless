@@ -237,7 +237,7 @@ func TestGrants_OnRefusalNamesTheRequest(t *testing.T) {
 	// A confidential asker may ask too; its remedy says where content may go.
 	legal := r.bind(gLegal, "cc/legal")
 	text := r.refused(legal, "recall", map[string]any{"query": "ledger", "project": gFin})
-	require.Contains(t, text, "content from example-finance may be copied into example-legal's memories and nowhere else")
+	require.Contains(t, text, "nothing read from example-finance may be written anywhere but example-legal")
 
 	// Never offered: a sealed target, a sealed asker. The refusal stays final.
 	before := r.count(`SELECT COUNT(*) FROM access_approvals`)
@@ -265,7 +265,9 @@ func TestGrants_OnApprovedGrantReadsOneProjectAndConfinesWrites(t *testing.T) {
 	require.Len(t, items, 2)
 	require.Contains(t, items[0], "quarterly ledger reconciliation notes", "the grant reads the target")
 	require.Contains(t, items[1], "Read access to example-finance was approved until")
-	require.Contains(t, items[1], "Content from example-finance may be copied into example-ops's memories")
+	require.Contains(t, items[1], "Nothing read from example-finance may be written anywhere but example-ops.")
+	require.Contains(t, items[1], "refer to example-finance's items by reference")
+	require.NotContains(t, items[1], "may be copied")
 	require.Contains(t, items[1], "This session now writes only into example-ops, for the rest of its life")
 	items, _ = r.call(ops, "memory_read", map[string]any{"id": r.finMem})
 	require.Len(t, items, 1, "announced once")
@@ -492,3 +494,39 @@ func TestGrants_PeerTierDaemonProof(t *testing.T) {
 }
 
 var lkOther = access.ProcessToken{PID: 500, Version: 5000, Boot: lkBoot}
+
+// The case a read grant exists for: an agent working a task in its own project
+// needs a confidential project's knowledge, asks, the owner approves, and the
+// agent writes up the work in that task. The write-up stays open to it after
+// the grant ends, the grant tells it to cite the project by reference, and
+// nothing else opens.
+func TestGrants_HolderDocumentsItsWorkInTheAskingProject(t *testing.T) {
+	r := newGrantRig(t, true)
+	ops := r.bind(gOps, "cc/ops")
+	hr := r.bind(gHR, "cc/hr")
+	task := r.ok(ops, "tasks_add", map[string]any{"title": "reconcile the quarter", "plan": "close-the-books"})["id"].(string)
+	elsewhere := r.ok(hr, "tasks_add", map[string]any{"title": "an hr task"})["id"].(string)
+
+	const cite = "When you document this work in example-ops (task details, memories, notes, findings), refer to " +
+		"example-finance's items by reference -- project slug plus the item's name or id -- and leave out " +
+		"example-finance's confidential details."
+	text := r.refused(ops, "recall", map[string]any{"query": "ledger reconciliation", "project": gFin})
+	require.Contains(t, text, cite, "the instruction arrives with the request")
+	r.approveKey(gShort.FindString(text), approval.For1h)
+
+	items, isErr := r.call(ops, "notes_read", map[string]any{"id": r.finNote})
+	require.False(t, isErr, "%v", items)
+	require.Len(t, items, 2)
+	require.Contains(t, items[1], cite, "and with the approval")
+
+	const writeUp = "Reconciled against example-finance:quarterly-ledger-notes."
+	require.Equal(t, writeUp, r.ok(ops, "tasks_update", map[string]any{"id": task, "body": writeUp})["body"])
+	r.ok(ops, "memory_write", map[string]any{"name": "quarter-closed", "kind": "reference", "description": "d", "body": writeUp + "\n"})
+	r.ok(ops, "notes_create", map[string]any{"title": "close notes", "body": writeUp})
+
+	require.Contains(t, r.refused(ops, "tasks_update", map[string]any{"id": elsewhere, "body": "x"}),
+		"so it writes only into example-ops", "another project's task stays closed to it")
+
+	r.advance(2 * time.Hour)
+	r.ok(ops, "tasks_update", map[string]any{"id": task, "body": writeUp + " Closed."})
+}

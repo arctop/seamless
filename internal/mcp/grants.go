@@ -104,31 +104,15 @@ func (s *Server) grantsMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.Tool
 // socket process chain under peer_auth (a TCP request or a restricted account
 // holds none), else the bound session.
 func (s *Server) loadGrants(ctx context.Context) (access.Grants, error) {
-	v, hasView := access.FromContext(ctx)
-	var keys []string
 	sessionID := ""
-	if hasView {
-		if v.Principal().Kind != access.KindOwner || !v.Principal().HasProcess {
-			return access.Grants{}, nil
-		}
-		if keys = chainKeys(v); len(keys) == 0 {
-			return access.Grants{}, nil
-		}
-	} else {
+	if _, hasView := access.FromContext(ctx); !hasView {
 		b, ok := s.getBinding(ctx)
 		if !ok || b.sessionID == "" {
 			return access.Grants{}, nil
 		}
 		sessionID = b.sessionID
 	}
-	rows, err := store.AccessGrantsForHolder(ctx, s.cfg.DB, keys, sessionID)
-	if err != nil {
-		return access.Grants{}, err
-	}
-	if len(rows) == 0 {
-		return access.Grants{}, nil
-	}
-	return access.JudgeGrants(ctx, sessionID, s.now(), store.AccessGrants(rows)), nil
+	return store.HolderGrants(ctx, s.cfg.DB, sessionID, s.now())
 }
 
 // grantRequestRefusal turns a read refused at a confidential project's fence
@@ -191,10 +175,11 @@ func (s *Server) grantRefusal(rule error, a store.AccessApproval, confines bool,
 		how = fmt.Sprintf("the owner approves it in their own terminal with `seam approve %s`, or with Approve on the "+
 			"console's Access requests page", short)
 	}
-	brings := "An approved read is read-only, and " + approval.CopyIntoLine(a.Project, a.FromProject) + " and nowhere else."
+	cite := approval.CiteByReferenceLine(a.Project, a.FromProject)
+	brings := "An approved read is read-only, and nothing read from " + a.Project + " may be written anywhere but " + a.FromProject + ". " + cite
 	if confines {
-		brings = fmt.Sprintf("An approved read is read-only, and confines this %s's writes to %s for the rest of its life.",
-			s.holderWord(), a.FromProject)
+		brings = fmt.Sprintf("An approved read is read-only, and confines this %s's writes to %s for the rest of its life. %s",
+			s.holderWord(), a.FromProject, cite)
 	}
 	return fmt.Errorf("%w\nRemedy: read request %s is waiting -- %s; retry once it is approved. %s", rule, short, how, brings)
 }
@@ -212,8 +197,8 @@ func (s *Server) holderWord() string {
 // sees it: what was approved, until when, and the confinement that came with
 // it.
 func (s *Server) grantNews(ctx context.Context, l access.Grant) string {
-	head := fmt.Sprintf("Read access to %s was approved until %s, read-only. %s, and nowhere else.",
-		l.Project, access.Clock(l.Expires), capitalize(approval.CopyIntoLine(l.Project, l.From)))
+	head := fmt.Sprintf("Read access to %s was approved until %s, read-only. Nothing read from %s may be written anywhere but %s. %s",
+		l.Project, access.Clock(l.Expires), l.Project, l.From, approval.CiteByReferenceLine(l.Project, l.From))
 	iso, err := store.IsolationOf(ctx, s.cfg.DB, l.From)
 	if err != nil || iso != core.IsolationOpen {
 		return head
@@ -233,13 +218,6 @@ func (s *Server) confinedRefusal(ctx context.Context, target string) error {
 	}
 	return fmt.Errorf("this %s was granted a read of another project, so it writes only into %s for the rest of its life: "+
 		"a write into %s is refused", s.holderWord(), strings.Join(confined, ", "), where)
-}
-
-func capitalize(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // claimGrant records a grant as announced and reports whether this call is

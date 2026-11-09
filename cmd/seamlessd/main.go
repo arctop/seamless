@@ -568,6 +568,7 @@ func runServe(args []string) error {
 		APIKey: cfg.MCP.APIKey, MaxEventChars: cfg.Budgets.ToolEventMaxChars,
 		PlanCapture: cfg.PlanCapture, LocalHost: config.Hostname(), Logger: logger,
 		Features: cfg.Features, Screening: screen, RevokeSessionLeases: revokeLeases, Approvals: hookApprovals,
+		ReadGrants: cfg.Isolation.Requests,
 	})
 	// The console reads through a handle on which locked projects do not
 	// exist, when there are any (store.OpenView); its writes go to the main

@@ -267,7 +267,7 @@ func newGMRig(t *testing.T, peer, requests bool) *gmRig {
 	require.NoError(t, err)
 	hooksH := hooks.NewHandler(hooks.Config{
 		DB: db, Retrieve: ret, Events: r.rec, Files: mgr, APIKey: gmKey, LocalHost: gmHost,
-		Features: feats, Screening: screen, RevokeSessionLeases: revoke, Approvals: hookApprovals, Now: r.clock.Now,
+		Features: feats, Screening: screen, RevokeSessionLeases: revoke, Approvals: hookApprovals, ReadGrants: requests, Now: r.clock.Now,
 	})
 	consoleDB, consoleEvents := db, r.rec
 	var consoleWriteDB *sql.DB

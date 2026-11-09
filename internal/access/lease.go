@@ -59,6 +59,17 @@ func (t ProcessToken) Key() string {
 	return t.Boot + ":" + strconv.FormatInt(int64(t.PID), 10) + ":" + strconv.FormatUint(t.Version, 10)
 }
 
+// ChainKeys are the keys of p's kernel-verified process chain.
+func (p Principal) ChainKeys() []string {
+	keys := make([]string, 0, len(p.Chain))
+	for _, t := range p.Chain {
+		if k := t.Key(); k != "" {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
 // String renders the token for logs: the key.
 func (t ProcessToken) String() string { return t.Key() }
 
