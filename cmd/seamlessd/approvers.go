@@ -39,7 +39,8 @@ const approversUsage = `usage: seamlessd approvers <verb>
 Approver credentials sign the owner's approvals of access to locked projects
 (peer_auth.locked). Run these as the daemon's own account.
 
-  enroll-code <passkey|touchid>   mint a one-time enrollment code, valid for 10 minutes
+  enroll-code <passkey|touchid> --key <fingerprint>
+                                  mint a one-time enrollment code for one key, valid for 10 minutes
   list [--json]                   list the enrolled credentials
   remove <id>                     remove one credential
   reset --yes                     remove every credential and revoke every live lease
@@ -77,11 +78,11 @@ func approvers(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writer
 // `approvers list` and doctor: a passkey with a code minted as the daemon's
 // account and, where the daemon runs on a Mac and serves the peer_auth socket
 // the Touch ID app talks over, this Mac's Touch ID with `seam touchid enroll`
-// in the owner's own terminal (it prints the command that mints its code).
+// in the owner's own terminal (its window shows the command that mints its code).
 func firstApproverAdvice(goos string, peerAuth bool) string {
-	s := "mint a code with `seamlessd approvers enroll-code passkey`, run as the daemon's account"
+	s := "create a passkey on the console's Approvers page, which shows the command that mints its code"
 	if goos == "darwin" && peerAuth {
-		s += "; or, for this Mac's Touch ID, run `seam touchid enroll` in the owner's own terminal, which prints the command that mints its code"
+		s += "; or, for this Mac's Touch ID, run `seam touchid enroll` in the owner's own terminal, whose window shows the command that mints its code"
 	}
 	return s
 }
@@ -91,25 +92,39 @@ func approversOn(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writ
 	verb, rest := args[0], args[1:]
 	switch verb {
 	case "enroll-code":
-		if len(rest) != 1 {
-			return fmt.Errorf("enroll-code takes one kind: %s", strings.Join(store.ApproverKinds, " or "))
+		if len(rest) == 0 {
+			return fmt.Errorf("enroll-code takes one kind and --key: %s", strings.Join(store.ApproverKinds, " or "))
 		}
 		kind := rest[0]
 		if !slices.Contains(store.ApproverKinds, kind) {
 			return fmt.Errorf("invalid kind %q: valid kinds are %s", kind, strings.Join(store.ApproverKinds, ", "))
 		}
-		code, expires, err := store.MintEnrollCode(ctx, db, kind, now)
+		fs := flag.NewFlagSet("approvers enroll-code", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		key := fs.String("key", "", "the fingerprint of the key this code enrolls")
+		if err := fs.Parse(rest[1:]); err != nil {
+			return fmt.Errorf("enroll-code: %w", err)
+		}
+		if fs.NArg() > 0 || *key == "" {
+			return errors.New("enroll-code needs --key <fingerprint>: a code enrolls one key. " +
+				"The console's Approvers page shows the command for a new passkey, and the Seamless Approve window for a Touch ID key")
+		}
+		fingerprint := store.FormatKeyFingerprint(*key)
+		if fingerprint == "" {
+			return fmt.Errorf("invalid value %q for --key: a key fingerprint looks like XXXX-XXXX-XXXX-XXXX", *key)
+		}
+		code, expires, err := store.MintEnrollCode(ctx, db, kind, fingerprint, now)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "Enrollment code (%s): %s\n", kind, code)
-		fmt.Fprintf(out, "It works once, until %s (%d minutes).\n", expires.Local().Format("15:04"), int(store.EnrollCodeTTL/time.Minute))
+		fmt.Fprintf(out, "Enrollment code (%s) for key %s: %s\n", kind, fingerprint, code)
+		fmt.Fprintf(out, "It works once, until %s (%d minutes), and only for that key. Check that key against the one on your screen.\n",
+			expires.Local().Format("15:04"), int(store.EnrollCodeTTL/time.Minute))
 		switch kind {
 		case store.ApproverPasskey:
-			_, origins := cfg.RelyingParty()
-			fmt.Fprintf(out, "Open %s/console/approvers in the owner's browser and enter it there.\n", origins[0])
+			fmt.Fprintln(out, "Enter it on the console's Approvers page, where the new passkey is waiting.")
 		case store.ApproverTouchID:
-			fmt.Fprintln(out, "Type it into the Seamless Approve dialog that `seam touchid enroll` opens, in the owner's session on this Mac.")
+			fmt.Fprintln(out, "Type it into the Seamless Approve window that showed this key, in the owner's session on this Mac.")
 		}
 		if len(cfg.PeerAuth.Locked) == 0 && !cfg.Isolation.Requests {
 			fmt.Fprintln(out, "Note: peer_auth.locked lists no project yet, so nothing asks for an approval.")

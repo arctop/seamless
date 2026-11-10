@@ -289,15 +289,16 @@ public enum Prompts {
     /// in (store.MintEnrollCode).
     public static let codeShape = "XXXX-XXXX-XXXX-XXXX"
 
-    /// `enrollCode` asks for the one-time code that `command` mints.
-    /// `problem` says what was wrong with the last code typed.
-    public static func enrollCode(command: String, problem: String?) -> Prompt {
+    /// `enrollCode` asks for the one-time code that `command` mints for this
+    /// Mac's new key, `key` (its fingerprint). `problem` says what was wrong
+    /// with the last code typed.
+    public static func enrollCode(command: String, key: String, problem: String?) -> Prompt {
         var body = ""
         if let problem = problem, !problem.isEmpty {
             body += Text.sentence(problem) + "\n\n"
         }
-        body += "Run this command in your own terminal. It asks for your password, then prints a one-time enrollment code. "
-        body += "Type the code below, with or without its dashes. A code works once, for 10 minutes."
+        body += "Run this command in your own terminal, one your agents cannot read. It asks for your password, then prints a one-time enrollment code for this Mac's new key, \(key). "
+        body += "Check that the key it prints is this one, then type the code below, with or without its dashes. The code works once, for 10 minutes, and only for this key."
         return Prompt(title: "Enroll this Mac's Touch ID with Seamless", body: body, setApart: [command],
                       placeholder: codeShape, accept: "Enroll", cancel: "Cancel")
     }

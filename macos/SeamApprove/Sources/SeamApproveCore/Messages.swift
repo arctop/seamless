@@ -51,6 +51,32 @@ public enum Messages {
         normalized.unicodeScalars.count == 16 && normalized.unicodeScalars.allSatisfy { Validate.crockford.contains($0) }
     }
 
+    /// `keyFingerprint` is how the owner names a new key when minting its
+    /// enrollment code (store.ApproverKeyFingerprint): SHA-256 of the raw
+    /// public key, its first 80 bits as 16 Crockford symbols, printed
+    /// XXXX-XXXX-XXXX-XXXX. A code is minted for this key alone, so one read
+    /// off the owner's terminal cannot enroll any other.
+    public static func keyFingerprint(publicKey: Data) -> String {
+        let symbols = Array("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
+        var out = ""
+        var written = 0
+        var acc: UInt32 = 0
+        var bits: UInt32 = 0
+        for byte in SHA256.hash(data: publicKey) where written < 16 {
+            acc = (acc << 8) | UInt32(byte)
+            bits += 8
+            while bits >= 5 && written < 16 {
+                bits -= 5
+                if written > 0 && written % 4 == 0 {
+                    out.append("-")
+                }
+                out.append(symbols[Int((acc >> bits) & 31)])
+                written += 1
+            }
+        }
+        return out
+    }
+
     /// TouchIDEnrollMessage(code, publicKey): the tag and a NUL, SHA-256 of
     /// the normalized code, then the raw public key.
     public static func touchIDEnrollMessage(code: String, publicKey: Data) throws -> Data {

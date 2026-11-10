@@ -1107,7 +1107,7 @@ removes just those members. <code>rm</code> is accepted as an alias for <code>re
 succeeds: the membership starts taking effect once an agent opens that repo and
 registers it.</p>
 <h2 id="seamlessd_approvers">seamlessd approvers</h2>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd approvers enroll-code &lt;passkey<span class="p">|</span>touchid&gt;
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd approvers enroll-code &lt;passkey<span class="p">|</span>touchid&gt; --key &lt;fingerprint&gt;
 </span></span><span class="line"><span class="cl">seamlessd approvers list <span class="o">[</span>--json<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seamlessd approvers remove &lt;id&gt;
 </span></span><span class="line"><span class="cl">seamlessd approvers reset --yes
@@ -1121,12 +1121,15 @@ the socket or with the TCP key, can mint a code or remove a credential, except
 that a Mac re-enrolling with <code>seam touchid enroll</code> retires its own earlier
 Touch ID key, which signs for it.</p>
 <ul>
-<li><code>enroll-code</code> mints a one-time enrollment code for one kind of credential. It
-works once, for 10 minutes; only its hash is stored. For a passkey, open the
-console's Approvers page (<code>/console/approvers</code>, on the passkey origin -
-<code>http://localhost:&lt;port&gt;</code> unless <code>peer_auth.passkeys</code> says otherwise) and
-enter it there. The first credential needs a code; a later passkey can be
-approved by one already enrolled instead.</li>
+<li><code>enroll-code</code> mints a one-time enrollment code for one key, named by its
+fingerprint (<code>--key</code>). It works once, for 10 minutes, only for that key; only
+its hash, which binds the key, is stored. You rarely type this by hand. For a
+passkey, create it on the console's Approvers page (<code>/console/approvers</code>, on the
+passkey origin - <code>http://localhost:&lt;port&gt;</code> unless <code>peer_auth.passkeys</code> says
+otherwise), which shows the command with the new key's fingerprint and takes the
+code. For a Touch ID key, the Seamless Approve window does the same. The first
+credential needs a code; a later passkey can be approved by one already enrolled
+instead.</li>
 <li><code>list</code> prints the enrolled credentials: id, kind, name, how each was enrolled
 and when it was last used. <code>--json</code> prints them as JSON.</li>
 <li><code>remove</code> deletes one credential. Leases it already approved are untouched.</li>
@@ -1136,8 +1139,8 @@ else's hands.</li>
 </ul>
 <p>With no credential enrolled, <code>seamlessd doctor</code> warns while a project is
 locked: only the terminal path can approve then. Both doctor and <code>list</code> say how
-to enroll one: a code from <code>enroll-code passkey</code>, run as the daemon's account,
-and, on a Mac whose daemon serves the <code>peer_auth</code> socket, <code>seam touchid enroll</code>
+to enroll one: the console's Approvers page, which shows the command for a
+passkey's code, and, on a Mac whose daemon serves the <code>peer_auth</code> socket, <code>seam touchid enroll</code>
 in your own terminal.</p>
 <h2 id="seamlessd_approve">seamlessd approve</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd approve &lt;request&gt; --for &lt;session<span class="p">|</span>1h<span class="p">|</span>4h&gt; --digest &lt;facts digest&gt;

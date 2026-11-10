@@ -118,9 +118,10 @@ public protocol KeyStore {
 
 /// What the flows ask the owner, in the helper's own dialogs.
 public protocol ApproverUI {
-    /// `enrollCode` asks for the one-time code; nil is a cancel. `problem`
-    /// says what was wrong with the last one typed.
-    func enrollCode(command: String, problem: String?) -> String?
+    /// `enrollCode` asks for the one-time code that `command` mints for the
+    /// new key `key` (its fingerprint); nil is a cancel. `problem` says what
+    /// was wrong with the last one typed.
+    func enrollCode(command: String, key: String, problem: String?) -> String?
     /// `confirmForget` asks before the key is deleted.
     func confirmForget(credentials: [String]) -> Bool
 }
@@ -217,9 +218,8 @@ public struct Flows {
             let account = try Plan.daemonAccount(list.terminal)
             try requireAccount(account, isPeer: got.peerUID, lookup: lookupAccount)
 
-            let code = try askCode(daemonCommand(list.terminal, account: account, verb: "enroll-code touchid"))
-            let label = name ?? Arguments.defaultApproverName(defaultName())
-
+            // The key comes first: the code is minted for it, by the
+            // fingerprint in the command this dialog shows.
             let older = try keys.keys()
             let (key, publicKey) = try keys.create()
             var enrolled = false
@@ -228,6 +228,10 @@ public struct Flows {
                     try? keys.delete(key)
                 }
             }
+            let fingerprint = Messages.keyFingerprint(publicKey: publicKey)
+            let code = try askCode(daemonCommand(list.terminal, account: account, verb: "enroll-code touchid --key " + fingerprint), key: fingerprint)
+            let label = name ?? Arguments.defaultApproverName(defaultName())
+
             let replacing = older.filter { $0.handle != key.handle && $0.credential != nil }
             var signings = [Signing(message: try Messages.touchIDEnrollMessage(code: code, publicKey: publicKey), key: key)]
             for old in replacing {
@@ -285,10 +289,10 @@ public struct Flows {
         }
     }
 
-    func askCode(_ command: String) throws -> String {
+    func askCode(_ command: String, key: String) throws -> String {
         var problem: String?
         for _ in 0..<5 {
-            guard let typed = ui.enrollCode(command: command, problem: problem) else {
+            guard let typed = ui.enrollCode(command: command, key: key, problem: problem) else {
                 throw ApproverError.cancelled("Not enrolled: cancelled.")
             }
             let normalized: String

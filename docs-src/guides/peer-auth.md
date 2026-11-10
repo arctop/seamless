@@ -281,20 +281,24 @@ daemon running with a project locked (or read grants on), so do it after the
 
 A first credential needs a one-time enrollment code, and only the daemon's
 account can mint one; no route, over the socket or with the TCP key, can. A code
-works once, for 10 minutes, and only its hash is stored. `seamlessd approvers`
+works once, for 10 minutes, and only its hash is stored. It is minted for one key,
+named by its fingerprint, so a code someone else reads cannot enroll a different
+key. `seamlessd approvers`
 also lists credentials and removes them, and `reset --yes` drops every credential
 and revokes every live lease
 ([reference](/reference/cli-seamlessd/#seamlessd_approvers)).
 
-**Passkeys** work with hardware keys, phones and password managers:
+**Passkeys** work with hardware keys, phones and password managers. Open
+`/console/approvers` on the passkey origin in your browser and create the passkey.
+The page then shows the command that mints a code for it:
 
 ```bash
 sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml \
-  /opt/seamless/bin/seamlessd approvers enroll-code passkey
+  /opt/seamless/bin/seamlessd approvers enroll-code passkey --key XXXX-XXXX-XXXX-XXXX
 ```
 
-Open `/console/approvers` on the passkey origin in your browser and enter the
-code there. The origin is `http://localhost:<port>` unless `peer_auth.passkeys`
+Run it in your own terminal, check that the key it prints is the one on the page,
+and enter the code there. The origin is `http://localhost:<port>` unless `peer_auth.passkeys`
 says otherwise, and browsers refuse passkeys on `127.0.0.1`. A later passkey can
 be approved by one already enrolled instead of a code. A passkey is bound to its
 `rp_id` for life: changing `rp_id` later strands every passkey enrolled under the
@@ -312,8 +316,9 @@ seam touchid enroll
 It installs your `seam`'s own release of the app
 (`seamless-approve_<version>_darwin.zip`, checked against the release's signed
 `checksums.txt` and against Apple's signature) at
-`~/Applications/Seamless Approve.app`, and prints the command that mints its
-code, to run in another terminal. Details, including how the app is checked and
+`~/Applications/Seamless Approve.app` and opens it. Its window shows the new key's
+fingerprint and the command that mints a code for that key, to run in another
+terminal. Details, including how the app is checked and
 how a Mac re-enrolls, are in the
 [CLI reference](/reference/cli-seam/#seam_touchid_enroll).
 
@@ -711,11 +716,12 @@ the locked notice, and `seam approve` in your own terminal shows its request.
   arrangement. Whoever holds the bearer key acts as the owner, and reaches every
   project but the locked ones. Backups of the data directory, and exports, hold
   every project: keep them as carefully as the most sensitive project in them.
-- **Anything running as you can watch your terminal.** An enrollment code and a
-  `console-open --unlock` link are shown once, and whoever uses one first gets what
-  it opens. Make them in a terminal your agents cannot read: a `tmux` server they
-  share lets them capture the pane. After enrolling, check that
-  `seamlessd approvers list` shows only what you enrolled.
+- **Anything running as you can watch your terminal.** A `console-open --unlock`
+  link is shown once, and whoever uses it first gets what it opens, so make it in a
+  terminal your agents cannot read: a `tmux` server they share lets them capture
+  the pane. An enrollment code enrolls only the key it was minted for, so being
+  read does not give it away, but your clipboard is reachable too: check that the
+  key the command prints is the one on your screen.
 - **Your shell is yours to guard.** Under peer_auth `seam approve` works only over
   the socket, and refuses one that the daemon's account does not serve, so a changed
   `server_url` cannot show it false facts. An agent running as you can still edit your shell's startup files, or

@@ -6,9 +6,11 @@ package store
 //
 //   - The first credential needs a one-time enrollment code. Only
 //     `seamlessd approvers enroll-code`, run as the daemon's own account,
-//     mints one (MintEnrollCode); no route does. The code is the secret: it is
-//     stored only as a hash, lives EnrollCodeTTL, and is consumed in the same
-//     transaction as the credential it enrolls.
+//     mints one (MintEnrollCode); no route does. A code is minted for one key,
+//     named by its fingerprint (ApproverKeyFingerprint), so a code read off the
+//     owner's terminal cannot enroll any other key. It is stored only as a hash
+//     that binds the fingerprint, lives EnrollCodeTTL, and is consumed in the
+//     same transaction as the credential it enrolls.
 //   - A later credential needs a code too, or the approval of an existing
 //     credential over a challenge that binds the new one. The caller verifies
 //     that assertion (internal/passkey); EnrollApprover checks the approving
@@ -62,8 +64,8 @@ const (
 
 var (
 	// ErrEnrollCode is an enrollment code that is absent, expired, already
-	// used, or minted for another kind. One error for all four, so a caller
-	// learns nothing about which.
+	// used, or minted for another kind or another key. One error for all five,
+	// so a caller learns nothing about which.
 	ErrEnrollCode = errors.New("enrollment code is not valid")
 	// ErrEnrollProof is an enrollment with no proof (or two): it needs exactly
 	// one of a code or an existing credential's approval, and the first
@@ -127,18 +129,66 @@ func NormalizeEnrollCode(code string) string {
 	return b.String()
 }
 
-func enrollCodeHash(code string) string {
-	sum := sha256.Sum256([]byte(NormalizeEnrollCode(code)))
+// enrollCodeHash is what the table stores for a code minted for the key named
+// by fingerprint. The fingerprint is inside the hash, so the same code offered
+// with any other key finds no row.
+func enrollCodeHash(code, fingerprint string) string {
+	sum := sha256.Sum256([]byte(NormalizeEnrollCode(code) + "\x00" + NormalizeEnrollCode(fingerprint)))
 	return hex.EncodeToString(sum[:])
 }
 
-// MintEnrollCode creates a one-time enrollment code for kind, valid for
+// ApproverKeyFingerprint is how a person names a public key when minting its
+// enrollment code: SHA-256 of the key's bytes, its first 80 bits as 16 Crockford
+// base32 symbols, printed XXXX-XXXX-XXXX-XXXX. For a Touch ID key the bytes are
+// the raw uncompressed P-256 point, for a passkey its COSE key. The Swift helper
+// computes the same thing (Messages.keyFingerprint), and a test on each side
+// pins the same vector. Finding another key with this fingerprint is a 2^80
+// search, and a code lives ten minutes.
+func ApproverKeyFingerprint(publicKey []byte) string {
+	sum := sha256.Sum256(publicKey)
+	var b strings.Builder
+	var acc, bits uint32
+	for _, v := range sum {
+		acc, bits = acc<<8|uint32(v), bits+8
+		for bits >= 5 && b.Len() < enrollCodeLen {
+			bits -= 5
+			b.WriteByte(enrollCodeSymbols[(acc>>bits)&31])
+		}
+		if b.Len() == enrollCodeLen {
+			break
+		}
+	}
+	return FormatKeyFingerprint(b.String())
+}
+
+// FormatKeyFingerprint prints a fingerprint as typed in its canonical form,
+// grouped as XXXX-XXXX-XXXX-XXXX, or returns "" when it is not one.
+func FormatKeyFingerprint(fingerprint string) string {
+	norm := NormalizeEnrollCode(fingerprint)
+	if len(norm) != enrollCodeLen || strings.Trim(norm, enrollCodeSymbols) != "" {
+		return ""
+	}
+	var b strings.Builder
+	for i := 0; i < len(norm); i++ {
+		if i > 0 && i%4 == 0 {
+			b.WriteByte('-')
+		}
+		b.WriteByte(norm[i])
+	}
+	return b.String()
+}
+
+// MintEnrollCode creates a one-time enrollment code for kind that enrolls only
+// the key named by fingerprint (ApproverKeyFingerprint), valid for
 // EnrollCodeTTL from now, and returns it formatted for a person
 // (XXXX-XXXX-XXXX-XXXX). Only the hash is stored. Nothing but
 // `seamlessd approvers enroll-code` calls it: no route may.
-func MintEnrollCode(ctx context.Context, db *sql.DB, kind string, now time.Time) (string, time.Time, error) {
+func MintEnrollCode(ctx context.Context, db *sql.DB, kind, fingerprint string, now time.Time) (string, time.Time, error) {
 	if err := validApproverKind(kind); err != nil {
 		return "", time.Time{}, fmt.Errorf("store.MintEnrollCode: %w", err)
+	}
+	if FormatKeyFingerprint(fingerprint) == "" {
+		return "", time.Time{}, fmt.Errorf("store.MintEnrollCode: %w: %q is not a key fingerprint (XXXX-XXXX-XXXX-XXXX)", ErrInvalidApprover, fingerprint)
 	}
 	raw := make([]byte, enrollCodeLen)
 	if _, err := rand.Read(raw); err != nil {
@@ -154,27 +204,10 @@ func MintEnrollCode(ctx context.Context, db *sql.DB, kind string, now time.Time)
 	code := b.String()
 	expires := now.Add(EnrollCodeTTL)
 	if _, err := db.ExecContext(ctx, `INSERT INTO approver_enroll_codes (hash, kind, created_at, expires_at) VALUES (?, ?, ?, ?)`,
-		enrollCodeHash(code), kind, core.FormatTime(now), core.FormatTime(expires)); err != nil {
+		enrollCodeHash(code, fingerprint), kind, core.FormatTime(now), core.FormatTime(expires)); err != nil {
 		return "", time.Time{}, fmt.Errorf("store.MintEnrollCode: %w", err)
 	}
 	return code, expires, nil
-}
-
-// CheckEnrollCode reports whether code is a live, unused code for kind at now,
-// without consuming it: the begin step of an enrollment, so a mistyped code is
-// refused before the owner touches an authenticator.
-func CheckEnrollCode(ctx context.Context, db *sql.DB, kind, code string, now time.Time) error {
-	var n int
-	err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM approver_enroll_codes
-		WHERE hash = ? AND kind = ? AND used_at IS NULL AND expires_at > ?`,
-		enrollCodeHash(code), kind, core.FormatTime(now)).Scan(&n)
-	if err != nil {
-		return fmt.Errorf("store.CheckEnrollCode: %w", err)
-	}
-	if n == 0 {
-		return fmt.Errorf("store.CheckEnrollCode: %w", ErrEnrollCode)
-	}
-	return nil
 }
 
 func validApproverCredential(c ApproverCredential) error {
@@ -269,7 +302,7 @@ func enrollApproverTx(ctx context.Context, db *sql.DB, cred ApproverCredential, 
 	if code != "" {
 		res, err := tx.ExecContext(ctx, `UPDATE approver_enroll_codes SET used_at = ?, used_for = ?
 			WHERE hash = ? AND kind = ? AND used_at IS NULL AND expires_at > ?`,
-			core.FormatTime(now), id, enrollCodeHash(code), cred.Kind, core.FormatTime(now))
+			core.FormatTime(now), id, enrollCodeHash(code, ApproverKeyFingerprint(cred.PublicKey)), cred.Kind, core.FormatTime(now))
 		if err != nil {
 			return ApproverCredential{}, nil, err
 		}

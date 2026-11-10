@@ -86,7 +86,7 @@ func (f *accessFixture) socketJSON(t *testing.T, req *http.Request) (int, map[st
 // the credential's id.
 func (f *accessFixture) enrollTouch(t *testing.T, k touchKey, name string) string {
 	t.Helper()
-	code, _, err := store.MintEnrollCode(context.Background(), f.db, store.ApproverTouchID, time.Now())
+	code, _, err := store.MintEnrollCode(context.Background(), f.db, store.ApproverTouchID, store.ApproverKeyFingerprint(k.pub), time.Now())
 	require.NoError(t, err)
 	status, out := f.socketJSON(t, formPost("/console/approvers/touchid/enroll", url.Values{
 		"code": {code}, "name": {name}, "public_key": {base64.StdEncoding.EncodeToString(k.pub)},
@@ -162,7 +162,7 @@ func TestTouchID_EnrollOverTheSocket(t *testing.T) {
 	require.Contains(t, page, "seam touchid enroll")
 
 	// The same key again, with a fresh code: already enrolled.
-	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverTouchID, time.Now())
+	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverTouchID, store.ApproverKeyFingerprint(k.pub), time.Now())
 	require.NoError(t, err)
 	status, out = f.socketJSON(t, formPost("/console/approvers/touchid/enroll", url.Values{
 		"code": {code}, "name": {"again"}, "public_key": {base64.StdEncoding.EncodeToString(k.pub)},
@@ -176,9 +176,10 @@ func TestTouchID_EnrollRefusals(t *testing.T) {
 	f := newAccessFixture(t)
 	ctx := context.Background()
 	k, other := newTouchKey(t), newTouchKey(t)
-	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverTouchID, time.Now())
+	fp := store.ApproverKeyFingerprint(k.pub)
+	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverTouchID, fp, time.Now())
 	require.NoError(t, err)
-	passkeyCode, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverPasskey, time.Now())
+	passkeyCode, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverPasskey, fp, time.Now())
 	require.NoError(t, err)
 	pub := base64.StdEncoding.EncodeToString(k.pub)
 	good := func() url.Values {
@@ -232,10 +233,8 @@ func TestTouchID_EnrollRefusals(t *testing.T) {
 	// The code was never consumed by a refusal: the good form still enrolls.
 	status, out = f.socketJSON(t, formPost("/console/approvers/touchid/enroll", good()))
 	require.Equal(t, http.StatusOK, status, string(out["error"]))
-	// And a code works once.
-	other2 := newTouchKey(t)
-	status, out = f.socketJSON(t, formPost("/console/approvers/touchid/enroll", url.Values{"code": {code}, "name": {"second"},
-		"public_key": {base64.StdEncoding.EncodeToString(other2.pub)}, "signature": {other2.sign(t, approval.TouchIDEnrollMessage(code, other2.pub))}}))
+	// And a code works once, even for the key it was minted for.
+	status, out = f.socketJSON(t, formPost("/console/approvers/touchid/enroll", good()))
 	require.Equal(t, http.StatusBadRequest, status)
 	require.Contains(t, errorOf(t, out), "already used")
 
@@ -446,7 +445,7 @@ func TestTouchID_EnrollRetiresTheKeyItReplaces(t *testing.T) {
 	old, mini, k := newTouchKey(t), newTouchKey(t), newTouchKey(t)
 	oldID := f.enrollTouch(t, old, "Touch ID on example-mac")
 	miniID := f.enrollTouch(t, mini, "Touch ID on example-mini")
-	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverTouchID, time.Now())
+	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverTouchID, store.ApproverKeyFingerprint(k.pub), time.Now())
 	require.NoError(t, err)
 	pub := base64.StdEncoding.EncodeToString(k.pub)
 	form := func(replace ...string) url.Values {
@@ -497,9 +496,9 @@ func TestTouchID_EnrollRetiresTheKeyItReplaces(t *testing.T) {
 
 	// A first enrollment's answer carries no retired field at all.
 	_, out = f.socketJSON(t, formPost("/console/approvers/touchid/enroll", func() url.Values {
-		c, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverTouchID, time.Now())
-		require.NoError(t, err)
 		k2 := newTouchKey(t)
+		c, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverTouchID, store.ApproverKeyFingerprint(k2.pub), time.Now())
+		require.NoError(t, err)
 		return url.Values{"code": {c}, "name": {"third"}, "public_key": {base64.StdEncoding.EncodeToString(k2.pub)},
 			"signature": {k2.sign(t, approval.TouchIDEnrollMessage(c, k2.pub))}}
 	}()))

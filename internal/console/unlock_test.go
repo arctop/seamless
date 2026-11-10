@@ -414,17 +414,9 @@ func TestLockedConsole_LockAgainAndRevoke(t *testing.T) {
 
 func TestLockedConsole_PasskeyUnlock(t *testing.T) {
 	lc := newLockedConsole(t)
-	ctx := context.Background()
-	code, _, err := store.MintEnrollCode(ctx, lc.db, store.ApproverPasskey, time.Now())
-	require.NoError(t, err)
 	key, err := passkeytest.New(true)
 	require.NoError(t, err)
-	begun, err := lc.svc.BeginPasskey(ctx, "key", code)
-	require.NoError(t, err)
-	created, err := key.Create(begun.Options, approverOrigin)
-	require.NoError(t, err)
-	_, err = lc.svc.FinishPasskey(ctx, begun.ID, created)
-	require.NoError(t, err)
+	enrollPasskeyByCode(t, lc.db, lc.svc, key, "key")
 
 	_, page := lc.get(t, "/console/unlock/"+lockedSlug, "")
 	require.Contains(t, page, `id="unlock-form"`, "on the passkey origin the button is offered")

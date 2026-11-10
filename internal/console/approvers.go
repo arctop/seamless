@@ -40,8 +40,9 @@ const formBodyPasskey int64 = 3 * passkey.MaxResponseBytes
 type ApprovalsView interface {
 	PasskeysOn() bool
 	Origins() []string
-	BeginPasskey(ctx context.Context, name, code string) (approval.Begun, error)
+	BeginPasskey(ctx context.Context, name string, byCode bool) (approval.Begun, error)
 	FinishPasskey(ctx context.Context, id string, response []byte) (approval.Finished, error)
+	ConfirmPasskeyCode(ctx context.Context, id, code string) (store.ApproverCredential, error)
 	ApprovePasskey(ctx context.Context, id string, response []byte) (store.ApproverCredential, error)
 	// EnrollTouchIDReplacing stores the Touch ID helper's new key, proven by
 	// a live touchid enrollment code and the key's own signature over it, and
@@ -140,15 +141,17 @@ func (s *Service) approverError(w http.ResponseWriter, r *http.Request, err erro
 	msg, status := "the passkey could not be verified; try again", http.StatusBadRequest
 	switch {
 	case errors.Is(err, store.ErrEnrollCode):
-		msg = "that enrollment code is not valid: it may be mistyped, expired (codes last 10 minutes) or already used"
+		msg = "that enrollment code is not valid for this key: it may be mistyped, expired (codes last 10 minutes), already used, or minted for another key"
 	case errors.Is(err, store.ErrEnrollProof):
-		msg = "the first passkey needs an enrollment code: mint one with `seamlessd approvers enroll-code passkey`, run as the daemon's account"
+		msg = "the first passkey needs a one-time enrollment code, minted for it once the passkey exists"
 	case errors.Is(err, store.ErrInvalidApprover):
 		msg = "give the passkey a name of 1 to 64 characters on one line"
 	case errors.Is(err, store.ErrApproverExists):
 		msg = "that passkey is already enrolled"
 	case errors.Is(err, approval.ErrNoEnrollment):
 		msg = "this enrollment expired or was already used; start again"
+	case errors.Is(err, approval.ErrTooManyEnrollments):
+		msg, status = "too many passkey enrollments are waiting; try again in a few minutes", http.StatusTooManyRequests
 	case errors.Is(err, approval.ErrPasskeysOff):
 		msg, status = "passkeys are not configured on this daemon", http.StatusConflict
 	case errors.Is(err, passkey.ErrUserVerification):
@@ -173,7 +176,14 @@ func (s *Service) approversBegin(w http.ResponseWriter, r *http.Request) {
 	if s.approversOff(w, r) {
 		return
 	}
-	begun, err := s.cfg.Approvals.BeginPasskey(r.Context(), r.PostForm.Get("name"), r.PostForm.Get("code"))
+	// A passkey is created in a browser, which never comes over the socket.
+	// Beginning needs no proof, since the code follows the credential, so an
+	// agent on the socket could otherwise fill the waiting enrollments.
+	if access.PeerAuthenticated(r.Context()) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "a passkey is enrolled from a browser, on the console's Approvers page"})
+		return
+	}
+	begun, err := s.cfg.Approvals.BeginPasskey(r.Context(), r.PostForm.Get("name"), r.PostForm.Get("by_code") == "1")
 	if err != nil {
 		s.approverError(w, r, err)
 		return
@@ -190,11 +200,40 @@ func (s *Service) approversFinish(w http.ResponseWriter, r *http.Request) {
 		s.approverError(w, r, err)
 		return
 	}
-	if fin.Credential != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"enrolled": fin.Credential.ID, "name": fin.Credential.Name})
+	if fin.Fingerprint != "" {
+		writeJSON(w, http.StatusOK, map[string]any{"fingerprint": fin.Fingerprint,
+			"command": s.enrollCodeCommand(store.ApproverPasskey, fin.Fingerprint)})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"approve": fin.Approve})
+}
+
+// approversConfirm finishes a passkey enrollment with the code minted for its key.
+func (s *Service) approversConfirm(w http.ResponseWriter, r *http.Request) {
+	if s.approversOff(w, r) {
+		return
+	}
+	cred, err := s.cfg.Approvals.ConfirmPasskeyCode(r.Context(), r.PostForm.Get("id"), r.PostForm.Get("code"))
+	if err != nil {
+		s.approverError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"enrolled": cred.ID, "name": cred.Name})
+}
+
+// enrollCodeCommand is the command that mints a kind's code for one key, as the
+// daemon's account when the daemon knows how that is reached.
+func (s *Service) enrollCodeCommand(kind, fingerprint string) string {
+	verb := "approvers enroll-code " + kind + " --key " + fingerprint
+	t := s.cfg.Terminal
+	if t == nil || t.Account == "" || t.Seamlessd == "" {
+		return "seamlessd " + verb
+	}
+	env := ""
+	if t.Config != "" {
+		env = "env SEAMLESS_CONFIG=" + shellWord(t.Config) + " "
+	}
+	return "sudo -k -u " + shellWord(t.Account) + " " + env + shellWord(t.Seamlessd) + " " + verb
 }
 
 func (s *Service) approversApprove(w http.ResponseWriter, r *http.Request) {
@@ -230,8 +269,9 @@ var touchIDCredentialID = regexp.MustCompile(`^[0-9A-Za-z_-]{1,64}$`)
 // /console/approvers/touchid/enroll with the code the owner typed into the
 // helper's dialog, the key's name, its public key, and its signature over
 // approval.TouchIDEnrollMessage(code, public key). The code is the proof --
-// only `seamlessd approvers enroll-code touchid`, run as the daemon's account,
-// mints one -- and the signature shows the code's holder holds the key. It is
+// only `seamlessd approvers enroll-code touchid --key <fingerprint>`, run as the
+// daemon's account, mints one, and only for this key -- and the signature shows
+// the code's holder holds the key. It is
 // accepted on the peer_auth socket only, where the helper runs as the owner's
 // uid; the TCP key and the console cookie never enroll a Touch ID key.
 //
@@ -259,7 +299,7 @@ func (s *Service) approversTouchIDEnroll(w http.ResponseWriter, r *http.Request)
 	}
 	code := strings.TrimSpace(r.PostForm.Get("code"))
 	if code == "" {
-		bad("a Touch ID key needs an enrollment code: mint one with `seamlessd approvers enroll-code touchid`, run as the daemon's account")
+		bad("a Touch ID key needs an enrollment code: Seamless Approve shows the command that mints one for its key")
 		return
 	}
 	pub, err := base64.StdEncoding.Strict().DecodeString(r.PostForm.Get("public_key"))
@@ -288,7 +328,7 @@ func (s *Service) approversTouchIDEnroll(w http.ResponseWriter, r *http.Request)
 	case errors.Is(err, store.ErrInvalidApprover):
 		bad("give the Touch ID key a name of 1 to 64 characters on one line")
 	case errors.Is(err, store.ErrEnrollProof):
-		bad("a Touch ID key needs an enrollment code: mint one with `seamlessd approvers enroll-code touchid`, run as the daemon's account")
+		bad("a Touch ID key needs an enrollment code: Seamless Approve shows the command that mints one for its key")
 	default:
 		s.approverError(w, r, err)
 	}

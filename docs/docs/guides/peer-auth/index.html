@@ -551,16 +551,20 @@ daemon running with a project locked (or read grants on), so do it after the
 <a href="#move-an-existing-install-over">cutover</a>.</p>
 <p>A first credential needs a one-time enrollment code, and only the daemon's
 account can mint one; no route, over the socket or with the TCP key, can. A code
-works once, for 10 minutes, and only its hash is stored. <code>seamlessd approvers</code>
+works once, for 10 minutes, and only its hash is stored. It is minted for one key,
+named by its fingerprint, so a code someone else reads cannot enroll a different
+key. <code>seamlessd approvers</code>
 also lists credentials and removes them, and <code>reset --yes</code> drops every credential
 and revokes every live lease
 (<a href="../../reference/cli-seamlessd/#seamlessd_approvers">reference</a>).</p>
-<p><strong>Passkeys</strong> work with hardware keys, phones and password managers:</p>
+<p><strong>Passkeys</strong> work with hardware keys, phones and password managers. Open
+<code>/console/approvers</code> on the passkey origin in your browser and create the passkey.
+The page then shows the command that mints a code for it:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -k -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml <span class="se">\
-</span></span></span><span class="line"><span class="cl">  /opt/seamless/bin/seamlessd approvers enroll-code passkey
+</span></span></span><span class="line"><span class="cl">  /opt/seamless/bin/seamlessd approvers enroll-code passkey --key XXXX-XXXX-XXXX-XXXX
 </span></span></code></pre></div>
-<p>Open <code>/console/approvers</code> on the passkey origin in your browser and enter the
-code there. The origin is <code>http://localhost:&lt;port&gt;</code> unless <code>peer_auth.passkeys</code>
+<p>Run it in your own terminal, check that the key it prints is the one on the page,
+and enter the code there. The origin is <code>http://localhost:&lt;port&gt;</code> unless <code>peer_auth.passkeys</code>
 says otherwise, and browsers refuse passkeys on <code>127.0.0.1</code>. A later passkey can
 be approved by one already enrolled instead of a code. A passkey is bound to its
 <code>rp_id</code> for life: changing <code>rp_id</code> later strands every passkey enrolled under the
@@ -574,8 +578,9 @@ see it. In your own terminal, with <code>server_url</code> naming the socket:</p
 <p>It installs your <code>seam</code>'s own release of the app
 (<code>seamless-approve_&lt;version&gt;_darwin.zip</code>, checked against the release's signed
 <code>checksums.txt</code> and against Apple's signature) at
-<code>~/Applications/Seamless Approve.app</code>, and prints the command that mints its
-code, to run in another terminal. Details, including how the app is checked and
+<code>~/Applications/Seamless Approve.app</code> and opens it. Its window shows the new key's
+fingerprint and the command that mints a code for that key, to run in another
+terminal. Details, including how the app is checked and
 how a Mac re-enrolls, are in the
 <a href="../../reference/cli-seam/#seam_touchid_enroll">CLI reference</a>.</p>
 <p>The app takes nothing from its command line but the socket and the request. It
@@ -965,11 +970,12 @@ account, reads everything; a passwordless <code>sudo</code> to it voids the whol
 arrangement. Whoever holds the bearer key acts as the owner, and reaches every
 project but the locked ones. Backups of the data directory, and exports, hold
 every project: keep them as carefully as the most sensitive project in them.</li>
-<li><strong>Anything running as you can watch your terminal.</strong> An enrollment code and a
-<code>console-open --unlock</code> link are shown once, and whoever uses one first gets what
-it opens. Make them in a terminal your agents cannot read: a <code>tmux</code> server they
-share lets them capture the pane. After enrolling, check that
-<code>seamlessd approvers list</code> shows only what you enrolled.</li>
+<li><strong>Anything running as you can watch your terminal.</strong> A <code>console-open --unlock</code>
+link is shown once, and whoever uses it first gets what it opens, so make it in a
+terminal your agents cannot read: a <code>tmux</code> server they share lets them capture
+the pane. An enrollment code enrolls only the key it was minted for, so being
+read does not give it away, but your clipboard is reachable too: check that the
+key the command prints is the one on your screen.</li>
 <li><strong>Your shell is yours to guard.</strong> Under peer_auth <code>seam approve</code> works only over
 the socket, and refuses one that the daemon's account does not serve, so a changed
 <code>server_url</code> cannot show it false facts. An agent running as you can still edit your shell's startup files, or

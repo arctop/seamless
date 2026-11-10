@@ -112,7 +112,6 @@ var (
 	pmHelper    = access.ProcessToken{PID: 600, Version: 6000, Boot: pmBoot} // Seamless Approve, launched by launchd
 
 	pmShortRe = regexp.MustCompile(`R-[0-9A-Z]{4}`)
-	pmCodeRe  = regexp.MustCompile(`[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}`)
 )
 
 // pmPrograms is the kernel every proof row runs under: it names the agents,
@@ -581,15 +580,13 @@ func (d *pmDaemon) readAccess(base, key, ref string) pmAccessOne {
 	return one
 }
 
-// mintCode is `seamlessd approvers enroll-code <kind>`'s core, as the
-// daemon's account runs it.
-func (d *pmDaemon) mintCode(kind string) string {
+// mintCode is `seamlessd approvers enroll-code <kind> --key <fingerprint>`'s
+// core, as the daemon's account runs it.
+func (d *pmDaemon) mintCode(kind, fingerprint string) string {
 	d.t.Helper()
 	var out strings.Builder
-	require.NoError(d.t, approvers(context.Background(), d.db, d.cfg, &out, []string{"enroll-code", kind}, time.Now()))
-	code := pmCodeRe.FindString(out.String())
-	require.NotEmpty(d.t, code, out.String())
-	return code
+	require.NoError(d.t, approvers(context.Background(), d.db, d.cfg, &out, []string{"enroll-code", kind, "--key", fingerprint}, time.Now()))
+	return mintedCode(d.t, out.String(), fingerprint)
 }
 
 // pmTouchKey is a software P-256 key playing the helper's Secure Enclave key.
@@ -615,10 +612,10 @@ func pmNewKey(t *testing.T) *ecdsa.PrivateKey {
 // key's signature over it.
 func (d *pmDaemon) enrollTouchID() pmTouchKey {
 	d.t.Helper()
-	code := d.mintCode(store.ApproverTouchID)
 	key := pmNewKey(d.t)
 	pub, err := key.PublicKey.Bytes()
 	require.NoError(d.t, err)
+	code := d.mintCode(store.ApproverTouchID, store.ApproverKeyFingerprint(pub))
 	sig, err := pmSign(key, approval.TouchIDEnrollMessage(code, pub))
 	require.NoError(d.t, err)
 	status, body := d.do(d.socket(pmHelper), "", http.MethodPost, "/console/approvers/touchid/enroll", url.Values{
@@ -642,23 +639,40 @@ func pmNewAuthenticator(t *testing.T) *passkeytest.Authenticator {
 }
 
 // enrollPasskey enrolls a virtual authenticator on the Approvers page's
-// ceremony routes, with a code the daemon's account minted.
+// ceremony routes, with a code the daemon's account minted for the key the
+// finish step named.
 func (d *pmDaemon) enrollPasskey() *passkeytest.Authenticator {
 	d.t.Helper()
 	a := pmNewAuthenticator(d.t)
-	code := d.mintCode(store.ApproverPasskey)
-	status, body := d.do(d.tcp.URL, pmKey, http.MethodPost, "/console/approvers/passkey/begin",
-		url.Values{"name": {"security key"}, "code": {code}}, nil)
+	id, fingerprint := d.finishPasskeyByCode(d.tcp.URL, pmKey, a, "security key")
+	status, body := d.do(d.tcp.URL, pmKey, http.MethodPost, "/console/approvers/passkey/confirm",
+		url.Values{"id": {id}, "code": {d.mintCode(store.ApproverPasskey, fingerprint)}}, nil)
+	require.Equal(d.t, http.StatusOK, status, body)
+	require.Contains(d.t, body, `"enrolled"`)
+	return a
+}
+
+// finishPasskeyByCode runs a by-code enrollment's begin and finish on base and
+// returns the enrollment's id and the fingerprint finish named: the key the
+// next step's code must be minted for.
+func (d *pmDaemon) finishPasskeyByCode(base, key string, a *passkeytest.Authenticator, name string) (string, string) {
+	d.t.Helper()
+	status, body := d.do(base, key, http.MethodPost, "/console/approvers/passkey/begin",
+		url.Values{"name": {name}, "by_code": {"1"}}, nil)
 	require.Equal(d.t, http.StatusOK, status, body)
 	var begun approval.Begun
 	require.NoError(d.t, json.Unmarshal([]byte(body), &begun))
 	resp, err := a.Create(begun.Options, pmOrigin)
 	require.NoError(d.t, err)
-	status, body = d.do(d.tcp.URL, pmKey, http.MethodPost, "/console/approvers/passkey/finish",
+	status, body = d.do(base, key, http.MethodPost, "/console/approvers/passkey/finish",
 		url.Values{"id": {begun.ID}, "response": {string(resp)}}, nil)
 	require.Equal(d.t, http.StatusOK, status, body)
-	require.Contains(d.t, body, `"enrolled"`)
-	return a
+	var fin struct {
+		Fingerprint string `json:"fingerprint"`
+	}
+	require.NoError(d.t, json.Unmarshal([]byte(body), &fin))
+	require.NotEmpty(d.t, fin.Fingerprint, body)
+	return begun.ID, fin.Fingerprint
 }
 
 // pmTouchIDSignature is the helper's signature over a request it read

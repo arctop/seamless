@@ -33,11 +33,17 @@
   {{else if not .OnOrigin}}
   <p class="held-sub">{{icon "triangle-alert"}} A passkey can only be created on <a href="{{.Origin}}/console/approvers">{{.Origin}}</a>. Browsers refuse passkeys on an IP address such as 127.0.0.1, so open this page there (you may need to sign in to the console again on that address).</p>
   {{else}}
-  <p class="held-sub">A security key, your phone, this computer, or a password manager. The first passkey needs a one-time code: run <code>seamlessd approvers enroll-code passkey</code> as the daemon's account. {{if .Credentials}}Without a code, one of your enrolled passkeys approves the new one instead.{{end}}</p>
+  <p class="held-sub">A security key, your phone, this computer, or a password manager. {{if .Credentials}}One of your enrolled passkeys approves the new one, or you can use a one-time code made for it.{{else}}The first passkey needs a one-time code. Once the passkey exists, this page shows the command that makes the code for it.{{end}}</p>
   <form id="approver-form" class="approver-form" autocomplete="off">
     <label>Name <input id="approver-name" name="name" maxlength="64" required placeholder="security key, phone, laptop"></label>
-    <label>Enrollment code <input id="approver-code" name="code" placeholder="XXXX-XXXX-XXXX-XXXX" {{if not .Credentials}}required{{end}} autocapitalize="characters" spellcheck="false"></label>
+    {{if .Credentials}}<label><input id="approver-bycode" type="checkbox"> Use a one-time code instead</label>{{else}}<input id="approver-bycode" type="hidden" value="1">{{end}}
     <button class="btn primary" id="approver-go" type="submit">{{icon "key-round"}} Create passkey</button>
+  </form>
+  <form id="approver-confirm" class="approver-form" autocomplete="off" hidden>
+    <p class="held-sub">Run this in your own terminal, one your agents cannot read. It asks for your password and prints a code that works only for the passkey you just created.</p>
+    <pre id="approver-command"></pre>
+    <label>Enrollment code <input id="approver-code" name="code" placeholder="XXXX-XXXX-XXXX-XXXX" required autocapitalize="characters" spellcheck="false"></label>
+    <button class="btn primary" id="approver-confirm-go" type="submit">{{icon "key-round"}} Enroll</button>
   </form>
   <p class="held-sub" id="approver-status" role="status" aria-live="polite"></p>
   {{end}}
@@ -45,7 +51,7 @@
 
 <section aria-labelledby="approvers-touchid-title">
   <h2 id="approvers-touchid-title">Add a Touch ID key</h2>
-  <p class="held-sub">On a Mac, run <code>seam touchid enroll</code> in your own terminal. It installs the Seamless Approve app, which keeps its key in this Mac's Secure Enclave, and asks for a one-time code from <code>seamlessd approvers enroll-code touchid</code>, run as the daemon's account. The key then approves from the agent's dialog with your finger, your Apple Watch or your login password. Enrolling the same Mac again replaces its key: the earlier one signs for its own removal and leaves this list with the enrollment. Another Mac's key, and a passkey, are never removed that way.</p>
+  <p class="held-sub">On a Mac, run <code>seam touchid enroll</code> in your own terminal. It installs the Seamless Approve app, which keeps its key in this Mac's Secure Enclave and shows the command that makes a one-time code for that key, run as the daemon's account. The key then approves from the agent's dialog with your finger, your Apple Watch or your login password. Enrolling the same Mac again replaces its key: the earlier one signs for its own removal and leaves this list with the enrollment. Another Mac's key, and a passkey, are never removed that way.</p>
 </section>
 </div>
 {{end}}
@@ -129,16 +135,32 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbe
     form._seamWired = true;
     var status = document.getElementById('approver-status');
     var go = document.getElementById('approver-go');
+    var confirm = document.getElementById('approver-confirm');
+    var id = '';
     function say(msg) { status.textContent = msg; }
+    confirm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var again = document.getElementById('approver-confirm-go');
+      again.disabled = true;
+      post('/console/approvers/passkey/confirm', { id: id, code: document.getElementById('approver-code').value }).then(function (done) {
+        confirm.hidden = true;
+        say('Enrolled "' + done.name + '".');
+        refresh();
+      }).catch(function (err) {
+        say(err && err.message ? err.message : 'Something went wrong. Nothing was enrolled.');
+      }).finally(function () { again.disabled = false; });
+    });
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       if (!window.PublicKeyCredential) { say('This browser does not support passkeys.'); return; }
       var name = document.getElementById('approver-name').value;
-      var code = document.getElementById('approver-code').value;
-      var id = '';
+      var by = document.getElementById('approver-bycode');
+      var byCode = by.type === 'hidden' || by.checked;
+      id = '';
+      confirm.hidden = true;
       go.disabled = true;
       say('Starting...');
-      post('/console/approvers/passkey/begin', { name: name, code: code }).then(function (begun) {
+      post('/console/approvers/passkey/begin', { name: name, by_code: byCode ? '1' : '' }).then(function (begun) {
         id = begun.id;
         say('Follow your browser\'s prompt to create the passkey.');
         return navigator.credentials.create({ publicKey: creationOptions(begun.options.publicKey) });
@@ -146,12 +168,19 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbe
         say('Checking the new passkey...');
         return post('/console/approvers/passkey/finish', { id: id, response: JSON.stringify(toJSON(cred)) });
       }).then(function (fin) {
-        if (fin.enrolled) return fin;
+        if (fin.fingerprint) {
+          document.getElementById('approver-command').textContent = fin.command;
+          document.getElementById('approver-code').value = '';
+          confirm.hidden = false;
+          say('The passkey exists. Enter the code made for it to enroll it.');
+          return null;
+        }
         say('Now approve it with a passkey you already enrolled.');
         return navigator.credentials.get({ publicKey: requestOptions(fin.approve.publicKey) }).then(function (cred) {
           return post('/console/approvers/passkey/approve', { id: id, response: JSON.stringify(toJSON(cred)) });
         });
       }).then(function (done) {
+        if (!done) return;
         say('Enrolled "' + done.name + '".');
         refresh();
       }).catch(function (err) {

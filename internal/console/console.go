@@ -303,6 +303,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/approvers/passkey/begin", formBodySmall, s.approversBegin)
 	post("POST /console/approvers/passkey/finish", formBodyPasskey, s.approversFinish)
 	post("POST /console/approvers/passkey/approve", formBodyPasskey, s.approversApprove)
+	post("POST /console/approvers/passkey/confirm", formBodySmall, s.approversConfirm)
 	post("POST /console/approvers/touchid/enroll", formBodySmall, s.approversTouchIDEnroll)
 	// The queue itself is also the restricted accounts' proposals queue, so
 	// heldGate serves it while either reason holds; the rest is screening's.

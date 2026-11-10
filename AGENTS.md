@@ -337,8 +337,12 @@ any of it.
 - **Approver credentials are enrolled by the daemon's account, never by a
   route** (`store/approvers.go`, `internal/approval`, migration 032). A first
   passkey or Touch ID key needs a one-time code that only
-  `seamlessd approvers enroll-code` mints (it opens the database directly, so
-  running it is the proof of being the daemon's account); a later one needs a
+  `seamlessd approvers enroll-code --key <fingerprint>` mints (it opens the
+  database directly, so running it is the proof of being the daemon's account).
+  The code is minted for that one key: its stored hash binds
+  `store.ApproverKeyFingerprint`, so a code read off the owner's terminal cannot
+  enroll another, and the key exists before the code does (the helper's window
+  and the console page show the command). A later one needs a
   code or an existing passkey's assertion over a challenge binding the new
   credential (`enrollBinding`). Removing and resetting are that command's too.
   The one exception is a Touch ID re-enrollment: a credential whose own key

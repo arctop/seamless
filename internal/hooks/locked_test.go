@@ -415,7 +415,7 @@ func TestLockedSessionStart_OffersTouchIDOnlyWhereTheDialogShows(t *testing.T) {
 			require.NoError(t, err)
 			pub, err := key.PublicKey.Bytes()
 			require.NoError(t, err)
-			code, _, err := store.MintEnrollCode(ctx, e.db, store.ApproverTouchID, e.clock())
+			code, _, err := store.MintEnrollCode(ctx, e.db, store.ApproverTouchID, store.ApproverKeyFingerprint(pub), e.clock())
 			require.NoError(t, err)
 			d := sha256.Sum256(approval.TouchIDEnrollMessage(code, pub))
 			sig, err := ecdsa.SignASN1(rand.Reader, key, d[:])

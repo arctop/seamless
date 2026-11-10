@@ -12,6 +12,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -904,4 +905,68 @@ func pmHook(t *testing.T, base, endpoint string, body []byte) string {
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
 	return out.HookSpecificOutput.AdditionalContext
+}
+
+// An enrollment code read off the owner's terminal is worth nothing to the
+// agent that read it: minted for the owner's key, it enrolls no other, over
+// the agent's own socket connection, by either route. The refusal is the
+// code's, not the route's: the agent reaches both routes. The owner's key
+// then enrolls with the same code.
+func TestStolenEnrollCode_EnrollsOnlyTheKeyItWasMintedFor(t *testing.T) {
+	const enrolled = `SELECT COUNT(*) FROM approver_credentials`
+	t.Run("Touch ID", func(t *testing.T) {
+		d := newPMDaemon(t, pmOpts{})
+		owner, attacker := pmNewKey(t), pmNewKey(t)
+		ownerPub, err := owner.PublicKey.Bytes()
+		require.NoError(t, err)
+		attackerPub, err := attacker.PublicKey.Bytes()
+		require.NoError(t, err)
+		code := d.mintCode(store.ApproverTouchID, store.ApproverKeyFingerprint(ownerPub))
+		post := func(base string, k *ecdsa.PrivateKey, pub []byte) (int, string) {
+			t.Helper()
+			sig, err := pmSign(k, approval.TouchIDEnrollMessage(code, pub))
+			require.NoError(t, err)
+			return d.do(base, "", http.MethodPost, "/console/approvers/touchid/enroll", url.Values{
+				"name": {"Touch ID on this Mac"}, "code": {code},
+				"public_key": {base64.StdEncoding.EncodeToString(pub)}, "signature": {base64.StdEncoding.EncodeToString(sig)},
+			}, nil)
+		}
+
+		status, body := post(d.socket(pmBridge, pmAgent, pmShell), attacker, attackerPub)
+		require.Equal(t, http.StatusBadRequest, status, body)
+		require.Contains(t, body, "minted for another key")
+		require.Zero(t, d.count(enrolled), "the agent's key is not enrolled")
+
+		status, body = post(d.socket(pmHelper), owner, ownerPub)
+		require.Equal(t, http.StatusOK, status, body)
+		require.Equal(t, 1, d.count(enrolled), "the owner's key enrolls with the same code")
+	})
+	t.Run("passkey", func(t *testing.T) {
+		d := newPMDaemon(t, pmOpts{})
+		ownerID, fingerprint := d.finishPasskeyByCode(d.tcp.URL, pmKey, pmNewAuthenticator(t), "security key")
+		code := d.mintCode(store.ApproverPasskey, fingerprint)
+
+		// On the agent's own socket a passkey cannot even begin: it is made in
+		// a browser, and beginning needs no proof.
+		agentSocket := d.socket(pmBridge, pmAgent, pmShell)
+		status, body := d.do(agentSocket, "", http.MethodPost, "/console/approvers/passkey/begin",
+			url.Values{"name": {"x"}, "by_code": {"1"}}, nil)
+		require.Equal(t, http.StatusForbidden, status, body)
+		require.Contains(t, body, "from a browser")
+
+		// An agent that took the bearer key from the owner's console.yaml can
+		// begin one, and the code it read is still no use to its key.
+		agentID, agentFingerprint := d.finishPasskeyByCode(d.tcp.URL, pmKey, pmNewAuthenticator(t), "x")
+		require.NotEqual(t, fingerprint, agentFingerprint)
+		status, body = d.do(d.tcp.URL, pmKey, http.MethodPost, "/console/approvers/passkey/confirm",
+			url.Values{"id": {agentID}, "code": {code}}, nil)
+		require.Equal(t, http.StatusBadRequest, status, body)
+		require.Contains(t, body, "minted for another key")
+		require.Zero(t, d.count(enrolled), "the agent's passkey is not enrolled")
+
+		status, body = d.do(d.tcp.URL, pmKey, http.MethodPost, "/console/approvers/passkey/confirm",
+			url.Values{"id": {ownerID}, "code": {code}}, nil)
+		require.Equal(t, http.StatusOK, status, body)
+		require.Equal(t, 1, d.count(enrolled), "the owner's passkey enrolls with the same code")
+	})
 }

@@ -534,7 +534,7 @@ func TestApprove_TouchIDPath(t *testing.T) {
 		require.NoError(t, err)
 		return sig
 	}
-	code := f.code(t, store.ApproverTouchID)
+	code := f.code(t, store.ApproverTouchID, pub)
 	cred, err := f.svc.EnrollTouchID(ctx, "this Mac", code, pub, sign(TouchIDEnrollMessage(code, pub)))
 	require.NoError(t, err)
 

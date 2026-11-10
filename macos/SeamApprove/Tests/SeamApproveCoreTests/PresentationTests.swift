@@ -176,19 +176,19 @@ final class PresentationTests: XCTestCase {
 
     func testEnrollCodePrompt() {
         let command = "sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid"
-        let p = Prompts.enrollCode(command: command, problem: nil)
+        let p = Prompts.enrollCode(command: command, key: "Y2WK-2PG4-B7DB-FATZ", problem: nil)
         XCTAssertEqual(p, Prompt(title: "Enroll this Mac's Touch ID with Seamless",
-                                 body: "Run this command in your own terminal. It asks for your password, then prints a one-time enrollment code. "
-                                     + "Type the code below, with or without its dashes. A code works once, for 10 minutes.",
+                                 body: "Run this command in your own terminal, one your agents cannot read. It asks for your password, then prints a one-time enrollment code for this Mac's new key, Y2WK-2PG4-B7DB-FATZ. "
+                                     + "Check that the key it prints is this one, then type the code below, with or without its dashes. The code works once, for 10 minutes, and only for this key.",
                                  setApart: [command], placeholder: "XXXX-XXXX-XXXX-XXXX", accept: "Enroll", cancel: "Cancel"))
         XCTAssertFalse(p.body.contains("sudo"), "the command is set apart, never wrapped into the body")
-        XCTAssertEqual(Prompts.enrollCode(command: command, problem: CodeProblem.notACode).body,
+        XCTAssertEqual(Prompts.enrollCode(command: command, key: "Y2WK-2PG4-B7DB-FATZ", problem: CodeProblem.notACode).body,
                        "That is not an enrollment code. A code has 16 letters and digits, printed as XXXX-XXXX-XXXX-XXXX.\n\n" + p.body)
     }
 
     func testCopyableSetApartLines() {
         let command = "sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid"
-        XCTAssertTrue(Prompts.enrollCode(command: command, problem: nil).copyable, "the enrollment command is copied by a click")
+        XCTAssertTrue(Prompts.enrollCode(command: command, key: "Y2WK-2PG4-B7DB-FATZ", problem: nil).copyable, "the enrollment command is copied by a click")
         XCTAssertFalse(Prompts.confirmForget(keptByDaemon: true).copyable, "nothing set apart, nothing to copy")
         XCTAssertTrue(Notices.enrolled(name: "Touch ID", removals: ["seamlessd approvers remove 01A"]).copyable)
         XCTAssertTrue(Notices.keyDeleted(credentials: ["01A"]).copyable)

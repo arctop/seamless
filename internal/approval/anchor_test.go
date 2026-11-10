@@ -381,7 +381,7 @@ func (f *fixture) enrollTouchIDKey(t *testing.T) {
 	require.NoError(t, err)
 	pub, err := key.PublicKey.Bytes()
 	require.NoError(t, err)
-	code := f.code(t, store.ApproverTouchID)
+	code := f.code(t, store.ApproverTouchID, pub)
 	d := sha256.Sum256(TouchIDEnrollMessage(code, pub))
 	sig, err := ecdsa.SignASN1(rand.Reader, key, d[:])
 	require.NoError(t, err)

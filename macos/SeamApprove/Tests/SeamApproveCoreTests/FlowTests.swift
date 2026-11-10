@@ -216,7 +216,7 @@ final class FlowTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(out.notice).autoCloses)
         XCTAssertFalse(out.message.contains("01NEWAPPROVER0000000000000"), out.message)
         XCTAssertEqual(ui.asked.count, 2)
-        XCTAssertEqual(ui.asked[0].command, "sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid")
+        XCTAssertTrue(ui.asked[0].command.hasPrefix("sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid --key "), ui.asked[0].command)
         XCTAssertNil(ui.asked[0].problem)
         XCTAssertEqual(ui.asked[1].problem, CodeProblem.notACode)
 
@@ -230,6 +230,9 @@ final class FlowTests: XCTestCase {
         let pub = try XCTUnwrap(Data(base64Encoded: form["public_key"] ?? ""))
         XCTAssertEqual(pub.count, 65)
         XCTAssertEqual(pub.first, 0x04)
+        XCTAssertEqual(ui.asked[0].command,
+                       "sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid --key " + Messages.keyFingerprint(publicKey: pub),
+                       "the code is minted for the key this enrollment registers")
 
         let stored = try keys.keys()
         XCTAssertEqual(stored.count, 1, "the older key is replaced")

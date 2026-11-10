@@ -34,8 +34,9 @@ import (
 	"github.com/arctop/seamless/internal/store"
 )
 
-// EnrollTTL is how long a started passkey enrollment waits for its browser.
-const EnrollTTL = 5 * time.Minute
+// EnrollTTL is how long a started passkey enrollment waits for its browser and,
+// by a code, for the owner to mint the code for the new key.
+const EnrollTTL = 10 * time.Minute
 
 // maxPending caps the passkey enrollments in flight, so a caller looping on
 // begin cannot grow the table without bound.
@@ -112,14 +113,18 @@ func (s *Service) PasskeysOn() bool { return s != nil && s.cfg.Passkeys != nil }
 // Origins returns the relying party's origins.
 func (s *Service) Origins() []string { return slices.Clone(s.cfg.Origins) }
 
+// ErrTooManyEnrollments is a passkey enrollment refused because maxPending are
+// already waiting.
+var ErrTooManyEnrollments = errors.New("too many passkey enrollments in progress")
+
 // pendingEnroll is one passkey enrollment between its requests.
 type pendingEnroll struct {
 	name    string
-	code    string // "" when an existing passkey approves it
+	byCode  bool // false when an existing passkey approves it
 	state   passkey.RegistrationState
 	expires time.Time
-	// cred and binding are set once the new credential is created and an
-	// existing passkey's approval is awaited.
+	// cred is set once the new credential is created; it then waits for the
+	// code minted for it, or for an existing passkey's approval over binding.
 	cred    *passkey.Credential
 	binding []byte
 }
@@ -131,12 +136,13 @@ type Begun struct {
 	Options json.RawMessage `json:"options"`
 }
 
-// Finished is a passkey enrollment's result. Either the credential was stored
-// (Credential set), or an existing passkey must approve it first: Approve then
-// holds the request options for navigator.credentials.get.
+// Finished is a passkey enrollment's result once the new credential exists. It
+// waits for one more proof: Fingerprint names the key to mint a code for
+// (ConfirmPasskeyCode takes the code), or Approve holds the request options for
+// an existing passkey's navigator.credentials.get (ApprovePasskey).
 type Finished struct {
-	Credential *store.ApproverCredential `json:"credential,omitempty"`
-	Approve    json.RawMessage           `json:"approve,omitempty"`
+	Fingerprint string          `json:"fingerprint,omitempty"`
+	Approve     json.RawMessage `json:"approve,omitempty"`
 }
 
 func newID() (string, error) {
@@ -189,12 +195,12 @@ func (s *Service) passkeys(ctx context.Context) ([]passkey.Credential, error) {
 	return out, nil
 }
 
-// BeginPasskey starts enrolling a passkey named name. With a code, the code
-// must be live (it is checked now and consumed at the end); without one, an
-// existing passkey will have to approve the new credential, so one must be
-// enrolled. Every enrolled passkey is excluded, so an authenticator that holds
-// one already is not enrolled twice.
-func (s *Service) BeginPasskey(ctx context.Context, name, code string) (Begun, error) {
+// BeginPasskey starts enrolling a passkey named name. By code, the code comes
+// after the credential exists, because it is minted for that credential's key
+// (ConfirmPasskeyCode). Otherwise an existing passkey will have to approve the
+// new credential, so one must be enrolled. Every enrolled passkey is excluded,
+// so an authenticator that holds one already is not enrolled twice.
+func (s *Service) BeginPasskey(ctx context.Context, name string, byCode bool) (Begun, error) {
 	if err := refuseRestricted(ctx); err != nil {
 		return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", err)
 	}
@@ -210,11 +216,7 @@ func (s *Service) BeginPasskey(ctx context.Context, name, code string) (Begun, e
 	if err != nil {
 		return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", err)
 	}
-	if code = strings.TrimSpace(code); code != "" {
-		if err := store.CheckEnrollCode(ctx, s.cfg.DB, store.ApproverPasskey, code, now); err != nil {
-			return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", err)
-		}
-	} else if len(existing) == 0 {
+	if !byCode && len(existing) == 0 {
 		return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", store.ErrEnrollProof)
 	}
 	user, err := s.user(ctx)
@@ -233,15 +235,15 @@ func (s *Service) BeginPasskey(ctx context.Context, name, code string) (Begun, e
 	defer s.mu.Unlock()
 	s.gc(now)
 	if len(s.pending) >= maxPending {
-		return Begun{}, fmt.Errorf("approval.BeginPasskey: too many enrollments in progress; try again in a few minutes")
+		return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", ErrTooManyEnrollments)
 	}
-	s.pending[id] = &pendingEnroll{name: name, code: code, state: state, expires: now.Add(EnrollTTL)}
+	s.pending[id] = &pendingEnroll{name: name, byCode: byCode, state: state, expires: now.Add(EnrollTTL)}
 	return Begun{ID: id, Options: opts}, nil
 }
 
-// FinishPasskey verifies the browser's creation response for enrollment id.
-// With a code, the credential is stored and the code consumed, in one
-// transaction. Without one, the new credential waits for an existing
+// FinishPasskey verifies the browser's creation response for enrollment id. The
+// new credential then waits: by code, for the code minted for its key
+// (Finished.Fingerprint, ConfirmPasskeyCode); otherwise for an existing
 // passkey's approval (ApprovePasskey) over a challenge that binds it.
 func (s *Service) FinishPasskey(ctx context.Context, id string, response []byte) (Finished, error) {
 	if err := refuseRestricted(ctx); err != nil {
@@ -263,12 +265,12 @@ func (s *Service) FinishPasskey(ctx context.Context, id string, response []byte)
 	if err != nil {
 		return Finished{}, fmt.Errorf("approval.FinishPasskey: %w", err)
 	}
-	if p.code != "" {
-		stored, err := store.EnrollApprover(ctx, s.cfg.DB, FromPasskey(cred, p.name), p.code, "", now)
-		if err != nil {
-			return Finished{}, fmt.Errorf("approval.FinishPasskey: %w", err)
-		}
-		return Finished{Credential: &stored}, nil
+	if p.byCode {
+		p.cred = &cred
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.pending[id] = p
+		return Finished{Fingerprint: store.ApproverKeyFingerprint(cred.PublicKey)}, nil
 	}
 	existing, err := s.passkeys(ctx)
 	if err != nil {
@@ -286,6 +288,37 @@ func (s *Service) FinishPasskey(ctx context.Context, id string, response []byte)
 	return Finished{Approve: opts}, nil
 }
 
+// ConfirmPasskeyCode enrolls enrollment id's new credential with the code minted
+// for its key: the credential is stored and the code consumed in one
+// transaction. A code that is not valid for this key leaves the enrollment
+// waiting, so a mistyped code can be typed again.
+func (s *Service) ConfirmPasskeyCode(ctx context.Context, id, code string) (store.ApproverCredential, error) {
+	if err := refuseRestricted(ctx); err != nil {
+		return store.ApproverCredential{}, fmt.Errorf("approval.ConfirmPasskeyCode: %w", err)
+	}
+	if !s.PasskeysOn() {
+		return store.ApproverCredential{}, ErrPasskeysOff
+	}
+	now := s.cfg.Now()
+	p, err := s.take(id, now)
+	if err != nil {
+		return store.ApproverCredential{}, fmt.Errorf("approval.ConfirmPasskeyCode: %w", ErrNoEnrollment)
+	}
+	if !p.byCode || p.cred == nil {
+		return store.ApproverCredential{}, fmt.Errorf("approval.ConfirmPasskeyCode: %w", ErrNoEnrollment)
+	}
+	stored, err := store.EnrollApprover(ctx, s.cfg.DB, FromPasskey(*p.cred, p.name), strings.TrimSpace(code), "", now)
+	if err != nil {
+		if errors.Is(err, store.ErrEnrollCode) || errors.Is(err, store.ErrEnrollProof) {
+			s.mu.Lock()
+			s.pending[id] = p
+			s.mu.Unlock()
+		}
+		return store.ApproverCredential{}, fmt.Errorf("approval.ConfirmPasskeyCode: %w", err)
+	}
+	return stored, nil
+}
+
 // ApprovePasskey verifies an existing passkey's approval of enrollment id's new
 // credential -- an assertion over the challenge that binds it -- records the
 // approving credential's use, and stores the new one as added by it.
@@ -298,7 +331,7 @@ func (s *Service) ApprovePasskey(ctx context.Context, id string, response []byte
 	}
 	now := s.cfg.Now()
 	p, err := s.take(id, now)
-	if err != nil || p.cred == nil {
+	if err != nil || p.cred == nil || p.byCode {
 		return store.ApproverCredential{}, fmt.Errorf("approval.ApprovePasskey: %w", ErrNoEnrollment)
 	}
 	rows, err := store.ApproverCredentials(ctx, s.cfg.DB, store.ApproverPasskey)

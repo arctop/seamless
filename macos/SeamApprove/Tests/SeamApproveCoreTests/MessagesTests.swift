@@ -41,6 +41,13 @@ final class MessagesTests: XCTestCase {
         return d
     }()
 
+    /// The vector store.ApproverKeyFingerprint's test pins on the Go side.
+    func testKeyFingerprintMatchesGo() {
+        var key = Data([0x04])
+        key.append(Data(repeating: 0x11, count: 64))
+        XCTAssertEqual(Messages.keyFingerprint(publicKey: key), "Y2WK-2PG4-B7DB-FATZ")
+    }
+
     func testEnrollMessageMatchesGo() throws {
         XCTAssertEqual(Self.publicKey.hex, "040102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40")
         XCTAssertEqual(

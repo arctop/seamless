@@ -5,9 +5,9 @@ import SeamApproveCore
 /// runs modally on the main thread. The words come from SeamApproveCore
 /// (Prompts, Notices), where the tests pin them; this file only lays them out.
 final class AppUI: ApproverUI {
-    func enrollCode(command: String, problem: String?) -> String? {
+    func enrollCode(command: String, key: String, problem: String?) -> String? {
         onMain {
-            let p = Prompts.enrollCode(command: command, problem: problem)
+            let p = Prompts.enrollCode(command: command, key: key, problem: problem)
             let alert = NSAlert()
             alert.messageText = p.title
             alert.informativeText = p.body

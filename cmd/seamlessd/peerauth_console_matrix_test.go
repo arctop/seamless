@@ -118,9 +118,10 @@ func (d *cmDaemon) postTargets(t *testing.T, pendingID string) []struct {
 				"/console/access/request":              {"project": {p}},
 				"/console/access/{id}/approve":         {"duration": {"1h"}, "digest": {"0000"}, "response": {"{}"}},
 				"/console/unlock/{project}/finish":     {"id": {cmNoSuch}, "response": {"{}"}},
-				"/console/approvers/passkey/begin":     {"name": {"probe"}, "code": {"AAAA-BBBB-CCCC-DDDD"}},
+				"/console/approvers/passkey/begin":     {"name": {"probe"}, "by_code": {"1"}},
 				"/console/approvers/passkey/finish":    {"id": {cmNoSuch}, "response": {"{}"}},
 				"/console/approvers/passkey/approve":   {"id": {cmNoSuch}, "response": {"{}"}},
+				"/console/approvers/passkey/confirm":   {"id": {cmNoSuch}, "code": {"AAAA-BBBB-CCCC-DDDD"}},
 				"/console/approvers/touchid/enroll":    {"name": {"probe"}, "public_key": {"AAAA"}},
 			}
 			form := forms[pattern]
@@ -423,9 +424,7 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 	require.NoError(t, err)
 	var finUnlock string
 	t.Run("the same browser, unlocked with a passkey", func(t *testing.T) {
-		code, _, err := store.MintEnrollCode(ctx, d.db, store.ApproverPasskey, time.Now())
-		require.NoError(t, err)
-		status, body, _ := browserA.do(t, http.MethodPost, "/console/approvers/passkey/begin", url.Values{"name": {"cm-key"}, "code": {code}}, true)
+		status, body, _ := browserA.do(t, http.MethodPost, "/console/approvers/passkey/begin", url.Values{"name": {"cm-key"}, "by_code": {"1"}}, true)
 		require.Equal(t, http.StatusOK, status, body)
 		var begun struct {
 			ID      string          `json:"id"`
@@ -436,6 +435,15 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 		require.NoError(t, err)
 		status, body, _ = browserA.do(t, http.MethodPost, "/console/approvers/passkey/finish", url.Values{"id": {begun.ID}, "response": {string(created)}}, true)
 		require.Equal(t, http.StatusOK, status, body)
+		var fin struct {
+			Fingerprint string `json:"fingerprint"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(body), &fin))
+		code, _, err := store.MintEnrollCode(ctx, d.db, store.ApproverPasskey, fin.Fingerprint, time.Now())
+		require.NoError(t, err)
+		status, body, _ = browserA.do(t, http.MethodPost, "/console/approvers/passkey/confirm", url.Values{"id": {begun.ID}, "code": {code}}, true)
+		require.Equal(t, http.StatusOK, status, body)
+		require.Contains(t, body, `"enrolled"`)
 
 		status, body, _ = browserA.do(t, http.MethodPost, "/console/unlock/"+cmFinance+"/begin", url.Values{}, true)
 		require.Equal(t, http.StatusOK, status, body)

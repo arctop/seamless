@@ -195,7 +195,7 @@ usage:
                            repos map to it or it holds memories, notes or open tasks; --undo; --dry-run
   seamlessd family         manage project families (list|add|remove)
   seamlessd approvers      the owner's passkeys and Touch ID keys for locked projects
-                           (enroll-code|list|remove|reset; run as the daemon's account)
+                           (enroll-code <kind> --key <fingerprint>|list|remove|reset; run as the daemon's account)
   seamlessd approve        commit an access approval for a locked project (seam approve runs it
                            through sudo -k as the daemon's account)
   seamlessd console-open   open the console in a browser, pre-authenticated

@@ -255,7 +255,7 @@ final class FakeUI: ApproverUI {
         self.codes = codes
     }
 
-    func enrollCode(command: String, problem: String?) -> String? {
+    func enrollCode(command: String, key: String, problem: String?) -> String? {
         asked.append((command, problem))
         return codes.isEmpty ? nil : codes.removeFirst()
     }

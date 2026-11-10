@@ -398,11 +398,14 @@ func TestTouchIDEnroll_ReleaseHappyPath(t *testing.T) {
 	out := rig.out.String()
 	require.Contains(t, out, "Installed Seamless Approve at "+rig.target())
 	require.Contains(t, out, `Enrolled the Touch ID key "Touch ID on laptop" (01KTOUCHIDKEY0000000000001)`)
-	// The app opens at once, with nothing typed: its window waits for the
-	// code, and the terminal says so, with the command that mints it.
-	require.Contains(t, shown, "Opening Seamless Approve. Its window waits for a one-time enrollment code.")
-	require.Contains(t, shown, "in another terminal on this Mac, run\n\n  sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid\n")
-	require.Contains(t, shown, "Type the code into the Seamless Approve window, then touch the sensor. This terminal waits until Seamless Approve closes.")
+	// The app opens at once, with nothing typed: its window shows the new key
+	// and the command that mints a code for it, and the terminal says so. Only
+	// the window knows the key, so the terminal never prints a mint command.
+	require.Contains(t, shown, "Opening Seamless Approve. Its window shows this Mac's new key and the command that mints a one-time enrollment code for it.")
+	require.Contains(t, shown, "Run that command in another terminal on this Mac, one your agents cannot read.")
+	require.Contains(t, shown, "which works once, for 10 minutes, and only for that key.")
+	require.Contains(t, shown, "Type the code into the window, then touch the sensor. This terminal waits until Seamless Approve closes.")
+	require.NotContains(t, shown, "enroll-code")
 	require.NotContains(t, out, "Press Return")
 	require.NotContains(t, out, "Retired", "nothing was enrolled before")
 }
@@ -765,7 +768,7 @@ func TestTouchIDEnroll_Refusals(t *testing.T) {
 	t.Run("no terminal approver", func(t *testing.T) {
 		rig := newTouchRig(t, &stubDaemon{}, "\n")
 		require.Equal(t, 1, rig.run("enroll"))
-		require.Contains(t, rig.errb.String(), "seamlessd approvers enroll-code touchid")
+		require.Contains(t, rig.errb.String(), "the daemon did not say how to reach its own account")
 		require.Empty(t, rig.runner.recorded())
 	})
 	t.Run("a terminal approver that is not one", func(t *testing.T) {
@@ -871,21 +874,33 @@ func TestTouchIDEnroll_AgainstTheConsole(t *testing.T) {
 	})
 
 	rig := newTouchRig(t, daemon, "\n")
-	code, _, err := store.MintEnrollCode(ctx, db, store.ApproverTouchID, time.Now())
-	require.NoError(t, err)
+	// The helper makes its key before the code exists: its window shows the
+	// key's fingerprint and the owner mints the code for that key.
+	var nextKey *ecdsa.PrivateKey
+	mintForNextKey := func() string {
+		t.Helper()
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+		pub, err := key.PublicKey.Bytes()
+		require.NoError(t, err)
+		code, _, err := store.MintEnrollCode(ctx, db, store.ApproverTouchID, store.ApproverKeyFingerprint(pub), time.Now())
+		require.NoError(t, err)
+		nextKey = key
+		return code
+	}
+	code := mintForNextKey()
 	var (
 		enrolled string
 		held     *ecdsa.PrivateKey // the key this Mac's keychain holds, as the helper keeps it
 		heldID   string
 	)
 	rig.runner.helper = func(argv []string) {
-		// Seamless Approve: a new key, signed over the code the owner typed,
-		// posted over the socket it was given, the way the helper posts it;
-		// the key it held before signs its own retirement.
+		// Seamless Approve: the key its window showed, signed over the code the
+		// owner typed, posted over the socket it was given, the way the helper
+		// posts it; the key it held before signs its own retirement.
 		i := slices.Index(argv, "--socket")
 		sock, name := argv[i+1], argv[slices.Index(argv, "--name")+1]
-		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-		require.NoError(t, err)
+		key := nextKey
 		pub, err := key.PublicKey.Bytes()
 		require.NoError(t, err)
 		signWith := func(k *ecdsa.PrivateKey, msg []byte) string {
@@ -927,7 +942,8 @@ func TestTouchIDEnroll_AgainstTheConsole(t *testing.T) {
 	require.Equal(t, 0, rig.run("enroll", "--name", "Touch ID on laptop"), rig.errb.String())
 	require.NotEmpty(t, enrolled)
 	require.Contains(t, rig.out.String(), `Enrolled the Touch ID key "Touch ID on laptop" (`+enrolled+`)`)
-	require.Contains(t, rig.out.String(), "sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid")
+	require.Contains(t, rig.out.String(), "Its window shows this Mac's new key and the command that mints a one-time enrollment code for it.")
+	require.NotContains(t, rig.out.String(), "enroll-code")
 
 	rig.out.Reset()
 	require.Equal(t, 0, rig.run("status"), rig.errb.String())
@@ -936,8 +952,7 @@ func TestTouchIDEnroll_AgainstTheConsole(t *testing.T) {
 	// Enrolling this Mac again retires the first key with the new one: the
 	// daemon lists one key under the name, and seam says which went.
 	first := enrolled
-	code, _, err = store.MintEnrollCode(ctx, db, store.ApproverTouchID, time.Now())
-	require.NoError(t, err)
+	code = mintForNextKey()
 	rig.out.Reset()
 	require.Equal(t, 0, rig.run("enroll", "--name", "Touch ID on laptop"), rig.errb.String())
 	require.NotEqual(t, first, enrolled)

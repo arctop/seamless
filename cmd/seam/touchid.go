@@ -18,11 +18,11 @@ package main
 //  3. installs it atomically at ~/Applications/Seamless Approve.app,
 //     replacing an existing install only after a y/N (a local build is
 //     checked before that question, so a bad one is refused at once);
-//  4. opens the app through LaunchServices at once, its dialog waiting for
-//     the one-time enrollment code, and tells the owner how to mint that
-//     code (as the daemon's account: only that account can) in another
-//     terminal. The owner types the code into the app's own dialog, never
-//     through seam; the app creates the Secure Enclave key, enrolls it, and
+//  4. opens the app through LaunchServices at once. The app creates the Secure
+//     Enclave key and its dialog shows the command that mints a one-time
+//     enrollment code for that key (as the daemon's account: only that
+//     account can) to run in another terminal. The owner types the code into
+//     the app's own dialog, never through seam; the app enrolls the key and
 //     retires this Mac's earlier key with it. seam then confirms on the
 //     daemon that a new Touch ID key exists and names the one it replaced.
 //
@@ -93,10 +93,10 @@ and for a local build the app's team is shown and you are asked. It installs at
 you confirm; keeping it enrolls with the installed app (a local build named
 with --app is checked first, and is then not used).
 
-Then it opens the app, whose dialog waits for the one-time enrollment code,
-and prints the command that mints the code, to run as the daemon's account
-in another terminal: type the code into the app's dialog, and touch the
-sensor. Afterwards it confirms on the daemon that a new Touch ID key is
+Then it opens the app. Its window shows the new key's fingerprint and the
+command that mints a one-time enrollment code for that key, to run as the
+daemon's account in another terminal: type the code into the window, and
+touch the sensor. A code enrolls only the key it was minted for. Afterwards it confirms on the daemon that a new Touch ID key is
 enrolled. Re-enrolling replaces this Mac's earlier key: the app deletes it,
 and the daemon retires its credential with the new enrollment once that
 earlier key has signed for it, so no dead key is left listed. A key another
@@ -184,12 +184,12 @@ func runTouchIDEnroll(ctx context.Context, e *env, o *touchIDEnrollOpts, _ []str
 	}
 
 	// The app opens at once and its dialog waits for the code, so nothing
-	// here waits on a key the owner might miss after switching terminals.
-	fmt.Fprintf(e.stdout, "\nOpening Seamless Approve. Its window waits for a one-time enrollment code.\n"+
-		"Mint the code as the daemon's account: in another terminal on this Mac, run\n\n  %s\n\n",
-		strings.Join(shellWords(enrollCodeArgv(t)), " "))
-	fmt.Fprintln(e.stdout, "It asks for your password or Touch ID and prints the code, which works once, for 10 minutes. "+
-		"Type the code into the Seamless Approve window, then touch the sensor. This terminal waits until Seamless Approve closes.")
+	// here waits on a key the owner might miss after switching terminals. The
+	// command comes from the window, which alone knows the new key's
+	// fingerprint.
+	fmt.Fprintln(e.stdout, "\nOpening Seamless Approve. Its window shows this Mac's new key and the command that mints a one-time enrollment code for it.")
+	fmt.Fprintln(e.stdout, "Run that command in another terminal on this Mac, one your agents cannot read. It asks for your password or Touch ID and prints the code, "+
+		"which works once, for 10 minutes, and only for that key. Type the code into the window, then touch the sensor. This terminal waits until Seamless Approve closes.")
 	argv := append([]string{"open", "-W", "-n", "-a", target, "--args"}, approverEnrollArgs(sock, name)...)
 	code, err := e.run(ctx, argv, nil, io.Discard, e.stderr)
 	if err != nil {
@@ -240,8 +240,7 @@ func reportReplaced(w io.Writer, t terminalApprover, before, after, added []appr
 	}
 }
 
-// removeApproverArgv removes one credential as the daemon's account, as
-// enrollCodeArgv mints a code.
+// removeApproverArgv removes one credential as the daemon's account.
 func removeApproverArgv(t terminalApprover, id string) []string {
 	return []string{"sudo", "-k", "-u", t.Account, "env", "SEAMLESS_CONFIG=" + t.Config, t.Seamlessd, "approvers", "remove", id}
 }
@@ -270,7 +269,7 @@ func validKeyName(name string) error {
 }
 
 // enrollCodeApprover reads, from the daemon's access JSON, the account and
-// paths the enrollment code is minted with, held to the shapes seam approve
+// paths the approver commands run with, held to the shapes seam approve
 // holds them to before they become a command line. The daemon is verified
 // first, as seam approve verifies it: they become that command line either way.
 func enrollCodeApprover(ctx context.Context, e *env, cfg config.Config) (terminalApprover, error) {
@@ -284,8 +283,7 @@ func enrollCodeApprover(ctx context.Context, e *env, cfg config.Config) (termina
 	}
 	t := list.Terminal
 	if t == nil || t.Account == "" || t.Seamlessd == "" || t.Config == "" {
-		return terminalApprover{}, errors.New("the daemon did not say how to reach its own account: mint the code with " +
-			"`seamlessd approvers enroll-code touchid`, run as the daemon's account, then run seam touchid enroll again")
+		return terminalApprover{}, errors.New("the daemon did not say how to reach its own account, so Seamless Approve could not show the command that mints its code")
 	}
 	switch {
 	case !accountName.MatchString(t.Account):
@@ -301,12 +299,6 @@ func enrollCodeApprover(ctx context.Context, e *env, cfg config.Config) (termina
 		return terminalApprover{}, err
 	}
 	return *t, nil
-}
-
-// enrollCodeArgv mints a Touch ID enrollment code as the daemon's account. -k
-// makes sudo ask every time and keep no ticket an agent could reuse.
-func enrollCodeArgv(t terminalApprover) []string {
-	return []string{"sudo", "-k", "-u", t.Account, "env", "SEAMLESS_CONFIG=" + t.Config, t.Seamlessd, "approvers", "enroll-code", "touchid"}
 }
 
 // shellWords quotes each argument for a POSIX shell, so a printed command

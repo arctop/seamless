@@ -1117,7 +1117,7 @@ func (d *restartDaemon) enrollTouchID() (*ecdsa.PrivateKey, store.ApproverCreden
 	require.NoError(d.t, err)
 	pub, err := key.PublicKey.Bytes()
 	require.NoError(d.t, err)
-	code, _, err := store.MintEnrollCode(ctx, d.db, store.ApproverTouchID, time.Now())
+	code, _, err := store.MintEnrollCode(ctx, d.db, store.ApproverTouchID, store.ApproverKeyFingerprint(pub), time.Now())
 	require.NoError(d.t, err)
 	msg := sha256.Sum256(approval.TouchIDEnrollMessage(code, pub))
 	sig, err := ecdsa.SignASN1(rand.Reader, key, msg[:])

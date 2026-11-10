@@ -120,9 +120,11 @@ func TestRestricted_DecidesNothing(t *testing.T) {
 	require.ErrorIs(t, err, ErrRestricted)
 	_, err = f.svc.BeginConsoleUnlock(rctx, lockFin, "token-hash")
 	require.ErrorIs(t, err, ErrRestricted)
-	_, err = f.svc.BeginPasskey(rctx, "a key", f.code(t, store.ApproverPasskey))
+	_, err = f.svc.BeginPasskey(rctx, "a key", true)
 	require.ErrorIs(t, err, ErrRestricted)
-	_, err = f.svc.EnrollTouchID(rctx, "a key", f.code(t, store.ApproverTouchID), nil, nil)
+	_, err = f.svc.ConfirmPasskeyCode(rctx, "an-enrollment", f.code(t, store.ApproverPasskey, []byte("a key")))
+	require.ErrorIs(t, err, ErrRestricted)
+	_, err = f.svc.EnrollTouchID(rctx, "a key", f.code(t, store.ApproverTouchID, []byte("a key")), nil, nil)
 	require.ErrorIs(t, err, ErrRestricted)
 
 	got, err := store.AccessApprovalByID(context.Background(), f.db, a.ID)

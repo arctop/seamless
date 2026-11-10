@@ -28,6 +28,17 @@ import (
 
 var codeRe = regexp.MustCompile(`[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}`)
 
+// mintedCode is the code `enroll-code` printed for the key named fingerprint.
+// The fingerprint it echoes has a code's shape too, so it reads past it.
+func mintedCode(t *testing.T, out, fingerprint string) string {
+	t.Helper()
+	_, after, ok := strings.Cut(out, "for key "+fingerprint+": ")
+	require.True(t, ok, out)
+	code := codeRe.FindString(after)
+	require.NotEmpty(t, code, out)
+	return code
+}
+
 func TestApprovers_Verbs(t *testing.T) {
 	ctx := context.Background()
 	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
@@ -47,18 +58,22 @@ func TestApprovers_Verbs(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, "No approver credentials are enrolled")
 
-	out, err = run("enroll-code", "passkey")
+	fp := store.ApproverKeyFingerprint([]byte{9})
+	out, err = run("enroll-code", "passkey", "--key", fp)
 	require.NoError(t, err)
-	code := codeRe.FindString(out)
-	require.NotEmpty(t, code, out)
-	require.Contains(t, out, "http://localhost:9123/console/approvers", "the passkey page on the relying party's origin, never 127.0.0.1")
-	require.NoError(t, store.CheckEnrollCode(ctx, db, store.ApproverPasskey, code, now))
+	code := mintedCode(t, out, fp)
+	require.Contains(t, out, "Enrollment code (passkey) for key "+fp+": "+code+"\n")
+	require.Contains(t, out, "It works once, until ")
+	require.Contains(t, out, "and only for that key.")
+	require.Contains(t, out, "on the console's Approvers page, where the new passkey is waiting")
 
-	out, err = run("enroll-code", "touchid")
+	out, err = run("enroll-code", "touchid", "--key", fp)
 	require.NoError(t, err)
-	require.Contains(t, out, "seam touchid enroll")
+	require.Contains(t, out, "Enrollment code (touchid) for key "+fp+": ")
+	require.Contains(t, out, "the Seamless Approve window that showed this key")
 
 	for _, bad := range [][]string{{"enroll-code"}, {"enroll-code", "password"}, {"enroll-code", "passkey", "x"},
+		{"enroll-code", "password", "--key", fp}, {"enroll-code", "passkey", "--key", fp, "x"},
 		{"remove"}, {"reset"}, {"reset", "--force"}, {"list", "x"}, {"frobnicate"}} {
 		_, err := run(bad...)
 		require.Error(t, err, "%v", bad)
@@ -106,12 +121,12 @@ func TestApproverCheck(t *testing.T) {
 		c := approverCheck(ctx, db, goos)
 		require.Equal(t, statusWarn, c.status)
 		require.Contains(t, c.detail, "only the terminal path")
-		require.Contains(t, c.detail, "to enroll one, mint a code with `seamlessd approvers enroll-code passkey`, run as the daemon's account")
+		require.Contains(t, c.detail, "to enroll one, create a passkey on the console's Approvers page, which shows the command that mints its code")
 		require.Equal(t, touchID, strings.Contains(c.detail, "seam touchid enroll"), goos)
 	}
 
 	now := time.Now()
-	code, _, err := store.MintEnrollCode(ctx, db, store.ApproverPasskey, now)
+	code, _, err := store.MintEnrollCode(ctx, db, store.ApproverPasskey, store.ApproverKeyFingerprint([]byte{9}), now)
 	require.NoError(t, err)
 	_, err = store.EnrollApprover(ctx, db, store.ApproverCredential{
 		Kind: store.ApproverPasskey, CredentialID: []byte{1}, PublicKey: []byte{9}, Alg: -7, Name: "key",
@@ -123,17 +138,17 @@ func TestApproverCheck(t *testing.T) {
 	require.Equal(t, statusInfo, approverCheck(ctx, nil, "darwin").status)
 }
 
-// With nothing enrolled, list and doctor give the same advice: a passkey code
-// minted as the daemon's account everywhere, and seam touchid enroll too only
+// With nothing enrolled, list and doctor give the same advice: a passkey made
+// on the console's Approvers page everywhere, and seam touchid enroll too only
 // on a Mac whose daemon serves the peer_auth socket the Touch ID app needs.
 func TestApprovers_EmptyListAdvice(t *testing.T) {
 	ctx := context.Background()
 	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	passkey := "No approver credentials are enrolled. To enroll one, mint a code with `seamlessd approvers enroll-code passkey`, " +
-		"run as the daemon's account"
-	touchID := "; or, for this Mac's Touch ID, run `seam touchid enroll` in the owner's own terminal, which prints the command that mints its code"
+	passkey := "No approver credentials are enrolled. To enroll one, create a passkey on the console's Approvers page, " +
+		"which shows the command that mints its code"
+	touchID := "; or, for this Mac's Touch ID, run `seam touchid enroll` in the owner's own terminal, whose window shows the command that mints its code"
 	for _, tc := range []struct {
 		goos     string
 		peerAuth bool
@@ -154,6 +169,41 @@ func TestApprovers_EmptyListAdvice(t *testing.T) {
 			require.Contains(t, out.String(), advice)
 			require.Contains(t, approverCheck(ctx, db, tc.goos).detail, "; to enroll one, "+advice, "doctor says it the same way")
 		}
+	}
+}
+
+// A code is minted for one key, so enroll-code refuses to mint without naming
+// it: no --key, and a --key that is not a fingerprint, each print nothing and
+// store nothing.
+func TestApprovers_EnrollCodeNeedsAKey(t *testing.T) {
+	ctx := context.Background()
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	cfg := config.Defaults()
+	cfg.PeerAuth.Locked = []string{"example-finance"}
+	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+	for name, tc := range map[string]struct {
+		args []string
+		want string
+	}{
+		"no --key":           {[]string{"enroll-code", "passkey"}, "enroll-code needs --key <fingerprint>"},
+		"no --key, Touch ID": {[]string{"enroll-code", "touchid"}, "enroll-code needs --key <fingerprint>"},
+		"an empty value":     {[]string{"enroll-code", "passkey", "--key", ""}, "enroll-code needs --key <fingerprint>"},
+		"no value":           {[]string{"enroll-code", "passkey", "--key"}, "flag needs an argument"},
+		"not a fingerprint":  {[]string{"enroll-code", "passkey", "--key", "the-owners-key"}, `invalid value "the-owners-key" for --key`},
+		"too short":          {[]string{"enroll-code", "touchid", "--key", "Y2WK-2PG4"}, `invalid value "Y2WK-2PG4" for --key`},
+		"a symbol it omits":  {[]string{"enroll-code", "touchid", "--key", "UUUU-UUUU-UUUU-UUUU"}, "for --key"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var out bytes.Buffer
+			err := approvers(ctx, db, cfg, &out, tc.args, now)
+			require.ErrorContains(t, err, tc.want)
+			require.Empty(t, out.String(), "nothing printed, no code shown")
+			var n int
+			require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM approver_enroll_codes`).Scan(&n))
+			require.Zero(t, n, "nothing minted")
+		})
 	}
 }
 

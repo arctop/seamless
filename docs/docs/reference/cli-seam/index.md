@@ -589,16 +589,17 @@ a y/N. A local build given with `--app` is checked first, so a bad one is
 refused before anything is asked; if you then keep the installed copy, `seam`
 says the `--app` build was not used and enrolls with the installed app.
 
-It then opens the app at once, whose dialog waits for the code, and prints the
-command that mints a one-time enrollment code as the daemon's account, to run
-in another terminal:
+It then opens the app at once. The app makes the new key, and its window shows
+the key's fingerprint and the command that mints a one-time enrollment code for
+that key, as the daemon's account, to run in another terminal:
 
 ```bash
-sudo -k -u _seamless env SEAMLESS_CONFIG=<config> <seamlessd> approvers enroll-code touchid
+sudo -k -u _seamless env SEAMLESS_CONFIG=<config> <seamlessd> approvers enroll-code touchid --key XXXX-XXXX-XXXX-XXXX
 ```
 
-Type the code into the app's dialog: it creates its key (one touch) and
-registers it, while the first terminal waits for the app to close. The key
+Type the code into the app's window and touch the sensor: the app signs with its
+new key and registers it, while the first terminal waits for the app to close. A
+code enrolls only the key it was minted for. The key
 lives in the Secure Enclave, in a keychain group only the signed app can use,
 and needs your presence - finger, Apple Watch or login password - for every
 approval. `seam touchid enroll` finishes by confirming that the daemon lists

@@ -599,7 +599,7 @@ registers it.
 ## seamlessd approvers {#seamlessd_approvers}
 
 ```bash
-seamlessd approvers enroll-code <passkey|touchid>
+seamlessd approvers enroll-code <passkey|touchid> --key <fingerprint>
 seamlessd approvers list [--json]
 seamlessd approvers remove <id>
 seamlessd approvers reset --yes
@@ -615,12 +615,15 @@ the socket or with the TCP key, can mint a code or remove a credential, except
 that a Mac re-enrolling with `seam touchid enroll` retires its own earlier
 Touch ID key, which signs for it.
 
-- `enroll-code` mints a one-time enrollment code for one kind of credential. It
-  works once, for 10 minutes; only its hash is stored. For a passkey, open the
-  console's Approvers page (`/console/approvers`, on the passkey origin -
-  `http://localhost:<port>` unless `peer_auth.passkeys` says otherwise) and
-  enter it there. The first credential needs a code; a later passkey can be
-  approved by one already enrolled instead.
+- `enroll-code` mints a one-time enrollment code for one key, named by its
+  fingerprint (`--key`). It works once, for 10 minutes, only for that key; only
+  its hash, which binds the key, is stored. You rarely type this by hand. For a
+  passkey, create it on the console's Approvers page (`/console/approvers`, on the
+  passkey origin - `http://localhost:<port>` unless `peer_auth.passkeys` says
+  otherwise), which shows the command with the new key's fingerprint and takes the
+  code. For a Touch ID key, the Seamless Approve window does the same. The first
+  credential needs a code; a later passkey can be approved by one already enrolled
+  instead.
 - `list` prints the enrolled credentials: id, kind, name, how each was enrolled
   and when it was last used. `--json` prints them as JSON.
 - `remove` deletes one credential. Leases it already approved are untouched.
@@ -630,8 +633,8 @@ Touch ID key, which signs for it.
 
 With no credential enrolled, `seamlessd doctor` warns while a project is
 locked: only the terminal path can approve then. Both doctor and `list` say how
-to enroll one: a code from `enroll-code passkey`, run as the daemon's account,
-and, on a Mac whose daemon serves the `peer_auth` socket, `seam touchid enroll`
+to enroll one: the console's Approvers page, which shows the command for a
+passkey's code, and, on a Mac whose daemon serves the `peer_auth` socket, `seam touchid enroll`
 in your own terminal.
 
 ## seamlessd approve {#seamlessd_approve}

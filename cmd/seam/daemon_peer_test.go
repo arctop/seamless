@@ -344,7 +344,8 @@ func TestTouchIDEnroll_VerifiesTheDaemon(t *testing.T) {
 			rig.e.dialDaemon = fakeDaemonPeer(tc.peer)
 			require.Equal(t, 1, rig.run("enroll"))
 			require.Contains(t, rig.errb.String(), tc.want)
-			require.NotContains(t, rig.out.String(), "enroll-code", "no command line built from it is shown")
+			require.NotContains(t, rig.out.String(), "sudo", "no command line built from it is shown")
+			require.NotContains(t, rig.out.String(), "Opening Seamless Approve", "refused before the app opens")
 			require.Empty(t, rig.runner.recorded(), "nothing installs, nothing runs")
 		})
 	}

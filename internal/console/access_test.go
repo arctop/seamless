@@ -129,16 +129,9 @@ func TestAccess_RequestNamesThePasskeyPageOnlyWithAPasskey(t *testing.T) {
 	id, _ := f.file(t)
 	ctx := context.Background()
 	require.Empty(t, f.svc.Ways(ctx, id).Page, "passkeys set up, none enrolled")
-	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverPasskey, time.Now())
-	require.NoError(t, err)
 	key, err := passkeytest.New(true)
 	require.NoError(t, err)
-	begun, err := f.svc.BeginPasskey(ctx, "key", code)
-	require.NoError(t, err)
-	created, err := key.Create(begun.Options, approverOrigin)
-	require.NoError(t, err)
-	_, err = f.svc.FinishPasskey(ctx, begun.ID, created)
-	require.NoError(t, err)
+	enrollPasskeyByCode(t, f.db, f.svc, key, "key")
 	require.Equal(t, approverOrigin+"/console/access/"+id, f.svc.Ways(ctx, id).Page)
 }
 
@@ -253,17 +246,9 @@ func TestAccess_RequestListAndFacts(t *testing.T) {
 // enrollPasskey enrolls a virtual authenticator with a one-time code.
 func (f *accessFixture) enrollPasskey(t *testing.T) *passkeytest.Authenticator {
 	t.Helper()
-	ctx := context.Background()
-	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverPasskey, time.Now())
-	require.NoError(t, err)
 	key, err := passkeytest.New(true)
 	require.NoError(t, err)
-	begun, err := f.svc.BeginPasskey(ctx, "key", code)
-	require.NoError(t, err)
-	created, err := key.Create(begun.Options, approverOrigin)
-	require.NoError(t, err)
-	_, err = f.svc.FinishPasskey(ctx, begun.ID, created)
-	require.NoError(t, err)
+	enrollPasskeyByCode(t, f.db, f.svc, key, "key")
 	return key
 }
 
@@ -587,16 +572,9 @@ func TestAccess_PasskeyNeedsAnOrigin(t *testing.T) {
 	f := newAccessFixture(t)
 	id, _ := f.file(t)
 	ctx := context.Background()
-	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverPasskey, time.Now())
-	require.NoError(t, err)
 	key, err := passkeytest.New(true)
 	require.NoError(t, err)
-	begun, err := f.svc.BeginPasskey(ctx, "key", code)
-	require.NoError(t, err)
-	created, err := key.Create(begun.Options, approverOrigin)
-	require.NoError(t, err)
-	_, err = f.svc.FinishPasskey(ctx, begun.ID, created)
-	require.NoError(t, err)
+	enrollPasskeyByCode(t, f.db, f.svc, key, "key")
 
 	v, err := passkey.New(passkey.Config{RPID: "localhost", Origins: []string{approverOrigin}})
 	require.NoError(t, err)
