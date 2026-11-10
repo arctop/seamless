@@ -1,6 +1,9 @@
 // Lease-based task claiming: the compare-and-set claim and the four ways a claim
 // ends (holder release, owner force-release, session teardown, lease expiry).
 // Expiry is enforced lazily inside ClaimTask -- there is no background sweeper.
+// None of them writes updated_account: a claim or release changes no text, so
+// it neither labels an owner's task with the claimant's account nor clears the
+// label of an account whose words the task still carries (taskTextAccount).
 package store
 
 import (
@@ -11,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 )
 
@@ -127,7 +129,7 @@ func ClaimTask(ctx context.Context, db *sql.DB, id, sessionID string, lease time
 	expStr := core.FormatTime(now.Add(lease).UTC())
 	res, err := db.ExecContext(ctx, `
 		UPDATE tasks
-		   SET status = 'in_progress', claimed_by = ?, lease_expires_at = ?, updated_at = ?, updated_account = ?
+		   SET status = 'in_progress', claimed_by = ?, lease_expires_at = ?, updated_at = ?
 		 WHERE id = ?
 		   AND (
 		         (status = 'open' AND NOT EXISTS (
@@ -140,7 +142,7 @@ func ClaimTask(ctx context.Context, db *sql.DB, id, sessionID string, lease time
 		          OR lease_expires_at IS NULL
 		          OR lease_expires_at <= ?))
 		   )`,
-		sessionID, expStr, nowStr, access.AccountOf(ctx), id, sessionID, nowStr)
+		sessionID, expStr, nowStr, id, sessionID, nowStr)
 	if err != nil {
 		return ClaimResult{}, fmt.Errorf("store.ClaimTask: %w", err)
 	}
@@ -219,9 +221,9 @@ func claimRefusal(ctx context.Context, db *sql.DB, id string, now time.Time) (co
 // ErrTaskNotFound when the id is unknown).
 func ReleaseTask(ctx context.Context, db *sql.DB, id, sessionID string, now time.Time) (core.Task, error) {
 	res, err := db.ExecContext(ctx, `
-		UPDATE tasks SET status = 'open', claimed_by = '', lease_expires_at = NULL, updated_at = ?, updated_account = ?
+		UPDATE tasks SET status = 'open', claimed_by = '', lease_expires_at = NULL, updated_at = ?
 		 WHERE id = ? AND claimed_by = ? AND status = 'in_progress'`,
-		core.FormatTime(now.UTC()), access.AccountOf(ctx), id, sessionID)
+		core.FormatTime(now.UTC()), id, sessionID)
 	if err != nil {
 		return core.Task{}, fmt.Errorf("store.ReleaseTask: %w", err)
 	}
@@ -250,9 +252,9 @@ func ReleaseTask(ctx context.Context, db *sql.DB, id, sessionID string, now time
 // to release) and ErrTaskNotFound when the id is unknown.
 func ForceReleaseTask(ctx context.Context, db *sql.DB, id string, now time.Time) (core.Task, error) {
 	res, err := db.ExecContext(ctx, `
-		UPDATE tasks SET status = 'open', claimed_by = '', lease_expires_at = NULL, updated_at = ?, updated_account = ?
+		UPDATE tasks SET status = 'open', claimed_by = '', lease_expires_at = NULL, updated_at = ?
 		 WHERE id = ? AND status = 'in_progress'`,
-		core.FormatTime(now.UTC()), access.AccountOf(ctx), id)
+		core.FormatTime(now.UTC()), id)
 	if err != nil {
 		return core.Task{}, fmt.Errorf("store.ForceReleaseTask: %w", err)
 	}
@@ -280,9 +282,9 @@ func ReleaseClaimsForSession(ctx context.Context, db *sql.DB, sessionID string, 
 		return 0, nil
 	}
 	res, err := db.ExecContext(ctx, `
-		UPDATE tasks SET status = 'open', claimed_by = '', lease_expires_at = NULL, updated_at = ?, updated_account = ?
+		UPDATE tasks SET status = 'open', claimed_by = '', lease_expires_at = NULL, updated_at = ?
 		 WHERE claimed_by = ? AND status = 'in_progress'`,
-		core.FormatTime(now.UTC()), access.AccountOf(ctx), sessionID)
+		core.FormatTime(now.UTC()), sessionID)
 	if err != nil {
 		return 0, fmt.Errorf("store.ReleaseClaimsForSession: %w", err)
 	}

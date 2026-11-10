@@ -129,14 +129,14 @@ func TestRestricted_SupersedeRaceRefused(t *testing.T) {
 	write("owner-rule", core.KindConstraint)
 	replacement := write("agent-note", core.KindGotcha)
 
-	_, err = s.supersedeMemory(agent, "example-open", "owner-rule", replacement, now)
+	_, err = s.supersedeMemory(agent, "example-open", "owner-rule", replacement, true, now)
 	require.ErrorContains(t, err, "is a proposal")
 	still, ok, err := store.MemoryByName(ctx, db, "example-open", "owner-rule")
 	require.NoError(t, err)
 	require.True(t, ok, "the constraint stays active")
 	require.True(t, still.Active())
 
-	ref, err := s.supersedeMemory(owner, "example-open", "owner-rule", replacement, now)
+	ref, err := s.supersedeMemory(owner, "example-open", "owner-rule", replacement, true, now)
 	require.NoError(t, err)
 	require.Equal(t, "example-open/owner-rule", ref)
 }

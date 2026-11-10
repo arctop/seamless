@@ -318,16 +318,24 @@ func TestRestricted_NonBriefingWritesLandLabeled(t *testing.T) {
 	require.Empty(t, eventsOf(t, r.db, core.EventMemoryHeld))
 }
 
-// The label follows the content like Model attribution does: a body change
-// re-stamps it with the writer (the owner's clears it), a restricted
-// account's new description or title stamps it, and metadata -- tags, a
-// star, a supersede tombstone, an owner's description fix -- keeps it.
+// The label follows the content like Model attribution does: a restricted
+// account's change of a body, description or title stamps it, and the owner's
+// write clears it only once every one of those is the owner's -- replaced
+// with new text in that write, or empty. The label names one account for the
+// whole item, not which field it wrote, so the owner's append, search/replace
+// edit, or rewrite of one field keeps it, and so does metadata -- tags, a
+// star, a supersede tombstone.
 func TestRestricted_LabelFollowsContent(t *testing.T) {
 	r := newKARig(t, kaOpts{})
 	edit := func(cli *mcpclient.Client, args map[string]any) {
 		t.Helper()
 		args["name"], args["project"] = "lesson", kaOpen
 		r.call(cli, "memory_edit", args)
+	}
+	rewrite := func(cli *mcpclient.Client, description, body string) {
+		t.Helper()
+		r.call(cli, "memory_write", map[string]any{"name": "lesson", "kind": "gotcha", "project": kaOpen,
+			"description": description, "body": body})
 	}
 	r.write(r.owner, "lesson", "gotcha", "Line one.\n", nil)
 	r.memAccount("lesson", "")
@@ -339,17 +347,25 @@ func TestRestricted_LabelFollowsContent(t *testing.T) {
 	edit(r.owner, map[string]any{"tags_remove": []any{"x"}})
 	r.memAccount("lesson", kaAccount)
 	edit(r.owner, map[string]any{"description": "the owner's fix"})
-	r.memAccount("lesson", kaAccount) // the owner's description fix keeps it
+	r.memAccount("lesson", kaAccount) // the owner's description fix keeps it: the body may be the account's
 	edit(r.owner, map[string]any{"edits": []any{map[string]any{"old_string": "Line one.", "new_string": "Line 1."}}})
-	r.memAccount("lesson", "") // the owner's body edit clears it
-	edit(r.agent, map[string]any{"edits": []any{map[string]any{"old_string": "Line 1.", "new_string": "Line one."}}})
-	r.memAccount("lesson", kaAccount)
-
+	r.memAccount("lesson", kaAccount) // a search/replace edit keeps what it did not replace
 	r.call(r.owner, "memory_append", map[string]any{"name": "lesson", "project": kaOpen, "body": "Owner adds.\n"})
+	r.memAccount("lesson", kaAccount) // an append keeps every word already there
+	rewrite(r.owner, "the owner's fix", "Owner rewrite.\n")
+	r.memAccount("lesson", kaAccount) // the description resent as it was is not new text
+	rewrite(r.owner, "the owner's own line", "Owner rewrite.\n")
+	r.memAccount("lesson", kaAccount) // nor is the body
+	rewrite(r.owner, "the owner's line", "Owner rewrite, all of it.\n")
+	r.memAccount("lesson", "") // both new: every labeled word is the owner's
+
+	edit(r.agent, map[string]any{"edits": []any{map[string]any{"old_string": "all of it", "new_string": "mostly"}}})
+	r.memAccount("lesson", kaAccount)
+	r.write(r.owner, "lesson", "gotcha", "Owner again.\n", nil)
 	r.memAccount("lesson", "")
 	r.call(r.agent, "memory_append", map[string]any{"name": "lesson", "project": kaOpen, "body": "Agent adds.\n"})
 	r.memAccount("lesson", kaAccount)
-	r.write(r.owner, "lesson", "gotcha", "Owner rewrite.\n", nil)
+	r.write(r.owner, "lesson", "gotcha", "Owner rewrite.\n", map[string]any{"description": "a new line"})
 	r.memAccount("lesson", "")
 	r.write(r.agent, "lesson", "gotcha", "Agent rewrite.\n", nil)
 	r.memAccount("lesson", kaAccount)
@@ -375,19 +391,39 @@ func TestRestricted_LabelFollowsContent(t *testing.T) {
 	r.call(r.owner, "notes_update", map[string]any{"id": id, "description": "the owner's summary"})
 	r.noteAccount(id, kaAccount)
 	r.call(r.owner, "notes_update", map[string]any{"id": id, "body": "Owner body.\n"})
-	r.noteAccount(id, "")
+	r.noteAccount(id, kaAccount) // the account's title is still the note's
+	r.call(r.owner, "notes_update", map[string]any{"id": id, "title": "Shared log, the owner's", "body": "Owner body, again.\n"})
+	r.noteAccount(id, kaAccount) // the description was not rewritten here, so it may be the account's
+	r.call(r.owner, "notes_update", map[string]any{"id": id, "title": "Shared log", "description": "the owner's line",
+		"body": "Owner body.\n"})
+	r.noteAccount(id, "") // body, title and description all new
 	r.call(r.agent, "notes_append", map[string]any{"id": id, "body": "agent line"})
 	r.noteAccount(id, kaAccount)
 	r.call(r.owner, "notes_edit", map[string]any{"id": id, "edits": []any{map[string]any{"old_string": "Owner body.", "new_string": "Owner's body."}}})
+	r.noteAccount(id, kaAccount) // a search/replace edit keeps what it did not replace
+	r.call(r.owner, "notes_append", map[string]any{"id": id, "body": "owner line"})
+	r.noteAccount(id, kaAccount) // an append keeps every word already there
+	r.call(r.owner, "notes_update", map[string]any{"id": id, "title": "Shared log", "description": "the owner's line, new",
+		"body": "Owner again.\n"})
+	r.noteAccount(id, kaAccount) // the title resent as it was is not new text
+	r.call(r.owner, "notes_update", map[string]any{"id": id, "title": "Shared log, rewritten", "description": "the owner's line",
+		"body": "Owner again, all of it.\n"})
 	r.noteAccount(id, "")
-	r.call(r.agent, "notes_edit", map[string]any{"id": id, "edits": []any{map[string]any{"old_string": "Owner's body.", "new_string": "Owner body."}}})
+	r.call(r.agent, "notes_edit", map[string]any{"id": id, "edits": []any{map[string]any{"old_string": "all of it", "new_string": "mostly"}}})
 	r.noteAccount(id, kaAccount)
-	r.call(r.owner, "notes_update", map[string]any{"id": id, "body": "Owner again.\n"})
-	r.noteAccount(id, "")
 	r.call(r.agent, "notes_update", map[string]any{"id": id, "body": "Agent body.\n"})
 	r.noteAccount(id, kaAccount)
 	r.call(r.owner, "favorite_set", map[string]any{"kind": "note", "id": id, "favorite": true})
 	r.noteAccount(id, kaAccount)
+
+	// A note with no description is its body and title: rewriting both clears it.
+	bare := r.call(r.agent, "notes_create", map[string]any{"title": "Agent scratch", "body": "Agent text.\n", "project": kaOpen})
+	bareID := bare["id"].(string)
+	r.noteAccount(bareID, kaAccount)
+	r.call(r.owner, "notes_update", map[string]any{"id": bareID, "body": "Owner text.\n"})
+	r.noteAccount(bareID, kaAccount)
+	r.call(r.owner, "notes_update", map[string]any{"id": bareID, "title": "Owner scratch", "body": "Owner text, all of it.\n"})
+	r.noteAccount(bareID, "")
 }
 
 // Every way a restricted account can land, replace, supersede or delete a

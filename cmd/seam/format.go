@@ -73,8 +73,9 @@ func writtenBy(account string) string {
 	return "written by account " + printable(account)
 }
 
-// updatedBy labels an item a restricted local account last changed, in the
-// wording the console's task pages use: "" for the owner, as writtenBy.
+// updatedBy labels a task whose title or body a restricted local account
+// rewrote, in the wording the console's task pages use: "" for the owner, as
+// writtenBy.
 func updatedBy(account string) string {
 	if account == "" {
 		return ""

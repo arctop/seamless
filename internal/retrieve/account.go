@@ -62,9 +62,11 @@ func AccountMark(account string) string {
 func accountMark(account string) string { return AccountMark(account) }
 
 // taskAccount is the account a task's lines name: its creator, else the
-// restricted account that last changed it. An owner's task can be rewritten
-// by a restricted account (core.Task.UpdatedAccount) and must not then read
-// as the owner's words.
+// restricted account whose rewrite of its title or body the text may still
+// carry (core.Task.UpdatedAccount). An owner's task can be rewritten by a
+// restricted account and must not then read as the owner's words; one the
+// account only claimed, released or closed is still the owner's text, and
+// carries no label.
 func taskAccount(t core.Task) string {
 	if t.Account != "" {
 		return t.Account

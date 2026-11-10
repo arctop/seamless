@@ -912,13 +912,18 @@ Claude Code sign-in and its own copy of anything the session reads:</p>
 </span></span></span><span class="line"><span class="cl">  --seam /opt/seamless/bin/seam
 </span></span></code></pre></div>
 <p>Keep the socket outside every home directory: the account cannot traverse yours.</p>
-<p><strong>Everything it writes is labeled.</strong> Memories, notes, tasks and their updates,
-plan steps, sessions and their findings, and trials record the account that
+<p><strong>Everything it writes is labeled.</strong> Memories, notes, tasks and its rewrites of
+yours, plan steps, sessions and their findings, and trials record the account that
 wrote them, and every surface shows it: &quot;[written by account _example_agent]&quot;
 at the end of briefing, prompt recall (<code>&lt;seam-recall&gt;</code>), A2A and
 <code>seam task list</code> lines, an <code>account</code> field in tool results, and a &quot;written by
 account _example_agent&quot; chip on console rows. Your own writes look exactly as
-they always have.</p>
+they always have. A label stays while the account's words may still be there. A
+status change, a claim or release, tags or a star never move it, and neither
+does your append, partial edit or rewrite of one field. It clears once you have
+rewritten all of the item's text in new words: a memory's body and description,
+a note's body, title and description, or a task's title and body. An empty
+description or task body counts as yours.</p>
 <p><strong>Binding rules are proposals.</strong> A constraint, convention, protocol or stage
 steers every session's briefing, so one from a restricted account does not land
 on its own. When the account writes one, or edits, appends to, supersedes,
@@ -935,7 +940,12 @@ neither promote a proposal nor undo a promotion. Every other kind of memory,
 and notes, tasks and findings, lands at once, labeled.</p>
 <p>Three more rules keep its text from passing as yours. It cannot give a project
 memory the name of a live global constraint, convention, protocol or stage, because
-a read by that name would then answer with its text. It cannot ask the gardener to
+a read by that name would then answer with its text. A project memory it wrote
+before you created a global rule of that name does not answer either: a read by
+the bare name answers with your rule and names the account's memory, which
+stays readable by id or with <code>project=&lt;slug&gt;</code>. A write by that bare name (an
+append, edit, delete, star or supersede) is refused until it says
+<code>project=&lt;slug&gt;</code> or <code>project=global</code>. It cannot ask the gardener to
 plan a change (<code>gardener_request</code>, <code>gardener_split</code>), and it still sees proposals
 with <code>gardener_proposals</code>. A memory or note whose content it changes loses its star.</p>
 <p>Sessions belong to the account that started them: a restricted account's agents

@@ -354,6 +354,21 @@ rejected as ambiguous rather than silently landing in the global scope. Pass
 <p><code>memory_edit</code> targets a memory that already exists, so it resolves like
 <code>memory_append</code>: the session's scope first, then a global fallback. The write is
 judged against the project the memory actually sits in.</p>
+<p><code>memory_read</code> by name resolves the same way, so a project memory of a name
+answers in place of the global memory of that name. Under <code>peer_auth</code>, one
+exception keeps a <a href="../../../guides/peer-auth/#restricted-local-accounts">restricted local
+account</a>'s words from standing in
+for your rules: when the project memory is that account's and the global memory
+of its name is a constraint, convention, protocol or stage, a read that names no
+project answers with the global memory, and its <code>project_memory</code> field gives the
+project memory's <code>id</code>, project and account, to read it by id. A read that passes
+<code>project=&lt;slug&gt;</code> still answers with the project memory, labeled with its
+<code>account</code>, and its <code>global_memory</code> field points at the rule
+(<code>project=global</code>). A write by such a name - <code>memory_append</code>, <code>memory_edit</code>,
+<code>memory_delete</code>, <code>favorite_set</code>, or <code>memory_write</code>'s <code>supersedes</code> - that names
+no project is refused, writing nothing, with an error naming both memories:
+pass <code>project=&lt;slug&gt;</code> or <code>project=global</code> to say which one you mean. Your own
+project memories shadow global ones as before.</p>
 <h2 id="recall-is-the-only-search-tool">Recall is the only search tool</h2>
 <p>There is one search entry point. <code>recall</code> fuses FTS5 keyword matching and vector
 similarity with reciprocal rank fusion, nudges the fused order by favorite and

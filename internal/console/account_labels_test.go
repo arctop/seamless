@@ -27,7 +27,7 @@ func accountChip(name string) string {
 
 func updatedAccountChip(name string) string {
 	return `<span class="kind faint" data-updated-account="` + name +
-		`" title="Last changed by a restricted local account (peer_auth.restricted)">updated by account ` + name + `</span>`
+		`" title="Title or body rewritten by a restricted local account (peer_auth.restricted)">updated by account ` + name + `</span>`
 }
 
 // labeledItems seeds one item of each kind written by the restricted account

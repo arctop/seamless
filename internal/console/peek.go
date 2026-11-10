@@ -11,6 +11,7 @@ import (
 
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/markdown"
+	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -347,7 +348,8 @@ type taskDetail struct {
 	Updated        time.Time  `json:"updated"`
 	Closed         *time.Time `json:"closed,omitempty"`
 	// Account is the restricted local account that created the task and
-	// UpdatedAccount the one that last changed it; "" for the owner.
+	// UpdatedAccount the one whose rewrite of its title or body the text may
+	// still carry (never a status flip or a claim); "" for the owner.
 	Account        string `json:"account,omitempty"`
 	UpdatedAccount string `json:"updatedAccount,omitempty"`
 	// Next is where this fragment's owner actions (star, release) return to,
@@ -501,23 +503,22 @@ func (s *Service) renderBody(ctx context.Context, body, project string) template
 
 // wikiResolver maps a normalized [[name]] reference to a memory peek link,
 // resolving the name against the store scoped to project with a global fallback.
+// It is the by-name read every agent surface makes (retrieve.MemoryByNameRead),
+// so a restricted account's project memory steps aside for the global rule of
+// that name it would shadow: the owner following [[name]] lands on the rule the
+// agents read, and the account's memory stays in the Memories list, labeled.
+// The global scope is always visible here; the request's handle (s.db) hides
+// whatever the request may not read, the global rule included.
 func (s *Service) wikiResolver(ctx context.Context, project string) markdown.WikiResolver {
 	return func(name string) (string, bool) {
-		m, ok, err := store.MemoryByName(ctx, s.db(ctx), project, name)
+		r, err := retrieve.MemoryByNameRead(ctx, s.db(ctx), project, name, true)
 		if err != nil {
 			s.logger.Warn("console: resolve wiki-link", "name", name, "error", err)
 			return "", false
 		}
-		if !ok && project != "" {
-			m, ok, err = store.MemoryByName(ctx, s.db(ctx), "", name)
-			if err != nil {
-				s.logger.Warn("console: resolve wiki-link (global)", "name", name, "error", err)
-				return "", false
-			}
-		}
-		if !ok {
+		if !r.Found {
 			return "", false
 		}
-		return "/console/memories/" + m.ID, true
+		return "/console/memories/" + r.Memory.ID, true
 	}
 }

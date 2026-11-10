@@ -14,6 +14,7 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/lifecycle"
+	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/validate"
@@ -65,6 +66,24 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 	// Cap on a word boundary with a trailing ellipsis so the stored description
 	// -- the only text shown in every index and briefing -- never ends mid-word.
 	desc = core.TruncateWords(desc, maxDescriptionRunes)
+
+	// A supersedes target is a by-name write too, and it is refused here, before
+	// anything lands, when its name is a restricted account's project memory
+	// shadowing a global rule and the call named no project (refuseShadowedWrite).
+	// supersedeMemory judges it again after the write, for a rule written in
+	// between. A malformed name is left to the paths below, which report it.
+	explicitScope := argString(req, "project") != ""
+	if target, terr := memoryName(argString(req, "supersedes")); terr == nil && target != "" && !explicitScope {
+		old, ok, rerr := s.resolveMemory(ctx, project, target, true)
+		if rerr != nil {
+			return errResult("memory_write", rerr)
+		}
+		if ok {
+			if serr := s.refuseShadowedWrite(ctx, old, false); serr != nil {
+				return errResult("memory_write", fmt.Errorf("supersedes: %w", serr))
+			}
+		}
+	}
 
 	// The dedup hint stays OUTSIDE the mutation below, in both directions. It
 	// costs an embedding round trip to a provider, so running it under the file's
@@ -143,9 +162,8 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 		var replaced core.Memory // the file this write replaces, read under the lock (screening's base)
 
 		// Account follows the content like Model, but with no "unknown" value to
-		// fall back from: this write replaces the whole content, so it carries the
-		// writer's label, and an owner's rewrite of a restricted account's memory
-		// clears it.
+		// fall back from: a new memory carries the writer's label. Over an existing
+		// one, accountAfter decides below.
 		mem := core.Memory{
 			Kind: kind, Name: name, Description: desc, Project: project, Body: body,
 			Updated: now, ValidFrom: now, SourceSession: s.boundSession(ctx),
@@ -204,6 +222,16 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 				mem.Tags, mem.Favorite, mem.Extra = onDisk.Tags, onDisk.Favorite, onDisk.Extra
 				replaced = onDisk
 			}
+			// This write replaces the body and the description, so a restricted
+			// account's stamps its label. The owner's clears one only when both are
+			// new text: a description resent as it was is still the account's line
+			// on every index (accountAfter, textOwned).
+			prior := existing
+			if replaced.ID != "" {
+				prior = replaced
+			}
+			mem.Account = accountAfter(prior.Account, account, true,
+				textOwned(prior.Body, body, true) && textOwned(prior.Description, desc, true))
 			mem.Favorite = starAfter(mem.Favorite, account, true)
 		} else {
 			id, err := core.NewID()
@@ -271,7 +299,7 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 		return errResult("memory_write", serr)
 	}
 	if supersedes != "" {
-		superseded, serr := s.supersedeMemory(ctx, project, supersedes, written, now)
+		superseded, serr := s.supersedeMemory(ctx, project, supersedes, written, explicitScope, now)
 		if serr != nil {
 			// Partial failure: the new memory is kept -- its content is valid
 			// knowledge, an update-in-place has no previous body to restore, and
@@ -303,11 +331,18 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 // in-place update, nothing to supersede), or an error the caller surfaces as a
 // tool error (the write itself is kept). A target already superseded by this
 // same replacement reports success, so retrying a memory_write whose supersede
-// already landed stays idempotent.
-func (s *Server) supersedeMemory(ctx context.Context, project, target string, replacement core.Memory, now time.Time) (string, error) {
+// already landed stays idempotent. explicit is whether the call passed
+// project=: without it, a target whose name a restricted account's project
+// memory shares with a global rule is refused (refuseShadowedWrite).
+func (s *Server) supersedeMemory(ctx context.Context, project, target string, replacement core.Memory, explicit bool, now time.Time) (string, error) {
 	old, found, err := s.resolveMemory(ctx, project, target, true)
 	if err != nil {
 		return "", err
+	}
+	if found {
+		if err := s.refuseShadowedWrite(ctx, old, explicit); err != nil {
+			return "", err
+		}
 	}
 	if !found {
 		// The active index missed: either the name is wrong, or the target is
@@ -402,6 +437,9 @@ func (s *Server) handleMemoryAppend(ctx context.Context, req mcp.CallToolRequest
 		return errResult("memory_append", s.scopedNotFound(ctx, "memory", project, name,
 			memoryAppendMissHelp, memoryAppendMissHelpSealed))
 	}
+	if err := s.refuseShadowedWrite(ctx, idx, argString(req, "project") != ""); err != nil {
+		return errResult("memory_append", err)
+	}
 	// The lookup falls back to the global scope, so the memory this append is
 	// about to rewrite may sit outside the caller's project -- and an append is a
 	// durable write, so it is judged as one against the scope it actually landed
@@ -428,7 +466,9 @@ func (s *Server) handleMemoryAppend(ctx context.Context, req mcp.CallToolRequest
 		if model := s.boundSessionModel(ctx); model != "" {
 			cur.Model = model
 		}
-		// The account label follows the body the same way (accountAfter).
+		// The account label follows the body too, except that an append keeps
+		// every word already there: a restricted account's append stamps its
+		// label, and the owner's never clears one (accountAfter).
 		cur.Account = accountAfter(cur.Account, judge.account, true, false)
 		cur.Favorite = starAfter(cur.Favorite, judge.account, true)
 		// A restricted account's append to a briefing-injected kind -- its own
@@ -501,6 +541,10 @@ func (s *Server) handleMemoryRead(ctx context.Context, req mcp.CallToolRequest) 
 		return errResult("memory_read", errors.New("pass exactly one of name or id"))
 	}
 	var idx core.Memory
+	// The other memory of the read's name, when a restricted account's project
+	// memory and a global rule share it (resolveReadShadow): the one passed
+	// over, or the rule an explicit project read answered beside.
+	var shadow readShadow
 	if id != "" {
 		m, found, err := store.MemoryByID(ctx, s.cfg.DB, id)
 		if err != nil {
@@ -533,6 +577,12 @@ func (s *Server) handleMemoryRead(ctx context.Context, req mcp.CallToolRequest) 
 		idx, found, err = s.resolveMemory(ctx, project, name, true)
 		if err != nil {
 			return errResult("memory_read", err)
+		}
+		if found {
+			idx, shadow, err = s.resolveReadShadow(ctx, idx, argString(req, "project") != "")
+			if err != nil {
+				return errResult("memory_read", err)
+			}
 		}
 		if !found {
 			// The active lookup missed; a superseded memory (excluded from the
@@ -578,6 +628,7 @@ func (s *Server) handleMemoryRead(ctx context.Context, req mcp.CallToolRequest) 
 	if mem.Favorite {
 		out["favorite"] = true
 	}
+	shadow.render(out)
 	if !mem.Active() {
 		warning, fenced := s.supersededWarning(ctx, mem)
 		out["warning"] = warning
@@ -596,6 +647,109 @@ func (s *Server) handleMemoryRead(ctx context.Context, req mcp.CallToolRequest) 
 		}
 	}
 	return jsonResult(out)
+}
+
+// readShadow is the pair a by-name memory_read found sharing one name: a
+// restricted account's project memory and the live global rule of a
+// briefing-injected kind it would shadow (retrieve.ShadowedRule). explicit
+// says which one the read answered with. The zero value is a read that found
+// no such pair, and renders nothing.
+type readShadow struct {
+	passed   core.Memory // the restricted account's project memory
+	rule     core.Memory // the global rule of the same name
+	explicit bool        // the read named the project: it answered with passed
+}
+
+// resolveReadShadow applies the shadow rule to memory_read's by-name answer
+// idx, once resolveMemory found it. A restricted account's project memory
+// whose name is a live global rule of a briefing-injected kind does not answer
+// in the rule's place: the read answers with the rule, and the response points
+// at the project memory by id (readShadow.render).
+//
+// explicit is whether the call passed project=. A read that names the project
+// asked for that scope's memory, so it keeps answering with it, labeled with
+// its account as always, and is pointed at the rule instead. That is the least
+// surprising split: the agents a briefing sends to read a rule pass a bare
+// name (the briefing's "memory_read name=<name>"), and a scope the caller
+// named is the one every by-name tool answers from (the miss help offers
+// project=<slug> and project=global as the way to choose). project=global
+// answers with the global memory before this is reached, and a read by id
+// resolves no name. A caller that may not read the global scope (a sealed
+// session) keeps the project memory with no pointer: the rule is not its to
+// read.
+//
+// The check costs nothing for the owner's memories and on an install without
+// restricted accounts: it starts only for a project memory that carries an
+// account.
+func (s *Server) resolveReadShadow(ctx context.Context, idx core.Memory, explicit bool) (core.Memory, readShadow, error) {
+	if idx.Project == "" || idx.Account == "" {
+		return idx, readShadow{}, nil
+	}
+	global, err := s.canReadGlobal(ctx)
+	if err != nil || !global {
+		return idx, readShadow{}, err
+	}
+	rule, ok, err := retrieve.ShadowedRule(ctx, s.cfg.DB, idx)
+	if err != nil || !ok {
+		return idx, readShadow{}, err
+	}
+	sh := readShadow{passed: idx, rule: rule, explicit: explicit}
+	if explicit {
+		return idx, sh, nil
+	}
+	return rule, sh, nil
+}
+
+// refuseShadowedWrite refuses a by-name write whose call named no scope when
+// the name it resolved, idx, is a restricted account's project memory that a
+// live global rule of a briefing-injected kind shares (resolveReadShadow).
+// Reads answer such a name with the rule, while the write's lookup finds the
+// project memory first, so an agent the briefing sent to the rule would
+// append to, edit, star, delete or supersede the account's memory in its
+// place. Neither target is safe to guess, so nothing is written and the error
+// names both and asks for the scope. A call that passed project= chose its
+// scope and proceeds as before, and so does a caller that may not read the
+// global scope (the rule is not its to name). explicit is whether the call
+// passed project=.
+func (s *Server) refuseShadowedWrite(ctx context.Context, idx core.Memory, explicit bool) error {
+	if explicit {
+		return nil
+	}
+	_, sh, err := s.resolveReadShadow(ctx, idx, false)
+	if err != nil || sh.passed.ID == "" {
+		return err
+	}
+	return fmt.Errorf("the name %s is two memories: project %s's (id %s, %s) and a global %s (id %s); a restricted "+
+		"account's project memory does not stand in for a global rule, so a write by that name must say which it "+
+		"means -- nothing was written; pass project=%s for the project memory, or project=global for the global %s",
+		sh.passed.Name, sh.passed.Project, sh.passed.ID, retrieve.AccountLabel(sh.passed.Account),
+		sh.rule.Kind, sh.rule.ID, sh.passed.Project, sh.rule.Kind)
+}
+
+// render adds the pointer at the memory the read did not answer with:
+// project_memory when the rule answered, global_memory when an explicit
+// project read answered with the account's memory. Each carries the other
+// memory's id and a sentence saying how to read it.
+func (r readShadow) render(out map[string]any) {
+	if r.passed.ID == "" {
+		return
+	}
+	if r.explicit {
+		out["global_memory"] = map[string]any{
+			"id": r.rule.ID, "kind": string(r.rule.Kind),
+			"note": fmt.Sprintf("a global %s named %s also exists, and a by-name read that names no project answers "+
+				"with it rather than with this project memory (%s); read it with memory_read name=%s project=global",
+				r.rule.Kind, r.rule.Name, retrieve.AccountLabel(r.passed.Account), r.rule.Name),
+		}
+		return
+	}
+	out["project_memory"] = map[string]any{
+		"id": r.passed.ID, "project": r.passed.Project, "account": r.passed.Account,
+		"note": fmt.Sprintf("project %s also has a memory named %s (%s); a restricted account's project memory does "+
+			"not answer by-name reads in place of a global %s, so this answer is the global one -- read the project "+
+			"memory with memory_read id=%s", r.passed.Project, r.passed.Name, retrieve.AccountLabel(r.passed.Account),
+			r.rule.Kind, r.passed.ID),
+	}
 }
 
 // resolveSupersededMemory finds a superseded (invalid) memory by (project, name),
@@ -674,6 +828,9 @@ func (s *Server) handleMemoryDelete(ctx context.Context, req mcp.CallToolRequest
 	}
 	if !found {
 		return errResult("memory_delete", s.scopedNotFound(ctx, "memory", project, name, "", ""))
+	}
+	if err := s.refuseShadowedWrite(ctx, idx, argString(req, "project") != ""); err != nil {
+		return errResult("memory_delete", err)
 	}
 	// Same reason as memory_append: the global fallback can land this delete on a
 	// memory outside the caller's project, and a delete is the least recoverable

@@ -158,6 +158,11 @@ func (s *Server) setMemoryFavorite(ctx context.Context, req mcp.CallToolRequest,
 	if !found {
 		return "", "", s.scopedNotFound(ctx, "memory", scope, name, "", "")
 	}
+	// A star pins a memory into briefings: on a name a restricted account's
+	// project memory shares with a global rule, the call must say which one.
+	if err := s.refuseShadowedWrite(ctx, idx, argString(req, "project") != ""); err != nil {
+		return "", "", err
+	}
 	if err := s.fenceWrite(ctx, idx.Project); err != nil {
 		return "", "", err
 	}

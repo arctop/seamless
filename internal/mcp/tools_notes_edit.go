@@ -124,8 +124,9 @@ func (s *Server) handleNotesEdit(ctx context.Context, req mcp.CallToolRequest) (
 		if model := s.boundSessionModel(ctx); model != "" {
 			cur.Model = model
 		}
-		// The account label and the star follow the body the same way
-		// (accountAfter, starAfter).
+		// The account label and the star follow the body the same way, except
+		// that a search/replace edit keeps whatever it did not replace: the
+		// owner's edit never clears a label (accountAfter, starAfter).
 		cur.Account = accountAfter(cur.Account, access.AccountOf(ctx), true, false)
 		cur.Favorite = starAfter(cur.Favorite, access.AccountOf(ctx), true)
 		if screen {

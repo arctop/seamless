@@ -54,9 +54,9 @@ type TaskPatch struct {
 // and must not create a cycle. The caller mints the ULID id and timestamps.
 //
 // The task's account is the restricted account the request in ctx speaks for
-// (access.AccountOf) unless the caller set one; every later change stamps
-// updated_account the same way, so a plan step a restricted account created,
-// claimed or closed says so whichever tool did it.
+// (access.AccountOf) unless the caller set one, so a plan step a restricted
+// account created says so whichever tool created it. updated_account is the
+// text's label after that, and only UpdateTask moves it (taskTextAccount).
 func CreateTask(ctx context.Context, db *sql.DB, t core.Task) error {
 	if t.Account == "" {
 		t.Account = access.AccountOf(ctx)
@@ -107,6 +107,9 @@ func CreateTask(ctx context.Context, db *sql.DB, t core.Task) error {
 // agent's claimed task cannot be edited or closed out from under it. The holder
 // itself, an expired lease, and the owner override (ForceReleaseTask) are the
 // only ways past the lock.
+//
+// updated_account moves only when the title or body actually changes
+// (taskTextAccount); a status, project, dependency or commit change keeps it.
 func UpdateTask(ctx context.Context, db *sql.DB, id string, patch TaskPatch, actor string, now time.Time) (core.Task, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -126,12 +129,15 @@ func UpdateTask(ctx context.Context, db *sql.DB, id string, patch TaskPatch, act
 			ErrTaskClaimConflict, id, t.ClaimedBy)
 	}
 
+	prevTitle, prevBody := t.Title, t.Body
 	if patch.Title != nil {
 		t.Title = *patch.Title
 	}
 	if patch.Body != nil {
 		t.Body = *patch.Body
 	}
+	t.UpdatedAccount = taskTextAccount(t.UpdatedAccount, access.AccountOf(ctx),
+		t.Title != prevTitle, t.Body != prevBody, t.Body)
 	if patch.ProjectSlug != nil {
 		t.ProjectSlug = *patch.ProjectSlug
 	}
@@ -172,7 +178,7 @@ func UpdateTask(ctx context.Context, db *sql.DB, id string, patch TaskPatch, act
 		                 claimed_by = ?, lease_expires_at = ?, updated_account = ?
 		 WHERE id = ?`,
 		t.Title, t.Body, t.ProjectSlug, string(t.Status), core.FormatTime(t.UpdatedAt), closedAt,
-		t.ClaimedBy, leaseAt, access.AccountOf(ctx), t.ID); err != nil {
+		t.ClaimedBy, leaseAt, t.UpdatedAccount, t.ID); err != nil {
 		return core.Task{}, fmt.Errorf("store.UpdateTask: update: %w", err)
 	}
 	if err := addDeps(ctx, tx, t.ID, patch.AddDependsOn); err != nil {
@@ -191,6 +197,37 @@ func UpdateTask(ctx context.Context, db *sql.DB, id string, patch TaskPatch, act
 		return core.Task{}, fmt.Errorf("store.UpdateTask: commit: %w", err)
 	}
 	return TaskByID(ctx, db, id)
+}
+
+// taskTextAccount is a task's updated_account after a change: the restricted
+// account (peer_auth.restricted) whose words the title or body may still
+// carry, or "" when none can. It follows the text, the rule a memory's or
+// note's account label follows (mcp's accountAfter), and nothing else: a
+// status flip, a claim or release, a lease lapsing, a project move, a new
+// dependency, a recorded commit or a star keeps the value the row has, so the
+// owner closing a task an account rewrote leaves the label on, and an account
+// that only claimed the owner's task never puts one there.
+//
+// writer is the account the change speaks for ("" for the owner). A
+// restricted account's change of the title or the body stamps its name. The
+// owner's change clears the label only once it leaves no text it did not
+// write: the title rewritten, and the body rewritten too unless it is empty.
+// The column names one account for the whole task, not which field it wrote,
+// so an owner's edit of one field cannot know the other is its own; keeping a
+// label a little too long names an account whose words are gone, while
+// clearing it early would pass an account's title off as the owner's on every
+// task line. (A memory's account can follow its body alone because its
+// description only summarizes the body; a task's title is its text.)
+// Unchanged values count as no change, so resending the same text moves
+// nothing.
+func taskTextAccount(current, writer string, titleChanged, bodyChanged bool, body string) string {
+	switch {
+	case writer != "" && (titleChanged || bodyChanged):
+		return writer
+	case writer == "" && titleChanged && (bodyChanged || body == ""):
+		return ""
+	}
+	return current
 }
 
 // TaskByID returns a task with its dependency ids populated. found is false when

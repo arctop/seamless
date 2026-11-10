@@ -795,7 +795,9 @@ and the sidebar badge counts the proposals.
 
 Elsewhere on the console, a memory, note, task, session or trial that a
 restricted account wrote carries a small "written by account <name>" chip (a
-task the account last changed, "updated by account <name>"), including search
+task whose title or body the account rewrote, "updated by account <name>",
+until you have rewritten all of its text; a status change or a claim moves
+neither chip), including search
 results, a lab's trial list and the project workspace's tabs; events and a
 session's activity timeline carry none. Your own items show none.
 

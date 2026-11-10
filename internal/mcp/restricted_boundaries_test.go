@@ -173,14 +173,29 @@ func TestRestricted_TaskRewriteLabeled(t *testing.T) {
 	task := r.call(r.owner, "tasks_add", map[string]any{"project": kaOpen, "title": "owner task", "body": "owner body"})
 	id := task["id"].(string)
 	r.call(r.owner, "tasks_add", map[string]any{"project": kaOpen, "title": "untouched task", "body": "the owner's alone"})
+	untouched := r.call(r.owner, "tasks_add", map[string]any{"project": kaOpen, "title": "claimed task", "body": "the owner's words"})
 	out := r.call(r.agent, "tasks_update", map[string]any{"id": id, "title": "Xq7 rewritten", "body": "Xq7 rewritten body"})
 	require.Equal(t, kaAccount, out["updated_account"])
+
+	// The owner moving it through statuses keeps the label: the text is still
+	// the account's.
+	for _, st := range []string{"in_progress", "open"} {
+		flip := r.call(r.owner, "tasks_update", map[string]any{"id": id, "status": st})
+		require.Equal(t, kaAccount, flip["updated_account"], "status %s", st)
+	}
+	// The account claiming and releasing the owner's task writes none of it.
+	r.call(r.agent, "session_start", map[string]any{"project": kaOpen})
+	claim := r.call(r.agent, "tasks_claim", map[string]any{"id": untouched["id"]})
+	require.NotContains(t, claim, "updated_account")
+	released := r.call(r.agent, "tasks_release", map[string]any{"id": untouched["id"]})
+	require.NotContains(t, released, "updated_account")
 
 	mark := " [written by account " + kaAccount + "]"
 	sess := r.call(r.owner, "session_start", map[string]any{"project": kaOpen})
 	b, _ := sess["briefing"].(string)
 	require.Contains(t, b, "- Xq7 rewritten"+mark+"\n")
 	require.Contains(t, b, "- untouched task\n")
+	require.Contains(t, b, "- claimed task\n")
 
 	rec := r.call(r.owner, "recall", map[string]any{"query": "Xq7", "project": kaOpen})
 	require.Contains(t, mustJSON(t, rec), `"account":"`+kaAccount+`"`)

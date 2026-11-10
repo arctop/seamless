@@ -511,7 +511,7 @@ func TestRestricted_SessionBelongsToItsPrincipal(t *testing.T) {
 	t.Run("restricted in its own", func(t *testing.T) {
 		claim := r.ok(acct, "tasks_claim", map[string]any{"id": taskID, "session": "sess/acct-one"})
 		require.Equal(t, acctSess.ID, claim["claimed_by"])
-		require.Equal(t, wkAcct, claim["updated_account"])
+		require.NotContains(t, claim, "updated_account", "a claim writes none of the task's text")
 		require.NotContains(t, claim, "account", "the owner created the task")
 		// By the name it gave, or the qualified name its session reports.
 		upd := r.ok(acct, "session_update", map[string]any{"session": "sess/acct-one", "findings": "progress"})

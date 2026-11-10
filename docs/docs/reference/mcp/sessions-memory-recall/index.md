@@ -109,6 +109,22 @@ rejected as ambiguous rather than silently landing in the global scope. Pass
 `memory_append`: the session's scope first, then a global fallback. The write is
 judged against the project the memory actually sits in.
 
+`memory_read` by name resolves the same way, so a project memory of a name
+answers in place of the global memory of that name. Under `peer_auth`, one
+exception keeps a [restricted local
+account](https://thereisnospoon.org/docs/guides/peer-auth/#restricted-local-accounts)'s words from standing in
+for your rules: when the project memory is that account's and the global memory
+of its name is a constraint, convention, protocol or stage, a read that names no
+project answers with the global memory, and its `project_memory` field gives the
+project memory's `id`, project and account, to read it by id. A read that passes
+`project=<slug>` still answers with the project memory, labeled with its
+`account`, and its `global_memory` field points at the rule
+(`project=global`). A write by such a name - `memory_append`, `memory_edit`,
+`memory_delete`, `favorite_set`, or `memory_write`'s `supersedes` - that names
+no project is refused, writing nothing, with an error naming both memories:
+pass `project=<slug>` or `project=global` to say which one you mean. Your own
+project memories shadow global ones as before.
+
 ## Recall is the only search tool
 
 There is one search entry point. `recall` fuses FTS5 keyword matching and vector

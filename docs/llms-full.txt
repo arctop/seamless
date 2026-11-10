@@ -6829,13 +6829,18 @@ sudo -u _example_agent -H /opt/seamless/bin/seamlessd install-hooks --client cla
 
 Keep the socket outside every home directory: the account cannot traverse yours.
 
-**Everything it writes is labeled.** Memories, notes, tasks and their updates,
-plan steps, sessions and their findings, and trials record the account that
+**Everything it writes is labeled.** Memories, notes, tasks and its rewrites of
+yours, plan steps, sessions and their findings, and trials record the account that
 wrote them, and every surface shows it: "[written by account _example_agent]"
 at the end of briefing, prompt recall (`<seam-recall>`), A2A and
 `seam task list` lines, an `account` field in tool results, and a "written by
 account _example_agent" chip on console rows. Your own writes look exactly as
-they always have.
+they always have. A label stays while the account's words may still be there. A
+status change, a claim or release, tags or a star never move it, and neither
+does your append, partial edit or rewrite of one field. It clears once you have
+rewritten all of the item's text in new words: a memory's body and description,
+a note's body, title and description, or a task's title and body. An empty
+description or task body counts as yours.
 
 **Binding rules are proposals.** A constraint, convention, protocol or stage
 steers every session's briefing, so one from a restricted account does not land
@@ -6857,7 +6862,12 @@ and notes, tasks and findings, lands at once, labeled.
 
 Three more rules keep its text from passing as yours. It cannot give a project
 memory the name of a live global constraint, convention, protocol or stage, because
-a read by that name would then answer with its text. It cannot ask the gardener to
+a read by that name would then answer with its text. A project memory it wrote
+before you created a global rule of that name does not answer either: a read by
+the bare name answers with your rule and names the account's memory, which
+stays readable by id or with `project=<slug>`. A write by that bare name (an
+append, edit, delete, star or supersede) is refused until it says
+`project=<slug>` or `project=global`. It cannot ask the gardener to
 plan a change (`gardener_request`, `gardener_split`), and it still sees proposals
 with `gardener_proposals`. A memory or note whose content it changes loses its star.
 
@@ -8628,6 +8638,22 @@ rejected as ambiguous rather than silently landing in the global scope. Pass
 `memory_edit` targets a memory that already exists, so it resolves like
 `memory_append`: the session's scope first, then a global fallback. The write is
 judged against the project the memory actually sits in.
+
+`memory_read` by name resolves the same way, so a project memory of a name
+answers in place of the global memory of that name. Under `peer_auth`, one
+exception keeps a [restricted local
+account](/guides/peer-auth/#restricted-local-accounts)'s words from standing in
+for your rules: when the project memory is that account's and the global memory
+of its name is a constraint, convention, protocol or stage, a read that names no
+project answers with the global memory, and its `project_memory` field gives the
+project memory's `id`, project and account, to read it by id. A read that passes
+`project=<slug>` still answers with the project memory, labeled with its
+`account`, and its `global_memory` field points at the rule
+(`project=global`). A write by such a name - `memory_append`, `memory_edit`,
+`memory_delete`, `favorite_set`, or `memory_write`'s `supersedes` - that names
+no project is refused, writing nothing, with an error naming both memories:
+pass `project=<slug>` or `project=global` to say which one you mean. Your own
+project memories shadow global ones as before.
 
 ## Recall is the only search tool
 
@@ -13879,7 +13905,9 @@ and the sidebar badge counts the proposals.
 
 Elsewhere on the console, a memory, note, task, session or trial that a
 restricted account wrote carries a small "written by account <name>" chip (a
-task the account last changed, "updated by account <name>"), including search
+task whose title or body the account rewrote, "updated by account <name>",
+until you have rewritten all of its text; a status change or a claim moves
+neither chip), including search
 results, a lab's trial list and the project workspace's tabs; events and a
 session's activity timeline carry none. Your own items show none.
 

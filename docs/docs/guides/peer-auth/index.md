@@ -657,13 +657,18 @@ sudo -u _example_agent -H /opt/seamless/bin/seamlessd install-hooks --client cla
 
 Keep the socket outside every home directory: the account cannot traverse yours.
 
-**Everything it writes is labeled.** Memories, notes, tasks and their updates,
-plan steps, sessions and their findings, and trials record the account that
+**Everything it writes is labeled.** Memories, notes, tasks and its rewrites of
+yours, plan steps, sessions and their findings, and trials record the account that
 wrote them, and every surface shows it: "[written by account _example_agent]"
 at the end of briefing, prompt recall (`<seam-recall>`), A2A and
 `seam task list` lines, an `account` field in tool results, and a "written by
 account _example_agent" chip on console rows. Your own writes look exactly as
-they always have.
+they always have. A label stays while the account's words may still be there. A
+status change, a claim or release, tags or a star never move it, and neither
+does your append, partial edit or rewrite of one field. It clears once you have
+rewritten all of the item's text in new words: a memory's body and description,
+a note's body, title and description, or a task's title and body. An empty
+description or task body counts as yours.
 
 **Binding rules are proposals.** A constraint, convention, protocol or stage
 steers every session's briefing, so one from a restricted account does not land
@@ -685,7 +690,12 @@ and notes, tasks and findings, lands at once, labeled.
 
 Three more rules keep its text from passing as yours. It cannot give a project
 memory the name of a live global constraint, convention, protocol or stage, because
-a read by that name would then answer with its text. It cannot ask the gardener to
+a read by that name would then answer with its text. A project memory it wrote
+before you created a global rule of that name does not answer either: a read by
+the bare name answers with your rule and names the account's memory, which
+stays readable by id or with `project=<slug>`. A write by that bare name (an
+append, edit, delete, star or supersede) is refused until it says
+`project=<slug>` or `project=global`. It cannot ask the gardener to
 plan a change (`gardener_request`, `gardener_split`), and it still sees proposals
 with `gardener_proposals`. A memory or note whose content it changes loses its star.
 

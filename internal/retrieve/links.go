@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/arctop/seamless/internal/core"
-	"github.com/arctop/seamless/internal/store"
 )
 
 // expandLinks scans the top fused memory hits for [[name]] links and adds each
@@ -76,13 +75,16 @@ func (s *Service) expandLinks(ctx context.Context, ordered []string, acc map[str
 // project scope, falling back to a global memory of the same name when the
 // scope may read global at all (globalVisible; a sealed project may not).
 // found is false when nothing matches (a dangling link is simply ignored).
+//
+// It is a by-name read like memory_read's, so a restricted account's project
+// memory steps aside for the global rule it would shadow (MemoryByNameRead):
+// a [[name]] link in a hit pulls in the rule, never the account's text in its
+// place. The memory passed over is not added: it is in recall on its own
+// merits, labeled, when the query reaches it.
 func (s *Service) resolveLinkedMemory(ctx context.Context, project, name string, globalVisible bool) (core.Memory, bool, error) {
-	m, ok, err := store.MemoryByName(ctx, s.db, project, name)
-	if err != nil || ok {
-		return m, ok, err
+	r, err := MemoryByNameRead(ctx, s.db, project, name, globalVisible)
+	if err != nil {
+		return core.Memory{}, false, err
 	}
-	if project != "" && globalVisible {
-		return store.MemoryByName(ctx, s.db, "", name)
-	}
-	return core.Memory{}, false, nil
+	return r.Memory, r.Found, nil
 }

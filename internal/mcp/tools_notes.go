@@ -357,13 +357,17 @@ func (p noteUpdatePatch) empty() bool {
 // applyNoteUpdate applies a parsed patch to the note read under the mutation
 // lock. It is a method because the body case needs the bound session's model.
 func (s *Server) applyNoteUpdate(ctx context.Context, note *core.Note, p noteUpdatePatch) {
-	// The account label follows the content fields: a replaced body re-stamps
-	// it (the owner's clears it), and a restricted account's new title or
-	// description stamps it too; tags and a move keep it (accountAfter). The
-	// star follows the same content: a restricted account may not set one, so
-	// it must not inherit one for words the owner did not star (starAfter).
-	note.Account = accountAfter(note.Account, access.AccountOf(ctx), p.body != nil, noteTextChanged(*note, p))
-	note.Favorite = starAfter(note.Favorite, access.AccountOf(ctx), p.body != nil || noteTextChanged(*note, p))
+	// The account label follows the content fields: a restricted account's
+	// replaced body, title or description stamps it, and the owner's update
+	// clears it only when the body, the title and the description are all its
+	// own afterwards -- each replaced with new text, or an empty description;
+	// tags and a move keep it (accountAfter, textOwned). It is decided at the
+	// end, once the patch is applied. The star follows the same content: a
+	// restricted account may not set one, so it must not inherit one for words
+	// the owner did not star (starAfter).
+	before := *note
+	contentChanged := p.body != nil || noteTextChanged(before, p)
+	note.Favorite = starAfter(note.Favorite, access.AccountOf(ctx), contentChanged)
 	if p.title != nil {
 		note.Title = *p.title
 	}
@@ -399,6 +403,10 @@ func (s *Server) applyNoteUpdate(ctx context.Context, note *core.Note, p noteUpd
 			return slices.Contains(p.tagsRemove, t)
 		})
 	}
+	note.Account = accountAfter(before.Account, access.AccountOf(ctx), contentChanged,
+		textOwned(before.Body, note.Body, p.body != nil) &&
+			textOwned(before.Title, note.Title, p.title != nil) &&
+			textOwned(before.Description, note.Description, p.description != nil))
 }
 
 func notesAppendTool() mcp.Tool {
@@ -448,8 +456,9 @@ func (s *Server) handleNotesAppend(ctx context.Context, req mcp.CallToolRequest)
 		if model := s.boundSessionModel(ctx); model != "" {
 			note.Model = model
 		}
-		// The account label and the star follow the appended text the same way
-		// (accountAfter, starAfter).
+		// The account label and the star follow the appended text the same way,
+		// except that an append keeps every word already there: the owner's
+		// never clears a label (accountAfter, starAfter).
 		note.Account = accountAfter(note.Account, access.AccountOf(ctx), true, false)
 		note.Favorite = starAfter(note.Favorite, access.AccountOf(ctx), true)
 		if screen {

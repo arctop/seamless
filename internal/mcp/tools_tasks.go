@@ -463,8 +463,9 @@ func taskJSON(t core.Task) map[string]any {
 		j["favorite"] = true
 	}
 	// Provenance (peer_auth.restricted): the restricted account that created
-	// the task, and the one that last changed it. The owner's tasks carry
-	// neither key.
+	// the task, and the one whose rewrite of its title or body the text may
+	// still carry (a status change or a claim never sets it). The owner's
+	// tasks carry neither key.
 	if t.Account != "" {
 		j["account"] = t.Account
 	}

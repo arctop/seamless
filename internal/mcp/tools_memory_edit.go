@@ -110,6 +110,9 @@ func (s *Server) handleMemoryEdit(ctx context.Context, req mcp.CallToolRequest) 
 		return errResult("memory_edit", s.scopedNotFound(ctx, "memory", project, name,
 			memoryAppendMissHelp, memoryAppendMissHelpSealed))
 	}
+	if err := s.refuseShadowedWrite(ctx, idx, argString(req, "project") != ""); err != nil {
+		return errResult("memory_edit", err)
+	}
 	if err := s.fenceWrite(ctx, idx.Project); err != nil {
 		return errResult("memory_edit", err)
 	}
@@ -180,11 +183,13 @@ func (s *Server) handleMemoryEdit(ctx context.Context, req mcp.CallToolRequest) 
 				cur.Model = model
 			}
 		}
-		// The account label follows the body like Model; a restricted account's
-		// new description stamps it too, since that line is what every index
-		// shows (accountAfter).
-		cur.Account = accountAfter(cur.Account, judge.account, newBody != oldBody,
-			cur.Description != before.Description)
+		// The account label follows the body and the description: a restricted
+		// account's change of either stamps it. A search/replace edit keeps
+		// whatever it did not replace, so the owner's edit clears a label only
+		// when the body is left empty and the description is new (accountAfter).
+		cur.Account = accountAfter(cur.Account, judge.account,
+			newBody != oldBody || cur.Description != before.Description,
+			textOwned(oldBody, newBody, false) && textOwned(before.Description, cur.Description, true))
 		cur.Favorite = starAfter(cur.Favorite, judge.account,
 			newBody != oldBody || cur.Description != before.Description)
 		// A restricted account's edit of a briefing-injected kind -- its own

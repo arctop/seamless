@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
@@ -17,8 +18,8 @@ import (
 //
 // A restricted account writes the open projects it reaches, and every memory
 // or note it writes carries its account name (core.Memory.Account,
-// core.Note.Account) for as long as the content it wrote is the content on
-// disk. What it cannot do is change what binds every session: a write that
+// core.Note.Account) for as long as the content may still carry its words
+// (accountAfter). What it cannot do is change what binds every session: a write that
 // lands, replaces, supersedes or deletes a memory of a briefing-injected kind
 // (screening.BriefingKinds) is a PROPOSAL. It goes to write screening's held
 // queue -- whether or not the screening feature is on -- and lands only when
@@ -135,6 +136,11 @@ func errSupersedeIsProposal(target string, kind core.MemoryKind) error {
 // the project first, so the account's text would answer every agent the
 // briefing sent to read the global rule, with no proposal in between. The
 // account reads the global scope, so the refusal tells it nothing new.
+//
+// This judges only a new name. A project memory the account wrote before the
+// owner's global rule of that name existed is judged where it would answer:
+// every by-name read steps past it to the rule (retrieve.ShadowedRule,
+// memory_read's resolveReadShadow).
 func (s *Server) refuseGlobalShadow(ctx context.Context, project, name string) error {
 	if project == "" {
 		return nil
@@ -168,17 +174,41 @@ func noteTextChanged(note core.Note, p noteUpdatePatch) bool {
 }
 
 // accountAfter is the account label a memory or note carries after a write:
-// a body change re-stamps it with the writer (the owner's rewrite clears it,
-// as a rewrite re-stamps Model), and a restricted account's change of the
-// description or title stamps it too, because that text is what every index
-// and briefing line shows. Anything else -- tags, a star, an owner's
-// description fix -- keeps the label the content already carries, so the
-// label never stops naming an account whose words are still the content.
-func accountAfter(current, account string, bodyChanged, textChanged bool) string {
-	if bodyChanged || (textChanged && account != "") {
-		return account
+// the restricted account whose words its labeled text may still carry, or ""
+// when none can. The labeled text is everything a restricted account's change
+// of stamps the label: a memory's body and description, a note's body, title
+// and description -- the body, and the lines every index and briefing shows.
+//
+// writer is the account the write speaks for ("" for the owner). changed is
+// whether the write changed any labeled text: a restricted account's change
+// stamps its name. ownsAll is whether, after the write, every labeled field is
+// wholly the writer's (textOwned): the owner's write clears the label only
+// then. The label names one account for the whole item, not which field it
+// wrote, so the owner's append, search/replace edit, or rewrite of one field
+// cannot know the rest is its own. Keeping the label then names an account
+// whose words may be gone; clearing it would pass the account's words off as
+// the owner's on every surface, so it keeps it. Tags, a star, a move and a
+// supersede tombstone change no labeled text and keep it too.
+// store.UpdateTask's taskTextAccount is the same rule for a task's title and
+// body.
+func accountAfter(current, writer string, changed, ownsAll bool) string {
+	switch {
+	case writer != "" && changed:
+		return writer
+	case writer == "" && ownsAll:
+		return ""
 	}
 	return current
+}
+
+// textOwned reports whether one labeled text field is wholly the writer's
+// after a write: the write replaced it outright (replaced) with different text,
+// or it is empty. Text resent unchanged, or kept around an append or a
+// search/replace edit, is still whoever wrote it before. Surrounding
+// whitespace is not a change.
+func textOwned(before, after string, replaced bool) bool {
+	b, a := strings.TrimSpace(before), strings.TrimSpace(after)
+	return a == "" || (replaced && a != b)
 }
 
 // starAfter is a memory's or note's star after a write: a restricted account's change of

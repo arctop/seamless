@@ -112,7 +112,10 @@ var dgPlanTables = []string{
 
 // dgForbiddenKeys are the response keys SEAL A (restricted accounts, commit
 // 4989ebee) added; none may appear in any response with the defaults.
-var dgForbiddenKeys = []string{"account", "updated_account", "proposed_by"}
+// project_memory and global_memory are memory_read's pointers between a
+// restricted account's project memory and the global rule of its name, so
+// they need a memory carrying an account, which the defaults never write.
+var dgForbiddenKeys = []string{"account", "updated_account", "proposed_by", "project_memory", "global_memory"}
 
 // ---------------------------------------------------------------------------
 // The daemon

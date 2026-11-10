@@ -260,11 +260,17 @@ any of it.
   CANNOT CREATE a project (every creation path -- write scope, session_start,
   project_create, the repo map -- refuses it first). No requests, grants or
   leases. `access.AccountOf(ctx) != ""` is the one test for it, and the
-  account name is the label every write carries: sessions, tasks
-  (`account`/`updated_account`) and trials are stamped by the store from ctx;
-  memory and note content by the MCP and hook write paths (frontmatter
-  `account`, following the content like `model`, plus a restricted account's
-  description/title change). The owner's writes carry no label.
+  account name is the label every write carries: sessions, tasks (`account` at
+  creation; `updated_account` only when a title or body changes,
+  `store.taskTextAccount`) and trials are stamped by the store from ctx; memory
+  and note content by the MCP and hook write paths (frontmatter `account`,
+  `mcp.accountAfter`). A restricted account's change of the labeled text (a
+  memory's body or description; a note's body, title or description; a task's
+  title or body) stamps the label, and nothing else moves it: status, claims,
+  releases, moves, tags, stars and tombstones keep it. The owner's write clears
+  it only once every labeled field is the owner's (`textOwned`: replaced with
+  new text in that write, or empty), so the owner's append, search/replace edit
+  or one-field rewrite keeps it. The owner's writes carry no label.
 - **A restricted account's binding rule is a proposal, never a write.** Any
   write, append, edit, overwrite, supersede or delete that touches a
   `screening.BriefingKinds` memory (constraint, convention, protocol, stage)
@@ -274,8 +280,16 @@ any of it.
   queue's Release (console, `seam promote`, TTY only), the owner's alone. It
   may not star (favorite_set), apply gardener proposals, or plan them
   (gardener_request, gardener_split). It may not give a project memory the name
-  of a live global briefing-kind memory (the shadow would answer by-name reads),
-  and a memory or note whose content it changes loses its star.
+  of a live global briefing-kind memory (the shadow would answer by-name reads).
+  One it wrote before such a global rule existed steps aside for the rule
+  (`retrieve.ShadowedRule`): memory_read by a bare name, recall's link expansion
+  and the console's wiki links answer with the rule, memory_read pointing at the
+  other memory (`project_memory`, or `global_memory` on an explicit `project=`
+  read), and a by-name write that names no project (memory_append, memory_edit,
+  memory_delete, favorite_set, memory_write's supersedes) is refused, naming
+  both (`refuseShadowedWrite`). Reads by id and calls with an explicit
+  `project=` behave as before. A memory or note whose content it changes loses
+  its star.
 - **The owner's decisions are refused from an agent's process.** On the socket,
   bringing a fence down, deciding held writes and changing features go through
   `refusedFromAgent`/`ownerHands` (`access.FromAgent`, the kernel's process chain,

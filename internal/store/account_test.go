@@ -75,7 +75,7 @@ func TestAccountColumns_StampedFromTheRequest(t *testing.T) {
 	require.NoError(t, err)
 	tk, err = TaskByID(owner, db, "01K0TASK0000000000000000A2")
 	require.NoError(t, err)
-	require.Equal(t, "_example_agent", tk.UpdatedAccount)
+	require.Empty(t, tk.UpdatedAccount, "a claim writes no text, so it adds no label")
 	require.Empty(t, tk.Account, "a claim does not change who created it")
 	_, err = ReleaseTask(ctx, db, "01K0TASK0000000000000000A2", "cc/agent", now)
 	require.NoError(t, err)
