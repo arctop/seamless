@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/passkey/passkeytest"
@@ -88,4 +89,68 @@ func TestConsoleUnlock_PasskeysOff(t *testing.T) {
 	require.ErrorIs(t, err, ErrPasskeysOff)
 	_, err = off.FinishConsoleUnlock(context.Background(), "x", "example-finance", store.HashConsoleToken("b"), nil)
 	require.ErrorIs(t, err, ErrPasskeysOff)
+}
+
+// The terminal path: the browser begins it, with no passkey needed; the
+// daemon's account approves its code for a lease no longer than the console's;
+// the approval is recorded.
+func TestConsoleUnlock_Terminal(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	rec := events.NewRecorder(f.db)
+	f.svc.cfg.Events = rec
+	browser := store.HashConsoleToken("browser-a")
+
+	begun, err := f.svc.BeginTerminalUnlock(ctx, "example-finance", browser)
+	require.NoError(t, err, "no passkey is enrolled, and none is needed")
+	require.Equal(t, begun.Code, store.FormatUnlockCode(begun.Code))
+	require.Equal(t, f.now.Add(ConsoleTerminalUnlockTTL), begun.PendingUntil)
+
+	_, err = f.svc.ApproveTerminalUnlock(ctx, "example-finance", begun.Code, ConsoleLease+time.Minute)
+	require.ErrorIs(t, err, store.ErrInvalidConsoleUnlock, "no longer than the console lease")
+	_, err = f.svc.ApproveTerminalUnlock(ctx, "example-legal", begun.Code, time.Hour)
+	require.ErrorIs(t, err, store.ErrConsoleUnlockNotFound, "a code names one project's unlock")
+	require.Empty(t, f.unlockEvents(t, rec), "a refused approval records nothing")
+
+	f.now = f.now.Add(time.Minute)
+	u, err := f.svc.ApproveTerminalUnlock(ctx, "example-finance", begun.Code, time.Hour)
+	require.NoError(t, err)
+	require.Equal(t, begun.ID, u.ID)
+	require.Equal(t, browser, u.TokenHash)
+	require.Equal(t, store.ConsoleUnlockByDaemon, u.Credential)
+	require.Equal(t, f.now.Add(time.Hour), *u.ExpiresAt)
+	evs := f.unlockEvents(t, rec)
+	require.Len(t, evs, 1)
+	require.Equal(t, u.ID, evs[0].ItemID)
+	require.Equal(t, "example-finance", evs[0].ProjectSlug)
+	require.Equal(t, ProofDaemon, evs[0].Payload["proof"])
+
+	_, err = f.svc.ApproveTerminalUnlock(ctx, "example-finance", begun.Code, time.Hour)
+	require.ErrorIs(t, err, store.ErrConsoleUnlockNotFound, "a code works once")
+
+	// Late: the code waits ConsoleTerminalUnlockTTL.
+	late, err := f.svc.BeginTerminalUnlock(ctx, "example-finance", browser)
+	require.NoError(t, err)
+	f.now = f.now.Add(ConsoleTerminalUnlockTTL)
+	_, err = f.svc.ApproveTerminalUnlock(ctx, "example-finance", late.Code, time.Hour)
+	require.ErrorIs(t, err, store.ErrConsoleUnlockNotFound)
+}
+
+func (f *fixture) unlockEvents(t *testing.T, rec *events.Recorder) []core.Event {
+	t.Helper()
+	evs, err := rec.ByKinds(context.Background(), []core.EventKind{EventConsoleUnlocked}, "", "", 10)
+	require.NoError(t, err)
+	return evs
+}
+
+// A restricted account begins and approves nothing: the console already keeps
+// it out, and the approval service refuses it again.
+func TestConsoleUnlock_TerminalRefusesRestricted(t *testing.T) {
+	f := newGrantFixture(t)
+	rctx := access.WithView(context.Background(), restrictedView(t, f, bridge, agent, shell))
+	_, err := f.svc.BeginTerminalUnlock(rctx, lockFin, store.HashConsoleToken("browser-a"))
+	require.ErrorIs(t, err, ErrRestricted)
+	_, err = f.svc.ApproveTerminalUnlock(rctx, lockFin, "ABCD-EFGH", time.Hour)
+	require.ErrorIs(t, err, ErrRestricted)
+	require.Zero(t, countRows(t, f, "console_unlocks"))
 }

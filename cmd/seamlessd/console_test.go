@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -105,17 +108,20 @@ func TestRenderConsoleLoginPage_EscapesKey(t *testing.T) {
 		"quote in key must be escaped, got: %s", page)
 }
 
-// The unlock link is the credential: on a launcher's argv ps would show it to
-// any process of the account, and whoever claims it first gets the unlock. So
-// the unlock path prints the link and runs nothing, even with a launcher of
-// each name first on PATH.
-func TestConsoleOpenUnlock_PrintsTheLinkAndLaunchesNothing(t *testing.T) {
+// console-open --unlock --code, end to end as the daemon's account: it
+// approves the code a browser's page shows, says what it opened, prints
+// nothing secret, and launches nothing, even with a launcher of each name
+// first on PATH.
+func TestConsoleOpenUnlock_ApprovesTheCodeAndLaunchesNothing(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("peer_auth is a POSIX deployment: the account check refuses first")
 	}
-	daemonDB(t, store.LatestSchemaVersion())
+	dbPath := daemonDB(t, store.LatestSchemaVersion())
 	cfg, err := config.Load()
 	require.NoError(t, err)
+	cookie, err := store.NewConsoleToken()
+	require.NoError(t, err)
+	u, code := beginTerminalIn(t, dbPath, "example-finance", store.HashConsoleToken(cookie))
 
 	bin := t.TempDir()
 	launched := filepath.Join(t.TempDir(), "launched")
@@ -125,24 +131,82 @@ func TestConsoleOpenUnlock_PrintsTheLinkAndLaunchesNothing(t *testing.T) {
 	}
 	t.Setenv("PATH", bin)
 
-	out := captureStdout(t, func() error { return runConsoleUnlock(cfg, "example-finance", "", "") })
-	require.Contains(t, out, "Unlock link for example-finance (works once, within 10 minutes):")
-	require.Contains(t, out, consoleBase(cfg)+"/console/unlock?t=")
-
+	out := captureStdout(t, func() error { return runConsoleUnlock(cfg, "example-finance", code, "", "") })
+	require.Contains(t, out, "Unlocked example-finance for 3 hours, until ")
+	require.Contains(t, out, "in the browser that showed code "+code+".")
+	require.NotContains(t, out, cookie)
+	require.NotContains(t, out, "?t=", "no link: nothing the terminal shows opens a browser")
 	_, err = os.Stat(launched)
-	require.ErrorIs(t, err, os.ErrNotExist, "no launcher ran: the link never reached an argv")
+	require.ErrorIs(t, err, os.ErrNotExist, "no launcher ran")
+
+	db, err := store.OpenExisting(dbPath)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, db.Close()) }()
+	live, err := store.LiveConsoleUnlocks(context.Background(), db, store.HashConsoleToken(cookie), time.Now())
+	require.NoError(t, err)
+	require.Len(t, live, 1)
+	require.Equal(t, u.ID, live[0].ID, "the browser that began it reads the project")
+}
+
+// beginTerminalIn begins a terminal unlock of project in the database at
+// dbPath, as the browser whose cookie hashes to tokenHash does, and returns
+// the row and its code.
+func beginTerminalIn(t *testing.T, dbPath, project, tokenHash string) (store.ConsoleUnlock, string) {
+	t.Helper()
+	db, err := store.OpenExisting(dbPath)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, db.Close()) }()
+	u, code, err := store.BeginTerminalUnlock(context.Background(), db, project, tokenHash, 3*time.Hour, 10*time.Minute, time.Now())
+	require.NoError(t, err)
+	return u, code
+}
+
+// Without --code it asks for one in a terminal, and refuses -- naming --code
+// and the page where the unlock begins -- anywhere else, before any database
+// is opened.
+func TestConsoleOpenUnlock_WithoutACode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("peer_auth is a POSIX deployment: the account check refuses first")
+	}
+	dbPath := daemonDB(t, store.LatestSchemaVersion())
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	page := consoleBase(cfg) + "/console/unlock/example-finance"
+
+	var said bytes.Buffer
+	err = consoleUnlock(cfg, "example-finance", "", "", "", unlockTerminal{in: strings.NewReader(""), out: &said})
+	require.ErrorContains(t, err, "needs --code")
+	require.ErrorContains(t, err, page)
+	require.Empty(t, said.String(), "nothing asked where nobody can answer")
+
+	cookie, err := store.NewConsoleToken()
+	require.NoError(t, err)
+	_, code := beginTerminalIn(t, dbPath, "example-finance", store.HashConsoleToken(cookie))
+	typed := strings.ToLower(strings.ReplaceAll(code, "-", " ")) + "\n"
+	err = consoleUnlock(cfg, "example-finance", "", "", "", unlockTerminal{in: strings.NewReader(typed), out: &said, interactive: true})
+	require.NoError(t, err)
+	require.Contains(t, said.String(), "Open "+page+" in the browser you sign in to the console with")
+	require.Contains(t, said.String(), "Code it shows: ")
+	require.Contains(t, said.String(), "Unlocked example-finance for 3 hours")
+
+	said.Reset()
+	err = consoleUnlock(cfg, "example-finance", "", "", "", unlockTerminal{in: strings.NewReader("\n"), out: &said, interactive: true})
+	require.ErrorContains(t, err, "no code was typed: nothing changed")
 }
 
 // --browser names the application to launch, and --unlock launches none: a
 // flag that is present and means nothing is refused, not quietly ignored. It
 // is settled first, so it is the answer before the account check or any
-// database is opened.
+// database is opened. --code and --for mean nothing without --unlock.
 func TestConsoleOpenUnlock_RefusesBrowser(t *testing.T) {
-	require.ErrorIs(t, runConsoleUnlock(config.Defaults(), "example-finance", "", "Google Chrome"), errUnlockBrowser,
+	require.ErrorIs(t, runConsoleUnlock(config.Defaults(), "example-finance", "ABCD-EFGH", "", "Google Chrome"), errUnlockBrowser,
 		"ahead of the account check, which says peer_auth is off")
 
 	writeDaemonConfig(t, t.TempDir())
 	err := runConsoleOpen([]string{"--unlock", "example-finance", "--browser", "Safari"})
 	require.ErrorIs(t, err, errUnlockBrowser)
 	require.ErrorContains(t, err, "--browser does not combine with --unlock")
+	for _, args := range [][]string{{"--code", "ABCD-EFGH"}, {"--for", "1h"}} {
+		require.ErrorContains(t, runConsoleOpen(args), "--for and --code need --unlock <project>")
+	}
 }

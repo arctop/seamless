@@ -17,7 +17,7 @@ func (r RestoredAccess) Total() int64 { return r.Leases + r.Unlocks + r.Grants }
 
 // ResetRestoredAccess ends every live permission a restored database brings
 // back: an agent tree's access leases, a browser's console unlocks (and every
-// pending unlock ceremony or link) and the read grants. A snapshot holds them
+// pending unlock, passkey or terminal) and the read grants. A snapshot holds them
 // as they stood when it was taken, including ones revoked since, so a restore
 // that kept them would reopen what the owner had closed. It fails closed:
 // locked projects' agents and browsers ask again.

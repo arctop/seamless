@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"database/sql"
@@ -21,6 +22,10 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
+	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/store"
@@ -61,9 +66,10 @@ var consoleLoginTmpl = template.Must(template.New("console-login").Parse(`<!doct
 // is unreachable, since the page POSTs to it.
 func runConsoleOpen(args []string) error {
 	fs := flag.NewFlagSet("console-open", flag.ContinueOnError)
-	browser := fs.String("browser", "", `browser application to open instead of the default (e.g. "Google Chrome"; macOS only; not with --unlock, which prints its link)`)
-	unlock := fs.String("unlock", "", "a locked project to open in one browser's console (run as the daemon's account, through sudo -k)")
-	forFlag := fs.String("for", "", "how long the unlock lasts once opened (with --unlock; at most and by default 3h, capped by peer_auth.max_lease)")
+	browser := fs.String("browser", "", `browser application to open instead of the default (e.g. "Google Chrome"; macOS only; not with --unlock, which opens no browser)`)
+	unlock := fs.String("unlock", "", "approve a locked project's unlock in the browser that began it on its unlock page (run as the daemon's account, through sudo -k)")
+	code := fs.String("code", "", "the code that browser's unlock page shows (with --unlock; asked for when absent and stdin is a terminal)")
+	forFlag := fs.String("for", "", "how long the unlock lasts once approved (with --unlock; at most and by default 3h, capped by peer_auth.max_lease)")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("seamlessd.console-open: %w", err)
 	}
@@ -71,11 +77,11 @@ func runConsoleOpen(args []string) error {
 	if err != nil {
 		return fmt.Errorf("seamlessd.console-open: %w", err)
 	}
-	if *unlock != "" || *forFlag != "" {
+	if *unlock != "" || *forFlag != "" || *code != "" {
 		if *unlock == "" {
-			return errors.New("seamlessd.console-open: --for needs --unlock <project>")
+			return errors.New("seamlessd.console-open: --for and --code need --unlock <project>")
 		}
-		if err := runConsoleUnlock(cfg, *unlock, *forFlag, *browser); err != nil {
+		if err := runConsoleUnlock(cfg, *unlock, *code, *forFlag, *browser); err != nil {
 			return fmt.Errorf("seamlessd.console-open: %w", err)
 		}
 		return nil
@@ -371,32 +377,60 @@ func socketConsoleRefusal(cfg config.Config) error {
 		"mcp.api_key (set SEAMLESS_CONFIG)", cfg.DaemonAddress(), where)
 }
 
-// consoleUnlockLinkTTL is how long an unlock link waits to be opened. Once
-// opened it is used up; the unlock it starts lasts --for.
-const consoleUnlockLinkTTL = 10 * time.Minute
-
 // errUnlockBrowser refuses --browser beside --unlock. --browser names the
 // application to launch, and --unlock launches none, so it is present and means
 // nothing: refused rather than quietly ignored.
-var errUnlockBrowser = errors.New("--browser does not combine with --unlock: the unlock link is printed, never handed to a browser, so open it yourself in the browser you sign in to the console with")
+var errUnlockBrowser = errors.New("--browser does not combine with --unlock: an unlock begins on the console's unlock page, " +
+	"in the browser you sign in to the console with, and console-open --unlock only approves the code that page shows")
 
-// runConsoleUnlock is console-open --unlock: the terminal way to open a
-// locked project in one browser's console. It runs as the daemon's own
-// account (the same check as seamlessd approve: the sudo is the proof), writes
-// a one-time unlock link straight into the database and prints it. A browser
-// that opens it gets the seamless_unlock cookie; the unlock never reaches an
+// unlockTerminal is the terminal console-open --unlock talks to: where a
+// missing code is asked for and the outcome is said. interactive is whether
+// in is a terminal the owner types at.
+type unlockTerminal struct {
+	in          io.Reader
+	out         io.Writer
+	interactive bool
+}
+
+// stdioUnlockTerminal is the process's own terminal.
+func stdioUnlockTerminal() unlockTerminal {
+	return unlockTerminal{in: os.Stdin, out: os.Stdout, interactive: term.IsTerminal(int(os.Stdin.Fd()))}
+}
+
+// unlockPage is where an unlock of project begins: the console's unlock page,
+// on the origin the browser signs in on. It is no secret.
+func unlockPage(cfg config.Config, project string) string {
+	return consoleBase(cfg) + "/console/unlock/" + url.PathEscape(project)
+}
+
+// runConsoleUnlock is console-open --unlock: the terminal's half of a
+// terminal unlock. The owner's browser begins it on the project's unlock page,
+// which shows a pairing code; this approves that code as the daemon's own
+// account (the same check as seamlessd approve: the sudo is the proof), and
+// the browser that showed it reads the project. The unlock never reaches an
 // agent.
 //
-// It launches nothing. The link is the credential, and on a launcher's argv
-// (open, xdg-open) ps shows it to every process, so an agent running as the
-// owner could read it and claim it first. The daemon's account usually has no
-// desktop session to open a browser in anyway.
-func runConsoleUnlock(cfg config.Config, project, forFlag, browser string) error {
+// Nothing it reads or prints is a credential. The code only names a row the
+// browser began, bound to that browser's cookie, so someone reading this
+// terminal (a shared tmux server, scrollback) learns nothing that opens
+// another browser. It launches nothing either: the daemon's account usually
+// has no desktop session to open a browser in.
+func runConsoleUnlock(cfg config.Config, project, code, forFlag, browser string) error {
+	return consoleUnlock(cfg, project, code, forFlag, browser, stdioUnlockTerminal())
+}
+
+// consoleUnlock is runConsoleUnlock with its terminal given.
+func consoleUnlock(cfg config.Config, project, code, forFlag, browser string, tty unlockTerminal) error {
 	if browser != "" {
 		return errUnlockBrowser
 	}
 	if err := approverAccountCheck(cfg, defaultPeerAuthEnv()); err != nil {
 		return err
+	}
+	// Settled before the database is opened: nothing to ask the owner with.
+	if strings.TrimSpace(code) == "" && !tty.interactive {
+		return fmt.Errorf("console-open --unlock needs --code: open %s in the browser you sign in to the console with, "+
+			"choose Approve from a terminal, and run the command it shows", unlockPage(cfg, project))
 	}
 	db, err := openServedDB(cfg, os.Stderr)
 	if err != nil {
@@ -408,39 +442,74 @@ func runConsoleUnlock(cfg config.Config, project, forFlag, browser string) error
 	if err != nil {
 		return err
 	}
-	link, err := consoleUnlockLink(context.Background(), cfg, db, svc.ConsoleLeaseLength(), project, forFlag, time.Now())
+	return approveConsoleUnlock(context.Background(), cfg, db, svc, tty, project, code, forFlag)
+}
+
+// approveConsoleUnlock is console-open --unlock's testable core: it checks
+// project is locked and the duration (absent: the whole console lease;
+// present: one no longer than it), asks for the code when none was given,
+// approves it, and says what it opened. A code that is malformed, mistyped,
+// used, expired or another project's changes nothing.
+func approveConsoleUnlock(ctx context.Context, cfg config.Config, db *sql.DB, svc *approval.Service, tty unlockTerminal,
+	project, code, forFlag string) error {
+	locked, err := lockedProjects(ctx, cfg, db)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stdout, "Unlock link for %s (works once, within %s):\n\n  %s\n\nOpen it in the browser you sign in to the console with.\n",
-		project, minutesWords(consoleUnlockLinkTTL), link)
-	return nil
-}
-
-// consoleUnlockLink is runConsoleUnlock's testable core: it checks project is
-// locked and the duration (absent: the whole console lease; present: a
-// duration no longer than it), writes the link, and returns its URL.
-func consoleUnlockLink(ctx context.Context, cfg config.Config, db *sql.DB, maxLease time.Duration, project, forFlag string, now time.Time) (string, error) {
-	locked, err := lockedProjects(ctx, cfg, db)
-	if err != nil {
-		return "", err
-	}
 	if !slices.Contains(locked, project) {
-		return "", fmt.Errorf("project %q is not locked: the locked projects are %s", project, strings.Join(locked, ", "))
+		return fmt.Errorf("project %q is not locked: the locked projects are %s", project, strings.Join(locked, ", "))
 	}
+	maxLease := svc.ConsoleLeaseLength()
 	lease := maxLease
 	if forFlag != "" {
 		d, err := time.ParseDuration(forFlag)
 		if err != nil || d < time.Minute || d > maxLease {
-			return "", fmt.Errorf("invalid --for %q: a duration from 1m to %s (the console lease)", forFlag, maxLease)
+			return fmt.Errorf("invalid --for %q: a duration from 1m to %s (the console lease)", forFlag, maxLease)
 		}
 		lease = d
 	}
-	secret, _, err := store.CreateConsoleUnlockLink(ctx, db, project, lease, consoleUnlockLinkTTL, now)
-	if err != nil {
-		return "", err
+	if strings.TrimSpace(code) == "" {
+		if !tty.interactive {
+			return fmt.Errorf("console-open --unlock needs --code: open %s and choose Approve from a terminal", unlockPage(cfg, project))
+		}
+		fmt.Fprintf(tty.out, "Open %s in the browser you sign in to the console with, and choose Approve from a terminal.\n"+
+			"Code it shows: ", unlockPage(cfg, project))
+		line, err := bufio.NewReader(tty.in).ReadString('\n')
+		if err != nil && line == "" {
+			return fmt.Errorf("no code was typed: nothing changed (%w)", err)
+		}
+		if code = strings.TrimSpace(line); code == "" {
+			return errors.New("no code was typed: nothing changed")
+		}
 	}
-	return consoleBase(cfg) + "/console/unlock?t=" + url.QueryEscape(secret), nil
+	shown := store.FormatUnlockCode(code)
+	u, err := svc.ApproveTerminalUnlock(ctx, project, code, lease)
+	switch {
+	case errors.Is(err, store.ErrInvalidConsoleUnlock) && shown == "":
+		return &ownerError{msg: fmt.Sprintf("%q is not an unlock code: the unlock page shows one as XXXX-XXXX, 8 letters and digits. Nothing changed.", code), cause: err}
+	case errors.Is(err, store.ErrConsoleUnlockNotFound):
+		return &ownerError{msg: fmt.Sprintf("no unlock of %s is waiting for code %s: it may be mistyped, already used, expired (a code lasts %s), "+
+			"or shown for another project. Nothing changed. Start again on %s.",
+			project, shown, minutesWords(approval.ConsoleTerminalUnlockTTL), unlockPage(cfg, project)), cause: err}
+	case err != nil:
+		return err
+	}
+	fmt.Fprintf(tty.out, "Unlocked %s for %s, until %s, in the browser that showed code %s.\n",
+		u.Project, leaseWords(u.Lease), access.Clock(*u.ExpiresAt), shown)
+	return nil
+}
+
+// leaseWords says an unlock's length as the owner reads it: "3 hours", "90
+// minutes".
+func leaseWords(d time.Duration) string {
+	switch h := int(d / time.Hour); {
+	case d%time.Hour != 0:
+		return minutesWords(d)
+	case h == 1:
+		return "1 hour"
+	default:
+		return fmt.Sprintf("%d hours", h)
+	}
 }
 
 // minutesWords says a whole-minute duration as the owner reads it: "10

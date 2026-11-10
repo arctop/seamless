@@ -15,6 +15,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -413,7 +414,7 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 	t.Run("no console route mints an enrollment code or grants an unlock by itself", func(t *testing.T) {
 		c := d.counts(t)
 		require.Zero(t, c.enrollCodes, "only seamlessd approvers enroll-code mints one")
-		require.Zero(t, c.unlocks, "no unlock granted: no passkey is enrolled and no link was minted")
+		require.Zero(t, c.unlocks, "no unlock granted: no passkey is enrolled and no terminal approved a code")
 		require.Equal(t, 2, c.leases, "the agent's two leases and nothing else")
 		require.Equal(t, 2, c.approved)
 	})
@@ -584,12 +585,19 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 
 	var legalUnlock string
 	t.Run("the terminal path unlocks a second project in the same browser", func(t *testing.T) {
-		link, err := consoleUnlockLink(ctx, d.cfg, d.db, d.svc.ConsoleLeaseLength(), cmLegal, "", time.Now())
-		require.NoError(t, err)
-		u, err := url.Parse(link)
-		require.NoError(t, err)
-		status, body, _ := browserA.do(t, http.MethodGet, u.RequestURI(), nil, false)
-		require.Equal(t, http.StatusOK, status, firstN(body, 300))
+		status, body, _ := browserA.do(t, http.MethodPost, "/console/unlock/"+cmLegal+"/terminal", url.Values{}, true)
+		require.Equal(t, http.StatusOK, status, body)
+		var begun struct{ ID, Code string }
+		require.NoError(t, json.Unmarshal([]byte(body), &begun))
+		// The code is read off the terminal by the leased tree too: it opens
+		// nothing for it, and only the daemon's account approves it.
+		status, _, _ = leased.do(t, http.MethodGet, "/console/unlock/"+cmLegal+"/terminal?id="+url.QueryEscape(begun.ID), nil, true)
+		require.Equal(t, http.StatusForbidden, status, "a socket caller reads no browser's unlock")
+		require.NoError(t, approveConsoleUnlock(ctx, d.cfg, d.db, d.svc, unlockTerminal{out: io.Discard}, cmLegal, begun.Code, ""))
+		status, body, _ = browserA.do(t, http.MethodGet, "/console/unlock/"+cmLegal+"/terminal?id="+url.QueryEscape(begun.ID), nil, true)
+		require.Equal(t, http.StatusOK, status, body)
+		require.Contains(t, body, `"state": "live"`)
+		_, body, _ = browserA.do(t, http.MethodGet, "/console/unlock/"+cmLegal, nil, false)
 		require.Contains(t, body, "Unlocked in this browser")
 		_, body, _ = browserA.do(t, http.MethodGet, "/console/memories/"+d.legal.memID, nil, false)
 		require.Contains(t, body, d.legal.secret)
@@ -638,7 +646,7 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 	t.Run("after every route: nothing minted, nothing granted by a route alone", func(t *testing.T) {
 		c := d.counts(t)
 		require.Equal(t, 1, c.enrollCodes, "the one code seamlessd approvers enroll-code would mint")
-		require.Equal(t, 2, c.unlocks, "the passkey unlock and the terminal link: nothing else was granted")
+		require.Equal(t, 2, c.unlocks, "the passkey unlock and the terminal approval: nothing else was granted")
 		require.Zero(t, c.liveUnlocks)
 		require.Equal(t, 2, c.leases, "the agent's two leases, one revoked")
 		require.Equal(t, 2, c.approved)

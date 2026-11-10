@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -140,56 +142,246 @@ func TestConsoleUnlock_PasskeyCeremony(t *testing.T) {
 	require.Empty(t, expired, "an unlock ends at its expiry")
 }
 
+// Each kind of pending unlock has its own cap: a holder of the console's key
+// filling the terminal unlocks' (no passkey needed) leaves a passkey ceremony
+// free to begin, and the reverse. Past their deadline both are purged.
 func TestConsoleUnlock_PendingCapAndPurge(t *testing.T) {
-	db := leaseDB(t)
 	ctx := context.Background()
 	browser := HashConsoleToken("browser-a")
-	for range maxPendingConsoleUnlocks {
-		_, err := BeginConsoleUnlock(ctx, db, "example-finance", browser, time.Hour, 5*time.Minute, unlockT0)
-		require.NoError(t, err)
+	passkey := func(db *sql.DB, at time.Time) error {
+		_, err := BeginConsoleUnlock(ctx, db, "example-finance", browser, time.Hour, 5*time.Minute, at)
+		return err
 	}
-	_, err := BeginConsoleUnlock(ctx, db, "example-finance", browser, time.Hour, 5*time.Minute, unlockT0)
-	require.ErrorIs(t, err, ErrConsoleUnlockBusy)
-	// Past their deadline they are purged, and a new one fits.
-	_, err = BeginConsoleUnlock(ctx, db, "example-finance", browser, time.Hour, 5*time.Minute, unlockT0.Add(6*time.Minute))
-	require.NoError(t, err)
-	var n int
-	require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM console_unlocks`).Scan(&n))
-	require.Equal(t, 1, n)
+	terminal := func(db *sql.DB, at time.Time) error {
+		_, _, err := BeginTerminalUnlock(ctx, db, "example-finance", browser, time.Hour, 5*time.Minute, at)
+		return err
+	}
+	for name, c := range map[string]struct {
+		fill, other func(*sql.DB, time.Time) error
+	}{
+		"terminal unlocks full":   {terminal, passkey},
+		"passkey ceremonies full": {passkey, terminal},
+	} {
+		t.Run(name, func(t *testing.T) {
+			db := leaseDB(t)
+			for range maxPendingConsoleUnlocks {
+				require.NoError(t, c.fill(db, unlockT0))
+			}
+			require.ErrorIs(t, c.fill(db, unlockT0), ErrConsoleUnlockBusy, "this kind's cap is full")
+			for range maxPendingConsoleUnlocks {
+				require.NoError(t, c.other(db, unlockT0), "the other kind has its own cap")
+			}
+			require.ErrorIs(t, c.other(db, unlockT0), ErrConsoleUnlockBusy, "and it is capped too")
+			// Past their deadline every pending unlock is purged, and a new
+			// one of either kind fits.
+			later := unlockT0.Add(6 * time.Minute)
+			require.NoError(t, c.fill(db, later))
+			require.NoError(t, c.other(db, later))
+			var n int
+			require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM console_unlocks`).Scan(&n))
+			require.Equal(t, 2, n)
+		})
+	}
 }
 
-func TestConsoleUnlock_LinkWorksOnce(t *testing.T) {
+func TestFormatUnlockCode(t *testing.T) {
+	for in, want := range map[string]string{
+		"ABCD-EFGH": "ABCD-EFGH", "abcdefgh": "ABCD-EFGH", " abcd efgh ": "ABCD-EFGH", "Abcd-eFgh": "ABCD-EFGH",
+		"0O1I-L234": "0011-1234", // Crockford's look-alikes fold
+		"ABCD-EFG":  "", "ABCD-EFGHJ": "", "ABCD-EFGU": "", "ABCD*EFG": "", "": "",
+	} {
+		require.Equal(t, want, FormatUnlockCode(in), in)
+	}
+	for range 50 {
+		c, err := newUnlockCode()
+		require.NoError(t, err)
+		require.Regexp(t, `^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$`, c)
+	}
+}
+
+// A terminal unlock: the browser begins it, bound to its cookie hash; the
+// daemon's account approves its code; only that browser reads the project.
+func TestConsoleUnlock_TerminalApproval(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
 	browser, other := HashConsoleToken("browser-a"), HashConsoleToken("browser-b")
 
-	_, _, err := CreateConsoleUnlockLink(ctx, db, "example-finance", 0, 10*time.Minute, unlockT0)
+	_, _, err := BeginTerminalUnlock(ctx, db, "example-finance", "not-a-hash", 3*time.Hour, 10*time.Minute, unlockT0)
 	require.ErrorIs(t, err, ErrInvalidConsoleUnlock)
-	secret, u, err := CreateConsoleUnlockLink(ctx, db, "example-finance", 3*time.Hour, 10*time.Minute, unlockT0)
+	_, _, err = BeginTerminalUnlock(ctx, db, "", browser, 3*time.Hour, 10*time.Minute, unlockT0)
+	require.ErrorIs(t, err, ErrInvalidConsoleUnlock)
+
+	u, code, err := BeginTerminalUnlock(ctx, db, "example-finance", browser, 3*time.Hour, 10*time.Minute, unlockT0)
 	require.NoError(t, err)
-	require.Equal(t, ConsoleUnlockByDaemon, u.Credential)
+	require.Equal(t, code, FormatUnlockCode(code), "the code comes printed")
+	require.Equal(t, ConsoleUnlockPending, u.Status)
+	require.Equal(t, browser, u.TokenHash, "bound to the browser that began it")
+	require.Nil(t, u.Challenge)
+	require.Empty(t, u.Credential)
+	require.Equal(t, unlockT0.Add(10*time.Minute), u.PendingUntil)
 	var stored string
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT claim_hash FROM console_unlocks WHERE id = ?`, u.ID).Scan(&stored))
-	require.Equal(t, HashConsoleToken(secret), stored)
-	require.NotContains(t, stored, secret, "the secret itself is never stored")
+	require.Equal(t, unlockCodeHash(code), stored)
+	require.True(t, validTokenHash(stored))
+	require.NotContains(t, stored, NormalizeEnrollCode(code))
+	require.NotEqual(t, HashConsoleToken(code), stored, "a code hashes under its own prefix")
 
-	_, err = ClaimConsoleUnlockLink(ctx, db, "wrong", browser, unlockT0)
-	require.ErrorIs(t, err, ErrConsoleUnlockNotFound)
-	_, err = ClaimConsoleUnlockLink(ctx, db, secret, browser, unlockT0.Add(10*time.Minute))
-	require.ErrorIs(t, err, ErrConsoleUnlockNotFound, "a link past its deadline is void")
+	live, err := LiveConsoleUnlocks(ctx, db, browser, unlockT0)
+	require.NoError(t, err)
+	require.Empty(t, live, "a terminal unlock waiting opens nothing")
+	_, err = PendingConsoleUnlock(ctx, db, u.ID, "example-finance", browser, unlockT0)
+	require.ErrorIs(t, err, ErrConsoleUnlockNotFound, "a terminal unlock is no passkey ceremony")
+	_, err = GrantConsoleUnlock(ctx, db, u.ID, browser, "cred-1", unlockT0)
+	require.ErrorIs(t, err, ErrConsoleUnlockNotFound, "nor can a passkey grant take it")
+
+	// Another browser's unlock of the same project, waiting beside it.
+	theirs, theirCode, err := BeginTerminalUnlock(ctx, db, "example-finance", other, 3*time.Hour, 10*time.Minute, unlockT0)
+	require.NoError(t, err)
+	require.NotEqual(t, code, theirCode)
+	// And one of another project, by the same browser.
+	legal, legalCode, err := BeginTerminalUnlock(ctx, db, "example-legal", browser, 3*time.Hour, 10*time.Minute, unlockT0)
+	require.NoError(t, err)
 
 	at := unlockT0.Add(2 * time.Minute)
-	got, err := ClaimConsoleUnlockLink(ctx, db, secret, browser, at)
-	require.NoError(t, err)
-	require.Equal(t, ConsoleUnlockLive, got.Status)
-	require.Equal(t, browser, got.TokenHash)
-	require.Equal(t, at.Add(3*time.Hour), *got.ExpiresAt, "the lease runs from the claim")
+	for name, c := range map[string]struct {
+		project, code string
+		at            time.Time
+		err           error
+	}{
+		"malformed":              {"example-finance", "ABC", at, ErrInvalidConsoleUnlock},
+		"no such code":           {"example-finance", "ZZZZ-ZZZZ", at, ErrConsoleUnlockNotFound},
+		"another project":        {"example-ops", code, at, ErrConsoleUnlockNotFound},
+		"another project's code": {"example-finance", legalCode, at, ErrConsoleUnlockNotFound},
+		"past deadline":          {"example-finance", code, unlockT0.Add(10 * time.Minute), ErrConsoleUnlockNotFound},
+	} {
+		_, err := ApproveTerminalUnlock(ctx, db, c.project, c.code, time.Hour, c.at)
+		require.ErrorIs(t, err, c.err, name)
+	}
+	_, err = ApproveTerminalUnlock(ctx, db, "example-finance", code, 0, at)
+	require.ErrorIs(t, err, ErrInvalidConsoleUnlock, "a lease lasts at least a second")
 
-	_, err = ClaimConsoleUnlockLink(ctx, db, secret, other, at)
-	require.ErrorIs(t, err, ErrConsoleUnlockNotFound, "a link works once")
-	live, err := LiveConsoleUnlocks(ctx, db, browser, at)
+	// Typed loosely, it still names the row; the lease is the approval's.
+	got, err := ApproveTerminalUnlock(ctx, db, "example-finance", strings.ToLower(strings.ReplaceAll(code, "-", "")), 90*time.Minute, at)
+	require.NoError(t, err)
+	require.Equal(t, u.ID, got.ID)
+	require.Equal(t, ConsoleUnlockLive, got.Status)
+	require.Equal(t, browser, got.TokenHash, "approval never names a browser: it opens the one that began it")
+	require.Equal(t, ConsoleUnlockByDaemon, got.Credential)
+	require.Equal(t, 90*time.Minute, got.Lease)
+	require.Equal(t, at.Add(90*time.Minute), *got.ExpiresAt, "the lease runs from the approval")
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT claim_hash FROM console_unlocks WHERE id = ?`, u.ID).Scan(&stored))
+	require.Empty(t, stored, "the code is spent")
+
+	_, err = ApproveTerminalUnlock(ctx, db, "example-finance", code, time.Hour, at)
+	require.ErrorIs(t, err, ErrConsoleUnlockNotFound, "a code works once")
+
+	live, err = LiveConsoleUnlocks(ctx, db, browser, at)
 	require.NoError(t, err)
 	require.Len(t, live, 1)
+	require.Equal(t, "example-finance", live[0].Project)
+	none, err := LiveConsoleUnlocks(ctx, db, other, at)
+	require.NoError(t, err)
+	require.Empty(t, none, "another browser's unlock still waits for its own code")
+	for _, id := range []string{theirs.ID, legal.ID} {
+		w, err := consoleUnlockByID(ctx, db, id)
+		require.NoError(t, err)
+		require.Equal(t, ConsoleUnlockPending, w.Status, "approving one code touches no other row")
+	}
+}
+
+// Two approvals of one code racing: exactly one wins.
+func TestConsoleUnlock_TerminalApprovalRace(t *testing.T) {
+	db := leaseDB(t)
+	ctx := context.Background()
+	browser := HashConsoleToken("browser-a")
+	_, code, err := BeginTerminalUnlock(ctx, db, "example-finance", browser, 3*time.Hour, 10*time.Minute, unlockT0)
+	require.NoError(t, err)
+	var wg sync.WaitGroup
+	results := make(chan error, 4)
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := ApproveTerminalUnlock(ctx, db, "example-finance", code, time.Hour, unlockT0.Add(time.Minute))
+			results <- err
+		}()
+	}
+	wg.Wait()
+	close(results)
+	wins := 0
+	for err := range results {
+		if err == nil {
+			wins++
+		} else {
+			require.ErrorIs(t, err, ErrConsoleUnlockNotFound)
+		}
+	}
+	require.Equal(t, 1, wins)
+	live, err := LiveConsoleUnlocks(ctx, db, browser, unlockT0.Add(time.Minute))
+	require.NoError(t, err)
+	require.Len(t, live, 1)
+}
+
+// A code another pending unlock shows is drawn again.
+func TestConsoleUnlock_TerminalCodeRerolls(t *testing.T) {
+	db := leaseDB(t)
+	ctx := context.Background()
+	draws := []string{"AAAA-AAAA", "AAAA-AAAA", "BBBB-BBBB"}
+	orig := newUnlockCode
+	t.Cleanup(func() { newUnlockCode = orig })
+	newUnlockCode = func() (string, error) {
+		c := draws[0]
+		if len(draws) > 1 {
+			draws = draws[1:]
+		}
+		return c, nil
+	}
+	_, first, err := BeginTerminalUnlock(ctx, db, "example-finance", HashConsoleToken("a"), time.Hour, time.Minute, unlockT0)
+	require.NoError(t, err)
+	require.Equal(t, "AAAA-AAAA", first)
+	_, second, err := BeginTerminalUnlock(ctx, db, "example-legal", HashConsoleToken("b"), time.Hour, time.Minute, unlockT0)
+	require.NoError(t, err)
+	require.Equal(t, "BBBB-BBBB", second, "unique among pending unlocks, whatever their project")
+	// Every draw taken: the begin fails rather than share a code.
+	_, _, err = BeginTerminalUnlock(ctx, db, "example-ops", HashConsoleToken("c"), time.Hour, time.Minute, unlockT0)
+	require.ErrorContains(t, err, "no free pairing code")
+}
+
+// The page waiting on a terminal approval reads its own row, and only its own.
+func TestConsoleUnlockFor(t *testing.T) {
+	db := leaseDB(t)
+	ctx := context.Background()
+	browser, other := HashConsoleToken("browser-a"), HashConsoleToken("browser-b")
+	u, code, err := BeginTerminalUnlock(ctx, db, "example-finance", browser, time.Hour, 10*time.Minute, unlockT0)
+	require.NoError(t, err)
+	for name, c := range map[string]struct{ id, project, token string }{
+		"another browser": {u.ID, "example-finance", other},
+		"no cookie":       {u.ID, "example-finance", ""},
+		"another project": {u.ID, "example-legal", browser},
+		"unknown id":      {"01NOPE", "example-finance", browser},
+	} {
+		_, err := ConsoleUnlockFor(ctx, db, c.id, c.project, c.token)
+		require.ErrorIs(t, err, ErrConsoleUnlockNotFound, name)
+	}
+	got, err := ConsoleUnlockFor(ctx, db, u.ID, "example-finance", browser)
+	require.NoError(t, err)
+	require.Equal(t, ConsoleUnlockPending, got.Status)
+	_, err = ApproveTerminalUnlock(ctx, db, "example-finance", code, time.Hour, unlockT0)
+	require.NoError(t, err)
+	got, err = ConsoleUnlockFor(ctx, db, u.ID, "example-finance", browser)
+	require.NoError(t, err)
+	require.Equal(t, ConsoleUnlockLive, got.Status)
+}
+
+// terminalUnlock begins and approves a terminal unlock of project for browser.
+func terminalUnlock(t *testing.T, db *sql.DB, project, browser string, lease time.Duration, now time.Time) ConsoleUnlock {
+	t.Helper()
+	ctx := context.Background()
+	_, code, err := BeginTerminalUnlock(ctx, db, project, browser, lease, time.Minute, now)
+	require.NoError(t, err)
+	u, err := ApproveTerminalUnlock(ctx, db, project, code, lease, now)
+	require.NoError(t, err)
+	return u
 }
 
 func TestConsoleUnlock_EndAndReset(t *testing.T) {
@@ -198,11 +390,7 @@ func TestConsoleUnlock_EndAndReset(t *testing.T) {
 	browser := HashConsoleToken("browser-a")
 	claim := func(project string) ConsoleUnlock {
 		t.Helper()
-		secret, _, err := CreateConsoleUnlockLink(ctx, db, project, time.Hour, time.Minute, unlockT0)
-		require.NoError(t, err)
-		u, err := ClaimConsoleUnlockLink(ctx, db, secret, browser, unlockT0)
-		require.NoError(t, err)
-		return u
+		return terminalUnlock(t, db, project, browser, time.Hour, unlockT0)
 	}
 	fin, legal := claim("example-finance"), claim("example-legal")
 	all, err := AllLiveConsoleUnlocks(ctx, db, unlockT0)
@@ -225,14 +413,16 @@ func TestConsoleUnlock_EndAndReset(t *testing.T) {
 	require.Len(t, live, 1)
 	require.Equal(t, "example-legal", live[0].Project)
 
-	_, _, err = CreateConsoleUnlockLink(ctx, db, "example-ops", time.Hour, time.Minute, unlockT0)
+	_, code, err := BeginTerminalUnlock(ctx, db, "example-ops", HashConsoleToken("browser-b"), time.Hour, 10*time.Minute, unlockT0)
 	require.NoError(t, err)
 	n, err := EndAllConsoleUnlocks(ctx, db, ConsoleUnlockEndReset, unlockT0.Add(time.Minute))
 	require.NoError(t, err)
-	require.EqualValues(t, 2, n, "the live unlock and the unclaimed link")
+	require.EqualValues(t, 2, n, "the live unlock and the terminal unlock still waiting")
 	live, err = LiveConsoleUnlocks(ctx, db, browser, unlockT0.Add(time.Minute))
 	require.NoError(t, err)
 	require.Empty(t, live)
+	_, err = ApproveTerminalUnlock(ctx, db, "example-ops", code, time.Hour, unlockT0.Add(time.Minute))
+	require.ErrorIs(t, err, ErrConsoleUnlockNotFound, "a reset unlock's code no longer approves it")
 }
 
 func TestLiveAccessLeasesAndTallies(t *testing.T) {

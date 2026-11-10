@@ -308,12 +308,9 @@ func TestApproverUserHandle_StableAndRandom(t *testing.T) {
 func TestResetApprovers_EndsConsoleUnlocks(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
-	secret, _, err := CreateConsoleUnlockLink(ctx, db, "example-finance", 3*time.Hour, 10*time.Minute, apNow)
-	require.NoError(t, err)
 	token, err := NewConsoleToken()
 	require.NoError(t, err)
-	_, err = ClaimConsoleUnlockLink(ctx, db, secret, HashConsoleToken(token), apNow)
-	require.NoError(t, err)
+	terminalUnlock(t, db, "example-finance", HashConsoleToken(token), 3*time.Hour, apNow)
 	live, err := AllLiveConsoleUnlocks(ctx, db, apNow)
 	require.NoError(t, err)
 	require.Len(t, live, 1)

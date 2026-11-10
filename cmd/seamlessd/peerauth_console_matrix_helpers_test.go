@@ -607,7 +607,7 @@ func (d *cmDaemon) getTargets(t *testing.T, pendingID string) []string {
 	add("/console/interactions")
 	add("/console/plans?w=all")
 	add("/console/gardener?kind=archive")
-	add("/console/unlock?t=" + q("no-such-link"))
+	add("/console/unlock/" + cmFinance + "/terminal?id=" + q(cmNoSuch))
 	for _, it := range d.secrets() {
 		p := it.project
 		for _, target := range []string{

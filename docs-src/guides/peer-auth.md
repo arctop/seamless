@@ -61,7 +61,9 @@ card on its Overview and choose **Lock this project**. The change needs a passke
 you have already [enrolled](#enroll-an-approver); until you have one, the card
 links to the Approvers page instead. Taking the lock off takes a passkey too, from
 the same page or the project's unlock page. Each approval names one project and
-one direction, so it cannot be replayed for anything else. Seamless applies the
+one direction, so it cannot be replayed for anything else. Turning a lock on ends
+every approval the project still had (agents' leases, read grants and browser
+unlocks), so each agent and browser asks again. Seamless applies the
 change by restarting, which briefly drops the console and agent connections.
 
 **Force lock, in the file.** A project listed under `peer_auth.force_locked` is
@@ -542,12 +544,26 @@ snapshot (a rollback or `seamlessd import`). Nothing extends one silently. From 
 minutes before it ends, every tool result and hook injection says when it ends and
 how to ask again.
 
-A console unlock is separate. A browser opens a locked project with
-`/console/unlock/<project>` and a passkey, or with
-`sudo -k -u _seamless seamlessd console-open --unlock <project>` from the terminal,
-for at most three hours (less when `max_lease` is shorter). It is a cookie in that
-one browser, never a lease, and it never opens the project to an agent. A locked
-plan or session page in the console takes you to that unlock page.
+A console unlock is separate. A browser opens a locked project from its unlock
+page, `/console/unlock/<project>`, for at most three hours (less when `max_lease`
+is shorter), in one of two ways. **Unlock with a passkey** asks your
+authenticator there. **Approve from a terminal** shows a code and the command
+that approves it, for example:
+
+```bash
+sudo -k -u _seamless seamlessd console-open --unlock example-finance --code 7KQ2-M9XD
+```
+
+Run it in your own terminal. `sudo -k` asks for your password or Touch ID, and the
+page updates by itself once the code is approved. The unlock opens the browser
+that showed the code and no other, so the code is not a secret: reading it off
+your screen or terminal gives nothing away. A code works once, within ten
+minutes, and `--for 1h` makes the unlock shorter. Approve only a code your own
+browser shows: one you were handed would unlock someone else's browser.
+
+Either way the unlock is a cookie in that one browser, never a lease, and it
+never opens the project to an agent. A locked plan or session page in the console
+takes you to that unlock page.
 
 ## Read grants and the advisory tier
 
@@ -749,12 +765,20 @@ the locked notice, and `seam approve` in your own terminal shows its request.
   every project: keep them as carefully as the most sensitive project in them.
   An export records the locks, and importing one [checks for a passkey that can
   open them](/guides/data/#locked-projects).
-- **Anything running as you can watch your terminal.** A `console-open --unlock`
-  link is shown once, and whoever uses it first gets what it opens, so make it in a
-  terminal your agents cannot read: a `tmux` server they share lets them capture
-  the pane. An enrollment code enrolls only the key it was minted for, so being
-  read does not give it away, but your clipboard is reachable too: check that the
-  key the command prints is the one on your screen.
+- **Anything running as you can watch your terminal.** A `tmux` server your agents
+  share lets them capture the pane, and your clipboard is reachable too. Nothing
+  the approval commands show is a credential: a console unlock's code opens only
+  the browser that showed it, and an enrollment code enrolls only the key it was
+  minted for, so being read gives neither away. Check that the code you approve
+  is the one your browser shows, and that the key the enrollment command prints
+  is the one on your screen.
+- **Taking a lock off is one passkey touch, and it holds for every agent.**
+  Removing a lock set from the console takes a single passkey approval, and from
+  the restart that follows every agent of yours reaches the project as its
+  isolation allows, with no approval, until you lock it again. A project listed
+  under `peer_auth.force_locked` keeps its lock: the console cannot take it off,
+  even with a passkey, though a console unlock still opens it in one browser for
+  a while.
 - **Your shell is yours to guard.** Under peer_auth `seam approve` works only over
   the socket, and refuses one that the daemon's account does not serve, so a changed
   `server_url` cannot show it false facts. An agent running as you can still edit your shell's startup files, or

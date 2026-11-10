@@ -33,10 +33,11 @@
   <h2 id="unlock-how-title">Unlock it in this browser for {{.Lease}}</h2>
   {{if not .Browser}}
   <p class="held-sub">An unlock is per browser: open this page in the browser you sign in to the console with.</p>
-  {{else if not .PasskeysOn}}
-  <p class="held-sub">Passkeys are not configured on this daemon. Unlock in your own terminal instead.</p>
+  {{else}}
+  {{if not .PasskeysOn}}
+  <p class="held-sub">Passkeys are not configured on this daemon. Approve the unlock from a terminal instead.</p>
   {{else if not .HasPasskey}}
-  <p class="held-sub">No passkey is enrolled yet: add one on the <a href="/console/approvers">Approvers</a> page, or unlock in your own terminal.</p>
+  <p class="held-sub">No passkey is enrolled yet: add one on the <a href="/console/approvers">Approvers</a> page, or approve the unlock from a terminal.</p>
   {{else if not .OnOrigin}}
   <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/unlock/{{.Project.Slug}}">{{.Origin}}</a>.</p>
   {{else}}
@@ -44,8 +45,15 @@
     <button class="btn primary" id="unlock-go" type="submit">{{icon "key-round"}} Unlock with a passkey</button>
   </form>
   {{end}}
-  <p class="held-sub">Or, in your own terminal (it asks for your password or Touch ID, then prints a one-time link to open here):</p>
-  <p><code class="unlock-command">{{.Command}}</code></p>
+  <form id="unlock-terminal-form" class="access-form" data-project="{{.Project.Slug}}">
+    <button class="btn" id="unlock-terminal-go" type="submit">{{icon "terminal"}} Approve from a terminal</button>
+  </form>
+  <p class="held-sub">This page then shows a code and the command that approves it, run in your own terminal. The command asks for your password or Touch ID and unlocks this browser only. Run it with the code this page shows, never with one you were handed; a code works for {{.TerminalMinutes}} minutes.</p>
+  <div id="unlock-terminal" hidden>
+    <p class="held-sub">{{icon "terminal"}} This browser's code is <strong><code id="unlock-terminal-code"></code></strong>. Run:</p>
+    <pre id="unlock-terminal-command"></pre>
+  </div>
+  {{end}}
   <p class="held-sub" id="unlock-status" role="status" aria-live="polite"></p>
 </section>
 {{end}}
@@ -60,8 +68,7 @@
 
 {{define "scripts"}}
 <script>
-{{if .Data.Claimed}}try { history.replaceState(null, '', '/console/unlock/' + encodeURIComponent({{.Data.Project.Slug}})); } catch (e) {} // the used link leaves the address bar
-{{end}}window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbered by a refresh
+window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a terminal approval in progress must not be clobbered by a refresh
 (function () {
   function b64urlToBuf(s) {
     s = s.replace(/-/g, '+').replace(/_/g, '/');
@@ -118,13 +125,96 @@
     }
     return Promise.resolve(false);
   }
+  function say(msg) {
+    var status = document.getElementById('unlock-status');
+    if (status) status.textContent = msg;
+  }
+  // The terminal path: begin, show the code and its command, then ask the
+  // status endpoint every couple of seconds until the terminal approves it.
+  // The status is read through this browser's cookie, and the page itself is
+  // never reloaded: once live, it refreshes in place as the passkey path does.
+  var waiting = null; // { url, timer }: the code this page waits on
+  function stopWaiting() {
+    if (waiting) clearTimeout(waiting.timer);
+    waiting = null;
+  }
+  function clock(iso) {
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  function terminalOver(msg) {
+    stopWaiting();
+    var box = document.getElementById('unlock-terminal');
+    if (box) box.hidden = true;
+    say(msg);
+  }
+  function schedule(url) {
+    if (!waiting || waiting.url !== url) return;
+    waiting.timer = setTimeout(function () { check(url); }, 2000);
+  }
+  function check(url) {
+    if (!waiting || waiting.url !== url) return;
+    if (!document.getElementById('unlock-terminal-form')) { stopWaiting(); return; } // the page moved on
+    fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(function (res) {
+      if (res.status === 401) return { state: 'signed-out' };
+      return res.json();
+    }).then(function (data) {
+      if (!waiting || waiting.url !== url) return; // a newer code took over
+      switch (data.state) {
+        case 'pending':
+          schedule(url);
+          return;
+        case 'live':
+          stopWaiting();
+          say('Unlocked ' + data.unlocked + ' in this browser.');
+          refresh();
+          return;
+        case 'signed-out':
+          terminalOver('Your console sign-in ended: sign in again, then start over. Nothing was unlocked here.');
+          return;
+        case 'ended':
+          terminalOver('This unlock ended before it was approved. Nothing was unlocked: start again for a new code.');
+          return;
+        default:
+          terminalOver('The code expired before a terminal approved it. Nothing was unlocked: start again for a new code.');
+      }
+    }).catch(function () {
+      if (!waiting || waiting.url !== url) return;
+      say('Could not reach the console to check on the code; still waiting.');
+      schedule(url);
+    });
+  }
+  function enhanceTerminal() {
+    var form = document.getElementById('unlock-terminal-form');
+    if (!form || form._seamWired) return;
+    form._seamWired = true;
+    var base = '/console/unlock/' + encodeURIComponent(form.getAttribute('data-project'));
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      stopWaiting();
+      var go = document.getElementById('unlock-terminal-go');
+      if (go) go.disabled = true;
+      say('Starting the unlock.');
+      post(base + '/terminal', {}).then(function (begun) {
+        document.getElementById('unlock-terminal-code').textContent = begun.code;
+        document.getElementById('unlock-terminal-command').textContent = begun.command;
+        document.getElementById('unlock-terminal').hidden = false;
+        var until = clock(begun.pending_until);
+        say('Waiting for the terminal' + (until ? ', until ' + until : '') + '. This page updates once the command approves code ' + begun.code + '.');
+        var url = base + '/terminal?id=' + encodeURIComponent(begun.id);
+        waiting = { url: url, timer: null };
+        schedule(url);
+      }).catch(function (err) {
+        say(err && err.message ? err.message : 'Something went wrong. Nothing was unlocked.');
+      }).finally(function () { if (go) go.disabled = false; });
+    });
+  }
   function enhance() {
+    enhanceTerminal();
     var form = document.getElementById('unlock-form');
     if (!form || form._seamWired) return;
     form._seamWired = true;
-    var status = document.getElementById('unlock-status');
     var go = document.getElementById('unlock-go');
-    function say(msg) { if (status) status.textContent = msg; }
     var base = '/console/unlock/' + encodeURIComponent(form.getAttribute('data-project'));
     form.addEventListener('submit', function (e) {
       e.preventDefault();

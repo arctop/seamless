@@ -193,7 +193,7 @@ func TestApprovalCommands_NeverMigrateADatabaseBehindThisBinary(t *testing.T) {
 	behind := store.LatestSchemaVersion() - 1
 	for name, run := range map[string]func(config.Config) error{
 		"approve":               func(config.Config) error { return runApprove([]string{"R-ABCD", "--deny"}) },
-		"console-open --unlock": func(cfg config.Config) error { return runConsoleUnlock(cfg, "example-finance", "", "") },
+		"console-open --unlock": func(cfg config.Config) error { return runConsoleUnlock(cfg, "example-finance", "ABCD-EFGH", "", "") },
 	} {
 		t.Run(name, func(t *testing.T) {
 			dbPath := daemonDB(t, behind)

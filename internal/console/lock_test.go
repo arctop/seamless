@@ -197,7 +197,7 @@ func TestLock_FenceStaysUp(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, core.IsolationConfidential, state)
 
-	rr = open(lockedSlug, lc.unlockLink(t))
+	rr = open(lockedSlug, lc.unlockByTerminal(t))
 	require.Equal(t, http.StatusConflict, rr.Code, "a force-locked project too, from a browser that unlocked it: %s", rr.Body.String())
 	state, err = store.IsolationOf(ctx, lc.db, lockedSlug)
 	require.NoError(t, err)

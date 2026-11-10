@@ -167,29 +167,71 @@ func (lc *lockedConsole) get(t *testing.T, target, unlock string) (int, string) 
 	return rr.Code, rr.Body.String()
 }
 
-// unlockLink unlocks the locked project for a fresh browser the way
-// console-open --unlock does, and returns that browser's cookie value.
-func (lc *lockedConsole) unlockLink(t *testing.T) string {
+// terminalBegun is POST /console/unlock/<project>/terminal's answer.
+type terminalBegun struct {
+	ID           string `json:"id"`
+	Code         string `json:"code"`
+	Command      string `json:"command"`
+	PendingUntil string `json:"pending_until"`
+	Minutes      int    `json:"minutes"`
+}
+
+// beginTerminal begins a terminal unlock of project in the browser holding
+// unlock ("" for a fresh one), and returns the answer and the browser's
+// cookie: the one it sent, or the one the begin set.
+func (lc *lockedConsole) beginTerminal(t *testing.T, project, unlock string) (terminalBegun, string) {
 	t.Helper()
-	secret, _, err := store.CreateConsoleUnlockLink(context.Background(), lc.db, lockedSlug, 3*time.Hour, 10*time.Minute, time.Now())
-	require.NoError(t, err)
-	rr := lc.do(lc.browser(http.MethodGet, "/console/unlock?t="+url.QueryEscape(secret), "", nil))
+	rr := lc.do(lc.browser(http.MethodPost, "/console/unlock/"+project+"/terminal", unlock, url.Values{}))
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	require.Contains(t, rr.Body.String(), "Unlocked in this browser", "the answer is the unlock page itself")
-	require.Contains(t, rr.Body.String(), `history.replaceState(null, '', '/console/unlock/' + encodeURIComponent("`+lockedSlug+`"))`,
-		"the used link leaves the address bar")
-	require.NotContains(t, rr.Body.String(), secret)
+	var begun terminalBegun
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &begun))
+	cookie := unlock
 	for _, c := range rr.Result().Cookies() {
 		if c.Name == unlockCookieName {
 			require.True(t, c.HttpOnly)
 			require.Equal(t, http.SameSiteStrictMode, c.SameSite)
 			require.Equal(t, "/console", c.Path)
 			require.Positive(t, c.MaxAge)
-			return c.Value
+			cookie = c.Value
 		}
 	}
-	t.Fatal("the claim set no unlock cookie")
-	return ""
+	require.NotEmpty(t, cookie, "the begin issues a fresh browser its cookie")
+	return begun, cookie
+}
+
+// terminalState asks the status endpoint after unlock id as the browser
+// holding unlock, and returns the HTTP status and the state it names.
+func (lc *lockedConsole) terminalState(t *testing.T, project, id, unlock string) (int, string) {
+	t.Helper()
+	req := lc.browser(http.MethodGet, "/console/unlock/"+project+"/terminal?id="+url.QueryEscape(id), unlock, nil)
+	req.Header.Set("Accept", "application/json")
+	rr := lc.do(req)
+	var got struct {
+		State string `json:"state"`
+	}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &got), rr.Body.String())
+	return rr.Code, got.State
+}
+
+// approveCode is the terminal's half, as console-open --unlock --code runs it.
+func (lc *lockedConsole) approveCode(t *testing.T, project, code string) store.ConsoleUnlock {
+	t.Helper()
+	u, err := lc.svc.ApproveTerminalUnlock(context.Background(), project, code, 3*time.Hour)
+	require.NoError(t, err)
+	return u
+}
+
+// unlockByTerminal unlocks the locked project for a fresh browser the way the
+// terminal path does -- the browser begins it, the daemon's account approves
+// its code -- and returns that browser's cookie value.
+func (lc *lockedConsole) unlockByTerminal(t *testing.T) string {
+	t.Helper()
+	begun, cookie := lc.beginTerminal(t, lockedSlug, "")
+	lc.approveCode(t, lockedSlug, begun.Code)
+	status, state := lc.terminalState(t, lockedSlug, begun.ID, cookie)
+	require.Equal(t, http.StatusOK, status)
+	require.Equal(t, terminalLive, state)
+	return cookie
 }
 
 // consoleGETRoutes reads the console's GET routes from its source, as the
@@ -210,8 +252,8 @@ func (lc *lockedConsole) crawlTargets(t *testing.T) []string {
 	t.Helper()
 	var out []string
 	for _, p := range consoleGETRoutes(t) {
-		if p == "/console/events" || strings.HasPrefix(p, "/console/static/") || p == "/console/login" || p == "/console/unlock" {
-			continue // the live feed streams; statics and login are public; a claim needs a link
+		if p == "/console/events" || strings.HasPrefix(p, "/console/static/") || p == "/console/login" {
+			continue // the live feed streams; statics and login are public
 		}
 		p = strings.TrimSuffix(p, "{$}")
 		for _, r := range []struct{ prefix, from, to string }{
@@ -290,8 +332,8 @@ func TestLockedConsole_CrawlLocked(t *testing.T) {
 	status, page := lc.get(t, "/console/unlock/"+lockedSlug, "")
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, page, "Open tasks")
-	require.Contains(t, page, "console-open --unlock "+lockedSlug+" --for 3h")
-	require.Contains(t, page, "sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd")
+	require.Contains(t, page, `id="unlock-terminal-form"`, "the terminal path is offered with no passkey enrolled")
+	require.NotContains(t, page, "console-open --unlock", "no command until this browser has begun an unlock and has its code")
 	require.Contains(t, page, "No passkey is enrolled yet")
 
 	// The open project is not locked: nothing to unlock.
@@ -305,7 +347,7 @@ func TestLockedConsole_CrawlLocked(t *testing.T) {
 
 func TestLockedConsole_UnlockedBrowserReads(t *testing.T) {
 	lc := newLockedConsole(t)
-	cookie := lc.unlockLink(t)
+	cookie := lc.unlockByTerminal(t)
 
 	readsLocked := func(unlock string) bool {
 		t.Helper()
@@ -357,7 +399,7 @@ func TestLockedConsole_UnlockedBrowserReads(t *testing.T) {
 func TestLockedConsole_LockAgainAndRevoke(t *testing.T) {
 	lc := newLockedConsole(t)
 	ctx := context.Background()
-	cookie := lc.unlockLink(t)
+	cookie := lc.unlockByTerminal(t)
 	live, err := store.LiveConsoleUnlocks(ctx, lc.db, store.HashConsoleToken(cookie), time.Now())
 	require.NoError(t, err)
 	require.Len(t, live, 1)
@@ -470,22 +512,297 @@ func TestLockedConsole_PasskeyUnlock(t *testing.T) {
 	}
 }
 
-func TestLockedConsole_ClaimLink(t *testing.T) {
+// The terminal path: the browser begins it and shows a code and the command;
+// the daemon's account approves the code; the page, asking the status
+// endpoint, sees it live. Only that browser reads the project.
+func TestLockedConsole_TerminalUnlock(t *testing.T) {
 	lc := newLockedConsole(t)
-	secret, _, err := store.CreateConsoleUnlockLink(context.Background(), lc.db, lockedSlug, time.Hour, 10*time.Minute, time.Now())
+	ctx := context.Background()
+
+	_, page := lc.get(t, "/console/unlock/"+lockedSlug, "")
+	require.Contains(t, page, `id="unlock-terminal-form"`)
+	require.Contains(t, page, "Approve from a terminal")
+	require.Contains(t, page, "a code works for 10 minutes")
+	bearerPage := lc.do(authedReq(httptest.NewRequest(http.MethodGet, "/console/unlock/"+lockedSlug, nil)))
+	require.Equal(t, http.StatusOK, bearerPage.Code)
+	require.NotContains(t, bearerPage.Body.String(), `id="unlock-terminal-form"`, "only a browser is offered an unlock")
+
+	begun, cookie := lc.beginTerminal(t, lockedSlug, "")
+	require.Equal(t, begun.Code, store.FormatUnlockCode(begun.Code), "XXXX-XXXX")
+	require.Equal(t, "sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd "+
+		"console-open --unlock "+lockedSlug+" --code "+begun.Code, begun.Command)
+	require.Equal(t, 10, begun.Minutes)
+	_, err := time.Parse(time.RFC3339, begun.PendingUntil)
 	require.NoError(t, err)
-	// The TCP key cannot claim: a link is for a browser.
-	rr := lc.do(authedReq(httptest.NewRequest(http.MethodGet, "/console/unlock?t="+url.QueryEscape(secret), nil)))
-	require.Equal(t, http.StatusBadRequest, rr.Code)
-	rr = lc.do(lc.browser(http.MethodGet, "/console/unlock", "", nil))
-	require.Equal(t, http.StatusBadRequest, rr.Code, "an incomplete link")
-	rr = lc.do(lc.browser(http.MethodGet, "/console/unlock?t="+url.QueryEscape(secret), "", nil))
+
+	status, state := lc.terminalState(t, lockedSlug, begun.ID, cookie)
+	require.Equal(t, http.StatusOK, status)
+	require.Equal(t, terminalPending, state)
+	_, body := lc.get(t, "/console/memories?project="+lockedSlug, cookie)
+	require.NotContains(t, body, lockedSecret, "waiting opens nothing")
+
+	// Nobody but the beginning browser learns the row's state: another
+	// browser, no cookie, an unknown id and another project all get the
+	// answer an id that never existed gets; the TCP key is refused.
+	other, err := store.NewConsoleToken()
+	require.NoError(t, err)
+	for name, c := range map[string]struct{ project, id, cookie string }{
+		"another browser": {lockedSlug, begun.ID, other},
+		"no cookie":       {lockedSlug, begun.ID, ""},
+		"unknown id":      {lockedSlug, "01NOSUCHTHING", cookie},
+	} {
+		status, state := lc.terminalState(t, c.project, c.id, c.cookie)
+		require.Equal(t, http.StatusNotFound, status, name)
+		require.Equal(t, terminalExpired, state, name)
+	}
+	bearer := authedReq(httptest.NewRequest(http.MethodGet, "/console/unlock/"+lockedSlug+"/terminal?id="+begun.ID, nil))
+	bearer.AddCookie(&http.Cookie{Name: unlockCookieName, Value: cookie})
+	require.Equal(t, http.StatusForbidden, lc.do(bearer).Code, "the TCP key reads no browser's unlock, even holding its cookie")
+
+	u := lc.approveCode(t, lockedSlug, strings.ToLower(begun.Code))
+	require.Equal(t, begun.ID, u.ID)
+	req := lc.browser(http.MethodGet, "/console/unlock/"+lockedSlug+"/terminal?id="+begun.ID, cookie, nil)
+	req.Header.Set("Accept", "application/json")
+	rr := lc.do(req)
 	require.Equal(t, http.StatusOK, rr.Code)
-	rr = lc.do(lc.browser(http.MethodGet, "/console/unlock?t="+url.QueryEscape(secret), "", nil))
-	require.Equal(t, http.StatusNotFound, rr.Code, "a link works once")
-	evs, err := events.NewRecorder(lc.db).ByKinds(context.Background(), []core.EventKind{approval.EventConsoleUnlocked}, "", "", 10)
+	require.Contains(t, rr.Body.String(), `"state": "live"`)
+	require.Contains(t, rr.Body.String(), `"open": "/console/projects/`+lockedSlug+`"`)
+	reissued := false
+	for _, c := range rr.Result().Cookies() {
+		reissued = reissued || (c.Name == unlockCookieName && c.Value == cookie && c.MaxAge > 0)
+	}
+	require.True(t, reissued, "live: the cookie lasts as long as the unlock")
+	_, body = lc.get(t, "/console/memories?project="+lockedSlug, cookie)
+	require.Contains(t, body, lockedSecret, "the beginning browser reads the project")
+	_, body = lc.get(t, "/console/memories?project="+lockedSlug, other)
+	require.NotContains(t, body, lockedSecret, "and only that browser")
+	_, err = lc.svc.ApproveTerminalUnlock(ctx, lockedSlug, begun.Code, time.Hour)
+	require.ErrorIs(t, err, store.ErrConsoleUnlockNotFound, "a code works once")
+
+	// A second unlock in the same browser keeps its cookie.
+	rr = lc.do(lc.browser(http.MethodPost, "/console/unlock/"+lockedSlug+"/terminal", cookie, url.Values{}))
+	require.Equal(t, http.StatusOK, rr.Code)
+	for _, c := range rr.Result().Cookies() {
+		require.NotEqual(t, unlockCookieName, c.Name, "a browser with a live unlock keeps its cookie")
+	}
+	evs, err := events.NewRecorder(lc.db).ByKinds(ctx, []core.EventKind{approval.EventConsoleUnlocked}, "", "", 10)
 	require.NoError(t, err)
-	require.Len(t, evs, 1)
+	require.Len(t, evs, 1, "the approval is recorded once")
+	require.Equal(t, approval.ProofDaemon, evs[0].Payload["proof"])
+
+	// Expired before approval: the page is told so.
+	late, lateCookie := lc.beginTerminal(t, lockedSlug, "")
+	_, err = lc.db.Exec(`UPDATE console_unlocks SET pending_until = ? WHERE id = ?`, core.FormatTime(time.Now().Add(-time.Second)), late.ID)
+	require.NoError(t, err)
+	status, state = lc.terminalState(t, lockedSlug, late.ID, lateCookie)
+	require.Equal(t, http.StatusOK, status)
+	require.Equal(t, terminalExpired, state)
+	_, err = lc.svc.ApproveTerminalUnlock(ctx, lockedSlug, late.Code, time.Hour)
+	require.ErrorIs(t, err, store.ErrConsoleUnlockNotFound, "an expired code fails")
+	// Locked again: ended.
+	live, err := store.LiveConsoleUnlocks(ctx, lc.db, store.HashConsoleToken(cookie), time.Now())
+	require.NoError(t, err)
+	require.Len(t, live, 1)
+	_, err = store.EndConsoleUnlock(ctx, lc.db, live[0].ID, store.ConsoleUnlockEndLocked, time.Now())
+	require.NoError(t, err)
+	status, state = lc.terminalState(t, lockedSlug, begun.ID, cookie)
+	require.Equal(t, http.StatusOK, status)
+	require.Equal(t, terminalEnded, state)
+}
+
+// The terminal begin refuses what the passkey begin refuses: the TCP key, an
+// agent's socket, a restricted account, a cross-origin or unlabeled write, a
+// stranger, and a project that is not locked. None of them writes a row.
+func TestLockedConsole_TerminalBeginGates(t *testing.T) {
+	lc := newLockedConsole(t)
+	target := "/console/unlock/" + lockedSlug + "/terminal"
+	post := func(r *http.Request) *http.Request {
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("Accept", "application/json")
+		return r
+	}
+	sockView, ok := lc.policy.PeerChainView(501, []access.ProcessToken{{PID: 300, Version: 3000, Boot: "6c2f1a3e-0b7d-4c55-9a51-3d8f00a1b2c3"}})
+	require.True(t, ok)
+	sock := post(httptest.NewRequest(http.MethodPost, target, strings.NewReader("")))
+	sock = sock.WithContext(access.WithView(sock.Context(), sockView))
+	restrictedPolicy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{lockedSlug}, Restricted: []string{"_helper"}},
+		func(n string) (access.Account, error) {
+			switch n {
+			case "owner":
+				return access.Account{UID: 501, Name: "owner"}, nil
+			case "_helper":
+				return access.Account{UID: 503, Name: "_helper"}, nil
+			}
+			return access.Account{}, fmt.Errorf("no %s", n)
+		})
+	require.NoError(t, err)
+	rview, ok := restrictedPolicy.PeerChainView(503, nil)
+	require.True(t, ok)
+	restricted := post(httptest.NewRequest(http.MethodPost, target, strings.NewReader("")))
+	restricted = restricted.WithContext(access.WithView(restricted.Context(), rview))
+	crossSite := lc.browser(http.MethodPost, target, "", url.Values{})
+	crossSite.Header.Set("Sec-Fetch-Site", "same-site") // another local port
+	unlabeled := lc.browser(http.MethodPost, target, "", url.Values{})
+	unlabeled.Header.Del("Sec-Fetch-Site")
+	stranger := post(httptest.NewRequest(http.MethodPost, target, strings.NewReader("")))
+
+	for name, c := range map[string]struct {
+		req  *http.Request
+		want int
+	}{
+		"the TCP key":            {post(authedReq(httptest.NewRequest(http.MethodPost, target, strings.NewReader("")))), http.StatusForbidden},
+		"an agent's socket":      {sock, http.StatusForbidden},
+		"a restricted account":   {restricted, http.StatusForbidden},
+		"another local port":     {crossSite, http.StatusForbidden},
+		"no origin header":       {unlabeled, http.StatusForbidden},
+		"no credential":          {stranger, http.StatusUnauthorized},
+		"a project not locked":   {lc.browser(http.MethodPost, "/console/unlock/"+openSlug+"/terminal", "", url.Values{}), http.StatusNotFound},
+		"an unknown project":     {lc.browser(http.MethodPost, "/console/unlock/no-such/terminal", "", url.Values{}), http.StatusNotFound},
+		"the status, no session": {httptest.NewRequest(http.MethodGet, target+"?id=x", nil), http.StatusSeeOther},
+	} {
+		rr := lc.do(c.req)
+		require.Equal(t, c.want, rr.Code, "%s: %s", name, rr.Body.String())
+		for _, ck := range rr.Result().Cookies() {
+			require.NotEqual(t, unlockCookieName, ck.Name, "%s: no unlock cookie", name)
+		}
+	}
+	var n int
+	require.NoError(t, lc.db.QueryRow(`SELECT COUNT(*) FROM console_unlocks`).Scan(&n))
+	require.Zero(t, n, "no refused begin wrote a row")
+}
+
+// A key holder looping on one begin route fills that kind's pending cap and
+// is then refused, while the other way in stays open: a full terminal cap
+// still lets the owner's passkey ceremony through, and a full passkey cap the
+// owner's terminal unlock.
+func TestLockedConsole_TerminalBeginCapped(t *testing.T) {
+	const (
+		terminal = "/terminal"
+		passkey  = "/begin"
+	)
+	begin := func(lc *lockedConsole, route string) *httptest.ResponseRecorder {
+		return lc.do(lc.browser(http.MethodPost, "/console/unlock/"+lockedSlug+route, "", url.Values{}))
+	}
+	for name, c := range map[string]struct{ fill, other string }{
+		"terminal begins full": {terminal, passkey},
+		"passkey begins full":  {passkey, terminal},
+	} {
+		t.Run(name, func(t *testing.T) {
+			lc := newLockedConsole(t)
+			key, err := passkeytest.New(true)
+			require.NoError(t, err)
+			enrollPasskeyByCode(t, lc.db, lc.svc, key, "key")
+			for range 32 {
+				rr := begin(lc, c.fill)
+				require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+			}
+			rr := begin(lc, c.fill)
+			require.Equal(t, http.StatusConflict, rr.Code)
+			require.Contains(t, rr.Body.String(), "too many unlocks are in progress")
+
+			rr = begin(lc, c.other)
+			require.Equal(t, http.StatusOK, rr.Code, "the other way in has its own cap: %s", rr.Body.String())
+			cookie := ""
+			for _, ck := range rr.Result().Cookies() {
+				if ck.Name == unlockCookieName {
+					cookie = ck.Value
+				}
+			}
+			require.NotEmpty(t, cookie)
+			if c.other == terminal {
+				// And it carries through to a live unlock.
+				var begun terminalBegun
+				require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &begun))
+				lc.approveCode(t, lockedSlug, begun.Code)
+			} else {
+				var started approval.Begun
+				require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &started))
+				assertion, err := key.Get(started.Options, approverOrigin)
+				require.NoError(t, err)
+				rr = lc.do(lc.browser(http.MethodPost, "/console/unlock/"+lockedSlug+"/finish", cookie,
+					url.Values{"id": {started.ID}, "response": {string(assertion)}}))
+				require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+			}
+			_, body := lc.get(t, "/console/memories?project="+lockedSlug, cookie)
+			require.Contains(t, body, lockedSecret, "the owner unlocks past the full cap")
+		})
+	}
+}
+
+// The security review's two attacks on the unlock link, against the terminal
+// path: a party holding the console's TCP key and everything the terminal
+// shows -- the code, the command, the result -- but not the beginning
+// browser's cookie gets no live unlock, cannot read the row's state, and
+// cannot move the approval onto a cookie of its own.
+func TestLockedConsole_TerminalCodeOpensOnlyTheBeginningBrowser(t *testing.T) {
+	lc := newLockedConsole(t)
+	ctx := context.Background()
+	owner, ownerCookie := lc.beginTerminal(t, lockedSlug, "")
+
+	// The agent's browser: the console cookie is derived from the key, so an
+	// agent holding the key is "a browser" to the console. It plants an
+	// unlock cookie of its own choosing first.
+	planted, err := store.NewConsoleToken()
+	require.NoError(t, err)
+	theirs, agentCookie := lc.beginTerminal(t, lockedSlug, planted)
+	require.NotEqual(t, planted, agentCookie, "a cookie naming no live unlock is never adopted")
+	require.NotEqual(t, owner.Code, theirs.Code, "the code is the server's, never the caller's")
+
+	// It cannot read the owner's row, by id or with its own or planted cookie.
+	for _, c := range []string{agentCookie, planted, ""} {
+		status, _ := lc.terminalState(t, lockedSlug, owner.ID, c)
+		require.Equal(t, http.StatusNotFound, status)
+	}
+	// It sends the owner's code to every unlock route a browser has.
+	for _, p := range []string{"/terminal", "/begin", "/finish"} {
+		rr := lc.do(lc.browser(http.MethodPost, "/console/unlock/"+lockedSlug+p, agentCookie,
+			url.Values{"code": {owner.Code}, "id": {owner.ID}, "response": {"{}"}}))
+		require.Less(t, rr.Code, 500, p)
+	}
+
+	// The owner approves the code the owner's page shows.
+	u := lc.approveCode(t, lockedSlug, owner.Code)
+	require.Equal(t, store.HashConsoleToken(ownerCookie), u.TokenHash, "the approval opens the browser that began it")
+
+	for _, c := range []string{agentCookie, planted} {
+		live, err := store.LiveConsoleUnlocks(ctx, lc.db, store.HashConsoleToken(c), time.Now())
+		require.NoError(t, err)
+		require.Empty(t, live, "the agent's cookies hold no unlock")
+		_, body := lc.get(t, "/console/memories?project="+lockedSlug, c)
+		require.NotContains(t, body, lockedSecret)
+		rr := lc.do(func() *http.Request {
+			r := lc.browser(http.MethodGet, "/console/projects/"+lockedSlug, c, nil)
+			r.Header.Set("Accept", "application/json")
+			return r
+		}())
+		require.Equal(t, http.StatusForbidden, rr.Code)
+		require.Contains(t, rr.Body.String(), `"locked": true`)
+	}
+	// Replaying the code, from the terminal again, opens nothing more.
+	_, err = lc.svc.ApproveTerminalUnlock(ctx, lockedSlug, owner.Code, time.Hour)
+	require.ErrorIs(t, err, store.ErrConsoleUnlockNotFound)
+	// Its own row still waits for its own code, which only the owner's
+	// terminal can approve.
+	w, err := store.ConsoleUnlockFor(ctx, lc.db, theirs.ID, lockedSlug, store.HashConsoleToken(agentCookie))
+	require.NoError(t, err)
+	require.Equal(t, store.ConsoleUnlockPending, w.Status)
+	all, err := store.AllLiveConsoleUnlocks(ctx, lc.db, time.Now())
+	require.NoError(t, err)
+	require.Len(t, all, 1, "one approval, one live unlock")
+	_, body := lc.get(t, "/console/memories?project="+lockedSlug, ownerCookie)
+	require.Contains(t, body, lockedSecret, "the owner's browser reads it")
+}
+
+// A code approves only its own project: one begun for the locked project
+// cannot unlock another, even one this browser could begin.
+func TestLockedConsole_TerminalCodeIsPerProject(t *testing.T) {
+	lc := newLockedConsole(t)
+	begun, cookie := lc.beginTerminal(t, lockedSlug, "")
+	_, err := lc.svc.ApproveTerminalUnlock(context.Background(), openSlug, begun.Code, time.Hour)
+	require.ErrorIs(t, err, store.ErrConsoleUnlockNotFound)
+	status, state := lc.terminalState(t, lockedSlug, begun.ID, cookie)
+	require.Equal(t, http.StatusOK, status)
+	require.Equal(t, terminalPending, state, "a refused approval changes nothing")
 }
 
 // A `seam` command on the socket reads through its agent tree's lease: a
@@ -547,11 +864,11 @@ func TestConsoleOff_LockedSurfacesAbsent(t *testing.T) {
 	require.NoError(t, err)
 	// A live unlock row and its cookie exist; a console with nothing locked
 	// must not care.
-	secret, _, err := store.CreateConsoleUnlockLink(ctx, db, "example-ops", time.Hour, time.Minute, time.Now())
-	require.NoError(t, err)
 	cookie, err := store.NewConsoleToken()
 	require.NoError(t, err)
-	_, err = store.ClaimConsoleUnlockLink(ctx, db, secret, store.HashConsoleToken(cookie), time.Now())
+	begun, code, err := store.BeginTerminalUnlock(ctx, db, "example-ops", store.HashConsoleToken(cookie), time.Hour, time.Minute, time.Now())
+	require.NoError(t, err)
+	_, err = store.ApproveTerminalUnlock(ctx, db, "example-ops", code, time.Hour, time.Now())
 	require.NoError(t, err)
 
 	page := func(target, unlock string) string {
@@ -572,12 +889,14 @@ func TestConsoleOff_LockedSurfacesAbsent(t *testing.T) {
 			require.NotContains(t, without, s, target)
 		}
 	}
-	for _, target := range []string{"/console/unlock/example-ops", "/console/unlock?t=" + secret} {
+	for _, target := range []string{"/console/unlock/example-ops", "/console/unlock/example-ops/terminal?id=" + begun.ID} {
 		req := httptest.NewRequest(http.MethodGet, target, nil)
 		req.AddCookie(consoleCookie())
+		req.AddCookie(&http.Cookie{Name: unlockCookieName, Value: cookie})
 		require.Equal(t, http.StatusNotFound, do(mux, req).Code, target)
 	}
-	for _, target := range []string{"/console/unlock/example-ops/begin", "/console/access/unlocks/x/end", "/console/access/leases/x/revoke"} {
+	for _, target := range []string{"/console/unlock/example-ops/begin", "/console/unlock/example-ops/terminal",
+		"/console/access/unlocks/x/end", "/console/access/leases/x/revoke"} {
 		req := authedReq(httptest.NewRequest(http.MethodPost, target, strings.NewReader("")))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		require.Equal(t, http.StatusNotFound, do(mux, req).Code, target)
@@ -632,7 +951,7 @@ func TestLockScreens_OnlyWhileLocked(t *testing.T) {
 func TestLockedConsole_LiveFeedFollowsTheUnlock(t *testing.T) {
 	lc := newLockedConsole(t)
 	ctx := context.Background()
-	cookie := lc.unlockLink(t)
+	cookie := lc.unlockByTerminal(t)
 	id, err := lc.rec.Record(ctx, core.Event{Kind: core.EventToolCall, ProjectSlug: lockedSlug, Payload: map[string]any{"tool": "recall"}})
 	require.NoError(t, err)
 	ev, ok, err := lc.rec.ByID(ctx, id)
@@ -657,9 +976,6 @@ func TestLockedConsole_LiveFeedFollowsTheUnlock(t *testing.T) {
 }
 
 func TestUnlockHelpers(t *testing.T) {
-	for d, want := range map[time.Duration]string{3 * time.Hour: "3h", 90 * time.Minute: "90m", 90 * time.Second: "1m30s"} {
-		require.Equal(t, want, flagDuration(d))
-	}
 	require.Equal(t, "3 hours", leaseWord(3*time.Hour))
 	require.Equal(t, "90 minutes", leaseWord(90*time.Minute))
 	require.Equal(t, "_seamless", shellWord("_seamless"))
@@ -673,7 +989,7 @@ func TestUnlockHelpers(t *testing.T) {
 // which the board's locked row would contradict -- and shows nothing of it.
 func TestBriefingPreview_LockedProjectSaysWhy(t *testing.T) {
 	lc := newLockedConsole(t)
-	unlock := lc.unlockLink(t)
+	unlock := lc.unlockByTerminal(t)
 	for _, cookie := range []string{"", unlock} {
 		code, body := lc.get(t, "/console/settings/briefing/preview?project="+lockedSlug+"&format=json", cookie)
 		require.Equal(t, http.StatusForbidden, code, "unlocked=%v", cookie != "")

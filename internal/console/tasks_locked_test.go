@@ -82,7 +82,7 @@ func TestTasks_LockedBlockersNamed(t *testing.T) {
 	require.Contains(t, between(t, page, "ops waits on both", `<a class="rail-item`, "</a>"), "blocked by 2")
 
 	// A browser that unlocked the project reads the blocker itself.
-	cookie := lc.unlockLink(t)
+	cookie := lc.unlockByTerminal(t)
 	breq := lc.browser(http.MethodGet, "/console/tasks?format=json", cookie, nil)
 	breq.Header.Set("Accept", "application/json")
 	rr = lc.do(breq)
@@ -148,7 +148,7 @@ func TestProjectTasksTab_LockedBlockersNamed(t *testing.T) {
 	require.Contains(t, panel, "ops off-plan free")
 
 	// Unlocked, the browser reads the blocker itself: an ordinary chain chip.
-	cookie := lc.unlockLink(t)
+	cookie := lc.unlockByTerminal(t)
 	rr := lc.do(lc.browser(http.MethodGet, "/console/projects/"+openSlug+"?tab=tasks", cookie, nil))
 	require.Equal(t, http.StatusOK, rr.Code)
 	panel = tabPanel(t, rr.Body.String(), "tasks")
@@ -199,7 +199,7 @@ func TestTaskDetail_LockedBlockerNamed(t *testing.T) {
 	item := between(t, get("/console/tasks"), "ops waits on ledger", `<a class="rail-item`, "</a>")
 	require.Contains(t, item, `<span class="ri-desc" data-locked-blocker="`+lockedSlug+`"`, "a line of its own")
 
-	cookie := lc.unlockLink(t)
+	cookie := lc.unlockByTerminal(t)
 	rr := lc.do(lc.browser(http.MethodGet, "/console/tasks/"+id+"?reader=1", cookie, nil))
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.NotContains(t, rr.Body.String(), "data-locked-blocker")

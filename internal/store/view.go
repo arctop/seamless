@@ -115,7 +115,7 @@ var viewExempt = map[string]string{
 	"approver_enroll_codes": "one-time enrollment code hashes and their expiry, about no project; no corpus content",
 	// A console unlock names a LOCKED project, and the console reads it to
 	// decide which handle a browser gets: the handle that would hide it.
-	"console_unlocks": "per-browser console unlocks of locked projects: a slug, cookie and link hashes, a credential id and times; no corpus content, and the console reads it to choose the handle",
+	"console_unlocks": "per-browser console unlocks of locked projects: a slug, cookie and pairing-code hashes, a credential id and times; no corpus content, and the console reads it to choose the handle",
 	// A console lock names a LOCKED project, and the lock page reads it for a
 	// project this request's handle may hide.
 	"console_locks": "locks the owner set from the console: a slug, a credential id and a time; no corpus content, and the console reads it for a project its handle may hide",

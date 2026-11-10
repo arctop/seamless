@@ -125,7 +125,7 @@ func TestLockedLists_NameTheLockedProjects(t *testing.T) {
 
 	// An unlocked browser reads the project: nothing is left out, and the key
 	// is absent.
-	cookie := lc.unlockLink(t)
+	cookie := lc.unlockByTerminal(t)
 	for _, target := range []string{"/console/plans?format=json&w=all", "/console/sessions?format=json"} {
 		req := lc.browser(http.MethodGet, target, cookie, nil)
 		req.Header.Set("Accept", "application/json")
@@ -183,7 +183,7 @@ func TestLockedPages_NameTheLock(t *testing.T) {
 	}
 
 	// Unlocked, the unlock page links back; the item itself reads.
-	cookie := lc.unlockLink(t)
+	cookie := lc.unlockByTerminal(t)
 	_, page := lc.get(t, "/console/unlock/"+lockedSlug+"?item=plan&next="+url.QueryEscape("/console/plans/"+lc.plan), cookie)
 	require.Contains(t, page, `The plan you opened is in this locked project. <a href="/console/plans/`+lc.plan+`">Open it</a>.`)
 	status, _ := lc.get(t, "/console/plans/"+lc.plan, cookie)

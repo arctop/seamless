@@ -685,7 +685,7 @@ already approved: nothing changed`).
 
 ```bash
 seamlessd console-open [--browser APP]
-seamlessd console-open --unlock PROJECT [--for DURATION]
+seamlessd console-open --unlock PROJECT [--code CODE] [--for DURATION]
 ```
 
 Opens the console in a browser, already authenticated. It renders a one-shot
@@ -713,30 +713,41 @@ dial one, so the command says where the console is and to sign in with the
 daemon's key, or to run it with a config that names the TCP `server_url` and
 `mcp.api_key` (set `SEAMLESS_CONFIG`).
 
-`--unlock PROJECT` is the terminal way to open a locked project in one
-browser's console, without a passkey. Run it as the daemon's own account,
-through `sudo -k` so it asks for your password or Touch ID every time:
+`--unlock PROJECT` is the terminal's half of opening a locked project in one
+browser's console without a passkey. The browser begins it: open the project's
+unlock page (`/console/unlock/PROJECT`) in the browser you sign in to the
+console with and choose **Approve from a terminal**. The page shows a code and
+the command that approves it, run as the daemon's own account through `sudo -k`
+so it asks for your password or Touch ID every time:
 
 ```bash
-sudo -k -u _seamless seamlessd console-open --unlock example-finance --for 3h
+sudo -k -u _seamless seamlessd console-open --unlock example-finance --code 7KQ2-M9XD
 ```
 
 It refuses unless it runs as the daemon's account (the same check as
 `seamlessd approve`) and `PROJECT` is locked, by the config file or from the
-console. It writes a
-one-time unlock link straight into the database and prints it, launching no browser (`--browser` is refused with `--unlock`); open the link
-within ten minutes in the browser you sign in to the console with. Opening it
-sets that browser's `seamless_unlock` cookie, and the console then reads the
-project there until the unlock ends. `--for` is how long that lasts: at most,
-and by default, the console lease of three hours (shorter when
-`peer_auth.max_lease` is). The link works once.
+console. It finds the unlock of `PROJECT` waiting for that code, makes it live
+in the browser that showed the code, and says so (`Unlocked example-finance
+for 3 hours, until 17:04, in the browser that showed code 7KQ2-M9XD.`); the
+page notices within a few seconds and shows the project unlocked. It prints
+nothing secret and launches no browser (`--browser` is refused with
+`--unlock`).
 
-An unlock is per browser: another browser, the TCP key and every agent stay
-locked out. It is a console cookie, never a lease, so it never opens the
-project to an agent - the owner's own agents included. The console's access
-page lists every live unlock with **Lock again**, and each agent lease with
-**Revoke**. The console's unlock page (`/console/unlock/PROJECT`) does the
-same with a passkey instead of the terminal.
+`--code` takes the code in any case, with or without the hyphen. A code works
+once, within ten minutes of the page showing it, and only for its own project:
+a malformed, mistyped, used, expired or other project's code is refused and
+changes nothing. Without `--code` the command names the page to open and asks
+for the code when standard input is a terminal; anywhere else it refuses,
+naming `--code` and the page. `--for` is how long the unlock lasts once
+approved: at most, and by default, the console lease of three hours (shorter
+when `peer_auth.max_lease` is).
+
+An unlock is per browser: the one that showed the code reads the project, and
+another browser, the TCP key and every agent stay locked out, whoever else saw
+the code. It is a console cookie, never a lease, so it never opens the project
+to an agent - the owner's own agents included. The console's access page lists
+every live unlock with **Lock again**, and each agent lease with **Revoke**.
+The unlock page can also unlock with a passkey, with no terminal at all.
 
 ## seamlessd start / stop / restart / status {#seamlessd_service}
 

@@ -4,12 +4,15 @@ package store
 // project in one browser's console for a limited time.
 //
 // A browser holds a random seamless_unlock cookie; the database holds only its
-// hash, one row per project it opens. A row goes live after a proof: a passkey
-// assertion over a challenge bound to the project and to that browser
-// (BeginConsoleUnlock, GrantConsoleUnlock), or a one-time link that only the
-// daemon's own account can write (CreateConsoleUnlockLink, run by `seamlessd
-// console-open --unlock`; ClaimConsoleUnlockLink). The console then reads that
-// browser's requests through the handle that leaves the project in
+// hash, one row per project it opens. Every row is begun by the browser it
+// opens, bound to that cookie's hash from the start, and goes live after a
+// proof: a passkey assertion over a challenge bound to the project and to that
+// browser (BeginConsoleUnlock, GrantConsoleUnlock), or the daemon's own
+// account approving the row's pairing code (BeginTerminalUnlock, then
+// ApproveTerminalUnlock, run by `seamlessd console-open --unlock --code`).
+// Nothing that crosses the terminal is a credential: the code names a row, and
+// approving it opens only the browser that began it. The console then reads
+// that browser's requests through the handle that leaves the project in
 // (store.Views). An unlock is never a lease: nothing here is read by the
 // access layer, so no agent process -- the owner's included -- ever reads a
 // locked project through one.
@@ -49,21 +52,48 @@ const (
 // ConsoleUnlockEndReasons is the canonical set of end reasons.
 var ConsoleUnlockEndReasons = []string{ConsoleUnlockEndLocked, ConsoleUnlockEndReset}
 
-// ConsoleUnlockByDaemon is the credential of an unlock link: the daemon's own
-// account wrote it.
+// ConsoleUnlockByDaemon is the credential of an unlock approved in the
+// terminal: the daemon's own account approved its pairing code.
 const ConsoleUnlockByDaemon = "daemon-account"
 
-// ConsoleTokenBytes is the entropy of a seamless_unlock cookie and of an
-// unlock link's secret.
+// ConsoleTokenBytes is the entropy of a seamless_unlock cookie and of a
+// passkey ceremony's nonce.
 const ConsoleTokenBytes = 32
 
-// maxPendingConsoleUnlocks caps the passkey ceremonies waiting at once, so a
-// caller looping on begin cannot grow the table without bound.
+// maxPendingConsoleUnlocks caps the unlocks of each kind waiting at once
+// (pendingKind), so a caller looping on a begin route cannot grow the table
+// without bound.
 const maxPendingConsoleUnlocks = 32
 
+// pendingKind is a kind of pending unlock the cap counts on its own, as the
+// predicate that picks its rows. Each kind has its own cap, so a holder of the
+// console's key who fills one -- terminal begins need no passkey and wait
+// twice as long -- still leaves the other free for the owner.
+type pendingKind string
+
+const (
+	// pendingPasskey is a passkey ceremony: it carries its challenge.
+	pendingPasskey pendingKind = `challenge IS NOT NULL`
+	// pendingTerminal is a terminal unlock waiting for its code: no
+	// challenge, and bound to the browser that began it.
+	pendingTerminal pendingKind = `challenge IS NULL AND token_hash != ''`
+)
+
+const (
+	// unlockCodeLen is a pairing code's length: 8 Crockford base32 symbols
+	// (40 bits), printed XXXX-XXXX.
+	unlockCodeLen = 8
+	// unlockCodeTries bounds the re-rolls of a code another pending unlock
+	// already shows. Only pending terminal unlocks hold a code, and their cap
+	// keeps at most maxPendingConsoleUnlocks of the 2^40 codes taken, so a
+	// second roll is already rare.
+	unlockCodeTries = 8
+)
+
 var (
-	// ErrConsoleUnlockNotFound is a ceremony or link that is not there, not
-	// pending, not this browser's or this project's, or past its deadline.
+	// ErrConsoleUnlockNotFound is a ceremony or pairing code that is not
+	// there, not pending, not this browser's or this project's, or past its
+	// deadline.
 	ErrConsoleUnlockNotFound = errors.New("console unlock not found")
 	// ErrConsoleUnlockNotLive is an unlock that already ended or expired.
 	ErrConsoleUnlockNotLive = errors.New("console unlock is not live")
@@ -78,7 +108,7 @@ type ConsoleUnlock struct {
 	ID           string
 	Project      string
 	Status       string
-	TokenHash    string // the browser's cookie hash ("" for an unclaimed link)
+	TokenHash    string // the cookie hash of the browser that began it
 	Challenge    []byte
 	Credential   string
 	Lease        time.Duration
@@ -91,7 +121,7 @@ type ConsoleUnlock struct {
 }
 
 // NewConsoleToken returns a fresh random secret: a seamless_unlock cookie's
-// value or an unlock link's. Only its hash is ever stored.
+// value. Only its hash is ever stored.
 func NewConsoleToken() (string, error) {
 	b := make([]byte, ConsoleTokenBytes)
 	if _, err := rand.Read(b); err != nil {
@@ -100,8 +130,8 @@ func NewConsoleToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// HashConsoleToken is what console_unlocks stores of a cookie or a link
-// secret: hex SHA-256 under a domain prefix. An empty token has no hash.
+// HashConsoleToken is what console_unlocks stores of a cookie: hex SHA-256
+// under a domain prefix. An empty token has no hash.
 func HashConsoleToken(token string) string {
 	if token == "" {
 		return ""
@@ -191,11 +221,33 @@ func consoleUnlockByID(ctx context.Context, q interface {
 	return u, err
 }
 
+// makeRoomForUnlock is the first step of every begin, inside its transaction:
+// it purges the pending unlocks past their deadline, of every kind, then
+// refuses when maxPendingConsoleUnlocks of kind still wait. The kinds are
+// capped apart (pendingKind), so terminal begins never block a passkey
+// ceremony, nor the reverse.
+func makeRoomForUnlock(ctx context.Context, tx *sql.Tx, kind pendingKind, now time.Time) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM console_unlocks WHERE status = ? AND pending_until <= ?`,
+		ConsoleUnlockPending, core.FormatTime(now)); err != nil {
+		return fmt.Errorf("purge: %w", err)
+	}
+	var waiting int
+	// kind is one of the pendingKind constants, never caller text.
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM console_unlocks WHERE status = ? AND `+string(kind),
+		ConsoleUnlockPending).Scan(&waiting); err != nil {
+		return err
+	}
+	if waiting >= maxPendingConsoleUnlocks {
+		return ErrConsoleUnlockBusy
+	}
+	return nil
+}
+
 // BeginConsoleUnlock records a passkey ceremony that will unlock project for
 // the browser whose cookie hashes to tokenHash: pending for ttl, carrying a
 // fresh challenge (ConsoleUnlockChallenge), live for lease once granted.
-// Ceremonies past their deadline are purged first, and at most
-// maxPendingConsoleUnlocks wait at once.
+// Unlocks past their deadline are purged first, and at most
+// maxPendingConsoleUnlocks passkey ceremonies wait at once.
 func BeginConsoleUnlock(ctx context.Context, db *sql.DB, project, tokenHash string, lease, ttl time.Duration, now time.Time) (ConsoleUnlock, error) {
 	const op = "store.BeginConsoleUnlock"
 	if err := validConsoleUnlock(project, lease, ttl); err != nil {
@@ -218,17 +270,8 @@ func BeginConsoleUnlock(ctx context.Context, db *sql.DB, project, tokenHash stri
 		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM console_unlocks WHERE status = ? AND pending_until <= ?`,
-		ConsoleUnlockPending, core.FormatTime(now)); err != nil {
-		return ConsoleUnlock{}, fmt.Errorf("%s: purge: %w", op, err)
-	}
-	var waiting int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM console_unlocks WHERE status = ? AND challenge IS NOT NULL`,
-		ConsoleUnlockPending).Scan(&waiting); err != nil {
+	if err := makeRoomForUnlock(ctx, tx, pendingPasskey, now); err != nil {
 		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
-	}
-	if waiting >= maxPendingConsoleUnlocks {
-		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, ErrConsoleUnlockBusy)
 	}
 	challenge := ConsoleUnlockChallenge(id, project, tokenHash, nonce)
 	if _, err := tx.ExecContext(ctx, `INSERT INTO console_unlocks (id, project_slug, status, token_hash, challenge,
@@ -249,8 +292,8 @@ func BeginConsoleUnlock(ctx context.Context, db *sql.DB, project, tokenHash stri
 
 // PendingConsoleUnlock returns passkey ceremony id while it waits for the
 // browser whose cookie hashes to tokenHash, for project. Another browser's
-// ceremony, another project's, a link, a granted or late ceremony are all
-// ErrConsoleUnlockNotFound.
+// ceremony, another project's, a terminal unlock, a granted or late ceremony
+// are all ErrConsoleUnlockNotFound.
 func PendingConsoleUnlock(ctx context.Context, db *sql.DB, id, project, tokenHash string, now time.Time) (ConsoleUnlock, error) {
 	const op = "store.PendingConsoleUnlock"
 	if !validTokenHash(tokenHash) {
@@ -318,51 +361,137 @@ func oneRow(res sql.Result) error {
 	return nil
 }
 
-// CreateConsoleUnlockLink records a one-time link that unlocks project, for
-// lease, in whichever browser claims it before now plus ttl. It returns the
-// link's secret -- the only place it ever exists outside the browser -- and the
-// row. Only `seamlessd console-open --unlock`, run as the daemon's own account,
-// calls it: no route does.
-func CreateConsoleUnlockLink(ctx context.Context, db *sql.DB, project string, lease, ttl time.Duration, now time.Time) (string, ConsoleUnlock, error) {
-	const op = "store.CreateConsoleUnlockLink"
+// Terminal unlocks. The browser begins one (BeginTerminalUnlock) and shows its
+// pairing code; the owner approves it in a terminal, as the daemon's own
+// account (ApproveTerminalUnlock, run by `seamlessd console-open --unlock
+// --code`). The row is bound to the beginning browser's cookie hash from the
+// start and approval never changes it, so nothing the terminal shows can open
+// another browser.
+//
+// The code is not a secret: it only says which pending row the owner means,
+// and approving it opens only the browser that holds the cookie that began
+// it. It is stored hashed all the same, in claim_hash under its own domain
+// prefix (unlockCodeHash): the column keeps the one shape migration 033 gives
+// it, hex SHA-256, and a copy of the database never shows a code that a
+// reader could mistake for something worth typing into a terminal.
+
+// FormatUnlockCode returns a pairing code in its printed form, XXXX-XXXX, or
+// "" when code is not one. Typing is forgiving: any case, with or without the
+// hyphen or spaces, and Crockford's look-alikes (O for 0, I and L for 1).
+func FormatUnlockCode(code string) string {
+	norm := NormalizeEnrollCode(code)
+	if len(norm) != unlockCodeLen || strings.Trim(norm, enrollCodeSymbols) != "" {
+		return ""
+	}
+	return norm[:unlockCodeLen/2] + "-" + norm[unlockCodeLen/2:]
+}
+
+// unlockCodeHash is what claim_hash stores of a pairing code: hex SHA-256 of
+// its canonical form under a prefix no cookie hash uses.
+func unlockCodeHash(code string) string {
+	sum := sha256.Sum256([]byte("seamless console unlock code v1\x00" + NormalizeEnrollCode(code)))
+	return hex.EncodeToString(sum[:])
+}
+
+// newUnlockCode draws a fresh pairing code, printed. A variable so a test can
+// force the re-roll.
+var newUnlockCode = func() (string, error) {
+	raw := make([]byte, unlockCodeLen)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	b := make([]byte, unlockCodeLen)
+	for i, v := range raw {
+		// 256 is a multiple of the 32 symbols, so every symbol is as likely.
+		b[i] = enrollCodeSymbols[int(v)%len(enrollCodeSymbols)]
+	}
+	return FormatUnlockCode(string(b)), nil
+}
+
+// BeginTerminalUnlock records an unlock of project for the browser whose
+// cookie hashes to tokenHash, waiting for ttl for the daemon's account to
+// approve its pairing code. It returns the row and the code, printed
+// XXXX-XXXX. The code is re-rolled while another pending unlock shows the same
+// one. lease is how long it lasts should the approval not name one. Unlocks
+// past their deadline are purged first, and at most maxPendingConsoleUnlocks
+// terminal unlocks wait at once, a cap of their own: however many wait, a
+// passkey ceremony can still begin.
+func BeginTerminalUnlock(ctx context.Context, db *sql.DB, project, tokenHash string, lease, ttl time.Duration, now time.Time) (ConsoleUnlock, string, error) {
+	const op = "store.BeginTerminalUnlock"
 	if err := validConsoleUnlock(project, lease, ttl); err != nil {
-		return "", ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
+		return ConsoleUnlock{}, "", fmt.Errorf("%s: %w", op, err)
+	}
+	if !validTokenHash(tokenHash) {
+		return ConsoleUnlock{}, "", fmt.Errorf("%s: %w: a browser token hash is required", op, ErrInvalidConsoleUnlock)
 	}
 	id, err := core.NewID()
 	if err != nil {
-		return "", ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
-	}
-	secret, err := NewConsoleToken()
-	if err != nil {
-		return "", ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
+		return ConsoleUnlock{}, "", fmt.Errorf("%s: %w", op, err)
 	}
 	now = now.UTC()
-	if _, err := db.ExecContext(ctx, `INSERT INTO console_unlocks (id, project_slug, status, claim_hash, credential,
-		lease_seconds, created_at, pending_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, project, ConsoleUnlockPending, HashConsoleToken(secret), ConsoleUnlockByDaemon, int64(lease/time.Second),
-		core.FormatTime(now), core.FormatTime(now.Add(ttl))); err != nil {
-		return "", ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
-	}
-	u, err := consoleUnlockByIDWrapped(ctx, db, id, op)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return "", ConsoleUnlock{}, err
+		return ConsoleUnlock{}, "", fmt.Errorf("%s: %w", op, err)
 	}
-	return secret, u, nil
+	defer func() { _ = tx.Rollback() }()
+	if err := makeRoomForUnlock(ctx, tx, pendingTerminal, now); err != nil {
+		return ConsoleUnlock{}, "", fmt.Errorf("%s: %w", op, err)
+	}
+	code := ""
+	for range unlockCodeTries {
+		c, err := newUnlockCode()
+		if err != nil {
+			return ConsoleUnlock{}, "", fmt.Errorf("%s: code: %w", op, err)
+		}
+		var taken int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM console_unlocks WHERE claim_hash = ? AND status = ?`,
+			unlockCodeHash(c), ConsoleUnlockPending).Scan(&taken); err != nil {
+			return ConsoleUnlock{}, "", fmt.Errorf("%s: %w", op, err)
+		}
+		if taken == 0 {
+			code = c
+			break
+		}
+	}
+	if code == "" {
+		return ConsoleUnlock{}, "", fmt.Errorf("%s: no free pairing code after %d tries", op, unlockCodeTries)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO console_unlocks (id, project_slug, status, token_hash, claim_hash,
+		lease_seconds, created_at, pending_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, project, ConsoleUnlockPending, tokenHash, unlockCodeHash(code), int64(lease/time.Second),
+		core.FormatTime(now), core.FormatTime(now.Add(ttl))); err != nil {
+		return ConsoleUnlock{}, "", fmt.Errorf("%s: %w", op, err)
+	}
+	u, err := consoleUnlockByID(ctx, tx, id)
+	if err != nil {
+		return ConsoleUnlock{}, "", fmt.Errorf("%s: %w", op, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return ConsoleUnlock{}, "", fmt.Errorf("%s: %w", op, err)
+	}
+	return u, code, nil
 }
 
-// ClaimConsoleUnlockLink makes the link whose secret is given live for the
-// browser whose cookie hashes to tokenHash, until now plus its lease. It is a
-// compare-and-set on the link still pending before its deadline, and it clears
-// the link's hash, so a link works once.
-func ClaimConsoleUnlockLink(ctx context.Context, db *sql.DB, secret, tokenHash string, now time.Time) (ConsoleUnlock, error) {
-	const op = "store.ClaimConsoleUnlockLink"
-	claim := HashConsoleToken(secret)
-	if claim == "" || !validTokenHash(tokenHash) {
-		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, ErrConsoleUnlockNotFound)
+// ApproveTerminalUnlock makes live the terminal unlock of project that shows
+// code, for lease from now, with the daemon's account as its credential. The
+// browser it opens is the one that began it: approval never names a browser.
+// A malformed code is ErrInvalidConsoleUnlock; one that names no unlock of
+// project still waiting (mistyped, used, past its deadline, or another
+// project's) is ErrConsoleUnlockNotFound. It is a compare-and-set on the row
+// still pending, and it clears the code, so of two racing approvals exactly
+// one succeeds and a code works once.
+func ApproveTerminalUnlock(ctx context.Context, db *sql.DB, project, code string, lease time.Duration, now time.Time) (ConsoleUnlock, error) {
+	const op = "store.ApproveTerminalUnlock"
+	if err := validConsoleUnlock(project, lease, time.Second); err != nil {
+		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
 	}
-	at := core.FormatTime(now)
+	if FormatUnlockCode(code) == "" {
+		return ConsoleUnlock{}, fmt.Errorf("%s: %w: a pairing code is %d letters and digits, XXXX-XXXX", op, ErrInvalidConsoleUnlock, unlockCodeLen)
+	}
+	claim, at := unlockCodeHash(code), core.FormatTime(now)
 	u, err := scanConsoleUnlock(db.QueryRowContext(ctx, `SELECT `+consoleUnlockCols+` FROM console_unlocks
-		WHERE claim_hash = ? AND status = ? AND pending_until > ?`, claim, ConsoleUnlockPending, at))
+		WHERE project_slug = ? AND claim_hash = ? AND status = ? AND challenge IS NULL AND token_hash != '' AND pending_until > ?`,
+		project, claim, ConsoleUnlockPending, at))
 	if errors.Is(err, sql.ErrNoRows) {
 		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, ErrConsoleUnlockNotFound)
 	}
@@ -370,9 +499,10 @@ func ClaimConsoleUnlockLink(ctx context.Context, db *sql.DB, secret, tokenHash s
 		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
 	}
 	res, err := db.ExecContext(ctx, `UPDATE console_unlocks
-		SET status = ?, token_hash = ?, claim_hash = '', granted_at = ?, expires_at = ?
+		SET status = ?, credential = ?, claim_hash = '', lease_seconds = ?, granted_at = ?, expires_at = ?
 		WHERE id = ? AND claim_hash = ? AND status = ? AND pending_until > ?`,
-		ConsoleUnlockLive, tokenHash, at, core.FormatTime(now.Add(u.Lease)), u.ID, claim, ConsoleUnlockPending, at)
+		ConsoleUnlockLive, ConsoleUnlockByDaemon, int64(lease/time.Second), at, core.FormatTime(now.Add(lease)),
+		u.ID, claim, ConsoleUnlockPending, at)
 	if err != nil {
 		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -380,6 +510,27 @@ func ClaimConsoleUnlockLink(ctx context.Context, db *sql.DB, secret, tokenHash s
 		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
 	}
 	return consoleUnlockByIDWrapped(ctx, db, u.ID, op)
+}
+
+// ConsoleUnlockFor returns unlock id as the browser whose cookie hashes to
+// tokenHash sees it: its own row for project, in whatever state, for the page
+// waiting on a terminal approval. Another browser's row, another project's, or
+// a row purged past its deadline is ErrConsoleUnlockNotFound, the same answer
+// as an id that never existed.
+func ConsoleUnlockFor(ctx context.Context, db *sql.DB, id, project, tokenHash string) (ConsoleUnlock, error) {
+	const op = "store.ConsoleUnlockFor"
+	if !validTokenHash(tokenHash) {
+		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, ErrConsoleUnlockNotFound)
+	}
+	u, err := scanConsoleUnlock(db.QueryRowContext(ctx, `SELECT `+consoleUnlockCols+` FROM console_unlocks
+		WHERE id = ? AND project_slug = ? AND token_hash = ?`, id, project, tokenHash))
+	if errors.Is(err, sql.ErrNoRows) {
+		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, ErrConsoleUnlockNotFound)
+	}
+	if err != nil {
+		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
+	}
+	return u, nil
 }
 
 func queryConsoleUnlocks(ctx context.Context, db *sql.DB, op, where string, args ...any) ([]ConsoleUnlock, error) {
@@ -450,9 +601,10 @@ func EndConsoleUnlock(ctx context.Context, db *sql.DB, id, reason string, now ti
 	return consoleUnlockByIDWrapped(ctx, db, id, op)
 }
 
-// EndAllConsoleUnlocks ends every live unlock and every pending ceremony and
-// link at now (a restore brings back the unlocks a snapshot held), returning
-// how many.
+// EndAllConsoleUnlocks ends every live unlock and every pending one, passkey
+// ceremony or terminal unlock, at now (a restore brings back the unlocks a
+// snapshot held), returning how many. A pending terminal unlock's code is
+// cleared with it, so it can no longer be approved.
 func EndAllConsoleUnlocks(ctx context.Context, db *sql.DB, reason string, now time.Time) (int64, error) {
 	const op = "store.EndAllConsoleUnlocks"
 	if err := validConsoleUnlockEnd(reason); err != nil {

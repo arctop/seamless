@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -9,6 +12,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -138,47 +142,243 @@ func TestConsoleLock_LeasedTreeReadsThroughTheConsole(t *testing.T) {
 
 // console-open --unlock's core: the project must be locked, --for is the whole
 // console lease when absent and refused when present but not a duration up to
-// it, and the link it prints claims once into a browser's unlock.
-func TestConsoleOpenUnlock_Link(t *testing.T) {
+// it, and the code approves only the unlock its browser began, once, for its
+// own project, before its deadline. A refused code changes nothing.
+func TestConsoleOpenUnlock_ApproveCode(t *testing.T) {
+	ctx := context.Background()
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	cfg := config.Defaults()
+	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{"example-finance", "example-legal"}}
+	svc, err := newApprovals(cfg, db, events.NewRecorder(db), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, err)
+	var out strings.Builder
+	tty := unlockTerminal{in: strings.NewReader(""), out: &out}
+	approve := func(project, code, forFlag string) error {
+		return approveConsoleUnlock(ctx, cfg, db, svc, tty, project, code, forFlag)
+	}
+	browser, other := store.HashConsoleToken("browser"), store.HashConsoleToken("other")
+	begin := func(project, tokenHash string) (store.ConsoleUnlock, string) {
+		u, code, err := store.BeginTerminalUnlock(ctx, db, project, tokenHash, svc.ConsoleLeaseLength(), 10*time.Minute, time.Now())
+		require.NoError(t, err)
+		return u, code
+	}
+	fin, finCode := begin("example-finance", browser)
+	legal, legalCode := begin("example-legal", other)
+
+	require.ErrorContains(t, approve("example-ops", finCode, ""), "not locked")
+	for _, bad := range []string{"soon", "0s", "30s", "4h"} {
+		require.ErrorContains(t, approve("example-finance", finCode, bad), "invalid --for", bad)
+	}
+	err = approve("example-finance", "nope", "")
+	require.ErrorIs(t, err, store.ErrInvalidConsoleUnlock)
+	require.EqualError(t, err, `"nope" is not an unlock code: the unlock page shows one as XXXX-XXXX, 8 letters and digits. Nothing changed.`)
+	for name, c := range map[string]struct{ project, code string }{
+		"a mistyped code":        {"example-finance", "ZZZZ-ZZZZ"},
+		"another project's code": {"example-finance", legalCode},
+		"this code, elsewhere":   {"example-legal", finCode},
+	} {
+		err := approve(c.project, c.code, "")
+		require.ErrorIs(t, err, store.ErrConsoleUnlockNotFound, name)
+		require.ErrorContains(t, err, "no unlock of "+c.project+" is waiting for code ", name)
+		require.ErrorContains(t, err, "Nothing changed. Start again on "+consoleBase(cfg)+"/console/unlock/"+c.project+".", name)
+	}
+	require.Empty(t, out.String(), "a refusal says nothing on stdout")
+	none, err := store.AllLiveConsoleUnlocks(ctx, db, time.Now())
+	require.NoError(t, err)
+	require.Empty(t, none, "no refused code opened anything")
+
+	require.NoError(t, approve("example-finance", strings.ToLower(finCode), ""))
+	require.Regexp(t, `^Unlocked example-finance for 3 hours, until \d\d:\d\d, in the browser that showed code `+finCode+`\.\n$`, out.String())
+	live, err := store.LiveConsoleUnlocks(ctx, db, browser, time.Now())
+	require.NoError(t, err)
+	require.Len(t, live, 1)
+	require.Equal(t, fin.ID, live[0].ID)
+	require.Equal(t, 3*time.Hour, live[0].Lease, "absent --for is the whole console lease")
+	require.Equal(t, store.ConsoleUnlockByDaemon, live[0].Credential)
+	require.ErrorIs(t, approve("example-finance", finCode, ""), store.ErrConsoleUnlockNotFound, "a code works once")
+
+	out.Reset()
+	require.NoError(t, approve("example-legal", legalCode, "90m"))
+	require.Contains(t, out.String(), "Unlocked example-legal for 90 minutes")
+	live, err = store.LiveConsoleUnlocks(ctx, db, other, time.Now())
+	require.NoError(t, err)
+	require.Len(t, live, 1)
+	require.Equal(t, legal.ID, live[0].ID)
+	require.Equal(t, 90*time.Minute, live[0].Lease, "--for moved to approval time")
+
+	// Expired before it was approved.
+	_, late := begin("example-finance", browser)
+	_, err = db.Exec(`UPDATE console_unlocks SET pending_until = ? WHERE status = 'pending'`, core.FormatTime(time.Now().Add(-time.Second)))
+	require.NoError(t, err)
+	err = approve("example-finance", late, "")
+	require.ErrorIs(t, err, store.ErrConsoleUnlockNotFound)
+	require.ErrorContains(t, err, "expired (a code lasts 10 minutes)")
+
+	// It runs only as the daemon's account, with a project locked.
+	off := config.Defaults()
+	require.ErrorContains(t, runConsoleUnlock(off, "example-finance", finCode, "", ""), "peer_auth is off")
+}
+
+// Two terminals approving one code at once: exactly one unlock goes live.
+func TestConsoleOpenUnlock_RacingApprovals(t *testing.T) {
 	ctx := context.Background()
 	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	cfg := config.Defaults()
 	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{"example-finance"}}
-	now := time.Now()
-
-	_, err = consoleUnlockLink(ctx, cfg, db, 3*time.Hour, "example-ops", "", now)
-	require.ErrorContains(t, err, "not locked")
-	for _, bad := range []string{"soon", "0s", "30s", "4h"} {
-		_, err = consoleUnlockLink(ctx, cfg, db, 3*time.Hour, "example-finance", bad, now)
-		require.ErrorContains(t, err, "invalid --for", bad)
+	svc, err := newApprovals(cfg, db, events.NewRecorder(db), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, err)
+	_, code, err := store.BeginTerminalUnlock(ctx, db, "example-finance", store.HashConsoleToken("browser"), 3*time.Hour, 10*time.Minute, time.Now())
+	require.NoError(t, err)
+	var wg sync.WaitGroup
+	errs := make(chan error, 4)
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- approveConsoleUnlock(ctx, cfg, db, svc, unlockTerminal{out: io.Discard}, "example-finance", code, "")
+		}()
 	}
+	wg.Wait()
+	close(errs)
+	wins := 0
+	for err := range errs {
+		if err == nil {
+			wins++
+			continue
+		}
+		require.ErrorIs(t, err, store.ErrConsoleUnlockNotFound)
+	}
+	require.Equal(t, 1, wins)
+	live, err := store.AllLiveConsoleUnlocks(ctx, db, time.Now())
+	require.NoError(t, err)
+	require.Len(t, live, 1)
+}
 
-	link, err := consoleUnlockLink(ctx, cfg, db, 3*time.Hour, "example-finance", "", now)
-	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(link, consoleBase(cfg)+"/console/unlock?t="), link)
-	u, err := url.Parse(link)
-	require.NoError(t, err)
-	secret := u.Query().Get("t")
-	require.NotEmpty(t, secret)
-	browser := store.HashConsoleToken("browser")
-	got, err := store.ClaimConsoleUnlockLink(ctx, db, secret, browser, now)
-	require.NoError(t, err)
-	require.Equal(t, 3*time.Hour, got.Lease, "absent --for is the whole console lease")
-	require.Equal(t, store.ConsoleUnlockByDaemon, got.Credential)
-	_, err = store.ClaimConsoleUnlockLink(ctx, db, secret, browser, now)
-	require.ErrorIs(t, err, store.ErrConsoleUnlockNotFound, "the link works once")
+// The security review's first attack, ported (it was
+// TestPoC_StolenUnlockLinkOpensLockedProjectToAgent): an agent running as the
+// owner reads everything the owner's terminal shows -- the command with its
+// code, and what it printed -- and holds the console's TCP key in its own
+// cookie jar. On the real daemon wiring it gets no live unlock: what crossed
+// the terminal names the owner's browser's row, and approving it opened only
+// that browser.
+func TestConsoleUnlock_TerminalScrollbackOpensNothing(t *testing.T) {
+	ctx := context.Background()
+	d := cmNewDaemon(t, access.Account{Name: cmOwnerName, UID: cmUIDOwner}, nil)
+	owner := d.newBrowser(t, "the owner's browser")
+	status, body, _ := owner.do(t, http.MethodPost, "/console/unlock/"+cmFinance+"/terminal", url.Values{}, true)
+	require.Equal(t, http.StatusOK, status, body)
+	var begun struct {
+		ID, Code, Command string
+	}
+	require.NoError(t, json.Unmarshal([]byte(body), &begun))
+	require.NotEmpty(t, d.unlockCookie(t, owner))
 
-	link, err = consoleUnlockLink(ctx, cfg, db, 3*time.Hour, "example-finance", "90m", now)
-	require.NoError(t, err)
-	u, err = url.Parse(link)
-	require.NoError(t, err)
-	got, err = store.ClaimConsoleUnlockLink(ctx, db, u.Query().Get("t"), browser, now)
-	require.NoError(t, err)
-	require.Equal(t, 90*time.Minute, got.Lease)
+	// The owner runs the command; the agent reads the whole terminal.
+	var terminal strings.Builder
+	terminal.WriteString(begun.Command + "\n")
+	require.NoError(t, approveConsoleUnlock(ctx, d.cfg, d.db, d.svc, unlockTerminal{out: &terminal}, cmFinance, begun.Code, ""))
+	scrollback := terminal.String()
+	require.Contains(t, scrollback, begun.Code)
+	require.NotContains(t, scrollback, d.unlockCookie(t, owner), "the cookie never crosses the terminal")
+	require.NotContains(t, scrollback, "/console/unlock?t=")
 
-	// It runs only as the daemon's account, with a project locked.
-	off := config.Defaults()
-	require.ErrorContains(t, runConsoleUnlock(off, "example-finance", "", ""), "peer_auth is off")
+	agent := d.newBrowser(t, "the agent's cookie jar, built from the key in console.yaml")
+	for _, target := range []string{
+		"/console/unlock/" + cmFinance + "/terminal?id=" + url.QueryEscape(begun.ID), "/console/projects/" + cmFinance,
+	} {
+		status, body, _ := agent.do(t, http.MethodGet, target, nil, true)
+		require.Less(t, status, 500, target)
+		require.NotEqual(t, http.StatusOK, status, "%s: %s", target, firstN(body, 200))
+	}
+	status, body, _ = agent.do(t, http.MethodGet, "/console/projects/"+cmFinance, nil, true)
+	require.Equal(t, http.StatusForbidden, status)
+	require.Contains(t, body, `"locked": true`)
+	require.Empty(t, d.unlockCookie(t, agent), "the agent's jar holds no unlock cookie")
+	// Its own begin draws its own code, which nobody approved.
+	status, body, _ = agent.do(t, http.MethodPost, "/console/unlock/"+cmFinance+"/terminal", url.Values{"code": {begun.Code}}, true)
+	require.Equal(t, http.StatusOK, status, body)
+	require.NotContains(t, body, begun.Code)
+	live, err := store.LiveConsoleUnlocks(ctx, d.db, store.HashConsoleToken(d.unlockCookie(t, agent)), time.Now())
+	require.NoError(t, err)
+	require.Empty(t, live)
+	// Replaying the approval opens nothing more.
+	require.ErrorIs(t, approveConsoleUnlock(ctx, d.cfg, d.db, d.svc, unlockTerminal{out: io.Discard}, cmFinance, begun.Code, ""),
+		store.ErrConsoleUnlockNotFound)
+
+	status, body, _ = owner.do(t, http.MethodGet, "/console/projects/"+cmFinance, nil, true)
+	require.Equal(t, http.StatusOK, status, "the owner's browser reads it: %s", firstN(body, 200))
+	all, err := store.AllLiveConsoleUnlocks(ctx, d.db, time.Now())
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+}
+
+// The security review's second attack, ported (it was
+// TestPoC_UnlockLinkClaimedWithForgedCookie): a plain HTTP client with the key
+// forges the console cookie (sha256 of the prefix and the key, no login) and
+// plants a seamless_unlock value it knows. With the code the owner's page
+// shows it gets no live unlock, under its planted value or any cookie the
+// daemon hands it, and the approval lands on the owner's browser alone.
+func TestConsoleUnlock_ForgedCookieCannotTakeTheApproval(t *testing.T) {
+	ctx := context.Background()
+	d := cmNewDaemon(t, access.Account{Name: cmOwnerName, UID: cmUIDOwner}, nil)
+	owner := d.newBrowser(t, "the owner's browser")
+	status, body, _ := owner.do(t, http.MethodPost, "/console/unlock/"+cmFinance+"/terminal", url.Values{}, true)
+	require.Equal(t, http.StatusOK, status, body)
+	var begun struct{ ID, Code string }
+	require.NoError(t, json.Unmarshal([]byte(body), &begun))
+
+	sum := sha256.Sum256([]byte("seamless-console\x00" + cmKey))
+	forgedConsole := hex.EncodeToString(sum[:])
+	planted, err := store.NewConsoleToken()
+	require.NoError(t, err)
+	forged := func(method, target string, unlock string) (*http.Response, string) {
+		t.Helper()
+		var rd io.Reader
+		if method == http.MethodPost {
+			rd = strings.NewReader(url.Values{"code": {begun.Code}, "id": {begun.ID}}.Encode())
+		}
+		req, err := http.NewRequest(method, d.owner.URL+target, rd)
+		require.NoError(t, err)
+		req.Header.Set("Cookie", "seamless_console="+forgedConsole+"; seamless_unlock="+unlock)
+		req.Header.Set("Accept", "application/json")
+		if method == http.MethodPost {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("Origin", d.owner.URL)
+		}
+		resp, err := (&http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Do(req)
+		require.NoError(t, err)
+		raw, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		return resp, string(raw)
+	}
+	resp, _ := forged(http.MethodGet, "/console/unlock/"+cmFinance+"/terminal?id="+url.QueryEscape(begun.ID), planted)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode, "the forged client cannot read the owner's row")
+	resp, body = forged(http.MethodPost, "/console/unlock/"+cmFinance+"/terminal", planted)
+	require.Equal(t, http.StatusOK, resp.StatusCode, body)
+	var issued string
+	for _, c := range resp.Cookies() {
+		if c.Name == "seamless_unlock" {
+			issued = c.Value
+		}
+	}
+	require.NotEmpty(t, issued)
+	require.NotEqual(t, planted, issued, "a planted cookie naming no live unlock is never adopted")
+
+	require.NoError(t, approveConsoleUnlock(ctx, d.cfg, d.db, d.svc, unlockTerminal{out: io.Discard}, cmFinance, begun.Code, ""))
+	for _, c := range []string{planted, issued} {
+		live, err := store.LiveConsoleUnlocks(ctx, d.db, store.HashConsoleToken(c), time.Now())
+		require.NoError(t, err)
+		require.Empty(t, live, "the forged client holds no unlock")
+		resp, body := forged(http.MethodGet, "/console/projects/"+cmFinance, c)
+		require.Equal(t, http.StatusForbidden, resp.StatusCode)
+		require.Contains(t, body, `"locked": true`)
+	}
+	live, err := store.LiveConsoleUnlocks(ctx, d.db, store.HashConsoleToken(d.unlockCookie(t, owner)), time.Now())
+	require.NoError(t, err)
+	require.Len(t, live, 1, "the approval landed on the browser that began it")
 }

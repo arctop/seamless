@@ -3,16 +3,20 @@ package console
 // Console unlocks: the owner opens a locked project in one
 // browser's console for a limited time (approval.ConsoleLease, three hours).
 //
-// Two ways in, both ending in a live store.ConsoleUnlock row behind the
+// Two ways in, both begun on /console/unlock/<project> by the browser they
+// open, and both ending in a live store.ConsoleUnlock row behind that
 // browser's seamless_unlock cookie (HttpOnly, SameSite=Strict, Secure under
 // TLS):
 //
-//   - a passkey, at /console/unlock/<project>: an assertion over a fresh
-//     challenge naming the project and this browser (approval.BeginConsoleUnlock
-//     and FinishConsoleUnlock);
-//   - `sudo -k -u <daemon account> seamlessd console-open --unlock <project>`,
-//     which writes a one-time link straight into the database as the daemon's
-//     own account; GET /console/unlock?t=<secret> claims it.
+//   - a passkey: an assertion over a fresh challenge naming the project and
+//     this browser (approval.BeginConsoleUnlock and FinishConsoleUnlock);
+//   - the terminal: POST .../terminal records an unlock bound to this browser's
+//     cookie and answers a pairing code, the page shows it with the command,
+//     and `sudo -k -u <daemon account> seamlessd console-open --unlock <project>
+//     --code <code>` approves it as the daemon's own account. The page asks GET
+//     .../terminal?id= until it is live. Nothing the terminal shows is a
+//     credential: the code only names the row, and no route lets a request
+//     move a row to another browser's cookie.
 //
 // The live leases agents hold, and every browser's unlocks, are listed on the
 // access page with Revoke and Lock again. Neither a revoke nor a lock-again may
@@ -56,14 +60,11 @@ type unlockData struct {
 	OnOrigin   bool   `json:"-"`
 	Origin     string `json:"-"`
 	// Browser is false for a bearer or socket caller: an unlock is per
-	// browser, so only a browser is offered one.
+	// browser, so only a browser is offered one, passkey or terminal.
 	Browser bool `json:"-"`
-	// Command is the terminal way in, run in the owner's own terminal.
-	Command string `json:"command"`
-	// Claimed marks the answer to an unlock link: the page then replaces the
-	// link in the address bar with the project's unlock page, so a reload or
-	// a history entry never holds the used secret.
-	Claimed bool `json:"-"`
+	// TerminalMinutes is how long a code the terminal path shows waits for
+	// its approval.
+	TerminalMinutes int `json:"-"`
 	// Item is the kind of item a locked page sent the owner here for (a plan
 	// or a session: lockedItem), Next its page, to open once unlocked; both
 	// empty otherwise.
@@ -108,9 +109,10 @@ func shellWord(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// unlockCommand is the terminal way to unlock project: console-open as the
-// daemon's own account, through sudo -k so it asks every time.
-func (s *Service) unlockCommand(project string, lease time.Duration) string {
+// unlockCommand is the terminal's half of a terminal unlock: console-open as
+// the daemon's own account, through sudo -k so it asks every time, approving
+// the code this browser's page shows.
+func (s *Service) unlockCommand(project, code string) string {
 	account, seamlessd, env := "<daemon account>", "seamlessd", ""
 	if t := s.cfg.Terminal; t != nil {
 		if t.Account != "" {
@@ -123,19 +125,7 @@ func (s *Service) unlockCommand(project string, lease time.Duration) string {
 			env = "env SEAMLESS_CONFIG=" + shellWord(t.Config) + " "
 		}
 	}
-	return fmt.Sprintf("sudo -k -u %s %s%s console-open --unlock %s --for %s", account, env, seamlessd, shellWord(project), flagDuration(lease))
-}
-
-// flagDuration renders d as a --for value a person would type: "3h", "90m".
-func flagDuration(d time.Duration) string {
-	switch {
-	case d > 0 && d%time.Hour == 0:
-		return fmt.Sprintf("%dh", d/time.Hour)
-	case d > 0 && d%time.Minute == 0:
-		return fmt.Sprintf("%dm", d/time.Minute)
-	default:
-		return d.String()
-	}
+	return fmt.Sprintf("sudo -k -u %s %s%s console-open --unlock %s --code %s", account, env, seamlessd, shellWord(project), shellWord(code))
 }
 
 func (s *Service) unlockPage(w http.ResponseWriter, r *http.Request) {
@@ -164,10 +154,9 @@ func (s *Service) unlockDataFor(r *http.Request, slug string) (unlockData, error
 	if err != nil {
 		return unlockData{}, err
 	}
-	lease := s.cfg.Approvals.ConsoleLeaseLength()
 	d := unlockData{
-		Project: tallies[0], Lease: leaseWord(lease), PasskeysOn: s.cfg.Approvals.PasskeysOn(),
-		Browser: s.classify(r) == credCookie, Command: s.unlockCommand(slug, lease),
+		Project: tallies[0], Lease: leaseWord(s.cfg.Approvals.ConsoleLeaseLength()), PasskeysOn: s.cfg.Approvals.PasskeysOn(),
+		Browser: s.classify(r) == credCookie, TerminalMinutes: int(approval.ConsoleTerminalUnlockTTL / time.Minute),
 	}
 	if rc := reachOf(ctx); rc != nil {
 		d.Leased = slices.Contains(rc.open, slug) && !slices.Contains(rc.unlocked, slug)
@@ -297,57 +286,86 @@ func (s *Service) keepUnlockCookie(w http.ResponseWriter, r *http.Request, value
 	s.unlockCookie(w, value, last.Sub(now))
 }
 
-// unlockClaim claims a one-time link `seamlessd console-open --unlock` wrote.
-func (s *Service) unlockClaim(w http.ResponseWriter, r *http.Request) {
-	if s.approversOff(w, r) {
+// The states of a terminal unlock, as the page waiting on it reads them.
+const (
+	terminalPending = "pending" // its code waits for the terminal
+	terminalLive    = "live"    // approved: this browser reads the project
+	terminalExpired = "expired" // its code's deadline passed unapproved, or it is not this browser's
+	terminalEnded   = "ended"   // locked again, or reset, before or after it went live
+)
+
+// unlockTerminalBegin starts a terminal unlock: a row bound to this browser's
+// cookie (set here when the browser holds no live unlock yet), and the pairing
+// code and the command the page shows. Its gates are the passkey begin's: a
+// locked project, a browser (never the TCP key or the socket), the console's
+// origin check (auth, which also keeps a restricted account out), and a
+// pending cap, the terminal unlocks' own, so a key holder filling it leaves
+// the passkey path open.
+func (s *Service) unlockTerminalBegin(w http.ResponseWriter, r *http.Request) {
+	slug, ok := s.unlockProject(w, r)
+	if !ok || !s.browserOnly(w, r) {
 		return
 	}
-	if s.classify(r) != credCookie {
-		s.badRequest(w, r, "an unlock link is for a browser: open it in the browser you sign in to the console with")
-		return
-	}
-	secret := strings.TrimSpace(r.URL.Query().Get("t"))
-	if secret == "" {
-		s.badRequest(w, r, "this unlock link is incomplete: copy the whole link console-open printed")
-		return
-	}
-	token, _, err := s.browserToken(r)
+	token, fresh, err := s.browserToken(r)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	u, err := store.ClaimConsoleUnlockLink(r.Context(), s.writeDB(), secret, store.HashConsoleToken(token), time.Now())
+	begun, err := s.cfg.Approvals.BeginTerminalUnlock(r.Context(), slug, store.HashConsoleToken(token))
+	if err != nil {
+		s.unlockError(w, r, err)
+		return
+	}
+	if fresh {
+		s.unlockCookie(w, token, approval.ConsoleTerminalUnlockTTL+s.cfg.Approvals.ConsoleLeaseLength())
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id": begun.ID, "code": begun.Code, "command": s.unlockCommand(slug, begun.Code),
+		"pending_until": begun.PendingUntil.UTC().Format(time.RFC3339), "minutes": int(approval.ConsoleTerminalUnlockTTL / time.Minute),
+	})
+}
+
+// unlockTerminalStatus answers the page waiting on a terminal approval with
+// the state of the unlock it began (?id=). It reads the row through this
+// browser's cookie, so another browser, the TCP key and the socket get the
+// answer an id that never existed gets. Once live it re-issues the cookie to
+// last as long as the unlock, as a passkey's finish does.
+func (s *Service) unlockTerminalStatus(w http.ResponseWriter, r *http.Request) {
+	slug, ok := s.unlockProject(w, r)
+	if !ok || !s.browserOnly(w, r) {
+		return
+	}
+	gone := func() {
+		writeJSON(w, http.StatusNotFound, map[string]string{"state": terminalExpired,
+			"error": "no unlock begun in this browser is waiting: start again for a new code"})
+	}
+	c, err := r.Cookie(unlockCookieName)
+	if err != nil || c.Value == "" {
+		gone()
+		return
+	}
+	u, err := store.ConsoleUnlockFor(r.Context(), s.writeDB(), r.URL.Query().Get("id"), slug, store.HashConsoleToken(c.Value))
 	if errors.Is(err, store.ErrConsoleUnlockNotFound) {
-		s.notFound(w, r, "this unlock link was already used, or it expired: run console-open --unlock again")
+		gone()
 		return
 	}
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	s.keepUnlockCookie(w, r, token)
-	if log := s.eventLog(r.Context()); log != nil {
-		if _, err := log.Record(r.Context(), core.Event{Kind: approval.EventConsoleUnlocked, ItemID: u.ID, ProjectSlug: u.Project,
-			Payload: map[string]any{"proof": approval.ProofDaemon, "seconds": int64(u.Lease / time.Second)}}); err != nil {
-			s.logger.Warn("console: record console unlock", "error", err)
-		}
+	now := time.Now()
+	switch {
+	case u.Status == store.ConsoleUnlockPending && u.PendingUntil.After(now):
+		writeJSON(w, http.StatusOK, map[string]any{"state": terminalPending, "pending_until": u.PendingUntil.UTC().Format(time.RFC3339)})
+	case u.Status == store.ConsoleUnlockLive && u.ExpiresAt != nil && u.ExpiresAt.After(now):
+		s.keepUnlockCookie(w, r, c.Value)
+		writeJSON(w, http.StatusOK, map[string]any{"state": terminalLive, "unlocked": u.Project,
+			"expires_at": u.ExpiresAt.UTC().Format(time.RFC3339), "open": "/console/projects/" + url.PathEscape(u.Project)})
+	case u.Status == store.ConsoleUnlockPending:
+		writeJSON(w, http.StatusOK, map[string]string{"state": terminalExpired})
+	default:
+		writeJSON(w, http.StatusOK, map[string]string{"state": terminalEnded})
 	}
-	// The answer is the unlock page itself, built from the row just claimed,
-	// rather than a redirect: this request was judged before the cookie
-	// existed, and a SameSite=Strict cookie set during a navigation another
-	// site started is not sent on the redirect that follows it. The page's
-	// links are same-site, so the next click carries it.
-	if !slices.Contains(s.cfg.Views.Lockable(), u.Project) {
-		s.notFound(w, r, "project "+u.Project+" is no longer locked: there is nothing to unlock")
-		return
-	}
-	d, err := s.unlockDataFor(r, u.Project)
-	if err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	d.Unlocked, d.UnlockID, d.Until, d.Leased, d.Claimed = true, u.ID, u.ExpiresAt, false, true
-	s.render(w, r, "unlock", pageData{Title: "Unlock " + d.Project.Name, Active: "projects", Data: d})
 }
 
 // ownerDecision refuses an agent's socket connection: revoking a lease and
@@ -453,7 +471,7 @@ func (s *Service) unlockError(w http.ResponseWriter, r *http.Request, err error)
 	case errors.Is(err, store.ErrConsoleUnlockBusy):
 		msg = "too many unlocks are in progress; try again in a few minutes"
 	case errors.Is(err, approval.ErrNoPasskey):
-		msg = "no passkey is enrolled: enroll one on the Approvers page, or unlock in your own terminal"
+		msg = "no passkey is enrolled: enroll one on the Approvers page, or approve this unlock from a terminal"
 	case errors.Is(err, passkey.ErrUnknownCredential):
 		msg = "that passkey is not enrolled here"
 	}

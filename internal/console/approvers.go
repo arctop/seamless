@@ -62,11 +62,13 @@ type ApprovalsView interface {
 	Ways(ctx context.Context, id string) access.Ways
 	LeaseLength(choice string) (time.Duration, error)
 
-	// Console unlocks (unlock.go): a passkey ceremony that opens a locked
-	// project in one browser, and how long such an unlock lasts.
+	// Console unlocks (unlock.go): a passkey ceremony, or a terminal unlock
+	// the daemon's account approves, that opens a locked project in the one
+	// browser that began it, and how long such an unlock lasts.
 	ConsoleLeaseLength() time.Duration
 	BeginConsoleUnlock(ctx context.Context, project, tokenHash string) (approval.Begun, error)
 	FinishConsoleUnlock(ctx context.Context, id, project, tokenHash string, response []byte) (store.ConsoleUnlock, error)
+	BeginTerminalUnlock(ctx context.Context, project, tokenHash string) (approval.TerminalUnlock, error)
 
 	// Console locks (lock.go): a passkey ceremony that turns a project's lock
 	// on, or takes off a lock the console set.
