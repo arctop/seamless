@@ -52,6 +52,8 @@ type lockedConsole struct {
 	mgr    *files.Manager
 
 	memID, noteID, taskID, sessID, plan string
+
+	restarts int // RequestRestart calls
 }
 
 func newLockedConsole(t *testing.T) *lockedConsole {
@@ -92,7 +94,7 @@ func newLockedConsole(t *testing.T) *lockedConsole {
 	require.NoError(t, store.CreateSession(ctx, db, core.Session{ID: lc.sessID, Name: "cc/ledger", ProjectSlug: lockedSlug,
 		Status: core.SessionActive, Findings: "found " + lockedSecret, CreatedAt: now, UpdatedAt: now}))
 
-	lc.policy, err = access.New(config.PeerAuth{Owner: "owner", Locked: []string{lockedSlug}}, func(n string) (access.Account, error) {
+	lc.policy, err = access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{lockedSlug}}, func(n string) (access.Account, error) {
 		if n == "owner" {
 			return access.Account{UID: 501, Name: "owner"}, nil
 		}
@@ -107,13 +109,14 @@ func newLockedConsole(t *testing.T) *lockedConsole {
 	v, err := passkey.New(passkey.Config{RPID: "localhost", Origins: []string{approverOrigin}})
 	require.NoError(t, err)
 	rec := events.NewRecorder(db)
-	lc.svc = approval.New(approval.Config{DB: db, Passkeys: v, Origins: []string{approverOrigin}, Events: rec})
+	lc.svc = approval.New(approval.Config{DB: db, Passkeys: v, Origins: []string{approverOrigin}, Events: rec, ForceLocked: []string{lockedSlug}})
 	ret := retrieve.New(db, nil, config.Defaults().Budgets, nil)
 	ret.SetBodyReader(mgr.Store())
 	cs, err := New(Config{
 		DB: base, WriteDB: db, Files: mgr, Events: rec.ReadingFrom(base), Retrieve: ret, DataDir: filepath.Join(dir, "data"),
-		APIKey: testKey, Level: "advanced", Approvals: lc.svc, Views: views,
-		Terminal: &TerminalApprover{Account: "_seamless", Seamlessd: "/opt/seamless/bin/seamlessd", Config: "/opt/seamless/etc/seamless.yaml"},
+		APIKey: testKey, Level: "advanced", Approvals: lc.svc, Views: views, ForceLocked: []string{lockedSlug},
+		RequestRestart: func() { lc.restarts++ },
+		Terminal:       &TerminalApprover{Account: "_seamless", Seamlessd: "/opt/seamless/bin/seamlessd", Config: "/opt/seamless/etc/seamless.yaml"},
 	})
 	require.NoError(t, err)
 	lc.cs, lc.rec = cs, rec

@@ -1,7 +1,7 @@
 package main
 
 // Step 10's console rows: the console's browsers and socket callers against
-// locked projects (peer_auth.locked). The console is an owner surface, so the
+// locked projects. The console is an owner surface, so the
 // owner's own browser reads a locked project only once THAT browser is
 // unlocked (a console unlock: approval-backed, cookie-scoped), and a socket
 // caller reads what its agent tree's lease opens. A restricted local account
@@ -118,6 +118,8 @@ func (d *cmDaemon) postTargets(t *testing.T, pendingID string) []struct {
 				"/console/access/request":              {"project": {p}},
 				"/console/access/{id}/approve":         {"duration": {"1h"}, "digest": {"0000"}, "response": {"{}"}},
 				"/console/unlock/{project}/finish":     {"id": {cmNoSuch}, "response": {"{}"}},
+				"/console/lock/{project}/begin":        {"action": {"lock"}},
+				"/console/lock/{project}/finish":       {"id": {cmNoSuch}, "action": {"lock"}, "response": {"{}"}},
 				"/console/approvers/passkey/begin":     {"name": {"probe"}, "by_code": {"1"}},
 				"/console/approvers/passkey/finish":    {"id": {cmNoSuch}, "response": {"{}"}},
 				"/console/approvers/passkey/approve":   {"id": {cmNoSuch}, "response": {"{}"}},

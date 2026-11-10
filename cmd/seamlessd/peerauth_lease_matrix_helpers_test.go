@@ -247,9 +247,9 @@ func newLMDaemon(t *testing.T) *lmDaemon {
 	cfg := config.Defaults()
 	cfg.PeerAuth = config.PeerAuth{
 		Enabled: true, Owner: "owner",
-		Socket:     config.PeerSocket{Path: "/opt/seamless/run/seamlessd.sock"},
-		Locked:     []string{lmFin, lmLegal},
-		Restricted: []string{lmAccount},
+		Socket:      config.PeerSocket{Path: "/opt/seamless/run/seamlessd.sock"},
+		ForceLocked: []string{lmFin, lmLegal},
+		Restricted:  []string{lmAccount},
 	}
 	policy, err := access.New(cfg.PeerAuth, lmResolve)
 	require.NoError(t, err)

@@ -28,7 +28,7 @@ var (
 
 func lockedPolicy(t *testing.T) *access.Policy {
 	t.Helper()
-	p, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{"example-finance", "example-legal"}},
+	p, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{"example-finance", "example-legal"}},
 		func(n string) (access.Account, error) {
 			if n == "owner" {
 				return access.Account{UID: 501, Name: "owner"}, nil

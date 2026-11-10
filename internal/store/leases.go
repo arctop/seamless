@@ -1,6 +1,6 @@
 package store
 
-// Access approvals and leases: the storage behind peer_auth.locked's unlocks
+// Access approvals and leases: the storage behind the unlocks of locked projects
 // (migration 031). An owner session asks for one locked project; the request
 // waits here as a pending approval with a one-time challenge; the owner's
 // approval signs that challenge; ApproveAccess turns the approval into a lease

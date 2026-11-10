@@ -36,6 +36,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -153,6 +154,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unknown command %q\n\n", cmd)
 		usage()
 		os.Exit(2)
+	}
+	if errors.Is(err, errServeRestart) {
+		err = reexecSelf()
 	}
 	if err != nil {
 		// A refusal seamlessd approve words for the owner (approve.go's
@@ -308,6 +312,7 @@ func runServe(args []string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	var restartRequested atomic.Bool
 
 	// Claim this machine's identity before anything reads the repo map or a
 	// session row: rows written before host scoping (and by seeders or a
@@ -320,6 +325,14 @@ func runServe(args []string) error {
 	// peer_auth, second half of the preflight: the policy against the projects
 	// table. A lock naming a project that does not exist protects nothing.
 	if peer != nil {
+		consoleLocks, lerr := store.ConsoleLockedSlugs(ctx, db)
+		if lerr != nil {
+			return fmt.Errorf("seamlessd.serve: console locks: %w", lerr)
+		}
+		peer.policy = peer.policy.WithConsoleLocks(consoleLocks)
+		if len(cfg.PeerAuth.LegacyLocked) > 0 {
+			logger.Warn("peer_auth.locked is the old name of peer_auth.force_locked: rename the key")
+		}
 		problems, perr := projectProblems(ctx, db, peer.policy)
 		if perr != nil {
 			return fmt.Errorf("seamlessd.serve: peer_auth projects: %w", perr)
@@ -483,12 +496,12 @@ func runServe(args []string) error {
 		slog.Warn("mcp.api_key is empty; MCP and hook requests will be rejected -- set it in seamless.yaml")
 	}
 	// Locked projects: the approval service backs the lock's requests, the
-	// session-end revocations, and the console's Approvers and access pages.
-	// It exists only while peer_auth locks a project, or offers read grants
-	// (isolation.requests, whose proofs are the same); off, every surface
-	// below behaves exactly as before.
+	// session-end revocations, and the console's Approvers, access and lock
+	// pages. It exists whenever peer_auth is on, even with nothing locked yet:
+	// the owner enrolls a passkey before the first lock, since the console's
+	// lock needs one. Off, every surface below behaves exactly as before.
 	var approvalSvc *approval.Service
-	if peer != nil && (peer.policy.HasLocked() || cfg.Isolation.Requests) {
+	if peer != nil {
 		svc, aerr := newApprovals(cfg, db, rec, logger)
 		if aerr != nil {
 			return fmt.Errorf("seamlessd.serve: %w", aerr)
@@ -591,8 +604,8 @@ func runServe(args []string) error {
 		consoleDB, consoleWriteDB, consoleEvents = viewDB, db, rec.ReadingFrom(viewDB)
 		consoleViews = views
 	}
-	// The Approvers and access pages exist only while a project is locked:
-	// off, the console has no such pages and nothing on another page changes.
+	// The Approvers and access pages exist only under peer_auth: off, the
+	// console has no such pages and nothing on another page changes.
 	var approvals console.ApprovalsView
 	var terminal *console.TerminalApprover
 	if approvalSvc != nil {
@@ -622,9 +635,16 @@ func runServe(args []string) error {
 		// console on the default loopback install.
 		SecureCookies: cfg.TLSEnabled(),
 		Approvals:     approvals,
-		Grants:        consoleGrants,
-		Terminal:      terminal,
-		Views:         consoleViews,
+		ForceLocked:   cfg.PeerAuth.ForceLocked,
+		// A change to the locked projects applies at startup: the console asks
+		// for a clean shutdown, and main re-executes this binary once it is done.
+		RequestRestart: func() {
+			restartRequested.Store(true)
+			stop()
+		},
+		Grants:   consoleGrants,
+		Terminal: terminal,
+		Views:    consoleViews,
 		// Restricted local accounts file proposals into the held queue, so the
 		// queue's list and Promote/Discard are served even with write screening
 		// off whenever peer_auth lists one.
@@ -778,6 +798,9 @@ func runServe(args []string) error {
 	garden.Wait()
 	upd.Wait()
 	slog.Info("seamlessd stopped")
+	if restartRequested.Load() {
+		return errServeRestart
+	}
 	return nil
 }
 

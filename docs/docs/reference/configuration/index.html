@@ -379,15 +379,19 @@ outside <code>data_dir</code>. Required when enabled.</li>
 octal, default <code>0666</code>: every local account may knock, and the kernel still
 names each one. <code>socket.group</code> (<code>SEAMLESS_PEER_AUTH_SOCKET_GROUP</code>) hands the
 socket to a group, for a mode such as <code>0660</code>.</li>
-<li><code>locked</code> lists locked projects: each is closed to every owner request - its
-name shows, its content does not, writes are refused - unless the request
-rides a socket connection whose process holds a lease the owner approved. The
-TCP bearer key never holds one. The lock is not the <code>sealed</code> isolation state
-(which says what flows in and out of a project): a locked project is normally
-<code>confidential</code>, and <code>serve</code> refuses one that is <code>open</code>. File-only.</li>
+<li><code>force_locked</code> lists force-locked projects: locks only this file can remove.
+The console can set and remove locks of its own with a passkey, but it can
+never change one listed here. Each locked project is closed to every owner
+request - its name shows, its content does not, writes are refused - unless the
+request rides a socket connection whose process holds a lease the owner
+approved. The TCP bearer key never holds one. The lock is not the <code>sealed</code>
+isolation state (which says what flows in and out of a project): a locked
+project is normally <code>confidential</code>, and <code>serve</code> refuses a force-locked one that
+is <code>open</code>. File-only. <code>locked</code>, this key's earlier name, still loads, and
+<code>seamlessd doctor</code> warns until it is renamed.</li>
 <li><code>users</code> is a retired key. A config that sets it to a non-empty map is refused
 when it loads, even while the block is disabled, with a message that says
-to list the projects under <code>locked</code> and remove <code>users</code>
+to list the projects under <code>force_locked</code> and remove <code>users</code>
 (<a href="../../guides/peer-auth/#configure-it">the guide</a> has it word for word).</li>
 <li><code>max_lease</code> caps every lease the owner approves on a locked project, &quot;until
 this session ends&quot; included: at most <code>24h</code>, unset <code>8h</code>. File-only.</li>
@@ -855,6 +859,11 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <tr>
 <td><code>peer_auth.socket.group</code></td>
 <td>string</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>peer_auth.force_locked</code></td>
+<td>[]string</td>
 <td>-</td>
 </tr>
 <tr>
@@ -1363,13 +1372,15 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c">#     # 0660 to let only that group&#39;s members connect at all.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#     # env: SEAMLESS_PEER_AUTH_SOCKET_GROUP</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#     group: &#34;&#34;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # Locked projects (the approval design). Each is closed to every owner</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # request -- its name shows, its content does not, writes are refused --</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # unless the request rides a socket connection whose process holds a lease</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # the owner approved; the TCP bearer key never holds one. The lock is not</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # the sealed isolation state: a locked project is normally confidential.</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # File only (no env).</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   locked: []</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # Force-locked projects: locks only this file can remove. The console can</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # set and remove locks of its own with a passkey, but never one listed here.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # Each locked project is closed to every owner request -- its name shows,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # its content does not, writes are refused -- unless the request rides a</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # socket connection whose process holds a lease the owner approved; the TCP</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # bearer key never holds one. The lock is not the sealed isolation state: a</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # locked project is normally confidential. File only (no env). The earlier</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # name, locked, still loads.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   force_locked: []</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # Caps every lease the owner approves on a locked project, &#34;until this</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # session ends&#34; included. At most 24h; unset means 8h. File only (no env).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   max_lease: 8h</span><span class="w">

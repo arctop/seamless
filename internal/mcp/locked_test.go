@@ -31,7 +31,7 @@ import (
 	"github.com/arctop/seamless/internal/store/storetest"
 )
 
-// The locked view at the tool surface (peer_auth.locked, steps 7a and 8): a
+// The locked view at the tool surface (peer_auth, steps 7a and 8): a
 // project the owner has locked is listed with its counts, named in scope
 // errors and recalls, refused at the lock with the request that would open
 // it, briefed once when a lease lands, and warned about from 30 minutes
@@ -97,7 +97,7 @@ func newLockRig(t *testing.T) *lockRig {
 		require.NoError(t, err)
 	}
 	require.NoError(t, store.SetProjectIsolation(ctx, db, lkFin, core.IsolationConfidential))
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{lkFin}}, func(n string) (access.Account, error) {
+	policy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{lkFin}}, func(n string) (access.Account, error) {
 		if n == "owner" {
 			return access.Account{UID: 501, Name: "owner"}, nil
 		}

@@ -212,7 +212,7 @@ code (`web_fetch`, `mail`); without one, the payload's `tool_name` becomes the
 reason (`tool:webfetch`). The first mark stands. With the feature off the
 endpoint marks nothing and says so.
 
-Under a lock (`peer_auth.locked`), an agent in a locked project's repository
+Under a lock, an agent in a locked project's repository
 has its session recorded there before you approve its access. Its own guard
 marks that session all the same, so the access request you are shown carries
 the "session tainted" warning. A process outside the agent's process tree

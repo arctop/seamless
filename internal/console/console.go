@@ -128,9 +128,16 @@ type Config struct {
 	// would lock the owner out of their own console with no error anywhere.
 	SecureCookies bool
 	// Approvals backs the Approvers page (the owner's passkeys and Touch ID
-	// keys for locked projects). Nil -- no project is locked -- makes every
-	// Approvers route a 404, and nothing else shows it.
+	// keys for locked projects) and the lock page. Nil -- peer_auth is off --
+	// makes every such route a 404, and nothing else shows it.
 	Approvals ApprovalsView
+	// ForceLocked is peer_auth.force_locked: the locks only the config file
+	// can remove.
+	ForceLocked []string
+	// RequestRestart asks the daemon for a clean restart, once a lock change
+	// is stored: the locked projects are read at startup. Nil restarts
+	// nothing, and the lock page says the change is waiting.
+	RequestRestart func()
 	// Grants backs the read grants while isolation.requests is on: the
 	// Access requests page lists a confidential project's requests and the
 	// live grants with Revoke, and -- without peer_auth, where Approvals is
@@ -299,6 +306,9 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/unlock/{project}", s.auth(s.unlockPage))
 	post("POST /console/unlock/{project}/begin", formBodySmall, s.unlockBegin)
 	post("POST /console/unlock/{project}/finish", formBodyPasskey, s.unlockFinish)
+	handle("GET /console/lock/{project}", s.auth(s.lockPage))
+	post("POST /console/lock/{project}/begin", formBodySmall, s.lockBegin)
+	post("POST /console/lock/{project}/finish", formBodyPasskey, s.lockFinish)
 	handle("GET /console/approvers", s.auth(s.approversPage))
 	post("POST /console/approvers/passkey/begin", formBodySmall, s.approversBegin)
 	post("POST /console/approvers/passkey/finish", formBodyPasskey, s.approversFinish)

@@ -197,7 +197,7 @@ func TestAccessFilter_FTSAndCosine(t *testing.T) {
 func testPeerPolicy(t *testing.T) *access.Policy {
 	t.Helper()
 	accounts := map[string]access.Account{"owner": {UID: 501, Name: "owner"}, "_example_agent": {UID: 470, Name: "_example_agent"}}
-	p, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{"example-finance"}, Restricted: []string{"_example_agent"}}, func(n string) (access.Account, error) {
+	p, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{"example-finance"}, Restricted: []string{"_example_agent"}}, func(n string) (access.Account, error) {
 		if a, ok := accounts[n]; ok {
 			return a, nil
 		}

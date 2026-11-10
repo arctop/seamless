@@ -1,6 +1,6 @@
 package console
 
-// A request's reach under locked projects (peer_auth.locked).
+// A request's reach under locked projects.
 //
 // With nothing locked the console reads every request through one handle
 // (Config.DB) and nothing here runs. With projects locked, the daemon hands

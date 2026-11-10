@@ -32,10 +32,10 @@ func restrictedResolve(name string) (Account, error) {
 func restrictedPolicy(t *testing.T) *Policy {
 	t.Helper()
 	p, err := New(config.PeerAuth{
-		Enabled:    true,
-		Owner:      "owner",
-		Locked:     []string{lockFin},
-		Restricted: []string{"_example_agent"},
+		Enabled:     true,
+		Owner:       "owner",
+		ForceLocked: []string{lockFin},
+		Restricted:  []string{"_example_agent"},
 	}, restrictedResolve)
 	require.NoError(t, err)
 	return p

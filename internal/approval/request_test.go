@@ -53,7 +53,7 @@ func newReqFixture(t *testing.T) *reqFixture {
 	}
 	require.NoError(t, store.SetProjectIsolation(ctx, f.db, lockFin, core.IsolationConfidential))
 	require.NoError(t, store.SetProjectIsolation(ctx, f.db, lockLeg, core.IsolationConfidential))
-	p, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{lockFin, lockLeg}}, func(n string) (access.Account, error) {
+	p, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{lockFin, lockLeg}}, func(n string) (access.Account, error) {
 		if n == "owner" {
 			return access.Account{UID: 501, Name: "owner"}, nil
 		}

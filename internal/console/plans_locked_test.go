@@ -16,7 +16,7 @@ import (
 	"github.com/arctop/seamless/internal/store"
 )
 
-// The console-backed seam commands under peer_auth.locked (owner decision
+// The console-backed seam commands under a lock (owner decision
 // D2): a JSON lookup of a plan or a session that lives in a locked project
 // the request does not read answers the lock -- 403 with the lock refusal the
 // tool-backed commands print, {"locked": true, "project"} -- rather than a

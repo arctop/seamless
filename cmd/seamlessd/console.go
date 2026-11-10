@@ -271,13 +271,13 @@ func browserCommand(goos, target, app string) (*exec.Cmd, error) {
 	}
 }
 
-// consoleBase is where console-open signs in. While a project is locked it is
+// consoleBase is where console-open signs in. Under peer_auth it is
 // the passkey relying party's origin (localhost by default) rather than the
 // server URL: the console cookie is per host, and a passkey ceremony on an IP
 // address such as 127.0.0.1 is refused by every browser. Otherwise it is the
 // server URL, as it always was.
 func consoleBase(cfg config.Config) string {
-	if cfg.PeerAuth.Enabled && len(cfg.PeerAuth.Locked) > 0 {
+	if cfg.PeerAuth.Enabled {
 		if _, origins := cfg.RelyingParty(); len(origins) > 0 {
 			return origins[0]
 		}
@@ -290,7 +290,7 @@ func consoleBase(cfg config.Config) string {
 // its passkey origin is. A peer_auth owner's config is a client's -- its
 // server_url and key, no peer_auth block -- so consoleBase alone would sign it
 // in on 127.0.0.1, where passkeys cannot be created. A daemon that locks
-// nothing answers no origin (the access routes are 404), so a default install
+// nothing answers no origin (the access routes are 404 without peer_auth), so a default install
 // signs in exactly where it always did.
 func consoleOpenBase(cfg config.Config) string {
 	base := consoleBase(cfg)
@@ -413,8 +413,12 @@ func runConsoleUnlock(cfg config.Config, project, forFlag, browser string) error
 // locked and the duration (absent: the whole console lease; present: a
 // duration no longer than it), writes the link, and returns its URL.
 func consoleUnlockLink(ctx context.Context, cfg config.Config, db *sql.DB, maxLease time.Duration, project, forFlag string, now time.Time) (string, error) {
-	if !slices.Contains(cfg.PeerAuth.Locked, project) {
-		return "", fmt.Errorf("project %q is not locked: peer_auth.locked lists %s", project, strings.Join(cfg.PeerAuth.Locked, ", "))
+	locked, err := lockedProjects(ctx, cfg, db)
+	if err != nil {
+		return "", err
+	}
+	if !slices.Contains(locked, project) {
+		return "", fmt.Errorf("project %q is not locked: the locked projects are %s", project, strings.Join(locked, ", "))
 	}
 	lease := maxLease
 	if forFlag != "" {

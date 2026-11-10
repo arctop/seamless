@@ -27,8 +27,8 @@ type taskRow struct {
 	Closed   *time.Time `json:"closed,omitempty"`
 	Blockers []blocker  `json:"blockers,omitempty"`
 	// LockedBlockers are the unfinished blockers this request's handle does
-	// not hold because they sit in a locked project it does not read
-	// (peer_auth.locked): that project's slug, once per blocker, never the
+	// not hold because they sit in a locked project it does not read:
+	// that project's slug, once per blocker, never the
 	// blocker itself. nil while nothing is locked -- absent from the JSON.
 	LockedBlockers []string `json:"lockedBlockers,omitempty"`
 }
@@ -120,7 +120,7 @@ func (s *Service) tasksPage(ctx context.Context) (tasksData, error) {
 }
 
 // markLockedBlockers tells the owner which open tasks a locked project
-// (peer_auth.locked) blocks. The request's handle hides a locked project it
+// blocks. The request's handle hides a locked project it
 // does not read -- its tasks and their dependency edges both -- so a task one
 // of them blocks reads as ready on it, and a blocked one as blocked by fewer.
 // This asks the main handle for those blockers' projects alone, moves such a

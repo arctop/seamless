@@ -663,6 +663,7 @@ func LoadFrom(path string) (Config, error) {
 			return Config{}, fmt.Errorf("config.Load: parse %s: multiple YAML documents are not allowed", path)
 		}
 		cfg.sourcePath = path
+		cfg.PeerAuth.foldLegacyLocked()
 	}
 
 	if err := cfg.applyEnv(); err != nil {

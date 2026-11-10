@@ -130,7 +130,7 @@ type planStepVM struct {
 	Unblocks      []depChipVM // steps waiting on this one
 	UnblocksTitle string      // those steps named, for the chip's tooltip
 	// LockedBlockers are the step's unfinished blockers in a locked project
-	// this request does not read (peer_auth.locked): their project, once per
+	// this request does not read: their project, once per
 	// blocker (markLockedBlockers' rule). nil while nothing is locked.
 	LockedBlockers []string
 }

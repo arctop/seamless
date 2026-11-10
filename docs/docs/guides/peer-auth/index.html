@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </details>
   <p><a href="../../concepts/project-isolation/">Project isolation</a> keeps agents working on one
@@ -279,12 +279,12 @@ called that.</p>
 <tr>
 <td>Values</td>
 <td><code>open</code>, <code>confidential</code>, <code>sealed</code></td>
-<td>locked (<code>peer_auth.locked</code>) or not</td>
+<td>locked or not</td>
 </tr>
 <tr>
 <td>Set</td>
 <td>on the console's project Overview, or with <code>seam project isolation</code></td>
-<td>in the daemon's config file</td>
+<td>on the console's project Overview with a passkey, or forced in the daemon's config file</td>
 </tr>
 <tr>
 <td>Needs peer_auth</td>
@@ -308,6 +308,27 @@ agent, its session still reads your open projects and the global scope. <code>se
 refuses a locked project that is <code>open</code>, because the isolation fence is what
 keeps it out of the family, parent and cross-project gardener surfaces the lock
 does not reach on its own.</p>
+<h3 id="lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</h3>
+<p>There are two ways to lock a project, and they differ in who can undo them.</p>
+<p><strong>From the console.</strong> On a confidential or sealed project, open the <strong>Isolation</strong>
+card on its Overview and choose <strong>Lock this project</strong>. The change needs a passkey
+you have already <a href="#enroll-an-approver">enrolled</a>; until you have one, the card
+links to the Approvers page instead. Taking the lock off takes a passkey too, from
+the same page or the project's unlock page. Each approval names one project and
+one direction, so it cannot be replayed for anything else. Seamless applies the
+change by restarting, which briefly drops the console and agent connections.</p>
+<p><strong>Force lock, in the file.</strong> A project listed under <code>peer_auth.force_locked</code> is
+force locked: the console shows it as force locked and cannot change it, even
+with a passkey. Only editing the file and restarting removes it. Use this for
+a project that should stay locked however the console is reached.</p>
+<p>The console removes only the locks it set. A project in both places stays locked
+until it leaves the file. While a project is locked, by either route, its
+isolation cannot be set to <code>open</code>: remove the lock first.</p>
+<p>Console lock changes are passkey-only for now. A Touch ID key enrolled with
+<code>seam touchid enroll</code> approves agents' requests but cannot approve these; a
+passkey saved on your Mac still asks for your fingerprint in the browser.</p>
+<p>The key was called <code>peer_auth.locked</code> in earlier builds. That name still works,
+and <code>seamlessd doctor</code> warns until you rename it.</p>
 <h2 id="how-it-decides">How it decides</h2>
 <p>Every request carries a <strong>principal</strong>, set by the transport before any route
 runs:</p>
@@ -360,11 +381,11 @@ way in.</p>
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">socket</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l">/opt/seamless/run/seamlessd.sock</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;0666&#34;</span><span class="w">                    </span><span class="c"># who may knock; the kernel still names each one</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">locked</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">example-finance]        </span><span class="w"> </span><span class="c"># each must be confidential or sealed</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">force_locked</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">example-finance]  </span><span class="w"> </span><span class="c"># only this file can remove these; each must be confidential or sealed</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">max_lease</span><span class="p">:</span><span class="w"> </span><span class="l">8h                    </span><span class="w"> </span><span class="c"># optional: caps every approval, at most 24h</span><span class="w">
 </span></span></span></code></pre></div>
 <p>Every key is in <a href="../../reference/configuration/#peer-auth">the configuration reference</a>.</p>
-<p>Checked when the file loads, whether or not <code>enabled</code> is set: <code>locked</code> names
+<p>Checked when the file loads, whether or not <code>enabled</code> is set: <code>force_locked</code> names
 real projects, never the global scope, and none twice; <code>restricted</code> is listed
 only with <code>enabled</code> set, and never names the owner or the same account twice;
 <code>max_lease</code> and <code>passkeys</code> are well formed. With <code>enabled</code> set, also: the owner
@@ -383,10 +404,10 @@ project it meant open, which is exactly what this feature exists to prevent;</li
 prints the policy as it resolved and every reason <code>serve</code> would refuse.</p>
 <p><strong>Coming from <code>peer_auth.users</code>.</strong> A config with a non-empty <code>users</code> map is
 refused when it loads, even while peer_auth is disabled, with:</p>
-<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">config: peer_auth.users was the 2026-10-31 design, which sealed projects to other OS accounts, and is no longer supported: list the projects under peer_auth.locked and remove users
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">config: peer_auth.users was the 2026-10-31 design, which sealed projects to other OS accounts, and is no longer supported: list the projects under peer_auth.force_locked and remove users
 </span></span></code></pre></div>
 <p>That map reserved projects for other OS accounts, and you could never reach them.
-It is gone. List those projects under <code>peer_auth.locked</code>, keep each one
+It is gone. List those projects under <code>peer_auth.force_locked</code>, keep each one
 <code>confidential</code> or <code>sealed</code>, delete <code>users</code>, and restart. An account that was
 listed there is then refused at the socket unless you list it under
 <code>peer_auth.restricted</code>, which reaches only open projects that are not locked.</p>
@@ -547,8 +568,9 @@ either way.</p>
 <p>An approver credential is what signs your approval: a passkey, or a Touch ID
 key. None is required: the terminal path below always works, and
 <code>seamlessd doctor</code> warns only that it is the one path left. Enrolling needs the
-daemon running with a project locked (or read grants on), so do it after the
-<a href="#move-an-existing-install-over">cutover</a>.</p>
+daemon running under <code>peer_auth</code>, so do it after the
+<a href="#move-an-existing-install-over">cutover</a>. A lock set from the console needs a
+passkey enrolled first.</p>
 <p>A first credential needs a one-time enrollment code, and only the daemon's
 account can mint one; no route, over the socket or with the TCP key, can. A code
 works once, for 10 minutes, and only its hash is stored. It is minted for one key,
@@ -834,15 +856,15 @@ nothing they run can read your home directory. List it under
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">owner</span><span class="p">:</span><span class="w"> </span><span class="l">alice</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">socket</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l">/opt/seamless/run/seamlessd.sock</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">locked</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">example-finance]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">force_locked</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">example-finance]</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">restricted</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">_example_agent]</span><span class="w">
 </span></span></span></code></pre></div>
 <p>What such an account reaches:</p>
 <ul>
 <li>
 <p><strong>Every open project that is not locked</strong>, reading and writing. A project
-whose isolation is <code>confidential</code> or <code>sealed</code>, and every project under
-<code>peer_auth.locked</code>, is out of its reach and is not listed for it. Its refusal
+whose isolation is <code>confidential</code> or <code>sealed</code>, and every locked
+project, is out of its reach and is not listed for it. Its refusal
 reads the same for those projects and for a slug nobody registered, so it
 never learns which closed projects exist.</p>
 </li>
@@ -1059,7 +1081,7 @@ anything in the move went wrong.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </aside>
   

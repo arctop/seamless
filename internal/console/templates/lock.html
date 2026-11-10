@@ -1,0 +1,154 @@
+{{define "content"}}
+{{with .Data}}
+<div class="unlock-page" data-lock="{{.Slug}}">
+<header class="mv2-bar">
+  <h1>{{icon "lock"}}{{.Name}}</h1>{{about "A locked project closes to every agent until you approve one, its own agents included. Its name and counts still show; its content does not. Lock it here with a passkey, or force lock it in the daemon's config file, which only the file can undo."}}
+</header>
+
+<section aria-labelledby="lock-title">
+  <h2 id="lock-title">{{if .Force}}Force locked{{else if .Console}}Locked from the console{{else}}Lock this project{{end}}</h2>
+  {{if .Force}}
+  <p class="held-sub">{{icon "lock"}} This project is listed under <code>peer_auth.force_locked</code> in the daemon's config file. Only the file can remove this lock.</p>
+  {{else if and (not .Console) (not .Fenced)}}
+  <p class="held-sub">A lock needs an isolation fence. Make this project confidential or sealed on <a href="/console/projects/{{.Slug}}?tab=overview#isolation">its Isolation card</a> first.</p>
+  {{else}}
+  {{if .Console}}
+  <p class="held-sub">Removing this lock lets agents reach the project again without your approval, within its isolation fence.</p>
+  {{else}}
+  <p class="held-sub">Even this project's own agents will have to ask you first, and this console will show only its name and counts until you unlock it in a browser.</p>
+  {{end}}
+  {{if .Pending}}
+  <p class="held-sub">{{icon "triangle-alert"}} This change is saved and takes effect when Seamless next restarts.</p>
+  {{end}}
+  {{if not .Browser}}
+  <p class="held-sub">A lock change needs a passkey: open this page in the browser you sign in to the console with.</p>
+  {{else if not .PasskeysOn}}
+  <p class="held-sub">Passkeys are not configured on this daemon, so the lock can only be set in its config file.</p>
+  {{else if not .HasPasskey}}
+  <p class="held-sub" data-needs-passkey>{{icon "key-round"}} You need a passkey to change a lock. <a href="/console/approvers">Add one on the Approvers page</a>, then come back.</p>
+  {{else if not .OnOrigin}}
+  <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/lock/{{.Slug}}">{{.Origin}}</a>.</p>
+  {{else}}
+  <form id="lock-form" class="access-form" data-project="{{.Slug}}" data-action="{{.Action}}">
+    <button class="btn primary" id="lock-go" type="submit">{{icon "key-round"}} {{if .Console}}Remove the lock with a passkey{{else}}Lock with a passkey{{end}}</button>
+  </form>
+  {{if .CanRestart}}<p class="held-sub">Seamless restarts to apply this. Agent connections drop briefly and reconnect.</p>{{end}}
+  {{end}}
+  <p class="held-sub" id="lock-status" role="status" aria-live="polite"></p>
+  {{end}}
+</section>
+</div>
+{{end}}
+{{end}}
+
+{{define "scripts"}}
+<script>
+window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbered by a refresh
+(function () {
+  function b64urlToBuf(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out.buffer;
+  }
+  function bufToB64url(buf) {
+    var bytes = new Uint8Array(buf), bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function requestOptions(pk) {
+    if (window.PublicKeyCredential && PublicKeyCredential.parseRequestOptionsFromJSON) {
+      return PublicKeyCredential.parseRequestOptionsFromJSON(pk);
+    }
+    pk.challenge = b64urlToBuf(pk.challenge);
+    (pk.allowCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
+    return pk;
+  }
+  function toJSON(cred) {
+    if (cred.toJSON) return cred.toJSON();
+    var r = cred.response;
+    var out = {
+      id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
+      authenticatorAttachment: cred.authenticatorAttachment || null,
+      clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+      response: {
+        clientDataJSON: bufToB64url(r.clientDataJSON), authenticatorData: bufToB64url(r.authenticatorData),
+        signature: bufToB64url(r.signature)
+      }
+    };
+    if (r.userHandle) out.response.userHandle = bufToB64url(r.userHandle);
+    return out;
+  }
+  function post(path, fields) {
+    return fetch(path, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(fields).toString()
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error(data.error || ('request failed (' + res.status + ')'));
+        return data;
+      });
+    });
+  }
+  // Refresh the view in place (console-data-updates-never-reload-document).
+  function refresh() {
+    if (window.SeamConsole && window.SeamConsole.load) {
+      return window.SeamConsole.load(location.href, { history: 'replace', source: 'query' });
+    }
+    return Promise.resolve(false);
+  }
+  function instance() {
+    return fetch('/healthz', { cache: 'no-store' }).then(function (res) {
+      return res.ok ? res.json() : {};
+    }).then(function (h) { return h.instance || ''; }).catch(function () { return ''; });
+  }
+  // A restart is done when /healthz answers from a process other than before.
+  function waitForRestart(before, tries) {
+    if (tries <= 0) return Promise.resolve(false);
+    return new Promise(function (resolve) { setTimeout(resolve, 1000); }).then(instance).then(function (now) {
+      return now && now !== before ? true : waitForRestart(before, tries - 1);
+    });
+  }
+  function enhance() {
+    var form = document.getElementById('lock-form');
+    if (!form || form._seamWired) return;
+    form._seamWired = true;
+    var status = document.getElementById('lock-status');
+    var go = document.getElementById('lock-go');
+    function say(msg) { if (status) status.textContent = msg; }
+    var action = form.getAttribute('data-action');
+    var base = '/console/lock/' + encodeURIComponent(form.getAttribute('data-project'));
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!window.PublicKeyCredential) { say('This browser cannot use a passkey here.'); return; }
+      var id = '', before = '';
+      go.disabled = true;
+      say('Follow your browser\'s prompt.');
+      post(base + '/begin', { action: action }).then(function (begun) {
+        id = begun.id;
+        return navigator.credentials.get({ publicKey: requestOptions(begun.options.publicKey) });
+      }).then(function (cred) {
+        return instance().then(function (i) {
+          before = i;
+          return post(base + '/finish', { id: id, action: action, response: JSON.stringify(toJSON(cred)) });
+        });
+      }).then(function (done) {
+        if (!done.restarting) { say('Saved. It takes effect when Seamless next restarts.'); return refresh(); }
+        say('Saved. Seamless is restarting to apply it.');
+        return waitForRestart(before, 60).then(function (back) {
+          say(back ? 'Done.' : 'Seamless has not come back yet. Check it, then reopen this page.');
+          return back ? refresh() : false;
+        });
+      }).catch(function (err) {
+        say(err && err.name === 'NotAllowedError' ? 'Cancelled, or the authenticator timed out. Nothing changed.' :
+            (err && err.message ? err.message : 'Something went wrong. Nothing changed.'));
+      }).finally(function () { go.disabled = false; });
+    });
+  }
+  enhance();
+  document.addEventListener('seam:content-updated', enhance);
+})();
+</script>
+{{end}}

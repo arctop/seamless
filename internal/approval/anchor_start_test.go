@@ -15,7 +15,7 @@ import (
 // an *AnchorError, an agent's process (node included, since it is the one the
 // hook stamps) is not, and anything the rule cannot judge is left to filing.
 func TestJudgeStart(t *testing.T) {
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{"example-finance"}}, func(n string) (access.Account, error) {
+	policy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{"example-finance"}}, func(n string) (access.Account, error) {
 		if n == "owner" {
 			return access.Account{UID: 501, Name: "owner"}, nil
 		}

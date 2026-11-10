@@ -40,7 +40,7 @@ func (s *Server) handleProjectList(ctx context.Context, _ mcp.CallToolRequest) (
 	out := make([]map[string]any, 0, len(ps))
 	var ways *access.Ways // the approval paths a locked row offers, looked up once
 	for _, p := range ps {
-		// A project the owner has locked (peer_auth.locked) is listed -- its
+		// A project the owner has locked is listed -- its
 		// identity (name, description, isolation) and aggregate counts, never
 		// a row of what it holds -- with the way in.
 		locked := access.Locked(ctx, p.Slug)

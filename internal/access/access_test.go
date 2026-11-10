@@ -27,10 +27,10 @@ func testResolve(name string) (Account, error) {
 func testPolicy(t *testing.T) *Policy {
 	t.Helper()
 	p, err := New(config.PeerAuth{
-		Enabled:    true,
-		Owner:      "owner",
-		Locked:     []string{"example-finance", "example-legal"},
-		Restricted: []string{"_example_agent"},
+		Enabled:     true,
+		Owner:       "owner",
+		ForceLocked: []string{"example-finance", "example-legal"},
+		Restricted:  []string{"_example_agent"},
 	}, testResolve)
 	require.NoError(t, err)
 	return p
@@ -155,7 +155,7 @@ func TestNew_ResolutionRefusals(t *testing.T) {
 		{"owner does not resolve", config.PeerAuth{Owner: "nobody-here"}, "peer_auth.owner"},
 		{"a filled-in users key", config.PeerAuth{Owner: "owner", Users: map[string]any{"_example_agent": nil}},
 			"peer_auth.users was the 2026-10-31 design"},
-		{"users beside locked", config.PeerAuth{Owner: "owner", Locked: []string{"x"}, Users: map[string]any{"_a": "x"}},
+		{"users beside locked", config.PeerAuth{Owner: "owner", ForceLocked: []string{"x"}, Users: map[string]any{"_a": "x"}},
 			"peer_auth.users was the 2026-10-31 design"},
 		{"users beside restricted", config.PeerAuth{Owner: "owner", Restricted: []string{"_example_agent"}, Users: map[string]any{"_a": "x"}},
 			"peer_auth.users was the 2026-10-31 design"},

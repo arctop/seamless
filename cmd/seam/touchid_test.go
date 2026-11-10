@@ -856,7 +856,7 @@ func TestTouchIDEnroll_AgainstTheConsole(t *testing.T) {
 	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{"example-finance"}}, func(n string) (access.Account, error) {
+	policy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{"example-finance"}}, func(n string) (access.Account, error) {
 		return access.Account{UID: 501, Name: n}, nil
 	})
 	require.NoError(t, err)

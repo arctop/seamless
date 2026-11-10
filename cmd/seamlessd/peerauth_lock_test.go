@@ -43,7 +43,7 @@ func TestProjectProblems_LockedWording(t *testing.T) {
 	}
 	require.NoError(t, store.SetProjectIsolation(ctx, db, "example-legal", core.IsolationConfidential))
 
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{"example-finance", "example-legal", "example-typo"}}, lockOwnerResolve)
+	policy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{"example-finance", "example-legal", "example-typo"}}, lockOwnerResolve)
 	require.NoError(t, err)
 	problems, err := projectProblems(ctx, db, policy)
 	require.NoError(t, err)
@@ -57,11 +57,11 @@ func TestProjectProblems_LockedWording(t *testing.T) {
 // peer_auth off is a warning rather than silence.
 func TestPeerAuthChecks_LockedRows(t *testing.T) {
 	cfg := config.Defaults()
-	cfg.PeerAuth.Locked = []string{"example-finance"}
+	cfg.PeerAuth.ForceLocked = []string{"example-finance"}
 	rows := peerAuthChecks(context.Background(), cfg, nil, peerAuthEnv{resolve: lockOwnerResolve})
 	require.Len(t, rows, 1)
 	require.Equal(t, statusWarn, rows[0].status)
-	require.Contains(t, rows[0].detail, "peer_auth.locked is filled in")
+	require.Contains(t, rows[0].detail, "peer_auth.force_locked is filled in")
 	require.NotContains(t, rows[0].detail, "sealed")
 }
 
@@ -77,7 +77,7 @@ func TestPeerHandler_InstallsOnlyMatchingLeases(t *testing.T) {
 	sibling := access.ProcessToken{PID: 210, Version: 2100, Boot: boot}
 	chain := []access.ChainHop{{Token: bridge, Name: "seam"}, {Token: agent, Name: "claude"}, {Token: shell, Name: "zsh"}}
 
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{"example-finance", "example-legal"}}, lockOwnerResolve)
+	policy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{"example-finance", "example-legal"}}, lockOwnerResolve)
 	require.NoError(t, err)
 	rows := []access.Lease{
 		{ID: "agent-fin", Project: "example-finance", Process: agent.Key(), Expires: now.Add(time.Hour)},
@@ -164,4 +164,30 @@ func TestPeerHandler_InstallsOnlyMatchingLeases(t *testing.T) {
 		require.True(t, v.Principal().HasProcess)
 		require.Equal(t, access.Tokens(chain), v.Principal().Chain)
 	})
+}
+
+// Both lists count for every one-shot command that asks what is locked.
+func TestLockedProjects_FileAndConsole(t *testing.T) {
+	ctx := context.Background()
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	_, err = store.EnsureProject(ctx, db, "example-conf", "example-conf")
+	require.NoError(t, err)
+	require.NoError(t, store.SetProjectIsolation(ctx, db, "example-conf", core.IsolationConfidential))
+	require.NoError(t, store.AddConsoleLock(ctx, db, "example-conf", "cred", time.Now()))
+
+	cfg := config.Defaults()
+	cfg.PeerAuth.ForceLocked = []string{"example-finance", "example-conf"}
+	got, err := lockedProjects(ctx, cfg, db)
+	require.NoError(t, err)
+	require.Equal(t, []string{"example-conf", "example-finance"}, got)
+
+	got, err = lockedProjects(ctx, cfg, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"example-conf", "example-finance"}, got, "no database: the file's list")
+
+	require.False(t, locksProjects(ctx, cfg, db), "peer_auth off locks nothing")
+	cfg.PeerAuth.Enabled, cfg.PeerAuth.ForceLocked = true, nil
+	require.True(t, locksProjects(ctx, cfg, db), "a console lock registers access_request")
 }

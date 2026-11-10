@@ -1,6 +1,6 @@
 package hooks
 
-// Locked projects at the hooks (peer_auth.locked): the SessionStart notice in
+// Locked projects at the hooks: the SessionStart notice in
 // a locked project's repository, with the access request filed for the
 // session it records there, and the lease expiry warnings in the briefing and
 // the prompt injections. Every path here runs only while the daemon locks a

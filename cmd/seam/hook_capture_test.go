@@ -302,7 +302,7 @@ func TestHookCaptures_ThePushMatchesTheDaemonsOwnRead(t *testing.T) {
 	}
 
 	on := captureDaemon(t, f)
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{"example-finance"}},
+	policy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{"example-finance"}},
 		func(string) (access.Account, error) { return access.Account{UID: 501, Name: "owner"}, nil })
 	require.NoError(t, err)
 	view, ok := policy.PeerView(501)

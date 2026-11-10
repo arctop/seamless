@@ -86,7 +86,7 @@ func (s *Server) processSession(ctx context.Context) (core.Session, bool) {
 
 // listedProcessSession is processSession before the lock: it also returns the
 // caller's own session when it lies in a project the owner has locked
-// (peer_auth.locked) and this connection holds no lease on. Such a session
+// and this connection holds no lease on. Such a session
 // binds nothing (getBinding drops it); lockedBinding finds it, so a call that
 // would resolve through it is refused at the lock rather than inferred into
 // another project. With no lock it is processSession exactly.

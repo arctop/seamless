@@ -339,7 +339,7 @@ type taskDetail struct {
 	Deps        []taskRef     `json:"deps,omitempty"`      // tasks this one depends on
 	Blocks      []taskRef     `json:"blocks,omitempty"`    // tasks that depend on this one
 	// LockedBlockers are this task's unfinished blockers in a locked project
-	// the request does not read (peer_auth.locked), one project slug per
+	// the request does not read, one project slug per
 	// blocker (markLockedBlockers' rule): the request's handle hides them
 	// and their edges, so Deps leaves them out. nil while nothing is locked.
 	LockedBlockers []string   `json:"lockedBlockers,omitempty"`

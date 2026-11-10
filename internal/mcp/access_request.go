@@ -1,7 +1,7 @@
 package mcp
 
-// access_request: ask the owner for access to a locked project
-// (peer_auth.locked), explicitly, with a reason. A call refused at the lock
+// access_request: ask the owner for access to a locked project,
+// explicitly, with a reason. A call refused at the lock
 // already files a request (locked.go); this is the agent's way to ask before
 // it needs the project, or to say why. It files through the approval
 // service's one path, as the console's POST /console/access/request does, so
@@ -48,7 +48,7 @@ const accessReasonParam = "reason"
 func accessRequestTool() mcp.Tool {
 	return mcp.NewTool(AccessRequestTool, hintSet(),
 		mcp.WithDescription("Ask the owner for access to a locked project. Present only on a server that locks projects "+
-			"(peer_auth.locked), and answered only on its peer_auth socket. A locked project is closed even to the owner's "+
+			"(peer_auth), and answered only on its peer_auth socket. A locked project is closed even to the owner's "+
 			"own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in "+
 			"their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to "+
 			"say why. Asking again finds the request already waiting rather than filing another, and a reason given then "+
@@ -153,7 +153,7 @@ func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolReques
 	return s.accessRequestAnswer(ctx, start, t, ways, out)
 }
 
-// lockCovers reports whether project is a lock's (peer_auth.locked) for the
+// lockCovers reports whether project is a lock's for the
 // call in ctx: locked to it, or leased by its tree. A read grant is asked
 // only for a project no lock covers.
 func lockCovers(ctx context.Context, project string) bool {

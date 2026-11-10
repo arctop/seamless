@@ -79,9 +79,9 @@ var raAccounts = map[string]access.Account{
 func raPolicy() config.PeerAuth {
 	return config.PeerAuth{
 		Enabled: true, Owner: "katata",
-		Socket:     config.PeerSocket{Path: "/opt/seamless/run/seamlessd.sock"},
-		Locked:     []string{raLocked, raLockedOpen},
-		Restricted: []string{raAccount},
+		Socket:      config.PeerSocket{Path: "/opt/seamless/run/seamlessd.sock"},
+		ForceLocked: []string{raLocked, raLockedOpen},
+		Restricted:  []string{raAccount},
 	}
 }
 

@@ -13,7 +13,7 @@ import (
 	"github.com/arctop/seamless/internal/store"
 )
 
-// A blocker in a locked project (peer_auth.locked), told to the owner (owner
+// A blocker in a locked project, told to the owner (owner
 // decision D7): tasks_ready and the claim refusal name the locked project and
 // how to reach it -- by the owner's own approval on the socket, from the
 // socket on TCP -- where every other caller, and every blocker an isolation

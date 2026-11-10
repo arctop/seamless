@@ -113,7 +113,7 @@ type plansData struct {
 	// plan.shipped settlements in the current LOCAL calendar month. nil while
 	// the momentum feature is off -- zero trace, including in the JSON.
 	ShippedMonth *planShippedMonth `json:"shippedThisMonth,omitempty"`
-	// Locked names the locked projects (peer_auth.locked) this request does
+	// Locked names the locked projects this request does
 	// not read, whose plans the list leaves out: their names only, never a
 	// count of what they hold. nil while nothing is locked -- absent from the
 	// JSON, which reads exactly as before.
@@ -499,7 +499,7 @@ func (s *Service) planApprove(w http.ResponseWriter, r *http.Request) {
 }
 
 // answerLockedPlan answers a lookup of a plan this request's handle does not
-// hold, when the plan is in a locked project (peer_auth.locked) the request
+// hold, when the plan is in a locked project the request
 // does not read: the lock, named (answerLocked), instead of a "not found"
 // that would send the owner looking for a plan that exists -- the JSON
 // refusal, or for a browser page the locked page (lockedItem). It reports

@@ -1,7 +1,7 @@
 package console
 
 // The Approvers page: the owner's passkeys and Touch ID keys, which approve
-// access to locked projects (peer_auth.locked), the passkey enrollment
+// access to locked projects, the passkey enrollment
 // ceremony, and the Touch ID helper's enrollment (`seam touchid enroll`). It
 // exists only while a project is locked (Config.Approvals set); otherwise
 // every route here is a 404 and nothing on any other page changes.
@@ -67,6 +67,11 @@ type ApprovalsView interface {
 	ConsoleLeaseLength() time.Duration
 	BeginConsoleUnlock(ctx context.Context, project, tokenHash string) (approval.Begun, error)
 	FinishConsoleUnlock(ctx context.Context, id, project, tokenHash string, response []byte) (store.ConsoleUnlock, error)
+
+	// Console locks (lock.go): a passkey ceremony that turns a project's lock
+	// on, or takes off a lock the console set.
+	BeginLockChange(ctx context.Context, project string, action approval.LockAction) (approval.Begun, error)
+	FinishLockChange(ctx context.Context, id, project string, action approval.LockAction, response []byte) (store.ApproverCredential, error)
 }
 
 // approverRow is one enrolled credential. Its JSON is what `seam touchid

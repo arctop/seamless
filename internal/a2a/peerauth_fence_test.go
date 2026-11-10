@@ -39,7 +39,7 @@ func TestMessageSend_PeerAuthFencesConfidentialProjects(t *testing.T) {
 		insertRecallMemory(t, db, "01"+slug, slug+"-ledger-note", "ledger reconcile note", slug, "")
 	}
 
-	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Locked: []string{"example-locked"}},
+	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{"example-locked"}},
 		func(n string) (access.Account, error) {
 			if n == "owner" {
 				return access.Account{UID: 501, Name: "owner"}, nil

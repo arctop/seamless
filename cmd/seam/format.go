@@ -83,7 +83,7 @@ func updatedBy(account string) string {
 }
 
 // lockedSkipped is the line a console-backed list adds for the locked projects
-// (peer_auth.locked) its answer left out: "(not shown: locked project
+// its answer left out: "(not shown: locked project
 // acme-finance)". It names them and never counts what they hold -- a count
 // would say what a locked project holds -- and it is "" when the answer left
 // nothing out, so a list on an install without locked projects reads exactly

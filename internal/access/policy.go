@@ -3,6 +3,7 @@ package access
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os/user"
 	"slices"
 	"strconv"
@@ -64,10 +65,13 @@ func isNumeric(s string) bool {
 // request without a lock.
 type Policy struct {
 	owner Account
-	// ownerLocked is peer_auth.locked: the locked projects, closed to the
-	// owner except under a lease (lease.go).
+	// ownerLocked is every locked project, closed to the owner except under a
+	// lease (lease.go): peer_auth.force_locked and the console's own locks.
 	ownerLocked     map[string]bool
 	ownerLockedList []string // the same, sorted
+	// forceLocked is peer_auth.force_locked alone, sorted: the locks only the
+	// config file can remove.
+	forceLocked []string
 	// restricted is peer_auth.restricted: the restricted local accounts, by
 	// uid (restricted.go).
 	restricted map[uint32]Account
@@ -101,15 +105,16 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 		ownerLocked: map[string]bool{},
 		restricted:  map[uint32]Account{},
 	}
-	for _, slug := range cfg.Locked {
+	for _, slug := range cfg.ForceLocked {
 		slug = strings.TrimSpace(slug)
 		if slug == "" || p.ownerLocked[slug] {
-			return nil, fmt.Errorf("%w: peer_auth.locked lists %q: every entry must be a distinct project", ErrInvalidPolicy, slug)
+			return nil, fmt.Errorf("%w: peer_auth.force_locked lists %q: every entry must be a distinct project", ErrInvalidPolicy, slug)
 		}
 		p.ownerLocked[slug] = true
 		p.ownerLockedList = append(p.ownerLockedList, slug)
 	}
 	slices.Sort(p.ownerLockedList)
+	p.forceLocked = slices.Clone(p.ownerLockedList)
 	if err := p.resolveRestricted(cfg, resolve); err != nil {
 		return nil, err
 	}
@@ -196,8 +201,31 @@ func (p *Policy) PeerView(uid uint32) (View, bool) {
 // requires to be fenced.
 func (p *Policy) ConsoleHidden() []string { return slices.Clone(p.ownerLockedList) }
 
-// OwnerLocked returns the locked projects (peer_auth.locked), sorted.
+// OwnerLocked returns every locked project, force-locked or locked from the
+// console, sorted.
 func (p *Policy) OwnerLocked() []string { return slices.Clone(p.ownerLockedList) }
+
+// ForceLocked returns the projects peer_auth.force_locked lists, sorted.
+func (p *Policy) ForceLocked() []string { return slices.Clone(p.forceLocked) }
+
+// WithConsoleLocks returns a copy of p that also locks slugs, the locks the
+// console set (store.ConsoleLockedSlugs). serve calls it once, before any
+// request, so a Policy stays immutable while it serves. A slug the file already
+// force-locks counts once, and stays force-locked.
+func (p *Policy) WithConsoleLocks(slugs []string) *Policy {
+	out := *p
+	out.ownerLocked = make(map[string]bool, len(p.ownerLocked)+len(slugs))
+	maps.Copy(out.ownerLocked, p.ownerLocked)
+	out.ownerLockedList = slices.Clone(p.ownerLockedList)
+	for _, slug := range slugs {
+		if slug != "" && !out.ownerLocked[slug] {
+			out.ownerLocked[slug] = true
+			out.ownerLockedList = append(out.ownerLockedList, slug)
+		}
+	}
+	slices.Sort(out.ownerLockedList)
+	return &out
+}
 
 // HomeFor returns the home directory of the account a view speaks for, as the
 // directory service reported it when the policy was built ("" when unknown).

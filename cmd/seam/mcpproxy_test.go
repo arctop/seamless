@@ -1010,7 +1010,7 @@ func newRestartDaemon(t *testing.T, program string) *restartDaemon {
 	_, err = store.EnsureProject(ctx, db, rdProject, rdProject)
 	require.NoError(t, err)
 	require.NoError(t, store.SetProjectIsolation(ctx, db, rdProject, core.IsolationConfidential))
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{rdProject}}, func(n string) (access.Account, error) {
+	policy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{rdProject}}, func(n string) (access.Account, error) {
 		if n == "owner" {
 			return access.Account{UID: rdOwner, Name: "owner"}, nil
 		}

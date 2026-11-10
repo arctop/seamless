@@ -16,7 +16,7 @@
 // The policy is two rules, and this file and restricted.go are the only places
 // they are written:
 //
-//  1. The owner reaches every project but the locked ones (peer_auth.locked,
+//  1. The owner reaches every project but the locked ones (peer_auth,
 //     2026-11-04; lease.go): a locked project is closed to every owner request
 //     -- listed, never read, never written -- unless the request rides a socket
 //     connection whose process holds a live lease the owner approved. The lock
@@ -123,8 +123,7 @@ type View struct {
 func (v View) Principal() Principal { return v.who }
 
 // Restricted reports whether this view can be refused anything at all: a
-// restricted account always can, the owner only while some project is locked
-// (peer_auth.locked).
+// restricted account always can, the owner only while some project is locked.
 func (v View) Restricted() bool {
 	switch v.who.Kind {
 	case KindRestricted:

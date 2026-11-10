@@ -36,8 +36,8 @@ import (
 
 const approversUsage = `usage: seamlessd approvers <verb>
 
-Approver credentials sign the owner's approvals of access to locked projects
-(peer_auth.locked). Run these as the daemon's own account.
+Approver credentials sign the owner's approvals of access to locked projects.
+Run these as the daemon's own account.
 
   enroll-code <passkey|touchid> --key <fingerprint>
                                   mint a one-time enrollment code for one key, valid for 10 minutes
@@ -190,8 +190,10 @@ func (cmd approversCmd) run(ctx context.Context, db *sql.DB, cfg config.Config, 
 		case store.ApproverTouchID:
 			fmt.Fprintln(out, "Type it into the Seamless Approve window that showed this key, in the owner's session on this Mac.")
 		}
-		if len(cfg.PeerAuth.Locked) == 0 && !cfg.Isolation.Requests {
-			fmt.Fprintln(out, "Note: peer_auth.locked lists no project yet, so nothing asks for an approval.")
+		if locked, lerr := lockedProjects(ctx, cfg, db); lerr != nil {
+			return lerr
+		} else if len(locked) == 0 && !cfg.Isolation.Requests {
+			fmt.Fprintln(out, "Note: no project is locked yet, so nothing asks for an approval.")
 		}
 		return nil
 	case "list":
@@ -290,6 +292,6 @@ func newApprovals(cfg config.Config, db *sql.DB, rec *events.Recorder, logger *s
 	}
 	return approval.New(approval.Config{
 		DB: db, Passkeys: v, Origins: origins, UserName: "owner", UserDisplayName: display,
-		Events: rec, Host: host, LeaseCap: cfg.PeerAuth.LeaseCap(), Logger: logger,
+		Events: rec, Host: host, LeaseCap: cfg.PeerAuth.LeaseCap(), ForceLocked: cfg.PeerAuth.ForceLocked, Logger: logger,
 	}), nil
 }

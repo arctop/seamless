@@ -242,15 +242,17 @@ func (rt *peerAuthRuntime) ancestorProblem(key, path string) string {
 	}
 }
 
-// projectProblems checks the policy against the projects table: every project
-// it locks must exist -- a misspelled entry leaves the project it meant open,
-// which is exactly the failure peer_auth exists to prevent -- and must carry an
-// isolation fence (confidential or sealed), which keeps it out of the family,
-// parent and cross-project gardener surfaces the policy does not reach on its
-// own.
+// projectProblems checks the config file's locks against the projects table:
+// every project it force-locks must exist -- a misspelled entry leaves the
+// project it meant open, which is exactly the failure peer_auth exists to
+// prevent -- and must carry an isolation fence (confidential or sealed), which
+// keeps it out of the family, parent and cross-project gardener surfaces the
+// policy does not reach on its own. A console lock is not checked here: the
+// store holds those rules at the write, and a refusal to start could only be
+// cleared by hand.
 func projectProblems(ctx context.Context, db *sql.DB, policy *access.Policy) ([]string, error) {
 	var problems []string
-	for _, slug := range policy.OwnerLocked() {
+	for _, slug := range policy.ForceLocked() {
 		p, found, err := store.ProjectBySlug(ctx, db, slug)
 		if err != nil {
 			return nil, err

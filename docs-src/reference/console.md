@@ -462,6 +462,14 @@ telemetry stream has its own Interactions surface and would flood results.
 
 `/console/projects`
 
+**Locks.** Under [`peer_auth`](/guides/peer-auth/#two-settings-isolation-and-the-lock),
+a confidential or sealed project's Isolation card offers **Lock this project**,
+which opens `/console/lock/<project>`. Locking it, and removing a lock set here,
+each need a passkey already enrolled on the Approvers page; without one the card
+links there. Seamless restarts to apply the change. A project listed under
+`peer_auth.force_locked` shows as **Force locked** and cannot be changed here. A
+locked project's isolation cannot be set to `open`.
+
 The board: one row per project, with live sessions, total sessions, open and
 blocked tasks, memory count, inherited memories, reach rate, and last activity.
 Grouped by family (`?group=family|flat`) and sortable (`?sort=recent|coverage|name`).
@@ -556,7 +564,7 @@ by default). The reader carries the task's body, claim and lease state, and
 both dependency directions; **force-release** is the action, and it is the
 owner override - it takes the lock from whoever holds it.
 
-Under `peer_auth.locked`, a task blocked by a task in a locked project you
+Under a lock, a task blocked by a task in a locked project you
 haven't unlocked sits in the blocked rail, its blocker named only by project
 on a line of its own; the task's reader and peek list it under **Depends on**
 the same way. The project workspace's Plans & tasks tab marks such steps

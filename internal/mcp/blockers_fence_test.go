@@ -252,7 +252,7 @@ func bfNoBlocker(t *testing.T, text, id, title, what string) {
 	require.NotContains(t, text, title, "%s names the locked task's title", what)
 }
 
-// A locked project (peer_auth.locked) without a lease: the owner on TCP, and
+// A locked project without a lease: the owner on TCP, and
 // a socket owner whose tree holds no lease, are told something blocks the
 // open project's work, never what. The agent whose tree the owner approved
 // reads the blocker in every answer.

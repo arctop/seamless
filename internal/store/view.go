@@ -16,7 +16,7 @@ import (
 )
 
 // A filtered read handle: the owner's view of the database while peer_auth
-// locks projects (peer_auth.locked).
+// locks projects.
 //
 // The console reads the database through roughly a hundred and fifty store
 // functions -- lists, details, counts, charts, timelines -- and filtering each by
@@ -102,7 +102,7 @@ var viewExempt = map[string]string{
 	"settings":          "owner settings, counts and slugs (families, stages, the repo-map mirror); no corpus content",
 	"schema_migrations": "migration bookkeeping",
 	"fts":               "a virtual table cannot be shadowed by a view; its one reader filters by the request's View (accessFilter)",
-	// peer_auth.locked's unlocks: the approval page must read a request for a
+	// a locked project's unlocks: the approval page must read a request for a
 	// LOCKED project, which is exactly the project this handle would hide.
 	"access_approvals": "unlock requests for locked projects: slugs, ids, the kernel's facts about the caller and a capped one-line reason; no corpus content, and the approval page reads it for a locked project",
 	"access_leases":    "granted unlocks: slugs, process keys, session ids and times; no corpus content",
@@ -116,6 +116,9 @@ var viewExempt = map[string]string{
 	// A console unlock names a LOCKED project, and the console reads it to
 	// decide which handle a browser gets: the handle that would hide it.
 	"console_unlocks": "per-browser console unlocks of locked projects: a slug, cookie and link hashes, a credential id and times; no corpus content, and the console reads it to choose the handle",
+	// A console lock names a LOCKED project, and the lock page reads it for a
+	// project this request's handle may hide.
+	"console_locks": "locks the owner set from the console: a slug, a credential id and a time; no corpus content, and the console reads it for a project its handle may hide",
 	// An MCP connection's declared capabilities, about no project: which
 	// dialog modes its client can show.
 	"mcp_sessions": "MCP connection ids and the elicitation modes their clients declared, about no project; no corpus content",
@@ -235,7 +238,7 @@ func normalizeSlugs(slugs []string) []string {
 }
 
 // Views is a pool of filtered read handles over one database, one per hidden
-// set (peer_auth.locked). The console reads each request through the handle
+// set. The console reads each request through the handle
 // that hides exactly what that request may not read: every locked project the
 // request holds nothing open on -- an agent tree's lease on the socket, or a
 // browser's console unlock. A request with nothing open reads the base handle,

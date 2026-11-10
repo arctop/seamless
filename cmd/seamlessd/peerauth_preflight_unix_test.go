@@ -47,7 +47,7 @@ func TestTrustedFileProblem_ConfigReadabilityAndSymlink(t *testing.T) {
 		return f, nil
 	}
 	cfg := config.Defaults()
-	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", Locked: []string{"p"}}
+	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{"p"}}
 	policy, err := access.New(cfg.PeerAuth, lockOwnerResolve)
 	require.NoError(t, err)
 	rt := &peerAuthRuntime{policy: policy, cfg: cfg.PeerAuth,

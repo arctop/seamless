@@ -568,7 +568,7 @@ func lockedBlockersWithheld(ctx context.Context, byLocked map[string]int, generi
 	return strings.Join(parts, ", "), remedy
 }
 
-// lockedBlockerProject is the locked project (peer_auth.locked) a blocker
+// lockedBlockerProject is the locked project a blocker
 // the caller may not read is named by, or "" for the generic words. It names
 // one only when the blocker's project is locked and this connection holds no
 // lease on it (access.Locked), and the caller is the owner's own OS account:

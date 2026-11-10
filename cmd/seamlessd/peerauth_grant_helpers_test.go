@@ -203,7 +203,7 @@ func newGMRig(t *testing.T, peer, requests bool) *gmRig {
 	cfg := config.Defaults()
 	cfg.Isolation.Requests = requests
 	if peer {
-		cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", Locked: []string{gmFin}}
+		cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{gmFin}}
 		r.policy, err = access.New(cfg.PeerAuth, gmResolve)
 		require.NoError(t, err)
 		problems, err := projectProblems(ctx, db, r.policy)

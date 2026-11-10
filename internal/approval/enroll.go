@@ -1,5 +1,5 @@
-// Package approval is the owner's approval of access to locked projects
-// (peer_auth.locked): the approver credentials that can sign an approval, and
+// Package approval is the owner's approval of access to locked projects:
+// the approver credentials that can sign an approval, and
 // how they are enrolled.
 //
 // An approver credential is a WebAuthn passkey (internal/passkey) or the
@@ -73,6 +73,9 @@ type Config struct {
 	Host string
 	// LeaseCap is peer_auth.max_lease; 0 means 8 hours.
 	LeaseCap time.Duration
+	// ForceLocked is peer_auth.force_locked: the locks the console may not
+	// change.
+	ForceLocked []string
 	// Programs names the process a token names, for the anchor rule
 	// (anchor.go) and the facts' program: its executable path, else the
 	// kernel's name for it, "" when no live process of this boot is that
@@ -85,9 +88,10 @@ type Config struct {
 
 // Service runs enrollments. It is safe for concurrent use.
 type Service struct {
-	cfg     Config
-	mu      sync.Mutex
-	pending map[string]*pendingEnroll
+	cfg         Config
+	mu          sync.Mutex
+	pending     map[string]*pendingEnroll
+	lockChanges map[string]*pendingLockChange
 }
 
 // New builds a Service.
@@ -104,7 +108,7 @@ func New(cfg Config) *Service {
 	if cfg.Programs == nil {
 		cfg.Programs = access.ProgramOf
 	}
-	return &Service{cfg: cfg, pending: map[string]*pendingEnroll{}}
+	return &Service{cfg: cfg, pending: map[string]*pendingEnroll{}, lockChanges: map[string]*pendingLockChange{}}
 }
 
 // PasskeysOn reports whether the passkey ceremonies are available.
@@ -158,6 +162,11 @@ func (s *Service) gc(now time.Time) {
 	for id, p := range s.pending {
 		if !now.Before(p.expires) {
 			delete(s.pending, id)
+		}
+	}
+	for id, p := range s.lockChanges {
+		if !now.Before(p.expires) {
+			delete(s.lockChanges, id)
 		}
 	}
 }

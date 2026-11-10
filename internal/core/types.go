@@ -492,7 +492,7 @@ const (
 	EventCorpusConfirmed EventKind = "corpus.confirmed"  // the owner marked a flagged item safe or accepted a drifted one (item_id; payload: item_kind, via, by)
 	EventLockdownChanged EventKind = "lockdown.changed"  // lockdown went on or off (payload: on, source, by)
 
-	// Locked projects (peer_auth.locked): the owner's approvals of an agent's
+	// Locked projects: the owner's approvals of an agent's
 	// access. Payloads carry ids, codes and lengths -- never the agent's reason
 	// or a path.
 	EventAccessRequested EventKind = "access.requested" // an agent asked for a locked project (item_id: the request; session_id when known; payload: kind, via)

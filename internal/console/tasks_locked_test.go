@@ -15,7 +15,7 @@ import (
 	"github.com/arctop/seamless/internal/store"
 )
 
-// A task a locked project blocks (peer_auth.locked, owner decision D7). The
+// A task a locked project blocks (peer_auth, owner decision D7). The
 // console's handle hides the locked project's tasks and their dependency
 // edges, so before this the owner's Tasks screen listed such a task as READY
 // -- claimable -- with no word of what blocks it. Now it sits in the blocked

@@ -13,7 +13,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 )
 
-// Under peer_auth.locked the console-backed commands name a locked project
+// Under a lock the console-backed commands name a locked project
 // instead of answering "not found" (single lookups) or filtering in silence
 // (lists): owner decision D2. The daemon here is a stand-in that answers the
 // way the console does: a lookup of an item in a locked project is 403 with

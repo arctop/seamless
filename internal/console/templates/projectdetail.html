@@ -58,12 +58,29 @@
       {{if .IsolationConfirm}}{{template "isolation-confirm" .IsolationConfirm}}{{end}}
       <form class="iso-form" method="post" action="/console/projects/{{.Slug}}/isolation">
         <div class="seg iso-seg">
-          {{range .IsolationOptions}}<button type="submit" name="state" value="{{.State}}" class="{{if .On}}on{{end}}" aria-pressed="{{if .On}}true{{else}}false{{end}}">{{.Label}}</button>{{end}}
+          {{range .IsolationOptions}}<button type="submit" name="state" value="{{.State}}" class="{{if .On}}on{{end}}" aria-pressed="{{if .On}}true{{else}}false{{end}}"{{if .Disabled}} disabled title="A locked project must stay confidential or sealed"{{end}}>{{.Label}}</button>{{end}}
         </div>
       </form>
       <ul class="iso-promises">
         {{range .IsolationOptions}}<li class="{{if .On}}on{{end}}">{{.Promise}}</li>{{end}}
       </ul>
+      {{- with .Lock}}
+      <div class="iso-lock" id="lock">
+        {{if .Force}}
+        <p>{{icon "lock"}}<b>Force locked</b> in the daemon's config file. Only the file can remove it.</p>
+        {{else if .Console}}
+        <p>{{icon "lock"}}<b>Locked</b> from the console. <a href="/console/lock/{{.Slug}}">Remove the lock</a></p>
+        {{else if not .Fenced}}
+        <p class="muted">To lock this project, make it confidential or sealed first.</p>
+        {{else if not .PasskeysOn}}
+        <p class="muted">Passkeys are not configured on this daemon, so a lock can only be set in its config file.</p>
+        {{else if not .HasPasskey}}
+        <p class="muted" data-needs-passkey>{{icon "key-round"}}To lock this project you need a passkey. <a href="/console/approvers">Add one on the Approvers page</a></p>
+        {{else}}
+        <a class="btn small" href="/console/lock/{{.Slug}}">{{icon "lock"}}Lock this project</a>
+        {{end}}
+      </div>
+      {{- end}}
     </div>
   </div>
 

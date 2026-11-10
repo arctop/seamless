@@ -3668,7 +3668,7 @@ rather than discovering it as an unexplained error.
 
 Isolation is about what flows in and out of a project. Whether even the
 project's own agents need a fresh approval from you first is a second setting,
-the **lock** (`peer_auth.locked`), and "locked" never means `sealed`. A sensitive
+the **lock**, and "locked" never means `sealed`. A sensitive
 project is normally `confidential` and locked:
 [Lock projects behind your approval](/guides/peer-auth/#two-settings-isolation-and-the-lock)
 says when to use which.
@@ -6137,8 +6137,8 @@ called that.
 | | Isolation | The lock |
 |---|---|---|
 | Question | What flows in and out of this project? | Must even this project's own agents get your approval first? |
-| Values | `open`, `confidential`, `sealed` | locked (`peer_auth.locked`) or not |
-| Set | on the console's project Overview, or with `seam project isolation` | in the daemon's config file |
+| Values | `open`, `confidential`, `sealed` | locked or not |
+| Set | on the console's project Overview, or with `seam project isolation` | on the console's project Overview with a passkey, or forced in the daemon's config file |
 | Needs peer_auth | no | yes |
 
 - **`confidential`** is for sensitive work your agents should still do freely:
@@ -6154,6 +6154,34 @@ agent, its session still reads your open projects and the global scope. `serve`
 refuses a locked project that is `open`, because the isolation fence is what
 keeps it out of the family, parent and cross-project gardener surfaces the lock
 does not reach on its own.
+
+### Lock from the console, or force lock in the file
+
+There are two ways to lock a project, and they differ in who can undo them.
+
+**From the console.** On a confidential or sealed project, open the **Isolation**
+card on its Overview and choose **Lock this project**. The change needs a passkey
+you have already [enrolled](#enroll-an-approver); until you have one, the card
+links to the Approvers page instead. Taking the lock off takes a passkey too, from
+the same page or the project's unlock page. Each approval names one project and
+one direction, so it cannot be replayed for anything else. Seamless applies the
+change by restarting, which briefly drops the console and agent connections.
+
+**Force lock, in the file.** A project listed under `peer_auth.force_locked` is
+force locked: the console shows it as force locked and cannot change it, even
+with a passkey. Only editing the file and restarting removes it. Use this for
+a project that should stay locked however the console is reached.
+
+The console removes only the locks it set. A project in both places stays locked
+until it leaves the file. While a project is locked, by either route, its
+isolation cannot be set to `open`: remove the lock first.
+
+Console lock changes are passkey-only for now. A Touch ID key enrolled with
+`seam touchid enroll` approves agents' requests but cannot approve these; a
+passkey saved on your Mac still asks for your fingerprint in the browser.
+
+The key was called `peer_auth.locked` in earlier builds. That name still works,
+and `seamlessd doctor` warns until you rename it.
 
 ## How it decides
 
@@ -6192,13 +6220,13 @@ peer_auth:
   socket:
     path: /opt/seamless/run/seamlessd.sock
     mode: "0666"                    # who may knock; the kernel still names each one
-  locked: [example-finance]         # each must be confidential or sealed
+  force_locked: [example-finance]   # only this file can remove these; each must be confidential or sealed
   max_lease: 8h                     # optional: caps every approval, at most 24h
 ```
 
 Every key is in [the configuration reference](/reference/configuration/#peer-auth).
 
-Checked when the file loads, whether or not `enabled` is set: `locked` names
+Checked when the file loads, whether or not `enabled` is set: `force_locked` names
 real projects, never the global scope, and none twice; `restricted` is listed
 only with `enabled` set, and never names the owner or the same account twice;
 `max_lease` and `passkeys` are well formed. With `enabled` set, also: the owner
@@ -6221,11 +6249,11 @@ prints the policy as it resolved and every reason `serve` would refuse.
 refused when it loads, even while peer_auth is disabled, with:
 
 ```text
-config: peer_auth.users was the 2026-10-31 design, which sealed projects to other OS accounts, and is no longer supported: list the projects under peer_auth.locked and remove users
+config: peer_auth.users was the 2026-10-31 design, which sealed projects to other OS accounts, and is no longer supported: list the projects under peer_auth.force_locked and remove users
 ```
 
 That map reserved projects for other OS accounts, and you could never reach them.
-It is gone. List those projects under `peer_auth.locked`, keep each one
+It is gone. List those projects under `peer_auth.force_locked`, keep each one
 `confidential` or `sealed`, delete `users`, and restart. An account that was
 listed there is then refused at the socket unless you list it under
 `peer_auth.restricted`, which reaches only open projects that are not locked.
@@ -6379,8 +6407,9 @@ either way.
 An approver credential is what signs your approval: a passkey, or a Touch ID
 key. None is required: the terminal path below always works, and
 `seamlessd doctor` warns only that it is the one path left. Enrolling needs the
-daemon running with a project locked (or read grants on), so do it after the
-[cutover](#move-an-existing-install-over).
+daemon running under `peer_auth`, so do it after the
+[cutover](#move-an-existing-install-over). A lock set from the console needs a
+passkey enrolled first.
 
 A first credential needs a one-time enrollment code, and only the daemon's
 account can mint one; no route, over the socket or with the TCP key, can. A code
@@ -6669,15 +6698,15 @@ peer_auth:
   owner: alice
   socket:
     path: /opt/seamless/run/seamlessd.sock
-  locked: [example-finance]
+  force_locked: [example-finance]
   restricted: [_example_agent]
 ```
 
 What such an account reaches:
 
 - **Every open project that is not locked**, reading and writing. A project
-  whose isolation is `confidential` or `sealed`, and every project under
-  `peer_auth.locked`, is out of its reach and is not listed for it. Its refusal
+  whose isolation is `confidential` or `sealed`, and every locked
+  project, is out of its reach and is not listed for it. Its refusal
   reads the same for those projects and for a slug nobody registered, so it
   never learns which closed projects exist.
 - **The global scope, read-only.** Its briefing, recall and reads include
@@ -7110,7 +7139,7 @@ code (`web_fetch`, `mail`); without one, the payload's `tool_name` becomes the
 reason (`tool:webfetch`). The first mark stands. With the feature off the
 endpoint marks nothing and says so.
 
-Under a lock (`peer_auth.locked`), an agent in a locked project's repository
+Under a lock, an agent in a locked project's repository
 has its session recorded there before you approve its access. Its own guard
 marks that session all the same, so the access request you are shown carries
 the "session tainted" warning. A process outside the agent's process tree
@@ -8691,7 +8720,7 @@ Fetch a web page (SSRF-guarded: private/loopback addresses are rejected) and sav
 
 ## access_request {#access_request}
 
-Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth.locked), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another, and a reason given then fills in one the waiting request lacks. The answer says which: filed is true when this call filed a new request, false when it found one already waiting or the access is already held (nothing filed); reason is added when this call's reason was stored on the request, kept when the waiting request already had one, so this one was not used, and none when this call gave no reason or nothing was filed. Once the owner denies a request, refused calls file nothing more and say so: ask again here, with a reason, when the owner tells you to. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to 110 seconds for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then. An agent that already holds the access it asks for is answered with it, and nothing is filed, until 30 minutes before it ends. With read grants on (isolation.requests), it also asks for a read of a confidential project no lock covers.
+Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another, and a reason given then fills in one the waiting request lacks. The answer says which: filed is true when this call filed a new request, false when it found one already waiting or the access is already held (nothing filed); reason is added when this call's reason was stored on the request, kept when the waiting request already had one, so this one was not used, and none when this call gave no reason or nothing was filed. Once the owner denies a request, refused calls file nothing more and say so: ask again here, with a reason, when the owner tells you to. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to 110 seconds for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then. An agent that already holds the access it asks for is answered with it, and nothing is filed, until 30 minutes before it ends. With read grants on (isolation.requests), it also asks for a read of a confidential project no lock covers.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -9443,7 +9472,7 @@ one already exists.
 
 ## Locked projects
 
-Under `peer_auth`, a project listed in `peer_auth.locked` (see the
+Under `peer_auth`, a locked project (see the
 [configuration reference](/reference/configuration/#peer-auth)) is closed to
 every owner request - the owner's own agents included - until the owner
 approves a lease for the asking agent's process. A refused call files a
@@ -10604,7 +10633,7 @@ seamlessd approvers reset --yes
 ```
 
 Manages the owner's approver credentials: the passkeys and Touch ID keys that
-can approve an agent's access to a locked project (`peer_auth.locked`, see the
+can approve an agent's access to a locked project (see the
 [configuration reference](/reference/configuration/)). Every verb opens the
 database directly, so run it as the daemon's own account, for example
 `sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml
@@ -10692,7 +10721,7 @@ It refuses to run when `mcp.api_key` is empty, or when the server does not
 answer `/healthz` within two seconds - the page has nowhere to POST otherwise.
 Any HTTP response counts as reachable, including a degraded 503.
 
-While `peer_auth` is on and a project is locked, it signs in on the passkey
+While `peer_auth` is on, it signs in on the passkey
 origin (`http://localhost:<port>` by default) instead of the server URL: the
 console's cookie belongs to one host, and browsers refuse passkeys on an IP
 address such as `127.0.0.1`. A client's config carries no `peer_auth` block, so
@@ -10711,7 +10740,8 @@ sudo -k -u _seamless seamlessd console-open --unlock example-finance --for 3h
 ```
 
 It refuses unless it runs as the daemon's account (the same check as
-`seamlessd approve`) and `PROJECT` is one `peer_auth.locked` lists. It writes a
+`seamlessd approve`) and `PROJECT` is locked, by the config file or from the
+console. It writes a
 one-time unlock link straight into the database and prints it; open the link
 within ten minutes in the browser you sign in to the console with. Opening it
 sets that browser's `seamless_unlock` cookie, and the console then reads the
@@ -10922,15 +10952,19 @@ behavior of every earlier release. The guide is
   octal, default `0666`: every local account may knock, and the kernel still
   names each one. `socket.group` (`SEAMLESS_PEER_AUTH_SOCKET_GROUP`) hands the
   socket to a group, for a mode such as `0660`.
-- `locked` lists locked projects: each is closed to every owner request - its
-  name shows, its content does not, writes are refused - unless the request
-  rides a socket connection whose process holds a lease the owner approved. The
-  TCP bearer key never holds one. The lock is not the `sealed` isolation state
-  (which says what flows in and out of a project): a locked project is normally
-  `confidential`, and `serve` refuses one that is `open`. File-only.
+- `force_locked` lists force-locked projects: locks only this file can remove.
+  The console can set and remove locks of its own with a passkey, but it can
+  never change one listed here. Each locked project is closed to every owner
+  request - its name shows, its content does not, writes are refused - unless the
+  request rides a socket connection whose process holds a lease the owner
+  approved. The TCP bearer key never holds one. The lock is not the `sealed`
+  isolation state (which says what flows in and out of a project): a locked
+  project is normally `confidential`, and `serve` refuses a force-locked one that
+  is `open`. File-only. `locked`, this key's earlier name, still loads, and
+  `seamlessd doctor` warns until it is renamed.
 - `users` is a retired key. A config that sets it to a non-empty map is refused
   when it loads, even while the block is disabled, with a message that says
-  to list the projects under `locked` and remove `users`
+  to list the projects under `force_locked` and remove `users`
   ([the guide](/guides/peer-auth/#configure-it) has it word for word).
 - `max_lease` caps every lease the owner approves on a locked project, "until
   this session ends" included: at most `24h`, unset `8h`. File-only.
@@ -11087,6 +11121,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `peer_auth.socket.path` | string | - |
 | `peer_auth.socket.mode` | string | - |
 | `peer_auth.socket.group` | string | - |
+| `peer_auth.force_locked` | []string | - |
 | `peer_auth.locked` | []string | - |
 | `peer_auth.max_lease` | duration | - |
 | `peer_auth.passkeys.rp_id` | string | - |
@@ -11566,13 +11601,15 @@ update:
 #     # 0660 to let only that group's members connect at all.
 #     # env: SEAMLESS_PEER_AUTH_SOCKET_GROUP
 #     group: ""
-#   # Locked projects (the approval design). Each is closed to every owner
-#   # request -- its name shows, its content does not, writes are refused --
-#   # unless the request rides a socket connection whose process holds a lease
-#   # the owner approved; the TCP bearer key never holds one. The lock is not
-#   # the sealed isolation state: a locked project is normally confidential.
-#   # File only (no env).
-#   locked: []
+#   # Force-locked projects: locks only this file can remove. The console can
+#   # set and remove locks of its own with a passkey, but never one listed here.
+#   # Each locked project is closed to every owner request -- its name shows,
+#   # its content does not, writes are refused -- unless the request rides a
+#   # socket connection whose process holds a lease the owner approved; the TCP
+#   # bearer key never holds one. The lock is not the sealed isolation state: a
+#   # locked project is normally confidential. File only (no env). The earlier
+#   # name, locked, still loads.
+#   force_locked: []
 #   # Caps every lease the owner approves on a locked project, "until this
 #   # session ends" included. At most 24h; unset means 8h. File only (no env).
 #   max_lease: 8h
@@ -13182,6 +13219,14 @@ telemetry stream has its own Interactions surface and would flood results.
 
 `/console/projects`
 
+**Locks.** Under [`peer_auth`](/guides/peer-auth/#two-settings-isolation-and-the-lock),
+a confidential or sealed project's Isolation card offers **Lock this project**,
+which opens `/console/lock/<project>`. Locking it, and removing a lock set here,
+each need a passkey already enrolled on the Approvers page; without one the card
+links there. Seamless restarts to apply the change. A project listed under
+`peer_auth.force_locked` shows as **Force locked** and cannot be changed here. A
+locked project's isolation cannot be set to `open`.
+
 The board: one row per project, with live sessions, total sessions, open and
 blocked tasks, memory count, inherited memories, reach rate, and last activity.
 Grouped by family (`?group=family|flat`) and sortable (`?sort=recent|coverage|name`).
@@ -13276,7 +13321,7 @@ by default). The reader carries the task's body, claim and lease state, and
 both dependency directions; **force-release** is the action, and it is the
 owner override - it takes the lock from whoever holds it.
 
-Under `peer_auth.locked`, a task blocked by a task in a locked project you
+Under a lock, a task blocked by a task in a locked project you
 haven't unlocked sits in the blocked rail, its blocker named only by project
 on a line of its own; the task's reader and peek list it under **Depends on**
 the same way. The project workspace's Plans & tasks tab marks such steps

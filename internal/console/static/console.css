@@ -2620,7 +2620,7 @@ kbd {
   white-space: nowrap; text-overflow: ellipsis;
 }
 .rail-item .ri-meta .mono { font-size: inherit; }
-/* A blocker in a locked project (peer_auth.locked) gets a line of its own, so
+/* A blocker in a locked project gets a line of its own, so
    the truncated meta line never hides it; the reader and the peek list it
    under "Depends on". */
 .rail-item .ri-desc[data-locked-blocker] .ico { width: 12px; height: 12px; vertical-align: -2px; }
@@ -4950,6 +4950,10 @@ a.checkin-chip:hover { border-color: var(--brand); color: var(--brand); text-dec
   font-size: var(--text-xs); line-height: 1.55; color: var(--muted);
   padding-left: 12px; border-left: 2px solid var(--border);
 }
+.iso-lock { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.iso-lock p { margin: 0; }
+.iso-lock .icon, .iso-lock svg { vertical-align: -2px; margin-right: 6px; }
+.iso-seg button:disabled { opacity: 0.45; cursor: not-allowed; }
 .iso-promises li.on { color: var(--text-primary); border-left-color: var(--brand); }
 
 .iso-confirm {

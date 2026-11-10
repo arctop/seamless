@@ -62,7 +62,7 @@ func TestConsoleLock_LeasedTreeReadsThroughTheConsole(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := config.Defaults()
-	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", Locked: []string{"example-finance"}}
+	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{"example-finance"}}
 	policy, err := access.New(cfg.PeerAuth, lockOwnerResolve)
 	require.NoError(t, err)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -145,7 +145,7 @@ func TestConsoleOpenUnlock_Link(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	cfg := config.Defaults()
-	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", Locked: []string{"example-finance"}}
+	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{"example-finance"}}
 	now := time.Now()
 
 	_, err = consoleUnlockLink(ctx, cfg, db, 3*time.Hour, "example-ops", "", now)
@@ -180,5 +180,5 @@ func TestConsoleOpenUnlock_Link(t *testing.T) {
 
 	// It runs only as the daemon's account, with a project locked.
 	off := config.Defaults()
-	require.ErrorContains(t, runConsoleUnlock(off, "example-finance", "", ""), "locks no project")
+	require.ErrorContains(t, runConsoleUnlock(off, "example-finance", "", ""), "peer_auth is off")
 }

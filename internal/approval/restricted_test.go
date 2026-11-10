@@ -25,7 +25,7 @@ const restrictedUID = 502
 // filled the way the transport fills it (every open project).
 func restrictedView(t *testing.T, f *reqFixture, chain ...access.ProcessToken) access.View {
 	t.Helper()
-	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Locked: []string{lockFin, lockLeg},
+	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{lockFin, lockLeg},
 		Restricted: []string{"_example_agent"}}, func(n string) (access.Account, error) {
 		switch n {
 		case "owner":

@@ -21,8 +21,8 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 	const name = "peer_auth"
 	pa := cfg.PeerAuth
 	if !pa.Enabled {
-		if len(pa.Locked) > 0 {
-			return []check{{statusWarn, name, "off, but peer_auth.locked is filled in: nothing is locked until peer_auth.enabled is true"}}
+		if len(pa.ForceLocked) > 0 {
+			return []check{{statusWarn, name, "off, but peer_auth.force_locked is filled in: nothing is locked until peer_auth.enabled is true"}}
 		}
 		return []check{{statusInfo, name, "off: no socket; the TCP bearer key reaches every project (the default)"}}
 	}
@@ -33,6 +33,13 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 	if err != nil {
 		return []check{{statusFail, name, err.Error()}}
 	}
+	if db != nil {
+		console, lerr := store.ConsoleLockedSlugs(ctx, db)
+		if lerr != nil {
+			return []check{{statusFail, name, "console locks: " + lerr.Error()}}
+		}
+		policy = policy.WithConsoleLocks(console)
+	}
 	owner := policy.Owner()
 	mode := pa.Socket.Mode
 	if strings.TrimSpace(mode) == "" {
@@ -40,9 +47,12 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 	}
 	out := []check{{statusOK, name, fmt.Sprintf("socket %s (mode %s%s); owner %s (uid %d) on TCP and the socket",
 		pa.Socket.Path, mode, groupSuffix(pa.Socket.Group), owner.Name, owner.UID)}}
+	if len(pa.LegacyLocked) > 0 {
+		out = append(out, check{statusWarn, "peer_auth.force_locked", "this config uses peer_auth.locked, the old name of peer_auth.force_locked: rename the key"})
+	}
 	if locked := policy.OwnerLocked(); len(locked) > 0 {
-		out = append(out, check{statusOK, "peer_auth.locked", fmt.Sprintf("locked: [%s]; closed to every owner request "+
-			"that holds no lease the owner approved (the TCP bearer key never holds one)", strings.Join(locked, ", "))})
+		out = append(out, check{statusOK, "peer_auth.force_locked", fmt.Sprintf("locked: [%s] (force locked in this file: [%s]); closed to every owner request "+
+			"that holds no lease the owner approved (the TCP bearer key never holds one)", strings.Join(locked, ", "), strings.Join(policy.ForceLocked(), ", "))})
 		out = append(out, approverCheck(ctx, db, runtime.GOOS))
 	}
 	for _, a := range policy.RestrictedAccounts() {

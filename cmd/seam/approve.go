@@ -73,7 +73,7 @@ const (
 var approveCmd = spec("approve", groupAccess,
 	"decide an access request in the owner's own terminal",
 	between(0, 1, "request"), bindApprove, runApprove).withLong(
-	`The owner's terminal path for a locked project (peer_auth.locked). With no
+	`The owner's terminal path for a locked project. With no
 request it lists the pending ones and picks one (asking which when there are
 several); a request is its short id (R-7F3K) or its full id.
 

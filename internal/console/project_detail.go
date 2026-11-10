@@ -51,6 +51,9 @@ type projectWorkspaceData struct {
 	Isolation        core.Isolation
 	IsolationOptions []isolationOptionVM
 	IsolationConfirm *isolationConfirmVM
+	// Lock is the project's lock under peer_auth; nil with peer_auth off, so
+	// nothing renders.
+	Lock *lockView
 
 	Metrics   projectMetrics
 	Trend     []store.TrendBucket // this project's injection trend (its own memories)
@@ -202,6 +205,15 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 		Parent: p.ParentSlug, Retired: p.Retired(), Favorite: p.Favorite, ActiveTab: tab,
 		IsRoot: p.ParentSlug == "", TrendWin: win.Label,
 		Isolation: isolationOf(p), IsolationOptions: isolationOptions(isolationOf(p)),
+	}
+	lock, err := s.lockViewFor(r, slug, isolationOf(p))
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	data.Lock = lock
+	if lock.Locked() {
+		disableUnfenced(data.IsolationOptions)
 	}
 	if pending != "" {
 		confirm, err := s.isolationPendingConfirm(ctx, slug, pending)

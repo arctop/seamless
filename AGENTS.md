@@ -301,8 +301,8 @@ any of it.
   (`access.ReservedSessionName`). An OS account name never holds ":", so the
   first one ends the account. A new hook route that reads a session id from
   its body must qualify it the same way.
-- **A lease is judged, never trusted** (`peer_auth.locked`;
-  `internal/access/lease.go`, migration 031). A locked
+- **A lease is judged, never trusted** (`internal/access/lease.go`, migration
+  031). A locked
   project is closed to the owner: `View.Listed` (name and counts) is true,
   `Visible`/`Writable` are false. A View opens it only through
   `View.WithLeases`, which keeps a lease only on the owner's socket view with a
@@ -329,11 +329,26 @@ any of it.
   `Facts.Agent`. The residual risk is a same-uid debugger attaching to a
   process in the tree; the guide states it.
 - **Locked is not sealed.** Isolation (open / confidential / sealed) says what
-  flows in and out of a project; the lock (`peer_auth.locked`) says whether
+  flows in and out of a project; the lock says whether
   even its own agents need a fresh owner approval. Two settings, two words:
   never call the lock "sealed" in code, text or config. A locked project is
   normally confidential. `Policy.ConsoleHidden` is the set no owner surface
   shows without a lease (the locked projects).
+- **A lock comes from the file or the console, and only the console's can be
+  removed there** (`peer_auth.force_locked`; `store/console_locks.go`, migration
+  037; `approval/console_lock.go`; `console/lock.go`). The policy is
+  `access.New` over the file plus `Policy.WithConsoleLocks` over the table, once,
+  at startup, and stays immutable. A change is one passkey ceremony
+  (`approval.lockChangeChallenge` binds the ceremony id, the project and the
+  direction; a ceremony is single use), from a browser only, then a clean
+  shutdown and an in-place re-exec (`errServeRestart`, `reexecSelf`), so the
+  pid does not change. Never add a route that writes `console_locks` without
+  that proof. A lock needs a fence, judged inside the write
+  (`store.AddConsoleLock`), and a fence cannot drop to open under a lock of
+  either kind (`store.LoosenProjectIsolation`). A reader of the locked set goes
+  through the policy, or `lockedProjects` in cmd/seamlessd for a one-shot
+  command; `peer_auth.force_locked` alone is not the whole set. `locked` is the
+  key's earlier name and keeps loading (`foldLegacyLocked`).
 - **Approver credentials are enrolled by the daemon's account, never by a
   route** (`store/approvers.go`, `internal/approval`, migration 032). A first
   passkey or Touch ID key needs a one-time code that only

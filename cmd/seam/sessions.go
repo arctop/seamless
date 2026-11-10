@@ -61,7 +61,7 @@ func runSessions(_ context.Context, e *env, o *sessionsOpts, pos []string) error
 			Updated  time.Time `json:"updated"`
 		} `json:"sessions"`
 		// Locked names the locked projects whose sessions the console left
-		// out (peer_auth.locked; absent otherwise).
+		// out (peer_auth; absent otherwise).
 		Locked []string `json:"locked"`
 	}
 	path := "/console/sessions?format=json"

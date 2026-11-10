@@ -94,6 +94,16 @@ type isolationOptionVM struct {
 	Label   string
 	Promise string
 	On      bool
+	// Disabled refuses the option here: a locked project keeps its fence.
+	Disabled bool
+}
+
+// disableUnfenced turns off the options a locked project may not take: it must
+// keep an isolation fence for as long as it is locked.
+func disableUnfenced(options []isolationOptionVM) {
+	for i := range options {
+		options[i].Disabled = !options[i].State.FencesOutbound()
+	}
 }
 
 // isolationOptions builds the three options loosest-first (core.Isolations'
@@ -339,7 +349,12 @@ func (s *Service) isolationLoosen(w http.ResponseWriter, r *http.Request, slug s
 		return
 	}
 	ctx := r.Context()
-	if err := store.SetProjectIsolation(ctx, s.writeDB(), slug, to); err != nil {
+	if err := store.LoosenProjectIsolation(ctx, s.writeDB(), slug, to, s.cfg.ForceLocked); err != nil {
+		if errors.Is(err, store.ErrIsolationLocked) {
+			s.isolationRefused(w, r, store.IsolationTightenEffects{Project: slug, From: from, To: to},
+				slug+" is locked, and a locked project must stay confidential or sealed: remove the lock first.")
+			return
+		}
 		if errors.Is(err, store.ErrProjectNotFound) {
 			s.notFound(w, r, "No project with slug "+slug+".")
 			return

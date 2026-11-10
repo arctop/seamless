@@ -1,7 +1,7 @@
 package main
 
 // The lease principals' rows of the peer_auth matrix (plan step 10,
-// peer_auth.locked): one daemon -- the real route table over real services,
+// peer_auth): one daemon -- the real route table over real services,
 // wired as serve wires them while peer_auth locks a project -- with
 // example-finance (confidential) and example-legal (open) locked, open,
 // confidential and sealed projects beside them, and a restricted local

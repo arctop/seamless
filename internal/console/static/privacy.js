@@ -360,7 +360,7 @@
     if (!open.length) ghost(cx, cy - 142, 'No open projects', '', false);
     if (!conf.length) ghost(118, 250, 'None yet', 'confidential', false);
     if (!sealed.length) ghost(842, 250, 'None yet', 'sealed', false);
-    if (!locked.length) ghost(cx, 462, 'No locked projects', P.locking ? 'list one under peer_auth.locked' : 'needs Seamless in its own account', true);
+    if (!locked.length) ghost(cx, 462, 'No locked projects', P.locking ? 'lock one on its project page' : 'needs Seamless in its own account', true);
     watch(fm, 'flow');
   })();
 
@@ -411,7 +411,7 @@
     var fc = 'var(--pv-' + (F === 'confidential' ? 'conf' : F) + ')', extra = '';
     var how = F === 'open' ? 'seam project isolation <slug> open' : 'seam project isolation <slug> ' + F + ' --yes';
     if (F !== 'open' && ans[3] === 'yes') {
-      extra = '<p><b>And lock it.</b> ' + (P.locking ? 'List the project under <code>peer_auth.locked</code> in the daemon&rsquo;s config and restart it;' : 'A lock needs Seamless in its own account first; then list the project under <code>peer_auth.locked</code>, and') + ' its agents wait for your Touch ID, passkey or password.</p>';
+      extra = '<p><b>And lock it.</b> ' + (P.locking ? 'Lock it on its project page with a passkey;' : 'A lock needs Seamless in its own account first; then lock it on its project page, and') + ' its agents wait for your Touch ID, passkey or password.</p>';
       fc = 'var(--pv-locked)';
     }
     answer.style.setProperty('--fc', fc);

@@ -606,7 +606,7 @@ seamlessd approvers reset --yes
 ```
 
 Manages the owner's approver credentials: the passkeys and Touch ID keys that
-can approve an agent's access to a locked project (`peer_auth.locked`, see the
+can approve an agent's access to a locked project (see the
 [configuration reference](https://thereisnospoon.org/docs/reference/configuration/)). Every verb opens the
 database directly, so run it as the daemon's own account, for example
 `sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml
@@ -694,7 +694,7 @@ It refuses to run when `mcp.api_key` is empty, or when the server does not
 answer `/healthz` within two seconds - the page has nowhere to POST otherwise.
 Any HTTP response counts as reachable, including a degraded 503.
 
-While `peer_auth` is on and a project is locked, it signs in on the passkey
+While `peer_auth` is on, it signs in on the passkey
 origin (`http://localhost:<port>` by default) instead of the server URL: the
 console's cookie belongs to one host, and browsers refuse passkeys on an IP
 address such as `127.0.0.1`. A client's config carries no `peer_auth` block, so
@@ -713,7 +713,8 @@ sudo -k -u _seamless seamlessd console-open --unlock example-finance --for 3h
 ```
 
 It refuses unless it runs as the daemon's account (the same check as
-`seamlessd approve`) and `PROJECT` is one `peer_auth.locked` lists. It writes a
+`seamlessd approve`) and `PROJECT` is locked, by the config file or from the
+console. It writes a
 one-time unlock link straight into the database and prints it; open the link
 within ten minutes in the browser you sign in to the console with. Opening it
 sets that browser's `seamless_unlock` cookie, and the console then reads the

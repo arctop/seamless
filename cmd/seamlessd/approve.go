@@ -77,16 +77,15 @@ func runApprove(args []string) error {
 }
 
 // approverAccountCheck refuses unless this process runs as the daemon's own
-// account while peer_auth locks a project, or offers read grants
-// (isolation.requests): the data directory must be this account's and 0700,
+// account under peer_auth: the data directory must be this account's and 0700,
 // and this account must not be the owner's.
 func approverAccountCheck(cfg config.Config, env peerAuthEnv) error {
 	pa := cfg.PeerAuth
 	if !pa.Enabled && cfg.Isolation.Requests {
 		return errors.New("peer_auth is off, so a read grant is approved over the console with the bearer key: run seam approve, which does that")
 	}
-	if !pa.Enabled || (len(pa.Locked) == 0 && !cfg.Isolation.Requests) {
-		return errors.New("peer_auth locks no project, so there is nothing to approve")
+	if !pa.Enabled {
+		return errors.New("peer_auth is off, so there is nothing to approve")
 	}
 	facts, err := env.inspect(cfg.DataDir)
 	if err != nil {

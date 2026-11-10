@@ -88,7 +88,7 @@ type Config struct {
 	Features  config.Features
 	Screening *screening.Service
 	// RevokeSessionLeases ends a finished session's leases on locked
-	// projects (peer_auth.locked); nil -- nothing locked -- does nothing.
+	// projects; nil -- nothing locked -- does nothing.
 	RevokeSessionLeases func(ctx context.Context, sessionID string) (int64, error)
 	// Approvals is the daemon's approval service while a project is locked
 	// (the locked notice and its automatic request, the lease expiry
@@ -343,7 +343,7 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// peer_auth: a project the owner has locked (peer_auth.locked) and this
+	// peer_auth: a project the owner has locked and this
 	// connection holds no lease on gets the locked notice: the session is
 	// recorded there, metadata only, and an access request is filed for it
 	// (lockedStart).
@@ -580,7 +580,7 @@ func (h *Handler) ensureAmbientSession(ctx context.Context, client Client, host 
 
 // ensureAmbientSessionIn is ensureAmbientSession returning the session's id as
 // well as its name. locked names the project the caller is locked out of
-// (peer_auth.locked) that the session may be recorded in anyway -- metadata
+// that the session may be recorded in anyway -- metadata
 // only, findings refused until the owner approves (owner decision Q4); ""
 // places a session only where the caller may write, as always.
 func (h *Handler) ensureAmbientSessionIn(ctx context.Context, client Client, host string, p hookPayload, locked string) (id, name string) {
@@ -832,7 +832,7 @@ const (
 	// peer_auth off).
 	reachOK sessionReach = iota
 	// reachLocked: the owner's own session in a project it is locked out of
-	// (peer_auth.locked, no lease) -- recorded there metadata only, so a hook
+	// (peer_auth, no lease) -- recorded there metadata only, so a hook
 	// may heartbeat, stamp and complete it, and write nothing into it.
 	reachLocked
 	// reachForeign: a session the caller may not act on -- one in a project it

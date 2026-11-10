@@ -391,7 +391,7 @@ one already exists.
 
 ## Locked projects
 
-Under `peer_auth`, a project listed in `peer_auth.locked` (see the
+Under `peer_auth`, a locked project (see the
 [configuration reference](https://thereisnospoon.org/docs/reference/configuration/#peer-auth)) is closed to
 every owner request - the owner's own agents included - until the owner
 approves a lease for the asking agent's process. A refused call files a

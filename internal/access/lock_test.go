@@ -12,7 +12,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 )
 
-// The owner-locked view (peer_auth.locked): a locked project is listed for the
+// The owner-locked view: a locked project is listed for the
 // owner and readable only under a lease that names the request's own socket
 // process.
 
@@ -44,9 +44,9 @@ var (
 func lockPolicy(t *testing.T) *Policy {
 	t.Helper()
 	p, err := New(config.PeerAuth{
-		Enabled: true,
-		Owner:   "owner",
-		Locked:  []string{lockLegal, lockFin},
+		Enabled:     true,
+		Owner:       "owner",
+		ForceLocked: []string{lockLegal, lockFin},
 	}, lockResolve)
 	require.NoError(t, err)
 	return p
@@ -240,8 +240,8 @@ func TestLockedPolicy_Refusals(t *testing.T) {
 		cfg  config.PeerAuth
 		want string
 	}{
-		{"a slug twice", config.PeerAuth{Owner: "owner", Locked: []string{"x", " x"}}, "distinct"},
-		{"a blank slug", config.PeerAuth{Owner: "owner", Locked: []string{" "}}, "distinct"},
+		{"a slug twice", config.PeerAuth{Owner: "owner", ForceLocked: []string{"x", " x"}}, "distinct"},
+		{"a blank slug", config.PeerAuth{Owner: "owner", ForceLocked: []string{" "}}, "distinct"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := New(tc.cfg, lockResolve)
@@ -292,4 +292,25 @@ func TestLockedRefusal_FilesTheRequest(t *testing.T) {
 		return LockRequest{ID: "01R", Short: "R-AAAA", Refresh: true}, nil
 	})
 	require.Contains(t, Refusal(refresh, lockFin).Error(), "refresh request R-AAAA")
+}
+
+// The console's locks join the file's for every check, and ForceLocked still
+// names only the file's. The receiver is left as it was: a Policy never changes
+// while it serves.
+func TestPolicy_WithConsoleLocks(t *testing.T) {
+	base, err := New(config.PeerAuth{Owner: "owner", ForceLocked: []string{lockFin}}, lockResolve)
+	require.NoError(t, err)
+
+	p := base.WithConsoleLocks([]string{lockLegal, lockFin, ""})
+	require.Equal(t, []string{lockFin, lockLegal}, p.OwnerLocked(), "a slug in both lists counts once")
+	require.Equal(t, []string{lockFin}, p.ForceLocked())
+	require.True(t, p.HasLocked())
+	require.True(t, p.OwnerView().Locked(lockLegal), "a console lock closes the project to the owner")
+
+	require.Equal(t, []string{lockFin}, base.OwnerLocked(), "the receiver is unchanged")
+	require.False(t, base.OwnerView().Locked(lockLegal))
+
+	empty, err := New(config.PeerAuth{Owner: "owner"}, lockResolve)
+	require.NoError(t, err)
+	require.False(t, empty.WithConsoleLocks(nil).HasLocked())
 }

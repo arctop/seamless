@@ -40,7 +40,7 @@ func TestReachableDeps(t *testing.T) {
 	missing, err := core.NewID()
 	require.NoError(t, err)
 
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{lnFin}, Restricted: []string{"_example_agent"}},
+	policy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{lnFin}, Restricted: []string{"_example_agent"}},
 		func(n string) (access.Account, error) {
 			switch n {
 			case "owner":

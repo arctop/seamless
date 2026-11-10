@@ -543,7 +543,7 @@ with <code>{&quot;session&quot;: &quot;&lt;ULID or cc/... name&gt;&quot;}</code>
 code (<code>web_fetch</code>, <code>mail</code>); without one, the payload's <code>tool_name</code> becomes the
 reason (<code>tool:webfetch</code>). The first mark stands. With the feature off the
 endpoint marks nothing and says so.</p>
-<p>Under a lock (<code>peer_auth.locked</code>), an agent in a locked project's repository
+<p>Under a lock, an agent in a locked project's repository
 has its session recorded there before you approve its access. Its own guard
 marks that session all the same, so the access request you are shown carries
 the &quot;session tainted&quot; warning. A process outside the agent's process tree

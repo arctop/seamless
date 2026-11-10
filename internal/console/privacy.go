@@ -210,7 +210,7 @@ func (s *Service) privacyFences(ctx context.Context, peerAuth bool) []privacyFen
 			Empty: "No sealed projects yet."},
 		{Key: fenceLocked, Name: "Locked", Promise: "Even its own agents ask you first.",
 			Fits: "Money, health, credentials: projects where you want to say yes before an agent reads them, every time.",
-			How:  "Make the project confidential, list it in the daemon's config, and restart the daemon:", Code: "peer_auth:\n  locked: [example-finance]",
+			How:  "Make the project confidential, then lock it on its project page with a passkey. Or force lock it in the daemon's config file, which only the file can undo:", Code: "peer_auth:\n  force_locked: [example-finance]",
 			Empty: "No locked projects yet."},
 	}
 	if !peerAuth {
@@ -349,8 +349,8 @@ func privacySteps(d privacyData) []privacyStep {
 			Text: "Approve requests on the Access requests screen, or in your terminal with seam approve."})
 	case d.Dedicated():
 		out = append(out, privacyStep{State: "todo", Title: "Lock your most sensitive project", Sub: "its agents then wait for your approval",
-			Text: "Make the project confidential, list it under peer_auth.locked in the daemon's config, restart, and enroll an approver: a passkey, or Touch ID with seam touchid enroll.",
-			Code: "peer_auth:\n  locked: [example-finance]"})
+			Text: "Enroll a passkey on the Approvers screen, make the project confidential, and lock it on its project page. To force lock it instead, list it under peer_auth.force_locked in the daemon's config and restart.",
+			Code: "peer_auth:\n  force_locked: [example-finance]"})
 	default:
 		out = append(out, privacyStep{State: "later", Title: "Lock your most sensitive project", Sub: "after Seamless has its own account",
 			Text: "A lock needs the daemon in its own account first."})

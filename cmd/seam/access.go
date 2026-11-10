@@ -3,7 +3,7 @@ package main
 // seam access request -- an agent asks the owner for a locked project, or --
 // with isolation.requests on -- to read a confidential one.
 //
-// Under peer_auth a locked project (peer_auth.locked) is closed to every owner
+// Under peer_auth a locked project is closed to every owner
 // request until the owner approves a lease for the asking agent's process. A
 // refused call already files a pending request by itself; this is the explicit
 // form, with the agent's own reason attached. The owner decides it with seam
@@ -218,7 +218,7 @@ func accessGetVia(client *http.Client, cfg config.Config, path string, v any) er
 var accessRequestCmd = spec("access request", groupAccess,
 	"ask the owner for a locked project (from the agent's own shell)",
 	exactly(1, "project"), bindAccessRequest, runAccessRequest).withLong(
-	`Files an access request for a locked project (peer_auth.locked), naming the
+	`Files an access request for a locked project, naming the
 agent that runs this command: run it from the agent's own shell, where seam
 names the agent that started it. A refused call files one by itself; this is
 the explicit form, with a reason the owner sees labeled as the agent's words

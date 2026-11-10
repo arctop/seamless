@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// The owner-locked view (peer_auth.locked, the 2026-11-04 design): a locked
+// The owner-locked view (peer_auth, the 2026-11-04 design): a locked
 // project is closed to every owner request. Its name shows (View.Listed) and
 // its content does not (View.Visible), and writes into it are refused. It
 // opens only for one request at a time, and only when the transport has
@@ -19,7 +19,7 @@ import (
 // edge walks the kernel's process chain of a socket connection, loads the
 // lease rows for its processes and hands both in. The View keeps a lease only
 // when all four hold: it names a process of that very chain, the project is
-// one peer_auth.locked lists, it has not expired, and the view is the owner's
+// one the policy locks, it has not expired, and the view is the owner's
 // socket view. A TCP request -- the bearer key, which every owner process can
 // present -- never holds one, whatever it is handed.
 
@@ -86,7 +86,7 @@ type Lease struct {
 // WithLeases returns v with the leases that apply to it at now attached. It
 // keeps a lease only when v is the owner's view on the Unix socket and carries
 // a process chain, and the lease names a process of that chain (the agent's,
-// which every process it started shares) and a project peer_auth.locked
+// which every process it started shares) and a project the policy
 // lists, and it ends after now. Every other lease is dropped,
 // and every other view comes back unchanged, so a lease can never reach a TCP
 // request, another process, or a project that is not locked at all.
@@ -144,7 +144,7 @@ func (v View) Leases() []Lease {
 	return out
 }
 
-// Locked reports whether project is locked (peer_auth.locked) and v holds no
+// Locked reports whether project is locked and v holds no
 // lease on it: the owner may see that it exists, and nothing inside.
 // It is false for every non-owner view (a restricted account never lists such
 // a project: its reach is the open projects that are not locked).

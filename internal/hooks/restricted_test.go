@@ -71,7 +71,7 @@ func newRestrictedHooks(t *testing.T) *restrictedHooks {
 	require.NoError(t, store.SetProjectIsolation(ctx, e.db, rVault, core.IsolationSealed))
 	insertMemory(t, e.db, "01V", "constraint", "vault-secret-rule", "the vault team's secret rule", rVault)
 	insertMemory(t, e.db, "01L", "constraint", "legal-secret-rule", "the legal team's secret rule", rLegal)
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{lkFin, rLegal}, Restricted: []string{rAcct}},
+	policy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{lkFin, rLegal}, Restricted: []string{rAcct}},
 		func(n string) (access.Account, error) {
 			switch n {
 			case "owner":

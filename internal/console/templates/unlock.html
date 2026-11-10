@@ -49,6 +49,11 @@
   <p class="held-sub" id="unlock-status" role="status" aria-live="polite"></p>
 </section>
 {{end}}
+{{if .ForceLocked}}
+<p class="held-sub">{{icon "lock"}} Force locked in the daemon's config file (<code>peer_auth.force_locked</code>). Only the file can remove this lock.</p>
+{{else if .ConsoleLocked}}
+<p class="held-sub">{{icon "lock"}} Locked from the console. <a href="/console/lock/{{.Project.Slug}}">Remove the lock</a></p>
+{{end}}
 </div>
 {{end}}
 {{end}}

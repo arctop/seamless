@@ -1189,6 +1189,13 @@ can judge a weak hit for itself.</p>
 telemetry stream has its own Interactions surface and would flood results.</p>
 <h2 id="projects">Projects</h2>
 <p><code>/console/projects</code></p>
+<p><strong>Locks.</strong> Under <a href="../../guides/peer-auth/#two-settings-isolation-and-the-lock"><code>peer_auth</code></a>,
+a confidential or sealed project's Isolation card offers <strong>Lock this project</strong>,
+which opens <code>/console/lock/&lt;project&gt;</code>. Locking it, and removing a lock set here,
+each need a passkey already enrolled on the Approvers page; without one the card
+links there. Seamless restarts to apply the change. A project listed under
+<code>peer_auth.force_locked</code> shows as <strong>Force locked</strong> and cannot be changed here. A
+locked project's isolation cannot be set to <code>open</code>.</p>
 <p>The board: one row per project, with live sessions, total sessions, open and
 blocked tasks, memory count, inherited memories, reach rate, and last activity.
 Grouped by family (<code>?group=family|flat</code>) and sortable (<code>?sort=recent|coverage|name</code>).
@@ -1294,7 +1301,7 @@ dropped merged, newest first, capped at 25 with a count of the rest, collapsed
 by default). The reader carries the task's body, claim and lease state, and
 both dependency directions; <strong>force-release</strong> is the action, and it is the
 owner override - it takes the lock from whoever holds it.</p>
-<p>Under <code>peer_auth.locked</code>, a task blocked by a task in a locked project you
+<p>Under a lock, a task blocked by a task in a locked project you
 haven't unlocked sits in the blocked rail, its blocker named only by project
 on a line of its own; the task's reader and peek list it under <strong>Depends on</strong>
 the same way. The project workspace's Plans &amp; tasks tab marks such steps

@@ -66,10 +66,10 @@ func acctResolve(name string) (access.Account, error) {
 func acctPolicy(t *testing.T) *access.Policy {
 	t.Helper()
 	p, err := access.New(config.PeerAuth{
-		Enabled:    true,
-		Owner:      "owner",
-		Locked:     []string{acctLocked},
-		Restricted: []string{acctName},
+		Enabled:     true,
+		Owner:       "owner",
+		ForceLocked: []string{acctLocked},
+		Restricted:  []string{acctName},
 	}, acctResolve)
 	require.NoError(t, err)
 	return p

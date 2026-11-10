@@ -56,7 +56,7 @@ func newAccessFixtureWith(t *testing.T, grants bool) *accessFixture {
 	_, err = store.EnsureProject(ctx, db, "example-finance", "example-finance")
 	require.NoError(t, err)
 	require.NoError(t, store.SetProjectIsolation(ctx, db, "example-finance", core.IsolationConfidential))
-	p, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{"example-finance"}}, func(n string) (access.Account, error) {
+	p, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{"example-finance"}}, func(n string) (access.Account, error) {
 		if n == "owner" {
 			return access.Account{UID: 501, Name: "owner"}, nil
 		}

@@ -81,7 +81,7 @@ var (
 	lkShortID  = regexp.MustCompile(`R-[0-9A-Z]{4}`)
 )
 
-// lockHooks is a hook server with example-finance locked (peer_auth.locked),
+// lockHooks is a hook server with example-finance locked,
 // the approval service serve wires in, and a fake clock. Requests carry the
 // owner's socket View for the hook's process chain (the `seam hook` process
 // under the agent), with the leases live on it -- what peerHandler builds --
@@ -122,7 +122,7 @@ func newLockHooksWith(t *testing.T, approvals bool, configure func(db *sql.DB, c
 	insertMemory(t, db, "01F", "constraint", "fin-secret-rule", "the finance team's secret rule", lkFin)
 	insertMemory(t, db, "01O", "constraint", "ops-rule", "the ops team's rule", lkOps)
 	insertMemory(t, db, "01P", "gotcha", "ops-deploy-race", "ops deploy pipeline health check race", lkOps)
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{lkFin}}, func(n string) (access.Account, error) {
+	policy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{lkFin}}, func(n string) (access.Account, error) {
 		if n == "owner" {
 			return access.Account{UID: 501, Name: "owner"}, nil
 		}

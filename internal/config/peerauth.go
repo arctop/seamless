@@ -41,11 +41,13 @@ type PeerAuth struct {
 	// Socket is the listener the owner's agents and the restricted accounts
 	// dial.
 	Socket PeerSocket `yaml:"socket"`
-	// Locked lists the locked projects (the 2026-11-04 design): even the
-	// owner's own agents reach one only through a lease the owner approved,
-	// held by one session's socket connection; the TCP bearer key never
-	// reaches it. Without a lease the project is locked: its name shows, its
-	// content does not, and writes into it are refused. File only (no env).
+	// ForceLocked lists the force-locked projects: locks only this file can
+	// remove. Even the owner's own agents reach one only through a lease the
+	// owner approved, held by one session's socket connection; the TCP bearer
+	// key never reaches it. Without a lease the project is locked: its name
+	// shows, its content does not, and writes into it are refused. File only
+	// (no env). The console sets locks of its own (store.ConsoleLocks), each
+	// behind a passkey, and may remove only those.
 	//
 	// The lock is not an isolation state. Isolation (open, confidential,
 	// sealed) says what flows in and out of a project; the lock says whether
@@ -54,7 +56,13 @@ type PeerAuth struct {
 	// global. The key was called "sealed" before any release shipped it; a
 	// config that still says peer_auth.sealed is refused at load
 	// (renamedPeerAuthKey).
-	Locked []string `yaml:"locked"`
+	ForceLocked []string `yaml:"force_locked"`
+	// LegacyLocked is force_locked's earlier name, peer_auth.locked. A key
+	// a config already holds must keep loading (AGENTS.md, release
+	// discipline), and dropping a lock would open what it closed, so load
+	// folds it into ForceLocked (foldLegacyLocked) and doctor names the new
+	// key. Nothing else reads this field.
+	LegacyLocked []string `yaml:"locked"`
 	// MaxLease caps every lease the owner approves on a locked project, the
 	// "until this session ends" choice included: past it, a session asks again.
 	// Unset (0) means DefaultMaxLease; set, it is at most 24h. File only.
@@ -118,7 +126,7 @@ type PeerSocket struct {
 // design that key belonged to is gone, and locking is what replaced it. The
 // guide quotes the sentence, so the two change together.
 var ErrPeerAuthUsersRetired = errors.New("config: peer_auth.users was the 2026-10-31 design, which sealed projects to " +
-	"other OS accounts, and is no longer supported: list the projects under peer_auth.locked and remove users")
+	"other OS accounts, and is no longer supported: list the projects under peer_auth.force_locked and remove users")
 
 // RetiredUsersRefusal returns ErrPeerAuthUsersRetired while peer_auth.users
 // names anything, and nil when it is absent or empty. It is the one reader of
@@ -160,7 +168,7 @@ func (s PeerSocket) SocketFileMode() (uint32, error) {
 // de-duplicated: what serve and doctor check against the projects table.
 func (p PeerAuth) ReferencedProjects() []string {
 	var out []string
-	for _, slug := range p.Locked {
+	for _, slug := range p.ForceLocked {
 		if s := strings.TrimSpace(slug); s != "" && !slices.Contains(out, s) {
 			out = append(out, s)
 		}
@@ -170,7 +178,7 @@ func (p PeerAuth) ReferencedProjects() []string {
 }
 
 // renamedPeerAuthKey reports a peer_auth key spelled the way a pre-release
-// build spelled it, and its name now: peer_auth.sealed became peer_auth.locked
+// build spelled it, and its name now: peer_auth.sealed was renamed
 // before any release shipped it, because "sealed" is an isolation state and the
 // lock is a separate setting. Without this, KnownFields would refuse the old
 // key as an unknown field and leave the owner to guess the new name. A key
@@ -196,7 +204,7 @@ func renamedPeerAuthKey(data []byte) (old, now string) {
 		}
 		for j := 0; j+1 < len(block.Content); j += 2 {
 			if block.Content[j].Value == "sealed" {
-				return "peer_auth.sealed", "peer_auth.locked"
+				return "peer_auth.sealed", "peer_auth.force_locked"
 			}
 		}
 	}
@@ -389,20 +397,32 @@ func (c Config) validatePeerAuth() error {
 	return nil
 }
 
+// foldLegacyLocked moves the slugs under the old key, peer_auth.locked, into
+// ForceLocked. A slug listed under both keys counts once; one listed twice under
+// a single key stays twice, so validatePeerLocked still refuses it.
+func (p *PeerAuth) foldLegacyLocked() {
+	underNewKey := slices.Clone(p.ForceLocked)
+	for _, slug := range p.LegacyLocked {
+		if !slices.Contains(underNewKey, slug) {
+			p.ForceLocked = append(p.ForceLocked, slug)
+		}
+	}
+}
+
 // validatePeerLocked is the locked list's shape: real project slugs, never the
 // global scope, none twice.
 func validatePeerLocked(p PeerAuth) error {
 	seen := map[string]bool{}
-	for _, raw := range p.Locked {
+	for _, raw := range p.ForceLocked {
 		slug, err := validate.Project(raw)
 		if err != nil {
-			return fmt.Errorf("config: peer_auth.locked: %w", err)
+			return fmt.Errorf("config: peer_auth.force_locked: %w", err)
 		}
 		if slug == "" {
-			return fmt.Errorf("config: peer_auth.locked names the global scope: a global item is injected into every project's briefing, so global is never locked")
+			return fmt.Errorf("config: peer_auth.force_locked names the global scope: a global item is injected into every project's briefing, so global is never locked")
 		}
 		if seen[slug] {
-			return fmt.Errorf("config: peer_auth.locked lists project %q twice: name it once", slug)
+			return fmt.Errorf("config: peer_auth.force_locked lists project %q twice: name it once", slug)
 		}
 		seen[slug] = true
 	}

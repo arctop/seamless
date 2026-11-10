@@ -131,7 +131,7 @@ func doctor(args []string) error {
 	checks = append(checks, peerAuthChecks(context.Background(), cfg, db, defaultPeerAuthEnv())...)
 	checks = append(checks, repoMapCheck(db))
 	checks = append(checks, remoteSessionsCheck(db))
-	checks = append(checks, mcpToolsCheck(cfg))
+	checks = append(checks, mcpToolsCheck(context.Background(), cfg, db))
 	checks = append(checks, claudeRuntimeChecks()...)
 	checks = append(checks, hooksCheck(cfg))
 	checks = append(checks, claudeDesktopChecks(resolveSeamBin(""), absConfigPath(cfg.SourcePath()))...)
@@ -1083,11 +1083,11 @@ func missingEmbedCredential(cfg config.Config) (bool, string) {
 // useful check on a SERVER install whose daemon may well be stopped.
 //
 // The one registration that depends on the config is access_request, which a
-// daemon that locks a project registers (peer_auth.locked): the throwaway
+// daemon that locks a project registers: the throwaway
 // server is built the way serve builds it, and the count it must match is
 // mcp.ToolCountWith that. Every other install reads exactly as before.
-func mcpToolsCheck(cfg config.Config) check {
-	locked := locksProjects(cfg)
+func mcpToolsCheck(ctx context.Context, cfg config.Config, db *sql.DB) check {
+	locked := locksProjects(ctx, cfg, db)
 	srv := mcp.New(mcp.Config{OfferAccessRequest: locked})
 	n, want := srv.NumTools(), mcp.ToolCountWith(locked)
 	if n != want {
@@ -1100,8 +1100,12 @@ func mcpToolsCheck(cfg config.Config) check {
 // locksProjects reports whether serve would lock a project under cfg, and so
 // register access_request: peer_auth on with a locked project (the policy
 // refuses an empty or repeated entry, so any entry is one).
-func locksProjects(cfg config.Config) bool {
-	return cfg.PeerAuth.Enabled && len(cfg.PeerAuth.Locked) > 0
+func locksProjects(ctx context.Context, cfg config.Config, db *sql.DB) bool {
+	if !cfg.PeerAuth.Enabled {
+		return false
+	}
+	locked, err := lockedProjects(ctx, cfg, db)
+	return err == nil && len(locked) > 0
 }
 
 // clientMCPTimeout bounds the whole tools/list probe: the handshake plus one

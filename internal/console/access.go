@@ -1,6 +1,6 @@
 package console
 
-// Access requests for locked projects (peer_auth.locked): the pending list,
+// Access requests for locked projects: the pending list,
 // one request's facts with its passkey approval, and the JSON the terminal
 // path (seam approve) reads. Every route here is a 404 unless a project is
 // locked (Config.Approvals set) or read grants are on (Config.Grants set,

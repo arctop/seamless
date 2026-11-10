@@ -1,6 +1,6 @@
 package store
 
-// Console unlocks (peer_auth.locked; migration 033): the owner opens a locked
+// Console unlocks (peer_auth; migration 033): the owner opens a locked
 // project in one browser's console for a limited time.
 //
 // A browser holds a random seamless_unlock cookie; the database holds only its

@@ -48,7 +48,7 @@ rather than discovering it as an unexplained error.
 
 Isolation is about what flows in and out of a project. Whether even the
 project's own agents need a fresh approval from you first is a second setting,
-the **lock** (`peer_auth.locked`), and "locked" never means `sealed`. A sensitive
+the **lock**, and "locked" never means `sealed`. A sensitive
 project is normally `confidential` and locked:
 [Lock projects behind your approval](https://thereisnospoon.org/docs/guides/peer-auth/#two-settings-isolation-and-the-lock)
 says when to use which.

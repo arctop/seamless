@@ -47,7 +47,7 @@ func TestApprovers_Verbs(t *testing.T) {
 	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
 	cfg := config.Defaults()
 	cfg.Addr = "127.0.0.1:9123"
-	cfg.PeerAuth.Locked = []string{"example-finance"}
+	cfg.PeerAuth.ForceLocked = []string{"example-finance"}
 	run := func(args ...string) (string, error) {
 		var out bytes.Buffer
 		err := approvers(ctx, db, cfg, &out, args, now)
@@ -181,7 +181,7 @@ func TestApprovers_EnrollCodeNeedsAKey(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	cfg := config.Defaults()
-	cfg.PeerAuth.Locked = []string{"example-finance"}
+	cfg.PeerAuth.ForceLocked = []string{"example-finance"}
 	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
 	for name, tc := range map[string]struct {
 		args []string
@@ -213,7 +213,7 @@ func TestConsoleBase(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Addr = "127.0.0.1:9123"
 	require.Equal(t, cfg.ServerURL(), consoleBase(cfg), "peer_auth off: unchanged")
-	cfg.PeerAuth.Locked = []string{"example-finance"}
+	cfg.PeerAuth.ForceLocked = []string{"example-finance"}
 	require.Equal(t, cfg.ServerURL(), consoleBase(cfg), "a locked list while disabled changes nothing")
 	cfg.PeerAuth.Enabled = true
 	require.Equal(t, "http://localhost:9123", consoleBase(cfg))
@@ -273,7 +273,7 @@ func TestConsoleOpenBase_AsksTheDaemon(t *testing.T) {
 	// The daemon's own config asks nothing: it already knows.
 	before := hits.Load()
 	own := cfg
-	own.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", Locked: []string{"example-finance"}}
+	own.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{"example-finance"}}
 	_ = consoleOpenBase(own)
 	require.Equal(t, before, hits.Load(), "a config with peer_auth on does not ask")
 

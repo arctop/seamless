@@ -88,7 +88,7 @@ func TestDefaultsWindows_PeerPathsSayNotSupported(t *testing.T) {
 	require.Equal(t, "enabled, but this platform has no Unix-socket peer credentials Seamless can read (macOS and Linux only)", checks[0].detail)
 
 	// seamlessd approve: the account check fails closed at the file check.
-	cfg.PeerAuth.Locked = []string{"example-locked"}
+	cfg.PeerAuth.ForceLocked = []string{"example-locked"}
 	err = approverAccountCheck(cfg, defaultPeerAuthEnv())
 	require.ErrorContains(t, err, "peer_auth: file ownership checks are not supported on this platform")
 }

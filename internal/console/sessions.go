@@ -86,7 +86,7 @@ type sessionsData struct {
 	// while the momentum feature is off -- zero trace, including in the JSON.
 	Calendar template.HTML  `json:"-"`
 	Streak   *captureStreak `json:"captureStreak,omitempty"`
-	// Locked names the locked projects (peer_auth.locked) this request does
+	// Locked names the locked projects this request does
 	// not read, whose sessions the list leaves out: names only, never a count.
 	// nil while nothing is locked -- absent from the JSON.
 	Locked []string `json:"locked,omitempty"`

@@ -788,9 +788,9 @@ func (s *Service) approvalsPart(ctx context.Context, now time.Time) systemPart {
 		What:  "When a project is locked, even its own agents ask you first. You approve with Touch ID, a passkey or your terminal, and the approval becomes a lease for that one agent.",
 		Hero:  systemStat{Value: "Off", Label: "no project is locked"},
 		Talks: []string{"socket", "database"},
-		Facts: []systemFact{{"Setting", "peer_auth.locked: none"}},
-		TurnOn: &systemHow{Text: "Locks need the daemon in its own account (peer_auth). Then list the projects to lock.",
-			Code: "peer_auth:\n  locked: [example-finance]"},
+		Facts: []systemFact{{"Setting", "peer_auth: off"}},
+		TurnOn: &systemHow{Text: "Locks need the daemon in its own account (peer_auth). Then lock a project from its page, or force lock it in the config file.",
+			Code: "peer_auth:\n  force_locked: [example-finance]"},
 		Href: "/console/privacy", HrefLabel: "Open Privacy",
 	}
 	if s.cfg.Approvals == nil && s.cfg.Grants == nil {

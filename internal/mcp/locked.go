@@ -1,6 +1,6 @@
 package mcp
 
-// Locked projects (peer_auth.locked): a tool call refused at a lock files an
+// Locked projects: a tool call refused at a lock files an
 // access request automatically, and the refusal names it. The access layer
 // produces every refusal (access.Refusal); this file only plants the requester
 // it calls, for calls that can carry a lease at all -- the owner's socket

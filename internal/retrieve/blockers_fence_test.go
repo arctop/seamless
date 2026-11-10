@@ -44,7 +44,7 @@ func TestBriefing_BlockerInFencedProjectIsNeverNamed(t *testing.T) {
 	newTask(ops, "ops-rollout", "rollout waits on finance", blocker)
 	newTask(ops, "ops-rollout", "rollout step two")
 
-	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Locked: []string{fin}},
+	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{fin}},
 		func(n string) (access.Account, error) {
 			if n == "owner" {
 				return access.Account{UID: 501, Name: "owner"}, nil

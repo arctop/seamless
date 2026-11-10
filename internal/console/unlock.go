@@ -1,6 +1,6 @@
 package console
 
-// Console unlocks (peer_auth.locked): the owner opens a locked project in one
+// Console unlocks: the owner opens a locked project in one
 // browser's console for a limited time (approval.ConsoleLease, three hours).
 //
 // Two ways in, both ending in a live store.ConsoleUnlock row behind the
@@ -69,6 +69,10 @@ type unlockData struct {
 	// empty otherwise.
 	Item string `json:"-"`
 	Next string `json:"-"`
+	// ForceLocked says the config file holds this lock; ConsoleLocked says a
+	// lock set from the console does, and the page links to its removal.
+	ForceLocked   bool `json:"force_locked"`
+	ConsoleLocked bool `json:"console_locked"`
 }
 
 // unlockProject answers the routes that name a project: it must be one
@@ -187,6 +191,10 @@ func (s *Service) unlockDataFor(r *http.Request, slug string) (unlockData, error
 	if origins := s.cfg.Approvals.Origins(); len(origins) > 0 {
 		d.Origin = origins[0]
 		d.OnOrigin = slices.Contains(origins, requestOrigin(r))
+	}
+	d.ForceLocked = slices.Contains(s.cfg.ForceLocked, slug)
+	if d.ConsoleLocked, err = store.HasConsoleLock(ctx, s.writeDB(), slug); err != nil {
+		return unlockData{}, err
 	}
 	return d, nil
 }

@@ -136,15 +136,19 @@ behavior of every earlier release. The guide is
   octal, default `0666`: every local account may knock, and the kernel still
   names each one. `socket.group` (`SEAMLESS_PEER_AUTH_SOCKET_GROUP`) hands the
   socket to a group, for a mode such as `0660`.
-- `locked` lists locked projects: each is closed to every owner request - its
-  name shows, its content does not, writes are refused - unless the request
-  rides a socket connection whose process holds a lease the owner approved. The
-  TCP bearer key never holds one. The lock is not the `sealed` isolation state
-  (which says what flows in and out of a project): a locked project is normally
-  `confidential`, and `serve` refuses one that is `open`. File-only.
+- `force_locked` lists force-locked projects: locks only this file can remove.
+  The console can set and remove locks of its own with a passkey, but it can
+  never change one listed here. Each locked project is closed to every owner
+  request - its name shows, its content does not, writes are refused - unless the
+  request rides a socket connection whose process holds a lease the owner
+  approved. The TCP bearer key never holds one. The lock is not the `sealed`
+  isolation state (which says what flows in and out of a project): a locked
+  project is normally `confidential`, and `serve` refuses a force-locked one that
+  is `open`. File-only. `locked`, this key's earlier name, still loads, and
+  `seamlessd doctor` warns until it is renamed.
 - `users` is a retired key. A config that sets it to a non-empty map is refused
   when it loads, even while the block is disabled, with a message that says
-  to list the projects under `locked` and remove `users`
+  to list the projects under `force_locked` and remove `users`
   ([the guide](/guides/peer-auth/#configure-it) has it word for word).
 - `max_lease` caps every lease the owner approves on a locked project, "until
   this session ends" included: at most `24h`, unset `8h`. File-only.

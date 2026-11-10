@@ -93,12 +93,34 @@ peer_auth: {enabled: true, owner: katata, socket: {path: /opt/seamless/data/run/
 	}
 }
 
+// peer_auth.force_locked is the documented key; locked, its earlier name, keeps
+// loading, because a config that loaded before must still load and a lost lock
+// would open what it closed.
+func TestPeerAuth_ForceLockedAndItsOldName(t *testing.T) {
+	cfg, err := loadYAML(t, peerBase+"  force_locked: [example-finance]\n")
+	require.NoError(t, err)
+	require.Equal(t, []string{"example-finance"}, cfg.PeerAuth.ForceLocked)
+	require.Empty(t, cfg.PeerAuth.LegacyLocked)
+
+	cfg, err = loadYAML(t, peerBase+"  locked: [example-finance]\n")
+	require.NoError(t, err)
+	require.Equal(t, []string{"example-finance"}, cfg.PeerAuth.ForceLocked, "the old key still locks")
+	require.Equal(t, []string{"example-finance"}, cfg.PeerAuth.LegacyLocked, "doctor reads this to name the new key")
+
+	cfg, err = loadYAML(t, peerBase+"  force_locked: [example-finance]\n  locked: [example-finance, example-legal]\n")
+	require.NoError(t, err)
+	require.Equal(t, []string{"example-finance", "example-legal"}, cfg.PeerAuth.ForceLocked, "both keys count, and a slug under both once")
+
+	_, err = loadYAML(t, peerBase+"  locked: [example-finance, example-finance]\n")
+	require.ErrorContains(t, err, "twice", "one key listing a slug twice is still refused")
+}
+
 // peer_auth.locked (the approval design): locked projects, checked always,
 // enabled or not.
 func TestPeerAuth_LockedList(t *testing.T) {
 	cfg, err := loadYAML(t, peerBase+"  locked: [example-finance, \" example-legal\", example-ip]\n")
 	require.NoError(t, err)
-	require.Equal(t, []string{"example-finance", " example-legal", "example-ip"}, cfg.PeerAuth.Locked)
+	require.Equal(t, []string{"example-finance", " example-legal", "example-ip"}, cfg.PeerAuth.ForceLocked)
 	require.Equal(t, []string{"example-finance", "example-ip", "example-legal"}, cfg.PeerAuth.ReferencedProjects(),
 		"serve and doctor check every locked slug against the projects table")
 
@@ -168,7 +190,7 @@ func TestPeerAuth_SealedKeyRenamed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := loadYAML(t, body)
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "peer_auth.sealed was renamed to peer_auth.locked")
+			require.Contains(t, err.Error(), "peer_auth.sealed was renamed to peer_auth.force_locked")
 		})
 	}
 
@@ -182,7 +204,7 @@ func TestPeerAuth_SealedKeyRenamed(t *testing.T) {
 // the key stays known: a config that names it is not an unknown-field error.
 func TestPeerAuth_UsersRefused(t *testing.T) {
 	const refusal = "config: peer_auth.users was the 2026-10-31 design, which sealed projects to other OS accounts, " +
-		"and is no longer supported: list the projects under peer_auth.locked and remove users"
+		"and is no longer supported: list the projects under peer_auth.force_locked and remove users"
 	require.EqualError(t, ErrPeerAuthUsersRetired, refusal, "the sentence the guide quotes")
 	for name, body := range map[string]string{
 		"enabled":                         peerBase + "  users:\n    _example_finance:\n      sealed: [example-finance]\n",

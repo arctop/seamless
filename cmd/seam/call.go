@@ -30,7 +30,7 @@ import (
 // a newer daemon may serve tools this CLI predates, and the daemon is the one
 // that refuses a name it does not know. So it lists tools a given daemon may
 // not serve: an optional feature's while it is off, and access_request, which
-// only a daemon that locks a project (peer_auth.locked) registers. The help
+// only a daemon that locks a project registers. The help
 // says both.
 var callTools = []string{
 	"session_start", "session_update", "session_end",

@@ -110,7 +110,7 @@ type heldQueue struct {
 	Pending []json.RawMessage `json:"pending"`
 	Recent  []json.RawMessage `json:"recent"`
 	// Locked names the locked projects whose holds the console left out
-	// (peer_auth.locked; absent otherwise).
+	// (peer_auth; absent otherwise).
 	Locked []string `json:"locked"`
 }
 

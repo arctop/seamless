@@ -177,7 +177,7 @@ func TaskProjects(ctx context.Context, db *sql.DB, ids []string) (map[string]str
 // one entry per blocker, sorted, keyed by task id; a task with none is
 // absent. It reads only the blockers' projects, never their content, in a
 // handful of batched IN queries. The console asks it on the main handle for
-// the locked projects a request does not read (peer_auth.locked): its own
+// the locked projects a request does not read: its own
 // filtered handle hides those projects' tasks and their dependency edges, so
 // a task they block would otherwise read as ready.
 func OpenBlockerProjects(ctx context.Context, db *sql.DB, taskIDs, projects []string) (map[string][]string, error) {

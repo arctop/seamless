@@ -180,7 +180,7 @@ func newPMDaemon(t *testing.T, o pmOpts) *pmDaemon {
 
 	cfg := config.Defaults()
 	cfg.DataDir = dir
-	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", Locked: []string{pmLocked}}
+	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{pmLocked}}
 	policy, err := access.New(cfg.PeerAuth, lockOwnerResolve)
 	require.NoError(t, err)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

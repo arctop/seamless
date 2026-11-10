@@ -659,7 +659,7 @@ func (s *Server) setBinding(ctx context.Context, sessionID, project string) {
 // reach is no binding at all, whichever of the three routes produced it: the
 // session= handle and the process binding already refuse such sessions, and
 // this is the last word for an explicit binding made before the policy changed.
-// A binding to a project the owner has locked (peer_auth.locked) is no binding
+// A binding to a project the owner has locked is no binding
 // here either -- nothing may read or write through it -- but lockedBinding
 // still finds it, so the call is refused at the lock instead of inferred
 // somewhere else.

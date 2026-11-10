@@ -1,6 +1,6 @@
 package store
 
-// Reads the agent surfaces need about locked projects (peer_auth.locked; the
+// Reads the agent surfaces need about locked projects (peer_auth; the
 // MCP server and the hooks), beside the lease storage in leases.go. They only
 // read; ApproveAccess stays the one writer of a lease.
 

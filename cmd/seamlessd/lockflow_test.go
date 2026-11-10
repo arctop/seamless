@@ -48,7 +48,7 @@ func TestLockFlow_RefuseRequestApproveUseRevoke(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.NoError(t, store.SetProjectIsolation(ctx, db, "example-finance", core.IsolationConfidential))
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{"example-finance"}}, lockOwnerResolve)
+	policy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{"example-finance"}}, lockOwnerResolve)
 	require.NoError(t, err)
 
 	// The agent's session, stamped with its process by the SessionStart hook.
@@ -68,7 +68,7 @@ func TestLockFlow_RefuseRequestApproveUseRevoke(t *testing.T) {
 	ret := retrieve.New(db, nil, config.Defaults().Budgets, nil)
 	ret.SetBodyReader(mgr.Store())
 	cfg := config.Defaults()
-	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", Locked: []string{"example-finance"}}
+	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{"example-finance"}}
 	svc, err := newApprovals(cfg, db, rec, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, err)
 	mcpSrv := mcp.New(mcp.Config{DB: db, Files: mgr, Retrieve: ret, Events: rec, APIKey: "k", LocalHost: "laptop", Approvals: svc})

@@ -24,7 +24,7 @@ const (
 var lnAgent = access.ProcessToken{PID: 200, Version: 2000, Boot: "6c2f1a3e-0b7d-4c55-9a51-3d8f00a1b2c3"}
 
 func TestLockedBlockerProject(t *testing.T) {
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Locked: []string{lnFin}, Restricted: []string{"_example_agent"}},
+	policy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{lnFin}, Restricted: []string{"_example_agent"}},
 		func(n string) (access.Account, error) {
 			switch n {
 			case "owner":

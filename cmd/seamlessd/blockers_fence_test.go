@@ -104,7 +104,7 @@ func bfNewDaemon(t *testing.T) *bfDaemon {
 	require.NoError(t, store.AddRepoMapping(ctx, db, "/work/ops", bfOps))
 
 	cfg := config.Defaults()
-	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", Locked: []string{bfFin}, Restricted: []string{bfAccount}}
+	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{bfFin}, Restricted: []string{bfAccount}}
 	policy, err := access.New(cfg.PeerAuth, bfResolve)
 	require.NoError(t, err)
 	problems, err := projectProblems(ctx, db, policy)

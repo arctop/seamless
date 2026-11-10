@@ -161,8 +161,8 @@ func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account)
 	accounts := map[string]access.Account{cmOwnerName: owner}
 	pa := config.PeerAuth{
 		Enabled: true, Owner: cmOwnerName,
-		Socket: config.PeerSocket{Path: "/opt/seamless/run/seamlessd.sock"},
-		Locked: []string{cmFinance, cmLegal},
+		Socket:      config.PeerSocket{Path: "/opt/seamless/run/seamlessd.sock"},
+		ForceLocked: []string{cmFinance, cmLegal},
 	}
 	if restricted != nil {
 		accounts[restricted.Name] = *restricted
@@ -556,7 +556,7 @@ func (d *cmDaemon) cmFill(pattern string, it cmItems, pendingID string) string {
 		p = strings.Replace(p, "{slug}", it.capture, 1)
 	case strings.HasPrefix(p, "/console/projects/"):
 		p = strings.Replace(p, "{slug}", it.project, 1)
-	case strings.HasPrefix(p, "/console/unlock/"):
+	case strings.HasPrefix(p, "/console/unlock/"), strings.HasPrefix(p, "/console/lock/"):
 		p = strings.Replace(p, "{project}", it.project, 1)
 	case strings.HasPrefix(p, "/console/labs/"):
 		p = strings.Replace(p, "{name...}", it.lab, 1)

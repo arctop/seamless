@@ -464,13 +464,15 @@ update:
 #     # 0660 to let only that group's members connect at all.
 #     # env: SEAMLESS_PEER_AUTH_SOCKET_GROUP
 #     group: ""
-#   # Locked projects (the approval design). Each is closed to every owner
-#   # request -- its name shows, its content does not, writes are refused --
-#   # unless the request rides a socket connection whose process holds a lease
-#   # the owner approved; the TCP bearer key never holds one. The lock is not
-#   # the sealed isolation state: a locked project is normally confidential.
-#   # File only (no env).
-#   locked: []
+#   # Force-locked projects: locks only this file can remove. The console can
+#   # set and remove locks of its own with a passkey, but never one listed here.
+#   # Each locked project is closed to every owner request -- its name shows,
+#   # its content does not, writes are refused -- unless the request rides a
+#   # socket connection whose process holds a lease the owner approved; the TCP
+#   # bearer key never holds one. The lock is not the sealed isolation state: a
+#   # locked project is normally confidential. File only (no env). The earlier
+#   # name, locked, still loads.
+#   force_locked: []
 #   # Caps every lease the owner approves on a locked project, "until this
 #   # session ends" included. At most 24h; unset means 8h. File only (no env).
 #   max_lease: 8h
