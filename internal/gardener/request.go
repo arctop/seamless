@@ -318,7 +318,7 @@ Operations (return these in "ops"):
 - rekind: change a memory's KIND classification in place. {"op":"rekind","target":<n>,"kind":"<kind>","reason":"<short why>"}. The memory keeps its identity, project, and body; only its kind changes. The most common correction: constraint = what any agent must or must not do regardless of task; convention = a project-local choice or layout fact (naming, branding, where things live or deploy, file sync sets).
 
 Splitting a project (special -- NOT an op):
-- If the request is to SPLIT one project into NEW child projects (e.g. "split arctop-app into arctop-ios and arctop-android"), do NOT emit ops. Instead return {"split":{"source":"<project-slug-to-split>","instruction":"<the request text>"}}. Splitting creates new projects and a shared parent and is planned by a separate pass; here you only identify the single project being split.
+- If the request is to SPLIT one project into NEW child projects (e.g. "split example-app into example-ios and example-android"), do NOT emit ops. Instead return {"split":{"source":"<project-slug-to-split>","instruction":"<the request text>"}}. Splitting creates new projects and a shared parent and is planned by a separate pass; here you only identify the single project being split.
 
 Rules:
 - Reference memories ONLY by their [N] candidate number. Never invent numbers.

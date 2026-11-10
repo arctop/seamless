@@ -353,7 +353,7 @@ func TestGardenerRequest_UnavailableWithoutChat(t *testing.T) {
 }
 
 // newConsoleForSplit wires a chat-backed console and seeds two active memories in
-// project "arctop-app" ([1] ios-thing, [2] shared-thing), so the split path has
+// project "example-app" ([1] ios-thing, [2] shared-thing), so the split path has
 // something to classify.
 func newConsoleForSplit(t *testing.T, chat llm.Chat) (context.Context, *sql.DB, *http.ServeMux) {
 	t.Helper()
@@ -368,9 +368,9 @@ func newConsoleForSplit(t *testing.T, chat llm.Chat) (context.Context, *sql.DB, 
 	t.Cleanup(func() { _ = mgr.Close() })
 
 	now := time.Now().UTC()
-	writeProjectMem(t, mgr, "ios-thing", "arctop-app", now)
-	writeProjectMem(t, mgr, "shared-thing", "arctop-app", now.Add(-time.Hour))
-	_, err = store.EnsureProject(ctx, db, "arctop-app", "Arctop App")
+	writeProjectMem(t, mgr, "ios-thing", "example-app", now)
+	writeProjectMem(t, mgr, "shared-thing", "example-app", now.Add(-time.Hour))
+	_, err = store.EnsureProject(ctx, db, "example-app", "Example App")
 	require.NoError(t, err)
 
 	rec := events.NewRecorder(db)
@@ -393,14 +393,14 @@ func writeProjectMem(t *testing.T, mgr *files.Manager, name, project string, upd
 	require.NoError(t, err)
 }
 
-const splitConsoleJSON = `{"children":[{"slug":"arctop-ios","label":"Arctop iOS"},{"slug":"arctop-android","label":"Arctop Android"}],` +
-	`"shared":{"slug":"arctop-mobile-apps","label":"Arctop Mobile"},` +
-	`"assignments":[{"memory":1,"to":"arctop-ios"},{"memory":2,"to":"arctop-mobile-apps"}]}`
+const splitConsoleJSON = `{"children":[{"slug":"example-ios","label":"Example iOS"},{"slug":"example-android","label":"Example Android"}],` +
+	`"shared":{"slug":"example-mobile-apps","label":"Example Mobile"},` +
+	`"assignments":[{"memory":1,"to":"example-ios"},{"memory":2,"to":"example-mobile-apps"}]}`
 
 func TestGardenerSplit_CreatesPlanGroup(t *testing.T) {
 	ctx, db, mux := newConsoleForSplit(t, stubChat{out: splitConsoleJSON})
 
-	rr := postForm(mux, "/console/gardener/split", "source=arctop-app&instruction=split+into+ios+and+android")
+	rr := postForm(mux, "/console/gardener/split", "source=example-app&instruction=split+into+ios+and+android")
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	require.True(t, strings.HasPrefix(rr.Header().Get("Location"), "/console/gardener?notice="),
 		"a successful split redirects with a positive notice, got %q", rr.Header().Get("Location"))
@@ -416,7 +416,7 @@ func TestGardenerSplit_CreatesPlanGroup(t *testing.T) {
 	var data gardenerData
 	getJSON(t, mux, "/console/gardener?format=json", &data)
 	require.Len(t, data.Groups, 1)
-	require.Equal(t, "split-arctop-app", data.Groups[0].Slug)
+	require.Equal(t, "split-example-app", data.Groups[0].Slug)
 	require.Len(t, data.Groups[0].Cards, 3)
 	require.Equal(t, "split", data.Groups[0].Cards[0].Kind, "the setup card sorts first")
 	require.Equal(t, 2, data.Groups[0].MoveCount)
@@ -442,11 +442,11 @@ func TestGardenerSplit_CreatesPlanGroup(t *testing.T) {
 // planning: one POST, the plan batch lands, no second form.
 func TestGardenerRequest_SplitRecognized_PlansInline(t *testing.T) {
 	ctx, db, mux := newConsoleForSplit(t, &seqChat{outs: []string{
-		`{"split":{"source":"arctop-app","instruction":"split into ios and android"}}`,
+		`{"split":{"source":"example-app","instruction":"split into ios and android"}}`,
 		splitConsoleJSON,
 	}})
 
-	rr := postForm(mux, "/console/gardener/request", "request=split+arctop-app+into+ios+and+android&project=")
+	rr := postForm(mux, "/console/gardener/request", "request=split+example-app+into+ios+and+android&project=")
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	require.True(t, strings.HasPrefix(rr.Header().Get("Location"), "/console/gardener?notice="),
 		"a chained split redirects with a positive notice, got %q", rr.Header().Get("Location"))
@@ -482,41 +482,41 @@ func TestGardenerRequest_SplitIntentNoSource_ShowsPicker(t *testing.T) {
 
 func TestGardenerRetarget_ChangesTarget(t *testing.T) {
 	ctx, db, mux := newConsoleForSplit(t, stubChat{out: splitConsoleJSON})
-	require.Equal(t, http.StatusSeeOther, postForm(mux, "/console/gardener/split", "source=arctop-app").Code)
+	require.Equal(t, http.StatusSeeOther, postForm(mux, "/console/gardener/split", "source=example-app").Code)
 
 	reps, err := store.PendingProposals(ctx, db, store.ProposalReproject)
 	require.NoError(t, err)
 	require.NotEmpty(t, reps)
 	id := reps[0].ID
 
-	rr := postForm(mux, "/console/gardener/"+id+"/retarget", "to=arctop-android")
+	rr := postForm(mux, "/console/gardener/"+id+"/retarget", "to=example-android")
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	require.True(t, strings.HasPrefix(rr.Header().Get("Location"), "/console/gardener?notice="))
 
 	p, _, err := store.ProposalByID(ctx, db, id)
 	require.NoError(t, err)
-	require.Equal(t, "arctop-android", p.Payload["to"], "retarget rewrote the destination project")
+	require.Equal(t, "example-android", p.Payload["to"], "retarget rewrote the destination project")
 }
 
 func TestGardenerApplyPlan_AppliesSetupThenMoves(t *testing.T) {
 	ctx, db, mux := newConsoleForSplit(t, stubChat{out: splitConsoleJSON})
-	require.Equal(t, http.StatusSeeOther, postForm(mux, "/console/gardener/split", "source=arctop-app").Code)
+	require.Equal(t, http.StatusSeeOther, postForm(mux, "/console/gardener/split", "source=example-app").Code)
 
-	rr := postForm(mux, "/console/gardener/plan/split-arctop-app/apply", "")
+	rr := postForm(mux, "/console/gardener/plan/split-example-app/apply", "")
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	require.True(t, strings.HasPrefix(rr.Header().Get("Location"), "/console/gardener?notice="),
 		"applying the whole plan succeeds, got %q", rr.Header().Get("Location"))
 
 	// The child + shared projects exist and the memories moved out of the source.
-	for _, slug := range []string{"arctop-ios", "arctop-mobile-apps"} {
+	for _, slug := range []string{"example-ios", "example-mobile-apps"} {
 		_, found, err := store.ProjectBySlug(ctx, db, slug)
 		require.NoError(t, err)
 		require.True(t, found, slug+" created by the setup proposal")
 	}
-	_, found, err := store.MemoryByName(ctx, db, "arctop-ios", "ios-thing")
+	_, found, err := store.MemoryByName(ctx, db, "example-ios", "ios-thing")
 	require.NoError(t, err)
-	require.True(t, found, "ios-thing moved to arctop-ios")
-	_, found, err = store.MemoryByName(ctx, db, "arctop-app", "ios-thing")
+	require.True(t, found, "ios-thing moved to example-ios")
+	_, found, err = store.MemoryByName(ctx, db, "example-app", "ios-thing")
 	require.NoError(t, err)
 	require.False(t, found, "ios-thing left the source project")
 

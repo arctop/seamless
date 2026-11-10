@@ -126,7 +126,7 @@ func TestBuildWorkspaceRegistry_JoinsSourcesAndPreservesReferences(t *testing.T)
 	repoRows := []store.RepoMapRow{
 		{Host: "mac", Path: "/repos/z-app", Slug: "app"},
 		{Host: "mac", Path: "/repos/a-app", Slug: "app"},
-		{Host: "argon", Path: "/srv/app", Slug: "app"},
+		{Host: "example-remote", Path: "/srv/app", Slug: "app"},
 		{Host: "mac", Path: "/repos/future", Slug: "future"},
 		{Host: "", Path: "/repos/global", Slug: ""},
 	}
@@ -145,7 +145,7 @@ func TestBuildWorkspaceRegistry_JoinsSourcesAndPreservesReferences(t *testing.T)
 		workspaces[3].Slug,
 	})
 	require.Equal(t, []repoRoute{
-		{Host: "argon", Path: "/srv/app"},
+		{Host: "example-remote", Path: "/srv/app"},
 		{Host: "mac", Path: "/repos/a-app"},
 		{Host: "mac", Path: "/repos/z-app"},
 	}, workspaces[0].Repos, "ordered by host then path, so a machine's checkouts stay together")

@@ -188,27 +188,27 @@ func TestUndo_Reproject_MovesTheMemoryBack(t *testing.T) {
 	ctx := cx()
 	now := time.Now().UTC()
 
-	writeMem(t, mgr, "ios-thing", "arctop-app", "1", core.KindGotcha, now, "body")
-	mem, _, err := store.MemoryByName(ctx, g.db, "arctop-app", "ios-thing")
+	writeMem(t, mgr, "ios-thing", "example-app", "1", core.KindGotcha, now, "body")
+	mem, _, err := store.MemoryByName(ctx, g.db, "example-app", "ios-thing")
 	require.NoError(t, err)
 
 	p, err := store.CreateProposal(ctx, g.db, store.ProposalReproject, map[string]any{
 		"key": "reproject:" + mem.ID, "id": mem.ID, "name": mem.Name,
-		"from": "arctop-app", "to": "arctop-ios",
+		"from": "example-app", "to": "example-ios",
 	})
 	require.NoError(t, err)
 	_, err = g.Apply(ctx, p.ID)
 	require.NoError(t, err)
-	_, found, err := store.MemoryByName(ctx, g.db, "arctop-ios", "ios-thing")
+	_, found, err := store.MemoryByName(ctx, g.db, "example-ios", "ios-thing")
 	require.NoError(t, err)
 	require.True(t, found)
 
 	require.NoError(t, g.Undo(ctx, p.ID))
-	back, found, err := store.MemoryByName(ctx, g.db, "arctop-app", "ios-thing")
+	back, found, err := store.MemoryByName(ctx, g.db, "example-app", "ios-thing")
 	require.NoError(t, err)
 	require.True(t, found, "the memory came home")
 	require.Equal(t, mem.ID, back.ID, "same memory, same identity")
-	_, found, err = store.MemoryByName(ctx, g.db, "arctop-ios", "ios-thing")
+	_, found, err = store.MemoryByName(ctx, g.db, "example-ios", "ios-thing")
 	require.NoError(t, err)
 	require.False(t, found)
 }

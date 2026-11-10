@@ -28,7 +28,7 @@ func leaseReq(project string, proc access.ProcessToken) AccessRequest {
 	return AccessRequest{
 		Project: project, Kind: AccessKindRequest, Lease: 3 * time.Hour, TTL: 10 * time.Minute,
 		PeerUID: 501, PeerPID: proc.PID, ProcessKey: proc.Key(), Program: "/opt/seamless/bin/seam",
-		SessionID: "01SESSIONFIN", SessionName: "cc/fin", CWD: "/work/finance-os", Repo: "finance-os",
+		SessionID: "01SESSIONFIN", SessionName: "cc/fin", CWD: "/work/example-finance", Repo: "example-finance",
 		Model: "claude-opus-5-5", Reason: "reconcile the ledger notes",
 	}
 }

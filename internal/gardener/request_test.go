@@ -121,13 +121,13 @@ func TestRequestCandidates_Scope(t *testing.T) {
 
 func TestRequest_ReprojectMovesToExistingProject(t *testing.T) {
 	ctx, db, mgr, g := newReorgGardener(t,
-		`{"ops":[{"op":"reproject","target":1,"to":"arctop-ios","reason":"iOS-specific"}]}`)
+		`{"ops":[{"op":"reproject","target":1,"to":"example-ios","reason":"iOS-specific"}]}`)
 	now := time.Now().UTC()
-	writeMem(t, mgr, "ios-dfu", "arctop-app", "1", core.KindRunbook, now, "the iOS DFU flow")
-	_, err := store.EnsureProject(ctx, db, "arctop-ios", "Arctop iOS")
+	writeMem(t, mgr, "ios-dfu", "example-app", "1", core.KindRunbook, now, "the iOS DFU flow")
+	_, err := store.EnsureProject(ctx, db, "example-ios", "Example iOS")
 	require.NoError(t, err)
 
-	res, err := g.Request(ctx, "the ios-dfu memory belongs in arctop-ios", RequestScope{AllProjects: true})
+	res, err := g.Request(ctx, "the ios-dfu memory belongs in example-ios", RequestScope{AllProjects: true})
 	require.NoError(t, err)
 	require.Equal(t, 1, res.Total)
 	require.Equal(t, 1, res.ByKind[store.ProposalReproject])
@@ -137,15 +137,15 @@ func TestRequest_ReprojectMovesToExistingProject(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rps, 1)
 	require.Equal(t, "ios-dfu", rps[0].Payload["name"])
-	require.Equal(t, "arctop-app", rps[0].Payload["from"])
-	require.Equal(t, "arctop-ios", rps[0].Payload["to"])
+	require.Equal(t, "example-app", rps[0].Payload["from"])
+	require.Equal(t, "example-ios", rps[0].Payload["to"])
 	require.Equal(t, "request", rps[0].Payload["source"], "request-originated moves are tagged")
 }
 
 func TestRequest_ReprojectToUnknownProjectIsSkipped(t *testing.T) {
 	ctx, db, mgr, g := newReorgGardener(t,
 		`{"ops":[{"op":"reproject","target":1,"to":"brand-new","reason":"x"}]}`)
-	writeMem(t, mgr, "thing", "arctop-app", "1", core.KindGotcha, time.Now().UTC(), "x")
+	writeMem(t, mgr, "thing", "example-app", "1", core.KindGotcha, time.Now().UTC(), "x")
 
 	res, err := g.Request(ctx, "move thing into a project that does not exist", RequestScope{AllProjects: true})
 	require.NoError(t, err)
@@ -201,12 +201,12 @@ func TestRequest_RekindInvalidOrSameKindIsSkipped(t *testing.T) {
 
 func TestRequest_RecognizesSplitAndRoutes(t *testing.T) {
 	ctx, db, mgr, g := newReorgGardener(t,
-		`{"split":{"source":"arctop-app","instruction":"ios and android"}}`)
-	writeMem(t, mgr, "ios-thing", "arctop-app", "1", core.KindGotcha, time.Now().UTC(), "iOS only")
+		`{"split":{"source":"example-app","instruction":"ios and android"}}`)
+	writeMem(t, mgr, "ios-thing", "example-app", "1", core.KindGotcha, time.Now().UTC(), "iOS only")
 
-	res, err := g.Request(ctx, "split arctop-app into arctop-ios and arctop-android", RequestScope{AllProjects: true})
+	res, err := g.Request(ctx, "split example-app into example-ios and example-android", RequestScope{AllProjects: true})
 	require.NoError(t, err)
-	require.Equal(t, "arctop-app", res.SplitSource, "the source project is recognized and returned")
+	require.Equal(t, "example-app", res.SplitSource, "the source project is recognized and returned")
 	require.True(t, res.SplitIntent, "a recognized split is flagged structurally")
 	require.NotEmpty(t, res.Guidance)
 	require.Contains(t, res.Guidance, "gardener_split", "guidance routes to the split tool")
@@ -219,7 +219,7 @@ func TestRequest_RecognizesSplitAndRoutes(t *testing.T) {
 
 func TestRequest_SplitUnknownSourceGivesGuidance(t *testing.T) {
 	ctx, _, mgr, g := newReorgGardener(t, `{"split":{"source":"ghost-project"}}`)
-	writeMem(t, mgr, "thing", "arctop-app", "1", core.KindGotcha, time.Now().UTC(), "x")
+	writeMem(t, mgr, "thing", "example-app", "1", core.KindGotcha, time.Now().UTC(), "x")
 
 	res, err := g.Request(ctx, "split the ghost project apart", RequestScope{AllProjects: true})
 	require.NoError(t, err)

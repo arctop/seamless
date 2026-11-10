@@ -175,7 +175,7 @@ type Service struct {
 	// could reach it. An unreadable hostname degrades to "server" alone -- never
 	// to a guess, and never back to "this machine".
 	host string
-	// hostName is the bare, normalized hostname behind host ("boron"), so a
+	// hostName is the bare, normalized hostname behind host ("example-host"), so a
 	// list can tag only the sessions that ran on a DIFFERENT machine instead
 	// of stamping this one's name on every row.
 	hostName string

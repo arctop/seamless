@@ -244,18 +244,18 @@ func TestBriefingSiblingProjects(t *testing.T) {
 func TestBriefingInjectsParentMemories(t *testing.T) {
 	db := setupDB(t)
 	ctx := context.Background()
-	require.NoError(t, store.SetSetting(ctx, db, store.SettingRepoProjectMap, `{"/work/ios":"arctop-ios"}`))
+	require.NoError(t, store.SetSetting(ctx, db, store.SettingRepoProjectMap, `{"/work/ios":"example-ios"}`))
 
-	// arctop-ios is a child of the shared parent arctop-mobile-apps.
-	_, err := store.EnsureProject(ctx, db, "arctop-ios", "Arctop iOS")
+	// example-ios is a child of the shared parent example-mobile-apps.
+	_, err := store.EnsureProject(ctx, db, "example-ios", "Example iOS")
 	require.NoError(t, err)
-	_, err = store.EnsureProject(ctx, db, "arctop-mobile-apps", "Arctop Mobile")
+	_, err = store.EnsureProject(ctx, db, "example-mobile-apps", "Example Mobile")
 	require.NoError(t, err)
-	require.NoError(t, store.SetProjectParent(ctx, db, "arctop-ios", "arctop-mobile-apps", time.Now().UTC()))
+	require.NoError(t, store.SetProjectParent(ctx, db, "example-ios", "example-mobile-apps", time.Now().UTC()))
 
-	insMem(t, db, "01IOS", "gotcha", "ios-only-thing", "iOS specific pitfall", "arctop-ios")
-	insMem(t, db, "01SHARED", "reference", "shared-account-flow", "cross-platform account flow", "arctop-mobile-apps")
-	insMem(t, db, "01AND", "gotcha", "android-only-thing", "Android specific pitfall", "arctop-android")
+	insMem(t, db, "01IOS", "gotcha", "ios-only-thing", "iOS specific pitfall", "example-ios")
+	insMem(t, db, "01SHARED", "reference", "shared-account-flow", "cross-platform account flow", "example-mobile-apps")
+	insMem(t, db, "01AND", "gotcha", "android-only-thing", "Android specific pitfall", "example-android")
 
 	svc := New(db, nil, budgets(), nil)
 	b, ids, err := svc.Briefing(ctx, BriefingInput{CWD: "/work/ios", Source: "startup"})

@@ -181,7 +181,7 @@ func TestLevelGates_Gardener(t *testing.T) {
 
 func TestLevelGates_GardenerRetarget(t *testing.T) {
 	ctx, db, mux := newConsoleForSplit(t, stubChat{out: splitConsoleJSON})
-	require.Equal(t, http.StatusSeeOther, postForm(mux, "/console/gardener/split", "source=arctop-app").Code)
+	require.Equal(t, http.StatusSeeOther, postForm(mux, "/console/gardener/split", "source=example-app").Code)
 	reps, err := store.PendingProposals(ctx, db, store.ProposalReproject)
 	require.NoError(t, err)
 	require.NotEmpty(t, reps)

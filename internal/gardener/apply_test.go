@@ -156,13 +156,13 @@ func TestApplyReproject_MovesMemoryToNewProject(t *testing.T) {
 	ctx := cx()
 	now := time.Now().UTC()
 
-	writeMem(t, mgr, "ios-dfu", "arctop-app", "1", core.KindRunbook, now, "the iOS DFU flow")
-	mem, _, err := store.MemoryByName(ctx, g.db, "arctop-app", "ios-dfu")
+	writeMem(t, mgr, "ios-dfu", "example-app", "1", core.KindRunbook, now, "the iOS DFU flow")
+	mem, _, err := store.MemoryByName(ctx, g.db, "example-app", "ios-dfu")
 	require.NoError(t, err)
 
 	p, err := store.CreateProposal(ctx, g.db, store.ProposalReproject, map[string]any{
 		"key": "reproject:" + mem.ID, "id": mem.ID, "name": "ios-dfu",
-		"from": "arctop-app", "to": "arctop-ios", "rationale": "iOS-specific",
+		"from": "example-app", "to": "example-ios", "rationale": "iOS-specific",
 	})
 	require.NoError(t, err)
 
@@ -170,13 +170,13 @@ func TestApplyReproject_MovesMemoryToNewProject(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "applied", res["status"])
 
-	// The memory now lives in arctop-ios (same id), and is gone from arctop-app.
-	moved, found, err := store.MemoryByName(ctx, g.db, "arctop-ios", "ios-dfu")
+	// The memory now lives in example-ios (same id), and is gone from example-app.
+	moved, found, err := store.MemoryByName(ctx, g.db, "example-ios", "ios-dfu")
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, mem.ID, moved.ID, "reproject keeps the ULID")
 	require.True(t, moved.Active(), "a move is a relocation, not an invalidation")
-	_, found, err = store.MemoryByName(ctx, g.db, "arctop-app", "ios-dfu")
+	_, found, err = store.MemoryByName(ctx, g.db, "example-app", "ios-dfu")
 	require.NoError(t, err)
 	require.False(t, found, "the memory left the source project")
 
@@ -184,7 +184,7 @@ func TestApplyReproject_MovesMemoryToNewProject(t *testing.T) {
 	require.NoError(t, err)
 	idx, _, err := store.MemoryByID(ctx, g.db, mem.ID)
 	require.NoError(t, err)
-	require.Equal(t, "memory/arctop-ios/ios-dfu.md", idx.FilePath)
+	require.Equal(t, "memory/example-ios/ios-dfu.md", idx.FilePath)
 }
 
 // TestApplyReproject_RetryIsIdempotent drives applyReproject twice: a memory
@@ -195,10 +195,10 @@ func TestApplyReproject_RetryIsIdempotent(t *testing.T) {
 	ctx := cx()
 	now := time.Now().UTC()
 
-	writeMem(t, mgr, "thing", "arctop-app", "1", core.KindGotcha, now, "x")
-	mem, _, err := store.MemoryByName(ctx, g.db, "arctop-app", "thing")
+	writeMem(t, mgr, "thing", "example-app", "1", core.KindGotcha, now, "x")
+	mem, _, err := store.MemoryByName(ctx, g.db, "example-app", "thing")
 	require.NoError(t, err)
-	p := store.Proposal{Payload: map[string]any{"id": mem.ID, "name": "thing", "from": "arctop-app", "to": "arctop-ios"}}
+	p := store.Proposal{Payload: map[string]any{"id": mem.ID, "name": "thing", "from": "example-app", "to": "example-ios"}}
 
 	_, err = g.applyReproject(ctx, p, now)
 	require.NoError(t, err)
@@ -222,13 +222,13 @@ func TestApplyReproject_NameClashInTargetErrors(t *testing.T) {
 	ctx := cx()
 	now := time.Now().UTC()
 
-	writeMem(t, mgr, "dupe", "arctop-app", "1", core.KindGotcha, now, "source copy")
-	writeMem(t, mgr, "dupe", "arctop-ios", "2", core.KindGotcha, now, "target already has this name")
-	mem, _, err := store.MemoryByName(ctx, g.db, "arctop-app", "dupe")
+	writeMem(t, mgr, "dupe", "example-app", "1", core.KindGotcha, now, "source copy")
+	writeMem(t, mgr, "dupe", "example-ios", "2", core.KindGotcha, now, "target already has this name")
+	mem, _, err := store.MemoryByName(ctx, g.db, "example-app", "dupe")
 	require.NoError(t, err)
 
 	p, err := store.CreateProposal(ctx, g.db, store.ProposalReproject, map[string]any{
-		"key": "reproject:" + mem.ID, "id": mem.ID, "name": "dupe", "from": "arctop-app", "to": "arctop-ios",
+		"key": "reproject:" + mem.ID, "id": mem.ID, "name": "dupe", "from": "example-app", "to": "example-ios",
 	})
 	require.NoError(t, err)
 
@@ -329,17 +329,17 @@ func TestApplySplit_CreatesProjectsFamilyAndParents(t *testing.T) {
 	now := time.Now().UTC()
 
 	// The source needs a projects row for retirement to have a target.
-	_, err := store.EnsureProject(ctx, g.db, "arctop-app", "Arctop App")
+	_, err := store.EnsureProject(ctx, g.db, "example-app", "Example App")
 	require.NoError(t, err)
 
 	p, err := store.CreateProposal(ctx, g.db, store.ProposalSplit, map[string]any{
-		"key": "split:arctop-app", "source_project": "arctop-app", "retire_source": true,
-		"family": "arctop-mobile-apps", "plan": "split-arctop-app",
+		"key": "split:example-app", "source_project": "example-app", "retire_source": true,
+		"family": "example-mobile-apps", "plan": "split-example-app",
 		"children": []any{
-			map[string]any{"slug": "arctop-ios", "label": "Arctop iOS"},
-			map[string]any{"slug": "arctop-android", "label": "Arctop Android"},
+			map[string]any{"slug": "example-ios", "label": "Example iOS"},
+			map[string]any{"slug": "example-android", "label": "Example Android"},
 		},
-		"shared": map[string]any{"slug": "arctop-mobile-apps", "label": "Arctop Mobile"},
+		"shared": map[string]any{"slug": "example-mobile-apps", "label": "Example Mobile"},
 	})
 	require.NoError(t, err)
 
@@ -348,24 +348,24 @@ func TestApplySplit_CreatesProjectsFamilyAndParents(t *testing.T) {
 	require.Equal(t, "applied", res["status"])
 
 	// All three projects exist; children point at the shared parent.
-	for _, slug := range []string{"arctop-ios", "arctop-android", "arctop-mobile-apps"} {
+	for _, slug := range []string{"example-ios", "example-android", "example-mobile-apps"} {
 		_, found, err := store.ProjectBySlug(ctx, g.db, slug)
 		require.NoError(t, err)
 		require.True(t, found, slug+" should have been created")
 	}
-	for _, child := range []string{"arctop-ios", "arctop-android"} {
+	for _, child := range []string{"example-ios", "example-android"} {
 		pr, _, err := store.ProjectBySlug(ctx, g.db, child)
 		require.NoError(t, err)
-		require.Equal(t, "arctop-mobile-apps", pr.ParentSlug, child+" is parented to the shared project")
+		require.Equal(t, "example-mobile-apps", pr.ParentSlug, child+" is parented to the shared project")
 	}
 
 	// The three are linked as a family (siblings surface each other's findings).
-	sibs, err := store.SiblingProjects(ctx, g.db, "arctop-ios")
+	sibs, err := store.SiblingProjects(ctx, g.db, "example-ios")
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"arctop-android", "arctop-mobile-apps"}, sibs)
+	require.ElementsMatch(t, []string{"example-android", "example-mobile-apps"}, sibs)
 
 	// The source is retired (flagged, not deleted).
-	src, found, err := store.ProjectBySlug(ctx, g.db, "arctop-app")
+	src, found, err := store.ProjectBySlug(ctx, g.db, "example-app")
 	require.NoError(t, err)
 	require.True(t, found)
 	require.True(t, src.Retired(), "the emptied source is retired")

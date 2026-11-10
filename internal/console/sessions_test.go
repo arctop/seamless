@@ -406,35 +406,35 @@ func TestSessionsPage_ShowsHost(t *testing.T) {
 	id, err := core.NewID()
 	require.NoError(t, err)
 	require.NoError(t, store.CreateSession(ctx, db, core.Session{
-		ID: id, Name: "cc/remote01", Host: "argon", Status: core.SessionActive,
+		ID: id, Name: "cc/remote01", Host: "example-remote", Status: core.SessionActive,
 		CreatedAt: now.Add(-time.Minute), UpdatedAt: now,
 	}))
 
 	var data sessionsData
 	getJSON(t, mux, "/console/sessions?format=json", &data)
 	require.Len(t, data.Sessions, 1)
-	require.Equal(t, "argon", data.Sessions[0].Host)
+	require.Equal(t, "example-remote", data.Sessions[0].Host)
 
 	req := httptest.NewRequest(http.MethodGet, "/console/sessions", nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 	rr := do(mux, req)
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Contains(t, rr.Body.String(), "Ran on another machine", "a session from another host is tagged in the list")
-	require.Contains(t, rr.Body.String(), "argon")
+	require.Contains(t, rr.Body.String(), "example-remote")
 
 	req = httptest.NewRequest(http.MethodGet, "/console/sessions/"+id, nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 	rr = do(mux, req)
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Contains(t, rr.Body.String(), "Machine the agent ran on")
-	require.Contains(t, rr.Body.String(), "argon")
+	require.Contains(t, rr.Body.String(), "example-remote")
 }
 
 // The list tags a session's host only when it is NOT this console's machine:
 // on a one-machine install every row would otherwise carry the same name.
 func TestSameHost_FoldsLocalSuffixAndCase(t *testing.T) {
-	require.True(t, sameHost("Boron.local", "boron"))
-	require.True(t, sameHost("boron", "BORON"))
-	require.True(t, sameHost("", "boron"), "an unknown host never earns a remote tag")
-	require.False(t, sameHost("argon", "boron"))
+	require.True(t, sameHost("Example-Host.local", "example-host"))
+	require.True(t, sameHost("example-host", "EXAMPLE-HOST"))
+	require.True(t, sameHost("", "example-host"), "an unknown host never earns a remote tag")
+	require.False(t, sameHost("example-remote", "example-host"))
 }

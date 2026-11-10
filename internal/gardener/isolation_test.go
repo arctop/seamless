@@ -212,9 +212,9 @@ func TestSplit_RefusesAnIsolatedSource(t *testing.T) {
 	for _, state := range []core.Isolation{core.IsolationConfidential, core.IsolationSealed} {
 		t.Run(string(state), func(t *testing.T) {
 			ctx, db, g := newSplitGardener(t, splitJSON)
-			isolate(t, db, "arctop-app", state)
+			isolate(t, db, "example-app", state)
 
-			_, err := g.Split(ctx, "arctop-app", "split into ios and android")
+			_, err := g.Split(ctx, "example-app", "split into ios and android")
 			require.ErrorIs(t, err, ErrIsolatedProject)
 			require.Contains(t, err.Error(), string(state))
 
@@ -226,9 +226,9 @@ func TestSplit_RefusesAnIsolatedSource(t *testing.T) {
 
 	// The same source splits fine once it is open again.
 	ctx, db, g := newSplitGardener(t, splitJSON)
-	isolate(t, db, "arctop-app", core.IsolationConfidential)
-	require.NoError(t, store.SetProjectIsolation(ctx, db, "arctop-app", core.IsolationOpen))
-	res, err := g.Split(ctx, "arctop-app", "split into ios and android")
+	isolate(t, db, "example-app", core.IsolationConfidential)
+	require.NoError(t, store.SetProjectIsolation(ctx, db, "example-app", core.IsolationOpen))
+	res, err := g.Split(ctx, "example-app", "split into ios and android")
 	require.NoError(t, err)
 	require.Equal(t, 4, res.Total)
 }

@@ -11,8 +11,8 @@ import (
 
 // Project groups memories, notes, sessions, tasks, and trials under a slug.
 //
-// ParentSlug, when set, points a child project (e.g. arctop-ios) at a shared
-// parent (e.g. arctop-mobile-apps) whose active memories are injected into the
+// ParentSlug, when set, points a child project (e.g. example-ios) at a shared
+// parent (e.g. example-mobile-apps) whose active memories are injected into the
 // child's briefing -- how a split keeps cross-platform knowledge shared without
 // duplicating it. RetiredAt marks a project emptied by a split: kept for
 // provenance and still readable, but flagged as no longer the live home.

@@ -26,7 +26,7 @@ const peerBase = `
 data_dir: /opt/seamless/data
 peer_auth:
   enabled: true
-  owner: katata
+  owner: _example_owner
   socket:
     path: /opt/seamless/run/seamlessd.sock
 `
@@ -45,7 +45,7 @@ func TestPeerAuth_LoadsAFullBlock(t *testing.T) {
 	require.NoError(t, err)
 	pa := cfg.PeerAuth
 	require.True(t, pa.Enabled)
-	require.Equal(t, "katata", pa.Owner)
+	require.Equal(t, "_example_owner", pa.Owner)
 	require.Equal(t, []string{"example-finance", "example-ops"}, pa.ReferencedProjects())
 	mode, err := pa.Socket.SocketFileMode()
 	require.NoError(t, err)
@@ -66,15 +66,15 @@ peer_auth:
 `, "peer_auth.owner is required"},
 		{"socket path missing", `
 data_dir: /opt/seamless/data
-peer_auth: {enabled: true, owner: katata}
+peer_auth: {enabled: true, owner: _example_owner}
 `, "peer_auth.socket.path is required"},
 		{"socket path relative", `
 data_dir: /opt/seamless/data
-peer_auth: {enabled: true, owner: katata, socket: {path: run/s.sock}}
+peer_auth: {enabled: true, owner: _example_owner, socket: {path: run/s.sock}}
 `, "must be absolute"},
 		{"socket inside the data dir", `
 data_dir: /opt/seamless/data
-peer_auth: {enabled: true, owner: katata, socket: {path: /opt/seamless/data/run/s.sock}}
+peer_auth: {enabled: true, owner: _example_owner, socket: {path: /opt/seamless/data/run/s.sock}}
 `, "inside data_dir"},
 		{"mode not octal", peerBase + "    mode: rw-rw-rw-\n", "not an octal mode"},
 		{"mode beyond 0777", peerBase + "    mode: \"4777\"\n", "beyond 0777"},
@@ -159,7 +159,7 @@ func TestPeerAuth_RestrictedAccounts(t *testing.T) {
 			"peer_auth.restricted lists accounts while peer_auth is disabled"},
 		{"while disabled, the block otherwise unset", "peer_auth:\n  restricted: [_example_agent]\n",
 			"while peer_auth is disabled"},
-		{"the owner", peerBase + "  restricted: [katata]\n", `lists "katata", the owner`},
+		{"the owner", peerBase + "  restricted: [_example_owner]\n", `lists "_example_owner", the owner`},
 		{"twice", peerBase + "  restricted: [_example_agent, _example_agent]\n", "twice"},
 		{"not an account name", peerBase + "  restricted: [\"a b\"]\n", "not an OS account name"},
 		{"padded", peerBase + "  restricted: [\" _example_agent\"]\n", "not an OS account name"},
@@ -248,14 +248,14 @@ func TestPeerAuth_EnvOverrides(t *testing.T) {
 	clearSeamlessEnv(t)
 	t.Setenv("SEAMLESS_DATA_DIR", "/opt/seamless/data")
 	t.Setenv("SEAMLESS_PEER_AUTH_ENABLED", "true")
-	t.Setenv("SEAMLESS_PEER_AUTH_OWNER", "katata")
+	t.Setenv("SEAMLESS_PEER_AUTH_OWNER", "_example_owner")
 	t.Setenv("SEAMLESS_PEER_AUTH_SOCKET_PATH", "/opt/seamless/run/s.sock")
 	t.Setenv("SEAMLESS_PEER_AUTH_SOCKET_MODE", "0660")
 	t.Setenv("SEAMLESS_PEER_AUTH_SOCKET_GROUP", "_seamless_clients")
 	cfg, err := LoadFrom("")
 	require.NoError(t, err)
 	require.True(t, cfg.PeerAuth.Enabled)
-	require.Equal(t, "katata", cfg.PeerAuth.Owner)
+	require.Equal(t, "_example_owner", cfg.PeerAuth.Owner)
 	require.Equal(t, "/opt/seamless/run/s.sock", cfg.PeerAuth.Socket.Path)
 	require.Equal(t, "_seamless_clients", cfg.PeerAuth.Socket.Group)
 	mode, err := cfg.PeerAuth.Socket.SocketFileMode()

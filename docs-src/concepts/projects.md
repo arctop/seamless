@@ -103,10 +103,10 @@ derives a different slug - and that is what the override below is for.
 `seamlessd doctor` lists mapped paths that no longer exist.
 
 Map by hand only to override the derived slug - an `ios` directory that should be
-the `arctop-ios` project, or a renamed repo that should keep its old project:
+the `example-ios` project, or a renamed repo that should keep its old project:
 
 ```bash
-seamlessd map-repo --path ~/code/ios --project arctop-ios
+seamlessd map-repo --path ~/code/ios --project example-ios
 ```
 
 Either way, agents in that repo inherit its scope from the session their hook

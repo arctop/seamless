@@ -70,15 +70,15 @@ const (
 )
 
 var raAccounts = map[string]access.Account{
-	"katata":  {UID: raUIDOwner, Name: "katata", Home: "/Users/katata"},
-	raAccount: {UID: raUIDAgent, Name: raAccount, Home: "/Users/" + raAccount},
+	"_example_owner": {UID: raUIDOwner, Name: "_example_owner", Home: "/Users/_example_owner"},
+	raAccount:        {UID: raUIDAgent, Name: raAccount, Home: "/Users/" + raAccount},
 }
 
 // raPolicy is the block every raDaemon policy is built from: the owner, the
 // locked projects, and the restricted account.
 func raPolicy() config.PeerAuth {
 	return config.PeerAuth{
-		Enabled: true, Owner: "katata",
+		Enabled: true, Owner: "_example_owner",
 		Socket:      config.PeerSocket{Path: "/opt/seamless/run/seamlessd.sock"},
 		ForceLocked: []string{raLocked, raLockedOpen},
 		Restricted:  []string{raAccount},

@@ -80,7 +80,7 @@ func seedViewFixture(t *testing.T, db *sql.DB) (hiddenMem, shownMem, hiddenTask,
 	ins(`INSERT INTO embeddings (item_id, kind, model, dims, vec, updated_at)
 		VALUES ('m-hidden','memory','m',1,x'00000000',?), ('m-shown','memory','m',1,x'00000000',?)`, ts, ts)
 	ins(`INSERT INTO retrieval_stats (item_id, inject_count) VALUES ('m-hidden', 3), ('m-shown', 2)`)
-	ins(`INSERT INTO repo_map (host, path, slug, created_at) VALUES ('boron','/work/fin','example-finance',?), ('boron','/work/ops','example-ops',?)`, ts, ts)
+	ins(`INSERT INTO repo_map (host, path, slug, created_at) VALUES ('example-host','/work/fin','example-finance',?), ('example-host','/work/ops','example-ops',?)`, ts, ts)
 	ph, err := CreateProposal(ctx, db, ProposalArchive, map[string]any{"id": "m-hidden", "project": "example-finance"})
 	require.NoError(t, err)
 	_, err = CreateProposal(ctx, db, ProposalMerge, map[string]any{"keep": map[string]any{"id": "m-shown"}, "drop": map[string]any{"id": "m-hidden"}})

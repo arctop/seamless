@@ -253,9 +253,9 @@ func TestGardenerGroupDismiss(t *testing.T) {
 // its own undoable row.
 func TestGardenerGroupDismiss_PlanBatch(t *testing.T) {
 	ctx, db, mux := newConsoleForSplit(t, stubChat{out: splitConsoleJSON})
-	require.Equal(t, http.StatusSeeOther, postForm(mux, "/console/gardener/split", "source=arctop-app").Code)
+	require.Equal(t, http.StatusSeeOther, postForm(mux, "/console/gardener/split", "source=example-app").Code)
 
-	rr := postForm(mux, "/console/gardener/group/dismiss", "plan=split-arctop-app")
+	rr := postForm(mux, "/console/gardener/group/dismiss", "plan=split-example-app")
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	require.Contains(t, rr.Header().Get("Location"), "3+proposals")
 
@@ -314,7 +314,7 @@ func TestGardenerUndo_ApplyDropsTheOpenedTask(t *testing.T) {
 // undo button and the endpoint refuses even if called directly.
 func TestGardenerUndo_RefusedForAppliedSplit(t *testing.T) {
 	ctx, db, mux := newConsoleForSplit(t, stubChat{out: splitConsoleJSON})
-	require.Equal(t, http.StatusSeeOther, postForm(mux, "/console/gardener/split", "source=arctop-app").Code)
+	require.Equal(t, http.StatusSeeOther, postForm(mux, "/console/gardener/split", "source=example-app").Code)
 	splits, err := store.PendingProposals(ctx, db, store.ProposalSplit)
 	require.NoError(t, err)
 	require.Len(t, splits, 1)

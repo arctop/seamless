@@ -23,7 +23,7 @@ func TestInstall_SocketMakesEveryHookACommandWithoutAKey(t *testing.T) {
 	require.False(t, CommandOnlyBaseURL("http://127.0.0.1:8081"))
 
 	path := filepath.Join(t.TempDir(), "settings.json")
-	opts := InstallOptions{SettingsPath: path, BaseURL: socketBase, SeamBin: "/opt/seamless/bin/seam", ConfigPath: "/opt/arctop/finance/home/.config/seamless/seamless.yaml"}
+	opts := InstallOptions{SettingsPath: path, BaseURL: socketBase, SeamBin: "/opt/seamless/bin/seam", ConfigPath: "/opt/example/finance/home/.config/seamless/seamless.yaml"}
 	res, err := Install(opts)
 	require.NoError(t, err, "a socket install needs no api key")
 	require.True(t, res.Changed)

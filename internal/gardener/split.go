@@ -1,8 +1,8 @@
 package gardener
 
 // Project split: the flagship natural-language topology change. The owner asks to
-// split one project (e.g. arctop-app) into children (arctop-ios, arctop-android)
-// with cross-platform memories kept in a shared parent (arctop-mobile-apps). Like
+// split one project (e.g. example-app) into children (example-ios, example-android)
+// with cross-platform memories kept in a shared parent (example-mobile-apps). Like
 // every other pass this only ever writes PENDING proposals -- it never creates a
 // project or moves a memory itself. It emits one `split` setup proposal (create
 // the child/shared projects, link them as a family, parent the children, retire
@@ -193,7 +193,7 @@ Return ONLY a JSON object of this exact shape (no prose, no markdown fences):
 }
 
 Rules:
-- children: the 2+ projects the source splits into (e.g. arctop-ios, arctop-android). Use kebab-case slugs.
+- children: the 2+ projects the source splits into (e.g. example-ios, example-android). Use kebab-case slugs.
 - shared: ONE parent project for memories that apply to every child (cross-platform). Omit it (use {}) only if nothing is shared.
 - assignments: for EACH candidate memory, choose exactly one target -- a child slug, or the shared slug for cross-platform memories. Reference memories by their [N] number only; never invent numbers. "to" must be one of the child slugs or the shared slug.
 - Put a memory in the shared parent when it is platform-agnostic; put it in a child when it is specific to that platform.

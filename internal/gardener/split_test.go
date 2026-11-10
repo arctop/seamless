@@ -19,7 +19,7 @@ import (
 )
 
 // newSplitGardener builds a gardener with the given chat output and seeds three
-// active memories in project "arctop-app" in a known newest-first order:
+// active memories in project "example-app" in a known newest-first order:
 // [1] ios-thing, [2] android-thing, [3] shared-thing. chatOut == "" => no chat.
 func newSplitGardener(t *testing.T, chatOut string) (context.Context, *sql.DB, *Service) {
 	t.Helper()
@@ -33,9 +33,9 @@ func newSplitGardener(t *testing.T, chatOut string) (context.Context, *sql.DB, *
 	t.Cleanup(func() { _ = mgr.Close() })
 
 	now := time.Now().UTC()
-	writeMem(t, mgr, "ios-thing", "arctop-app", "1", core.KindGotcha, now, "iOS only")
-	writeMem(t, mgr, "android-thing", "arctop-app", "2", core.KindGotcha, now.Add(-time.Hour), "Android only")
-	writeMem(t, mgr, "shared-thing", "arctop-app", "3", core.KindReference, now.Add(-2*time.Hour), "cross-platform")
+	writeMem(t, mgr, "ios-thing", "example-app", "1", core.KindGotcha, now, "iOS only")
+	writeMem(t, mgr, "android-thing", "example-app", "2", core.KindGotcha, now.Add(-time.Hour), "Android only")
+	writeMem(t, mgr, "shared-thing", "example-app", "3", core.KindReference, now.Add(-2*time.Hour), "cross-platform")
 
 	var chat llm.Chat
 	if chatOut != "" {
@@ -45,14 +45,14 @@ func newSplitGardener(t *testing.T, chatOut string) (context.Context, *sql.DB, *
 	return ctx, db, g
 }
 
-const splitJSON = `{"children":[{"slug":"arctop-ios","label":"Arctop iOS"},{"slug":"arctop-android","label":"Arctop Android"}],` +
-	`"shared":{"slug":"arctop-mobile-apps","label":"Arctop Mobile"},` +
-	`"assignments":[{"memory":1,"to":"arctop-ios","rationale":"iOS"},{"memory":2,"to":"arctop-android","rationale":"Android"},{"memory":3,"to":"arctop-mobile-apps","rationale":"shared"}]}`
+const splitJSON = `{"children":[{"slug":"example-ios","label":"Example iOS"},{"slug":"example-android","label":"Example Android"}],` +
+	`"shared":{"slug":"example-mobile-apps","label":"Example Mobile"},` +
+	`"assignments":[{"memory":1,"to":"example-ios","rationale":"iOS"},{"memory":2,"to":"example-android","rationale":"Android"},{"memory":3,"to":"example-mobile-apps","rationale":"shared"}]}`
 
 func TestSplit_CreatesSetupAndReprojects(t *testing.T) {
 	ctx, db, g := newSplitGardener(t, splitJSON)
 
-	res, err := g.Split(ctx, "arctop-app", "split into ios and android, keep cross-platform shared")
+	res, err := g.Split(ctx, "example-app", "split into ios and android, keep cross-platform shared")
 	require.NoError(t, err)
 	require.Equal(t, 4, res.Total, "1 setup + 3 memory moves")
 	require.Equal(t, 1, res.ByKind[store.ProposalSplit])
@@ -63,8 +63,8 @@ func TestSplit_CreatesSetupAndReprojects(t *testing.T) {
 	splits, err := store.PendingProposals(ctx, db, store.ProposalSplit)
 	require.NoError(t, err)
 	require.Len(t, splits, 1)
-	require.Equal(t, "arctop-app", splits[0].Payload["source_project"])
-	require.Equal(t, "split-arctop-app", splits[0].Payload["plan"])
+	require.Equal(t, "example-app", splits[0].Payload["source_project"])
+	require.Equal(t, "split-example-app", splits[0].Payload["plan"])
 	require.Equal(t, "request", splits[0].Payload["source"])
 
 	// Every reproject is plan-tagged and moves out of the source.
@@ -73,23 +73,23 @@ func TestSplit_CreatesSetupAndReprojects(t *testing.T) {
 	require.Len(t, reps, 3)
 	targets := map[string]string{}
 	for _, r := range reps {
-		require.Equal(t, "split-arctop-app", r.Payload["plan"])
-		require.Equal(t, "arctop-app", r.Payload["from"])
+		require.Equal(t, "split-example-app", r.Payload["plan"])
+		require.Equal(t, "example-app", r.Payload["from"])
 		targets[r.Payload["name"].(string)] = r.Payload["to"].(string)
 	}
-	require.Equal(t, "arctop-ios", targets["ios-thing"])
-	require.Equal(t, "arctop-android", targets["android-thing"])
-	require.Equal(t, "arctop-mobile-apps", targets["shared-thing"])
+	require.Equal(t, "example-ios", targets["ios-thing"])
+	require.Equal(t, "example-android", targets["android-thing"])
+	require.Equal(t, "example-mobile-apps", targets["shared-thing"])
 }
 
 func TestSplit_SkipsInvalidTargets(t *testing.T) {
 	// [3]'s target is not among the children or the shared parent -> skipped.
-	badJSON := `{"children":[{"slug":"arctop-ios","label":"iOS"},{"slug":"arctop-android","label":"Android"}],` +
-		`"shared":{"slug":"arctop-mobile-apps","label":"Mobile"},` +
-		`"assignments":[{"memory":1,"to":"arctop-ios"},{"memory":3,"to":"nonsense-project"}]}`
+	badJSON := `{"children":[{"slug":"example-ios","label":"iOS"},{"slug":"example-android","label":"Android"}],` +
+		`"shared":{"slug":"example-mobile-apps","label":"Mobile"},` +
+		`"assignments":[{"memory":1,"to":"example-ios"},{"memory":3,"to":"nonsense-project"}]}`
 	ctx, db, g := newSplitGardener(t, badJSON)
 
-	res, err := g.Split(ctx, "arctop-app", "")
+	res, err := g.Split(ctx, "example-app", "")
 	require.NoError(t, err)
 	require.Equal(t, 2, res.Total, "1 setup + 1 valid reproject")
 	require.Equal(t, 1, res.ByKind[store.ProposalReproject])
@@ -101,10 +101,10 @@ func TestSplit_SkipsInvalidTargets(t *testing.T) {
 }
 
 func TestSplit_RejectsTooFewChildren(t *testing.T) {
-	oneChild := `{"children":[{"slug":"arctop-ios","label":"iOS"}],"shared":{},"assignments":[]}`
+	oneChild := `{"children":[{"slug":"example-ios","label":"iOS"}],"shared":{},"assignments":[]}`
 	ctx, db, g := newSplitGardener(t, oneChild)
 
-	_, err := g.Split(ctx, "arctop-app", "")
+	_, err := g.Split(ctx, "example-app", "")
 	require.Error(t, err, "a split needs at least two children")
 
 	all, err := store.PendingProposals(ctx, db, "")
@@ -120,7 +120,7 @@ func TestSplit_NoSourceIsAnError(t *testing.T) {
 
 func TestSplit_NoChatIsAnError(t *testing.T) {
 	ctx, db, g := newSplitGardener(t, "") // no chat client
-	_, err := g.Split(ctx, "arctop-app", "split it")
+	_, err := g.Split(ctx, "example-app", "split it")
 	require.ErrorIs(t, err, ErrNoChat)
 
 	all, err := store.PendingProposals(ctx, db, "")
@@ -130,7 +130,7 @@ func TestSplit_NoChatIsAnError(t *testing.T) {
 
 func TestSplit_GarbageOutputCreatesNothing(t *testing.T) {
 	ctx, db, g := newSplitGardener(t, "sorry, I can't do that")
-	_, err := g.Split(ctx, "arctop-app", "split it")
+	_, err := g.Split(ctx, "example-app", "split it")
 	require.ErrorIs(t, err, ErrUnparseable)
 
 	all, err := store.PendingProposals(ctx, db, "")

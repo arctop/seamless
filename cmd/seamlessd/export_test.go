@@ -151,7 +151,7 @@ func TestDefaultExportName(t *testing.T) {
 
 func TestSanitizeHostForFilename(t *testing.T) {
 	for in, want := range map[string]string{
-		"argon":            "argon",
+		"example-remote":   "example-remote",
 		"NUC.local":        "nuc.local",
 		"host/with/slash":  "host-with-slash",
 		`win\box`:          "win-box",
@@ -159,7 +159,7 @@ func TestSanitizeHostForFilename(t *testing.T) {
 		"":                 "unknown",
 		"   ":              "unknown",
 		"///":              "unknown",
-		"eitans-macbook13": "eitans-macbook13",
+		"example-laptop13": "example-laptop13",
 	} {
 		require.Equal(t, want, sanitizeHostForFilename(in), "sanitizeHostForFilename(%q)", in)
 	}

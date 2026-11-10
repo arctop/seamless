@@ -55,14 +55,14 @@ func TestRepoMapCheck_RemoteRowsAreCountedNotStatted(t *testing.T) {
 
 	present := t.TempDir()
 	require.NoError(t, store.AddRepoMapping(ctx, db, present, "here"))
-	// A remote client's repo root, which exists on argon and nowhere here.
+	// A remote client's repo root, which exists on example-remote and nowhere here.
 	_, _, err = store.RegisterProjectForCWD(ctx, db, store.CWDIdentity{
-		Host: "argon", CWD: "/srv/app/cmd", RepoRoot: "/srv/app", MainRoot: "/srv/app",
+		Host: "example-remote", CWD: "/srv/app/cmd", RepoRoot: "/srv/app", MainRoot: "/srv/app",
 	}, config.Hostname())
 	require.NoError(t, err)
 
 	c := repoMapCheck(db)
 	require.Equal(t, statusOK, c.status, "a remote path is not a dangling local one")
 	require.Contains(t, c.detail, "1 local mapped paths, all present on disk")
-	require.Contains(t, c.detail, "1 on argon, not verifiable from here")
+	require.Contains(t, c.detail, "1 on example-remote, not verifiable from here")
 }

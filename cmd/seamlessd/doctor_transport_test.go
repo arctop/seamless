@@ -297,16 +297,16 @@ func TestRemoteSessionsCheck(t *testing.T) {
 	require.Contains(t, c.detail, "none in 24h")
 	require.Contains(t, c.detail, "all local")
 
-	mkSession("cc/remote1", "argon")
+	mkSession("cc/remote1", "example-remote")
 	rec := events.NewRecorder(db)
 	_, err = rec.Record(ctx, core.Event{
 		Kind:    core.EventHookError,
-		Payload: map[string]any{"stage": "remote-host-skip", "what": "plan-capture", "host": "argon"},
+		Payload: map[string]any{"stage": "remote-host-skip", "what": "plan-capture", "host": "example-remote"},
 	})
 	require.NoError(t, err)
 
 	c = remoteSessionsCheck(db)
 	require.Equal(t, statusInfo, c.status, c.detail)
-	require.Contains(t, c.detail, "1 of 3 sessions in 24h from argon (1)")
+	require.Contains(t, c.detail, "1 of 3 sessions in 24h from example-remote (1)")
 	require.Contains(t, c.detail, "1 local captures skipped")
 }

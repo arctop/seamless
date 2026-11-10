@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -87,12 +88,39 @@ func TestCodexContractFixtures_CurrentCaptureProvenanceAndSanitization(t *testin
 			t.Errorf("%s is not valid JSON: %v", path, jsonErr)
 		}
 		for _, forbidden := range []string{
-			"/Users/katata", "/private/tmp/seamless-codex-contract", "access_token", "refresh_token",
+			"/private/tmp/seamless-codex-contract", "access_token", "refresh_token",
 		} {
 			require.NotContains(t, string(raw), forbidden, path)
 		}
+		require.Empty(t, foreignCodexFixtureHomes(string(raw)), path)
 		return nil
 	}))
+}
+
+// codexFixtureHome is the one home directory a sanitized fixture may name:
+// testdata/codex/README.md has every captured path rewritten to it.
+const codexFixtureHome = "/Users/dev"
+
+var codexFixtureHomePattern = regexp.MustCompile(`/Users/[^/"\\\s]+`)
+
+// foreignCodexFixtureHomes returns every macOS home directory in raw other than
+// codexFixtureHome: a path that survived sanitizing, whoever captured it.
+func foreignCodexFixtureHomes(raw string) []string {
+	var foreign []string
+	for _, home := range codexFixtureHomePattern.FindAllString(raw, -1) {
+		if home != codexFixtureHome {
+			foreign = append(foreign, home)
+		}
+	}
+	return foreign
+}
+
+func TestForeignCodexFixtureHomes(t *testing.T) {
+	require.Empty(t, foreignCodexFixtureHomes(`{"cwd":"/Users/dev/myrepo","home":"/Users/dev"}`))
+	require.Equal(t, []string{"/Users/someone"},
+		foreignCodexFixtureHomes(`{"cwd":"/Users/dev/myrepo","transcript":"/Users/someone/.codex/x.jsonl"}`))
+	require.Equal(t, []string{"/Users/developer"}, foreignCodexFixtureHomes(`"/Users/developer"`),
+		"the allowed home matches whole, not as a prefix")
 }
 
 func TestCodexContractFixtures_ReleasedSchemaDigests(t *testing.T) {

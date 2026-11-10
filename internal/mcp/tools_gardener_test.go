@@ -201,7 +201,7 @@ func TestGardenerSplit_NoChatIsToolError(t *testing.T) {
 	cli := dialClient(t, ctx, url, testKey)
 
 	res, err := cli.CallTool(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{
-		Name: "gardener_split", Arguments: map[string]any{"source": "arctop-app", "instruction": "split into ios and android"},
+		Name: "gardener_split", Arguments: map[string]any{"source": "example-app", "instruction": "split into ios and android"},
 	}})
 	require.NoError(t, err, "transport succeeds")
 	require.True(t, res.IsError, "a gardener with no chat client returns a tool error")

@@ -78,10 +78,10 @@ project scope from their cwd - no `project` argument on any call, and no
 even with agents working in several repos at once.
 
 Map by hand to override the derived slug - an `ios` directory that should be the
-`arctop-ios` project:
+`example-ios` project:
 
 ```bash
-seamlessd map-repo --path ~/code/ios --project arctop-ios
+seamlessd map-repo --path ~/code/ios --project example-ios
 ```
 
 See [Projects & scope](/concepts/projects/) for the full precedence chain and why

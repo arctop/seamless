@@ -116,7 +116,7 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 	}
 	// A child project (one with a parent) sees its shared parent's active memories
 	// in-briefing too, so cross-platform knowledge kept in the parent surfaces in
-	// each child without being duplicated (see the arctop-app split).
+	// each child without being duplicated (the shape gardener_split produces).
 	extra, err := s.familyMemoryScope(ctx, project, cfg.IncludeParentMemories)
 	if err != nil {
 		return "", nil, err
