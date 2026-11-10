@@ -335,6 +335,18 @@ func TestApprovers_SaysEachPasskeyNeedsItsOwnAuthenticator(t *testing.T) {
 	require.Contains(t, body, `choose a different authenticator in your browser\'s prompt`)
 }
 
+// The refresh after an enrollment morphs in the server's copy of the page,
+// whose status line is empty, so without data-live-skip it wipes the
+// confirmation the script just wrote there.
+func TestApprovers_TheRefreshLeavesTheStatusLineAlone(t *testing.T) {
+	_, mux := newApproversConsole(t)
+	req := authedReq(httptest.NewRequest(http.MethodGet, "/console/approvers", nil))
+	req.Host = "localhost:8081"
+	rr := do(mux, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Contains(t, rr.Body.String(), `id="approver-status" data-live-skip`)
+}
+
 // display: flex on the class beats the hidden attribute, so without its own
 // rule the code form shows, empty, before a passkey exists.
 func TestApprovers_TheCodeFormStaysHiddenUntilItIsNeeded(t *testing.T) {

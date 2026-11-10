@@ -45,7 +45,9 @@
     <label>Enrollment code <input id="approver-code" name="code" placeholder="XXXX-XXXX-XXXX-XXXX" required autocapitalize="characters" spellcheck="false"></label>
     <button class="btn primary" id="approver-confirm-go" type="submit">{{icon "key-round"}} Enroll</button>
   </form>
-  <p class="held-sub" id="approver-status" role="status" aria-live="polite"></p>
+  <!-- data-live-skip: the script owns this line. The server renders it empty,
+       so the refresh after an enrollment would otherwise wipe the confirmation. -->
+  <p class="held-sub" id="approver-status" data-live-skip role="status" aria-live="polite"></p>
   {{end}}
 </section>
 
