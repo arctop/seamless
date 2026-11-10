@@ -162,3 +162,57 @@ func TestLockChange_SingleUse(t *testing.T) {
 	_, err = f.svc.FinishLockChange(ctx, begun.ID, "example-conf", LockActionAdd, resp)
 	require.ErrorIs(t, err, ErrNoLockChange)
 }
+
+// A lease approved while the project was locked outlives the lock coming off,
+// since removal is one touch and lasts until the project is locked again, but
+// it does not outlive the lock coming back: the agent asks again. The change
+// says what it ended, in its own event and as access.revoked.
+func TestLockChange_RelockEndsEarlierAccess(t *testing.T) {
+	f, key := lockFixture(t)
+	ctx := context.Background()
+	f.enrollWithCode(t, key, "key")
+	change := func(action LockAction) {
+		t.Helper()
+		begun, err := f.svc.BeginLockChange(ctx, "example-conf", action)
+		require.NoError(t, err)
+		resp, err := key.Get(begun.Options, origin)
+		require.NoError(t, err)
+		_, err = f.svc.FinishLockChange(ctx, begun.ID, "example-conf", action, resp)
+		require.NoError(t, err)
+	}
+	change(LockActionAdd)
+	_, err := f.db.ExecContext(ctx, `INSERT INTO access_approvals (id, project_slug, kind, challenge, status, requested_at,
+		expires_at, lease_seconds, peer_uid, peer_pid, process_key) VALUES ('A1', 'example-conf', 'request', ?, 'approved', ?, ?, 28800, 501, 1, 'k1')`,
+		make([]byte, 32), core.FormatTime(f.now), core.FormatTime(f.now.Add(10*time.Minute)))
+	require.NoError(t, err)
+	_, err = f.db.ExecContext(ctx, `INSERT INTO access_leases (id, project_slug, process_key, peer_uid, peer_pid, approval_id,
+		granted_at, expires_at) VALUES ('L1', 'example-conf', 'k1', 501, 1, 'A1', ?, ?)`,
+		core.FormatTime(f.now), core.FormatTime(f.now.Add(8*time.Hour)))
+	require.NoError(t, err)
+	live := func() int {
+		t.Helper()
+		leases, err := store.ActiveAccessLeases(ctx, f.db, "k1", f.now)
+		require.NoError(t, err)
+		return len(leases)
+	}
+
+	change(LockActionRemove)
+	require.Equal(t, 1, live(), "removing the lock leaves the lease as it was")
+	change(LockActionAdd)
+	require.Zero(t, live(), "locking it again ends the lease from before")
+
+	rows, err := f.db.QueryContext(ctx, `SELECT kind, payload FROM events WHERE kind LIKE 'access.%' ORDER BY rowid`)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+	var got []string
+	for rows.Next() {
+		var kind, payload string
+		require.NoError(t, rows.Scan(&kind, &payload))
+		got = append(got, kind+" "+payload)
+	}
+	require.NoError(t, rows.Err())
+	require.Len(t, got, 4, "lock, remove, lock again, and the revoke it caused: %v", got)
+	require.Contains(t, got[2], `"leases":1`, "the lock change counts what it ended")
+	require.Contains(t, got[3], "access.revoked")
+	require.Contains(t, got[3], `"reason":"locked"`)
+}

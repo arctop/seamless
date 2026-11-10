@@ -57,10 +57,13 @@ const (
 	LeaseRevokedSessionEnded = "session_ended"
 	LeaseRevokedOwner        = "revoked"
 	LeaseRevokedReset        = "reset"
+	// LeaseRevokedLocked is the console locking the project again: an approval
+	// from before the lock came off must not outlive its return.
+	LeaseRevokedLocked = "locked"
 )
 
 // LeaseRevokeReasons is the canonical revoke-reason set.
-var LeaseRevokeReasons = []string{LeaseRevokedRefreshed, LeaseRevokedSessionEnded, LeaseRevokedOwner, LeaseRevokedReset}
+var LeaseRevokeReasons = []string{LeaseRevokedRefreshed, LeaseRevokedSessionEnded, LeaseRevokedOwner, LeaseRevokedReset, LeaseRevokedLocked}
 
 const (
 	// AccessChallengeBytes is the size of an approval's one-time challenge.

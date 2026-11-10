@@ -200,8 +200,9 @@ func (s *Service) FinishLockChange(ctx context.Context, id, project string, acti
 	if err := store.RecordApproverUse(ctx, s.cfg.DB, row.ID, row.SignCount, used.SignCount, used.BackupState, now); err != nil {
 		return store.ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
 	}
+	var ended store.EndedAccess
 	if action == LockActionAdd {
-		err = store.AddConsoleLock(ctx, s.cfg.DB, project, row.ID, now)
+		ended, err = store.AddConsoleLockEndingAccess(ctx, s.cfg.DB, project, row.ID, now)
 	} else {
 		err = store.RemoveConsoleLock(ctx, s.cfg.DB, project)
 	}
@@ -209,6 +210,12 @@ func (s *Service) FinishLockChange(ctx context.Context, id, project string, acti
 		return store.ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
 	}
 	s.record(ctx, core.Event{Kind: EventConsoleLockChanged, ItemID: row.ID, ProjectSlug: project,
-		Payload: map[string]any{"proof": ProofPasskey, "action": string(action)}})
+		Payload: ended.AddTo(map[string]any{"proof": ProofPasskey, "action": string(action)})})
+	if ended.Leases+ended.Grants > 0 {
+		// Said the way every other early end of agents' access is said, so the
+		// access page and the feed see it without knowing about locks.
+		s.record(ctx, core.Event{Kind: core.EventAccessRevoked, ProjectSlug: project,
+			Payload: map[string]any{"reason": store.LeaseRevokedLocked, "leases": ended.Leases, "grants": ended.Grants}})
+	}
 	return row, nil
 }

@@ -263,10 +263,11 @@ func (l lockPass) keep(p LockedProject) error {
 	if err != nil || has || l.dry() {
 		return err
 	}
-	if err := store.AddConsoleLock(l.ctx, l.db, p.Slug, store.ImportedLockCredential, l.now); err != nil {
+	ended, err := store.AddConsoleLockEndingAccess(l.ctx, l.db, p.Slug, store.ImportedLockCredential, l.now)
+	if err != nil {
 		return err
 	}
-	return l.record(p.Slug, "lock")
+	return l.record(p.Slug, "lock", ended)
 }
 
 // fence gives p the isolation fence a lock needs. On a merge the destination's
@@ -326,15 +327,16 @@ func (l lockPass) remove(p LockedProject) error {
 			return err
 		}
 	}
-	return l.record(p.Slug, "remove")
+	return l.record(p.Slug, "remove", store.EndedAccess{})
 }
 
-// record writes the audit event for a lock this import changed.
-func (l lockPass) record(project, action string) error {
+// record writes the audit event for a lock this import changed, with what a
+// new lock ended: leases, unlocks and grants from before the lock came off.
+func (l lockPass) record(project, action string, ended store.EndedAccess) error {
 	if l.rec == nil {
 		return nil
 	}
 	_, err := l.rec.Record(l.ctx, core.Event{Kind: core.EventConsoleLockChanged, ProjectSlug: project,
-		Payload: map[string]any{"proof": lockProofImport, "action": action}})
+		Payload: ended.AddTo(map[string]any{"proof": lockProofImport, "action": action})})
 	return err
 }

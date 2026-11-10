@@ -85,42 +85,98 @@ func HasConsoleLock(ctx context.Context, db *sql.DB, project string) (bool, erro
 	return n > 0, nil
 }
 
-// AddConsoleLock records a lock on project, proven by credential. The project
-// must exist and carry an isolation fence, and the console must not lock it
-// already.
+// AddConsoleLock records a lock on project, proven by credential, and ends the
+// access the project still had (AddConsoleLockEndingAccess).
 func AddConsoleLock(ctx context.Context, db *sql.DB, project, credential string, now time.Time) error {
+	_, err := AddConsoleLockEndingAccess(ctx, db, project, credential, now)
+	return err
+}
+
+// EndedAccess counts the permissions on one project that a new lock ended.
+type EndedAccess struct {
+	Leases, Unlocks, Grants int64
+}
+
+// AddTo sets each nonzero count in an event payload as leases, unlocks and
+// grants, and returns the payload.
+func (e EndedAccess) AddTo(payload map[string]any) map[string]any {
+	for k, n := range map[string]int64{"leases": e.Leases, "unlocks": e.Unlocks, "grants": e.Grants} {
+		if n > 0 {
+			payload[k] = n
+		}
+	}
+	return payload
+}
+
+// AddConsoleLockEndingAccess records a lock on project, proven by credential.
+// The project must exist and carry an isolation fence, and the console must not
+// lock it already.
+//
+// In the same transaction it ends every permission on the project that is
+// still live: agents' leases, read grants, and browsers' console unlocks, live
+// or pending. Each one dates from before the lock came off, since an unlocked
+// project grants none of these, and a lock turned back on means every agent and
+// browser asks again. The lock and the endings commit together or not at all,
+// so a lock is never recorded with an old approval still open behind it.
+func AddConsoleLockEndingAccess(ctx context.Context, db *sql.DB, project, credential string, now time.Time) (EndedAccess, error) {
 	const op = "store.AddConsoleLock"
+	var ended EndedAccess
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		return ended, fmt.Errorf("%s: %w", op, err)
 	}
 	defer func() { _ = tx.Rollback() }()
 	var isolation string
 	err = tx.QueryRowContext(ctx, `SELECT isolation FROM projects WHERE slug = ?`, project).Scan(&isolation)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("%s: %w: %q", op, ErrProjectNotFound, project)
+		return ended, fmt.Errorf("%s: %w: %q", op, ErrProjectNotFound, project)
 	}
 	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		return ended, fmt.Errorf("%s: %w", op, err)
 	}
 	if !core.Isolation(isolation).FencesOutbound() {
-		return fmt.Errorf("%s: %w", op, ErrConsoleLockUnfenced)
+		return ended, fmt.Errorf("%s: %w", op, ErrConsoleLockUnfenced)
 	}
 	var n int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM console_locks WHERE project_slug = ?`, project).Scan(&n); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		return ended, fmt.Errorf("%s: %w", op, err)
 	}
 	if n > 0 {
-		return fmt.Errorf("%s: %w", op, ErrConsoleLockExists)
+		return ended, fmt.Errorf("%s: %w", op, ErrConsoleLockExists)
 	}
+	at := core.FormatTime(now)
 	if _, err := tx.ExecContext(ctx, `INSERT INTO console_locks (project_slug, credential, locked_at) VALUES (?, ?, ?)`,
-		project, credential, core.FormatTime(now)); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		project, credential, at); err != nil {
+		return ended, fmt.Errorf("%s: %w", op, err)
+	}
+	// A pending unlock's code and challenge are cleared as EndAllConsoleUnlocks
+	// clears them, so it can no longer be approved or finished.
+	endings := []struct {
+		n    *int64
+		q    string
+		args []any
+	}{
+		{&ended.Leases, `UPDATE access_leases SET revoked_at = ?, revoked_reason = ?
+			WHERE project_slug = ? AND revoked_at IS NULL AND expires_at > ?`, []any{at, LeaseRevokedLocked, project, at}},
+		{&ended.Grants, `UPDATE access_grants SET revoked_at = ?, revoked_reason = ?
+			WHERE project_slug = ? AND revoked_at IS NULL AND expires_at > ?`, []any{at, LeaseRevokedLocked, project, at}},
+		{&ended.Unlocks, `UPDATE console_unlocks SET status = ?, ended_at = ?, ended_reason = ?, claim_hash = '', challenge = NULL
+			WHERE project_slug = ? AND status IN (?, ?)`,
+			[]any{ConsoleUnlockEnded, at, ConsoleUnlockEndLocked, project, ConsoleUnlockLive, ConsoleUnlockPending}},
+	}
+	for _, e := range endings {
+		res, err := tx.ExecContext(ctx, e.q, e.args...)
+		if err != nil {
+			return EndedAccess{}, fmt.Errorf("%s: end earlier access: %w", op, err)
+		}
+		if *e.n, err = res.RowsAffected(); err != nil {
+			return EndedAccess{}, fmt.Errorf("%s: end earlier access: %w", op, err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		return EndedAccess{}, fmt.Errorf("%s: %w", op, err)
 	}
-	return nil
+	return ended, nil
 }
 
 // RemoveConsoleLock deletes the console's lock on project.
