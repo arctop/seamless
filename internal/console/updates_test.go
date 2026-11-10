@@ -741,14 +741,16 @@ func TestUpdateBanner_DismissalIsPerTabByVersion(t *testing.T) {
 }
 
 // The live toast for a newly seen release shows the server-built summary, and
-// the refresh that same event triggers does not step on it.
+// the refresh that same event triggers does not step on it. Neither does the
+// refresh an owner action's event triggers step on that action's own line.
 func TestLayout_ToastsANewRelease(t *testing.T) {
 	layout, err := templateFS.ReadFile("templates/layout.html")
 	require.NoError(t, err)
 	src := string(layout)
 	require.Contains(t, src, "if (k === 'update.available' && d.summary) eventToast(d.summary);")
 	require.Contains(t, src, "if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);")
-	require.Contains(t, src, "if (Date.now() >= toastHold) flashToast('Updated');")
+	require.Contains(t, src, "function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }")
+	require.Contains(t, src, "if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');")
 	require.NotContains(t, src, "d.itemId", "the toast never interpolates the raw item id")
 }
 

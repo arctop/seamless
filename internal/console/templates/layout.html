@@ -235,6 +235,11 @@
   // the toast for its full time: the live refresh the same event schedules
   // must not replace it with the generic "Updated" a moment later.
   function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  // An owner action's own line (the notice or error it redirects back with,
+  // shown through SeamConsole.flash) keeps the toast the same way, while it is
+  // on screen: the action's event schedules a refresh too. The toast's own
+  // timer ends it, so this holds "Updated" back for one toast at most.
+  function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
 
   function apply() {
     if (busy) { again = true; return; }
@@ -255,7 +260,7 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); // the morph may have swapped the topbar's live indicator
         n = 0; pending = false; hidePill();
-        if (Date.now() >= toastHold) flashToast('Updated');
+        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
         // strip enter/pulse markers once their animations have played (longest
         // is the count pulse at 450ms) so nothing replays on a later reveal
         setTimeout(function () {

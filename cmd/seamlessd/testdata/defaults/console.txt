@@ -172,6 +172,11 @@
   
   
   function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
 
   function apply() {
     if (busy) { again = true; return; }
@@ -192,7 +197,7 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        if (Date.now() >= toastHold) flashToast('Updated');
+        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
         
         
         setTimeout(function () {
@@ -872,6 +877,11 @@
   
   
   function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
 
   function apply() {
     if (busy) { again = true; return; }
@@ -892,7 +902,7 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        if (Date.now() >= toastHold) flashToast('Updated');
+        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
         
         
         setTimeout(function () {
@@ -2226,6 +2236,11 @@
   
   
   function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
 
   function apply() {
     if (busy) { again = true; return; }
@@ -2246,7 +2261,7 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        if (Date.now() >= toastHold) flashToast('Updated');
+        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
         
         
         setTimeout(function () {
@@ -4256,6 +4271,11 @@
   
   
   function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
 
   function apply() {
     if (busy) { again = true; return; }
@@ -4276,7 +4296,7 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        if (Date.now() >= toastHold) flashToast('Updated');
+        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
         
         
         setTimeout(function () {
