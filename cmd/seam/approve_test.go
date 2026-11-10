@@ -146,6 +146,7 @@ func newApproveRig(t *testing.T, h http.HandlerFunc, typed string) *approveRig {
 	// and the real one is exercised in daemon_peer_test.go.
 	e.dialDaemon = fakeDaemonPeer(testDaemonUID)
 	e.lookupAccount = fakeAccounts
+	e.daemonAccount = noDaemonPin // this machine's real pin, if any, is not the stand-in's
 	e.getenv = func(k string) string { return rig.vars[k] }
 	e.now = func() time.Time { return fixedNow }
 	e.goos = "darwin"

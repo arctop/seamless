@@ -418,7 +418,8 @@ listed there is then refused at the socket unless you list it under
 database. If the daemon runs as you, every process of yours reads them. So with
 <code>peer_auth</code> on, <code>serve</code> refuses to start unless:</p>
 <ul>
-<li>it runs as neither the owner nor root;</li>
+<li>it runs as neither the owner nor root, and as the account the pin below
+names (with no pin, as a system account);</li>
 <li><code>data_dir</code> belongs to the daemon's account and is mode <code>0700</code>;</li>
 <li>the socket's directory belongs to the daemon's account or root and is not group-
 or world-writable (whoever can write it can replace the socket and impersonate
@@ -458,7 +459,7 @@ switch the boundary off at the next start.</li>
 <td><code>/opt/seamless/etc</code></td>
 <td>root</td>
 <td><code>0755</code></td>
-<td><code>seamless.yaml</code> (<code>root:_seamless</code>, <code>0640</code>)</td>
+<td><code>seamless.yaml</code> (<code>root:_seamless</code>, <code>0640</code>), <code>daemon-account</code> (root's, <code>0644</code>)</td>
 </tr>
 <tr>
 <td><code>/opt/seamless/data</code></td>
@@ -481,8 +482,13 @@ switch the boundary off at the next start.</li>
 </tbody>
 </table>
 </div>
-<p>Create the account. On macOS, as an administrator, pick an unused uid in the
-role range (<code>dscl . -list /Users UniqueID</code> lists the taken ones):</p>
+<p>Create the account as a system account: on macOS a uid below 500, on Linux one
+below <code>UID_MIN</code> in <code>/etc/login.defs</code> (1000 unless the file says otherwise). The
+commands below make one. Until the account is pinned (after the layout),
+<code>seam approve</code>, <code>seam touchid enroll</code>, the Touch ID approver and <code>serve</code> accept
+any system account as the daemon's, and no other.</p>
+<p>On macOS, as an administrator, pick an unused uid in the role range, below 500
+(<code>dscl . -list /Users UniqueID</code> lists the taken ones):</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo dscl . -create /Groups/_seamless PrimaryGroupID <span class="m">480</span>
 </span></span><span class="line"><span class="cl">sudo dscl . -create /Users/_seamless UniqueID <span class="m">480</span>
 </span></span><span class="line"><span class="cl">sudo dscl . -create /Users/_seamless PrimaryGroupID <span class="m">480</span>
@@ -501,6 +507,17 @@ whose data directory arrives there as a whole:</p>
 </span></span><span class="line"><span class="cl">sudo install -d -o _seamless -g _seamless -m <span class="m">0700</span> /opt/seamless/home /opt/seamless/data
 </span></span><span class="line"><span class="cl">sudo install -d -o _seamless -g _seamless -m <span class="m">0755</span> /opt/seamless/run
 </span></span></code></pre></div>
+<p>Then pin the account: <code>seam approve</code>, <code>seam touchid enroll</code>, the Touch ID
+approver and <code>serve</code> accept only the account this file names as the daemon's,
+so no other account - a restricted one, another service's - can pass for it.
+<code>sudo tee</code> writes it as root's:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nb">echo</span> <span class="s2">&#34;_seamless </span><span class="k">$(</span>id -u _seamless<span class="k">)</span><span class="s2">&#34;</span> <span class="p">|</span> sudo tee /opt/seamless/etc/daemon-account &gt;/dev/null
+</span></span><span class="line"><span class="cl">sudo chmod <span class="m">0644</span> /opt/seamless/etc/daemon-account
+</span></span></code></pre></div>
+<p>It is one line, the account's name and uid (<code>_seamless 480</code>). A pin that is not
+root's, that another account could rewrite (it or any directory above it), or
+that is not that one line makes them refuse every daemon until root rewrites
+it; <code>seamlessd doctor</code> says which.</p>
 <p>The service runs as that account whether or not anyone is logged in. On macOS
 it is a LaunchDaemon: the plist, its controls, and how to retire the per-user
 service first are in <a href="../../reference/service/#peer-auth-daemon">the service reference</a>.
@@ -861,8 +878,12 @@ detaches from that tree, or a call over TCP with the bearer key, is not confined
 <h2 id="restricted-local-accounts">Restricted local accounts</h2>
 <p>A <strong>restricted local account</strong> is a second OS account on the machine whose
 agents work beside yours: a separate login for unattended agents, say, so that
-nothing they run can read your home directory. List it under
-<code>peer_auth.restricted</code>, by user name or numeric uid:</p>
+nothing they run can read your home directory. With
+<a href="#deploy-it-the-daemon-runs-as-its-own-account">the daemon's account pinned</a>, it
+may be any account other than the daemon's; without the pin it must be an
+ordinary account, the kind a person logs in with, since the clients then accept
+any system account as the daemon's. List it under <code>peer_auth.restricted</code>, by user
+name or numeric uid:</p>
 <div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">peer_auth</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">owner</span><span class="p">:</span><span class="w"> </span><span class="l">alice</span><span class="w">
@@ -1052,8 +1073,8 @@ so nothing inside needs rewriting. On one volume the move is a rename.</p>
 <li><strong>Back up</strong>, as the owner, while the old daemon still serves:
 <code>seamlessd export -o ~/seamless-before-peer-auth.tar.gz</code>. The archive holds
 every project, the locked ones included: keep it as carefully as they are.</li>
-<li><strong>Create the account and the layout</strong> above, leaving out <code>/opt/seamless/data</code>,
-and install root-owned copies of both binaries in <code>/opt/seamless/bin</code>
+<li><strong>Create the account, the layout and the pin</strong> above, leaving out
+<code>/opt/seamless/data</code>, and install root-owned copies of both binaries in <code>/opt/seamless/bin</code>
 (<code>sudo install -o root -m 0755 &lt;seamlessd&gt; &lt;seam&gt; /opt/seamless/bin/</code>). Keep a
 copy of the current <code>mcp.api_key</code> for the console.</li>
 <li><strong>Write the daemon's config</strong> at <code>/opt/seamless/etc/seamless.yaml</code>

@@ -271,6 +271,21 @@ any of it.
   it only once every labeled field is the owner's (`textOwned`: replaced with
   new text in that write, or empty), so the owner's append, search/replace edit
   or one-field rewrite keeps it. The owner's writes carry no label.
+- **The daemon is the account root pinned, else a system account.** Root pins
+  the daemon's account in `access.DaemonAccountPath`
+  (`/opt/seamless/etc/daemon-account`, one line `<name> <uid>`;
+  `access.DaemonAccount`), believed only as a regular file owned by root
+  under directories owned by root, none of them group- or world-writable; a
+  pin that is there but fails that or does not parse refuses every daemon
+  (`access.ErrDaemonPin`), never falls back. With a pin only its uid is the
+  daemon (`access.DaemonUID`); with none, `access.SystemAccount` (macOS below
+  uid 500, Linux below login.defs' UID_MIN, no range elsewhere). `seam`'s
+  `verifyDaemon` (cmd/seam/daemon_peer.go), the Touch ID approver's
+  `PeerGuard.admit` (Socket.swift, with DaemonPin.swift mirroring the pin;
+  `< 500` alone, it is macOS only) and serve's preflight
+  (`filesystemProblems`, which doctor reports, refusing too a restricted
+  account that is the pinned one) apply it, so a restricted or other account
+  serving a socket as itself is refused; keep the three in step.
 - **A restricted account's binding rule is a proposal, never a write.** Any
   write, append, edit, overwrite, supersede or delete that touches a
   `screening.BriefingKinds` memory (constraint, convention, protocol, stage)

@@ -279,6 +279,7 @@ func newTouchRig(t *testing.T, daemon http.Handler, typed string) *touchRig {
 	// caller: the check of who answers is faked here, as it is for seam approve.
 	e.dialDaemon = fakeDaemonPeer(testDaemonUID)
 	e.lookupAccount = fakeAccounts
+	e.daemonAccount = noDaemonPin // this machine's real pin, if any, is not the stand-in's
 	cfg := config.Defaults()
 	cfg.Addr = "127.0.0.1:1" // nothing listens: only the socket can answer
 	cfg.AdvertisedURL = "unix://" + rig.sock

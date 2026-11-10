@@ -22,6 +22,7 @@ import (
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"golang.org/x/term"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 )
 
@@ -45,9 +46,9 @@ type env struct {
 	// in a test env unless the test sets it. A nil terminal, getenv or exec
 	// degrades to the safe answer, never to the real world: not a terminal, an
 	// empty environment, and no program run at all -- so a test that forgets to
-	// fake sudo fails rather than running it. A nil dialDaemon or lookupAccount
-	// refuses, so no daemon is believed unchecked. A nil now or tick is the real
-	// clock, which runs nothing.
+	// fake sudo fails rather than running it. A nil dialDaemon, daemonAccount or
+	// lookupAccount refuses, so no daemon is believed unchecked. A nil now or
+	// tick is the real clock, which runs nothing.
 
 	// terminal reports whether stdin and stdout are both terminals.
 	terminal func() bool
@@ -67,6 +68,9 @@ type env struct {
 	dialDaemon func(ctx context.Context, cfg config.Config) (uint32, *http.Client, error)
 	// lookupAccount resolves an OS account's name to its uid.
 	lookupAccount func(name string) (uint32, error)
+	// daemonAccount reads the pin root writes of the daemon's account
+	// (access.DaemonAccount): present false when there is none.
+	daemonAccount func() (pin access.DaemonPin, present bool, err error)
 }
 
 // newEnv returns the real world.
@@ -83,6 +87,7 @@ func newEnv() *env {
 
 		dialDaemon:    dialSocketDaemon,
 		lookupAccount: lookupAccountUID,
+		daemonAccount: access.DaemonAccount,
 	}
 }
 

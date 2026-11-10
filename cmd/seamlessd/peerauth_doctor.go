@@ -64,6 +64,9 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 	for _, w := range rt.restrictedReachWarnings() {
 		out = append(out, check{statusWarn, "peer_auth.restricted", w})
 	}
+	if row, ok := rt.daemonAccountRow(); ok {
+		out = append(out, row)
+	}
 	problems := rt.filesystemProblems(cfg, false)
 	if db != nil {
 		pp, perr := projectProblems(ctx, db, policy)
@@ -89,6 +92,26 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 			"totals, the model, plan-file and subagent capture and the git head, from clients whose server_url is the " +
 			"peer_auth socket; agents on the TCP key make none of these captures"})
 	return out
+}
+
+// daemonAccountRow is doctor's row for root's pin of the daemon's account.
+// A pin that is there but not believed, or that names another account than
+// the one doctor runs as, is a failure among the preflight's problems instead.
+func (rt *peerAuthRuntime) daemonAccountRow() (check, bool) {
+	const name = "peer_auth.daemon_account"
+	pin, pinned, err := rt.env.daemonPin()
+	switch {
+	case err != nil:
+		return check{}, false
+	case !pinned:
+		return check{statusWarn, name, rt.noPinNote()}, true
+	case rt.env.euid == int(pin.UID):
+		return check{statusOK, name, fmt.Sprintf("%s pins %s, the account this runs as: seam approve, seam touchid enroll "+
+			"and the Touch ID approver trust no other daemon", pin.Path, pin)}, true
+	default:
+		return check{statusInfo, name, fmt.Sprintf("%s pins %s: seam approve, seam touchid enroll and the Touch ID approver "+
+			"trust no other daemon, so it must run as that account (run doctor as it to check)", pin.Path, pin)}, true
+	}
 }
 
 func groupSuffix(g string) string {

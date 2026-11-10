@@ -16,23 +16,53 @@ public protocol Transport {
 
 /// `PeerGuard` is the check every connection passes right after connect,
 /// before a byte is sent: the socket's peer must not run as the helper's own
-/// uid. The helper runs as the owner, and so may every agent the owner runs;
-/// any of them could listen on a socket and pass its path here, but none of
-/// them can be another uid. The daemon runs as its own account. The first
-/// peer is pinned, so every connection of one run reaches the same account;
-/// the flows also check that account is the one the daemon names
-/// (`requireAccount`).
+/// uid, nor as root, and must run as the account root pinned as the daemon's
+/// (`DaemonPin`) or, with no pin, as a system account (a uid below 500). The
+/// helper runs as the owner, and so may every agent the owner runs; any of
+/// them could listen on a socket and pass its path here, but none of them can
+/// be another uid. A restricted local account or another service is another
+/// uid, which only the pin, which only root can write, singles out; without
+/// it, only root can create a system account, which keeps out an ordinary
+/// account (501 and up) but not another role account. A pin that is there but
+/// not believed refuses every peer. The first peer is pinned, so every
+/// connection of one run reaches the same account; the flows also check that
+/// account is the one the daemon names (`requireAccount`). The Go clients
+/// apply the same rule (access.DaemonAccount, access.DaemonUID).
 public final class PeerGuard {
+    /// macOS system accounts are below this uid; the accounts it creates for
+    /// people start at 501.
+    public static let systemUIDLimit: uid_t = 500
+
     public let ownUID: uid_t
     public private(set) var pinned: uid_t?
+    /// `daemonPin` reads root's pin of the daemon's account, nil when there is
+    /// none (`DaemonPin.load` in production).
+    let daemonPin: () throws -> DaemonPin?
 
-    public init(ownUID: uid_t) {
+    public init(ownUID: uid_t, daemonPin: @escaping () throws -> DaemonPin? = { try DaemonPin.load() }) {
         self.ownUID = ownUID
+        self.daemonPin = daemonPin
     }
 
     public func admit(_ peer: uid_t) throws {
         if peer == ownUID {
             throw ApproverError.peer("The process serving the socket runs as this account (uid \(peer)), not as the daemon's, so Seamless Approve will not talk to it.")
+        }
+        if peer == 0 {
+            throw ApproverError.peer("The process serving the socket runs as root (uid 0), not as the daemon's account, so Seamless Approve will not talk to it.")
+        }
+        let pin: DaemonPin?
+        do {
+            pin = try daemonPin()
+        } catch let e as PinError {
+            throw ApproverError.peer("The daemon account pin \(e.path) \(e.problem). Seamless Approve trusts no daemon until root rewrites it.")
+        }
+        if let pin = pin {
+            if peer != pin.uid {
+                throw ApproverError.peer("The process serving the socket runs as uid \(peer), but \(pin.path) pins the daemon's account as \(pin.name) (uid \(pin.uid)), so Seamless Approve will not talk to it.")
+            }
+        } else if peer >= PeerGuard.systemUIDLimit {
+            throw ApproverError.peer("The process serving the socket runs as uid \(peer), which is not a system account (those are below uid \(PeerGuard.systemUIDLimit)), and no pin names the daemon's account. The daemon runs as a system account of its own, so Seamless Approve will not talk to it.")
         }
         if let p = pinned, p != peer {
             throw ApproverError.peer("The process serving the socket changed from uid \(p) to uid \(peer) during one run, so Seamless Approve stopped.")

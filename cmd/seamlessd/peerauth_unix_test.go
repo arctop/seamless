@@ -72,11 +72,18 @@ func clearServeEnv(t *testing.T) {
 }
 
 // paTestEnv plays a daemon running as the test's own uid, with _example_owner a
-// different account (the owner) and "me" resolving to the test's uid.
+// different account (the owner) and "me" resolving to the test's uid. The
+// machine has no pin of the daemon's account (this one's real pin, if any, is
+// not the test's), and the test's uid is an ordinary account, so the env takes
+// it for a system account, as the daemon's is
+// (TestPreparePeerAuth_RefusesAnAccountThatIsNotASystemAccount holds the real
+// rule, TestPreparePeerAuth_DaemonAccountPin the pin).
 func paTestEnv(l paLayout, ownerUID uint32) peerAuthEnv {
 	me := uint32(os.Geteuid())
 	return peerAuthEnv{
-		euid: os.Geteuid(),
+		euid:          os.Geteuid(),
+		systemAccount: func(uint32) (bool, string) { return true, "the test's stand-in" },
+		daemonAccount: paNoPin,
 		resolve: func(name string) (access.Account, error) {
 			switch name {
 			case "_example_owner":
@@ -90,6 +97,23 @@ func paTestEnv(l paLayout, ownerUID uint32) peerAuthEnv {
 		},
 		exe:     func() (string, error) { return l.exe, nil },
 		inspect: inspectPath,
+	}
+}
+
+// paNoPin is a machine with no pin of the daemon's account.
+func paNoPin() (access.DaemonPin, bool, error) { return access.DaemonPin{}, false, nil }
+
+// paPinned is a machine whose trusted pin names uid.
+func paPinned(uid uint32) func() (access.DaemonPin, bool, error) {
+	return func() (access.DaemonPin, bool, error) {
+		return access.DaemonPin{Name: "_seamless", UID: uid, Path: access.DaemonAccountPath}, true, nil
+	}
+}
+
+// paBadPin is a machine whose pin is there but is not believed.
+func paBadPin(problem string) func() (access.DaemonPin, bool, error) {
+	return func() (access.DaemonPin, bool, error) {
+		return access.DaemonPin{}, true, fmt.Errorf("%w %s %s", access.ErrDaemonPin, access.DaemonAccountPath, problem)
 	}
 }
 
@@ -174,6 +198,189 @@ func TestPreparePeerAuth_Refusals(t *testing.T) {
 			require.Contains(t, err.Error(), tc.want)
 		})
 	}
+}
+
+// serve refuses to run as an account that is not a system account: seam
+// approve and the Touch ID approver would refuse the daemon, so the install
+// fails at start instead, naming the guide's step that creates the account.
+// An env that sets no rule is held to the real one.
+func TestPreparePeerAuth_RefusesAnAccountThatIsNotASystemAccount(t *testing.T) {
+	l, cfg := newPALayout(t, paLockedAndRestricted)
+	env := paTestEnv(l, uint32(os.Geteuid())+1000)
+	var judged []uint32
+	env.systemAccount = func(uid uint32) (bool, string) {
+		judged = append(judged, uid)
+		return false, "macOS system accounts are below uid 500"
+	}
+	_, err := preparePeerAuth(cfg, env)
+	require.ErrorIs(t, err, errPeerAuthPreflight)
+	require.Equal(t, []uint32{uint32(os.Geteuid())}, judged, "the daemon's own euid is judged")
+	require.Equal(t, fmt.Sprintf("peer_auth preflight: the daemon runs as uid %d, which is not a system account "+
+		"(macOS system accounts are below uid 500), and with no pin at /opt/seamless/etc/daemon-account, seam approve and the "+
+		"Touch ID approver refuse a daemon that is not one: run it as a system account, created and pinned as the peer_auth guide "+
+		`does under "Deploy it: the daemon runs as its own account" (dscl with a uid below 500 on macOS, useradd --system on Linux)`, os.Geteuid()), err.Error(),
+		"the only problem in an otherwise passing layout")
+
+	// The owner and root keep their own refusal, alone.
+	env.resolve = paTestEnv(l, uint32(os.Geteuid())).resolve
+	_, err = preparePeerAuth(cfg, env)
+	require.ErrorContains(t, err, "runs as _example_owner, the owner")
+	require.NotContains(t, err.Error(), "not a system account")
+	env = paTestEnv(l, uint32(os.Geteuid())+1000)
+	env.euid = 0
+	env.systemAccount = func(uint32) (bool, string) { return false, "x" }
+	_, err = preparePeerAuth(cfg, env)
+	require.ErrorContains(t, err, "runs as root")
+	require.NotContains(t, err.Error(), "not a system account")
+
+	// No rule set: the real one, which this test's own (ordinary) account fails.
+	if system, _ := access.SystemAccount(uint32(os.Geteuid())); system {
+		t.Skipf("uid %d is a system account here", os.Geteuid())
+	}
+	env = paTestEnv(l, uint32(os.Geteuid())+1000)
+	env.systemAccount = nil
+	_, err = preparePeerAuth(cfg, env)
+	require.ErrorIs(t, err, errPeerAuthPreflight)
+	require.Contains(t, err.Error(), fmt.Sprintf("the daemon runs as uid %d, which is not a system account", os.Geteuid()))
+}
+
+// With a trusted pin, serve runs only as the pinned account (the system-account
+// rule is not asked); a pin that is there but not believed refuses the start,
+// whoever runs it; and a restricted account that is the pinned one is refused.
+func TestPreparePeerAuth_DaemonAccountPin(t *testing.T) {
+	me := uint32(os.Geteuid())
+	notSystem := func(uint32) (bool, string) { return false, "not asked under a pin" }
+	l, cfg := newPALayout(t, paLockedAndRestricted)
+
+	env := paTestEnv(l, me+1000)
+	env.systemAccount = notSystem
+	env.daemonAccount = paPinned(me)
+	_, err := preparePeerAuth(cfg, env)
+	require.NoError(t, err, "the pinned account, whatever its range")
+
+	env.daemonAccount = paPinned(480)
+	_, err = preparePeerAuth(cfg, env)
+	require.ErrorIs(t, err, errPeerAuthPreflight)
+	require.Equal(t, fmt.Sprintf("peer_auth preflight: the daemon runs as uid %d, but /opt/seamless/etc/daemon-account pins the daemon's "+
+		"account as _seamless (uid 480), and seam approve and the Touch ID approver accept no other: run the daemon as _seamless, "+
+		`or have root rewrite the pin as the peer_auth guide does under "Deploy it: the daemon runs as its own account"`, me), err.Error())
+
+	env.daemonAccount = paBadPin("is owned by uid 501: it must belong to root")
+	_, err = preparePeerAuth(cfg, env)
+	require.ErrorIs(t, err, errPeerAuthPreflight)
+	require.Equal(t, "peer_auth preflight: the daemon account pin /opt/seamless/etc/daemon-account is owned by uid 501: it must belong "+
+		"to root -- serve and its clients trust no daemon while it stands: have root rewrite it as the peer_auth guide does under "+
+		`"Deploy it: the daemon runs as its own account"`, err.Error(), "refused, not the system-account fallback")
+	env.euid = 0
+	_, err = preparePeerAuth(cfg, env)
+	require.ErrorContains(t, err, "runs as root")
+	require.ErrorContains(t, err, "the daemon account pin /opt/seamless/etc/daemon-account is owned by uid 501", "whoever runs it")
+
+	// The restricted account is the pinned one.
+	l, cfg = newPALayout(t, "  restricted: [me]\n")
+	env = paTestEnv(l, me+1000)
+	env.daemonAccount = paPinned(me)
+	_, err = preparePeerAuth(cfg, env)
+	require.ErrorIs(t, err, errPeerAuthPreflight)
+	require.Equal(t, fmt.Sprintf("peer_auth preflight: peer_auth.restricted lists me (uid %d), the account /opt/seamless/etc/daemon-account "+
+		"pins as the daemon's: the clients would trust a socket it serves -- list another account, or have root correct the pin", me), err.Error())
+	env.daemonAccount = paNoPin
+	_, err = preparePeerAuth(cfg, env)
+	require.NoError(t, err, "with no pin there is nothing to collide with")
+}
+
+// serve says at start which account the pin names, or warns that there is
+// none, with the command that writes it.
+func TestLogPolicy_DaemonAccountPin(t *testing.T) {
+	l, cfg := newPALayout(t, paLockedAndRestricted)
+	env := paTestEnv(l, uint32(os.Geteuid())+1000)
+	logged := func(env peerAuthEnv) string {
+		rt, err := preparePeerAuth(cfg, env)
+		require.NoError(t, err)
+		var b strings.Builder
+		rt.logPolicy(slog.New(slog.NewTextHandler(&b, nil)))
+		return b.String()
+	}
+	out := logged(env)
+	require.Contains(t, out, "level=WARN")
+	require.Contains(t, out, "no pin at /opt/seamless/etc/daemon-account names the daemon's account")
+	require.Contains(t, out, `echo \"_seamless $(id -u _seamless)\" | sudo tee /opt/seamless/etc/daemon-account >/dev/null && sudo chmod 0644 /opt/seamless/etc/daemon-account`)
+
+	env.daemonAccount = paPinned(uint32(os.Geteuid()))
+	out = logged(env)
+	require.NotContains(t, out, "level=WARN")
+	require.Contains(t, out, fmt.Sprintf("peer_auth daemon account pinned\" pin=/opt/seamless/etc/daemon-account user=_seamless uid=%d", os.Geteuid()))
+}
+
+// Doctor's row for each state of the pin: absent (a warning with the command,
+// naming the account doctor runs as), trusted and this account (ok), trusted
+// and another (said, and a failure), not believed or not parsed (a failure).
+func TestPeerAuthChecks_DaemonAccountRows(t *testing.T) {
+	me := uint32(os.Geteuid())
+	l, cfg := newPALayout(t, paLockedAndRestricted)
+	rows := func(env peerAuthEnv) (pin []check, fails []string) {
+		for _, r := range peerAuthChecks(context.Background(), cfg, nil, env) {
+			if r.name == "peer_auth.daemon_account" {
+				pin = append(pin, r)
+			}
+			if r.status == statusFail {
+				fails = append(fails, r.detail)
+			}
+		}
+		return pin, fails
+	}
+
+	env := paTestEnv(l, me+1000)
+	base := env.resolve
+	env.resolve = func(name string) (access.Account, error) {
+		if name == fmt.Sprint(me) {
+			return access.Account{UID: me, Name: "_seamless_test"}, nil
+		}
+		return base(name)
+	}
+	pin, fails := rows(env)
+	require.Empty(t, fails)
+	require.Equal(t, []check{{statusWarn, "peer_auth.daemon_account", "no pin at /opt/seamless/etc/daemon-account names the daemon's account, " +
+		"so seam approve, seam touchid enroll and the Touch ID approver fall back to accepting any system account as the daemon's, " +
+		"another service's or a restricted role account included: pin this one, as an administrator: " +
+		`echo "_seamless_test $(id -u _seamless_test)" | sudo tee /opt/seamless/etc/daemon-account >/dev/null && sudo chmod 0644 /opt/seamless/etc/daemon-account`}}, pin)
+
+	env.daemonAccount = paPinned(me)
+	pin, fails = rows(env)
+	require.Empty(t, fails)
+	require.Equal(t, []check{{statusOK, "peer_auth.daemon_account", fmt.Sprintf("/opt/seamless/etc/daemon-account pins _seamless (uid %d), "+
+		"the account this runs as: seam approve, seam touchid enroll and the Touch ID approver trust no other daemon", me)}}, pin)
+
+	env.daemonAccount = paPinned(480)
+	pin, fails = rows(env)
+	require.Equal(t, []check{{statusInfo, "peer_auth.daemon_account", "/opt/seamless/etc/daemon-account pins _seamless (uid 480): seam approve, " +
+		"seam touchid enroll and the Touch ID approver trust no other daemon, so it must run as that account (run doctor as it to check)"}}, pin)
+	require.Len(t, fails, 1)
+	require.Contains(t, fails[0], fmt.Sprintf("the daemon runs as uid %d, but /opt/seamless/etc/daemon-account pins the daemon's account as _seamless (uid 480)", me))
+
+	for problem, want := range map[string]string{
+		"is mode 0664: it must be writable by root alone (0644)":                                                        "untrusted",
+		`has 3 space-separated fields, not 2: it must be one line, the daemon's account name and uid ("_seamless 480")`: "unparsable",
+	} {
+		env.daemonAccount = paBadPin(problem)
+		pin, fails = rows(env)
+		require.Empty(t, pin, "%s: no row of its own", want)
+		require.Equal(t, []string{"the daemon account pin /opt/seamless/etc/daemon-account " + problem + " -- serve and its clients trust " +
+			`no daemon while it stands: have root rewrite it as the peer_auth guide does under "Deploy it: the daemon runs as its own account"`}, fails, want)
+	}
+
+	// Run as the owner, the command names the guide's account, never the owner.
+	env = paTestEnv(l, me)
+	env.resolve = func(name string) (access.Account, error) {
+		if name == "_example_owner" || name == fmt.Sprint(me) {
+			return access.Account{UID: me, Name: "_example_owner"}, nil
+		}
+		return base(name)
+	}
+	pin, _ = rows(env)
+	require.Len(t, pin, 1)
+	require.Contains(t, pin[0].detail, `echo "_seamless $(id -u _seamless)"`)
+	require.NotContains(t, pin[0].detail, "_example_owner")
 }
 
 // A missing data dir is created 0700 by serve once its parents pass; doctor
@@ -323,6 +530,23 @@ func TestPeerAuthChecks_DoctorRows(t *testing.T) {
 		}
 	}
 	require.True(t, failed, "doctor fails on what serve would refuse")
+
+	// Run as an account that is not a system account, doctor fails the row serve
+	// would refuse on, and does not say the preflight passes.
+	require.NoError(t, os.Chmod(l.data, 0o700))
+	env.systemAccount = func(uint32) (bool, string) { return false, "macOS system accounts are below uid 500" }
+	var fails []string
+	text.Reset()
+	for _, r := range peerAuthChecks(context.Background(), cfg, nil, env) {
+		if r.status == statusFail {
+			fails = append(fails, r.name+": "+r.detail)
+		}
+		fmt.Fprintf(&text, "%s %s\n", r.name, r.detail)
+	}
+	require.Len(t, fails, 1, text.String())
+	require.Contains(t, fails[0], fmt.Sprintf("peer_auth: the daemon runs as uid %d, which is not a system account", os.Geteuid()))
+	require.Contains(t, fails[0], `"Deploy it: the daemon runs as its own account"`)
+	require.NotContains(t, text.String(), "pass serve's preflight")
 }
 
 // The daemon's real route table over a real socket, the kernel naming the

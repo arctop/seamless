@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -23,9 +24,20 @@ import (
 	"github.com/arctop/seamless/internal/config"
 )
 
-// testDaemonUID is the stand-in daemon's uid: by construction neither this
-// test's own nor root's.
-var testDaemonUID = uint32(os.Geteuid()) + 1000
+// testDaemonUID is the stand-in daemon's uid: the guide's _seamless (480), a
+// system account on macOS and Linux as is the uid after it, and by construction
+// neither this test's own nor root's.
+var testDaemonUID = func() uint32 {
+	if own := uint32(os.Geteuid()); own == 480 || own == 481 {
+		return 470
+	}
+	return 480
+}()
+
+// testOrdinaryUID is another account than this test's, and an ordinary one on
+// macOS and Linux: what a restricted local account serving a socket of its own
+// is.
+var testOrdinaryUID = uint32(os.Geteuid()) + 1000
 
 // fakeDaemonPeer stands in for the kernel: uid answered, and the client is the
 // config's own, so a TCP stand-in console can be read through it.
@@ -33,6 +45,16 @@ func fakeDaemonPeer(uid uint32) func(context.Context, config.Config) (uint32, *h
 	return func(_ context.Context, cfg config.Config) (uint32, *http.Client, error) {
 		client, err := cfg.HTTPClient(consoleTimeout)
 		return uid, client, err
+	}
+}
+
+// noDaemonPin is a machine with no pin: the system-account rule applies.
+func noDaemonPin() (access.DaemonPin, bool, error) { return access.DaemonPin{}, false, nil }
+
+// pinnedTo is a machine whose trusted pin names uid.
+func pinnedTo(uid uint32) func() (access.DaemonPin, bool, error) {
+	return func() (access.DaemonPin, bool, error) {
+		return access.DaemonPin{Name: "_seamless", UID: uid, Path: access.DaemonAccountPath}, true, nil
 	}
 }
 
@@ -121,6 +143,10 @@ func TestApprove_NothingIsShownUntilThePeerIsVerified(t *testing.T) {
 	}{
 		{name: "the caller's own uid", peer: own, want: "your own uid"},
 		{name: "root", peer: 0, want: "root (uid 0)"},
+		{name: "an account that is not a system account", peer: testOrdinaryUID,
+			want: fmt.Sprintf("answered by uid %d, which is not a system account", testOrdinaryUID)},
+		{name: "a restricted account naming itself", peer: testOrdinaryUID, terminal: withAccount(fmt.Sprintf("#%d", testOrdinaryUID)),
+			want: "which is not a system account"},
 		{name: "a socket nothing answers", dialErr: errors.New("connect: no such file or directory"), want: "no such file"},
 		{name: "account root", peer: testDaemonUID, terminal: withAccount("root"), want: "which is root"},
 		{name: "account ROOT", peer: testDaemonUID, terminal: withAccount("ROOT"), want: "which is root"},
@@ -153,6 +179,106 @@ func TestApprove_NothingIsShownUntilThePeerIsVerified(t *testing.T) {
 			require.Empty(t, rig.runner.recorded(), "no sudo run")
 		})
 	}
+}
+
+// A daemon is a system account (access.SystemAccount), so an ordinary account
+// that is neither the caller nor root -- a restricted local account serving a
+// socket as itself, once the owner's config names that socket -- is refused,
+// naming the uid, the guide's account step and the config to check. The
+// guide's _seamless passes.
+func TestVerifyDaemon_RefusesAnAccountThatIsNotASystemAccount(t *testing.T) {
+	cfg, path := configFileFor(t, "/opt/seamless/run/seamlessd.sock")
+	verify := func(peer uint32) (verifiedDaemon, error) {
+		return verifyDaemon(context.Background(), &env{dialDaemon: fakeDaemonPeer(peer), daemonAccount: noDaemonPin}, cfg)
+	}
+	ordinary := []uint32{testOrdinaryUID}
+	if runtime.GOOS == "darwin" {
+		ordinary = append(ordinary, 500, 501) // the first uid past the role range, and a person's first account
+	}
+	for _, uid := range ordinary {
+		if uid == uint32(os.Geteuid()) {
+			continue // the caller's own uid has its own refusal, below
+		}
+		_, err := verify(uid)
+		require.Error(t, err, "uid %d", uid)
+		_, rule := access.SystemAccount(uid)
+		require.Equal(t, fmt.Sprintf("refusing to trust the daemon at unix:/opt/seamless/run/seamlessd.sock: it is answered by uid %d, "+
+			"which is not a system account (%s), and no pin at /opt/seamless/etc/daemon-account names the daemon's account. "+
+			"The daemon runs as the system account the peer_auth guide creates and pins "+
+			`("Deploy it: the daemon runs as its own account"), and a restricted or other ordinary account serving the socket is refused. `+
+			"server_url in %s may have been changed: check it, or approve on the console's passkey page", uid, rule, path), err.Error())
+	}
+
+	d, err := verify(testDaemonUID)
+	require.NoError(t, err, "the guide's _seamless")
+	require.Equal(t, testDaemonUID, d.peer)
+
+	// The two refusals before it keep their words.
+	_, err = verify(0)
+	require.ErrorContains(t, err, "it is answered by root (uid 0), not by the daemon's own account")
+	_, err = verify(uint32(os.Geteuid()))
+	require.ErrorContains(t, err, fmt.Sprintf("it is answered by your own uid (%d), not by the daemon's own account", os.Geteuid()))
+}
+
+// With a trusted pin, the pinned uid is the daemon and every other account is
+// refused, another system account (a restricted role account, another
+// service) included; the system-account rule is not asked. A pin that is there
+// but not believed refuses every daemon. The caller's own uid and root keep
+// their refusals first.
+func TestVerifyDaemon_ThePinNamesTheDaemon(t *testing.T) {
+	cfg, path := configFileFor(t, "/opt/seamless/run/seamlessd.sock")
+	verify := func(peer uint32, pin func() (access.DaemonPin, bool, error)) (verifiedDaemon, error) {
+		return verifyDaemon(context.Background(), &env{dialDaemon: fakeDaemonPeer(peer), daemonAccount: pin}, cfg)
+	}
+	other := testDaemonUID + 4 // another role account: a system account, not the pinned one
+
+	d, err := verify(testDaemonUID, pinnedTo(testDaemonUID))
+	require.NoError(t, err, "the pinned account")
+	require.Equal(t, testDaemonUID, d.peer)
+	_, err = verify(testOrdinaryUID, pinnedTo(testOrdinaryUID))
+	require.NoError(t, err, "the pin decides, not the system-account range")
+
+	_, err = verify(other, pinnedTo(testDaemonUID))
+	require.Equal(t, fmt.Sprintf("refusing to trust the daemon at unix:/opt/seamless/run/seamlessd.sock: it is answered by uid %d, "+
+		"but /opt/seamless/etc/daemon-account pins the daemon's account as _seamless (uid %d), and any other account serving "+
+		"the socket is refused. server_url in %s may have been changed: check it, or approve on the console's passkey page",
+		other, testDaemonUID, path), err.Error())
+	_, err = verify(other, noDaemonPin)
+	require.NoError(t, err, "without the pin, another system account passes: what the pin is for")
+
+	untrusted := fmt.Errorf("%w %s is owned by uid 501: it must belong to root", access.ErrDaemonPin, access.DaemonAccountPath)
+	broken := func() (access.DaemonPin, bool, error) { return access.DaemonPin{}, true, untrusted }
+	_, err = verify(testDaemonUID, broken)
+	require.ErrorIs(t, err, access.ErrDaemonPin)
+	require.Equal(t, "refusing to trust any daemon: the daemon account pin /opt/seamless/etc/daemon-account is owned by uid 501: "+
+		"it must belong to root. No daemon is trusted until root rewrites it as the peer_auth guide does "+
+		`("Deploy it: the daemon runs as its own account"); meanwhile approve on the console's passkey page`, err.Error())
+
+	_, err = verify(0, broken)
+	require.ErrorContains(t, err, "root (uid 0)")
+	_, err = verify(uint32(os.Geteuid()), pinnedTo(uint32(os.Geteuid())))
+	require.ErrorContains(t, err, "your own uid", "a pin naming the caller does not make it the daemon")
+
+	_, err = verify(testDaemonUID, nil)
+	require.ErrorIs(t, err, errNoDaemonPin, "an env that reads no pin refuses")
+}
+
+// Through seam approve: a peer the pin does not name is refused before any
+// fact is shown or sudo runs; the pinned one is approved as before.
+func TestApprove_ThePinDecidesWhoIsTheDaemon(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	rig := newApproveRig(t, routes(t, byRef(t, a)), "y\n")
+	rig.e.daemonAccount = pinnedTo(testDaemonUID + 4)
+	require.Equal(t, 1, rig.run("R-7F3K", "--for", "1h"))
+	require.Contains(t, rig.errb.String(), "pins the daemon's account as _seamless")
+	require.Equal(t, 1, strings.Count(rig.errb.String(), "\n"), "one line")
+	require.Empty(t, rig.out.String(), "no fact shown")
+	require.Empty(t, rig.runner.recorded(), "no sudo run")
+
+	rig = newApproveRig(t, routes(t, byRef(t, a)), "y\n")
+	rig.e.daemonAccount = pinnedTo(testDaemonUID)
+	require.Equal(t, 0, rig.run("R-7F3K", "--for", "1h"), rig.errb.String())
+	require.Contains(t, rig.out.String(), "Access request R-7F3K\n")
 }
 
 // A TCP server_url says nothing of who answered, so the non-advisory path is
@@ -281,6 +407,7 @@ func TestApprove_WatchAndPasskeyRefuseEveryFailedCheck(t *testing.T) {
 	for name, dial := range map[string]func(context.Context, config.Config) (uint32, *http.Client, error){
 		"root":      fakeDaemonPeer(0),
 		"own uid":   fakeDaemonPeer(uint32(os.Geteuid())),
+		"ordinary":  fakeDaemonPeer(testOrdinaryUID),
 		"no dial":   func(context.Context, config.Config) (uint32, *http.Client, error) { return 0, nil, dialFailed },
 		"no dialer": nil,
 	} {
@@ -487,6 +614,8 @@ func TestTouchIDEnroll_VerifiesTheDaemon(t *testing.T) {
 	}{
 		{name: "the caller's own uid", peer: uint32(os.Geteuid()), terminal: testTerminal, want: "your own uid"},
 		{name: "root", peer: 0, terminal: testTerminal, want: "root (uid 0)"},
+		{name: "an account that is not a system account", peer: testOrdinaryUID, want: "which is not a system account",
+			terminal: &terminalApprover{Account: fmt.Sprintf("#%d", testOrdinaryUID), Seamlessd: "/x", Config: "/y"}},
 		{name: "account root", peer: testDaemonUID, want: "which is root",
 			terminal: &terminalApprover{Account: "root", Seamlessd: "/x", Config: "/y"}},
 		{name: "account #0", peer: testDaemonUID, want: "which is root",

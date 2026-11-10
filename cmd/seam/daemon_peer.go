@@ -13,8 +13,15 @@ package main
 // the peer's uid when the connection is made, and nothing the peer sends
 // changes it. So before anything a daemon says is shown as fact or becomes an
 // argument, the kernel is asked who answered (dialSocketDaemon), and the answer
-// must be neither the caller's own uid nor root, and must be the account the
-// daemon names for itself (verifiedDaemon.accountIsPeer).
+// must be neither the caller's own uid nor root, must be the daemon's account
+// as root pinned it (access.DaemonAccount) or, with no pin, a system account
+// (access.SystemAccount), and must be the account the daemon names for itself
+// (verifiedDaemon.accountIsPeer). The pin is what keeps out another account
+// with a uid of its own -- a restricted local account (peer_auth.restricted),
+// another service's role account -- that could serve a socket as itself and
+// name itself: only root can write the pin. Without one, only root can create
+// a system account, which keeps out an ordinary login account but not another
+// role account.
 //
 // The first connection is only for the check and is closed. A later connection
 // is a new dial of a path the agent may control, and a symlink flipped between
@@ -52,6 +59,8 @@ var (
 	errNoDaemonDialer = errors.New("no daemon dialer in this environment")
 	// errNoAccountLookup is a test env that set no e.lookupAccount.
 	errNoAccountLookup = errors.New("no account lookup in this environment")
+	// errNoDaemonPin is a test env that set no e.daemonAccount.
+	errNoDaemonPin = errors.New("no daemon account pin reader in this environment")
 	// errPeerChanged is a connection answered by another uid than the check saw.
 	errPeerChanged = errors.New("the daemon's socket is answered by another account than the one just checked")
 )
@@ -66,8 +75,12 @@ type verifiedDaemon struct {
 
 // verifyDaemon asks the kernel who answers at cfg's server_url and refuses a
 // peer that is the caller's own uid, or root: the two a planted socket can be
-// (an agent runs as the owner) and the one no daemon should be. A TCP server_url
-// is errServerNotSocket, which only the advisory path survives.
+// (an agent runs as the owner) and the one no daemon should be. It also refuses
+// a peer that is not the account root pinned as the daemon's, or with no pin a
+// peer that is not a system account: a restricted or other account serving a
+// socket of its own. A pin that is there but not believed refuses every
+// daemon. A TCP server_url is errServerNotSocket, which only the advisory path
+// survives.
 func verifyDaemon(ctx context.Context, e *env, cfg config.Config) (verifiedDaemon, error) {
 	if e.dialDaemon == nil {
 		return verifiedDaemon{}, errNoDaemonDialer
@@ -84,8 +97,32 @@ func verifyDaemon(ctx context.Context, e *env, cfg config.Config) (verifiedDaemo
 		return verifiedDaemon{}, fmt.Errorf("refusing to trust the daemon at %s: it is answered by %s, not by the daemon's own account. %s",
 			printable(cfg.DaemonAddress()), who, serverURLNote(cfg))
 	}
+	if e.daemonAccount == nil {
+		return verifiedDaemon{}, errNoDaemonPin
+	}
+	pin, pinned, err := e.daemonAccount()
+	if err != nil {
+		return verifiedDaemon{}, fmt.Errorf("refusing to trust any daemon: %w. No daemon is trusted until root rewrites it "+
+			"as the peer_auth guide does (%s); meanwhile approve on the console's passkey page", err, daemonAccountSection)
+	}
+	switch ok, rule := access.DaemonUID(peer, pin, pinned, access.SystemAccount); {
+	case ok:
+	case pinned:
+		return verifiedDaemon{}, fmt.Errorf("refusing to trust the daemon at %s: it is answered by uid %d, but %s, "+
+			"and any other account serving the socket is refused. %s",
+			printable(cfg.DaemonAddress()), peer, rule, serverURLNote(cfg))
+	default:
+		return verifiedDaemon{}, fmt.Errorf("refusing to trust the daemon at %s: it is answered by uid %d, which is not a system account (%s), "+
+			"and no pin at %s names the daemon's account. The daemon runs as the system account the peer_auth guide creates and pins (%s), "+
+			"and a restricted or other ordinary account serving the socket is refused. %s",
+			printable(cfg.DaemonAddress()), peer, rule, access.DaemonAccountPath, daemonAccountSection, serverURLNote(cfg))
+	}
 	return verifiedDaemon{cfg: cfg, peer: peer, client: client}, nil
 }
+
+// daemonAccountSection names the guide's section that creates the daemon's
+// account, for the refusal of a daemon that is not running as one.
+const daemonAccountSection = `"Deploy it: the daemon runs as its own account"`
 
 // terminal is terminalOf(one) for a verified daemon: the account it names must
 // be the uid the kernel saw answer.

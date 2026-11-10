@@ -42,6 +42,13 @@ type peerAuthEnv struct {
 	resolve access.Resolver                 // OS account lookup
 	exe     func() (string, error)          // this binary's path
 	inspect func(string) (fileFacts, error) // owner and mode of a path (no symlink follow)
+	// systemAccount judges the daemon's uid when no pin names its account
+	// (access.SystemAccount; nil is that too, so an env that forgot it is held
+	// to the real rule).
+	systemAccount func(uid uint32) (bool, string)
+	// daemonAccount reads root's pin of the daemon's account
+	// (access.DaemonAccount; nil is that too).
+	daemonAccount func() (access.DaemonPin, bool, error)
 }
 
 // fileFacts is what the permission checks need of one path.
@@ -55,11 +62,61 @@ type fileFacts struct {
 
 func defaultPeerAuthEnv() peerAuthEnv {
 	return peerAuthEnv{
-		euid:    os.Geteuid(),
-		resolve: access.LookupAccount,
-		exe:     os.Executable,
-		inspect: inspectPath,
+		euid:          os.Geteuid(),
+		resolve:       access.LookupAccount,
+		exe:           os.Executable,
+		inspect:       inspectPath,
+		systemAccount: access.SystemAccount,
+		daemonAccount: access.DaemonAccount,
 	}
+}
+
+// isSystemAccount is env.systemAccount, access.SystemAccount when unset.
+func (env peerAuthEnv) isSystemAccount(uid uint32) (bool, string) {
+	if env.systemAccount == nil {
+		return access.SystemAccount(uid)
+	}
+	return env.systemAccount(uid)
+}
+
+// daemonPin is env.daemonAccount, access.DaemonAccount when unset.
+func (env peerAuthEnv) daemonPin() (access.DaemonPin, bool, error) {
+	if env.daemonAccount == nil {
+		return access.DaemonAccount()
+	}
+	return env.daemonAccount()
+}
+
+// guideAccountSection is the guide's section that creates and pins the
+// daemon's account.
+const guideAccountSection = `"Deploy it: the daemon runs as its own account"`
+
+// pinCommand is the one command line that pins account as the daemon's, as the
+// guide writes it. account must be ValidDaemonAccountName: it is printed into
+// a shell command.
+func pinCommand(account string) string {
+	return fmt.Sprintf(`echo "%s $(id -u %s)" | sudo tee %s >/dev/null && sudo chmod 0644 %s`,
+		account, account, access.DaemonAccountPath, access.DaemonAccountPath)
+}
+
+// noPinNote is serve's warning and doctor's row when no pin names the
+// daemon's account.
+func (rt *peerAuthRuntime) noPinNote() string {
+	return fmt.Sprintf("no pin at %s names the daemon's account, so seam approve, seam touchid enroll and the Touch ID approver "+
+		"fall back to accepting any system account as the daemon's, another service's or a restricted role account included: "+
+		"pin this one, as an administrator: %s", access.DaemonAccountPath, pinCommand(rt.daemonAccountName()))
+}
+
+// daemonAccountName is the name of the account this process runs as, for the
+// pin command: "_seamless", the guide's, when that is the owner or root (not
+// the daemon's) or the name does not resolve to one a pin may hold.
+func (rt *peerAuthRuntime) daemonAccountName() string {
+	if rt.env.euid > 0 && rt.env.euid != int(rt.policy.Owner().UID) && rt.env.resolve != nil {
+		if a, err := rt.env.resolve(strconv.Itoa(rt.env.euid)); err == nil && a.UID == uint32(rt.env.euid) && access.ValidDaemonAccountName(a.Name) {
+			return a.Name
+		}
+	}
+	return "_seamless"
 }
 
 // peerAuthRuntime is peer_auth as serve runs it.
@@ -71,9 +128,13 @@ type peerAuthRuntime struct {
 
 // preparePeerAuth builds the policy and runs the filesystem preflight, before
 // serve opens or creates anything: the daemon must not run as the owner (whose
-// processes would then read every file it writes) nor as root; the data
-// directory, the config file and this binary must be beyond the owner's reach;
-// and the socket directory must be one only the daemon (or root) can write.
+// processes would then read every file it writes) nor as root, and must run as
+// the account root pinned (access.DaemonAccount) or, with no pin, as a system
+// account (access.SystemAccount): seam approve and the Touch ID approver refuse
+// any other daemon. A pin that is there but not believed is refused, and so is
+// a restricted account that is the pinned one. The data directory, the config
+// file and this binary must be beyond the owner's reach; and the socket
+// directory must be one only the daemon (or root) can write.
 func preparePeerAuth(cfg config.Config, env peerAuthEnv) (*peerAuthRuntime, error) {
 	if !access.PeerCredSupported {
 		return nil, fmt.Errorf("%w: this platform has no Unix-socket peer credentials Seamless can read (macOS and Linux only)", errPeerAuthPreflight)
@@ -95,11 +156,37 @@ func preparePeerAuth(cfg config.Config, env peerAuthEnv) (*peerAuthRuntime, erro
 func (rt *peerAuthRuntime) filesystemProblems(cfg config.Config, create bool) []string {
 	var problems []string
 	owner := rt.policy.Owner()
+	pin, pinned, pinErr := rt.env.daemonPin()
 	switch {
 	case rt.env.euid == int(owner.UID):
 		problems = append(problems, fmt.Sprintf("the daemon runs as %s, the owner: every process of that account could read the data directory directly -- run it as its own account (a LaunchDaemon or systemd unit with a dedicated user)", owner.Name))
 	case rt.env.euid == 0:
 		problems = append(problems, "the daemon runs as root: run it as its own unprivileged account (a LaunchDaemon with UserName, or a systemd unit with User=)")
+	case pinErr != nil:
+		// Below, whoever runs this.
+	default:
+		ok, rule := access.DaemonUID(uint32(rt.env.euid), pin, pinned, rt.env.isSystemAccount)
+		switch {
+		case ok:
+		case pinned:
+			problems = append(problems, fmt.Sprintf("the daemon runs as uid %d, but %s, and seam approve and the Touch ID approver accept no other: "+
+				"run the daemon as %s, or have root rewrite the pin as the peer_auth guide does under %s", rt.env.euid, rule, pin.Name, guideAccountSection))
+		default:
+			problems = append(problems, fmt.Sprintf("the daemon runs as uid %d, which is not a system account (%s), and with no pin at %s, seam approve "+
+				"and the Touch ID approver refuse a daemon that is not one: run it as a system account, created and pinned as the peer_auth "+
+				"guide does under %s (dscl with a uid below 500 on macOS, useradd --system on Linux)", rt.env.euid, rule, access.DaemonAccountPath, guideAccountSection))
+		}
+	}
+	if pinErr != nil {
+		problems = append(problems, fmt.Sprintf("%v -- serve and its clients trust no daemon while it stands: have root rewrite it as the peer_auth guide does under %s", pinErr, guideAccountSection))
+	}
+	if pinned {
+		for _, a := range rt.policy.RestrictedAccounts() {
+			if a.UID == pin.UID {
+				problems = append(problems, fmt.Sprintf("peer_auth.restricted lists %s (uid %d), the account %s pins as the daemon's: the clients would trust "+
+					"a socket it serves -- list another account, or have root correct the pin", a.Name, a.UID, pin.Path))
+			}
+		}
 	}
 	if p := rt.privateDirProblem("data_dir", cfg.DataDir, create); p != "" {
 		problems = append(problems, p)
@@ -518,5 +605,13 @@ func (rt *peerAuthRuntime) logPolicy(logger *slog.Logger) {
 		"locked", strings.Join(rt.policy.OwnerLocked(), ","))
 	for _, a := range rt.policy.RestrictedAccounts() {
 		logger.Info("peer_auth restricted account", "user", a.Name, "uid", a.UID)
+	}
+	switch pin, pinned, err := rt.env.daemonPin(); {
+	case err != nil:
+		// The preflight refused it; nothing reaches here.
+	case pinned:
+		logger.Info("peer_auth daemon account pinned", "pin", pin.Path, "user", pin.Name, "uid", pin.UID)
+	default:
+		logger.Warn("peer_auth: " + rt.noPinNote())
 	}
 }
