@@ -1,5 +1,5 @@
 {{define "layout"}}<!doctype html>
-<html lang="en">
+<html lang="en"{{if .BrowserProofMissing}} data-browser-proof="missing"{{end}}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -552,7 +552,8 @@
   });
 })();
 </script>
-{{block "scripts" .}}{{end}}
+{{if .BrowserKey}}<script src="/console/static/browserkey.js"></script>
+{{end}}{{block "scripts" .}}{{end}}
 </body>
 </html>
 {{end}}

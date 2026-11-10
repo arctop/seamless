@@ -6,7 +6,10 @@ package console
 // Two ways in, both begun on /console/unlock/<project> by the browser they
 // open, and both ending in a live store.ConsoleUnlock row behind that
 // browser's seamless_unlock cookie (HttpOnly, SameSite=Strict, Secure under
-// TLS):
+// TLS) and its browser key. A browser sends its cookies to every port of the
+// host, so the row's hash covers the cookie and the key together
+// (store.HashBrowserUnlock), and each request proves the key
+// (browserproof; reach.go):
 //
 //   - a passkey: an assertion over a fresh challenge naming the project and
 //     this browser (approval.BeginConsoleUnlock and FinishConsoleUnlock);
@@ -35,6 +38,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
+	"github.com/arctop/seamless/internal/console/browserproof"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/passkey"
 	"github.com/arctop/seamless/internal/store"
@@ -201,18 +205,38 @@ func (s *Service) unlockCookie(w http.ResponseWriter, value string, maxAge time.
 	})
 }
 
-// browserToken returns this browser's unlock secret: its cookie when that
-// already names a live unlock, else a fresh one. A cookie that names no live
-// unlock is never adopted -- a page on another local port can set a cookie
-// for this host, and its value would then be one the page knows.
-func (s *Service) browserToken(r *http.Request) (string, bool, error) {
+// browserKeyOf returns the key this request's proof verifies under, or writes
+// the refusal and reports false. Every unlock route needs it: the unlock's
+// hash covers it (store.HashBrowserUnlock), and a page on another port of this
+// host receives the cookie but can never make the proof. The console's page
+// sets the key up before it begins (static/browserkey.js), and its service
+// worker signs the requests.
+func (s *Service) browserKeyOf(w http.ResponseWriter, r *http.Request) (string, bool) {
+	rc := reachOf(r.Context())
+	if rc != nil && rc.key != "" {
+		return rc.key, true
+	}
+	msg := "this browser sent no proof of its unlock key: reload this page and start again"
+	if rc != nil && errors.Is(rc.keyErr, browserproof.ErrClock) {
+		msg = fmt.Sprintf("this browser's clock is more than %s off the daemon's: correct it, then start again", leaseWord(browserproof.Window))
+	}
+	writeJSON(w, http.StatusConflict, map[string]string{"error": msg})
+	return "", false
+}
+
+// browserToken returns this browser's unlock secret, and the hash an unlock
+// stores of it with key: its cookie when cookie and key already name a live
+// unlock, else a fresh one. A cookie that names no live unlock is never
+// adopted -- a page on another local port can set a cookie for this host, and
+// its value would then be one the page knows.
+func (s *Service) browserToken(r *http.Request, key string) (string, string, bool, error) {
 	if rc := reachOf(r.Context()); rc != nil && rc.token != "" {
-		if c, err := r.Cookie(unlockCookieName); err == nil && store.HashConsoleToken(c.Value) == rc.token {
-			return c.Value, false, nil
+		if c := unlockCookieValue(r); c != "" && store.HashBrowserUnlock(c, key) == rc.token {
+			return c, rc.token, false, nil
 		}
 	}
 	token, err := store.NewConsoleToken()
-	return token, true, err
+	return token, store.HashBrowserUnlock(token, key), true, err
 }
 
 // browserOnly refuses a caller that is not a browser: an unlock is per
@@ -233,12 +257,16 @@ func (s *Service) unlockBegin(w http.ResponseWriter, r *http.Request) {
 	if !ok || !s.browserOnly(w, r) {
 		return
 	}
-	token, fresh, err := s.browserToken(r)
+	key, ok := s.browserKeyOf(w, r)
+	if !ok {
+		return
+	}
+	token, hash, fresh, err := s.browserToken(r, key)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	begun, err := s.cfg.Approvals.BeginConsoleUnlock(r.Context(), slug, store.HashConsoleToken(token))
+	begun, err := s.cfg.Approvals.BeginConsoleUnlock(r.Context(), slug, hash)
 	if err != nil {
 		s.unlockError(w, r, err)
 		return
@@ -255,28 +283,33 @@ func (s *Service) unlockFinish(w http.ResponseWriter, r *http.Request) {
 	if !ok || !s.browserOnly(w, r) {
 		return
 	}
-	c, err := r.Cookie(unlockCookieName)
-	if err != nil || c.Value == "" {
+	cookie := unlockCookieValue(r)
+	if cookie == "" {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "this browser holds no unlock in progress; start again"})
 		return
 	}
-	u, err := s.cfg.Approvals.FinishConsoleUnlock(r.Context(), r.PostForm.Get("id"), slug, store.HashConsoleToken(c.Value), []byte(r.PostForm.Get("response")))
+	key, ok := s.browserKeyOf(w, r)
+	if !ok {
+		return
+	}
+	hash := store.HashBrowserUnlock(cookie, key)
+	u, err := s.cfg.Approvals.FinishConsoleUnlock(r.Context(), r.PostForm.Get("id"), slug, hash, []byte(r.PostForm.Get("response")))
 	if err != nil {
 		s.unlockError(w, r, err)
 		return
 	}
-	s.keepUnlockCookie(w, r, c.Value)
+	s.keepUnlockCookie(w, r, cookie, hash)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"unlocked": u.Project, "expires_at": u.ExpiresAt.UTC().Format(time.RFC3339), "open": "/console/projects/" + url.PathEscape(u.Project),
 	})
 }
 
-// keepUnlockCookie re-issues the cookie to last as long as this browser's
-// latest live unlock.
-func (s *Service) keepUnlockCookie(w http.ResponseWriter, r *http.Request, value string) {
+// keepUnlockCookie re-issues the cookie value to last as long as this
+// browser's latest live unlock, the rows under hash.
+func (s *Service) keepUnlockCookie(w http.ResponseWriter, r *http.Request, value, hash string) {
 	now := time.Now()
 	last := now.Add(s.cfg.Approvals.ConsoleLeaseLength())
-	if rows, err := store.LiveConsoleUnlocks(r.Context(), s.writeDB(), store.HashConsoleToken(value), now); err == nil {
+	if rows, err := store.LiveConsoleUnlocks(r.Context(), s.writeDB(), hash, now); err == nil {
 		for _, u := range rows {
 			if u.ExpiresAt != nil && u.ExpiresAt.After(last) {
 				last = *u.ExpiresAt
@@ -306,12 +339,16 @@ func (s *Service) unlockTerminalBegin(w http.ResponseWriter, r *http.Request) {
 	if !ok || !s.browserOnly(w, r) {
 		return
 	}
-	token, fresh, err := s.browserToken(r)
+	key, ok := s.browserKeyOf(w, r)
+	if !ok {
+		return
+	}
+	token, hash, fresh, err := s.browserToken(r, key)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	begun, err := s.cfg.Approvals.BeginTerminalUnlock(r.Context(), slug, store.HashConsoleToken(token))
+	begun, err := s.cfg.Approvals.BeginTerminalUnlock(r.Context(), slug, hash)
 	if err != nil {
 		s.unlockError(w, r, err)
 		return
@@ -327,7 +364,7 @@ func (s *Service) unlockTerminalBegin(w http.ResponseWriter, r *http.Request) {
 
 // unlockTerminalStatus answers the page waiting on a terminal approval with
 // the state of the unlock it began (?id=). It reads the row through this
-// browser's cookie, so another browser, the TCP key and the socket get the
+// browser's cookie and key, so another browser, the TCP key and the socket get the
 // answer an id that never existed gets. Once live it re-issues the cookie to
 // last as long as the unlock, as a passkey's finish does.
 func (s *Service) unlockTerminalStatus(w http.ResponseWriter, r *http.Request) {
@@ -339,12 +376,17 @@ func (s *Service) unlockTerminalStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"state": terminalExpired,
 			"error": "no unlock begun in this browser is waiting: start again for a new code"})
 	}
-	c, err := r.Cookie(unlockCookieName)
-	if err != nil || c.Value == "" {
+	cookie := unlockCookieValue(r)
+	if cookie == "" {
 		gone()
 		return
 	}
-	u, err := store.ConsoleUnlockFor(r.Context(), s.writeDB(), r.URL.Query().Get("id"), slug, store.HashConsoleToken(c.Value))
+	key, ok := s.browserKeyOf(w, r)
+	if !ok {
+		return
+	}
+	hash := store.HashBrowserUnlock(cookie, key)
+	u, err := store.ConsoleUnlockFor(r.Context(), s.writeDB(), r.URL.Query().Get("id"), slug, hash)
 	if errors.Is(err, store.ErrConsoleUnlockNotFound) {
 		gone()
 		return
@@ -358,7 +400,7 @@ func (s *Service) unlockTerminalStatus(w http.ResponseWriter, r *http.Request) {
 	case u.Status == store.ConsoleUnlockPending && u.PendingUntil.After(now):
 		writeJSON(w, http.StatusOK, map[string]any{"state": terminalPending, "pending_until": u.PendingUntil.UTC().Format(time.RFC3339)})
 	case u.Status == store.ConsoleUnlockLive && u.ExpiresAt != nil && u.ExpiresAt.After(now):
-		s.keepUnlockCookie(w, r, c.Value)
+		s.keepUnlockCookie(w, r, cookie, hash)
 		writeJSON(w, http.StatusOK, map[string]any{"state": terminalLive, "unlocked": u.Project,
 			"expires_at": u.ExpiresAt.UTC().Format(time.RFC3339), "open": "/console/projects/" + url.PathEscape(u.Project)})
 	case u.Status == store.ConsoleUnlockPending:

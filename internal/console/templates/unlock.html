@@ -129,6 +129,17 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a terminal approval in prog
     var status = document.getElementById('unlock-status');
     if (status) status.textContent = msg;
   }
+  // An unlock belongs to this browser's key as well as its cookie, since the
+  // cookie also reaches every other port of this host (browserkey.js). Set the
+  // key and its service worker up first, so the begin and every request after
+  // it carry the proof. It starts as the page loads (below), so a click finds
+  // it done and the passkey prompt follows the click as closely as before.
+  var keySetup = null;
+  function keyReady() {
+    if (!window.SeamBrowserKey) return Promise.reject(new Error('This page did not load the browser key: reload it and try again.'));
+    if (!keySetup) keySetup = window.SeamBrowserKey.ready().catch(function (err) { keySetup = null; throw err; });
+    return keySetup;
+  }
   // The terminal path: begin, show the code and its command, then ask the
   // status endpoint every couple of seconds until the terminal approves it.
   // The status is read through this browser's cookie, and the page itself is
@@ -160,6 +171,10 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a terminal approval in prog
       return res.json();
     }).then(function (data) {
       if (!waiting || waiting.url !== url) return; // a newer code took over
+      if (!data.state) {
+        terminalOver(data.error || 'Something went wrong. Nothing was unlocked: start again for a new code.');
+        return;
+      }
       switch (data.state) {
         case 'pending':
           schedule(url);
@@ -195,7 +210,9 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a terminal approval in prog
       var go = document.getElementById('unlock-terminal-go');
       if (go) go.disabled = true;
       say('Starting the unlock.');
-      post(base + '/terminal', {}).then(function (begun) {
+      keyReady().then(function () {
+        return post(base + '/terminal', {});
+      }).then(function (begun) {
         document.getElementById('unlock-terminal-code').textContent = begun.code;
         document.getElementById('unlock-terminal-command').textContent = begun.command;
         document.getElementById('unlock-terminal').hidden = false;
@@ -210,6 +227,9 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a terminal approval in prog
     });
   }
   function enhance() {
+    if (document.getElementById('unlock-terminal-form') && window.SeamBrowserKey && window.SeamBrowserKey.supported()) {
+      keyReady().catch(function () {}); // reported on the click, if it still fails then
+    }
     enhanceTerminal();
     var form = document.getElementById('unlock-form');
     if (!form || form._seamWired) return;
@@ -222,7 +242,9 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a terminal approval in prog
       var id = '';
       go.disabled = true;
       say('Follow your browser\'s prompt.');
-      post(base + '/begin', {}).then(function (begun) {
+      keyReady().then(function () {
+        return post(base + '/begin', {});
+      }).then(function (begun) {
         id = begun.id;
         return navigator.credentials.get({ publicKey: requestOptions(begun.options.publicKey) });
       }).then(function (cred) {

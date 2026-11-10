@@ -623,8 +623,8 @@ any of it.
   reads through a `store.Views` pool instead (one handle per hidden set),
   chosen per request (`console/reach.go`): the socket View's leases, plus --
   for a cookie-authenticated browser only -- the live rows behind its
-  `seamless_unlock` cookie. Console reads go through `s.db(ctx)` and
-  `s.eventLog(ctx)`, never `s.cfg.DB`. A console unlock is a cookie, never a
+  `seamless_unlock` cookie and browser key. Console reads go through `s.db(ctx)` and
+  `s.eventLog(ctx)`, never `s.cfg.DB`. A console unlock is a browser's, never a
   lease: it never reaches an agent. Console writes go to
   `s.writeDB()`, after reading their target through `s.db(ctx)`, the handle
   the request's reach chose; a gardener action by id checks `proposalReachable`
@@ -637,6 +637,19 @@ any of it.
   what it is about: an event recorded without a project is still hidden by its
   session, its item, or -- for the gardener's own events, whose payload carries
   the proposal key -- the proposal it concerns.
+- **A cookie never names a browser alone** (`console/browserproof`,
+  `static/browserkey.js`, `static/sw.js`). A browser sends its cookies to every
+  port of the host, so a program running as the owner can open the owner's
+  browser on its own port and read them. An unlock's `token_hash` is
+  `store.HashBrowserUnlock(cookie, key)`. The key is a non-extractable P-256 key
+  in the console origin's IndexedDB, and `withReach` counts an unlock only for
+  a request whose `Seamless-Browser-Proof` that key signed within
+  `browserproof.Window`. Every unlock route takes the key from the proof
+  (`browserKeyOf`) and refuses without one. The service worker signs same-origin
+  page fetches and GET or HEAD navigations, and never re-sends any other
+  navigation: re-sent from the worker, a form posted from another site would
+  pass `sameOriginRequest` as same-origin. A new grant of console access that
+  lives in the browser binds the same key.
 - **Events reach the console through the filtered handle.** The console's live
   feed re-reads each event through it (`liveEventVisible`) and the event log's
   reads go through `events.ReadingFrom`, so an event about a locked project

@@ -105,8 +105,18 @@ Unauthenticated browsers are redirected to the login page with a `?next=` that i
 validated against an open-redirect (an off-site or absolute candidate becomes
 `/console/`). Unauthenticated JSON callers get a 401.
 
-Public routes are the login page and the static assets (`console.css`,
-`interactions.js`, `search.js`, `favicon.svg`). Everything else requires the key.
+Public routes are the login page, the static assets (`console.css`,
+`interactions.js`, `search.js`, `favicon.svg` and the rest under
+`/console/static/`) and the service worker at `/console/sw.js`. Everything else
+requires the key.
+
+A browser sends its cookies to every port of the same host, so a program that
+can open your browser on another local port receives the console cookie too.
+Today that adds nothing to what reading the key gives such a program. A
+[console unlock](/guides/peer-auth/) of a locked project is worth more, so it is
+not just a cookie: it also needs a key the browser keeps for the console's own
+address, and a service worker signs each console request with that key. Only a
+browser that has started an unlock runs the service worker.
 
 ### `make console`
 

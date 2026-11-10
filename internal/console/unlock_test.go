@@ -2,6 +2,7 @@ package console
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/console/browserproof"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
@@ -54,6 +56,21 @@ type lockedConsole struct {
 	memID, noteID, taskID, sessID, plan string
 
 	restarts int // RequestRestart calls
+
+	// key is the test browser's key (browserproof): browser signs every
+	// request with it, as the console's service worker does.
+	key *ecdsa.PrivateKey
+	// unsigned makes browser send no proof, as a request that skipped the
+	// worker, or a program replaying the cookie from another port.
+	unsigned bool
+}
+
+// tokenHash is what an unlock stores for the test browser holding cookie.
+func (lc *lockedConsole) tokenHash(t *testing.T, cookie string) string {
+	t.Helper()
+	key, err := browserproof.EncodeKey(&lc.key.PublicKey)
+	require.NoError(t, err)
+	return store.HashBrowserUnlock(cookie, key)
 }
 
 func newLockedConsole(t *testing.T) *lockedConsole {
@@ -73,7 +90,9 @@ func newLockedConsole(t *testing.T) *lockedConsole {
 	}
 	require.NoError(t, store.SetProjectIsolation(ctx, db, lockedSlug, core.IsolationConfidential))
 
-	lc := &lockedConsole{db: db, mgr: mgr, plan: "ledger-plan"}
+	key, err := browserproof.NewKey()
+	require.NoError(t, err)
+	lc := &lockedConsole{db: db, mgr: mgr, plan: "ledger-plan", key: key}
 	now := time.Now().UTC()
 	mem := writeMemory(t, mgr, core.KindGotcha, lockedSlug, "ledger-close", "the close runs "+lockedSecret)
 	lc.memID = mem.ID
@@ -135,7 +154,8 @@ func newLockedConsole(t *testing.T) *lockedConsole {
 }
 
 // browser is a request from a signed-in browser, with its unlock cookie when
-// unlock is set. A write carries the same-origin header a browser sends.
+// unlock is set and its key's proof unless lc.unsigned. A write carries the
+// same-origin header a browser sends.
 func (lc *lockedConsole) browser(method, target, unlock string, form url.Values) *http.Request {
 	var body *strings.Reader
 	if form != nil {
@@ -151,6 +171,13 @@ func (lc *lockedConsole) browser(method, target, unlock string, form url.Values)
 	if method == http.MethodPost {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.Header.Set("Sec-Fetch-Site", "same-origin")
+	}
+	if !lc.unsigned && lc.key != nil {
+		proof, err := browserproof.Sign(lc.key, time.Now())
+		if err != nil {
+			panic(err)
+		}
+		req.Header.Set(browserproof.Header, proof)
 	}
 	return req
 }
@@ -400,7 +427,7 @@ func TestLockedConsole_LockAgainAndRevoke(t *testing.T) {
 	lc := newLockedConsole(t)
 	ctx := context.Background()
 	cookie := lc.unlockByTerminal(t)
-	live, err := store.LiveConsoleUnlocks(ctx, lc.db, store.HashConsoleToken(cookie), time.Now())
+	live, err := store.LiveConsoleUnlocks(ctx, lc.db, lc.tokenHash(t, cookie), time.Now())
 	require.NoError(t, err)
 	require.Len(t, live, 1)
 	id := live[0].ID
@@ -600,7 +627,7 @@ func TestLockedConsole_TerminalUnlock(t *testing.T) {
 	_, err = lc.svc.ApproveTerminalUnlock(ctx, lockedSlug, late.Code, time.Hour)
 	require.ErrorIs(t, err, store.ErrConsoleUnlockNotFound, "an expired code fails")
 	// Locked again: ended.
-	live, err := store.LiveConsoleUnlocks(ctx, lc.db, store.HashConsoleToken(cookie), time.Now())
+	live, err := store.LiveConsoleUnlocks(ctx, lc.db, lc.tokenHash(t, cookie), time.Now())
 	require.NoError(t, err)
 	require.Len(t, live, 1)
 	_, err = store.EndConsoleUnlock(ctx, lc.db, live[0].ID, store.ConsoleUnlockEndLocked, time.Now())
@@ -762,10 +789,10 @@ func TestLockedConsole_TerminalCodeOpensOnlyTheBeginningBrowser(t *testing.T) {
 
 	// The owner approves the code the owner's page shows.
 	u := lc.approveCode(t, lockedSlug, owner.Code)
-	require.Equal(t, store.HashConsoleToken(ownerCookie), u.TokenHash, "the approval opens the browser that began it")
+	require.Equal(t, lc.tokenHash(t, ownerCookie), u.TokenHash, "the approval opens the browser that began it")
 
 	for _, c := range []string{agentCookie, planted} {
-		live, err := store.LiveConsoleUnlocks(ctx, lc.db, store.HashConsoleToken(c), time.Now())
+		live, err := store.LiveConsoleUnlocks(ctx, lc.db, lc.tokenHash(t, c), time.Now())
 		require.NoError(t, err)
 		require.Empty(t, live, "the agent's cookies hold no unlock")
 		_, body := lc.get(t, "/console/memories?project="+lockedSlug, c)
@@ -783,7 +810,7 @@ func TestLockedConsole_TerminalCodeOpensOnlyTheBeginningBrowser(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrConsoleUnlockNotFound)
 	// Its own row still waits for its own code, which only the owner's
 	// terminal can approve.
-	w, err := store.ConsoleUnlockFor(ctx, lc.db, theirs.ID, lockedSlug, store.HashConsoleToken(agentCookie))
+	w, err := store.ConsoleUnlockFor(ctx, lc.db, theirs.ID, lockedSlug, lc.tokenHash(t, agentCookie))
 	require.NoError(t, err)
 	require.Equal(t, store.ConsoleUnlockPending, w.Status)
 	all, err := store.AllLiveConsoleUnlocks(ctx, lc.db, time.Now())
@@ -866,7 +893,11 @@ func TestConsoleOff_LockedSurfacesAbsent(t *testing.T) {
 	// must not care.
 	cookie, err := store.NewConsoleToken()
 	require.NoError(t, err)
-	begun, code, err := store.BeginTerminalUnlock(ctx, db, "example-ops", store.HashConsoleToken(cookie), time.Hour, time.Minute, time.Now())
+	browserKey, err := browserproof.NewKey()
+	require.NoError(t, err)
+	encoded, err := browserproof.EncodeKey(&browserKey.PublicKey)
+	require.NoError(t, err)
+	begun, code, err := store.BeginTerminalUnlock(ctx, db, "example-ops", store.HashBrowserUnlock(cookie, encoded), time.Hour, time.Minute, time.Now())
 	require.NoError(t, err)
 	_, err = store.ApproveTerminalUnlock(ctx, db, "example-ops", code, time.Hour, time.Now())
 	require.NoError(t, err)
@@ -877,6 +908,9 @@ func TestConsoleOff_LockedSurfacesAbsent(t *testing.T) {
 		req.AddCookie(consoleCookie())
 		if unlock != "" {
 			req.AddCookie(&http.Cookie{Name: unlockCookieName, Value: unlock})
+			proof, err := browserproof.Sign(browserKey, time.Now())
+			require.NoError(t, err)
+			req.Header.Set(browserproof.Header, proof)
 		}
 		rr := do(mux, req)
 		require.Equal(t, http.StatusOK, rr.Code, target)
@@ -884,8 +918,9 @@ func TestConsoleOff_LockedSurfacesAbsent(t *testing.T) {
 	}
 	for _, target := range []string{"/console/projects", "/console/settings", "/console/projects?format=json", "/console/memories?format=json"} {
 		without := page(target, "")
-		require.Equal(t, without, page(target, cookie), "%s: an unlock cookie changes nothing with nothing locked", target)
-		for _, s := range []string{"Access requests", `href="/console/approvers"`, "project-locked", `"locked"`, "/console/unlock"} {
+		require.Equal(t, without, page(target, cookie), "%s: an unlock cookie and its proof change nothing with nothing locked", target)
+		for _, s := range []string{"Access requests", `href="/console/approvers"`, "project-locked", `"locked"`, "/console/unlock",
+			"browserkey.js", "data-browser-proof"} {
 			require.NotContains(t, without, s, target)
 		}
 	}
@@ -968,7 +1003,7 @@ func TestLockedConsole_LiveFeedFollowsTheUnlock(t *testing.T) {
 	require.False(t, lc.cs.liveEventVisible(locked, ev))
 	require.False(t, reachOf(unlocked).until.IsZero(), "the stream ends with the unlock")
 
-	live, err := store.LiveConsoleUnlocks(ctx, lc.db, store.HashConsoleToken(cookie), time.Now())
+	live, err := store.LiveConsoleUnlocks(ctx, lc.db, lc.tokenHash(t, cookie), time.Now())
 	require.NoError(t, err)
 	_, err = store.EndConsoleUnlock(ctx, lc.db, live[0].ID, store.ConsoleUnlockEndLocked, time.Now())
 	require.NoError(t, err)

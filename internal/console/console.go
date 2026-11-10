@@ -248,6 +248,8 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/static/orrery.js", s.serveOrreryJS)
 	handle("GET /console/static/privacy.js", s.servePrivacyJS)
 	handle("GET /console/static/favicon.svg", s.serveFavicon)
+	handle("GET /console/static/browserkey.js", s.serveBrowserKeyJS)
+	handle("GET /console/sw.js", s.serveServiceWorker)
 	handle("GET /console/login", s.loginForm)
 	handle("POST /console/login", s.parseForm(formBodySmall, s.loginSubmit))
 	post("POST /console/logout", formBodySmall, s.logout)
@@ -450,7 +452,16 @@ func (s *Service) auth(next http.HandlerFunc) http.HandlerFunc {
 				http.Error(w, "forbidden: cross-origin request", http.StatusForbidden)
 				return
 			}
-			next(w, s.withReach(r, cred))
+			r = s.withReach(r, cred)
+			// A hover prefetch the service worker did not sign would be kept
+			// and shown as the locked page: refuse it, and the click itself
+			// goes through the worker.
+			if unprovenUnlock(r.Context()) && prefetchRequest(r) {
+				w.Header().Set("Cache-Control", "no-store")
+				http.Error(w, "not prefetched: this browser's unlock needs its proof", http.StatusServiceUnavailable)
+				return
+			}
+			next(w, r)
 		default:
 			if wantsJSON(r) {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized: bearer key required"})
@@ -459,6 +470,12 @@ func (s *Service) auth(next http.HandlerFunc) http.HandlerFunc {
 			http.Redirect(w, r, "/console/login?next="+safeNext(r.URL.RequestURI()), http.StatusSeeOther)
 		}
 	}
+}
+
+// prefetchRequest reports a speculative fetch (the layout's hover prefetch):
+// Sec-Purpose names it, and the older Purpose header too.
+func prefetchRequest(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Sec-Purpose"), "prefetch") || r.Header.Get("Purpose") == "prefetch"
 }
 
 // authed reports whether the request carries a valid credential, ignoring which
@@ -698,6 +715,23 @@ func (s *Service) serveFavicon(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	_, _ = w.Write(faviconSVG)
+}
+
+// serveBrowserKeyJS serves the browser key's script (browserproof), which the
+// page loads while a project is locked and the service worker imports.
+func (s *Service) serveBrowserKeyJS(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	_, _ = w.Write(browserKeyJS)
+}
+
+// serveServiceWorker serves the console's service worker. It sits at
+// /console/sw.js so its scope is /console/, and is revalidated on every
+// update check, so a fixed worker reaches browsers that already run one.
+func (s *Service) serveServiceWorker(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write(swJS)
 }
 
 // ---------------------------------------------------------------------------

@@ -583,9 +583,16 @@ your screen or terminal gives nothing away. A code works once, within ten
 minutes, and `--for 1h` makes the unlock shorter. Approve only a code your own
 browser shows: one you were handed would unlock someone else's browser.
 
-Either way the unlock is a cookie in that one browser, never a lease, and it
-never opens the project to an agent. A locked plan or session page in the console
-takes you to that unlock page.
+Either way the unlock lives in that one browser, never as a lease, and it never
+opens the project to an agent. It is a cookie plus a key that the browser keeps
+for the console's own address. A browser sends its cookies to every port of the
+same host, so the cookie alone opens nothing. Before an unlock begins, the page
+creates the key and installs a small service worker that signs each console
+request with it. The browser lets only the console's own address use the key,
+and the daemon counts the unlock only on a request the key signed. A browser that
+cannot run the service worker can't hold an unlock, and the page says so. That
+covers some private windows, and any page that is neither https nor localhost.
+A locked plan or session page in the console takes you to that unlock page.
 
 ## Read grants and the advisory tier
 
@@ -808,6 +815,13 @@ the locked notice, and `seam approve` in your own terminal shows its request.
   minted for, so being read gives neither away. Check that the code you approve
   is the one your browser shows, and that the key the enrollment command prints
   is the one on your screen.
+- **An unlocked browser shows the project to whatever controls that browser.**
+  A program running as you can receive the console's cookies by opening your
+  browser on another port, but without the browser's key they open nothing. What
+  it can still do is drive the browser itself, capture your screen, or read the
+  browser's profile files, which hold the key. Safari wraps the key with one in
+  your keychain; other browsers may store it as is. Lock the project again on the
+  access page once you are done, rather than wait out the three hours.
 - **Taking a lock off is one passkey touch, and it holds for every agent.**
   Removing a lock set from the console takes a single passkey approval, and from
   the restart that follows every agent of yours reaches the project as its

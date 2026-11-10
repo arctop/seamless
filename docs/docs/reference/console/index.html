@@ -507,8 +507,17 @@ header, and asks for JSON.</li>
 <p>Unauthenticated browsers are redirected to the login page with a <code>?next=</code> that is
 validated against an open-redirect (an off-site or absolute candidate becomes
 <code>/console/</code>). Unauthenticated JSON callers get a 401.</p>
-<p>Public routes are the login page and the static assets (<code>console.css</code>,
-<code>interactions.js</code>, <code>search.js</code>, <code>favicon.svg</code>). Everything else requires the key.</p>
+<p>Public routes are the login page, the static assets (<code>console.css</code>,
+<code>interactions.js</code>, <code>search.js</code>, <code>favicon.svg</code> and the rest under
+<code>/console/static/</code>) and the service worker at <code>/console/sw.js</code>. Everything else
+requires the key.</p>
+<p>A browser sends its cookies to every port of the same host, so a program that
+can open your browser on another local port receives the console cookie too.
+Today that adds nothing to what reading the key gives such a program. A
+<a href="../../guides/peer-auth/">console unlock</a> of a locked project is worth more, so it is
+not just a cookie: it also needs a key the browser keeps for the console's own
+address, and a service worker signs each console request with that key. Only a
+browser that has started an unlock runs the service worker.</p>
 <h3 id="make-console"><code>make console</code></h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">make console          <span class="c1"># open in the default browser, already signed in</span>
 </span></span><span class="line"><span class="cl">make console-chrome   <span class="c1"># same, but force Google Chrome</span>

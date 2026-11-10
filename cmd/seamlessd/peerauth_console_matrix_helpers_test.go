@@ -17,6 +17,7 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -43,6 +44,7 @@ import (
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/console"
+	"github.com/arctop/seamless/internal/console/browserproof"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
@@ -642,6 +644,32 @@ type cmCaller struct {
 	client *http.Client
 	// browser marks a cookie-authenticated caller: its writes carry Origin.
 	browser bool
+	// key is a browser's key (browserproof): every request it sends carries
+	// the proof the console's service worker adds.
+	key *ecdsa.PrivateKey
+}
+
+// decorate adds the caller's credential to req and, for a browser, the proof
+// its key signs.
+func (c cmCaller) decorate(t *testing.T, req *http.Request) {
+	t.Helper()
+	if c.auth != nil {
+		c.auth(req)
+	}
+	if c.key != nil {
+		proof, err := browserproof.Sign(c.key, time.Now())
+		require.NoError(t, err)
+		req.Header.Set(browserproof.Header, proof)
+	}
+}
+
+// unlockHash is what an unlock stores for this browser holding cookie.
+func (c cmCaller) unlockHash(t *testing.T, cookie string) string {
+	t.Helper()
+	require.NotNil(t, c.key, "%s holds no browser key", c.name)
+	key, err := browserproof.EncodeKey(&c.key.PublicKey)
+	require.NoError(t, err)
+	return store.HashBrowserUnlock(cookie, key)
 }
 
 func (c cmCaller) do(t *testing.T, method, target string, form url.Values, asJSON bool) (int, string, http.Header) {
@@ -663,9 +691,7 @@ func (c cmCaller) do(t *testing.T, method, target string, form url.Values, asJSO
 	if asJSON {
 		req.Header.Set("Accept", "application/json")
 	}
-	if c.auth != nil {
-		c.auth(req)
-	}
+	c.decorate(t, req)
 	client := c.client
 	if client == nil {
 		client = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -695,7 +721,9 @@ func (d *cmDaemon) newBrowser(t *testing.T, name string) cmCaller {
 	t.Helper()
 	jar, err := cookiejar.New(nil)
 	require.NoError(t, err)
-	b := cmCaller{name: name, base: d.owner.URL, browser: true, client: &http.Client{
+	key, err := browserproof.NewKey()
+	require.NoError(t, err)
+	b := cmCaller{name: name, base: d.owner.URL, browser: true, key: key, client: &http.Client{
 		Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}}
 	status, body, _ := b.do(t, http.MethodPost, "/console/login", url.Values{"key": {cmKey}, "next": {"/console/"}}, false)

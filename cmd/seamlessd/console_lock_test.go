@@ -21,6 +21,7 @@ import (
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/console"
+	"github.com/arctop/seamless/internal/console/browserproof"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
@@ -302,7 +303,7 @@ func TestConsoleUnlock_TerminalScrollbackOpensNothing(t *testing.T) {
 	status, body, _ = agent.do(t, http.MethodPost, "/console/unlock/"+cmFinance+"/terminal", url.Values{"code": {begun.Code}}, true)
 	require.Equal(t, http.StatusOK, status, body)
 	require.NotContains(t, body, begun.Code)
-	live, err := store.LiveConsoleUnlocks(ctx, d.db, store.HashConsoleToken(d.unlockCookie(t, agent)), time.Now())
+	live, err := store.LiveConsoleUnlocks(ctx, d.db, agent.unlockHash(t, d.unlockCookie(t, agent)), time.Now())
 	require.NoError(t, err)
 	require.Empty(t, live)
 	// Replaying the approval opens nothing more.
@@ -335,6 +336,12 @@ func TestConsoleUnlock_ForgedCookieCannotTakeTheApproval(t *testing.T) {
 	forgedConsole := hex.EncodeToString(sum[:])
 	planted, err := store.NewConsoleToken()
 	require.NoError(t, err)
+	// It makes proofs with a key of its own: it has no other.
+	forgedKey, err := browserproof.NewKey()
+	require.NoError(t, err)
+	forgedPublic, err := browserproof.EncodeKey(&forgedKey.PublicKey)
+	require.NoError(t, err)
+	signs := true
 	forged := func(method, target string, unlock string) (*http.Response, string) {
 		t.Helper()
 		var rd io.Reader
@@ -345,6 +352,11 @@ func TestConsoleUnlock_ForgedCookieCannotTakeTheApproval(t *testing.T) {
 		require.NoError(t, err)
 		req.Header.Set("Cookie", "seamless_console="+forgedConsole+"; seamless_unlock="+unlock)
 		req.Header.Set("Accept", "application/json")
+		if signs {
+			proof, err := browserproof.Sign(forgedKey, time.Now())
+			require.NoError(t, err)
+			req.Header.Set(browserproof.Header, proof)
+		}
 		if method == http.MethodPost {
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			req.Header.Set("Origin", d.owner.URL)
@@ -358,6 +370,11 @@ func TestConsoleUnlock_ForgedCookieCannotTakeTheApproval(t *testing.T) {
 	}
 	resp, _ := forged(http.MethodGet, "/console/unlock/"+cmFinance+"/terminal?id="+url.QueryEscape(begun.ID), planted)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode, "the forged client cannot read the owner's row")
+	signs = false
+	resp, body = forged(http.MethodPost, "/console/unlock/"+cmFinance+"/terminal", planted)
+	require.Equal(t, http.StatusConflict, resp.StatusCode, "no begin without a proof: %s", body)
+	require.Empty(t, resp.Cookies())
+	signs = true
 	resp, body = forged(http.MethodPost, "/console/unlock/"+cmFinance+"/terminal", planted)
 	require.Equal(t, http.StatusOK, resp.StatusCode, body)
 	var issued string
@@ -371,14 +388,14 @@ func TestConsoleUnlock_ForgedCookieCannotTakeTheApproval(t *testing.T) {
 
 	require.NoError(t, approveConsoleUnlock(ctx, d.cfg, d.db, d.svc, unlockTerminal{out: io.Discard}, cmFinance, begun.Code, ""))
 	for _, c := range []string{planted, issued} {
-		live, err := store.LiveConsoleUnlocks(ctx, d.db, store.HashConsoleToken(c), time.Now())
+		live, err := store.LiveConsoleUnlocks(ctx, d.db, store.HashBrowserUnlock(c, forgedPublic), time.Now())
 		require.NoError(t, err)
 		require.Empty(t, live, "the forged client holds no unlock")
 		resp, body := forged(http.MethodGet, "/console/projects/"+cmFinance, c)
 		require.Equal(t, http.StatusForbidden, resp.StatusCode)
 		require.Contains(t, body, `"locked": true`)
 	}
-	live, err := store.LiveConsoleUnlocks(ctx, d.db, store.HashConsoleToken(d.unlockCookie(t, owner)), time.Now())
+	live, err := store.LiveConsoleUnlocks(ctx, d.db, owner.unlockHash(t, d.unlockCookie(t, owner)), time.Now())
 	require.NoError(t, err)
 	require.Len(t, live, 1, "the approval landed on the browser that began it")
 }

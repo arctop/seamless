@@ -9,7 +9,9 @@ package console
 // that request may not read:
 //
 //   - a browser opens a locked project with a console unlock: its
-//     seamless_unlock cookie names live store.ConsoleUnlock rows (unlock.go);
+//     seamless_unlock cookie, with the key its request's proof verifies under
+//     (browserproof), names live store.ConsoleUnlock rows (unlock.go). The
+//     cookie alone names none: a browser sends it to every port of its host;
 //   - a `seam` command on the socket opens the projects its agent's tree holds
 //     a lease on (access.View.Leases), so a leased session's CLI reads the
 //     project while a browser and every other tree stay locked.
@@ -27,12 +29,14 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/console/browserproof"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/store"
 )
 
 // unlockCookieName holds a browser's console-unlock secret. The database keeps
-// only its hash (store.HashConsoleToken); each project it opens is a row.
+// only its hash with the browser's key (store.HashBrowserUnlock); each project
+// it opens is a row.
 const unlockCookieName = "seamless_unlock"
 
 // reach is one request's read reach while projects are locked.
@@ -45,9 +49,18 @@ type reach struct {
 	lockable []string
 	open     []string
 	unlocked []string
-	// token is the hash of the browser's seamless_unlock cookie when it names
-	// a live unlock, "" otherwise.
+	// key is the browser key a cookie-authenticated request's proof verifies
+	// under (browserproof.Verify), "" without one; keyErr is why there is none.
+	key    string
+	keyErr error
+	// token is the hash of the browser's seamless_unlock cookie and key when
+	// it names a live unlock, "" otherwise.
 	token string
+	// unproven is a request carrying an unlock cookie but no proof that
+	// verifies: whatever the cookie unlocked, this request reads none of it.
+	// A page rendered for one says so, and the page's script asks again
+	// through the service worker (static/browserkey.js).
+	unproven bool
 	// until is when the earliest lease or unlock among open ends (zero with
 	// nothing open): a long-lived request (the live feed) ends there.
 	until time.Time
@@ -111,11 +124,18 @@ func (s *Service) withReach(r *http.Request, cred credential) *http.Request {
 		}
 	}
 	// A browser: its console unlocks. Only a cookie-authenticated request
-	// carries them -- the cookie is per browser, and the bearer key and the
-	// socket are not browsers.
+	// carries them -- the bearer key and the socket are not browsers -- and
+	// only with a proof that verifies, since the cookie alone also reaches
+	// every other port of this host.
 	if cred == credCookie {
-		if c, err := r.Cookie(unlockCookieName); err == nil && c.Value != "" {
-			token := store.HashConsoleToken(c.Value)
+		rc.key, rc.keyErr = browserproof.Verify(r.Header.Get(browserproof.Header), now)
+		cookie := unlockCookieValue(r)
+		switch {
+		case cookie == "":
+		case rc.key == "":
+			rc.unproven = true
+		default:
+			token := store.HashBrowserUnlock(cookie, rc.key)
 			rows, err := store.LiveConsoleUnlocks(ctx, s.writeDB(), token, now)
 			if err != nil {
 				s.logger.Warn("console: console unlocks unavailable; locked projects stay locked", "error", err)
@@ -145,6 +165,21 @@ func (s *Service) withReach(r *http.Request, cred credential) *http.Request {
 		}
 	}
 	return r.WithContext(context.WithValue(ctx, reachKey{}, rc))
+}
+
+// unlockCookieValue is the request's seamless_unlock cookie, "" when none.
+func unlockCookieValue(r *http.Request) string {
+	if c, err := r.Cookie(unlockCookieName); err == nil {
+		return c.Value
+	}
+	return ""
+}
+
+// unprovenUnlock reports whether the request carries an unlock cookie without
+// a proof that verifies (reach.unproven).
+func unprovenUnlock(ctx context.Context) bool {
+	rc := reachOf(ctx)
+	return rc != nil && rc.unproven
 }
 
 // lockedProjects returns the locked projects this request does not read,

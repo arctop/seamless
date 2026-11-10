@@ -49,6 +49,17 @@ func TestConsoleToken(t *testing.T) {
 	require.True(t, validTokenHash(HashConsoleToken(a)))
 	require.False(t, validTokenHash("not-a-hash"))
 
+	// An unlock's hash covers the cookie and the browser's key together, and
+	// never equals the cookie's own hash: a cookie alone names no unlock.
+	bound := HashBrowserUnlock(a, "key-1")
+	require.True(t, validTokenHash(bound))
+	require.Equal(t, bound, HashBrowserUnlock(a, "key-1"))
+	require.NotEqual(t, bound, HashBrowserUnlock(a, "key-2"), "another key")
+	require.NotEqual(t, bound, HashBrowserUnlock(b, "key-1"), "another cookie")
+	require.NotEqual(t, bound, HashConsoleToken(a), "the cookie alone")
+	require.Empty(t, HashBrowserUnlock("", "key-1"), "no cookie")
+	require.Empty(t, HashBrowserUnlock(a, ""), "no key")
+
 	// The challenge binds the ceremony, the project and the browser.
 	nonce := make([]byte, 32)
 	base := ConsoleUnlockChallenge("01U", "example-finance", HashConsoleToken(a), nonce)

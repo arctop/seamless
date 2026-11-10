@@ -3,9 +3,12 @@ package store
 // Console unlocks (peer_auth; migration 033): the owner opens a locked
 // project in one browser's console for a limited time.
 //
-// A browser holds a random seamless_unlock cookie; the database holds only its
-// hash, one row per project it opens. Every row is begun by the browser it
-// opens, bound to that cookie's hash from the start, and goes live after a
+// A browser holds a random seamless_unlock cookie and a key only its console
+// origin can use (internal/console/browserproof); the database holds only one
+// hash of the two together (HashBrowserUnlock), one row per project it opens.
+// A cookie reaches every port of its host, so it never names a browser alone.
+// Every row is begun by the browser it
+// opens, bound to that hash from the start, and goes live after a
 // proof: a passkey assertion over a challenge bound to the project and to that
 // browser (BeginConsoleUnlock, GrantConsoleUnlock), or the daemon's own
 // account approving the row's pairing code (BeginTerminalUnlock, then
@@ -108,7 +111,7 @@ type ConsoleUnlock struct {
 	ID           string
 	Project      string
 	Status       string
-	TokenHash    string // the cookie hash of the browser that began it
+	TokenHash    string // the browser that began it: HashBrowserUnlock of its cookie and key
 	Challenge    []byte
 	Credential   string
 	Lease        time.Duration
@@ -140,7 +143,21 @@ func HashConsoleToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// validTokenHash reports whether h is a HashConsoleToken result.
+// HashBrowserUnlock is the token_hash the console stores for an unlock: the
+// browser's seamless_unlock cookie and the public key its proofs verify under
+// (browserproof), hashed together under their own domain prefix. A cookie read
+// on another port, without that key, hashes to no row; a row from before the
+// key (HashConsoleToken of the cookie alone) matches no request.
+func HashBrowserUnlock(cookie, browserKey string) string {
+	if cookie == "" || browserKey == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte("seamless console unlock v2\x00" + cookie + "\x00" + browserKey))
+	return hex.EncodeToString(sum[:])
+}
+
+// validTokenHash reports whether h is a HashConsoleToken or HashBrowserUnlock
+// result.
 func validTokenHash(h string) bool {
 	if len(h) != 2*sha256.Size {
 		return false

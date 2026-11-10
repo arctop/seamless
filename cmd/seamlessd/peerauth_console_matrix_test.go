@@ -191,9 +191,7 @@ func cmFeed(t *testing.T, c cmCaller) <-chan string {
 	t.Cleanup(cancel)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/console/events", nil)
 	require.NoError(t, err)
-	if c.auth != nil {
-		c.auth(req)
-	}
+	c.decorate(t, req)
 	client := c.client
 	if client == nil {
 		client = http.DefaultClient
@@ -387,10 +385,10 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 		for _, target := range targets {
 			for _, asJSON := range []bool{false, true} {
 				status, body, _ := restrictedC.do(t, http.MethodGet, target, nil, asJSON)
-				// The login form and the static assets are public: served to
-				// anyone, holding nothing of anyone's.
+				// The login form, the static assets and the service worker
+				// are public: served to anyone, holding nothing of anyone's.
 				switch {
-				case strings.HasPrefix(target, "/console/static/"):
+				case strings.HasPrefix(target, "/console/static/"), target == "/console/sw.js":
 					require.Equal(t, http.StatusOK, status, "GET %s", target)
 				case target == "/console/login":
 					// The login form sends a caller the kernel already
@@ -458,7 +456,7 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 		status, body, _ = browserA.do(t, http.MethodPost, "/console/unlock/"+cmFinance+"/finish", url.Values{"id": {begun.ID}, "response": {string(assertion)}}, true)
 		require.Equal(t, http.StatusOK, status, body)
 		require.Contains(t, body, `"unlocked": "`+cmFinance+`"`)
-		live, err := store.LiveConsoleUnlocks(ctx, d.db, store.HashConsoleToken(cookie), time.Now())
+		live, err := store.LiveConsoleUnlocks(ctx, d.db, browserA.unlockHash(t, cookie), time.Now())
 		require.NoError(t, err)
 		require.Len(t, live, 1)
 		finUnlock = live[0].ID
@@ -506,6 +504,18 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 		}
 		withA.name = "the TCP key with browser A's unlock cookie"
 		d.crawl(t, withA, targets)
+		// Browser A's own cookies, read off another port of this host and
+		// replayed without A's key (task 01M73SVP8HWD6KPF3ZC29RG6CT): locked.
+		replay := browserA
+		replay.key = nil
+		replay.name = "browser A's cookies replayed without its key"
+		d.crawl(t, replay, targets)
+		// Browser B with A's unlock cookie and its own key: locked.
+		browserB.client.Jar.SetCookies(u, []*http.Cookie{{Name: "seamless_unlock", Value: cookie, Path: "/console"}})
+		_, body, _ = browserB.do(t, http.MethodGet, "/console/memories/"+d.fin.memID, nil, false)
+		require.NotContains(t, body, d.fin.secret, "another browser's key does not take up A's cookie")
+		_, body, _ = browserA.do(t, http.MethodGet, "/console/memories/"+d.fin.memID, nil, false)
+		require.Contains(t, body, d.fin.secret, "browser A, with its key, still reads it")
 		// Nor does it reach an agent: the unleased tree's tools stay locked.
 		text, isErr := paCall(t, strangerMCP, "tasks_list", map[string]any{"project": cmFinance})
 		require.True(t, isErr)
@@ -601,7 +611,7 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 		require.Contains(t, body, "Unlocked in this browser")
 		_, body, _ = browserA.do(t, http.MethodGet, "/console/memories/"+d.legal.memID, nil, false)
 		require.Contains(t, body, d.legal.secret)
-		live, err := store.LiveConsoleUnlocks(ctx, d.db, store.HashConsoleToken(d.unlockCookie(t, browserA)), time.Now())
+		live, err := store.LiveConsoleUnlocks(ctx, d.db, browserA.unlockHash(t, d.unlockCookie(t, browserA)), time.Now())
 		require.NoError(t, err)
 		require.Len(t, live, 2, "one cookie, two unlocks")
 		for _, l := range live {

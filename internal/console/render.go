@@ -52,6 +52,16 @@ var privacyJS []byte
 //go:embed static/favicon.svg
 var faviconSVG []byte
 
+// browserKeyJS keeps this browser's unlock key (browserproof), in the page and
+// in the service worker, which imports it; swJS is that worker, served at
+// /console/sw.js so its scope is the whole console.
+//
+//go:embed static/browserkey.js
+var browserKeyJS []byte
+
+//go:embed static/sw.js
+var swJS []byte
+
 // pageNames are the page templates; each is parsed together with the shared
 // layout so it can supply the "content" (and optional "scripts") blocks. Pages
 // are added here as their handlers land, phase by phase.
@@ -122,7 +132,15 @@ type pageData struct {
 	// Jumps are the palette's Jump to rows that have no sidebar link: the
 	// screens without a nav row and the Settings sections this level offers.
 	Jumps []jumpEntry
-	Data  any
+	// BrowserKey loads static/browserkey.js, which keeps this browser's
+	// unlock key and its service worker: set while a project is locked, so a
+	// console with nothing locked renders exactly as before.
+	// BrowserProofMissing marks a page drawn for a request that carried an
+	// unlock cookie but no proof (a hard reload skips the service worker): it
+	// shows the base handle, and the script asks again through the worker.
+	BrowserKey          bool
+	BrowserProofMissing bool
+	Data                any
 }
 
 // jumpEntry is one hidden palette row the layout renders inside the sidebar
@@ -214,6 +232,8 @@ func (s *Service) withChrome(ctx context.Context, pd pageData) pageData {
 	pd.UpdateBanner, pd.UpdateAlert = s.updateChrome(time.Now())
 	pd.Host = s.host
 	pd.HostName = s.hostName
+	pd.BrowserKey = reachOf(ctx) != nil
+	pd.BrowserProofMissing = unprovenUnlock(ctx)
 	return pd
 }
 
