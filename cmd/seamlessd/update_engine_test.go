@@ -465,6 +465,140 @@ func TestAutoUpdate_ARollbackRestoreEndsTheBackupsAccessLeases(t *testing.T) {
 	require.Equal(t, store.LeaseRevokedReset, reason)
 }
 
+// rollBackAfter runs an update whose new release, once the backup is taken,
+// runs during on the database, migrates it one step and fails to come up. It
+// returns the rolled-back attempt.
+func rollBackAfter(t *testing.T, w *world, during func(dbPath string)) update.Attempt {
+	t.Helper()
+	dbPath := filepath.Join(w.dataDir, "seam.db")
+	w.installer = func(w *world, run installerRun) error {
+		if installerVersion(t, run) == "0.7.3" {
+			during(dbPath)
+			execDB(t, dbPath, `INSERT INTO schema_migrations(version) SELECT MAX(version) + 1 FROM schema_migrations`)
+			w.daemon.stop()
+			return os.WriteFile(w.exe, []byte("seamlessd 0.7.3\n"), 0o755)
+		}
+		return installerSwaps(w, run)
+	}
+	a, err := w.runAuto("0.7.3")
+	require.Error(t, err)
+	requireRecorded(t, w, a, update.StageRollback, true)
+	ver, _ := w.daemon.serving()
+	require.Equal(t, "0.7.2", ver, "the rollback target serves either way")
+	return a
+}
+
+// requireDB holds the data dir's seam.db to a schema and a set of console
+// locks.
+func requireDB(t *testing.T, w *world, schema int, locks ...string) {
+	t.Helper()
+	dbPath := filepath.Join(w.dataDir, "seam.db")
+	got, err := dbSchemaVersion(dbPath)
+	require.NoError(t, err)
+	require.Equal(t, schema, got)
+	held, err := dbConsoleLocks(context.Background(), dbPath)
+	require.NoError(t, err)
+	require.ElementsMatch(t, locks, held)
+}
+
+// A restore never reduces the set of locked projects (owner decision,
+// 2026-11-10): a lock the owner turned on while the new release ran is only in
+// the migrated database, so that database stays, and the record names the
+// project.
+func TestAutoUpdate_ARollbackKeepsTheMigratedDatabaseForALockAddedAfterTheBackup(t *testing.T) {
+	w := newWorld(t, "linux", "amd64", "0.7.2")
+	w.publish("0.7.2", releaseOpts{})
+	w.publish("0.7.3", releaseOpts{})
+	s0 := store.LatestSchemaVersion()
+	consoleLockProjects(t, filepath.Join(w.dataDir, "seam.db"), "example-b")
+
+	a := rollBackAfter(t, w, func(dbPath string) { consoleLockProjects(t, dbPath, "example-a") })
+	require.Contains(t, a.Error, fmt.Sprintf("the backup's database does not hold the console lock on example-a (added after the backup), "+
+		"so the migrated database (v%d) stays and the rollback target runs on a newer schema", s0+1))
+	require.NotContains(t, a.Error, "restored to schema")
+	requireDB(t, w, s0+1, "example-a", "example-b")
+	require.Empty(t, restoreLeftovers(t, w.dataDir), "nothing was moved, so nothing is left aside")
+}
+
+func TestAutoUpdate_ARollbackRestoresABackupHoldingTheSameLocks(t *testing.T) {
+	w := newWorld(t, "linux", "amd64", "0.7.2")
+	w.publish("0.7.2", releaseOpts{})
+	w.publish("0.7.3", releaseOpts{})
+	s0 := store.LatestSchemaVersion()
+	consoleLockProjects(t, filepath.Join(w.dataDir, "seam.db"), "example-a", "example-b")
+
+	a := rollBackAfter(t, w, func(string) {})
+	require.Contains(t, a.Error, fmt.Sprintf("the database was restored to schema v%d from the backup", s0))
+	require.NotContains(t, a.Error, "console lock")
+	requireDB(t, w, s0, "example-a", "example-b")
+	require.FileExists(t, filepath.Join(w.dataDir, "seam.db.pre-rollback-"+a.ID))
+}
+
+// A lock the owner removed while the new release ran comes back with the
+// backup's database: that fails closed, and the record says so.
+func TestAutoUpdate_ARollbackRestoresALockOnlyTheBackupHolds(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t, "linux", "amd64", "0.7.2")
+	w.publish("0.7.2", releaseOpts{})
+	w.publish("0.7.3", releaseOpts{})
+	s0 := store.LatestSchemaVersion()
+	consoleLockProjects(t, filepath.Join(w.dataDir, "seam.db"), "example-a")
+
+	a := rollBackAfter(t, w, func(dbPath string) {
+		db, err := store.OpenExisting(dbPath)
+		require.NoError(t, err)
+		require.NoError(t, store.RemoveConsoleLock(ctx, db, "example-a"))
+		require.NoError(t, db.Close())
+	})
+	require.Contains(t, a.Error, fmt.Sprintf("the database was restored to schema v%d from the backup", s0))
+	require.Contains(t, a.Error, "; the backup's console lock on example-a, removed after the backup, is back")
+	requireDB(t, w, s0, "example-a")
+}
+
+// A backup whose database predates console locks (migration 037) holds none,
+// so a lock in the migrated database keeps the migrated database in place.
+func TestAutoUpdate_ARollbackKeepsTheLocksABackupBeforeConsoleLocksLacks(t *testing.T) {
+	const consoleLocksMigration = 37 // internal/store/migrations/037_console_locks.sql
+	w := newWorld(t, "linux", "amd64", "0.7.2")
+	w.publish("0.7.2", releaseOpts{})
+	w.publish("0.7.3", releaseOpts{})
+	dbPath := filepath.Join(w.dataDir, "seam.db")
+	execDB(t, dbPath, `DROP TABLE console_locks`,
+		fmt.Sprintf(`DELETE FROM schema_migrations WHERE version >= %d`, consoleLocksMigration))
+	s0, err := dbSchemaVersion(dbPath)
+	require.NoError(t, err)
+	require.Less(t, s0, consoleLocksMigration)
+
+	a := rollBackAfter(t, w, func(dbPath string) {
+		// The new release creates the table, and the owner locks a project.
+		execDB(t, dbPath, `CREATE TABLE console_locks (project_slug TEXT PRIMARY KEY, credential TEXT NOT NULL, locked_at TEXT NOT NULL)`)
+		consoleLockProjects(t, dbPath, "example-a")
+	})
+	require.Contains(t, a.Error, fmt.Sprintf("the backup's database does not hold the console lock on example-a (added after the backup), "+
+		"so the migrated database (v%d) stays", s0+1))
+	requireDB(t, w, s0+1, "example-a")
+	require.Empty(t, restoreLeftovers(t, w.dataDir))
+}
+
+// Console locks that cannot be read cannot be shown to survive the restore,
+// so the database is left exactly as it is.
+func TestAutoUpdate_ARollbackLeavesADatabaseWhoseLocksCannotBeRead(t *testing.T) {
+	w := newWorld(t, "linux", "amd64", "0.7.2")
+	w.publish("0.7.2", releaseOpts{})
+	w.publish("0.7.3", releaseOpts{})
+	s0 := store.LatestSchemaVersion()
+
+	a := rollBackAfter(t, w, func(dbPath string) {
+		execDB(t, dbPath, `INSERT INTO console_locks (project_slug, credential, locked_at) VALUES ('example-a', 'cred', 'not a time')`)
+	})
+	require.Contains(t, a.Error, fmt.Sprintf("could not read the console locks of the database (schema v%d), so it was left as it is "+
+		"and the rollback target runs on a newer schema", s0+1))
+	got, err := dbSchemaVersion(filepath.Join(w.dataDir, "seam.db"))
+	require.NoError(t, err)
+	require.Equal(t, s0+1, got)
+	require.Empty(t, restoreLeftovers(t, w.dataDir))
+}
+
 func TestAutoUpdate_ARollbackThatFailsSaysTheDaemonMayBeDown(t *testing.T) {
 	w := newWorld(t, "linux", "amd64", "0.7.2")
 	w.publish("0.7.2", releaseOpts{})

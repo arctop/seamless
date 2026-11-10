@@ -585,7 +585,10 @@ never on the record's <code>error</code> text.</p>
 <p>An automatic update rolls back to the release it replaced when the new one does
 not come up, and an owner may pin an older release with <code>SEAMLESS_VERSION</code>. A
 rollback puts the database back only when the new release had migrated it, and
-it never touches memories, notes or the config. So every release must leave an
+it never touches memories, notes or the config. It also never reduces the set of
+locked projects: the backup's database goes in place only if it holds every
+console lock the migrated one does, and otherwise the migrated database stays.
+So every release must leave an
 install that the previous release can still run. These rules keep a rollback
 working, and the last one keeps an update from breaking Codex's hooks unnoticed.</p>
 <h3 id="migrations-stay-additive">Migrations stay additive</h3>

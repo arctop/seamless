@@ -60,8 +60,9 @@ counts the update only once the new release answers `/healthz` as a freshly
 started daemon that is still the same one ten seconds later, and otherwise
 rolls back: the service stops, the database is put back from the backup if the
 new release had already migrated it (the migrated file stays beside it as
-`seam.db.pre-rollback-<id>`), and the release you had is reinstalled and
-confirmed. Memories and notes are never rolled back. Each run is recorded in
+`seam.db.pre-rollback-<id>`) and the backup holds every console lock the
+migrated one does, and the release you had is reinstalled and confirmed.
+Memories and notes are never rolled back. Each run is recorded in
 `~/.seamless/update/` (`attempt.json`, `attempts.jsonl`, `logs/`). A run whose
 installer failed after the new release came up reports "applied with warnings":
 run `seamlessd install-hooks`. Already on the newest release, it says so and
@@ -285,7 +286,12 @@ it, and that updater:
 8. otherwise rolls back: it stops the service, puts the database back from the
    backup if the new release had already migrated it (the migrated file stays
    beside it as `seam.db.pre-rollback-<id>`), reinstalls the release you had and
-   confirms it the same way. Memories and notes are never rolled back.
+   confirms it the same way. Memories and notes are never rolled back. A
+   rollback never unlocks a project: if you locked one from the console while
+   the new release ran, the backup's database does not hold that lock, so the
+   migrated database stays, the release you had runs on its newer schema, and
+   the attempt's record names the project. A lock you removed in that time
+   comes back with the backup's database.
 
 The restart takes a moment, and agents keep working through it: hooks retry
 briefly and then fail open, and the `seam` MCP bridge rides out a restart

@@ -229,7 +229,9 @@ Before an update on such an install, the updater archives the instance to
 and keeps the newest two. When an update is rolled back after the new release
 had already migrated the database, the backup's database is put back. The
 migrated one, with its `-wal` and `-shm`, stays beside it as
-`seam.db.pre-rollback-<attempt>` until you delete it. Memories and notes are
+`seam.db.pre-rollback-<attempt>` until you delete it. A backup's database that
+lacks a console lock the migrated one holds is not put back: the migrated
+database stays in place, so a rollback never unlocks a project. Memories and notes are
 never rolled back. Creating `update/test-fail-confirm` rehearses a rollback on
 a real install: while it exists, every update fails its confirmation on purpose
 and rolls back, and `seamlessd doctor` warns. Delete it afterwards.

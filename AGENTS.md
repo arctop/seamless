@@ -879,7 +879,11 @@ never touches memories, notes or the config. A restored database -- the
 rollback's or `seamlessd import`'s -- ends every live access lease, console
 unlock and read grant it held (`store.ResetRestoredAccess`): a snapshot would
 otherwise reopen what the owner closed after it was taken, so when that fails
-the rollback puts the migrated database back instead of serving it. These rules exist so a rollback
+the rollback puts the migrated database back instead of serving it. A rollback
+also never reduces the set of locked projects: it puts the backup's database in
+place only if the extracted snapshot holds every console lock the migrated one
+does (both read before any file moves), and otherwise, or when either side's
+locks cannot be read, the migrated database stays. These rules exist so a rollback
 to the previous release keeps working; the last keeps an update from silently
 disabling Codex's hooks.
 

@@ -9,6 +9,13 @@ package main
 // reconcile re-indexes them, and recovering them from the backup is the
 // owner's call: `seamlessd import --from <backup>` restores only into an empty
 // data dir (into a populated one it merges), so the old one goes aside first.
+//
+// That restore never reduces the set of locked projects (owner decision,
+// 2026-11-10). The console's locks live only in the database, so one the owner
+// turned on while the new release ran is in the migrated database and not in
+// the backup's: the rollback reads the migrated database's console locks
+// before anything moves, and restoreDatabase puts the backup's database in
+// place only once its snapshot is shown to hold every one of them.
 
 import (
 	"archive/tar"
@@ -302,11 +309,30 @@ var errBackupPrune = errors.New("prune old backups")
 // beside a different database would be replayed into it. A failure after the
 // renames puts them back. The caller has stopped the daemon: nothing may hold
 // the database while its files move. The suffix is returned for the record.
-func restoreDatabase(dataDir, backupPath, attemptID string, wantSchema int) (string, error) {
+//
+// vet, when not nil, reads the extracted snapshot at the path it is given
+// before anything is renamed, and an error from it is returned with nothing
+// moved: what the snapshot lacks is judged while the live database is still
+// in place, so no moment leaves a database that fails the vet as seam.db --
+// not even for an updater killed mid-restore.
+func restoreDatabase(dataDir, backupPath, attemptID string, wantSchema int, vet func(snapshot string) error) (string, error) {
 	tmp := filepath.Join(dataDir, archive.DBName+".restore-"+attemptID)
 	if err := extractSnapshotDB(backupPath, tmp, wantSchema); err != nil {
 		_ = os.Remove(tmp)
 		return "", err
+	}
+	if vet != nil {
+		err := vet(tmp)
+		// SQLite removes the WAL and shared-memory files its last connection
+		// to the snapshot leaves; should one stay, it holds nothing (the vet
+		// only reads) and pairs with no database once the snapshot is renamed.
+		for _, side := range []string{tmp + "-wal", tmp + "-shm"} {
+			_ = os.Remove(side) //nolint:errcheck // best effort: usually absent, and inert if it stays
+		}
+		if err != nil {
+			_ = os.Remove(tmp)
+			return "", err
+		}
 	}
 	suffix := ".pre-rollback-" + attemptID
 	var moved []string
@@ -394,13 +420,85 @@ func restoredAccessWords(r store.RestoredAccess) string {
 			parts = append(parts, update.Plural(c.n, c.noun))
 		}
 	}
-	switch len(parts) {
-	case 0:
+	if len(parts) == 0 {
 		return "no access"
-	case 1:
-		return parts[0]
-	default:
-		return strings.Join(parts[:len(parts)-1], ", ") + " and " + parts[len(parts)-1]
+	}
+	return andList(parts)
+}
+
+// andList joins words for a record: "a", "a and b", "a, b and c".
+func andList(words []string) string {
+	if len(words) < 2 {
+		return strings.Join(words, "")
+	}
+	return strings.Join(words[:len(words)-1], ", ") + " and " + words[len(words)-1]
+}
+
+// dbConsoleLocks returns the projects the console locks in the database at
+// dbPath, sorted, through a store.OpenExisting handle -- never store.Open,
+// which would migrate it -- closed before it returns. A database without the
+// console_locks table (one that predates migration 037) has no console locks.
+// The database's WAL is part of it, so the rollback reads a database before
+// its files move: a -wal renamed aside no longer pairs with its main file.
+func dbConsoleLocks(ctx context.Context, dbPath string) ([]string, error) {
+	db, err := store.OpenExisting(dbPath)
+	if err != nil {
+		return nil, err
+	}
+	var slugs []string
+	var n int
+	err = db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'console_locks'`).Scan(&n)
+	if err != nil {
+		err = fmt.Errorf("look for the console_locks table: %w", err)
+	} else if n > 0 {
+		slugs, err = store.ConsoleLockedSlugs(ctx, db)
+	}
+	if cerr := db.Close(); cerr != nil && err == nil {
+		err = cerr
+	}
+	return slugs, err
+}
+
+// missingLocksError is a backup whose database does not hold every console
+// lock the migrated one does, naming the projects it lacks.
+type missingLocksError struct{ projects []string }
+
+func (e *missingLocksError) Error() string {
+	if len(e.projects) == 1 {
+		return "the backup's database does not hold the console lock on " + e.projects[0]
+	}
+	return "the backup's database does not hold the console locks on " + andList(e.projects)
+}
+
+// keepConsoleLocks is restoreDatabase's vet for a rollback whose migrated
+// database holds the console locks in locked: the snapshot must hold every
+// one, or the restore would open a project the owner locked after the backup
+// (a *missingLocksError). A snapshot whose locks cannot be read fails too: it
+// cannot be shown to keep them. The snapshot's locks locked lacks -- ones the
+// owner removed after the backup, which the restore brings back, failing
+// closed -- go to *returned for the record.
+func keepConsoleLocks(ctx context.Context, locked []string, returned *[]string) func(snapshot string) error {
+	return func(snapshot string) error {
+		got, err := dbConsoleLocks(ctx, snapshot)
+		if err != nil {
+			return fmt.Errorf("read the backup's console locks: %w", err)
+		}
+		var missing []string
+		for _, slug := range locked {
+			if !slices.Contains(got, slug) {
+				missing = append(missing, slug)
+			}
+		}
+		if len(missing) > 0 {
+			return &missingLocksError{projects: missing}
+		}
+		*returned = nil
+		for _, slug := range got {
+			if !slices.Contains(locked, slug) {
+				*returned = append(*returned, slug)
+			}
+		}
+		return nil
 	}
 }
 

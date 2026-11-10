@@ -793,8 +793,9 @@ func (u *updater) install(ctx context.Context, target, back releaseAssets) outco
 
 // rollback restores the release the attempt updated from (plan step 8): stop
 // the service; once the daemon has let go of the data dir, put the backup's
-// database back if the new release migrated it past the backup's schema (the
-// migrated one is kept aside, never deleted); run the rollback target's
+// database back if the new release migrated it past the backup's schema and
+// the backup's holds every console lock the migrated one does (the migrated
+// one is kept aside, never deleted); run the rollback target's
 // verified installer pinned to it; and confirm it the same way. Markdown is
 // never restored here.
 func (u *updater) rollback(ctx context.Context, target, back releaseAssets, cause string) outcome {
@@ -885,12 +886,25 @@ func (u *updater) waitDaemonGone(ctx context.Context) bool {
 }
 
 // restoreDBIfMigrated puts the backup's database back when the schema moved
-// past the backup's (S1 > S0), and says what it did. The backup holds the
-// access leases, console unlocks and read grants live when it was taken,
-// including ones revoked since, so every live one in it is ended before
-// anything serves it; when that cannot be done, the migrated database goes
-// back instead -- the rollback target then runs on the newer schema, which
-// release discipline keeps working -- rather than serve permissions the owner
+// past the backup's (S1 > S0), and says what it did. Wherever it keeps the
+// migrated database instead, the rollback target runs on the newer schema,
+// which release discipline keeps working.
+//
+// A restore never reduces the set of locked projects (owner decision,
+// 2026-11-10). The console's locks live only in the database, so a lock the
+// owner turned on after the backup is in the migrated database alone: its
+// console locks are read before any file moves (its WAL is part of it), and
+// the backup's database goes in place only if it holds every one. When either
+// side's locks cannot be read, that cannot be shown, and the migrated database
+// stays. The check runs on the extracted snapshot, before the reset below
+// writes to it and before it replaces seam.db, so no moment leaves a database
+// missing a lock as seam.db. A lock only the backup holds -- removed after it
+// -- comes back with it, which fails closed.
+//
+// The backup also holds the access leases, console unlocks and read grants
+// live when it was taken, including ones revoked since, so every live one in
+// it is ended before anything serves it; when that cannot be done, the
+// migrated database goes back instead rather than serve permissions the owner
 // had closed.
 func (u *updater) restoreDBIfMigrated(ctx context.Context) string {
 	dbPath := filepath.Join(u.dataDir(), archive.DBName)
@@ -902,8 +916,18 @@ func (u *updater) restoreDBIfMigrated(ctx context.Context) string {
 		u.logf("rollback: schema v%d, not past the backup's v%d; database left as it is", s1, u.backup.schema)
 		return ""
 	}
+	locked, err := dbConsoleLocks(ctx, dbPath)
+	if err != nil {
+		return fmt.Sprintf("could not read the console locks of the database (schema v%d), so it was left as it is "+
+			"and the rollback target runs on a newer schema: %v", s1, err)
+	}
 	attempt := u.job.req.AttemptID
-	suffix, err := restoreDatabase(u.dataDir(), u.backup.path, attempt, u.backup.schema)
+	var relocked []string
+	suffix, err := restoreDatabase(u.dataDir(), u.backup.path, attempt, u.backup.schema, keepConsoleLocks(ctx, locked, &relocked))
+	var missing *missingLocksError
+	if errors.As(err, &missing) {
+		return fmt.Sprintf("%v (added after the backup), so the migrated database (v%d) stays and the rollback target runs on a newer schema", missing, s1)
+	}
 	if err != nil {
 		return fmt.Sprintf("the database (schema v%d) could not be restored to v%d, so the rollback target runs on a newer schema: %v", s1, u.backup.schema, err)
 	}
@@ -919,6 +943,13 @@ func (u *updater) restoreDBIfMigrated(ctx context.Context) string {
 	msg := fmt.Sprintf("the database was restored to schema v%d from the backup; the migrated one (v%d) is kept as %s%s", u.backup.schema, s1, archive.DBName, suffix)
 	if ended.Total() > 0 {
 		msg += fmt.Sprintf("; ended what the backup held live: %s (locked projects ask again)", restoredAccessWords(ended))
+	}
+	switch len(relocked) {
+	case 0:
+	case 1:
+		msg += "; the backup's console lock on " + relocked[0] + ", removed after the backup, is back"
+	default:
+		msg += "; the backup's console locks on " + andList(relocked) + ", removed after the backup, are back"
 	}
 	return msg
 }
