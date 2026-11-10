@@ -6675,6 +6675,7 @@ html:not(.js) .brief-preview { display: none; }
 .approver small { color: var(--muted); font-size: var(--text-xs); }
 .approver-id { margin-left: auto; color: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); overflow-wrap: anywhere; }
 .approver-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin: 12px 0 0; }
+.approver-form[hidden] { display: none; } /* display beats the hidden attribute otherwise */
 .approver-form label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: var(--text-xs); }
 .approver-form input {
   min-width: 0; width: 16rem; max-width: 100%; padding: 8px 11px; border: 1px solid var(--border-strong);

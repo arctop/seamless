@@ -281,6 +281,55 @@ func TestApprovers_ConfirmRoute(t *testing.T) {
 	require.Equal(t, 1, n)
 }
 
+// Only a passkey approves a new passkey, in the browser: a Touch ID key signs in
+// the Mac's helper and cannot. So until a passkey exists the page offers the
+// code path alone, and not a box whose unticked default the daemon refuses.
+func TestApprovers_OnlyAnEnrolledPasskeyOffersTheNoCodePath(t *testing.T) {
+	db, mux := newApproversConsole(t)
+	ctx := context.Background()
+	const codeOnly = `<input id="approver-bycode" type="hidden" value="1">`
+	const choice = `<input id="approver-bycode" type="checkbox">`
+	page := func() string {
+		req := authedReq(httptest.NewRequest(http.MethodGet, "/console/approvers", nil))
+		req.Host = "localhost:8081"
+		rr := do(mux, req)
+		require.Equal(t, http.StatusOK, rr.Code)
+		return rr.Body.String()
+	}
+
+	require.Contains(t, page(), codeOnly, "nothing enrolled: the code path alone")
+
+	pub := append([]byte{0x04}, make([]byte, 64)...)
+	touch := store.ApproverCredential{Kind: store.ApproverTouchID, CredentialID: []byte("tk1"), PublicKey: pub, Alg: -7, Name: "this Mac"}
+	code, _, err := store.MintEnrollCode(ctx, db, store.ApproverTouchID, store.ApproverKeyFingerprint(pub), time.Now())
+	require.NoError(t, err)
+	_, err = store.EnrollApprover(ctx, db, touch, code, "", time.Now())
+	require.NoError(t, err)
+	body := page()
+	require.Contains(t, body, "this Mac", "the Touch ID key is listed")
+	require.Contains(t, body, codeOnly, "a Touch ID key cannot approve a passkey: still the code path alone")
+	require.NotContains(t, body, choice)
+	require.Contains(t, body, "The first passkey needs a one-time code")
+
+	a, err := passkeytest.New(true)
+	require.NoError(t, err)
+	id, fin := finishOverHTTP(t, mux, a, "security key", true)
+	confirmOverHTTP(t, db, mux, id, fin)
+	body = page()
+	require.Contains(t, body, choice, "a passkey is enrolled: it may approve the next one")
+	require.NotContains(t, body, codeOnly)
+	require.Contains(t, body, "One of your enrolled passkeys approves the new one")
+}
+
+// display: flex on the class beats the hidden attribute, so without its own
+// rule the code form shows, empty, before a passkey exists.
+func TestApprovers_TheCodeFormStaysHiddenUntilItIsNeeded(t *testing.T) {
+	_, mux := newApproversConsole(t)
+	rr := do(mux, httptest.NewRequest(http.MethodGet, "/console/static/console.css", nil))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Contains(t, rr.Body.String(), ".approver-form[hidden] { display: none; }")
+}
+
 // A restricted account's ceremony POSTs all stop at the console's own gate,
 // the confirm route with its siblings.
 func TestApprovers_RefusedForARestrictedAccount(t *testing.T) {

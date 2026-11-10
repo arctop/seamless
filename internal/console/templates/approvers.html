@@ -33,10 +33,10 @@
   {{else if not .OnOrigin}}
   <p class="held-sub">{{icon "triangle-alert"}} A passkey can only be created on <a href="{{.Origin}}/console/approvers">{{.Origin}}</a>. Browsers refuse passkeys on an IP address such as 127.0.0.1, so open this page there (you may need to sign in to the console again on that address).</p>
   {{else}}
-  <p class="held-sub">A security key, your phone, this computer, or a password manager. {{if .Credentials}}One of your enrolled passkeys approves the new one, or you can use a one-time code made for it.{{else}}The first passkey needs a one-time code. Once the passkey exists, this page shows the command that makes the code for it.{{end}}</p>
+  <p class="held-sub">A security key, your phone, this computer, or a password manager. {{if .HasPasskey}}One of your enrolled passkeys approves the new one, or you can use a one-time code made for it.{{else}}The first passkey needs a one-time code. Once the passkey exists, this page shows the command that makes the code for it.{{end}}</p>
   <form id="approver-form" class="approver-form" autocomplete="off">
     <label>Name <input id="approver-name" name="name" maxlength="64" required placeholder="security key, phone, laptop"></label>
-    {{if .Credentials}}<label><input id="approver-bycode" type="checkbox"> Use a one-time code instead</label>{{else}}<input id="approver-bycode" type="hidden" value="1">{{end}}
+    {{if .HasPasskey}}<label><input id="approver-bycode" type="checkbox"> Use a one-time code instead</label>{{else}}<input id="approver-bycode" type="hidden" value="1">{{end}}
     <button class="btn primary" id="approver-go" type="submit">{{icon "key-round"}} Create passkey</button>
   </form>
   <form id="approver-confirm" class="approver-form" autocomplete="off" hidden>

@@ -83,6 +83,10 @@ type approverRow struct {
 
 type approversData struct {
 	Credentials []approverRow `json:"credentials"`
+	// HasPasskey says an enrolled passkey can approve a new one. A Touch ID key
+	// cannot, so while only those exist the page offers the code path alone,
+	// as approval.BeginPasskey requires.
+	HasPasskey bool `json:"has_passkey"`
 	// PasskeysOn is false when the relying party is not configured; the page
 	// then lists credentials and explains, with no enrollment form.
 	PasskeysOn bool `json:"passkeys_on"`
@@ -126,6 +130,7 @@ func (s *Service) approversPage(w http.ResponseWriter, r *http.Request) {
 	}
 	d.OnOrigin = slices.Contains(origins, requestOrigin(r))
 	for _, c := range creds {
+		d.HasPasskey = d.HasPasskey || c.Kind == store.ApproverPasskey
 		d.Credentials = append(d.Credentials, approverRow{
 			ID: c.ID, Kind: c.Kind, Name: c.Name, Synced: c.BackupState, AddedAt: c.AddedAt,
 			AddedBy: approverAddedBy(c.AddedBy, creds), LastUsed: c.LastUsedAt,
