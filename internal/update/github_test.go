@@ -102,6 +102,7 @@ func TestFetch_RateLimits(t *testing.T) {
 		{"a garbage reset far away is capped", http.StatusForbidden, map[string]string{
 			"X-RateLimit-Remaining": "0",
 			"X-RateLimit-Reset":     strconv.FormatInt(now.Add(30*24*time.Hour).Unix(), 10),
+			"Date":                  serverNow.Format(http.TimeFormat),
 		}, 24 * time.Hour},
 	}
 	for _, tt := range tests {
