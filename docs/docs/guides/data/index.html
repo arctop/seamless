@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#what-is-precious-and-what-is-not">What is precious, and what is not</a></li><li class="lvl-2"><a href="#put-it-in-git">Put it in git</a></li><li class="lvl-2"><a href="#the-whole-instance-in-one-archive">The whole instance in one archive</a></li><li class="lvl-2"><a href="#restore">Restore</a></li><li class="lvl-2"><a href="#merging-two-instances">Merging two instances</a></li><li class="lvl-2"><a href="#import-from-seam-v1">Import from Seam v1</a></li><li class="lvl-2"><a href="#hand-editing">Hand-editing</a></li><li class="lvl-2"><a href="#moving-machines">Moving machines</a></li>
+      <li class="lvl-2"><a href="#what-is-precious-and-what-is-not">What is precious, and what is not</a></li><li class="lvl-2"><a href="#put-it-in-git">Put it in git</a></li><li class="lvl-2"><a href="#the-whole-instance-in-one-archive">The whole instance in one archive</a></li><li class="lvl-2"><a href="#restore">Restore</a></li><li class="lvl-2"><a href="#locked-projects">Locked projects</a></li><li class="lvl-2"><a href="#merging-two-instances">Merging two instances</a></li><li class="lvl-2"><a href="#import-from-seam-v1">Import from Seam v1</a></li><li class="lvl-2"><a href="#hand-editing">Hand-editing</a></li><li class="lvl-2"><a href="#moving-machines">Moving machines</a></li>
     </ul>
   </details>
   <p>Because durable knowledge is markdown files, backup and restore are boring - and
@@ -344,6 +344,57 @@ keeps it in sync from then on. You do not run a reindex command, because there
 isn't one to forget.</p>
 <p>To force a full rebuild, stop the daemon, delete <code>seam.db</code>, and start it again.
 You lose sessions, tasks, trials, and events; you lose no knowledge.</p>
+<h2 id="locked-projects">Locked projects</h2>
+<p>A backup keeps a locked project locked. <code>seamlessd export</code> records every locked
+project in the archive, whether the console set the lock or
+<code>peer_auth.force_locked</code> holds it, and a <code>--no-db</code> archive records them too. The
+file itself is not encrypted, so a lock does not protect it: keep the archive as
+carefully as the most sensitive project in it.</p>
+<p>Before an import writes anything, it looks for a passkey that can open those
+projects:</p>
+<ul>
+<li><strong>Restoring into an empty data directory</strong>, the backup's passkeys come back with
+its database. One counts if it was enrolled for this instance's relying party
+and can reach this machine: a synced passkey, a security key or a phone, or any
+passkey when you restore on the machine that enrolled it.</li>
+<li><strong>Merging</strong>, this instance's own passkeys count. A merge never brings passkeys.</li>
+</ul>
+<p>If it finds one, it asks whether you still have it. If it finds none, or you
+don't, you choose:</p>
+<ul>
+<li><strong>Keep the locks and add a passkey right after.</strong> The import prints the steps.
+The Approvers page takes a new passkey with a one-time code from your terminal,
+so a passkey you no longer have does not lock you out.</li>
+<li><strong>Add a passkey first</strong>, on a merge. The import stops with nothing changed. A
+restore doesn't offer this, because a daemon started on the empty data directory
+would create a database and turn the restore into a merge.</li>
+<li><strong>Remove the locks</strong> from these projects. They keep their isolation setting, and
+agents working in them then read them without asking.</li>
+</ul>
+<p>With no terminal to ask on, an import that finds no passkey stops with nothing
+changed until you pass <code>--keep-locks</code> or <code>--remove-locks</code>. Add <code>--dry-run</code> to see
+what it finds.</p>
+<p>Once the daemon is running, check the passkey for real by unlocking one of the
+projects with it at <code>/console/unlock/&lt;project&gt;</code>. Only a browser and the
+authenticator can prove you still have it, so the import can't.</p>
+<p>A few details:</p>
+<ul>
+<li>A lock held by the old machine's <code>force_locked</code> list becomes a console lock
+here, because no archive carries a config. If this machine's config force locks
+the project too, the file keeps holding it.</li>
+<li>With <code>peer_auth</code> off, locks do nothing, so the import says so and asks. Turn it
+on before you start the daemon.</li>
+<li>A merge that brings locks needs the daemon stopped, because a daemon reads the
+locked projects when it starts. <code>--force</code> overrides that, and you must then
+restart the daemon right away.</li>
+<li>On a merge, a project that is open here and locked in the archive is raised to
+the archive's isolation setting, and leaves any family or parent it had. If it
+has child projects it can't be fenced, so the import stops with nothing changed.</li>
+<li><code>--remove-locks</code> removes the archive's locks only. A force lock in this config,
+or a lock this instance already had, stays.</li>
+<li>A restore puts things back as they stood at the backup. A lock set later isn't
+in it, and a passkey removed later returns: check <code>seamlessd approvers list</code>.</li>
+</ul>
 <h2 id="merging-two-instances">Merging two instances</h2>
 <p>Importing an archive into an instance that already has data is a <strong>merge</strong>, and
 it is idempotent: anything whose ULID is already here is skipped, so running the
@@ -423,7 +474,7 @@ index rebuilds itself on first start either way.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#what-is-precious-and-what-is-not">What is precious, and what is not</a></li><li class="lvl-2"><a href="#put-it-in-git">Put it in git</a></li><li class="lvl-2"><a href="#the-whole-instance-in-one-archive">The whole instance in one archive</a></li><li class="lvl-2"><a href="#restore">Restore</a></li><li class="lvl-2"><a href="#merging-two-instances">Merging two instances</a></li><li class="lvl-2"><a href="#import-from-seam-v1">Import from Seam v1</a></li><li class="lvl-2"><a href="#hand-editing">Hand-editing</a></li><li class="lvl-2"><a href="#moving-machines">Moving machines</a></li>
+      <li class="lvl-2"><a href="#what-is-precious-and-what-is-not">What is precious, and what is not</a></li><li class="lvl-2"><a href="#put-it-in-git">Put it in git</a></li><li class="lvl-2"><a href="#the-whole-instance-in-one-archive">The whole instance in one archive</a></li><li class="lvl-2"><a href="#restore">Restore</a></li><li class="lvl-2"><a href="#locked-projects">Locked projects</a></li><li class="lvl-2"><a href="#merging-two-instances">Merging two instances</a></li><li class="lvl-2"><a href="#import-from-seam-v1">Import from Seam v1</a></li><li class="lvl-2"><a href="#hand-editing">Hand-editing</a></li><li class="lvl-2"><a href="#moving-machines">Moving machines</a></li>
     </ul>
   </aside>
   

@@ -66,6 +66,12 @@ func runExport(args []string) error {
 		// archive's source_host compares with the rows inside it.
 		Host: config.Hostname(),
 	}
+	if cfg.PeerAuth.Enabled {
+		// A force lock lives in the config, which no archive carries, so the
+		// manifest has to name it or a restore elsewhere comes back open.
+		opts.ForceLocked = cfg.PeerAuth.ForceLocked
+		opts.PasskeyRPID, _ = cfg.RelyingParty()
+	}
 
 	if dest == "-" {
 		// Report to stderr: stdout is the archive, and a summary line mixed
@@ -205,6 +211,13 @@ func exportSummary(m archive.Manifest, dest string, size int64) string {
 		}
 	} else {
 		fmt.Fprintf(&b, "\n  database: not included (--no-db); sessions, tasks, trials and events are NOT in this archive")
+	}
+	if m.Locks != nil {
+		fmt.Fprintf(&b, "\n  locked: %s (they import locked; this file is not encrypted, so guard it like those projects)",
+			strings.Join(m.Locks.Slugs(), ", "))
+	}
+	if m.LocksError != "" {
+		fmt.Fprintf(&b, "\n  warning: could not read which projects the console locks (%s); any of them would import unlocked", m.LocksError)
 	}
 	return b.String()
 }

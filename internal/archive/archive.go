@@ -18,7 +18,7 @@
 // restored as another user must not carry the exporting machine's ownership,
 // and the corpus is owner-only on disk for the same reason the data dir is.
 //
-// The package imports core, files, store, and validate. It must NOT import
+// The package imports core, events, files, store, and validate. It must NOT import
 // internal/config: an archive is described by its manifest and its data dir
 // argument, never by the config of whatever process happens to be holding it,
 // which is what lets an export run against a data dir the caller names and an
@@ -28,6 +28,8 @@ package archive
 import (
 	"errors"
 	"time"
+
+	"github.com/arctop/seamless/internal/store"
 )
 
 // FormatVersion is the archive container version. It describes the tar layout
@@ -72,8 +74,14 @@ var (
 
 	// ErrDaemonRunning reports that a daemon is answering on the target
 	// instance's address. A fresh restore replaces seam.db underneath it, so it
-	// refuses rather than corrupting a live instance.
+	// refuses rather than corrupting a live instance. A merge that brings locks
+	// refuses too: a daemon reads the locked projects when it starts.
 	ErrDaemonRunning = errors.New("seamlessd is running against this data dir")
+
+	// ErrLockCannotApply reports a merge that cannot keep a project locked here:
+	// the project is open on this instance and has child projects, and a locked
+	// project must be fenced, which a project with children cannot be.
+	ErrLockCannotApply = errors.New("a lock in this archive cannot be applied here")
 )
 
 // Counts is the manifest's inventory: what a reader should expect to find, so a
@@ -121,4 +129,48 @@ type Manifest struct {
 	EmbeddingModels []string `json:"embedding_models,omitempty"`
 
 	Counts Counts `json:"counts"`
+
+	// Locks is what the import needs to keep this instance's locked projects
+	// locked. Nil when none was locked, so an archive without locks reads as it
+	// always has. It is here, and not only in the snapshot, because a lock can
+	// live where the snapshot cannot see it: in the exporting machine's config
+	// (peer_auth.force_locked), or in a database a --no-db export leaves out.
+	Locks *Locks `json:"locks,omitempty"`
+
+	// LocksError says why a --no-db export could not read the console's locks.
+	// Such an export is how knowledge gets out of a damaged database, so it goes
+	// ahead, and both ends say what it could not know.
+	LocksError string `json:"locks_error,omitempty"`
+}
+
+// LockedProject is one project that was locked when the archive was written.
+type LockedProject struct {
+	Slug string `json:"slug"`
+	// Isolation is the project's fence. A lock needs one, and a --no-db archive
+	// carries no projects table to read it from. Empty when the exporter had no
+	// database to ask.
+	Isolation string `json:"isolation,omitempty"`
+}
+
+// Locks is the manifest's record of the locked projects and of who could open
+// them. It names passkeys and never holds key material.
+type Locks struct {
+	// Projects are the locked projects, sorted by slug: the console's locks and
+	// the exporting config's force locks alike.
+	Projects []LockedProject `json:"projects"`
+	// PasskeyRPID is the relying party the passkeys below were enrolled for: a
+	// passkey signs for that one and no other. Empty when the exporter did not
+	// know it.
+	PasskeyRPID string `json:"passkey_rp_id,omitempty"`
+	// Passkeys are the passkeys enrolled when the archive was written.
+	Passkeys []store.PasskeyFact `json:"passkeys,omitempty"`
+}
+
+// Slugs returns the locked projects' slugs.
+func (l Locks) Slugs() []string {
+	out := make([]string, len(l.Projects))
+	for i, p := range l.Projects {
+		out[i] = p.Slug
+	}
+	return out
 }

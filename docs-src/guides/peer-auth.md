@@ -747,6 +747,8 @@ the locked notice, and `seam approve` in your own terminal shows its request.
   arrangement. Whoever holds the bearer key acts as the owner, and reaches every
   project but the locked ones. Backups of the data directory, and exports, hold
   every project: keep them as carefully as the most sensitive project in them.
+  An export records the locks, and importing one [checks for a passkey that can
+  open them](/guides/data/#locked-projects).
 - **Anything running as you can watch your terminal.** A `console-open --unlock`
   link is shown once, and whoever uses it first gets what it opens, so make it in a
   terminal your agents cannot read: a `tmux` server they share lets them capture

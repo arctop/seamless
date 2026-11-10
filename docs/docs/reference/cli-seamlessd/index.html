@@ -507,6 +507,7 @@ archive and never leaves a truncated one under a finished-looking name.</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd import <span class="o">[</span>--from DIR<span class="p">|</span>FILE<span class="p">|</span>-<span class="o">]</span> <span class="o">[</span>--embed<span class="o">=</span>false<span class="o">]</span>
 </span></span><span class="line"><span class="cl">                 <span class="o">[</span>--skip LIST<span class="o">]</span>              <span class="c1"># v1 directory only</span>
 </span></span><span class="line"><span class="cl">                 <span class="o">[</span>--dry-run<span class="o">]</span> <span class="o">[</span>--force<span class="o">]</span>      <span class="c1"># archive only</span>
+</span></span><span class="line"><span class="cl">                 <span class="o">[</span>--keep-locks<span class="p">|</span>--remove-locks<span class="o">]</span>  <span class="c1"># archive only</span>
 </span></span></code></pre></div>
 <p>Imports another store into this instance. <strong>What <code>--from</code> names on disk decides
 which of two unrelated operations runs</strong> - never a flag:</p>
@@ -572,7 +573,19 @@ which of two unrelated operations runs</strong> - never a flag:</p>
 <td><code>--force</code></td>
 <td><code>false</code></td>
 <td>archive</td>
-<td>Allow a fresh restore while a daemon is still answering for this data directory.</td>
+<td>Allow a fresh restore, or a merge that brings locks, while a daemon is still answering for this data directory.</td>
+</tr>
+<tr>
+<td><code>--keep-locks</code></td>
+<td><code>false</code></td>
+<td>archive</td>
+<td>Keep the backup's locks without being asked, even with no passkey able to open them yet.</td>
+</tr>
+<tr>
+<td><code>--remove-locks</code></td>
+<td><code>false</code></td>
+<td>archive</td>
+<td>Import the backup's locked projects without their locks. Cannot be combined with <code>--keep-locks</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -586,6 +599,8 @@ delta re-import safe after the first pass. It honours SIGINT/SIGTERM, and prints
 a report even when the import ends in an error. With <code>--embed</code> on and no usable
 embedder, it warns and imports without vectors rather than failing.</p>
 <h3 id="importing-an-archive">Importing an archive</h3>
+<p>An archive that holds locked projects is checked for a passkey able to open them
+before anything is written. See <a href="../../guides/data/#locked-projects">Locked projects</a>.</p>
 <p>Restore-or-merge is a property of the <strong>destination</strong>, printed in the report and
 never overridable. There is no <code>restore</code> verb and no <code>--mode</code>: the only thing an
 override could do is replace a populated instance's database.</p>

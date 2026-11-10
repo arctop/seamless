@@ -5710,6 +5710,61 @@ isn't one to forget.
 To force a full rebuild, stop the daemon, delete `seam.db`, and start it again.
 You lose sessions, tasks, trials, and events; you lose no knowledge.
 
+## Locked projects
+
+A backup keeps a locked project locked. `seamlessd export` records every locked
+project in the archive, whether the console set the lock or
+`peer_auth.force_locked` holds it, and a `--no-db` archive records them too. The
+file itself is not encrypted, so a lock does not protect it: keep the archive as
+carefully as the most sensitive project in it.
+
+Before an import writes anything, it looks for a passkey that can open those
+projects:
+
+- **Restoring into an empty data directory**, the backup's passkeys come back with
+  its database. One counts if it was enrolled for this instance's relying party
+  and can reach this machine: a synced passkey, a security key or a phone, or any
+  passkey when you restore on the machine that enrolled it.
+- **Merging**, this instance's own passkeys count. A merge never brings passkeys.
+
+If it finds one, it asks whether you still have it. If it finds none, or you
+don't, you choose:
+
+- **Keep the locks and add a passkey right after.** The import prints the steps.
+  The Approvers page takes a new passkey with a one-time code from your terminal,
+  so a passkey you no longer have does not lock you out.
+- **Add a passkey first**, on a merge. The import stops with nothing changed. A
+  restore doesn't offer this, because a daemon started on the empty data directory
+  would create a database and turn the restore into a merge.
+- **Remove the locks** from these projects. They keep their isolation setting, and
+  agents working in them then read them without asking.
+
+With no terminal to ask on, an import that finds no passkey stops with nothing
+changed until you pass `--keep-locks` or `--remove-locks`. Add `--dry-run` to see
+what it finds.
+
+Once the daemon is running, check the passkey for real by unlocking one of the
+projects with it at `/console/unlock/<project>`. Only a browser and the
+authenticator can prove you still have it, so the import can't.
+
+A few details:
+
+- A lock held by the old machine's `force_locked` list becomes a console lock
+  here, because no archive carries a config. If this machine's config force locks
+  the project too, the file keeps holding it.
+- With `peer_auth` off, locks do nothing, so the import says so and asks. Turn it
+  on before you start the daemon.
+- A merge that brings locks needs the daemon stopped, because a daemon reads the
+  locked projects when it starts. `--force` overrides that, and you must then
+  restart the daemon right away.
+- On a merge, a project that is open here and locked in the archive is raised to
+  the archive's isolation setting, and leaves any family or parent it had. If it
+  has child projects it can't be fenced, so the import stops with nothing changed.
+- `--remove-locks` removes the archive's locks only. A force lock in this config,
+  or a lock this instance already had, stays.
+- A restore puts things back as they stood at the backup. A lock set later isn't
+  in it, and a passkey removed later returns: check `seamlessd approvers list`.
+
 ## Merging two instances
 
 Importing an archive into an instance that already has data is a **merge**, and
@@ -6857,6 +6912,8 @@ the locked notice, and `seam approve` in your own terminal shows its request.
   arrangement. Whoever holds the bearer key acts as the owner, and reaches every
   project but the locked ones. Backups of the data directory, and exports, hold
   every project: keep them as carefully as the most sensitive project in them.
+  An export records the locks, and importing one [checks for a passkey that can
+  open them](/guides/data/#locked-projects).
 - **Anything running as you can watch your terminal.** A `console-open --unlock`
   link is shown once, and whoever uses it first gets what it opens, so make it in a
   terminal your agents cannot read: a `tmux` server they share lets them capture
@@ -10433,6 +10490,7 @@ archive and never leaves a truncated one under a finished-looking name.
 seamlessd import [--from DIR|FILE|-] [--embed=false]
                  [--skip LIST]              # v1 directory only
                  [--dry-run] [--force]      # archive only
+                 [--keep-locks|--remove-locks]  # archive only
 ```
 
 Imports another store into this instance. **What `--from` names on disk decides
@@ -10449,7 +10507,9 @@ which of two unrelated operations runs** - never a flag:
 | `--embed` | `true` | both | Embed imported items for cosine search, using the configured provider. |
 | `--skip` | `briefings` | v1 directory | Comma-separated storage projects to skip. |
 | `--dry-run` | `false` | archive | Report what the import would do and change nothing. |
-| `--force` | `false` | archive | Allow a fresh restore while a daemon is still answering for this data directory. |
+| `--force` | `false` | archive | Allow a fresh restore, or a merge that brings locks, while a daemon is still answering for this data directory. |
+| `--keep-locks` | `false` | archive | Keep the backup's locks without being asked, even with no passkey able to open them yet. |
+| `--remove-locks` | `false` | archive | Import the backup's locked projects without their locks. Cannot be combined with `--keep-locks`. |
 
 A flag from the other family is an **error**, not an ignored no-op: `--dry-run`
 against a v1 directory would otherwise read as "previewed, nothing happened"
@@ -10463,6 +10523,9 @@ a report even when the import ends in an error. With `--embed` on and no usable
 embedder, it warns and imports without vectors rather than failing.
 
 ### Importing an archive
+
+An archive that holds locked projects is checked for a passkey able to open them
+before anything is written. See [Locked projects](/guides/data/#locked-projects).
 
 Restore-or-merge is a property of the **destination**, printed in the report and
 never overridable. There is no `restore` verb and no `--mode`: the only thing an

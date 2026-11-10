@@ -49,6 +49,9 @@ import (
 //     this one's owner.
 //   - console_unlocks: one browser's console unlocks, behind a cookie only
 //     that machine's browser holds.
+//   - console_locks: copied as rows it would lose the exporting config's force
+//     locks and skip the fence a lock needs here. applyArchiveLocks puts every
+//     archive lock on the destination's own project instead.
 //   - access_grants: read grants of confidential projects, bound to this
 //     machine's sessions and processes; merging one would be a grant nobody
 //     approved here.
@@ -96,7 +99,7 @@ type rowPass struct {
 // to the same path-occupancy rules as any other write. That is the cost of
 // merging, and it is why fresh-vs-merge is decided by the destination rather
 // than offered as a flag.
-func importMerge(ctx context.Context, a *archiveReader, opts ImportOptions, logger *slog.Logger, rep *ImportReport) error {
+func importMerge(ctx context.Context, a *archiveReader, opts ImportOptions, choice LockChoice, logger *slog.Logger, rep *ImportReport) error {
 	stage, err := os.MkdirTemp("", "seamless-import-")
 	if err != nil {
 		return fmt.Errorf("archive.Import: staging dir: %w", err)
@@ -108,6 +111,7 @@ func importMerge(ctx context.Context, a *archiveReader, opts ImportOptions, logg
 		return err
 	}
 
+	locks := manifestLocks(a.manifest)
 	if ex.dbPath != "" {
 		// store.Open migrates the staged snapshot forward to this build's
 		// schema. It is the whole reason the snapshot is staged rather than
@@ -117,6 +121,11 @@ func importMerge(ctx context.Context, a *archiveReader, opts ImportOptions, logg
 		staged, err := store.Open(ex.dbPath)
 		if err != nil {
 			return fmt.Errorf("archive.Import: migrate staged snapshot: %w", err)
+		}
+		locks, err = withSnapshotLocks(ctx, staged, locks)
+		if err != nil {
+			_ = staged.Close()
+			return err
 		}
 		if err := staged.Close(); err != nil {
 			return fmt.Errorf("archive.Import: close staged snapshot: %w", err)
@@ -138,9 +147,10 @@ func importMerge(ctx context.Context, a *archiveReader, opts ImportOptions, logg
 		mgr.SetEmbedder(opts.Embedder)
 	}
 
-	slugs, err := mergeCorpus(ctx, mgr, db, stage, opts.DryRun, rep)
-	if err != nil {
-		return err
+	if choice == LocksKeep {
+		if err := checkLocksFit(ctx, db, locks); err != nil {
+			return err
+		}
 	}
 
 	var pass rowPass
@@ -149,6 +159,18 @@ func importMerge(ctx context.Context, a *archiveReader, opts ImportOptions, logg
 		if err != nil {
 			return err
 		}
+	}
+
+	// The locks go on before a locked project's files arrive. The corpus pass
+	// embeds as it writes and can run for minutes, and a merge stopped partway
+	// must not leave that content in a project with no lock.
+	if err := applyArchiveLocks(ctx, db, opts, ModeMerge, locks, choice, rep); err != nil {
+		return err
+	}
+
+	slugs, err := mergeCorpus(ctx, mgr, db, stage, opts.DryRun, rep)
+	if err != nil {
+		return err
 	}
 
 	if err := ensureImportedProjects(ctx, db, slugs, pass.projectSlugs, opts.DryRun, rep); err != nil {

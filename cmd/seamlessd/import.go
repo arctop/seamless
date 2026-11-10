@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -40,7 +41,7 @@ const (
 // otherwise read as "previewed, nothing happened" while the import ran.
 var (
 	v1OnlyFlags      = []string{"skip"}
-	archiveOnlyFlags = []string{"dry-run", "force"}
+	archiveOnlyFlags = []string{"dry-run", "force", "keep-locks", "remove-locks"}
 )
 
 // runImport brings another store's data into this instance, from either of two
@@ -68,6 +69,9 @@ func runImport(args []string) error {
 	if err := checkImportFlagFamily(kind, set); err != nil {
 		return err
 	}
+	if f.keepLocks && f.removeLocks {
+		return errors.New("seamlessd.import: --keep-locks and --remove-locks contradict each other; pass one")
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -78,7 +82,7 @@ func runImport(args []string) error {
 	defer stop()
 
 	if kind == sourceArchive {
-		return importArchive(ctx, cfg, src, f.dryRun, f.force, f.embed)
+		return importArchive(ctx, cfg, src, f)
 	}
 	return importV1(ctx, cfg, src, splitCSV(f.skip), f.embed)
 }
@@ -90,6 +94,9 @@ type importFlags struct {
 	embed  bool
 	dryRun bool
 	force  bool
+
+	keepLocks   bool
+	removeLocks bool
 }
 
 // newImportFlagSet defines the flags in one place so the family lists above are
@@ -104,6 +111,8 @@ func newImportFlagSet() (*flag.FlagSet, *importFlags) {
 	fs.BoolVar(&f.embed, "embed", true, "embed imported items for cosine search (uses the configured provider)")
 	fs.BoolVar(&f.dryRun, "dry-run", false, "archive only: report what the import would do and change nothing")
 	fs.BoolVar(&f.force, "force", false, "archive only: restore into a data dir a daemon is still answering for")
+	fs.BoolVar(&f.keepLocks, "keep-locks", false, "archive only: keep the backup's locks without being asked, even with no passkey able to open them yet")
+	fs.BoolVar(&f.removeLocks, "remove-locks", false, "archive only: import the backup's locked projects without their locks")
 	return fs, f
 }
 
@@ -196,7 +205,7 @@ func importV1(ctx context.Context, cfg config.Config, src string, skip []string,
 // anything can open it, and a merge has to migrate the archive's staged
 // snapshot to this build's schema before it can copy rows across. Passing in an
 // already-open handle would make the first impossible.
-func importArchive(ctx context.Context, cfg config.Config, src string, dryRun, force, embed bool) error {
+func importArchive(ctx context.Context, cfg config.Config, src string, f *importFlags) error {
 	mode, err := archive.DetectMode(cfg.DataDir)
 	if err != nil {
 		return fmt.Errorf("seamlessd.import: %w", err)
@@ -205,7 +214,7 @@ func importArchive(ctx context.Context, cfg config.Config, src string, dryRun, f
 	// this data dir would be holding a database that no longer exists. A merge
 	// writes through the same files layer and store the daemon uses, and a dry
 	// run writes nothing at all -- neither needs the daemon down.
-	if mode == archive.ModeFresh && !dryRun && !force && serverReachable(urlHostPort(cfg.ServerURL())) {
+	if mode == archive.ModeFresh && !f.dryRun && !f.force && serverReachable(urlHostPort(cfg.ServerURL())) {
 		return fmt.Errorf("seamlessd.import: %w: a fresh restore replaces %s underneath it; stop the daemon (seamlessd stop) or pass --force",
 			archive.ErrDaemonRunning, cfg.DBPath())
 	}
@@ -222,13 +231,24 @@ func importArchive(ctx context.Context, cfg config.Config, src string, dryRun, f
 		r = f
 	}
 
+	gate := &lockGate{
+		cfg: cfg, flags: f, in: bufio.NewReader(os.Stdin), out: os.Stderr, host: config.Hostname(),
+		// "-" means stdin is the archive, so it cannot also be the answer.
+		interactive: src != "-" && stdinIsTerminal(),
+		daemonUp:    func() bool { return serverReachable(urlHostPort(cfg.ServerURL())) },
+		local:       func(ctx context.Context) ([]store.PasskeyFact, error) { return localPasskeys(ctx, cfg) },
+	}
 	opts := archive.ImportOptions{
 		DataDir: cfg.DataDir,
 		Src:     r,
-		DryRun:  dryRun,
+		DryRun:  f.dryRun,
 		Logger:  slog.Default(),
+		OnLocks: gate.decide,
 	}
-	if embed {
+	if cfg.PeerAuth.Enabled {
+		opts.ForceLocked = cfg.PeerAuth.ForceLocked
+	}
+	if f.embed {
 		opts.Embedder = newImportEmbedder(cfg)
 	}
 
@@ -240,6 +260,7 @@ func importArchive(ctx context.Context, cfg config.Config, src string, dryRun, f
 	if err != nil {
 		return fmt.Errorf("seamlessd.import: %w", err)
 	}
+	gate.advise(os.Stdout, rep)
 	return nil
 }
 

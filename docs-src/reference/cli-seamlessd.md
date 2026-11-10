@@ -196,6 +196,7 @@ archive and never leaves a truncated one under a finished-looking name.
 seamlessd import [--from DIR|FILE|-] [--embed=false]
                  [--skip LIST]              # v1 directory only
                  [--dry-run] [--force]      # archive only
+                 [--keep-locks|--remove-locks]  # archive only
 ```
 
 Imports another store into this instance. **What `--from` names on disk decides
@@ -212,7 +213,9 @@ which of two unrelated operations runs** - never a flag:
 | `--embed` | `true` | both | Embed imported items for cosine search, using the configured provider. |
 | `--skip` | `briefings` | v1 directory | Comma-separated storage projects to skip. |
 | `--dry-run` | `false` | archive | Report what the import would do and change nothing. |
-| `--force` | `false` | archive | Allow a fresh restore while a daemon is still answering for this data directory. |
+| `--force` | `false` | archive | Allow a fresh restore, or a merge that brings locks, while a daemon is still answering for this data directory. |
+| `--keep-locks` | `false` | archive | Keep the backup's locks without being asked, even with no passkey able to open them yet. |
+| `--remove-locks` | `false` | archive | Import the backup's locked projects without their locks. Cannot be combined with `--keep-locks`. |
 
 A flag from the other family is an **error**, not an ignored no-op: `--dry-run`
 against a v1 directory would otherwise read as "previewed, nothing happened"
@@ -226,6 +229,9 @@ a report even when the import ends in an error. With `--embed` on and no usable
 embedder, it warns and imports without vectors rather than failing.
 
 ### Importing an archive
+
+An archive that holds locked projects is checked for a passkey able to open them
+before anything is written. See [Locked projects](/guides/data/#locked-projects).
 
 Restore-or-merge is a property of the **destination**, printed in the report and
 never overridable. There is no `restore` verb and no `--mode`: the only thing an

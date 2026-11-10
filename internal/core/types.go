@@ -377,9 +377,10 @@ type Task struct {
 	Favorite       bool       `json:"favorite,omitempty"` // owner/agent star; never bumps UpdatedAt
 	DependsOn      []string   `json:"dependsOn,omitempty"`
 	// Account is the restricted local account (peer_auth.restricted) that
-	// created the task, and UpdatedAccount the one that last changed it
-	// (status, body, a claim); "" for the owner, background work and every
-	// install without restricted accounts.
+	// created the task, and UpdatedAccount the one whose rewrite of the title
+	// or body the text may still carry (a status flip, a claim or a release
+	// never moves it; store.UpdateTask's taskTextAccount); "" for the owner,
+	// background work and every install without restricted accounts.
 	Account        string     `json:"account,omitempty"`
 	UpdatedAccount string     `json:"updatedAccount,omitempty"`
 	CreatedAt      time.Time  `json:"createdAt"`
@@ -495,12 +496,13 @@ const (
 	// Locked projects: the owner's approvals of an agent's
 	// access. Payloads carry ids, codes and lengths -- never the agent's reason
 	// or a path.
-	EventAccessRequested EventKind = "access.requested" // an agent asked for a locked project (item_id: the request; session_id when known; payload: kind, via)
-	EventAccessApproved  EventKind = "access.approved"  // the owner approved a request (item_id: the request; payload: lease, proof, seconds)
-	EventAccessDenied    EventKind = "access.denied"    // the owner denied a request (item_id: the request; payload: proof)
-	EventAccessRevoked   EventKind = "access.revoked"   // leases ended early (payload: reason, leases; session_id for a session end)
-	EventAccessGranted   EventKind = "access.granted"   // the owner approved a read grant of a confidential project (isolation.requests; item_id: the request; session_id; project: the target; payload: grant, from_project, proof, seconds, duration)
-	EventAccessConfined  EventKind = "access.confined"  // a session in an open project was write-confined by its read grant (item_id: the request; session_id; project: the confined project; payload: grant, target_project)
+	EventAccessRequested    EventKind = "access.requested"            // an agent asked for a locked project (item_id: the request; session_id when known; payload: kind, via)
+	EventAccessApproved     EventKind = "access.approved"             // the owner approved a request (item_id: the request; payload: lease, proof, seconds)
+	EventAccessDenied       EventKind = "access.denied"               // the owner denied a request (item_id: the request; payload: proof)
+	EventAccessRevoked      EventKind = "access.revoked"              // leases ended early (payload: reason, leases; session_id for a session end)
+	EventAccessGranted      EventKind = "access.granted"              // the owner approved a read grant of a confidential project (isolation.requests; item_id: the request; session_id; project: the target; payload: grant, from_project, proof, seconds, duration)
+	EventAccessConfined     EventKind = "access.confined"             // a session in an open project was write-confined by its read grant (item_id: the request; session_id; project: the confined project; payload: grant, target_project)
+	EventConsoleLockChanged EventKind = "access.console_lock_changed" // a lock turned on or off, from the console or by an archive import (item_id: the proving credential, empty for an import; project: the project; payload: proof, action)
 
 	// Background update check (internal/update). Payload values are parsed
 	// X.Y.Z versions and fixed install-kind words, never release-API text.

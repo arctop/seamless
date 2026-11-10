@@ -39,8 +39,9 @@ type ExportOptions struct {
 	// NoDB exports the markdown trees only. The manifest then carries no
 	// schema version, no table counts, and no embedding models: those describe
 	// a database this archive does not contain, and stamping them from the live
-	// file would describe bytes that are not here. seam.db is not even opened,
-	// so a knowledge-only export works on a data dir with no database at all.
+	// file would describe bytes that are not here. seam.db is opened read-only
+	// and only to record the locks, so a knowledge-only export still works on a
+	// data dir with no database at all.
 	NoDB bool
 
 	// SeamlessdVersion is recorded verbatim in the manifest. It is passed in
@@ -50,6 +51,13 @@ type ExportOptions struct {
 
 	// Host overrides the recorded source host. Empty means os.Hostname.
 	Host string
+
+	// ForceLocked are the exporting config's force locks, and PasskeyRPID the
+	// relying party its passkeys belong to. Both are passed in because this
+	// package never reads config. The update's own pre-update backup leaves them
+	// empty: it is put back on the machine whose config still holds them.
+	ForceLocked []string
+	PasskeyRPID string
 
 	// TmpDir is where the export stages: the database snapshot is written into
 	// a fresh seamless-export-* directory under it, streamed into the archive,
@@ -122,6 +130,25 @@ func Export(ctx context.Context, opts ExportOptions) (Manifest, error) {
 		manifest.Counts.Tables = tables
 		manifest.EmbeddingModels = models
 	}
+
+	// Read from the snapshot when there is one, so the record describes the
+	// bytes in this archive. A --no-db export has none, and still has to say
+	// what was locked: its files are the locked projects' content.
+	locksDB := snapPath
+	if opts.NoDB {
+		locksDB = filepath.Join(opts.DataDir, DBName)
+	}
+	locks, err := exportLocks(ctx, locksDB, opts)
+	if err != nil {
+		if !opts.NoDB {
+			return Manifest{}, err
+		}
+		manifest.LocksError = err.Error()
+		if locks, err = exportLocks(ctx, "", opts); err != nil {
+			return Manifest{}, err
+		}
+	}
+	manifest.Locks = locks
 
 	memFiles, err := collectTree(ctx, opts.DataDir, MemoryTree)
 	if err != nil {

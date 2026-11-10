@@ -349,6 +349,14 @@ any of it.
   through the policy, or `lockedProjects` in cmd/seamlessd for a one-shot
   command; `peer_auth.force_locked` alone is not the whole set. `locked` is the
   key's earlier name and keeps loading (`foldLegacyLocked`).
+- **A backup carries its locks, and an import never drops one silently**
+  (`archive.Manifest.Locks`, `archive/locks.go`, `cmd/seamlessd/import_locks.go`).
+  The manifest names every locked project, the config's force locks and a
+  `--no-db` export's included, because no archive carries a config. An import
+  either puts each lock back (`applyArchiveLocks`; on a merge before the corpus
+  pass, so a merge stopped partway leaves no locked content unlocked) or, on the
+  owner's explicit answer through `OnLocks`, leaves it off and records that.
+  `LocksKeep` is the zero value. Any new import path keeps both properties.
 - **Approver credentials are enrolled by the daemon's account, never by a
   route** (`store/approvers.go`, `internal/approval`, migration 032). A first
   passkey or Touch ID key needs a one-time code that only

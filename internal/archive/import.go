@@ -150,6 +150,17 @@ type ImportOptions struct {
 
 	// Logger receives the counts. Nil uses slog.Default.
 	Logger *slog.Logger
+
+	// OnLocks is asked what to do when the archive holds locked projects, once
+	// the manifest has been read and before anything is written. An error stops
+	// the import with nothing changed. Nil keeps the locks, the safe answer. It
+	// is called on a dry run too, and must not prompt there.
+	OnLocks func(ctx context.Context, mode Mode, m Manifest) (LockChoice, error)
+
+	// ForceLocked are the destination config's force locks. The import writes no
+	// console lock for these, since the file already holds them, and cannot
+	// remove them.
+	ForceLocked []string
 }
 
 // PathCollision is a corpus file the merge refused to write because the path it
@@ -204,6 +215,10 @@ type ImportReport struct {
 	// as a snapshot and the manifest's counts describe it.
 	Rows map[string]int
 
+	// Locks is what became of the archive's locked projects, nil when it held
+	// none.
+	Locks *LockOutcome
+
 	PathCollisions []PathCollision
 	NameCollisions []NameCollision
 	Warnings       []string
@@ -227,6 +242,17 @@ func (r ImportReport) String() string {
 			}
 		}
 		fmt.Fprintf(&b, "\nrows inserted: %s", strings.Join(parts, ", "))
+	}
+	if l := r.Locks; l != nil {
+		if len(l.Locked) > 0 {
+			fmt.Fprintf(&b, "\nlocked: %s", strings.Join(l.Locked, ", "))
+		}
+		if len(l.Removed) > 0 {
+			fmt.Fprintf(&b, "\nlocks removed: %s", strings.Join(l.Removed, ", "))
+		}
+		if len(l.StillLocked) > 0 {
+			fmt.Fprintf(&b, "\nstill locked by this instance's own lock: %s", strings.Join(l.StillLocked, ", "))
+		}
 	}
 	for _, c := range r.PathCollisions {
 		fmt.Fprintf(&b, "\npath collision: %s wanted by %s, held by %s (not written)",
@@ -286,11 +312,26 @@ func Import(ctx context.Context, opts ImportOptions) (*ImportReport, error) {
 	defer func() { _ = a.Close() }()
 	rep.Manifest = a.manifest
 
+	canonicalLocks(a.manifest, rep)
+	if a.manifest.LocksError != "" {
+		rep.Warnings = append(rep.Warnings, fmt.Sprintf(
+			"the export could not read its locks (%q): a project it held locked from the console arrives unlocked", a.manifest.LocksError))
+	}
+
+	// Asked here: the manifest has been read and nothing has been written. A
+	// refusal returns no report, because there is nothing to report.
+	choice := LocksKeep
+	if opts.OnLocks != nil && a.manifest.Locks != nil && len(a.manifest.Locks.Projects) > 0 {
+		if choice, err = opts.OnLocks(ctx, mode, a.manifest); err != nil {
+			return nil, err
+		}
+	}
+
 	switch mode {
 	case ModeFresh:
-		err = importFresh(ctx, a, opts, logger, rep)
+		err = importFresh(ctx, a, opts, choice, logger, rep)
 	case ModeMerge:
-		err = importMerge(ctx, a, opts, logger, rep)
+		err = importMerge(ctx, a, opts, choice, logger, rep)
 	default:
 		// Unreachable: DetectMode returns one of the two or an error. Named
 		// rather than defaulted, so a third mode added later fails loudly.
@@ -321,7 +362,7 @@ func Import(ctx context.Context, opts ImportOptions) (*ImportReport, error) {
 // rename. Reconcile afterwards heals the one window the exporter leaves open --
 // it snapshots the database before walking the trees, so a file written during
 // the export is in the archive with no index row behind it.
-func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, logger *slog.Logger, rep *ImportReport) error {
+func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, choice LockChoice, logger *slog.Logger, rep *ImportReport) error {
 	if opts.DryRun {
 		// Nothing is extracted at all: the manifest already carries every count
 		// a fresh restore would produce, and a dry run that wrote the trees and
@@ -330,7 +371,7 @@ func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, logg
 		rep.Memories = a.manifest.Counts.MemoryFiles
 		rep.Notes = a.manifest.Counts.NoteFiles
 		rep.Warnings = append(rep.Warnings, embeddingWarnings(a.manifest, opts.Embedder, ModeFresh)...)
-		return nil
+		return applyArchiveLocks(ctx, nil, opts, ModeFresh, manifestLocks(a.manifest), choice, rep)
 	}
 
 	ex, err := a.extractTo(ctx, opts.DataDir, importTmpDB)
@@ -361,6 +402,22 @@ func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, logg
 	// since: every live one ends here, and a locked project's agents ask again.
 	if _, err := store.ResetRestoredAccess(ctx, db, time.Now()); err != nil {
 		return fmt.Errorf("archive.Import: %w", err)
+	}
+	// Credentials are not a live permission ResetRestoredAccess can end: they
+	// are who may approve, and this restore is often how a machine gets them
+	// back. But one removed since the backup (a lost key, say) is back too.
+	if err := warnRestoredApprovers(ctx, db, rep); err != nil {
+		return err
+	}
+	// The whole database is the archive's, so its console locks are the
+	// archive's. The manifest adds what the snapshot could not hold: the
+	// exporting config's force locks, or every lock of a --no-db archive.
+	locks, err := withSnapshotLocks(ctx, db, manifestLocks(a.manifest))
+	if err != nil {
+		return err
+	}
+	if err := applyArchiveLocks(ctx, db, opts, ModeFresh, locks, choice, rep); err != nil {
+		return err
 	}
 
 	mgr, err := files.NewManager(opts.DataDir, db, logger)

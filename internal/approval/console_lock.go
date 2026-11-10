@@ -34,7 +34,7 @@ const (
 )
 
 // EventConsoleLockChanged records a lock turned on or off from the console.
-const EventConsoleLockChanged core.EventKind = "access.console_lock_changed"
+const EventConsoleLockChanged = core.EventConsoleLockChanged
 
 // lockChangeTTL is how long a begun ceremony waits for its assertion.
 const lockChangeTTL = ConsoleUnlockTTL

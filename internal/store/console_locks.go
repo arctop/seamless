@@ -180,3 +180,68 @@ func LoosenProjectIsolation(ctx context.Context, db *sql.DB, slug string, state 
 	}
 	return nil
 }
+
+// ImportedLockCredential is console_locks.credential for a lock an archive
+// import set. No passkey signed that lock here: it was already on the project
+// in the backup, and the import keeps it.
+const ImportedLockCredential = "import"
+
+// PasskeyFact describes one enrolled passkey for a backup's manifest: its label
+// and whether it can be used away from the machine that enrolled it. It holds
+// no key material.
+type PasskeyFact struct {
+	Name     string `json:"name"`
+	Portable bool   `json:"portable"`
+}
+
+// LockFacts is what a database knows about its locks and who can open them.
+type LockFacts struct {
+	// ConsoleLocked are the projects the console locks, sorted.
+	ConsoleLocked []string
+	// Passkeys are the enrolled passkeys. A Touch ID key is not one: its key
+	// never leaves the Mac that made it.
+	Passkeys []PasskeyFact
+}
+
+// ReadLockFacts reads a database's LockFacts. A database that predates either
+// table has none of what that table holds, which is not an error: an export
+// never migrates the database it reads.
+func ReadLockFacts(ctx context.Context, db *sql.DB) (LockFacts, error) {
+	const op = "store.ReadLockFacts"
+	var facts LockFacts
+	ok, err := tableExists(ctx, db, "console_locks")
+	if err != nil {
+		return facts, fmt.Errorf("%s: %w", op, err)
+	}
+	if ok {
+		if facts.ConsoleLocked, err = ConsoleLockedSlugs(ctx, db); err != nil {
+			return facts, fmt.Errorf("%s: %w", op, err)
+		}
+	}
+	if ok, err = tableExists(ctx, db, "approver_credentials"); err != nil {
+		return facts, fmt.Errorf("%s: %w", op, err)
+	}
+	if ok {
+		creds, err := ApproverCredentials(ctx, db, ApproverPasskey)
+		if err != nil {
+			return facts, fmt.Errorf("%s: %w", op, err)
+		}
+		for _, c := range creds {
+			facts.Passkeys = append(facts.Passkeys, PasskeyFact{Name: c.Name, Portable: passkeyTravels(c)})
+		}
+	}
+	return facts, nil
+}
+
+// passkeyTravels reports whether a passkey can sign away from the machine that
+// enrolled it: a synced one, a security key, or a phone. It is what the
+// authenticator said at registration, so it can only say "may work": whether
+// the owner still holds the authenticator is not something a row can tell.
+func passkeyTravels(c ApproverCredential) bool {
+	if c.BackupEligible || c.Attachment == "cross-platform" {
+		return true
+	}
+	return slices.ContainsFunc(c.Transports, func(t string) bool {
+		return t == "usb" || t == "nfc" || t == "ble" || t == "hybrid"
+	})
+}
