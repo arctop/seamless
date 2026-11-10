@@ -78,4 +78,4 @@ On a server that records commits (`commits.record`, off by default),
 `tasks_update` also takes `commits`: the full ids of the commits that did the
 task's work, recorded on the task in the same transaction as the rest of the
 call and behind the same claim lock. Off, the argument does not exist. See
-[Record commits for an integrity monitor](/guides/commit-records/).
+[Feeding a security monitor](/guides/security-monitor/#recording-commits).

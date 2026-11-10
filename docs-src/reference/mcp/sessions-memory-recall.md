@@ -50,7 +50,7 @@ tools also accept `summary` as an alias of `findings`.
 On a server that records commits (`commits.record`, off by default),
 `session_end` also takes `commits`: the full ids of the commits the session
 made, recorded on it for an integrity monitor. Off, the argument does not
-exist. See [Record commits for an integrity monitor](/guides/commit-records/).
+exist. See [Feeding a security monitor](/guides/security-monitor/#recording-commits).
 
 If `tasks_update` ever fails claiming a task is held by *your own* session id,
 the connection lost an explicit `session_start` binding - those live in daemon

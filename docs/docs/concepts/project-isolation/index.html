@@ -160,7 +160,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
-        <li><a href="../../guides/commit-records/">Record commits for an integrity monitor</a></li>
+        <li><a href="../../guides/security-monitor/">Feeding a security monitor</a></li>
         
         <li><a href="../../guides/troubleshooting/">Troubleshooting</a></li>
         
@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-three-states">The three states</a></li><li class="lvl-2"><a href="#the-console-is-exempt">The console is exempt</a></li><li class="lvl-2"><a href="#isolation-requires-a-standalone-project">Isolation requires a standalone project</a></li><li class="lvl-2"><a href="#tightening-and-loosening">Tightening and loosening</a></li><li class="lvl-2"><a href="#knowledge-that-already-got-out">Knowledge that already got out</a></li><li class="lvl-3"><a href="#in-the-console">In the console</a></li><li class="lvl-3"><a href="#from-the-cli">From the CLI</a></li><li class="lvl-2"><a href="#what-agents-see">What agents see</a></li><li class="lvl-2"><a href="#asking-for-access">Asking for access</a></li><li class="lvl-2"><a href="#honest-limits">Honest limits</a></li>
+      <li class="lvl-2"><a href="#the-three-states">The three states</a></li><li class="lvl-2"><a href="#the-console-is-exempt">The console is exempt</a></li><li class="lvl-2"><a href="#isolation-requires-a-standalone-project">Isolation requires a standalone project</a></li><li class="lvl-2"><a href="#tightening-and-loosening">Tightening and loosening</a></li><li class="lvl-2"><a href="#knowledge-that-already-got-out">Knowledge that already got out</a></li><li class="lvl-3"><a href="#in-the-console">In the console</a></li><li class="lvl-3"><a href="#from-the-cli">From the CLI</a></li><li class="lvl-2"><a href="#what-agents-see">What agents see</a></li><li class="lvl-2"><a href="#what-a-security-monitor-sees">What a security monitor sees</a></li><li class="lvl-2"><a href="#asking-for-access">Asking for access</a></li><li class="lvl-2"><a href="#honest-limits">Honest limits</a></li>
     </ul>
   </details>
   <p>By default, projects are cooperative rather than isolated. Any agent can read or
@@ -379,6 +379,11 @@ session as a withheld entry in <code>tasks_ready</code>, a <code>depends_on_with
 place of its id, and a count in the claim's &quot;task blocked&quot; refusal - never its
 title or its id.</li>
 </ul>
+<h2 id="what-a-security-monitor-sees">What a security monitor sees</h2>
+<p>A monitor you <a href="../../guides/security-monitor/">feed from Seamless</a> follows a fenced
+project without learning its name: the metadata feed sends a confidential or
+sealed project's slug only as a keyed hash, and the commit-matching snapshot
+never names its repository. Both are off by default.</p>
 <h2 id="asking-for-access">Asking for access</h2>
 <p>A refusal at a confidential project's fence can become a request you approve,
 when the daemon's config turns it on (<code>isolation.requests: true</code>; see
@@ -500,7 +505,7 @@ dir, port, and key, run as its own account.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-three-states">The three states</a></li><li class="lvl-2"><a href="#the-console-is-exempt">The console is exempt</a></li><li class="lvl-2"><a href="#isolation-requires-a-standalone-project">Isolation requires a standalone project</a></li><li class="lvl-2"><a href="#tightening-and-loosening">Tightening and loosening</a></li><li class="lvl-2"><a href="#knowledge-that-already-got-out">Knowledge that already got out</a></li><li class="lvl-3"><a href="#in-the-console">In the console</a></li><li class="lvl-3"><a href="#from-the-cli">From the CLI</a></li><li class="lvl-2"><a href="#what-agents-see">What agents see</a></li><li class="lvl-2"><a href="#asking-for-access">Asking for access</a></li><li class="lvl-2"><a href="#honest-limits">Honest limits</a></li>
+      <li class="lvl-2"><a href="#the-three-states">The three states</a></li><li class="lvl-2"><a href="#the-console-is-exempt">The console is exempt</a></li><li class="lvl-2"><a href="#isolation-requires-a-standalone-project">Isolation requires a standalone project</a></li><li class="lvl-2"><a href="#tightening-and-loosening">Tightening and loosening</a></li><li class="lvl-2"><a href="#knowledge-that-already-got-out">Knowledge that already got out</a></li><li class="lvl-3"><a href="#in-the-console">In the console</a></li><li class="lvl-3"><a href="#from-the-cli">From the CLI</a></li><li class="lvl-2"><a href="#what-agents-see">What agents see</a></li><li class="lvl-2"><a href="#what-a-security-monitor-sees">What a security monitor sees</a></li><li class="lvl-2"><a href="#asking-for-access">Asking for access</a></li><li class="lvl-2"><a href="#honest-limits">Honest limits</a></li>
     </ul>
   </aside>
   

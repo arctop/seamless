@@ -156,9 +156,9 @@ paste. No LLM key is required either: without one, recall degrades to plain
 full-text search. Add OpenAI or Ollama in the
 [configuration](/reference/configuration/) when you want semantic recall.
 
-`seamlessd doctor` is the checkpoint: it validates the config, opens the
-database, applies migrations, and asserts the tool count. If it is green, the
-daemon will start.
+`seamlessd doctor` is the checkpoint: it validates the config, reports the
+database and its schema without changing either, and asserts the tool count. If
+it is green, the daemon will start.
 
 ## Now open your client
 
@@ -598,10 +598,10 @@ project scope from their cwd - no `project` argument on any call, and no
 even with agents working in several repos at once.
 
 Map by hand to override the derived slug - an `ios` directory that should be the
-`arctop-ios` project:
+`example-ios` project:
 
 ```bash
-seamlessd map-repo --path ~/code/ios --project arctop-ios
+seamlessd map-repo --path ~/code/ios --project example-ios
 ```
 
 See [Projects & scope](/concepts/projects/) for the full precedence chain and why
@@ -3569,10 +3569,10 @@ derives a different slug - and that is what the override below is for.
 `seamlessd doctor` lists mapped paths that no longer exist.
 
 Map by hand only to override the derived slug - an `ios` directory that should be
-the `arctop-ios` project, or a renamed repo that should keep its old project:
+the `example-ios` project, or a renamed repo that should keep its old project:
 
 ```bash
-seamlessd map-repo --path ~/code/ios --project arctop-ios
+seamlessd map-repo --path ~/code/ios --project example-ios
 ```
 
 Either way, agents in that repo inherit its scope from the session their hook
@@ -3770,6 +3770,13 @@ nothing.
   session as a withheld entry in `tasks_ready`, a `depends_on_withheld` count in
   place of its id, and a count in the claim's "task blocked" refusal - never its
   title or its id.
+
+## What a security monitor sees
+
+A monitor you [feed from Seamless](/guides/security-monitor/) follows a fenced
+project without learning its name: the metadata feed sends a confidential or
+sealed project's slug only as a keyed hash, and the commit-matching snapshot
+never names its repository. Both are off by default.
 
 ## Asking for access
 
@@ -4329,9 +4336,9 @@ opt-in guard against a poisoned memory: every agent write is screened for
 secrets, injection markers and hidden characters, and the suspicious ones -
 along with any change to a binding rule by a session that read outside text -
 wait for your release instead of reaching every briefing.
-[Record commits for an integrity monitor](/guides/commit-records/) is its
-opt-in neighbor for a repository's history: agents name the commits they made,
-and a snapshot of sessions, tasks and those commits lets a monitor flag the
+[Feeding a security monitor](/guides/security-monitor/) is its opt-in neighbor:
+a metadata feed of events tells a monitor what agents did as it happens, and a
+snapshot of sessions, tasks and the commits they recorded lets it flag the
 commits no tracked work accounts for.
 
 The last three are operational. [Import, back up & restore](/guides/data/) covers
@@ -6353,8 +6360,8 @@ Retire any per-user service first, or it starts again at your next login
 Your agents connect through the socket: a locked project opens only to a process
 the kernel names, which a TCP connection never is. Your config becomes a
 client's, because your account no longer runs the daemon - and a server-role
-config there would have `seamlessd doctor` open (and create) a database in your
-home:
+config there would have `seamlessd doctor` report on a database in your home
+rather than the daemon's:
 
 ```yaml
 role: client
@@ -6775,7 +6782,7 @@ Three more rules keep its text from passing as yours. It cannot give a project
 memory the name of a live global constraint, convention, protocol or stage, because
 a read by that name would then answer with its text. It cannot ask the gardener to
 plan a change (`gardener_request`, `gardener_split`), and it still sees proposals
-with `gardener_proposals`. A memory it rewrites loses its star.
+with `gardener_proposals`. A memory or note whose content it changes loses its star.
 
 Sessions belong to the account that started them: a restricted account's agents
 cannot resume, bind to or write findings into your sessions, and yours cannot
@@ -7001,19 +7008,16 @@ screening:
 `SEAMLESS_SCREENING_BLOB_MIN_LENGTH` override them. Loopback URLs
 (`localhost`, `127.0.0.1`) are never "outside".
 
-Four more keys belong to the review, drift, lockdown and feed sections below:
+Two more keys belong to the drift and lockdown sections below:
 
 ```yaml
 screening:
   drift_interval: 5m                       # 0 turns the drift watch off
   lockdown_file: /path/to/lockdown.flag    # its existence turns lockdown on
-  feed_socket: /path/to/consumer/ingest.sock
-  feed_spool: /path/to/spool               # default <data_dir>/feed
 ```
 
 Each has a `SEAMLESS_SCREENING_*` override (`DRIFT_INTERVAL`,
-`LOCKDOWN_FILE`, `FEED_SOCKET`, `FEED_SPOOL`); the paths expand a leading
-`~` and must be absolute.
+`LOCKDOWN_FILE`); the path expands a leading `~` and must be absolute.
 
 ## What is screened
 
@@ -7276,32 +7280,12 @@ ten seconds, with the refusals in between counted in `suppressed`.
 
 ## The metadata feed
 
-With `screening.feed_socket` set, the daemon delivers every event's metadata
-to that Unix socket, for a monitor that should see what agents do without
-reading Seamless. A frame carries the event's kind (as `activity`), time,
-class, severity and outcome; the session's name and agent process; the
-project - **a confidential or sealed project, or one locked under
-peer_auth, as a keyed hash** (`h:` and 24 hex characters, keyed by a random key
-in the spool folder); the item kind and id; and the codes, counts, sizes and
-flags the event carries. It never carries arguments, results, bodies,
-prompts, queries, names or titles: each frame is built from an allowlist of
-metadata keys, and a value that does not fit its pattern (free text where a
-code belongs) is dropped.
-
-The protocol is HTTP/1.1 on the socket: `GET /v1/limits`, then
-`POST /v1/batch` with `Content-Type: application/x-ndjson`, a header line
-`{"v":1,"batch":"<id>","frames":<n>,"dropped":<n>}` and one frame per line.
-The consumer answers each batch with a receipt whose `action` is `settle`,
-`retry` or `discard`. While it is down the feed spools to `feed_spool`
-(0700): bounded at 10,000 frames and 8 MiB, the oldest dropped first and
-counted in the next header's `dropped`; one batch in flight, resent unchanged
-under its id until a receipt settles or discards it, across restarts too. When
-nothing else is waiting it sends a heartbeat frame every third of the
-consumer's `heartbeat_s`.
-
-The feed reads the event log itself, in the order events landed, from a
-cursor it keeps in the spool, so a burst never loses an event. Turned off and
-on again, it starts from the newest event rather than replaying the gap.
+While this feature is on and `screening.feed_socket` names a Unix socket, the
+daemon delivers every event's metadata - never its content - to a monitor
+listening there, so it can see what agents do without reading Seamless.
+[Feeding a security monitor](/guides/security-monitor/) has the frame and
+delivery contract and how to turn it on, beside the commit-matching snapshot
+that serves the same kind of monitor.
 
 ## Forensics
 
@@ -7357,84 +7341,219 @@ it runs with. Run it on a copy of a corpus you are allowed to read.
 
 ---
 
-# Record commits for an integrity monitor
+# Feeding a security monitor
 
-URL: https://thereisnospoon.org/docs/guides/commit-records/
+URL: https://thereisnospoon.org/docs/guides/security-monitor/
 
 
-An integrity monitor watching a repository's main branch wants to know which
-commits came from tracked work and which came from nowhere: a commit pushed
-from outside every agent session and every task is the one worth a look.
-Seamless already knows which sessions ran when, and in which repository, and
-which tasks exist. **Commit records** let it say so, in two halves:
+A security monitor can see processes, files and connections. What it cannot see
+is what your agents did inside Seamless. Seamless can tell it, in two
+independent ways:
 
-1. **Agents record their commits.** `session_end` and `tasks_update` take an
-   optional `commits` argument: the full ids of the commits a session made or
-   a task's work produced, recorded on that session or task.
-2. **The daemon writes a snapshot.** One JSON file, replaced whole every few
-   minutes, lists the sessions live in a window - name, repository, start and
-   end - and the tasks a commit in it may name, each with the commits it
-   recorded. The monitor reads that file and matches its own list of the
-   branch's commits against it.
+1. **A metadata feed of events.** Every event in Seamless's log - a memory
+   written, a write held, a read refused, a session started - goes to a Unix
+   socket the monitor listens on, as metadata: who, what, where, when and how it
+   went, and never the content.
+2. **A commit-matching snapshot.** One JSON file, replaced whole every few
+   minutes, lists which sessions ran when and in which repository, which tasks a
+   commit may name, and the commits agents recorded on each. A monitor watching
+   a repository's main branch matches that branch's commits against it: a commit
+   pushed from outside every agent session and every task is the one worth a
+   look.
 
-Both are off by default, and off is exactly the previous behavior: neither
-tool offers the argument (a call that sends one is refused as an unknown
-parameter, word for word as before), nothing is recorded, and no file is
-written. They switch on separately: a snapshot without recorded commits still
-tells a monitor which sessions ran when, and where.
+Both are optional and off by default, and off is exactly the earlier behavior:
+no socket is dialed, no file is written, and no tool changes shape. Each is a
+small generic contract, so any program that speaks it can be the monitor. Use
+either or both.
 
-## Turn it on
+| | Metadata feed | Commit-matching snapshot |
+|---|---|---|
+| Answers | What agents are doing, as it happens | Which commits came from tracked work |
+| Delivery | HTTP/1.1 batches pushed to a Unix socket | One JSON file the monitor reads |
+| Contract | Wire format `v` 1 | `kind` `seamless_feed`, `version` 1 |
+| Carries | Kinds, codes, counts, sizes, flags and ids | Session names, task ids, repository names, times and commit ids |
+| Needs | [Write screening](/guides/write-screening/) on, and `screening.feed_socket` | `commits.snapshot_file`; `commits.record` adds the commit ids |
 
-```yaml
-commits:
-  record: true                                               # offer the commits argument
-  snapshot_file: /path/to/outbox/snapshot-seamless_feed.json # write the snapshot here
-  snapshot_interval: 5m                                      # default 5m, from 30s to 24h
-  snapshot_window: 720h                                      # default 30 days, from 1h to a year
+## The metadata feed, version 1
+
+With the feed on, the daemon reads its own event log, in the order events
+landed, from a cursor it keeps in the spool, so a burst never loses an event.
+Each event becomes one **frame**, and frames travel in **batches** to the
+**consumer**, the program listening on the socket. The version is the `v` on
+every batch header, limits answer and receipt, and it is 1.
+
+### What a frame carries
+
+One JSON object per line on the wire, wrapped here to read:
+
+```json
+{"time": "2026-11-02T01:16:54.977Z", "host": "build-host",
+ "class": "agent", "activity": "memory_held", "severity": "medium", "outcome": "blocked",
+ "actor": {"kind": "agent", "id": "4242.1730000000", "session": "cc/0a1b2c3d-4e5f6a7b"},
+ "target": {"system": "seamless", "asset": "myapp", "path_class": "memory"},
+ "fields": {"event_id": "01KX0000000000000000000020", "hold_id": "01KX0000000000000000000021",
+            "item_kind": "memory", "kind": "constraint", "op": "write",
+            "reasons": "instruction.override", "source_seq": 4812, "tool": "memory_write"}}
 ```
 
-Each key has an environment override: `SEAMLESS_COMMITS_RECORD`,
-`SEAMLESS_COMMITS_SNAPSHOT_FILE`, `SEAMLESS_COMMITS_SNAPSHOT_INTERVAL` and
-`SEAMLESS_COMMITS_SNAPSHOT_WINDOW`. They are read at start, so restart the
-daemon after a change. `snapshot_file` must be absolute (a leading `~`
-expands), and its directory must already exist: the daemon creates nothing
-there but that file (and, for a moment, a hidden temporary file beside it).
+| Field | What it holds |
+|---|---|
+| `time` | When the event happened, UTC to the millisecond |
+| `host` | The daemon's host name, lowercase |
+| `class` | `agent`, `auth`, `file`, `config`, `finding` or `health` |
+| `activity` | The event's kind as one word: `memory.held` becomes `memory_held` |
+| `severity` | `info`, `low`, `medium` or `high` |
+| `outcome` | `success`, `failure`, `blocked` or `unknown` |
+| `actor` | Who acted: `kind` `agent`, with `session` the session's name and `id` its agent process (pid and start time); `kind` `user` with `id` `owner`; or `kind` `system` with `id` `seamless` |
+| `target.system` | `seamless` |
+| `target.asset` | The project: its slug, `global` for the global scope, or a keyed hash (below) |
+| `target.path_class` | The item kind, when the event has one |
+| `fields` | The event's metadata |
 
-## Recording commits
+`fields` comes from an allowlist of metadata keys, each with a pattern its value
+must fit:
 
-With `record` on, both tools list `commits` in their schema:
+- **Codes and kinds:** `kind`, `item_kind`, `tool`, `op`, `hook`, `via`,
+  `reason`, `surface`, `change`, `by`, `action`, `status`, `from`, `to`.
+- **Numbers:** `size`, `duration_ms`, `items`, `safe`, `flagged`, `suppressed`,
+  `item_count`, `emitted_tokens`.
+- **Flags:** `held`, `quarantined`, `baseline`, `on`, `updated`, `truncated`,
+  `is_error`, `ambient`, `favorite`, `matched`.
+- **Ids:** `hold_id`, `released_hold_id`, `superseded_by`, and `item_ids` joined
+  with commas.
+- **Lists of codes, joined with commas:** `verdicts`, `reasons`.
+- **Versions:** `version`, `current_version`.
 
-- `session_end commits=[...]` records the ids on the session being ended - the
-  same session the call completes, behind the same project fence.
-- `tasks_update id=<task> commits=[...]` records them on the task. Recording is
-  an update like any other: it lands in the same transaction as the rest of the
-  call, and a task another session holds via a live claim refuses it with
-  `already claimed`, exactly as it refuses a retitle.
+Beside those, an event's frame has `event_id` and, when the event names an item,
+`item_id`. `access.refused` adds `target_project`, and
+`settings.features_changed` adds one `feature_<name>` flag per feature.
 
-The argument takes an array, or a comma-separated string. Each entry must be a
-full commit id - the 40-character SHA-1 or 64-character SHA-256 name
-`git rev-parse HEAD` prints. An abbreviation is refused, never expanded: it can
-name a different commit once the repository grows a colliding prefix.
-Uppercase is read as lowercase, and a repeat counts once - within the call, and
-against what the session or task already holds. One call records at most 256
-distinct ids, and one session or task holds at most 10,000. Any bad entry
-refuses the whole call: a refused `session_end` leaves the session open, and a
-refused `tasks_update` changes nothing, its other fields included.
+Nothing else reaches a frame, and a value that does not fit its pattern (free
+text where a code belongs) is dropped. So a frame never carries arguments,
+results, bodies, prompts, queries, names or titles.
 
-A successful call reports `commits_recorded`, and its event
-(`session.ended`, `task.transition`) carries the same count. The ids
-themselves live in the record, never in an event.
+**A fenced project travels as a keyed hash.** A confidential or sealed project,
+or one locked under [peer_auth](/guides/peer-auth/), appears only as `h:` and 24
+hex characters, in `target.asset` and in `target_project` alike. The key is
+random and lives in the spool folder as `hash.key`, so a project's hash is
+stable across restarts and a monitor can follow one project without learning its
+name. Remove the key and every project's hash changes.
 
-## The snapshot
+### Class, severity and outcome
 
-With `snapshot_file` set, the daemon writes the snapshot as it starts and every
-`snapshot_interval` after. Each write builds the whole document, checks it
-against the contract below, writes it beside the file and renames it into
-place, so a reader never sees half of one. A snapshot that would break the
-contract is not written, and the last good file stays. The file's mode is
-`0640`: put it in a directory only the daemon's account can write and whose
-group is the monitor's. Whoever can write that directory can replace the
-snapshot, and with it vouch for any commit.
+Most events are class `agent`, severity `info`, outcome `success`. These are
+not:
+
+| Event | Class | Severity | Outcome |
+|---|---|---|---|
+| `corpus.drift` | `file` | `high`; `medium` for a missing file | `blocked`; `unknown` for a missing file |
+| `lockdown.changed` | `config` | `high` going on, `medium` going off | `success` |
+| `access.refused` | `auth` | `medium` | `blocked` |
+| `memory.held` | `agent` | `medium` | `blocked` |
+| `settings.features_changed`, `project.isolation.changed` | `config` | `medium` | `success` |
+| `update.failed` | `config` | `medium` | `failure` |
+| `memory.screened` | `agent` | `low` with a verdict, else `info` | `blocked` when held, else `success` |
+| `memory.released`, `memory.discarded`, `corpus.confirmed`, `session.tainted`, `session.untainted` | `agent` | `low` | `success` |
+| `hook.error` | `agent` | `low` | `failure` |
+| `update.started`, `update.applied` | `config` | `low` | `success` |
+| `update.available` | `config` | `info` | `success` |
+| `corpus.reviewed` | `finding` | `info` | `success` |
+| `tool.call` | `agent` | `info` | `failure` on a tool error, else `success` |
+
+Write screening's own events, and what each one's payload holds, are in
+[its event table](/guides/write-screening/#events).
+
+### The two requests
+
+Both are HTTP/1.1 on the socket, one request to a connection, and the feed waits
+up to 30 seconds for an answer.
+
+**`GET /v1/limits`** reads the consumer's limits, when the feed starts and
+hourly after:
+
+```json
+{"v": 1, "frame_bytes": 16384, "batch_frames": 500, "batch_bytes": 1048576, "heartbeat_s": 300}
+```
+
+Those values are also the defaults, used until a consumer says otherwise. A
+value that is missing, zero or negative keeps its default, and an answer that is
+not status 200 or not version 1 changes nothing. Only `heartbeat_s` changes what
+the feed does today. The other three are read but do not narrow what is sent: a
+batch never exceeds 500 frames or 1 MiB, and a frame never exceeds 16,384 bytes,
+so a consumer must accept at least the defaults.
+
+**`POST /v1/batch`**, with `Content-Type: application/x-ndjson`, sends a header
+line and one frame per line, each ending in a newline:
+
+```text
+{"v":1,"batch":"<id>","frames":<n>,"dropped":<n>}
+{ one frame }
+{ one frame }
+```
+
+`batch` is 1 to 64 of `A-Z a-z 0-9 . _ : -`, starting with a letter or digit, and
+never repeats. `frames` is how many lines follow. `dropped` is how many frames
+the feed has lost that the consumer has not yet recorded.
+
+### Receipts
+
+The consumer answers each batch with a JSON receipt, and its `action` decides:
+
+| `action` | HTTP status | What the feed does |
+|---|---|---|
+| `settle` | 200 | Deletes the batch, and subtracts the receipt's `dropped` from its count of lost frames |
+| `retry` | The rule's | Keeps the batch and sends it again after backing off |
+| `discard` | The rule's | Deletes the batch and counts its frames as dropped |
+
+A settle carries the `batch` id, a `status` of `stored` or `duplicate`, the whole
+numbers `frames`, `accepted`, `refused_count` and `dropped`, and a `refused`
+list:
+
+```json
+{"v": 1, "action": "settle", "status": "stored", "batch": "<id>",
+ "frames": 2, "accepted": 2, "refused_count": 0, "refused": [], "dropped": 0}
+```
+
+A retry or a discard names one rule, at that rule's status, and a retry may add
+`retry_after_s`:
+
+| `rule` | Status | `action` |
+|---|---|---|
+| `sender` | 403 | `retry` |
+| `path` | 404 | `retry` |
+| `method` | 405 | `retry` |
+| `type` | 415 | `retry` |
+| `version` | 400 | `retry` |
+| `store` | 503 | `retry` |
+| `size` | 413 | `discard` |
+| `newline` | 400 | `discard` |
+| `header` | 400 | `discard` |
+| `frames` | 400 | `discard` |
+
+Any other reply - no JSON, another version, another batch's id, a number
+missing, a status that does not fit the action - counts as a retry: only a
+receipt settles or discards a batch. A retry, or a consumer it cannot reach,
+backs the feed off from 5 seconds, doubling to 5 minutes; a `retry_after_s` sets
+the wait inside those bounds.
+
+### How delivery behaves
+
+- **One batch in flight**, oldest first, resent unchanged, byte for byte, under
+  its id until a receipt settles or discards it, across restarts too.
+- **A bounded spool.** While the consumer is down the feed spools to
+  `feed_spool`: at most 10,000 frames and 8 MiB, the oldest dropped first and
+  counted in the next header's `dropped`.
+- **Heartbeats.** When nothing else is waiting the feed sends a heartbeat frame
+  every third of the consumer's `heartbeat_s`, and never more often than every
+  10 seconds: class `health`, activity `heartbeat`, with `interval_s`, `spooled`
+  and `dropped_count` in `fields`.
+- **A running count.** `fields.source_seq` numbers the frames the spool took, so
+  a frame dropped from it shows as a gap.
+
+## The commit-matching snapshot, version 1
+
+One JSON object, whose `kind` and `version` name the contract. (`seamless_feed`
+is the contract's name; this file is not the metadata feed.)
 
 ```json
 {
@@ -7462,7 +7581,7 @@ snapshot, and with it vouch for any commit.
 | `host` | The daemon's host name, lowercase |
 | `taken_at` | When it was built, UTC to the millisecond |
 | `since` | The start of what it covers: `snapshot_window` before `taken_at`, or the start of the first session when that is later. A commit seen before it is outside the snapshot |
-| `sessions[].id` | The session's name - the `cc/...` or `cx/...` on a briefing's `Seam session` line, or a `sess/*` name - so a commit message that mentions it matches. A name outside the contract's pattern is replaced by the session's ULID |
+| `sessions[].id` | The session's name - the `cc/...` or `cx/...` on a briefing's `Seam session` line, or a `sess/*` name - so a commit message that mentions it matches. A name outside the contract's pattern, or one another listed session already took, is replaced by the session's ULID |
 | `sessions[].repo` | The repository the session's working directory is in, or `null` |
 | `sessions[].started_at`, `ended_at` | When it started, and when it ended - `null` while it is active. A session idle longer than `gardener.session_idle_minutes` has ended at its last activity, the end the idle reaper gives it: never at the moment it was reaped, and whether or not the reaper runs |
 | `tasks[].id` | A task's ULID, for a commit message that names one |
@@ -7479,26 +7598,118 @@ least recently are left out.
 It carries identifiers and times only: never a finding, a title, a body, a
 path or a project slug.
 
-## Which repository a session is in
+The daemon writes the snapshot as it starts and every `snapshot_interval` after.
+Each write builds the whole document, checks it against the contract, writes it
+beside the file and renames it into place, so a reader never sees half of one.
+The check holds it to exactly the names above, each value of its type and on its
+pattern, no list past its bound, and no session id, task id or commit in one
+entry given twice. A snapshot that would break the contract is not written, and
+the last good file stays.
+
+### Which repository a session is in
 
 A session's repository is found from its working directory through the repo
 map, exactly as its project is (the longest mapped path the directory lies
 under, on the session's own host). The repository's name is the last segment
 of its origin remote - `git@host:owner/myapp.git` gives `myapp` - or, with no
-origin recorded, the last segment of its path. Configure the monitor with the
+usable origin, the last segment of its path. Configure the monitor with the
 same names. A working directory outside every mapped repository gives `null`,
 and so does a name outside the contract's pattern.
 
 A confidential or sealed project's repository is never named, and neither is
-that of a project locked under [peer_auth](/guides/peer-auth/): their sessions
-and tasks are still listed - by
-name or id, with their times and recorded commits - with `repo` `null`, the way
-the metadata feed sends such a project's slug only as a keyed hash. A monitor
-that matches by time cannot match those sessions; a recorded commit, or one
-whose message names the session or task, still matches.
+that of a project locked under [peer_auth](/guides/peer-auth/). Their sessions
+and tasks are still listed, with their recorded commits: sessions by name, with
+their times and a `repo` of `null`, and tasks by id, with `repo` left out. A
+monitor that matches by time cannot match those sessions; a recorded commit, or
+one whose message names the session or task, still matches.
+
+## Turn on the metadata feed
+
+The feed is part of [write screening](/guides/write-screening/), so it needs
+that feature on as well as a socket to deliver to:
+
+```yaml
+features:
+  screening: true
+screening:
+  feed_socket: /path/to/consumer/ingest.sock
+  feed_spool: /path/to/spool               # default <data_dir>/feed
+```
+
+`SEAMLESS_SCREENING_FEED_SOCKET` and `SEAMLESS_SCREENING_FEED_SPOOL` override
+the two paths, which expand a leading `~` and must be absolute. They are read at
+start, so restart the daemon after a change. The feature itself can also be
+[turned on from the console](/guides/write-screening/#turn-it-on), and takes
+effect without a restart.
+
+With no socket set the feed never starts. With a socket set and the feature off
+it sends nothing, and turned on again it starts from the newest event rather
+than replaying the gap.
+
+The spool folder is the daemon's alone. It is created `0700`, and the feed
+refuses one that is a symbolic link and, on macOS and Linux, one its group or
+others can reach or another account owns. A feed that cannot start leaves the
+daemon serving without it, and the log says `metadata feed not started`.
+
+## Turn on commit records and the snapshot
+
+```yaml
+commits:
+  record: true                                               # offer the commits argument
+  snapshot_file: /path/to/outbox/snapshot-seamless_feed.json # write the snapshot here
+  snapshot_interval: 5m                                      # default 5m, from 30s to 24h
+  snapshot_window: 720h                                      # default 30 days, from 1h to a year
+```
+
+Each key has an environment override: `SEAMLESS_COMMITS_RECORD`,
+`SEAMLESS_COMMITS_SNAPSHOT_FILE`, `SEAMLESS_COMMITS_SNAPSHOT_INTERVAL` and
+`SEAMLESS_COMMITS_SNAPSHOT_WINDOW`. They are read at start, so restart the
+daemon after a change. Neither half needs write screening.
+
+`record` and `snapshot_file` switch on separately: a snapshot without recorded
+commits still tells a monitor which sessions ran when, and where. Off, neither
+tool offers the argument (a call that sends one is refused as an unknown
+parameter, word for word as before), nothing is recorded, and no file is
+written.
+
+`snapshot_file` must be absolute (a leading `~` expands), and its directory must
+already exist: the daemon creates nothing there but that file (and, for a
+moment, a hidden temporary file beside it). The file's mode is `0640`: put it
+in a directory only the daemon's account can write and whose group is the
+monitor's. Whoever can write that directory can replace the snapshot, and with
+it vouch for any commit.
+
+### Recording commits
+
+With `record` on, both tools list `commits` in their schema:
+
+- `session_end commits=[...]` records the ids on the session being ended - the
+  same session the call completes, behind the same project fence.
+- `tasks_update id=<task> commits=[...]` records them on the task. Recording is
+  an update like any other: it lands in the same transaction as the rest of the
+  call, and a task another session holds via a live claim refuses it with
+  `already claimed`, exactly as it refuses a retitle.
+
+The argument takes an array, or a comma-separated string. Each entry must be a
+full commit id - the 40-character SHA-1 or 64-character SHA-256 name
+`git rev-parse HEAD` prints. An abbreviation is refused, never expanded: it can
+name a different commit once the repository grows a colliding prefix.
+Uppercase is read as lowercase, and a repeat counts once - within the call, and
+against what the session or task already holds. One call records at most 256
+distinct ids, and one session or task holds at most 10,000. Any bad entry
+refuses the whole call: a refused `session_end` leaves the session open, and a
+refused `tasks_update` changes nothing, its other fields included.
+
+A successful call reports `commits_recorded`, and its event
+(`session.ended`, `task.transition`) carries the same count. The ids
+themselves live in the record, never in an event.
 
 ## What it does not cover
 
+- **The feed has gaps it can only count.** Frames dropped past the spool's bound
+  are counted, not kept. Nothing is spooled while write screening is off. If the
+  event log is rewritten (a restore from an archive, say) and the event the
+  cursor names is gone, the feed resumes at the newest event and logs a warning.
 - **A record is an agent's claim.** Seamless checks that an id is a full commit
   id, never that the commit exists or that this session made it. Any caller
   allowed to end a session or update a task can vouch for a commit on it; the
@@ -7507,7 +7718,7 @@ whose message names the session or task, still matches.
   session that ends through the client's own hook (most Claude Code sessions)
   records no commits unless the agent called `session_end` with them; its
   times and repository still reach the snapshot.
-- **It is the record's view, not git's.** Commits that never reached a
+- **The snapshot is the record's view, not git's.** Commits that never reached a
   session's or task's record are matched, if at all, by the monitor's own
   rules - a message naming a listed session or task, or a commit time inside
   an open session of the same repository.
@@ -8260,7 +8471,7 @@ tools also accept `summary` as an alias of `findings`.
 On a server that records commits (`commits.record`, off by default),
 `session_end` also takes `commits`: the full ids of the commits the session
 made, recorded on it for an integrity monitor. Off, the argument does not
-exist. See [Record commits for an integrity monitor](/guides/commit-records/).
+exist. See [Feeding a security monitor](/guides/security-monitor/#recording-commits).
 
 If `tasks_update` ever fails claiming a task is held by *your own* session id,
 the connection lost an explicit `session_start` binding - those live in daemon
@@ -8802,7 +9013,7 @@ On a server that records commits (`commits.record`, off by default),
 `tasks_update` also takes `commits`: the full ids of the commits that did the
 task's work, recorded on the task in the same transaction as the rest of the
 call and behind the same claim lock. Off, the argument does not exist. See
-[Record commits for an integrity monitor](/guides/commit-records/).
+[Feeding a security monitor](/guides/security-monitor/#recording-commits).
 
 ## tasks_add {#tasks_add}
 
@@ -9028,7 +9239,7 @@ List pending gardener proposals (merge/consolidate duplicate memories, archive s
 
 ## gardener_request {#gardener_request}
 
-The natural-language entry point for REORGANIZING memory. Describe the change in plain language and it returns reviewable pending proposals -- fold duplicates together ("these two memories are duplicates -- keep the newer"), retire stale memories ("archive anything about the old port 8080"), synthesize several into one ("combine the three auth-flow notes"), move a mis-filed memory to another EXISTING project ("the iOS DFU memory belongs in arctop-ios"), or reclassify a memory's kind ("the wordmark memory is a convention, not a constraint"). Use this whenever the user describes how they want their knowledge organized; if the intended change is ambiguous, ask them a clarifying question first. It NEVER mutates memories: it only creates pending proposals -- review with gardener_proposals, resolve with gardener_apply. If the request is to split one project into NEW child projects, it recognizes that and returns guidance (splitSource) pointing you at gardener_split instead. Needs an LLM chat client.
+The natural-language entry point for REORGANIZING memory. Describe the change in plain language and it returns reviewable pending proposals -- fold duplicates together ("these two memories are duplicates -- keep the newer"), retire stale memories ("archive anything about the old port 8080"), synthesize several into one ("combine the three auth-flow notes"), move a mis-filed memory to another EXISTING project ("the iOS DFU memory belongs in example-ios"), or reclassify a memory's kind ("the wordmark memory is a convention, not a constraint"). Use this whenever the user describes how they want their knowledge organized; if the intended change is ambiguous, ask them a clarifying question first. It NEVER mutates memories: it only creates pending proposals -- review with gardener_proposals, resolve with gardener_apply. If the request is to split one project into NEW child projects, it recognizes that and returns guidance (splitSource) pointing you at gardener_split instead. Needs an LLM chat client.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -9038,7 +9249,7 @@ The natural-language entry point for REORGANIZING memory. Describe the change in
 
 ## gardener_split {#gardener_split}
 
-Plan a project SPLIT: divide one existing project into two or more NEW child projects, keeping cross-platform memories in a shared parent (e.g. split arctop-app into arctop-ios + arctop-android with shared arctop-mobile-apps). Use this when the user wants to break one project into several -- gardener_request points you here (via splitSource) when it detects that intent. It NEVER creates a project or moves a memory: it only creates reviewable pending proposals -- one 'split' setup proposal plus one 'reproject' per memory, all under plan 'split-&lt;source&gt;'. Review with gardener_proposals, then apply each with gardener_apply (or retarget a memory first in the console). Needs an LLM chat client and a known source project slug (see project_list).
+Plan a project SPLIT: divide one existing project into two or more NEW child projects, keeping cross-platform memories in a shared parent (e.g. split example-app into example-ios + example-android with shared example-mobile-apps). Use this when the user wants to break one project into several -- gardener_request points you here (via splitSource) when it detects that intent. It NEVER creates a project or moves a memory: it only creates reviewable pending proposals -- one 'split' setup proposal plus one 'reproject' per memory, all under plan 'split-&lt;source&gt;'. Review with gardener_proposals, then apply each with gardener_apply (or retarget a memory first in the console). Needs an LLM chat client and a known source project slug (see project_list).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -10033,7 +10244,10 @@ URL: https://thereisnospoon.org/docs/reference/cli-seamlessd/
 every other subcommand is a one-shot that opens the same config and database
 directly, without going through a running server. That means most of them work
 whether or not the daemon is up - and that `map-repo`, `unmap-repo`,
-`retire-project` and `family` write state the running daemon reads.
+`retire-project` and `family` write state the running daemon reads. They never
+migrate: a database behind this binary's schema is refused (the daemon migrates
+it at its next start), and only `map-repo` creates a database when there is
+none.
 
 Each subcommand parses its own flags. None of them take positional arguments
 except `family`, which takes only positionals.
@@ -10124,8 +10338,8 @@ Checks stop early if config or the database cannot be loaded at all.
 | `bind` | Loopback is OK. Non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication; non-loopback *without* TLS is a warning naming what travels in the clear. |
 | `server_url` | Fetches `/healthz` through the advertised URL. Not answering is **info** (the daemon is often stopped while doctor runs); a `421` is a **fail** naming the Host header it just refused, which means the allowlist and the advertised name disagree. A derived URL says so. |
 | `tls` | Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of `server_url` - the one that fails at the client's handshake with a message that names no file on the server. |
-| `database` | Path, schema version, and table count. Opens and migrates if needed. |
-| `schema version` | An **info** line pairing what the database has applied with what this binary compiles - `v25 applied / v25 compiled`. A database *ahead* of the binary warns: it was migrated by a newer `seamlessd` (a downgrade, or an update rollback that could not restore the pre-update database). Run that newer release again (`seamlessd update`), or import a backup taken before it (`seamlessd import`). `serve` logs the same warning at startup, and an archive from such a database would be refused. |
+| `database` | Path, schema version, and table count, or that none exists yet (a fresh install: the daemon creates it at its first start). Never creates or migrates a database. |
+| `schema version` | An **info** line pairing what the database has applied with what this binary compiles - `v25 applied / v25 compiled`. A database *ahead* of the binary warns: it was migrated by a newer `seamlessd` (a downgrade, or an update rollback that could not restore the pre-update database). Run that newer release again (`seamlessd update`), or import a backup taken before it (`seamlessd import`). `serve` logs the same warning at startup, and an archive from such a database would be refused. A database *behind* the binary warns too: a daemon of this version migrates it at its next start, and doctor skips the checks that need the current schema. |
 | `repo map` | Warns when mapped paths belonging to **this** host name directories that no longer exist on disk. A moved repo adopts its project at its next session start; a moved-and-renamed repo needs the printed `map-repo` override, and `unmap-repo --stale` clears the dead entries. Rows belonging to other hosts are counted and reported as not verifiable from here - never stat'd, never treated as missing. |
 | `remote sessions` | An **info** line: which other machines used this daemon in the last 24 hours, and how many daemon-side captures were skipped for them. `none in 24h` on a single-machine install. |
 | `mcp_tools` | On a server install, fails if the number of registered tools disagrees with the expected count - catches a tool written but never wired in. On a `role: client` install it is the live count instead: `tools/list` against the server, judged against that server's effective feature state. |
@@ -10742,7 +10956,7 @@ sudo -k -u _seamless seamlessd console-open --unlock example-finance --for 3h
 It refuses unless it runs as the daemon's account (the same check as
 `seamlessd approve`) and `PROJECT` is locked, by the config file or from the
 console. It writes a
-one-time unlock link straight into the database and prints it; open the link
+one-time unlock link straight into the database and prints it, launching no browser (`--browser` is refused with `--unlock`); open the link
 within ten minutes in the browser you sign in to the console with. Opening it
 sets that browser's `seamless_unlock` cookie, and the console then reads the
 project there until the unlock ends. `--for` is how long that lasts: at most,
@@ -11021,6 +11235,15 @@ switch; grants do not.
 
 The block is new after v0.7.4; releases before it refuse config keys they do
 not know, so the example file leaves it commented out.
+
+### Feeding a security monitor {#security-monitor}
+
+`screening.feed_socket` and `screening.feed_spool` deliver a metadata feed of
+events to a Unix socket, and the `commits:` block records the commits agents
+made and writes a commit-matching snapshot for a monitor to read. Both are off
+by default, and off is exactly the earlier behavior.
+[Feeding a security monitor](/guides/security-monitor/) has each contract and
+how to turn each on.
 
 ## Generating a key
 

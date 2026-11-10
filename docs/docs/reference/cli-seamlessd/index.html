@@ -160,7 +160,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
-        <li><a href="../../guides/commit-records/">Record commits for an integrity monitor</a></li>
+        <li><a href="../../guides/security-monitor/">Feeding a security monitor</a></li>
         
         <li><a href="../../guides/troubleshooting/">Troubleshooting</a></li>
         
@@ -243,7 +243,10 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 every other subcommand is a one-shot that opens the same config and database
 directly, without going through a running server. That means most of them work
 whether or not the daemon is up - and that <code>map-repo</code>, <code>unmap-repo</code>,
-<code>retire-project</code> and <code>family</code> write state the running daemon reads.</p>
+<code>retire-project</code> and <code>family</code> write state the running daemon reads. They never
+migrate: a database behind this binary's schema is refused (the daemon migrates
+it at its next start), and only <code>map-repo</code> creates a database when there is
+none.</p>
 <p>Each subcommand parses its own flags. None of them take positional arguments
 except <code>family</code>, which takes only positionals.</p>
 <p>For the keys every command below resolves, see
@@ -353,11 +356,11 @@ Checks stop early if config or the database cannot be loaded at all.</p>
 </tr>
 <tr>
 <td><code>database</code></td>
-<td>Path, schema version, and table count. Opens and migrates if needed.</td>
+<td>Path, schema version, and table count, or that none exists yet (a fresh install: the daemon creates it at its first start). Never creates or migrates a database.</td>
 </tr>
 <tr>
 <td><code>schema version</code></td>
-<td>An <strong>info</strong> line pairing what the database has applied with what this binary compiles - <code>v25 applied / v25 compiled</code>. A database <em>ahead</em> of the binary warns: it was migrated by a newer <code>seamlessd</code> (a downgrade, or an update rollback that could not restore the pre-update database). Run that newer release again (<code>seamlessd update</code>), or import a backup taken before it (<code>seamlessd import</code>). <code>serve</code> logs the same warning at startup, and an archive from such a database would be refused.</td>
+<td>An <strong>info</strong> line pairing what the database has applied with what this binary compiles - <code>v25 applied / v25 compiled</code>. A database <em>ahead</em> of the binary warns: it was migrated by a newer <code>seamlessd</code> (a downgrade, or an update rollback that could not restore the pre-update database). Run that newer release again (<code>seamlessd update</code>), or import a backup taken before it (<code>seamlessd import</code>). <code>serve</code> logs the same warning at startup, and an archive from such a database would be refused. A database <em>behind</em> the binary warns too: a daemon of this version migrates it at its next start, and doctor skips the checks that need the current schema.</td>
 </tr>
 <tr>
 <td><code>repo map</code></td>
@@ -1198,7 +1201,7 @@ through <code>sudo -k</code> so it asks for your password or Touch ID every time
 <p>It refuses unless it runs as the daemon's account (the same check as
 <code>seamlessd approve</code>) and <code>PROJECT</code> is locked, by the config file or from the
 console. It writes a
-one-time unlock link straight into the database and prints it; open the link
+one-time unlock link straight into the database and prints it, launching no browser (<code>--browser</code> is refused with <code>--unlock</code>); open the link
 within ten minutes in the browser you sign in to the console with. Opening it
 sets that browser's <code>seamless_unlock</code> cookie, and the console then reads the
 project there until the unlock ends. <code>--for</code> is how long that lasts: at most,

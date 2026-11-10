@@ -152,6 +152,13 @@ nothing.
   place of its id, and a count in the claim's "task blocked" refusal - never its
   title or its id.
 
+## What a security monitor sees
+
+A monitor you [feed from Seamless](/guides/security-monitor/) follows a fenced
+project without learning its name: the metadata feed sends a confidential or
+sealed project's slug only as a keyed hash, and the commit-matching snapshot
+never names its repository. Both are off by default.
+
 ## Asking for access
 
 A refusal at a confidential project's fence can become a request you approve,

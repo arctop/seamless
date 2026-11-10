@@ -206,6 +206,15 @@ switch; grants do not.
 The block is new after v0.7.4; releases before it refuse config keys they do
 not know, so the example file leaves it commented out.
 
+### Feeding a security monitor {#security-monitor}
+
+`screening.feed_socket` and `screening.feed_spool` deliver a metadata feed of
+events to a Unix socket, and the `commits:` block records the commits agents
+made and writes a commit-matching snapshot for a monitor to read. Both are off
+by default, and off is exactly the earlier behavior.
+[Feeding a security monitor](/guides/security-monitor/) has each contract and
+how to turn each on.
+
 ## Generating a key
 
 `mcp.api_key` guards `/api/mcp` and the console. On a true first run - no

@@ -33,9 +33,9 @@ opt-in guard against a poisoned memory: every agent write is screened for
 secrets, injection markers and hidden characters, and the suspicious ones -
 along with any change to a binding rule by a session that read outside text -
 wait for your release instead of reaching every briefing.
-[Record commits for an integrity monitor](/guides/commit-records/) is its
-opt-in neighbor for a repository's history: agents name the commits they made,
-and a snapshot of sessions, tasks and those commits lets a monitor flag the
+[Feeding a security monitor](/guides/security-monitor/) is its opt-in neighbor:
+a metadata feed of events tells a monitor what agents did as it happens, and a
+snapshot of sessions, tasks and the commits they recorded lets it flag the
 commits no tracked work accounts for.
 
 The last three are operational. [Import, back up & restore](/guides/data/) covers

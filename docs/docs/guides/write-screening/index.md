@@ -73,19 +73,16 @@ screening:
 `SEAMLESS_SCREENING_BLOB_MIN_LENGTH` override them. Loopback URLs
 (`localhost`, `127.0.0.1`) are never "outside".
 
-Four more keys belong to the review, drift, lockdown and feed sections below:
+Two more keys belong to the drift and lockdown sections below:
 
 ```yaml
 screening:
   drift_interval: 5m                       # 0 turns the drift watch off
   lockdown_file: /path/to/lockdown.flag    # its existence turns lockdown on
-  feed_socket: /path/to/consumer/ingest.sock
-  feed_spool: /path/to/spool               # default <data_dir>/feed
 ```
 
 Each has a `SEAMLESS_SCREENING_*` override (`DRIFT_INTERVAL`,
-`LOCKDOWN_FILE`, `FEED_SOCKET`, `FEED_SPOOL`); the paths expand a leading
-`~` and must be absolute.
+`LOCKDOWN_FILE`); the path expands a leading `~` and must be absolute.
 
 ## What is screened
 
@@ -348,32 +345,12 @@ ten seconds, with the refusals in between counted in `suppressed`.
 
 ## The metadata feed
 
-With `screening.feed_socket` set, the daemon delivers every event's metadata
-to that Unix socket, for a monitor that should see what agents do without
-reading Seamless. A frame carries the event's kind (as `activity`), time,
-class, severity and outcome; the session's name and agent process; the
-project - **a confidential or sealed project, or one locked under
-peer_auth, as a keyed hash** (`h:` and 24 hex characters, keyed by a random key
-in the spool folder); the item kind and id; and the codes, counts, sizes and
-flags the event carries. It never carries arguments, results, bodies,
-prompts, queries, names or titles: each frame is built from an allowlist of
-metadata keys, and a value that does not fit its pattern (free text where a
-code belongs) is dropped.
-
-The protocol is HTTP/1.1 on the socket: `GET /v1/limits`, then
-`POST /v1/batch` with `Content-Type: application/x-ndjson`, a header line
-`{"v":1,"batch":"<id>","frames":<n>,"dropped":<n>}` and one frame per line.
-The consumer answers each batch with a receipt whose `action` is `settle`,
-`retry` or `discard`. While it is down the feed spools to `feed_spool`
-(0700): bounded at 10,000 frames and 8 MiB, the oldest dropped first and
-counted in the next header's `dropped`; one batch in flight, resent unchanged
-under its id until a receipt settles or discards it, across restarts too. When
-nothing else is waiting it sends a heartbeat frame every third of the
-consumer's `heartbeat_s`.
-
-The feed reads the event log itself, in the order events landed, from a
-cursor it keeps in the spool, so a burst never loses an event. Turned off and
-on again, it starts from the newest event rather than replaying the gap.
+While this feature is on and `screening.feed_socket` names a Unix socket, the
+daemon delivers every event's metadata - never its content - to a monitor
+listening there, so it can see what agents do without reading Seamless.
+[Feeding a security monitor](https://thereisnospoon.org/docs/guides/security-monitor/) has the frame and
+delivery contract and how to turn it on, beside the commit-matching snapshot
+that serves the same kind of monitor.
 
 ## Forensics
 

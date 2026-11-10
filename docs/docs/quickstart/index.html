@@ -160,7 +160,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
-        <li><a href="../guides/commit-records/">Record commits for an integrity monitor</a></li>
+        <li><a href="../guides/security-monitor/">Feeding a security monitor</a></li>
         
         <li><a href="../guides/troubleshooting/">Troubleshooting</a></li>
         
@@ -304,9 +304,9 @@ written to <code>~/.config/seamless/seamless.yaml</code>. Nothing to copy, nothi
 paste. No LLM key is required either: without one, recall degrades to plain
 full-text search. Add OpenAI or Ollama in the
 <a href="../reference/configuration/">configuration</a> when you want semantic recall.</p>
-<p><code>seamlessd doctor</code> is the checkpoint: it validates the config, opens the
-database, applies migrations, and asserts the tool count. If it is green, the
-daemon will start.</p>
+<p><code>seamlessd doctor</code> is the checkpoint: it validates the config, reports the
+database and its schema without changing either, and asserts the tool count. If
+it is green, the daemon will start.</p>
 <h2 id="now-open-your-client">Now open your client</h2>
 <p>The installer already wired the clients it found, so there is no second setup
 step.</p>

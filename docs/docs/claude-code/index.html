@@ -160,7 +160,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
-        <li><a href="../guides/commit-records/">Record commits for an integrity monitor</a></li>
+        <li><a href="../guides/security-monitor/">Feeding a security monitor</a></li>
         
         <li><a href="../guides/troubleshooting/">Troubleshooting</a></li>
         
@@ -295,8 +295,8 @@ project scope from their cwd - no <code>project</code> argument on any call, and
 <a href="../concepts/sessions/#process-binding">bound to the session its hook opened</a>,
 even with agents working in several repos at once.</p>
 <p>Map by hand to override the derived slug - an <code>ios</code> directory that should be the
-<code>arctop-ios</code> project:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd map-repo --path ~/code/ios --project arctop-ios
+<code>example-ios</code> project:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd map-repo --path ~/code/ios --project example-ios
 </span></span></code></pre></div>
 <p>See <a href="../concepts/projects/">Projects &amp; scope</a> for the full precedence chain and why
 unmapped writes are rejected rather than defaulted to global.</p>

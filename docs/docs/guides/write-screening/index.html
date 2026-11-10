@@ -160,7 +160,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/write-screening/" class="current" aria-current="page">Screen writes and hold the suspicious ones</a></li>
         
-        <li><a href="../../guides/commit-records/">Record commits for an integrity monitor</a></li>
+        <li><a href="../../guides/security-monitor/">Feeding a security monitor</a></li>
         
         <li><a href="../../guides/troubleshooting/">Troubleshooting</a></li>
         
@@ -304,16 +304,13 @@ you reset it.</li>
 <p><code>SEAMLESS_SCREENING_URL_ALLOWLIST</code> (comma-separated) and
 <code>SEAMLESS_SCREENING_BLOB_MIN_LENGTH</code> override them. Loopback URLs
 (<code>localhost</code>, <code>127.0.0.1</code>) are never &quot;outside&quot;.</p>
-<p>Four more keys belong to the review, drift, lockdown and feed sections below:</p>
+<p>Two more keys belong to the drift and lockdown sections below:</p>
 <div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">screening</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">drift_interval</span><span class="p">:</span><span class="w"> </span><span class="l">5m                      </span><span class="w"> </span><span class="c"># 0 turns the drift watch off</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">lockdown_file</span><span class="p">:</span><span class="w"> </span><span class="l">/path/to/lockdown.flag   </span><span class="w"> </span><span class="c"># its existence turns lockdown on</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">feed_socket</span><span class="p">:</span><span class="w"> </span><span class="l">/path/to/consumer/ingest.sock</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">feed_spool</span><span class="p">:</span><span class="w"> </span><span class="l">/path/to/spool              </span><span class="w"> </span><span class="c"># default &lt;data_dir&gt;/feed</span><span class="w">
 </span></span></span></code></pre></div>
 <p>Each has a <code>SEAMLESS_SCREENING_*</code> override (<code>DRIFT_INTERVAL</code>,
-<code>LOCKDOWN_FILE</code>, <code>FEED_SOCKET</code>, <code>FEED_SPOOL</code>); the paths expand a leading
-<code>~</code> and must be absolute.</p>
+<code>LOCKDOWN_FILE</code>); the path expands a leading <code>~</code> and must be absolute.</p>
 <h2 id="what-is-screened">What is screened</h2>
 <p>Every agent write that lands text in the corpus: <code>memory_write</code> (including
 the half that supersedes), <code>memory_append</code>, <code>memory_edit</code>, <code>notes_create</code>,
@@ -689,30 +686,12 @@ the target project when there is one - never the call's arguments. It is
 rate-limited: one event per reason, surface, tool, target and session every
 ten seconds, with the refusals in between counted in <code>suppressed</code>.</p>
 <h2 id="the-metadata-feed">The metadata feed</h2>
-<p>With <code>screening.feed_socket</code> set, the daemon delivers every event's metadata
-to that Unix socket, for a monitor that should see what agents do without
-reading Seamless. A frame carries the event's kind (as <code>activity</code>), time,
-class, severity and outcome; the session's name and agent process; the
-project - <strong>a confidential or sealed project, or one locked under
-peer_auth, as a keyed hash</strong> (<code>h:</code> and 24 hex characters, keyed by a random key
-in the spool folder); the item kind and id; and the codes, counts, sizes and
-flags the event carries. It never carries arguments, results, bodies,
-prompts, queries, names or titles: each frame is built from an allowlist of
-metadata keys, and a value that does not fit its pattern (free text where a
-code belongs) is dropped.</p>
-<p>The protocol is HTTP/1.1 on the socket: <code>GET /v1/limits</code>, then
-<code>POST /v1/batch</code> with <code>Content-Type: application/x-ndjson</code>, a header line
-<code>{&quot;v&quot;:1,&quot;batch&quot;:&quot;&lt;id&gt;&quot;,&quot;frames&quot;:&lt;n&gt;,&quot;dropped&quot;:&lt;n&gt;}</code> and one frame per line.
-The consumer answers each batch with a receipt whose <code>action</code> is <code>settle</code>,
-<code>retry</code> or <code>discard</code>. While it is down the feed spools to <code>feed_spool</code>
-(0700): bounded at 10,000 frames and 8 MiB, the oldest dropped first and
-counted in the next header's <code>dropped</code>; one batch in flight, resent unchanged
-under its id until a receipt settles or discards it, across restarts too. When
-nothing else is waiting it sends a heartbeat frame every third of the
-consumer's <code>heartbeat_s</code>.</p>
-<p>The feed reads the event log itself, in the order events landed, from a
-cursor it keeps in the spool, so a burst never loses an event. Turned off and
-on again, it starts from the newest event rather than replaying the gap.</p>
+<p>While this feature is on and <code>screening.feed_socket</code> names a Unix socket, the
+daemon delivers every event's metadata - never its content - to a monitor
+listening there, so it can see what agents do without reading Seamless.
+<a href="../../guides/security-monitor/">Feeding a security monitor</a> has the frame and
+delivery contract and how to turn it on, beside the commit-matching snapshot
+that serves the same kind of monitor.</p>
 <h2 id="forensics">Forensics</h2>
 <p><code>retrieval.injected</code> - the record of which memories a briefing, a prompt
 recall or a recall answer gave which session - is never pruned: the retention
@@ -818,7 +797,7 @@ injected; <code>recall</code> and <code>memory_read</code> still answer an agent
     
     <nav class="page-nav" aria-label="Pagination">
       <a class="prev" href="../../guides/peer-auth/"><span class="dir">Previous</span><span class="t">Lock projects behind your approval</span></a>
-      <a class="next" href="../../guides/commit-records/"><span class="dir">Next</span><span class="t">Record commits for an integrity monitor</span></a>
+      <a class="next" href="../../guides/security-monitor/"><span class="dir">Next</span><span class="t">Feeding a security monitor</span></a>
     </nav>
     
   </main>

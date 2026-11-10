@@ -196,7 +196,7 @@ docs-src/guides/peer-auth.md) adds a Unix-socket listener whose callers are
 named by the kernel's peer uid, locks the projects it lists until the owner
 approves an agent's access, and lists restricted local accounts; a client of it
 sets `server_url: unix:///path.sock` and needs no key.
-The `commits:` block (off by default; docs-src/guides/commit-records.md) offers
+The `commits:` block (off by default; docs-src/guides/security-monitor.md) offers
 session_end and tasks_update a `commits` argument (`record`) and writes the
 commit-matching snapshot to `snapshot_file`.
 

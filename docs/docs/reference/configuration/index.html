@@ -160,7 +160,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
-        <li><a href="../../guides/commit-records/">Record commits for an integrity monitor</a></li>
+        <li><a href="../../guides/security-monitor/">Feeding a security monitor</a></li>
         
         <li><a href="../../guides/troubleshooting/">Troubleshooting</a></li>
         
@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-3"><a href="#isolation-requests">Access requests at a confidential fence</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
+      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-3"><a href="#isolation-requests">Access requests at a confidential fence</a></li><li class="lvl-3"><a href="#security-monitor">Feeding a security monitor</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
     </ul>
   </details>
   <p>Seamless reads a single YAML file. Every key also has a <code>SEAMLESS_*</code> environment
@@ -444,6 +444,13 @@ daemon's account), a passkey, or a Touch ID key. Locks work without this
 switch; grants do not.</p>
 <p>The block is new after v0.7.4; releases before it refuse config keys they do
 not know, so the example file leaves it commented out.</p>
+<h3 id="security-monitor">Feeding a security monitor</h3>
+<p><code>screening.feed_socket</code> and <code>screening.feed_spool</code> deliver a metadata feed of
+events to a Unix socket, and the <code>commits:</code> block records the commits agents
+made and writes a commit-matching snapshot for a monitor to read. Both are off
+by default, and off is exactly the earlier behavior.
+<a href="../../guides/security-monitor/">Feeding a security monitor</a> has each contract and
+how to turn each on.</p>
 <h2 id="generating-a-key">Generating a key</h2>
 <p><code>mcp.api_key</code> guards <code>/api/mcp</code> and the console. On a true first run - no
 config file anywhere in the search order and no <code>SEAMLESS_MCP_API_KEY</code> in the
@@ -1441,7 +1448,7 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-3"><a href="#isolation-requests">Access requests at a confidential fence</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
+      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-3"><a href="#isolation-requests">Access requests at a confidential fence</a></li><li class="lvl-3"><a href="#security-monitor">Feeding a security monitor</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
     </ul>
   </aside>
   

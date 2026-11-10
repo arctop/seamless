@@ -275,7 +275,7 @@ any of it.
   may not star (favorite_set), apply gardener proposals, or plan them
   (gardener_request, gardener_split). It may not give a project memory the name
   of a live global briefing-kind memory (the shadow would answer by-name reads),
-  and a memory whose content it changes loses its star.
+  and a memory or note whose content it changes loses its star.
 - **The owner's decisions are refused from an agent's process.** On the socket,
   bringing a fence down, deciding held writes and changing features go through
   `refusedFromAgent`/`ownerHands` (`access.FromAgent`, the kernel's process chain,
@@ -355,7 +355,10 @@ any of it.
   `seamlessd approvers enroll-code --key <fingerprint>` mints (it opens the
   database directly, so running it is the proof of being the daemon's account).
   `approvers`, `approve` and `console-open --unlock` open it through
-  `openServedDB`, which never creates or migrates: the schema is the daemon's to
+  `openServedDB`, as do `family`, `unmap-repo`, `retire-project` and `map-repo`
+  (which alone creates an absent database on a server install), and `doctor`
+  reads what it finds without creating or migrating; `openServedDB` never
+  creates or migrates: the schema is the daemon's to
   move, so a database behind the binary is refused, and `approvers` settles its
   arguments before opening anything.
   The code is minted for that one key: its stored hash binds
@@ -702,7 +705,7 @@ Part 2 of the same feature (migration 029, `internal/screening/corpus.go`,
 ### Commit records (`internal/commitfeed`)
 
 The `commits:` option (off by default; off is exactly the previous behavior).
-Guide: docs-src/guides/commit-records.md.
+Guide: docs-src/guides/security-monitor.md.
 
 - **Off, the argument does not exist.** While `commits.record` is off,
   `registerTools` registers session_end and tasks_update without `commits`

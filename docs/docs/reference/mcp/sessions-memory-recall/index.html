@@ -160,7 +160,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
-        <li><a href="../../../guides/commit-records/">Record commits for an integrity monitor</a></li>
+        <li><a href="../../../guides/security-monitor/">Feeding a security monitor</a></li>
         
         <li><a href="../../../guides/troubleshooting/">Troubleshooting</a></li>
         
@@ -269,7 +269,7 @@ tools also accept <code>summary</code> as an alias of <code>findings</code>.</p>
 <p>On a server that records commits (<code>commits.record</code>, off by default),
 <code>session_end</code> also takes <code>commits</code>: the full ids of the commits the session
 made, recorded on it for an integrity monitor. Off, the argument does not
-exist. See <a href="../../../guides/commit-records/">Record commits for an integrity monitor</a>.</p>
+exist. See <a href="../../../guides/security-monitor/#recording-commits">Feeding a security monitor</a>.</p>
 <p>If <code>tasks_update</code> ever fails claiming a task is held by <em>your own</em> session id,
 the connection lost an explicit <code>session_start</code> binding - those live in daemon
 memory, so a restart or reconnect drops them. Re-run <code>session_start</code> with the

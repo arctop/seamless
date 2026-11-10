@@ -6,7 +6,10 @@
 every other subcommand is a one-shot that opens the same config and database
 directly, without going through a running server. That means most of them work
 whether or not the daemon is up - and that `map-repo`, `unmap-repo`,
-`retire-project` and `family` write state the running daemon reads.
+`retire-project` and `family` write state the running daemon reads. They never
+migrate: a database behind this binary's schema is refused (the daemon migrates
+it at its next start), and only `map-repo` creates a database when there is
+none.
 
 Each subcommand parses its own flags. None of them take positional arguments
 except `family`, which takes only positionals.
@@ -97,8 +100,8 @@ Checks stop early if config or the database cannot be loaded at all.
 | `bind` | Loopback is OK. Non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication; non-loopback *without* TLS is a warning naming what travels in the clear. |
 | `server_url` | Fetches `/healthz` through the advertised URL. Not answering is **info** (the daemon is often stopped while doctor runs); a `421` is a **fail** naming the Host header it just refused, which means the allowlist and the advertised name disagree. A derived URL says so. |
 | `tls` | Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of `server_url` - the one that fails at the client's handshake with a message that names no file on the server. |
-| `database` | Path, schema version, and table count. Opens and migrates if needed. |
-| `schema version` | An **info** line pairing what the database has applied with what this binary compiles - `v25 applied / v25 compiled`. A database *ahead* of the binary warns: it was migrated by a newer `seamlessd` (a downgrade, or an update rollback that could not restore the pre-update database). Run that newer release again (`seamlessd update`), or import a backup taken before it (`seamlessd import`). `serve` logs the same warning at startup, and an archive from such a database would be refused. |
+| `database` | Path, schema version, and table count, or that none exists yet (a fresh install: the daemon creates it at its first start). Never creates or migrates a database. |
+| `schema version` | An **info** line pairing what the database has applied with what this binary compiles - `v25 applied / v25 compiled`. A database *ahead* of the binary warns: it was migrated by a newer `seamlessd` (a downgrade, or an update rollback that could not restore the pre-update database). Run that newer release again (`seamlessd update`), or import a backup taken before it (`seamlessd import`). `serve` logs the same warning at startup, and an archive from such a database would be refused. A database *behind* the binary warns too: a daemon of this version migrates it at its next start, and doctor skips the checks that need the current schema. |
 | `repo map` | Warns when mapped paths belonging to **this** host name directories that no longer exist on disk. A moved repo adopts its project at its next session start; a moved-and-renamed repo needs the printed `map-repo` override, and `unmap-repo --stale` clears the dead entries. Rows belonging to other hosts are counted and reported as not verifiable from here - never stat'd, never treated as missing. |
 | `remote sessions` | An **info** line: which other machines used this daemon in the last 24 hours, and how many daemon-side captures were skipped for them. `none in 24h` on a single-machine install. |
 | `mcp_tools` | On a server install, fails if the number of registered tools disagrees with the expected count - catches a tool written but never wired in. On a `role: client` install it is the live count instead: `tools/list` against the server, judged against that server's effective feature state. |
@@ -715,7 +718,7 @@ sudo -k -u _seamless seamlessd console-open --unlock example-finance --for 3h
 It refuses unless it runs as the daemon's account (the same check as
 `seamlessd approve`) and `PROJECT` is locked, by the config file or from the
 console. It writes a
-one-time unlock link straight into the database and prints it; open the link
+one-time unlock link straight into the database and prints it, launching no browser (`--browser` is refused with `--unlock`); open the link
 within ten minutes in the browser you sign in to the console with. Opening it
 sets that browser's `seamless_unlock` cookie, and the console then reads the
 project there until the unlock ends. `--for` is how long that lasts: at most,

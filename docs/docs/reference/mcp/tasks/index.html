@@ -160,7 +160,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
-        <li><a href="../../../guides/commit-records/">Record commits for an integrity monitor</a></li>
+        <li><a href="../../../guides/security-monitor/">Feeding a security monitor</a></li>
         
         <li><a href="../../../guides/troubleshooting/">Troubleshooting</a></li>
         
@@ -315,7 +315,7 @@ the exact lease boundary, even while its status remains <code>in_progress</code>
 <code>tasks_update</code> also takes <code>commits</code>: the full ids of the commits that did the
 task's work, recorded on the task in the same transaction as the rest of the
 call and behind the same claim lock. Off, the argument does not exist. See
-<a href="../../../guides/commit-records/">Record commits for an integrity monitor</a>.</p>
+<a href="../../../guides/security-monitor/#recording-commits">Feeding a security monitor</a>.</p>
 <h2 id="tasks_add">tasks_add</h2>
 <p>Add a task to the dependency-aware ready queue. depends_on lists task ids that must finish first (done or dropped unblocks); each must exist and must not create a cycle. The task is 'ready' once it has no open/in_progress blocker.</p>
 <div class="table-wrap">

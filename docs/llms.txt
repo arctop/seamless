@@ -43,7 +43,7 @@
 - [Share one daemon across a LAN](https://thereisnospoon.org/docs/guides/network-install/): Run one seamlessd for several devices - the server config, TLS with mkcert or openssl, the client-config pairing command, and the captures a remote device honestly does not get.
 - [Lock projects behind your approval](https://thereisnospoon.org/docs/guides/peer-auth/): peer_auth - the daemon in its own OS account, a Unix socket that names each caller by its uid, and locked projects your own agents reach only with an approval you prove.
 - [Screen writes and hold the suspicious ones](https://thereisnospoon.org/docs/guides/write-screening/): Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.
-- [Record commits for an integrity monitor](https://thereisnospoon.org/docs/guides/commit-records/): Commit records - agents name the commits they made on session_end and tasks_update, and the daemon writes a snapshot of its sessions, tasks and those commits that an integrity monitor matches a branch's commits against.
+- [Feeding a security monitor](https://thereisnospoon.org/docs/guides/security-monitor/): Tell a security monitor what your agents did - a metadata feed of events over a Unix socket and a commit-matching snapshot file, each a small versioned contract, both off by default.
 - [Troubleshooting](https://thereisnospoon.org/docs/guides/troubleshooting/): Symptom-first fixes for a system whose hooks fail open - where silence, not an error, is what a broken install looks like.
 
 ## Reference

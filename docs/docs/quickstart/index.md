@@ -51,9 +51,9 @@ paste. No LLM key is required either: without one, recall degrades to plain
 full-text search. Add OpenAI or Ollama in the
 [configuration](https://thereisnospoon.org/docs/reference/configuration/) when you want semantic recall.
 
-`seamlessd doctor` is the checkpoint: it validates the config, opens the
-database, applies migrations, and asserts the tool count. If it is green, the
-daemon will start.
+`seamlessd doctor` is the checkpoint: it validates the config, reports the
+database and its schema without changing either, and asserts the tool count. If
+it is green, the daemon will start.
 
 ## Now open your client
 

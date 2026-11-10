@@ -160,7 +160,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
-        <li><a href="../../guides/commit-records/">Record commits for an integrity monitor</a></li>
+        <li><a href="../../guides/security-monitor/">Feeding a security monitor</a></li>
         
         <li><a href="../../guides/troubleshooting/">Troubleshooting</a></li>
         
@@ -529,8 +529,8 @@ On Linux it is a system unit, <code>/etc/systemd/system/seamless-daemon.service<
 <p>Your agents connect through the socket: a locked project opens only to a process
 the kernel names, which a TCP connection never is. Your config becomes a
 client's, because your account no longer runs the daemon - and a server-role
-config there would have <code>seamlessd doctor</code> open (and create) a database in your
-home:</p>
+config there would have <code>seamlessd doctor</code> report on a database in your home
+rather than the daemon's:</p>
 <div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">client</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;unix:///opt/seamless/run/seamlessd.sock&#34;</span><span class="w">
 </span></span></span></code></pre></div>
@@ -925,7 +925,7 @@ and notes, tasks and findings, lands at once, labeled.</p>
 memory the name of a live global constraint, convention, protocol or stage, because
 a read by that name would then answer with its text. It cannot ask the gardener to
 plan a change (<code>gardener_request</code>, <code>gardener_split</code>), and it still sees proposals
-with <code>gardener_proposals</code>. A memory it rewrites loses its star.</p>
+with <code>gardener_proposals</code>. A memory or note whose content it changes loses its star.</p>
 <p>Sessions belong to the account that started them: a restricted account's agents
 cannot resume, bind to or write findings into your sessions, and yours cannot
 act in theirs. Its sessions also have names of their own: every one is stored

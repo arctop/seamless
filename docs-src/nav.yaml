@@ -56,7 +56,7 @@ sections:
       - network-install.md
       - peer-auth.md
       - write-screening.md
-      - commit-records.md
+      - security-monitor.md
       - troubleshooting.md
 
   - title: Reference

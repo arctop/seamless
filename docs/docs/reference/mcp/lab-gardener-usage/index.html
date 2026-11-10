@@ -160,7 +160,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../../guides/write-screening/">Screen writes and hold the suspicious ones</a></li>
         
-        <li><a href="../../../guides/commit-records/">Record commits for an integrity monitor</a></li>
+        <li><a href="../../../guides/security-monitor/">Feeding a security monitor</a></li>
         
         <li><a href="../../../guides/troubleshooting/">Troubleshooting</a></li>
         
@@ -527,7 +527,7 @@ writes, and occupied-path protections remain the same as direct tools.</p>
 </table>
 </div>
 <h2 id="gardener_request">gardener_request</h2>
-<p>The natural-language entry point for REORGANIZING memory. Describe the change in plain language and it returns reviewable pending proposals -- fold duplicates together (&quot;these two memories are duplicates -- keep the newer&quot;), retire stale memories (&quot;archive anything about the old port 8080&quot;), synthesize several into one (&quot;combine the three auth-flow notes&quot;), move a mis-filed memory to another EXISTING project (&quot;the iOS DFU memory belongs in arctop-ios&quot;), or reclassify a memory's kind (&quot;the wordmark memory is a convention, not a constraint&quot;). Use this whenever the user describes how they want their knowledge organized; if the intended change is ambiguous, ask them a clarifying question first. It NEVER mutates memories: it only creates pending proposals -- review with gardener_proposals, resolve with gardener_apply. If the request is to split one project into NEW child projects, it recognizes that and returns guidance (splitSource) pointing you at gardener_split instead. Needs an LLM chat client.</p>
+<p>The natural-language entry point for REORGANIZING memory. Describe the change in plain language and it returns reviewable pending proposals -- fold duplicates together (&quot;these two memories are duplicates -- keep the newer&quot;), retire stale memories (&quot;archive anything about the old port 8080&quot;), synthesize several into one (&quot;combine the three auth-flow notes&quot;), move a mis-filed memory to another EXISTING project (&quot;the iOS DFU memory belongs in example-ios&quot;), or reclassify a memory's kind (&quot;the wordmark memory is a convention, not a constraint&quot;). Use this whenever the user describes how they want their knowledge organized; if the intended change is ambiguous, ask them a clarifying question first. It NEVER mutates memories: it only creates pending proposals -- review with gardener_proposals, resolve with gardener_apply. If the request is to split one project into NEW child projects, it recognizes that and returns guidance (splitSource) pointing you at gardener_split instead. Needs an LLM chat client.</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -561,7 +561,7 @@ writes, and occupied-path protections remain the same as direct tools.</p>
 </table>
 </div>
 <h2 id="gardener_split">gardener_split</h2>
-<p>Plan a project SPLIT: divide one existing project into two or more NEW child projects, keeping cross-platform memories in a shared parent (e.g. split arctop-app into arctop-ios + arctop-android with shared arctop-mobile-apps). Use this when the user wants to break one project into several -- gardener_request points you here (via splitSource) when it detects that intent. It NEVER creates a project or moves a memory: it only creates reviewable pending proposals -- one 'split' setup proposal plus one 'reproject' per memory, all under plan 'split-&lt;source&gt;'. Review with gardener_proposals, then apply each with gardener_apply (or retarget a memory first in the console). Needs an LLM chat client and a known source project slug (see project_list).</p>
+<p>Plan a project SPLIT: divide one existing project into two or more NEW child projects, keeping cross-platform memories in a shared parent (e.g. split example-app into example-ios + example-android with shared example-mobile-apps). Use this when the user wants to break one project into several -- gardener_request points you here (via splitSource) when it detects that intent. It NEVER creates a project or moves a memory: it only creates reviewable pending proposals -- one 'split' setup proposal plus one 'reproject' per memory, all under plan 'split-&lt;source&gt;'. Review with gardener_proposals, then apply each with gardener_apply (or retarget a memory first in the console). Needs an LLM chat client and a known source project slug (see project_list).</p>
 <div class="table-wrap">
 <table>
 <thead>

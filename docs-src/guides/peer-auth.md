@@ -250,8 +250,8 @@ Retire any per-user service first, or it starts again at your next login
 Your agents connect through the socket: a locked project opens only to a process
 the kernel names, which a TCP connection never is. Your config becomes a
 client's, because your account no longer runs the daemon - and a server-role
-config there would have `seamlessd doctor` open (and create) a database in your
-home:
+config there would have `seamlessd doctor` report on a database in your home
+rather than the daemon's:
 
 ```yaml
 role: client
@@ -672,7 +672,7 @@ Three more rules keep its text from passing as yours. It cannot give a project
 memory the name of a live global constraint, convention, protocol or stage, because
 a read by that name would then answer with its text. It cannot ask the gardener to
 plan a change (`gardener_request`, `gardener_split`), and it still sees proposals
-with `gardener_proposals`. A memory it rewrites loses its star.
+with `gardener_proposals`. A memory or note whose content it changes loses its star.
 
 Sessions belong to the account that started them: a restricted account's agents
 cannot resume, bind to or write findings into your sessions, and yours cannot
