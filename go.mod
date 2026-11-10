@@ -2,7 +2,7 @@ module github.com/arctop/seamless
 
 go 1.26.0
 
-toolchain go1.26.9
+toolchain go1.26.10
 
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0

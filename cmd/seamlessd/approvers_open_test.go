@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -186,6 +187,9 @@ func TestOpenServedDB_WarnsOnlyOnADatabaseAheadOfThisBinary(t *testing.T) {
 // The other one-shot commands the approval path runs as the daemon's account
 // hold the same line.
 func TestApprovalCommands_NeverMigrateADatabaseBehindThisBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("peer_auth is a POSIX deployment: the account check refuses before the schema check")
+	}
 	behind := store.LatestSchemaVersion() - 1
 	for name, run := range map[string]func(config.Config) error{
 		"approve":               func(config.Config) error { return runApprove([]string{"R-ABCD", "--deny"}) },
