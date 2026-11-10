@@ -412,8 +412,16 @@ func TestFeed_DeliversMetadataOnlyAndSpoolsWhileDown(t *testing.T) {
 	require.Contains(t, got, `"activity":"corpus_drift"`)
 	require.Contains(t, got, `"source_seq":`)
 
-	// Off: nothing more is spooled.
+	// Off: nothing more is spooled. The feed reads the switch once per turn,
+	// and a turn already past that read finishes its tail and delivery, so an
+	// event recorded right after the flip can still go out. Wait for the feed's
+	// own record that it saw the switch off: only a turn that read off clears
+	// Active, and that turn and every later one deliver nothing.
 	on.Store(false)
+	require.Eventually(t, func() bool {
+		st, ok, _ := readSpoolState(filepath.Join(sockDir, "spool", "state.json"))
+		return ok && !st.Active
+	}, 10*time.Second, 20*time.Millisecond, "the feed saw the switch off")
 	n := len(c.received())
 	_, err = rec.Record(ctx, core.Event{Kind: core.EventMemoryWritten, Payload: map[string]any{"kind": "gotcha"}})
 	require.NoError(t, err)

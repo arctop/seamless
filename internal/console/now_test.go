@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"net/http"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -61,6 +62,18 @@ func seedNowFleet(t *testing.T, db *sql.DB) (agentID, claimedID, looseID, readyI
 	return agentID, claimedID, looseID, readyID
 }
 
+// justAfterLocalMidnight moves a synctest bubble's clock, the one the Now page
+// reads, to 00:00:30 local on the bubble's next local day. A blocked timer is
+// how a bubble's clock moves, and it takes no real time. Call it first: the
+// clock advances only while nothing else in the bubble is running.
+func justAfterLocalMidnight(t *testing.T) {
+	t.Helper()
+	l := time.Now().Local()
+	target := time.Date(l.Year(), l.Month(), l.Day()+1, 0, 0, 30, 0, l.Location())
+	<-time.After(target.Sub(l))
+	require.Equal(t, "00:00:30", time.Now().Local().Format("15:04:05"))
+}
+
 func TestNowPage_ShowsTheFleet(t *testing.T) {
 	db, mux := newConsole(t)
 	agentID, claimedID, looseID, readyID := seedNowFleet(t, db)
@@ -110,52 +123,56 @@ func TestNowPage_ShowsTheFleet(t *testing.T) {
 // The arcade is a gamification surface: off (the shipped default), no query
 // runs, no latch is written, no event is minted, and the page carries zero
 // trace in HTML and JSON alike; on, the tape and records render and a record
-// crossing is celebrated exactly once.
+// crossing is celebrated exactly once. Every run sits in the first minute of the
+// local day, where "today" is easiest to get wrong.
 func TestNowPage_ArcadeFollowsTheGamificationFeature(t *testing.T) {
-	db, mux, _ := newGatedConsole(t)
-	ctx := context.Background()
-	now := time.Now().UTC()
+	synctest.Test(t, func(t *testing.T) {
+		justAfterLocalMidnight(t)
+		db, mux, _ := newGatedConsole(t)
+		ctx := context.Background()
+		now := time.Now().UTC()
 
-	agentID, _, _, _ := seedNowFleet(t, db)
-	closed := now.Add(-time.Minute)
-	require.NoError(t, store.CreateTask(ctx, db, core.Task{
-		ID: mustID(t), ProjectSlug: "demo", Title: "already shipped today",
-		Status: core.TaskDone, ClosedAt: &closed,
-		CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: closed,
-	}))
-	recordEvents := func() int {
-		var n int
-		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM events WHERE kind = ?`,
-			string(core.EventRecordBroken)).Scan(&n))
-		return n
-	}
-	latchRows := func() int {
-		var n int
-		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM settings WHERE key = ?`,
-			store.SettingGamificationRecords).Scan(&n))
-		return n
-	}
+		agentID, _, _, _ := seedNowFleet(t, db)
+		closed := now.Add(-10 * time.Second) // still today; a minute back is yesterday
+		require.NoError(t, store.CreateTask(ctx, db, core.Task{
+			ID: mustID(t), ProjectSlug: "demo", Title: "already shipped today",
+			Status: core.TaskDone, ClosedAt: &closed,
+			CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: closed,
+		}))
+		recordEvents := func() int {
+			var n int
+			require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM events WHERE kind = ?`,
+				string(core.EventRecordBroken)).Scan(&n))
+			return n
+		}
+		latchRows := func() int {
+			var n int
+			require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM settings WHERE key = ?`,
+				store.SettingGamificationRecords).Scan(&n))
+			return n
+		}
 
-	off := getPeek(t, mux, "/console/now").Body.String()
-	require.Contains(t, off, `id="ag-`+agentID+`"`, "the core page renders regardless of the feature")
-	for _, marker := range []string{"now-tape", "now-record", "now-moment", "now-hot", "data-moment"} {
-		require.NotContains(t, off, marker, "off means zero trace")
-	}
-	require.NotContains(t, getJSON2(t, mux, "/console/now?format=json"), "arcade")
-	require.Zero(t, latchRows(), "off means no computation and no latch")
-	require.Zero(t, recordEvents())
+		off := getPeek(t, mux, "/console/now").Body.String()
+		require.Contains(t, off, `id="ag-`+agentID+`"`, "the core page renders regardless of the feature")
+		for _, marker := range []string{"now-tape", "now-record", "now-moment", "now-hot", "data-moment"} {
+			require.NotContains(t, off, marker, "off means zero trace")
+		}
+		require.NotContains(t, getJSON2(t, mux, "/console/now?format=json"), "arcade")
+		require.Zero(t, latchRows(), "off means no computation and no latch")
+		require.Zero(t, recordEvents())
 
-	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Gamification: true}))
-	on := getPeek(t, mux, "/console/now").Body.String()
-	require.Contains(t, on, "now-tape")
-	require.Contains(t, on, "tasks closed")
-	require.Contains(t, on, "most tasks closed in a day")
-	require.Contains(t, on, `data-moment="record-tasks_day-`, "a fresh record is a moment")
-	require.Equal(t, 1, latchRows(), "the ledger latched")
-	require.Equal(t, 3, recordEvents(), "each crossing (tasks, memories, live agents) is minted exactly once")
+		require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Gamification: true}))
+		on := getPeek(t, mux, "/console/now").Body.String()
+		require.Contains(t, on, "now-tape")
+		require.Contains(t, on, "tasks closed")
+		require.Contains(t, on, "most tasks closed in a day")
+		require.Contains(t, on, `data-moment="record-tasks_day-`, "a fresh record is a moment")
+		require.Equal(t, 1, latchRows(), "the ledger latched")
+		require.Equal(t, 3, recordEvents(), "each crossing (tasks, memories, live agents) is minted exactly once")
 
-	again := getPeek(t, mux, "/console/now").Body.String()
-	require.Contains(t, again, "now-record")
-	require.Equal(t, 3, recordEvents(), "re-rendering mints nothing new")
-	require.Contains(t, getJSON2(t, mux, "/console/now?format=json"), "arcade")
+		again := getPeek(t, mux, "/console/now").Body.String()
+		require.Contains(t, again, "now-record")
+		require.Equal(t, 3, recordEvents(), "re-rendering mints nothing new")
+		require.Contains(t, getJSON2(t, mux, "/console/now?format=json"), "arcade")
+	})
 }
