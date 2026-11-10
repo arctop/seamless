@@ -300,9 +300,11 @@ sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml \
 Run it in your own terminal, check that the key it prints is the one on the page,
 and enter the code there. The origin is `http://localhost:<port>` unless `peer_auth.passkeys`
 says otherwise, and browsers refuse passkeys on `127.0.0.1`. A later passkey can
-be approved by one already enrolled instead of a code. A passkey is bound to its
-`rp_id` for life: changing `rp_id` later strands every passkey enrolled under the
-old one.
+be approved by one already enrolled instead of a code. Each passkey needs its own
+authenticator: the browser refuses one that already holds a passkey enrolled here,
+and devices that share synced passkeys, such as a phone on the same iCloud
+Keychain, count as one. A passkey is bound to its `rp_id` for life: changing
+`rp_id` later strands every passkey enrolled under the old one.
 
 **Touch ID on a Mac** (optional) goes through Seamless Approve, a small macOS app
 that approves a request with Touch ID, an Apple Watch or the login password. A

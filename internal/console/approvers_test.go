@@ -321,6 +321,20 @@ func TestApprovers_OnlyAnEnrolledPasskeyOffersTheNoCodePath(t *testing.T) {
 	require.Contains(t, body, "One of your enrolled passkeys approves the new one")
 }
 
+// A browser refuses an authenticator that already holds an enrolled passkey. The
+// owner read the bare refusal as a failure, so the page says beforehand that
+// each passkey needs its own, and the refusal says what to do next.
+func TestApprovers_SaysEachPasskeyNeedsItsOwnAuthenticator(t *testing.T) {
+	_, mux := newApproversConsole(t)
+	req := authedReq(httptest.NewRequest(http.MethodGet, "/console/approvers", nil))
+	req.Host = "localhost:8081"
+	rr := do(mux, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+	body := rr.Body.String()
+	require.Contains(t, body, "Each passkey needs its own authenticator")
+	require.Contains(t, body, `choose a different authenticator in your browser\'s prompt`)
+}
+
 // display: flex on the class beats the hidden attribute, so without its own
 // rule the code form shows, empty, before a passkey exists.
 func TestApprovers_TheCodeFormStaysHiddenUntilItIsNeeded(t *testing.T) {

@@ -33,7 +33,7 @@
   {{else if not .OnOrigin}}
   <p class="held-sub">{{icon "triangle-alert"}} A passkey can only be created on <a href="{{.Origin}}/console/approvers">{{.Origin}}</a>. Browsers refuse passkeys on an IP address such as 127.0.0.1, so open this page there (you may need to sign in to the console again on that address).</p>
   {{else}}
-  <p class="held-sub">A security key, your phone, this computer, or a password manager. {{if .HasPasskey}}One of your enrolled passkeys approves the new one, or you can use a one-time code made for it.{{else}}The first passkey needs a one-time code. Once the passkey exists, this page shows the command that makes the code for it.{{end}}</p>
+  <p class="held-sub">A security key, your phone, this computer, or a password manager. Each passkey needs its own authenticator, and devices that share synced passkeys count as one. {{if .HasPasskey}}One of your enrolled passkeys approves the new one, or you can use a one-time code made for it.{{else}}The first passkey needs a one-time code. Once the passkey exists, this page shows the command that makes the code for it.{{end}}</p>
   <form id="approver-form" class="approver-form" autocomplete="off">
     <label>Name <input id="approver-name" name="name" maxlength="64" required placeholder="security key, phone, laptop"></label>
     {{if .HasPasskey}}<label><input id="approver-bycode" type="checkbox"> Use a one-time code instead</label>{{else}}<input id="approver-bycode" type="hidden" value="1">{{end}}
@@ -185,7 +185,7 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbe
         refresh();
       }).catch(function (err) {
         say(err && err.name === 'NotAllowedError' ? 'Cancelled, or the authenticator timed out. Nothing was enrolled.' :
-            err && err.name === 'InvalidStateError' ? 'That authenticator already holds an enrolled passkey.' :
+            err && err.name === 'InvalidStateError' ? 'That authenticator already holds one of your enrolled passkeys, and each passkey needs its own. Nothing was enrolled. Click Create passkey again and choose a different authenticator in your browser\'s prompt. A device sharing the same synced passkeys, such as a phone on the same iCloud Keychain, counts as the same authenticator.' :
             (err && err.message ? err.message : 'Something went wrong. Nothing was enrolled.'));
       }).finally(function () { go.disabled = false; });
     });
