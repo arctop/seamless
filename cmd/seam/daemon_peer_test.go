@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -190,14 +191,167 @@ func TestApprove_AdvisoryStaysUnverifiedOverTCP(t *testing.T) {
 	}
 }
 
-// --passkey opens a page and builds no sudo command line, so no peer is asked.
-func TestApprove_PasskeyAsksNoPeer(t *testing.T) {
+// --passkey builds no sudo command line, so a TCP server_url, which carries no
+// peer identity, stays allowed: the real check answers errServerNotSocket and
+// the page still opens, the request named or picked from the list.
+func TestApprove_PasskeyOverTCPStillOpensThePage(t *testing.T) {
 	a := factsOf(reqA, "R-7F3K", "example-finance")
-	rig := newApproveRig(t, routes(t, byRef(t, a)), "")
-	rig.e.dialDaemon = nil
-	rig.e.lookupAccount = nil
-	require.Equal(t, 0, rig.run("--passkey", reqA), rig.errb.String())
+	table := byRef(t, a)
+	table["GET /console/access"] = listJSON(t, a)
+	for _, argv := range [][]string{{"--passkey", reqA}, {"--passkey"}} {
+		rig := newApproveRig(t, routes(t, table), "")
+		rig.e.dialDaemon = dialSocketDaemon
+		rig.e.lookupAccount = nil
+		require.Equal(t, 0, rig.run(argv...), "%v: %s", argv, rig.errb.String())
+		require.Equal(t, [][]string{{"open", "https://seamless.example.org/console/access/" + reqA}}, rig.runner.recorded(), "%v", argv)
+	}
+}
+
+// watchFor runs seam approve --watch for at most d. A refusal ends it at once;
+// a watch that was not refused runs until d and exits 0.
+func watchFor(rig *approveRig, d time.Duration) int {
+	rig.e.tick = func(time.Duration) (<-chan time.Time, func()) { return make(chan time.Time), func() {} }
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	return dispatch(ctx, rig.e, []string{"approve", "--watch"})
+}
+
+// watchOnePoll runs seam approve --watch until its first poll has finished,
+// ends it, and returns its status. A watch that ends by itself fails the test
+// here: it would never read the tick, and the send would hang until the timeout.
+func watchOnePoll(t *testing.T, rig *approveRig) int {
+	t.Helper()
+	tick := make(chan time.Time)
+	rig.e.tick = func(time.Duration) (<-chan time.Time, func()) { return tick, func() {} }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan int, 1)
+	go func() { done <- dispatch(ctx, rig.e, []string{"approve", "--watch"}) }()
+	select {
+	case tick <- time.Time{}:
+	case code := <-done:
+		t.Fatalf("the watch ended by itself with status %d: %s", code, rig.errb.String())
+	}
+	cancel()
+	return <-done
+}
+
+// The planted socket again, for the two paths that build no sudo command line:
+// it could forge --watch's lines, or choose the page --passkey opens (here,
+// one of the agent's own). It is refused by who serves it, before a single
+// request reaches it, so nothing is printed, opened or notified.
+func TestApprove_WatchAndPasskeyRefuseAPlantedSocket(t *testing.T) {
+	requirePeerCred(t)
+	forged := factsOf(reqA, "R-7F3K", "harmless-docs")
+	table := byRef(t, forged, func(o *accessOne) { o.Page = "https://agent.example/console/access/" + reqA })
+	table["GET /console/access"] = listJSON(t, forged)
+	var served atomic.Int32
+	sock := serveTouchSocket(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		served.Add(1)
+		routes(t, table)(w, r)
+	}))
+	cfg, path := configFileFor(t, sock)
+
+	for name, run := range map[string]func(*approveRig) int{
+		"watch":        func(r *approveRig) int { return watchFor(r, 5*time.Second) },
+		"passkey":      func(r *approveRig) int { return r.run("--passkey", reqA) },
+		"passkey list": func(r *approveRig) int { return r.run("--passkey") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			rig := newApproveRig(t, routes(t, nil), "")
+			rig.e.loadConfig = func() (config.Config, error) { return cfg, nil }
+			rig.e.dialDaemon = dialSocketDaemon
+			require.Equal(t, 1, run(rig))
+			require.Contains(t, rig.errb.String(), "your own uid")
+			require.Contains(t, rig.errb.String(), "server_url in "+path+" may have been changed")
+			require.Empty(t, rig.out.String(), "nothing the planted socket said is shown")
+			require.Empty(t, rig.runner.recorded(), "no browser opens and no notification is raised")
+			require.Zero(t, served.Load(), "no request reaches it")
+		})
+	}
+}
+
+// A daemon the kernel names but whose uid is the wrong one is refused on these
+// paths like any other: root, and the caller's own uid.
+func TestApprove_WatchAndPasskeyRefuseEveryFailedCheck(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	table := byRef(t, a)
+	table["GET /console/access"] = listJSON(t, a)
+	dialFailed := errors.New("console unreachable at unix:/nowhere")
+	for name, dial := range map[string]func(context.Context, config.Config) (uint32, *http.Client, error){
+		"root":      fakeDaemonPeer(0),
+		"own uid":   fakeDaemonPeer(uint32(os.Geteuid())),
+		"no dial":   func(context.Context, config.Config) (uint32, *http.Client, error) { return 0, nil, dialFailed },
+		"no dialer": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			for mode, run := range map[string]func(*approveRig) int{
+				"watch":   func(r *approveRig) int { return watchFor(r, 5*time.Second) },
+				"passkey": func(r *approveRig) int { return r.run("--passkey", reqA) },
+			} {
+				rig := newApproveRig(t, routes(t, table), "")
+				rig.e.dialDaemon = dial
+				require.Equal(t, 1, run(rig), mode)
+				require.NotEmpty(t, rig.errb.String(), mode)
+				require.Empty(t, rig.out.String(), mode)
+				require.Empty(t, rig.runner.recorded(), mode)
+				require.Empty(t, rig.ac.requests(), "%s: nothing is read", mode)
+			}
+		})
+	}
+}
+
+// countingTransport counts what crosses it and hands it on.
+type countingTransport struct {
+	calls atomic.Int32
+	next  http.RoundTripper
+}
+
+func (c *countingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	c.calls.Add(1)
+	return c.next.RoundTrip(r)
+}
+
+// A verified daemon is read through the client the check handed back, every
+// connection of which the kernel has named. Reading through cfg's own client
+// instead would re-dial server_url unchecked and undo the verification.
+func TestApprove_WatchAndPasskeyReadThroughTheVerifiedClient(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	table := byRef(t, a)
+	table["GET /console/access"] = listJSON(t, a)
+	verified := func(rig *approveRig) *countingTransport {
+		counting := &countingTransport{next: http.DefaultTransport}
+		rig.e.dialDaemon = func(context.Context, config.Config) (uint32, *http.Client, error) {
+			return testDaemonUID, &http.Client{Transport: counting}, nil
+		}
+		return counting
+	}
+
+	rig := newApproveRig(t, routes(t, table), "")
+	counting := verified(rig)
+	require.Equal(t, 0, watchOnePoll(t, rig), rig.errb.String())
+	require.Contains(t, rig.out.String(), "R-7F3K   example-finance")
+	require.Greater(t, int(counting.calls.Load()), 0, "the watch read through the verified client")
+	require.Equal(t, len(rig.ac.requests()), int(counting.calls.Load()), "and through nothing else")
+
+	rig = newApproveRig(t, routes(t, table), "")
+	counting = verified(rig)
+	require.Equal(t, 0, rig.run("--passkey"), rig.errb.String())
 	require.Equal(t, [][]string{{"open", "https://seamless.example.org/console/access/" + reqA}}, rig.runner.recorded())
+	require.Equal(t, len(rig.ac.requests()), int(counting.calls.Load()), "the list and the request both")
+	require.Greater(t, int(counting.calls.Load()), 1)
+}
+
+// --watch over TCP: nothing says who answered, and it builds no sudo command
+// line, so it watches as it always did and the check's answer is not fatal.
+func TestApprove_WatchOverTCPStillWatches(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	rig := newApproveRig(t, routes(t, map[string]string{"GET /console/access": listJSON(t, a)}), "")
+	rig.e.dialDaemon = dialSocketDaemon
+	rig.e.lookupAccount = nil
+	require.Equal(t, 0, watchOnePoll(t, rig), rig.errb.String())
+	require.Contains(t, rig.out.String(), "R-7F3K   example-finance")
+	require.Empty(t, rig.errb.String())
 }
 
 // An env that forgot to name a dialer refuses rather than believe anyone.

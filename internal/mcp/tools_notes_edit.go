@@ -124,8 +124,10 @@ func (s *Server) handleNotesEdit(ctx context.Context, req mcp.CallToolRequest) (
 		if model := s.boundSessionModel(ctx); model != "" {
 			cur.Model = model
 		}
-		// The account label follows the body the same way (accountAfter).
+		// The account label and the star follow the body the same way
+		// (accountAfter, starAfter).
 		cur.Account = accountAfter(cur.Account, access.AccountOf(ctx), true, false)
+		cur.Favorite = starAfter(cur.Favorite, access.AccountOf(ctx), true)
 		if screen {
 			if herr := s.judgeNoteWrite(ctx, "notes_edit", cur, before, "", screenSession, &jd); herr != nil {
 				return core.Note{}, herr

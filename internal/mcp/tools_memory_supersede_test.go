@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/stretchr/testify/require"
 )
 
@@ -105,4 +106,32 @@ func TestMemoryWrite_SupersedeRetryIdempotent(t *testing.T) {
 	r := callJSON(t, ctx, cli, "memory_read", map[string]any{"name": "third-truth"})
 	require.Equal(t, "third-truth", r["name"])
 	require.Nil(t, r["warning"])
+}
+
+// A replacement since deleted has no row left to name its project, so it is
+// judged like one the caller may not reach: the answer carries neither its id
+// nor the tombstone line naming it, for any reader. The file keeps the line.
+func TestMemoryRead_ReplacementSinceDeletedFailsClosed(t *testing.T) {
+	r := newKARig(t, kaOpts{})
+	r.write(r.owner, "old-rule", "gotcha", "Old body.\n", nil)
+	written := r.write(r.owner, "new-rule", "gotcha", "New body.\n", map[string]any{"supersedes": "old-rule"})
+	repl := written["id"].(string)
+	r.call(r.owner, "memory_delete", map[string]any{"name": "new-rule", "project": kaOpen})
+
+	idx, disk := r.memory("old-rule")
+	require.Equal(t, repl, idx.SupersededBy, "the pointer dangles")
+	require.Contains(t, disk.Body, "> Superseded by "+kaOpen+"/new-rule")
+
+	for name, cli := range map[string]*mcpclient.Client{"the owner": r.owner, "a restricted account": r.agent, "no peer_auth": r.plain} {
+		for _, args := range []map[string]any{{"name": "old-rule", "project": kaOpen}, {"id": idx.ID}} {
+			read := r.call(cli, "memory_read", args)
+			require.Regexp(t, `^superseded on \d{4}-\d{2}-\d{2}; the replacement is not reachable from here$`, read["warning"], name)
+			require.Equal(t, "Old body.\n", read["body"], "%s: the tombstone line is gone, the memory's own words stay", name)
+			raw := mustJSON(t, read)
+			require.NotContains(t, raw, repl, name)
+			require.NotContains(t, raw, "new-rule", name)
+		}
+	}
+	_, after := r.memory("old-rule")
+	require.Contains(t, after.Body, "> Superseded by "+kaOpen+"/new-rule", "the file is untouched")
 }

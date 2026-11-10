@@ -61,7 +61,7 @@ var consoleLoginTmpl = template.Must(template.New("console-login").Parse(`<!doct
 // is unreachable, since the page POSTs to it.
 func runConsoleOpen(args []string) error {
 	fs := flag.NewFlagSet("console-open", flag.ContinueOnError)
-	browser := fs.String("browser", "", `browser application to open instead of the default (e.g. "Google Chrome"; macOS only)`)
+	browser := fs.String("browser", "", `browser application to open instead of the default (e.g. "Google Chrome"; macOS only; not with --unlock, which prints its link)`)
 	unlock := fs.String("unlock", "", "a locked project to open in one browser's console (run as the daemon's account, through sudo -k)")
 	forFlag := fs.String("for", "", "how long the unlock lasts once opened (with --unlock; at most and by default 3h, capped by peer_auth.max_lease)")
 	if err := fs.Parse(args); err != nil {
@@ -375,13 +375,26 @@ func socketConsoleRefusal(cfg config.Config) error {
 // opened it is used up; the unlock it starts lasts --for.
 const consoleUnlockLinkTTL = 10 * time.Minute
 
+// errUnlockBrowser refuses --browser beside --unlock. --browser names the
+// application to launch, and --unlock launches none, so it is present and means
+// nothing: refused rather than quietly ignored.
+var errUnlockBrowser = errors.New("--browser does not combine with --unlock: the unlock link is printed, never handed to a browser, so open it yourself in the browser you sign in to the console with")
+
 // runConsoleUnlock is console-open --unlock: the terminal way to open a
 // locked project in one browser's console. It runs as the daemon's own
 // account (the same check as seamlessd approve: the sudo is the proof), writes
-// a one-time unlock link straight into the database, prints it, and tries to
-// open it. A browser that opens it gets the seamless_unlock cookie; the
-// unlock never reaches an agent.
+// a one-time unlock link straight into the database and prints it. A browser
+// that opens it gets the seamless_unlock cookie; the unlock never reaches an
+// agent.
+//
+// It launches nothing. The link is the credential, and on a launcher's argv
+// (open, xdg-open) ps shows it to every process, so an agent running as the
+// owner could read it and claim it first. The daemon's account usually has no
+// desktop session to open a browser in anyway.
 func runConsoleUnlock(cfg config.Config, project, forFlag, browser string) error {
+	if browser != "" {
+		return errUnlockBrowser
+	}
 	if err := approverAccountCheck(cfg, defaultPeerAuthEnv()); err != nil {
 		return err
 	}
@@ -401,11 +414,6 @@ func runConsoleUnlock(cfg config.Config, project, forFlag, browser string) error
 	}
 	fmt.Fprintf(os.Stdout, "Unlock link for %s (works once, within %s):\n\n  %s\n\nOpen it in the browser you sign in to the console with.\n",
 		project, minutesWords(consoleUnlockLinkTTL), link)
-	// The daemon's account usually has no desktop session to open a browser
-	// in; the printed link is the way, and a launch failure says so quietly.
-	if err := openInBrowser(link, browser); err != nil {
-		fmt.Fprintln(os.Stderr, "(could not open a browser from this account; open the link above yourself)")
-	}
 	return nil
 }
 

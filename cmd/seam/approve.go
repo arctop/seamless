@@ -29,7 +29,10 @@ package main
 // agent running as the owner can edit, so the daemon is verified first
 // (daemon_peer.go): nothing it says is shown as fact until the kernel has named
 // who answered. The advisory path may stay unverified: it never runs sudo, and
-// only posts back to the daemon that asked.
+// only posts back to the daemon that asked. --watch and --passkey build no sudo
+// command line either, but a planted socket could forge a watch line or choose
+// the page --passkey opens, so on a socket they are verified the same way; only
+// a TCP server_url, which carries no peer identity, leaves them unverified.
 
 import (
 	"bufio"
@@ -162,24 +165,28 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 	if err != nil {
 		return err
 	}
-	if *o.watch {
-		return watchAccess(ctx, e, cfg)
-	}
 
-	// Who answers, before anything it says is read. A passkey run only opens a
-	// page and builds no sudo command line. A TCP server_url cannot be verified,
-	// which only an advisory request survives: unverified holds the refusal
-	// until the daemon has said which this is, and nothing is shown before then.
-	var daemon verifiedDaemon
+	// Who answers, before anything it says is read. Every path asks, and a
+	// failed check on a socket refuses every path: a planted socket could forge
+	// --watch's lines or choose the page --passkey opens. A TCP server_url cannot
+	// be verified. --watch and --passkey build no sudo command line, so they go
+	// on through cfg's own client; anything else only an advisory request
+	// survives, and unverified holds the refusal until the daemon has said which
+	// this is, with nothing shown before then.
+	noSudo := *o.watch || *o.passkey
 	var unverified error
-	if !*o.passkey {
-		daemon, err = verifyDaemon(ctx, e, cfg)
-		if errors.Is(err, errServerNotSocket) {
-			unverified, err = err, nil
+	daemon, err := verifyDaemon(ctx, e, cfg)
+	if errors.Is(err, errServerNotSocket) {
+		if !noSudo {
+			unverified = err
 		}
-		if err != nil {
-			return err
-		}
+		err = nil
+	}
+	if err != nil {
+		return err
+	}
+	if *o.watch {
+		return watchAccess(ctx, e, cfg, daemon.client)
 	}
 
 	in := bufio.NewReader(e.stdin)
@@ -542,8 +549,8 @@ const (
 // Every value is also made printable: a program name, a cwd and above all the
 // reason are the agent's to choose, and a terminal escape among them could
 // repaint the lines above it. Only the warnings are colored (useColor). The
-// working directory and the model are the agent's own report too, as the
-// closing note says.
+// repository, the working directory and the model are the agent's own report
+// too, as the closing note says.
 func renderFacts(e *env, f accessFacts) {
 	fmt.Fprintf(e.stdout, "\nAccess request %s\n\n", printable(f.Short))
 	for _, w := range f.Warnings {
@@ -580,6 +587,9 @@ func renderFacts(e *env, f accessFacts) {
 		session += " (" + printable(f.Model) + ")"
 	}
 	fact("Session", session)
+	if f.Repo != "" {
+		fact("Repository", printable(f.Repo))
+	}
 	fact("Working in", orUnknown(printable(f.CWD)))
 	says := "(no reason given)"
 	if f.Reason != "" {
@@ -987,11 +997,13 @@ func openerArgv(goos, page string) []string {
 // --- --watch ---
 
 // watchAccess polls the pending list every watchInterval, prints each request
-// it has not seen once, and raises a notification for it. It ends, cleanly, on
-// an interrupt or when ctx ends. A first poll that fails is the answer (no
-// project locked, no daemon); a later one is reported once per distinct
-// failure and the watch goes on, so a daemon restart does not end it.
-func watchAccess(ctx context.Context, e *env, cfg config.Config) error {
+// it has not seen once, and raises a notification for it. It reads through
+// client, the verified daemon's, or cfg's own when client is nil (a TCP
+// server_url). It ends, cleanly, on an interrupt or when ctx ends. A first poll
+// that fails is the answer (no project locked, no daemon); a later one is
+// reported once per distinct failure and the watch goes on, so a daemon restart
+// does not end it.
+func watchAccess(ctx context.Context, e *env, cfg config.Config, client *http.Client) error {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
 	tick, stopTick := e.ticker(watchInterval)
@@ -1003,7 +1015,7 @@ func watchAccess(ctx context.Context, e *env, cfg config.Config) error {
 	lastErr := ""
 	for {
 		var list accessList
-		err := accessGet(cfg, accessListPath, &list)
+		err := accessGetVia(client, cfg, accessListPath, &list)
 		switch {
 		case err != nil && first:
 			return err

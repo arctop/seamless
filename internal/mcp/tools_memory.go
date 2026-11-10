@@ -624,9 +624,9 @@ func (s *Server) resolveSupersededMemory(ctx context.Context, project, name stri
 // fenced reports that it may not: a superseded memory stays readable where its
 // replacement may not be, so the answer then carries none of the replacement's
 // project, name or id, and the caller drops the body's tombstone line too. A
-// replacement that cannot be looked up counts as fenced, since nothing can say
-// it is not. The fence is a filter here, so it files no request and records no
-// refusal.
+// replacement that cannot be looked up, or that was since deleted (no row is
+// left to name its project), counts as fenced, since nothing can say it is not.
+// The fence is a filter here, so it files no request and records no refusal.
 func (s *Server) supersededWarning(ctx context.Context, mem core.Memory) (warning string, fenced bool) {
 	when := ""
 	if mem.InvalidAt != nil {
@@ -641,10 +641,7 @@ func (s *Server) supersededWarning(ctx context.Context, mem core.Memory) (warnin
 		s.logger.Warn("mcp: superseded memory's replacement", "id", mem.ID, "error", err)
 		return unreachable, true
 	}
-	if !ok {
-		return fmt.Sprintf("superseded by %s%s; read that instead", mem.SupersededBy, when), false
-	}
-	if s.fenceReadQuiet(access.WithLockRequester(ctx, nil), repl.Project) != nil {
+	if !ok || s.fenceReadQuiet(access.WithLockRequester(ctx, nil), repl.Project) != nil {
 		return unreachable, true
 	}
 	return fmt.Sprintf("superseded by %s%s; read that instead",

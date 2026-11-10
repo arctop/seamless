@@ -258,6 +258,7 @@ func TestApprove_FactsShowWarningsFirstAndLabelTheReason(t *testing.T) {
 		"  Agent           Claude Code 2.1.319\n" +
 		"  Asking          /usr/local/bin/claude (pid 4242, uid 501)\n" +
 		"  Session         cc/quiet-otter (claude-opus-5-5)\n" +
+		"  Repository      finance\n" +
 		"  Working in      /Users/owner/repos/finance\n" +
 		"  The agent says  \"reconcile the Q3 ledger\"  (the agent's own words, not checked)\n" +
 		"  Kind            first request\n" +
@@ -273,6 +274,7 @@ func TestApprove_FactsCannotRepaintTheTerminal(t *testing.T) {
 	a.Reason = "fine\x1b[2K\x1b[1A  Project         other\u202e"
 	a.Program = "/tmp/cl\x1b]0;x\x07aude"
 	a.CWD = "/tmp/\x9bwork"
+	a.Repo = "fin\x1b[2Kance\u202e"
 	rig := newApproveRig(t, routes(t, byRef(t, a)), "\nn\n")
 	require.Equal(t, 0, rig.run("R-7F3K"))
 	out := rig.out.String()
@@ -281,6 +283,22 @@ func TestApprove_FactsCannotRepaintTheTerminal(t *testing.T) {
 	require.NotContains(t, out, "\x07")
 	require.Contains(t, out, `The agent says  "fine\x1b[2K\x1b[1A  Project         other\u202e"  (the agent's own words, not checked)`)
 	require.Contains(t, out, `/tmp/cl\x1b]0;x\aaude (pid 4242`)
+	require.Contains(t, out, "  Repository      fin\\x1b[2Kance\\u202e\n", "the repository is the agent's report: it is made printable like the rest")
+}
+
+// The repository the closing note names is shown when the facts carry one, in
+// the Session row's neighborhood, and a request with none gets no empty row.
+func TestApprove_RepositoryRowFollowsTheFacts(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	rig := newApproveRig(t, routes(t, byRef(t, a)), "\nn\n")
+	require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+	require.Contains(t, rig.out.String(), "  Repository      finance\n")
+	require.Less(t, strings.Index(rig.out.String(), "Repository"), strings.Index(rig.out.String(), selfReportedNote))
+
+	a.Repo = ""
+	rig = newApproveRig(t, routes(t, byRef(t, a)), "\nn\n")
+	require.Equal(t, 0, rig.run("R-7F3K"), rig.errb.String())
+	require.NotContains(t, rig.out.String(), "Repository")
 }
 
 func TestApprove_ColorIsForWarningsOnlyAndHonorsNoColor(t *testing.T) {
@@ -934,6 +952,7 @@ func TestApprove_TranscriptGolden(t *testing.T) {
 				"  Agent           Claude Code 2.1.319\n" +
 				"  Asking          /usr/local/bin/claude (pid 4242, uid 501)\n" +
 				"  Session         cc/quiet-otter (claude-opus-5-5)\n" +
+				"  Repository      finance\n" +
 				"  Working in      /Users/owner/repos/finance\n" +
 				"  The agent says  \"reconcile the Q3 ledger\"  (the agent's own words, not checked)\n" +
 				"  Kind            first request\n" +

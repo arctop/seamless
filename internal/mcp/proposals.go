@@ -181,7 +181,7 @@ func accountAfter(current, account string, bodyChanged, textChanged bool) string
 	return current
 }
 
-// starAfter is a memory's star after a write: a restricted account's change of
+// starAfter is a memory's or note's star after a write: a restricted account's change of
 // its content drops it. A star pins a memory into briefings and the account
 // may not set one, so it must not inherit one for words the owner did not
 // star. Metadata (tags) changes nothing the star vouches for.

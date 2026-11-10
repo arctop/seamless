@@ -359,8 +359,11 @@ func (p noteUpdatePatch) empty() bool {
 func (s *Server) applyNoteUpdate(ctx context.Context, note *core.Note, p noteUpdatePatch) {
 	// The account label follows the content fields: a replaced body re-stamps
 	// it (the owner's clears it), and a restricted account's new title or
-	// description stamps it too; tags and a move keep it (accountAfter).
+	// description stamps it too; tags and a move keep it (accountAfter). The
+	// star follows the same content: a restricted account may not set one, so
+	// it must not inherit one for words the owner did not star (starAfter).
 	note.Account = accountAfter(note.Account, access.AccountOf(ctx), p.body != nil, noteTextChanged(*note, p))
+	note.Favorite = starAfter(note.Favorite, access.AccountOf(ctx), p.body != nil || noteTextChanged(*note, p))
 	if p.title != nil {
 		note.Title = *p.title
 	}
@@ -445,8 +448,10 @@ func (s *Server) handleNotesAppend(ctx context.Context, req mcp.CallToolRequest)
 		if model := s.boundSessionModel(ctx); model != "" {
 			note.Model = model
 		}
-		// The account label follows the appended text the same way (accountAfter).
+		// The account label and the star follow the appended text the same way
+		// (accountAfter, starAfter).
 		note.Account = accountAfter(note.Account, access.AccountOf(ctx), true, false)
+		note.Favorite = starAfter(note.Favorite, access.AccountOf(ctx), true)
 		if screen {
 			if herr := s.judgeNoteWrite(ctx, "notes_append", note, before, "", screenSession, &jd); herr != nil {
 				return core.Note{}, herr

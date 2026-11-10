@@ -1,12 +1,16 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/store"
 )
 
 // The health probe and the login page's form action are two views of one
@@ -99,4 +103,46 @@ func TestRenderConsoleLoginPage_EscapesKey(t *testing.T) {
 	require.NotContains(t, page, `value="a">`)
 	require.True(t, strings.Contains(page, "&#34;") || strings.Contains(page, "&quot;"),
 		"quote in key must be escaped, got: %s", page)
+}
+
+// The unlock link is the credential: on a launcher's argv ps would show it to
+// any process of the account, and whoever claims it first gets the unlock. So
+// the unlock path prints the link and runs nothing, even with a launcher of
+// each name first on PATH.
+func TestConsoleOpenUnlock_PrintsTheLinkAndLaunchesNothing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("peer_auth is a POSIX deployment: the account check refuses first")
+	}
+	daemonDB(t, store.LatestSchemaVersion())
+	cfg, err := config.Load()
+	require.NoError(t, err)
+
+	bin := t.TempDir()
+	launched := filepath.Join(t.TempDir(), "launched")
+	for _, name := range []string{"open", "xdg-open"} {
+		script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + launched + "'\n"
+		require.NoError(t, os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755))
+	}
+	t.Setenv("PATH", bin)
+
+	out := captureStdout(t, func() error { return runConsoleUnlock(cfg, "example-finance", "", "") })
+	require.Contains(t, out, "Unlock link for example-finance (works once, within 10 minutes):")
+	require.Contains(t, out, consoleBase(cfg)+"/console/unlock?t=")
+
+	_, err = os.Stat(launched)
+	require.ErrorIs(t, err, os.ErrNotExist, "no launcher ran: the link never reached an argv")
+}
+
+// --browser names the application to launch, and --unlock launches none: a
+// flag that is present and means nothing is refused, not quietly ignored. It
+// is settled first, so it is the answer before the account check or any
+// database is opened.
+func TestConsoleOpenUnlock_RefusesBrowser(t *testing.T) {
+	require.ErrorIs(t, runConsoleUnlock(config.Defaults(), "example-finance", "", "Google Chrome"), errUnlockBrowser,
+		"ahead of the account check, which says peer_auth is off")
+
+	writeDaemonConfig(t, t.TempDir())
+	err := runConsoleOpen([]string{"--unlock", "example-finance", "--browser", "Safari"})
+	require.ErrorIs(t, err, errUnlockBrowser)
+	require.ErrorContains(t, err, "--browser does not combine with --unlock")
 }
