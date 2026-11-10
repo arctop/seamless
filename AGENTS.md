@@ -339,6 +339,10 @@ any of it.
   passkey or Touch ID key needs a one-time code that only
   `seamlessd approvers enroll-code --key <fingerprint>` mints (it opens the
   database directly, so running it is the proof of being the daemon's account).
+  `approvers`, `approve` and `console-open --unlock` open it through
+  `openServedDB`, which never creates or migrates: the schema is the daemon's to
+  move, so a database behind the binary is refused, and `approvers` settles its
+  arguments before opening anything.
   The code is minted for that one key: its stored hash binds
   `store.ApproverKeyFingerprint`, so a code read off the owner's terminal cannot
   enroll another, and the key exists before the code does (the helper's window

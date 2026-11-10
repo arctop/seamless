@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -53,9 +54,9 @@ func runApprove(args []string) error {
 		// here (ownerError), not as a log record.
 		return &ownerError{msg: err.Error(), cause: err}
 	}
-	db, err := store.Open(cfg.DBPath())
+	db, err := openServedDB(cfg, os.Stderr)
 	if err != nil {
-		return fmt.Errorf("seamlessd.approve: %w", err)
+		return &ownerError{msg: err.Error(), cause: err}
 	}
 	defer func() { _ = db.Close() }()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
@@ -100,6 +101,43 @@ func approverAccountCheck(cfg config.Config, env peerAuthEnv) error {
 		return errors.New("this is the owner's account, not the daemon's: the terminal approval needs the sudo to the daemon's account")
 	}
 	return nil
+}
+
+// openServedDB opens the database a daemon serves, for a one-shot command run as
+// the daemon's account: approvers, approve and console-open --unlock. Unlike
+// store.Open it never creates or migrates. The schema is the daemon's to move,
+// at its own startup, and a newer binary run by hand must not move it under an
+// older running daemon as a side effect of something else.
+//
+// So a database behind this binary is refused. One ahead of it needs no
+// migration and is opened with a warning, as serve does, which keeps the
+// terminal approval path and `approvers remove` working after a downgrade.
+func openServedDB(cfg config.Config, warnings io.Writer) (*sql.DB, error) {
+	path := cfg.DBPath()
+	db, err := store.OpenExisting(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("no database at %s: the daemon creates it when it first starts, so start the daemon, or set SEAMLESS_CONFIG to its config", path)
+	}
+	if err != nil {
+		return nil, err
+	}
+	applied, err := store.SchemaVersion(db)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("read the schema version of %s: %w", path, err)
+	}
+	compiled := store.LatestSchemaVersion()
+	if applied < compiled {
+		_ = db.Close()
+		return nil, fmt.Errorf("the database at %s is at schema v%d and this seamlessd expects v%d. "+
+			"This command never migrates a database, so nothing changed: "+
+			"run the seamlessd the daemon runs, or restart the daemon on this version first", path, applied, compiled)
+	}
+	if applied > compiled {
+		fmt.Fprintf(warnings, "warning: the database at %s is at schema v%d, newer than this seamlessd's v%d: %s; %s\n",
+			path, applied, compiled, schemaAheadCause, schemaAheadFix)
+	}
+	return db, nil
 }
 
 // approve is the testable core of runApprove, with read grants off.

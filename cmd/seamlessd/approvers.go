@@ -47,26 +47,40 @@ Approver credentials sign the owner's approvals of access to locked projects
 `
 
 func runApprovers(args []string) error {
-	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+	if len(args) == 0 || approversHelp(args) {
 		fmt.Fprint(os.Stderr, approversUsage)
 		if len(args) == 0 {
 			return errors.New("seamlessd.approvers: a verb is required")
 		}
 		return nil
 	}
+	// The arguments are settled before anything is opened, so a typo or a --help
+	// never reaches the database.
+	cmd, err := parseApprovers(args)
+	if err != nil {
+		return fmt.Errorf("seamlessd.approvers: %w", err)
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("seamlessd.approvers: %w", err)
 	}
-	db, err := store.Open(cfg.DBPath())
+	db, err := openServedDB(cfg, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("seamlessd.approvers: %w", err)
 	}
 	defer func() { _ = db.Close() }()
-	if err := approvers(context.Background(), db, cfg, os.Stdout, args, time.Now()); err != nil {
+	if err := cmd.run(context.Background(), db, cfg, os.Stdout, time.Now(), runtime.GOOS); err != nil {
 		return fmt.Errorf("seamlessd.approvers: %w", err)
 	}
 	return nil
+}
+
+// approversHelp says args ask for the usage: "help" in the verb's place, or a
+// help flag anywhere after it.
+func approversHelp(args []string) bool {
+	return args[0] == "help" || slices.ContainsFunc(args, func(a string) bool {
+		return a == "-h" || a == "-help" || a == "--help"
+	})
 }
 
 // approvers runs one verb against db; the testable core of runApprovers.
@@ -89,38 +103,88 @@ func firstApproverAdvice(goos string, peerAuth bool) string {
 
 // approversOn is approvers on the platform goos.
 func approversOn(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writer, args []string, now time.Time, goos string) error {
-	verb, rest := args[0], args[1:]
-	switch verb {
+	cmd, err := parseApprovers(args)
+	if err != nil {
+		return err
+	}
+	return cmd.run(ctx, db, cfg, out, now, goos)
+}
+
+// approversCmd is one verb with its arguments checked.
+type approversCmd struct {
+	verb        string
+	kind        string // enroll-code
+	fingerprint string // enroll-code
+	asJSON      bool   // list
+	id          string // remove
+}
+
+// parseApprovers checks a verb and its arguments and touches nothing, so a bad
+// one is refused before any database is opened.
+func parseApprovers(args []string) (approversCmd, error) {
+	cmd := approversCmd{verb: args[0]}
+	rest := args[1:]
+	switch cmd.verb {
 	case "enroll-code":
 		if len(rest) == 0 {
-			return fmt.Errorf("enroll-code takes one kind and --key: %s", strings.Join(store.ApproverKinds, " or "))
+			return cmd, fmt.Errorf("enroll-code takes one kind and --key: %s", strings.Join(store.ApproverKinds, " or "))
 		}
-		kind := rest[0]
-		if !slices.Contains(store.ApproverKinds, kind) {
-			return fmt.Errorf("invalid kind %q: valid kinds are %s", kind, strings.Join(store.ApproverKinds, ", "))
+		cmd.kind = rest[0]
+		if !slices.Contains(store.ApproverKinds, cmd.kind) {
+			return cmd, fmt.Errorf("invalid kind %q: valid kinds are %s", cmd.kind, strings.Join(store.ApproverKinds, ", "))
 		}
 		fs := flag.NewFlagSet("approvers enroll-code", flag.ContinueOnError)
 		fs.SetOutput(io.Discard)
 		key := fs.String("key", "", "the fingerprint of the key this code enrolls")
 		if err := fs.Parse(rest[1:]); err != nil {
-			return fmt.Errorf("enroll-code: %w", err)
+			return cmd, fmt.Errorf("enroll-code: %w", err)
 		}
 		if fs.NArg() > 0 || *key == "" {
-			return errors.New("enroll-code needs --key <fingerprint>: a code enrolls one key. " +
+			return cmd, errors.New("enroll-code needs --key <fingerprint>: a code enrolls one key. " +
 				"The console's Approvers page shows the command for a new passkey, and the Seamless Approve window for a Touch ID key")
 		}
-		fingerprint := store.FormatKeyFingerprint(*key)
-		if fingerprint == "" {
-			return fmt.Errorf("invalid value %q for --key: a key fingerprint looks like XXXX-XXXX-XXXX-XXXX", *key)
+		cmd.fingerprint = store.FormatKeyFingerprint(*key)
+		if cmd.fingerprint == "" {
+			return cmd, fmt.Errorf("invalid value %q for --key: a key fingerprint looks like XXXX-XXXX-XXXX-XXXX", *key)
 		}
-		code, expires, err := store.MintEnrollCode(ctx, db, kind, fingerprint, now)
+	case "list":
+		fs := flag.NewFlagSet("approvers list", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		asJSON := fs.Bool("json", false, "print JSON")
+		if err := fs.Parse(rest); err != nil {
+			return cmd, err
+		}
+		if fs.NArg() > 0 {
+			return cmd, fmt.Errorf("list takes no arguments, got %q", fs.Arg(0))
+		}
+		cmd.asJSON = *asJSON
+	case "remove":
+		if len(rest) != 1 || strings.TrimSpace(rest[0]) == "" {
+			return cmd, errors.New("remove takes one credential id (see `seamlessd approvers list`)")
+		}
+		cmd.id = rest[0]
+	case "reset":
+		if !slices.Equal(rest, []string{"--yes"}) {
+			return cmd, errors.New("reset removes every credential and revokes every live lease: pass --yes to confirm")
+		}
+	default:
+		return cmd, fmt.Errorf("unknown verb %q\n\n%s", cmd.verb, approversUsage)
+	}
+	return cmd, nil
+}
+
+// run carries out a parsed verb against db on the platform goos.
+func (cmd approversCmd) run(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writer, now time.Time, goos string) error {
+	switch cmd.verb {
+	case "enroll-code":
+		code, expires, err := store.MintEnrollCode(ctx, db, cmd.kind, cmd.fingerprint, now)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "Enrollment code (%s) for key %s: %s\n", kind, fingerprint, code)
+		fmt.Fprintf(out, "Enrollment code (%s) for key %s: %s\n", cmd.kind, cmd.fingerprint, code)
 		fmt.Fprintf(out, "It works once, until %s (%d minutes), and only for that key. Check that key against the one on your screen.\n",
 			expires.Local().Format("15:04"), int(store.EnrollCodeTTL/time.Minute))
-		switch kind {
+		switch cmd.kind {
 		case store.ApproverPasskey:
 			fmt.Fprintln(out, "Enter it on the console's Approvers page, where the new passkey is waiting.")
 		case store.ApproverTouchID:
@@ -131,20 +195,11 @@ func approversOn(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writ
 		}
 		return nil
 	case "list":
-		fs := flag.NewFlagSet("approvers list", flag.ContinueOnError)
-		fs.SetOutput(io.Discard)
-		asJSON := fs.Bool("json", false, "print JSON")
-		if err := fs.Parse(rest); err != nil {
-			return err
-		}
-		if fs.NArg() > 0 {
-			return fmt.Errorf("list takes no arguments, got %q", fs.Arg(0))
-		}
 		creds, err := store.ApproverCredentials(ctx, db, "")
 		if err != nil {
 			return err
 		}
-		if *asJSON {
+		if cmd.asJSON {
 			return writeApproversJSON(out, creds)
 		}
 		if len(creds) == 0 {
@@ -165,33 +220,25 @@ func approversOn(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writ
 		}
 		return nil
 	case "remove":
-		if len(rest) != 1 || strings.TrimSpace(rest[0]) == "" {
-			return errors.New("remove takes one credential id (see `seamlessd approvers list`)")
-		}
-		if err := store.RemoveApprover(ctx, db, rest[0]); err != nil {
+		if err := store.RemoveApprover(ctx, db, cmd.id); err != nil {
 			return err
 		}
 		n, err := store.CountApprovers(ctx, db)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "Removed %s. %d credential(s) remain.\n", rest[0], n)
+		fmt.Fprintf(out, "Removed %s. %d credential(s) remain.\n", cmd.id, n)
 		if n == 0 {
 			fmt.Fprintln(out, "Only the terminal approval path (seam approve) is left.")
 		}
 		return nil
-	case "reset":
-		if !slices.Equal(rest, []string{"--yes"}) {
-			return errors.New("reset removes every credential and revokes every live lease: pass --yes to confirm")
-		}
+	default: // reset: parseApprovers admits no other verb
 		creds, leases, err := store.ResetApprovers(ctx, db, now)
 		if err != nil {
 			return err
 		}
 		fmt.Fprintf(out, "Removed %d credential(s) and revoked %d live lease(s).\n", creds, leases)
 		return nil
-	default:
-		return fmt.Errorf("unknown verb %q\n\n%s", verb, approversUsage)
 	}
 }
 

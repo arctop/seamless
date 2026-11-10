@@ -385,7 +385,7 @@ func runConsoleUnlock(cfg config.Config, project, forFlag, browser string) error
 	if err := approverAccountCheck(cfg, defaultPeerAuthEnv()); err != nil {
 		return err
 	}
-	db, err := store.Open(cfg.DBPath())
+	db, err := openServedDB(cfg, os.Stderr)
 	if err != nil {
 		return err
 	}
