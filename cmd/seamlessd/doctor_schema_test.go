@@ -62,10 +62,9 @@ func TestSchemaVersionCheck(t *testing.T) {
 			wantDetail: fmt.Sprintf("v%d applied / v%d compiled", compiled, compiled),
 		},
 		{
-			// Unreachable through doctor itself, whose store.Open migrates first,
-			// but the check reports the pair rather than guessing.
-			name: "behind", applied: compiled - 3, wantStatus: statusInfo,
-			wantDetail: fmt.Sprintf("v%d applied / v%d compiled", compiled-3, compiled),
+			// doctor reports it and leaves it: migrating is the daemon's.
+			name: "behind", applied: compiled - 3, wantStatus: statusWarn,
+			wantDetail: fmt.Sprintf("v%d applied / v%d compiled -- %s", compiled-3, compiled, schemaBehindFinding),
 		},
 		{
 			name: "ahead: a downgrade or a rollback that kept the newer database", applied: compiled + 2,
@@ -99,6 +98,12 @@ func TestSchemaAheadWording(t *testing.T) {
 	require.Contains(t, schemaAheadFix, "newer release again")
 	require.Contains(t, schemaAheadFix, "seamlessd update")
 	require.Contains(t, schemaAheadFix, "seamlessd import")
+}
+
+func TestSchemaVersionCheck_NoDatabaseYet(t *testing.T) {
+	got := schemaVersionCheck(nil)
+	require.Equal(t, statusInfo, got.status)
+	require.Equal(t, fmt.Sprintf("no database yet / v%d compiled", store.LatestSchemaVersion()), got.detail)
 }
 
 func TestSchemaVersionCheck_UnreadableSchemaWarns(t *testing.T) {

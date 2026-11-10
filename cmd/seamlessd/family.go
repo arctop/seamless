@@ -28,27 +28,32 @@ func runFamily(args []string) error {
 	}
 	sub, rest := args[0], args[1:]
 
+	// Settled before anything is opened: a typo or --help must not touch the
+	// database, or fail for the lack of one.
+	var run func(context.Context, *sql.DB, []string) error
+	switch sub {
+	case "list":
+		run = func(ctx context.Context, db *sql.DB, _ []string) error { return familyList(ctx, db) }
+	case "add":
+		run = familyAdd
+	case "remove", "rm":
+		run = familyRemove
+	default:
+		return fmt.Errorf("seamlessd.family: unknown subcommand %q (want list|add|remove)", sub)
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("seamlessd.family: %w", err)
 	}
-	db, err := store.Open(cfg.DBPath())
+	// openServedDB, not store.Open: this runs by hand, often from a newer build
+	// than the running daemon's, whose schema it must not move.
+	db, err := openServedDB(cfg, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("seamlessd.family: %w", err)
 	}
 	defer func() { _ = db.Close() }()
-	ctx := context.Background()
-
-	switch sub {
-	case "list":
-		return familyList(ctx, db)
-	case "add":
-		return familyAdd(ctx, db, rest)
-	case "remove", "rm":
-		return familyRemove(ctx, db, rest)
-	default:
-		return fmt.Errorf("seamlessd.family: unknown subcommand %q (want list|add|remove)", sub)
-	}
+	return run(context.Background(), db, rest)
 }
 
 func familyList(ctx context.Context, db *sql.DB) error {

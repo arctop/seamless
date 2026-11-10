@@ -48,7 +48,7 @@ func runUnmapRepo(args []string) error {
 	if err != nil {
 		return fmt.Errorf("seamlessd.unmap-repo: %w", err)
 	}
-	db, err := store.Open(cfg.DBPath())
+	db, err := openServedDB(cfg, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("seamlessd.unmap-repo: %w", err)
 	}

@@ -102,9 +102,10 @@ func approverAccountCheck(cfg config.Config, env peerAuthEnv) error {
 	return nil
 }
 
-// openServedDB opens the database a daemon serves, for a one-shot command run as
-// the daemon's account: approvers, approve and console-open --unlock. Unlike
-// store.Open it never creates or migrates. The schema is the daemon's to move,
+// openServedDB opens the database a daemon serves, for a one-shot command:
+// approvers, approve and console-open --unlock, run as the daemon's account, and
+// family, unmap-repo, retire-project and map-repo. Unlike store.Open it never
+// creates or migrates. The schema is the daemon's to move,
 // at its own startup, and a newer binary run by hand must not move it under an
 // older running daemon as a side effect of something else.
 //

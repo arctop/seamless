@@ -50,7 +50,7 @@ func newPALayout(t *testing.T, extra string) (paLayout, config.Config) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(l.exe), 0o755))
 	require.NoError(t, os.WriteFile(l.exe, []byte("#!/bin/sh\n"), 0o755))
 	require.NoError(t, os.Chmod(l.exe, 0o755))
-	yaml := fmt.Sprintf("data_dir: %s\naddr: 127.0.0.1:0\nmcp:\n  api_key: k\npeer_auth:\n  enabled: true\n  owner: katata\n  socket:\n    path: %s\n%s",
+	yaml := fmt.Sprintf("data_dir: %s\naddr: 127.0.0.1:0\nmcp:\n  api_key: k\npeer_auth:\n  enabled: true\n  owner: _example_owner\n  socket:\n    path: %s\n%s",
 		l.data, l.sock, extra)
 	require.NoError(t, os.WriteFile(l.cfgPath, []byte(yaml), 0o600))
 	require.NoError(t, os.Chmod(l.cfgPath, 0o600))
@@ -71,7 +71,7 @@ func clearServeEnv(t *testing.T) {
 	}
 }
 
-// paTestEnv plays a daemon running as the test's own uid, with katata a
+// paTestEnv plays a daemon running as the test's own uid, with _example_owner a
 // different account (the owner) and "me" resolving to the test's uid.
 func paTestEnv(l paLayout, ownerUID uint32) peerAuthEnv {
 	me := uint32(os.Geteuid())
@@ -79,8 +79,8 @@ func paTestEnv(l paLayout, ownerUID uint32) peerAuthEnv {
 		euid: os.Geteuid(),
 		resolve: func(name string) (access.Account, error) {
 			switch name {
-			case "katata":
-				return access.Account{UID: ownerUID, Name: "katata"}, nil
+			case "_example_owner":
+				return access.Account{UID: ownerUID, Name: "_example_owner"}, nil
 			case "me":
 				return access.Account{UID: me, Name: "me"}, nil
 			case "_example_agent":
@@ -112,7 +112,7 @@ func TestPreparePeerAuth_Refusals(t *testing.T) {
 	}{
 		{"the daemon runs as the owner", func(t *testing.T, l paLayout, env *peerAuthEnv) {
 			env.resolve = paTestEnv(l, uint32(os.Geteuid())).resolve
-		}, "runs as katata, the owner"},
+		}, "runs as _example_owner, the owner"},
 		{"the daemon runs as root", func(t *testing.T, l paLayout, env *peerAuthEnv) {
 			env.euid = 0
 		}, "runs as root"},
@@ -311,7 +311,8 @@ func TestPeerAuthChecks_DoctorRows(t *testing.T) {
 	}
 	require.Contains(t, text.String(), "_example_agent (uid 470): restricted")
 	require.Contains(t, text.String(), "locked: [example-finance]")
-	require.Contains(t, text.String(), "preflight passes")
+	require.Contains(t, text.String(), "the files and accounts pass serve's preflight", "no database: the project checks did not run")
+	require.NotContains(t, text.String(), "preflight passes")
 	require.Contains(t, text.String(), "reads no agent files")
 
 	require.NoError(t, os.Chmod(l.data, 0o755))
@@ -338,8 +339,8 @@ func TestPeerAuthSocket_MCPOverTheRealSocket(t *testing.T) {
 
 	me := uint32(os.Geteuid())
 	accounts := map[string]access.Account{
-		"katata":  {UID: me + 1000, Name: "katata"},
-		raAccount: {UID: me, Name: raAccount},
+		"_example_owner": {UID: me + 1000, Name: "_example_owner"},
+		raAccount:        {UID: me, Name: raAccount},
 	}
 	policy, err := access.New(raPolicy(), func(n string) (access.Account, error) {
 		if a, ok := accounts[n]; ok {

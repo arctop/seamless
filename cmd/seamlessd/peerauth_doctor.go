@@ -75,7 +75,13 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 	for _, p := range problems {
 		out = append(out, check{statusFail, name, p})
 	}
-	if len(problems) == 0 {
+	switch {
+	case len(problems) > 0:
+	case db == nil:
+		// The project checks above need a current schema, so this can only speak
+		// for the files and the accounts.
+		out = append(out, check{statusInfo, name, "the files and accounts pass serve's preflight; the projects it names were not checked"})
+	default:
 		out = append(out, check{statusOK, name, "preflight passes: serve will start with the boundary up"})
 	}
 	out = append(out, check{statusInfo, "peer_auth.captures",

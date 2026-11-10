@@ -51,7 +51,7 @@ func runRetireProject(args []string) error {
 	if err != nil {
 		return fmt.Errorf("seamlessd.retire-project: %w", err)
 	}
-	db, err := store.Open(cfg.DBPath())
+	db, err := openServedDB(cfg, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("seamlessd.retire-project: %w", err)
 	}

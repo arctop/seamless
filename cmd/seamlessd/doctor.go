@@ -68,6 +68,11 @@ type check struct {
 // doctor runs environment self-checks and prints a report. It exits non-zero
 // (via a returned error) only when a check FAILs; warnings do not fail the run.
 //
+// It reports and changes nothing: the database is read as it is found and never
+// created or migrated (openDoctorDB), because `make doctor` runs a freshly built
+// checkout with no SEAMLESS_CONFIG, and from a branch carrying a newer migration
+// that would move the live schema under the running daemon.
+//
 // P0 grows this: config loading and database reachability are added in later
 // steps so the phase-0 acceptance ("doctor reports config + DB ok") is met.
 func doctor(args []string) error {
@@ -95,10 +100,8 @@ func doctor(args []string) error {
 	)
 
 	// The role branch, and it is placed here because everything below it reads
-	// LOCAL server state. store.Open is the sharp edge: it creates and migrates,
-	// so running it against a client would MINT the ~/.seamless/seam.db whose
-	// absence is what "role: client" means, and every later run would then find
-	// that database and report it as healthy.
+	// LOCAL server state a client does not have: the report would describe a
+	// data dir and a database on the wrong machine.
 	if cfg.IsClient() {
 		return reportChecks(append(checks, clientChecks(cfg)...))
 	}
@@ -111,38 +114,102 @@ func doctor(args []string) error {
 	)
 	checks = append(checks, transportChecks(cfg)...)
 
-	// Database: open (creating + migrating if needed) and report schema state.
-	db, err := store.Open(cfg.DBPath())
-	if err != nil {
-		checks = append(checks, check{statusFail, "database", err.Error()})
+	ctx := context.Background()
+	d, dbRow, ok := openDoctorDB(cfg)
+	checks = append(checks, dbRow)
+	if !ok {
 		return reportChecks(checks)
 	}
-	defer func() { _ = db.Close() }()
-	ver, verr := store.SchemaVersion(db)
-	tbls, terr := store.TableCount(db)
-	if verr != nil || terr != nil {
-		checks = append(checks, check{statusFail, "database", "opened but could not read schema"})
-	} else {
-		checks = append(checks, check{statusOK, "database",
-			fmt.Sprintf("%s (schema v%d, %d tables)", cfg.DBPath(), ver, tbls)})
+	if d.handle != nil {
+		defer func() { _ = d.handle.Close() }()
+	}
+	// needsCurrent runs a check whose queries are written against the current
+	// schema, or says it did not.
+	needsCurrent := func(name string, run func(*sql.DB) check) check {
+		if d.current == nil {
+			return check{statusInfo, name, "skipped: " + d.why}
+		}
+		return run(d.current)
 	}
 
-	checks = append(checks, schemaVersionCheck(db))
-	checks = append(checks, peerAuthChecks(context.Background(), cfg, db, defaultPeerAuthEnv())...)
-	checks = append(checks, repoMapCheck(db))
-	checks = append(checks, remoteSessionsCheck(db))
-	checks = append(checks, mcpToolsCheck(context.Background(), cfg, db))
+	checks = append(checks, schemaVersionCheck(d.handle))
+	checks = append(checks, doctorPeerAuthChecks(ctx, cfg, d, defaultPeerAuthEnv())...)
+	checks = append(checks, needsCurrent("repo map", repoMapCheck))
+	checks = append(checks, needsCurrent("remote sessions", remoteSessionsCheck))
+	// mcp_tools compares a count with itself under either answer to "does it lock
+	// a project", so it needs no current schema; nil reads the file's locks only.
+	checks = append(checks, mcpToolsCheck(ctx, cfg, d.current))
 	checks = append(checks, claudeRuntimeChecks()...)
 	checks = append(checks, hooksCheck(cfg))
 	checks = append(checks, claudeDesktopChecks(resolveSeamBin(""), absConfigPath(cfg.SourcePath()))...)
-	checks = append(checks, codexChecks(cfg, db)...)
-	checks = append(checks, featureSkillsCheck(db, cfg))
+	// The events table and the settings row these two read date from migration
+	// 001, so an older schema answers them; with no database codexChecks drops
+	// its activity line and loadUpdateView applies no console override.
+	checks = append(checks, codexChecks(cfg, d.handle)...)
+	checks = append(checks, needsCurrent("feature skills", func(db *sql.DB) check { return featureSkillsCheck(db, cfg) }))
 	checks = append(checks, gardenerCheck(cfg))
 	checks = append(checks, launchdChecks(runtime.GOOS, homeDir(), os.Getuid())...)
-	checks = append(checks, updatesCheck(context.Background(), cfg, db, time.Now()))
+	checks = append(checks, updatesCheck(ctx, cfg, d.handle, time.Now()))
 	checks = append(checks, updateConfirmChecks(cfg)...)
 
 	return reportChecks(checks)
+}
+
+// doctorDB is what doctor found at the configured database path.
+type doctorDB struct {
+	// handle is open on whatever exists, nil when there is no database.
+	handle *sql.DB
+	// current is handle when its schema is this binary's or newer, else nil: the
+	// handle for checks whose queries are written against the current schema.
+	current *sql.DB
+	// why says why current is nil, in the words of those checks' skipped rows.
+	why string
+}
+
+// openDoctorDB opens what exists at the configured path and never creates or
+// migrates it: a check that reports schema state must not change it. It returns
+// the database row and whether the rest of the report can run.
+//
+// A database behind this binary still opens, and is the daemon's to migrate at
+// its next start (store.Open). One ahead of it opens as well, as under serve, and
+// keeps today's report: schemaVersionCheck warns and every check runs.
+func openDoctorDB(cfg config.Config) (doctorDB, check, bool) {
+	const name = "database"
+	path := cfg.DBPath()
+	db, err := store.OpenExisting(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return doctorDB{why: "no database yet"}, check{statusInfo, name,
+			path + " does not exist yet -- a fresh install: the daemon creates and migrates it at its first start (seamlessd serve)"}, true
+	}
+	if err != nil {
+		return doctorDB{}, check{statusFail, name, err.Error()}, false
+	}
+	d := doctorDB{handle: db}
+	applied, verr := store.SchemaVersion(db)
+	tables, terr := store.TableCount(db)
+	if verr != nil || terr != nil {
+		d.why = "its schema could not be read"
+		return d, check{statusWarn, name, fmt.Sprintf("%s opened, but its schema could not be read (%v) -- not migrated yet, or not a Seamless database",
+			path, errors.Join(verr, terr))}, true
+	}
+	if compiled := store.LatestSchemaVersion(); applied >= compiled {
+		d.current = db
+	} else {
+		d.why = fmt.Sprintf("the database is at schema v%d, behind this binary's v%d", applied, compiled)
+	}
+	return d, check{statusOK, name, fmt.Sprintf("%s (schema v%d, %d tables)", path, applied, tables)}, true
+}
+
+// doctorPeerAuthChecks is peerAuthChecks for the state doctor found the database
+// in. With no current schema it still reports the policy, the accounts and the
+// files, which are most of what serve refuses on and what an owner wants to see
+// before a first start.
+func doctorPeerAuthChecks(ctx context.Context, cfg config.Config, d doctorDB, env peerAuthEnv) []check {
+	rows := peerAuthChecks(ctx, cfg, d.current, env)
+	if d.current != nil || !cfg.PeerAuth.Enabled {
+		return rows
+	}
+	return append(rows, check{statusInfo, "peer_auth", "skipped: console locks, project checks and approvers: " + d.why})
 }
 
 // clientChecks is the rest of the report for an install whose role is client.
@@ -268,25 +335,37 @@ const (
 	schemaAheadFix   = "run that newer release again (seamlessd update), or import a backup taken before it (seamlessd import)"
 )
 
+// schemaBehindFinding is doctor's word on a database behind this binary. It is
+// a warning rather than a failure: nothing is broken, the daemon migrates it,
+// and `seamlessd doctor && seamlessd start` has to get past it.
+const schemaBehindFinding = "behind this binary: a daemon of this version migrates it at its next start, doctor never does, and the checks that need the current schema are skipped"
+
 // schemaVersionCheck pairs what the database has APPLIED with what this binary
-// COMPILES. doctor's own store.Open has already migrated forward by the time it
-// runs, so "applied < compiled" is unreachable here and the interesting case is
-// the other one: a database migrated by a NEWER seamlessd. store.Open applies
-// nothing to it and opens it anyway, which is why serve runs on it under the
-// same warning, but this build cannot understand it by migrating -- the
-// migrations that produced it are not in it -- which is also why an archive
-// from it is refused here. Info rather than ok, because the pair is a fact to
-// read, not a condition to pass.
+// COMPILES. doctor never migrates, so both differences are reachable.
+//
+// A database BEHIND this binary is the daemon's to migrate (schemaBehindFinding).
+// One migrated by a NEWER seamlessd is the other case: store.Open applies nothing
+// to it and opens it anyway, which is why serve runs on it under the same
+// warning, but this build cannot understand it by migrating -- the migrations
+// that produced it are not in it -- which is also why an archive from it is
+// refused here. Info rather than ok when they match, because the pair is a fact
+// to read, not a condition to pass.
 func schemaVersionCheck(db *sql.DB) check {
 	const name = "schema version"
+	compiled := store.LatestSchemaVersion()
+	if db == nil {
+		return check{statusInfo, name, fmt.Sprintf("no database yet / v%d compiled", compiled)}
+	}
 	applied, err := store.SchemaVersion(db)
 	if err != nil {
 		return check{statusWarn, name, "cannot read schema_migrations: " + err.Error()}
 	}
-	compiled := store.LatestSchemaVersion()
 	detail := fmt.Sprintf("v%d applied / v%d compiled", applied, compiled)
-	if applied > compiled {
+	switch {
+	case applied > compiled:
 		return check{statusWarn, name, detail + " -- " + schemaAheadCause + "; " + schemaAheadFix}
+	case applied < compiled:
+		return check{statusWarn, name, detail + " -- " + schemaBehindFinding}
 	}
 	return check{statusInfo, name, detail}
 }

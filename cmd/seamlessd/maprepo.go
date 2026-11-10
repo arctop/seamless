@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,7 +46,7 @@ func runMapRepo(args []string) error {
 	if err != nil {
 		return fmt.Errorf("seamlessd.map-repo: %w", err)
 	}
-	db, err := store.Open(cfg.DBPath())
+	db, err := openMapRepoDB(cfg, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("seamlessd.map-repo: %w", err)
 	}
@@ -58,4 +61,18 @@ func runMapRepo(args []string) error {
 	}
 	fmt.Printf("mapped %s -> project %q\n", abs, *project)
 	return nil
+}
+
+// openMapRepoDB is openServedDB, except that a server install with no database
+// yet gets one. map-repo is the one one-shot command with a before-any-daemon
+// use: the installers can leave no daemon at all (SEAMLESS_NO_SERVICE, a host
+// with no user service), and serve's AdoptLocalHost re-homes the rows of a
+// map-repo that ran before it did. Creating a database moves no schema under
+// anyone. A client install never runs a daemon, so it gets openServedDB's
+// refusal rather than a database nothing will ever read.
+func openMapRepoDB(cfg config.Config, warnings io.Writer) (*sql.DB, error) {
+	if _, err := os.Stat(cfg.DBPath()); errors.Is(err, os.ErrNotExist) && !cfg.IsClient() {
+		return store.Open(cfg.DBPath())
+	}
+	return openServedDB(cfg, warnings)
 }
