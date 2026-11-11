@@ -521,11 +521,11 @@ func TestProbeInstall_System(t *testing.T) {
 		}, sysCfg, update.KindUnknown, "group-writable"},
 		{"no LaunchDaemon", "darwin", func(e *installProbeEnv) {
 			e.readFile = func(string) ([]byte, error) { return nil, fs.ErrNotExist }
-		}, sysCfg, update.KindUnknown, "no system service found (/Library/LaunchDaemons/com.arctop.seamless.daemon.plist)"},
+		}, sysCfg, update.KindUnknown, "no system service found (" + filepath.FromSlash("/Library/LaunchDaemons/com.arctop.seamless.daemon.plist") + ")"},
 		{"LaunchDaemon under the legacy label", "darwin", func(e *installProbeEnv) {
 			plist := docBlock(t, "docs-src/reference/service.md", "## A system service for peer_auth", "xml")
 			e.readFile = func(p string) ([]byte, error) {
-				if p == "/Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist" {
+				if filepath.ToSlash(p) == "/Library/LaunchDaemons/org.thereisnospoon.seamless.daemon.plist" {
 					return []byte(plist), nil
 				}
 				return nil, fs.ErrNotExist
@@ -535,7 +535,7 @@ func TestProbeInstall_System(t *testing.T) {
 		{"unit in /lib/systemd/system", "linux", func(e *installProbeEnv) {
 			read := e.readFile
 			e.readFile = func(p string) ([]byte, error) {
-				switch p {
+				switch filepath.ToSlash(p) {
 				case "/etc/systemd/system/seamless-daemon.service":
 					return nil, fs.ErrNotExist
 				case "/lib/systemd/system/seamless-daemon.service":
@@ -547,7 +547,7 @@ func TestProbeInstall_System(t *testing.T) {
 		{"unit unreadable", "linux", func(e *installProbeEnv) {
 			read := e.readFile
 			e.readFile = func(p string) ([]byte, error) {
-				if p == "/etc/systemd/system/seamless-daemon.service" {
+				if filepath.ToSlash(p) == "/etc/systemd/system/seamless-daemon.service" {
 					return nil, fs.ErrPermission
 				}
 				return read(p)
@@ -577,7 +577,7 @@ func TestProbeInstall_System(t *testing.T) {
 			read := e.readFile
 			e.readFile = func(p string) ([]byte, error) {
 				raw, err := read(p)
-				if p == "/etc/systemd/system/seamless-daemon.service" {
+				if filepath.ToSlash(p) == "/etc/systemd/system/seamless-daemon.service" {
 					raw = []byte(strings.Replace(string(raw), "Restart=always", "Restart=on-failure", 1))
 				}
 				return raw, err
@@ -600,7 +600,7 @@ func TestProbeInstall_System(t *testing.T) {
 		{"linux without lingering", "linux", func(e *installProbeEnv) {
 			read := e.readFile
 			e.readFile = func(p string) ([]byte, error) {
-				if strings.HasPrefix(p, lingerDir) {
+				if strings.HasPrefix(filepath.ToSlash(p), lingerDir) {
 					return nil, fs.ErrNotExist
 				}
 				return read(p)

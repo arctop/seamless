@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -157,8 +158,16 @@ func (s *supervisor) stop(pid int) error {
 // probe passes every system gate, seam sits beside seamlessd, both releases
 // carry real archives, and the supervisor runs the daemon. The world's
 // installer must never run.
+//
+// It skips on Windows, which peer_auth refuses (Detect says "macOS and Linux
+// only", and the attended update refuses before any swap), so this swap never
+// runs there. The tests also lean on what Windows lacks: the 0755 the swap
+// keeps on both binaries, and a 0000 config the daemon's account cannot read.
 func newSystemWorld(t *testing.T, from, to string) (*world, *supervisor) {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("a peer_auth system daemon runs on macOS and Linux only")
+	}
 	w := newWorld(t, "darwin", "arm64", from)
 	w.probeEdits = func(p *update.Probe) {
 		p.PeerAuth = true
