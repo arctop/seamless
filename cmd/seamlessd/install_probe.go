@@ -96,12 +96,9 @@ type installConfig struct {
 	path string
 	// client is role: client.
 	client bool
-	// peerAuth is peer_auth.enabled and owner peer_auth.owner; autoOptIn is
-	// update.auto set true explicitly, which a peer_auth system daemon needs
-	// to update itself.
-	peerAuth  bool
-	owner     string
-	autoOptIn bool
+	// peerAuth is peer_auth.enabled and owner peer_auth.owner.
+	peerAuth bool
+	owner    string
 }
 
 // installConfigOf is the probe's view of cfg, loaded from path ("" for none).
@@ -109,7 +106,6 @@ func installConfigOf(cfg config.Config, path string) installConfig {
 	return installConfig{
 		path: path, client: cfg.IsClient(),
 		peerAuth: cfg.PeerAuth.Enabled, owner: cfg.PeerAuth.Owner,
-		autoOptIn: cfg.Update.Auto != nil && *cfg.Update.Auto,
 	}
 }
 
@@ -133,7 +129,6 @@ func probeInstallWith(env installProbeEnv, distribution, ver string, ic installC
 		Exe:          env.exe,
 		ConfigPath:   ic.path,
 		PeerAuth:     ic.peerAuth,
-		AutoOptIn:    ic.autoOptIn,
 	}
 	if !update.IsReleaseBuild(distribution, ver) || ic.client {
 		return p

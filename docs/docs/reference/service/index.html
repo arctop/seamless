@@ -535,10 +535,10 @@ and <code>ExecStart=/opt/seamless/bin/seamlessd serve</code>, enabled with
 has a complete unit. Retire the per-user service first
 (<a href="#removing-the-service-by-hand">by hand</a>), or it starts again at your next
 login.</p>
-<p>By default the daemon only tells you about a new release: replace the binaries
-in <code>/opt/seamless/bin</code> with <code>sudo</code> and restart it. Once an administrator opts it
-in (<a href="../../guides/peer-auth/#updates">the guide's Updates</a>), it updates itself
-without the installer. The updater runs as the daemon's account, swaps
+<p>In the guide's layout, where the daemon's account holds <code>/opt/seamless/bin</code>, it
+updates itself without the installer (<a href="../../guides/peer-auth/#updates">the guide's Updates</a>);
+with the binaries root's, it only tells you about a new release, and you replace
+them with <code>sudo</code> and restart it. The updater runs as the daemon's account, swaps
 <code>seamlessd</code> and <code>seam</code> in place and ends the daemon with <code>SIGTERM</code>, and
 <code>KeepAlive</code> or <code>Restart=always</code> starts the new binary. Nothing is reloaded and
 no root process runs, so the service must start the daemon again after a clean

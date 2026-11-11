@@ -332,10 +332,10 @@ has a complete unit. Retire the per-user service first
 ([by hand](#removing-the-service-by-hand)), or it starts again at your next
 login.
 
-By default the daemon only tells you about a new release: replace the binaries
-in `/opt/seamless/bin` with `sudo` and restart it. Once an administrator opts it
-in ([the guide's Updates](https://thereisnospoon.org/docs/guides/peer-auth/#updates)), it updates itself
-without the installer. The updater runs as the daemon's account, swaps
+In the guide's layout, where the daemon's account holds `/opt/seamless/bin`, it
+updates itself without the installer ([the guide's Updates](https://thereisnospoon.org/docs/guides/peer-auth/#updates));
+with the binaries root's, it only tells you about a new release, and you replace
+them with `sudo` and restart it. The updater runs as the daemon's account, swaps
 `seamlessd` and `seam` in place and ends the daemon with `SIGTERM`, and
 `KeepAlive` or `Restart=always` starts the new binary. Nothing is reloaded and
 no root process runs, so the service must start the daemon again after a clean

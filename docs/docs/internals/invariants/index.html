@@ -548,8 +548,8 @@ environment is final and locks its console toggle. <code>check: false</code> mea
 update traffic at all and <code>auto: false</code> means nothing installs unattended, and
 neither may be one click away from untrue. <code>auto</code> is a permission, not a
 promise: only an install that updates itself acts on it (<code>Install.NotifyOnly</code>:
-the installer's, or a peer_auth system daemon's, which also needs its config to
-set <code>update.auto: true</code> explicitly), and it is off whenever checks are.</p>
+the installer's, or a peer_auth system daemon's), and it is off whenever checks
+are.</p>
 <h3 id="never-spawn-without-the-record-on-disk">Never spawn without the record on disk</h3>
 <p><code>State.Spawn</code> is saved before <code>Spawner.Spawn</code>, and <code>update.started</code> is recorded
 between the two. A daemon that dies right after spawning finds the spawn in its

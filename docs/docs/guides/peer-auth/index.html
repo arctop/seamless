@@ -455,9 +455,9 @@ certificate, on another port or address.</li>
 </tr>
 <tr>
 <td><code>/opt/seamless/bin</code></td>
-<td>root</td>
+<td><code>_seamless</code></td>
 <td><code>0755</code></td>
-<td><code>seamlessd</code>, <code>seam</code> (both <code>0755</code>, root's)</td>
+<td><code>seamlessd</code>, <code>seam</code> (both <code>0755</code>, <code>_seamless</code>'s)</td>
 </tr>
 <tr>
 <td><code>/opt/seamless/etc</code></td>
@@ -492,9 +492,10 @@ certificate, on another port or address.</li>
 </tbody>
 </table>
 </div>
-<p>A daemon that <a href="#updates">updates itself</a> holds <code>/opt/seamless/bin</code> and both
-binaries as <code>_seamless</code> instead of root, still <code>0755</code>: your account can write
-neither way.</p>
+<p>The daemon's account holds <code>/opt/seamless/bin</code> so that the daemon can
+<a href="#updates">update itself</a>; your account can write neither binary. Keep the
+directory and both binaries root's instead to put them out of the daemon's
+reach too, and it only tells you about a new release.</p>
 <p>Create the account as a system account: on macOS a uid below 500, on Linux one
 below <code>UID_MIN</code> in <code>/etc/login.defs</code> (1000 unless the file says otherwise). The
 commands below make one. Until the account is pinned (after the layout),
@@ -516,9 +517,13 @@ any system account as the daemon's, and no other.</p>
 <p>Then the layout (<code>root</code>'s group is <code>wheel</code> on macOS, <code>root</code> on Linux). Leave
 out <code>/opt/seamless/data</code> when you are <a href="#move-an-existing-install-over">moving an existing install</a>,
 whose data directory arrives there as a whole:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo install -d -o root -g wheel -m <span class="m">0755</span> /opt/seamless /opt/seamless/bin /opt/seamless/etc
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo install -d -o root -g wheel -m <span class="m">0755</span> /opt/seamless /opt/seamless/etc
 </span></span><span class="line"><span class="cl">sudo install -d -o _seamless -g _seamless -m <span class="m">0700</span> /opt/seamless/home /opt/seamless/data
-</span></span><span class="line"><span class="cl">sudo install -d -o _seamless -g _seamless -m <span class="m">0755</span> /opt/seamless/run
+</span></span><span class="line"><span class="cl">sudo install -d -o _seamless -g _seamless -m <span class="m">0755</span> /opt/seamless/run /opt/seamless/bin
+</span></span></code></pre></div>
+<p>Then put a release's <code>seamlessd</code> and <code>seam</code> there, as the daemon's (a build
+from source runs too, but never updates itself):</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo install -o _seamless -g _seamless -m <span class="m">0755</span> &lt;seamlessd&gt; &lt;seam&gt; /opt/seamless/bin/
 </span></span></code></pre></div>
 <p>A daemon that serves TLS keeps its certificate and key there too, out of your
 account's reach: the daemon's account cannot read a key in your home, and every
@@ -557,10 +562,13 @@ On Linux it is a system unit, <code>/etc/systemd/system/seamless-daemon.service<
 </span></span><span class="line"><span class="cl"><span class="k">[Install]</span>
 </span></span><span class="line"><span class="cl"><span class="na">WantedBy</span><span class="o">=</span><span class="s">multi-user.target</span>
 </span></span></code></pre></div>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo systemctl daemon-reload
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo loginctl enable-linger _seamless
+</span></span><span class="line"><span class="cl">sudo systemctl daemon-reload
 </span></span><span class="line"><span class="cl">sudo systemctl <span class="nb">enable</span> --now seamless-daemon
 </span></span></code></pre></div>
-<p>Retire any per-user service first, or it starts again at your next login
+<p>Lingering keeps the account's own systemd user manager running with no one
+logged in: the daemon's updater runs as a unit of it (<a href="#updates">why</a>). Retire
+any per-user service first, or it starts again at your next login
 (<a href="../../reference/service/#peer-auth-daemon">how</a>).</p>
 <h2 id="connect-the-owner">Connect the owner</h2>
 <p>Your agents connect through the socket: a locked project opens only to a process
@@ -1078,11 +1086,10 @@ recorded; nothing is retried, and the next capture after the approval
 carries the current state. Agents on the TCP key make none of these
 captures; point their <code>server_url</code> at the socket. Agents can still record
 findings with <code>session_end</code>.</li>
-<li><strong>Updates are yours to switch on.</strong> The installer's per-user service cannot
-host peer_auth, so neither the installer nor a <code>seamlessd update</code> run as you
-touches this install, and by default the daemon only tells you about a new
-release: replace <code>/opt/seamless/bin</code> with <code>sudo</code> and restart it. It can also
-<a href="#updates">update itself</a>. Run <code>make install</code> only with a client-role config,
+<li><strong>It updates itself, as its own account.</strong> The installer's per-user service
+cannot host peer_auth, so neither the installer nor a <code>seamlessd update</code> run
+as you touches this install. The daemon installs new releases by itself
+instead (<a href="#updates">how</a>). Run <code>make install</code> only with a client-role config,
 so it updates your own <code>seam</code> and hooks and leaves the service alone.</li>
 <li><strong>Counts stay machine-wide in <code>usage_summary</code></strong>, as they are for isolation:
 volume, never content, and the same number for every caller.</li>
@@ -1091,26 +1098,29 @@ Its proposals about a locked project reach a client only through a lease, and
 the console shows them only in a browser that has unlocked the project.</li>
 </ul>
 <h3 id="updates">Updates</h3>
-<p>A peer_auth daemon can install new releases by itself, with no installer and
-no root process, once an administrator opts it in:</p>
-<ol>
-<li>Give the daemon's account the binary directory:
-<code>sudo chown -R _seamless:_seamless /opt/seamless/bin</code>.</li>
-<li>Set <code>update.auto: true</code> in its config, <code>/opt/seamless/etc/seamless.yaml</code>. Only
-root writes that file, so without that line the console's toggle cannot switch
-automatic updates on here; with it, the toggle can still turn them off.</li>
-<li>On Linux, let the account's systemd user manager run with no one logged in:
-<code>sudo loginctl enable-linger _seamless</code>. The updater runs as a unit of that
-manager, because stopping the system unit stops every process in it.</li>
-<li>Restart the daemon. <strong>Settings -&gt; Updates</strong> (its <strong>Mode</strong> row) then reads
-&quot;installs new releases by itself&quot;, or names the step still missing.</li>
-</ol>
-<p>The service must start the daemon again after a clean exit, as the plist and
-the unit above do (<code>KeepAlive</code> true, <code>Restart=always</code>); <code>Restart=on-failure</code>
-would leave it down after an update. On Linux, keep every setting in the config
-file: a <code>SEAMLESS_*</code> variable on an <code>Environment=</code> line of the unit, other than
-<code>SEAMLESS_CONFIG</code>, never reaches the updater, so it makes the daemon only notify.</p>
-<p>From then on the <a href="../../updating/#automatic-updates">usual rules</a> hold: the soak,
+<p>A peer_auth daemon installs new releases by itself, with no installer and no
+root process, like any install that updates itself: automatic updates are on
+until you turn them off. The layout above is all it needs:</p>
+<ul>
+<li>its account holds <code>/opt/seamless/bin</code> and both binaries, which the updater
+swaps in place;</li>
+<li>the service starts the daemon again after a clean exit, as the plist and the
+unit above do (<code>KeepAlive</code> true, <code>Restart=always</code>); <code>Restart=on-failure</code>
+would leave it down after an update;</li>
+<li>on Linux, the account lingers (<code>sudo loginctl enable-linger _seamless</code>): the
+updater runs as a unit of its user manager, because stopping the system unit
+stops every process in it. Keep every setting in the config file there too: a
+<code>SEAMLESS_*</code> variable on an <code>Environment=</code> line of the unit, other than
+<code>SEAMLESS_CONFIG</code>, never reaches the updater, so it makes the daemon only
+notify.</li>
+</ul>
+<p><strong>Settings -&gt; Updates</strong> (its <strong>Mode</strong> row) reads &quot;installs new releases by
+itself&quot;, or names what is missing. A daemon set up with root-owned binaries
+needs <code>sudo chown -R _seamless:_seamless /opt/seamless/bin</code>, on Linux the
+linger, and a restart. Turn automatic updates off with the toggle there, or for
+good with <code>update.auto: false</code> in its config, <code>/opt/seamless/etc/seamless.yaml</code>,
+which the console cannot override.</p>
+<p>The <a href="../../updating/#automatic-updates">usual rules</a> hold: the soak,
 the quiet moment, the backup, the confirmation and the rollback. Only the
 install step differs. Running as the daemon's account, the updater verifies the
 release's <code>checksums.txt</code> against its Sigstore bundle for the exact tag, checks
@@ -1122,10 +1132,14 @@ A rollback renames the kept ones back the same way. Hooks installed with
 with the daemon. To update by hand:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml
 </span></span></code></pre></div>
-<p>The trade-off: the daemon's account can now rewrite its own binary, so a
-compromised daemon could keep itself in place across restarts. It already holds
-every project's data, and your account still cannot write either binary, so the
-boundary against your agents is unchanged.</p>
+<p>The trade-off: the daemon's account can rewrite its own binaries, so a
+compromised daemon could keep itself in place across restarts, and could replace
+the <code>seam</code> that hooks installed with <code>--seam /opt/seamless/bin/seam</code> run. It
+already holds every project's data, and your account still cannot write either
+binary, so the boundary against your agents is unchanged. To keep both binaries
+out of the daemon's reach as well, leave <code>/opt/seamless/bin</code> root's
+(<code>sudo chown -R root /opt/seamless/bin</code>): the daemon then only tells you about a
+new release, and you replace the binaries with <code>sudo</code> and restart it.</p>
 <h2 id="limits">Limits</h2>
 <ul>
 <li><strong>The transcript holds what a session read.</strong> Once you approve an agent, its
@@ -1192,9 +1206,8 @@ so nothing inside needs rewriting. On one volume the move is a rename.</p>
 every project, the locked ones included: keep it as carefully as they are.</p>
 </li>
 <li>
-<p><strong>Create the account, the layout and the pin</strong> above, leaving out
-<code>/opt/seamless/data</code>, and install root-owned copies of both binaries in <code>/opt/seamless/bin</code>
-(<code>sudo install -o root -m 0755 &lt;seamlessd&gt; &lt;seam&gt; /opt/seamless/bin/</code>). Keep a
+<p><strong>Create the account, the layout with both binaries, and the pin</strong> above,
+leaving out <code>/opt/seamless/data</code>. Keep a
 copy of the current <code>mcp.api_key</code> for the console.</p>
 </li>
 <li>

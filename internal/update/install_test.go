@@ -100,7 +100,6 @@ func systemProbe() Probe {
 		ExeDirWritable: true,
 		ConfigPath:     "/opt/seamless/etc/seamless.yaml",
 		PeerAuth:       true,
-		AutoOptIn:      true,
 		System: SystemProbe{
 			Account: true,
 			Service: ServiceProbe{
@@ -150,7 +149,6 @@ func TestDetectSystem(t *testing.T) {
 			p.System.ForeignEnv = []string{"SEAMLESS_ADDR"}
 		}, KindUnknown, "SEAMLESS_ADDR set in the system unit's environment"},
 		{"no config loaded", func(p *Probe) { p.ConfigPath = "" }, KindUnknown, "no config file"},
-		{"not opted in", func(p *Probe) { p.AutoOptIn = false }, KindUnknown, "update.auto: true"},
 		{"root-owned bin dir", func(p *Probe) { p.ExeDirWritable = false }, KindUnknown, "cannot write the executable's directory"},
 		{"no lingering user manager", func(p *Probe) {
 			p.System.UserManagerProblem = "the user manager of _seamless does not linger"

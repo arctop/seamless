@@ -489,7 +489,7 @@ func fakeSystemProbeEnv(t *testing.T, goos string) installProbeEnv {
 
 func TestProbeInstall_System(t *testing.T) {
 	const cfgPath = "/opt/seamless/etc/seamless.yaml"
-	optedIn := installConfig{path: cfgPath, peerAuth: true, owner: "me", autoOptIn: true}
+	sysCfg := installConfig{path: cfgPath, peerAuth: true, owner: "me"}
 	tests := []struct {
 		name     string
 		goos     string
@@ -498,32 +498,30 @@ func TestProbeInstall_System(t *testing.T) {
 		wantKind update.Kind
 		reason   string
 	}{
-		{"darwin LaunchDaemon", "darwin", nil, optedIn, update.KindSystem, ""},
-		{"linux system unit", "linux", nil, optedIn, update.KindSystem, ""},
-		{"not opted in", "darwin", nil, installConfig{path: cfgPath, peerAuth: true, owner: "me"},
-			update.KindUnknown, "update.auto: true"},
-		{"the guide's root-owned bin", "linux", func(e *installProbeEnv) { e.writable = func(string) bool { return false } },
-			optedIn, update.KindUnknown, "cannot write the executable's directory"},
+		{"darwin LaunchDaemon", "darwin", nil, sysCfg, update.KindSystem, ""},
+		{"linux system unit", "linux", nil, sysCfg, update.KindSystem, ""},
+		{"a root-owned bin", "linux", func(e *installProbeEnv) { e.writable = func(string) bool { return false } },
+			sysCfg, update.KindUnknown, "cannot write the executable's directory"},
 		{"running as the owner", "darwin", func(e *installProbeEnv) { e.euid = 501 },
-			optedIn, update.KindUnknown, "is the owner's account, me"},
-		{"running as root", "linux", func(e *installProbeEnv) { e.euid = 0 }, optedIn, update.KindUnknown, "root"},
+			sysCfg, update.KindUnknown, "is the owner's account, me"},
+		{"running as root", "linux", func(e *installProbeEnv) { e.euid = 0 }, sysCfg, update.KindUnknown, "root"},
 		{"another account than the pinned one", "darwin", func(e *installProbeEnv) { e.euid = 481 },
-			optedIn, update.KindUnknown, "pins the daemon's account as _seamless (uid 480)"},
+			sysCfg, update.KindUnknown, "pins the daemon's account as _seamless (uid 480)"},
 		{"no pin, a system account", "darwin", func(e *installProbeEnv) {
 			e.daemonPin = func() (access.DaemonPin, bool, error) { return access.DaemonPin{}, false, nil }
-		}, optedIn, update.KindSystem, ""},
+		}, sysCfg, update.KindSystem, ""},
 		{"no pin, not a system account", "darwin", func(e *installProbeEnv) {
 			e.daemonPin = func() (access.DaemonPin, bool, error) { return access.DaemonPin{}, false, nil }
 			e.euid = 502
-		}, optedIn, update.KindUnknown, "below 500"},
+		}, sysCfg, update.KindUnknown, "below 500"},
 		{"a pin that is not believed", "linux", func(e *installProbeEnv) {
 			e.daemonPin = func() (access.DaemonPin, bool, error) {
 				return access.DaemonPin{}, true, errors.New("the daemon account pin is group-writable")
 			}
-		}, optedIn, update.KindUnknown, "group-writable"},
+		}, sysCfg, update.KindUnknown, "group-writable"},
 		{"no LaunchDaemon", "darwin", func(e *installProbeEnv) {
 			e.readFile = func(string) ([]byte, error) { return nil, fs.ErrNotExist }
-		}, optedIn, update.KindUnknown, "no system service found (/Library/LaunchDaemons/com.arctop.seamless.daemon.plist)"},
+		}, sysCfg, update.KindUnknown, "no system service found (/Library/LaunchDaemons/com.arctop.seamless.daemon.plist)"},
 		{"LaunchDaemon under the legacy label", "darwin", func(e *installProbeEnv) {
 			plist := docBlock(t, "docs-src/reference/service.md", "## A system service for peer_auth", "xml")
 			e.readFile = func(p string) ([]byte, error) {
@@ -533,7 +531,7 @@ func TestProbeInstall_System(t *testing.T) {
 				return nil, fs.ErrNotExist
 			}
 			e.environ = []string{"XPC_SERVICE_NAME=org.thereisnospoon.seamless.daemon"}
-		}, optedIn, update.KindSystem, ""},
+		}, sysCfg, update.KindSystem, ""},
 		{"unit in /lib/systemd/system", "linux", func(e *installProbeEnv) {
 			read := e.readFile
 			e.readFile = func(p string) ([]byte, error) {
@@ -545,7 +543,7 @@ func TestProbeInstall_System(t *testing.T) {
 				}
 				return read(p)
 			}
-		}, optedIn, update.KindSystem, ""},
+		}, sysCfg, update.KindSystem, ""},
 		{"unit unreadable", "linux", func(e *installProbeEnv) {
 			read := e.readFile
 			e.readFile = func(p string) ([]byte, error) {
@@ -554,16 +552,16 @@ func TestProbeInstall_System(t *testing.T) {
 				}
 				return read(p)
 			}
-		}, optedIn, update.KindUnknown, "seamless-daemon.service could not be read"},
+		}, sysCfg, update.KindUnknown, "seamless-daemon.service could not be read"},
 		{"service runs another copy", "darwin", func(e *installProbeEnv) { e.exe = "/usr/local/bin/seamlessd" },
-			optedIn, update.KindUnknown, "not this executable"},
+			sysCfg, update.KindUnknown, "not this executable"},
 		{"started by hand on darwin", "darwin", func(e *installProbeEnv) { e.environ = nil },
-			optedIn, update.KindUnknown, "not running as the launchd job com.arctop.seamless.daemon"},
+			sysCfg, update.KindUnknown, "not running as the launchd job com.arctop.seamless.daemon"},
 		{"the per-user LaunchAgent's label is not the daemon's", "darwin", func(e *installProbeEnv) {
 			e.environ = []string{"XPC_SERVICE_NAME=com.arctop.seamless"}
-		}, optedIn, update.KindUnknown, "launchd job com.arctop.seamless.daemon"},
+		}, sysCfg, update.KindUnknown, "launchd job com.arctop.seamless.daemon"},
 		{"darwin parent is not launchd", "darwin", func(e *installProbeEnv) { e.ppid = 77 },
-			optedIn, update.KindUnknown, "not a child of launchd"},
+			sysCfg, update.KindUnknown, "not a child of launchd"},
 		{"linux in the per-user unit", "linux", func(e *installProbeEnv) {
 			read := e.readFile
 			e.readFile = func(p string) ([]byte, error) {
@@ -572,9 +570,9 @@ func TestProbeInstall_System(t *testing.T) {
 				}
 				return read(p)
 			}
-		}, optedIn, update.KindUnknown, "not running in the seamless-daemon.service system unit"},
+		}, sysCfg, update.KindUnknown, "not running in the seamless-daemon.service system unit"},
 		{"linux without INVOCATION_ID", "linux", func(e *installProbeEnv) { e.environ = []string{"SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml"} },
-			optedIn, update.KindUnknown, "INVOCATION_ID"},
+			sysCfg, update.KindUnknown, "INVOCATION_ID"},
 		{"a unit that restarts only on failure", "linux", func(e *installProbeEnv) {
 			read := e.readFile
 			e.readFile = func(p string) ([]byte, error) {
@@ -584,7 +582,7 @@ func TestProbeInstall_System(t *testing.T) {
 				}
 				return raw, err
 			}
-		}, optedIn, update.KindUnknown, "does not start the daemon again after it exits cleanly"},
+		}, sysCfg, update.KindUnknown, "does not start the daemon again after it exits cleanly"},
 		{"a LaunchDaemon that keeps alive only on failure", "darwin", func(e *installProbeEnv) {
 			read := e.readFile
 			e.readFile = func(p string) ([]byte, error) {
@@ -592,13 +590,13 @@ func TestProbeInstall_System(t *testing.T) {
 				return []byte(strings.Replace(string(raw), "<key>KeepAlive</key>         <true/>",
 					"<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>", 1)), err
 			}
-		}, optedIn, update.KindUnknown, "does not start the daemon again after it exits cleanly"},
+		}, sysCfg, update.KindUnknown, "does not start the daemon again after it exits cleanly"},
 		{"linux: an override in the unit the updater would run without", "linux", func(e *installProbeEnv) {
 			e.environ = append(e.environ, "SEAMLESS_ADDR=127.0.0.1:9090")
-		}, optedIn, update.KindUnknown, "SEAMLESS_ADDR set in the system unit's environment"},
+		}, sysCfg, update.KindUnknown, "SEAMLESS_ADDR set in the system unit's environment"},
 		{"darwin: the setsid updater inherits the daemon's environment", "darwin", func(e *installProbeEnv) {
 			e.environ = append(e.environ, "SEAMLESS_ADDR=127.0.0.1:9090")
-		}, optedIn, update.KindSystem, ""},
+		}, sysCfg, update.KindSystem, ""},
 		{"linux without lingering", "linux", func(e *installProbeEnv) {
 			read := e.readFile
 			e.readFile = func(p string) ([]byte, error) {
@@ -607,9 +605,9 @@ func TestProbeInstall_System(t *testing.T) {
 				}
 				return read(p)
 			}
-		}, optedIn, update.KindUnknown, "sudo loginctl enable-linger _seamless"},
-		{"windows has no peer_auth", "windows", nil, optedIn, update.KindUnknown, "macOS and Linux only"},
-		{"no config file", "darwin", nil, installConfig{peerAuth: true, owner: "me", autoOptIn: true},
+		}, sysCfg, update.KindUnknown, "sudo loginctl enable-linger _seamless"},
+		{"windows has no peer_auth", "windows", nil, sysCfg, update.KindUnknown, "macOS and Linux only"},
+		{"no config file", "darwin", nil, installConfig{peerAuth: true, owner: "me"},
 			update.KindUnknown, "no config file"},
 		// The installer's own layout, with peer_auth switched on, is no
 		// installer install: its per-user service cannot host the boundary.
@@ -618,7 +616,7 @@ func TestProbeInstall_System(t *testing.T) {
 			e.resolve = func(string) (access.Account, error) { return access.Account{UID: 501, Name: "me"}, nil }
 			e.daemonPin = func() (access.DaemonPin, bool, error) { return access.DaemonPin{}, false, nil }
 			e.systemAccount = func(uint32) (bool, string) { return false, "a system account has a uid below 500" }
-		}, installConfig{path: "/h/.config/seamless/seamless.yaml", peerAuth: true, owner: "me", autoOptIn: true},
+		}, installConfig{path: "/h/.config/seamless/seamless.yaml", peerAuth: true, owner: "me"},
 			update.KindUnknown, "the owner's account"},
 	}
 	for _, tt := range tests {
@@ -668,7 +666,7 @@ func TestInSystemUnit(t *testing.T) {
 // (gate 9 fails for it, by design), yet it must still find KindSystem, or it
 // refuses every attempt the daemon starts.
 func TestUpdaterProbe_SystemDaemonsUpdater(t *testing.T) {
-	optedIn := installConfig{path: "/opt/seamless/etc/seamless.yaml", peerAuth: true, owner: "me", autoOptIn: true}
+	sysCfg := installConfig{path: "/opt/seamless/etc/seamless.yaml", peerAuth: true, owner: "me"}
 	for _, goos := range []string{"darwin", "linux"} {
 		t.Run(goos, func(t *testing.T) {
 			env := fakeSystemProbeEnv(t, goos)
@@ -681,7 +679,7 @@ func TestUpdaterProbe_SystemDaemonsUpdater(t *testing.T) {
 				}
 				return read(p)
 			}
-			p := probeInstallWith(env, "release", "0.8.1", optedIn)
+			p := probeInstallWith(env, "release", "0.8.1", sysCfg)
 			require.Equal(t, update.KindUnknown, update.Detect(p).Kind, "as the service's own process, it is not")
 			for _, attended := range []bool{false, true} {
 				got := update.Detect(updaterProbe(p, attended))

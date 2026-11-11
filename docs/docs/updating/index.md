@@ -120,7 +120,7 @@ command:
 | Homebrew | no | `brew upgrade --cask arctop/tap/seamless` |
 | a clone (`make install`), `go install` or `go build` | no | `git pull && make install` |
 | a client of a shared daemon | no | re-run the pairing commands `seamlessd client-config` prints on the server |
-| a [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) system daemon | once [opted in](https://thereisnospoon.org/docs/guides/peer-auth/#updates) | `sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml` |
+| a [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) system daemon | yes, in [the guide's layout](https://thereisnospoon.org/docs/guides/peer-auth/#updates) | `sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml` |
 
 **What is sent.** One anonymous `GET` to
 `https://api.github.com/repos/arctop/seamless/releases`, with a fixed
@@ -203,9 +203,9 @@ releases, whatever `update.auto` says:
   the daemon's environment (the installer rewrites the service without it).
 
 One more install updates itself: a [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) daemon
-running as its own account under a LaunchDaemon or system unit, once an
-administrator has given that account its binary directory and set
-`update.auto: true` in its config ([how](https://thereisnospoon.org/docs/guides/peer-auth/#updates)). It
+running as its own account under a LaunchDaemon or system unit, when that
+account holds its binary directory, as in the guide's layout
+([how](https://thereisnospoon.org/docs/guides/peer-auth/#updates)). It
 installs no installer's service; its updater swaps the binaries in place and
 the service manager restarts the daemon. Any other peer_auth layout is only
 told, and `seamlessd update` refuses one.

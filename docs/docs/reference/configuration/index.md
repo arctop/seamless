@@ -719,9 +719,9 @@ plan_capture:
 # no identifiers -- and tells you when one does. auto, max_defer and min_age
 # decide whether and when it also installs one by itself, which only an install
 # the curl or PowerShell installer made ever does -- and a peer_auth system
-# daemon whose account owns its binary directory and whose config sets auto:
-# true (docs: guides/peer-auth, Updates). Homebrew, builds from source, client
-# machines and layouts the daemon cannot vouch for are only told.
+# daemon whose account owns its binary directory (docs: guides/peer-auth,
+# Updates). Homebrew, builds from source, client machines and layouts the
+# daemon cannot vouch for are only told.
 # Set auto, max_defer and min_age here, not in the daemon's environment: any
 # SEAMLESS_* variable besides SEAMLESS_CONFIG there makes the install
 # notify-only, so their env variables below can turn automatic updates off but
@@ -739,9 +739,7 @@ update:
   # env: SEAMLESS_UPDATE_CHECK_INTERVAL
   check_interval: 6h
   # Whether the daemon installs a newer release by itself. Unset (the default)
-  # means on, except for a peer_auth system daemon, which needs it set true
-  # here (and only root writes its config). false keeps the check and its
-  # notices and leaves installing to you
+  # means on. false keeps the check and its notices and leaves installing to you
   # (seamlessd update); a false here or in the environment is final, and the
   # console cannot turn it back on. Commented out for the same reason as check.
   # env: SEAMLESS_UPDATE_AUTO

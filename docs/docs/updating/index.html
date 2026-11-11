@@ -364,7 +364,7 @@ command:</p>
 </tr>
 <tr>
 <td>a <a href="../guides/peer-auth/">peer_auth</a> system daemon</td>
-<td>once <a href="../guides/peer-auth/#updates">opted in</a></td>
+<td>yes, in <a href="../guides/peer-auth/#updates">the guide's layout</a></td>
 <td><code>sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml</code></td>
 </tr>
 </tbody>
@@ -437,9 +437,9 @@ it cannot write to, or any <code>SEAMLESS_*</code> variable besides <code>SEAMLE
 the daemon's environment (the installer rewrites the service without it).</li>
 </ul>
 <p>One more install updates itself: a <a href="../guides/peer-auth/">peer_auth</a> daemon
-running as its own account under a LaunchDaemon or system unit, once an
-administrator has given that account its binary directory and set
-<code>update.auto: true</code> in its config (<a href="../guides/peer-auth/#updates">how</a>). It
+running as its own account under a LaunchDaemon or system unit, when that
+account holds its binary directory, as in the guide's layout
+(<a href="../guides/peer-auth/#updates">how</a>). It
 installs no installer's service; its updater swaps the binaries in place and
 the service manager restarts the daemon. Any other peer_auth layout is only
 told, and <code>seamlessd update</code> refuses one.</p>

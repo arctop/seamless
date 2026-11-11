@@ -1142,8 +1142,8 @@ The [automatic update check](https://thereisnospoon.org/docs/updating/#automatic
 [automatic updates](https://thereisnospoon.org/docs/updating/#automatic-updates) in plain words: the **Mode** -
 whether this install checks for new releases, and whether it installs them by
 itself or only tells you, and why (a release build checks by default, a build
-from source does not, and only an install the installer made, or an opted-in
-peer_auth system daemon, updates itself) -
+from source does not, and only an install the installer made, or a peer_auth
+system daemon in the guide's layout, updates itself) -
 what a check sends (one anonymous request to `api.github.com` every few hours;
 nothing when checks are off), the installed version and kind of build, the
 command that updates this install (with a copy button, labeled **To update by

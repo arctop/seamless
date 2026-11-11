@@ -79,11 +79,11 @@ type supervisor struct {
 	// starts: the new release migrating it before it fails.
 	migrate   func() error
 	migrateAs string
-	lock    *fileLock
-	stopped time.Time
-	signals []int
-	stopErr error
-	errs    []error
+	lock      *fileLock
+	stopped   time.Time
+	signals   []int
+	stopErr   error
+	errs      []error
 }
 
 // installed is the release the seamlessd on disk names.
@@ -161,7 +161,7 @@ func newSystemWorld(t *testing.T, from, to string) (*world, *supervisor) {
 	t.Helper()
 	w := newWorld(t, "darwin", "arm64", from)
 	w.probeEdits = func(p *update.Probe) {
-		p.PeerAuth, p.AutoOptIn = true, true
+		p.PeerAuth = true
 		p.Service = update.ServiceProbe{}
 		p.System = update.SystemProbe{
 			Account:    true,
@@ -390,13 +390,13 @@ func TestSystemUpdate_GatesRefuseAnInstallThatNoLongerUpdatesItself(t *testing.T
 	edit := w.probeEdits
 	w.probeEdits = func(p *update.Probe) {
 		edit(p)
-		p.AutoOptIn = false
+		p.ExeDirWritable = false
 	}
 	a, err := runSystemAuto(t, w, systemDeps(w, s), "0.7.3")
 	require.Error(t, err)
 	requireRecorded(t, w, a, update.StageGates, false)
 	require.Equal(t, update.RefusalNotInstaller, a.Refusal)
-	require.Contains(t, a.Error, "update.auto: true")
+	require.Contains(t, a.Error, "cannot write the executable's directory")
 	requireBinaries(t, w, "0.7.2")
 }
 
@@ -420,7 +420,7 @@ func TestSystemUpdate_AttendedRefusesTheInstallerForAnyPeerAuthLayout(t *testing
 	edit := w.probeEdits
 	w.probeEdits = func(p *update.Probe) {
 		edit(p)
-		p.ExeDirWritable = false // the guide's root-owned bin
+		p.ExeDirWritable = false // a bin dir kept root's
 	}
 	var out strings.Builder
 	d := systemDeps(w, s)

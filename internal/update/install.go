@@ -42,8 +42,7 @@ const (
 	KindInstaller Kind = "installer"
 	// KindSystem is a peer_auth system daemon that updates itself: a
 	// LaunchDaemon or system unit running as the daemon's own account, which
-	// can write the directory its binaries live in, opted in with update.auto:
-	// true in its config. Its updater swaps the release's binaries in place
+	// can write the directory its binaries live in. Its updater swaps the release's binaries in place
 	// and ends the daemon for the service manager to restart; no installer
 	// runs, and no root process.
 	KindSystem Kind = "system"
@@ -136,9 +135,6 @@ type Probe struct {
 	// installer's per-user service cannot host, so it is never KindInstaller:
 	// it is KindSystem when System passes, else KindUnknown.
 	PeerAuth bool
-	// AutoOptIn reports whether the loaded config sets update.auto: true
-	// explicitly, which a system daemon needs to update itself.
-	AutoOptIn bool
 	// System is what a peer_auth system daemon is judged by; read only with
 	// PeerAuth on.
 	System SystemProbe
@@ -273,9 +269,8 @@ func unknownReason(p Probe) string {
 // order: not root; the executable located; running as the daemon's account;
 // the system service found, readable, running this executable and starting
 // it again after a clean exit; no SEAMLESS_* overrides the updater would run
-// without (Linux); a config
-// file loaded (the updater is started with its path); update.auto: true in
-// it; the executable's directory writable (the swap renames into it); on
+// without (Linux); a config file loaded (the updater is started with its
+// path); the executable's directory writable (the swap renames into it); on
 // Linux, the account's user manager lingering; and this process the service's
 // own instance.
 func systemReason(p Probe) string {
@@ -305,8 +300,6 @@ func systemReason(p Probe) string {
 			strings.Join(sys.ForeignEnv, ", "))
 	case p.ConfigPath == "":
 		return "no config file is loaded"
-	case !p.AutoOptIn:
-		return "a peer_auth daemon updates itself only once its config sets update.auto: true"
 	case !p.ExeDirWritable:
 		return "the daemon's account cannot write the executable's directory: give that account the directory and the binaries in it " +
 			"for automatic updates, or replace them with sudo"

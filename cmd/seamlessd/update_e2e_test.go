@@ -263,7 +263,7 @@ func e2eSystemWorld(t *testing.T, broken bool) (*world, updaterDeps) {
 	addr := w.cfg.Addr
 	w.daemon.srv.Close()
 	w.probeEdits = func(p *update.Probe) {
-		p.PeerAuth, p.AutoOptIn = true, true
+		p.PeerAuth = true
 		p.System = update.SystemProbe{
 			Account:    true,
 			Service:    update.ServiceProbe{Path: "/etc/systemd/system/seamless-daemon.service", Found: true, Program: w.exe, RunsThisExe: true},
