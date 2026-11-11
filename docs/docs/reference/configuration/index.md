@@ -310,6 +310,10 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `update.auto` | bool, optional | unset |
 | `update.max_defer` | duration | `24h` |
 | `update.min_age` | duration | `24h` |
+| `backup.auto` | bool, optional | unset |
+| `backup.every` | duration | `24h` |
+| `backup.keep` | int | `7` |
+| `backup.dir` | string | - |
 | `peer_auth.enabled` | bool | - |
 | `peer_auth.owner` | string | - |
 | `peer_auth.socket.path` | string | - |
@@ -754,6 +758,37 @@ update:
   # Installing by hand (seamlessd update) does not wait.
   # env: SEAMLESS_UPDATE_MIN_AGE
   min_age: 24h
+
+# Scheduled backups. On a schedule, the daemon archives the whole instance --
+# the database, every memory and note, and a list of what each project holds
+# -- into one folder, and keeps the newest few. A run is skipped when nothing
+# changed since the last backup, or when the disk lacks room for it. Set this
+# in the console instead (Settings -> Backups): it also lists the backups in
+# the folder and restores one, and what it saves wins over this file and env
+# until you reset it there.
+# The block is new after v0.8.1 and releases before it refuse config keys they
+# do not know, so it is left commented out here: setting any of it pins this
+# file to a release that knows it.
+# backup:
+#   # Unset (the default) means on for release builds and off for builds from
+#   # source. false turns scheduled backups off; true turns them on for a
+#   # build from source too.
+#   # env: SEAMLESS_BACKUP_AUTO
+#   auto: false
+#   # Time between scheduled backups, as a Go duration from 1h to 720h.
+#   # env: SEAMLESS_BACKUP_EVERY
+#   every: 24h
+#   # How many automatic backups to keep, from 1 to 100. Older automatic ones
+#   # are deleted after the next one is written. Backups you make yourself,
+#   # the safety backup taken before a restore and the updater's pre-update
+#   # backups are never deleted automatically.
+#   # env: SEAMLESS_BACKUP_KEEP
+#   keep: 7
+#   # The folder backups go to: an absolute path (a leading ~ expands), such as
+#   # a synced folder or an external disk. Unset: <data_dir>/backups. The
+#   # safety backup taken before a restore always stays in <data_dir>/backups.
+#   # env: SEAMLESS_BACKUP_DIR
+#   dir: ""
 
 # Peer-user authentication: a Unix socket whose callers the daemon identifies by
 # the uid the kernel reports (never by anything the client sends), and the

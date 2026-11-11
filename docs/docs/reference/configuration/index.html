@@ -847,6 +847,26 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <td><code>24h</code></td>
 </tr>
 <tr>
+<td><code>backup.auto</code></td>
+<td>bool, optional</td>
+<td>unset</td>
+</tr>
+<tr>
+<td><code>backup.every</code></td>
+<td>duration</td>
+<td><code>24h</code></td>
+</tr>
+<tr>
+<td><code>backup.keep</code></td>
+<td>int</td>
+<td><code>7</code></td>
+</tr>
+<tr>
+<td><code>backup.dir</code></td>
+<td>string</td>
+<td>-</td>
+</tr>
+<tr>
 <td><code>peer_auth.enabled</code></td>
 <td>bool</td>
 <td>-</td>
@@ -1341,6 +1361,37 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Installing by hand (seamlessd update) does not wait.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_UPDATE_MIN_AGE</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">min_age</span><span class="p">:</span><span class="w"> </span><span class="l">24h</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># Scheduled backups. On a schedule, the daemon archives the whole instance --</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># the database, every memory and note, and a list of what each project holds</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># -- into one folder, and keeps the newest few. A run is skipped when nothing</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># changed since the last backup, or when the disk lacks room for it. Set this</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># in the console instead (Settings -&gt; Backups): it also lists the backups in</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># the folder and restores one, and what it saves wins over this file and env</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># until you reset it there.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># The block is new after v0.8.1 and releases before it refuse config keys they</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># do not know, so it is left commented out here: setting any of it pins this</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># file to a release that knows it.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># backup:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # Unset (the default) means on for release builds and off for builds from</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # source. false turns scheduled backups off; true turns them on for a</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # build from source too.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # env: SEAMLESS_BACKUP_AUTO</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   auto: false</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # Time between scheduled backups, as a Go duration from 1h to 720h.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # env: SEAMLESS_BACKUP_EVERY</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   every: 24h</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # How many automatic backups to keep, from 1 to 100. Older automatic ones</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # are deleted after the next one is written. Backups you make yourself,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # the safety backup taken before a restore and the updater&#39;s pre-update</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # backups are never deleted automatically.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # env: SEAMLESS_BACKUP_KEEP</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   keep: 7</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # The folder backups go to: an absolute path (a leading ~ expands), such as</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # a synced folder or an external disk. Unset: &lt;data_dir&gt;/backups. The</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # safety backup taken before a restore always stays in &lt;data_dir&gt;/backups.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # env: SEAMLESS_BACKUP_DIR</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   dir: &#34;&#34;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># Peer-user authentication: a Unix socket whose callers the daemon identifies by</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># the uid the kernel reports (never by anything the client sends), and the</span><span class="w">

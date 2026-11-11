@@ -149,6 +149,12 @@ func TestGenerateConfigCoversExample(t *testing.T) {
 	require.Contains(t, md, "| `update.auto` | bool, optional | unset |", "unset auto is on, which the docs prose says")
 	require.Contains(t, md, "| `update.max_defer` | duration | `24h` |")
 	require.Contains(t, md, "| `update.min_age` | duration | `24h` |")
+	// The backup block is commented out in the example (a backup: key pins the
+	// file to a release that knows it), so only the table documents its keys.
+	require.Contains(t, md, "| `backup.auto` | bool, optional | unset |", "unset auto: the build decides")
+	require.Contains(t, md, "| `backup.every` | duration | `24h` |")
+	require.Contains(t, md, "| `backup.keep` | int | `7` |")
+	require.Contains(t, md, "| `backup.dir` | string | - |", "an empty dir is <data_dir>/backups")
 	require.Contains(t, md, "```yaml", "the example file ships verbatim")
 	require.NotContains(t, md, "| `sourcePath` |", "unexported bookkeeping is not a config key")
 }

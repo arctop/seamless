@@ -73,6 +73,9 @@ type Config struct {
 	Capture     Capture     `yaml:"capture"`
 	PlanCapture PlanCapture `yaml:"plan_capture"`
 	Update      Update      `yaml:"update"`
+	// Backup is scheduled backups (backup.go): how often, how many to keep,
+	// and the folder they go to.
+	Backup Backup `yaml:"backup"`
 	// PeerAuth is peer-user authentication over a Unix socket (peerauth.go).
 	// Off by default; off is exactly the pre-peer_auth behavior.
 	PeerAuth PeerAuth `yaml:"peer_auth"`
@@ -616,6 +619,9 @@ func Defaults() Config {
 			MaxDefer:      Duration(DefaultUpdateMaxDefer),
 			MinAge:        Duration(DefaultUpdateMinAge),
 		},
+		// Auto stays nil: unset means the build decides (internal/backup). An
+		// empty Dir is <data_dir>/backups.
+		Backup: Backup{Every: Duration(DefaultBackupEvery), Keep: DefaultBackupKeep},
 	}
 }
 
@@ -703,6 +709,7 @@ func LoadFrom(path string) (Config, error) {
 		{"screening.feed_socket", &cfg.Screening.FeedSocket},
 		{"screening.feed_spool", &cfg.Screening.FeedSpool},
 		{"commits.snapshot_file", &cfg.Commits.SnapshotFile},
+		{"backup.dir", &cfg.Backup.Dir},
 	} {
 		v, perr := expandHome(*p.dst)
 		if perr != nil {
@@ -721,7 +728,7 @@ func LoadFrom(path string) (Config, error) {
 // Config key gives null a meaning: a null scalar decoded over Defaults can
 // otherwise preserve or erase a value depending on its Go type, making a
 // present value indistinguishable from absence. That includes the optional
-// pointer keys (update.check, update.auto): leaving the key out is how they
+// pointer keys (update.check, update.auto, backup.auto): leaving the key out is how they
 // say "unset", so a null would only be a second spelling of it. Syntax,
 // duplicate-key, and trailing-document errors are left to the strict concrete
 // decode below so diagnostics stay canonical.
@@ -856,6 +863,9 @@ func (c Config) Validate() error {
 		return err
 	}
 	if err := c.Update.Validate(); err != nil {
+		return err
+	}
+	if err := c.Backup.Validate(); err != nil {
 		return err
 	}
 	if err := c.validatePeerAuth(); err != nil {
@@ -1042,6 +1052,16 @@ func (c *Config) applyEnv() error {
 	if err := envDuration("SEAMLESS_UPDATE_MIN_AGE", &c.Update.MinAge); err != nil {
 		return err
 	}
+	if err := envBoolPtr("SEAMLESS_BACKUP_AUTO", &c.Backup.Auto); err != nil {
+		return err
+	}
+	if err := envDuration("SEAMLESS_BACKUP_EVERY", &c.Backup.Every); err != nil {
+		return err
+	}
+	if err := envInt("SEAMLESS_BACKUP_KEEP", &c.Backup.Keep); err != nil {
+		return err
+	}
+	envStr("SEAMLESS_BACKUP_DIR", &c.Backup.Dir)
 	// peer_auth: the scalar keys only. The locked and restricted lists stay
 	// file-only: they are the part of the policy that must be read in one place.
 	if err := envBool("SEAMLESS_PEER_AUTH_ENABLED", &c.PeerAuth.Enabled); err != nil {

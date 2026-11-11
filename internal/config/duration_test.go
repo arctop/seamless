@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -141,4 +142,54 @@ func TestDurationMarshalYAMLRoundTrip(t *testing.T) {
 	var back doc
 	require.NoError(t, yaml.Unmarshal(out, &back))
 	require.Equal(t, Duration(90*time.Minute), back.D)
+}
+
+// TestDurationJSON pins the text form a JSON row (the stored backup override)
+// carries: the compact string out, ParseDuration's rules in, and a JSON number
+// refused, so a stored row can never be read as nanoseconds. The YAML tests
+// above still pass through UnmarshalYAML (the "line N" in their errors is its
+// own), which yaml.v3 prefers over UnmarshalText.
+func TestDurationJSON(t *testing.T) {
+	type row struct {
+		D  Duration  `json:"d"`
+		P  *Duration `json:"p,omitempty"`
+		NP *Duration `json:"np,omitempty"`
+	}
+	p := Duration(24 * time.Hour)
+	out, err := json.Marshal(row{D: Duration(90 * time.Minute), P: &p})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"d":"1h30m","p":"24h"}`, string(out))
+
+	var back row
+	require.NoError(t, json.Unmarshal(out, &back))
+	require.Equal(t, Duration(90*time.Minute), back.D)
+	require.Equal(t, &p, back.P)
+	require.Nil(t, back.NP)
+
+	tests := []struct {
+		name    string
+		body    string
+		want    time.Duration
+		wantErr string // "" = no error
+	}{
+		{name: "hours", body: `{"d":"6h"}`, want: 6 * time.Hour},
+		{name: "bare zero string", body: `{"d":"0"}`, want: 0},
+		{name: "bare int string needs a unit", body: `{"d":"30"}`, wantErr: "needs a unit"},
+		{name: "negative", body: `{"d":"-1h"}`, wantErr: "must not be negative"},
+		{name: "empty", body: `{"d":""}`, wantErr: "invalid duration"},
+		{name: "a number is not nanoseconds", body: `{"d":86400000000000}`, wantErr: "cannot unmarshal number"},
+		{name: "a bool", body: `{"d":true}`, wantErr: "cannot unmarshal bool"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got row
+			err := json.Unmarshal([]byte(tt.body), &got)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got.D.Std())
+		})
+	}
 }

@@ -704,3 +704,59 @@ func SetUpdateOverride(ctx context.Context, db *sql.DB, o config.UpdateOverride)
 func ClearUpdateOverride(ctx context.Context, db *sql.DB) error {
 	return DeleteSetting(ctx, db, SettingUpdateConfig)
 }
+
+// SettingBackupConfig is the settings key holding the console's backup
+// settings override: a JSON-encoded config.BackupOverride. Like the briefing
+// and features rows, and unlike update_config, a field it sets simply wins
+// over the file/env value until the owner resets it (the merge lives in
+// internal/backup). A restore keeps it as it is today: where and how often
+// this install backs up is not part of the data a backup brings back.
+const SettingBackupConfig = "backup_config"
+
+// BackupOverride returns the stored console backup override and whether a row
+// exists. A missing or blank row is (zero, false, nil). It decodes over
+// nothing: a field the row does not carry stays nil, "no override for that
+// setting".
+//
+// A row that does not decode, or holds a value config.BackupOverride.Validate
+// refuses (a hand edit, or a newer release's wider bounds), is an error.
+// Callers log it and fall back to the file/env values -- failure-soft, like
+// the other override readers -- so a bad row can neither take a surface down
+// nor hand the scheduler a keep of zero.
+func BackupOverride(ctx context.Context, db *sql.DB) (config.BackupOverride, bool, error) {
+	raw, found, err := GetSetting(ctx, db, SettingBackupConfig)
+	if err != nil {
+		return config.BackupOverride{}, false, err
+	}
+	if !found || strings.TrimSpace(raw) == "" {
+		return config.BackupOverride{}, false, nil
+	}
+	var o config.BackupOverride
+	if err := json.Unmarshal([]byte(raw), &o); err != nil {
+		return config.BackupOverride{}, false, fmt.Errorf("store.BackupOverride: decode: %w", err)
+	}
+	if err := o.Validate(); err != nil {
+		return config.BackupOverride{}, false, fmt.Errorf("store.BackupOverride: %w", err)
+	}
+	return o, true, nil
+}
+
+// SetBackupOverride persists o as the console backup override, refusing one
+// config.BackupOverride.Validate refuses, so the row BackupOverride reads back
+// is always usable. A nil field is left out of the row and overrides nothing.
+func SetBackupOverride(ctx context.Context, db *sql.DB, o config.BackupOverride) error {
+	if err := o.Validate(); err != nil {
+		return fmt.Errorf("store.SetBackupOverride: %w", err)
+	}
+	raw, err := json.Marshal(o)
+	if err != nil {
+		return fmt.Errorf("store.SetBackupOverride: %w", err)
+	}
+	return SetSetting(ctx, db, SettingBackupConfig, string(raw))
+}
+
+// ClearBackupOverride removes the console backup override, handing the backup
+// settings back to file/env. Clearing twice is a no-op.
+func ClearBackupOverride(ctx context.Context, db *sql.DB) error {
+	return DeleteSetting(ctx, db, SettingBackupConfig)
+}

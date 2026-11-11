@@ -54,6 +54,19 @@ func TestExampleConfigLoads(t *testing.T) {
 		require.Contains(t, text, line)
 	}
 
+	// The backup block is documented but commented out whole: a backup: key
+	// pins the file to a release that knows the block, and a rollback to an
+	// older one would refuse it (AGENTS.md "Release discipline").
+	require.Equal(t, Defaults().Backup, cfg.Backup)
+	require.NotContains(t, "\n"+text, "\nbackup:", "the backup block stays commented out")
+	for _, line := range []string{
+		"# backup:\n", "#   auto: false\n", "#   every: 24h\n", "#   keep: 7\n", "#   dir: \"\"\n",
+		"#   # env: SEAMLESS_BACKUP_AUTO\n", "#   # env: SEAMLESS_BACKUP_EVERY\n",
+		"#   # env: SEAMLESS_BACKUP_KEEP\n", "#   # env: SEAMLESS_BACKUP_DIR\n",
+	} {
+		require.Contains(t, text, line)
+	}
+
 	// Every other key is at its default too, modulo what loading legitimately
 	// does to a default: data_dir's leading ~ expands, and the example's
 	// `allowed_hosts: []` decodes to an empty list where the default is nil --
@@ -66,4 +79,30 @@ func TestExampleConfigLoads(t *testing.T) {
 	require.Empty(t, cfg.AllowedHosts)
 	cfg.AllowedHosts = nil
 	require.Equal(t, want, cfg)
+}
+
+// TestExampleConfig_BackupBlockLoadsUncommented uncomments the example's
+// backup block and loads it, so the values it shows stay ones the daemon
+// accepts: the defaults, with auto spelled out as the opt-out it documents.
+func TestExampleConfig_BackupBlockLoadsUncommented(t *testing.T) {
+	isolateUpdateEnv(t)
+	raw, err := os.ReadFile(filepath.Join("..", "..", "seamless.yaml.example"))
+	require.NoError(t, err)
+	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
+
+	_, block, found := strings.Cut(text, "\n# backup:\n")
+	require.True(t, found, "the example documents the backup block")
+	block, _, _ = strings.Cut(block, "\n\n")
+	var b strings.Builder
+	b.WriteString("backup:\n")
+	for line := range strings.SplitSeq(block, "\n") {
+		require.True(t, strings.HasPrefix(line, "#   "), "every line of the block is commented: %q", line)
+		b.WriteString(strings.TrimPrefix(line, "# ") + "\n")
+	}
+
+	cfg, err := LoadFrom(writeConfig(t, b.String()))
+	require.NoError(t, err)
+	want := Defaults().Backup
+	want.Auto = new(false)
+	require.Equal(t, want, cfg.Backup)
 }

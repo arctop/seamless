@@ -132,6 +132,25 @@ func (d *Duration) UnmarshalYAML(n *yaml.Node) error {
 // UnmarshalYAML reads back.
 func (d Duration) MarshalYAML() (any, error) { return d.String(), nil }
 
+// MarshalText writes d in the compact form String returns, so JSON (a stored
+// console override, store.BackupOverride) carries "24h" rather than a count of
+// nanoseconds. YAML keeps using MarshalYAML, which yaml.v3 prefers.
+func (d Duration) MarshalText() ([]byte, error) { return []byte(d.String()), nil }
+
+// UnmarshalText reads a duration through ParseDuration, the rules the file and
+// the environment follow: "24h" or a bare "0", never a bare "30". A JSON
+// number is refused by encoding/json before it gets here, so a stored row can
+// never be read as nanoseconds. YAML keeps using UnmarshalYAML, which yaml.v3
+// prefers.
+func (d *Duration) UnmarshalText(b []byte) error {
+	v, err := ParseDuration(string(b))
+	if err != nil {
+		return err
+	}
+	*d = v
+	return nil
+}
+
 // describeNode names a YAML node for an error message: a scalar by its tag and
 // value, a collection by its kind.
 func describeNode(n *yaml.Node) string {
