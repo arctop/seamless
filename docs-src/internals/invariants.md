@@ -365,8 +365,9 @@ The briefing and features overrides work simply: the console's stored row wins.
 environment is final and locks its console toggle. `check: false` means no
 update traffic at all and `auto: false` means nothing installs unattended, and
 neither may be one click away from untrue. `auto` is a permission, not a
-promise: only an install the installer made acts on it (`Install.NotifyOnly`),
-and it is off whenever checks are.
+promise: only an install that updates itself acts on it (`Install.NotifyOnly`:
+the installer's, or a peer_auth system daemon's, which also needs its config to
+set `update.auto: true` explicitly), and it is off whenever checks are.
 
 ### Never spawn without the record on disk
 

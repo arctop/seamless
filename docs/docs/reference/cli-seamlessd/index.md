@@ -478,6 +478,15 @@ rolls back to the release you had. Each such run is recorded in
 runs this same engine unattended. Already on the newest release, it says so
 and changes nothing. [Update & uninstall](https://thereisnospoon.org/docs/updating/) has the details.
 
+With a config that turns peer_auth on, `update` runs no installer, which would
+set up a per-user service that cannot host it. A system daemon that
+[updates itself](https://thereisnospoon.org/docs/guides/peer-auth/#updates), run as the daemon's account
+(`sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml`),
+is updated the way its own updater does it: the archive checked against the
+verified `checksums.txt`, `seamlessd` and `seam` swapped in place, the daemon
+ended for its service manager to start again, and the same backup,
+confirmation and rollback. Any other peer_auth layout is refused.
+
 | Flag | Default | Meaning |
 |---|---|---|
 | `--check` | `false` | Report installed vs the newest release and exit without changing anything. It reads GitHub's release list - the highest version that is not a draft, a prerelease, or still uploading its assets - and adds what the daemon's [update check](https://thereisnospoon.org/docs/updating/#automatic-update-checks) and [automatic updates](https://thereisnospoon.org/docs/updating/#automatic-updates) have recorded: the mode and the last check; for a daemon that updates itself, the release it installs next with its soak (`target`) and the deadline (`pending`); an update under way; the last attempt with the updater's error, log and backup (and a `fix` row: `seamlessd install-hooks` after one that applied with warnings, or the owner's action - `seamlessd restart`, or `seamlessd update` by hand - after one the updater's gates refused while the daemon still runs the release it started from); a hold, a pause, blocked releases, a backoff, and the rollback drill while it is on. These come from the records, so they print even when the release list cannot be read. It asks even when `update.check` is `false`, because running it is you asking. |

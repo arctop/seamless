@@ -120,6 +120,7 @@ command:
 | Homebrew | no | `brew upgrade --cask arctop/tap/seamless` |
 | a clone (`make install`), `go install` or `go build` | no | `git pull && make install` |
 | a client of a shared daemon | no | re-run the pairing commands `seamlessd client-config` prints on the server |
+| a [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) system daemon | once [opted in](https://thereisnospoon.org/docs/guides/peer-auth/#updates) | `sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml` |
 
 **What is sent.** One anonymous `GET` to
 `https://api.github.com/repos/arctop/seamless/releases`, with a fixed
@@ -200,6 +201,14 @@ releases, whatever `update.auto` says:
   not write or that runs another binary, another config file, a binary directory
   it cannot write to, or any `SEAMLESS_*` variable besides `SEAMLESS_CONFIG` in
   the daemon's environment (the installer rewrites the service without it).
+
+One more install updates itself: a [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) daemon
+running as its own account under a LaunchDaemon or system unit, once an
+administrator has given that account its binary directory and set
+`update.auto: true` in its config ([how](https://thereisnospoon.org/docs/guides/peer-auth/#updates)). It
+installs no installer's service; its updater swaps the binaries in place and
+the service manager restarts the daemon. Any other peer_auth layout is only
+told, and `seamlessd update` refuses one.
 
 **Settings -> Updates** (its **Mode** row) and `seamlessd update --check` (its
 `mode` row) say which kind this install is, and why. That last rule is why the update keys belong in the
@@ -292,6 +301,15 @@ it, and that updater:
    migrated database stays, the release you had runs on its newer schema, and
    the attempt's record names the project. A lock you removed in that time
    comes back with the backup's database.
+
+A [peer_auth system daemon](https://thereisnospoon.org/docs/guides/peer-auth/#updates) skips the installer:
+in step 3 it downloads `checksums.txt`, its bundle and this platform's archive,
+and checks the archive against the verified `checksums.txt`; in step 4 it keeps
+the `seamlessd` and `seam` it is about to replace beside them; in step 6 it
+renames the release's binaries into place and ends the daemon, which its
+service manager starts again; and in step 8 it renames the kept binaries back
+and ends the daemon the same way, holding the data directory while it puts the
+database back.
 
 The restart takes a moment, and agents keep working through it: hooks retry
 briefly and then fail open, and the `seam` MCP bridge rides out a restart

@@ -83,8 +83,9 @@ type updaterDeps struct {
 	// identity of release v's tag (releasesig.VerifyAsset).
 	verify func(bundle, artifact []byte, v update.Version) error
 
-	// probe gathers update.Detect's probe for configPath (probeInstall).
-	probe func(configPath string, client bool) update.Probe
+	// probe gathers update.Detect's probe for the config ic describes
+	// (probeInstall).
+	probe func(ic installConfig) update.Probe
 	// selfCheck refuses an unattended run inside the service's own process
 	// tree (outsideServiceCheck).
 	selfCheck func() error
@@ -96,8 +97,11 @@ type updaterDeps struct {
 	service func(action serviceAction) (bool, string)
 	// runInstaller runs a release's install script (runInstallerScript).
 	runInstaller func(installerRun) error
-	freeBytes    func(dir string) (uint64, error)
-	sameFile     func(a, b string) bool
+	// stopDaemon ends a system install's daemon, pid, for its service
+	// manager to start the binary on disk (endDaemon).
+	stopDaemon func(pid int) error
+	freeBytes  func(dir string) (uint64, error)
+	sameFile   func(a, b string) bool
 
 	timing updaterTiming
 }
@@ -121,8 +125,8 @@ func realUpdaterDeps(stdout io.Writer) updaterDeps {
 			return page.Releases, err
 		},
 		verify: releasesig.Embedded(),
-		probe: func(configPath string, client bool) update.Probe {
-			return probeInstall(distribution, version, configPath, client)
+		probe: func(ic installConfig) update.Probe {
+			return probeInstall(distribution, version, ic)
 		},
 		selfCheck:   func() error { return outsideServiceCheck(runtime.GOOS, os.ReadFile) },
 		autoAllowed: autoUpdateAllowed,
@@ -135,6 +139,7 @@ func realUpdaterDeps(stdout io.Writer) updaterDeps {
 			return ok, out
 		},
 		runInstaller: runInstallerScript,
+		stopDaemon:   endDaemon,
 		freeBytes:    freeBytes,
 		sameFile:     sameFile,
 		timing:       defaultUpdaterTiming,
@@ -165,8 +170,9 @@ type selfProcess struct {
 // it, and what the daemon's spawner (update_spawn.go) does to escape it:
 //
 //   - linux: systemd stops the unit's whole cgroup, so /proc/self/cgroup must
-//     not place this process in the seamless.service unit (inSystemdUnit). A
-//     transient unit of its own passes.
+//     not place this process in the seamless.service user unit
+//     (inSystemdUnit), nor in a peer_auth daemon's seamless-daemon.service
+//     system unit (inSystemUnit). A transient unit of its own passes.
 //   - darwin: launchd signals the job's process group, so this process must
 //     lead a group of its own (pgid == pid). A Setsid child and a launchd
 //     job's main process pass; a plain child of the daemon does not. Not
@@ -197,6 +203,9 @@ func checkOutsideService(goos string, readFile func(string) ([]byte, error), sel
 		}
 		if inSystemdUnit(cg, systemdUnit) {
 			return fmt.Errorf("%w: this process is in the %s unit, which the installer restarts", errInsideService, systemdUnit)
+		}
+		if inSystemUnit(cg, systemDaemonUnit) {
+			return fmt.Errorf("%w: this process is in the %s system unit, which the update restarts", errInsideService, systemDaemonUnit)
 		}
 		return nil
 	case "darwin":
@@ -267,7 +276,8 @@ func refused(refusal string, err error) error { return &refusalError{refusal: re
 
 // updaterProbe adapts Detect's probe to the updater, which is by design not
 // the service's own process: gate 9 ("this process is the service's
-// supervised instance") always fails for it, so it is taken as met here, and
+// supervised instance") always fails for it -- the installer's service's and
+// a peer_auth system service's alike -- so it is taken as met here, and
 // replaced by the opposite check, outsideServiceCheck, for an unattended run.
 // An attended run also ignores the installer's own knobs in the environment:
 // gate 7 is there because the service would lose them, but an owner who sets
@@ -275,6 +285,7 @@ func refused(refusal string, err error) error { return &refusalError{refusal: re
 // the installer, not the service.
 func updaterProbe(p update.Probe, attended bool) update.Probe {
 	p.Supervised, p.SupervisedReason = true, ""
+	p.System.Supervised, p.System.SupervisedReason = true, ""
 	if attended {
 		p.ForeignEnv = slices.DeleteFunc(slices.Clone(p.ForeignEnv), func(name string) bool {
 			return slices.Contains(installerKnobs, name)
@@ -293,10 +304,12 @@ type updateJob struct {
 	// terminal, the installer prompting there, no client or skill knobs, and
 	// the owner's own knobs winning. installDir is then already decided
 	// (installDirFor) and newest is the newest release, when known, for the
-	// floor fallback.
+	// floor fallback; system is a peer_auth system daemon's install
+	// (update.KindSystem), updated in place (runSystem).
 	attended   bool
 	installDir string
 	newest     update.Version
+	system     bool
 }
 
 // outcome is how an attempt ended, as the attempt record states it.
@@ -320,6 +333,10 @@ type updater struct {
 	backup       backupResult
 	prevInstance string
 	prevPID      int
+	// system is a system install's update (runSystem), and swap its
+	// binaries while it replaces them.
+	system bool
+	swap   binarySwap
 }
 
 func (u *updater) dataDir() string { return u.job.cfg.DataDir }
@@ -430,6 +447,10 @@ func (u *updater) run(ctx context.Context) outcome {
 		return o
 	}
 
+	if u.system {
+		return u.runSystem(ctx)
+	}
+
 	u.stage(update.StageFetch)
 	dl, floor, err := u.fetchTarget(ctx)
 	if err != nil {
@@ -478,7 +499,9 @@ func fetchFailureStage(err error) update.Stage {
 }
 
 // gates re-checks that this update may run now. An unattended one re-runs
-// Detect (with gate 9 replaced, updaterProbe), requires this binary to be the
+// Detect (with gate 9 replaced, updaterProbe) -- an installer install, or a
+// peer_auth system daemon (update.KindSystem, updated in place by runSystem,
+// its install dir the executable's own) -- requires this binary to be the
 // release the attempt updates from, runs the outside-the-service self-check,
 // re-reads whether automatic updates are still allowed -- for an automatic
 // attempt (WhyAuto) only: one the owner asked the daemon for runs whatever
@@ -496,10 +519,15 @@ func fetchFailureStage(err error) update.Stage {
 func (u *updater) gates(ctx context.Context) error {
 	if u.job.attended {
 		u.shape = installShape{dir: u.job.installDir}
+		u.system = u.job.system
 		return nil
 	}
-	if inst := update.Detect(u.job.probe); inst.Kind != update.KindInstaller {
-		return refused(update.RefusalNotInstaller, fmt.Errorf("not an installer-managed install (%s): %s", inst.Kind, inst.Reason))
+	switch inst := update.Detect(u.job.probe); inst.Kind {
+	case update.KindInstaller:
+	case update.KindSystem:
+		u.system = true
+	default:
+		return refused(update.RefusalNotInstaller, fmt.Errorf("not an install that updates itself (%s): %s", inst.Kind, inst.Reason))
 	}
 	if cur, ok := update.Parse(u.d.version); !ok || cur != u.job.req.From {
 		return refused(update.RefusalStaleBinary, fmt.Errorf("the installed seamlessd is not v%s, the release this attempt updates from; restart the service so it runs the installed release", u.job.req.From))
@@ -514,6 +542,11 @@ func (u *updater) gates(ctx context.Context) error {
 		case err != nil:
 			return err
 		}
+	}
+	if u.system {
+		u.shape = installShape{dir: filepath.Dir(u.job.probe.Exe)}
+		u.logf("shape: a peer_auth system daemon, its binaries in %s", u.shape.dir)
+		return nil
 	}
 	shape, err := observeInstallShape(u.shapeEnv(), u.job.cfg, u.job.configPath, u.job.probe.Service, u.job.probe.Exe)
 	if err != nil {

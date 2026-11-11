@@ -1615,6 +1615,7 @@ command:
 | Homebrew | no | `brew upgrade --cask arctop/tap/seamless` |
 | a clone (`make install`), `go install` or `go build` | no | `git pull && make install` |
 | a client of a shared daemon | no | re-run the pairing commands `seamlessd client-config` prints on the server |
+| a [peer_auth](/guides/peer-auth/) system daemon | once [opted in](/guides/peer-auth/#updates) | `sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml` |
 
 **What is sent.** One anonymous `GET` to
 `https://api.github.com/repos/arctop/seamless/releases`, with a fixed
@@ -1695,6 +1696,14 @@ releases, whatever `update.auto` says:
   not write or that runs another binary, another config file, a binary directory
   it cannot write to, or any `SEAMLESS_*` variable besides `SEAMLESS_CONFIG` in
   the daemon's environment (the installer rewrites the service without it).
+
+One more install updates itself: a [peer_auth](/guides/peer-auth/) daemon
+running as its own account under a LaunchDaemon or system unit, once an
+administrator has given that account its binary directory and set
+`update.auto: true` in its config ([how](/guides/peer-auth/#updates)). It
+installs no installer's service; its updater swaps the binaries in place and
+the service manager restarts the daemon. Any other peer_auth layout is only
+told, and `seamlessd update` refuses one.
 
 **Settings -> Updates** (its **Mode** row) and `seamlessd update --check` (its
 `mode` row) say which kind this install is, and why. That last rule is why the update keys belong in the
@@ -1787,6 +1796,15 @@ it, and that updater:
    migrated database stays, the release you had runs on its newer schema, and
    the attempt's record names the project. A lock you removed in that time
    comes back with the backup's database.
+
+A [peer_auth system daemon](/guides/peer-auth/#updates) skips the installer:
+in step 3 it downloads `checksums.txt`, its bundle and this platform's archive,
+and checks the archive against the verified `checksums.txt`; in step 4 it keeps
+the `seamlessd` and `seam` it is about to replace beside them; in step 6 it
+renames the release's binaries into place and ends the daemon, which its
+service manager starts again; and in step 8 it renames the kept binaries back
+and ends the daemon the same way, holding the data directory while it puts the
+database back.
 
 The restart takes a moment, and agents keep working through it: hooks retry
 briefly and then fail open, and the `seam` MCP bridge rides out a restart
@@ -6480,6 +6498,10 @@ A layout that satisfies all of it:
 | `/opt/seamless/run` | `_seamless` | `0755` | the socket |
 | `/opt/seamless/home` | `_seamless` | `0700` | the account's home (caches, nothing else) |
 
+A daemon that [updates itself](#updates) holds `/opt/seamless/bin` and both
+binaries as `_seamless` instead of root, still `0755`: your account can write
+neither way.
+
 Create the account as a system account: on macOS a uid below 500, on Linux one
 below `UID_MIN` in `/etc/login.defs` (1000 unless the file says otherwise). The
 commands below make one. Until the account is pinned (after the layout),
@@ -6592,7 +6614,10 @@ seamlessd install-hooks --client claude    # or codex, or all
 
 With a socket `server_url` every hook is a `seam hook <event>` command (Claude
 Code's own http hook cannot dial a socket), and the MCP registration is the
-`seam mcp-proxy` stdio bridge. Under peer_auth the
+`seam mcp-proxy` stdio bridge. They run the `seam` beside the `seamlessd` that
+installed them, a copy of your own; add `--seam /opt/seamless/bin/seam` to run
+the daemon's instead, which no process of yours can replace and which moves
+with the daemon when it [updates itself](#updates). Under peer_auth the
 [daemon reads no agent files](#what-changes-with-peer-auth-on), so `seam hook`
 reads them and sends what it found.
 
@@ -7123,16 +7148,59 @@ the locked notice, and `seam approve` in your own terminal shows its request.
   carries the current state. Agents on the TCP key make none of these
   captures; point their `server_url` at the socket. Agents can still record
   findings with `session_end`.
-- **Updates are an administrator's step.** A LaunchDaemon or system-unit install
-  is not one the installer made, so the daemon only notifies; replace
-  `/opt/seamless/bin` with `sudo` and restart it. Run `make install` only with a
-  client-role config, so it updates your own `seam` and hooks and leaves the
-  service alone.
+- **Updates are yours to switch on.** The installer's per-user service cannot
+  host peer_auth, so neither the installer nor a `seamlessd update` run as you
+  touches this install, and by default the daemon only tells you about a new
+  release: replace `/opt/seamless/bin` with `sudo` and restart it. It can also
+  [update itself](#updates). Run `make install` only with a client-role config,
+  so it updates your own `seam` and hooks and leaves the service alone.
 - **Counts stay machine-wide in `usage_summary`**, as they are for isolation:
   volume, never content, and the same number for every caller.
 - **The gardener still runs over every project**, as the daemon, for no caller.
   Its proposals about a locked project reach a client only through a lease, and
   the console shows them only in a browser that has unlocked the project.
+
+### Updates {#updates}
+
+A peer_auth daemon can install new releases by itself, with no installer and
+no root process, once an administrator opts it in:
+
+1. Give the daemon's account the binary directory:
+   `sudo chown -R _seamless:_seamless /opt/seamless/bin`.
+2. Set `update.auto: true` in its config, `/opt/seamless/etc/seamless.yaml`. Only
+   root writes that file, so without that line the console's toggle cannot switch
+   automatic updates on here; with it, the toggle can still turn them off.
+3. On Linux, let the account's systemd user manager run with no one logged in:
+   `sudo loginctl enable-linger _seamless`. The updater runs as a unit of that
+   manager, because stopping the system unit stops every process in it.
+4. Restart the daemon. **Settings -> Updates** (its **Mode** row) then reads
+   "installs new releases by itself", or names the step still missing.
+
+The service must start the daemon again after a clean exit, as the plist and
+the unit above do (`KeepAlive` true, `Restart=always`); `Restart=on-failure`
+would leave it down after an update. On Linux, keep every setting in the config
+file: a `SEAMLESS_*` variable on an `Environment=` line of the unit, other than
+`SEAMLESS_CONFIG`, never reaches the updater, so it makes the daemon only notify.
+
+From then on the [usual rules](/updating/#automatic-updates) hold: the soak,
+the quiet moment, the backup, the confirmation and the rollback. Only the
+install step differs. Running as the daemon's account, the updater verifies the
+release's `checksums.txt` against its Sigstore bundle for the exact tag, checks
+the archive against it, keeps the `seamlessd` and `seam` it replaces beside the
+new ones, renames the new ones into place, and ends the daemon with `SIGTERM`.
+launchd's `KeepAlive` or systemd's `Restart=always` then starts the new binary.
+A rollback renames the kept ones back the same way. Hooks installed with
+`--seam /opt/seamless/bin/seam` ([Connect the owner](#connect-the-owner)) move
+with the daemon. To update by hand:
+
+```bash
+sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml
+```
+
+The trade-off: the daemon's account can now rewrite its own binary, so a
+compromised daemon could keep itself in place across restarts. It already holds
+every project's data, and your account still cannot write either binary, so the
+boundary against your agents is unchanged.
 
 ## Limits
 
@@ -7178,8 +7246,8 @@ the locked notice, and `seam approve` in your own terminal shows its request.
 - **Your shell is yours to guard.** Under peer_auth `seam approve` works only over
   the socket, and refuses one that the daemon's account does not serve, so a changed
   `server_url` cannot show it false facts. An agent running as you can still edit your shell's startup files, or
-  replace a `seam` you own. Run the root-owned `/opt/seamless/bin/seam approve` by
-  its full path if you doubt yours.
+  replace a `seam` you own. Run `/opt/seamless/bin/seam approve`, which your
+  account cannot write, by its full path if you doubt yours.
 - **Some decisions refuse a process an agent started**: bringing a fence down,
   releasing or discarding a held write, clearing a session's mark, and changing
   which features are on. Make them in your own terminal or the console. This stops
@@ -11056,6 +11124,15 @@ rolls back to the release you had. Each such run is recorded in
 runs this same engine unattended. Already on the newest release, it says so
 and changes nothing. [Update & uninstall](/updating/) has the details.
 
+With a config that turns peer_auth on, `update` runs no installer, which would
+set up a per-user service that cannot host it. A system daemon that
+[updates itself](/guides/peer-auth/#updates), run as the daemon's account
+(`sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml`),
+is updated the way its own updater does it: the archive checked against the
+verified `checksums.txt`, `seamlessd` and `seam` swapped in place, the daemon
+ended for its service manager to start again, and the same backup,
+confirmation and rollback. Any other peer_auth layout is refused.
+
 | Flag | Default | Meaning |
 |---|---|---|
 | `--check` | `false` | Report installed vs the newest release and exit without changing anything. It reads GitHub's release list - the highest version that is not a draft, a prerelease, or still uploading its assets - and adds what the daemon's [update check](/updating/#automatic-update-checks) and [automatic updates](/updating/#automatic-updates) have recorded: the mode and the last check; for a daemon that updates itself, the release it installs next with its soak (`target`) and the deadline (`pending`); an update under way; the last attempt with the updater's error, log and backup (and a `fix` row: `seamlessd install-hooks` after one that applied with warnings, or the owner's action - `seamlessd restart`, or `seamlessd update` by hand - after one the updater's gates refused while the daemon still runs the release it started from); a hold, a pause, blocked releases, a backoff, and the rollback drill while it is on. These come from the records, so they print even when the release list cannot be read. It asks even when `update.check` is `false`, because running it is you asking. |
@@ -12106,8 +12183,10 @@ plan_capture:
 # whether a newer Seamless release exists -- one anonymous request that carries
 # no identifiers -- and tells you when one does. auto, max_defer and min_age
 # decide whether and when it also installs one by itself, which only an install
-# the curl or PowerShell installer made ever does: Homebrew, builds from source,
-# client machines and layouts the daemon cannot vouch for are only told.
+# the curl or PowerShell installer made ever does -- and a peer_auth system
+# daemon whose account owns its binary directory and whose config sets auto:
+# true (docs: guides/peer-auth, Updates). Homebrew, builds from source, client
+# machines and layouts the daemon cannot vouch for are only told.
 # Set auto, max_defer and min_age here, not in the daemon's environment: any
 # SEAMLESS_* variable besides SEAMLESS_CONFIG there makes the install
 # notify-only, so their env variables below can turn automatic updates off but
@@ -12125,7 +12204,9 @@ update:
   # env: SEAMLESS_UPDATE_CHECK_INTERVAL
   check_interval: 6h
   # Whether the daemon installs a newer release by itself. Unset (the default)
-  # means on. false keeps the check and its notices and leaves installing to you
+  # means on, except for a peer_auth system daemon, which needs it set true
+  # here (and only root writes its config). false keeps the check and its
+  # notices and leaves installing to you
   # (seamlessd update); a false here or in the environment is final, and the
   # console cannot turn it back on. Commented out for the same reason as check.
   # env: SEAMLESS_UPDATE_AUTO
@@ -12851,7 +12932,8 @@ when). It never installs anything in-process. It starts the updater,
 `seamlessd update --auto`, which verifies the new release and runs that
 release's own installer, and the installer restarts the service. So the daemon
 starts the updater where stopping the service cannot reach it, which is a
-different place on each OS.
+different place on each OS. A [peer_auth system daemon](#peer-auth-daemon) that
+updates itself runs no installer; its updater swaps the binaries itself.
 
 The updater runs the `seamlessd` on disk and refuses unless that binary is the
 release the daemon is updating from. It also refuses to run inside the
@@ -13069,8 +13151,21 @@ has a complete unit. Retire the per-user service first
 ([by hand](#removing-the-service-by-hand)), or it starts again at your next
 login.
 
-Automatic updates do not manage this install (the daemon only notifies): replace
-the binaries in `/opt/seamless/bin` with `sudo` and restart it.
+By default the daemon only tells you about a new release: replace the binaries
+in `/opt/seamless/bin` with `sudo` and restart it. Once an administrator opts it
+in ([the guide's Updates](/guides/peer-auth/#updates)), it updates itself
+without the installer. The updater runs as the daemon's account, swaps
+`seamlessd` and `seam` in place and ends the daemon with `SIGTERM`, and
+`KeepAlive` or `Restart=always` starts the new binary. Nothing is reloaded and
+no root process runs, so the service must start the daemon again after a clean
+exit: `KeepAlive` true, or `Restart=always`, as above. On macOS that restart
+re-runs the loaded job in place, which macOS 26 refused once for an
+ad-hoc-signed binary. The release binaries are Developer ID-signed, and a
+refused start is tried again 10 seconds later, inside the two minutes the
+update waits for the new release. On macOS the updater is a `setsid` child, as for the
+per-user service. On Linux it is a transient unit of the account's own user
+manager (`sudo systemctl --user -M _seamless@ list-units 'seamless-update-*'`
+shows one in progress), which needs that account to linger.
 
 ## Where things live {#where-things-live}
 
@@ -13347,7 +13442,7 @@ The console is **read-mostly**. That is a design claim, so here is the whole lis
 | Turn update checks on or off | `POST /console/settings/updates` | Stores the console's `update.check` override (`check=on` or `off`). It can always turn checks off; it cannot turn them on while the config file or environment says `update.check: false` - that is final, and the form says so. Installs nothing. |
 | Reset update checks | `POST /console/settings/updates/reset` | Clears that override - both switches - handing them back to the config file (or, without one, the build's default). |
 | Check for updates now | `POST /console/settings/updates/check` | Asks GitHub's release list once, right away - refused while checks are off or within a minute of the last check. Reads; installs nothing. |
-| Turn automatic updates on or off | `POST /console/settings/updates/auto` | Stores the console's `update.auto` override (`auto=on` or `off`), keeping its `update.check`. It can always turn automatic updates off; it cannot turn them on while the config file or environment says `update.auto: false`, or locks `update.check: false` (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Only an install the installer made acts on it. |
+| Turn automatic updates on or off | `POST /console/settings/updates/auto` | Stores the console's `update.auto` override (`auto=on` or `off`), keeping its `update.check`. It can always turn automatic updates off; it cannot turn them on while the config file or environment says `update.auto: false`, or locks `update.check: false` (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Only an install that updates itself acts on it: the installer's, or a [peer_auth system daemon](/guides/peer-auth/#updates)'s. |
 | Update now | `POST /console/settings/updates/apply` | Installs the newest release at once, after a confirm: it skips the soak, the wait for idle agents, skipped releases and the backoff, and lifts a hold, whether automatic updates are on, off or paused. Refused while checks are off, on an install that does not update itself, while an update is under way, within a minute of a failed release check, when nothing newer is known, or when the release carries no signed checksums bundle. The daemon restarts to finish. |
 | Resume automatic updates | `POST /console/settings/updates/resume` | Lifts the pause automatic updates put on themselves after rollbacks, and the hold a deliberate downgrade set. Changes no setting; skipped releases stay skipped, and a running backoff runs out. |
 | Save a project family | `POST /console/settings/families/save` | Creates a family or replaces one family's name and member set - the same `project_families` setting `seamlessd family` manages. Members come from a closed picker of registered projects, so a typo cannot create an inert member. |
@@ -14439,7 +14534,8 @@ The [automatic update check](/updating/#automatic-update-checks) and
 [automatic updates](/updating/#automatic-updates) in plain words: the **Mode** -
 whether this install checks for new releases, and whether it installs them by
 itself or only tells you, and why (a release build checks by default, a build
-from source does not, and only an install the installer made updates itself) -
+from source does not, and only an install the installer made, or an opted-in
+peer_auth system daemon, updates itself) -
 what a check sends (one anonymous request to `api.github.com` every few hours;
 nothing when checks are off), the installed version and kind of build, the
 command that updates this install (with a copy button, labeled **To update by
@@ -16014,8 +16110,9 @@ The briefing and features overrides work simply: the console's stored row wins.
 environment is final and locks its console toggle. `check: false` means no
 update traffic at all and `auto: false` means nothing installs unattended, and
 neither may be one click away from untrue. `auto` is a permission, not a
-promise: only an install the installer made acts on it (`Install.NotifyOnly`),
-and it is off whenever checks are.
+promise: only an install that updates itself acts on it (`Install.NotifyOnly`:
+the installer's, or a peer_auth system daemon's, which also needs its config to
+set `update.auto: true` explicitly), and it is off whenever checks are.
 
 ### Never spawn without the record on disk
 

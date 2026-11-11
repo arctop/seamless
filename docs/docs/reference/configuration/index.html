@@ -1305,8 +1305,10 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c"># whether a newer Seamless release exists -- one anonymous request that carries</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># no identifiers -- and tells you when one does. auto, max_defer and min_age</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># decide whether and when it also installs one by itself, which only an install</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c"># the curl or PowerShell installer made ever does: Homebrew, builds from source,</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c"># client machines and layouts the daemon cannot vouch for are only told.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># the curl or PowerShell installer made ever does -- and a peer_auth system</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># daemon whose account owns its binary directory and whose config sets auto:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># true (docs: guides/peer-auth, Updates). Homebrew, builds from source, client</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># machines and layouts the daemon cannot vouch for are only told.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># Set auto, max_defer and min_age here, not in the daemon&#39;s environment: any</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># SEAMLESS_* variable besides SEAMLESS_CONFIG there makes the install</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># notify-only, so their env variables below can turn automatic updates off but</span><span class="w">
@@ -1324,7 +1326,9 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_UPDATE_CHECK_INTERVAL</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">check_interval</span><span class="p">:</span><span class="w"> </span><span class="l">6h</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Whether the daemon installs a newer release by itself. Unset (the default)</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># means on. false keeps the check and its notices and leaves installing to you</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># means on, except for a peer_auth system daemon, which needs it set true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># here (and only root writes its config). false keeps the check and its</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># notices and leaves installing to you</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># (seamlessd update); a false here or in the environment is final, and the</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># console cannot turn it back on. Commented out for the same reason as check.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_UPDATE_AUTO</span><span class="w">

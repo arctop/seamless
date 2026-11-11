@@ -17,14 +17,17 @@ package main
 // SEAMLESS_* of the developer's -- reaches them.
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -62,8 +65,10 @@ echo $! >"$dir/pid"
 // seamlessd, and this is that daemon. It binds UPDATER_E2E_ADDR (waiting for
 // the previous one to let go), records itself as running in the update state
 // under UPDATER_E2E_DATA before it serves -- the order a release daemon keeps
-// -- and answers /healthz as SEAMLESS_VERSION. It exits when killed, or after
-// a minute regardless, so a failed test cannot leave it behind for long.
+// -- and answers /healthz as SEAMLESS_VERSION. With UPDATER_E2E_LOCK=1 it
+// first takes the data dir's lock, as serve does (lockDataDir). It exits when
+// killed, or after a minute regardless, so a failed test cannot leave it
+// behind for long.
 func TestUpdaterHelperDaemon(t *testing.T) {
 	if os.Getenv("UPDATER_HELPER_DAEMON") != "1" {
 		t.Skip("the stand-in daemon of TestUpdater_EndToEnd; not a test of its own")
@@ -71,6 +76,13 @@ func TestUpdaterHelperDaemon(t *testing.T) {
 	v, ok := update.Parse(os.Getenv("SEAMLESS_VERSION"))
 	if !ok {
 		os.Exit(2)
+	}
+	if os.Getenv("UPDATER_E2E_LOCK") == "1" {
+		lock, err := lockDataDir(t.Context(), os.Getenv("UPDATER_E2E_DATA"), nil)
+		if err != nil {
+			os.Exit(6)
+		}
+		defer func() { _ = lock.Close() }()
 	}
 	instance, err := core.NewID()
 	if err != nil {
@@ -226,4 +238,140 @@ func TestUpdater_EndToEndRollback(t *testing.T) {
 	require.Equal(t, "0.7.2", st.Running.Version.String())
 	require.Equal(t, []serviceAction{actionStop}, w.actions)
 	require.False(t, errors.Is(err, errLockHeld))
+}
+
+// e2eSystemDaemon is a system install's seamlessd in the end-to-end test: a
+// script that runs the stand-in daemon as release v, taking the data dir's
+// lock -- or, broken, one that exits at once.
+func e2eSystemDaemon(v string, broken bool) string {
+	if broken {
+		return "#!/bin/sh\nexit 3\n"
+	}
+	return "#!/bin/sh\nUPDATER_HELPER_DAEMON=1 UPDATER_E2E_LOCK=1 SEAMLESS_VERSION=" + v +
+		" exec \"$UPDATER_E2E_HELPER\" -test.run='^TestUpdaterHelperDaemon$' >/dev/null 2>&1\n"
+}
+
+// e2eSystemWorld is a peer_auth system daemon run for real: its seamlessd is
+// e2eSystemDaemon on disk, a supervisor loop plays launchd's KeepAlive (it
+// runs whatever seamlessd is on disk, again whenever it exits), and the
+// updater's end of the daemon is the real SIGTERM (endDaemon).
+func e2eSystemWorld(t *testing.T, broken bool) (*world, updaterDeps) {
+	t.Helper()
+	w := newWorld(t, "linux", "amd64", "0.7.2")
+	helper, err := filepath.Abs(os.Args[0])
+	require.NoError(t, err)
+	addr := w.cfg.Addr
+	w.daemon.srv.Close()
+	w.probeEdits = func(p *update.Probe) {
+		p.PeerAuth, p.AutoOptIn = true, true
+		p.System = update.SystemProbe{
+			Account:    true,
+			Service:    update.ServiceProbe{Path: "/etc/systemd/system/seamless-daemon.service", Found: true, Program: w.exe, RunsThisExe: true},
+			Restarts:   true,
+			Supervised: true,
+		}
+	}
+	w.installer = func(*world, installerRun) error { return errors.New("a system install never runs the installer") }
+	for _, v := range []string{"0.7.2", "0.7.3"} {
+		w.publish(v, releaseOpts{archive: tarGz(t, map[string]string{
+			"seamlessd": e2eSystemDaemon(v, broken && v == "0.7.3"), "seam": "seam " + v + "\n",
+		})})
+	}
+	require.NoError(t, os.WriteFile(w.exe, []byte(e2eSystemDaemon("0.7.2", false)), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(w.installDir, "seam"), []byte("seam 0.7.2\n"), 0o755))
+
+	env := []string{
+		"PATH=/usr/bin:/bin", "HOME=" + w.home, "LANG=C",
+		"UPDATER_E2E_HELPER=" + helper, "UPDATER_E2E_ADDR=" + addr, "UPDATER_E2E_DATA=" + w.dataDir,
+	}
+	done := make(chan struct{})
+	var (
+		mu      sync.Mutex
+		current *os.Process
+	)
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			cmd := exec.Command(w.exe)
+			cmd.Env = env
+			if err := cmd.Start(); err == nil {
+				mu.Lock()
+				current = cmd.Process
+				mu.Unlock()
+				_ = cmd.Wait()
+			}
+			select {
+			case <-done:
+				return
+			case <-time.After(20 * time.Millisecond):
+			}
+		}
+	}()
+	t.Cleanup(func() {
+		close(done)
+		mu.Lock()
+		defer mu.Unlock()
+		if current != nil {
+			_ = current.Kill()
+		}
+	})
+	healthy := func(want string) func() bool {
+		return func() bool {
+			resp, err := http.Get("http://" + addr + "/healthz")
+			if err != nil {
+				return false
+			}
+			defer func() { _ = resp.Body.Close() }()
+			var body struct{ Version string }
+			return json.NewDecoder(resp.Body).Decode(&body) == nil && strings.HasPrefix(body.Version, want+"+")
+		}
+	}
+	require.Eventually(t, healthy("0.7.2"), 10*time.Second, 20*time.Millisecond)
+
+	d := w.deps(nil)
+	d.environ = env
+	d.stopDaemon = endDaemon
+	d.timing.confirm.deadline = 3 * time.Second
+	d.timing.confirm.starting = 3 * time.Second
+	d.timing.daemonStop = 5 * time.Second
+	return w, d
+}
+
+func TestUpdater_EndToEndSystem(t *testing.T) {
+	w, d := e2eSystemWorld(t, false)
+	a, err := runE2E(t, w, d)
+	require.NoError(t, err)
+	requireRecorded(t, w, a, update.StageDone, false)
+	require.Empty(t, w.installs, "no installer runs")
+
+	installed, err := os.ReadFile(w.exe)
+	require.NoError(t, err)
+	require.Equal(t, e2eSystemDaemon("0.7.3", false), string(installed))
+	seam, err := os.ReadFile(filepath.Join(w.installDir, "seam"))
+	require.NoError(t, err)
+	require.Equal(t, "seam 0.7.3\n", string(seam))
+	st, err := update.ReadState(w.dataDir)
+	require.NoError(t, err)
+	require.Equal(t, "0.7.3", st.Running.Version.String())
+	_, err = os.Stat(rollbackName(w.installDir, "seamlessd"))
+	require.ErrorIs(t, err, os.ErrNotExist, "the kept binaries go once the release confirms")
+}
+
+func TestUpdater_EndToEndSystemRollback(t *testing.T) {
+	w, d := e2eSystemWorld(t, true)
+	a, err := runE2E(t, w, d)
+	require.Error(t, err)
+	requireRecorded(t, w, a, update.StageRollback, true)
+	require.NotContains(t, a.Error, "did not let go of the data dir")
+
+	installed, rerr := os.ReadFile(w.exe)
+	require.NoError(t, rerr)
+	require.Equal(t, e2eSystemDaemon("0.7.2", false), string(installed))
+	st, rerr := update.ReadState(w.dataDir)
+	require.NoError(t, rerr)
+	require.Equal(t, "0.7.2", st.Running.Version.String())
 }

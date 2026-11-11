@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </details>
   <p><a href="../../concepts/project-isolation/">Project isolation</a> keeps agents working on one
@@ -492,6 +492,9 @@ certificate, on another port or address.</li>
 </tbody>
 </table>
 </div>
+<p>A daemon that <a href="#updates">updates itself</a> holds <code>/opt/seamless/bin</code> and both
+binaries as <code>_seamless</code> instead of root, still <code>0755</code>: your account can write
+neither way.</p>
 <p>Create the account as a system account: on macOS a uid below 500, on Linux one
 below <code>UID_MIN</code> in <code>/etc/login.defs</code> (1000 unless the file says otherwise). The
 commands below make one. Until the account is pinned (after the layout),
@@ -574,7 +577,10 @@ registration:</p>
 </span></span></code></pre></div>
 <p>With a socket <code>server_url</code> every hook is a <code>seam hook &lt;event&gt;</code> command (Claude
 Code's own http hook cannot dial a socket), and the MCP registration is the
-<code>seam mcp-proxy</code> stdio bridge. Under peer_auth the
+<code>seam mcp-proxy</code> stdio bridge. They run the <code>seam</code> beside the <code>seamlessd</code> that
+installed them, a copy of your own; add <code>--seam /opt/seamless/bin/seam</code> to run
+the daemon's instead, which no process of yours can replace and which moves
+with the daemon when it <a href="#updates">updates itself</a>. Under peer_auth the
 <a href="#what-changes-with-peer-auth-on">daemon reads no agent files</a>, so <code>seam hook</code>
 reads them and sends what it found.</p>
 <p>The console still needs TCP and the bearer key: a browser cannot dial a socket,
@@ -1072,17 +1078,54 @@ recorded; nothing is retried, and the next capture after the approval
 carries the current state. Agents on the TCP key make none of these
 captures; point their <code>server_url</code> at the socket. Agents can still record
 findings with <code>session_end</code>.</li>
-<li><strong>Updates are an administrator's step.</strong> A LaunchDaemon or system-unit install
-is not one the installer made, so the daemon only notifies; replace
-<code>/opt/seamless/bin</code> with <code>sudo</code> and restart it. Run <code>make install</code> only with a
-client-role config, so it updates your own <code>seam</code> and hooks and leaves the
-service alone.</li>
+<li><strong>Updates are yours to switch on.</strong> The installer's per-user service cannot
+host peer_auth, so neither the installer nor a <code>seamlessd update</code> run as you
+touches this install, and by default the daemon only tells you about a new
+release: replace <code>/opt/seamless/bin</code> with <code>sudo</code> and restart it. It can also
+<a href="#updates">update itself</a>. Run <code>make install</code> only with a client-role config,
+so it updates your own <code>seam</code> and hooks and leaves the service alone.</li>
 <li><strong>Counts stay machine-wide in <code>usage_summary</code></strong>, as they are for isolation:
 volume, never content, and the same number for every caller.</li>
 <li><strong>The gardener still runs over every project</strong>, as the daemon, for no caller.
 Its proposals about a locked project reach a client only through a lease, and
 the console shows them only in a browser that has unlocked the project.</li>
 </ul>
+<h3 id="updates">Updates</h3>
+<p>A peer_auth daemon can install new releases by itself, with no installer and
+no root process, once an administrator opts it in:</p>
+<ol>
+<li>Give the daemon's account the binary directory:
+<code>sudo chown -R _seamless:_seamless /opt/seamless/bin</code>.</li>
+<li>Set <code>update.auto: true</code> in its config, <code>/opt/seamless/etc/seamless.yaml</code>. Only
+root writes that file, so without that line the console's toggle cannot switch
+automatic updates on here; with it, the toggle can still turn them off.</li>
+<li>On Linux, let the account's systemd user manager run with no one logged in:
+<code>sudo loginctl enable-linger _seamless</code>. The updater runs as a unit of that
+manager, because stopping the system unit stops every process in it.</li>
+<li>Restart the daemon. <strong>Settings -&gt; Updates</strong> (its <strong>Mode</strong> row) then reads
+&quot;installs new releases by itself&quot;, or names the step still missing.</li>
+</ol>
+<p>The service must start the daemon again after a clean exit, as the plist and
+the unit above do (<code>KeepAlive</code> true, <code>Restart=always</code>); <code>Restart=on-failure</code>
+would leave it down after an update. On Linux, keep every setting in the config
+file: a <code>SEAMLESS_*</code> variable on an <code>Environment=</code> line of the unit, other than
+<code>SEAMLESS_CONFIG</code>, never reaches the updater, so it makes the daemon only notify.</p>
+<p>From then on the <a href="../../updating/#automatic-updates">usual rules</a> hold: the soak,
+the quiet moment, the backup, the confirmation and the rollback. Only the
+install step differs. Running as the daemon's account, the updater verifies the
+release's <code>checksums.txt</code> against its Sigstore bundle for the exact tag, checks
+the archive against it, keeps the <code>seamlessd</code> and <code>seam</code> it replaces beside the
+new ones, renames the new ones into place, and ends the daemon with <code>SIGTERM</code>.
+launchd's <code>KeepAlive</code> or systemd's <code>Restart=always</code> then starts the new binary.
+A rollback renames the kept ones back the same way. Hooks installed with
+<code>--seam /opt/seamless/bin/seam</code> (<a href="#connect-the-owner">Connect the owner</a>) move
+with the daemon. To update by hand:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml
+</span></span></code></pre></div>
+<p>The trade-off: the daemon's account can now rewrite its own binary, so a
+compromised daemon could keep itself in place across restarts. It already holds
+every project's data, and your account still cannot write either binary, so the
+boundary against your agents is unchanged.</p>
 <h2 id="limits">Limits</h2>
 <ul>
 <li><strong>The transcript holds what a session read.</strong> Once you approve an agent, its
@@ -1127,8 +1170,8 @@ a while.</li>
 <li><strong>Your shell is yours to guard.</strong> Under peer_auth <code>seam approve</code> works only over
 the socket, and refuses one that the daemon's account does not serve, so a changed
 <code>server_url</code> cannot show it false facts. An agent running as you can still edit your shell's startup files, or
-replace a <code>seam</code> you own. Run the root-owned <code>/opt/seamless/bin/seam approve</code> by
-its full path if you doubt yours.</li>
+replace a <code>seam</code> you own. Run <code>/opt/seamless/bin/seam approve</code>, which your
+account cannot write, by its full path if you doubt yours.</li>
 <li><strong>Some decisions refuse a process an agent started</strong>: bringing a fence down,
 releasing or discarding a held write, clearing a session's mark, and changing
 which features are on. Make them in your own terminal or the console. This stops
@@ -1238,7 +1281,7 @@ wherever step 10 put it, is the fallback if anything in the move went wrong.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </aside>
   

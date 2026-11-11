@@ -117,7 +117,8 @@ when). It never installs anything in-process. It starts the updater,
 `seamlessd update --auto`, which verifies the new release and runs that
 release's own installer, and the installer restarts the service. So the daemon
 starts the updater where stopping the service cannot reach it, which is a
-different place on each OS.
+different place on each OS. A [peer_auth system daemon](#peer-auth-daemon) that
+updates itself runs no installer; its updater swaps the binaries itself.
 
 The updater runs the `seamlessd` on disk and refuses unless that binary is the
 release the daemon is updating from. It also refuses to run inside the
@@ -338,8 +339,21 @@ has a complete unit. Retire the per-user service first
 ([by hand](#removing-the-service-by-hand)), or it starts again at your next
 login.
 
-Automatic updates do not manage this install (the daemon only notifies): replace
-the binaries in `/opt/seamless/bin` with `sudo` and restart it.
+By default the daemon only tells you about a new release: replace the binaries
+in `/opt/seamless/bin` with `sudo` and restart it. Once an administrator opts it
+in ([the guide's Updates](/guides/peer-auth/#updates)), it updates itself
+without the installer. The updater runs as the daemon's account, swaps
+`seamlessd` and `seam` in place and ends the daemon with `SIGTERM`, and
+`KeepAlive` or `Restart=always` starts the new binary. Nothing is reloaded and
+no root process runs, so the service must start the daemon again after a clean
+exit: `KeepAlive` true, or `Restart=always`, as above. On macOS that restart
+re-runs the loaded job in place, which macOS 26 refused once for an
+ad-hoc-signed binary. The release binaries are Developer ID-signed, and a
+refused start is tried again 10 seconds later, inside the two minutes the
+update waits for the new release. On macOS the updater is a `setsid` child, as for the
+per-user service. On Linux it is a transient unit of the account's own user
+manager (`sudo systemctl --user -M _seamless@ list-units 'seamless-update-*'`
+shows one in progress), which needs that account to linger.
 
 ## Where things live {#where-things-live}
 

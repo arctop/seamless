@@ -91,6 +91,102 @@ func TestDetect(t *testing.T) {
 	}
 }
 
+// systemProbe is a peer_auth system daemon's probe for which every gate passes.
+func systemProbe() Probe {
+	return Probe{
+		Distribution:   DistributionRelease,
+		Version:        "0.8.1",
+		Exe:            "/opt/seamless/bin/seamlessd",
+		ExeDirWritable: true,
+		ConfigPath:     "/opt/seamless/etc/seamless.yaml",
+		PeerAuth:       true,
+		AutoOptIn:      true,
+		System: SystemProbe{
+			Account: true,
+			Service: ServiceProbe{
+				Path:        "/Library/LaunchDaemons/com.arctop.seamless.daemon.plist",
+				Found:       true,
+				Program:     "/opt/seamless/bin/seamlessd",
+				RunsThisExe: true,
+			},
+			Restarts:   true,
+			Supervised: true,
+		},
+	}
+}
+
+func TestDetectSystem(t *testing.T) {
+	tests := []struct {
+		name       string
+		mutate     func(p *Probe)
+		wantKind   Kind
+		wantReason string // substring; "" for the system kind
+	}{
+		{"every gate passes", func(*Probe) {}, KindSystem, ""},
+		// The build gates come first, as for every install.
+		{"source build", func(p *Probe) { p.Distribution = DistributionSource }, KindSource, "built from source"},
+		{"release-stamped snapshot", func(p *Probe) { p.Version = "0.8.1-SNAPSHOT-abc1234" }, KindUnknown, "not a published release"},
+		{"client role", func(p *Probe) { p.Client = true }, KindClient, "role: client"},
+		// With peer_auth on, the installer's gates never apply: no marker, no
+		// installer config, and SEAMLESS_* in the unit's environment are all fine.
+		{"installer facts are irrelevant", func(p *Probe) {
+			p.ForeignEnv = []string{"SEAMLESS_CONFIG_EXTRA"}
+			p.Service = ServiceProbe{}
+		}, KindSystem, ""},
+		{"root", func(p *Probe) { p.Root = true }, KindUnknown, "root"},
+		{"exe unknown", func(p *Probe) { p.Exe = "" }, KindUnknown, "could not be located"},
+		{"not the daemon's account", func(p *Probe) {
+			p.System.Account = false
+			p.System.AccountReason = "uid 501 is not the pinned _seamless (uid 480)"
+		}, KindUnknown, "not running as the daemon's account: uid 501"},
+		{"service unreadable", func(p *Probe) { p.System.Service.Err = "permission denied" }, KindUnknown, "could not be read"},
+		{"no system service", func(p *Probe) { p.System.Service.Found = false }, KindUnknown, "no system service found"},
+		{"service runs another binary", func(p *Probe) {
+			p.System.Service.RunsThisExe = false
+			p.System.Service.Program = "/usr/local/bin/seamlessd"
+		}, KindUnknown, "/usr/local/bin/seamlessd"},
+		{"no restart after a clean exit", func(p *Probe) { p.System.Restarts = false }, KindUnknown, "does not start the daemon again"},
+		{"env overrides the updater would run without", func(p *Probe) {
+			p.System.ForeignEnv = []string{"SEAMLESS_ADDR"}
+		}, KindUnknown, "SEAMLESS_ADDR set in the system unit's environment"},
+		{"no config loaded", func(p *Probe) { p.ConfigPath = "" }, KindUnknown, "no config file"},
+		{"not opted in", func(p *Probe) { p.AutoOptIn = false }, KindUnknown, "update.auto: true"},
+		{"root-owned bin dir", func(p *Probe) { p.ExeDirWritable = false }, KindUnknown, "cannot write the executable's directory"},
+		{"no lingering user manager", func(p *Probe) {
+			p.System.UserManagerProblem = "the user manager of _seamless does not linger"
+		}, KindUnknown, "does not linger"},
+		{"started by hand", func(p *Probe) { p.System.Supervised = false }, KindUnknown, "started by hand"},
+		{"started by hand with a reason", func(p *Probe) {
+			p.System.Supervised = false
+			p.System.SupervisedReason = "not running as the launchd job com.arctop.seamless.daemon"
+		}, KindUnknown, "com.arctop.seamless.daemon"},
+		// An installer layout with peer_auth switched on is no installer install.
+		{"installer layout with peer_auth on", func(p *Probe) {
+			*p = installerProbe()
+			p.PeerAuth = true
+		}, KindUnknown, "not running as the daemon's account"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := systemProbe()
+			tt.mutate(&p)
+			got := Detect(p)
+			require.Equal(t, tt.wantKind, got.Kind)
+			if tt.wantReason == "" {
+				require.Empty(t, got.Reason)
+				require.False(t, got.NotifyOnly())
+				require.Equal(t, SystemHint, got.Hint)
+				return
+			}
+			require.Contains(t, got.Reason, tt.wantReason)
+			require.True(t, got.NotifyOnly())
+			if p.PeerAuth && got.Kind == KindUnknown && IsReleaseBuild(p.Distribution, p.Version) {
+				require.Equal(t, SystemManualHint, got.Hint, "seamlessd update refuses a peer_auth layout")
+			}
+		})
+	}
+}
+
 func TestIsReleaseBuild(t *testing.T) {
 	require.True(t, IsReleaseBuild(DistributionRelease, "0.7.2"))
 	require.False(t, IsReleaseBuild(DistributionRelease, "0.7.2-SNAPSHOT-abc"))

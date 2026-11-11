@@ -118,7 +118,8 @@ type Applying struct {
 // Mode reports what the update machinery does here and why, in words for the
 // owner. It is ModeAuto only when every one of these holds: checks are on,
 // the owner allows automatic updates (Settings.Auto), this is a release build
-// the installer made (Release, and Install.NotifyOnly is false), an updater is
+// that updates itself (Release, and Install.NotifyOnly is false: the
+// installer made it, or it is a peer_auth system daemon), an updater is
 // wired (CanApply), and automatic updates have not paused themselves
 // (Paused). Otherwise a mode that checks is ModeNotify, and the reason names
 // what is missing.
@@ -137,7 +138,7 @@ func (s Status) Mode() (Mode, string) {
 			return ModeOff, "update checks are off"
 		}
 	}
-	if s.Install.Kind != KindInstaller && s.Install.Reason != "" {
+	if s.Install.NotifyOnly() && s.Install.Reason != "" {
 		return ModeNotify, "told about new releases, never updated unattended: " + s.Install.Reason
 	}
 	told := "this install is told about new releases; installing one is your call (" + s.Install.Hint + ")"

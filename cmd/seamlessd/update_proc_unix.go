@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"syscall"
@@ -39,6 +40,20 @@ func stopInstaller(p *os.Process, unattended bool) error {
 		return nil
 	}
 	return p.Kill()
+}
+
+// endDaemon ends a system install's daemon with SIGTERM, its graceful
+// shutdown; the service manager (KeepAlive, Restart=always) then starts the
+// binary on disk. A process already gone is no error: it is restarting anyway.
+// It never signals the updater itself, whatever a lock file names.
+func endDaemon(pid int) error {
+	if pid <= 0 || pid == os.Getpid() {
+		return fmt.Errorf("refusing to signal pid %d: not the daemon", pid)
+	}
+	if err := unix.Kill(pid, unix.SIGTERM); err != nil && !errors.Is(err, unix.ESRCH) {
+		return fmt.Errorf("signal pid %d: %w", pid, err)
+	}
+	return nil
 }
 
 // freeBytes is the space on dir's file system available to this user.

@@ -29,8 +29,8 @@ type Settings struct {
 	CheckInterval time.Duration
 
 	// Auto is whether the owner lets the daemon install a newer release by
-	// itself. It is a permission, not a promise: only an install the
-	// installer made ever acts on it (Install.NotifyOnly), and it is false
+	// itself. It is a permission, not a promise: only an install that
+	// updates itself ever acts on it (Install.NotifyOnly), and it is false
 	// whenever Check is, since with no update traffic there is nothing to
 	// install.
 	Auto bool

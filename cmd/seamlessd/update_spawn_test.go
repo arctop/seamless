@@ -92,6 +92,16 @@ func TestSystemdRunArgv_RuntimeIsTwiceTheInstallerTimeout(t *testing.T) {
 	require.Contains(t, argv, fmt.Sprintf("RuntimeMaxSec=%d", int(2*installerTimeout.Seconds())))
 }
 
+func TestSystemdRunEnv(t *testing.T) {
+	// A peer_auth daemon's system unit has no XDG_RUNTIME_DIR: systemd-run
+	// --user is pointed at the daemon account's own manager.
+	got := systemdRunEnv([]string{"PATH=/usr/bin:/bin", "HOME=/opt/seamless/home"}, 480)
+	require.Equal(t, []string{"PATH=/usr/bin:/bin", "HOME=/opt/seamless/home", "XDG_RUNTIME_DIR=/run/user/480"}, got)
+	// A per-user unit's daemon keeps the one its manager gave it.
+	own := []string{"XDG_RUNTIME_DIR=/run/user/1000", "PATH=/bin"}
+	require.Equal(t, own, systemdRunEnv(own, 480))
+}
+
 func TestSystemdRunFailure(t *testing.T) {
 	exit1 := errors.New("exit status 1")
 	tests := []struct {

@@ -35,8 +35,9 @@ func (s systemdRunSpawner) Spawn(ctx context.Context, req update.SpawnRequest) e
 	if err := req.Validate(); err != nil {
 		return fmt.Errorf("seamlessd.spawn: %w", err)
 	}
-	argv := systemdRunArgv(s.target, req, os.Environ())
-	out, err := runHandoff(ctx, handoffTimeout, argv[0], argv[1:]...)
+	environ := os.Environ()
+	argv := systemdRunArgv(s.target, req, environ)
+	out, err := runHandoffEnv(ctx, handoffTimeout, systemdRunEnv(environ, os.Geteuid()), argv[0], argv[1:]...)
 	if err != nil {
 		return fmt.Errorf("seamlessd.spawn: start the updater as a transient unit: %w", systemdRunFailure(out, err))
 	}

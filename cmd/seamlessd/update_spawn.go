@@ -34,6 +34,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -96,8 +97,15 @@ var errHandoffTimeout = errors.New("timed out")
 // since it may already have handed the updater over: a cancelled ctx returns
 // at once and leaves the command to finish on its own. Only timeout kills it.
 func runHandoff(ctx context.Context, timeout time.Duration, name string, args ...string) ([]byte, error) {
+	return runHandoffEnv(ctx, timeout, nil, name, args...)
+}
+
+// runHandoffEnv is runHandoff with the command's environment: env, or this
+// process's own when env is nil.
+func runHandoffEnv(ctx context.Context, timeout time.Duration, env []string, name string, args ...string) ([]byte, error) {
 	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	cmd := exec.CommandContext(runCtx, name, args...)
+	cmd.Env = env
 	cmd.SysProcAttr = handoffProcAttr()
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
@@ -181,6 +189,20 @@ func systemdRunArgv(t spawnTarget, req update.SpawnRequest, environ []string) []
 	}
 	argv = append(argv, "--", t.exe)
 	return append(argv, t.args(req)...)
+}
+
+// systemdRunEnv is the environment systemd-run itself runs with: the
+// daemon's, plus XDG_RUNTIME_DIR=/run/user/<uid> when the daemon has none.
+// systemd-run --user finds the user manager through it, and a per-user
+// unit's daemon has it from its manager, but a peer_auth daemon's system unit
+// starts without one: its updater runs under the daemon account's lingering
+// user manager all the same. The unit itself never sees this environment.
+func systemdRunEnv(environ []string, uid int) []string {
+	if envValue(environ, "XDG_RUNTIME_DIR") != "" {
+		return environ
+	}
+	out := slices.Clone(environ)
+	return append(out, fmt.Sprintf("XDG_RUNTIME_DIR=/run/user/%d", uid))
 }
 
 // systemdRunFailure says why systemd-run did not start the updater, from its

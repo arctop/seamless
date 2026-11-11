@@ -344,7 +344,8 @@ when). It never installs anything in-process. It starts the updater,
 <code>seamlessd update --auto</code>, which verifies the new release and runs that
 release's own installer, and the installer restarts the service. So the daemon
 starts the updater where stopping the service cannot reach it, which is a
-different place on each OS.</p>
+different place on each OS. A <a href="#peer-auth-daemon">peer_auth system daemon</a> that
+updates itself runs no installer; its updater swaps the binaries itself.</p>
 <p>The updater runs the <code>seamlessd</code> on disk and refuses unless that binary is the
 release the daemon is updating from. It also refuses to run inside the
 service's own process tree. It holds <code>~/.seamless/update/update.lock</code> for its
@@ -534,8 +535,21 @@ and <code>ExecStart=/opt/seamless/bin/seamlessd serve</code>, enabled with
 has a complete unit. Retire the per-user service first
 (<a href="#removing-the-service-by-hand">by hand</a>), or it starts again at your next
 login.</p>
-<p>Automatic updates do not manage this install (the daemon only notifies): replace
-the binaries in <code>/opt/seamless/bin</code> with <code>sudo</code> and restart it.</p>
+<p>By default the daemon only tells you about a new release: replace the binaries
+in <code>/opt/seamless/bin</code> with <code>sudo</code> and restart it. Once an administrator opts it
+in (<a href="../../guides/peer-auth/#updates">the guide's Updates</a>), it updates itself
+without the installer. The updater runs as the daemon's account, swaps
+<code>seamlessd</code> and <code>seam</code> in place and ends the daemon with <code>SIGTERM</code>, and
+<code>KeepAlive</code> or <code>Restart=always</code> starts the new binary. Nothing is reloaded and
+no root process runs, so the service must start the daemon again after a clean
+exit: <code>KeepAlive</code> true, or <code>Restart=always</code>, as above. On macOS that restart
+re-runs the loaded job in place, which macOS 26 refused once for an
+ad-hoc-signed binary. The release binaries are Developer ID-signed, and a
+refused start is tried again 10 seconds later, inside the two minutes the
+update waits for the new release. On macOS the updater is a <code>setsid</code> child, as for the
+per-user service. On Linux it is a transient unit of the account's own user
+manager (<code>sudo systemctl --user -M _seamless@ list-units 'seamless-update-*'</code>
+shows one in progress), which needs that account to linger.</p>
 <h2 id="where-things-live">Where things live</h2>
 <p>Every <code>~</code> path resolves under <code>%USERPROFILE%</code> on Windows - the daemon searches
 the same relative locations on every OS.</p>

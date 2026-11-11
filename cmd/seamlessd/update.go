@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -199,7 +200,7 @@ func runAutoUpdate(f updateFlags, d updaterDeps) error {
 	if cfg.IsClient() {
 		return errors.New("seamlessd.update: role: client runs no daemon here, so nothing updates it unattended")
 	}
-	job := updateJob{req: req, cfg: cfg, configPath: configPath, probe: updaterProbe(d.probe(configPath, false), false)}
+	job := updateJob{req: req, cfg: cfg, configPath: configPath, probe: updaterProbe(d.probe(installConfigOf(cfg, configPath)), false)}
 	final, err := runRecorded(context.Background(), d, job)
 	if final.ID == "" {
 		return fmt.Errorf("seamlessd.update: %w", err)
@@ -226,10 +227,13 @@ type attendedPlan struct {
 	// newest release in the floor fallback (floor).
 	installer update.Version
 	floor     bool
-	// managed is an installer-managed install this binary runs: backup,
-	// confirmation, rollback and an attempt record apply. reason says why
-	// not; dir is SEAMLESS_INSTALL_DIR when managed.
+	// managed is an installer-managed install this binary runs, or a
+	// peer_auth system daemon's (system): backup, confirmation, rollback and
+	// an attempt record apply. reason says why not; dir is
+	// SEAMLESS_INSTALL_DIR when managed, the executable's directory for a
+	// system install.
 	managed bool
+	system  bool
 	reason  string
 	dir     string
 }
@@ -245,6 +249,10 @@ type attendedPlan struct {
 //   - The knobs the owner set win: their environment reaches the installer as
 //     it is, and the updater adds only the knobs they did not set.
 //   - A Homebrew install is refused with the brew command.
+//   - A peer_auth system daemon that updates itself (update.KindSystem), run
+//     as its account, is updated in place like the daemon's own updater does
+//     it (runSystem). A peer_auth config on any other layout is refused: the
+//     installer would set up a per-user service, which cannot host peer_auth.
 //   - On an installer-managed install that this binary is (Detect, with gate 9
 //     and the installer's own knobs set aside: updaterProbe), the update takes
 //     the update lock, records its attempt (WhyManual), backs up, confirms the
@@ -270,8 +278,18 @@ func runAttendedUpdate(ctx context.Context, f updateFlags, d updaterDeps) error 
 	}
 
 	cfg, configPath, cfgErr := loadAttendedConfig(f.config)
-	client := cfgErr == nil && cfg.IsClient()
-	probe := updaterProbe(d.probe(configPath, client), true)
+	if errors.Is(cfgErr, fs.ErrPermission) {
+		// A config this account may not read is most likely a peer_auth
+		// daemon's (root:<account> 0640), and the installer must never run
+		// over one: it would set up a per-user service beside it.
+		return fmt.Errorf("seamlessd.update: %w; this account cannot read the config, so nothing is installed: "+
+			"a peer_auth daemon updates as its own account (%s)", cfgErr, update.SystemHint)
+	}
+	ic := installConfig{path: configPath}
+	if cfgErr == nil {
+		ic = installConfigOf(cfg, configPath)
+	}
+	probe := updaterProbe(d.probe(ic), true)
 	install := update.Detect(probe)
 	if install.Kind == update.KindHomebrew {
 		return fmt.Errorf("seamlessd.update: %s; update it with: %s", install.Reason, update.Hint(update.KindHomebrew))
@@ -281,6 +299,10 @@ func runAttendedUpdate(ctx context.Context, f updateFlags, d updaterDeps) error 
 	plan, err := planAttended(ctx, d, install, probe, cfgErr)
 	if err != nil {
 		return fmt.Errorf("seamlessd.update: %w", err)
+	}
+	if probe.PeerAuth && !plan.managed {
+		return fmt.Errorf("seamlessd.update: this config turns peer_auth on, and the installer sets up a per-user service, which cannot host it (%s); "+
+			"replace the binaries the daemon runs with sudo and restart it, or have it update itself as the peer_auth guide describes", plan.reason)
 	}
 	fieldRowTo(w, "target", plan.describeTarget())
 	if plan.managed && !plan.pinned {
@@ -314,7 +336,7 @@ func runAttendedUpdate(ctx context.Context, f updateFlags, d updaterDeps) error 
 	}
 	job := updateJob{
 		req: req, cfg: cfg, configPath: configPath, probe: probe,
-		attended: true, installDir: plan.dir, newest: plan.newest,
+		attended: true, installDir: plan.dir, newest: plan.newest, system: plan.system,
 	}
 	final, err := runRecorded(ctx, d, job)
 	if final.ID == "" {
@@ -397,6 +419,10 @@ func planAttended(ctx context.Context, d updaterDeps, install update.Install, pr
 	switch {
 	case cfgErr != nil:
 		p.reason = "the config did not load: " + cfgErr.Error()
+	case install.Kind == update.KindSystem && (!targetOK || p.floor):
+		p.reason = fmt.Sprintf("an in-place update needs signed checksums, and %s has none", p.describePin())
+	case install.Kind == update.KindSystem:
+		p.managed, p.system, p.dir = true, true, filepath.Dir(probe.Exe)
 	case install.Kind != update.KindInstaller:
 		p.reason = fmt.Sprintf("not an installer-managed install (%s): %s", install.Kind, install.Reason)
 	case !targetOK:
@@ -417,6 +443,14 @@ func planAttended(ctx context.Context, d updaterDeps, install update.Install, pr
 	return p, nil
 }
 
+// describePin names the pinned or target release for a reason.
+func (p attendedPlan) describePin() string {
+	if p.target.IsZero() {
+		return "SEAMLESS_VERSION=" + p.pin
+	}
+	return "v" + p.target.String()
+}
+
 // describeTarget is the target row.
 func (p attendedPlan) describeTarget() string {
 	switch {
@@ -433,6 +467,14 @@ func (p attendedPlan) describeTarget() string {
 // install goes, the backup and rollback (or why there is none), and the
 // equivalent hand-run one-liner.
 func (p attendedPlan) printRows(w io.Writer, d updaterDeps, cfg config.Config) {
+	if p.system {
+		fieldRowTo(w, "source", d.releases.assetURL(p.target, platformArchive(p.target, d.goos, d.goarch)))
+		fieldRowTo(w, "signature", dim(fmt.Sprintf("sigstore bundle for checksums.txt, signed by this repo's release workflow on v%s, which pins the archive", p.target)))
+		fieldRowTo(w, "install", tildePath(p.dir)+dim(" (seamlessd and seam swapped in place; the service starts the daemon again)"))
+		fieldRowTo(w, "backup", dim(tildePath(filepath.Join(backupDir(cfg.DataDir), backupName(p.from, d.now())))))
+		fieldRowTo(w, "confirm", dim(fmt.Sprintf("v%s must then serve, or v%s's binaries go back", p.target, p.from)))
+		return
+	}
 	src := d.releases.assetURL(p.installer, installerAsset(d.goos))
 	fieldRowTo(w, "source", src)
 	if p.floor {

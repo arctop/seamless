@@ -91,7 +91,7 @@ func updateSpawnerFor(cfg config.Config, logger *slog.Logger) update.Spawner {
 // tracker that wraps its routes. Nothing runs until Start, which runServe
 // calls only after the listener is bound.
 func newUpdateChecker(cfg config.Config, db *sql.DB, rec update.Recorder, instance string, activity *activityTracker, logger *slog.Logger) *update.Checker {
-	install := update.Detect(probeInstall(distribution, version, absConfigPath(cfg.SourcePath()), cfg.IsClient()))
+	install := update.Detect(probeInstall(distribution, version, installConfigOf(cfg, absConfigPath(cfg.SourcePath()))))
 	chk := update.New(updateCheckerDeps(cfg, db, rec, instance, install, activity, logger))
 	st := chk.Status()
 	mode, reason := st.Mode()

@@ -69,6 +69,9 @@ type fakeDaemon struct {
 	instance string
 	pid      int
 	starts   int
+	// ownPID records this process's PID as the daemon's, the PID a system
+	// world's data dir lock names (tryLockFile).
+	ownPID bool
 }
 
 func (d *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -89,19 +92,29 @@ func (d *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // start (re)starts the daemon as release ver with a fresh instance and
 // records it in the update state, as a daemon's boot does.
 func (d *fakeDaemon) start(ver string) {
+	require.NoError(d.t, d.startQuiet(ver))
+}
+
+// startQuiet is start for a goroutine that may not fail the test itself.
+func (d *fakeDaemon) startQuiet(ver string) error {
+	v, ok := update.Parse(ver)
+	if !ok {
+		return fmt.Errorf("version %q", ver)
+	}
 	d.mu.Lock()
 	d.starts++
 	d.version = ver
 	d.instance = "instance-" + strconv.Itoa(d.starts)
 	d.pid = 5000 + d.starts
+	if d.ownPID {
+		d.pid = os.Getpid()
+	}
 	inst, pid := d.instance, d.pid
 	d.mu.Unlock()
-	v, ok := update.Parse(ver)
-	require.True(d.t, ok)
-	require.NoError(d.t, update.SaveState(d.dataDir, update.State{Running: update.Running{
+	return update.SaveState(d.dataDir, update.State{Running: update.Running{
 		Version: v, Distribution: update.DistributionRelease, Kind: update.KindInstaller,
 		Instance: inst, PID: pid, StartedAt: time.Now().UTC(),
-	}}))
+	}})
 }
 
 // startUnrecorded serves ver with a fresh instance the update state does not
@@ -302,6 +315,7 @@ type releaseOpts struct {
 	checksumsSigner string // identity signing checksums.txt ("" = its own tag)
 	checksums       string // checksums.txt content ("" = generated)
 	script          string // the install script ("" = a comment naming the release)
+	archive         []byte // this platform's archive (nil = a stand-in's bytes)
 }
 
 // publish puts release v on the release server, every asset signed for its
@@ -317,6 +331,9 @@ func (w *world) publish(v string, opts releaseOpts) {
 	}
 	archiveName := platformArchive(ver, w.goos, w.goarch)
 	archiveBytes := []byte("archive of " + v)
+	if opts.archive != nil {
+		archiveBytes = opts.archive
+	}
 	checksums := opts.checksums
 	if checksums == "" {
 		sum := sha256.Sum256(archiveBytes)
@@ -399,10 +416,10 @@ func (w *world) setAssetState(v, name, state string) {
 }
 
 // probe is the install probe of an installer-managed install of w.from.
-func (w *world) probe(configPath string, client bool) update.Probe {
+func (w *world) probe(ic installConfig) update.Probe {
 	p := update.Probe{
-		Distribution: update.DistributionRelease, Version: w.from, Client: client,
-		Exe: w.exe, ExeDirWritable: true, ConfigIsInstallers: true, ConfigPath: configPath,
+		Distribution: update.DistributionRelease, Version: w.from, Client: ic.client,
+		Exe: w.exe, ExeDirWritable: true, ConfigIsInstallers: true, ConfigPath: ic.path,
 		Service: update.ServiceProbe{
 			Path:  filepath.Join(w.home, "Library", "LaunchAgents", launchdLabel+".plist"),
 			Found: true, Marker: true, Program: w.exe, RunsThisExe: true,

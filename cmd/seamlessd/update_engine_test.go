@@ -258,7 +258,7 @@ func TestAutoUpdate_GateRefusalsRecordTheirWord(t *testing.T) {
 	}{
 		{"not an installer install", func(w *world) {
 			w.probeEdits = func(p *update.Probe) { p.Service.Marker = false }
-		}, update.StageGates, update.RefusalNotInstaller, "gates: not an installer-managed install"},
+		}, update.StageGates, update.RefusalNotInstaller, "gates: not an install that updates itself"},
 		{"inside the service's process tree", func(w *world) {
 			w.selfErr = fmt.Errorf("%w: this process is in the seamless.service unit", errInsideService)
 		}, update.StageGates, update.RefusalSelfCheck, "gates: the updater must run outside the service's process tree: this process is in the seamless.service unit"},
@@ -775,7 +775,7 @@ func TestGates_TheSettingsGateIsForAutomaticAttemptsOnly(t *testing.T) {
 	w.autoErr = fmt.Errorf("%w (set by console)", errAutoOff)
 	u := &updater{d: w.deps(nil), job: updateJob{
 		req: update.SpawnRequest{AttemptID: testAttemptID(t), From: mustVersion(t, "0.7.2"), To: mustVersion(t, "0.7.3"), Why: "now"},
-		cfg: w.cfg, configPath: w.cfgPath, probe: updaterProbe(w.probe(w.cfgPath, false), false),
+		cfg: w.cfg, configPath: w.cfgPath, probe: updaterProbe(w.probe(installConfig{path: w.cfgPath}), false),
 	}}
 	require.NoError(t, u.gates(context.Background()))
 	u.job.req.Why = update.WhyAuto
@@ -796,7 +796,7 @@ func TestGates_AttendedNeverRefuses(t *testing.T) {
 	w.autoErr = errAutoOff
 	d := w.deps(nil)
 	d.version = "0.7.1"
-	p := w.probe(w.cfgPath, false)
+	p := w.probe(installConfig{path: w.cfgPath})
 	p.Service.Marker = false
 	u := &updater{d: d, job: updateJob{
 		req: update.SpawnRequest{AttemptID: testAttemptID(t), From: mustVersion(t, "0.7.2"), To: mustVersion(t, "0.7.3"), Why: update.WhyManual},
@@ -852,6 +852,10 @@ func TestOutsideServiceCheck(t *testing.T) {
 			cgroup("0::/user.slice/user-501.slice/user@501.service/app.slice/seamless.service/x\n", nil), noProc, false, "seamless.service unit"},
 		{"linux: a system unit of the same name, which the installer never restarts", "linux",
 			cgroup("0::/system.slice/seamless.service\n", nil), noProc, true, ""},
+		{"linux: inside a peer_auth daemon's system unit", "linux",
+			cgroup("0::/system.slice/seamless-daemon.service\n", nil), noProc, false, "seamless-daemon.service system unit"},
+		{"linux: a peer_auth daemon's updater, in its account's user manager", "linux",
+			cgroup("0::/user.slice/user-480.slice/user@480.service/app.slice/seamless-update-01M4HFPS1DBMJXQ4CE8ZZ0JRDH.service\n", nil), noProc, true, ""},
 		{"linux: unreadable", "linux", cgroup("", os.ErrPermission), noProc, false, "/proc/self/cgroup"},
 
 		{"darwin: a Setsid child leads its own group", "darwin", noCgroup, proc(selfProcess{pid: 4242, pgid: 4242}, nil), true, ""},

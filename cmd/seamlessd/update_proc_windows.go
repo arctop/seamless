@@ -42,6 +42,12 @@ func stopInstaller(p *os.Process, _ bool) error {
 	return p.Kill()
 }
 
+// endDaemon is a system install's restart, which Windows has none of:
+// peer_auth, and so update.KindSystem, is macOS and Linux only.
+func endDaemon(pid int) error {
+	return fmt.Errorf("signal pid %d: a peer_auth system daemon runs on macOS and Linux only", pid)
+}
+
 // freeBytes is the space on dir's volume available to this user.
 func freeBytes(dir string) (uint64, error) {
 	p, err := windows.UTF16PtrFromString(dir)

@@ -192,6 +192,10 @@ A layout that satisfies all of it:
 | `/opt/seamless/run` | `_seamless` | `0755` | the socket |
 | `/opt/seamless/home` | `_seamless` | `0700` | the account's home (caches, nothing else) |
 
+A daemon that [updates itself](#updates) holds `/opt/seamless/bin` and both
+binaries as `_seamless` instead of root, still `0755`: your account can write
+neither way.
+
 Create the account as a system account: on macOS a uid below 500, on Linux one
 below `UID_MIN` in `/etc/login.defs` (1000 unless the file says otherwise). The
 commands below make one. Until the account is pinned (after the layout),
@@ -304,7 +308,10 @@ seamlessd install-hooks --client claude    # or codex, or all
 
 With a socket `server_url` every hook is a `seam hook <event>` command (Claude
 Code's own http hook cannot dial a socket), and the MCP registration is the
-`seam mcp-proxy` stdio bridge. Under peer_auth the
+`seam mcp-proxy` stdio bridge. They run the `seam` beside the `seamlessd` that
+installed them, a copy of your own; add `--seam /opt/seamless/bin/seam` to run
+the daemon's instead, which no process of yours can replace and which moves
+with the daemon when it [updates itself](#updates). Under peer_auth the
 [daemon reads no agent files](#what-changes-with-peer-auth-on), so `seam hook`
 reads them and sends what it found.
 
@@ -835,16 +842,59 @@ the locked notice, and `seam approve` in your own terminal shows its request.
   carries the current state. Agents on the TCP key make none of these
   captures; point their `server_url` at the socket. Agents can still record
   findings with `session_end`.
-- **Updates are an administrator's step.** A LaunchDaemon or system-unit install
-  is not one the installer made, so the daemon only notifies; replace
-  `/opt/seamless/bin` with `sudo` and restart it. Run `make install` only with a
-  client-role config, so it updates your own `seam` and hooks and leaves the
-  service alone.
+- **Updates are yours to switch on.** The installer's per-user service cannot
+  host peer_auth, so neither the installer nor a `seamlessd update` run as you
+  touches this install, and by default the daemon only tells you about a new
+  release: replace `/opt/seamless/bin` with `sudo` and restart it. It can also
+  [update itself](#updates). Run `make install` only with a client-role config,
+  so it updates your own `seam` and hooks and leaves the service alone.
 - **Counts stay machine-wide in `usage_summary`**, as they are for isolation:
   volume, never content, and the same number for every caller.
 - **The gardener still runs over every project**, as the daemon, for no caller.
   Its proposals about a locked project reach a client only through a lease, and
   the console shows them only in a browser that has unlocked the project.
+
+### Updates {#updates}
+
+A peer_auth daemon can install new releases by itself, with no installer and
+no root process, once an administrator opts it in:
+
+1. Give the daemon's account the binary directory:
+   `sudo chown -R _seamless:_seamless /opt/seamless/bin`.
+2. Set `update.auto: true` in its config, `/opt/seamless/etc/seamless.yaml`. Only
+   root writes that file, so without that line the console's toggle cannot switch
+   automatic updates on here; with it, the toggle can still turn them off.
+3. On Linux, let the account's systemd user manager run with no one logged in:
+   `sudo loginctl enable-linger _seamless`. The updater runs as a unit of that
+   manager, because stopping the system unit stops every process in it.
+4. Restart the daemon. **Settings -> Updates** (its **Mode** row) then reads
+   "installs new releases by itself", or names the step still missing.
+
+The service must start the daemon again after a clean exit, as the plist and
+the unit above do (`KeepAlive` true, `Restart=always`); `Restart=on-failure`
+would leave it down after an update. On Linux, keep every setting in the config
+file: a `SEAMLESS_*` variable on an `Environment=` line of the unit, other than
+`SEAMLESS_CONFIG`, never reaches the updater, so it makes the daemon only notify.
+
+From then on the [usual rules](/updating/#automatic-updates) hold: the soak,
+the quiet moment, the backup, the confirmation and the rollback. Only the
+install step differs. Running as the daemon's account, the updater verifies the
+release's `checksums.txt` against its Sigstore bundle for the exact tag, checks
+the archive against it, keeps the `seamlessd` and `seam` it replaces beside the
+new ones, renames the new ones into place, and ends the daemon with `SIGTERM`.
+launchd's `KeepAlive` or systemd's `Restart=always` then starts the new binary.
+A rollback renames the kept ones back the same way. Hooks installed with
+`--seam /opt/seamless/bin/seam` ([Connect the owner](#connect-the-owner)) move
+with the daemon. To update by hand:
+
+```bash
+sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml
+```
+
+The trade-off: the daemon's account can now rewrite its own binary, so a
+compromised daemon could keep itself in place across restarts. It already holds
+every project's data, and your account still cannot write either binary, so the
+boundary against your agents is unchanged.
 
 ## Limits
 
@@ -890,8 +940,8 @@ the locked notice, and `seam approve` in your own terminal shows its request.
 - **Your shell is yours to guard.** Under peer_auth `seam approve` works only over
   the socket, and refuses one that the daemon's account does not serve, so a changed
   `server_url` cannot show it false facts. An agent running as you can still edit your shell's startup files, or
-  replace a `seam` you own. Run the root-owned `/opt/seamless/bin/seam approve` by
-  its full path if you doubt yours.
+  replace a `seam` you own. Run `/opt/seamless/bin/seam approve`, which your
+  account cannot write, by its full path if you doubt yours.
 - **Some decisions refuse a process an agent started**: bringing a fence down,
   releasing or discarding a held write, clearing a session's mark, and changing
   which features are on. Make them in your own terminal or the console. This stops

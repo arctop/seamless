@@ -437,7 +437,7 @@ is not how Seamless is driven; it is how you watch it.</p>
 <tr>
 <td>Turn automatic updates on or off</td>
 <td><code>POST /console/settings/updates/auto</code></td>
-<td>Stores the console's <code>update.auto</code> override (<code>auto=on</code> or <code>off</code>), keeping its <code>update.check</code>. It can always turn automatic updates off; it cannot turn them on while the config file or environment says <code>update.auto: false</code>, or locks <code>update.check: false</code> (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Only an install the installer made acts on it.</td>
+<td>Stores the console's <code>update.auto</code> override (<code>auto=on</code> or <code>off</code>), keeping its <code>update.check</code>. It can always turn automatic updates off; it cannot turn them on while the config file or environment says <code>update.auto: false</code>, or locks <code>update.check: false</code> (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Only an install that updates itself acts on it: the installer's, or a <a href="../../guides/peer-auth/#updates">peer_auth system daemon</a>'s.</td>
 </tr>
 <tr>
 <td>Update now</td>
@@ -1775,7 +1775,8 @@ budgets or policy numbers: those live in Knowledge engine.</p>
 <a href="../../updating/#automatic-updates">automatic updates</a> in plain words: the <strong>Mode</strong> -
 whether this install checks for new releases, and whether it installs them by
 itself or only tells you, and why (a release build checks by default, a build
-from source does not, and only an install the installer made updates itself) -
+from source does not, and only an install the installer made, or an opted-in
+peer_auth system daemon, updates itself) -
 what a check sends (one anonymous request to <code>api.github.com</code> every few hours;
 nothing when checks are off), the installed version and kind of build, the
 command that updates this install (with a copy button, labeled <strong>To update by

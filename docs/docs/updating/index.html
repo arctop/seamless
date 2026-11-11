@@ -362,6 +362,11 @@ command:</p>
 <td>no</td>
 <td>re-run the pairing commands <code>seamlessd client-config</code> prints on the server</td>
 </tr>
+<tr>
+<td>a <a href="../guides/peer-auth/">peer_auth</a> system daemon</td>
+<td>once <a href="../guides/peer-auth/#updates">opted in</a></td>
+<td><code>sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml</code></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -431,6 +436,13 @@ not write or that runs another binary, another config file, a binary directory
 it cannot write to, or any <code>SEAMLESS_*</code> variable besides <code>SEAMLESS_CONFIG</code> in
 the daemon's environment (the installer rewrites the service without it).</li>
 </ul>
+<p>One more install updates itself: a <a href="../guides/peer-auth/">peer_auth</a> daemon
+running as its own account under a LaunchDaemon or system unit, once an
+administrator has given that account its binary directory and set
+<code>update.auto: true</code> in its config (<a href="../guides/peer-auth/#updates">how</a>). It
+installs no installer's service; its updater swaps the binaries in place and
+the service manager restarts the daemon. Any other peer_auth layout is only
+told, and <code>seamlessd update</code> refuses one.</p>
 <p><strong>Settings -&gt; Updates</strong> (its <strong>Mode</strong> row) and <code>seamlessd update --check</code> (its
 <code>mode</code> row) say which kind this install is, and why. That last rule is why the update keys belong in the
 config file, not the service's environment: <code>SEAMLESS_UPDATE_AUTO=true</code> there
@@ -514,6 +526,14 @@ migrated database stays, the release you had runs on its newer schema, and
 the attempt's record names the project. A lock you removed in that time
 comes back with the backup's database.</li>
 </ol>
+<p>A <a href="../guides/peer-auth/#updates">peer_auth system daemon</a> skips the installer:
+in step 3 it downloads <code>checksums.txt</code>, its bundle and this platform's archive,
+and checks the archive against the verified <code>checksums.txt</code>; in step 4 it keeps
+the <code>seamlessd</code> and <code>seam</code> it is about to replace beside them; in step 6 it
+renames the release's binaries into place and ends the daemon, which its
+service manager starts again; and in step 8 it renames the kept binaries back
+and ends the daemon the same way, holding the data directory while it puts the
+database back.</p>
 <p>The restart takes a moment, and agents keep working through it: hooks retry
 briefly and then fail open, and the <code>seam</code> MCP bridge rides out a restart
 (<a href="../reference/cli-seam/#hooks">the <code>seam</code> CLI</a>). For a day afterwards, new

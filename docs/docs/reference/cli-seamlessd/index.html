@@ -948,6 +948,14 @@ rolls back to the release you had. Each such run is recorded in
 <code>~/.seamless/update/</code>. A daemon that <a href="../../updating/#automatic-updates">updates itself</a>
 runs this same engine unattended. Already on the newest release, it says so
 and changes nothing. <a href="../../updating/">Update &amp; uninstall</a> has the details.</p>
+<p>With a config that turns peer_auth on, <code>update</code> runs no installer, which would
+set up a per-user service that cannot host it. A system daemon that
+<a href="../../guides/peer-auth/#updates">updates itself</a>, run as the daemon's account
+(<code>sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml</code>),
+is updated the way its own updater does it: the archive checked against the
+verified <code>checksums.txt</code>, <code>seamlessd</code> and <code>seam</code> swapped in place, the daemon
+ended for its service manager to start again, and the same backup,
+confirmation and rollback. Any other peer_auth layout is refused.</p>
 <div class="table-wrap">
 <table>
 <thead>
