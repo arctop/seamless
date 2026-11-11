@@ -197,6 +197,14 @@ searches ahead of `./seamless.yaml`, so the hooks resolve it from any directory.
 It is seeded **only when absent** - an install never clobbers a config holding
 your bearer key. Delete it to re-seed.
 
+`make install` refuses to replace an install the one-liner made, before it
+writes anything: it would swap the release for a source build, and automatic
+updates would stop. It tells them apart by the comment the installer writes
+into the service's plist or systemd unit. To try a build on such a machine, run
+`make build` and start `./bin/seamlessd` with a scratch config. To take the
+install over anyway, run `make install FORCE=1`; running the installer again
+hands it back.
+
 On a `role: client` config, `make install` branches the same way the one-liner
 does: it installs the binaries and wires the agent clients, prints the service
 step as skipped naming the server, and polls **that server's** `/healthz`

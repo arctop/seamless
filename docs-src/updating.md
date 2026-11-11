@@ -169,6 +169,11 @@ make install           # swap it
 make doctor            # confirm config + DB after the swap
 ```
 
+On a machine the installer set up, `make install` stops before writing
+anything, because a source build there ends automatic updates.
+`make install FORCE=1` takes the install over; running the installer again
+hands it back.
+
 </details>
 
 Migrations apply automatically at startup - there is no separate migrate step.

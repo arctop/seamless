@@ -45,6 +45,11 @@ That split is the point. `make build` on a half-finished edit is free, because
 the daemon and hooks keep running the last thing you installed. Rebuilding is not
 deploying.
 
+On a machine the curl installer set up, `make install` refuses before it writes
+anything, because a source build there ends the release's automatic updates.
+Develop there with `make build` and a scratch daemon (its own config, data dir
+and port), or take the install over with `make install FORCE=1`.
+
 Note that `make build` is not the same as `go build`: it stamps the commit and
 build date into the binary via `-ldflags`, and those show up in `/healthz`, the
 MCP handshake, and the startup log. A plain `go build` leaves them `unknown`,

@@ -1370,6 +1370,14 @@ searches ahead of `./seamless.yaml`, so the hooks resolve it from any directory.
 It is seeded **only when absent** - an install never clobbers a config holding
 your bearer key. Delete it to re-seed.
 
+`make install` refuses to replace an install the one-liner made, before it
+writes anything: it would swap the release for a source build, and automatic
+updates would stop. It tells them apart by the comment the installer writes
+into the service's plist or systemd unit. To try a build on such a machine, run
+`make build` and start `./bin/seamlessd` with a scratch config. To take the
+install over anyway, run `make install FORCE=1`; running the installer again
+hands it back.
+
 On a `role: client` config, `make install` branches the same way the one-liner
 does: it installs the binaries and wires the agent clients, prints the service
 step as skipped naming the server, and polls **that server's** `/healthz`
@@ -1661,6 +1669,11 @@ make check             # everything green before you swap the running daemon
 make install           # swap it
 make doctor            # confirm config + DB after the swap
 ```
+
+On a machine the installer set up, `make install` stops before writing
+anything, because a source build there ends automatic updates.
+`make install FORCE=1` takes the install over; running the installer again
+hands it back.
 
 
 Migrations apply automatically at startup - there is no separate migrate step.
@@ -15478,6 +15491,11 @@ make logs       # follow ~/.seamless/seamlessd.log
 That split is the point. `make build` on a half-finished edit is free, because
 the daemon and hooks keep running the last thing you installed. Rebuilding is not
 deploying.
+
+On a machine the curl installer set up, `make install` refuses before it writes
+anything, because a source build there ends the release's automatic updates.
+Develop there with `make build` and a scratch daemon (its own config, data dir
+and port), or take the install over with `make install FORCE=1`.
 
 Note that `make build` is not the same as `go build`: it stamps the commit and
 build date into the binary via `-ldflags`, and those show up in `/healthz`, the

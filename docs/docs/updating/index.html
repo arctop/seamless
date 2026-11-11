@@ -406,6 +406,10 @@ tree instead:</p>
 </span></span><span class="line"><span class="cl">make install           <span class="c1"># swap it</span>
 </span></span><span class="line"><span class="cl">make doctor            <span class="c1"># confirm config + DB after the swap</span>
 </span></span></code></pre></div>
+<p>On a machine the installer set up, <code>make install</code> stops before writing
+anything, because a source build there ends automatic updates.
+<code>make install FORCE=1</code> takes the install over; running the installer again
+hands it back.</p>
 </details>
 <p>Migrations apply automatically at startup - there is no separate migrate step.
 Run <code>make doctor</code> afterwards anyway: it is the cheapest way to learn that the new

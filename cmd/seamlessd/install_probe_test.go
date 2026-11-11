@@ -722,3 +722,19 @@ func TestPlistKeepsAlive(t *testing.T) {
 	}
 	require.False(t, plistKeepsAlive([]byte("not xml")))
 }
+
+// TestMakeInstallGuardUsesTheInstallerMarker: the Makefile's _check-takeover
+// greps for the installer's marker before `make install` writes anything, so it
+// must look for exactly the string Detect looks for.
+func TestMakeInstallGuardUsesTheInstallerMarker(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "Makefile"))
+	require.NoError(t, err)
+	var marker string
+	for line := range strings.SplitSeq(string(b), "\n") {
+		if v, ok := strings.CutPrefix(line, "INSTALLER_MARKER"); ok {
+			marker = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(v), ":="))
+		}
+	}
+	require.Equal(t, update.InstallerMarker, marker)
+	require.Contains(t, string(b), "install: _check-takeover build", "the guard must run before install writes anything")
+}

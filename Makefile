@@ -125,7 +125,7 @@ PS_INSTALLER := docs/install.ps1
 
 .PHONY: help build test test-race bench seambench lint vet cross-check vulncheck fmt fmt-check check check-fast tidy run doctor console console-chrome \
 	docs docs-check docs-serve changelog installer-check site-check site-stamp indexnow metrics release-snapshot install-git-hooks uninstall-git-hooks \
-	install uninstall update _seed-config _install-service _reload-service \
+	install uninstall update _check-takeover _seed-config _install-service _reload-service \
 	_check-health _wait-healthy _check-server start stop restart status \
 	logs install-onboard-skill uninstall-onboard-skill \
 	install-research-skill uninstall-research-skill clean
@@ -174,8 +174,10 @@ help:
 	@echo "                       list, selects the wired agent"
 	@echo "                       client; default detect = the clients on this machine)"
 	@echo "                       under 'role: client' the service is skipped and the"
-	@echo "                       SERVER's /healthz is polled -- this machine runs no daemon"
-	@echo "    uninstall          remove service, hooks, MCP, skills + binaries (config/data kept;"
+	@echo "                       SERVER's /healthz is polled -- this machine runs no daemon;"
+	@echo "                       refuses on a machine the curl installer set up (FORCE=1"
+	@echo "                       takes it over and ends its automatic updates)"
+	@echo "    uninstall         remove service, hooks, MCP, skills + binaries (config/data kept;"
 	@echo "                       PURGE=1 also deletes config + ~/.seamless)"
 	@echo "    update             upgrade in place to the latest release (CHECK=1 only reports)"
 	@echo "    start              start the installed service (launchd/systemd/task)"
@@ -594,7 +596,9 @@ _reload-service:
 # Each of those runs as a sub-make so its $(shell ...) reads the config AFTER
 # _seed-config may have written it, the same reason _wait-healthy has always
 # been invoked that way.
-install: build
+#
+# _check-takeover runs first, before the build and before anything is written.
+install: _check-takeover build
 	@mkdir -p $(PREFIX_BIN) $(CONFIG_DIR)
 	@install -m 0755 $(BIN_DIR)/$(BINARY) $(PREFIX_BIN)/$(BINARY)
 	@install -m 0755 $(BIN_DIR)/$(CLI) $(PREFIX_BIN)/$(CLI)
@@ -603,6 +607,38 @@ install: build
 	@SEAMLESS_CONFIG=$(CONFIG) $(PREFIX_BIN)/$(BINARY) install-hooks --client $(CLIENT) --seam $(PREFIX_BIN)/$(CLI)
 	@$(MAKE) _check-health
 	@$(PREFIX_BIN)/$(BINARY) install-summary --bin-dir $(PREFIX_BIN) --config $(CONFIG) --bins $(BINARY),$(CLI)
+
+# Refuse to replace an install the curl installer made. On such a machine
+# `make install` would quietly end automatic updates: the binaries it copies are
+# source builds (the first gate of update.Detect), and the plist it renders
+# lacks the installer's marker. So when a service definition the installer owns
+# carries that marker -- the launchd plist under either label, or the systemd
+# user unit (`make install` is macOS-only, but on Linux it would overwrite the
+# binaries before failing at launchctl) -- this stops before anything is
+# written. FORCE=1 takes the install over, and the installer hands it back.
+#
+# Plain grep on what is on disk, never the binary about to be installed: a new
+# build must not be the one that decides whether it may replace the old one.
+# INSTALLER_MARKER must equal update.InstallerMarker
+# (TestMakeInstallGuardUsesTheInstallerMarker). A Homebrew or client install
+# writes no service definition, so this passes it by. Under `make -n` this
+# recipe is printed, not run.
+INSTALLER_MARKER  := Written by https://thereisnospoon.org/install
+SYSTEMD_USER_UNIT := $(HOME)/.config/systemd/user/seamless.service
+FORCE ?=
+_check-takeover:
+	@for def in $(SVC_PLIST) $(LEGACY_SVC_PLIST) $(SYSTEMD_USER_UNIT); do \
+	    [ -f "$$def" ] && grep -qF '$(INSTALLER_MARKER)' "$$def" || continue; \
+	    if [ -n "$(strip $(FORCE))" ]; then \
+	        echo "taking over the installer's install ($$def): automatic updates stay off until the installer runs again"; \
+	        exit 0; \
+	    fi; \
+	    echo "ERROR: the curl installer manages Seamless on this machine ($$def)."; \
+	    echo "       make install would replace its release with a source build, and automatic updates would stop."; \
+	    echo "       To try a build, run make build and start ./bin/seamlessd with a scratch config (SEAMLESS_CONFIG)."; \
+	    echo "       To take the install over anyway: make install FORCE=1 (running the installer again hands it back)."; \
+	    exit 1; \
+	done
 
 # Render the plist and (re)boot the service -- unless this is a client install.
 #

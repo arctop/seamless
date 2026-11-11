@@ -117,7 +117,9 @@ exist yet.
 ```bash
 make build      # ./bin/seamlessd + ./bin/seam (touches nothing live)
 make install    # build + snapshot binaries/config to ~/.local/bin +
-                # ~/.config/seamless, repoint the service and hooks, restart
+                # ~/.config/seamless, repoint the service and hooks, restart.
+                # Refuses on a machine the curl installer set up (its service
+                # file carries the installer's marker) unless FORCE=1
 make test       # unit tests
 make test-race  # unit tests with the race detector
 make check      # the full gate: build + vet + cross-check (darwin/windows

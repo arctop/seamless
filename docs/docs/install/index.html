@@ -456,6 +456,13 @@ it as the edit-test loop.</p>
 searches ahead of <code>./seamless.yaml</code>, so the hooks resolve it from any directory.
 It is seeded <strong>only when absent</strong> - an install never clobbers a config holding
 your bearer key. Delete it to re-seed.</p>
+<p><code>make install</code> refuses to replace an install the one-liner made, before it
+writes anything: it would swap the release for a source build, and automatic
+updates would stop. It tells them apart by the comment the installer writes
+into the service's plist or systemd unit. To try a build on such a machine, run
+<code>make build</code> and start <code>./bin/seamlessd</code> with a scratch config. To take the
+install over anyway, run <code>make install FORCE=1</code>; running the installer again
+hands it back.</p>
 <p>On a <code>role: client</code> config, <code>make install</code> branches the same way the one-liner
 does: it installs the binaries and wires the agent clients, prints the service
 step as skipped naming the server, and polls <strong>that server's</strong> <code>/healthz</code>
