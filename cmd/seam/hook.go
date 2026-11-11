@@ -424,6 +424,23 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 	var reply []byte
 	if err == nil {
 		defer func() { _ = resp.Body.Close() }()
+		// A non-2xx reply is a failure like the rest, never hook output: a bad
+		// key's "unauthorized", a refused peer's "forbidden ...", a 503's text.
+		// On exit 0 the client adds plain-text stdout to the model's context, so
+		// relaying one would put the error into every prompt rather than fail
+		// open. The status and a capped body go to stderr instead.
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			if notice := resp.Header.Get(harvest.RefusedHeader); notice != "" {
+				fmt.Fprintln(e.stderr, "seam hook:", notice)
+			}
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody)) //nolint:errcheck // best-effort read of an error body for the message; a partial read still helps
+			if body = bytes.TrimSpace(body); len(body) > 0 {
+				fmt.Fprintf(e.stderr, "seam hook: seamlessd returned %s: %s\n", resp.Status, body)
+			} else {
+				fmt.Fprintf(e.stderr, "seam hook: seamlessd returned %s\n", resp.Status)
+			}
+			return nil
+		}
 		// The whole reply is read before any of it is written. The client parses
 		// this process's stdout as the hook's output, so a reply cut off partway
 		// -- by the deadline, or by a daemon that dies mid-write -- would reach it

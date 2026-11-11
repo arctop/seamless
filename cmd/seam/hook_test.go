@@ -331,6 +331,53 @@ func TestRunHook_WritesNothingOfAReplyCutShort(t *testing.T) {
 	require.Equal(t, "seam hook: read reply: "+io.ErrUnexpectedEOF.Error()+"\n", errb.String())
 }
 
+// A non-2xx reply is never hook output. On exit 0 the client adds plain-text
+// stdout to the model's context, so relaying a bad key's "unauthorized" (or a
+// refused peer's "forbidden ...") would put it into every prompt. Its status and
+// body go to stderr, nothing reaches stdout, and the hook still exits 0.
+func TestRunHook_NonSuccessReplyNeverReachesStdout(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		status int
+		body   string
+		want   string
+	}{
+		{"bad key", http.StatusUnauthorized, "unauthorized\n", "seam hook: seamlessd returned 401 Unauthorized: unauthorized\n"},
+		{"unknown client", http.StatusBadRequest, "  unknown client \"codxe\"\n", "seam hook: seamlessd returned 400 Bad Request: unknown client \"codxe\"\n"},
+		{"empty body", http.StatusServiceUnavailable, "", "seam hook: seamlessd returned 503 Service Unavailable\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.Copy(io.Discard, r.Body)
+				w.WriteHeader(tt.status)
+				_, _ = io.WriteString(w, tt.body)
+			}))
+			t.Cleanup(srv.Close)
+			e, out, errb := hookEnvAt(strings.TrimPrefix(srv.URL, "http://"))
+			require.NoError(t, runHook(context.Background(), e, &hookOpts{}, []string{"user-prompt-submit"}))
+			require.Empty(t, out.String(), "a non-2xx body must never reach the agent's context")
+			require.Equal(t, tt.want, errb.String())
+		})
+	}
+}
+
+// An error body is read only up to maxErrorBody, so a daemon (or whatever holds
+// the port) answering with an endless error page cannot hold the hook to its
+// deadline or flood the client's stderr.
+func TestRunHook_NonSuccessBodyIsCapped(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, strings.Repeat("x", 2*maxErrorBody))
+	}))
+	t.Cleanup(srv.Close)
+	e, out, errb := hookEnvAt(strings.TrimPrefix(srv.URL, "http://"))
+	require.NoError(t, runHook(context.Background(), e, &hookOpts{}, []string{"session-start"}))
+	require.Empty(t, out.String())
+	prefix := "seam hook: seamlessd returned 500 Internal Server Error: "
+	require.Equal(t, prefix+strings.Repeat("x", maxErrorBody)+"\n", errb.String())
+}
+
 // hangingDials is a hookOpts.httpClient: the production client with its dialer
 // replaced. The first refused dials are refused as a closed port refuses them;
 // every later one hangs, as a dial to a host that drops packets does, until the

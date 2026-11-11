@@ -150,12 +150,18 @@ recorded bytes.
 **A hook must never block an agent.** Every handler in `internal/hooks` honors
 this: an internal error yields a 200 with empty `additionalContext` rather than a
 failure. Only a bad bearer key (401) or an unknown `?client=` discriminator
-(400) returns non-2xx - both are install bugs, not runtime conditions.
+(400) returns non-2xx - both are install bugs, not runtime conditions. (Under
+peer_auth the socket also refuses an account it does not know with a 403, and
+`session-taint` reports its outcome by status, [below](#session-taint).)
 
 The same contract runs client-side. `seam hook <event>` reports a failure to
 stderr and exits 0 - a server that is down, a config that will not load, an
-unreadable stdin, all produce exit 0. Only a misconfigured event name or
-`--client` value (an install bug, not a runtime condition) is a hard error.
+unreadable stdin, all produce exit 0. A non-2xx reply is one of those failures:
+its status and the start of its body go to stderr and nothing reaches stdout,
+because the client adds a hook's plain-text stdout to the agent's context, and
+a relayed `unauthorized` would land in every prompt. Only a misconfigured
+event name or `--client` value (an install bug, not a runtime condition) is a
+hard error.
 Each hook also gives up 1s before its client would kill it - at 4s on
 `UserPromptSubmit`, 9s on the rest - so a server that never answers, such as
 one on a LAN the laptop has left, where a dial hangs rather than being
@@ -219,7 +225,9 @@ that uses `seam hook session-taint` as its whole hook command hands its client
 valid hook output, while the `X-Seamless-Taint` header and the status say what
 happened - `marked` or `already-marked` (200; the first mark stands), `off`
 (200; screening is off, nothing marked), `unknown-session` (404), `invalid`
-(400). `seam hook` still exits 0 on every one of them.
+(400). `seam hook` still exits 0 on every one of them; on a 404 or 400 it
+writes the status to stderr and nothing to stdout, which a client reads as
+continue too.
 
 Nothing clears a mark through a hook, a flag or an MCP tool: only the owner,
 on the console's Held screen.
