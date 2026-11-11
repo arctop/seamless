@@ -285,7 +285,11 @@ any of it.
   `< 500` alone, it is macOS only) and serve's preflight
   (`filesystemProblems`, which doctor reports, refusing too a restricted
   account that is the pinned one) apply it, so a restricted or other account
-  serving a socket as itself is refused; keep the three in step.
+  serving a socket as itself is refused; keep the three in step. The same
+  preflight judges the TLS pair like the config file: rewritable by no one but
+  root or the daemon's account, and the key readable by no account but the
+  daemon's (never world, group only the daemon's own) -- whoever reads it
+  serves the console's own name.
 - **A restricted account's binding rule is a proposal, never a write.** Any
   write, append, edit, overwrite, supersede or delete that touches a
   `screening.BriefingKinds` memory (constraint, convention, protocol, stage)

@@ -174,7 +174,11 @@ database. If the daemon runs as you, every process of yours reads them. So with
   a directory you own anywhere above the data is one you can rename it out of;
 - the config file and the `seamlessd` binary belong to root or the daemon's
   account and are not group- or world-writable: whoever can rewrite either can
-  switch the boundary off at the next start.
+  switch the boundary off at the next start;
+- with TLS on, `tls.cert_file` and `tls.key_file` are held to the same rule, and
+  no other account can read the key (its group may, only when that group is the
+  daemon's own): whoever reads the key can serve the daemon's own name with its
+  certificate, on another port or address.
 
 A layout that satisfies all of it:
 
@@ -183,6 +187,7 @@ A layout that satisfies all of it:
 | `/opt/seamless` | root | `0755` | |
 | `/opt/seamless/bin` | root | `0755` | `seamlessd`, `seam` (both `0755`, root's) |
 | `/opt/seamless/etc` | root | `0755` | `seamless.yaml` (`root:_seamless`, `0640`), `daemon-account` (root's, `0644`) |
+| `/opt/seamless/etc/tls` | `root:_seamless` | `0750` | with TLS on: the certificate (`0644`) and its key (`root:_seamless`, `0640`) |
 | `/opt/seamless/data` | `_seamless` | `0700` | the database and corpus |
 | `/opt/seamless/run` | `_seamless` | `0755` | the socket |
 | `/opt/seamless/home` | `_seamless` | `0700` | the account's home (caches, nothing else) |
@@ -220,6 +225,14 @@ whose data directory arrives there as a whole:
 sudo install -d -o root -g wheel -m 0755 /opt/seamless /opt/seamless/bin /opt/seamless/etc
 sudo install -d -o _seamless -g _seamless -m 0700 /opt/seamless/home /opt/seamless/data
 sudo install -d -o _seamless -g _seamless -m 0755 /opt/seamless/run
+```
+
+A daemon that serves TLS keeps its certificate and key there too, out of your
+account's reach: the daemon's account cannot read a key in your home, and every
+process of yours can.
+
+```bash
+sudo install -d -o root -g _seamless -m 0750 /opt/seamless/etc/tls
 ```
 
 Then pin the account: `seam approve`, `seam touchid enroll`, the Touch ID
@@ -859,6 +872,16 @@ so nothing inside needs rewriting. On one volume the move is a rename.
    the `peer_auth` block listing the projects to lock, and the same `mcp.api_key`
    and LLM keys. Check the slugs against your project list now: a misspelled
    entry is refused at startup, and `doctor` names it.
+
+   If the daemon serves TLS, its certificate and key move too: the old config
+   points into your home, which the daemon's account cannot read and every
+   process of yours can. Copy them into `/opt/seamless/etc/tls`
+   (`sudo install -o root -g _seamless -m 0644 <cert> /opt/seamless/etc/tls/`
+   and `sudo install -o root -g _seamless -m 0640 <key> /opt/seamless/etc/tls/`),
+   point `tls.cert_file` and `tls.key_file` at those copies, and delete the key
+   from your home once the new daemon serves. Whatever renews the certificate
+   (`tailscale cert`, `certbot`) must from then on write there, as root: `serve`
+   refuses a key another account can read, and `doctor` names the file.
 5. **Stop the old service and move the data**: stop and remove the per-user
    service ([how](/reference/service/#peer-auth-daemon)), then
    `sudo mv ~/.seamless /opt/seamless/data`,
@@ -893,5 +916,7 @@ Unload the LaunchDaemon or disable the system unit
 (`sudo mv /opt/seamless/data ~/.seamless` and `sudo chown -R $(id -un) ~/.seamless`),
 restore your server config without the `peer_auth` block - a release that predates
 it refuses the key - and reinstall the per-user service (`make install`, or the
-installer). The export from step 2, wherever step 10 put it, is the fallback if
-anything in the move went wrong.
+installer). A TLS key you deleted from your home in step 4 comes back the same
+way (`sudo install -o $(id -un) -m 0600 /opt/seamless/etc/tls/<key> <the old path>`),
+or the per-user daemon cannot load its certificate. The export from step 2,
+wherever step 10 put it, is the fallback if anything in the move went wrong.

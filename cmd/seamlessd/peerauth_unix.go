@@ -22,6 +22,7 @@ func inspectPath(path string) (fileFacts, error) {
 	mode := info.Mode()
 	return fileFacts{
 		uid:     st.Uid,
+		gid:     st.Gid,
 		mode:    mode,
 		isDir:   info.IsDir(),
 		symlink: mode&os.ModeSymlink != 0,

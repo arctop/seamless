@@ -39,6 +39,7 @@ var errPeerAuthPreflight = errors.New("peer_auth preflight")
 // so tests can play a daemon account without being one.
 type peerAuthEnv struct {
 	euid    int                             // the daemon's effective uid
+	egid    int                             // the daemon's effective gid: the one group a TLS key may be readable by
 	resolve access.Resolver                 // OS account lookup
 	exe     func() (string, error)          // this binary's path
 	inspect func(string) (fileFacts, error) // owner and mode of a path (no symlink follow)
@@ -54,6 +55,7 @@ type peerAuthEnv struct {
 // fileFacts is what the permission checks need of one path.
 type fileFacts struct {
 	uid     uint32
+	gid     uint32
 	mode    os.FileMode
 	isDir   bool
 	symlink bool
@@ -63,6 +65,7 @@ type fileFacts struct {
 func defaultPeerAuthEnv() peerAuthEnv {
 	return peerAuthEnv{
 		euid:          os.Geteuid(),
+		egid:          os.Getegid(),
 		resolve:       access.LookupAccount,
 		exe:           os.Executable,
 		inspect:       inspectPath,
@@ -204,8 +207,39 @@ func (rt *peerAuthRuntime) filesystemProblems(cfg config.Config, create bool) []
 	} else if p := rt.trustedFileProblem("seamlessd binary", exe); p != "" {
 		problems = append(problems, p)
 	}
+	// The TLS pair: whoever can read the key serves the console's own name with
+	// the real certificate, on another port or address, and whoever can rewrite
+	// either file decides what the daemon presents at its next start.
+	if cfg.TLSEnabled() {
+		for _, f := range []struct{ what, path string }{
+			{tlsCertWhat, cfg.TLS.CertFile},
+			{tlsKeyWhat, cfg.TLS.KeyFile},
+		} {
+			if p := rt.trustedFileProblem(f.what, f.path); p != "" {
+				problems = append(problems, p+rt.tlsLayoutHint())
+			}
+		}
+	}
 	return problems
 }
+
+// tlsCertWhat and tlsKeyWhat are how the preflight names the TLS pair. The key
+// is a secret, so like the config file it must also be unreadable by other
+// accounts.
+const (
+	tlsCertWhat = "tls.cert_file"
+	tlsKeyWhat  = "tls.key_file"
+)
+
+// tlsLayoutHint ends a TLS file's problem with where the guide keeps the pair.
+func (rt *peerAuthRuntime) tlsLayoutHint() string {
+	return fmt.Sprintf(" -- keep the certificate and key under /opt/seamless/etc/tls (root:%s, the key 0640) and point tls.cert_file "+
+		"and tls.key_file there, as the peer_auth guide does under %s", rt.daemonAccountName(), guideMoveSection)
+}
+
+// guideMoveSection is the guide's section that moves an existing install over,
+// TLS files included.
+const guideMoveSection = `"Move an existing install over"`
 
 // privateDirProblem checks a directory only the daemon may enter: owned by the
 // daemon's account, no group or world bits at all, and reached through
@@ -263,14 +297,17 @@ func (rt *peerAuthRuntime) socketDirProblem(dir string) string {
 	return ""
 }
 
-// configFileWhat is how the preflight names the config file. It alone holds
-// secrets, so it alone must also be unreadable by other accounts.
+// configFileWhat is how the preflight names the config file. It holds secrets,
+// so like the TLS key (tlsKeyWhat) it must also be unreadable by other
+// accounts.
 const configFileWhat = "config file"
 
 // trustedFileProblem checks a file the daemon trusts (its config, its own
-// binary): whoever can rewrite it can switch the boundary off at the next
-// start, so it must belong to root or the daemon's account and be writable by
-// no one else, through directories no one else can rewrite.
+// binary, its TLS pair): whoever can rewrite it can switch the boundary off at
+// the next start, so it must belong to root or the daemon's account and be
+// writable by no one else, through directories no one else can rewrite. The
+// TLS key must also be readable by no account but the daemon's: world-readable
+// never, group-readable only by the daemon's own group.
 func (rt *peerAuthRuntime) trustedFileProblem(what, path string) string {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -296,6 +333,10 @@ func (rt *peerAuthRuntime) trustedFileProblem(what, path string) string {
 		return fmt.Sprintf("%s %s is mode %04o: it must not be group- or world-writable", what, real, facts.mode.Perm())
 	case what == configFileWhat && facts.mode.Perm()&0o004 != 0:
 		return fmt.Sprintf("%s %s is mode %04o: every account can read it, and it holds the bearer key; make it 0640, readable by the daemon's group only", what, real, facts.mode.Perm())
+	case what == tlsKeyWhat && facts.mode.Perm()&0o004 != 0:
+		return fmt.Sprintf("%s %s is mode %04o: every account can read the TLS private key, and with it serve this daemon's name; make it 0640, readable by the daemon's group only", what, real, facts.mode.Perm())
+	case what == tlsKeyWhat && facts.mode.Perm()&0o040 != 0 && int(facts.gid) != rt.env.egid:
+		return fmt.Sprintf("%s %s is mode %04o with group %d, not the daemon's group (%d): that group's members can read the TLS private key; chgrp it to the daemon's group, or make it 0600", what, real, facts.mode.Perm(), facts.gid, rt.env.egid)
 	}
 	return ""
 }

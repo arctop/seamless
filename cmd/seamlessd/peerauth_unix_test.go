@@ -82,6 +82,7 @@ func paTestEnv(l paLayout, ownerUID uint32) peerAuthEnv {
 	me := uint32(os.Geteuid())
 	return peerAuthEnv{
 		euid:          os.Geteuid(),
+		egid:          os.Getegid(),
 		systemAccount: func(uint32) (bool, string) { return true, "the test's stand-in" },
 		daemonAccount: paNoPin,
 		resolve: func(name string) (access.Account, error) {
@@ -197,6 +198,86 @@ func TestPreparePeerAuth_Refusals(t *testing.T) {
 			require.ErrorIs(t, err, errPeerAuthPreflight)
 			require.Contains(t, err.Error(), tc.want)
 		})
+	}
+}
+
+// With TLS on, the preflight judges the pair as it judges the config: whoever
+// can read the key serves the daemon's own name with the real certificate (on
+// another port or address), and whoever can rewrite either file decides what
+// the next start presents. The guide's layout -- root:<daemon group>, the key
+// 0640 -- passes; a key kept in the owner's home, as a pre-peer_auth TLS
+// install keeps it, is refused with where to move it.
+func TestPreparePeerAuth_TLSPair(t *testing.T) {
+	const ownerUID = 4242
+	for _, tc := range []struct {
+		name   string
+		tlsOn  bool
+		mutate func(t *testing.T, tls string, env *peerAuthEnv)
+		want   []string // empty: the preflight passes
+	}{
+		{"the daemon's own pair passes", true, nil, nil},
+		{"TLS off checks no TLS file", false, func(t *testing.T, tls string, env *peerAuthEnv) {
+			require.NoError(t, os.Chmod(filepath.Join(tls, "key.pem"), 0o666))
+		}, nil},
+		{"the guide's layout passes: root, the daemon's group, 0640", true, func(t *testing.T, tls string, env *peerAuthEnv) {
+			env.inspect = overrideFacts(filepath.Join(tls, "key.pem"), func(f *fileFacts) {
+				f.uid, f.gid, f.mode = 0, uint32(env.egid), 0o640
+			})
+		}, nil},
+		{"a key the owner owns", true, func(t *testing.T, tls string, env *peerAuthEnv) {
+			env.inspect = overrideFacts(filepath.Join(tls, "key.pem"), func(f *fileFacts) { f.uid = ownerUID })
+		}, []string{"tls.key_file", "owned by uid 4242", "/opt/seamless/etc/tls"}},
+		{"a key every account can read", true, func(t *testing.T, tls string, env *peerAuthEnv) {
+			require.NoError(t, os.Chmod(filepath.Join(tls, "key.pem"), 0o644))
+		}, []string{"tls.key_file", "every account can read the TLS private key"}},
+		{"a key another group can read", true, func(t *testing.T, tls string, env *peerAuthEnv) {
+			env.inspect = overrideFacts(filepath.Join(tls, "key.pem"), func(f *fileFacts) {
+				f.uid, f.gid, f.mode = 0, uint32(env.egid)+1, 0o640
+			})
+		}, []string{"tls.key_file", "not the daemon's group"}},
+		{"a certificate others can rewrite", true, func(t *testing.T, tls string, env *peerAuthEnv) {
+			require.NoError(t, os.Chmod(filepath.Join(tls, "cert.pem"), 0o666))
+		}, []string{"tls.cert_file", "must not be group- or world-writable"}},
+		{"a pair under a directory the owner owns", true, func(t *testing.T, tls string, env *peerAuthEnv) {
+			env.inspect = overrideFacts(tls, func(f *fileFacts) { f.uid = ownerUID })
+		}, []string{"tls.cert_file: directory", "tls.key_file: directory", "owned by uid 4242"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l, cfg := newPALayout(t, paLockedAndRestricted)
+			tls := filepath.Join(l.base, "etc", "tls")
+			require.NoError(t, os.Mkdir(tls, 0o750))
+			require.NoError(t, os.Chmod(tls, 0o750))
+			require.NoError(t, os.WriteFile(filepath.Join(tls, "cert.pem"), []byte("cert"), 0o644))
+			require.NoError(t, os.Chmod(filepath.Join(tls, "cert.pem"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(tls, "key.pem"), []byte("key"), 0o600))
+			if tc.tlsOn {
+				cfg.TLS.CertFile, cfg.TLS.KeyFile = filepath.Join(tls, "cert.pem"), filepath.Join(tls, "key.pem")
+			}
+			env := paTestEnv(l, ownerUID)
+			if tc.mutate != nil {
+				tc.mutate(t, tls, &env)
+			}
+			_, err := preparePeerAuth(cfg, env)
+			if len(tc.want) == 0 {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, errPeerAuthPreflight)
+			for _, w := range tc.want {
+				require.Contains(t, err.Error(), w)
+			}
+		})
+	}
+}
+
+// overrideFacts is inspectPath with path's facts changed by edit.
+func overrideFacts(path string, edit func(*fileFacts)) func(string) (fileFacts, error) {
+	return func(p string) (fileFacts, error) {
+		f, err := inspectPath(p)
+		if err == nil && p == path {
+			edit(&f)
+		}
+		return f, err
 	}
 }
 

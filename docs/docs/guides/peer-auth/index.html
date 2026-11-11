@@ -429,7 +429,11 @@ belongs to root or the daemon's account and is not writable by anyone else -
 a directory you own anywhere above the data is one you can rename it out of;</li>
 <li>the config file and the <code>seamlessd</code> binary belong to root or the daemon's
 account and are not group- or world-writable: whoever can rewrite either can
-switch the boundary off at the next start.</li>
+switch the boundary off at the next start;</li>
+<li>with TLS on, <code>tls.cert_file</code> and <code>tls.key_file</code> are held to the same rule, and
+no other account can read the key (its group may, only when that group is the
+daemon's own): whoever reads the key can serve the daemon's own name with its
+certificate, on another port or address.</li>
 </ul>
 <p>A layout that satisfies all of it:</p>
 <div class="table-wrap">
@@ -460,6 +464,12 @@ switch the boundary off at the next start.</li>
 <td>root</td>
 <td><code>0755</code></td>
 <td><code>seamless.yaml</code> (<code>root:_seamless</code>, <code>0640</code>), <code>daemon-account</code> (root's, <code>0644</code>)</td>
+</tr>
+<tr>
+<td><code>/opt/seamless/etc/tls</code></td>
+<td><code>root:_seamless</code></td>
+<td><code>0750</code></td>
+<td>with TLS on: the certificate (<code>0644</code>) and its key (<code>root:_seamless</code>, <code>0640</code>)</td>
 </tr>
 <tr>
 <td><code>/opt/seamless/data</code></td>
@@ -506,6 +516,11 @@ whose data directory arrives there as a whole:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo install -d -o root -g wheel -m <span class="m">0755</span> /opt/seamless /opt/seamless/bin /opt/seamless/etc
 </span></span><span class="line"><span class="cl">sudo install -d -o _seamless -g _seamless -m <span class="m">0700</span> /opt/seamless/home /opt/seamless/data
 </span></span><span class="line"><span class="cl">sudo install -d -o _seamless -g _seamless -m <span class="m">0755</span> /opt/seamless/run
+</span></span></code></pre></div>
+<p>A daemon that serves TLS keeps its certificate and key there too, out of your
+account's reach: the daemon's account cannot read a key in your home, and every
+process of yours can.</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo install -d -o root -g _seamless -m <span class="m">0750</span> /opt/seamless/etc/tls
 </span></span></code></pre></div>
 <p>Then pin the account: <code>seam approve</code>, <code>seam touchid enroll</code>, the Touch ID
 approver and <code>serve</code> accept only the account this file names as the daemon's,
@@ -1082,46 +1097,77 @@ reads the key in your <code>console.yaml</code>.</li>
 <p>The data directory moves as a whole; the database stores paths relative to it,
 so nothing inside needs rewriting. On one volume the move is a rename.</p>
 <ol>
-<li><strong>Fence first, in the old world.</strong> Make each project you will lock
-<code>confidential</code> or <code>sealed</code> (<code>seam project isolation &lt;slug&gt; confidential --yes</code>).</li>
-<li><strong>Back up</strong>, as the owner, while the old daemon still serves:
+<li>
+<p><strong>Fence first, in the old world.</strong> Make each project you will lock
+<code>confidential</code> or <code>sealed</code> (<code>seam project isolation &lt;slug&gt; confidential --yes</code>).</p>
+</li>
+<li>
+<p><strong>Back up</strong>, as the owner, while the old daemon still serves:
 <code>seamlessd export -o ~/seamless-before-peer-auth.tar.gz</code>. The archive holds
-every project, the locked ones included: keep it as carefully as they are.</li>
-<li><strong>Create the account, the layout and the pin</strong> above, leaving out
+every project, the locked ones included: keep it as carefully as they are.</p>
+</li>
+<li>
+<p><strong>Create the account, the layout and the pin</strong> above, leaving out
 <code>/opt/seamless/data</code>, and install root-owned copies of both binaries in <code>/opt/seamless/bin</code>
 (<code>sudo install -o root -m 0755 &lt;seamlessd&gt; &lt;seam&gt; /opt/seamless/bin/</code>). Keep a
-copy of the current <code>mcp.api_key</code> for the console.</li>
-<li><strong>Write the daemon's config</strong> at <code>/opt/seamless/etc/seamless.yaml</code>
+copy of the current <code>mcp.api_key</code> for the console.</p>
+</li>
+<li>
+<p><strong>Write the daemon's config</strong> at <code>/opt/seamless/etc/seamless.yaml</code>
 (<code>root:_seamless 0640</code>): your old config with <code>data_dir: /opt/seamless/data</code>,
 the <code>peer_auth</code> block listing the projects to lock, and the same <code>mcp.api_key</code>
 and LLM keys. Check the slugs against your project list now: a misspelled
-entry is refused at startup, and <code>doctor</code> names it.</li>
-<li><strong>Stop the old service and move the data</strong>: stop and remove the per-user
+entry is refused at startup, and <code>doctor</code> names it.</p>
+<p>If the daemon serves TLS, its certificate and key move too: the old config
+points into your home, which the daemon's account cannot read and every
+process of yours can. Copy them into <code>/opt/seamless/etc/tls</code>
+(<code>sudo install -o root -g _seamless -m 0644 &lt;cert&gt; /opt/seamless/etc/tls/</code>
+and <code>sudo install -o root -g _seamless -m 0640 &lt;key&gt; /opt/seamless/etc/tls/</code>),
+point <code>tls.cert_file</code> and <code>tls.key_file</code> at those copies, and delete the key
+from your home once the new daemon serves. Whatever renews the certificate
+(<code>tailscale cert</code>, <code>certbot</code>) must from then on write there, as root: <code>serve</code>
+refuses a key another account can read, and <code>doctor</code> names the file.</p>
+</li>
+<li>
+<p><strong>Stop the old service and move the data</strong>: stop and remove the per-user
 service (<a href="../../reference/service/#peer-auth-daemon">how</a>), then
 <code>sudo mv ~/.seamless /opt/seamless/data</code>,
 <code>sudo chown -R _seamless:_seamless /opt/seamless/data</code> and
-<code>sudo chmod -R go-rwx /opt/seamless/data</code>.</li>
-<li><strong>Start the daemon</strong>: install and load
+<code>sudo chmod -R go-rwx /opt/seamless/data</code>.</p>
+</li>
+<li>
+<p><strong>Start the daemon</strong>: install and load
 <a href="../../reference/service/#peer-auth-daemon">the LaunchDaemon</a> or the system unit
 above, then <code>curl -s http://127.0.0.1:8081/healthz</code> and the doctor line in
-<a href="#verify">Verify</a>.</li>
-<li><strong>Switch your own config to the socket</strong> and reinstall the hooks and MCP
+<a href="#verify">Verify</a>.</p>
+</li>
+<li>
+<p><strong>Switch your own config to the socket</strong> and reinstall the hooks and MCP
 registration (<a href="#connect-the-owner">Connect the owner</a>). This is the step that
-puts your agents on <code>seam mcp-proxy</code>.</li>
-<li><strong>Enroll an approver</strong> (<a href="#enroll-an-approver">how</a>). Until you do, the terminal
-path still approves.</li>
-<li><strong>Verify</strong> (<a href="#verify">above</a>), then start an agent in a locked repository and
-approve its request end to end.</li>
-<li><strong>Put the export out of your agents' reach.</strong> The archive from step 2 sits in
+puts your agents on <code>seam mcp-proxy</code>.</p>
+</li>
+<li>
+<p><strong>Enroll an approver</strong> (<a href="#enroll-an-approver">how</a>). Until you do, the terminal
+path still approves.</p>
+</li>
+<li>
+<p><strong>Verify</strong> (<a href="#verify">above</a>), then start an agent in a locked repository and
+approve its request end to end.</p>
+</li>
+<li>
+<p><strong>Put the export out of your agents' reach.</strong> The archive from step 2 sits in
 your home, readable by anything that runs as you, with every locked project in
 it. Move it now (<code>sudo mv ~/seamless-before-peer-auth.tar.gz /opt/seamless/</code> and
 <code>sudo chown root</code> and <code>sudo chmod 600</code> the file there),
-and delete it once the new install has proved itself.</li>
-<li><strong>Optional: list a restricted account.</strong> Add it to <code>peer_auth.restricted</code> and
+and delete it once the new install has proved itself.</p>
+</li>
+<li>
+<p><strong>Optional: list a restricted account.</strong> Add it to <code>peer_auth.restricted</code> and
 restart the daemon. Give the account its own client config (socket
 <code>server_url</code>, no key), run <code>install-hooks</code> as the account, and map each of its
 clones with <code>seamlessd map-repo --path &lt;its clone&gt; --project &lt;slug&gt;</code> as the
-daemon's account (<a href="#restricted-local-accounts">details</a>).</li>
+daemon's account (<a href="#restricted-local-accounts">details</a>).</p>
+</li>
 </ol>
 <h3 id="roll-back">Roll back</h3>
 <p>Unload the LaunchDaemon or disable the system unit
@@ -1129,8 +1175,10 @@ daemon's account (<a href="#restricted-local-accounts">details</a>).</li>
 (<code>sudo mv /opt/seamless/data ~/.seamless</code> and <code>sudo chown -R $(id -un) ~/.seamless</code>),
 restore your server config without the <code>peer_auth</code> block - a release that predates
 it refuses the key - and reinstall the per-user service (<code>make install</code>, or the
-installer). The export from step 2, wherever step 10 put it, is the fallback if
-anything in the move went wrong.</p>
+installer). A TLS key you deleted from your home in step 4 comes back the same
+way (<code>sudo install -o $(id -un) -m 0600 /opt/seamless/etc/tls/&lt;key&gt; &lt;the old path&gt;</code>),
+or the per-user daemon cannot load its certificate. The export from step 2,
+wherever step 10 put it, is the fallback if anything in the move went wrong.</p>
 
 </article>
 
