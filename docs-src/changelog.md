@@ -15,6 +15,117 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.8.0 {#v0-8-0}
+
+Released 2026-11-11 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.8.0)
+
+### Features
+
+- feat(serve): an IPv4 addr also listens on its interface's IPv6 addresses that reach no further
+- feat: backups carry project locks, and an import never drops one silently
+- feat(console): lock and unlock a project with a passkey
+- feat(approval): an enrollment code enrolls only the key it was minted for
+- feat(peer_auth): one model: the users map is retired and the guide covers locked projects
+- feat(console): locked blockers in the task reader, plan writers in search, locked plan and session pages, agents on access rows, capped durations
+- feat(clock): approval times read in the viewer's own zone and name none
+- feat(approval): a denied request stays denied for refusals, an explicit ask fills a missing reason, and a dialog leaves one remedy
+- feat(console): the System and Privacy screens
+- feat(console): the Held screen color codes why each write is held, and marks what each reason matched
+- feat(approval): passkeys sign their duration, a cancelled Touch ID ends the wait, and the CLI names the lock
+- feat(peer-auth): a restricted account's sessions get a namespace of their own, so a name taken in a closed project reads like a free one
+- feat(touchid): the macOS seam checks the approver download's Sigstore signature, as an update is checked
+- feat(peer-auth): restricted local accounts reach the open projects, label their writes, and propose binding rules
+- feat(approval): refuse broad anchors, name the agent, and offer only the approval paths that exist
+- feat(macos): Seamless Approve's prompt and alerts read as plain sentences
+- feat(macos): Seamless Approve carries the Seamless mark as its app icon
+- feat(macos): Seamless Approve, the opt-in Touch ID approver, and its signed release asset
+- feat(mcp): the in-session approval dialog, and access_request on a locked daemon
+- feat(peer-auth): Touch ID approvals over the socket, and seam touchid enroll
+- feat(seam): the mcp-proxy bridge relays a mid-call answer and launches the Touch ID approver
+- feat(isolation): opt-in read grants: a confidential project's fence can ask instead of refusing
+- feat(hooks): client-side captures under peer_auth
+- feat(console): the console under locked projects: a view pool, per-browser unlocks, locked rows
+- feat(peer-auth): the locked view at every agent surface, and lease expiry warnings
+- feat(peer-auth): access requests at the lock and the approve core
+- feat(peer-auth): approver credentials and their enrolment (migration 032)
+- feat(passkey): WebAuthn registration and assertion through go-webauthn
+- feat(seam): --json on read commands, seam call, and memory/note read verbs
+- feat(peer-auth): leases follow the agent's process tree, read from the kernel
+- feat(store): lease and approval storage for passkey-sealed projects (migration 031)
+- feat(peer-auth): the owner-locked view for projects sealed behind the owner's passkey
+- feat(service): rename the launchd label to com.arctop.seamless, migrating existing installs
+- feat(commits): record the commits a session or task made, and snapshot them for an integrity monitor
+- feat(screening): write screening part 2 - corpus review, drift quarantine, lockdown, access.refused, the feed wired, forensics retention
+- feat(feed): a metadata feed package and a durable event-log tail
+- feat(screening): screen agent writes, hold the suspicious ones for the owner, and mark provenance on injected memories
+- feat(peer-auth): one daemon that tells callers apart by their Unix-socket peer user and seals projects to OS accounts
+
+### Fixes
+
+- fix(peer-auth): every passkey needs a code, and each records the relying party it belongs to
+- fix(peer-auth): serve judges the TLS pair like its config, and the move guide relocates it
+- fix(seam): a hook's non-2xx reply never reaches the agent's context
+- fix(console): a console unlock opens only the browser that holds its key
+- fix(peer-auth): clients and serve accept only the pinned daemon account
+- fix: a restricted account's label follows its words, and its old memory never stands in for a rule
+- fix(console): an unlock from the terminal opens only the browser that asked
+- fix(update): a rollback never drops a console lock
+- fix: turning a console lock back on ends the access from before
+- fix: close gaps the locked-projects security review left
+- fix(seamlessd): one-shot commands no longer migrate the database
+- fix(console): an owner action's toast survives the live refresh
+- fix(ci): raise the toolchain to go1.26.10 and skip a POSIX-only test on Windows
+- fix(approvers): one-shot approval commands never migrate the database
+- fix(console): the Approvers page keeps its "Enrolled" line through the refresh
+- fix(console): say what to do when an authenticator already holds a passkey
+- fix(console): a Touch ID key alone no longer offers the passkey path it cannot approve
+- fix(access): close the gaps the pre-merge security review found
+- fix(access): settle the SEAL 11 gaps the owner decided
+- fix(macos): a failure title reads on light glass, and a quoted path keeps its first slash
+- fix(macos): a killed Touch ID helper ends the dialog's wait
+- fix(approval): access_request says what it did, and the U3 approval follow-ups
+- fix(mcp): a running agent keeps its approval dialog across a daemon restart
+- fix(macos): a bare session name stays on one line
+- fix(mcp): the passkey page's dialog waits for the decision and the page's answer together
+- fix(console): the passkey approve button asks for the passkey after a duration is chosen
+- fix(macos): the Touch ID prompt says a capped duration as the cap
+- fix(mcp): the approval dialog offers durations as the lease cap grants them
+- fix(macos): color a failure's title once its alert is up
+- fix(macos): the app's times are on the 24-hour clock, and a session is named by its short id
+- fix(mcp): the approval dialog leads with the warning count, and its wait ends before the background move
+- fix(seam): seam approve picks a duration by its name, and says when a fixed one ends
+- fix(macos): a failure alert reads as one, and only an alert that changed nothing closes by itself
+- fix(console): the Touch ID helper's facts-changed refusal names no page to reload
+- fix(screening): an agent's own guard marks its session in a locked project before the lease
+- fix(macos): the set-apart command shows every line, and a click copies it
+- fix(console): the locked-blocker lines emit nothing while nothing is locked
+- fix(console): the Approvers page gets its own styles
+- fix(seamlessd): approve's account refusal is one line, and the unlock link's lifetime reads in minutes
+- fix(console): a restricted account's seam access request, the locked preview and the screening card say what is true
+- fix(console): the access pages get their own styles, the Agent row and copy the owner can act on
+- fix(approval): a short id keeps naming its request once it is decided or expired
+- fix(mcp): every MCP client refuses a redirect; vulncheck allows GO-2026-6911 until 2026-12-06
+- fix(update): a rollback that restores the pre-update database ends the access it held
+- fix(console): a marked session stays marked until the owner clears it
+- fix(console): the empty Held screen uses the house empty panel
+- fix(console): focus rings on primary and pop buttons
+- fix(console): focus ring on the welcome card's write-screening box
+- fix(console): show a held write's whole preview, not a 360px scroll box
+- fix(console): a stale held card no longer says what Release would do
+- fix(console): line up a stale held card's note with its Discard button
+- fix(repo-map): quote retire-project's remedies, and match C:/ against C:\
+- fix(hook): relay the daemon's reply whole or not at all
+
+### Other
+
+- refactor(approver): one shared approver_ended contract, the waiters on the Server, the handler registered once, and the cancel line pinned in the app
+- refactor: spell enroll and enrollment the American way
+- refactor(macos): the Touch ID approver's identifier is com.arctop.seamless.approve
+- refactor(peer-auth): rename the access lock to peer_auth.locked
+- build(release): move the cask quarantine strip to hooks.post.install_steps
+- perf(console): a live Overview refresh sends only what changed
+- perf(store): read each injection's payload once
+
 ## v0.7.4 {#v0-7-4}
 
 Released 2026-10-15 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.7.4)
