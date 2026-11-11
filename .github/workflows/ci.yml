@@ -14,7 +14,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The full gate, or its docs lane when `changes` finds a docs-only run.
+  # !cancelled() runs it even when `changes` failed: a missing output reads
+  # as code, so every step below that tests `!= 'false'` runs the full gate.
   check:
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     # make check took 14m50s on 2026-10-10 (go test -race ./... alone ~11m,
     # internal/console the long pole at ~9m), and the next run was cut off
@@ -51,6 +56,7 @@ jobs:
       # pkg@version` resolves outside the current module, so this cannot touch
       # go.mod/go.sum.
       - name: Install golangci-lint
+        if: needs.changes.outputs.code != 'false'
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
@@ -62,13 +68,41 @@ jobs:
       # cannot touch go.mod/go.sum. Findings track the live vuln.go.dev DB, not
       # this pin, so a new advisory still turns CI red without a bump here.
       - name: Install govulncheck
+        if: needs.changes.outputs.code != 'false'
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
       # build + vet + fmt-check + lint + vulncheck + test-race. CGO stays enabled (the default
       # on this runner) because -race requires it; the no-CGO rule is about the
       # shipped binary's deps, not the test toolchain.
       - name: make check
+        if: needs.changes.outputs.code != 'false'
         run: make check
+
+      # The docs lane, for a run that changed only docs-src/ and the files
+      # docsgen generates from it (`changes` decides). Such a run changes no
+      # code, so build, vet, lint, vulncheck and the -race suite have nothing
+      # new to judge. What it can break is the generated site (docs-check,
+      # which also rebuilds the changelog from every tag, hence fetch-depth: 0
+      # above), the landing page's agreement with the docs (site-check), and
+      # the tests that read docs files. Those packages are found here, not
+      # listed: every package with a test naming docs-src, docs/docs or
+      # llms(-full).txt. A hand-kept list had already missed cmd/seamlessd,
+      # whose tests hold the guides' service blocks to the install probe. A
+      # false positive costs one package's test time; a missed one would let
+      # a docs edit break a test the full gate runs. No -race: the change
+      # touches no code a race could be in. It took about a minute locally.
+      - name: docs lane (docs-only change)
+        if: needs.changes.outputs.code == 'false'
+        run: |
+          make docs-check site-check
+          mapfile -t pkgs < <(git grep -l -E 'docs-src|docs/docs|"docs", "docs"|llms' -- '*_test.go' \
+            | xargs -n1 dirname | sort -u | sed 's|^|./|')
+          if [ "${#pkgs[@]}" -eq 0 ]; then
+            echo "docs lane: found no test that reads a docs file, so it refuses to pass on nothing" >&2
+            exit 1
+          fi
+          echo "docs lane: go test ${pkgs[*]}"
+          go test -count=1 "${pkgs[@]}"
 
   # `check` above stays the only full gate. This job runs the packages with
   # OS-specific code on the two OSes Linux CI cannot stand in for. Files
@@ -82,7 +116,12 @@ jobs:
   # semantics. So this job runs whole packages, not a -run filter: a name
   # filter misses those tests, and every new test would have to be added to
   # it by hand.
+  #
+  # Skipped on a docs-only run (which a required check counts as passing):
+  # nothing it tests can change there. A missing `changes` output runs it.
   os-smoke:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     strategy:
       # Each OS reports on its own: a red Windows run must not cancel the
       # macOS run that would have shown whether the change is Windows-only.
@@ -162,17 +201,27 @@ jobs:
           fi
           go test -count=1 -skip "$skip" ./cmd/seamlessd ./internal/update ./internal/agentproc
 
-  # Whether this run touches the Touch ID approver: macos/, scripts/approver/
-  # or a workflow (owner, 2026-11-06: the macOS job runs only then). Plain git
-  # rather than a path-filter action, for the reason config-lint gives. Both
-  # commits are fetched at depth 1: a two-dot diff compares trees and needs
-  # no history. Anything it cannot tell (a new branch's all-zero `before`, a
-  # failed fetch or diff) runs the job.
+  # What this run touches, so the jobs above and below can skip what it
+  # cannot affect:
+  # - approver: the Touch ID approver's files, macos/, scripts/approver/ or a
+  #   workflow (owner, 2026-11-06: the macOS job runs only then).
+  # - code: false only when EVERY changed path is docs-src/ or a file docsgen
+  #   generates from it (docs/docs/, docs/llms.txt, docs/llms-full.txt), such
+  #   as the changelog refresh after a release. `check` then runs its docs
+  #   lane and os-smoke is skipped. Any other path keeps the full gate: Go
+  #   code, a workflow, a script, .goreleaser.yaml, docs/install* (os-smoke
+  #   tests it), docs/index.html (site-check judges it against the installer
+  #   and the CLI), docs/scenarios/, the repo root.
+  # Plain git rather than a path-filter action, for the reason config-lint
+  # gives. Both commits are fetched at depth 1: a two-dot diff compares trees
+  # and needs no history. Anything it cannot tell (a new branch's all-zero
+  # `before`, a failed fetch or diff, an empty diff) runs every job.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       approver: ${{ steps.diff.outputs.approver }}
+      code: ${{ steps.diff.outputs.code }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -181,11 +230,15 @@ jobs:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: |
           approver=true
+          code=true
           if [ -n "${BASE//0/}" ] && git fetch -q --no-tags --depth=1 origin "$BASE" \
             && files=$(git diff --name-only "$BASE" HEAD); then
             grep -qE '^(macos/|scripts/approver/|\.github/workflows/)' <<<"$files" || approver=false
+            if [ -n "$files" ] && ! grep -qvE '^(docs-src/|docs/docs/|docs/llms(-full)?\.txt$)' <<<"$files"; then
+              code=false
+            fi
           fi
-          echo "approver=$approver" | tee -a "$GITHUB_OUTPUT"
+          { echo "approver=$approver"; echo "code=$code"; } | tee -a "$GITHUB_OUTPUT"
 
   # The macOS Touch ID approver (macos/SeamApprove, Swift) is built only on a
   # release tag that carries its signing profile, so without this job it
