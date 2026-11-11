@@ -29,7 +29,7 @@ Strict layering, no circular imports. `cmd/` wires everything; no package import
 ```
 cmd/seamlessd, cmd/seam, cmd/seambench, cmd/demoseed, cmd/docsgen
   -> internal/{mcp,hooks,console}         (API surfaces)
-    -> internal/{retrieve,lifecycle,gardener,files,capture,bench,demokit,update,screening,feed,commitfeed,approval} (domains)
+    -> internal/{retrieve,lifecycle,gardener,files,capture,bench,demokit,update,screening,feed,commitfeed,approval,backup} (domains)
       -> internal/{store,events,llm,core,config,validate,access}   (foundations)
 ```
 

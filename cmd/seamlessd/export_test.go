@@ -149,22 +149,6 @@ func TestDefaultExportName(t *testing.T) {
 		defaultExportName("a", at.In(time.FixedZone("UTC+3", 3*3600))))
 }
 
-func TestSanitizeHostForFilename(t *testing.T) {
-	for in, want := range map[string]string{
-		"example-remote":   "example-remote",
-		"NUC.local":        "nuc.local",
-		"host/with/slash":  "host-with-slash",
-		`win\box`:          "win-box",
-		"host:1":           "host-1",
-		"":                 "unknown",
-		"   ":              "unknown",
-		"///":              "unknown",
-		"example-laptop13": "example-laptop13",
-	} {
-		require.Equal(t, want, sanitizeHostForFilename(in), "sanitizeHostForFilename(%q)", in)
-	}
-}
-
 func TestHumanSize(t *testing.T) {
 	require.Equal(t, "0 B", humanSize(0))
 	require.Equal(t, "512 B", humanSize(512))

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/archive"
+	"github.com/arctop/seamless/internal/backup"
 	"github.com/arctop/seamless/internal/config"
 )
 
@@ -161,34 +162,15 @@ func exportToFile(ctx context.Context, opts archive.ExportOptions, dest string) 
 }
 
 // defaultExportName is the archive name an -o-less export writes into the
-// current directory: seamless-<host>-<UTC timestamp>.tar.gz.
+// current directory: seamless-<host>-<UTC timestamp>.tar.gz, the name Settings
+// > Backups gives a backup the owner made (backup.FileName), so an export
+// copied into the backup folder lists as one.
 //
 // The timestamp is UTC with no separators so the name sorts chronologically and
 // survives every filesystem; the host is sanitized because a hostname may carry
 // characters (a path separator, a colon on Windows) that a filename may not.
 func defaultExportName(host string, now time.Time) string {
-	return fmt.Sprintf("seamless-%s-%s.tar.gz", sanitizeHostForFilename(host), now.UTC().Format("20060102T150405Z"))
-}
-
-// sanitizeHostForFilename reduces a hostname to lowercase letters, digits, dot,
-// dash and underscore. An empty or fully-unusable hostname becomes "unknown"
-// rather than an empty segment: config.Hostname returns "" for a machine whose
-// name could not be read, and "seamless--20260101T000000Z.tar.gz" hides that.
-func sanitizeHostForFilename(host string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(strings.TrimSpace(host)) {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '.', r == '-', r == '_':
-			b.WriteRune(r)
-		default:
-			b.WriteRune('-')
-		}
-	}
-	name := strings.Trim(b.String(), "-.")
-	if name == "" {
-		return "unknown"
-	}
-	return name
+	return backup.FileName(host, now, archive.KindManual)
 }
 
 // exportSummary is the human report: what was written, where, and what the

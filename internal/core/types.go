@@ -510,6 +510,14 @@ const (
 	EventUpdateApplied   EventKind = "update.applied"   // the daemon started on a different version than the last one (item_id: the new version; payload: from, to, direction, plus codex_hooks_changed when Codex's hooks.json changed with it); recorded after the state file is written
 	EventUpdateStarted   EventKind = "update.started"   // the daemon handed an update attempt to its updater (item_id: the version it installs; payload: from, to, why, path, attempt); recorded after the attempt is saved, before the spawn
 	EventUpdateFailed    EventKind = "update.failed"    // an update attempt the daemon started did not apply (item_id: the version it tried; payload: from, to, outcome, stage, why, rolled_back, attempt, plus refusal -- a fixed word -- when the updater's gates refused it); never the updater's error text
+
+	// Backups (internal/backup). Payloads carry file names, kinds, counts,
+	// sizes and fixed reason words -- never a path's contents or error text.
+	EventBackupCreated       EventKind = "backup.created"        // a backup was written and read back (item_id: the file name; payload: kind, where, bytes, memories, notes, projects)
+	EventBackupFailed        EventKind = "backup.failed"         // a backup did not complete (payload: kind, where, reason -- a fixed word -- and failures, the automatic streak)
+	EventBackupDeleted       EventKind = "backup.deleted"        // the owner deleted a backup, or pruning removed an old automatic one (item_id: the file name; payload: kind, where, by)
+	EventBackupRestored      EventKind = "backup.restored"       // a restore was applied (item_id: the backup's file name; payload: mode, sha256, proof)
+	EventBackupRestoreFailed EventKind = "backup.restore_failed" // a restore did not finish, or expired (item_id: the backup's file name; payload: mode, stage, reason -- a fixed word)
 )
 
 // Event is one entry in the append-only log. Payload carries kind-specific
