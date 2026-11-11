@@ -691,7 +691,9 @@ func runServe(args []string) error {
 	// Refusals (write screening's access.refused, when on) are watched on both
 	// listeners, outside everything that can refuse.
 	tcpRoutes = refusalWatch(screen, tcpRoutes)
-	srv := newHTTPServer(ctx, bind, daemonHandler(bind, cfg.AllowedHostsEffective(), activity, tcpRoutes))
+	// The handler is set once the listeners are bound: the Host allowlist names
+	// the IPv6 addresses paired with bind, which only the bind can tell.
+	srv := newHTTPServer(ctx, bind, nil)
 	if tlsOn {
 		// TLS 1.2 floor: everything below it is either broken or obsolete, and
 		// nothing that speaks to this daemon (Go, curl, a browser) needs it.
@@ -718,6 +720,12 @@ func runServe(args []string) error {
 		garden.Wait()
 		return fmt.Errorf("seamlessd.serve: %w", err)
 	}
+	// Beside a concrete IPv4 address, the IPv6 addresses of its interface that
+	// reach no further (listen_pair.go). They are facts about the listener, as
+	// the bind host is, so the Host allowlist admits them the same way.
+	paired := listenPaired(ln, hostIfaceAddrs, net.Listen)
+	lns := append([]net.Listener{ln}, paired...)
+	srv.Handler = daemonHandler(bind, append(cfg.AllowedHostsEffective(), listenerHosts(paired)...), activity, tcpRoutes)
 	// The peer_auth socket: the same routes, no Host guard (a Unix socket has no
 	// DNS name to rebind and no browser can reach it), and each connection's
 	// principal read from the kernel at accept. The refusal of an unknown peer
@@ -728,7 +736,9 @@ func runServe(args []string) error {
 	if peer != nil {
 		sockLn, err = peer.listenSocket()
 		if err != nil {
-			_ = ln.Close()
+			for _, l := range lns {
+				_ = l.Close()
+			}
 			stop()
 			garden.Wait()
 			return fmt.Errorf("seamlessd.serve: %w", err)
@@ -742,21 +752,28 @@ func runServe(args []string) error {
 	}
 	upd.Start(ctx)
 
-	errCh := make(chan error, 2)
-	go func() {
-		slog.Info("seamlessd listening", "addr", bind, "url", serverURL, "tls", tlsOn,
-			"data_dir", cfg.DataDir,
-			"version", buildVersion(), "commit", commit, "built", buildDate, "mcp_tools", mcpSrv.NumTools(),
-			"distribution", distribution, "instance", instance)
-		serve := func() error { return srv.Serve(ln) }
-		if tlsOn {
-			// The certificate is already in srv.TLSConfig, so no file names.
-			serve = func() error { return srv.ServeTLS(ln, "", "") }
-		}
-		if err := serve(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
-		}
-	}()
+	errCh := make(chan error, len(lns)+1)
+	listening := []any{"addr", bind}
+	for _, l := range paired {
+		listening = append(listening, "also", l.Addr().String())
+	}
+	slog.Info("seamlessd listening", append(listening, "url", serverURL, "tls", tlsOn,
+		"data_dir", cfg.DataDir,
+		"version", buildVersion(), "commit", commit, "built", buildDate, "mcp_tools", mcpSrv.NumTools(),
+		"distribution", distribution, "instance", instance)...)
+	// One server on every TCP listener: Shutdown and Close reach them all.
+	for _, l := range lns {
+		go func() {
+			serve := func() error { return srv.Serve(l) }
+			if tlsOn {
+				// The certificate is already in srv.TLSConfig, so no file names.
+				serve = func() error { return srv.ServeTLS(l, "", "") }
+			}
+			if err := serve(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				errCh <- err
+			}
+		}()
+	}
 	if sockSrv != nil {
 		go func() {
 			slog.Info("seamlessd listening on the peer_auth socket", "socket", peer.cfg.Socket.Path)

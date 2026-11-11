@@ -443,13 +443,18 @@ A page on the origin can run passkey ceremonies with any passkey enrolled for it
 That is why doctor checks two things about every origin:
 
 - **The daemon listens on every address its host resolves to, on its port.** A
-  tailnet name resolves to an IPv4 and an IPv6 address. If `addr` names only one
-  of them, another process running as you can listen on the other and serve the
-  same origin, and a browser that picks that address runs its ceremonies there.
-  Bind the wildcard (`addr: "0.0.0.0:8081"` holds every address of every
-  interface, so the bearer key and TLS are then all that guard it on your LAN), or
-  give the name only addresses the daemon holds. `localhost` has the same gap on
-  `[::1]` while the daemon listens on `127.0.0.1` alone; doctor notes it.
+  tailnet name can resolve to an IPv4 and an IPv6 address. An address of the
+  name the daemon does not hold is one another process running as you can
+  listen on and serve the same origin from, and a browser that picks that
+  address runs its ceremonies there. So an IPv4 `addr` brings its interface's
+  IPv6 addresses along: the tailnet's `fd7a:...` address beside its `100.x`
+  one, `[::1]` beside `127.0.0.1`. Doctor's `bind` row lists them. It never
+  pairs a private address with a global IPv6 one, which would widen a LAN bind
+  to the internet. An address the pairing misses, such as one on another
+  interface, still needs the wildcard (`addr: "0.0.0.0:8081"` holds every
+  address of every interface, so the bearer key and TLS are then all that
+  guard it on your LAN), or a name that resolves only to addresses the daemon
+  holds.
 - **The certificate names the host.** Under peer_auth only root and the daemon's
   account read the TLS key, which is what keeps a process of yours from serving
   the origin with a valid certificate. That holds only if your account cannot get

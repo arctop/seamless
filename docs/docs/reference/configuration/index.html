@@ -931,6 +931,13 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c"># HTTP bind address. Change it here and re-run `make install`: this file is the</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># single source of truth for the bind, and the Makefile reads the port back out</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># of it rather than assuming 8081.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># An IPv4 address also listens, on the same port, on its interface&#39;s IPv6</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># addresses that reach no further, where it has them: ::1 beside 127.0.0.1, a</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># unique local address (fc00::/7, such as a tailnet&#39;s fd7a:...) beside a</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># private or tailnet one, never a global IPv6 address beside a private IPv4</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># one. So a dual-stack name is this daemon whichever address a client tries</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># first. A wildcard already listens everywhere; doctor&#39;s bind row lists the pair.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># env: SEAMLESS_ADDR</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">addr</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;127.0.0.1:8081&#34;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">

@@ -60,39 +60,51 @@ func TestPasskeyOriginChecks_EveryAddressOfTheName(t *testing.T) {
 	cert, key := writeCertPair(t, time.Now().Add(24*time.Hour), name)
 	other, otherKey := writeCertPair(t, time.Now().Add(24*time.Hour), "elsewhere.example.com")
 	tailnet := fakeLookup(map[string][]string{name: {"100.64.0.7", "fd7a:115c:a1e0::7"}})
+	elsewhere := fakeLookup(map[string][]string{name: {"100.64.0.7", "fd7a:115c:a1e0::99"}})
 	tls := func(c config.Config, certFile, keyFile string) config.Config {
 		c.TLS.CertFile, c.TLS.KeyFile = certFile, keyFile
 		return c
 	}
 	base := config.Defaults()
 	base.AdvertisedURL = "https://" + name + ":8081"
+	ifaces := func(i ...[]netip.Addr) ifaceAddrs { return func() ([][]netip.Addr, error) { return i, nil } }
+	dualStack := ifaces(addrs("127.0.0.1", "::1"), addrs("100.64.0.7", "fd7a:115c:a1e0::7"))
+	// The tailnet's IPv6 address on an interface of its own: nothing pairs it.
+	split := ifaces(addrs("127.0.0.1", "::1"), addrs("100.64.0.7"), addrs("fd7a:115c:a1e0::7"))
 
 	for _, tc := range []struct {
-		name   string
-		cfg    config.Config
-		bind   string
-		lookup originLookup
-		want   checkStatus
-		says   []string
+		name string
+		cfg  config.Config
+		bind string
+		hn   hostNet
+		want checkStatus
+		says []string
 	}{
-		{"the tailnet IPv4 alone leaves the IPv6 address to anyone", tls(base, cert, key), "100.64.0.7:8081", tailnet,
-			statusWarn, []string{"derived from server_url https://" + name + ":8081", "does not listen on fd7a:115c:a1e0::7",
-				"another local process can listen there"}},
-		{"a wildcard bind holds every address", tls(base, cert, key), "0.0.0.0:8081", tailnet,
+		{"the tailnet IPv4 holds its interface's IPv6 beside it", tls(base, cert, key), "100.64.0.7:8081", hostNet{tailnet, dualStack},
+			statusOK, []string{"derived from server_url https://" + name + ":8081", "100.64.0.7, fd7a:115c:a1e0::7, every address of it held"}},
+		{"an IPv6 address of the name on another interface is left to anyone", tls(base, cert, key), "100.64.0.7:8081",
+			hostNet{tailnet, split}, statusWarn, []string{"does not listen on fd7a:115c:a1e0::7", "another local process can listen there"}},
+		{"an address of the name this machine does not hold", tls(base, cert, key), "100.64.0.7:8081", hostNet{elsewhere, dualStack},
+			statusWarn, []string{"this machine does not hold fd7a:115c:a1e0::99", "reaches another machine, or nothing"}},
+		{"a wildcard bind holds every address", tls(base, cert, key), "0.0.0.0:8081", hostNet{tailnet, split},
 			statusOK, []string{"every address of it held by this daemon on port 8081"}},
-		{"a certificate for another name", tls(base, other, otherKey), "0.0.0.0:8081", tailnet,
+		{"a certificate for another name", tls(base, other, otherKey), "0.0.0.0:8081", hostNet{tailnet, dualStack},
 			statusWarn, []string{"does not name the host " + name, "a browser refuses the origin"}},
-		{"a name that does not resolve", tls(base, cert, key), "0.0.0.0:8081", fakeLookup(nil),
+		{"a name that does not resolve", tls(base, cert, key), "0.0.0.0:8081", hostNet{fakeLookup(nil), dualStack},
 			statusWarn, []string{"does not resolve here"}},
-		{"a listener on another port", tls(base, cert, key), "0.0.0.0:9443", tailnet,
+		{"a listener on another port", tls(base, cert, key), "0.0.0.0:9443", hostNet{tailnet, dualStack},
 			statusWarn, []string{"names port 8081, but this daemon listens on port 9443"}},
-		{"the localhost default on a tailnet bind cannot be reached", config.Defaults(), "100.64.0.7:8081", tailnet,
+		{"the localhost default on a tailnet bind cannot be reached", config.Defaults(), "100.64.0.7:8081", hostNet{tailnet, dualStack},
 			statusWarn, []string{"the localhost default", "does not listen on localhost"}},
-		{"the localhost default on 127.0.0.1 leaves only [::1], said as information", config.Defaults(), "127.0.0.1:8081", tailnet,
-			statusOK, []string{"does not listen on ::1 port 8081"}},
+		{"the localhost default on 127.0.0.1 holds ::1 beside it", config.Defaults(), "127.0.0.1:8081", hostNet{tailnet, dualStack},
+			statusOK, []string{"127.0.0.1, ::1, every address of it held"}},
+		{"the localhost default on [::1] leaves 127.0.0.1, said as information", config.Defaults(), "[::1]:8081",
+			hostNet{tailnet, dualStack}, statusOK, []string{"does not listen on 127.0.0.1 port 8081"}},
+		{"a machine with no ::1 leaves nothing for a process to take", config.Defaults(), "127.0.0.1:8081",
+			hostNet{tailnet, ifaces(addrs("127.0.0.1"))}, statusOK, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			rows := passkeyOriginChecks(context.Background(), tc.cfg, tc.bind, nil, tc.lookup)
+			rows := passkeyOriginChecks(context.Background(), tc.cfg, tc.bind, nil, tc.hn)
 			text := rowsText(rows)
 			require.Equal(t, tc.want, worst(rows), text)
 			for _, s := range tc.says {
@@ -142,24 +154,29 @@ func TestPasskeyOriginChecks_EnrolledPasskeys(t *testing.T) {
 	require.NotContains(t, text, `"key b" (`)
 }
 
-// boundAddrs reads what net.Listen holds: a wildcard holds everything, an IP
-// itself, a name its first IPv4 address.
+// boundAddrs reads what serve listens on: a wildcard holds everything, an IP
+// itself, a name its first IPv4 address, and an IPv4 address the IPv6 ones
+// serve pairs with it.
 func TestBoundAddrs(t *testing.T) {
-	lookup := fakeLookup(map[string][]string{"studio.local": {"fe80::1", "192.168.1.9"}})
+	hn := hostNet{
+		lookup: fakeLookup(map[string][]string{"studio.local": {"fe80::1", "192.168.1.9"}}),
+		ifaces: func() ([][]netip.Addr, error) { return studioIfaces, nil },
+	}
 	for bind, want := range map[string]heldAddrs{
 		":8081":             {every: true},
 		"0.0.0.0:8081":      {every: true},
 		"[::]:8081":         {every: true},
-		"100.64.0.7:8081":   {addr: netip.MustParseAddr("100.64.0.7")},
-		"[::1]:8081":        {addr: netip.IPv6Loopback()},
-		"studio.local:8081": {addr: netip.MustParseAddr("192.168.1.9")},
+		"100.64.0.7:8081":   {addrs: addrs("100.64.0.7", "fd7a:115c:a1e0::7")},
+		"10.9.9.9:8081":     {addrs: addrs("10.9.9.9")},
+		"[::1]:8081":        {addrs: addrs("::1")},
+		"studio.local:8081": {addrs: addrs("192.168.1.9", "fd00:1::9")},
 	} {
-		got, err := boundAddrs(context.Background(), bind, lookup)
+		got, err := boundAddrs(context.Background(), bind, hn)
 		require.NoError(t, err, bind)
 		require.Equal(t, want, got, bind)
 	}
-	_, err := boundAddrs(context.Background(), "nowhere.local:8081", lookup)
+	_, err := boundAddrs(context.Background(), "nowhere.local:8081", hn)
 	require.Error(t, err)
-	require.True(t, heldAddrs{addr: netip.MustParseAddr("100.64.0.7")}.covers(netip.MustParseAddr("::ffff:100.64.0.7")),
+	require.True(t, heldAddrs{addrs: addrs("100.64.0.7")}.covers(netip.MustParseAddr("::ffff:100.64.0.7")),
 		"a v4-mapped answer is the same address")
 }

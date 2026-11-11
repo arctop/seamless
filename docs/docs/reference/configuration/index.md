@@ -344,6 +344,13 @@ This is `seamless.yaml.example` from the repository, verbatim.
 # HTTP bind address. Change it here and re-run `make install`: this file is the
 # single source of truth for the bind, and the Makefile reads the port back out
 # of it rather than assuming 8081.
+#
+# An IPv4 address also listens, on the same port, on its interface's IPv6
+# addresses that reach no further, where it has them: ::1 beside 127.0.0.1, a
+# unique local address (fc00::/7, such as a tailnet's fd7a:...) beside a
+# private or tailnet one, never a global IPv6 address beside a private IPv4
+# one. So a dual-stack name is this daemon whichever address a client tries
+# first. A wildcard already listens everywhere; doctor's bind row lists the pair.
 # env: SEAMLESS_ADDR
 addr: "127.0.0.1:8081"
 

@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -483,7 +485,7 @@ func transportChecks(cfg config.Config) []check {
 			clientServerURLCheck(cfg),
 		}
 	}
-	return []check{bindCheck(cfg), serverURLCheck(cfg), tlsCheck(cfg)}
+	return []check{bindCheck(cfg, bindPaired(context.Background(), cfg.Addr, systemNet)), serverURLCheck(cfg), tlsCheck(cfg)}
 }
 
 // clientServerURLCheck probes the server a client install dials.
@@ -553,16 +555,22 @@ func reachabilityProbe() *http.Client {
 // bindCheck reports the listener's exposure. Non-loopback without TLS is a warn
 // and not a fail for the same reason warnNonLoopbackBind is a warning: binding
 // wide is a legitimate choice, and refusing it would only teach people to patch
-// it out.
-func bindCheck(cfg config.Config) check {
+// it out. paired is the IPv6 addresses serve listens on beside an IPv4 addr
+// (bindPaired), which reach no further than it does and so change nothing here
+// but the list.
+func bindCheck(cfg config.Config, paired []netip.Addr) check {
 	const name = "bind"
+	addr := cfg.Addr
+	if _, port, err := net.SplitHostPort(cfg.Addr); err == nil {
+		addr += pairedSuffix(port, paired)
+	}
 	if isLoopbackBind(cfg.Addr) {
-		return check{statusOK, name, cfg.Addr + " (reachable only from this machine)"}
+		return check{statusOK, name, addr + " (reachable only from this machine)"}
 	}
 	if cfg.TLSEnabled() {
-		return check{statusOK, name, cfg.Addr + " over TLS; the bearer key is still the only authentication"}
+		return check{statusOK, name, addr + " over TLS; the bearer key is still the only authentication"}
 	}
-	return check{statusWarn, name, cfg.Addr +
+	return check{statusWarn, name, addr +
 		" is reachable beyond this machine with no TLS: the bearer key, every hook payload and the whole console travel in the clear" +
 		" -- set tls.cert_file/tls.key_file, or keep it inside a trusted LAN"}
 }

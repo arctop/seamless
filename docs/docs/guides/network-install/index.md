@@ -55,6 +55,12 @@ config load, in any spelling of the unspecified address: `http://0.0.0.0:8081`
 reaches, at most, the machine doing the dialing, so it can never be the right
 answer to "where do clients reach me".
 
+A concrete IPv4 `addr` (one LAN or tailnet address instead of the wildcard)
+also listens on its interface's IPv6 addresses that reach no further, so a
+dual-stack name reaches the daemon over either family. Beside a private or
+tailnet address that means only unique local addresses (`fd…`), never a global
+IPv6 address the internet may reach. Doctor's `bind` row lists them.
+
 Naming `server_url` also arms the **Host-header allowlist**: the daemon then
 answers the loopback names, a concrete bind host, and the host of `server_url`,
 and refuses everything else with `421 Misdirected Request`. Add any further

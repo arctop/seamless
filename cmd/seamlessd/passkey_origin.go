@@ -36,22 +36,47 @@ func lookupOriginHost(ctx context.Context, host string) ([]netip.Addr, error) {
 	return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 }
 
+// hostNet is what the origin checks read about this machine's network: the
+// names its resolver answers, and the addresses its interfaces hold.
+type hostNet struct {
+	lookup originLookup
+	ifaces ifaceAddrs
+}
+
+// systemNet is this machine's resolver and interfaces.
+var systemNet = hostNet{lookup: lookupOriginHost, ifaces: hostIfaceAddrs}
+
+// holds reports whether one of this machine's interfaces holds a.
+func (n hostNet) holds(a netip.Addr) bool {
+	all, err := n.ifaces()
+	if err != nil {
+		return true // unknown: judged as the worse case, an address a local process can take
+	}
+	for _, list := range all {
+		if slices.Contains(list, a.Unmap()) {
+			return true
+		}
+	}
+	return false
+}
+
 // passkeyOriginChecks is what doctor reports, and serve logs, about the
 // relying party the approver passkeys use under peer_auth:
 //
 //   - the rp_id and origins in effect, and where they come from;
 //   - for each origin, whether this daemon serves it: its scheme against TLS,
 //     its port against bind, the certificate naming its host, and the daemon
-//     listening on EVERY address the host resolves to. An address of the name
-//     the daemon does not hold is one another local process can listen on and
-//     serve the exact origin from, so a browser that picks it would run a
-//     passkey ceremony for that process;
+//     listening on EVERY address the host resolves to (bind, and the IPv6
+//     addresses serve pairs with an IPv4 one: listen_pair.go). An address of
+//     the name this machine holds and the daemon does not is one another local
+//     process can listen on and serve the exact origin from, so a browser that
+//     picks it would run a passkey ceremony for that process;
 //   - with a database, the passkeys a changed rp_id strands (each one works only
 //     under the rp_id it was enrolled for), the ones enrolled before that was
 //     recorded, and the ones another passkey's approval enrolled without a code.
 //
 // bind is the listener's address (cfg.Addr, or serve's -addr).
-func passkeyOriginChecks(ctx context.Context, cfg config.Config, bind string, db *sql.DB, lookup originLookup) []check {
+func passkeyOriginChecks(ctx context.Context, cfg config.Config, bind string, db *sql.DB, hn hostNet) []check {
 	const name = "peer_auth.passkeys"
 	rpID, origins := cfg.RelyingParty()
 	source := "the localhost default"
@@ -66,7 +91,7 @@ func passkeyOriginChecks(ctx context.Context, cfg config.Config, bind string, db
 	out := []check{{statusOK, name, fmt.Sprintf("relying party %s (%s), origins %s: a passkey approves only under the rp_id "+
 		"it was enrolled for", rpID, source, strings.Join(origins, ", "))}}
 	for _, o := range origins {
-		out = append(out, originChecks(ctx, cfg, bind, o, lookup)...)
+		out = append(out, originChecks(ctx, cfg, bind, o, hn)...)
 	}
 	if db != nil {
 		out = append(out, enrolledPasskeyChecks(ctx, db, rpID)...)
@@ -75,7 +100,7 @@ func passkeyOriginChecks(ctx context.Context, cfg config.Config, bind string, db
 }
 
 // originChecks judges one origin against this daemon's listener.
-func originChecks(ctx context.Context, cfg config.Config, bind, origin string, lookup originLookup) []check {
+func originChecks(ctx context.Context, cfg config.Config, bind, origin string, hn hostNet) []check {
 	const name = "peer_auth.passkeys"
 	u, err := url.Parse(origin)
 	if err != nil || u.Hostname() == "" {
@@ -123,79 +148,104 @@ func originChecks(ctx context.Context, cfg config.Config, bind, origin string, l
 		// Browsers answer localhost themselves, with both loopback addresses.
 		addrs = []netip.Addr{netip.MustParseAddr("127.0.0.1"), netip.IPv6Loopback()}
 	} else {
-		addrs, err = lookup(ctx, host)
+		addrs, err = hn.lookup(ctx, host)
 		if err != nil {
 			return append(out, check{statusWarn, name, fmt.Sprintf("origin %s: %s does not resolve here (%v), so a browser on "+
 				"this machine cannot reach it", origin, host, err)})
 		}
 	}
-	held, err := boundAddrs(ctx, bind, lookup)
+	held, err := boundAddrs(ctx, bind, hn)
 	if err != nil {
 		return append(out, check{statusWarn, name, fmt.Sprintf("origin %s: cannot tell which addresses this daemon "+
 			"listens on (%v)", origin, err)})
 	}
-	var missing []netip.Addr
+	// An address of the name the daemon does not hold is a local process's to
+	// take only when this machine holds it; one it does not is another
+	// machine's, or nobody's.
+	var missing, elsewhere []netip.Addr
 	for _, a := range addrs {
-		if !held.covers(a) {
+		switch {
+		case held.covers(a):
+		case hn.holds(a):
 			missing = append(missing, a)
+		default:
+			elsewhere = append(elsewhere, a)
 		}
 	}
 	switch {
-	case len(missing) == 0:
+	case len(missing)+len(elsewhere) == 0:
 		if len(out) == 0 {
 			out = append(out, check{statusOK, name, fmt.Sprintf("origin %s: %s, every address of it held by this daemon on port %s",
 				origin, joinAddrs(addrs), port)})
 		}
-	case localhost && len(missing) == len(addrs):
+	case localhost && len(missing)+len(elsewhere) == len(addrs):
 		out = append(out, check{statusWarn, name, fmt.Sprintf("origin %s: this daemon does not listen on localhost (addr %s), so no "+
 			"browser can open the passkey pages: serve TLS under a host name in server_url, which the relying party then "+
 			"follows, or set peer_auth.passkeys to an origin the daemon serves", origin, bind)})
-	case localhost:
+	case localhost && len(missing) > 0:
 		out = append(out, check{statusInfo, name, fmt.Sprintf("origin %s: this daemon does not listen on %s port %s: a browser "+
 			"that tries that address first could reach another local process listening there", origin, joinAddrs(missing), port)})
+	case localhost:
+		// A loopback address this machine lacks is one no process can take, and
+		// a browser that tries it falls back to the other.
 	default:
-		out = append(out, check{statusWarn, name, fmt.Sprintf("origin %s: %s resolves to %s, and this daemon does not listen on %s "+
-			"(addr %s): another local process can listen there and serve the origin, so a browser that picks that address "+
-			"would run its passkey ceremonies -- listen on every address of the name (a wildcard addr binds every interface), "+
-			"or give the name only the addresses the daemon holds", origin, host, joinAddrs(addrs), joinAddrs(missing), bind)})
+		if len(missing) > 0 {
+			out = append(out, check{statusWarn, name, fmt.Sprintf("origin %s: %s resolves to %s, and this daemon does not listen on %s "+
+				"(addr %s): another local process can listen there and serve the origin, so a browser that picks that address "+
+				"would run its passkey ceremonies -- serve pairs an IPv4 addr only with its own interface's IPv6 addresses that "+
+				"reach no further; bind the wildcard (every interface) or give the name only the addresses the daemon holds",
+				origin, host, joinAddrs(addrs), joinAddrs(missing), bind)})
+		}
+		if len(elsewhere) > 0 {
+			out = append(out, check{statusWarn, name, fmt.Sprintf("origin %s: %s resolves to %s, and this machine does not hold %s: "+
+				"a browser that picks that address reaches another machine, or nothing -- give the name only this machine's "+
+				"addresses", origin, host, joinAddrs(addrs), joinAddrs(elsewhere))})
+		}
 	}
 	return out
 }
 
-// heldAddrs is what a listener holds: every address (a wildcard bind), or
-// exactly one.
+// heldAddrs is what serve's listeners hold: every address (a wildcard bind),
+// or the ones listed.
 type heldAddrs struct {
 	every bool
-	addr  netip.Addr
+	addrs []netip.Addr
 }
 
 func (h heldAddrs) covers(a netip.Addr) bool {
-	return h.every || h.addr == a.Unmap()
+	return h.every || slices.Contains(h.addrs, a.Unmap())
 }
 
-// boundAddrs reads what serve's net.Listen("tcp", bind) holds: a wildcard or
-// empty host is every address (Go listens dual-stack); an IP is itself; a name
-// is the address the listener resolves it to, the first IPv4 one if any.
-func boundAddrs(ctx context.Context, bind string, lookup originLookup) (heldAddrs, error) {
+// boundAddrs reads what serve listens on for bind: a wildcard or empty host is
+// every address (Go listens dual-stack); an IP is itself; a name is the address
+// net.Listen resolves it to, the first IPv4 one if any. Beside an IPv4 address
+// come the IPv6 ones serve pairs with it (pairedIPv6), as far as this
+// machine's interfaces can be read.
+func boundAddrs(ctx context.Context, bind string, hn hostNet) (heldAddrs, error) {
 	host := bindHost(bind)
 	if config.IsWildcardHost(host) {
 		return heldAddrs{every: true}, nil
 	}
-	if a, err := netip.ParseAddr(host); err == nil {
-		return heldAddrs{addr: a.Unmap()}, nil
-	}
-	addrs, err := lookup(ctx, host)
+	primary, err := netip.ParseAddr(host)
 	if err != nil {
-		return heldAddrs{}, err
+		addrs, lerr := hn.lookup(ctx, host)
+		if lerr != nil {
+			return heldAddrs{}, lerr
+		}
+		if len(addrs) == 0 {
+			return heldAddrs{}, fmt.Errorf("%s resolves to nothing", host)
+		}
+		i := slices.IndexFunc(addrs, func(a netip.Addr) bool { return a.Unmap().Is4() })
+		if i < 0 {
+			i = 0
+		}
+		primary = addrs[i]
 	}
-	if len(addrs) == 0 {
-		return heldAddrs{}, fmt.Errorf("%s resolves to nothing", host)
+	held := heldAddrs{addrs: []netip.Addr{primary.Unmap()}}
+	if all, ierr := hn.ifaces(); ierr == nil {
+		held.addrs = append(held.addrs, pairedIPv6(primary, all)...)
 	}
-	i := slices.IndexFunc(addrs, func(a netip.Addr) bool { return a.Unmap().Is4() })
-	if i < 0 {
-		i = 0
-	}
-	return heldAddrs{addr: addrs[i].Unmap()}, nil
+	return held, nil
 }
 
 func joinAddrs(addrs []netip.Addr) string {
@@ -284,7 +334,7 @@ func warnPasskeyOrigin(ctx context.Context, cfg config.Config, bind string, db *
 	rpID, _ := cfg.RelyingParty()
 	logPasskeyRows(logger, enrolledPasskeyChecks(ctx, db, rpID))
 	go func() {
-		rows := passkeyOriginChecks(ctx, cfg, bind, nil, lookupOriginHost)
+		rows := passkeyOriginChecks(ctx, cfg, bind, nil, systemNet)
 		if ctx.Err() != nil {
 			return
 		}

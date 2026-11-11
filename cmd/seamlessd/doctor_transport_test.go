@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -88,11 +89,16 @@ func TestBindCheck(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			c := bindCheck(tc.cfg)
+			c := bindCheck(tc.cfg, nil)
 			require.Equal(t, tc.status, c.status, c.detail)
 			require.Contains(t, c.detail, tc.want)
 		})
 	}
+	c := bindCheck(config.Config{Addr: "100.64.0.7:8081", TLS: config.TLS{CertFile: cert, KeyFile: key}},
+		[]netip.Addr{netip.MustParseAddr("fd7a:115c:a1e0::7")})
+	require.Equal(t, statusOK, c.status)
+	require.Equal(t, "100.64.0.7:8081 (and [fd7a:115c:a1e0::7]:8081 beside it, on the same interface) over TLS; "+
+		"the bearer key is still the only authentication", c.detail)
 }
 
 // The 421 case is the whole reason this check exists: from the client it looks

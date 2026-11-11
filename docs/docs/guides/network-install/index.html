@@ -316,6 +316,11 @@ at startup. Putting the wildcard in <code>server_url</code> instead is refused o
 config load, in any spelling of the unspecified address: <code>http://0.0.0.0:8081</code>
 reaches, at most, the machine doing the dialing, so it can never be the right
 answer to &quot;where do clients reach me&quot;.</p>
+<p>A concrete IPv4 <code>addr</code> (one LAN or tailnet address instead of the wildcard)
+also listens on its interface's IPv6 addresses that reach no further, so a
+dual-stack name reaches the daemon over either family. Beside a private or
+tailnet address that means only unique local addresses (<code>fd…</code>), never a global
+IPv6 address the internet may reach. Doctor's <code>bind</code> row lists them.</p>
 <p>Naming <code>server_url</code> also arms the <strong>Host-header allowlist</strong>: the daemon then
 answers the loopback names, a concrete bind host, and the host of <code>server_url</code>,
 and refuses everything else with <code>421 Misdirected Request</code>. Add any further

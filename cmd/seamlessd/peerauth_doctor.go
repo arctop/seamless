@@ -47,7 +47,7 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 	}
 	out := []check{{statusOK, name, fmt.Sprintf("socket %s (mode %s%s); owner %s (uid %d) on TCP and the socket",
 		pa.Socket.Path, mode, groupSuffix(pa.Socket.Group), owner.Name, owner.UID)}}
-	out = append(out, passkeyOriginChecks(ctx, cfg, cfg.Addr, db, lookupOriginHost)...)
+	out = append(out, passkeyOriginChecks(ctx, cfg, cfg.Addr, db, systemNet)...)
 	if len(pa.LegacyLocked) > 0 {
 		out = append(out, check{statusWarn, "peer_auth.force_locked", "this config uses peer_auth.locked, the old name of peer_auth.force_locked: rename the key"})
 	}

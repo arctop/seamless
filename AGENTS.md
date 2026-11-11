@@ -423,7 +423,13 @@ any of it.
   listener: TLS and port, the certificate naming the host, and the daemon
   holding EVERY address the host resolves to
   (`cmd/seamlessd/passkey_origin.go`), since an address it does not hold is one
-  another local process can serve the origin from.
+  another local process can serve the origin from. serve listens beside a
+  concrete IPv4 `addr` on its own interface's IPv6 addresses that reach no
+  further (`pairedIPv6` in `cmd/seamlessd/listen_pair.go`: ::1 beside loopback,
+  only unique local ones beside a private or tailnet address), and doctor's
+  held set (`boundAddrs`) reads the same function, so the two cannot disagree.
+  Never pair a private address with a global one: that widens a LAN bind to the
+  internet.
   The one exception is a Touch ID re-enrollment: a credential whose own key
   signs `approval.TouchIDReplaceMessage` (the code's hash, the new key, its id)
   is retired in the enrollment's transaction (`store.EnrollTouchIDRetiring`).
