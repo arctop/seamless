@@ -10,6 +10,23 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](https://thereisnospoon.org/docs/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.8.1 {#v0-8-1}
+
+Released 2026-11-11 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.8.1)
+
+### Features
+
+- feat(update): a peer_auth system daemon can update itself, as its own account
+
+### Fixes
+
+- fix(update): a peer_auth system daemon updates itself by default, with no update.auto opt-in
+
+### Other
+
+- build(make): install refuses to replace an installer-made install unless FORCE=1
+- build(deps): raise the toolchain to go1.26.11 for GO-2026-6859
+
 ## v0.8.0 {#v0-8-0}
 
 Released 2026-11-11 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.8.0)
