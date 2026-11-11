@@ -152,6 +152,9 @@ func doctor(args []string) error {
 	checks = append(checks, gardenerCheck(cfg))
 	checks = append(checks, launchdChecks(runtime.GOOS, homeDir(), os.Getuid())...)
 	checks = append(checks, updatesCheck(ctx, cfg, d.handle, time.Now()))
+	if !cfg.IsClient() {
+		checks = append(checks, backupsCheck(ctx, cfg, d.handle, time.Now()))
+	}
 	checks = append(checks, updateConfirmChecks(cfg)...)
 
 	return reportChecks(checks)

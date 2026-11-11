@@ -151,10 +151,14 @@ const (
 	// RefusalAutoOff: the owner turned automatic updates off after the daemon
 	// decided to start this one (WhyAuto only).
 	RefusalAutoOff = "auto_off"
+	// RefusalRestorePending: a restore is staged or under way
+	// (<data_dir>/restore/pending.json), and an update must not replace the
+	// binary or back up the data under it.
+	RefusalRestorePending = "restore_pending"
 )
 
 // refusals lists every refusal this release writes.
-var refusals = []string{RefusalNotInstaller, RefusalStaleBinary, RefusalSelfCheck, RefusalAutoOff}
+var refusals = []string{RefusalNotInstaller, RefusalStaleBinary, RefusalSelfCheck, RefusalAutoOff, RefusalRestorePending}
 
 // KnownRefusal reports whether this release knows refusal.
 func KnownRefusal(refusal string) bool { return slices.Contains(refusals, refusal) }

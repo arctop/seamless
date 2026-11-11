@@ -279,7 +279,7 @@ func describe(e *Entry, installID string, wrote func(dir, name string) bool) {
 		e.Kind = m.Kind
 		e.CreatedAt = m.CreatedAt
 		e.Ours = installID != "" && m.InstallID == installID
-		e.FromAnother = m.InstallID != "" && m.InstallID != installID
+		e.FromAnother = installID != "" && m.InstallID != "" && m.InstallID != installID
 		e.TooNew = m.FormatVersion > archive.FormatVersion || m.SchemaVersion > store.LatestSchemaVersion()
 	case e.Named:
 		e.Kind = e.Parsed.Kind

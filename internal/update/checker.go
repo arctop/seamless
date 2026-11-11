@@ -111,6 +111,10 @@ type Deps struct {
 	// the lock to probe releases it at once. nil, or an error: the
 	// heartbeat alone decides.
 	UpdaterRunning func() (bool, error)
+	// Holding says why automatic updates must wait right now, "" when
+	// nothing holds them: a restore staged or under way. Update now is
+	// refused while it holds too. nil: nothing holds them.
+	Holding func() string
 	// CodexHooksHash fingerprints Codex's hooks.json: a hash of its bytes,
 	// or a fixed token when the file does not exist; an error when it
 	// cannot tell. It is read at start and before each spawn, and a

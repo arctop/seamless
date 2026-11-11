@@ -29,6 +29,7 @@ import (
 	"github.com/sigstore/sigstore-go/pkg/testing/ca"
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/backup"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/releasesig"
@@ -453,10 +454,11 @@ func (w *world) deps(stdout *strings.Builder) updaterDeps {
 			page, err := f.Fetch(ctx, "")
 			return page.Releases, err
 		},
-		verify:      w.verify,
-		probe:       w.probe,
-		selfCheck:   func() error { return w.selfErr },
-		autoAllowed: func(context.Context, config.Config) error { return w.autoErr },
+		verify:         w.verify,
+		probe:          w.probe,
+		selfCheck:      func() error { return w.selfErr },
+		autoAllowed:    func(context.Context, config.Config) error { return w.autoErr },
+		restorePending: backup.RestorePending,
 		service: func(a serviceAction) (bool, string) {
 			w.mu.Lock()
 			w.actions = append(w.actions, a)

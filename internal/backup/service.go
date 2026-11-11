@@ -121,6 +121,12 @@ type Deps struct {
 	// CLI staged applies at startup. nil (Windows, which has no in-place
 	// restart): a staged restore waits for the next start.
 	RequestRestart func()
+	// Validate checks a restore's prepared database the way serve's
+	// preflight would (peer_auth's projectProblems); nil checks nothing more.
+	Validate func(ctx context.Context, db *sql.DB) error
+	// UpdateBusy reports an update under way, which refuses a restore; nil
+	// never refuses.
+	UpdateBusy func() bool
 
 	// GOOS picks the folder rules and suggestions; "" is runtime.GOOS. Home,
 	// User and Getenv feed the suggestions; zero values read the process's.
@@ -191,6 +197,10 @@ type Status struct {
 	// alert's baseline before any confirmation.
 	Since time.Time `json:"since,omitzero"`
 
+	// Restore is the restore side: one being prepared, one staged, the last
+	// one's result.
+	Restore RestoreStatus `json:"restore"`
+
 	// StateError says why the schedule's record could not be saved.
 	StateError string `json:"state_error,omitempty"`
 	// Stopped is a service whose loop ended after a fault.
@@ -243,6 +253,7 @@ func (st Status) clone() Status {
 		c.LastBackup = &b
 	}
 	c.written = append([]written(nil), st.written...)
+	c.Restore = st.Restore.clone()
 	return c
 }
 
@@ -260,11 +271,12 @@ type Service struct {
 	mu     sync.RWMutex
 	status Status
 
-	cmds    chan command
-	jobDone chan jobResult
-	done    chan struct{}
-	jobs    sync.WaitGroup
-	started atomic.Bool
+	cmds        chan command
+	jobDone     chan jobResult
+	restoreDone chan restoreJobResult
+	done        chan struct{}
+	jobs        sync.WaitGroup
+	started     atomic.Bool
 
 	idMu sync.Mutex
 	id   string
@@ -278,6 +290,16 @@ type Service struct {
 	stateErr    string
 	overrideErr string
 	pendingSeen pendingMark
+
+	// The restore side, owned by the loop.
+	staging      *Staging
+	stageStep    atomic.Pointer[string]
+	cancelStage  context.CancelFunc
+	archiving    bool
+	pending      *Pending
+	last         *Result
+	stageFail    *StageFailure
+	restartAsked bool
 }
 
 type commandKind int
@@ -287,12 +309,16 @@ const (
 	cmdBackUpNow
 	cmdRetryNow
 	cmdForget
+	cmdStageRestore
+	cmdCancelRestore
+	cmdDismissRestore
 )
 
 type command struct {
-	kind  commandKind
-	entry Entry // cmdForget
-	reply chan result
+	kind    commandKind
+	entry   Entry // cmdForget, cmdStageRestore
+	restore RestoreRequest
+	reply   chan result
 }
 
 type result struct {
@@ -337,14 +363,15 @@ func New(d Deps) *Service {
 	}
 	f := folders{dataDir: d.DataDir, goos: d.GOOS, guard: d.Guard, freeBytes: d.FreeBytes}
 	s := &Service{
-		d:       d,
-		log:     d.Log,
-		folders: f,
-		lister:  lister{folders: f, cache: &manifestCache{}},
-		export:  d.export,
-		cmds:    make(chan command),
-		jobDone: make(chan jobResult, 1),
-		done:    make(chan struct{}),
+		d:           d,
+		log:         d.Log,
+		folders:     f,
+		lister:      lister{folders: f, cache: &manifestCache{}},
+		export:      d.export,
+		cmds:        make(chan command),
+		jobDone:     make(chan jobResult, 1),
+		restoreDone: make(chan restoreJobResult, 1),
+		done:        make(chan struct{}),
 	}
 	if s.export == nil {
 		s.export = archive.Export
@@ -377,6 +404,8 @@ func (s *Service) Start(ctx context.Context) {
 	if set.Auto && s.state.Since.IsZero() {
 		s.state.Since = now
 	}
+	s.noteFolder(ctx, set)
+	s.loadRestore(ctx)
 	s.publish(set)
 	go s.loop(ctx)
 }
@@ -595,6 +624,9 @@ func (s *Service) loop(ctx context.Context) {
 			if s.cancelJob != nil {
 				s.cancelJob()
 			}
+			if s.cancelStage != nil {
+				s.cancelStage()
+			}
 			s.mu.Lock()
 			s.status.Stopped = true
 			s.mu.Unlock()
@@ -611,6 +643,9 @@ func (s *Service) loop(ctx context.Context) {
 			if s.cancelJob != nil {
 				s.cancelJob()
 			}
+			if s.cancelStage != nil {
+				s.cancelStage()
+			}
 			return
 		case <-ticks:
 			s.tick(ctx)
@@ -618,6 +653,8 @@ func (s *Service) loop(ctx context.Context) {
 			s.poll()
 		case r := <-s.jobDone:
 			s.finish(ctx, r)
+		case r := <-s.restoreDone:
+			s.finishRestore(ctx, r)
 		case cmd := <-s.cmds:
 			cmd.reply <- s.handle(ctx, cmd)
 		}
@@ -634,7 +671,8 @@ func (s *Service) tick(ctx context.Context) {
 	if set.Auto && s.state.Since.IsZero() {
 		s.state.Since = now
 	}
-	if s.running == nil && s.due(set, now) {
+	s.noteFolder(ctx, set)
+	if s.running == nil && !s.restoreBusy() && s.pending == nil && s.due(set, now) {
 		s.startJob(ctx, set, now, archive.KindScheduled, true)
 	}
 	s.publish(set)
@@ -669,7 +707,7 @@ func (s *Service) handle(ctx context.Context, cmd command) result {
 	var err error
 	switch cmd.kind {
 	case cmdBackUpNow, cmdRetryNow:
-		if s.running != nil {
+		if s.running != nil || s.restoreBusy() {
 			err = ErrBusy
 			break
 		}
@@ -681,6 +719,12 @@ func (s *Service) handle(ctx context.Context, cmd command) result {
 	case cmdForget:
 		s.state.forgetWritten(filepath.Dir(cmd.entry.Path), cmd.entry.Name)
 		s.persist()
+	case cmdStageRestore:
+		err = s.stageRestore(ctx, cmd.restore, cmd.entry)
+	case cmdCancelRestore:
+		err = s.cancelRestore()
+	case cmdDismissRestore:
+		err = s.dismissRestore()
 	}
 	s.publish(set)
 	return result{status: s.Status(), err: err}
@@ -813,6 +857,7 @@ func (s *Service) publish(set Settings) {
 		r := *s.lastRun
 		st.LastRun = &r
 	}
+	st.Restore = s.restoreStatus()
 	s.mu.Lock()
 	st.Stopped = s.status.Stopped
 	s.status = st
@@ -856,6 +901,8 @@ func (s *Service) poll() {
 	}
 	if !m.exists {
 		s.pendingSeen = m
+		s.pending = nil
+		s.publish(s.settings(context.Background()))
 		return
 	}
 	stage, ok := pendingStage(PendingPath(s.d.DataDir))
@@ -863,14 +910,28 @@ func (s *Service) poll() {
 		return // not complete yet
 	}
 	s.pendingSeen = m
+	if p, err := ReadPending(s.d.DataDir); err == nil && p != nil {
+		s.pending = p
+		s.publish(s.settings(context.Background()))
+	}
 	if stage != StagePending {
 		return
 	}
+	s.askRestart("backup: a restore was staged; restarting to apply it")
+}
+
+// askRestart asks the daemon, once, for the restart that applies a staged
+// restore; without a restart (Windows) it waits for the next start.
+func (s *Service) askRestart(msg string) {
 	if s.d.RequestRestart == nil {
 		s.log.Info("backup: a restore is staged; it applies when Seamless next starts")
 		return
 	}
-	s.log.Info("backup: a restore was staged; restarting to apply it")
+	if s.restartAsked {
+		return
+	}
+	s.restartAsked = true
+	s.log.Info(msg)
 	s.d.RequestRestart()
 }
 

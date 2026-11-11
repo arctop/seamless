@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/backup"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
@@ -284,6 +285,11 @@ func runAttendedUpdate(ctx context.Context, f updateFlags, d updaterDeps) error 
 		// over one: it would set up a per-user service beside it.
 		return fmt.Errorf("seamlessd.update: %w; this account cannot read the config, so nothing is installed: "+
 			"a peer_auth daemon updates as its own account (%s)", cfgErr, update.SystemHint)
+	}
+	if cfgErr == nil && !cfg.IsClient() && backup.RestorePending(cfg.DataDir) {
+		// An update backs the data up and replaces the binary: never under a
+		// restore that has not finished.
+		return restorePendingUpdateError(cfg.DataDir)
 	}
 	ic := installConfig{path: configPath}
 	if cfgErr == nil {

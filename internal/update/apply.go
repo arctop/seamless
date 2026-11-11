@@ -155,6 +155,8 @@ func (c *Checker) evaluate(ctx context.Context, now time.Time, s Settings, cur V
 	case c.applying != nil:
 		c.view.decision.Wait = applyingWords(c.applying)
 	case !c.view.decision.Apply:
+	case c.holding() != "":
+		c.view.decision = waitFor(WaitRestore, c.holding())
 	case c.updaterRunning():
 		// Not this daemon's attempt (it would be applying): a manual update
 		// that has not written its record yet, or one whose heartbeat stalled.
@@ -164,6 +166,14 @@ func (c *Checker) evaluate(ctx context.Context, now time.Time, s Settings, cur V
 			UntilWords(c.state.RecheckAt.Sub(now)), target.Version))
 	}
 	return changed
+}
+
+// holding is Deps.Holding's answer, "" without one.
+func (c *Checker) holding() string {
+	if c.d.Holding == nil {
+		return ""
+	}
+	return c.d.Holding()
 }
 
 // stale reports whether the last successful fetch is too old for a spawn to
@@ -320,6 +330,9 @@ func (c *Checker) applyNow(ctx context.Context, s Settings) error {
 	}
 	newest, ok := Newest(c.state.Releases)
 	switch {
+	case c.holding() != "":
+		c.step(ctx, s, false)
+		return fmt.Errorf("%w: %s", ErrCannotApply, c.holding())
 	case !ok || newest.Version.Compare(cur) <= 0:
 		c.step(ctx, s, false)
 		return ErrUpToDate

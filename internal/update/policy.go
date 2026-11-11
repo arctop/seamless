@@ -104,6 +104,8 @@ const (
 	WaitHeld     = "held"
 	WaitBlocked  = "blocked"
 	WaitUnsigned = "unsigned"
+	// WaitRestore: a restore is staged or under way (Deps.Holding).
+	WaitRestore = "restore"
 )
 
 // Block reasons (Block.Reason): why automatic updates skip a release.

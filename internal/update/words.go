@@ -59,6 +59,8 @@ func RefusalWords(refusal string) string {
 		return "the updater could not make sure it runs outside the service, which the installer restarts"
 	case RefusalAutoOff:
 		return "automatic updates were turned off before it began"
+	case RefusalRestorePending:
+		return "a restore was waiting to finish"
 	default:
 		return ""
 	}

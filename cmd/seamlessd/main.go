@@ -6,6 +6,8 @@
 //	seamlessd doctor        run configuration + database self-checks
 //	seamlessd export        write the whole instance to one archive (corpus + db snapshot + manifest)
 //	seamlessd import        import a Seam v1 data directory, or a seamlessd export archive
+//	seamlessd backups       list the backups in the backup folder and <data_dir>/backups
+//	seamlessd restore       put a backup back (replace everything, or --merge what is missing)
 //	seamlessd install-hooks install agent hooks, MCP, and maintained skills
 //	seamlessd client-config print the pairing commands for a client machine
 //	seamlessd uninstall     remove Seamless (service, hooks, MCP, skills, binaries)
@@ -41,6 +43,7 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/a2a"
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/commitfeed"
 	"github.com/arctop/seamless/internal/config"
@@ -114,6 +117,10 @@ func main() {
 		err = runExport(args)
 	case "import":
 		err = runImport(args)
+	case "backups":
+		err = runBackups(args)
+	case "restore":
+		err = runRestore(args)
 	case "install-hooks":
 		err = runInstallHooks(args)
 	case "install-summary":
@@ -182,6 +189,9 @@ usage:
                            (-o FILE, or -o - for stdout; --no-db for the markdown trees only)
   seamlessd import         import a Seam v1 data directory (--from ~/.seam), or a seamlessd export
                            archive (--from FILE|-; --dry-run previews, --force allows a live restore)
+  seamlessd backups        list the backups in the backup folder and in <data_dir>/backups (--json)
+  seamlessd restore        put a backup back: <file|name>; replaces all data, today's saved first so it
+                           can be undone (--merge only brings back what is missing; --yes skips the prompt)
   seamlessd install-hooks  install Claude Code/Codex hooks, MCP, and maintained skills
   seamlessd client-config  print the commands that pair another machine as a client (run on the SERVER;
                            --redact masks the key so the output is safe to paste into a ticket)
@@ -282,16 +292,30 @@ func runServe(args []string) error {
 		slog.Info("data dir in use; waiting for the daemon that holds it to exit",
 			"lock", lock, "holder", holder, "wait", dataDirLockWait)
 	})
+	lockOK := true
 	switch {
 	case errors.Is(err, errLockUnsupported):
 		// Refusing to serve would leave a data dir on such a mount unusable;
 		// serving without the guard is what every earlier release did.
 		slog.Warn("data dir lock unavailable on this file system; a second daemon on this data dir will not be refused",
 			"data_dir", cfg.DataDir, "err", err)
+		lockOK = false
 	case err != nil:
 		return fmt.Errorf("seamlessd.serve: %w", err)
 	default:
 		defer func() { _ = dirLock.Close() }()
+	}
+
+	// A restore staged before the restart finishes here, under the lock and
+	// before anything opens the database (internal/backup): the swap, or the
+	// merge. A swap that could not be undone stops the start, naming where
+	// today's data is.
+	var restorePolicy *access.Policy
+	if peer != nil {
+		restorePolicy = peer.policy
+	}
+	if err := applyPendingRestore(context.Background(), cfg, restorePolicy, lockOK, logger); err != nil {
+		return fmt.Errorf("seamlessd.serve: %w", err)
 	}
 
 	db, err := store.Open(cfg.DBPath())
@@ -416,6 +440,13 @@ func runServe(args []string) error {
 	// itself as running. The briefing asks it for the update notice.
 	upd := newUpdateChecker(cfg, db, rec, instance, activity, logger)
 	ret.SetUpdateNotice(upd.Notice)
+	// Scheduled backups and the restore commands (internal/backup): built
+	// here, started once the listener is bound, like the update check. A
+	// staged restore restarts the daemon in place, as a console lock does.
+	backups := newBackupService(cfg, db, rec, restorePolicy, upd, func() {
+		restartRequested.Store(true)
+		stop()
+	}, logger)
 
 	// Gardener: propose-only maintenance, exposed to the gardener_apply MCP tool
 	// and run on a ticker. The chat client (for digests) is best-effort; without
@@ -751,6 +782,7 @@ func runServe(args []string) error {
 		sockSrv.ConnContext = peerConnContext
 	}
 	upd.Start(ctx)
+	backups.Start(ctx)
 
 	errCh := make(chan error, len(lns)+1)
 	listening := []any{"addr", bind}
@@ -794,6 +826,7 @@ func runServe(args []string) error {
 		_ = srv.Close()
 		garden.Wait()
 		upd.Wait()
+		backups.Wait()
 		return fmt.Errorf("seamlessd.serve: %w", err)
 	}
 
@@ -814,10 +847,13 @@ func runServe(args []string) error {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		garden.Wait()
 		upd.Wait()
+		backups.Wait()
 		return fmt.Errorf("seamlessd.serve: shutdown: %w", err)
 	}
 	garden.Wait()
 	upd.Wait()
+	// Bounded: a backup stalled writing to a slow disk is abandoned here.
+	backups.Wait()
 	slog.Info("seamlessd stopped")
 	if restartRequested.Load() {
 		return errServeRestart

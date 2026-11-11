@@ -63,6 +63,9 @@ func updateCheckerDeps(cfg config.Config, db *sql.DB, rec update.Recorder, insta
 		SessionIdle:    time.Duration(cfg.Gardener.SessionIdleMinutes) * time.Minute,
 		UpdaterRunning: func() (bool, error) { return updaterLockHeld(cfg.DataDir) },
 		CodexHooksHash: codexHooksFingerprint,
+		// A staged restore holds automatic updates (and Update now) off: the
+		// update would back up and replace the binary under the swap.
+		Holding: restoreHolding(cfg.DataDir),
 	}
 	if activity != nil {
 		d.Activity = activity.snapshot

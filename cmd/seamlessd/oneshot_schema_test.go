@@ -223,6 +223,7 @@ var oneShotWriters = []struct {
 	{"unmap-repo --path", func() error { return runUnmapRepo([]string{"--path", "/some/repo"}) }},
 	{"unmap-repo --stale", func() error { return runUnmapRepo([]string{"--stale"}) }},
 	{"retire-project", func() error { return runRetireProject([]string{"--project", "app"}) }},
+	{"restore", func() error { return runRestore([]string{"--yes", "seamless-host-20261110T030000Z.tar.gz"}) }},
 }
 
 // A database behind this binary is refused, in the same words as the approval

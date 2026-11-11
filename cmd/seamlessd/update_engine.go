@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/archive"
+	"github.com/arctop/seamless/internal/backup"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/releasesig"
 	"github.com/arctop/seamless/internal/store"
@@ -102,6 +103,10 @@ type updaterDeps struct {
 	stopDaemon func(pid int) error
 	freeBytes  func(dir string) (uint64, error)
 	sameFile   func(a, b string) bool
+	// restorePending reports a restore staged or under way in a data dir
+	// (backup.RestorePending), which the unattended updater refuses; nil
+	// never refuses.
+	restorePending func(dataDir string) bool
 
 	timing updaterTiming
 }
@@ -128,8 +133,9 @@ func realUpdaterDeps(stdout io.Writer) updaterDeps {
 		probe: func(ic installConfig) update.Probe {
 			return probeInstall(distribution, version, ic)
 		},
-		selfCheck:   func() error { return outsideServiceCheck(runtime.GOOS, os.ReadFile) },
-		autoAllowed: autoUpdateAllowed,
+		selfCheck:      func() error { return outsideServiceCheck(runtime.GOOS, os.ReadFile) },
+		autoAllowed:    autoUpdateAllowed,
+		restorePending: backup.RestorePending,
 		service: func(action serviceAction) (bool, string) {
 			plan := serviceControl(action, runtime.GOOS, home, os.Getuid())
 			ok, out := runControlCmds(plan.Cmds)
@@ -534,6 +540,9 @@ func (u *updater) gates(ctx context.Context) error {
 	}
 	if err := u.d.selfCheck(); err != nil {
 		return refused(update.RefusalSelfCheck, err)
+	}
+	if u.d.restorePending != nil && u.d.restorePending(u.job.cfg.DataDir) {
+		return refused(update.RefusalRestorePending, errors.New("a restore is waiting to finish; the update waits until Seamless has finished it"))
 	}
 	if u.job.req.Why == update.WhyAuto {
 		switch err := u.d.autoAllowed(ctx, u.job.cfg); {

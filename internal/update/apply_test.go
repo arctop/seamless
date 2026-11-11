@@ -768,6 +768,25 @@ func TestAuto_ALockHeldBeforeTheSpawnWaits(t *testing.T) {
 	require.Equal(t, "an updater is already running", st.Waiting)
 }
 
+// A restore staged or under way holds automatic updates off, and lifting it
+// lets the update go ahead.
+func TestAuto_ARestoreHoldsTheSpawn(t *testing.T) {
+	a := newAutoHarness(t)
+	a.soakedList()
+	held := "a restore is waiting to finish; updates wait until it has"
+	a.deps.Holding = func() string { return held }
+	a.start()
+	st := a.firstCheck()
+	require.Empty(t, a.m.spawned())
+	require.Equal(t, WaitRestore, st.WaitCode)
+	require.Equal(t, held, st.Waiting)
+
+	held = ""
+	a.clock.Add(time.Minute)
+	a.tick()
+	require.Len(t, a.m.spawned(), 1)
+}
+
 func TestAuto_FoundInTheHistory(t *testing.T) {
 	a := newAutoHarness(t)
 	a.soakedList()
@@ -1040,6 +1059,9 @@ func TestApplyNow(t *testing.T) {
 			a.list.set(apiRel("v0.7.3", t0.Add(-48*time.Hour), true), apiRel("v0.7.4", t0.Add(-48*time.Hour), false))
 		}, ErrUnsigned},
 		{"an updater holds the lock", func(a *autoHarness) { a.m.locked = true }, ErrInProgress},
+		{"a restore is waiting to finish", func(a *autoHarness) {
+			a.deps.Holding = func() string { return "a restore is waiting to finish" }
+		}, ErrCannotApply},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := newAutoHarness(t)

@@ -91,6 +91,60 @@ type state struct {
 	Since time.Time `json:"since,omitzero"`
 	// Written traces the backups this service wrote, oldest first.
 	Written []written `json:"written,omitempty"`
+	// Folder is the folder in force at the last save, and InstallID this
+	// install's id: what `seamlessd backups` lists without opening the
+	// database (the console's chosen folder lives there).
+	Folder    string `json:"folder,omitempty"`
+	InstallID string `json:"install_id,omitempty"`
+}
+
+// ScheduleSummary is what doctor reads of the schedule's record.
+type ScheduleSummary struct {
+	LastConfirmed time.Time
+	LastSuccess   time.Time
+	// LastBackup is the newest backup's name.
+	LastBackup   string
+	Failures     int
+	FailingSince time.Time
+	LastError    string
+}
+
+// ReadSchedule reads the schedule's record for doctor; a missing record is the
+// zero summary.
+func ReadSchedule(dataDir string) (ScheduleSummary, error) {
+	data, err := os.ReadFile(statePath(dataDir))
+	if errors.Is(err, fs.ErrNotExist) {
+		return ScheduleSummary{}, nil
+	}
+	if err != nil {
+		return ScheduleSummary{}, err
+	}
+	var st state
+	if err := json.Unmarshal(data, &st); err != nil {
+		return ScheduleSummary{}, fmt.Errorf("%s: %w", statePath(dataDir), err)
+	}
+	sum := ScheduleSummary{
+		LastConfirmed: st.LastConfirmed, LastSuccess: st.LastSuccess,
+		Failures: st.Failures, FailingSince: st.FailingSince, LastError: st.LastError,
+	}
+	if st.LastBackup != nil {
+		sum.LastBackup = st.LastBackup.Name
+	}
+	return sum, nil
+}
+
+// ReadFolderRecord is the folder the daemon last recorded backing up into and
+// this install's id, from .schedule.json; both "" when it never recorded them.
+func ReadFolderRecord(dataDir string) (folder, installID string) {
+	data, err := os.ReadFile(statePath(dataDir))
+	if err != nil {
+		return "", ""
+	}
+	var st state
+	if json.Unmarshal(data, &st) != nil || st.Version != stateVersion {
+		return "", ""
+	}
+	return st.Folder, st.InstallID
 }
 
 func statePath(dataDir string) string { return filepath.Join(LocalDir(dataDir), stateName) }

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/backup"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/store/storetest"
@@ -268,6 +269,10 @@ func TestAutoUpdate_GateRefusalsRecordTheirWord(t *testing.T) {
 		{"automatic updates were turned off", func(w *world) {
 			w.autoErr = fmt.Errorf("%w (set by console)", errAutoOff)
 		}, update.StageGates, update.RefusalAutoOff, "gates: automatic updates are off (set by console)"},
+		{"a restore is waiting to finish", func(w *world) {
+			require.NoError(t, os.MkdirAll(backup.RestoreRoot(w.dataDir), 0o700))
+			require.NoError(t, os.WriteFile(backup.PendingPath(w.dataDir), []byte(`{"stage":"staged"}`), 0o600))
+		}, update.StageGates, update.RefusalRestorePending, "gates: a restore is waiting to finish"},
 		{"the settings could not be read", func(w *world) {
 			w.autoErr = errors.New("read the update settings: database is locked")
 		}, update.StageGates, "", "gates: read the update settings: database is locked"},

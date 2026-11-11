@@ -38,6 +38,20 @@
 //     notices a restore the CLI staged (restore/pending.json) every two
 //     seconds. Wait is bounded, so a run stalled on a slow disk never holds
 //     the daemon's shutdown.
+//   - Restore (restore*.go): Stager prepares a restore while the daemon
+//     serves (the backup verified and copied under <data_dir>/restore/<id>/,
+//     a replacement imported fresh beside today's data with today's locks
+//     kept and checked, a merge's safety backup of today's data taken) and
+//     records restore/pending.json; Applier finishes it at the next start,
+//     under the data dir lock and before anything opens the database: a
+//     replacement through a write-ahead swap record (staged, swapping,
+//     applied = the commit point) rolled back entry by entry from wherever a
+//     stop left it, a merge idempotently, at most three times. Archiver turns
+//     the replaced data into a before-restore backup once the daemon serves,
+//     reading it back before it removes the original: the owner's undo.
+//     Today's locks, approvers, kept settings and repo routes survive every
+//     restore, and nothing under restore/ is deleted before its data is
+//     verified elsewhere.
 //
 // The package is a domain package over archive, store, events (through the
 // Recorder interface), core and config. The disks' free space, the restart,
