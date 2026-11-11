@@ -93,6 +93,7 @@ type Service struct {
 	mu          sync.Mutex
 	pending     map[string]*pendingEnroll
 	lockChanges map[string]*pendingLockChange
+	restores    map[string]*pendingRestore
 }
 
 // New builds a Service.
@@ -109,7 +110,8 @@ func New(cfg Config) *Service {
 	if cfg.Programs == nil {
 		cfg.Programs = access.ProgramOf
 	}
-	return &Service{cfg: cfg, pending: map[string]*pendingEnroll{}, lockChanges: map[string]*pendingLockChange{}}
+	return &Service{cfg: cfg, pending: map[string]*pendingEnroll{}, lockChanges: map[string]*pendingLockChange{},
+		restores: map[string]*pendingRestore{}}
 }
 
 // PasskeysOn reports whether the passkey ceremonies are available.
@@ -154,7 +156,7 @@ func newID() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// gc drops expired enrollments; the caller holds mu.
+// gc drops expired enrollments and ceremonies; the caller holds mu.
 func (s *Service) gc(now time.Time) {
 	for id, p := range s.pending {
 		if !now.Before(p.expires) {
@@ -164,6 +166,11 @@ func (s *Service) gc(now time.Time) {
 	for id, p := range s.lockChanges {
 		if !now.Before(p.expires) {
 			delete(s.lockChanges, id)
+		}
+	}
+	for id, p := range s.restores {
+		if !now.Before(p.expires) {
+			delete(s.restores, id)
 		}
 	}
 }
