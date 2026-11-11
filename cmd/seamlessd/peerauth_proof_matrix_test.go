@@ -950,7 +950,7 @@ func TestStolenEnrollCode_EnrollsOnlyTheKeyItWasMintedFor(t *testing.T) {
 		// a browser, and beginning needs no proof.
 		agentSocket := d.socket(pmBridge, pmAgent, pmShell)
 		status, body := d.do(agentSocket, "", http.MethodPost, "/console/approvers/passkey/begin",
-			url.Values{"name": {"x"}, "by_code": {"1"}}, nil)
+			url.Values{"name": {"x"}}, nil)
 		require.Equal(t, http.StatusForbidden, status, body)
 		require.Contains(t, body, "from a browser")
 

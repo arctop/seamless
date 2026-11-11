@@ -391,7 +391,7 @@ any of it.
   owner's explicit answer through `OnLocks`, leaves it off and records that.
   `LocksKeep` is the zero value. Any new import path keeps both properties.
 - **Approver credentials are enrolled by the daemon's account, never by a
-  route** (`store/approvers.go`, `internal/approval`, migration 032). A first
+  route** (`store/approvers.go`, `internal/approval`, migration 032). Every
   passkey or Touch ID key needs a one-time code that only
   `seamlessd approvers enroll-code --key <fingerprint>` mints (it opens the
   database directly, so running it is the proof of being the daemon's account).
@@ -405,9 +405,25 @@ any of it.
   The code is minted for that one key: its stored hash binds
   `store.ApproverKeyFingerprint`, so a code read off the owner's terminal cannot
   enroll another, and the key exists before the code does (the helper's window
-  and the console page show the command). A later one needs a
-  code or an existing passkey's assertion over a challenge binding the new
-  credential (`enrollBinding`). Removing and resetting are that command's too.
+  and the console page show the command). An enrolled passkey never vouches
+  for a new one, however many are enrolled: an enrolled key can take a
+  console lock off with no one present, so one tricked touch must not add a
+  key an agent holds (F2 of the console-lock review). Never add an
+  enrollment path whose proof is an existing credential's assertion (the store
+  has none: `store.EnrollApprover` takes a code and nothing else). Removing
+  and resetting are that command's too.
+  A passkey is bound for life to the RP ID it was enrolled under, and records it
+  (`approver_credentials.rp_id`, migration 038; '' for Touch ID keys and for
+  rows from before it). The relying party comes from `config.RelyingParty`
+  alone -- configured, else derived from a TLS `server_url` host
+  (`config.ServedRelyingParty`, exact host, never a parent domain), else
+  localhost -- so serve, export, import and console-open agree; never derive it
+  anywhere else. serve's log and doctor name the passkeys a changed RP ID
+  strands (`store.StrandedPasskeys`) and judge every origin against the
+  listener: TLS and port, the certificate naming the host, and the daemon
+  holding EVERY address the host resolves to
+  (`cmd/seamlessd/passkey_origin.go`), since an address it does not hold is one
+  another local process can serve the origin from.
   The one exception is a Touch ID re-enrollment: a credential whose own key
   signs `approval.TouchIDReplaceMessage` (the code's hash, the new key, its id)
   is retired in the enrollment's transaction (`store.EnrollTouchIDRetiring`).

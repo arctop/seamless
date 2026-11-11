@@ -121,9 +121,8 @@ func (d *cmDaemon) postTargets(t *testing.T, pendingID string) []struct {
 				"/console/unlock/{project}/finish":     {"id": {cmNoSuch}, "response": {"{}"}},
 				"/console/lock/{project}/begin":        {"action": {"lock"}},
 				"/console/lock/{project}/finish":       {"id": {cmNoSuch}, "action": {"lock"}, "response": {"{}"}},
-				"/console/approvers/passkey/begin":     {"name": {"probe"}, "by_code": {"1"}},
+				"/console/approvers/passkey/begin":     {"name": {"probe"}},
 				"/console/approvers/passkey/finish":    {"id": {cmNoSuch}, "response": {"{}"}},
-				"/console/approvers/passkey/approve":   {"id": {cmNoSuch}, "response": {"{}"}},
 				"/console/approvers/passkey/confirm":   {"id": {cmNoSuch}, "code": {"AAAA-BBBB-CCCC-DDDD"}},
 				"/console/approvers/touchid/enroll":    {"name": {"probe"}, "public_key": {"AAAA"}},
 			}
@@ -425,7 +424,7 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 	require.NoError(t, err)
 	var finUnlock string
 	t.Run("the same browser, unlocked with a passkey", func(t *testing.T) {
-		status, body, _ := browserA.do(t, http.MethodPost, "/console/approvers/passkey/begin", url.Values{"name": {"cm-key"}, "by_code": {"1"}}, true)
+		status, body, _ := browserA.do(t, http.MethodPost, "/console/approvers/passkey/begin", url.Values{"name": {"cm-key"}}, true)
 		require.Equal(t, http.StatusOK, status, body)
 		var begun struct {
 			ID      string          `json:"id"`

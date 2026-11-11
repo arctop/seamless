@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </details>
   <p><a href="../../concepts/project-isolation/">Project isolation</a> keeps agents working on one
@@ -590,9 +590,10 @@ and name it when you open the console:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>~/.config/seamless/console.yaml seamlessd console-open
 </span></span></code></pre></div>
 <p>On a daemon that locks a project, <code>console-open</code> signs in on the passkey origin
-the daemon names (<code>http://localhost:&lt;port&gt;</code> by default) instead of <code>127.0.0.1</code>:
+the daemon names (<a href="#the-passkey-origin">which one</a>) instead of <code>127.0.0.1</code>:
 the console's cookie belongs to one host, and browsers refuse passkeys on an IP
-address.</p>
+address. On a TLS install, <code>server_url</code> in <code>console.yaml</code> is the daemon's https
+address, as your other clients use it.</p>
 <p>If your agents would write scripts over the data directory, tell them to use the
 tools or <code>seam ... --json | jq</code> instead:
 <a href="../../guides/integrate-your-agent/#optional-tell-your-agent-where-to-read-from">integrate your agent</a>
@@ -605,11 +606,13 @@ key. None is required: the terminal path below always works, and
 daemon running under <code>peer_auth</code>, so do it after the
 <a href="#move-an-existing-install-over">cutover</a>. A lock set from the console needs a
 passkey enrolled first.</p>
-<p>A first credential needs a one-time enrollment code, and only the daemon's
+<p>Every credential needs a one-time enrollment code, and only the daemon's
 account can mint one; no route, over the socket or with the TCP key, can. A code
 works once, for 10 minutes, and only its hash is stored. It is minted for one key,
 named by its fingerprint, so a code someone else reads cannot enroll a different
-key. <code>seamlessd approvers</code>
+key. A passkey you already enrolled never vouches for a new one: an enrolled
+passkey can take a console lock off, so one touch you were tricked into must not
+be enough to add a key an agent holds. <code>seamlessd approvers</code>
 also lists credentials and removes them, and <code>reset --yes</code> drops every credential
 and revokes every live lease
 (<a href="../../reference/cli-seamlessd/#seamlessd_approvers">reference</a>).</p>
@@ -620,13 +623,11 @@ The page then shows the command that mints a code for it:</p>
 </span></span></span><span class="line"><span class="cl">  /opt/seamless/bin/seamlessd approvers enroll-code passkey --key XXXX-XXXX-XXXX-XXXX
 </span></span></code></pre></div>
 <p>Run it in your own terminal, check that the key it prints is the one on the page,
-and enter the code there. The origin is <code>http://localhost:&lt;port&gt;</code> unless <code>peer_auth.passkeys</code>
-says otherwise, and browsers refuse passkeys on <code>127.0.0.1</code>. A later passkey can
-be approved by one already enrolled instead of a code. Each passkey needs its own
+and enter the code there. Browsers refuse passkeys on <code>127.0.0.1</code>, so open the
+page on <a href="#the-passkey-origin">the passkey origin</a>. Each passkey needs its own
 authenticator: the browser refuses one that already holds a passkey enrolled here,
 and devices that share synced passkeys, such as a phone on the same iCloud
-Keychain, count as one. A passkey is bound to its <code>rp_id</code> for life: changing
-<code>rp_id</code> later strands every passkey enrolled under the old one.</p>
+Keychain, count as one.</p>
 <p><strong>Touch ID on a Mac</strong> (optional) goes through Seamless Approve, a small macOS app
 that approves a request with Touch ID, an Apple Watch or the login password. A
 default install neither contains nor launches it, and Linux and Windows never
@@ -663,6 +664,42 @@ provisioning profile for it whose keychain group covers the app's:</p>
 (<code>APPROVER_NOTARY_KEY</code>, <code>APPROVER_NOTARY_KEY_ID</code>, <code>APPROVER_NOTARY_ISSUER_ID</code>). A
 source or prerelease <code>seam</code> has no release of the app to fetch: pass <code>--app</code> with
 a downloaded zip or a local build.</p>
+<h3 id="the-passkey-origin">The passkey origin</h3>
+<p>A passkey belongs to one relying party, named by its <code>rp_id</code>, and the browser
+creates or uses it only on that relying party's origins. Unless
+<code>peer_auth.passkeys</code> names them, the daemon picks:</p>
+<ul>
+<li><strong>A TLS install whose <code>server_url</code> names a host</strong> (a tailnet name, your own
+domain) uses that exact host as <code>rp_id</code> and <code>https://&lt;host&gt;:&lt;port&gt;</code> as the
+origin, the address your clients already use. Its parent domain is never
+used, so no other host under it can run a ceremony for these passkeys.</li>
+<li><strong>Any other install</strong> uses <code>localhost</code> and <code>http://localhost:&lt;port&gt;</code> (https
+with TLS on).</li>
+</ul>
+<p><code>seamlessd doctor</code> and the daemon's log at startup say which it is.</p>
+<p>A passkey is bound to its <code>rp_id</code> for life. Changing <code>rp_id</code>, or the
+<code>server_url</code> it came from, or turning TLS off, strands every passkey enrolled
+under the old one. The daemon records each passkey's <code>rp_id</code>, so doctor and the
+log name the ones a change strands. Passkeys enrolled before it recorded that
+are listed as unknown.</p>
+<p>A page on the origin can run passkey ceremonies with any passkey enrolled for it.
+That is why doctor checks two things about every origin:</p>
+<ul>
+<li><strong>The daemon listens on every address its host resolves to, on its port.</strong> A
+tailnet name resolves to an IPv4 and an IPv6 address. If <code>addr</code> names only one
+of them, another process running as you can listen on the other and serve the
+same origin, and a browser that picks that address runs its ceremonies there.
+Bind the wildcard (<code>addr: &quot;0.0.0.0:8081&quot;</code> holds every address of every
+interface, so the bearer key and TLS are then all that guard it on your LAN), or
+give the name only addresses the daemon holds. <code>localhost</code> has the same gap on
+<code>[::1]</code> while the daemon listens on <code>127.0.0.1</code> alone; doctor notes it.</li>
+<li><strong>The certificate names the host.</strong> Under peer_auth only root and the daemon's
+account read the TLS key, which is what keeps a process of yours from serving
+the origin with a valid certificate. That holds only if your account cannot get
+a certificate for the name by itself: a tailnet whose cert command you may run
+(<code>tailscale cert</code>) hands any process of yours one. Then binding every address is
+what stands between them and the origin.</li>
+</ul>
 <h2 id="requests">Requests</h2>
 <p>When an agent reaches a locked project without a lease, Seamless files an access
 request, and the refusal says so. Asking needs no privilege, and the daemon, not
@@ -1196,7 +1233,7 @@ wherever step 10 put it, is the fallback if anything in the move went wrong.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </aside>
   

@@ -8,7 +8,7 @@ package console
 //
 // The page lists and adds; it never removes. Removing a credential, or
 // resetting them all, is `seamlessd approvers remove|reset`, run as the
-// daemon's own account -- the same proof that mints the enrollment code a first
+// daemon's own account -- the same proof that mints the enrollment code every
 // credential needs. A console cookie, or the bearer key a script holds, is not
 // that proof. The one credential a route retires is a Touch ID key that signs
 // its own retirement while the same Mac enrolls its replacement with such a
@@ -40,10 +40,9 @@ const formBodyPasskey int64 = 3 * passkey.MaxResponseBytes
 type ApprovalsView interface {
 	PasskeysOn() bool
 	Origins() []string
-	BeginPasskey(ctx context.Context, name string, byCode bool) (approval.Begun, error)
+	BeginPasskey(ctx context.Context, name string) (approval.Begun, error)
 	FinishPasskey(ctx context.Context, id string, response []byte) (approval.Finished, error)
 	ConfirmPasskeyCode(ctx context.Context, id, code string) (store.ApproverCredential, error)
-	ApprovePasskey(ctx context.Context, id string, response []byte) (store.ApproverCredential, error)
 	// EnrollTouchIDReplacing stores the Touch ID helper's new key, proven by
 	// a live touchid enrollment code and the key's own signature over it, and
 	// in the same transaction retires each earlier key of this Mac whose own
@@ -90,10 +89,6 @@ type approverRow struct {
 
 type approversData struct {
 	Credentials []approverRow `json:"credentials"`
-	// HasPasskey says an enrolled passkey can approve a new one. A Touch ID key
-	// cannot, so while only those exist the page offers the code path alone,
-	// as approval.BeginPasskey requires.
-	HasPasskey bool `json:"has_passkey"`
 	// PasskeysOn is false when the relying party is not configured; the page
 	// then lists credentials and explains, with no enrollment form.
 	PasskeysOn bool `json:"passkeys_on"`
@@ -137,7 +132,6 @@ func (s *Service) approversPage(w http.ResponseWriter, r *http.Request) {
 	}
 	d.OnOrigin = slices.Contains(origins, requestOrigin(r))
 	for _, c := range creds {
-		d.HasPasskey = d.HasPasskey || c.Kind == store.ApproverPasskey
 		d.Credentials = append(d.Credentials, approverRow{
 			ID: c.ID, Kind: c.Kind, Name: c.Name, Synced: c.BackupState, AddedAt: c.AddedAt,
 			AddedBy: approverAddedBy(c.AddedBy, creds), LastUsed: c.LastUsedAt,
@@ -155,7 +149,7 @@ func (s *Service) approverError(w http.ResponseWriter, r *http.Request, err erro
 	case errors.Is(err, store.ErrEnrollCode):
 		msg = "that enrollment code is not valid for this key: it may be mistyped, expired (codes last 10 minutes), already used, or minted for another key"
 	case errors.Is(err, store.ErrEnrollProof):
-		msg = "the first passkey needs a one-time enrollment code, minted for it once the passkey exists"
+		msg = "every passkey needs a one-time enrollment code, minted for it once the passkey exists"
 	case errors.Is(err, store.ErrInvalidApprover):
 		msg = "give the passkey a name of 1 to 64 characters on one line"
 	case errors.Is(err, store.ErrApproverExists):
@@ -195,7 +189,7 @@ func (s *Service) approversBegin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "a passkey is enrolled from a browser, on the console's Approvers page"})
 		return
 	}
-	begun, err := s.cfg.Approvals.BeginPasskey(r.Context(), r.PostForm.Get("name"), r.PostForm.Get("by_code") == "1")
+	begun, err := s.cfg.Approvals.BeginPasskey(r.Context(), r.PostForm.Get("name"))
 	if err != nil {
 		s.approverError(w, r, err)
 		return
@@ -212,12 +206,8 @@ func (s *Service) approversFinish(w http.ResponseWriter, r *http.Request) {
 		s.approverError(w, r, err)
 		return
 	}
-	if fin.Fingerprint != "" {
-		writeJSON(w, http.StatusOK, map[string]any{"fingerprint": fin.Fingerprint,
-			"command": s.enrollCodeCommand(store.ApproverPasskey, fin.Fingerprint)})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"approve": fin.Approve})
+	writeJSON(w, http.StatusOK, map[string]any{"fingerprint": fin.Fingerprint,
+		"command": s.enrollCodeCommand(store.ApproverPasskey, fin.Fingerprint)})
 }
 
 // approversConfirm finishes a passkey enrollment with the code minted for its key.
@@ -246,18 +236,6 @@ func (s *Service) enrollCodeCommand(kind, fingerprint string) string {
 		env = "env SEAMLESS_CONFIG=" + shellWord(t.Config) + " "
 	}
 	return "sudo -k -u " + shellWord(t.Account) + " " + env + shellWord(t.Seamlessd) + " " + verb
-}
-
-func (s *Service) approversApprove(w http.ResponseWriter, r *http.Request) {
-	if s.approversOff(w, r) {
-		return
-	}
-	cred, err := s.cfg.Approvals.ApprovePasskey(r.Context(), r.PostForm.Get("id"), []byte(r.PostForm.Get("response")))
-	if err != nil {
-		s.approverError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"enrolled": cred.ID, "name": cred.Name})
 }
 
 // The Touch ID helper's enrollment form: what the Secure Enclave key it made

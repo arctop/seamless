@@ -646,7 +646,7 @@ func (d *dialogRig) enrollPasskey() *passkeytest.Authenticator {
 	ctx := context.Background()
 	a, err := passkeytest.New(true)
 	require.NoError(d.t, err)
-	begun, err := d.svc.BeginPasskey(ctx, "security key", true)
+	begun, err := d.svc.BeginPasskey(ctx, "security key")
 	require.NoError(d.t, err)
 	resp, err := a.Create(begun.Options, dlgOrigin)
 	require.NoError(d.t, err)

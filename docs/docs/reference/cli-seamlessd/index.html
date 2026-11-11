@@ -1142,12 +1142,11 @@ Touch ID key, which signs for it.</p>
 <li><code>enroll-code</code> mints a one-time enrollment code for one key, named by its
 fingerprint (<code>--key</code>). It works once, for 10 minutes, only for that key; only
 its hash, which binds the key, is stored. You rarely type this by hand. For a
-passkey, create it on the console's Approvers page (<code>/console/approvers</code>, on the
-passkey origin - <code>http://localhost:&lt;port&gt;</code> unless <code>peer_auth.passkeys</code> says
-otherwise), which shows the command with the new key's fingerprint and takes the
-code. For a Touch ID key, the Seamless Approve window does the same. The first
-credential needs a code; a later passkey can be approved by one already enrolled
-instead.</li>
+passkey, create it on the console's Approvers page (<code>/console/approvers</code>, on
+<a href="../../guides/peer-auth/#the-passkey-origin">the passkey origin</a>), which shows the
+command with the new key's fingerprint and takes the code. For a Touch ID key, the Seamless Approve window does the same. Every
+credential needs a code, however many are enrolled: an enrolled passkey never
+vouches for a new one.</li>
 <li><code>list</code> prints the enrolled credentials: id, kind, name, how each was enrolled
 and when it was last used. <code>--json</code> prints them as JSON.</li>
 <li><code>remove</code> deletes one credential. Leases it already approved are untouched.</li>
@@ -1199,8 +1198,8 @@ error on other platforms rather than silently opening the default browser.</p>
 <p>It refuses to run when <code>mcp.api_key</code> is empty, or when the server does not
 answer <code>/healthz</code> within two seconds - the page has nowhere to POST otherwise.
 Any HTTP response counts as reachable, including a degraded 503.</p>
-<p>While <code>peer_auth</code> is on, it signs in on the passkey
-origin (<code>http://localhost:&lt;port&gt;</code> by default) instead of the server URL: the
+<p>While <code>peer_auth</code> is on, it signs in on
+<a href="../../guides/peer-auth/#the-passkey-origin">the passkey origin</a> instead of the server URL: the
 console's cookie belongs to one host, and browsers refuse passkeys on an IP
 address such as <code>127.0.0.1</code>. A client's config carries no <code>peer_auth</code> block, so
 there it asks the daemon for that origin, and uses <code>localhost</code> only when the

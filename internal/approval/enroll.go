@@ -3,11 +3,12 @@
 // how they are enrolled.
 //
 // An approver credential is a WebAuthn passkey (internal/passkey) or the
-// macOS Touch ID helper's Secure Enclave key. The first one is enrolled with a
+// macOS Touch ID helper's Secure Enclave key. Every one is enrolled with a
 // one-time code that only `seamlessd approvers enroll-code`, run as the
-// daemon's own account, can mint; a later one with a code too, or with the
-// approval of an existing passkey over a challenge that binds the new
-// credential. The store keeps the rows and the code rules (store/approvers.go);
+// daemon's own account, can mint, for that one key. An enrolled passkey never
+// vouches for a new one: an enrolled key can take a console lock off with no
+// one present, so one tricked touch must not be enough to add a key an agent
+// holds. The store keeps the rows and the code rules (store/approvers.go);
 // this package runs the ceremonies around them.
 package approval
 
@@ -34,8 +35,8 @@ import (
 	"github.com/arctop/seamless/internal/store"
 )
 
-// EnrollTTL is how long a started passkey enrollment waits for its browser and,
-// by a code, for the owner to mint the code for the new key.
+// EnrollTTL is how long a started passkey enrollment waits for its browser and
+// for the owner to mint the code for the new key.
 const EnrollTTL = 10 * time.Minute
 
 // maxPending caps the passkey enrollments in flight, so a caller looping on
@@ -124,13 +125,11 @@ var ErrTooManyEnrollments = errors.New("too many passkey enrollments in progress
 // pendingEnroll is one passkey enrollment between its requests.
 type pendingEnroll struct {
 	name    string
-	byCode  bool // false when an existing passkey approves it
 	state   passkey.RegistrationState
 	expires time.Time
 	// cred is set once the new credential is created; it then waits for the
-	// code minted for it, or for an existing passkey's approval over binding.
-	cred    *passkey.Credential
-	binding []byte
+	// code minted for its key.
+	cred *passkey.Credential
 }
 
 // Begun is a started passkey enrollment: its id and the creation options for
@@ -141,12 +140,10 @@ type Begun struct {
 }
 
 // Finished is a passkey enrollment's result once the new credential exists. It
-// waits for one more proof: Fingerprint names the key to mint a code for
-// (ConfirmPasskeyCode takes the code), or Approve holds the request options for
-// an existing passkey's navigator.credentials.get (ApprovePasskey).
+// waits for the code: Fingerprint names the key to mint one for, and
+// ConfirmPasskeyCode takes it.
 type Finished struct {
-	Fingerprint string          `json:"fingerprint,omitempty"`
-	Approve     json.RawMessage `json:"approve,omitempty"`
+	Fingerprint string `json:"fingerprint"`
 }
 
 func newID() (string, error) {
@@ -204,12 +201,11 @@ func (s *Service) passkeys(ctx context.Context) ([]passkey.Credential, error) {
 	return out, nil
 }
 
-// BeginPasskey starts enrolling a passkey named name. By code, the code comes
-// after the credential exists, because it is minted for that credential's key
-// (ConfirmPasskeyCode). Otherwise an existing passkey will have to approve the
-// new credential, so one must be enrolled. Every enrolled passkey is excluded,
-// so an authenticator that holds one already is not enrolled twice.
-func (s *Service) BeginPasskey(ctx context.Context, name string, byCode bool) (Begun, error) {
+// BeginPasskey starts enrolling a passkey named name. The code comes after the
+// credential exists, because it is minted for that credential's key
+// (ConfirmPasskeyCode). Every enrolled passkey is excluded, so an
+// authenticator that holds one already is not enrolled twice.
+func (s *Service) BeginPasskey(ctx context.Context, name string) (Begun, error) {
 	if err := refuseRestricted(ctx); err != nil {
 		return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", err)
 	}
@@ -224,9 +220,6 @@ func (s *Service) BeginPasskey(ctx context.Context, name string, byCode bool) (B
 	existing, err := s.passkeys(ctx)
 	if err != nil {
 		return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", err)
-	}
-	if !byCode && len(existing) == 0 {
-		return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", store.ErrEnrollProof)
 	}
 	user, err := s.user(ctx)
 	if err != nil {
@@ -246,14 +239,13 @@ func (s *Service) BeginPasskey(ctx context.Context, name string, byCode bool) (B
 	if len(s.pending) >= maxPending {
 		return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", ErrTooManyEnrollments)
 	}
-	s.pending[id] = &pendingEnroll{name: name, byCode: byCode, state: state, expires: now.Add(EnrollTTL)}
+	s.pending[id] = &pendingEnroll{name: name, state: state, expires: now.Add(EnrollTTL)}
 	return Begun{ID: id, Options: opts}, nil
 }
 
 // FinishPasskey verifies the browser's creation response for enrollment id. The
-// new credential then waits: by code, for the code minted for its key
-// (Finished.Fingerprint, ConfirmPasskeyCode); otherwise for an existing
-// passkey's approval (ApprovePasskey) over a challenge that binds it.
+// new credential then waits for the code minted for its key
+// (Finished.Fingerprint, ConfirmPasskeyCode).
 func (s *Service) FinishPasskey(ctx context.Context, id string, response []byte) (Finished, error) {
 	if err := refuseRestricted(ctx); err != nil {
 		return Finished{}, fmt.Errorf("approval.FinishPasskey: %w", err)
@@ -274,27 +266,11 @@ func (s *Service) FinishPasskey(ctx context.Context, id string, response []byte)
 	if err != nil {
 		return Finished{}, fmt.Errorf("approval.FinishPasskey: %w", err)
 	}
-	if p.byCode {
-		p.cred = &cred
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		s.pending[id] = p
-		return Finished{Fingerprint: store.ApproverKeyFingerprint(cred.PublicKey)}, nil
-	}
-	existing, err := s.passkeys(ctx)
-	if err != nil {
-		return Finished{}, fmt.Errorf("approval.FinishPasskey: %w", err)
-	}
-	binding := enrollBinding(id, cred)
-	opts, err := s.cfg.Passkeys.BeginAssertion(binding, existing)
-	if err != nil {
-		return Finished{}, fmt.Errorf("approval.FinishPasskey: %w", err)
-	}
-	p.cred, p.binding = &cred, binding
+	p.cred = &cred
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pending[id] = p
-	return Finished{Approve: opts}, nil
+	return Finished{Fingerprint: store.ApproverKeyFingerprint(cred.PublicKey)}, nil
 }
 
 // ConfirmPasskeyCode enrolls enrollment id's new credential with the code minted
@@ -313,10 +289,14 @@ func (s *Service) ConfirmPasskeyCode(ctx context.Context, id, code string) (stor
 	if err != nil {
 		return store.ApproverCredential{}, fmt.Errorf("approval.ConfirmPasskeyCode: %w", ErrNoEnrollment)
 	}
-	if !p.byCode || p.cred == nil {
+	if p.cred == nil {
 		return store.ApproverCredential{}, fmt.Errorf("approval.ConfirmPasskeyCode: %w", ErrNoEnrollment)
 	}
-	stored, err := store.EnrollApprover(ctx, s.cfg.DB, FromPasskey(*p.cred, p.name), strings.TrimSpace(code), "", now)
+	// The passkey is bound for life to the RP ID it was just registered under:
+	// record it, so a later change of rp_id names the passkeys it strands.
+	row := FromPasskey(*p.cred, p.name)
+	row.RPID = s.cfg.Passkeys.RPID()
+	stored, err := store.EnrollApprover(ctx, s.cfg.DB, row, strings.TrimSpace(code), now)
 	if err != nil {
 		if errors.Is(err, store.ErrEnrollCode) || errors.Is(err, store.ErrEnrollProof) {
 			s.mu.Lock()
@@ -328,47 +308,7 @@ func (s *Service) ConfirmPasskeyCode(ctx context.Context, id, code string) (stor
 	return stored, nil
 }
 
-// ApprovePasskey verifies an existing passkey's approval of enrollment id's new
-// credential -- an assertion over the challenge that binds it -- records the
-// approving credential's use, and stores the new one as added by it.
-func (s *Service) ApprovePasskey(ctx context.Context, id string, response []byte) (store.ApproverCredential, error) {
-	if err := refuseRestricted(ctx); err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("approval.ApprovePasskey: %w", err)
-	}
-	if !s.PasskeysOn() {
-		return store.ApproverCredential{}, ErrPasskeysOff
-	}
-	now := s.cfg.Now()
-	p, err := s.take(id, now)
-	if err != nil || p.cred == nil || p.byCode {
-		return store.ApproverCredential{}, fmt.Errorf("approval.ApprovePasskey: %w", ErrNoEnrollment)
-	}
-	rows, err := store.ApproverCredentials(ctx, s.cfg.DB, store.ApproverPasskey)
-	if err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("approval.ApprovePasskey: %w", err)
-	}
-	allowed := make([]passkey.Credential, len(rows))
-	for i, r := range rows {
-		allowed[i] = ToPasskey(r)
-	}
-	used, err := s.cfg.Passkeys.FinishAssertion(p.binding, allowed, response)
-	if err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("approval.ApprovePasskey: %w", err)
-	}
-	approver, ok := rowFor(rows, used.ID)
-	if !ok {
-		return store.ApproverCredential{}, fmt.Errorf("approval.ApprovePasskey: %w", passkey.ErrUnknownCredential)
-	}
-	if err := store.RecordApproverUse(ctx, s.cfg.DB, approver.ID, approver.SignCount, used.SignCount, used.BackupState, now); err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("approval.ApprovePasskey: %w", err)
-	}
-	stored, err := store.EnrollApprover(ctx, s.cfg.DB, FromPasskey(*p.cred, p.name), "", approver.ID, now)
-	if err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("approval.ApprovePasskey: %w", err)
-	}
-	return stored, nil
-}
-
+// rowFor is the stored row of the credential an assertion used.
 func rowFor(rows []store.ApproverCredential, credID []byte) (store.ApproverCredential, bool) {
 	for _, r := range rows {
 		if string(r.CredentialID) == string(credID) {
@@ -376,21 +316,6 @@ func rowFor(rows []store.ApproverCredential, credID []byte) (store.ApproverCrede
 		}
 	}
 	return store.ApproverCredential{}, false
-}
-
-// enrollBinding is the 32-byte challenge an existing passkey signs to approve a
-// new credential: it names this enrollment and the new credential's id and
-// public key, so the approval cannot be lifted onto another enrollment or
-// another key.
-func enrollBinding(id string, c passkey.Credential) []byte {
-	h := sha256.New()
-	h.Write([]byte("seamless approver enrollment v1\x00"))
-	h.Write([]byte(id))
-	h.Write([]byte{0})
-	h.Write(c.ID)
-	h.Write([]byte{0})
-	h.Write(c.PublicKey)
-	return h.Sum(nil)
 }
 
 // TouchIDEnrollMessage is what the Touch ID helper signs with its new key to

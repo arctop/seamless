@@ -652,13 +652,13 @@ func (d *pmDaemon) enrollPasskey() *passkeytest.Authenticator {
 	return a
 }
 
-// finishPasskeyByCode runs a by-code enrollment's begin and finish on base and
+// finishPasskeyByCode runs a passkey enrollment's begin and finish on base and
 // returns the enrollment's id and the fingerprint finish named: the key the
 // next step's code must be minted for.
 func (d *pmDaemon) finishPasskeyByCode(base, key string, a *passkeytest.Authenticator, name string) (string, string) {
 	d.t.Helper()
 	status, body := d.do(base, key, http.MethodPost, "/console/approvers/passkey/begin",
-		url.Values{"name": {name}, "by_code": {"1"}}, nil)
+		url.Values{"name": {name}}, nil)
 	require.Equal(d.t, http.StatusOK, status, body)
 	var begun approval.Begun
 	require.NoError(d.t, json.Unmarshal([]byte(body), &begun))

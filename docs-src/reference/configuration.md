@@ -164,11 +164,14 @@ behavior of every earlier release. The guide is
   Refused while `enabled` is false, and for the owner. File-only.
 - `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
   the owner's approver passkeys ([seamlessd approvers](/reference/cli-seamlessd/#seamlessd_approvers)).
-  Unset, they are `localhost` and the console's own address on localhost.
-  `rp_id` is a host name, never an IP address; each origin is https, or http
-  on localhost, on `rp_id` or a subdomain of it. A passkey is bound to its
-  `rp_id` for life: changing it strands every passkey enrolled under the old
-  one. File-only.
+  Unset, a TLS install whose `server_url` names a host uses that exact host as
+  `rp_id` and its https address as the origin; any other install uses
+  `localhost` and the console's own address on localhost. `rp_id` is a host
+  name, never an IP address; each origin is https, or http on localhost, on
+  `rp_id` or a subdomain of it. A passkey is bound to its `rp_id` for life:
+  changing it, or the `server_url` it was derived from, strands every passkey
+  enrolled under the old one, and `seamlessd doctor` and the daemon's log name
+  the ones it strands. File-only.
 
 A client of such a daemon names the socket as its `server_url`:
 `unix:///absolute/path.sock`. It needs no `mcp.api_key`, and its hooks and MCP

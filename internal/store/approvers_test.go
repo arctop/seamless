@@ -76,7 +76,7 @@ func TestEnrollCode_Shape(t *testing.T) {
 
 	// As typed: lowercase, no dashes, spaces, and Crockford's look-alikes.
 	typed := strings.ToLower(strings.ReplaceAll(code, "-", " "))
-	_, err = EnrollApprover(ctx, db, cred, typed, "", apNow)
+	_, err = EnrollApprover(ctx, db, cred, typed, apNow)
 	require.NoError(t, err)
 	require.Equal(t, "0110", NormalizeEnrollCode("oIl0"))
 
@@ -109,17 +109,17 @@ func TestEnrollApprover_CodeRules(t *testing.T) {
 				t.Skip("the random code already ends in Z")
 			}
 			require.False(t, enrollCodeLive(t, db, ApproverPasskey, tc.code, fp, tc.at))
-			_, err := EnrollApprover(ctx, db, passkeyCred("c-"+name), tc.code, "", tc.at)
+			_, err := EnrollApprover(ctx, db, passkeyCred("c-"+name), tc.code, tc.at)
 			require.ErrorIs(t, err, ErrEnrollCode)
 		})
 	}
 
-	first, err := EnrollApprover(ctx, db, passkeyCred("c1"), code, "", apNow.Add(time.Minute))
+	first, err := EnrollApprover(ctx, db, passkeyCred("c1"), code, apNow.Add(time.Minute))
 	require.NoError(t, err)
 	require.Equal(t, AddedByCode, first.AddedBy)
 	require.NotEmpty(t, first.ID)
 
-	_, err = EnrollApprover(ctx, db, passkeyCred("c2"), code, "", apNow.Add(2*time.Minute))
+	_, err = EnrollApprover(ctx, db, passkeyCred("c2"), code, apNow.Add(2*time.Minute))
 	require.ErrorIs(t, err, ErrEnrollCode, "a code is single use")
 	require.False(t, enrollCodeLive(t, db, ApproverPasskey, code, fp, apNow.Add(2*time.Minute)))
 
@@ -140,34 +140,39 @@ func TestEnrollApprover_ProofRules(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
 
-	_, err := EnrollApprover(ctx, db, passkeyCred("c1"), "", "", apNow)
-	require.ErrorIs(t, err, ErrEnrollProof, "no proof at all")
-	_, err = EnrollApprover(ctx, db, passkeyCred("c1"), "", "no-such-credential", apNow)
-	require.ErrorIs(t, err, ErrEnrollProof, "the first credential needs a code: there is nothing to approve it")
+	_, err := EnrollApprover(ctx, db, passkeyCred("c1"), "", apNow)
+	require.ErrorIs(t, err, ErrEnrollProof, "no code at all")
+	_, err = EnrollApprover(ctx, db, passkeyCred("c1"), "   ", apNow)
+	require.ErrorIs(t, err, ErrEnrollProof, "a blank code is no code")
 
 	fp := fingerprintOf(passkeyCred("c1"))
 	code, _, err := MintEnrollCode(ctx, db, ApproverPasskey, fp, apNow)
 	require.NoError(t, err)
-	first, err := EnrollApprover(ctx, db, passkeyCred("c1"), code, "", apNow)
+	first, err := EnrollApprover(ctx, db, passkeyCred("c1"), code, apNow)
 	require.NoError(t, err)
+	require.Equal(t, AddedByCode, first.AddedBy)
+
+	// An enrolled credential never stands in for a later one's code: there is
+	// no approval path to take.
+	_, err = EnrollApprover(ctx, db, passkeyCred("c2"), "", apNow)
+	require.ErrorIs(t, err, ErrEnrollProof, "a second credential needs a code too")
 
 	code2, _, err := MintEnrollCode(ctx, db, ApproverPasskey, fp, apNow)
 	require.NoError(t, err)
-	_, err = EnrollApprover(ctx, db, passkeyCred("c2"), code2, first.ID, apNow)
-	require.ErrorIs(t, err, ErrEnrollProof, "two proofs is not one")
-	require.True(t, enrollCodeLive(t, db, ApproverPasskey, code2, fp, apNow), "a refused enrollment consumes nothing")
+	second, err := EnrollApprover(ctx, db, passkeyCred("c2"), code2, apNow)
+	require.NoError(t, err, "a later credential, with a code of its own")
+	require.Equal(t, AddedByCode, second.AddedBy)
 
-	second, err := EnrollApprover(ctx, db, passkeyCred("c2"), "", first.ID, apNow)
-	require.NoError(t, err, "a later credential, approved by an existing one")
-	require.Equal(t, first.ID, second.AddedBy)
-
-	_, err = EnrollApprover(ctx, db, passkeyCred("c1"), "", first.ID, apNow)
+	code3, _, err := MintEnrollCode(ctx, db, ApproverPasskey, fp, apNow)
+	require.NoError(t, err)
+	_, err = EnrollApprover(ctx, db, passkeyCred("c1"), code3, apNow)
 	require.ErrorIs(t, err, ErrApproverExists)
+	require.True(t, enrollCodeLive(t, db, ApproverPasskey, code3, fp, apNow), "a refused enrollment consumes nothing")
 
 	touch := ApproverCredential{Kind: ApproverTouchID, CredentialID: []byte("tk1"), PublicKey: touchKey(7), Alg: -7, Name: "this Mac"}
 	tcode, _, err := MintEnrollCode(ctx, db, ApproverTouchID, fingerprintOf(touch), apNow)
 	require.NoError(t, err)
-	tk, err := EnrollApprover(ctx, db, touch, tcode, "", apNow)
+	tk, err := EnrollApprover(ctx, db, touch, tcode, apNow)
 	require.NoError(t, err)
 	require.Equal(t, ApproverTouchID, tk.Kind)
 
@@ -192,12 +197,54 @@ func TestEnrollApprover_RefusesBadRecords(t *testing.T) {
 		"no name":                   {Kind: ApproverPasskey, CredentialID: []byte("x"), PublicKey: []byte{1}, Name: "  "},
 		"a two-line name":           {Kind: ApproverPasskey, CredentialID: []byte("x"), PublicKey: []byte{1}, Name: "a\nb"},
 		"an over-long name":         {Kind: ApproverPasskey, CredentialID: []byte("x"), PublicKey: []byte{1}, Name: strings.Repeat("n", 65)},
+		"a Touch ID key with an RP": {Kind: ApproverTouchID, CredentialID: []byte("x"), PublicKey: touchKey(1), Name: "n", RPID: "localhost"},
+		"an RP ID with a space":     {Kind: ApproverPasskey, CredentialID: []byte("x"), PublicKey: []byte{1}, Name: "n", RPID: "a b"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := EnrollApprover(ctx, db, c, "AAAA", "", apNow)
+			_, err := EnrollApprover(ctx, db, c, "AAAA", apNow)
 			require.ErrorIs(t, err, ErrInvalidApprover)
 		})
 	}
+}
+
+// Migration 038: a passkey keeps the RP ID it was enrolled under, a row from
+// before the column reads as unknown, and only a known, different RP ID
+// strands a passkey.
+func TestApproverRPID_RecordedAndStranded(t *testing.T) {
+	db := leaseDB(t)
+	ctx := context.Background()
+	named := passkeyCred("named")
+	named.RPID = "studio.example.ts.net"
+	enrollOne(t, db, named)
+	local := passkeyCred("local")
+	local.RPID = "localhost"
+	enrollOne(t, db, local)
+	enrollOne(t, db, touchCred(7, "this mac"))
+	// A row the previous release inserted names no rp_id column at all.
+	_, err := db.ExecContext(ctx, `INSERT INTO approver_credentials (id, kind, credential_id, public_key, alg, name, added_at, added_by)
+		VALUES ('old', 'passkey', X'0102', X'a501', -7, 'older key', ?, 'code')`, core.FormatTime(apNow))
+	require.NoError(t, err)
+
+	creds, err := ApproverCredentials(ctx, db, "")
+	require.NoError(t, err)
+	got := map[string]string{}
+	for _, c := range creds {
+		got[c.Name] = c.RPID
+	}
+	require.Equal(t, map[string]string{"laptop named": "studio.example.ts.net", "laptop local": "localhost",
+		"this mac": "", "older key": ""}, got)
+
+	names := func(cs []ApproverCredential) []string {
+		var out []string
+		for _, c := range cs {
+			out = append(out, c.Name)
+		}
+		return out
+	}
+	require.Equal(t, []string{"laptop local"}, names(StrandedPasskeys(creds, "studio.example.ts.net")),
+		"the localhost passkey cannot sign for the name; the unknown one and the Touch ID key are not judged")
+	require.Equal(t, []string{"laptop named"}, names(StrandedPasskeys(creds, "localhost")))
+	require.Empty(t, StrandedPasskeys(nil, "localhost"))
 }
 
 func enrollOne(t *testing.T, db *sql.DB, c ApproverCredential) ApproverCredential {
@@ -205,7 +252,7 @@ func enrollOne(t *testing.T, db *sql.DB, c ApproverCredential) ApproverCredentia
 	ctx := context.Background()
 	code, _, err := MintEnrollCode(ctx, db, c.Kind, fingerprintOf(c), apNow)
 	require.NoError(t, err)
-	got, err := EnrollApprover(ctx, db, c, code, "", apNow)
+	got, err := EnrollApprover(ctx, db, c, code, apNow)
 	require.NoError(t, err)
 	return got
 }
@@ -392,7 +439,7 @@ func TestEnrollTouchIDRetiring(t *testing.T) {
 	})
 	t.Run("EnrollApprover retires nothing", func(t *testing.T) {
 		db, old, other, pk := fresh(t)
-		got, err := EnrollApprover(ctx, db, touchCred(3, "Touch ID on example-mac"), code(t, db, touchCred(3, "")), "", apNow)
+		got, err := EnrollApprover(ctx, db, touchCred(3, "Touch ID on example-mac"), code(t, db, touchCred(3, "")), apNow)
 		require.NoError(t, err)
 		require.ElementsMatch(t, []string{old.ID, other.ID, pk.ID, got.ID}, ids(t, db))
 	})
@@ -418,18 +465,18 @@ func TestEnrollCode_BoundToItsKey(t *testing.T) {
 			code, _, err := MintEnrollCode(ctx, db, tc.kind, fingerprintOf(tc.mine), apNow)
 			require.NoError(t, err)
 
-			_, err = EnrollApprover(ctx, db, tc.them, code, "", apNow)
+			_, err = EnrollApprover(ctx, db, tc.them, code, apNow)
 			require.ErrorIs(t, err, ErrEnrollCode, "the same code with another key")
 			n, err := CountApprovers(ctx, db)
 			require.NoError(t, err)
 			require.Zero(t, n, "nothing is enrolled")
 			require.True(t, enrollCodeLive(t, db, tc.kind, code, fingerprintOf(tc.mine), apNow), "and the code is not spent")
 
-			got, err := EnrollApprover(ctx, db, tc.mine, code, "", apNow)
+			got, err := EnrollApprover(ctx, db, tc.mine, code, apNow)
 			require.NoError(t, err, "its own key still enrolls with it")
 			require.Equal(t, tc.mine.PublicKey, got.PublicKey)
 
-			_, err = EnrollApprover(ctx, db, tc.them, code, "", apNow)
+			_, err = EnrollApprover(ctx, db, tc.them, code, apNow)
 			require.ErrorIs(t, err, ErrEnrollCode, "spent now, for every key")
 		})
 	}
@@ -480,7 +527,7 @@ func TestApproverKeyFingerprint_PinnedVector(t *testing.T) {
 	ctx := context.Background()
 	code, _, err := MintEnrollCode(ctx, db, ApproverTouchID, "y2wk-2pg4-b7db-fatz", apNow)
 	require.NoError(t, err)
-	got, err := EnrollApprover(ctx, db, ApproverCredential{Kind: ApproverTouchID, CredentialID: []byte("k"), PublicKey: key, Alg: -7, Name: "this Mac"}, code, "", apNow)
+	got, err := EnrollApprover(ctx, db, ApproverCredential{Kind: ApproverTouchID, CredentialID: []byte("k"), PublicKey: key, Alg: -7, Name: "this Mac"}, code, apNow)
 	require.NoError(t, err, "a code minted for the key as typed enrolls that key")
 	require.Equal(t, key, got.PublicKey)
 }

@@ -95,11 +95,14 @@ type PeerAuth struct {
 // passkey enrolled under the old one.
 type PeerPasskeys struct {
 	// RPID is a host name -- never an IP literal, which WebAuthn does not
-	// accept -- such as "localhost" (the default) or "seamless.example.com".
+	// accept -- such as "localhost" or "seamless.example.com". Empty, it is
+	// derived (Config.RelyingParty).
 	RPID string `yaml:"rp_id"`
 	// Origins are the exact origins the console's passkey pages are served
 	// from: https, or http on localhost, each on rp_id or a subdomain of it.
-	// Empty means the console's own address on localhost.
+	// With both keys empty, a TLS install whose server_url names a host derives
+	// both from that name (Config.ServedRelyingParty); any other install uses
+	// the console's own address on localhost.
 	Origins []string `yaml:"origins"`
 }
 
@@ -238,20 +241,26 @@ func (p PeerAuth) LeaseCap() time.Duration {
 }
 
 // RelyingParty returns the WebAuthn relying party for the approver passkeys:
-// the configured rp_id and origins, or, unset, "localhost" and the console's
-// own address on localhost (http, or https when the daemon serves TLS). A
-// console reached as 127.0.0.1 cannot run a passkey ceremony at all -- an IP is
-// not a valid RP ID -- which is why the default names localhost.
+// the configured rp_id and origins; unset, the TLS server_url's host name
+// (ServedRelyingParty); otherwise "localhost" and the console's own address on
+// localhost (http, or https when the daemon serves TLS). A console reached as
+// 127.0.0.1 cannot run a passkey ceremony at all -- an IP is not a valid RP ID
+// -- which is why the last default names localhost.
 func (c Config) RelyingParty() (rpID string, origins []string) {
 	p := c.PeerAuth.Passkeys
 	rpID = strings.TrimSpace(p.RPID)
-	if rpID == "" {
-		rpID = "localhost"
-	}
 	for _, o := range p.Origins {
 		if o = strings.TrimSpace(o); o != "" {
 			origins = append(origins, strings.TrimSuffix(o, "/"))
 		}
+	}
+	if rpID == "" && len(origins) == 0 {
+		if host, origin, ok := c.ServedRelyingParty(); ok {
+			return host, []string{origin}
+		}
+	}
+	if rpID == "" {
+		rpID = "localhost"
 	}
 	if len(origins) > 0 {
 		return rpID, origins
@@ -265,6 +274,36 @@ func (c Config) RelyingParty() (rpID string, origins []string) {
 		port = pt
 	}
 	return rpID, []string{scheme + "://" + net.JoinHostPort(rpID, port)}
+}
+
+// ServedRelyingParty is the relying party a TLS install derives from the name
+// it serves: when TLS is on and ServerURL is an https URL whose host is a DNS
+// name (never an IP literal, never a socket), the RP ID is exactly that host and
+// the origin is https://<host>[:<port>]. ok is false otherwise. The host is kept
+// as named and never widened to a parent domain, which would bring every other
+// host under that domain into the passkeys' scope.
+//
+// It reads no file: whether the certificate covers the name is doctor's and
+// serve's warning (a certificate that does not cover it fails every client's
+// TLS anyway), so every reader of the relying party -- serve, export, import,
+// console-open -- derives the same answer from the same config.
+func (c Config) ServedRelyingParty() (rpID, origin string, ok bool) {
+	if !c.TLSEnabled() || c.SocketPath() != "" {
+		return "", "", false
+	}
+	u, err := url.Parse(c.ServerURL())
+	if err != nil || !strings.EqualFold(u.Scheme, "https") {
+		return "", "", false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "" || validRPID(host) != nil {
+		return "", "", false
+	}
+	origin = "https://" + host
+	if port := u.Port(); port != "" && port != "443" {
+		origin += ":" + port
+	}
+	return host, origin, true
 }
 
 // validatePeerPasskeys is the passkeys block's shape: rp_id a lowercase host

@@ -4,17 +4,18 @@ package store
 // challenge with the owner present -- a WebAuthn passkey or the macOS Touch ID
 // key. This file keeps the rows and the enrollment rules:
 //
-//   - The first credential needs a one-time enrollment code. Only
+//   - Every credential needs a one-time enrollment code. Only
 //     `seamlessd approvers enroll-code`, run as the daemon's own account,
 //     mints one (MintEnrollCode); no route does. A code is minted for one key,
 //     named by its fingerprint (ApproverKeyFingerprint), so a code read off the
 //     owner's terminal cannot enroll any other key. It is stored only as a hash
 //     that binds the fingerprint, lives EnrollCodeTTL, and is consumed in the
 //     same transaction as the credential it enrolls.
-//   - A later credential needs a code too, or the approval of an existing
-//     credential over a challenge that binds the new one. The caller verifies
-//     that assertion (internal/passkey); EnrollApprover checks the approving
-//     credential exists.
+//   - An enrolled credential never vouches for a new one. An enrolled passkey
+//     can take a console lock off, so a single approval tricked out of the
+//     owner must not be enough to add a key someone else holds. (Rows an
+//     earlier build enrolled that way keep the approving credential's id in
+//     added_by; doctor names them.)
 //
 // The ceremonies themselves live above the store; a row here is input to them
 // and never a grant on its own.
@@ -49,7 +50,8 @@ const (
 	// EnrollCodeTTL is how long an enrollment code stays valid.
 	EnrollCodeTTL = 10 * time.Minute
 	// AddedByCode is approver_credentials.added_by for a credential a code
-	// enrolled; otherwise it holds the approving credential's id.
+	// enrolled: every one this build enrolls. A row an earlier build enrolled by
+	// another credential's approval holds that credential's id instead.
 	AddedByCode = "code"
 	// enrollCodeSymbols is Crockford's base32: no I, L, O or U.
 	enrollCodeSymbols = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -67,10 +69,8 @@ var (
 	// used, or minted for another kind or another key. One error for all five,
 	// so a caller learns nothing about which.
 	ErrEnrollCode = errors.New("enrollment code is not valid")
-	// ErrEnrollProof is an enrollment with no proof (or two): it needs exactly
-	// one of a code or an existing credential's approval, and the first
-	// credential needs a code.
-	ErrEnrollProof = errors.New("enrollment needs a code or an existing credential's approval")
+	// ErrEnrollProof is an enrollment with no code: every credential needs one.
+	ErrEnrollProof = errors.New("enrollment needs a one-time enrollment code")
 	// ErrApproverNotFound is an approver id or credential id with no row.
 	ErrApproverNotFound = errors.New("approver credential not found")
 	// ErrApproverExists is a credential already enrolled.
@@ -101,6 +101,24 @@ type ApproverCredential struct {
 	AddedAt           time.Time
 	AddedBy           string
 	LastUsedAt        *time.Time
+	// RPID is the WebAuthn relying party a passkey was enrolled under
+	// (migration 038): it works under that RP ID and no other. "" for a Touch
+	// ID key, and for a passkey enrolled before the column existed (unknown).
+	RPID string
+}
+
+// StrandedPasskeys returns the enrolled passkeys whose recorded RP ID is known
+// and is not rpID: the ones a daemon serving rpID can no longer verify. A
+// passkey with no recorded RP ID is not among them, since nothing says where
+// it belongs.
+func StrandedPasskeys(creds []ApproverCredential, rpID string) []ApproverCredential {
+	var out []ApproverCredential
+	for _, c := range creds {
+		if c.Kind == ApproverPasskey && c.RPID != "" && c.RPID != rpID {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 func validApproverKind(kind string) error {
@@ -223,6 +241,12 @@ func validApproverCredential(c ApproverCredential) error {
 	if c.Kind == ApproverTouchID && (len(c.PublicKey) != 65 || c.PublicKey[0] != 0x04) {
 		return fmt.Errorf("%w: a Touch ID key is an uncompressed P-256 point (65 bytes)", ErrInvalidApprover)
 	}
+	if c.Kind == ApproverTouchID && c.RPID != "" {
+		return fmt.Errorf("%w: a Touch ID key has no relying party", ErrInvalidApprover)
+	}
+	if len(c.RPID) > 253 || strings.ContainsAny(c.RPID, " \r\n\t") {
+		return fmt.Errorf("%w: rp_id %q is not a host name", ErrInvalidApprover, c.RPID)
+	}
 	name := strings.TrimSpace(c.Name)
 	if name == "" || len([]rune(name)) > MaxApproverNameRunes || strings.ContainsAny(name, "\r\n\t") {
 		return fmt.Errorf("%w: a name is 1 to %d characters on one line", ErrInvalidApprover, MaxApproverNameRunes)
@@ -230,13 +254,11 @@ func validApproverCredential(c ApproverCredential) error {
 	return nil
 }
 
-// EnrollApprover stores cred, proven by exactly one of: code, a live unused
-// enrollment code of cred's kind (consumed here, in the same transaction), or
-// approvedBy, the id of an existing credential whose approval of this
-// enrollment the caller has verified. The first credential needs a code. It
+// EnrollApprover stores cred, proven by code: a live unused enrollment code of
+// cred's kind minted for cred's key, consumed here in the same transaction. It
 // returns the stored row.
-func EnrollApprover(ctx context.Context, db *sql.DB, cred ApproverCredential, code, approvedBy string, now time.Time) (ApproverCredential, error) {
-	stored, _, err := enrollApprover(ctx, db, "store.EnrollApprover", cred, code, approvedBy, now, nil)
+func EnrollApprover(ctx context.Context, db *sql.DB, cred ApproverCredential, code string, now time.Time) (ApproverCredential, error) {
+	stored, _, err := enrollApprover(ctx, db, "store.EnrollApprover", cred, code, now, nil)
 	return stored, err
 }
 
@@ -262,30 +284,27 @@ func EnrollTouchIDRetiring(ctx context.Context, db *sql.DB, cred ApproverCredent
 	if cred.Kind != ApproverTouchID {
 		return ApproverCredential{}, nil, fmt.Errorf("%s: %w: only a Touch ID key retires a credential", op, ErrInvalidApprover)
 	}
-	if code == "" {
-		return ApproverCredential{}, nil, fmt.Errorf("%s: %w", op, ErrEnrollProof)
-	}
-	return enrollApprover(ctx, db, op, cred, code, "", now, retire)
+	return enrollApprover(ctx, db, op, cred, code, now, retire)
 }
 
 // enrollApprover is EnrollApprover and EnrollTouchIDRetiring: it stores cred
 // and removes the retirees in one transaction, every error wrapped in op.
-func enrollApprover(ctx context.Context, db *sql.DB, op string, cred ApproverCredential, code, approvedBy string, now time.Time,
+func enrollApprover(ctx context.Context, db *sql.DB, op string, cred ApproverCredential, code string, now time.Time,
 	retire []RetiredApprover) (ApproverCredential, []string, error) {
-	stored, retired, err := enrollApproverTx(ctx, db, cred, code, approvedBy, now, retire)
+	stored, retired, err := enrollApproverTx(ctx, db, cred, code, now, retire)
 	if err != nil {
 		return ApproverCredential{}, nil, fmt.Errorf("%s: %w", op, err)
 	}
 	return stored, retired, nil
 }
 
-func enrollApproverTx(ctx context.Context, db *sql.DB, cred ApproverCredential, code, approvedBy string, now time.Time,
+func enrollApproverTx(ctx context.Context, db *sql.DB, cred ApproverCredential, code string, now time.Time,
 	retire []RetiredApprover) (ApproverCredential, []string, error) {
 	cred.Name = strings.TrimSpace(cred.Name)
 	if err := validApproverCredential(cred); err != nil {
 		return ApproverCredential{}, nil, err
 	}
-	if (code == "") == (approvedBy == "") {
+	if strings.TrimSpace(code) == "" {
 		return ApproverCredential{}, nil, ErrEnrollProof
 	}
 	id, err := core.NewID()
@@ -299,29 +318,18 @@ func enrollApproverTx(ctx context.Context, db *sql.DB, cred ApproverCredential, 
 	defer func() { _ = tx.Rollback() }()
 
 	addedBy := AddedByCode
-	if code != "" {
-		res, err := tx.ExecContext(ctx, `UPDATE approver_enroll_codes SET used_at = ?, used_for = ?
-			WHERE hash = ? AND kind = ? AND used_at IS NULL AND expires_at > ?`,
-			core.FormatTime(now), id, enrollCodeHash(code, ApproverKeyFingerprint(cred.PublicKey)), cred.Kind, core.FormatTime(now))
-		if err != nil {
-			return ApproverCredential{}, nil, err
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return ApproverCredential{}, nil, err
-		}
-		if n != 1 {
-			return ApproverCredential{}, nil, ErrEnrollCode
-		}
-	} else {
-		var n int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM approver_credentials WHERE id = ?`, approvedBy).Scan(&n); err != nil {
-			return ApproverCredential{}, nil, err
-		}
-		if n == 0 {
-			return ApproverCredential{}, nil, fmt.Errorf("%w: the approving credential %q is not enrolled", ErrEnrollProof, approvedBy)
-		}
-		addedBy = approvedBy
+	res, err := tx.ExecContext(ctx, `UPDATE approver_enroll_codes SET used_at = ?, used_for = ?
+		WHERE hash = ? AND kind = ? AND used_at IS NULL AND expires_at > ?`,
+		core.FormatTime(now), id, enrollCodeHash(code, ApproverKeyFingerprint(cred.PublicKey)), cred.Kind, core.FormatTime(now))
+	if err != nil {
+		return ApproverCredential{}, nil, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return ApproverCredential{}, nil, err
+	}
+	if n != 1 {
+		return ApproverCredential{}, nil, ErrEnrollCode
 	}
 
 	var dup int
@@ -334,11 +342,11 @@ func enrollApproverTx(ctx context.Context, db *sql.DB, cred ApproverCredential, 
 	}
 	cred.ID, cred.AddedAt, cred.AddedBy, cred.LastUsedAt = id, now, addedBy, nil
 	if _, err := tx.ExecContext(ctx, `INSERT INTO approver_credentials (id, kind, credential_id, public_key, alg, sign_count,
-		backup_eligible, backup_state, aaguid, transports, attachment, attestation_format, user_handle, name, added_at, added_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		backup_eligible, backup_state, aaguid, transports, attachment, attestation_format, user_handle, name, added_at, added_by, rp_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		cred.ID, cred.Kind, cred.CredentialID, cred.PublicKey, cred.Alg, int64(cred.SignCount),
 		boolInt(cred.BackupEligible), boolInt(cred.BackupState), cred.AAGUID, strings.Join(cred.Transports, ","),
-		cred.Attachment, cred.AttestationFormat, cred.UserHandle, cred.Name, core.FormatTime(now), addedBy); err != nil {
+		cred.Attachment, cred.AttestationFormat, cred.UserHandle, cred.Name, core.FormatTime(now), addedBy, cred.RPID); err != nil {
 		return ApproverCredential{}, nil, err
 	}
 	// Retire only after the new row is in, in the same transaction: an
@@ -372,7 +380,7 @@ func boolInt(b bool) int {
 }
 
 const approverCols = `id, kind, credential_id, public_key, alg, sign_count, backup_eligible, backup_state, aaguid,
-	transports, attachment, attestation_format, user_handle, name, added_at, added_by, last_used_at`
+	transports, attachment, attestation_format, user_handle, name, added_at, added_by, last_used_at, rp_id`
 
 func scanApprover(row interface{ Scan(...any) error }) (ApproverCredential, error) {
 	var (
@@ -385,7 +393,7 @@ func scanApprover(row interface{ Scan(...any) error }) (ApproverCredential, erro
 		aaguid, userHand []byte
 	)
 	if err := row.Scan(&c.ID, &c.Kind, &c.CredentialID, &c.PublicKey, &c.Alg, &count, &be, &bs, &aaguid,
-		&transports, &c.Attachment, &c.AttestationFormat, &userHand, &c.Name, &addedAt, &c.AddedBy, &lastUsed); err != nil {
+		&transports, &c.Attachment, &c.AttestationFormat, &userHand, &c.Name, &addedAt, &c.AddedBy, &lastUsed, &c.RPID); err != nil {
 		return ApproverCredential{}, err
 	}
 	if count < 0 || count > int64(^uint32(0)) {

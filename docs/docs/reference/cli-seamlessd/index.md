@@ -627,12 +627,11 @@ Touch ID key, which signs for it.
 - `enroll-code` mints a one-time enrollment code for one key, named by its
   fingerprint (`--key`). It works once, for 10 minutes, only for that key; only
   its hash, which binds the key, is stored. You rarely type this by hand. For a
-  passkey, create it on the console's Approvers page (`/console/approvers`, on the
-  passkey origin - `http://localhost:<port>` unless `peer_auth.passkeys` says
-  otherwise), which shows the command with the new key's fingerprint and takes the
-  code. For a Touch ID key, the Seamless Approve window does the same. The first
-  credential needs a code; a later passkey can be approved by one already enrolled
-  instead.
+  passkey, create it on the console's Approvers page (`/console/approvers`, on
+  [the passkey origin](https://thereisnospoon.org/docs/guides/peer-auth/#the-passkey-origin)), which shows the
+  command with the new key's fingerprint and takes the code. For a Touch ID key, the Seamless Approve window does the same. Every
+  credential needs a code, however many are enrolled: an enrolled passkey never
+  vouches for a new one.
 - `list` prints the enrolled credentials: id, kind, name, how each was enrolled
   and when it was last used. `--json` prints them as JSON.
 - `remove` deletes one credential. Leases it already approved are untouched.
@@ -703,8 +702,8 @@ It refuses to run when `mcp.api_key` is empty, or when the server does not
 answer `/healthz` within two seconds - the page has nowhere to POST otherwise.
 Any HTTP response counts as reachable, including a degraded 503.
 
-While `peer_auth` is on, it signs in on the passkey
-origin (`http://localhost:<port>` by default) instead of the server URL: the
+While `peer_auth` is on, it signs in on
+[the passkey origin](https://thereisnospoon.org/docs/guides/peer-auth/#the-passkey-origin) instead of the server URL: the
 console's cookie belongs to one host, and browsers refuse passkeys on an IP
 address such as `127.0.0.1`. A client's config carries no `peer_auth` block, so
 there it asks the daemon for that origin, and uses `localhost` only when the

@@ -120,7 +120,7 @@ func TestRestricted_DecidesNothing(t *testing.T) {
 	require.ErrorIs(t, err, ErrRestricted)
 	_, err = f.svc.BeginConsoleUnlock(rctx, lockFin, "token-hash")
 	require.ErrorIs(t, err, ErrRestricted)
-	_, err = f.svc.BeginPasskey(rctx, "a key", true)
+	_, err = f.svc.BeginPasskey(rctx, "a key")
 	require.ErrorIs(t, err, ErrRestricted)
 	_, err = f.svc.ConfirmPasskeyCode(rctx, "an-enrollment", f.code(t, store.ApproverPasskey, []byte("a key")))
 	require.ErrorIs(t, err, ErrRestricted)

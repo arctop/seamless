@@ -341,6 +341,60 @@ func TestPeerAuth_Passkeys(t *testing.T) {
 	}
 }
 
+// A TLS install that serves a host name derives its relying party from that
+// name when peer_auth.passkeys is empty: the exact host as RP ID, its https
+// origin with the port as clients dial it. Anything else keeps the localhost
+// default, and a configured block always wins.
+func TestPeerAuth_PasskeysDerivedFromTheServedName(t *testing.T) {
+	const tlsBlock = "tls:\n  cert_file: /opt/seamless/etc/tls/c.pem\n  key_file: /opt/seamless/etc/tls/k.pem\n"
+	for _, tc := range []struct {
+		name, body string
+		rp         string
+		origins    []string
+	}{
+		{"a tailnet name on a tailnet address",
+			"addr: 100.64.0.7:8081\nserver_url: https://studio.example.ts.net:8081\n" + tlsBlock,
+			"studio.example.ts.net", []string{"https://studio.example.ts.net:8081"}},
+		{"the name is lower-cased, as a browser sends it",
+			"addr: 0.0.0.0:8081\nserver_url: https://Studio.Example.TS.net:8081/\n" + tlsBlock,
+			"studio.example.ts.net", []string{"https://studio.example.ts.net:8081"}},
+		{"port 443 is the origin's default and is not spelled",
+			"addr: 0.0.0.0:443\nserver_url: https://seamless.example.com\n" + tlsBlock,
+			"seamless.example.com", []string{"https://seamless.example.com"}},
+		{"a hostname bind with no server_url",
+			"addr: studio.local:9443\n" + tlsBlock,
+			"studio.local", []string{"https://studio.local:9443"}},
+		{"an IP server_url keeps localhost",
+			"addr: 100.64.0.7:8081\nserver_url: https://100.64.0.7:8081\n" + tlsBlock,
+			"localhost", []string{"https://localhost:8081"}},
+		{"a loopback install keeps localhost",
+			"addr: 127.0.0.1:8081\n" + tlsBlock,
+			"localhost", []string{"https://localhost:8081"}},
+		{"no TLS keeps localhost, whatever server_url says",
+			"addr: 0.0.0.0:8081\nserver_url: http://studio.local:8081\n",
+			"localhost", []string{"http://localhost:8081"}},
+		{"an http server_url on a TLS install derives nothing",
+			"addr: 0.0.0.0:8081\nserver_url: http://studio.local:8081\n" + tlsBlock,
+			"localhost", []string{"https://localhost:8081"}},
+		{"a configured rp_id wins",
+			"addr: 0.0.0.0:8081\nserver_url: https://studio.example.ts.net:8081\n" + tlsBlock +
+				strings.TrimPrefix(peerBase, "\n") + "  passkeys:\n    rp_id: example.ts.net\n",
+			"example.ts.net", []string{"https://example.ts.net:8081"}},
+		{"configured origins win",
+			"addr: 0.0.0.0:8081\nserver_url: https://studio.example.ts.net:8081\n" + tlsBlock +
+				strings.TrimPrefix(peerBase, "\n") + "  passkeys:\n    rp_id: localhost\n    origins: [\"https://localhost:8081\"]\n",
+			"localhost", []string{"https://localhost:8081"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := loadYAML(t, tc.body)
+			require.NoError(t, err)
+			rp, origins := cfg.RelyingParty()
+			require.Equal(t, tc.rp, rp)
+			require.Equal(t, tc.origins, origins)
+		})
+	}
+}
+
 // peer_auth.max_lease caps every approved lease: unset is 8h, set is at most
 // 24h.
 func TestPeerAuth_MaxLease(t *testing.T) {

@@ -507,6 +507,10 @@ func runServe(args []string) error {
 			return fmt.Errorf("seamlessd.serve: %w", aerr)
 		}
 		approvalSvc = svc
+		// A passkey works only under the relying party it was enrolled for, and
+		// only on an origin this daemon holds on every address: say so in the
+		// log as doctor does, without holding up the start.
+		warnPasskeyOrigin(ctx, cfg, bind, db, logger)
 	}
 	// Read grants (isolation.requests): a read refused at a confidential
 	// project's fence files a request the owner may approve. Under peer_auth

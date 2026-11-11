@@ -1,0 +1,15 @@
+-- The relying party each passkey was enrolled under. A WebAuthn passkey is
+-- bound to its RP ID for life: when the daemon's effective rp_id changes (a
+-- renamed host, a new server_url, TLS turned off, a hand-set
+-- peer_auth.passkeys.rp_id), every passkey enrolled under the old one stops
+-- working. Recording it lets serve and doctor name the passkeys a change
+-- strands instead of letting them fail at the next approval.
+--
+--   rp_id  the RP ID the passkey was registered for; '' for a Touch ID key
+--          (it has none) and for a passkey enrolled before this migration,
+--          whose RP ID is unknown
+--
+-- One added column with a default and nothing else: the previous release
+-- names its columns in every statement over this table, so it reads and
+-- inserts exactly as before, and its inserts leave the column ''.
+ALTER TABLE approver_credentials ADD COLUMN rp_id TEXT NOT NULL DEFAULT '';

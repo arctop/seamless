@@ -33,10 +33,9 @@
   {{else if not .OnOrigin}}
   <p class="held-sub">{{icon "triangle-alert"}} A passkey can only be created on <a href="{{.Origin}}/console/approvers">{{.Origin}}</a>. Browsers refuse passkeys on an IP address such as 127.0.0.1, so open this page there (you may need to sign in to the console again on that address).</p>
   {{else}}
-  <p class="held-sub">A security key, your phone, this computer, or a password manager. Each passkey needs its own authenticator, and devices that share synced passkeys count as one. {{if .HasPasskey}}One of your enrolled passkeys approves the new one, or you can use a one-time code made for it.{{else}}The first passkey needs a one-time code. Once the passkey exists, this page shows the command that makes the code for it.{{end}}</p>
+  <p class="held-sub">A security key, your phone, this computer, or a password manager. Each passkey needs its own authenticator, and devices that share synced passkeys count as one. Every passkey needs a one-time code, even when one is already enrolled: once the new passkey exists, this page shows the command that makes the code for it, run as the daemon's account.</p>
   <form id="approver-form" class="approver-form" autocomplete="off">
     <label>Name <input id="approver-name" name="name" maxlength="64" required placeholder="security key, phone, laptop"></label>
-    {{if .HasPasskey}}<label><input id="approver-bycode" type="checkbox"> Use a one-time code instead</label>{{else}}<input id="approver-bycode" type="hidden" value="1">{{end}}
     <button class="btn primary" id="approver-go" type="submit">{{icon "key-round"}} Create passkey</button>
   </form>
   <form id="approver-confirm" class="approver-form" autocomplete="off" hidden>
@@ -84,30 +83,15 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbe
     (pk.excludeCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
     return pk;
   }
-  function requestOptions(pk) {
-    if (window.PublicKeyCredential && PublicKeyCredential.parseRequestOptionsFromJSON) {
-      return PublicKeyCredential.parseRequestOptionsFromJSON(pk);
-    }
-    pk.challenge = b64urlToBuf(pk.challenge);
-    (pk.allowCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
-    return pk;
-  }
   function toJSON(cred) {
     if (cred.toJSON) return cred.toJSON();
     var r = cred.response, out = {
       id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
       authenticatorAttachment: cred.authenticatorAttachment || null,
       clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
-      response: { clientDataJSON: bufToB64url(r.clientDataJSON) }
+      response: { clientDataJSON: bufToB64url(r.clientDataJSON), attestationObject: bufToB64url(r.attestationObject) }
     };
-    if (r.attestationObject) {
-      out.response.attestationObject = bufToB64url(r.attestationObject);
-      if (r.getTransports) out.response.transports = r.getTransports();
-    } else {
-      out.response.authenticatorData = bufToB64url(r.authenticatorData);
-      out.response.signature = bufToB64url(r.signature);
-      if (r.userHandle) out.response.userHandle = bufToB64url(r.userHandle);
-    }
+    if (r.getTransports) out.response.transports = r.getTransports();
     return out;
   }
   function post(path, fields) {
@@ -156,13 +140,11 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbe
       e.preventDefault();
       if (!window.PublicKeyCredential) { say('This browser does not support passkeys.'); return; }
       var name = document.getElementById('approver-name').value;
-      var by = document.getElementById('approver-bycode');
-      var byCode = by.type === 'hidden' || by.checked;
       id = '';
       confirm.hidden = true;
       go.disabled = true;
       say('Starting...');
-      post('/console/approvers/passkey/begin', { name: name, by_code: byCode ? '1' : '' }).then(function (begun) {
+      post('/console/approvers/passkey/begin', { name: name }).then(function (begun) {
         id = begun.id;
         say('Follow your browser\'s prompt to create the passkey.');
         return navigator.credentials.create({ publicKey: creationOptions(begun.options.publicKey) });
@@ -170,21 +152,10 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbe
         say('Checking the new passkey...');
         return post('/console/approvers/passkey/finish', { id: id, response: JSON.stringify(toJSON(cred)) });
       }).then(function (fin) {
-        if (fin.fingerprint) {
-          document.getElementById('approver-command').textContent = fin.command;
-          document.getElementById('approver-code').value = '';
-          confirm.hidden = false;
-          say('The passkey exists. Enter the code made for it to enroll it.');
-          return null;
-        }
-        say('Now approve it with a passkey you already enrolled.');
-        return navigator.credentials.get({ publicKey: requestOptions(fin.approve.publicKey) }).then(function (cred) {
-          return post('/console/approvers/passkey/approve', { id: id, response: JSON.stringify(toJSON(cred)) });
-        });
-      }).then(function (done) {
-        if (!done) return;
-        say('Enrolled "' + done.name + '".');
-        refresh();
+        document.getElementById('approver-command').textContent = fin.command;
+        document.getElementById('approver-code').value = '';
+        confirm.hidden = false;
+        say('The passkey exists. Enter the code made for it to enroll it.');
       }).catch(function (err) {
         say(err && err.name === 'NotAllowedError' ? 'Cancelled, or the authenticator timed out. Nothing was enrolled.' :
             err && err.name === 'InvalidStateError' ? 'That authenticator already holds one of your enrolled passkeys, and each passkey needs its own. Nothing was enrolled. Click Create passkey again and choose a different authenticator in your browser\'s prompt. A device sharing the same synced passkeys, such as a phone on the same iCloud Keychain, counts as the same authenticator.' :

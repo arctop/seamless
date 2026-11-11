@@ -407,11 +407,14 @@ writes waits for you to promote it
 Refused while <code>enabled</code> is false, and for the owner. File-only.</li>
 <li><code>passkeys.rp_id</code> and <code>passkeys.origins</code> name the WebAuthn relying party of
 the owner's approver passkeys (<a href="../../reference/cli-seamlessd/#seamlessd_approvers">seamlessd approvers</a>).
-Unset, they are <code>localhost</code> and the console's own address on localhost.
-<code>rp_id</code> is a host name, never an IP address; each origin is https, or http
-on localhost, on <code>rp_id</code> or a subdomain of it. A passkey is bound to its
-<code>rp_id</code> for life: changing it strands every passkey enrolled under the old
-one. File-only.</li>
+Unset, a TLS install whose <code>server_url</code> names a host uses that exact host as
+<code>rp_id</code> and its https address as the origin; any other install uses
+<code>localhost</code> and the console's own address on localhost. <code>rp_id</code> is a host
+name, never an IP address; each origin is https, or http on localhost, on
+<code>rp_id</code> or a subdomain of it. A passkey is bound to its <code>rp_id</code> for life:
+changing it, or the <code>server_url</code> it was derived from, strands every passkey
+enrolled under the old one, and <code>seamlessd doctor</code> and the daemon's log name
+the ones it strands. File-only.</li>
 </ul>
 <p>A client of such a daemon names the socket as its <code>server_url</code>:
 <code>unix:///absolute/path.sock</code>. It needs no <code>mcp.api_key</code>, and its hooks and MCP
@@ -1392,9 +1395,11 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # session ends&#34; included. At most 24h; unset means 8h. File only (no env).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   max_lease: 8h</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # The WebAuthn relying party of the owner&#39;s approver passkeys (seamlessd</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # approvers). Unset: rp_id localhost and the console&#39;s own address on</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # localhost. rp_id is a host name, never an IP; each origin is https, or</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # http on localhost, on rp_id or a subdomain. Changing rp_id later strands</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # approvers). Unset: on a TLS install whose server_url names a host, rp_id</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # is that host and the origin its https address; otherwise rp_id localhost</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # and the console&#39;s own address on localhost. rp_id is a host name, never</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # an IP; each origin is https, or http on localhost, on rp_id or a</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # subdomain. Changing rp_id (or the server_url it came from) later strands</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # every passkey enrolled under the old one. File only (no env).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   passkeys:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#     rp_id: &#34;&#34;</span><span class="w">

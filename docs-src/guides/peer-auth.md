@@ -326,9 +326,10 @@ SEAMLESS_CONFIG=~/.config/seamless/console.yaml seamlessd console-open
 ```
 
 On a daemon that locks a project, `console-open` signs in on the passkey origin
-the daemon names (`http://localhost:<port>` by default) instead of `127.0.0.1`:
+the daemon names ([which one](#the-passkey-origin)) instead of `127.0.0.1`:
 the console's cookie belongs to one host, and browsers refuse passkeys on an IP
-address.
+address. On a TLS install, `server_url` in `console.yaml` is the daemon's https
+address, as your other clients use it.
 
 If your agents would write scripts over the data directory, tell them to use the
 tools or `seam ... --json | jq` instead:
@@ -345,11 +346,13 @@ daemon running under `peer_auth`, so do it after the
 [cutover](#move-an-existing-install-over). A lock set from the console needs a
 passkey enrolled first.
 
-A first credential needs a one-time enrollment code, and only the daemon's
+Every credential needs a one-time enrollment code, and only the daemon's
 account can mint one; no route, over the socket or with the TCP key, can. A code
 works once, for 10 minutes, and only its hash is stored. It is minted for one key,
 named by its fingerprint, so a code someone else reads cannot enroll a different
-key. `seamlessd approvers`
+key. A passkey you already enrolled never vouches for a new one: an enrolled
+passkey can take a console lock off, so one touch you were tricked into must not
+be enough to add a key an agent holds. `seamlessd approvers`
 also lists credentials and removes them, and `reset --yes` drops every credential
 and revokes every live lease
 ([reference](/reference/cli-seamlessd/#seamlessd_approvers)).
@@ -364,13 +367,11 @@ sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml \
 ```
 
 Run it in your own terminal, check that the key it prints is the one on the page,
-and enter the code there. The origin is `http://localhost:<port>` unless `peer_auth.passkeys`
-says otherwise, and browsers refuse passkeys on `127.0.0.1`. A later passkey can
-be approved by one already enrolled instead of a code. Each passkey needs its own
+and enter the code there. Browsers refuse passkeys on `127.0.0.1`, so open the
+page on [the passkey origin](#the-passkey-origin). Each passkey needs its own
 authenticator: the browser refuses one that already holds a passkey enrolled here,
 and devices that share synced passkeys, such as a phone on the same iCloud
-Keychain, count as one. A passkey is bound to its `rp_id` for life: changing
-`rp_id` later strands every passkey enrolled under the old one.
+Keychain, count as one.
 
 **Touch ID on a Mac** (optional) goes through Seamless Approve, a small macOS app
 that approves a request with Touch ID, an Apple Watch or the login password. A
@@ -416,6 +417,45 @@ seam touchid enroll --app "bin/approver/Seamless Approve.app"
 (`APPROVER_NOTARY_KEY`, `APPROVER_NOTARY_KEY_ID`, `APPROVER_NOTARY_ISSUER_ID`). A
 source or prerelease `seam` has no release of the app to fetch: pass `--app` with
 a downloaded zip or a local build.
+
+### The passkey origin
+
+A passkey belongs to one relying party, named by its `rp_id`, and the browser
+creates or uses it only on that relying party's origins. Unless
+`peer_auth.passkeys` names them, the daemon picks:
+
+- **A TLS install whose `server_url` names a host** (a tailnet name, your own
+  domain) uses that exact host as `rp_id` and `https://<host>:<port>` as the
+  origin, the address your clients already use. Its parent domain is never
+  used, so no other host under it can run a ceremony for these passkeys.
+- **Any other install** uses `localhost` and `http://localhost:<port>` (https
+  with TLS on).
+
+`seamlessd doctor` and the daemon's log at startup say which it is.
+
+A passkey is bound to its `rp_id` for life. Changing `rp_id`, or the
+`server_url` it came from, or turning TLS off, strands every passkey enrolled
+under the old one. The daemon records each passkey's `rp_id`, so doctor and the
+log name the ones a change strands. Passkeys enrolled before it recorded that
+are listed as unknown.
+
+A page on the origin can run passkey ceremonies with any passkey enrolled for it.
+That is why doctor checks two things about every origin:
+
+- **The daemon listens on every address its host resolves to, on its port.** A
+  tailnet name resolves to an IPv4 and an IPv6 address. If `addr` names only one
+  of them, another process running as you can listen on the other and serve the
+  same origin, and a browser that picks that address runs its ceremonies there.
+  Bind the wildcard (`addr: "0.0.0.0:8081"` holds every address of every
+  interface, so the bearer key and TLS are then all that guard it on your LAN), or
+  give the name only addresses the daemon holds. `localhost` has the same gap on
+  `[::1]` while the daemon listens on `127.0.0.1` alone; doctor notes it.
+- **The certificate names the host.** Under peer_auth only root and the daemon's
+  account read the TLS key, which is what keeps a process of yours from serving
+  the origin with a valid certificate. That holds only if your account cannot get
+  a certificate for the name by itself: a tailnet whose cert command you may run
+  (`tailscale cert`) hands any process of yours one. Then binding every address is
+  what stands between them and the origin.
 
 ## Requests
 

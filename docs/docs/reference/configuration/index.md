@@ -162,11 +162,14 @@ behavior of every earlier release. The guide is
   Refused while `enabled` is false, and for the owner. File-only.
 - `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
   the owner's approver passkeys ([seamlessd approvers](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_approvers)).
-  Unset, they are `localhost` and the console's own address on localhost.
-  `rp_id` is a host name, never an IP address; each origin is https, or http
-  on localhost, on `rp_id` or a subdomain of it. A passkey is bound to its
-  `rp_id` for life: changing it strands every passkey enrolled under the old
-  one. File-only.
+  Unset, a TLS install whose `server_url` names a host uses that exact host as
+  `rp_id` and its https address as the origin; any other install uses
+  `localhost` and the console's own address on localhost. `rp_id` is a host
+  name, never an IP address; each origin is https, or http on localhost, on
+  `rp_id` or a subdomain of it. A passkey is bound to its `rp_id` for life:
+  changing it, or the `server_url` it was derived from, strands every passkey
+  enrolled under the old one, and `seamlessd doctor` and the daemon's log name
+  the ones it strands. File-only.
 
 A client of such a daemon names the socket as its `server_url`:
 `unix:///absolute/path.sock`. It needs no `mcp.api_key`, and its hooks and MCP
@@ -805,9 +808,11 @@ update:
 #   # session ends" included. At most 24h; unset means 8h. File only (no env).
 #   max_lease: 8h
 #   # The WebAuthn relying party of the owner's approver passkeys (seamlessd
-#   # approvers). Unset: rp_id localhost and the console's own address on
-#   # localhost. rp_id is a host name, never an IP; each origin is https, or
-#   # http on localhost, on rp_id or a subdomain. Changing rp_id later strands
+#   # approvers). Unset: on a TLS install whose server_url names a host, rp_id
+#   # is that host and the origin its https address; otherwise rp_id localhost
+#   # and the console's own address on localhost. rp_id is a host name, never
+#   # an IP; each origin is https, or http on localhost, on rp_id or a
+#   # subdomain. Changing rp_id (or the server_url it came from) later strands
 #   # every passkey enrolled under the old one. File only (no env).
 #   passkeys:
 #     rp_id: ""

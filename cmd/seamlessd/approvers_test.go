@@ -81,7 +81,7 @@ func TestApprovers_Verbs(t *testing.T) {
 
 	cred, err := store.EnrollApprover(ctx, db, store.ApproverCredential{
 		Kind: store.ApproverPasskey, CredentialID: []byte{1, 2, 3}, PublicKey: []byte{9}, Alg: -7, Name: "laptop",
-	}, code, "", now)
+	}, code, now)
 	require.NoError(t, err)
 
 	out, err = run("list")
@@ -130,7 +130,7 @@ func TestApproverCheck(t *testing.T) {
 	require.NoError(t, err)
 	_, err = store.EnrollApprover(ctx, db, store.ApproverCredential{
 		Kind: store.ApproverPasskey, CredentialID: []byte{1}, PublicKey: []byte{9}, Alg: -7, Name: "key",
-	}, code, "", now)
+	}, code, now)
 	require.NoError(t, err)
 	c := approverCheck(ctx, db, "darwin")
 	require.Equal(t, statusOK, c.status)

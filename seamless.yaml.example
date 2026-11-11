@@ -477,9 +477,11 @@ update:
 #   # session ends" included. At most 24h; unset means 8h. File only (no env).
 #   max_lease: 8h
 #   # The WebAuthn relying party of the owner's approver passkeys (seamlessd
-#   # approvers). Unset: rp_id localhost and the console's own address on
-#   # localhost. rp_id is a host name, never an IP; each origin is https, or
-#   # http on localhost, on rp_id or a subdomain. Changing rp_id later strands
+#   # approvers). Unset: on a TLS install whose server_url names a host, rp_id
+#   # is that host and the origin its https address; otherwise rp_id localhost
+#   # and the console's own address on localhost. rp_id is a host name, never
+#   # an IP; each origin is https, or http on localhost, on rp_id or a
+#   # subdomain. Changing rp_id (or the server_url it came from) later strands
 #   # every passkey enrolled under the old one. File only (no env).
 #   passkeys:
 #     rp_id: ""

@@ -64,15 +64,11 @@ func ceremonyError(t *testing.T, out map[string]json.RawMessage) string {
 }
 
 // finishOverHTTP runs a passkey enrollment's begin and finish through the
-// console routes and returns its id and finish's answer: by code, that names
-// the key to mint a code for; otherwise it asks an existing passkey's approval.
-func finishOverHTTP(t *testing.T, mux *http.ServeMux, a *passkeytest.Authenticator, name string, byCode bool) (string, map[string]json.RawMessage) {
+// console routes and returns its id and finish's answer, which names the key to
+// mint a code for.
+func finishOverHTTP(t *testing.T, mux *http.ServeMux, a *passkeytest.Authenticator, name string) (string, map[string]json.RawMessage) {
 	t.Helper()
-	form := url.Values{"name": {name}}
-	if byCode {
-		form.Set("by_code", "1")
-	}
-	status, begun := postCeremony(t, mux, "/console/approvers/passkey/begin", form)
+	status, begun := postCeremony(t, mux, "/console/approvers/passkey/begin", url.Values{"name": {name}})
 	require.Equal(t, http.StatusOK, status, string(begun["error"]))
 	var id string
 	require.NoError(t, json.Unmarshal(begun["id"], &id))
@@ -101,7 +97,7 @@ func confirmOverHTTP(t *testing.T, db *sql.DB, mux *http.ServeMux, id string, fi
 func enrollPasskeyByCode(t *testing.T, db *sql.DB, svc *approval.Service, a *passkeytest.Authenticator, name string) store.ApproverCredential {
 	t.Helper()
 	ctx := context.Background()
-	begun, err := svc.BeginPasskey(ctx, name, true)
+	begun, err := svc.BeginPasskey(ctx, name)
 	require.NoError(t, err)
 	created, err := a.Create(begun.Options, approverOrigin)
 	require.NoError(t, err)
@@ -125,8 +121,8 @@ func TestApprovers_OffIsNotFound(t *testing.T) {
 	rr := do(mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/approvers", nil)))
 	require.Equal(t, http.StatusNotFound, rr.Code, "no project is locked: the page does not exist")
 	for _, path := range []string{"/console/approvers/passkey/begin", "/console/approvers/passkey/finish",
-		"/console/approvers/passkey/approve", "/console/approvers/passkey/confirm"} {
-		status, out := postCeremony(t, mux, path, url.Values{"name": {"k"}, "by_code": {"1"}, "id": {"x"}, "code": {"c"}, "response": {"{}"}})
+		"/console/approvers/passkey/confirm"} {
+		status, out := postCeremony(t, mux, path, url.Values{"name": {"k"}, "id": {"x"}, "code": {"c"}, "response": {"{}"}})
 		require.Equal(t, http.StatusNotFound, status, path)
 		require.Contains(t, ceremonyError(t, out), "no project is locked", path)
 	}
@@ -148,15 +144,11 @@ func TestApprovers_EnrollAndList(t *testing.T) {
 	require.Contains(t, body, `id="approver-form"`, "on the relying party's origin, the form is offered")
 	require.Contains(t, page("127.0.0.1:8081"), "can only be created on", "on 127.0.0.1 the page sends the owner to localhost")
 
-	status, out := postCeremony(t, mux, "/console/approvers/passkey/begin", url.Values{"name": {"key"}})
-	require.Equal(t, http.StatusBadRequest, status)
-	require.Contains(t, ceremonyError(t, out), "needs a one-time enrollment code")
-
 	a, err := passkeytest.New(true)
 	require.NoError(t, err)
-	id, fin := finishOverHTTP(t, mux, a, "security key", true)
-	require.NotContains(t, fin, "enrolled", "by code, finish stores nothing: the code comes next")
-	status, out = postCeremony(t, mux, "/console/approvers/passkey/confirm", url.Values{"id": {id}, "code": {"AAAA-BBBB-CCCC-DDDD"}})
+	id, fin := finishOverHTTP(t, mux, a, "security key")
+	require.NotContains(t, fin, "enrolled", "finish stores nothing: the code comes next")
+	status, out := postCeremony(t, mux, "/console/approvers/passkey/confirm", url.Values{"id": {id}, "code": {"AAAA-BBBB-CCCC-DDDD"}})
 	require.Equal(t, http.StatusBadRequest, status)
 	require.Contains(t, ceremonyError(t, out), "not valid")
 	n, err := store.CountApprovers(ctx, db)
@@ -172,17 +164,25 @@ func TestApprovers_EnrollAndList(t *testing.T) {
 	require.Contains(t, body, "an enrollment code")
 	require.NotContains(t, body, "Nothing is enrolled yet")
 
-	// A second passkey with no code: the first approves it.
+	// A second passkey needs a code of its own too (F2 of the console-lock
+	// review): the first one never vouches for it, and the page offers no such
+	// path.
+	require.NotContains(t, body, "approves the new one")
+	require.NotContains(t, body, "approver-bycode")
 	b, err := passkeytest.New(false)
 	require.NoError(t, err)
-	id, fin = finishOverHTTP(t, mux, b, "phone", false)
-	require.Contains(t, fin, "approve")
-	require.NotContains(t, fin, "fingerprint", "an approved enrollment needs no code")
-	assertion, err := a.Get(fin["approve"], approverOrigin)
+	id, fin = finishOverHTTP(t, mux, b, "phone")
+	require.Contains(t, fin, "fingerprint", "a second passkey waits for its code like the first")
+	require.NotContains(t, fin, "approve")
+	rr := do(mux, authedReq(httptest.NewRequest(http.MethodPost, "/console/approvers/passkey/approve",
+		strings.NewReader(url.Values{"id": {id}, "response": {"{}"}}.Encode()))))
+	require.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, rr.Code, "no route enrolls a passkey by another's approval")
+	n, err = store.CountApprovers(ctx, db)
 	require.NoError(t, err)
-	status, done = postCeremony(t, mux, "/console/approvers/passkey/approve", url.Values{"id": {id}, "response": {string(assertion)}})
-	require.Equal(t, http.StatusOK, status, string(done["error"]))
-	require.Contains(t, page("localhost:8081"), "approved by security key")
+	require.Equal(t, 1, n)
+	done = confirmOverHTTP(t, db, mux, id, fin)
+	require.Contains(t, string(done["name"]), "phone")
+	require.NotContains(t, page("localhost:8081"), "approved by")
 
 	n, err = store.CountApprovers(ctx, db)
 	require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestApprovers_EnrollAndList(t *testing.T) {
 // every console write (console-csrf-origin-check-contract).
 func TestApprovers_CrossOriginRefused(t *testing.T) {
 	_, mux := newApproversConsole(t)
-	req := httptest.NewRequest(http.MethodPost, "/console/approvers/passkey/begin", strings.NewReader("name=k&by_code=1"))
+	req := httptest.NewRequest(http.MethodPost, "/console/approvers/passkey/begin", strings.NewReader("name=k"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(&http.Cookie{Name: cookieName, Value: consoleToken(testKey)})
 	req.Header.Set("Origin", "http://localhost:9999")
@@ -206,8 +206,8 @@ func TestApprovers_CrossOriginRefused(t *testing.T) {
 func TestApprovers_NoRouteMintsACode(t *testing.T) {
 	db, mux := newApproversConsole(t)
 	for _, path := range []string{"/console/approvers/passkey/begin", "/console/approvers/passkey/finish",
-		"/console/approvers/passkey/approve", "/console/approvers/passkey/confirm"} {
-		postCeremony(t, mux, path, url.Values{"name": {"k"}, "by_code": {"1"}, "code": {"AAAA-BBBB-CCCC-DDDD"}, "id": {"x"}, "response": {"{}"}})
+		"/console/approvers/passkey/confirm"} {
+		postCeremony(t, mux, path, url.Values{"name": {"k"}, "code": {"AAAA-BBBB-CCCC-DDDD"}, "id": {"x"}, "response": {"{}"}})
 	}
 	do(mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/approvers", nil)))
 	var n int
@@ -215,7 +215,7 @@ func TestApprovers_NoRouteMintsACode(t *testing.T) {
 	require.Zero(t, n)
 }
 
-// A by-code finish names the key to mint a code for and the command that mints
+// A finish names the key to mint a code for and the command that mints
 // it, as the daemon's account where the daemon knows how that is reached. The
 // key it names is the key the code then enrolls.
 func TestApprovers_FinishNamesTheKeyAndItsCommand(t *testing.T) {
@@ -234,7 +234,7 @@ func TestApprovers_FinishNamesTheKeyAndItsCommand(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			a, err := passkeytest.New(true)
 			require.NoError(t, err)
-			id, fin := finishOverHTTP(t, tc.mux, a, "security key", true)
+			id, fin := finishOverHTTP(t, tc.mux, a, "security key")
 			var fp, command string
 			require.NoError(t, json.Unmarshal(fin["fingerprint"], &fp))
 			require.NoError(t, json.Unmarshal(fin["command"], &command))
@@ -259,7 +259,7 @@ func TestApprovers_ConfirmRoute(t *testing.T) {
 	ctx := context.Background()
 	a, err := passkeytest.New(true)
 	require.NoError(t, err)
-	id, fin := finishOverHTTP(t, mux, a, "security key", true)
+	id, fin := finishOverHTTP(t, mux, a, "security key")
 
 	other, _, err := store.MintEnrollCode(ctx, db, store.ApproverPasskey, "Y2WK-2PG4-B7DB-FATZ", time.Now())
 	require.NoError(t, err)
@@ -281,14 +281,12 @@ func TestApprovers_ConfirmRoute(t *testing.T) {
 	require.Equal(t, 1, n)
 }
 
-// Only a passkey approves a new passkey, in the browser: a Touch ID key signs in
-// the Mac's helper and cannot. So until a passkey exists the page offers the
-// code path alone, and not a box whose unticked default the daemon refuses.
-func TestApprovers_OnlyAnEnrolledPasskeyOffersTheNoCodePath(t *testing.T) {
+// Every passkey needs a one-time code (F2 of the console-lock review): the page
+// never offers a way around it, whether nothing, a Touch ID key or a passkey is
+// enrolled.
+func TestApprovers_EveryPasskeyIsOfferedTheCodePathAlone(t *testing.T) {
 	db, mux := newApproversConsole(t)
 	ctx := context.Background()
-	const codeOnly = `<input id="approver-bycode" type="hidden" value="1">`
-	const choice = `<input id="approver-bycode" type="checkbox">`
 	page := func() string {
 		req := authedReq(httptest.NewRequest(http.MethodGet, "/console/approvers", nil))
 		req.Host = "localhost:8081"
@@ -296,29 +294,31 @@ func TestApprovers_OnlyAnEnrolledPasskeyOffersTheNoCodePath(t *testing.T) {
 		require.Equal(t, http.StatusOK, rr.Code)
 		return rr.Body.String()
 	}
+	codeOnly := func(body, why string) {
+		t.Helper()
+		require.Contains(t, body, "Every passkey needs a one-time code", why)
+		require.NotContains(t, body, "approver-bycode", why)
+		require.NotContains(t, body, "approves the new one", why)
+		require.NotContains(t, body, "/console/approvers/passkey/approve", why)
+	}
 
-	require.Contains(t, page(), codeOnly, "nothing enrolled: the code path alone")
+	codeOnly(page(), "nothing enrolled")
 
 	pub := append([]byte{0x04}, make([]byte, 64)...)
 	touch := store.ApproverCredential{Kind: store.ApproverTouchID, CredentialID: []byte("tk1"), PublicKey: pub, Alg: -7, Name: "this Mac"}
 	code, _, err := store.MintEnrollCode(ctx, db, store.ApproverTouchID, store.ApproverKeyFingerprint(pub), time.Now())
 	require.NoError(t, err)
-	_, err = store.EnrollApprover(ctx, db, touch, code, "", time.Now())
+	_, err = store.EnrollApprover(ctx, db, touch, code, time.Now())
 	require.NoError(t, err)
 	body := page()
 	require.Contains(t, body, "this Mac", "the Touch ID key is listed")
-	require.Contains(t, body, codeOnly, "a Touch ID key cannot approve a passkey: still the code path alone")
-	require.NotContains(t, body, choice)
-	require.Contains(t, body, "The first passkey needs a one-time code")
+	codeOnly(body, "a Touch ID key enrolled")
 
 	a, err := passkeytest.New(true)
 	require.NoError(t, err)
-	id, fin := finishOverHTTP(t, mux, a, "security key", true)
+	id, fin := finishOverHTTP(t, mux, a, "security key")
 	confirmOverHTTP(t, db, mux, id, fin)
-	body = page()
-	require.Contains(t, body, choice, "a passkey is enrolled: it may approve the next one")
-	require.NotContains(t, body, codeOnly)
-	require.Contains(t, body, "One of your enrolled passkeys approves the new one")
+	codeOnly(page(), "a passkey enrolled")
 }
 
 // A browser refuses an authenticator that already holds an enrolled passkey. The
@@ -362,8 +362,8 @@ func TestApprovers_RefusedForARestrictedAccount(t *testing.T) {
 	db, mux := newApproversConsole(t)
 	view := restrictedConsoleView(t)
 	for _, path := range []string{"/console/approvers/passkey/begin", "/console/approvers/passkey/finish",
-		"/console/approvers/passkey/approve", "/console/approvers/passkey/confirm"} {
-		form := url.Values{"name": {"k"}, "by_code": {"1"}, "id": {"x"}, "code": {"AAAA-BBBB-CCCC-DDDD"}, "response": {"{}"}}
+		"/console/approvers/passkey/confirm"} {
+		form := url.Values{"name": {"k"}, "id": {"x"}, "code": {"AAAA-BBBB-CCCC-DDDD"}, "response": {"{}"}}
 		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.Header.Set("Accept", "application/json")
