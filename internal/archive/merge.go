@@ -100,7 +100,7 @@ type rowPass struct {
 // merging, and it is why fresh-vs-merge is decided by the destination rather
 // than offered as a flag.
 func importMerge(ctx context.Context, a *archiveReader, opts ImportOptions, choice LockChoice, logger *slog.Logger, rep *ImportReport) error {
-	stage, err := os.MkdirTemp("", "seamless-import-")
+	stage, err := os.MkdirTemp(opts.TmpDir, "seamless-import-")
 	if err != nil {
 		return fmt.Errorf("archive.Import: staging dir: %w", err)
 	}

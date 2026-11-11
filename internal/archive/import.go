@@ -161,6 +161,21 @@ type ImportOptions struct {
 	// console lock for these, since the file already holds them, and cannot
 	// remove them.
 	ForceLocked []string
+
+	// KeepLocked are projects a FRESH restore keeps locked on top of the
+	// archive's own locks: the ones the destination held before its data was
+	// set aside for this restore, so a restore never reduces the set of locked
+	// projects (owner decision, 2026-11-10). Each is registered, fenced and
+	// locked as an archive lock is under LocksKeep, whatever the owner chose for
+	// the archive's own. A merge ignores it: a merge never removes a lock the
+	// destination holds.
+	KeepLocked []LockedProject
+
+	// TmpDir is where a merge stages the archive (its snapshot and markdown)
+	// before folding it in. Empty means the OS default, which is often a small
+	// RAM-backed tmpfs; a caller merging a large archive names a directory on a
+	// real disk. It must already exist.
+	TmpDir string
 }
 
 // PathCollision is a corpus file the merge refused to write because the path it
@@ -371,7 +386,7 @@ func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, choi
 		rep.Memories = a.manifest.Counts.MemoryFiles
 		rep.Notes = a.manifest.Counts.NoteFiles
 		rep.Warnings = append(rep.Warnings, embeddingWarnings(a.manifest, opts.Embedder, ModeFresh)...)
-		return applyArchiveLocks(ctx, nil, opts, ModeFresh, manifestLocks(a.manifest), choice, rep)
+		return applyFreshLocks(ctx, nil, opts, manifestLocks(a.manifest), choice, rep)
 	}
 
 	ex, err := a.extractTo(ctx, opts.DataDir, importTmpDB)
@@ -416,7 +431,7 @@ func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, choi
 	if err != nil {
 		return err
 	}
-	if err := applyArchiveLocks(ctx, db, opts, ModeFresh, locks, choice, rep); err != nil {
+	if err := applyFreshLocks(ctx, db, opts, locks, choice, rep); err != nil {
 		return err
 	}
 

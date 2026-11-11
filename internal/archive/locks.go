@@ -221,6 +221,72 @@ func applyArchiveLocks(ctx context.Context, db *sql.DB, opts ImportOptions, mode
 	return nil
 }
 
+// applyFreshLocks applies a fresh restore's locks: the archive's under the
+// owner's choice, and opts.KeepLocked -- the destination's own, from before the
+// restore -- always kept. A project in both is kept, under the stricter of the
+// two fences: the destination's lock is not the archive's to remove.
+func applyFreshLocks(ctx context.Context, db *sql.DB, opts ImportOptions, locks []LockedProject, choice LockChoice, rep *ImportReport) error {
+	if len(opts.KeepLocked) == 0 {
+		return applyArchiveLocks(ctx, db, opts, ModeFresh, locks, choice, rep)
+	}
+	keep := map[string]LockedProject{}
+	for _, p := range opts.KeepLocked {
+		if prev, ok := keep[p.Slug]; ok {
+			p = stricterLock(prev, p)
+		}
+		keep[p.Slug] = p
+	}
+	var archiveOnly []LockedProject
+	for _, p := range locks {
+		if k, ok := keep[p.Slug]; ok {
+			keep[p.Slug] = stricterLock(k, p)
+			continue
+		}
+		archiveOnly = append(archiveOnly, p)
+	}
+	if err := applyArchiveLocks(ctx, db, opts, ModeFresh, archiveOnly, choice, rep); err != nil {
+		return err
+	}
+	first := rep.Locks
+	kept := make([]LockedProject, 0, len(keep))
+	for _, p := range keep {
+		kept = append(kept, p)
+	}
+	slices.SortFunc(kept, func(a, b LockedProject) int { return strings.Compare(a.Slug, b.Slug) })
+	if err := applyArchiveLocks(ctx, db, opts, ModeFresh, kept, LocksKeep, rep); err != nil {
+		return err
+	}
+	rep.Locks = combineOutcomes(first, rep.Locks)
+	return nil
+}
+
+// stricterLock returns whichever of two records of one project's lock names
+// the stricter fence.
+func stricterLock(a, b LockedProject) LockedProject {
+	if slices.Index(core.Isolations, b.fence()) > slices.Index(core.Isolations, a.fence()) {
+		return b
+	}
+	return a
+}
+
+// combineOutcomes joins the outcome of the archive's own locks with that of the
+// locks a fresh restore kept, either of which may be nil.
+func combineOutcomes(archive, kept *LockOutcome) *LockOutcome {
+	if archive == nil {
+		return kept
+	}
+	if kept == nil {
+		return archive
+	}
+	locked := append(slices.Clone(archive.Locked), kept.Locked...)
+	slices.Sort(locked)
+	return &LockOutcome{
+		Locked:      slices.Compact(locked),
+		Removed:     archive.Removed,
+		StillLocked: archive.StillLocked,
+	}
+}
+
 // lockPass is one run of applyArchiveLocks.
 type lockPass struct {
 	ctx  context.Context //nolint:containedctx // lives for one applyArchiveLocks call

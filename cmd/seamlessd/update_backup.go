@@ -268,7 +268,7 @@ func takeBackup(ctx context.Context, r backupRequest) (backupResult, error) {
 		return backupResult{}, err
 	}
 	manifest, err := archive.Export(ctx, archive.ExportOptions{
-		DataDir: r.dataDir, Out: tmp, SeamlessdVersion: r.version, TmpDir: staging,
+		DataDir: r.dataDir, Out: tmp, SeamlessdVersion: r.version, TmpDir: staging, Kind: archive.KindPreUpdate,
 	})
 	if err != nil {
 		_ = tmp.Close()

@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -58,6 +59,16 @@ type ExportOptions struct {
 	// empty: it is put back on the machine whose config still holds them.
 	ForceLocked []string
 	PasskeyRPID string
+
+	// Kind is recorded as Manifest.Kind: why this archive is written
+	// (KindScheduled, KindManual, KindBeforeRestore, KindPreUpdate). Empty for a
+	// plain export.
+	Kind string
+
+	// InstallID is recorded as Manifest.InstallID: the install writing the
+	// archive (store.InstallID). It is passed in, like the version, because
+	// which install is writing is the caller's to say. Empty records none.
+	InstallID string
 
 	// TmpDir is where the export stages: the database snapshot is written into
 	// a fresh seamless-export-* directory under it, streamed into the archive,
@@ -114,6 +125,8 @@ func Export(ctx context.Context, opts ExportOptions) (Manifest, error) {
 		CreatedAt:        time.Now().UTC(),
 		SourceHost:       host,
 		IncludesDB:       !opts.NoDB,
+		Kind:             opts.Kind,
+		InstallID:        opts.InstallID,
 	}
 
 	snapPath := ""
@@ -122,13 +135,15 @@ func Export(ctx context.Context, opts ExportOptions) (Manifest, error) {
 		if err := snapshotDB(ctx, filepath.Join(opts.DataDir, DBName), snapPath); err != nil {
 			return Manifest{}, err
 		}
-		schemaVersion, tables, models, err := inspectSnapshot(ctx, snapPath)
+		facts, err := inspectSnapshot(ctx, snapPath)
 		if err != nil {
 			return Manifest{}, err
 		}
-		manifest.SchemaVersion = schemaVersion
-		manifest.Counts.Tables = tables
-		manifest.EmbeddingModels = models
+		manifest.SchemaVersion = facts.schemaVersion
+		manifest.Counts.Tables = facts.tables
+		manifest.EmbeddingModels = facts.models
+		manifest.Projects, manifest.ProjectsOmitted = capProjects(snapshotProjects(facts.projects))
+		manifest.Fingerprint = facts.fingerprint
 	}
 
 	// Read from the snapshot when there is one, so the record describes the
@@ -160,6 +175,10 @@ func Export(ctx context.Context, opts ExportOptions) (Manifest, error) {
 	}
 	manifest.Counts.MemoryFiles = len(memFiles)
 	manifest.Counts.NoteFiles = len(noteFiles)
+	if opts.NoDB {
+		// No index to read: the trees are all there is, so each file counts.
+		manifest.Projects, manifest.ProjectsOmitted = capProjects(treeProjects(memFiles, noteFiles))
+	}
 
 	if err := writeArchive(opts.Out, manifest, snapPath, append(memFiles, noteFiles...)); err != nil {
 		return Manifest{}, err
@@ -188,40 +207,118 @@ func snapshotDB(ctx context.Context, dbPath, snapPath string) error {
 	return nil
 }
 
+// snapshotFacts is what the manifest reports about a verified snapshot.
+type snapshotFacts struct {
+	schemaVersion int
+	tables        map[string]int
+	models        []string
+	projects      []store.ProjectContent
+	fingerprint   string
+}
+
 // inspectSnapshot verifies the snapshot and reads what the manifest reports
 // about it. Reading from the snapshot rather than the live database is the
 // point: the manifest has to describe the bytes in the archive, and the live
 // database has moved on by the time the tar is written.
-func inspectSnapshot(ctx context.Context, snapPath string) (schemaVersion int, tables map[string]int, models []string, err error) {
+func inspectSnapshot(ctx context.Context, snapPath string) (snapshotFacts, error) {
 	// mode=ro, and no journal_mode pragma: a read-only handle must not create
 	// -wal/-shm files next to the snapshot we are about to tar.
 	dsn := "file:" + url.PathEscape(snapPath) + "?mode=ro&_pragma=busy_timeout(5000)"
 	db, openErr := sql.Open("sqlite", dsn)
 	if openErr != nil {
-		return 0, nil, nil, fmt.Errorf("archive.Export: verify snapshot: %w", openErr)
+		return snapshotFacts{}, fmt.Errorf("archive.Export: verify snapshot: %w", openErr)
 	}
 	db.SetMaxOpenConns(1)
 	defer func() { _ = db.Close() }()
 
 	if err := quickCheck(ctx, db); err != nil {
-		return 0, nil, nil, err
+		return snapshotFacts{}, err
 	}
 
-	schemaVersion, err = store.SchemaVersion(db)
-	if err != nil {
-		return 0, nil, nil, fmt.Errorf("archive.Export: verify snapshot: %w", err)
+	var f snapshotFacts
+	var err error
+	if f.schemaVersion, err = store.SchemaVersion(db); err != nil {
+		return snapshotFacts{}, fmt.Errorf("archive.Export: verify snapshot: %w", err)
 	}
+	if f.tables, err = tableCounts(ctx, db); err != nil {
+		return snapshotFacts{}, err
+	}
+	if f.models, err = embeddingModels(ctx, db); err != nil {
+		return snapshotFacts{}, err
+	}
+	if f.projects, err = store.ProjectContentCounts(ctx, db); err != nil {
+		return snapshotFacts{}, fmt.Errorf("archive.Export: count the snapshot's projects: %w", err)
+	}
+	if f.fingerprint, err = store.ContentFingerprint(ctx, db); err != nil {
+		return snapshotFacts{}, fmt.Errorf("archive.Export: fingerprint the snapshot: %w", err)
+	}
+	return f, nil
+}
 
-	tables, err = tableCounts(ctx, db)
-	if err != nil {
-		return 0, nil, nil, err
+// snapshotProjects converts the snapshot's per-project counts for the manifest.
+func snapshotProjects(in []store.ProjectContent) []ProjectCounts {
+	out := make([]ProjectCounts, 0, len(in))
+	for _, p := range in {
+		out = append(out, ProjectCounts{
+			Slug: p.Slug, Name: p.Name, Memories: p.Memories, Retired: p.Retired,
+			Notes: p.Notes, Tasks: p.Tasks, Sessions: p.Sessions, Trials: p.Trials,
+		})
 	}
+	return out
+}
 
-	models, err = embeddingModels(ctx, db)
-	if err != nil {
-		return 0, nil, nil, err
+// treeProjects counts the corpus files per project for an archive without a
+// database: memory/<project>/... and notes/<project>/..., where _global is the
+// global scope. Every memory file counts as active: there is no index to tell a
+// tombstone from a live memory.
+func treeProjects(memFiles, noteFiles []treeFile) []ProjectCounts {
+	by := map[string]*ProjectCounts{}
+	at := func(name string) *ProjectCounts {
+		_, rest, _ := strings.Cut(name, "/")
+		slug, _, _ := strings.Cut(rest, "/")
+		if slug == globalDir {
+			slug = ""
+		}
+		p := by[slug]
+		if p == nil {
+			p = &ProjectCounts{Slug: slug}
+			by[slug] = p
+		}
+		return p
 	}
-	return schemaVersion, tables, models, nil
+	for _, f := range memFiles {
+		at(f.name).Memories++
+	}
+	for _, f := range noteFiles {
+		at(f.name).Notes++
+	}
+	out := make([]ProjectCounts, 0, len(by))
+	for _, p := range by {
+		out = append(out, *p)
+	}
+	return out
+}
+
+// globalDir is the directory the global scope's files live in, in both trees.
+const globalDir = "_global"
+
+// capProjects orders the projects largest first (then by slug, so equal sizes
+// stay stable) and keeps at most maxManifestProjects, returning how many it
+// left out.
+func capProjects(in []ProjectCounts) ([]ProjectCounts, int) {
+	slices.SortFunc(in, func(a, b ProjectCounts) int {
+		if d := b.total() - a.total(); d != 0 {
+			return d
+		}
+		return strings.Compare(a.Slug, b.Slug)
+	})
+	if len(in) <= maxManifestProjects {
+		if len(in) == 0 {
+			return nil, 0
+		}
+		return in, 0
+	}
+	return in[:maxManifestProjects], len(in) - maxManifestProjects
 }
 
 // quickCheck runs PRAGMA quick_check on the snapshot. It reports every row: on

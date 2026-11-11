@@ -71,30 +71,9 @@ func openArchive(r io.Reader) (_ *archiveReader, retErr error) {
 	}()
 
 	tr := tar.NewReader(gz)
-	hdr, err := tr.Next()
+	m, err := readManifestEntry(tr, "archive.open")
 	if err != nil {
-		return nil, fmt.Errorf("archive.open: %w: no entries: %w", ErrNotArchive, err)
-	}
-	if hdr.Name != ManifestName {
-		return nil, fmt.Errorf("archive.open: %w: first entry is %q, want %q",
-			ErrNotArchive, hdr.Name, ManifestName)
-	}
-	if hdr.Typeflag != tar.TypeReg {
-		return nil, fmt.Errorf("archive.open: %w: %s is not a regular file entry",
-			ErrUnsafeEntry, ManifestName)
-	}
-
-	data, err := io.ReadAll(io.LimitReader(tr, maxManifestBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("archive.open: %w: read manifest: %w", ErrNotArchive, err)
-	}
-	if len(data) > maxManifestBytes {
-		return nil, fmt.Errorf("archive.open: %w: manifest exceeds %d bytes", ErrNotArchive, maxManifestBytes)
-	}
-
-	var m Manifest
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("archive.open: %w: manifest is not valid JSON: %w", ErrNotArchive, err)
+		return nil, err
 	}
 	if m.FormatVersion != FormatVersion {
 		return nil, fmt.Errorf("archive.open: unsupported format_version %d: this build reads %d",
@@ -111,6 +90,55 @@ func openArchive(r io.Reader) (_ *archiveReader, retErr error) {
 		manifest: m,
 		seen:     map[string]bool{ManifestName: true},
 	}, nil
+}
+
+// readManifestEntry reads the first tar entry as the manifest, with the checks
+// that make an archive one of ours: the name, a regular file, the size cap and
+// valid JSON. The format and schema refusals are openArchive's, because a list
+// of backups has to show an archive this build cannot restore and say why.
+func readManifestEntry(tr *tar.Reader, op string) (Manifest, error) {
+	hdr, err := tr.Next()
+	if err != nil {
+		return Manifest{}, fmt.Errorf("%s: %w: no entries: %w", op, ErrNotArchive, err)
+	}
+	if hdr.Name != ManifestName {
+		return Manifest{}, fmt.Errorf("%s: %w: first entry is %q, want %q",
+			op, ErrNotArchive, hdr.Name, ManifestName)
+	}
+	if hdr.Typeflag != tar.TypeReg {
+		return Manifest{}, fmt.Errorf("%s: %w: %s is not a regular file entry",
+			op, ErrUnsafeEntry, ManifestName)
+	}
+
+	data, err := io.ReadAll(io.LimitReader(tr, maxManifestBytes+1))
+	if err != nil {
+		return Manifest{}, fmt.Errorf("%s: %w: read manifest: %w", op, ErrNotArchive, err)
+	}
+	if len(data) > maxManifestBytes {
+		return Manifest{}, fmt.Errorf("%s: %w: manifest exceeds %d bytes", op, ErrNotArchive, maxManifestBytes)
+	}
+
+	var m Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		return Manifest{}, fmt.Errorf("%s: %w: manifest is not valid JSON: %w", op, ErrNotArchive, err)
+	}
+	return m, nil
+}
+
+// ReadManifest returns an archive's manifest, reading its first entry and
+// nothing after it: cheap enough to run over every backup in a folder. Unlike
+// Import it refuses neither an unsupported format_version nor a schema newer
+// than this build, which a caller compares with FormatVersion and
+// store.LatestSchemaVersion to say why such a backup cannot be restored here.
+// An error wraps ErrNotArchive, or ErrUnsafeEntry for a manifest entry that is
+// not a regular file.
+func ReadManifest(r io.Reader) (Manifest, error) {
+	gz, err := gzip.NewReader(r)
+	if err != nil {
+		return Manifest{}, fmt.Errorf("archive.ReadManifest: %w: not a gzip stream: %w", ErrNotArchive, err)
+	}
+	defer func() { _ = gz.Close() }()
+	return readManifestEntry(tar.NewReader(gz), "archive.ReadManifest")
 }
 
 // Close releases the gzip reader. It does not close the underlying stream,

@@ -84,6 +84,50 @@ var (
 	ErrLockCannotApply = errors.New("a lock in this archive cannot be applied here")
 )
 
+// The kinds of archive, recorded as Manifest.Kind: why one was written. An
+// empty kind is a plain `seamlessd export`, and every archive written before
+// the field existed.
+const (
+	// KindScheduled is an automatic backup the backup scheduler made.
+	KindScheduled = "scheduled"
+	// KindManual is a backup the owner asked for (Back up now).
+	KindManual = "manual"
+	// KindBeforeRestore is the safety backup of the data a restore replaced or
+	// merged into.
+	KindBeforeRestore = "before-restore"
+	// KindPreUpdate is the updater's backup before it installs a release.
+	KindPreUpdate = "pre-update"
+)
+
+// maxManifestProjects caps Manifest.Projects. The manifest is the first entry
+// and is read whole (maxManifestBytes), so an instance with a very large number
+// of projects records its largest ones and counts the rest in ProjectsOmitted,
+// rather than writing a manifest no release could read.
+const maxManifestProjects = 1000
+
+// ProjectCounts is what one project held when the archive was written, so a
+// list of backups can say what each one would bring back.
+type ProjectCounts struct {
+	// Slug is the project, "" for the global scope.
+	Slug string `json:"slug"`
+	// Name is the project's display name, when it differs from the slug.
+	Name string `json:"name,omitempty"`
+	// Memories are the active ones; Retired the superseded or archived ones
+	// still on disk as tombstones. An archive without a database counts every
+	// memory file as active: it has no index to tell them apart.
+	Memories int `json:"memories"`
+	Retired  int `json:"retired,omitempty"`
+	Notes    int `json:"notes"`
+	Tasks    int `json:"tasks,omitempty"`
+	Sessions int `json:"sessions,omitempty"`
+	Trials   int `json:"trials,omitempty"`
+}
+
+// total is everything the project holds, for ordering.
+func (p ProjectCounts) total() int {
+	return p.Memories + p.Retired + p.Notes + p.Tasks + p.Sessions + p.Trials
+}
+
 // Counts is the manifest's inventory: what a reader should expect to find, so a
 // truncated or hand-edited archive is detectable before it is trusted.
 type Counts struct {
@@ -129,6 +173,27 @@ type Manifest struct {
 	EmbeddingModels []string `json:"embedding_models,omitempty"`
 
 	Counts Counts `json:"counts"`
+
+	// Kind says why the archive was written (KindScheduled, KindManual,
+	// KindBeforeRestore, KindPreUpdate); empty for a plain export.
+	Kind string `json:"kind,omitempty"`
+
+	// InstallID names the install that wrote the archive (store.InstallID), so
+	// a folder several installs share -- even two machines with the same
+	// hostname -- prunes only its own backups. Empty when the writer named none.
+	InstallID string `json:"install_id,omitempty"`
+
+	// Projects is what each project held, largest first, at most
+	// maxManifestProjects of them; ProjectsOmitted counts the rest. Counted from
+	// the snapshot's index when the archive carries a database, else from the
+	// markdown trees. Empty in an archive written before the field existed.
+	Projects        []ProjectCounts `json:"projects,omitempty"`
+	ProjectsOmitted int             `json:"projects_omitted,omitempty"`
+
+	// Fingerprint is store.ContentFingerprint of the snapshot: a later backup
+	// whose database has the same fingerprint would capture nothing new. Empty
+	// for an archive without a database.
+	Fingerprint string `json:"fingerprint,omitempty"`
 
 	// Locks is what the import needs to keep this instance's locked projects
 	// locked. Nil when none was locked, so an archive without locks reads as it
