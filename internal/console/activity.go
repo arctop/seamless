@@ -253,6 +253,9 @@ func eventSummary(e core.Event) string {
 		return updateStartedSummary(p)
 	case core.EventUpdateFailed:
 		return updateFailedSummary(p)
+	case core.EventBackupCreated, core.EventBackupFailed, core.EventBackupDeleted,
+		core.EventBackupRestored, core.EventBackupRestoreFailed:
+		return backupEventSummary(e)
 	case core.EventTaskTransition:
 		if to := payloadStr(p, "to"); to != "" {
 			return "task -> " + to

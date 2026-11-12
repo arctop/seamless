@@ -16,6 +16,8 @@ package main
 // sends one, so a secret in any response is a leak.
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/ecdsa"
 	"database/sql"
@@ -42,6 +44,7 @@ import (
 	"github.com/arctop/seamless/internal/a2a"
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
+	"github.com/arctop/seamless/internal/backup"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/console"
 	"github.com/arctop/seamless/internal/console/browserproof"
@@ -135,6 +138,13 @@ type cmDaemon struct {
 	fin, legal cmItems
 	// openMemID is the owner's own open-project memory (cmOpenMarker).
 	openMemID string
+
+	// backups is a real backup service over the daemon's data dir, writing
+	// into backupDir; backupRef names the backup plantBackup made, which
+	// holds both locked projects' secrets.
+	backups   *backup.Service
+	backupDir string
+	backupRef string
 }
 
 // cmNewDaemon builds the daemon with the owner (and the restricted account,
@@ -219,10 +229,21 @@ func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account)
 		require.NotContains(t, consoleLog.String(), "readonly database",
 			"a console write reached a read-only filtered handle")
 	})
+	// A real backup service, as serve builds it, writing into a folder outside
+	// the data dir. Nothing runs by itself: automatic backups are off on a
+	// build from source.
+	backupDir := filepath.Join(t.TempDir(), "Seamless Backups")
+	backups := backup.New(backup.Deps{
+		DataDir: dir, DB: db, Base: config.Backup{Dir: backupDir}, Version: "0.0.0-test", Host: host,
+		ForceLocked: pa.ForceLocked, Events: rec, Log: logger,
+	})
+	backupCtx, stopBackups := context.WithCancel(context.Background())
+	backups.Start(backupCtx)
+	t.Cleanup(func() { stopBackups(); backups.Wait() })
 	consoleSrv, err := console.New(console.Config{
 		DB: base, WriteDB: db, Files: mgr, Gardener: garden, Events: rec.ReadingFrom(base),
 		Screening: screen, Retrieve: ret, APIKey: cmKey, DataDir: dir, Features: feats, Level: "advanced",
-		Approvals: svc, Terminal: terminalApprover(cfg), Views: views,
+		Approvals: svc, Terminal: terminalApprover(cfg), Views: views, Backups: backups,
 		RestrictedAccounts: policy.HasRestricted(),
 		Logger:             slog.New(slog.NewTextHandler(consoleLog, nil)),
 	})
@@ -233,7 +254,7 @@ func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account)
 	}.mux()
 
 	d := &cmDaemon{db: db, path: path, dir: dir, host: host, mgr: mgr, rec: rec, cfg: cfg, policy: policy, svc: svc,
-		views: views, mux: mux, consoleLog: consoleLog, logger: logger}
+		views: views, mux: mux, consoleLog: consoleLog, logger: logger, backups: backups, backupDir: backupDir}
 	d.owner = httptest.NewServer(ownerHandler(policy, mux))
 	t.Cleanup(func() { closeServer(d.owner) })
 	return d
@@ -406,6 +427,43 @@ func (d *cmDaemon) plantOpen(t *testing.T) {
 
 // secrets are both locked projects' secrets.
 func (d *cmDaemon) secrets() []cmItems { return []cmItems{d.fin, d.legal} }
+
+// backUp runs Back up now on the backup service and waits for it, returning
+// the new backup's ref.
+func (d *cmDaemon) backUp(t *testing.T) string {
+	t.Helper()
+	_, err := d.backups.BackUpNow(context.Background())
+	require.NoError(t, err)
+	return d.awaitBackup(t)
+}
+
+// awaitBackup waits for the backup under way and returns its ref.
+func (d *cmDaemon) awaitBackup(t *testing.T) string {
+	t.Helper()
+	var st backup.Status
+	require.Eventually(t, func() bool {
+		st = d.backups.Status()
+		return st.Running == nil && st.LastRun != nil
+	}, 60*time.Second, 20*time.Millisecond)
+	require.Equal(t, backup.OutcomeCreated, st.LastRun.Outcome, st.LastRun.Error)
+	return backup.WhereFolder + ":" + st.LastRun.Name
+}
+
+// plantBackup makes the backup the crawl looks at: one holding both locked
+// projects' content, secrets and all. No console answer may carry any of it.
+func (d *cmDaemon) plantBackup(t *testing.T) {
+	t.Helper()
+	d.backupRef = d.backUp(t)
+	raw, err := os.ReadFile(filepath.Join(d.backupDir, strings.TrimPrefix(d.backupRef, backup.WhereFolder+":")))
+	require.NoError(t, err)
+	gz, err := gzip.NewReader(bytes.NewReader(raw))
+	require.NoError(t, err)
+	inside, err := io.ReadAll(gz)
+	require.NoError(t, err)
+	for _, it := range d.secrets() {
+		require.Contains(t, string(inside), it.secret, "the planted backup holds %s's content", it.project)
+	}
+}
 
 // noLockedContent fails when body carries either locked project's secret or
 // names one of its items (unless said, the request itself, named it).
@@ -610,6 +668,12 @@ func (d *cmDaemon) getTargets(t *testing.T, pendingID string) []string {
 	add("/console/plans?w=all")
 	add("/console/gardener?kind=archive")
 	add("/console/unlock/" + cmFinance + "/terminal?id=" + q(cmNoSuch))
+	add("/console/settings?s=backups")
+	add("/console/settings/backups/folder?dir=" + q(d.backupDir))
+	add("/console/settings/backups/folder?dir=" + q(d.dir))
+	if d.backupRef != "" {
+		add("/console/settings?s=backups&restore=" + q(d.backupRef))
+	}
 	for _, it := range d.secrets() {
 		p := it.project
 		for _, target := range []string{

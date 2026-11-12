@@ -655,7 +655,7 @@ func TestSettingsSections_RenderAtTheirLevels(t *testing.T) {
 	page := getPeek(t, mux, "/console/settings").Body.String()
 	require.Contains(t, page, `data-section="experience"`)
 	require.Contains(t, page, `id="experience"`)
-	require.Equal(t, []string{"experience", "features", "setup", "updates"}, offered(page))
+	require.Equal(t, []string{"experience", "features", "setup", "updates", "backups"}, offered(page))
 	require.NotContains(t, page, "data-level-banner")
 
 	for _, tc := range []struct {
@@ -665,19 +665,19 @@ func TestSettingsSections_RenderAtTheirLevels(t *testing.T) {
 		banner  bool
 		subnav  []string
 	}{
-		{"basic", "features", `id="features"`, false, []string{"experience", "features", "setup", "updates"}},
-		{"basic", "setup", `id="setup"`, false, []string{"experience", "features", "setup", "updates"}},
-		{"basic", "updates", `id="updates"`, false, []string{"experience", "features", "setup", "updates"}},
-		{"basic", "briefing", `id="briefing-recipe"`, true, []string{"experience", "features", "setup", "updates", "briefing"}},
-		{"basic", "engine", `id="knowledge-engine"`, true, []string{"experience", "features", "setup", "updates", "engine"}},
+		{"basic", "features", `id="features"`, false, []string{"experience", "features", "setup", "updates", "backups"}},
+		{"basic", "setup", `id="setup"`, false, []string{"experience", "features", "setup", "updates", "backups"}},
+		{"basic", "updates", `id="updates"`, false, []string{"experience", "features", "setup", "updates", "backups"}},
+		{"basic", "briefing", `id="briefing-recipe"`, true, []string{"experience", "features", "setup", "updates", "backups", "briefing"}},
+		{"basic", "engine", `id="knowledge-engine"`, true, []string{"experience", "features", "setup", "updates", "backups", "engine"}},
 		{"standard", "briefing", `id="briefing-recipe"`, false,
-			[]string{"experience", "features", "setup", "updates", "briefing", "workspaces"}},
+			[]string{"experience", "features", "setup", "updates", "backups", "briefing", "workspaces"}},
 		{"standard", "workspaces", `id="workspace-registry"`, false,
-			[]string{"experience", "features", "setup", "updates", "briefing", "workspaces"}},
+			[]string{"experience", "features", "setup", "updates", "backups", "briefing", "workspaces"}},
 		{"standard", "engine", `id="knowledge-engine"`, true,
-			[]string{"experience", "features", "setup", "updates", "briefing", "workspaces", "engine"}},
+			[]string{"experience", "features", "setup", "updates", "backups", "briefing", "workspaces", "engine"}},
 		{"advanced", "engine", `id="knowledge-engine"`, false,
-			[]string{"experience", "features", "setup", "updates", "briefing", "workspaces", "engine"}},
+			[]string{"experience", "features", "setup", "updates", "backups", "briefing", "workspaces", "engine"}},
 	} {
 		setLevel(t, db, tc.level)
 		rr := getPeek(t, mux, "/console/settings?s="+tc.section)
@@ -706,13 +706,13 @@ func TestSettingsSections_UnknownSectionIsANamedBadRequest(t *testing.T) {
 	}
 	rr := getPeek(t, mux, "/console/settings?s=runtime")
 	require.Contains(t, rr.Body.String(),
-		"invalid s &#34;runtime&#34;: valid values are experience, features, setup, updates, briefing, workspaces, engine")
+		"invalid s &#34;runtime&#34;: valid values are experience, features, setup, updates, backups, briefing, workspaces, engine")
 
 	req := httptest.NewRequest(http.MethodGet, "/console/settings?s=runtime&format=json", nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 	rr = do(mux, req)
 	require.Equal(t, http.StatusBadRequest, rr.Code)
-	require.Contains(t, rr.Body.String(), "valid values are experience, features, setup, updates, briefing, workspaces, engine")
+	require.Contains(t, rr.Body.String(), "valid values are experience, features, setup, updates, backups, briefing, workspaces, engine")
 }
 
 // The JSON contract: the FULL payload at every section, plus the level fields.

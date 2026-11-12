@@ -663,7 +663,10 @@ func runServe(args []string) error {
 		Embedding: embedRT,
 		// The background update check backs Settings -> Updates, the Home
 		// version fact and the "updated" banner.
-		Updates:        upd,
+		Updates: upd,
+		// The backup service backs Settings -> Backups, the Your setup row,
+		// the every-page alert and the System screen's Backups part.
+		Backups:        backups,
 		SessionIdleTTL: time.Duration(cfg.Gardener.SessionIdleMinutes) * time.Minute,
 		// Secure only under TLS: a browser drops a Secure cookie arriving over
 		// http, so setting it unconditionally would lock the owner out of the

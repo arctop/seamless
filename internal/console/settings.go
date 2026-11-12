@@ -225,6 +225,9 @@ type settingsData struct {
 	// filled only for that section. Page state like Setup: the JSON payload
 	// stays the same at every section.
 	Updates updatesPanel `json:"-"`
+	// Backups is the Backups section's view of the backup service, filled
+	// only for that section, like Updates.
+	Backups backupsPanel `json:"-"`
 	// PreviewProjects are the projects the Briefing section's preview offers
 	// (registered and live, in slug order), and PreviewProject the one it
 	// opens on: where the owner's agents worked last, else the first. Filled
@@ -318,6 +321,8 @@ type setupPanel struct {
 	ConfigPath    string
 	ConfigEditURL template.URL
 	Clients       []setupClient
+	// Backups is the Backups row, nil when no backup service runs here.
+	Backups *setupBackups
 }
 
 // setupClient is one agent client that has recorded sessions here.
@@ -329,7 +334,8 @@ type setupClient struct {
 // setupData builds the Your setup facts. The clients line is best-effort: a
 // read failure costs that line, never the section.
 func (s *Service) setupData(ctx context.Context) setupPanel {
-	p := setupPanel{Version: strings.TrimSpace(s.cfg.Version), Host: s.host, ConfigPath: strings.TrimSpace(s.cfg.ConfigPath)}
+	p := setupPanel{Version: strings.TrimSpace(s.cfg.Version), Host: s.host, ConfigPath: strings.TrimSpace(s.cfg.ConfigPath),
+		Backups: s.setupBackupsRow(time.Now())}
 	if p.ConfigPath != "" {
 		_, p.ConfigEditURL = absAndEditURL("", p.ConfigPath)
 	}
@@ -418,6 +424,10 @@ func (s *Service) settings(w http.ResponseWriter, r *http.Request) {
 	if section.ID == "updates" && !wantsJSON(r) {
 		updates = s.updatesPanelAt(time.Now())
 	}
+	var backups backupsPanel
+	if section.ID == "backups" && !wantsJSON(r) {
+		backups = s.backupsPanelFor(r, time.Now())
+	}
 
 	lvl := s.consoleLevel(ctx)
 	pd := pageData{
@@ -455,6 +465,7 @@ func (s *Service) settings(w http.ResponseWriter, r *http.Request) {
 			CustomizeOpen:          lvl.Level >= levelAdvanced,
 			Setup:                  s.setupData(ctx),
 			Updates:                updates,
+			Backups:                backups,
 			PreviewProjects:        previewProjects,
 			PreviewProject:         previewProject,
 		},

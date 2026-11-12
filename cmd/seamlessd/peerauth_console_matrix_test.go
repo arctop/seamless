@@ -26,6 +26,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/approval"
+	"github.com/arctop/seamless/internal/backup"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/mcp"
 	"github.com/arctop/seamless/internal/passkey/passkeytest"
@@ -63,8 +65,9 @@ func (d *cmDaemon) crawl(t *testing.T, c cmCaller, targets []string, open ...str
 
 // postTargets is every console POST route with the form each one reads,
 // filled with each locked project's items. The login and logout forms (the
-// browser's own credential) and the update controls (no update check runs
-// here) are left out.
+// browser's own credential), the update controls (no update check runs
+// here), and Back up now and the restore (each makes or stages a backup;
+// their own cases follow) are left out.
 func (d *cmDaemon) postTargets(t *testing.T, pendingID string) []struct {
 	target string
 	form   url.Values
@@ -87,7 +90,8 @@ func (d *cmDaemon) postTargets(t *testing.T, pendingID string) []struct {
 		}{target, form})
 	}
 	for _, pattern := range posts {
-		if pattern == "/console/login" || pattern == "/console/logout" || strings.HasPrefix(pattern, "/console/settings/updates") {
+		if pattern == "/console/login" || pattern == "/console/logout" || strings.HasPrefix(pattern, "/console/settings/updates") ||
+			pattern == "/console/settings/backups/now" || pattern == "/console/settings/backups/restore" {
 			continue
 		}
 		for _, it := range d.secrets() {
@@ -125,6 +129,10 @@ func (d *cmDaemon) postTargets(t *testing.T, pendingID string) []struct {
 				"/console/approvers/passkey/finish":    {"id": {cmNoSuch}, "response": {"{}"}},
 				"/console/approvers/passkey/confirm":   {"id": {cmNoSuch}, "code": {"AAAA-BBBB-CCCC-DDDD"}},
 				"/console/approvers/touchid/enroll":    {"name": {"probe"}, "public_key": {"AAAA"}},
+				// The settings in force: a save that changes nothing.
+				"/console/settings/backups":               {"every": {"24h"}, "keep": {"7"}, "dir": {d.backupDir}},
+				"/console/settings/backups/delete":        {"ref": {"folder:seamless-nosuch-20260101T000000Z.tar.gz"}},
+				"/console/settings/backups/restore/begin": {"ref": {d.backupRef}, "mode": {"merge"}},
 			}
 			form := forms[pattern]
 			if form == nil {
@@ -266,6 +274,7 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 	d.fin = d.plant(t, agentMCP, cmFinance, cmFinSecret, "fin")
 	d.legal = d.plant(t, agentMCP, cmLegal, cmLegalSecret, "legal")
 	d.plantOpen(t)
+	d.plantBackup(t)
 
 	// Another tree of the owner's asks too: its request waits, pending. Its
 	// probe names no item, so the owner's own event log holds no locked
@@ -479,6 +488,80 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 		require.False(t, cmUnlockPage(t, browserA, cmLegal).Unlocked)
 		c := d.counts(t)
 		require.Equal(t, 2, c.leases, "an unlock is a cookie, never a lease")
+	})
+
+	t.Run("backups: Back up now is the owner's, and a restore under the locks needs the passkey", func(t *testing.T) {
+		before := d.counts(t)
+		// Back up now: refused from a connection whose process the kernel
+		// did not name, and made from the TCP key.
+		status, body, _ := noChain.do(t, http.MethodPost, "/console/settings/backups/now", url.Values{}, true)
+		require.Equal(t, http.StatusForbidden, status, body)
+		status, _, hdr := tcpKey.do(t, http.MethodPost, "/console/settings/backups/now", url.Values{}, false)
+		require.Equal(t, http.StatusSeeOther, status)
+		require.Contains(t, hdr.Get("Location"), "notice=")
+		made := d.awaitBackup(t)
+		require.NotEqual(t, d.backupRef, made)
+		_, body, _ = tcpKey.do(t, http.MethodGet, "/console/settings?s=backups", nil, false)
+		require.Contains(t, body, strings.TrimPrefix(made, "folder:"), "the new backup is listed")
+		d.noLockedContent(t, body, "", "the backups section")
+
+		// A restore without an assertion is refused for the browser and the
+		// key alike, and nothing is staged; only a browser begins one.
+		for _, c := range []cmCaller{browserA, tcpKey} {
+			status, body, _ := c.do(t, http.MethodPost, "/console/settings/backups/restore", url.Values{"ref": {d.backupRef}, "mode": {"merge"}}, true)
+			require.Equal(t, http.StatusForbidden, status, "%s: %s", c.name, body)
+			d.noLockedContent(t, body, "", c.name+" restore")
+		}
+		status, _, _ = tcpKey.do(t, http.MethodPost, "/console/settings/backups/restore/begin", url.Values{"ref": {d.backupRef}, "mode": {"merge"}}, true)
+		require.Equal(t, http.StatusForbidden, status)
+		require.False(t, backup.RestorePending(d.dir), "nothing staged")
+
+		begin := func(mode string) (string, json.RawMessage) {
+			t.Helper()
+			status, body, _ := browserA.do(t, http.MethodPost, "/console/settings/backups/restore/begin", url.Values{"ref": {d.backupRef}, "mode": {mode}}, true)
+			require.Equal(t, http.StatusOK, status, body)
+			var begun struct {
+				ID      string          `json:"id"`
+				Options json.RawMessage `json:"options"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(body), &begun))
+			return begun.ID, begun.Options
+		}
+		// An approval to bring back what is missing never replaces everything.
+		id, opts := begin("merge")
+		assertion, err := key.Get(opts, cmOrigin)
+		require.NoError(t, err)
+		status, body, _ = browserA.do(t, http.MethodPost, "/console/settings/backups/restore",
+			url.Values{"ref": {d.backupRef}, "mode": {"replace"}, "id": {id}, "response": {string(assertion)}}, true)
+		require.Equal(t, http.StatusConflict, status, body)
+		require.False(t, backup.RestorePending(d.dir))
+
+		// The ceremony that passes stages the merge, bound to the backup's
+		// digest; the restart that would apply it never comes here, so it
+		// waits, and Cancel restore drops it.
+		id, opts = begin("merge")
+		assertion, err = key.Get(opts, cmOrigin)
+		require.NoError(t, err)
+		status, body, _ = browserA.do(t, http.MethodPost, "/console/settings/backups/restore",
+			url.Values{"ref": {d.backupRef}, "mode": {"merge"}, "id": {id}, "response": {string(assertion)}}, true)
+		require.Equal(t, http.StatusOK, status, body)
+		require.Eventually(t, func() bool { return d.backups.Status().Restore.Pending != nil }, 60*time.Second, 20*time.Millisecond)
+		p, err := backup.ReadPending(d.dir)
+		require.NoError(t, err)
+		require.Equal(t, backup.ModeMerge, p.Mode)
+		require.Equal(t, approval.ProofPasskey, p.Proof)
+		require.NotEmpty(t, p.Credential)
+		require.Len(t, p.SHA256, 64)
+		_, body, _ = browserA.do(t, http.MethodGet, "/console/settings?s=backups", nil, false)
+		require.Contains(t, body, `data-restore-state="pending"`)
+		require.Contains(t, body, "Restarting Seamless")
+		d.noLockedContent(t, body, "", "the backups section with a restore staged", cmFinance)
+		status, _, _ = browserA.do(t, http.MethodPost, "/console/settings/backups/restore/cancel", url.Values{}, false)
+		require.Equal(t, http.StatusSeeOther, status)
+		require.False(t, backup.RestorePending(d.dir), "the cancelled restore is gone")
+		d.itemsUnchanged(t, d.fin, true, "a staged and cancelled restore")
+		d.itemsUnchanged(t, d.legal, true, "a staged and cancelled restore")
+		require.Equal(t, before, d.counts(t), "a restore ceremony grants nothing")
 	})
 
 	browserB := d.newBrowser(t, "browser B")

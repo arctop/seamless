@@ -153,6 +153,7 @@
         {{with .Database}}{{if .Path}}<div><dt>Database</dt><dd>{{with .SizeHuman}}<strong>{{.}}</strong>{{end}}<span class="mono">{{.Path}}</span>{{copyBtn .Path}}</dd></div>{{end}}{{end}}
         <div><dt>Agents connected</dt><dd>{{if .Setup.Clients}}{{range $i, $c := .Setup.Clients}}{{if $i}}<span class="faint">&middot;</span>{{end}}<span>{{$c.Name}} <small class="faint">last active {{agoPhrase $c.LastSeen}}</small></span>{{end}}{{else}}None yet &mdash; an agent appears here once it starts a session with the hooks installed.{{end}}</dd></div>
         {{with .Embeddings}}<div><dt>Semantic recall</dt><dd>{{if .Enabled}}<span class="badge ok">on</span><span>with <span class="mono">{{.Model}}</span></span>{{else}}<span class="badge warn">off</span><span>{{if .OverriddenOff}}Switched off in this console. Search and recall use keywords only.{{else if .Misconfigured}}The model settings in the config file have a mistake: <span class="mono">{{.Reason}}</span>{{else}}Search and recall use keywords only. Add an OpenAI key (or point Ollama at a local model) in the config file, then restart.{{end}}</span><a href="https://thereisnospoon.org/docs/guides/troubleshooting/#recall-returns-junk-or-misses-what-you-just-wrote" target="_blank" rel="noopener">What this changes &nearr;</a>{{end}}</dd></div>{{end}}
+        {{with .Setup.Backups}}<div><dt>Backups</dt><dd>{{if .Failing}}<span class="badge warn">needs attention</span>{{else if .On}}<span class="badge ok">on</span>{{else}}<span class="badge">off</span>{{end}}<span>{{.Line}}</span><a href="/console/settings?s=backups" data-seam-query>Settings &rsaquo; Backups</a></dd></div>{{end}}
         <div><dt>Gardener</dt><dd>{{if .Gardener.Enabled}}<span class="badge ok">on</span><span>suggests cleanups every {{.Gardener.IntervalMinutes}} minutes</span>{{else}}<span class="badge">paused</span><span>no cleanup suggestions are made</span>{{end}}</dd></div>
       </dl>
       <nav class="setup-docs" aria-label="Documentation">
@@ -234,6 +235,10 @@
       <p class="updates-note">{{icon "info"}}<span>The update check is not running in this process, so there is nothing to show or change here.</span></p>
       {{end}}{{end}}
     </section>
+    {{end}}
+
+    {{if eq .Section "backups"}}
+    {{template "settings-backups" .}}
     {{end}}
 
     {{if eq .Section "briefing"}}
@@ -1087,6 +1092,7 @@ window.SEAM_NO_LIVE_REFRESH = true; // preserve unsaved form state on this contr
   function enhanceSettings() {
     enhanceDirtyForm('[data-briefing-form]', 'brief-state', 'Unsaved changes — save to use them for new sessions.');
     enhanceDirtyForm('[data-features-form]', 'features-state', 'Unsaved changes — save to apply them.');
+    enhanceDirtyForm('[data-backups-form]', 'backups-state', 'Unsaved changes — save to use them from the next backup.');
     enhanceFamilies();
     refreshPreview();
   }
@@ -1095,6 +1101,14 @@ window.SEAM_NO_LIVE_REFRESH = true; // preserve unsaved form state on this contr
 })();
 </script>
 {{end}}
+{{end}}
+
+{{/* The passkey ceremonies' shared helpers and Settings > Backups' script:
+     loaded on every Settings page, since the sub-nav swaps sections in place.
+     Both are inert without their markup. */}}
+{{define "scripts"}}
+<script src="/console/static/passkey.js"></script>
+<script src="/console/static/backups.js"></script>
 {{end}}
 
 {{/* The briefing preview's fragments (briefing_preview.go), fetched into the

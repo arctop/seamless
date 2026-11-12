@@ -47,7 +47,7 @@
       <a href="/console/sessions" data-key="s" data-tip="Sessions" class=""><svg class="ico ico-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg><span class="nav-label">Sessions</span><span class="count">6</span></a>
       <a href="/console/settings" data-key="," data-tip="Settings" class="nav-settings"><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="nav-label">Settings</span></a>
       
-      <div class="nav-jumps" hidden><a href="/console/search" data-jump="Search" data-hint="every filter and sort" tabindex="-1"><svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></a><a href="/console/settings?s=experience" data-jump="Settings › Experience" data-hint="How much of the console you see, and how it looks" tabindex="-1"><svg class="ico ico-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg></a><a href="/console/settings?s=features" data-jump="Settings › Features" data-hint="Optional features, for the console and agents alike" tabindex="-1"><svg class="ico ico-toggle-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="12" x="2" y="6" rx="6" ry="6"/><circle cx="16" cy="12" r="2"/></svg></a><a href="/console/settings?s=setup" data-jump="Settings › Your setup" data-hint="Version, files, and what is connected" tabindex="-1"><svg class="ico ico-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg></a><a href="/console/settings?s=updates" data-jump="Settings › Updates" data-hint="New releases, and whether this install checks for and installs them" tabindex="-1"><svg class="ico ico-refresh-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></a></div>
+      <div class="nav-jumps" hidden><a href="/console/search" data-jump="Search" data-hint="every filter and sort" tabindex="-1"><svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></a><a href="/console/settings?s=experience" data-jump="Settings › Experience" data-hint="How much of the console you see, and how it looks" tabindex="-1"><svg class="ico ico-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg></a><a href="/console/settings?s=features" data-jump="Settings › Features" data-hint="Optional features, for the console and agents alike" tabindex="-1"><svg class="ico ico-toggle-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="12" x="2" y="6" rx="6" ry="6"/><circle cx="16" cy="12" r="2"/></svg></a><a href="/console/settings?s=setup" data-jump="Settings › Your setup" data-hint="Version, files, and what is connected" tabindex="-1"><svg class="ico ico-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg></a><a href="/console/settings?s=updates" data-jump="Settings › Updates" data-hint="New releases, and whether this install checks for and installs them" tabindex="-1"><svg class="ico ico-refresh-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></a><a href="/console/settings?s=backups" data-jump="Settings › Backups" data-hint="Automatic backups, the folder they go to, and restoring one" tabindex="-1"><svg class="ico ico-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></a></div>
     </nav>
     <div class="side-foot">
       <div class="account">
@@ -487,6 +487,8 @@
 <title>Overview &middot; Seamless</title>
 ==== /console/ main ====
   <main class="main" id="main" tabindex="-1">
+    
+    
     
     
     
@@ -1243,6 +1245,8 @@
     
     
     
+    
+    
     <div class="section notice level-banner" role="note" data-level-banner="projects">
       <p class="level-banner-copy"><svg class="ico ico-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg><span><strong>Projects</strong> is a Standard screen. You are in Basic: it works, it just is not in your sidebar.</span></p>
       <div class="level-banner-acts">
@@ -1731,6 +1735,8 @@
 <title>Project example-open-alpha &middot; Seamless</title>
 ==== /console/projects/example-open-alpha main ====
   <main class="main" id="main" tabindex="-1">
+    
+    
     
     
     
@@ -2692,6 +2698,8 @@
     
     
     
+    
+    
     <div class="section notice level-banner" role="note" data-level-banner="projects">
       <p class="level-banner-copy"><svg class="ico ico-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg><span><strong>Projects</strong> is a Standard screen. You are in Basic: it works, it just is not in your sidebar.</span></p>
       <div class="level-banner-acts">
@@ -2982,6 +2990,8 @@
     
     
     
+    
+    
     <div class="section notice level-banner" role="note" data-level-banner="projects">
       <p class="level-banner-copy"><svg class="ico ico-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg><span><strong>Projects</strong> is a Standard screen. You are in Basic: it works, it just is not in your sidebar.</span></p>
       <div class="level-banner-acts">
@@ -3250,6 +3260,8 @@
     
     
     
+    
+    
 
 
 
@@ -3482,6 +3494,8 @@
     
     
     
+    
+    
 
 
 
@@ -3609,6 +3623,8 @@
 <title>Tasks &middot; Seamless</title>
 ==== /console/tasks main ====
   <main class="main" id="main" tabindex="-1">
+    
+    
     
     
     
@@ -3762,6 +3778,8 @@
 <title>Sessions &middot; Seamless</title>
 ==== /console/sessions main ====
   <main class="main" id="main" tabindex="-1">
+    
+    
     
     
     
@@ -3955,6 +3973,8 @@
     
     
     
+    
+    
     <div class="section notice level-banner" role="note" data-level-banner="plans">
       <p class="level-banner-copy"><svg class="ico ico-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg><span><strong>Plans</strong> is a Standard screen. You are in Basic: it works, it just is not in your sidebar.</span></p>
       <div class="level-banner-acts">
@@ -4097,6 +4117,8 @@
     
     
     
+    
+    
 
 <section class="feature-off" data-feature-off="screening">
   <span class="feature-off-icon"><svg class="ico ico-power" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg></span>
@@ -4113,6 +4135,8 @@
 <title>Gardener &middot; Seamless</title>
 ==== /console/gardener main ====
   <main class="main" id="main" tabindex="-1">
+    
+    
     
     
     
@@ -4647,6 +4671,8 @@ window.SEAM_NO_LIVE_REFRESH = true;
     
     
     
+    
+    
 
 <div class="settings-page" data-settings data-section="experience">
   <header class="mv2-bar">
@@ -4677,6 +4703,11 @@ window.SEAM_NO_LIVE_REFRESH = true;
         <span class="settings-subnav-copy"><strong>Updates</strong><small>New releases, and whether this install checks for and installs them</small></span>
       </a>
       
+      <a href="/console/settings?s=backups" data-section-link="backups" class="">
+        <span class="settings-subnav-ico"><svg class="ico ico-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></span>
+        <span class="settings-subnav-copy"><strong>Backups</strong><small>Automatic backups, the folder they go to, and restoring one</small></span>
+      </a>
+      
     </nav>
 
     <div class="settings-body">
@@ -4703,7 +4734,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
           <input type="hidden" name="return" value="/console/settings?s=experience">
           <header class="level-card-head"><h3>Basic</h3><span class="badge ok">Current</span></header>
           <p class="level-card-line">Just the essentials: what your agents remember and what they are doing.</p>
-          <div class="level-card-items"><span class="level-card-lead">Shows</span><ul><li>Overview</li><li>Memories</li><li>Notes</li><li>Gardener</li><li>Sessions</li><li>Settings</li><li>Search</li><li>Settings: Experience, Features, Your setup, and Updates</li></ul>
+          <div class="level-card-items"><span class="level-card-lead">Shows</span><ul><li>Overview</li><li>Memories</li><li>Notes</li><li>Gardener</li><li>Sessions</li><li>Settings</li><li>Search</li><li>Settings: Experience, Features, Your setup, Updates, and Backups</li></ul>
             </div>
           <button class="btn small" type="button" disabled>In use</button>
         </form>
@@ -4748,6 +4779,8 @@ window.SEAM_NO_LIVE_REFRESH = true;
         </section>
       </div>
     </section>
+    
+
     
 
     
@@ -5022,6 +5055,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
   function enhanceSettings() {
     enhanceDirtyForm('[data-briefing-form]', 'brief-state', 'Unsaved changes — save to use them for new sessions.');
     enhanceDirtyForm('[data-features-form]', 'features-state', 'Unsaved changes — save to apply them.');
+    enhanceDirtyForm('[data-backups-form]', 'backups-state', 'Unsaved changes — save to use them from the next backup.');
     enhanceFamilies();
     refreshPreview();
   }
@@ -5032,11 +5066,434 @@ window.SEAM_NO_LIVE_REFRESH = true;
 
 
   </main>
-==== /console/settings tail: the common tail ====
+==== /console/settings tail ====
+</div>
+<div class="nav-progress" aria-hidden="true"></div>
+<button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
+<div id="live-toast" role="status" aria-live="polite" hidden></div>
+<div id="cmdk" class="cmdk-overlay" hidden>
+  <div class="cmdk" role="dialog" aria-modal="true" aria-label="Search or jump to">
+    <div class="cmdk-input-row">
+      <svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="cmdk-input" type="text" role="combobox" aria-expanded="true" aria-controls="cmdk-list"
+             aria-autocomplete="list" autocomplete="off" spellcheck="false"
+             placeholder="Search knowledge and work, or jump to a page&hellip;">
+      <kbd class="cmdk-esc">esc</kbd>
+    </div>
+    <ul id="cmdk-list" class="cmdk-list" role="listbox" aria-label="Results"></ul>
+    <div class="cmdk-foot">
+      <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>
+      <span><kbd>&crarr;</kbd> open</span>
+      <span><kbd>?</kbd> shortcuts</span>
+      <a class="sp" id="cmdk-all" href="/console/search">See all results</a>
+    </div>
+  </div>
+</div>
+
+<div id="keys" class="keys-overlay" hidden>
+  <div class="keys" role="dialog" aria-modal="true" aria-labelledby="keys-title">
+    <header class="keys-head">
+      <h2 id="keys-title"><svg class="ico ico-keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></svg>Keyboard shortcuts</h2>
+      <button type="button" class="keys-close" data-keys-close aria-label="Close"><svg class="ico ico-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </header>
+    <div class="keys-body">
+      <section>
+        <h3>Anywhere</h3>
+        <dl>
+          <div><dt><kbd>&#8984;</kbd><kbd>K</kbd></dt><dd>Search or jump to a page</dd></div>
+          <div><dt><kbd>/</kbd></dt><dd>Filter this page (search when it has no filter)</dd></div>
+          <div><dt><kbd>?</kbd></dt><dd>This sheet</dd></div>
+          <div><dt><kbd>[</kbd></dt><dd>Collapse or expand the sidebar</dd></div>
+          <div><dt><kbd>esc</kbd></dt><dd>Close a panel, sheet, or search</dd></div>
+        </dl>
+      </section>
+      <section>
+        <h3>Lists and readers</h3>
+        <dl>
+          <div><dt><kbd>j</kbd></dt><dd>Next item</dd></div>
+          <div><dt><kbd>k</kbd></dt><dd>Previous item</dd></div>
+        </dl>
+      </section>
+      <section>
+        <h3>Go to <small>press <kbd>g</kbd>, then</small></h3>
+        <dl id="keys-goto"></dl>
+      </section>
+    </div>
+  </div>
+</div>
+<script src="/console/static/interactions.js"></script>
+<script src="/console/static/search.js"></script>
+<script src="/console/static/library.js"></script>
+<script src="/console/static/charts.js"></script>
+<script src="/console/static/navigation.js"></script>
+<script src="/console/static/shell.js"></script>
+<script>
+(function () {
+  
+  
+  
+  
+  var connected = false;
+  function setLive(on) { document.querySelectorAll('.topbar .live:not(#ix-live)').forEach(function (p) { p.classList.toggle('off', !on); }); }
+  if (!window.EventSource) { setLive(false); return; }
+  var pill = document.getElementById('live-pill');
+  var toast = document.getElementById('live-toast');
+  
+  
+  
+  
+  var orbs = document.querySelectorAll('a.brand .dot');
+  function setOrb(on) { orbs.forEach(function (o) { o.classList.toggle('on', on); o.classList.toggle('off', !on); }); }
+
+  var n = 0;            
+  var pending = false;  
+  var busy = false;     
+  var again = false;    
+  var debounce = null;
+  var toastTimer = null;
+  var toastHold = 0;    
+
+  function fieldFocused() { var a = document.activeElement; return !!(a && a.matches && a.matches('input, textarea, select, [contenteditable=""], [contenteditable="true"]')); }
+  function selecting() { var s = window.getSelection && window.getSelection(); return !!(s && s.type === 'Range' && String(s).trim()); }
+  function paneOpen() { return !!document.querySelector('.list-detail-split.detail-open'); }
+  function cmdkOpen() { var c = document.getElementById('cmdk'); return !!(c && !c.hidden); }
+  
+  function safe() { return !document.hidden && !fieldFocused() && !selecting() && !paneOpen() && !cmdkOpen(); }
+
+  function showPill() { if (!pill) return; pill.textContent = n + ' update' + (n > 1 ? 's' : '') + ' · tap to refresh'; pill.hidden = false; }
+  function hidePill() { if (pill) pill.hidden = true; }
+  function flashToast(msg) {
+    if (!toast) return;
+    toast.textContent = msg; toast.hidden = false;
+    toast.classList.remove('error');
+    toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show'); 
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove('show'); setTimeout(function () { toast.hidden = true; }, 300); }, 2600);
+  }
+  
+  
+  
+  function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
+
+  function apply() {
+    if (busy) { again = true; return; }
+    busy = true;
+    
+    
+    var headers = { 'X-Seam-Live': '1' };
+    if (window.SeamConsole) window.SeamConsole.heldViews(headers);
+    fetch(location.href, { credentials: 'same-origin', headers: headers })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        if (!doc.querySelector('.sidebar')) {
+          
+          location.assign('/console/login?next=' + encodeURIComponent(location.pathname + location.search));
+          return;
+        }
+        if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
+        setLive(connected); 
+        n = 0; pending = false; hidePill();
+        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        
+        
+        setTimeout(function () {
+          document.querySelectorAll('.live-in, nav.nav .count.bump').forEach(function (el) { el.classList.remove('live-in', 'bump'); });
+        }, 600);
+      })
+      .catch(function (error) {
+        
+        
+        if (window.SeamConsole && window.SeamConsole.stale(error)) { again = true; return; }
+        pending = true; showPill(); 
+      })
+      .finally(function () { busy = false; if (again) { again = false; schedule(); } });
+  }
+  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
+  function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
+
+  var es = new EventSource('/console/events');
+  es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+  es.onmessage = function (ev) {
+    
+    
+    
+    
+    try {
+      var d = JSON.parse(ev.data), k = d.kind;
+      
+      
+      
+      document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
+      if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+      
+      
+      if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
+      
+      
+      
+      if (k === 'update.available' && d.summary) eventToast(d.summary);
+    } catch (e) {}
+    
+    
+    
+    if (window.SEAM_NO_LIVE_REFRESH) return;
+    n++; schedule();
+  };
+  es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+
+  
+  
+  setInterval(function () { if (pending && !busy && safe()) apply(); }, 1500);
+  if (pill) pill.onclick = function () { apply(); };
+})();
+(function () {
+  
+
+  if (document.querySelector('.list-detail-split')) return;
+  document.addEventListener('click', function (e) {
+    var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
+    if (!row) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    if (e.target.closest('a, button, form')) return; 
+    var sel = window.getSelection && window.getSelection();
+    if (sel && sel.type === 'Range' && sel.toString()) return;
+    location.href = row.getAttribute('data-href');
+  });
+})();
+(function () {
+  
+
+  
+  
+  
+  if (!document.querySelector('.list-detail-split') || !document.getElementById('detail-pane')) return;
+  function split() { return document.querySelector('.list-detail-split'); }
+  function pane() { return document.getElementById('detail-pane'); }
+  function pbody() { var p = pane(); return p ? p.querySelector('.detail-pane-body') : null; }
+  var lastTrigger = null; 
+  var pushed = false;     
+
+  function peekURL(href) { return href + (href.indexOf('?') >= 0 ? '&' : '?') + 'peek=1'; }
+  function targetHref(el) {
+    if (el.getAttribute('href')) return el.getAttribute('href');
+    var h = el.closest('[data-href]');
+    return h ? h.getAttribute('data-href') : null;
+  }
+  function mark(href) {
+    var s = split();
+    if (!s) return;
+    s.querySelectorAll('.row-link.selected').forEach(function (r) {
+      r.classList.remove('selected'); r.removeAttribute('aria-current');
+    });
+    if (!href) return;
+    s.querySelectorAll('.row-link[data-href]').forEach(function (r) {
+      if (r.getAttribute('data-href') === href) { r.classList.add('selected'); r.setAttribute('aria-current', 'true'); }
+    });
+  }
+  function load(href) {
+    return fetch(peekURL(href)).then(function (r) {
+      if (!r.ok) throw new Error('http ' + r.status);
+      return r.text();
+    }).then(function (html) {
+      var b = pbody(), p = pane(), s = split();
+      if (!b || !p || !s) return;
+      b.innerHTML = html;
+      if (window.IX) window.IX.enhance(b);
+      var openLink = p.querySelector('.detail-open');
+      if (openLink) openLink.setAttribute('href', href);
+      p.hidden = false;
+      s.classList.add('detail-open');
+      b.scrollTop = 0;
+    }).catch(function () {
+      if (window.SeamConsole) window.SeamConsole.flash('Could not update the detail view. The current data is unchanged.', 'error');
+    });
+  }
+  function teardown() {
+    var p = pane(), s = split(), b = pbody();
+    if (p) p.hidden = true;
+    if (s) s.classList.remove('detail-open');
+    if (b) b.innerHTML = '';
+    mark(null);
+    pushed = false;
+    if (lastTrigger && typeof lastTrigger.focus === 'function') { try { lastTrigger.focus(); } catch (e) {} }
+    lastTrigger = null;
+  }
+  
+  
+  
+  function open(href, drill) {
+    if (!href) return;
+    var wasHidden = pane().hidden;
+    load(href);
+    mark(href);
+    var hash = '#peek=' + encodeURIComponent(href);
+    try {
+      if (wasHidden) { history.pushState({ peek: 1 }, '', hash); pushed = true; }
+      else if (drill) { history.pushState({ peek: 1 }, '', hash); }
+      else { history.replaceState({ peek: 1 }, '', hash); }
+    } catch (e) {}
+  }
+  
+  
+  function requestClose() {
+    if (pushed) { history.back(); return; }
+    if (location.hash.indexOf('#peek=') === 0) {
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    }
+    teardown();
+  }
+
+  document.addEventListener('click', function (e) {
+    var closeHit = e.target.closest ? e.target.closest('.detail-close') : null;
+    if (closeHit) { e.preventDefault(); requestClose(); return; }
+    var peek = e.target.closest ? e.target.closest('[data-peek]') : null;
+    if (peek) {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; 
+      if (e.target.closest('button, form')) return;                       
+      var plainLink = e.target.closest('a[href]');
+      if (plainLink && !plainLink.hasAttribute('data-peek')) return;      
+      var href = targetHref(peek);
+      if (!href) return;
+      e.preventDefault();
+      lastTrigger = e.target.closest('a[href]') || peek;
+      open(href, !!e.target.closest('#detail-pane'));
+      return;
+    }
+    var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
+    var s = split();
+    if (!row || !s || !s.contains(row)) return;
+    if (e.target.closest('a, button')) return;
+    var sel = window.getSelection && window.getSelection();
+    if (sel && sel.type === 'Range' && sel.toString()) return;
+    location.href = row.getAttribute('data-href');
+  });
+
+  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && p && !p.hidden) requestClose(); });
+  
+  window.addEventListener('popstate', function () {
+    var mm = location.hash.match(/^#peek=(.+)$/);
+    if (mm) { var hp = decodeURIComponent(mm[1]); pushed = true; load(hp); mark(hp); }
+    else { var p = pane(); if (p && !p.hidden) teardown(); }
+  });
+  
+  
+  var m = location.hash.match(/^#peek=(.+)$/);
+  if (m) {
+    try { var h0 = decodeURIComponent(m[1]); pushed = false; load(h0); mark(h0); } catch (e) {}
+  }
+})();
+(function () {
+  var btn = document.getElementById('theme-toggle');
+  var root = document.documentElement;
+  var osDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  
+  
+  function choice() {
+    var t = root.getAttribute('data-theme');
+    return t === 'dark' || t === 'light' ? t : 'system';
+  }
+  function effective() {
+    var c = choice();
+    if (c !== 'system') return c;
+    return osDark && osDark.matches ? 'dark' : 'light';
+  }
+  
+  
+  
+  function label() {
+    if (!btn) return;
+    var next = effective() === 'dark' ? 'Light theme' : 'Dark theme';
+    if (choice() === 'system') next += effective() === 'dark' ? ' instead of the system\u2019s dark' : ' instead of the system\u2019s light';
+    btn.setAttribute('aria-label', next);
+    btn.setAttribute('title', next);
+  }
+  label();
+  function announce() {
+    document.dispatchEvent(new CustomEvent('seam:theme', { detail: { theme: choice(), effective: effective() } }));
+  }
+  
+  
+  
+  function set(theme) {
+    if (theme === 'system') {
+      root.removeAttribute('data-theme');
+      try { localStorage.removeItem('seamless-theme'); } catch (e) {}
+    } else if (theme === 'dark' || theme === 'light') {
+      root.setAttribute('data-theme', theme);
+      try { localStorage.setItem('seamless-theme', theme); } catch (e) {}
+    } else {
+      return;
+    }
+    label();
+    announce();
+  }
+  window.SeamTheme = { set: set, choice: choice, effective: effective };
+  if (btn) btn.onclick = function () { set(effective() === 'dark' ? 'light' : 'dark'); };
+  
+  
+  if (osDark) {
+    var onOS = function () { if (choice() === 'system') { label(); announce(); } };
+    if (osDark.addEventListener) osDark.addEventListener('change', onOS);
+    else if (osDark.addListener) osDark.addListener(onOS);
+  }
+})();
+(function () {
+  
+
+  function flash(btn) {
+    btn.classList.add('copied');
+    btn.setAttribute('aria-label', 'Copied');
+    setTimeout(function () {
+      btn.classList.remove('copied');
+      btn.setAttribute('aria-label', 'Copy');
+    }, 1100);
+  }
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.copy-btn[data-copy]') : null;
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var text = btn.getAttribute('data-copy');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash(btn); }, function () { fallbackCopy(text); flash(btn); });
+    } else {
+      fallbackCopy(text);
+      flash(btn);
+    }
+  });
+})();
+</script>
+
+<script src="/console/static/passkey.js"></script>
+<script src="/console/static/backups.js"></script>
+
+</body>
+</html>
+
 ==== GET /console/search?q=example+deploy -> 200 ====
 <title>Search &middot; Seamless</title>
 ==== /console/search?q=example+deploy main ====
   <main class="main" id="main" tabindex="-1">
+    
+    
     
     
     
@@ -5386,6 +5843,8 @@ Wave one is the staging ... </div>
     
     
     
+    
+    
     <div class="section notice level-banner" role="note" data-level-banner="trials">
       <p class="level-banner-copy"><svg class="ico ico-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg><span><strong>Trials</strong> is a Standard screen. You are in Basic: it works, it just is not in your sidebar.</span></p>
       <div class="level-banner-acts">
@@ -5521,6 +5980,8 @@ Wave one is the staging ... </div>
     
     
     
+    
+    
     <div class="section notice level-banner" role="note" data-level-banner="labs">
       <p class="level-banner-copy"><svg class="ico ico-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg><span><strong>Labs</strong> is a Standard screen. You are in Basic: it works, it just is not in your sidebar.</span></p>
       <div class="level-banner-acts">
@@ -5619,6 +6080,8 @@ Wave one is the staging ... </div>
 <title>Retrieval &middot; Seamless</title>
 ==== /console/retrieval main ====
   <main class="main" id="main" tabindex="-1">
+    
+    
     
     
     
@@ -5979,6 +6442,8 @@ Wave one is the staging ... </div>
 <title>Context &middot; Seamless</title>
 ==== /console/context main ====
   <main class="main" id="main" tabindex="-1">
+    
+    
     
     
     

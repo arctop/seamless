@@ -73,6 +73,12 @@ type ApprovalsView interface {
 	// on, or takes off a lock the console set.
 	BeginLockChange(ctx context.Context, project string, action approval.LockAction) (approval.Begun, error)
 	FinishLockChange(ctx context.Context, id, project string, action approval.LockAction, response []byte) (store.ApproverCredential, error)
+
+	// Console restores (settings_backups_routes.go): a passkey ceremony bound
+	// to a backup's SHA-256, which the console reads from the file, and the
+	// restore mode. It approves and stages nothing itself.
+	BeginRestore(ctx context.Context, digest string, mode approval.RestoreMode) (approval.Begun, error)
+	FinishRestore(ctx context.Context, id, digest string, mode approval.RestoreMode, response []byte) (store.ApproverCredential, error)
 }
 
 // approverRow is one enrolled credential. Its JSON is what `seam touchid

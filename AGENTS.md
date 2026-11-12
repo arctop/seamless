@@ -1158,7 +1158,10 @@ memory, approve a plan, force-release a task's claim lock,
 ask/split/apply/dismiss/retarget a gardener proposal, save or reset the
 briefing settings, switch update checks and automatic updates (or hand both
 back to the config), check for updates now, update now, resume automatic
-updates, and -- with write screening on -- release or discard a held write,
+updates, save or reset the backup schedule and folder, back up now, delete a
+backup, restore one (a passkey ceremony bound to the backup's digest and the
+mode while peer_auth locks a project), cancel a staged restore or dismiss its
+result, and -- with write screening on -- release or discard a held write,
 clear a session's mark, switch lockdown, re-run the review, mark a flagged item
 safe and accept a file changed outside Seamless. Keep pages self-contained and dependency-free so an agent can edit
 them without a toolchain.

@@ -79,13 +79,43 @@ func TestNavigationJS_MorphsTheNavWhenItsLinkSetChanges(t *testing.T) {
 
 func TestQueryForms_UseInPlaceNavigation(t *testing.T) {
 	getForm := regexp.MustCompile(`<form[^>]*method="get"[^>]*>`)
-	for _, name := range pageNames {
-		source, err := templateFS.ReadFile("templates/" + name + ".html")
+	// Every template file, the partials a page parses with it included
+	// (settings_backups.html, context_shared.html, the peek fragments).
+	entries, err := templateFS.ReadDir("templates")
+	require.NoError(t, err)
+	for _, e := range entries {
+		source, err := templateFS.ReadFile("templates/" + e.Name())
 		require.NoError(t, err)
 		for _, form := range getForm.FindAllString(string(source), -1) {
-			require.Contains(t, form, "data-seam-query", "%s has a GET data form outside the shared no-reload path: %s", name, form)
+			require.Contains(t, form, "data-seam-query", "%s has a GET data form outside the shared no-reload path: %s", e.Name(), form)
 		}
 	}
+}
+
+// Settings > Backups stays on the shared no-reload path: its links into the
+// confirm card and back are data-seam-query, its forms are plain POSTs the
+// shared path takes, the restart wait and the live refresh re-draw the view in
+// place, and its script re-applies what it holds after every morph.
+func TestBackupsSection_StaysOnTheSharedNoReloadPath(t *testing.T) {
+	source, err := templateFS.ReadFile("templates/settings_backups.html")
+	require.NoError(t, err)
+	page := string(source)
+	require.Contains(t, page, `<a class="btn small" href="{{.Restore}}" data-seam-query>`)
+	require.Contains(t, page, `href="/console/settings?s=backups#backups" data-seam-query>Cancel</a>`)
+	require.Contains(t, page, `<a class="btn small" href="{{.}}" data-seam-query>{{icon "undo-2"}} Undo this restore</a>`)
+	for _, action := range []string{"/console/settings/backups", "/console/settings/backups/now", "/console/settings/backups/delete",
+		"/console/settings/backups/restore", "/console/settings/backups/restore/cancel", "/console/settings/backups/restore/dismiss"} {
+		require.Contains(t, page, `method="post" action="`+action+`"`, action)
+	}
+
+	js := string(backupsJS)
+	require.NotContains(t, js, "location.reload(", "the section never reloads the document")
+	require.NotContains(t, js, "location.href =", "nor navigates to refresh")
+	require.Contains(t, js, "window.SeamConsole.patchPage(doc, 'backups')", "a re-draw morphs the view in place")
+	require.Contains(t, js, "document.addEventListener('seam:content-updated', enhance)", "held state is re-applied after a morph")
+	require.Contains(t, js, "document.addEventListener('seam:event'", "backup.* events refresh the section")
+	require.Contains(t, js, "f.addEventListener('submit'", "the ceremony runs before the shared POST path, on the form itself")
+	require.NotContains(t, string(passkeyJS), "location.reload(")
 }
 
 func TestQueryControls_AreWiredAcrossConsole(t *testing.T) {

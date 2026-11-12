@@ -126,6 +126,46 @@ func TestFrames_Shapes(t *testing.T) {
 	require.Equal(t, "health", hb.Class)
 }
 
+// The backup events: their counts and fixed words reach the frame, a
+// restore's approving passkey by id, and never a file's name, a path or a
+// run's error text.
+func TestFrames_Backups(t *testing.T) {
+	m := testMapper()
+	ts := time.Date(2026, 11, 11, 3, 0, 0, 0, time.UTC)
+	created := m.frame(core.Event{ID: "01KX0000000000000000000031", TS: ts, Kind: core.EventBackupCreated,
+		ItemID: "seamless-SECRETHOST-20261111T030000Z-auto.tar.gz", Payload: map[string]any{
+			"kind": "scheduled", "where": "folder", "bytes": 4300000, "memories": 412, "notes": 96, "projects": 7}}, session{})
+	require.NoError(t, created.validate())
+	require.Equal(t, "file", created.Class)
+	require.Equal(t, "system", created.Actor.Kind)
+	require.Equal(t, map[string]any{"event_id": "01KX0000000000000000000031", "kind": "scheduled", "where": "folder",
+		"bytes": 4300000, "memories": 412, "notes": 96, "projects": 7}, created.Fields, "the file name is no field")
+
+	failed := m.frame(core.Event{ID: "01KX0000000000000000000032", TS: ts, Kind: core.EventBackupFailed, Payload: map[string]any{
+		"kind": "scheduled", "where": "folder", "reason": "folder-disconnected", "failures": 3,
+		"error": "/Volumes/SECRET is not connected"}}, session{})
+	require.NoError(t, failed.validate())
+	require.Equal(t, "failure", failed.Outcome)
+	require.Equal(t, "folder-disconnected", failed.Fields["reason"])
+	require.Equal(t, 3, failed.Fields["failures"])
+
+	restored := m.frame(core.Event{ID: "01KX0000000000000000000033", TS: ts, Kind: core.EventBackupRestored,
+		ItemID: "seamless-host-20261110T030000Z-auto.tar.gz", Payload: map[string]any{
+			"mode": "replace", "kind": "scheduled", "memories": 398, "notes": 94, "by": "console", "proof": "passkey",
+			"credential": "01KX0000000000000000000040"}}, session{})
+	require.NoError(t, restored.validate())
+	require.Equal(t, "high", restored.Severity)
+	require.Equal(t, "user", restored.Actor.Kind, "the owner asked, at the console")
+	require.Equal(t, "passkey", restored.Fields["proof"])
+	require.Equal(t, "01KX0000000000000000000040", restored.Fields["credential_id"])
+	require.Equal(t, "replace", restored.Fields["mode"])
+
+	raw, err := json.Marshal([]Frame{created, failed, restored})
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "SECRET")
+	require.NotContains(t, string(raw), ".tar.gz")
+}
+
 func TestContentShaped(t *testing.T) {
 	for _, bad := range []string{"body", "prompt", "args", "result", "message_text", "raw", "content_preview"} {
 		require.True(t, contentShaped(bad), bad)

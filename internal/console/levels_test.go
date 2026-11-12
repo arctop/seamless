@@ -426,14 +426,14 @@ func TestLevels_PaletteJumpsFollowTheLevel(t *testing.T) {
 	require.Equal(t, []string{
 		"/console/search",
 		"/console/settings?s=experience", "/console/settings?s=features", "/console/settings?s=setup",
-		"/console/settings?s=updates",
+		"/console/settings?s=updates", "/console/settings?s=backups",
 	}, jumps(), "basic: no Context, no Standard or Advanced sections")
 
 	setLevel(t, db, "advanced")
 	require.Equal(t, []string{
 		"/console/search", "/console/context",
 		"/console/settings?s=experience", "/console/settings?s=features", "/console/settings?s=setup",
-		"/console/settings?s=updates",
+		"/console/settings?s=updates", "/console/settings?s=backups",
 		"/console/settings?s=briefing", "/console/settings?s=workspaces", "/console/settings?s=engine",
 	}, jumps())
 
@@ -604,7 +604,7 @@ func TestExperienceSection_CardsAreGenerated(t *testing.T) {
 	require.Contains(t, basic, "In use")
 	require.Contains(t, standard, "Use Standard")
 	for _, item := range []string{"Overview", "Memories", "Notes", "Gardener", "Sessions", "Settings", "Search",
-		"Settings: Experience, Features, Your setup, and Updates"} {
+		"Settings: Experience, Features, Your setup, Updates, and Backups"} {
 		require.Contains(t, basic, "<li>"+item+"</li>")
 	}
 	for _, item := range []string{"Now", "Projects", "Plans", "Tasks", "Labs", "Trials", "Settings: Briefing and Workspaces"} {

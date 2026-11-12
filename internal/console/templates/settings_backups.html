@@ -1,0 +1,221 @@
+{{/* Settings > Backups (settings_backups.go builds .Backups). Parsed with the
+     settings page (render.go) and drawn by its Backups section. The forms ride
+     the shared no-reload POST path; Restore… opens the confirm card in place
+     through a data-seam-query link, so the whole section works without
+     script. static/backups.js adds the folder field's live check and chips,
+     the passkey ceremony under the gate, and follows a restore through the
+     restart (data-restore-state). The free text here is the backup service's
+     own -- a run's or a restore's sentence, a folder's problem, a path -- and
+     appears in this section only. */}}
+{{define "settings-backups"}}
+<section class="settings-zone settings-section bk-section" id="backups" data-restore-state="{{.Backups.State}}" data-restore-restart="{{.Backups.Restart}}"{{if .Backups.BackingUp}} data-backup-running{{end}}>
+  <header class="settings-section-head">
+    <div>
+      <div class="settings-zone-kicker">Keeping your knowledge safe</div>
+      <h2>Backups</h2>
+      <p>Seamless copies everything &mdash; every memory and note, with the database that holds your sessions, tasks and projects &mdash; into one folder, on a schedule. Restore any copy here: replace everything with it, or bring back only what is missing. A restore saves today&rsquo;s data first, so it can be undone.</p>
+    </div>
+    {{if .Backups.Running}}<span class="settings-access editable">{{icon "settings"}} Editable here</span>{{else}}<span class="settings-access">{{icon "lock"}} Read only</span>{{end}}
+  </header>
+  {{with .Backups}}{{if .Running}}
+  {{if .Stopped}}<p class="updates-alert" role="alert">{{icon "triangle-alert"}}<span><strong>The backup service stopped after an internal error.</strong> Seamless keeps serving; restart it to revive backups.</span></p>{{end}}
+
+  {{with .Result}}
+  <div class="bk-result is-{{.Tone}}" id="backup-result" role="status">
+    <p class="bk-result-copy">{{if eq .Tone "ok"}}{{icon "check"}}{{else}}{{icon "triangle-alert"}}{{end}}<span>
+      {{if eq .Outcome "restored"}}{{if eq .Mode "merge"}}{{if .Counts}}<strong>Brought back what was missing</strong> from the backup of {{clockDate .BackupAt}}: {{.Counts}}.{{else}}<strong>Nothing was missing:</strong> the backup of {{clockDate .BackupAt}} holds nothing this install lacks.{{end}}{{with .Previous}} Your data from before is saved as a backup in Seamless&rsquo;s data folder, <span class="mono">{{.}}</span>.{{end}}
+      {{else}}<strong>Restored the backup from {{clockDate .BackupAt}}</strong> ({{.Counts}}).{{if .Previous}} Your previous data is saved as a backup in Seamless&rsquo;s data folder, <span class="mono">{{.Previous}}</span>.{{else if .Saving}} Your previous data is being saved as a backup&hellip;{{end}}{{end}}
+      {{else if eq .Outcome "partial"}}<strong>The merge stopped partway.</strong> {{.Message}}
+      {{else if eq .Outcome "expired"}}<strong>The restore was not applied.</strong> The restore you started {{clockDate .RequestedAt}} was not applied because Seamless did not restart within an hour. Nothing changed.
+      {{else}}<strong>The restore did not finish.</strong> {{.Message}}{{end}}
+    </span></p>
+    {{with .PreviousError}}<p class="updates-error">{{icon "triangle-alert"}}<span>Your previous data could not be saved as a backup yet: <span class="mono">{{.}}</span>{{with $.Backups.Result.PreviousDir}} It is kept in <span class="mono">{{.}}</span>{{copyBtn .}}{{end}}</span></p>{{end}}
+    {{range .Kept}}<p class="bk-kept">{{icon "lock"}}<span>{{.}}</span></p>{{end}}
+    <div class="bk-actions">
+      {{with .Undo}}<a class="btn small" href="{{.}}" data-seam-query>{{icon "undo-2"}} Undo this restore</a>{{end}}
+      {{if not .Saving}}<form method="post" action="/console/settings/backups/restore/dismiss"><button class="btn small" type="submit">Dismiss</button></form>{{end}}
+    </div>
+  </div>
+  {{end}}
+
+  {{with .Failed}}
+  <div class="bk-result is-danger" id="backup-failed" role="alert">
+    <p class="bk-result-copy">{{icon "triangle-alert"}}<span><strong>The restore could not be prepared.</strong> {{.Message}}</span></p>
+    <div class="bk-actions"><form method="post" action="/console/settings/backups/restore/dismiss"><button class="btn small" type="submit">Dismiss</button></form></div>
+  </div>
+  {{end}}
+
+  {{with .Progress}}
+  <article class="card bk-card bk-progress" id="backup-progress" aria-labelledby="bk-progress-title">
+    <h2 id="bk-progress-title">{{icon "history"}}Restoring<span class="h2-meta">{{if eq .Mode "merge"}}bringing back what is missing{{else}}replacing all data{{end}}</span></h2>
+    {{if .BackupName}}<p class="bk-lead">The backup from {{clockDate .BackupAt}}</p>{{end}}
+    <ol class="bk-steps">
+      {{range .Steps}}<li class="bk-step is-{{.State}}"{{if eq .State "doing"}} aria-current="step"{{end}}><span class="bk-step-mark" aria-hidden="true">{{if eq .State "done"}}{{icon "check"}}{{end}}</span><span>{{.Label}}</span></li>{{end}}
+    </ol>
+    {{if .Manual}}<p class="bk-gate">{{icon "refresh-cw"}}<span>Restart Seamless within an hour to finish{{if not .ExpiresAt.IsZero}} (by {{clock .ExpiresAt}}){{end}}: <span class="mono">{{.Command}}</span>{{copyBtn .Command}}</span></p>{{end}}
+    <p class="bk-wait" role="status" aria-live="polite" data-backups-wait></p>
+    {{if .Cancel}}<div class="bk-actions"><form method="post" action="/console/settings/backups/restore/cancel"><button class="btn small" type="submit">Cancel restore</button></form></div>{{end}}
+  </article>
+  {{end}}
+
+  {{with .Confirm}}{{if .Missing}}{{template "backups-confirm" .}}{{end}}{{end}}
+
+  {{with .Status}}
+  <article class="card bk-card bk-status" id="backup-status" aria-labelledby="bk-status-title">
+    <h2 id="bk-status-title">{{icon "archive"}}Automatic backups<span class="h2-meta"><span class="badge{{with .Tone}} {{.}}{{end}}">{{.Badge}}</span></span></h2>
+    <div class="bk-lines" role="status" aria-live="polite">
+      <p class="bk-lead">{{.Lead}}</p>
+      {{with .Running}}<p class="bk-line">{{icon "loader"}}<span title="{{ts $.Backups.Status.RunningAt}}">{{.}}</span></p>{{end}}
+      {{if .Last}}<p class="bk-line">{{icon "check"}}<span title="{{ts .LastAt}}">{{.Last}}</span></p>{{else}}<p class="bk-line">{{icon "info"}}<span>{{.None}}</span></p>{{end}}
+      {{with .Next}}<p class="bk-line">{{icon "clock"}}<span title="{{ts $.Backups.Status.NextAt}}">{{.}}</span></p>{{end}}
+      {{with .ManualFailed}}<p class="bk-line is-warn">{{icon "triangle-alert"}}<span>{{.}}</span></p>{{end}}
+    </div>
+    {{with .Failing}}
+    <div class="bk-failing" role="alert">
+      <p>{{icon "triangle-alert"}} <span title="{{ts .Since}}">{{.Line}}</span>{{with .Error}}: <span class="mono">{{.}}</span>{{end}}</p>
+      <form method="post" action="/console/settings/backups/now"><input type="hidden" name="run" value="retry"><button class="btn small" type="submit"{{with .RetryBlocked}} disabled title="{{.}}"{{end}}>{{icon "refresh-cw"}} Try again</button></form>
+    </div>
+    {{end}}
+    <p class="bk-folder"><span class="bk-folder-label">Backups go to</span><span class="mono">{{.Folder}}</span>{{copyBtn .Folder}}{{if .FolderLocal}}<small class="faint">Seamless&rsquo;s data folder</small>{{end}}</p>
+    {{with .FolderProblem}}<p class="updates-error bk-folder-problem">{{icon "triangle-alert"}}<span>{{.}}</span></p>{{end}}
+    <div class="bk-actions">
+      <form method="post" action="/console/settings/backups/now"><button class="btn primary" type="submit"{{with .BackUpNowBlocked}} disabled title="{{.}}"{{end}}>{{icon "archive"}} Back up now</button></form>
+    </div>
+    {{range .Notes}}<p class="updates-note">{{icon "info"}}<span>{{.}}</span></p>{{end}}
+  </article>
+  {{end}}
+
+  {{with .Form}}
+  <article class="card bk-card bk-schedule" id="backup-schedule" aria-labelledby="bk-schedule-title">
+    <h2 id="bk-schedule-title">{{icon "clock"}}Schedule and folder</h2>
+    <div class="settings-precedence{{if .Overridden}} is-override{{end}}">
+      <span class="state-dot"></span>
+      <span><strong>{{.SourceLabel}}</strong> &mdash; {{.SourceNote}}</span>
+      {{if .Overridden}}<button class="btn small" type="submit" form="backups-reset">Reset to the config file</button>{{end}}
+    </div>
+    <form method="post" action="/console/settings/backups" class="bk-form" data-backups-form>
+      <label class="brief-toggle bk-toggle">
+        <input type="checkbox" name="auto" value="on"{{if .Auto}} checked{{end}}>
+        <span class="brief-switch" aria-hidden="true"></span>
+        <span><strong>Back up automatically</strong><small>A run is skipped when nothing has changed since the last backup, or when the disk is short of room.</small></span>
+      </label>
+      <div class="brief-fields two">
+        <label class="brief-field">How often
+          <span class="brief-number"><select name="every">{{range .EveryOpts}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></span>
+        </label>
+        <label class="brief-field">Automatic backups to keep
+          <span class="brief-number"><input type="number" name="keep" min="{{.MinKeep}}" max="{{.MaxKeep}}" value="{{.Keep}}" required><i>backups</i></span>
+          <small>Older automatic backups are deleted after the next one. Backups you make yourself and safety backups are never deleted automatically.</small>
+        </label>
+      </div>
+      <div class="bk-dir">
+        <label class="brief-field" for="bk-dir">Folder
+          <span class="brief-number bk-dir-box"><input id="bk-dir" type="text" name="dir" value="{{.Dir}}" placeholder="{{.LocalDir}}" spellcheck="false" autocomplete="off" autocapitalize="off" data-backups-dir aria-describedby="bk-dir-check"></span>
+        </label>
+        {{if .Chips}}<div class="bk-chips" role="group" aria-label="Suggested places">{{range .Chips}}<button type="button" class="bk-chip{{if .Current}} is-current{{end}}" data-backups-chip="{{.Dir}}" title="{{.Kind}}: {{.Dir}}">{{icon "folder-open"}}{{.Label}}</button>{{end}}</div>{{end}}
+        <p class="bk-dir-check" id="bk-dir-check" role="status" aria-live="polite" data-backups-check data-usable="{{.Check.Usable}}">{{.Check.Text}}</p>
+      </div>
+      <footer class="brief-actions settings-savebar">
+        <div class="brief-state" id="backups-state" role="status" aria-live="polite">
+          <span class="state-dot"></span>
+          <span>Saving applies from the next backup.</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn" type="button" data-form-discard>Discard</button>
+          <button class="btn primary" type="submit">{{icon "check"}} Save</button>
+        </div>
+      </footer>
+    </form>
+    {{if .Overridden}}<form id="backups-reset" method="post" action="/console/settings/backups/reset"></form>{{end}}
+  </article>
+  {{end}}
+
+  {{with .List}}
+  <article class="card bk-card bk-list" id="backup-list" aria-labelledby="bk-list-title">
+    <h2 id="bk-list-title">{{icon "history"}}Available backups{{if .Rows}}<span class="h2-meta">newest first</span>{{end}}</h2>
+    {{with .Error}}<p class="updates-error">{{icon "triangle-alert"}}<span>{{.}}</span></p>{{end}}
+    {{with .Empty}}<p class="bk-empty">{{.}}</p>{{end}}
+    {{with .Local}}<p class="bk-foot">The backup folder&rsquo;s backups, and the safety and pre-update backups in Seamless&rsquo;s data folder, <span class="mono">{{.}}</span>.</p>{{end}}
+    {{if .Rows}}<ul class="bk-rows">
+      {{range .Rows}}
+      <li class="bk-row{{if .Open}} is-open{{end}}" id="{{.ID}}">
+        <div class="bk-row-main">
+          <p class="bk-row-when"><span title="{{ts .When}}">{{agoPhrase .When}}</span><small>{{clockDate .When}}</small></p>
+          <p class="bk-row-meta"><span class="badge{{with .KindTone}} {{.}}{{end}}">{{.Kind}}</span>{{if .Undo}}<span>the last restore&rsquo;s undo</span>{{end}}{{if .Local}}<span>in Seamless&rsquo;s data folder</span>{{end}}{{with .From}}<span>{{.}}</span>{{end}}<span>{{.Size}}</span></p>
+          {{with .Summary}}<p class="bk-summary">{{.}}</p>{{end}}
+          {{with .Note}}<p class="bk-note">{{icon "info"}}<span>{{.}}</span></p>{{end}}
+        </div>
+        <div class="bk-row-acts">
+          {{if .Restore}}{{if .RestoreBlocked}}<button class="btn small" type="button" disabled title="{{.RestoreBlocked}}">{{icon "history"}} Restore&hellip;</button>{{else}}<a class="btn small" href="{{.Restore}}" data-seam-query>{{icon "history"}} Restore&hellip;</a>{{end}}{{end}}
+          <form method="post" action="/console/settings/backups/delete" onsubmit="return confirm({{if .Undo}}'Delete the safety backup from before your last restore? Deleting it removes that restore\'s undo.'{{else}}'Delete this backup? It is removed from its folder and cannot be brought back.'{{end}});">
+            <input type="hidden" name="ref" value="{{.Ref}}">
+            <button class="btn small" type="submit">Delete</button>
+          </form>
+        </div>
+        <details class="bk-details">
+          <summary>What it holds</summary>
+          {{with .Made}}<p class="bk-made">{{.}}</p>{{end}}
+          <p class="bk-path"><span class="mono">{{.Path}}</span>{{copyBtn .Path}}</p>
+          {{if .Projects}}<div class="bk-table">
+            <table class="bk-projects">
+              <thead><tr><th scope="col">Project</th><th scope="col">Memories</th><th scope="col">Notes</th><th scope="col">Tasks</th><th scope="col">Sessions</th><th scope="col" title="How many more (+) or fewer (&minus;) memories and notes the project holds now than in this backup">vs now</th></tr></thead>
+              <tbody>
+                {{range .Projects}}<tr{{if .OnlyNow}} class="is-now"{{end}}><th scope="row">{{.Name}}</th>{{if .OnlyNow}}<td>&ndash;</td><td>&ndash;</td><td>&ndash;</td><td>&ndash;</td>{{else}}<td>{{.Memories}}</td><td>{{.Notes}}</td><td>{{.Tasks}}</td><td>{{.Sessions}}</td>{{end}}<td class="bk-vs">{{.VsNow}}</td></tr>{{end}}
+              </tbody>
+            </table>
+          </div>{{with .Omitted}}<p class="bk-foot">And {{.}} more projects, not counted one by one.</p>{{end}}{{else}}<p class="bk-foot">This backup does not say what each project holds.</p>{{end}}
+        </details>
+        {{if .Open}}{{with $.Backups.Confirm}}{{template "backups-confirm" .}}{{end}}{{end}}
+      </li>
+      {{end}}
+    </ul>{{end}}
+    {{if .Locked}}<p class="bk-foot">{{icon "lock"}} A locked project shows its name and what the backup holds of it, never what it holds now.</p>{{end}}
+  </article>
+  {{end}}
+  {{else}}
+  <p class="updates-note">{{icon "info"}}<span>Backups are not running in this process, so there is nothing to show or change here.</span></p>
+  {{end}}{{end}}
+</section>
+{{end}}
+
+{{/* The confirm card Restore… opens (?restore=<ref>): inside the row it is
+     about, or above the list when the backup is no longer in it. */}}
+{{define "backups-confirm"}}
+  <article class="card bk-card bk-confirm" id="backup-restore" aria-labelledby="bk-confirm-title" tabindex="-1">
+  <h2 id="bk-confirm-title">{{icon "history"}}{{if .Undo}}Undo the last restore{{else}}Restore a backup{{end}}<span class="h2-meta"><a href="/console/settings?s=backups#backups" data-seam-query>Cancel</a></span></h2>
+  {{if .Missing}}
+  <p class="bk-lead">That backup is not in the list any more: it may have been deleted or moved.</p>
+  {{else if .NotRestorable}}
+  <p class="bk-lead">{{.NotRestorable}}</p>
+  {{else}}
+  <p class="bk-lead">Restore the backup from {{clockDate .When}} <span class="badge">{{.Kind}}</span></p>
+  {{with .Compare}}<p class="bk-compare">{{.}}</p>{{end}}
+  <form method="post" action="/console/settings/backups/restore" class="bk-restore-form" data-backups-restore{{if .Gated}} data-passkey{{end}}>
+    <input type="hidden" name="ref" value="{{.Ref}}">
+    <fieldset class="bk-modes">
+      <legend>What to restore</legend>
+      <label class="bk-mode{{if not .Replace.OK}} is-off{{end}}">
+        <input type="radio" name="mode" value="replace"{{if eq .Mode "replace"}} checked{{end}}{{if not .Replace.OK}} disabled{{end}}>
+        <span><strong>Replace all data with this backup</strong><small>{{if .Replace.OK}}Everything goes back to how it was on {{clockDate .When}}. Your current data is saved as a backup first, so you can undo this.{{else}}{{.Replace.Why}}{{end}}</small></span>
+      </label>
+      <label class="bk-mode{{if not .Merge.OK}} is-off{{end}}">
+        <input type="radio" name="mode" value="merge"{{if eq .Mode "merge"}} checked{{end}}{{if not .Merge.OK}} disabled{{end}}>
+        <span><strong>Only bring back what&rsquo;s missing</strong><small>{{if .Merge.OK}}Adds what the backup has and this install doesn&rsquo;t, such as deleted memories, notes and sessions. Nothing you have now changes.{{else}}{{.Merge.Why}}{{end}}</small></span>
+      </label>
+    </fieldset>
+    <p class="bk-foot">Locks, passkeys, repo routes and console settings stay as they are now, and no project&rsquo;s privacy is loosened. {{if eq .Restart "manual"}}Seamless then needs a restart to finish: run <span class="mono">seamlessd restart</span> within an hour.{{else}}Seamless restarts to finish; agents lose it for a few seconds.{{end}}</p>
+    {{if and .Gated (not .Passkey)}}
+    <p class="bk-gate">{{icon "key-round"}}<span>{{.NoPasskey}}</span></p>
+    {{range .Commands}}<p class="bk-command"><span class="bk-command-label">{{.Label}}</span><span class="mono">{{.Command}}</span>{{copyBtn .Command}}</p>{{end}}
+    {{else}}
+    <div class="bk-actions">
+      <button class="btn primary" type="submit" data-backups-go{{with .Blocked}} disabled title="{{.}}"{{end}}>{{if .Gated}}{{icon "key-round"}} Restore with passkey{{else}}{{icon "history"}} Restore{{end}}</button>
+      <a class="btn" href="/console/settings?s=backups#backups" data-seam-query>Cancel</a>
+    </div>
+    {{end}}
+    {{with .Blocked}}<p class="bk-foot">{{icon "info"}} {{.}}.</p>{{end}}
+    <p class="bk-wait" role="status" aria-live="polite" data-backups-status></p>
+  </form>
+  {{end}}
+</article>
+{{end}}

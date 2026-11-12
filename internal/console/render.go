@@ -62,6 +62,15 @@ var browserKeyJS []byte
 //go:embed static/sw.js
 var swJS []byte
 
+// passkeyJS holds the WebAuthn helpers the passkey ceremonies share, and
+// backupsJS Settings > Backups' script.
+//
+//go:embed static/passkey.js
+var passkeyJS []byte
+
+//go:embed static/backups.js
+var backupsJS []byte
+
 // pageNames are the page templates; each is parsed together with the shared
 // layout so it can supply the "content" (and optional "scripts") blocks. Pages
 // are added here as their handlers land, phase by phase.
@@ -122,6 +131,11 @@ type pageData struct {
 	// trouble -- paused, or the last update the daemon started did not apply
 	// (updates_auto.go); nil otherwise, and whenever no update check runs here.
 	UpdateAlert *updateAlert
+	// BackupAlert is set on every page while automatic backups are in
+	// trouble -- the last two failed, or none has finished for three
+	// intervals (backups.go); nil otherwise, and whenever no backup service
+	// runs here.
+	BackupAlert *backupAlert
 	// ReturnPath is this page's own URL (flash params stripped), for forms that
 	// change presentation state and come back here -- the banner's switch.
 	ReturnPath string
@@ -230,6 +244,7 @@ func (s *Service) withChrome(ctx context.Context, pd pageData) pageData {
 		pd.LevelBanner = levelBannerFor(id, pd.Level)
 	}
 	pd.UpdateBanner, pd.UpdateAlert = s.updateChrome(time.Now())
+	pd.BackupAlert = s.backupChrome(time.Now())
 	pd.Host = s.host
 	pd.HostName = s.hostName
 	pd.BrowserKey = reachOf(ctx) != nil
@@ -370,6 +385,10 @@ func evtTone(kind string) string {
 		return "ok"
 	case kind == "update.failed":
 		return "warn"
+	case kind == "backup.failed", kind == "backup.restore_failed":
+		return "warn"
+	case kind == "backup.created", kind == "backup.restored":
+		return "ok"
 	case strings.HasPrefix(kind, "memory.read"), strings.HasPrefix(kind, "memory.written"), strings.HasPrefix(kind, "note."):
 		return "ok"
 	default:
@@ -424,6 +443,11 @@ var eventLabels = map[string]string{
 	"memory.discarded":           "Held write discarded",
 	"session.tainted":            "Outside text read",
 	"session.untainted":          "Outside-text mark cleared",
+	"backup.created":             "Backup made",
+	"backup.failed":              "Backup failed",
+	"backup.deleted":             "Backup deleted",
+	"backup.restored":            "Backup restored",
+	"backup.restore_failed":      "Restore failed",
 }
 
 // evtLabel names an event kind for a reader. An unlisted kind is spelled out
@@ -472,8 +496,13 @@ func evtIcon(kind string) string {
 		return "map"
 	case kind == "gamification.record_broken":
 		return "trophy"
-	case kind == "agent.mishap", kind == "hook.error", kind == "update.failed":
+	case kind == "agent.mishap", kind == "hook.error", kind == "update.failed",
+		kind == "backup.failed", kind == "backup.restore_failed":
 		return "triangle-alert"
+	case kind == "backup.restored":
+		return "history"
+	case strings.HasPrefix(kind, "backup."):
+		return "archive"
 	case kind == "memory.written", kind == "note.written":
 		return "pencil"
 	case kind == "memory.read", kind == "note.read":
@@ -526,6 +555,9 @@ func parseTemplates() (pages, fragments map[string]*template.Template, err error
 		files := []string{"templates/layout.html", "templates/" + name + ".html"}
 		if name == "context" || name == "projectdetail" {
 			files = append(files, "templates/context_shared.html")
+		}
+		if name == "settings" {
+			files = append(files, "templates/settings_backups.html")
 		}
 		if entityPeekPages[name] {
 			files = append(files, "templates/peek_"+name+".html")

@@ -13764,6 +13764,7 @@ What each level shows, generated from the console's own registries:
 | **Features** - Optional features, for the console and agents alike | shown | shown | shown |
 | **Your setup** - Version, files, and what is connected | shown | shown | shown |
 | **Updates** - New releases, and whether this install checks for and installs them | shown | shown | shown |
+| **Backups** - Automatic backups, the folder they go to, and restoring one | shown | shown | shown |
 | **Briefing** - What every new agent session starts with | - | shown | shown |
 | **Workspaces** - Projects, repo routes, and families | - | shown | shown |
 | **Knowledge engine** - Semantic index, ranking, storage, and policy | - | - | shown |

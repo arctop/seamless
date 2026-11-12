@@ -6,7 +6,8 @@
 // (apply/dismiss/retarget), saving or resetting the briefing settings, and
 // steering updates: switching the background update check and automatic
 // updates, asking it to check now, installing the newest release now, and
-// resuming automatic updates after they paused themselves.
+// resuming automatic updates after they paused themselves, and the backups:
+// their schedule and folder, Back up now, deleting one, and restoring one.
 // Access is guarded by the same static bearer key as the MCP surface: a browser
 // trades the key for a cookie at /console/login, and the seam CLI presents the
 // key as a bearer token.
@@ -113,6 +114,13 @@ type Config struct {
 	// (tests, tools): the section says so, its POSTs answer with an error
 	// flash, and the strip keeps the plain version.
 	Updates UpdatesView
+	// Backups is the backup service (*backup.Service in the daemon): Settings
+	// -> Backups, the Backups row in Your setup, the every-page alert while
+	// automatic backups are in trouble and the System screen's Backups part
+	// read it, and the Backups POSTs steer it. nil means backups are not
+	// running in this process (tests, tools): the section says so and its
+	// POSTs answer with an error flash.
+	Backups BackupsView
 	// Level is the file/env console level base (config.Console.Level): how much
 	// of the console the owner sees. The effective level is this plus the
 	// store's level row, resolved live per request (see consoleLevel). Empty
@@ -249,6 +257,8 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/static/privacy.js", s.servePrivacyJS)
 	handle("GET /console/static/favicon.svg", s.serveFavicon)
 	handle("GET /console/static/browserkey.js", s.serveBrowserKeyJS)
+	handle("GET /console/static/passkey.js", s.servePasskeyJS)
+	handle("GET /console/static/backups.js", s.serveBackupsJS)
 	handle("GET /console/sw.js", s.serveServiceWorker)
 	handle("GET /console/login", s.loginForm)
 	handle("POST /console/login", s.parseForm(formBodySmall, s.loginSubmit))
@@ -352,6 +362,18 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/settings/updates/auto", formBodySmall, s.settingsUpdatesAuto)
 	post("POST /console/settings/updates/apply", formBodySmall, s.settingsUpdatesApply)
 	post("POST /console/settings/updates/resume", formBodySmall, s.settingsUpdatesResume)
+	// Settings > Backups: every route is the owner's own decision, the folder
+	// field's live check included. Under peer_auth with a project locked, a
+	// restore needs a passkey ceremony (/restore/begin, a browser's only).
+	handle("GET /console/settings/backups/folder", s.auth(ownerHands(s.settingsBackupsFolder)))
+	post("POST /console/settings/backups", formBodySmall, ownerHands(s.settingsBackupsSave))
+	post("POST /console/settings/backups/reset", formBodySmall, ownerHands(s.settingsBackupsReset))
+	post("POST /console/settings/backups/now", formBodySmall, ownerHands(s.settingsBackupsNow))
+	post("POST /console/settings/backups/delete", formBodySmall, ownerHands(s.settingsBackupsDelete))
+	post("POST /console/settings/backups/restore/begin", formBodySmall, ownerHands(s.settingsBackupsRestoreBegin))
+	post("POST /console/settings/backups/restore", formBodyPasskey, ownerHands(s.settingsBackupsRestore))
+	post("POST /console/settings/backups/restore/cancel", formBodySmall, ownerHands(s.settingsBackupsRestoreCancel))
+	post("POST /console/settings/backups/restore/dismiss", formBodySmall, ownerHands(s.settingsBackupsRestoreDismiss))
 	handle("GET /console/events", s.auth(s.sse))
 	handle("GET /console/events/{id}", s.auth(s.eventDetail))
 	// Anything under /console/ no route above claims: the styled 404 inside the
@@ -722,6 +744,23 @@ func (s *Service) serveBrowserKeyJS(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	_, _ = w.Write(browserKeyJS)
+}
+
+// servePasskeyJS serves the WebAuthn helpers the passkey ceremonies share
+// (window.SeamPasskey): the lock page's and the backups section's.
+func (s *Service) servePasskeyJS(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	_, _ = w.Write(passkeyJS)
+}
+
+// serveBackupsJS serves Settings > Backups' script: the folder field's live
+// check and chips, the restore's passkey ceremony, and following a restore
+// through the restart. Loaded by the Settings page and inert elsewhere.
+func (s *Service) serveBackupsJS(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	_, _ = w.Write(backupsJS)
 }
 
 // serveServiceWorker serves the console's service worker. It sits at

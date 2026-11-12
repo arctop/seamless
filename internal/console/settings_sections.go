@@ -42,6 +42,8 @@ var settingsSections = []settingsSection{
 		Blurb: "Version, files, and what is connected"},
 	{ID: "updates", Label: "Updates", Icon: "refresh-cw", Min: levelBasic, Anchor: "updates",
 		Blurb: "New releases, and whether this install checks for and installs them"},
+	{ID: "backups", Label: "Backups", Icon: "archive", Min: levelBasic, Anchor: "backups",
+		Blurb: "Automatic backups, the folder they go to, and restoring one"},
 	{ID: "briefing", Label: "Briefing", Icon: "brain", Min: levelStandard, Anchor: "briefing-recipe",
 		Blurb: "What every new agent session starts with"},
 	{ID: "workspaces", Label: "Workspaces", Icon: "folder-tree", Min: levelStandard, Anchor: "workspace-registry",
