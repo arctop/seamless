@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -201,7 +202,13 @@ func TestRestoreCmd_WithADaemonStagesAndWaitsForItsResult(t *testing.T) {
 	require.NoError(t, err, out.String())
 	require.NoError(t, <-daemon)
 	require.NoError(t, lock.Close())
-	require.Contains(t, out.String(), "waiting for Seamless to restart and finish")
+	// Windows has no in-place restart: the command restarts the service
+	// itself (a stub here) instead of waiting for the daemon to.
+	waits := "waiting for Seamless to restart and finish"
+	if runtime.GOOS == "windows" {
+		waits = "restarting Seamless"
+	}
+	require.Contains(t, out.String(), waits)
 	require.Contains(t, out.String(), "restored the backup from")
 	require.Equal(t, []string{"01TASKSEED"}, in.tasks(t))
 }
