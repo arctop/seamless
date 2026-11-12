@@ -215,7 +215,9 @@ func (s *Service) stageRestore(ctx context.Context, req RestoreRequest, e Entry)
 	case s.d.UpdateBusy != nil && s.d.UpdateBusy():
 		return failf(RestoreReasonBusy, "Seamless is installing an update: restore once it has finished")
 	}
-	ref := BackupRef{Name: e.Name, Where: e.Where, Kind: e.Kind}
+	// The listing's time, so the progress card names the backup while the job
+	// checks it; the manifest fills the rest once it is read again.
+	ref := BackupRef{Name: e.Name, Where: e.Where, Kind: e.Kind, CreatedAt: e.CreatedAt}
 	now := s.d.Now()
 	s.staging = &Staging{Mode: req.Mode, Backup: ref, Step: StepChecking, StartedAt: now}
 	step := StepChecking

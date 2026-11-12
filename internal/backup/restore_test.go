@@ -549,8 +549,15 @@ func TestService_StageRestoreStagesAndRestartsOnce(t *testing.T) {
 
 	_, sum, err := h.svc.Digest(context.Background(), ref)
 	require.NoError(t, err)
-	_, err = h.svc.StageRestore(context.Background(), RestoreRequest{Ref: ref, Mode: ModeReplace, ExpectSHA256: sum, By: "console", Proof: "owner"})
+	staged, err := h.svc.StageRestore(context.Background(), RestoreRequest{Ref: ref, Mode: ModeReplace, ExpectSHA256: sum, By: "console", Proof: "owner"})
 	require.NoError(t, err)
+	// The progress card reads "The backup from <its time>" while the job
+	// checks it, before the manifest is read again.
+	require.NotNil(t, staged.Restore.Staging)
+	require.Equal(t, l.Entries[0].Name, staged.Restore.Staging.Backup.Name)
+	require.False(t, l.Entries[0].CreatedAt.IsZero())
+	require.True(t, staged.Restore.Staging.Backup.CreatedAt.Equal(l.Entries[0].CreatedAt),
+		"staging names the backup's time: %v", staged.Restore.Staging.Backup.CreatedAt)
 	st := restoreIdle(t, h)
 	require.NotNil(t, st.Restore.Pending, "%+v", st.Restore.Failed)
 	require.Equal(t, sum, st.Restore.Pending.SHA256)
