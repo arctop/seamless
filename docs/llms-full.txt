@@ -2007,6 +2007,29 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.8.2 {#v0-8-2}
+
+Released 2026-11-12 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.8.2)
+
+### Features
+
+- feat(console): Settings &gt; Backups: the schedule, the folder, the backups it holds, and restore with its undo
+- feat(approval): a console restore is approved by a passkey bound to the backup's digest and mode
+- feat(backup): restore: staged while serving, applied at startup, undoable; seamlessd backups and restore
+- feat(backup): the backup service: settings, names, folder rules, the list, runs and the scheduler
+- feat(archive): backup manifests say what they hold, and a restore keeps today's locks
+- feat(config): a backup: block for scheduled backups, and the console's override of it
+
+### Fixes
+
+- fix(backup): seamlessd restore lets go of the database before a daemon swaps it
+- fix(backup): a backup's record counts projects without the global scope
+- fix(console): a merge's result names only the kinds it added
+- fix(backup): a restore that changed the data ends the "up to date" claim
+- fix(backup): a restore's progress card names the backup's time while it is checked
+- fix(console): an in-place load lands on its URL's #anchor
+- fix(hooks): doctor and install-hooks see the hooks in Claude Code's managed settings
+
 ## v0.8.1 {#v0-8-1}
 
 Released 2026-11-11 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.8.1)
