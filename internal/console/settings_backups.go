@@ -1079,10 +1079,23 @@ func restoreResultFor(r backup.Result, listing backup.Listing) *restoreResult {
 		res.Tone = "ok"
 		if r.Mode == backup.ModeMerge {
 			// Empty when the backup held nothing missing here.
+			// Only the kinds it added are named: "1 memory added", not "1
+			// item added, among them 1 memory and 0 notes".
 			if r.Added > 0 {
-				res.Counts = countOf(r.Added, "item", "items") + " added"
-				if r.Memories+r.Notes > 0 {
-					res.Counts += ", among them " + countOf(r.Memories, "memory", "memories") + " and " + countOf(r.Notes, "note", "notes")
+				var kinds []string
+				if r.Memories > 0 {
+					kinds = append(kinds, countOf(r.Memories, "memory", "memories"))
+				}
+				if r.Notes > 0 {
+					kinds = append(kinds, countOf(r.Notes, "note", "notes"))
+				}
+				switch named := strings.Join(kinds, " and "); {
+				case named != "" && r.Memories+r.Notes == r.Added:
+					res.Counts = named + " added"
+				case named != "":
+					res.Counts = countOf(r.Added, "item", "items") + " added, among them " + named
+				default:
+					res.Counts = countOf(r.Added, "item", "items") + " added"
 				}
 			}
 		} else {

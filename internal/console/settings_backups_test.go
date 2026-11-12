@@ -807,6 +807,19 @@ func TestBackupsRestore_Result(t *testing.T) {
 	sec = sectionOf(t, bc.page(t, ""))
 	require.Contains(t, sec, "<strong>Brought back what was missing</strong> from the backup of <time")
 	require.Contains(t, sec, "31 items added, among them 5 memories and 2 notes.")
+	for _, tc := range []struct {
+		added, memories, notes int
+		want                   string
+	}{
+		{1, 1, 0, ": 1 memory added."},
+		{3, 2, 1, ": 2 memories and 1 note added."},
+		{9, 0, 2, ": 9 items added, among them 2 notes."},
+		{4, 0, 0, ": 4 items added."},
+	} {
+		bc.fb.status.Restore.Last = &backup.Result{ID: "r2c", Mode: backup.ModeMerge, Outcome: backup.RestoreDone, Backup: ref,
+			Added: tc.added, Memories: tc.memories, Notes: tc.notes, Previous: safety}
+		require.Contains(t, sectionOf(t, bc.page(t, "")), tc.want, "a kind it added none of is not named")
+	}
 
 	bc.fb.status.Restore.Last = &backup.Result{ID: "r2b", Mode: backup.ModeMerge, Outcome: backup.RestoreDone, Backup: ref, Previous: safety}
 	require.Contains(t, sectionOf(t, bc.page(t, "")), "<strong>Nothing was missing:</strong> the backup of <time")
