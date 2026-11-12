@@ -132,8 +132,8 @@ func (w managedHooksWorld) installUser(t *testing.T, covered ...string) {
 	require.NoError(t, err)
 }
 
-// The layout the owner chose on boron: managed settings carry all seven hooks
-// and the user file none. Doctor used to call that "not installed".
+// The layout an administrator who deploys the hooks chooses: managed settings
+// carry all seven hooks and the user file none. Doctor used to call that "not installed".
 func TestHooksCheckManagedSettingsCarryTheWholeProfile(t *testing.T) {
 	w := newManagedHooksWorld(t)
 	managed := w.writeManaged(t, claudeManagedSettingsFile, w.seamBin)
