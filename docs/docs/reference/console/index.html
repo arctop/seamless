@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#what-the-console-can-change">What the console can change</a></li><li class="lvl-2"><a href="#signing-in">Signing in</a></li><li class="lvl-3"><a href="#make-console">make console</a></li><li class="lvl-2"><a href="#getting-around">Getting around</a></li><li class="lvl-3"><a href="#the-command-palette">The command palette</a></li><li class="lvl-3"><a href="#keyboard">Keyboard</a></li><li class="lvl-3"><a href="#ambient-signals">Ambient signals</a></li><li class="lvl-2"><a href="#choose-how-much-you-see">Choose how much you see</a></li><li class="lvl-3"><a href="#screens">Screens</a></li><li class="lvl-3"><a href="#settings-sections">Settings sections</a></li><li class="lvl-3"><a href="#within-screens">Within screens</a></li><li class="lvl-2"><a href="#three-ways-to-render-a-page">Three ways to render a page</a></li><li class="lvl-2"><a href="#overview">Overview</a></li><li class="lvl-3"><a href="#since-you-were-last-here">Since you were last here</a></li><li class="lvl-2"><a href="#now">Now</a></li><li class="lvl-2"><a href="#interactions">Interactions</a></li><li class="lvl-2"><a href="#search">Search</a></li><li class="lvl-2"><a href="#projects">Projects</a></li><li class="lvl-2"><a href="#sessions">Sessions</a></li><li class="lvl-2"><a href="#memories">Memories</a></li><li class="lvl-2"><a href="#notes">Notes</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-2"><a href="#plans">Plans</a></li><li class="lvl-2"><a href="#labs">Labs</a></li><li class="lvl-2"><a href="#trials">Trials</a></li><li class="lvl-2"><a href="#context">Context</a></li><li class="lvl-2"><a href="#retrieval">Retrieval</a></li><li class="lvl-2"><a href="#gardener">Gardener</a></li><li class="lvl-2"><a href="#held">Held</a></li><li class="lvl-2"><a href="#system">System</a></li><li class="lvl-2"><a href="#privacy">Privacy</a></li><li class="lvl-2"><a href="#settings">Settings</a></li><li class="lvl-3"><a href="#experience">Experience</a></li><li class="lvl-3"><a href="#optional-features">Optional features</a></li><li class="lvl-3"><a href="#your-setup">Your setup</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#briefing">Briefing</a></li><li class="lvl-3"><a href="#workspaces">Workspaces</a></li><li class="lvl-3"><a href="#knowledge-engine">Knowledge engine</a></li><li class="lvl-2"><a href="#event-detail">Event detail</a></li><li class="lvl-2"><a href="#errors">Errors</a></li>
+      <li class="lvl-2"><a href="#what-the-console-can-change">What the console can change</a></li><li class="lvl-2"><a href="#signing-in">Signing in</a></li><li class="lvl-3"><a href="#make-console">make console</a></li><li class="lvl-2"><a href="#getting-around">Getting around</a></li><li class="lvl-3"><a href="#the-command-palette">The command palette</a></li><li class="lvl-3"><a href="#keyboard">Keyboard</a></li><li class="lvl-3"><a href="#ambient-signals">Ambient signals</a></li><li class="lvl-2"><a href="#choose-how-much-you-see">Choose how much you see</a></li><li class="lvl-3"><a href="#screens">Screens</a></li><li class="lvl-3"><a href="#settings-sections">Settings sections</a></li><li class="lvl-3"><a href="#within-screens">Within screens</a></li><li class="lvl-2"><a href="#three-ways-to-render-a-page">Three ways to render a page</a></li><li class="lvl-2"><a href="#overview">Overview</a></li><li class="lvl-3"><a href="#since-you-were-last-here">Since you were last here</a></li><li class="lvl-2"><a href="#now">Now</a></li><li class="lvl-2"><a href="#interactions">Interactions</a></li><li class="lvl-2"><a href="#search">Search</a></li><li class="lvl-2"><a href="#projects">Projects</a></li><li class="lvl-2"><a href="#sessions">Sessions</a></li><li class="lvl-2"><a href="#memories">Memories</a></li><li class="lvl-2"><a href="#notes">Notes</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-2"><a href="#plans">Plans</a></li><li class="lvl-2"><a href="#labs">Labs</a></li><li class="lvl-2"><a href="#trials">Trials</a></li><li class="lvl-2"><a href="#context">Context</a></li><li class="lvl-2"><a href="#retrieval">Retrieval</a></li><li class="lvl-2"><a href="#gardener">Gardener</a></li><li class="lvl-2"><a href="#held">Held</a></li><li class="lvl-2"><a href="#system">System</a></li><li class="lvl-2"><a href="#privacy">Privacy</a></li><li class="lvl-2"><a href="#settings">Settings</a></li><li class="lvl-3"><a href="#experience">Experience</a></li><li class="lvl-3"><a href="#optional-features">Optional features</a></li><li class="lvl-3"><a href="#your-setup">Your setup</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#backups">Backups</a></li><li class="lvl-3"><a href="#briefing">Briefing</a></li><li class="lvl-3"><a href="#workspaces">Workspaces</a></li><li class="lvl-3"><a href="#knowledge-engine">Knowledge engine</a></li><li class="lvl-2"><a href="#event-detail">Event detail</a></li><li class="lvl-2"><a href="#errors">Errors</a></li>
     </ul>
   </details>
   <p>The console is the owner's window onto a system whose actual clients are agents.
@@ -450,6 +450,46 @@ is not how Seamless is driven; it is how you watch it.</p>
 <td>Lifts the pause automatic updates put on themselves after rollbacks, and the hold a deliberate downgrade set. Changes no setting; skipped releases stay skipped, and a running backoff runs out.</td>
 </tr>
 <tr>
+<td>Save the backup schedule and folder</td>
+<td><code>POST /console/settings/backups</code></td>
+<td>Stores the console's <code>backup:</code> override: only the values that differ from the settings in force. A new folder is created and tested with a write first. Applies from the next backup.</td>
+</tr>
+<tr>
+<td>Reset the backup settings</td>
+<td><code>POST /console/settings/backups/reset</code></td>
+<td>Clears that override, handing the schedule and the folder back to the config file (or, without one, the build's default).</td>
+</tr>
+<tr>
+<td>Back up now</td>
+<td><code>POST /console/settings/backups/now</code></td>
+<td>Writes a backup at once, marked <strong>Made by you</strong>: never skipped, never deleted automatically. With <code>run=retry</code> (the failing card's <strong>Try again</strong>) it runs the schedule's backup instead, which is skipped when nothing changed and prunes after itself. Refused while a backup runs or a restore is being prepared.</td>
+</tr>
+<tr>
+<td>Delete a backup</td>
+<td><code>POST /console/settings/backups/delete</code></td>
+<td><code>ref=</code> a backup from the list, never a path. Removes the file from its folder, after a confirm.</td>
+</tr>
+<tr>
+<td>Begin a restore's passkey ceremony</td>
+<td><code>POST /console/settings/backups/restore/begin</code></td>
+<td>Only while <a href="../../guides/peer-auth/#restore">peer_auth</a> locks a project, and only from a signed-in browser. Returns a WebAuthn challenge bound to the backup file's SHA-256, which the server reads from the file itself, and to the mode. Writes nothing.</td>
+</tr>
+<tr>
+<td>Restore a backup</td>
+<td><code>POST /console/settings/backups/restore</code></td>
+<td><code>ref=</code> and <code>mode=replace</code> or <code>merge</code>. Verifies the backup and prepares the restore while Seamless serves, then restarts to finish it. A replace saves today's data as a backup first. Refused while a backup, another restore or an update is under way. Under the passkey gate it also needs the ceremony's <code>id</code> and <code>response</code>, and the file's digest must still match.</td>
+</tr>
+<tr>
+<td>Cancel a staged restore</td>
+<td><code>POST /console/settings/backups/restore/cancel</code></td>
+<td>Drops a restore that is waiting for its restart. Nothing changes.</td>
+</tr>
+<tr>
+<td>Dismiss a restore's result</td>
+<td><code>POST /console/settings/backups/restore/dismiss</code></td>
+<td>Hides the last restore's result card. Changes no data.</td>
+</tr>
+<tr>
 <td>Save a project family</td>
 <td><code>POST /console/settings/families/save</code></td>
 <td>Creates a family or replaces one family's name and member set - the same <code>project_families</code> setting <code>seamlessd family</code> manages. Members come from a closed picker of registered projects, so a typo cannot create an inert member.</td>
@@ -480,7 +520,10 @@ touching any memory's content. The console level is presentation state of the sa
 what this console shows you and nothing else. <strong>Update now</strong> and <strong>Resume
 automatic updates</strong> act on the install rather than on knowledge: the first
 starts the same backed-up update <code>seamlessd update</code> runs, the second lets
-automatic updates run again.</p>
+automatic updates run again. A <strong>restore</strong> is the one write that changes
+knowledge wholesale, and it puts back what a backup of this install held,
+never text of the console's own: the data from before is saved as a backup
+first, so a restore is itself undone by restoring.</p>
 <p>This is deliberate, and it is the same principle as
 <a href="../../concepts/gardener/">the gardener's</a> propose-only contract. The store is written
 by agents doing work, with provenance attached. A console that could quietly edit
@@ -652,7 +695,7 @@ Claude Code or Codex and wants to know it works: what the agents remember
 decline (Gardener), and a Home that opens on a health strip - which agent clients
 are working here, whether semantic recall is on, when the last briefing went
 out, and the version (which says when a newer release is out) - plus the
-Updates settings.</p>
+Updates and Backups settings.</p>
 <p><strong>Standard</strong> adds following the work: Now, Projects, Plans, and Tasks (and Labs
 and Trials when that feature is on), the Overview's window, vitals, and
 workspaces, the Briefing and Workspaces settings, and the finer controls on the
@@ -1773,7 +1816,8 @@ config file (with a link that opens it in your editor, or a note that the daemon
 runs on defaults and environment variables), the data folder, the database file
 and its size, which agent clients have recorded sessions and when each was last
 active, whether semantic recall is on - and when it is off, what to do about it -
-whether the gardener is running and how often, and links to these docs. No
+whether the gardener is running and how often, how often backups run, how many
+are kept and when the last one was made, and links to these docs. No
 budgets or policy numbers: those live in Knowledge engine.</p>
 <h3 id="updates">Updates</h3>
 <p><code>/console/settings?s=updates</code></p>
@@ -1824,6 +1868,102 @@ changed with the update (re-approve them in Codex's <code>/hooks</code>) or the 
 reported warnings (run <code>seamlessd install-hooks</code>). For a week after automatic
 updates pause themselves, or after an update the daemon started does not apply,
 every page also carries a warning banner pointing here.</p>
+<h3 id="backups">Backups</h3>
+<p><code>/console/settings?s=backups</code></p>
+<p>Scheduled backups of the whole instance into one folder you choose, the
+backups found there, and restore. <a href="../../guides/data/#backups-in-the-console">Backups in the console</a>
+walks through it; this is what each card holds.</p>
+<p><strong>Automatic backups</strong>, the status card:</p>
+<ul>
+<li>whether automatic backups are on, how often they run and how many are kept -
+or why they are off: turned off here, <code>backup.auto: false</code> in the config
+file, or a build from source, which backs up only when you turn it on;</li>
+<li>the newest backup: when, its size, and how many memories and notes in how
+many projects it holds;</li>
+<li>when the next backup runs, or <strong>Up to date: nothing has changed since the
+last backup</strong>, with when it checks next;</li>
+<li>a backup under way, while it runs;</li>
+<li>the automatic runs' failure streak - how many failed in a row, since when,
+and the last one's reason - with <strong>Try again</strong>, which runs the schedule's
+backup now;</li>
+<li>the folder, with a copy button, and <strong>Back up now</strong>, which makes a backup
+marked <strong>Made by you</strong> whatever the schedule says.</li>
+</ul>
+<p><strong>Schedule and folder</strong>, the form:</p>
+<ul>
+<li><strong>Back up automatically</strong>. A run is skipped when nothing has changed since
+the last backup, or when the disk is short of room.</li>
+<li><strong>How often</strong>: Every hour, Every 6 hours, Every day or Every week. An
+interval set in the config file (anything from <code>1h</code> to <code>720h</code>) shows among
+them as itself.</li>
+<li><strong>Automatic backups to keep</strong>, 1 to 100. Older automatic backups are deleted
+after the next one. Backups you make yourself and safety backups are never
+deleted automatically.</li>
+<li><strong>Folder</strong>, with a live check as you type (it only looks, never writes) and
+chips for the places on this machine this account can write to: iCloud
+Drive, cloud folders and external disks on macOS, Dropbox and external disks
+on Linux, OneDrive and other drives on Windows, and Seamless's data folder.</li>
+</ul>
+<p><strong>Save</strong> stores only what differs from the settings in force; a new folder is
+created and tested with a write first. <strong>Reset to the config file</strong> makes the
+settings follow the config file again. The bar at the top says where the values
+come from: <strong>Default for this build</strong>, <strong>Following the config file</strong>, or <strong>Set
+in this console</strong> with the fields you set.</p>
+<p><strong>Available backups</strong>, the list, newest first: the backups in the chosen folder
+and in Seamless's data folder (<code>~/.seamless/backups</code>, where the safety and
+pre-update backups stay). Each row has:</p>
+<ul>
+<li>when, the kind in words - <strong>Automatic</strong>, <strong>Made by you</strong>, <strong>Before restore</strong>,
+<strong>Before updating from v0.8.1</strong> or <strong>Exported</strong> - the size, and the machine
+it came from when another Seamless made it;</li>
+<li><strong>What it holds</strong>: the file's path, and per project the memories, notes,
+tasks and sessions, beside <strong>vs now</strong>, how many more or fewer memories and
+notes the project holds now. A locked project shows its name and the backup's
+counts, never what it holds now. A project that is no longer here says so,
+and one that is only here now shows dashes;</li>
+<li><strong>Restore…</strong> and <strong>Delete</strong>. An iCloud placeholder (download it in Finder
+first) and a backup a newer Seamless made (update to restore it) cannot be
+restored and say why.</li>
+</ul>
+<p><strong>Restore…</strong> opens a confirm card in the backup's row, with a link that works
+without script:</p>
+<ul>
+<li>it compares the backup with now (how many more or fewer memories, notes and
+sessions this install holds);</li>
+<li>two choices: <strong>Replace all data with this backup</strong> (your current data is
+saved as a backup first, so you can undo it) or <strong>Only bring back what's
+missing</strong> (nothing you have now changes). A knowledge-only backup offers only
+the merge;</li>
+<li>what a restore leaves alone: locks, passkeys, repo routes and console
+settings stay as they are now, and no project's privacy is loosened;</li>
+<li><strong>Restore</strong>, or <strong>Restore with passkey</strong> under the
+<a href="../../guides/peer-auth/#restore">peer_auth gate</a>. Without a usable passkey, the
+card names why and shows the terminal command instead, with a copy button.</li>
+</ul>
+<p>Then a progress card lists the steps: <strong>Checking the backup</strong>, <strong>Preparing the
+restored data</strong> (replace) or <strong>Saving your current data</strong> (merge), <strong>Restarting
+Seamless</strong>, <strong>Done</strong>, and for a replace, <strong>Saving your previous data as a
+backup</strong>. The page waits through the restart and draws the section again in
+place. <strong>Cancel restore</strong> is offered while a restore is staged. On Windows, the
+card names <code>seamlessd restart</code>, to run within an hour, after which a staged
+restore is dropped.</p>
+<p>After the restart, the result card says what was restored, where the previous
+data was saved, and anything the restore kept of today (a stricter privacy
+setting, locked projects the backup did not have), with <strong>Undo this restore</strong> -
+the confirm card for the safety backup - and <strong>Dismiss</strong>. A restore that did
+not finish, expired or stopped partway says so there instead.</p>
+<p>Elsewhere:</p>
+<ul>
+<li><strong>Settings &gt; Your setup</strong> has a <strong>Backups</strong> row: how often, how many are
+kept, and the last backup.</li>
+<li>Every page carries an alert while automatic backups are in trouble, linking
+here. <strong>Automatic backups are failing.</strong> appears when two automatic runs in a
+row did not finish, with the first failure's time and the reason.
+<strong>Automatic backups are overdue.</strong> appears when none has finished for three
+intervals. <strong>Got it</strong> hides it for that tab until a new episode begins.</li>
+<li><a href="#system">System</a> draws backups as a core part, on, off, failing or
+overdue.</li>
+</ul>
 <h3 id="briefing">Briefing</h3>
 <p><code>/console/settings?s=briefing</code></p>
 <p>What every new agent session starts with. Three <strong>presets</strong> lead the section -
@@ -1935,7 +2075,7 @@ the detail pane would nest the whole console inside itself.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#what-the-console-can-change">What the console can change</a></li><li class="lvl-2"><a href="#signing-in">Signing in</a></li><li class="lvl-3"><a href="#make-console">make console</a></li><li class="lvl-2"><a href="#getting-around">Getting around</a></li><li class="lvl-3"><a href="#the-command-palette">The command palette</a></li><li class="lvl-3"><a href="#keyboard">Keyboard</a></li><li class="lvl-3"><a href="#ambient-signals">Ambient signals</a></li><li class="lvl-2"><a href="#choose-how-much-you-see">Choose how much you see</a></li><li class="lvl-3"><a href="#screens">Screens</a></li><li class="lvl-3"><a href="#settings-sections">Settings sections</a></li><li class="lvl-3"><a href="#within-screens">Within screens</a></li><li class="lvl-2"><a href="#three-ways-to-render-a-page">Three ways to render a page</a></li><li class="lvl-2"><a href="#overview">Overview</a></li><li class="lvl-3"><a href="#since-you-were-last-here">Since you were last here</a></li><li class="lvl-2"><a href="#now">Now</a></li><li class="lvl-2"><a href="#interactions">Interactions</a></li><li class="lvl-2"><a href="#search">Search</a></li><li class="lvl-2"><a href="#projects">Projects</a></li><li class="lvl-2"><a href="#sessions">Sessions</a></li><li class="lvl-2"><a href="#memories">Memories</a></li><li class="lvl-2"><a href="#notes">Notes</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-2"><a href="#plans">Plans</a></li><li class="lvl-2"><a href="#labs">Labs</a></li><li class="lvl-2"><a href="#trials">Trials</a></li><li class="lvl-2"><a href="#context">Context</a></li><li class="lvl-2"><a href="#retrieval">Retrieval</a></li><li class="lvl-2"><a href="#gardener">Gardener</a></li><li class="lvl-2"><a href="#held">Held</a></li><li class="lvl-2"><a href="#system">System</a></li><li class="lvl-2"><a href="#privacy">Privacy</a></li><li class="lvl-2"><a href="#settings">Settings</a></li><li class="lvl-3"><a href="#experience">Experience</a></li><li class="lvl-3"><a href="#optional-features">Optional features</a></li><li class="lvl-3"><a href="#your-setup">Your setup</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#briefing">Briefing</a></li><li class="lvl-3"><a href="#workspaces">Workspaces</a></li><li class="lvl-3"><a href="#knowledge-engine">Knowledge engine</a></li><li class="lvl-2"><a href="#event-detail">Event detail</a></li><li class="lvl-2"><a href="#errors">Errors</a></li>
+      <li class="lvl-2"><a href="#what-the-console-can-change">What the console can change</a></li><li class="lvl-2"><a href="#signing-in">Signing in</a></li><li class="lvl-3"><a href="#make-console">make console</a></li><li class="lvl-2"><a href="#getting-around">Getting around</a></li><li class="lvl-3"><a href="#the-command-palette">The command palette</a></li><li class="lvl-3"><a href="#keyboard">Keyboard</a></li><li class="lvl-3"><a href="#ambient-signals">Ambient signals</a></li><li class="lvl-2"><a href="#choose-how-much-you-see">Choose how much you see</a></li><li class="lvl-3"><a href="#screens">Screens</a></li><li class="lvl-3"><a href="#settings-sections">Settings sections</a></li><li class="lvl-3"><a href="#within-screens">Within screens</a></li><li class="lvl-2"><a href="#three-ways-to-render-a-page">Three ways to render a page</a></li><li class="lvl-2"><a href="#overview">Overview</a></li><li class="lvl-3"><a href="#since-you-were-last-here">Since you were last here</a></li><li class="lvl-2"><a href="#now">Now</a></li><li class="lvl-2"><a href="#interactions">Interactions</a></li><li class="lvl-2"><a href="#search">Search</a></li><li class="lvl-2"><a href="#projects">Projects</a></li><li class="lvl-2"><a href="#sessions">Sessions</a></li><li class="lvl-2"><a href="#memories">Memories</a></li><li class="lvl-2"><a href="#notes">Notes</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-2"><a href="#plans">Plans</a></li><li class="lvl-2"><a href="#labs">Labs</a></li><li class="lvl-2"><a href="#trials">Trials</a></li><li class="lvl-2"><a href="#context">Context</a></li><li class="lvl-2"><a href="#retrieval">Retrieval</a></li><li class="lvl-2"><a href="#gardener">Gardener</a></li><li class="lvl-2"><a href="#held">Held</a></li><li class="lvl-2"><a href="#system">System</a></li><li class="lvl-2"><a href="#privacy">Privacy</a></li><li class="lvl-2"><a href="#settings">Settings</a></li><li class="lvl-3"><a href="#experience">Experience</a></li><li class="lvl-3"><a href="#optional-features">Optional features</a></li><li class="lvl-3"><a href="#your-setup">Your setup</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#backups">Backups</a></li><li class="lvl-3"><a href="#briefing">Briefing</a></li><li class="lvl-3"><a href="#workspaces">Workspaces</a></li><li class="lvl-3"><a href="#knowledge-engine">Knowledge engine</a></li><li class="lvl-2"><a href="#event-detail">Event detail</a></li><li class="lvl-2"><a href="#errors">Errors</a></li>
     </ul>
   </aside>
   

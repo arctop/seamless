@@ -913,6 +913,45 @@ out of the daemon's reach as well, leave `/opt/seamless/bin` root's
 (`sudo chown -R root /opt/seamless/bin`): the daemon then only tells you about a
 new release, and you replace the binaries with `sudo` and restart it.
 
+### Backups and restore {#restore}
+
+[Scheduled backups](/guides/data/#backups-in-the-console) run as the daemon's
+account, like everything else it does, so the folder rules are stricter here:
+
+- the backup folder, and every folder above it, must be writable by nobody but
+  root and the daemon's account, the rule serve applies to the data directory;
+- every backup must stay owned by the daemon's account with mode `0600`. A disk
+  that cannot keep that - exFAT, and many network shares - fails the run, and
+  the file is removed.
+
+A backup holds every project, the locked ones too, so keep the folder as
+carefully as the most sensitive project in it.
+
+**A console restore needs a passkey** while any project is locked - force locked
+in the file, or locked from the console. A restore could roll a locked project
+back, and the bearer key is not proof of the owner, so **Restore with
+passkey** runs a WebAuthn ceremony first. Only a signed-in browser can begin it;
+a bearer key cannot. The challenge is bound to the backup file's SHA-256, which
+the daemon reads from the file itself, and to the mode, so an approval to bring
+back what is missing can never replace everything, or be lifted onto another
+file. Each ceremony is single use and lasts five minutes, and the file's digest
+is read again before the restore is staged. Like a console lock change, it is
+passkey-only for now.
+
+Without a usable passkey - none enrolled, passkeys not configured, or the page
+not on the [passkey origin](#the-passkey-origin) - the confirm card says why and
+shows the terminal's way instead, with a copy button:
+
+```bash
+sudo -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd restore [--merge] <path>
+```
+
+[`seamlessd restore`](/reference/cli-seamlessd/#seamlessd_restore) refuses to
+run as root or as any account but the daemon's: running as that account is its
+proof, as for `seamlessd approve`. Either way, the restore keeps today's locks,
+approvers and fences, adds the backup's locks, and ends every lease, read grant
+and console unlock the backup held.
+
 ## Limits
 
 - **The transcript holds what a session read.** Once you approve an agent, its
@@ -929,10 +968,11 @@ new release, and you replace the binaries with `sudo` and restart it.
 - **The boundary is the OS account.** Root, and anyone who can become the daemon's
   account, reads everything; a passwordless `sudo` to it voids the whole
   arrangement. Whoever holds the bearer key acts as the owner, and reaches every
-  project but the locked ones. Backups of the data directory, and exports, hold
-  every project: keep them as carefully as the most sensitive project in them.
-  An export records the locks, and importing one [checks for a passkey that can
-  open them](/guides/data/#locked-projects).
+  project but the locked ones. Backups of the data directory, scheduled
+  backups and exports hold every project: keep them as carefully as the most
+  sensitive project in them. A backup records the locks, a restore keeps them
+  ([how](#restore)), and importing one [checks for a passkey that can open
+  them](/guides/data/#locked-projects).
 - **Anything running as you can watch your terminal.** A `tmux` server your agents
   share lets them capture the pane, and your clipboard is reachable too. Nothing
   the approval commands show is a credential: a console unlock's code opens only

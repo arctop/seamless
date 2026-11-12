@@ -1,6 +1,6 @@
 ---
 title: Domain invariants
-description: The rules plausible-looking code breaks - supersession, scope resolution, FTS and LIKE escaping, LLM degradation, automatic updates and release discipline - and why each exists.
+description: The rules plausible-looking code breaks - supersession, scope resolution, FTS and LIKE escaping, LLM degradation, automatic updates, backups and restore, and release discipline - and why each exists.
 ---
 
 These are the rules that reasonable code violates. Every one of them has a
@@ -404,10 +404,67 @@ know, and skip a history line that does not decode. Only the holder of
 `update.lock` writes either file.
 
 A gate refusal is a fixed word in `refusal` (`not_installer`, `stale_binary`,
-`self_check`, `auto_off`), written only on a finished attempt that stopped at
+`self_check`, `auto_off`, `restore_pending`), written only on a finished attempt that stopped at
 `gates` and that a daemon started. A reader keeps a word it does not know and
 treats it as a plain failure. Surfaces key the owner's action on that word,
 never on the record's `error` text.
+
+## Backups and restore
+
+Enforced in `internal/backup` (the scheduler, the folder rules, staging and
+applying a restore), `internal/store` (`restore_kept.go`), `internal/approval`
+(`restore.go`) and `cmd/seamlessd` (`backups.go`). Guide:
+[Import, back up & restore](/guides/data/#backups-in-the-console).
+
+### A restore never reduces the locked set or loosens a fence
+
+A restore puts back a backup's knowledge and work record, never the state that
+says how this install runs and who may approve. `store.ReadKeptState` reads
+today's before anything moves and `store.ApplyKeptState` writes it into the
+restored database before it is put in place: the kept settings rows, the
+approver tables and the repo routes become exactly today's, so a passkey
+removed after the backup stays removed; console locks are the backup's plus
+today's, today's verbatim; every project keeps the stricter of its two fences.
+A restored database also ends every live lease, console unlock and read grant
+it held. A settings key added to the store must be classified as kept or
+restored-with-data, or a test that walks every `GetSetting` and `SetSetting`
+call fails.
+
+### Under a peer_auth lock, only a passkey or the daemon's account restores
+
+While peer_auth locks any project, no console route stages a restore without
+`approval.FinishRestore`. Its challenge names the backup's SHA-256, which the
+server reads from the file, never from the client, and the mode, so an approval
+to merge cannot replace everything or be lifted onto another file. Only a
+browser can begin the ceremony. The CLI's proof is running as the daemon's own
+account, never root.
+
+### The live data directory changes only through the recorded swap
+
+The heavy work of a restore runs while the daemon serves and touches nothing in
+the live data directory. At the next start, under the data directory lock and
+before anything opens the database, a replace moves entries by rename only
+after `pending.json` records the swap, and `applied` is the commit point: a
+start that finds `swapping` rolls back entry by entry, and one that finds
+`applied` only finishes the bookkeeping. Nothing under `restore/` is deleted
+before its data is verified elsewhere, and a rollback that cannot complete
+makes serve refuse rather than serve half of each. While `pending.json` exists,
+no update runs (`restore_pending`).
+
+### Pruning touches only this install's automatic backups
+
+A scheduled run deletes only `-auto` backups whose manifest names this install,
+past the newest `keep`. It never deletes a backup the owner made, a safety
+backup, a pre-update backup, or another install's backup in a shared folder,
+since two installs with the same host name can share one folder.
+
+### Under peer_auth, a backup stays the daemon's alone
+
+A backup file is `0600` and owned by the daemon's account, in a folder only
+that account and root can change; a disk that cannot keep that fails the run,
+and the file is removed. The folder check answers "inside Seamless's data
+folder" for any path in the data directory but its own `backups/` before any
+other probe, so it can never be used to learn what the data directory holds.
 
 ## Release discipline
 

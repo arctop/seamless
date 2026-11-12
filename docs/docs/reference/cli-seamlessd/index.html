@@ -5,20 +5,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>seamlessd CLI - Seamless docs</title>
-<meta name="description" content="The daemon and operator CLI - serve, doctor, export, import, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.">
+<meta name="description" content="The daemon and operator CLI - serve, doctor, export, import, backups, restore, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.">
 <link rel="canonical" href="https://thereisnospoon.org/docs/reference/cli-seamlessd/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://thereisnospoon.org/docs/reference/cli-seamlessd/">
 <meta property="og:title" content="seamlessd CLI - Seamless docs">
-<meta property="og:description" content="The daemon and operator CLI - serve, doctor, export, import, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.">
+<meta property="og:description" content="The daemon and operator CLI - serve, doctor, export, import, backups, restore, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Reference","item":"https://thereisnospoon.org/docs/reference/"},{"@type":"ListItem","position":3,"name":"seamlessd CLI","item":"https://thereisnospoon.org/docs/reference/cli-seamlessd/"}]},{"@type":"TechArticle","headline":"seamlessd CLI - Seamless docs","description":"The daemon and operator CLI - serve, doctor, export, import, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.","url":"https://thereisnospoon.org/docs/reference/cli-seamlessd/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Reference","item":"https://thereisnospoon.org/docs/reference/"},{"@type":"ListItem","position":3,"name":"seamlessd CLI","item":"https://thereisnospoon.org/docs/reference/cli-seamlessd/"}]},{"@type":"TechArticle","headline":"seamlessd CLI - Seamless docs","description":"The daemon and operator CLI - serve, doctor, export, import, backups, restore, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.","url":"https://thereisnospoon.org/docs/reference/cli-seamlessd/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
 <link rel="icon" type="image/svg+xml" href="../../../static/favicon.svg">
@@ -232,11 +232,11 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 </nav>
 
   <h1>seamlessd CLI</h1>
-  <p class="lede">The daemon and operator CLI - serve, doctor, export, import, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.</p>
+  <p class="lede">The daemon and operator CLI - serve, doctor, export, import, backups, restore, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.</p>
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
+      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
     </ul>
   </details>
   <p><code>seamlessd</code> is both the server and the operator CLI. <code>serve</code> runs the daemon;
@@ -248,7 +248,8 @@ migrate: a database behind this binary's schema is refused (the daemon migrates
 it at its next start), and only <code>map-repo</code> creates a database when there is
 none.</p>
 <p>Each subcommand parses its own flags. None of them take positional arguments
-except <code>family</code>, which takes only positionals.</p>
+except <code>family</code>, which takes only positionals, and <code>restore</code>, which takes the
+backup to restore.</p>
 <p>For the keys every command below resolves, see
 <a href="../../reference/configuration/">Configuration</a>.</p>
 <h2 id="seamlessd_serve">seamlessd serve</h2>
@@ -360,7 +361,7 @@ Checks stop early if config or the database cannot be loaded at all.</p>
 </tr>
 <tr>
 <td><code>schema version</code></td>
-<td>An <strong>info</strong> line pairing what the database has applied with what this binary compiles - <code>v25 applied / v25 compiled</code>. A database <em>ahead</em> of the binary warns: it was migrated by a newer <code>seamlessd</code> (a downgrade, or an update rollback that could not restore the pre-update database). Run that newer release again (<code>seamlessd update</code>), or import a backup taken before it (<code>seamlessd import</code>). <code>serve</code> logs the same warning at startup, and an archive from such a database would be refused. A database <em>behind</em> the binary warns too: a daemon of this version migrates it at its next start, and doctor skips the checks that need the current schema.</td>
+<td>An <strong>info</strong> line pairing what the database has applied with what this binary compiles - <code>v25 applied / v25 compiled</code>. A database <em>ahead</em> of the binary warns: it was migrated by a newer <code>seamlessd</code> (a downgrade, or an update rollback that could not restore the pre-update database). Run that newer release again (<code>seamlessd update</code>), or restore a backup taken before it (<code>seamlessd restore</code>, or <code>seamlessd import</code> into an empty data directory). <code>serve</code> logs the same warning at startup, and an archive from such a database would be refused. A database <em>behind</em> the binary warns too: a daemon of this version migrates it at its next start, and doctor skips the checks that need the current schema.</td>
 </tr>
 <tr>
 <td><code>repo map</code></td>
@@ -413,6 +414,10 @@ Checks stop early if config or the database cannot be loaded at all.</p>
 <tr>
 <td><code>gardener</code></td>
 <td>The ticker configuration, or a warning that it is disabled.</td>
+</tr>
+<tr>
+<td><code>backups</code></td>
+<td><a href="../../guides/data/#backups-in-the-console">Scheduled backups</a> and restores, from the records in <code>~/.seamless/backups/</code> and <code>~/.seamless/restore/</code>. A restore in flight comes first: one staged (<strong>info</strong>: it applies when Seamless restarts, and expires an hour after it was staged), one stopped part way through its swap or its merge (<strong>warn</strong>: the next start undoes the swap, or runs the merge again), or one applied with its bookkeeping left for the next start (<strong>info</strong>). Then a <strong>warn</strong> for replaced data still waiting to be saved as a backup, a <code>restore/&lt;id&gt;/previous</code> folder no record accounts for, or a last restore that did not finish. Otherwise the schedule: <strong>info</strong> when automatic backups are off, a <strong>warn</strong> when the last two or more automatic backups failed (the first failure's time and the last error) or nothing has confirmed the backups current for three intervals, <strong>info</strong> when none has been made yet, and <strong>ok</strong> with when they were last confirmed. Absent under <code>role: client</code>.</td>
 </tr>
 <tr>
 <td><code>updates</code></td>
@@ -602,8 +607,10 @@ embedder, it warns and imports without vectors rather than failing.</p>
 <p>An archive that holds locked projects is checked for a passkey able to open them
 before anything is written. See <a href="../../guides/data/#locked-projects">Locked projects</a>.</p>
 <p>Restore-or-merge is a property of the <strong>destination</strong>, printed in the report and
-never overridable. There is no <code>restore</code> verb and no <code>--mode</code>: the only thing an
-override could do is replace a populated instance's database.</p>
+never overridable. <code>import</code> has no <code>--mode</code>: the only thing an override could do
+is replace a populated instance's database. To replace a populated instance's
+data on purpose, with today's saved first, use
+<a href="#seamlessd_restore"><code>seamlessd restore</code></a>.</p>
 <ul>
 <li><strong>Fresh</strong> (restore) when the data directory is absent, or holds neither
 <code>seam.db</code> nor <code>seam.db-wal</code> and no regular non-dot file in either tree. The
@@ -652,6 +659,95 @@ still exits 0 - the report is the work item.</p>
 report says so and points at the console's re-embed
 (Settings → Embeddings). Vectors from two models are not comparable, so that
 mismatch does not heal itself.</p>
+<h2 id="seamlessd_backups">seamlessd backups</h2>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd backups <span class="o">[</span>--json<span class="o">]</span>
+</span></span></code></pre></div>
+<p>Lists the backups that <a href="#seamlessd_restore"><code>restore</code></a> and the console's
+<strong>Settings &gt; Backups</strong> can put back, newest first: those in the backup folder
+and those in <code>~/.seamless/backups</code>, where the safety backups taken before a
+restore and the updater's pre-update backups always stay. Each line has when the
+backup was made, its kind (<code>automatic</code>, <code>made by you</code>, <code>before restore</code>,
+<code>before v0.8.1 update</code> or <code>exported</code>), its size and its file name, and under it
+what it holds: memories, notes, projects and sessions, <code>(memories and notes only)</code> for a <code>--no-db</code> export, and the machine it came from when another
+Seamless made it. An iCloud placeholder or a backup a newer Seamless made says
+why it cannot be restored.</p>
+<p>The folder is the one the daemon last recorded in
+<code>~/.seamless/backups/.schedule.json</code>, so a folder chosen in the console counts,
+and otherwise the config's (<code>backup.dir</code>, or <code>~/.seamless/backups</code>). A folder
+that cannot be used says why. <code>--json</code> prints the same listing as JSON.</p>
+<p>It opens no database, so it answers whether or not the daemon runs. Under
+<code>role: client</code> it refuses: the backups are on the server.</p>
+<h2 id="seamlessd_restore">seamlessd restore</h2>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd restore &lt;file<span class="p">|</span>name&gt; <span class="o">[</span>--merge<span class="o">]</span> <span class="o">[</span>--yes<span class="o">]</span>
+</span></span></code></pre></div>
+<p>Puts a backup back. <code>&lt;name&gt;</code> is a file name as <code>seamlessd backups</code> lists it;
+<code>&lt;file&gt;</code> is any backup's path, such as an export or a backup copied from
+another machine. The command shows where the backup came from and what it
+holds, says what will happen, and asks on the terminal. <code>--yes</code> skips the
+question, and without a terminal it is required.</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--merge</code></td>
+<td><code>false</code></td>
+<td>Only bring back what the backup has and this install lacks, first-writer-wins by ULID, as an <a href="#importing-an-archive">import merge</a> does. Nothing here changes. Without it, the backup replaces all data, and today's is saved first as a <code>-before-restore</code> backup in <code>~/.seamless/backups</code>, so restoring that one undoes it. A <code>--no-db</code> export can only be merged.</td>
+</tr>
+<tr>
+<td><code>--yes</code></td>
+<td><code>false</code></td>
+<td>Restore without asking.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Either way, locks, passkeys, project privacy, repo routes and console settings
+stay as they are now. A project locked today stays locked, a lock in the backup
+comes back, each project keeps the stricter of its two privacy settings, and
+every agent lease, console unlock and read grant in the backup is ended.
+<a href="../../guides/data/#restore-in-the-console">What a restore keeps</a> has the list.</p>
+<p>How it finishes depends on the daemon:</p>
+<ul>
+<li><strong>With the daemon running</strong>, the command checks the backup, prepares the
+restored data beside today's (or, for a merge, saves today's data first), and
+records the restore in <code>~/.seamless/restore/pending.json</code>. The daemon notices
+within seconds, restarts, and applies it before it opens the database. The
+command waits up to three minutes for the result and prints it. On Windows,
+where the daemon cannot restart itself in place, the command restarts the
+service. A restore that waits more than an hour for its restart is dropped,
+and nothing changes.</li>
+<li><strong>With no daemon</strong>, the command takes the data directory's lock and applies
+the restore itself, then, for a replace, saves the replaced data as a backup.</li>
+</ul>
+<p>A replace swaps the data in with a few renames, recorded before each step, so
+a start interrupted part way puts today's data back by itself (see
+<a href="../../guides/troubleshooting/#a-restore-did-not-finish">A restore did not finish</a>).
+Nothing under <code>~/.seamless/restore/</code> is deleted until its data is saved
+elsewhere.</p>
+<p>It refuses:</p>
+<ul>
+<li>a database older than this binary, like every one-shot command, and a data
+directory with no database: on a new machine, start Seamless once first;</li>
+<li>a backup a newer Seamless made, an iCloud placeholder that is not downloaded,
+and a file that is not a backup;</li>
+<li>a file system that cannot lock the data directory, since no swap is safe
+without the lock;</li>
+<li>while an update is running, or another restore is waiting to finish;</li>
+<li>under <code>role: client</code>: restore on the server.</li>
+</ul>
+<p>Under <a href="../../guides/peer-auth/#restore">peer_auth</a>, run it as the daemon's own
+account, never as root. It has no <code>--config</code> flag, so name the config through
+the environment, as the console's command does:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd restore &lt;file&gt;
+</span></span></code></pre></div>
+<p>The account is the proof the console asks a passkey for.</p>
 <h2 id="seamlessd_install_hooks">seamlessd install-hooks</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd install-hooks <span class="o">[</span>--client claude<span class="p">|</span>claude-desktop<span class="p">|</span>codex<span class="p">|</span>all<span class="p">|</span>detect<span class="o">]</span> <span class="o">[</span>--settings PATH<span class="o">]</span> <span class="o">[</span>--codex-hooks PATH<span class="o">]</span> <span class="o">[</span>--desktop-config PATH<span class="o">]</span> <span class="o">[</span>--url BASE<span class="o">]</span> <span class="o">[</span>--server-url URL<span class="o">]</span> <span class="o">[</span>--api-key KEY<span class="o">]</span> <span class="o">[</span>--seam PATH<span class="o">]</span> <span class="o">[</span>--mcp<span class="o">=</span>false<span class="o">]</span> <span class="o">[</span>--skills<span class="o">=</span>false<span class="o">]</span>
 </span></span></code></pre></div>
@@ -948,6 +1044,12 @@ rolls back to the release you had. Each such run is recorded in
 <code>~/.seamless/update/</code>. A daemon that <a href="../../updating/#automatic-updates">updates itself</a>
 runs this same engine unattended. Already on the newest release, it says so
 and changes nothing. <a href="../../updating/">Update &amp; uninstall</a> has the details.</p>
+<p><code>update</code> refuses while a <a href="#seamlessd_restore">restore</a> is waiting to finish
+(<code>~/.seamless/restore/pending.json</code> exists), since it would back the data up and
+replace the binary under it: restart Seamless to finish the restore, or cancel
+it in the console's <strong>Settings &gt; Backups</strong>, then update. Automatic updates and
+<strong>Update now</strong> wait the same way, and an attempt the daemon had already started
+stops with the refusal <code>restore_pending</code>.</p>
 <p>With a config that turns peer_auth on, <code>update</code> runs no installer, which would
 set up a per-user service that cannot host it. A system daemon that
 <a href="../../guides/peer-auth/#updates">updates itself</a>, run as the daemon's account
@@ -1304,7 +1406,7 @@ daemon is running older code than what you just built.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
+      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
     </ul>
   </aside>
   

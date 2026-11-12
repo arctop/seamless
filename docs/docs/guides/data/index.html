@@ -5,20 +5,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Import, back up &amp; restore - Seamless docs</title>
-<meta name="description" content="One archive with seamlessd export, restoring or merging it with seamlessd import, putting ~/.seamless in git, what deleting seam.db actually costs, and moving to a new machine.">
+<meta name="description" content="Scheduled backups and two-click restores in the console, one archive with seamlessd export, seamlessd restore and import, putting ~/.seamless in git, what deleting seam.db actually costs, and moving to a new machine.">
 <link rel="canonical" href="https://thereisnospoon.org/docs/guides/data/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://thereisnospoon.org/docs/guides/data/">
 <meta property="og:title" content="Import, back up &amp; restore - Seamless docs">
-<meta property="og:description" content="One archive with seamlessd export, restoring or merging it with seamlessd import, putting ~/.seamless in git, what deleting seam.db actually costs, and moving to a new machine.">
+<meta property="og:description" content="Scheduled backups and two-click restores in the console, one archive with seamlessd export, seamlessd restore and import, putting ~/.seamless in git, what deleting seam.db actually costs, and moving to a new machine.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Import, back up \u0026 restore","item":"https://thereisnospoon.org/docs/guides/data/"}]},{"@type":"TechArticle","headline":"Import, back up \u0026 restore - Seamless docs","description":"One archive with seamlessd export, restoring or merging it with seamlessd import, putting ~/.seamless in git, what deleting seam.db actually costs, and moving to a new machine.","url":"https://thereisnospoon.org/docs/guides/data/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Import, back up \u0026 restore","item":"https://thereisnospoon.org/docs/guides/data/"}]},{"@type":"TechArticle","headline":"Import, back up \u0026 restore - Seamless docs","description":"Scheduled backups and two-click restores in the console, one archive with seamlessd export, seamlessd restore and import, putting ~/.seamless in git, what deleting seam.db actually costs, and moving to a new machine.","url":"https://thereisnospoon.org/docs/guides/data/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
 <link rel="icon" type="image/svg+xml" href="../../../static/favicon.svg">
@@ -232,16 +232,122 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 </nav>
 
   <h1>Import, back up &amp; restore</h1>
-  <p class="lede">One archive with seamlessd export, restoring or merging it with seamlessd import, putting ~/.seamless in git, what deleting seam.db actually costs, and moving to a new machine.</p>
+  <p class="lede">Scheduled backups and two-click restores in the console, one archive with seamlessd export, seamlessd restore and import, putting ~/.seamless in git, what deleting seam.db actually costs, and moving to a new machine.</p>
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#what-is-precious-and-what-is-not">What is precious, and what is not</a></li><li class="lvl-2"><a href="#put-it-in-git">Put it in git</a></li><li class="lvl-2"><a href="#the-whole-instance-in-one-archive">The whole instance in one archive</a></li><li class="lvl-2"><a href="#restore">Restore</a></li><li class="lvl-2"><a href="#locked-projects">Locked projects</a></li><li class="lvl-2"><a href="#merging-two-instances">Merging two instances</a></li><li class="lvl-2"><a href="#import-from-seam-v1">Import from Seam v1</a></li><li class="lvl-2"><a href="#hand-editing">Hand-editing</a></li><li class="lvl-2"><a href="#moving-machines">Moving machines</a></li>
+      <li class="lvl-2"><a href="#backups-in-the-console">Backups in the console</a></li><li class="lvl-3"><a href="#the-schedule">The schedule</a></li><li class="lvl-3"><a href="#the-folder">The folder</a></li><li class="lvl-3"><a href="#the-list">The list</a></li><li class="lvl-3"><a href="#restore-in-the-console">Restore, and undo</a></li><li class="lvl-2"><a href="#what-is-precious-and-what-is-not">What is precious, and what is not</a></li><li class="lvl-2"><a href="#put-it-in-git">Put it in git</a></li><li class="lvl-2"><a href="#the-whole-instance-in-one-archive">The whole instance in one archive</a></li><li class="lvl-2"><a href="#restore">Restore</a></li><li class="lvl-3"><a href="#restoring-with-seamlessd-import">Restoring with seamlessd import</a></li><li class="lvl-2"><a href="#locked-projects">Locked projects</a></li><li class="lvl-2"><a href="#merging-two-instances">Merging two instances</a></li><li class="lvl-2"><a href="#import-from-seam-v1">Import from Seam v1</a></li><li class="lvl-2"><a href="#hand-editing">Hand-editing</a></li><li class="lvl-2"><a href="#moving-machines">Moving machines</a></li>
     </ul>
   </details>
   <p>Because durable knowledge is markdown files, backup and restore are boring - and
-that is the feature. This page is mostly about knowing which half of
+that is the feature. A release install - the installer's or Homebrew's - backs
+itself up every day without being asked, and the console restores any of those
+backups in two clicks. The rest of this page is about knowing which half of
 <code>~/.seamless</code> is precious and which half regenerates.</p>
+<h2 id="backups-in-the-console">Backups in the console</h2>
+<p><strong>Settings &gt; Backups</strong> in the console backs up the whole instance on a
+schedule, lists the backups it finds, and restores one. Each backup is one
+archive of the kind <a href="#the-whole-instance-in-one-archive"><code>seamlessd export</code></a>
+writes: every memory and note, a consistent snapshot of the database with your
+sessions, tasks, trials and projects, and a list of what each project holds.
+Like an export, it holds no config and no key.</p>
+<h3 id="the-schedule">The schedule</h3>
+<p>A release install (the installer's or Homebrew's) backs up <strong>every day, keeping
+the newest 7</strong>, in <code>~/.seamless/backups</code>. A Seamless built from source backs up only once you
+turn it on, so a throwaway daemon never writes backups. The section's
+<strong>Schedule and folder</strong> card sets:</p>
+<ul>
+<li><strong>Back up automatically</strong>, on or off;</li>
+<li><strong>How often</strong>: every hour, every 6 hours, every day or every week. The config
+file can set any interval from <code>1h</code> to <code>720h</code>, and the list then shows it too;</li>
+<li><strong>Automatic backups to keep</strong>, from 1 to 100. Older automatic backups are
+deleted after the next one is written. Backups you make yourself, the safety
+backups taken before a restore and the updater's pre-update backups are never
+deleted automatically, and neither is another install's backup in a shared
+folder.</li>
+</ul>
+<p>The first scheduled backup runs no sooner than ten minutes after Seamless
+starts. A run is skipped when nothing has changed since this install's newest
+backup in the folder (the card then says <strong>Up to date</strong>), or when the disk is
+short of room: a backup needs its own size free on each disk it touches, plus a
+reserve of 1 GiB or the backup's size, whichever is larger, so the updater can
+always take its own backup. <strong>Back up now</strong> makes one at once, whatever the
+schedule says.</p>
+<p>What you save there wins over the config file's
+<a href="../../reference/configuration/#backups"><code>backup:</code> block</a> until you press <strong>Reset to
+the config file</strong>, and applies from the next backup.</p>
+<h3 id="the-folder">The folder</h3>
+<p>Backups go to one folder you choose. Pick a synced folder or an external disk
+so a backup outlives the machine: the section offers the places it finds on
+this machine and can write to - iCloud Drive and the folders under
+<code>~/Library/CloudStorage</code> (Dropbox, Google Drive, OneDrive) and every external
+disk on macOS, <code>~/Dropbox</code> and the disks under <code>/media/&lt;you&gt;</code> on Linux,
+OneDrive and the other drives on Windows, and Seamless's own data folder
+everywhere. A suggestion fills in <code>&lt;place&gt;/Seamless Backups</code>.</p>
+<p>The folder field checks the path as you type, without writing anything:
+<strong>Ready</strong> with the free space, <strong>Will be created</strong>, <strong>Not writable</strong>, that its
+disk is not connected, or <strong>Inside Seamless's data folder</strong>, which is refused
+(only <code>~/.seamless/backups</code> itself is allowed). Saving a new
+folder creates it, private to your account, and tests it with a write first.
+The backups already in the old folder stay there.</p>
+<p>On macOS, a folder that macOS's privacy protection keeps Seamless out of gets
+its own answer: allow Seamless in <strong>System Settings &gt; Privacy &amp; Security &gt;
+Files and Folders</strong>, or give it <strong>Full Disk Access</strong>. A disk that is not
+connected is never written under: the run fails, says so, and the next one
+tries again.</p>
+<h3 id="the-list">The list</h3>
+<p><strong>Available backups</strong> lists, newest first, the backups in the chosen folder and
+in <code>~/.seamless/backups</code>, where the safety and pre-update backups always stay.
+Each one shows when it was made, its size and its kind in words: <strong>Automatic</strong>,
+<strong>Made by you</strong>, <strong>Before restore</strong>, <strong>Before updating from v0.8.1</strong>, or
+<strong>Exported</strong> for a file <code>seamlessd export</code> wrote. A backup another Seamless made
+says which machine it came from. <strong>What it holds</strong> opens a table of each
+project's memories, notes, tasks and sessions, beside how many more or fewer
+memories and notes the project holds now. A locked project shows its name and
+what the backup holds of it, never what it holds now.</p>
+<p>Two kinds of file are listed but cannot be restored yet: an iCloud placeholder
+(download it in Finder first) and a backup a newer Seamless made (update to
+restore it). <strong>Delete</strong> removes a backup from its folder, after a confirm.</p>
+<h3 id="restore-in-the-console">Restore, and undo</h3>
+<p><strong>Restore…</strong> opens a card in the backup's row that compares it with now and
+offers two choices:</p>
+<ul>
+<li><strong>Replace all data with this backup.</strong> Everything goes back to how it was
+when the backup was made. Your current data is saved as a backup first, so
+you can undo it.</li>
+<li><strong>Only bring back what's missing.</strong> Adds what the backup has and this install
+doesn't, such as deleted memories, notes and sessions. Nothing you have now
+changes. A backup of memories and notes only (<code>seamlessd export --no-db</code>)
+offers just this one.</li>
+</ul>
+<p>Then the card follows the restore through its steps: <strong>Checking the backup</strong>,
+<strong>Preparing the restored data</strong> (replace) or <strong>Saving your current data</strong>
+(merge), <strong>Restarting Seamless</strong>, <strong>Done</strong>, and for a replace, <strong>Saving your
+previous data as a backup</strong>. The heavy work happens while Seamless still
+serves, so a backup that fails its checks changes nothing. Seamless then
+restarts to finish, and agents lose it for a few seconds. <strong>Cancel restore</strong> is
+there until the restart.</p>
+<p>After the restart a result card says what was restored, with <strong>Undo this
+restore</strong> - which opens the same card for the safety backup - and
+<strong>Dismiss</strong>. On Windows, Seamless cannot restart itself in place: the card asks
+you to run <code>seamlessd restart</code> within an hour. A restore that waits longer is
+dropped, and nothing changes.</p>
+<p><strong>What a restore keeps.</strong> Locks, passkeys, project privacy, repo routes and
+console settings stay as they are now:</p>
+<ul>
+<li>a project locked today stays locked, and one locked in the backup comes back
+locked, so a restore never reduces the set of locked projects;</li>
+<li>each project keeps the stricter of its privacy setting now and in the backup;</li>
+<li>the passkeys and enrollment codes stay today's, so a passkey you removed
+after the backup does not come back;</li>
+<li>the repo routes, the briefing, features, level, embeddings, update and backup
+settings stay this machine's;</li>
+<li>every agent lease, console unlock and read grant the backup held is ended,
+so each agent and browser asks again.</li>
+</ul>
+<p>Under <a href="../../guides/peer-auth/#restore">peer_auth</a> with a project locked, a console
+restore needs a passkey, and without one the card shows the terminal command
+instead. <a href="#restore"><code>seamlessd restore</code></a> is the same restore without a browser.</p>
 <h2 id="what-is-precious-and-what-is-not">What is precious, and what is not</h2>
 <figure class="doc-figure" data-tone="warn" aria-labelledby="backup-map-caption">
   <span class="figure-kicker">Backup priorities</span>
@@ -320,7 +426,30 @@ writes the archive to stdout and the report to stderr.</li>
 <p><code>--no-db</code> gives you a knowledge-only archive: the two markdown trees, nothing
 else. It is the tarball equivalent of the git recipe above.</p>
 <h2 id="restore">Restore</h2>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd backups                                           <span class="c1"># what there is to restore</span>
+</span></span><span class="line"><span class="cl">seamlessd restore seamless-nuc.local-20260923T030000Z-auto.tar.gz
+</span></span><span class="line"><span class="cl">seamlessd restore --merge ~/Downloads/seamless.tar.gz       <span class="c1"># bring back only what is missing</span>
+</span></span></code></pre></div>
+<p><a href="../../reference/cli-seamlessd/#seamlessd_restore"><code>seamlessd restore</code></a> is the
+console's <a href="#restore-in-the-console">restore</a> from a terminal. Name a backup as
+<code>seamlessd backups</code> lists it, or give any backup file's path. It says what the
+backup holds and asks before it changes anything (<code>--yes</code> skips the question).
+Without <code>--merge</code> the backup replaces all data and today's is saved as a
+before-restore backup first, so restoring that one undoes it. With <code>--merge</code>
+only what the backup has and this install lacks is added. Either way it keeps
+what <a href="#restore-in-the-console">a console restore keeps</a>: locks, passkeys,
+project privacy, repo routes and console settings.</p>
+<p>There is nothing to stop first. With the daemon running, the command prepares
+the restore, the daemon restarts to finish it, and the command waits for the
+result. With no daemon, it applies the restore itself.</p>
+<p><code>seamlessd restore</code> needs a database to restore into, so on a machine where
+Seamless has never run, start it once first (the installer does). It refuses a
+database older than its own binary, like every one-shot command.</p>
+<h3 id="restoring-with-seamlessd-import">Restoring with <code>seamlessd import</code></h3>
+<p><code>seamlessd import</code> is the older, lower-level way. It brings the backup's own
+passkeys and console settings with it, which <code>seamlessd restore</code> never does:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd stop
+</span></span><span class="line"><span class="cl">mv ~/.seamless ~/.seamless.old                   <span class="c1"># import restores only into an empty data directory</span>
 </span></span><span class="line"><span class="cl">seamlessd import --from seamless-nuc.local-20260923T220501Z.tar.gz
 </span></span><span class="line"><span class="cl">seamlessd doctor <span class="o">&amp;&amp;</span> seamlessd start
 </span></span></code></pre></div>
@@ -345,11 +474,14 @@ isn't one to forget.</p>
 <p>To force a full rebuild, stop the daemon, delete <code>seam.db</code>, and start it again.
 You lose sessions, tasks, trials, and events; you lose no knowledge.</p>
 <h2 id="locked-projects">Locked projects</h2>
-<p>A backup keeps a locked project locked. <code>seamlessd export</code> records every locked
-project in the archive, whether the console set the lock or
+<p>A backup keeps a locked project locked. Every backup and <code>seamlessd export</code>
+records every locked project in the archive, whether the console set the lock or
 <code>peer_auth.force_locked</code> holds it, and a <code>--no-db</code> archive records them too. The
 file itself is not encrypted, so a lock does not protect it: keep the archive as
 carefully as the most sensitive project in it.</p>
+<p>With <code>seamlessd restore</code> or the console there is nothing to choose: the restore
+keeps today's locks and passkeys and adds the backup's locks. The rest of this
+section is about <code>seamlessd import</code>.</p>
 <p>Before an import writes anything, it looks for a passkey that can open those
 projects:</p>
 <ul>
@@ -439,17 +571,23 @@ any text editor.</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="c1"># on the old machine</span>
 </span></span><span class="line"><span class="cl">seamlessd <span class="nb">export</span> -o seamless.tar.gz
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># on the new one</span>
-</span></span><span class="line"><span class="cl">make install                        <span class="c1"># seeds a config with a NEW generated key</span>
-</span></span><span class="line"><span class="cl">seamlessd stop                      <span class="c1"># the installer starts the service</span>
-</span></span><span class="line"><span class="cl">seamlessd import --from seamless.tar.gz
-</span></span><span class="line"><span class="cl">seamlessd doctor <span class="o">&amp;&amp;</span> seamlessd start
+</span></span><span class="line"><span class="cl"><span class="c1"># on the new one, once Seamless is installed and has started</span>
+</span></span><span class="line"><span class="cl">seamlessd restore ~/seamless.tar.gz
 </span></span></code></pre></div>
-<p>The new machine's data directory is empty, so this is a restore: every memory
-and note lands byte-for-byte, and the sessions, tasks, trials, and events come
-with it. If you are folding the old machine into an instance that already has
-data, the same command is a merge instead - see
+<p>Every memory and note comes back byte-for-byte, with the sessions, tasks,
+trials, and events. Backups in a synced folder work the same way: point the new
+machine's backup folder at it, and its backups are in the console's list, marked
+as from another Seamless. If you are folding the old machine into an instance
+that already has data, add <code>--merge</code> - see
 <a href="#merging-two-instances">Merging two instances</a>.</p>
+<p>The new machine keeps its own settings, as every restore does: its passkeys,
+its repo routes (a session started in a repository maps it again by its
+directory name, and <code>seamlessd map-repo</code> points one at another project) and its
+console settings. Locked projects come back locked. To open them,
+enroll a passkey here: the Approvers page takes one with a one-time code from
+your terminal. To bring the old machine's passkeys and console settings across
+too, restore with <code>seamlessd import</code> into an empty data directory instead
+(<a href="#restoring-with-seamlessd-import">Restoring with <code>seamlessd import</code></a>).</p>
 <p>The install generates a fresh <code>mcp.api_key</code> rather than copying the old config:
 the key is the only credential, it is deliberately not in the archive, and a
 machine migration is a good moment not to spread it around. See
@@ -474,7 +612,7 @@ index rebuilds itself on first start either way.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#what-is-precious-and-what-is-not">What is precious, and what is not</a></li><li class="lvl-2"><a href="#put-it-in-git">Put it in git</a></li><li class="lvl-2"><a href="#the-whole-instance-in-one-archive">The whole instance in one archive</a></li><li class="lvl-2"><a href="#restore">Restore</a></li><li class="lvl-2"><a href="#locked-projects">Locked projects</a></li><li class="lvl-2"><a href="#merging-two-instances">Merging two instances</a></li><li class="lvl-2"><a href="#import-from-seam-v1">Import from Seam v1</a></li><li class="lvl-2"><a href="#hand-editing">Hand-editing</a></li><li class="lvl-2"><a href="#moving-machines">Moving machines</a></li>
+      <li class="lvl-2"><a href="#backups-in-the-console">Backups in the console</a></li><li class="lvl-3"><a href="#the-schedule">The schedule</a></li><li class="lvl-3"><a href="#the-folder">The folder</a></li><li class="lvl-3"><a href="#the-list">The list</a></li><li class="lvl-3"><a href="#restore-in-the-console">Restore, and undo</a></li><li class="lvl-2"><a href="#what-is-precious-and-what-is-not">What is precious, and what is not</a></li><li class="lvl-2"><a href="#put-it-in-git">Put it in git</a></li><li class="lvl-2"><a href="#the-whole-instance-in-one-archive">The whole instance in one archive</a></li><li class="lvl-2"><a href="#restore">Restore</a></li><li class="lvl-3"><a href="#restoring-with-seamlessd-import">Restoring with seamlessd import</a></li><li class="lvl-2"><a href="#locked-projects">Locked projects</a></li><li class="lvl-2"><a href="#merging-two-instances">Merging two instances</a></li><li class="lvl-2"><a href="#import-from-seam-v1">Import from Seam v1</a></li><li class="lvl-2"><a href="#hand-editing">Hand-editing</a></li><li class="lvl-2"><a href="#moving-machines">Moving machines</a></li>
     </ul>
   </aside>
   

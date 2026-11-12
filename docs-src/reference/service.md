@@ -266,12 +266,11 @@ walks through the outcomes. What the service manager can tell you:
   `curl -fsSL https://thereisnospoon.org/install | SEAMLESS_VERSION=<version> sh`,
   or `$env:SEAMLESS_VERSION='<version>'; irm https://thereisnospoon.org/install.ps1 | iex`
   on Windows. Then run `seamlessd doctor`.
-- **Putting the whole instance back** from the pre-update backup is a restore,
-  and `seamlessd import` restores only into an empty data directory (into a
-  populated one it merges). Run `seamlessd stop`, then move `~/.seamless` aside
-  (to `~/.seamless.broken`, say; the backup moves with it), then run
-  `seamlessd import --from ~/.seamless.broken/backups/pre-update-v<old>-<time>.tar.gz`,
-  then `seamlessd start`.
+- **Putting the whole instance back** from the pre-update backup is
+  `seamlessd restore pre-update-v<old>-<time>.tar.gz` (`seamlessd backups`
+  lists it as `before v<old> update`), or **Restore…** on it in the console's
+  **Settings > Backups**. Today's data is saved as a backup first, so it can be
+  undone. See [Restore](/guides/data/#restore).
 
 ## A system service for peer_auth {#peer-auth-daemon}
 
@@ -365,7 +364,7 @@ the same relative locations on every OS.
 | Binaries | `~/.local/bin/seamlessd`, `~/.local/bin/seam` | `SEAMLESS_INSTALL_DIR` retargets them - see [Install & deploy](/install/) |
 | Config + bearer key | `~/.config/seamless/seamless.yaml` | mode `0600`; every key in [Configuration](/reference/configuration/) |
 | Knowledge + database | `~/.seamless/` | markdown memories and notes, plus `seam.db` - see [Storage](/reference/storage/) |
-| Update records + backups | `~/.seamless/update/`, `~/.seamless/backups/` | the update check's state, each update attempt and its log, the pre-update archives - see [Storage](/reference/storage/#the-update-records) |
+| Update records + backups | `~/.seamless/update/`, `~/.seamless/backups/`, `~/.seamless/restore/` | the update check's state, each update attempt and its log, the pre-update archives, scheduled and safety backups, a restore in flight - see [Storage](/reference/storage/#the-update-records) and [the backup records](/reference/storage/#the-backup-records) |
 | Daemon log | `~/.seamless/seamlessd.log` (macOS, Windows); journald (Linux) | `make logs` from a clone, `journalctl --user -u seamless -f` on Linux |
 | Claude Code hooks | `~/.claude/settings.json` | exactly what is written: [Hooks](/reference/hooks/) |
 | Codex hooks | `${CODEX_HOME:-~/.codex}/hooks.json` | same reference, [shell-string forms](/reference/hooks/#the-codex-profile-is-shell-strings) |

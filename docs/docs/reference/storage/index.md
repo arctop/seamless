@@ -25,7 +25,12 @@ _global/{name}.md Machine-wide memories
 notes/ Durable note tree
 _global/{slug}.md Machine-wide notes
 {project}/{slug}.md One project note per file
-backups/ Pre-update archives (pre-update-v{old}-{time}.tar.gz), the newest two
+backups/ Backups: the scheduled ones (unless backup.dir names another folder), the safety backups taken before a restore, and the pre-update archives (pre-update-v{old}-{time}.tar.gz), the newest two
+.schedule.json The schedule's record: the last run, the failure streak, the folder in use and this install's id
+restore/ Only around a restore: what it staged, and its result
+pending.json A restore staged or under way; while it exists, updates wait
+last.json The last restore's result, shown until dismissed
+{id}/ archive.tar.gz (the verified copy of the backup), new/ (the restored data, before the swap), previous/ (the data a replace set aside, until it is saved as a backup)
 update/ The update check's and the updater's record (release builds only)
 state.json Last check, cached release list, running daemon, automatic-update state
 update.lock The updater's lock; never delete it
@@ -232,6 +237,38 @@ database stays in place, so a rollback never unlocks a project. Memories and not
 never rolled back. Creating `update/test-fail-confirm` rehearses a rollback on
 a real install: while it exists, every update fails its confirmation on purpose
 and rolls back, and `seamlessd doctor` warns. Delete it afterwards.
+
+### The backup records {#the-backup-records}
+
+[Scheduled backups](https://thereisnospoon.org/docs/guides/data/#backups-in-the-console) go to
+`<data_dir>/backups` unless `backup.dir` or the console names another folder.
+Their names say what they are: `seamless-<host>-<UTC time>-auto.tar.gz` for an
+automatic backup, `seamless-<host>-<UTC time>-before-restore.tar.gz` for the
+safety backup a restore takes, which always stays in `<data_dir>/backups`, and
+`seamless-<host>-<UTC time>.tar.gz` for one made with **Back up now**, the name
+`seamlessd export` gives too. Each one is an export archive whose manifest also
+says why it was written, which install wrote it, and what each project held. A
+backup is written to a dot-prefixed temporary file in its folder, synced,
+renamed into place and read back. Listings skip dot files.
+
+`backups/.schedule.json` is the scheduler's record: when it last ran, confirmed
+the backups current and succeeded, the newest backup, the failure streak and its
+last reason, the automatic backups it wrote (so it can still prune its own after
+a cloud folder turned them into placeholders), the folder in use and this
+install's id. It lives beside the backups rather than in the database, so a
+restore that replaces the database keeps the schedule's history. `seamlessd
+backups` reads its folder from there.
+
+`restore/` exists only around a restore. `pending.json` is the staged restore:
+the backup, its SHA-256, the mode, who asked and with what proof, and the stage
+it has reached (`staged`, `swapping`, `applied`, or `merging` for a merge). It
+is created exclusively, so only one restore waits at a time. `restore/<id>/`
+holds the verified copy of the backup and, for a replace, `new/` (the restored
+data, prepared while the daemon served) and `previous/` (today's data, once the
+swap set it aside, until it is saved as a before-restore backup and read back).
+`last.json` is the result the console and `seamlessd restore` report. Never
+delete anything under `restore/` by hand while `pending.json` exists: the next
+start reads it to finish or undo the swap.
 
 ### Reconciliation
 

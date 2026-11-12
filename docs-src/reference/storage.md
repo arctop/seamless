@@ -27,7 +27,12 @@ it by hand, and what happens if you delete it.
     <div class="tree-branch"><code>notes/</code><span class="tree-note">Durable note tree</span></div>
     <div class="tree-leaf"><code>_global/{slug}.md</code><span class="tree-note">Machine-wide notes</span></div>
     <div class="tree-leaf"><code>{project}/{slug}.md</code><span class="tree-note">One project note per file</span></div>
-    <div class="tree-branch"><code>backups/</code><span class="tree-note">Pre-update archives (pre-update-v{old}-{time}.tar.gz), the newest two</span></div>
+    <div class="tree-branch"><code>backups/</code><span class="tree-note">Backups: the scheduled ones (unless backup.dir names another folder), the safety backups taken before a restore, and the pre-update archives (pre-update-v{old}-{time}.tar.gz), the newest two</span></div>
+    <div class="tree-leaf"><code>.schedule.json</code><span class="tree-note">The schedule's record: the last run, the failure streak, the folder in use and this install's id</span></div>
+    <div class="tree-branch"><code>restore/</code><span class="tree-note">Only around a restore: what it staged, and its result</span></div>
+    <div class="tree-leaf"><code>pending.json</code><span class="tree-note">A restore staged or under way; while it exists, updates wait</span></div>
+    <div class="tree-leaf"><code>last.json</code><span class="tree-note">The last restore's result, shown until dismissed</span></div>
+    <div class="tree-leaf"><code>{id}/</code><span class="tree-note">archive.tar.gz (the verified copy of the backup), new/ (the restored data, before the swap), previous/ (the data a replace set aside, until it is saved as a backup)</span></div>
     <div class="tree-branch"><code>update/</code><span class="tree-note">The update check's and the updater's record (release builds only)</span></div>
     <div class="tree-leaf"><code>state.json</code><span class="tree-note">Last check, cached release list, running daemon, automatic-update state</span></div>
     <div class="tree-leaf"><code>update.lock</code><span class="tree-note">The updater's lock; never delete it</span></div>
@@ -235,6 +240,38 @@ database stays in place, so a rollback never unlocks a project. Memories and not
 never rolled back. Creating `update/test-fail-confirm` rehearses a rollback on
 a real install: while it exists, every update fails its confirmation on purpose
 and rolls back, and `seamlessd doctor` warns. Delete it afterwards.
+
+### The backup records {#the-backup-records}
+
+[Scheduled backups](/guides/data/#backups-in-the-console) go to
+`<data_dir>/backups` unless `backup.dir` or the console names another folder.
+Their names say what they are: `seamless-<host>-<UTC time>-auto.tar.gz` for an
+automatic backup, `seamless-<host>-<UTC time>-before-restore.tar.gz` for the
+safety backup a restore takes, which always stays in `<data_dir>/backups`, and
+`seamless-<host>-<UTC time>.tar.gz` for one made with **Back up now**, the name
+`seamlessd export` gives too. Each one is an export archive whose manifest also
+says why it was written, which install wrote it, and what each project held. A
+backup is written to a dot-prefixed temporary file in its folder, synced,
+renamed into place and read back. Listings skip dot files.
+
+`backups/.schedule.json` is the scheduler's record: when it last ran, confirmed
+the backups current and succeeded, the newest backup, the failure streak and its
+last reason, the automatic backups it wrote (so it can still prune its own after
+a cloud folder turned them into placeholders), the folder in use and this
+install's id. It lives beside the backups rather than in the database, so a
+restore that replaces the database keeps the schedule's history. `seamlessd
+backups` reads its folder from there.
+
+`restore/` exists only around a restore. `pending.json` is the staged restore:
+the backup, its SHA-256, the mode, who asked and with what proof, and the stage
+it has reached (`staged`, `swapping`, `applied`, or `merging` for a merge). It
+is created exclusively, so only one restore waits at a time. `restore/<id>/`
+holds the verified copy of the backup and, for a replace, `new/` (the restored
+data, prepared while the daemon served) and `previous/` (today's data, once the
+swap set it aside, until it is saved as a before-restore backup and read back).
+`last.json` is the result the console and `seamlessd restore` report. Never
+delete anything under `restore/` by hand while `pending.json` exists: the next
+start reads it to finish or undo the swap.
 
 ### Reconciliation
 

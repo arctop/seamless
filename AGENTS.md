@@ -938,6 +938,47 @@ attempt files. Every other install only notifies. Owner decisions: memory
   `update_selfcheck_windows.go`, with stubs in `update_selfcheck_unix.go`.
   Compare paths with `os.SameFile`, never strings.
 
+### Backups and restore (`internal/backup`)
+
+Settings > Backups and `seamlessd backups`/`restore`. Guide:
+docs-src/guides/data.md; owner decisions: memory
+`console-backups-owner-decisions`.
+
+- **A restore never reduces the locked set or loosens a fence.**
+  `store.ReadKeptState` reads today's state before anything moves, and
+  `store.ApplyKeptState` writes it into the restored database before the swap:
+  `RestoreKeptSettings` and the `keptTables` (approvers, enrollment codes,
+  repo_map) become exactly today's, console locks are the backup's plus
+  today's (today's verbatim), and each project keeps the stricter of its two
+  isolations. A new settings key goes into `RestoreKeptSettings` or
+  `restoredSettings`, or `TestSettingsKeys_EveryKeyIsClassifiedForRestore`
+  fails.
+- **No route stages a restore under a peer_auth lock without
+  `approval.FinishRestore`** (`restoreGated`: a force lock, a lockable project,
+  or a console lock; an unreadable lock table counts as locked). `/restore/begin`
+  is cookie-only, and the digest is the server's own read of the file, read
+  again at finish. The CLI's proof is the daemon's account, never root.
+- **The live data dir changes only through the recorded swap.** Staging runs
+  while serving and writes only under `restore/<id>/`. `applyPendingRestore`
+  (`backup.Applier`) runs in `runServe` after `lockDataDir` and before
+  `store.Open`; renames happen only
+  after `pending.json` says `swapping`, `applied` is the commit point, and a
+  rollback that cannot complete is serve's error. Nothing under `restore/` is
+  deleted before its data is verified elsewhere. While `pending.json` exists,
+  the updater refuses (`restore_pending`) and the checker holds.
+- **Pruning touches only this install's `-auto` backups** (manifest
+  `InstallID`), never manual, before-restore, pre-update or another install's
+  files. Startup sweeps only `.staging-*` and the service's own partials, never
+  the updater's `.export-*`.
+- **One writer, bounded shutdown.** The service's loop goroutine owns
+  `.schedule.json` and serves commands; a run never holds a live database
+  handle while it writes to the destination, so `Wait` (bounded) can abandon a
+  stalled cloud or network write.
+- **Under peer_auth a backup is the daemon's alone**: `0600`, owned by its
+  uid, in a folder only it and root can change (`backup.Guard`). The folder
+  check answers "inside Seamless's data folder" before any other probe for any
+  path in the data dir but `backups/`, so it is no oracle into the corpus.
+
 ### Release discipline: the previous release must still run
 
 An automatic update rolls back to the release it replaced when the new one does

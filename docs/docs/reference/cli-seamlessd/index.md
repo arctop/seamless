@@ -1,6 +1,6 @@
 # seamlessd CLI
 
-> The daemon and operator CLI - serve, doctor, export, import, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.
+> The daemon and operator CLI - serve, doctor, export, import, backups, restore, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.
 
 `seamlessd` is both the server and the operator CLI. `serve` runs the daemon;
 every other subcommand is a one-shot that opens the same config and database
@@ -12,7 +12,8 @@ it at its next start), and only `map-repo` creates a database when there is
 none.
 
 Each subcommand parses its own flags. None of them take positional arguments
-except `family`, which takes only positionals.
+except `family`, which takes only positionals, and `restore`, which takes the
+backup to restore.
 
 For the keys every command below resolves, see
 [Configuration](https://thereisnospoon.org/docs/reference/configuration/).
@@ -101,7 +102,7 @@ Checks stop early if config or the database cannot be loaded at all.
 | `server_url` | Fetches `/healthz` through the advertised URL. Not answering is **info** (the daemon is often stopped while doctor runs); a `421` is a **fail** naming the Host header it just refused, which means the allowlist and the advertised name disagree. A derived URL says so. |
 | `tls` | Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of `server_url` - the one that fails at the client's handshake with a message that names no file on the server. |
 | `database` | Path, schema version, and table count, or that none exists yet (a fresh install: the daemon creates it at its first start). Never creates or migrates a database. |
-| `schema version` | An **info** line pairing what the database has applied with what this binary compiles - `v25 applied / v25 compiled`. A database *ahead* of the binary warns: it was migrated by a newer `seamlessd` (a downgrade, or an update rollback that could not restore the pre-update database). Run that newer release again (`seamlessd update`), or import a backup taken before it (`seamlessd import`). `serve` logs the same warning at startup, and an archive from such a database would be refused. A database *behind* the binary warns too: a daemon of this version migrates it at its next start, and doctor skips the checks that need the current schema. |
+| `schema version` | An **info** line pairing what the database has applied with what this binary compiles - `v25 applied / v25 compiled`. A database *ahead* of the binary warns: it was migrated by a newer `seamlessd` (a downgrade, or an update rollback that could not restore the pre-update database). Run that newer release again (`seamlessd update`), or restore a backup taken before it (`seamlessd restore`, or `seamlessd import` into an empty data directory). `serve` logs the same warning at startup, and an archive from such a database would be refused. A database *behind* the binary warns too: a daemon of this version migrates it at its next start, and doctor skips the checks that need the current schema. |
 | `repo map` | Warns when mapped paths belonging to **this** host name directories that no longer exist on disk. A moved repo adopts its project at its next session start; a moved-and-renamed repo needs the printed `map-repo` override, and `unmap-repo --stale` clears the dead entries. Rows belonging to other hosts are counted and reported as not verifiable from here - never stat'd, never treated as missing. |
 | `remote sessions` | An **info** line: which other machines used this daemon in the last 24 hours, and how many daemon-side captures were skipped for them. `none in 24h` on a single-machine install. |
 | `mcp_tools` | On a server install, fails if the number of registered tools disagrees with the expected count - catches a tool written but never wired in. On a `role: client` install it is the live count instead: `tools/list` against the server, judged against that server's effective feature state. |
@@ -115,6 +116,7 @@ Checks stop early if config or the database cannot be loaded at all.
 | `codex mcp` | Exact enabled stdio bridge state from `codex mcp get seamless --json`, plus executable/config target existence. |
 | `feature skills` | An **info** line when a client's skill home still holds a skill for an [optional feature](https://thereisnospoon.org/docs/reference/console/#optional-features) you switched off - the daemon never deletes there on a toggle. Re-run `install-hooks` to remove it, or re-enable the feature. |
 | `gardener` | The ticker configuration, or a warning that it is disabled. |
+| `backups` | [Scheduled backups](https://thereisnospoon.org/docs/guides/data/#backups-in-the-console) and restores, from the records in `~/.seamless/backups/` and `~/.seamless/restore/`. A restore in flight comes first: one staged (**info**: it applies when Seamless restarts, and expires an hour after it was staged), one stopped part way through its swap or its merge (**warn**: the next start undoes the swap, or runs the merge again), or one applied with its bookkeeping left for the next start (**info**). Then a **warn** for replaced data still waiting to be saved as a backup, a `restore/<id>/previous` folder no record accounts for, or a last restore that did not finish. Otherwise the schedule: **info** when automatic backups are off, a **warn** when the last two or more automatic backups failed (the first failure's time and the last error) or nothing has confirmed the backups current for three intervals, **info** when none has been made yet, and **ok** with when they were last confirmed. Absent under `role: client`. |
 | `updates` | The [automatic update check](https://thereisnospoon.org/docs/updating/#automatic-update-checks) and [automatic updates](https://thereisnospoon.org/docs/updating/#automatic-updates), read from the daemon's and the updater's own records (`~/.seamless/update/state.json`, `attempt.json`) without asking GitHub or the daemon. One line, the most urgent thing first. An update that could not be rolled back cleanly, and that the daemon has not settled, is a **warn** carrying the updater's recovery steps and its log. An update under way is **info**. Automatic updates that paused themselves are a **warn** naming why, with the way out: resume them in the console under **Settings > Updates**. A daemon that updates itself says, as **info**, what it installs next and when: once its soak (`update.min_age`) is over, then when no agent session is live, or at a lull in requests after its deadline (`update.max_defer`). A newer release that automatic updates skip (blocked after a failed attempt, or published without a signed checksums bundle) is a **warn** with the command to install it by hand; a hold after a deliberate downgrade is **info**. A daemon that only notifies is **ok** when up to date and a **warn** naming the newer release and the command for this install. The last attempt is added while it concerns the running release, with the updater's own error; one that applied with warnings names `seamlessd install-hooks`. One the updater's gates refused is a **warn** ending in the owner's action for that refusal: `seamlessd restart` when the installed seamlessd is not the version the daemon runs (a release installed without a restart) or the install no longer looks installer-made, and `seamlessd update`, run by hand, when the updater could not make sure it runs outside the service. Automatic updates turned off before it began need no action. **info** when checks are off (and why) or have not run yet. A check failing for a week is a **warn** - usually a proxy the service's environment does not know about. |
 | `update drill` | Only while `~/.seamless/update/test-fail-confirm` exists: a **warn**, because the rollback drill's switch makes every update fail its confirmation and roll back. Delete the file to end the drill. |
 | `tls trust` | Whether this machine's own client verifies the certificate the daemon serves for `server_url`. That client is the one its hooks dial with, and the one an update confirms the new daemon through. The answer comes from the config (the system roots plus `tls.ca_file`) without a dial, so it answers while the daemon is down. **ok** when the client verifies it; otherwise a **warn** naming the repair, since every update would fail its confirmation, and so would its rollback's: the attempt ends not rolled back and automatic updates pause. A `tls.ca_file` that cannot be loaded warns on any install. Absent when TLS is off and the client is usable. |
@@ -233,8 +235,10 @@ An archive that holds locked projects is checked for a passkey able to open them
 before anything is written. See [Locked projects](https://thereisnospoon.org/docs/guides/data/#locked-projects).
 
 Restore-or-merge is a property of the **destination**, printed in the report and
-never overridable. There is no `restore` verb and no `--mode`: the only thing an
-override could do is replace a populated instance's database.
+never overridable. `import` has no `--mode`: the only thing an override could do
+is replace a populated instance's database. To replace a populated instance's
+data on purpose, with today's saved first, use
+[`seamlessd restore`](#seamlessd_restore).
 
 - **Fresh** (restore) when the data directory is absent, or holds neither
   `seam.db` nor `seam.db-wal` and no regular non-dot file in either tree. The
@@ -268,6 +272,94 @@ When the archive's `embedding_models` differ from this instance's embedder, the
 report says so and points at the console's re-embed
 (Settings → Embeddings). Vectors from two models are not comparable, so that
 mismatch does not heal itself.
+
+## seamlessd backups {#seamlessd_backups}
+
+```bash
+seamlessd backups [--json]
+```
+
+Lists the backups that [`restore`](#seamlessd_restore) and the console's
+**Settings > Backups** can put back, newest first: those in the backup folder
+and those in `~/.seamless/backups`, where the safety backups taken before a
+restore and the updater's pre-update backups always stay. Each line has when the
+backup was made, its kind (`automatic`, `made by you`, `before restore`,
+`before v0.8.1 update` or `exported`), its size and its file name, and under it
+what it holds: memories, notes, projects and sessions, `(memories and notes
+only)` for a `--no-db` export, and the machine it came from when another
+Seamless made it. An iCloud placeholder or a backup a newer Seamless made says
+why it cannot be restored.
+
+The folder is the one the daemon last recorded in
+`~/.seamless/backups/.schedule.json`, so a folder chosen in the console counts,
+and otherwise the config's (`backup.dir`, or `~/.seamless/backups`). A folder
+that cannot be used says why. `--json` prints the same listing as JSON.
+
+It opens no database, so it answers whether or not the daemon runs. Under
+`role: client` it refuses: the backups are on the server.
+
+## seamlessd restore {#seamlessd_restore}
+
+```bash
+seamlessd restore <file|name> [--merge] [--yes]
+```
+
+Puts a backup back. `<name>` is a file name as `seamlessd backups` lists it;
+`<file>` is any backup's path, such as an export or a backup copied from
+another machine. The command shows where the backup came from and what it
+holds, says what will happen, and asks on the terminal. `--yes` skips the
+question, and without a terminal it is required.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--merge` | `false` | Only bring back what the backup has and this install lacks, first-writer-wins by ULID, as an [import merge](#importing-an-archive) does. Nothing here changes. Without it, the backup replaces all data, and today's is saved first as a `-before-restore` backup in `~/.seamless/backups`, so restoring that one undoes it. A `--no-db` export can only be merged. |
+| `--yes` | `false` | Restore without asking. |
+
+Either way, locks, passkeys, project privacy, repo routes and console settings
+stay as they are now. A project locked today stays locked, a lock in the backup
+comes back, each project keeps the stricter of its two privacy settings, and
+every agent lease, console unlock and read grant in the backup is ended.
+[What a restore keeps](https://thereisnospoon.org/docs/guides/data/#restore-in-the-console) has the list.
+
+How it finishes depends on the daemon:
+
+- **With the daemon running**, the command checks the backup, prepares the
+  restored data beside today's (or, for a merge, saves today's data first), and
+  records the restore in `~/.seamless/restore/pending.json`. The daemon notices
+  within seconds, restarts, and applies it before it opens the database. The
+  command waits up to three minutes for the result and prints it. On Windows,
+  where the daemon cannot restart itself in place, the command restarts the
+  service. A restore that waits more than an hour for its restart is dropped,
+  and nothing changes.
+- **With no daemon**, the command takes the data directory's lock and applies
+  the restore itself, then, for a replace, saves the replaced data as a backup.
+
+A replace swaps the data in with a few renames, recorded before each step, so
+a start interrupted part way puts today's data back by itself (see
+[A restore did not finish](https://thereisnospoon.org/docs/guides/troubleshooting/#a-restore-did-not-finish)).
+Nothing under `~/.seamless/restore/` is deleted until its data is saved
+elsewhere.
+
+It refuses:
+
+- a database older than this binary, like every one-shot command, and a data
+  directory with no database: on a new machine, start Seamless once first;
+- a backup a newer Seamless made, an iCloud placeholder that is not downloaded,
+  and a file that is not a backup;
+- a file system that cannot lock the data directory, since no swap is safe
+  without the lock;
+- while an update is running, or another restore is waiting to finish;
+- under `role: client`: restore on the server.
+
+Under [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/#restore), run it as the daemon's own
+account, never as root. It has no `--config` flag, so name the config through
+the environment, as the console's command does:
+
+```bash
+sudo -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd restore <file>
+```
+
+The account is the proof the console asks a passkey for.
 
 ## seamlessd install-hooks {#seamlessd_install_hooks}
 
@@ -477,6 +569,13 @@ rolls back to the release you had. Each such run is recorded in
 `~/.seamless/update/`. A daemon that [updates itself](https://thereisnospoon.org/docs/updating/#automatic-updates)
 runs this same engine unattended. Already on the newest release, it says so
 and changes nothing. [Update & uninstall](https://thereisnospoon.org/docs/updating/) has the details.
+
+`update` refuses while a [restore](#seamlessd_restore) is waiting to finish
+(`~/.seamless/restore/pending.json` exists), since it would back the data up and
+replace the binary under it: restart Seamless to finish the restore, or cancel
+it in the console's **Settings > Backups**, then update. Automatic updates and
+**Update now** wait the same way, and an attempt the daemon had already started
+stops with the refusal `restore_pending`.
 
 With a config that turns peer_auth on, `update` runs no installer, which would
 set up a per-user service that cannot host it. A system daemon that

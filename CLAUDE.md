@@ -21,8 +21,9 @@ preserved read-only as a fallback archive.
 ## Project structure
 
 ```
-cmd/seamlessd/     server daemon: serve, doctor, export, import, install-hooks,
-                   map-repo, unmap-repo, retire-project, family, console-open
+cmd/seamlessd/     server daemon: serve, doctor, export, import, backups, restore,
+                   install-hooks, map-repo, unmap-repo, retire-project, family,
+                   console-open
 cmd/seam/          headless CLI (agents + owner observability)  [P2/P5]
 cmd/docsgen/       docs site generator: docs-src/ -> docs/docs/ (see SITE.md)
 cmd/demoseed/      thin CLI over internal/demokit: the console-fleet seed
@@ -93,6 +94,13 @@ internal/releasesig/ Sigstore check that a release asset came from this repo's
 internal/archive/  instance archives: VACUUM INTO snapshot + corpus + manifest
                    out; guarded tar extract and restore-or-merge back in.
                    Never imports config
+internal/backup/   Settings > Backups' service: the backup: settings, backup
+                   names, the folder rules and suggestions, the list, one run
+                   at a time, the scheduler (.schedule.json), and restore:
+                   staged while serving, applied at startup through a
+                   recorded swap, undoable. Domain package over archive,
+                   store, events, core, config; cmd/seamlessd/backups.go wires
+                   it and holds `seamlessd backups`/`restore`
 internal/importer/ one-shot import of the v1 (~/.seam) snapshot
 internal/demokit/  importable fixture-seeding primitives + the demo spec sets;
                    the shared seam under BOTH branding and the benchmark
@@ -192,7 +200,10 @@ automatic updates' idle gate. The `update:` block (check, check_interval, auto,
 max_defer, min_age) drives the update check and automatic updates; its console
 override (Settings -> Updates) merges the other way round: `check: false` or
 `auto: false` in the file/env is final and locks its toggle (false check means
-no update traffic at all). Durations are `config.Duration` ("6h"; a bare
+no update traffic at all). The `backup:` block (auto, every, keep, dir) drives
+scheduled backups; unset auto is on for release builds and off for source
+builds, and its console override (Settings -> Backups) simply wins until reset.
+Durations are `config.Duration` ("6h"; a bare
 number other than 0 is refused). The `peer_auth:` block (off by default; see
 docs-src/guides/peer-auth.md) adds a Unix-socket listener whose callers are
 named by the kernel's peer uid, locks the projects it lists until the owner
@@ -210,7 +221,15 @@ commit-matching snapshot to `snapshot_file`.
   seamlessd.lock                   serve's one-daemon-per-data-dir lock (holder's PID; never delete it)
   memory/{project|_global}/{name}.md   one memory per file (source of truth)
   notes/{project|_global}/{slug}.md    work artifacts (source of truth)
-  backups/pre-update-v*.tar.gz     the updater's pre-update archives (newest 2)
+  backups/                         scheduled backups (unless backup.dir names another folder),
+                                   *-before-restore safety backups, and the updater's
+                                   pre-update-v*.tar.gz archives (newest 2)
+  backups/.schedule.json           the scheduler's record: runs, failure streak, folder, install_id
+  restore/pending.json             a restore staged or under way (stage staged|swapping|applied|merging);
+                                   while it exists updates refuse (restore_pending)
+  restore/last.json                the last restore's result, until dismissed
+  restore/<id>/{archive.tar.gz,new,previous}  a restore's verified copy, the prepared data,
+                                   and the data a replace set aside (never delete by hand)
   update/state.json                the update check's record (release daemons only)
   update/update.lock               the updater's lock (never delete it)
   update/attempt.json, attempts.jsonl, logs/   the updater's records (it writes, the daemon reads)

@@ -55,6 +55,14 @@ The console is **read-mostly**. That is a design claim, so here is the whole lis
 | Turn automatic updates on or off | `POST /console/settings/updates/auto` | Stores the console's `update.auto` override (`auto=on` or `off`), keeping its `update.check`. It can always turn automatic updates off; it cannot turn them on while the config file or environment says `update.auto: false`, or locks `update.check: false` (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Only an install that updates itself acts on it: the installer's, or a [peer_auth system daemon](/guides/peer-auth/#updates)'s. |
 | Update now | `POST /console/settings/updates/apply` | Installs the newest release at once, after a confirm: it skips the soak, the wait for idle agents, skipped releases and the backoff, and lifts a hold, whether automatic updates are on, off or paused. Refused while checks are off, on an install that does not update itself, while an update is under way, within a minute of a failed release check, when nothing newer is known, or when the release carries no signed checksums bundle. The daemon restarts to finish. |
 | Resume automatic updates | `POST /console/settings/updates/resume` | Lifts the pause automatic updates put on themselves after rollbacks, and the hold a deliberate downgrade set. Changes no setting; skipped releases stay skipped, and a running backoff runs out. |
+| Save the backup schedule and folder | `POST /console/settings/backups` | Stores the console's `backup:` override: only the values that differ from the settings in force. A new folder is created and tested with a write first. Applies from the next backup. |
+| Reset the backup settings | `POST /console/settings/backups/reset` | Clears that override, handing the schedule and the folder back to the config file (or, without one, the build's default). |
+| Back up now | `POST /console/settings/backups/now` | Writes a backup at once, marked **Made by you**: never skipped, never deleted automatically. With `run=retry` (the failing card's **Try again**) it runs the schedule's backup instead, which is skipped when nothing changed and prunes after itself. Refused while a backup runs or a restore is being prepared. |
+| Delete a backup | `POST /console/settings/backups/delete` | `ref=` a backup from the list, never a path. Removes the file from its folder, after a confirm. |
+| Begin a restore's passkey ceremony | `POST /console/settings/backups/restore/begin` | Only while [peer_auth](/guides/peer-auth/#restore) locks a project, and only from a signed-in browser. Returns a WebAuthn challenge bound to the backup file's SHA-256, which the server reads from the file itself, and to the mode. Writes nothing. |
+| Restore a backup | `POST /console/settings/backups/restore` | `ref=` and `mode=replace` or `merge`. Verifies the backup and prepares the restore while Seamless serves, then restarts to finish it. A replace saves today's data as a backup first. Refused while a backup, another restore or an update is under way. Under the passkey gate it also needs the ceremony's `id` and `response`, and the file's digest must still match. |
+| Cancel a staged restore | `POST /console/settings/backups/restore/cancel` | Drops a restore that is waiting for its restart. Nothing changes. |
+| Dismiss a restore's result | `POST /console/settings/backups/restore/dismiss` | Hides the last restore's result card. Changes no data. |
 | Save a project family | `POST /console/settings/families/save` | Creates a family or replaces one family's name and member set - the same `project_families` setting `seamlessd family` manages. Members come from a closed picker of registered projects, so a typo cannot create an inert member. |
 | Delete a project family | `POST /console/settings/families/delete` | Removes the whole family. Its projects lose the sibling-findings channel; nothing else about them changes. |
 | Sign in / sign out | `POST /console/login`, `POST /console/logout` | Sets or clears the console cookie. Touches no data. |
@@ -72,7 +80,10 @@ touching any memory's content. The console level is presentation state of the sa
 what this console shows you and nothing else. **Update now** and **Resume
 automatic updates** act on the install rather than on knowledge: the first
 starts the same backed-up update `seamlessd update` runs, the second lets
-automatic updates run again.
+automatic updates run again. A **restore** is the one write that changes
+knowledge wholesale, and it puts back what a backup of this install held,
+never text of the console's own: the data from before is saved as a backup
+first, so a restore is itself undone by restoring.
 
 This is deliberate, and it is the same principle as
 [the gardener's](/concepts/gardener/) propose-only contract. The store is written
@@ -220,7 +231,7 @@ Claude Code or Codex and wants to know it works: what the agents remember
 decline (Gardener), and a Home that opens on a health strip - which agent clients
 are working here, whether semantic recall is on, when the last briefing went
 out, and the version (which says when a newer release is out) - plus the
-Updates settings.
+Updates and Backups settings.
 
 **Standard** adds following the work: Now, Projects, Plans, and Tasks (and Labs
 and Trials when that feature is on), the Overview's window, vitals, and
@@ -1072,7 +1083,8 @@ config file (with a link that opens it in your editor, or a note that the daemon
 runs on defaults and environment variables), the data folder, the database file
 and its size, which agent clients have recorded sessions and when each was last
 active, whether semantic recall is on - and when it is off, what to do about it -
-whether the gardener is running and how often, and links to these docs. No
+whether the gardener is running and how often, how often backups run, how many
+are kept and when the last one was made, and links to these docs. No
 budgets or policy numbers: those live in Knowledge engine.
 
 ### Updates
@@ -1130,6 +1142,108 @@ changed with the update (re-approve them in Codex's `/hooks`) or the installer
 reported warnings (run `seamlessd install-hooks`). For a week after automatic
 updates pause themselves, or after an update the daemon started does not apply,
 every page also carries a warning banner pointing here.
+
+### Backups
+
+`/console/settings?s=backups`
+
+Scheduled backups of the whole instance into one folder you choose, the
+backups found there, and restore. [Backups in the console](/guides/data/#backups-in-the-console)
+walks through it; this is what each card holds.
+
+**Automatic backups**, the status card:
+
+- whether automatic backups are on, how often they run and how many are kept -
+  or why they are off: turned off here, `backup.auto: false` in the config
+  file, or a build from source, which backs up only when you turn it on;
+- the newest backup: when, its size, and how many memories and notes in how
+  many projects it holds;
+- when the next backup runs, or **Up to date: nothing has changed since the
+  last backup**, with when it checks next;
+- a backup under way, while it runs;
+- the automatic runs' failure streak - how many failed in a row, since when,
+  and the last one's reason - with **Try again**, which runs the schedule's
+  backup now;
+- the folder, with a copy button, and **Back up now**, which makes a backup
+  marked **Made by you** whatever the schedule says.
+
+**Schedule and folder**, the form:
+
+- **Back up automatically**. A run is skipped when nothing has changed since
+  the last backup, or when the disk is short of room.
+- **How often**: Every hour, Every 6 hours, Every day or Every week. An
+  interval set in the config file (anything from `1h` to `720h`) shows among
+  them as itself.
+- **Automatic backups to keep**, 1 to 100. Older automatic backups are deleted
+  after the next one. Backups you make yourself and safety backups are never
+  deleted automatically.
+- **Folder**, with a live check as you type (it only looks, never writes) and
+  chips for the places on this machine this account can write to: iCloud
+  Drive, cloud folders and external disks on macOS, Dropbox and external disks
+  on Linux, OneDrive and other drives on Windows, and Seamless's data folder.
+
+**Save** stores only what differs from the settings in force; a new folder is
+created and tested with a write first. **Reset to the config file** makes the
+settings follow the config file again. The bar at the top says where the values
+come from: **Default for this build**, **Following the config file**, or **Set
+in this console** with the fields you set.
+
+**Available backups**, the list, newest first: the backups in the chosen folder
+and in Seamless's data folder (`~/.seamless/backups`, where the safety and
+pre-update backups stay). Each row has:
+
+- when, the kind in words - **Automatic**, **Made by you**, **Before restore**,
+  **Before updating from v0.8.1** or **Exported** - the size, and the machine
+  it came from when another Seamless made it;
+- **What it holds**: the file's path, and per project the memories, notes,
+  tasks and sessions, beside **vs now**, how many more or fewer memories and
+  notes the project holds now. A locked project shows its name and the backup's
+  counts, never what it holds now. A project that is no longer here says so,
+  and one that is only here now shows dashes;
+- **Restore…** and **Delete**. An iCloud placeholder (download it in Finder
+  first) and a backup a newer Seamless made (update to restore it) cannot be
+  restored and say why.
+
+**Restore…** opens a confirm card in the backup's row, with a link that works
+without script:
+
+- it compares the backup with now (how many more or fewer memories, notes and
+  sessions this install holds);
+- two choices: **Replace all data with this backup** (your current data is
+  saved as a backup first, so you can undo it) or **Only bring back what's
+  missing** (nothing you have now changes). A knowledge-only backup offers only
+  the merge;
+- what a restore leaves alone: locks, passkeys, repo routes and console
+  settings stay as they are now, and no project's privacy is loosened;
+- **Restore**, or **Restore with passkey** under the
+  [peer_auth gate](/guides/peer-auth/#restore). Without a usable passkey, the
+  card names why and shows the terminal command instead, with a copy button.
+
+Then a progress card lists the steps: **Checking the backup**, **Preparing the
+restored data** (replace) or **Saving your current data** (merge), **Restarting
+Seamless**, **Done**, and for a replace, **Saving your previous data as a
+backup**. The page waits through the restart and draws the section again in
+place. **Cancel restore** is offered while a restore is staged. On Windows, the
+card names `seamlessd restart`, to run within an hour, after which a staged
+restore is dropped.
+
+After the restart, the result card says what was restored, where the previous
+data was saved, and anything the restore kept of today (a stricter privacy
+setting, locked projects the backup did not have), with **Undo this restore** -
+the confirm card for the safety backup - and **Dismiss**. A restore that did
+not finish, expired or stopped partway says so there instead.
+
+Elsewhere:
+
+- **Settings > Your setup** has a **Backups** row: how often, how many are
+  kept, and the last backup.
+- Every page carries an alert while automatic backups are in trouble, linking
+  here. **Automatic backups are failing.** appears when two automatic runs in a
+  row did not finish, with the first failure's time and the reason.
+  **Automatic backups are overdue.** appears when none has finished for three
+  intervals. **Got it** hides it for that tab until a new episode begins.
+- [System](#system) draws backups as a core part, on, off, failing or
+  overdue.
 
 ### Briefing
 

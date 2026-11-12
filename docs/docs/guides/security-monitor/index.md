@@ -70,13 +70,15 @@ One JSON object per line on the wire, wrapped here to read:
 must fit:
 
 - **Codes and kinds:** `kind`, `item_kind`, `tool`, `op`, `hook`, `via`,
-  `reason`, `surface`, `change`, `by`, `action`, `status`, `from`, `to`.
-- **Numbers:** `size`, `duration_ms`, `items`, `safe`, `flagged`, `suppressed`,
+  `reason`, `surface`, `change`, `by`, `action`, `status`, `from`, `to`,
+  `where`, `mode`, `step`, `outcome`, `proof`.
+- **Numbers:** `size`, `bytes`, `memories`, `notes`, `projects`, `added`,
+  `failures`, `duration_ms`, `items`, `safe`, `flagged`, `suppressed`,
   `item_count`, `emitted_tokens`.
 - **Flags:** `held`, `quarantined`, `baseline`, `on`, `updated`, `truncated`,
   `is_error`, `ambient`, `favorite`, `matched`.
-- **Ids:** `hold_id`, `released_hold_id`, `superseded_by`, and `item_ids` joined
-  with commas.
+- **Ids:** `hold_id`, `released_hold_id`, `superseded_by`, `credential_id`, and
+  `item_ids` joined with commas.
 - **Lists of codes, joined with commas:** `verdicts`, `reasons`.
 - **Versions:** `version`, `current_version`.
 
@@ -108,6 +110,10 @@ not:
 | `memory.held` | `agent` | `medium` | `blocked` |
 | `settings.features_changed`, `project.isolation.changed` | `config` | `medium` | `success` |
 | `update.failed` | `config` | `medium` | `failure` |
+| `backup.restored` | `file` | `high` | `success` |
+| `backup.failed`, `backup.restore_failed` | `file` | `medium` | `failure` |
+| `backup.deleted` | `file` | `low` | `success` |
+| `backup.created` | `file` | `info` | `success` |
 | `memory.screened` | `agent` | `low` with a verdict, else `info` | `blocked` when held, else `success` |
 | `memory.released`, `memory.discarded`, `corpus.confirmed`, `session.tainted`, `session.untainted` | `agent` | `low` | `success` |
 | `hook.error` | `agent` | `low` | `failure` |
@@ -118,6 +124,17 @@ not:
 
 Write screening's own events, and what each one's payload holds, are in
 [its event table](https://thereisnospoon.org/docs/guides/write-screening/#events).
+
+A backup event's item is the backup's file name, which is not an id, so no
+frame names the file. What the frames carry:
+
+| Event | Fields |
+|---|---|
+| `backup.created` | `kind` (`scheduled`, `manual`, `before-restore`), `where` (`folder` or `local`), `bytes`, `memories`, `notes`, `projects` |
+| `backup.failed` | `kind`, `where`, `reason` (a fixed word: `no-space`, `export`, `read-back`, `database`, `cancelled`, `unsafe-file`, `internal`, or `folder-` and the folder's state), and `failures`, the automatic streak, for a scheduled backup |
+| `backup.deleted` | `kind`, `where`, `by` (`owner`, or `prune` for an old automatic backup) |
+| `backup.restored` | `mode` (`replace` or `merge`), `kind`, `memories`, `notes`, `added` for a merge that added something, `by` (`console` or `cli`), `proof` (`owner`, `passkey` or `account`), and `credential_id`, the id of the approver passkey that approved it |
+| `backup.restore_failed` | `mode`, `reason` (a fixed word), and `outcome` (`failed`, `expired`, `partial`) with `step` `apply`, or `step` `stage` when the restore could not be prepared |
 
 ### The two requests
 

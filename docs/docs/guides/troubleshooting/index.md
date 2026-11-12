@@ -538,6 +538,88 @@ Causes worth knowing:
   installer reported a problem after it came up, usually while wiring the agent
   clients. Run `seamlessd install-hooks`.
 
+## Automatic backups are failing or overdue {#automatic-backups-are-failing}
+
+**What is happening.** Every console page carries one of two alerts, linking to
+**Settings > Backups**:
+
+- **Automatic backups are failing.** Two automatic backups in a row did not
+  finish. The alert names when the first failed and why.
+- **Automatic backups are overdue.** None has finished, or been skipped because
+  nothing changed, for three intervals. Usually the daemon was not running, or
+  the machine slept through them.
+
+**Got it** hides the alert in that tab until a new episode begins.
+`seamlessd doctor`'s `backups` row says the same from a terminal.
+
+**Fix.** **Settings > Backups** shows the last failure's reason under the status
+card. Fix what it names, then press **Try again**, which runs the scheduled
+backup now:
+
+| The reason says | What to do |
+|---|---|
+| the backup folder's disk is not connected | Plug the disk in, or choose another folder. Nothing is written under a disk that is not mounted. |
+| the backup folder no longer exists | Reconnect its disk, or choose the folder again. |
+| the backup folder is not writable | Fix its permissions, or choose another folder. |
+| macOS is keeping Seamless out of the backup folder | Allow Seamless in **System Settings > Privacy & Security > Files and Folders**, or give it **Full Disk Access**. A folder in iCloud Drive, Dropbox or on an external disk can need this. |
+| the disk is too full | Free space on the folder's disk and on the data folder's: a backup needs its size free on each, plus a reserve of 1 GiB or the backup's size, whichever is larger. Or keep fewer backups. |
+| the backup did not read back as written | The disk or the sync service changed the file as it was written. Try again, or choose a local folder. |
+| the backup folder is not private to Seamless | Under [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/#restore) no other account may be able to change the folder or any folder above it. Choose one that only root and the daemon's account can write to. |
+| the disk does not keep backups private to Seamless | Under [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/#restore) a backup must stay owned by the daemon's account and private to it, which exFAT disks and many network shares cannot do. Choose a folder on a disk that keeps file owners. |
+
+A backup that **Back up now** makes and that fails shows its reason on the
+status card too, but does not count toward the alert.
+
+## A restore did not finish {#a-restore-did-not-finish}
+
+**What is happening.** The result card in **Settings > Backups** (and
+`seamlessd restore`, and doctor's `backups` row) says the restore did not
+finish, and why. Whatever the reason, today's data is in place:
+
+- **The restore was not applied because Seamless did not restart within an
+  hour.** A staged restore expires an hour after it was staged, so an old one
+  never lands by surprise. On Windows, the console cannot restart Seamless
+  itself: run `seamlessd restart` within the hour, or start the restore again.
+- **The backup did not verify**, or **changed after it was approved**. The
+  file is damaged, or was replaced between the confirm and the restore. Nothing
+  changed. Restore another backup.
+- **The swap failed and was rolled back.** A replace swaps the data in with a
+  few renames and records each step first. A start stopped part way, by a crash
+  or a power cut, puts today's data back by itself, and doctor says so meanwhile.
+- **The merge stopped partway.** What the merge added stays, and nothing was
+  removed. The next start runs it again, up to three times. Restoring the same
+  backup with **Only bring back what's missing** is safe to repeat, since a
+  merge skips what is already here.
+- **The data folder's file system cannot be locked.** No restore can swap the
+  data safely without the data directory's lock, so the restore was dropped.
+
+**When Seamless will not start.** If a swap cannot be rolled back - a file
+that cannot be moved back, say - `seamlessd serve` refuses to start rather than
+serve half of each. Its error says that today's data is split between
+`~/.seamless` and `~/.seamless/restore/<id>/previous`, recorded in
+`~/.seamless/restore/pending.json`. Move each entry of `previous/` back into
+`~/.seamless` (first moving aside a restored entry of the same name that is in
+the way), then remove `pending.json` and start Seamless again. Nothing under
+`~/.seamless/restore/` is ever deleted before its data is saved elsewhere.
+
+**The previous data is still in `restore/`.** After a replace, Seamless saves
+the data it replaced as a **Before restore** backup and only then removes it.
+Until that is done, or when it fails, the result card and doctor name
+`~/.seamless/restore/<id>/previous`; a restart tries again. A
+`restore/<id>/previous` folder that no record accounts for makes doctor warn:
+check that it holds nothing you need, then remove it.
+
+## `seamlessd update` refuses: a restore is waiting to finish
+
+**What is happening.** A restore is staged and has not been applied yet
+(`~/.seamless/restore/pending.json` exists). An update backs the data up and
+replaces the binary, so it never runs under a restore that has not finished.
+Automatic updates wait, **Update now** is refused, and an attempt that was
+already starting records the refusal `restore_pending`.
+
+**Fix.** Restart Seamless (`seamlessd restart`) to finish the restore, or cancel
+it with **Cancel restore** in **Settings > Backups**. Then update.
+
 ## `memory_write` says the name is held by a superseded memory
 
 **What is happening.** A superseded or archived memory leaves every index but

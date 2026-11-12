@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-3"><a href="#isolation-requests">Access requests at a confidential fence</a></li><li class="lvl-3"><a href="#security-monitor">Feeding a security monitor</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
+      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#backups">Scheduled backups</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-3"><a href="#isolation-requests">Access requests at a confidential fence</a></li><li class="lvl-3"><a href="#security-monitor">Feeding a security monitor</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
     </ul>
   </details>
   <p>Seamless reads a single YAML file. Every key also has a <code>SEAMLESS_*</code> environment
@@ -258,7 +258,7 @@ override.</p>
 the database. They win over file <em>and</em> env, take effect without a daemon
 restart, and stay until reset.</li>
 </ol>
-<p>That fourth layer covers three blocks where the stored row simply wins:</p>
+<p>That fourth layer covers four blocks where the stored row simply wins:</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -284,6 +284,11 @@ restart, and stay until reset.</li>
 <td>Settings → <a href="../../reference/console/#experience">Experience</a>, or the Home welcome card</td>
 <td>Immediately, in the console only.</td>
 </tr>
+<tr>
+<td><code>backup:</code></td>
+<td>Settings → <a href="../../reference/console/#backups">Backups</a></td>
+<td>From the next scheduled backup.</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -298,8 +303,8 @@ is never one click from untrue, and with checks off nothing installs by itself
 either. See <a href="#the-update-check">the update block</a>.</p>
 <p>It exists so you can change what agents get injected - and what they can reach -
 while they are running, and it is the one place where the config file is not the
-last word: check the console before concluding a <code>briefing:</code>, <code>features:</code>, or
-<code>console.level</code> setting is being ignored. No form ever writes your config file,
+last word: check the console before concluding a <code>briefing:</code>, <code>features:</code>,
+<code>console.level</code> or <code>backup:</code> setting is being ignored. No form ever writes your config file,
 and <strong>Reset</strong> on each clears the stored row and hands that block back to
 file/env.</p>
 <p>Overrides can be in force without you having set them. Upgrading an
@@ -362,6 +367,33 @@ than tune them.</p>
 keys they do not know, so a file that sets one runs only with v0.7.0 or newer.
 The example file spells out the keys whose default has a value and leaves
 <code>check</code> and <code>auto</code>, whose default is unset, commented out.</p>
+<h3 id="backups">Scheduled backups</h3>
+<p>The <code>backup:</code> block drives <a href="../../guides/data/#backups-in-the-console">scheduled backups</a>:</p>
+<ul>
+<li><code>auto</code> (<code>SEAMLESS_BACKUP_AUTO</code>) is optional. Left unset, a release build
+backs up on a schedule and a build from source does not, so a throwaway
+daemon never writes backups. <code>true</code> or <code>false</code> decides either way.</li>
+<li><code>every</code> (<code>SEAMLESS_BACKUP_EVERY</code>) is the time between scheduled backups: a Go
+duration from <code>1h</code> to <code>720h</code>, default <code>24h</code>.</li>
+<li><code>keep</code> (<code>SEAMLESS_BACKUP_KEEP</code>) is how many automatic backups to keep, from 1
+to 100, default 7. Pruning removes only this install's automatic backups past
+the newest <code>keep</code>, after the next one is written: never a backup you made, a
+safety backup taken before a restore, an updater's pre-update backup, or
+another install's backup in a shared folder.</li>
+<li><code>dir</code> (<code>SEAMLESS_BACKUP_DIR</code>) is the folder backups go to: an absolute path,
+or one starting with <code>~/</code>. Empty means <code>&lt;data_dir&gt;/backups</code>. A folder inside
+the data directory other than that one is refused. The safety backup taken
+before a restore always stays in <code>&lt;data_dir&gt;/backups</code>.</li>
+</ul>
+<p>The console's <strong>Settings → Backups</strong> is the recommended place for all four: it
+checks a folder before it is used, and what it saves wins over the file and the
+environment until you reset it there. The daemon's environment is a poor place
+for them: any <code>SEAMLESS_*</code> variable there besides <code>SEAMLESS_CONFIG</code> makes an
+install that updates itself <a href="#the-update-check">only notify</a>.</p>
+<p>The block is new after v0.8.1. seamlessd releases before it refuse config keys
+they do not know, so a file that sets any of these runs only with a release that
+knows them, and a rollback to an older release would refuse it. That is why the
+example file leaves the block commented out.</p>
 <h3 id="peer-auth">Peer-user authentication</h3>
 <p>The <code>peer_auth:</code> block turns on a Unix-socket listener whose callers the daemon
 identifies by the uid the kernel reports, and locks the projects you list until
@@ -1513,7 +1545,7 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-3"><a href="#isolation-requests">Access requests at a confidential fence</a></li><li class="lvl-3"><a href="#security-monitor">Feeding a security monitor</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
+      <li class="lvl-2"><a href="#where-the-config-comes-from">Where the config comes from</a></li><li class="lvl-2"><a href="#precedence">Precedence</a></li><li class="lvl-3"><a href="#the-console-level">The console level</a></li><li class="lvl-3"><a href="#the-update-check">The update check</a></li><li class="lvl-3"><a href="#backups">Scheduled backups</a></li><li class="lvl-3"><a href="#peer-auth">Peer-user authentication</a></li><li class="lvl-3"><a href="#isolation-requests">Access requests at a confidential fence</a></li><li class="lvl-3"><a href="#security-monitor">Feeding a security monitor</a></li><li class="lvl-2"><a href="#generating-a-key">Generating a key</a></li><li class="lvl-2"><a href="#every-key">Every key</a></li><li class="lvl-2"><a href="#annotated-example">Annotated example</a></li>
     </ul>
   </aside>
   

@@ -472,12 +472,11 @@ release you had is the installer pinned to it:
 <code>curl -fsSL https://thereisnospoon.org/install | SEAMLESS_VERSION=&lt;version&gt; sh</code>,
 or <code>$env:SEAMLESS_VERSION='&lt;version&gt;'; irm https://thereisnospoon.org/install.ps1 | iex</code>
 on Windows. Then run <code>seamlessd doctor</code>.</li>
-<li><strong>Putting the whole instance back</strong> from the pre-update backup is a restore,
-and <code>seamlessd import</code> restores only into an empty data directory (into a
-populated one it merges). Run <code>seamlessd stop</code>, then move <code>~/.seamless</code> aside
-(to <code>~/.seamless.broken</code>, say; the backup moves with it), then run
-<code>seamlessd import --from ~/.seamless.broken/backups/pre-update-v&lt;old&gt;-&lt;time&gt;.tar.gz</code>,
-then <code>seamlessd start</code>.</li>
+<li><strong>Putting the whole instance back</strong> from the pre-update backup is
+<code>seamlessd restore pre-update-v&lt;old&gt;-&lt;time&gt;.tar.gz</code> (<code>seamlessd backups</code>
+lists it as <code>before v&lt;old&gt; update</code>), or <strong>Restore…</strong> on it in the console's
+<strong>Settings &gt; Backups</strong>. Today's data is saved as a backup first, so it can be
+undone. See <a href="../../guides/data/#restore">Restore</a>.</li>
 </ul>
 <h2 id="peer-auth-daemon">A system service for peer_auth</h2>
 <p><a href="../../guides/peer-auth/">Locked projects</a> need the daemon to run as an account of
@@ -580,8 +579,8 @@ the same relative locations on every OS.</p>
 </tr>
 <tr>
 <td>Update records + backups</td>
-<td><code>~/.seamless/update/</code>, <code>~/.seamless/backups/</code></td>
-<td>the update check's state, each update attempt and its log, the pre-update archives - see <a href="../../reference/storage/#the-update-records">Storage</a></td>
+<td><code>~/.seamless/update/</code>, <code>~/.seamless/backups/</code>, <code>~/.seamless/restore/</code></td>
+<td>the update check's state, each update attempt and its log, the pre-update archives, scheduled and safety backups, a restore in flight - see <a href="../../reference/storage/#the-update-records">Storage</a> and <a href="../../reference/storage/#the-backup-records">the backup records</a></td>
 </tr>
 <tr>
 <td>Daemon log</td>

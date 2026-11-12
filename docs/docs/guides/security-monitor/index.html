@@ -372,13 +372,15 @@ every batch header, limits answer and receipt, and it is 1.</p>
 must fit:</p>
 <ul>
 <li><strong>Codes and kinds:</strong> <code>kind</code>, <code>item_kind</code>, <code>tool</code>, <code>op</code>, <code>hook</code>, <code>via</code>,
-<code>reason</code>, <code>surface</code>, <code>change</code>, <code>by</code>, <code>action</code>, <code>status</code>, <code>from</code>, <code>to</code>.</li>
-<li><strong>Numbers:</strong> <code>size</code>, <code>duration_ms</code>, <code>items</code>, <code>safe</code>, <code>flagged</code>, <code>suppressed</code>,
+<code>reason</code>, <code>surface</code>, <code>change</code>, <code>by</code>, <code>action</code>, <code>status</code>, <code>from</code>, <code>to</code>,
+<code>where</code>, <code>mode</code>, <code>step</code>, <code>outcome</code>, <code>proof</code>.</li>
+<li><strong>Numbers:</strong> <code>size</code>, <code>bytes</code>, <code>memories</code>, <code>notes</code>, <code>projects</code>, <code>added</code>,
+<code>failures</code>, <code>duration_ms</code>, <code>items</code>, <code>safe</code>, <code>flagged</code>, <code>suppressed</code>,
 <code>item_count</code>, <code>emitted_tokens</code>.</li>
 <li><strong>Flags:</strong> <code>held</code>, <code>quarantined</code>, <code>baseline</code>, <code>on</code>, <code>updated</code>, <code>truncated</code>,
 <code>is_error</code>, <code>ambient</code>, <code>favorite</code>, <code>matched</code>.</li>
-<li><strong>Ids:</strong> <code>hold_id</code>, <code>released_hold_id</code>, <code>superseded_by</code>, and <code>item_ids</code> joined
-with commas.</li>
+<li><strong>Ids:</strong> <code>hold_id</code>, <code>released_hold_id</code>, <code>superseded_by</code>, <code>credential_id</code>, and
+<code>item_ids</code> joined with commas.</li>
 <li><strong>Lists of codes, joined with commas:</strong> <code>verdicts</code>, <code>reasons</code>.</li>
 <li><strong>Versions:</strong> <code>version</code>, <code>current_version</code>.</li>
 </ul>
@@ -445,6 +447,30 @@ not:</p>
 <td><code>failure</code></td>
 </tr>
 <tr>
+<td><code>backup.restored</code></td>
+<td><code>file</code></td>
+<td><code>high</code></td>
+<td><code>success</code></td>
+</tr>
+<tr>
+<td><code>backup.failed</code>, <code>backup.restore_failed</code></td>
+<td><code>file</code></td>
+<td><code>medium</code></td>
+<td><code>failure</code></td>
+</tr>
+<tr>
+<td><code>backup.deleted</code></td>
+<td><code>file</code></td>
+<td><code>low</code></td>
+<td><code>success</code></td>
+</tr>
+<tr>
+<td><code>backup.created</code></td>
+<td><code>file</code></td>
+<td><code>info</code></td>
+<td><code>success</code></td>
+</tr>
+<tr>
 <td><code>memory.screened</code></td>
 <td><code>agent</code></td>
 <td><code>low</code> with a verdict, else <code>info</code></td>
@@ -491,6 +517,40 @@ not:</p>
 </div>
 <p>Write screening's own events, and what each one's payload holds, are in
 <a href="../../guides/write-screening/#events">its event table</a>.</p>
+<p>A backup event's item is the backup's file name, which is not an id, so no
+frame names the file. What the frames carry:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Fields</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>backup.created</code></td>
+<td><code>kind</code> (<code>scheduled</code>, <code>manual</code>, <code>before-restore</code>), <code>where</code> (<code>folder</code> or <code>local</code>), <code>bytes</code>, <code>memories</code>, <code>notes</code>, <code>projects</code></td>
+</tr>
+<tr>
+<td><code>backup.failed</code></td>
+<td><code>kind</code>, <code>where</code>, <code>reason</code> (a fixed word: <code>no-space</code>, <code>export</code>, <code>read-back</code>, <code>database</code>, <code>cancelled</code>, <code>unsafe-file</code>, <code>internal</code>, or <code>folder-</code> and the folder's state), and <code>failures</code>, the automatic streak, for a scheduled backup</td>
+</tr>
+<tr>
+<td><code>backup.deleted</code></td>
+<td><code>kind</code>, <code>where</code>, <code>by</code> (<code>owner</code>, or <code>prune</code> for an old automatic backup)</td>
+</tr>
+<tr>
+<td><code>backup.restored</code></td>
+<td><code>mode</code> (<code>replace</code> or <code>merge</code>), <code>kind</code>, <code>memories</code>, <code>notes</code>, <code>added</code> for a merge that added something, <code>by</code> (<code>console</code> or <code>cli</code>), <code>proof</code> (<code>owner</code>, <code>passkey</code> or <code>account</code>), and <code>credential_id</code>, the id of the approver passkey that approved it</td>
+</tr>
+<tr>
+<td><code>backup.restore_failed</code></td>
+<td><code>mode</code>, <code>reason</code> (a fixed word), and <code>outcome</code> (<code>failed</code>, <code>expired</code>, <code>partial</code>) with <code>step</code> <code>apply</code>, or <code>step</code> <code>stage</code> when the restore could not be prepared</td>
+</tr>
+</tbody>
+</table>
+</div>
 <h3 id="the-two-requests">The two requests</h3>
 <p>Both are HTTP/1.1 on the socket, one request to a connection, and the feed waits
 up to 30 seconds for an answer.</p>

@@ -24,13 +24,14 @@ Four layers resolve each key. Later layers win:
    the database. They win over file *and* env, take effect without a daemon
    restart, and stay until reset.
 
-That fourth layer covers three blocks where the stored row simply wins:
+That fourth layer covers four blocks where the stored row simply wins:
 
 | Block | Written by | When it takes effect |
 |---|---|---|
 | `briefing:` | Settings → [Briefing](https://thereisnospoon.org/docs/reference/console/#briefing) | From the next session start. |
 | `features:` | Settings → [Features](https://thereisnospoon.org/docs/reference/console/#optional-features), or the Home welcome card's write-screening box | Immediately in the console; an agent sees it from its next session (tool lists and briefings alike), and write screening from its next write. |
 | `console.level` | Settings → [Experience](https://thereisnospoon.org/docs/reference/console/#experience), or the Home welcome card | Immediately, in the console only. |
+| `backup:` | Settings → [Backups](https://thereisnospoon.org/docs/reference/console/#backups) | From the next scheduled backup. |
 
 The `update:` block's two switches, `update.check` and `update.auto`, are merged
 the other way round: the **more restrictive** value wins. Settings →
@@ -44,8 +45,8 @@ either. See [the update block](#the-update-check).
 
 It exists so you can change what agents get injected - and what they can reach -
 while they are running, and it is the one place where the config file is not the
-last word: check the console before concluding a `briefing:`, `features:`, or
-`console.level` setting is being ignored. No form ever writes your config file,
+last word: check the console before concluding a `briefing:`, `features:`,
+`console.level` or `backup:` setting is being ignored. No form ever writes your config file,
 and **Reset** on each clears the stored row and hands that block back to
 file/env.
 
@@ -115,6 +116,36 @@ All five keys are new in v0.7.0. seamlessd releases before it refuse config
 keys they do not know, so a file that sets one runs only with v0.7.0 or newer.
 The example file spells out the keys whose default has a value and leaves
 `check` and `auto`, whose default is unset, commented out.
+
+### Scheduled backups {#backups}
+
+The `backup:` block drives [scheduled backups](https://thereisnospoon.org/docs/guides/data/#backups-in-the-console):
+
+- `auto` (`SEAMLESS_BACKUP_AUTO`) is optional. Left unset, a release build
+  backs up on a schedule and a build from source does not, so a throwaway
+  daemon never writes backups. `true` or `false` decides either way.
+- `every` (`SEAMLESS_BACKUP_EVERY`) is the time between scheduled backups: a Go
+  duration from `1h` to `720h`, default `24h`.
+- `keep` (`SEAMLESS_BACKUP_KEEP`) is how many automatic backups to keep, from 1
+  to 100, default 7. Pruning removes only this install's automatic backups past
+  the newest `keep`, after the next one is written: never a backup you made, a
+  safety backup taken before a restore, an updater's pre-update backup, or
+  another install's backup in a shared folder.
+- `dir` (`SEAMLESS_BACKUP_DIR`) is the folder backups go to: an absolute path,
+  or one starting with `~/`. Empty means `<data_dir>/backups`. A folder inside
+  the data directory other than that one is refused. The safety backup taken
+  before a restore always stays in `<data_dir>/backups`.
+
+The console's **Settings → Backups** is the recommended place for all four: it
+checks a folder before it is used, and what it saves wins over the file and the
+environment until you reset it there. The daemon's environment is a poor place
+for them: any `SEAMLESS_*` variable there besides `SEAMLESS_CONFIG` makes an
+install that updates itself [only notify](#the-update-check).
+
+The block is new after v0.8.1. seamlessd releases before it refuse config keys
+they do not know, so a file that sets any of these runs only with a release that
+knows them, and a rollback to an older release would refuse it. That is why the
+example file leaves the block commented out.
 
 ### Peer-user authentication {#peer-auth}
 
