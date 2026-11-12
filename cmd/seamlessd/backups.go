@@ -379,8 +379,8 @@ func restoreCmd(ctx context.Context, args []string, d restoreDeps) error {
 		dbOpen = false
 		return db.Close()
 	}
-	// The direct apply closes the handle itself, checked, before the swap;
-	// this covers every return before that.
+	// Closed, checked, once the restore is staged (before either path swaps
+	// the data); this covers every return before that.
 	defer func() { _ = closeDB() }() //nolint:errcheck // a read handle closed on an early return; nothing was written through it that a close could lose
 
 	var policy *access.Policy
@@ -454,11 +454,14 @@ func restoreCmd(ctx context.Context, args []string, d restoreDeps) error {
 		return fmt.Errorf("seamlessd.restore: %w", err)
 	}
 
-	if lock == nil {
-		return finishThroughDaemon(ctx, cfg, p, d)
-	}
+	// Closed before either path swaps the data: the daemon's swap renames
+	// seam.db at its restart while this process waits, and on Windows a
+	// file another process holds open cannot be renamed.
 	if err := closeDB(); err != nil {
 		return fmt.Errorf("seamlessd.restore: %w", err)
+	}
+	if lock == nil {
+		return finishThroughDaemon(ctx, cfg, p, d)
 	}
 	fmt.Fprintf(d.out, "  %s\n", "applying")
 	a := backup.Applier{DataDir: cfg.DataDir, ForceLocked: restoreForceLocked(cfg), Validate: restoreValidator(policy),
