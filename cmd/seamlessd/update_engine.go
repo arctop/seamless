@@ -571,7 +571,7 @@ func (u *updater) gates(ctx context.Context) error {
 }
 
 func (u *updater) shapeEnv() shapeEnv {
-	return shapeEnv{goos: u.d.goos, home: u.d.home, environ: u.d.environ, sameFile: u.d.sameFile}
+	return shapeEnv{goos: u.d.goos, home: u.d.home, environ: u.d.environ, sameFile: u.d.sameFile, claudeManagedDir: claudeManagedSettingsDir()}
 }
 
 // fetchTarget re-reads the release the attempt installs by its tag and

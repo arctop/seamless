@@ -30,6 +30,10 @@ type shapeEnv struct {
 	// installer's own `seamlessd install-hooks` will look.
 	environ  []string
 	sameFile func(a, b string) bool
+	// claudeManagedDir is Claude Code's managed settings directory
+	// (claudeManagedSettingsDir; "" for none). Seamless hooks there wire Claude
+	// Code as surely as the user file's do.
+	claudeManagedDir string
 }
 
 // lookupEnvIn returns key's value in environ, the last one winning as in a
@@ -155,7 +159,10 @@ const (
 
 // observeClients lists the agent clients this install already wires, as
 // SEAMLESS_CLIENT targets: Claude Code when ~/.claude/settings.json holds
-// Seamless-owned hooks (hooks.InstalledStatus: current or stale), Codex the
+// Seamless-owned hooks (hooks.InstalledStatus: current or stale), or when
+// Claude Code's managed settings do -- re-running install-hooks there writes no
+// hook the managed file carries, but it keeps the skills and the MCP
+// registration current, which an update must not drop -- Codex the
 // same for its hooks file, and the Claude app when its desktop config holds a
 // seamless MCP entry that install-hooks would keep or repair (exact or owned
 // drift; a foreign entry under the name is not ours to touch). A client whose
@@ -174,7 +181,16 @@ func observeClients(env shapeEnv, cfg config.Config, dir, configPath string) (cl
 		}
 		return len(status.Owned) > 0
 	}
-	if owns(hooks.ClientClaudeCode, "Claude Code", env.claudeSettingsPath()) {
+	claudeWired := owns(hooks.ClientClaudeCode, "Claude Code", env.claudeSettingsPath())
+	if !claudeWired && env.claudeManagedDir != "" {
+		managed := inspectClaudeManagedHooks(env.claudeManagedDir, hooks.InstallOptions{
+			Client: hooks.ClientClaudeCode, BaseURL: cfg.ServerURL(),
+			APIKey: cfg.MCP.APIKey, SeamBin: seamBin, ConfigPath: configPath,
+		})
+		claudeWired = len(managed.sources) > 0
+		notes = append(notes, managed.errs...)
+	}
+	if claudeWired {
 		clients = append(clients, shapeClaude)
 	}
 	if ok, note := desktopRegistered(env, seamBin, configPath); ok {

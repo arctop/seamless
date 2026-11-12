@@ -18,7 +18,10 @@ detection-based installer, which prompts on a terminal and can wire Codex too.
 
 This merges seven hook entries into your Claude Code `settings.json`, preserving
 everything already there and backing the file up once before the first change.
-It is idempotent: an already-current file is left untouched.
+It is idempotent: an already-current file is left untouched. If your
+organization's [managed settings](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_install_hooks_managed)
+already carry a Seamless hook, that event is left to them and not written
+again, because Claude Code would run both copies.
 
 It then registers the MCP server with `claude mcp add-json --scope user`. The
 registration uses `seam mcp-headers --config <absolute yaml>` as

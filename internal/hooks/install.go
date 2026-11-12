@@ -184,13 +184,21 @@ type InstallOptions struct {
 	APIKey       string // static bearer key (written into the CC http hook header; Codex command hooks carry none)
 	SeamBin      string // path to the seam CLI for command hooks; "" => "seam" (PATH)
 	ConfigPath   string // abs seamless.yaml passed to command hooks as `--config` so they resolve config from any cwd; "" omits it
+
+	// Covered names profile events that another settings source already runs:
+	// Claude Code's managed settings, whose hooks run alongside the user and
+	// project files' rather than replacing them. Install writes no entry for a
+	// covered event and removes the ones it owns, so the hook never runs twice
+	// (actions "managed" and "removed"). Only Install reads it; a name outside
+	// the client's profile is an error.
+	Covered []string
 }
 
 // InstallResult reports what an install did.
 type InstallResult struct {
 	Changed    bool
 	BackupPath string   // "" when no backup was written
-	Actions    []string // per-hook: "SessionStart: added|updated|unchanged"
+	Actions    []string // per-hook: "SessionStart: added|updated|adopted|deduped|unchanged", or managed|removed for a Covered event
 }
 
 // InstallStatus separates exact current definitions from stale definitions
@@ -226,6 +234,9 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	if err := validateDefinitionPaths("hooks.Install", opts.SeamBin, opts.ConfigPath); err != nil {
 		return InstallResult{}, err
 	}
+	if err := validateCovered(profile, opts.Covered); err != nil {
+		return InstallResult{}, err
+	}
 	profile = profileForBaseURL(profile, opts.BaseURL)
 
 	settings, mode, err := loadSettings(opts.SettingsPath)
@@ -247,6 +258,22 @@ func Install(opts InstallOptions) (InstallResult, error) {
 		// whose arguments happen to contain hook + event remain foreign. A v1
 		// "seam_managed" entry at another URL remains foreign too.
 		matches, classes := classifiedHookIndices(client, arr, desired, hs, desiredURL)
+		if slices.Contains(opts.Covered, hs.Event) {
+			if len(matches) == 0 {
+				res.Actions = append(res.Actions, hs.Event+": managed")
+				continue
+			}
+			// The same shape Uninstall leaves: an emptied event array goes
+			// rather than staying behind as "SessionStart": [].
+			if arr = removeIndices(arr, matches); len(arr) == 0 {
+				delete(hooksObj, hs.Event)
+			} else {
+				hooksObj[hs.Event] = arr
+			}
+			res.Changed = true
+			res.Actions = append(res.Actions, hs.Event+": removed")
+			continue
+		}
 		switch {
 		case len(matches) == 0:
 			arr = append(arr, desired)
@@ -267,7 +294,12 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	if !res.Changed {
 		return res, nil
 	}
-	settings["hooks"] = hooksObj
+	// Removing covered duplicates can empty the object, as Uninstall can.
+	if len(hooksObj) == 0 {
+		delete(settings, "hooks")
+	} else {
+		settings["hooks"] = hooksObj
+	}
 
 	backup, err := backupOnce(opts.SettingsPath, mode)
 	if err != nil {
@@ -666,6 +698,18 @@ func matchAction(n int, firstClass hookDefinitionClass) string {
 	default:
 		return "adopted"
 	}
+}
+
+// validateCovered refuses a covered event the profile does not install: a
+// misspelled name would otherwise skip nothing and leave the duplicate it was
+// meant to prevent.
+func validateCovered(profile []hookSpec, covered []string) error {
+	for _, event := range covered {
+		if !slices.ContainsFunc(profile, func(hs hookSpec) bool { return hs.Event == event }) {
+			return fmt.Errorf("hooks.Install: covered event %q is not in the client's profile", event)
+		}
+	}
+	return nil
 }
 
 func validateDefinitionPaths(op, seamBin, configPath string) error {

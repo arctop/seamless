@@ -681,6 +681,10 @@ func certNames(c *x509.Certificate) []string {
 // resolves to a quiet OK "not detected" line rather than a warning -- symmetric
 // with codexChecks, so a Codex-only user is not perpetually nagged to install a
 // client they do not run.
+//
+// Claude Code's managed settings (claude_managed.go) are read too. When they
+// carry any Seamless hook, managedHooksCheck judges the whole set instead, since
+// Claude Code runs managed hooks alongside these files' hooks.
 func hooksCheck(cfg config.Config) check {
 	installed, err := hooks.InstalledEvents(hooks.ClientClaudeCode)
 	if err != nil {
@@ -692,6 +696,23 @@ func hooksCheck(cfg config.Config) check {
 	}
 	candidates = append(candidates, filepath.Join(".claude", "settings.json"))
 
+	managed := inspectClaudeManagedHooks(claudeManagedSettingsDir(), doctorInstallOptions(hooks.ClientClaudeCode, "", cfg))
+	var chk check
+	if len(managed.sources) > 0 {
+		chk = managedHooksCheck(cfg, installed, candidates, managed)
+	} else {
+		chk = settingsHooksCheck(cfg, installed, candidates)
+	}
+	if len(managed.errs) > 0 {
+		chk.status = max(chk.status, statusWarn)
+		chk.detail += "; " + strings.Join(managed.errs, "; ")
+	}
+	return chk
+}
+
+// settingsHooksCheck is the check when no managed settings carry a Seamless
+// hook: the first candidate holding every exact current definition is OK.
+func settingsHooksCheck(cfg config.Config, installed, candidates []string) check {
 	var best check
 	found := false
 	for _, path := range candidates {
@@ -722,6 +743,103 @@ func hooksCheck(cfg config.Config) check {
 		return check{statusOK, "hooks", "Claude Code not detected (no claude CLI or ~/.claude)"}
 	}
 	return check{statusWarn, "hooks", "not installed (run: seamlessd install-hooks)"}
+}
+
+// managedHooksCheck judges the Claude Code hooks when managed settings carry
+// some of the Seamless profile. Claude Code runs the hooks of every source, so
+// the question is per event: exactly one current definition, wherever it lives.
+//   - A managed event must be current there and its seam executable present.
+//     The file is not the user's, so drift names it rather than a command.
+//   - A managed event that a user or project file also carries runs twice;
+//     install-hooks removes that copy.
+//   - Every other event must be current in a user or project file, as before.
+func managedHooksCheck(cfg config.Config, want, candidates []string, managed claudeManagedHooks) check {
+	var parts, problems []string
+	for _, src := range managed.sources {
+		parts = append(parts, fmt.Sprintf("managed settings %s (current: %s; stale: %s)",
+			src.path, hookEventNames(src.status.Current), hookEventNames(src.status.Stale)))
+		if len(src.status.Stale) > 0 {
+			problems = append(problems, fmt.Sprintf("stale in %s: %s (not a file install-hooks writes: an administrator must update it)",
+				src.path, hookEventNames(src.status.Stale)))
+		}
+		if pathProblems := recordedHookPathProblems(hooks.ClientClaudeCode, src.path); len(pathProblems) > 0 {
+			problems = append(problems, fmt.Sprintf("not runnable from %s: %s", src.path, strings.Join(pathProblems, ", ")))
+		}
+	}
+	covered := managed.covered(want)
+	for _, event := range covered {
+		if owners := managed.owners(event); len(owners) > 1 {
+			paths := make([]string, len(owners))
+			for i, src := range owners {
+				paths[i] = src.path
+			}
+			problems = append(problems, fmt.Sprintf("%s runs twice: it is in %s", event, strings.Join(paths, " and ")))
+		}
+	}
+
+	// The user and project files: duplicates of managed events, and where every
+	// other event is current.
+	currentIn := map[string]string{}
+	staleIn := map[string]string{}
+	homeSettings, _ := expandHome("~/.claude/settings.json") //nolint:errcheck // "" matches no candidate, so every fix names its file
+	for _, path := range candidates {
+		status, err := hooks.InstalledStatus(doctorInstallOptions(hooks.ClientClaudeCode, path, cfg))
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("cannot inspect %s: %v", path, err))
+			continue
+		}
+		var dups, current []string
+		for _, event := range status.Owned {
+			switch {
+			case slices.Contains(covered, event):
+				dups = append(dups, event)
+			case slices.Contains(status.Current, event):
+				if _, seen := currentIn[event]; !seen {
+					currentIn[event] = path
+					current = append(current, event)
+				}
+			default:
+				if _, seen := staleIn[event]; !seen {
+					staleIn[event] = path
+				}
+			}
+		}
+		if len(current) > 0 {
+			parts = append(parts, fmt.Sprintf("%s (current: %s)", path, hookEventNames(current)))
+		}
+		if len(dups) > 0 {
+			fix := "seamlessd install-hooks --client claude"
+			if path != homeSettings {
+				fix += " --settings " + path
+			}
+			problems = append(problems, fmt.Sprintf("runs twice: %s also in %s (run: %s to remove that copy)",
+				hookEventNames(dups), path, fix))
+		}
+	}
+	var stale, missing []string
+	for _, event := range want {
+		if slices.Contains(covered, event) {
+			continue
+		}
+		if _, ok := currentIn[event]; ok {
+			continue
+		}
+		if _, ok := staleIn[event]; ok {
+			stale = append(stale, event)
+		} else {
+			missing = append(missing, event)
+		}
+	}
+	if len(stale) > 0 || len(missing) > 0 {
+		problems = append(problems, fmt.Sprintf("outside the managed settings, stale: %s; missing: %s (run: seamlessd install-hooks --client claude)",
+			hookEventNames(stale), hookEventNames(missing)))
+	}
+
+	detail := "definitions in " + strings.Join(parts, " and ")
+	if len(problems) == 0 {
+		return check{statusOK, "hooks", detail}
+	}
+	return check{statusWarn, "hooks", detail + "; " + strings.Join(problems, "; ")}
 }
 
 // codexChecks reports the shared local Codex host used by the desktop app, CLI,

@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
+      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
     </ul>
   </details>
   <p><code>seamlessd</code> is both the server and the operator CLI. <code>serve</code> runs the daemon;
@@ -381,7 +381,7 @@ Checks stop early if config or the database cannot be loaded at all.</p>
 </tr>
 <tr>
 <td><code>hooks</code></td>
-<td>Claude Code definitions compared with today's desired profile.</td>
+<td>Claude Code definitions compared with today's desired profile, in <code>~/.claude/settings.json</code>, <code>./.claude/settings.json</code>, and <a href="#seamlessd_install_hooks_managed">Claude Code's managed settings</a>. An event the managed settings carry counts as installed there: a stale definition or a missing <code>seam</code> executable in them is a <strong>warn</strong> naming the file, which an administrator must update, and a copy of that event in a user or project file is a <strong>warn</strong> because it runs twice.</td>
 </tr>
 <tr>
 <td><code>claude desktop mcp</code></td>
@@ -873,7 +873,23 @@ definitions, adopts only recognizable legacy Seamless URLs/commands, deduplicate
 owned entries, and backs the file up once before the first change. An arbitrary
 executable merely containing <code>hook &lt;event&gt;</code> is foreign. An already-current file
 is reported as up to date and left untouched. Each event reports <code>added</code>,
-<code>updated</code>, <code>adopted</code>, <code>deduped</code>, or <code>unchanged</code>.</p>
+<code>updated</code>, <code>adopted</code>, <code>deduped</code>, or <code>unchanged</code>, or for an event the managed
+settings carry, <code>managed</code> or <code>removed</code>.</p>
+<h3 id="seamlessd_install_hooks_managed">Claude Code's managed settings</h3>
+<p>An administrator or a device-management tool can deliver Claude Code settings
+in a system-wide file the user cannot edit: <code>managed-settings.json</code>, plus any
+<code>*.json</code> drop-ins in <code>managed-settings.d/</code>, in <code>/Library/Application Support/ClaudeCode/</code> on macOS, <code>/etc/claude-code/</code> on Linux and WSL, and
+<code>C:\Program Files\ClaudeCode\</code> on Windows. Claude Code runs the hooks in those
+files <em>alongside</em> the ones in <code>settings.json</code> rather than instead of them. So a
+Seamless hook in both places fires twice, and the briefing is injected twice.</p>
+<p><code>install-hooks</code> reads those files first. An event they already carry is left to
+them (<code>managed</code>), and a copy in the target file from an earlier install is
+removed (<code>removed</code>); every other event installs as usual. A <code>managed</code> row names
+the file the events run from. If a managed definition differs from what this
+install would write - another <code>seam</code> path, an older shape - the row says so
+instead of changing it, since the file belongs to whoever deployed it. The
+other managed sources (the claude.ai admin console, MDM profiles, the Windows
+registry) are not files Seamless can read, so they are not consulted.</p>
 <p>For Claude Code, seven events are installed together: <code>SessionStart</code>,
 <code>UserPromptSubmit</code>, <code>SessionEnd</code>, <code>PostToolUse</code>, <code>SubagentStart</code>,
 <code>SubagentStop</code>, and
@@ -946,7 +962,9 @@ already-gone file or a missing client CLI is a note, never a failure, so
 uninstall is idempotent and safe to re-run.</p>
 <p>Hook removal uses the installer's same classifier: current, marked-stale, and
 recognizable legacy Seamless definitions are removed; foreign definitions are
-preserved. Skill removal is scoped to <code>seam-onboard</code>, <code>seam-research</code>, and the
+preserved. Seamless hooks in <a href="#seamlessd_install_hooks_managed">Claude Code's managed settings</a>
+are not Seamless's to edit, so uninstall leaves them and names them in a
+<code>managed</code> row: ask whoever deployed that file to remove them. Skill removal is scoped to <code>seam-onboard</code>, <code>seam-research</code>, and the
 one-shot delivery marker in each selected client's skill root.</p>
 <p>Under <code>role: client</code> two steps narrow rather than run. The service block reports
 <code>not installed</code> and no teardown happens - a client registered none, and running
@@ -1406,7 +1424,7 @@ daemon is running older code than what you just built.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
+      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
     </ul>
   </aside>
   

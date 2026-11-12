@@ -780,19 +780,32 @@ func claudeDesktopSurfaceDetected() bool {
 
 // installClaudeHooks installs the Claude Code hook profile into settings.json and
 // (unless doMCP is false) registers the MCP server with the claude CLI.
+//
+// An event Claude Code's managed settings already carry is left to them: Claude
+// Code runs managed hooks alongside the user's, so writing it here too would run
+// it twice, and a copy here from an earlier install is removed. A managed file
+// that cannot be read covers nothing -- Claude Code cannot apply it either.
 func installClaudeHooks(cfg config.Config, settings, baseURL, seamBin, configPath string, doMCP bool) error {
 	path, err := expandHome(settings)
 	if err != nil {
 		return err
 	}
-	res, err := hooks.Install(hooks.InstallOptions{
+	opts := hooks.InstallOptions{
 		Client: hooks.ClientClaudeCode, SettingsPath: path, BaseURL: baseURL,
 		APIKey: cfg.MCP.APIKey, SeamBin: seamBin, ConfigPath: configPath,
-	})
+	}
+	profile, err := hooks.InstalledEvents(hooks.ClientClaudeCode)
+	if err != nil {
+		return err
+	}
+	managed := inspectClaudeManagedHooks(claudeManagedSettingsDir(), opts)
+	opts.Covered = managed.covered(profile)
+	res, err := hooks.Install(opts)
 	if err != nil {
 		return err
 	}
 	printClientBlock(res, "Claude Code", path)
+	printManagedCoverage(managed)
 	if doMCP {
 		registerClaudeMCP(baseURL, seamBin, configPath)
 	}
@@ -861,10 +874,11 @@ func printClientBlock(res hooks.InstallResult, client, path string) {
 // summarizeActions turns per-hook action strings ("SessionStart: added") into a
 // colored count summary ("2 added, 4 unchanged") plus one detail line per action
 // that changed something ("added: SessionStart, PostToolUse"). Unchanged hooks
-// are counted but never enumerated -- they are the boring, scannable majority.
+// are counted but never enumerated -- they are the boring, scannable majority --
+// and neither are managed ones, which the managed row names.
 func summarizeActions(actions []string) (summary string, changed []string) {
 	// Stable display order; unchanged trails so the eye lands on changes first.
-	order := []string{"added", "updated", "adopted", "deduped", "unchanged"}
+	order := []string{"added", "updated", "adopted", "deduped", "removed", "managed", "unchanged"}
 	counts := map[string]int{}
 	events := map[string][]string{}
 	for _, a := range actions {
@@ -881,7 +895,7 @@ func summarizeActions(actions []string) (summary string, changed []string) {
 			continue
 		}
 		segs = append(segs, colorAction(act, fmt.Sprintf("%d %s", counts[act], act)))
-		if act != "unchanged" {
+		if act != "unchanged" && act != "managed" {
 			changed = append(changed, colorAction(act, act+": ")+strings.Join(events[act], ", "))
 		}
 	}
@@ -889,12 +903,13 @@ func summarizeActions(actions []string) (summary string, changed []string) {
 }
 
 // colorAction tints an action word by outcome: green for a real change (added /
-// updated / adopted), yellow for a dedupe, dim for unchanged.
+// updated / adopted), yellow for a dedupe or a removed duplicate, dim for
+// unchanged and managed.
 func colorAction(act, text string) string {
 	switch act {
-	case "unchanged":
+	case "unchanged", "managed":
 		return dim(text)
-	case "deduped":
+	case "deduped", "removed":
 		return yellow(text)
 	default:
 		return green(text)

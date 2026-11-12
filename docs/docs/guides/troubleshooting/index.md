@@ -44,7 +44,9 @@ daemon up, key valid - is broken, and every link in it fails silently by design.
 **Fix.** Walk the chain in order:
 
 1. `seamlessd doctor` → read the client-specific definition line. Claude Code
-   checks `~/.claude/settings.json` and then `./.claude/settings.json`; Codex
+   checks `~/.claude/settings.json`, `./.claude/settings.json`, and Claude
+   Code's [managed settings](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_install_hooks_managed);
+   Codex
    names exact `current`, `stale`, and `missing` events in its hooks file. A
    warning does **not** fail the run, so read it rather than trusting the exit
    code. Repair owned drift with `seamlessd install-hooks`.
@@ -94,6 +96,21 @@ owned stdio bridge is replaced in place and verified. A direct-HTTP or arbitrary
 foreign entry under the reserved `seamless` name is not overwritten: either keep
 it and use `--mcp=false` for future hook/skill refreshes, or explicitly run
 `codex mcp remove seamless` before reinstalling the maintained proxy.
+
+## The briefing appears twice
+
+**What is happening.** Two copies of the Seamless hooks are installed, and
+Claude Code runs both. The usual cause is Claude Code's
+[managed settings](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_install_hooks_managed):
+a file an administrator or a device-management tool deploys, whose hooks run
+alongside the ones in `~/.claude/settings.json`.
+
+**Fix.** `seamlessd doctor`'s `hooks` line names both files: `runs twice:
+<events> also in <file>`. Run `seamlessd install-hooks --client claude`, which
+leaves those events to the managed settings and removes the copies from your
+settings file. If doctor instead calls a managed definition stale or not
+runnable, the managed file is the one to fix. It is not yours to edit, so ask
+whoever deployed it.
 
 ## A briefing appears, but it is nearly empty or names the wrong project
 

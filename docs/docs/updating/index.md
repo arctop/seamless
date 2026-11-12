@@ -447,7 +447,10 @@ The hooks come out of `~/.claude/settings.json` and Codex's `hooks.json` through
 the same exact classifier the installer and doctor use. Current, marked-stale,
 and unmistakable legacy Seamless entries are removed; foreign entries survive,
 even when their arguments happen to contain `hook <event>`. The install's
-original backup sits next to each file.
+original backup sits next to each file. Seamless hooks in Claude Code's
+[managed settings](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_install_hooks_managed)
+stay where they are, and uninstall names them: that file belongs to whoever
+deployed it.
 
 If you would rather do it by hand - a bare binary you never installed a
 service for, say - `claude mcp remove seamless` or `codex mcp remove seamless`

@@ -154,6 +154,21 @@ func TestObserveClients_ObservedNeverAdded(t *testing.T) {
 		require.Empty(t, clients)
 		require.Len(t, notes, 1)
 	})
+	t.Run("hooks in Claude Code's managed settings wire Claude Code", func(t *testing.T) {
+		f := newShapeFixture(t, "darwin")
+		f.env.claudeManagedDir = t.TempDir()
+		f.wire(t, hooks.ClientClaudeCode, filepath.Join(f.env.claudeManagedDir, claudeManagedSettingsFile), filepath.Join(f.dir, "seam"))
+		clients, notes := observeClients(f.env, f.cfg, f.dir, f.configPath)
+		require.Empty(t, notes)
+		require.Equal(t, []string{shapeClaude}, clients, "an update must keep refreshing Claude Code's skills and MCP")
+
+		// An unreadable managed file wires nothing, and says why.
+		require.NoError(t, os.WriteFile(filepath.Join(f.env.claudeManagedDir, claudeManagedSettingsFile), []byte("{"), 0o600))
+		clients, notes = observeClients(f.env, f.cfg, f.dir, f.configPath)
+		require.Empty(t, clients)
+		require.Len(t, notes, 1)
+		require.Contains(t, notes[0], "cannot inspect managed settings")
+	})
 	t.Run("an unreadable settings file leaves the client out", func(t *testing.T) {
 		f := newShapeFixture(t, "linux")
 		require.NoError(t, os.MkdirAll(filepath.Dir(f.env.claudeSettingsPath()), 0o700))

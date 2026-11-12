@@ -410,6 +410,9 @@ func runBestEffort(cmds []*exec.Cmd) {
 
 // uninstallClientHooks removes (or previews) one client's Seamless hook entries
 // from its settings/hooks file, printing a block that matches install's shape.
+// For Claude Code it also names any Seamless hooks in Claude Code's managed
+// settings: uninstall cannot remove those, and they keep calling a seam that is
+// about to be gone.
 func uninstallClientHooks(client hooks.Client, path string, statusOpts hooks.InstallOptions, dryRun bool) error {
 	expanded, err := expandHome(path)
 	if err != nil {
@@ -421,25 +424,40 @@ func uninstallClientHooks(client hooks.Client, path string, statusOpts hooks.Ins
 	}
 	fmt.Printf("\n%s\n", bold(label))
 
+	statusOpts.Client = client
 	if dryRun {
-		statusOpts.Client = client
 		statusOpts.SettingsPath = expanded
 		status, err := hooks.InstalledStatus(statusOpts)
 		if err != nil {
 			return err
 		}
 		printHookRow(len(status.Owned), status.Owned, expanded, true)
-		return nil
+	} else {
+		res, err := hooks.Uninstall(hooks.UninstallOptions{Client: client, SettingsPath: expanded, BaseURL: statusOpts.BaseURL})
+		if err != nil {
+			return err
+		}
+		printHookRow(len(removedEvents(res.Actions)), removedEvents(res.Actions), expanded, false)
+		if res.BackupPath != "" {
+			fieldRow("backup", dim(tildePath(res.BackupPath)))
+		}
 	}
-	res, err := hooks.Uninstall(hooks.UninstallOptions{Client: client, SettingsPath: expanded, BaseURL: statusOpts.BaseURL})
-	if err != nil {
-		return err
-	}
-	printHookRow(len(removedEvents(res.Actions)), removedEvents(res.Actions), expanded, false)
-	if res.BackupPath != "" {
-		fieldRow("backup", dim(tildePath(res.BackupPath)))
+	if client == hooks.ClientClaudeCode {
+		printManagedLeftBehind(inspectClaudeManagedHooks(claudeManagedSettingsDir(), statusOpts))
 	}
 	return nil
+}
+
+// printManagedLeftBehind names the Seamless hooks Claude Code's managed settings
+// still carry after an uninstall, and who can remove them.
+func printManagedLeftBehind(m claudeManagedHooks) {
+	for _, src := range m.sources {
+		fieldRow("managed", yellow(fmt.Sprintf("%s still run from %s", hookEventNames(src.status.Owned), tildePath(src.path))))
+		contDim("that file is not Seamless's to edit: ask whoever deployed it to remove them")
+	}
+	for _, msg := range m.errs {
+		fieldRow("managed", yellow(msg))
+	}
 }
 
 // printHookRow renders the "hooks" summary line for a client block.

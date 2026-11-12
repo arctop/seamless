@@ -108,7 +108,7 @@ Checks stop early if config or the database cannot be loaded at all.
 | `remote sessions` | An **info** line: which other machines used this daemon in the last 24 hours, and how many daemon-side captures were skipped for them. `none in 24h` on a single-machine install. |
 | `mcp_tools` | On a server install, fails if the number of registered tools disagrees with the expected count - catches a tool written but never wired in. On a `role: client` install it is the live count instead: `tools/list` against the server, judged against that server's effective feature state. |
 | `claude CLI runtime` / `claude app runtime` | Each discoverable Claude Code runtime's self-reported version, separately: the PATH CLI and, on macOS, every runtime the desktop app has retained - they can differ, and collapsing them would hide exactly that skew. No discoverable runtime means no lines. |
-| `hooks` | Claude Code definitions compared with today's desired profile. |
+| `hooks` | Claude Code definitions compared with today's desired profile, in `~/.claude/settings.json`, `./.claude/settings.json`, and [Claude Code's managed settings](#seamlessd_install_hooks_managed). An event the managed settings carry counts as installed there: a stale definition or a missing `seam` executable in them is a **warn** naming the file, which an administrator must update, and a copy of that event in a user or project file is a **warn** because it runs twice. |
 | `claude desktop mcp` | The chat surface's `claude_desktop_config.json` entry compared with the desired stdio bridge. Absent is an **info** line naming the opt-in command, never a nag; an exact entry reports OK while stating that the running app's loaded state is unverifiable (the app reads the config at startup). No lines when neither the app nor a desktop config exists. |
 | `codex CLI runtime` / `codex app runtime` | Each discoverable Codex runtime's self-reported version, separately, on the same principle. |
 | `codex hooks` | Codex current, stale, and missing definitions, including command targets. |
@@ -446,7 +446,27 @@ definitions, adopts only recognizable legacy Seamless URLs/commands, deduplicate
 owned entries, and backs the file up once before the first change. An arbitrary
 executable merely containing `hook <event>` is foreign. An already-current file
 is reported as up to date and left untouched. Each event reports `added`,
-`updated`, `adopted`, `deduped`, or `unchanged`.
+`updated`, `adopted`, `deduped`, or `unchanged`, or for an event the managed
+settings carry, `managed` or `removed`.
+
+### Claude Code's managed settings {#seamlessd_install_hooks_managed}
+
+An administrator or a device-management tool can deliver Claude Code settings
+in a system-wide file the user cannot edit: `managed-settings.json`, plus any
+`*.json` drop-ins in `managed-settings.d/`, in `/Library/Application
+Support/ClaudeCode/` on macOS, `/etc/claude-code/` on Linux and WSL, and
+`C:\Program Files\ClaudeCode\` on Windows. Claude Code runs the hooks in those
+files *alongside* the ones in `settings.json` rather than instead of them. So a
+Seamless hook in both places fires twice, and the briefing is injected twice.
+
+`install-hooks` reads those files first. An event they already carry is left to
+them (`managed`), and a copy in the target file from an earlier install is
+removed (`removed`); every other event installs as usual. A `managed` row names
+the file the events run from. If a managed definition differs from what this
+install would write - another `seam` path, an older shape - the row says so
+instead of changing it, since the file belongs to whoever deployed it. The
+other managed sources (the claude.ai admin console, MDM profiles, the Windows
+registry) are not files Seamless can read, so they are not consulted.
 
 For Claude Code, seven events are installed together: `SessionStart`,
 `UserPromptSubmit`, `SessionEnd`, `PostToolUse`, `SubagentStart`,
@@ -515,7 +535,9 @@ uninstall is idempotent and safe to re-run.
 
 Hook removal uses the installer's same classifier: current, marked-stale, and
 recognizable legacy Seamless definitions are removed; foreign definitions are
-preserved. Skill removal is scoped to `seam-onboard`, `seam-research`, and the
+preserved. Seamless hooks in [Claude Code's managed settings](#seamlessd_install_hooks_managed)
+are not Seamless's to edit, so uninstall leaves them and names them in a
+`managed` row: ask whoever deployed that file to remove them. Skill removal is scoped to `seam-onboard`, `seam-research`, and the
 one-shot delivery marker in each selected client's skill root.
 
 Under `role: client` two steps narrow rather than run. The service block reports

@@ -434,7 +434,7 @@ func planAttended(ctx context.Context, d updaterDeps, install update.Install, pr
 	case !targetOK:
 		p.reason = fmt.Sprintf("SEAMLESS_VERSION=%s is not a release number X.Y.Z", p.pin)
 	default:
-		env := shapeEnv{goos: d.goos, home: d.home, environ: d.environ, sameFile: d.sameFile}
+		env := shapeEnv{goos: d.goos, home: d.home, environ: d.environ, sameFile: d.sameFile, claudeManagedDir: claudeManagedSettingsDir()}
 		dir, err := installDirFor(env, probe.Service, probe.Exe)
 		if err != nil {
 			p.reason = err.Error()

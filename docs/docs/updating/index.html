@@ -676,7 +676,10 @@ filesystem root. See <a href="../reference/storage/">Storage</a> for what is in 
 the same exact classifier the installer and doctor use. Current, marked-stale,
 and unmistakable legacy Seamless entries are removed; foreign entries survive,
 even when their arguments happen to contain <code>hook &lt;event&gt;</code>. The install's
-original backup sits next to each file.</p>
+original backup sits next to each file. Seamless hooks in Claude Code's
+<a href="../reference/cli-seamlessd/#seamlessd_install_hooks_managed">managed settings</a>
+stay where they are, and uninstall names them: that file belongs to whoever
+deployed it.</p>
 <p>If you would rather do it by hand - a bare binary you never installed a
 service for, say - <code>claude mcp remove seamless</code> or <code>codex mcp remove seamless</code>
 drops that client's MCP registration; the chat surface has no CLI, so delete
