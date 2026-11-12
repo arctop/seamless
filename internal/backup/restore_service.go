@@ -366,6 +366,12 @@ func (s *Service) loadRestore(ctx context.Context) {
 	}
 	if !res.Recorded {
 		s.recordResult(ctx, res)
+		// The last run found the data unchanged; a restore that changed it
+		// since makes that "up to date" untrue until the next run looks.
+		if (res.Outcome == RestoreDone || res.Outcome == RestorePartial) && s.state.LastOutcome == OutcomeUnchanged {
+			s.state.LastOutcome = ""
+			s.persist()
+		}
 		res.Recorded = true
 		if err := writeRecord(LastPath(s.d.DataDir), res); err != nil {
 			s.log.Warn("backup: could not save the restore's result", "err", err)

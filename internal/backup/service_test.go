@@ -69,6 +69,34 @@ func TestScheduler_FirstRunWaitsTenMinutesThenDaily(t *testing.T) {
 	require.Nil(t, h.tick().Running)
 }
 
+// A restore that changed the data ends "Up to date: nothing has changed since
+// the last backup" (the last run's skip), and that survives a restart. One
+// that changed nothing leaves it.
+func TestScheduler_ARestoreThatChangedTheDataEndsUpToDate(t *testing.T) {
+	for _, tc := range []struct {
+		outcome  string
+		upToDate bool
+	}{
+		{RestoreDone, false}, {RestorePartial, false}, {RestoreFailed, true}, {RestoreExpired, true},
+	} {
+		t.Run(tc.outcome, func(t *testing.T) {
+			dataDir, db := seedDataDir(t)
+			h := newHarness(t, dataDir, db)
+			require.Equal(t, OutcomeCreated, h.runScheduled(firstRunDelay).LastRun.Outcome)
+			require.True(t, h.runScheduled(24*time.Hour).UpToDate)
+
+			// What a startup finds once a restore has been applied (or not).
+			require.NoError(t, writeRecord(LastPath(dataDir), &Result{
+				Version: 1, ID: "01RESTORE", Mode: ModeReplace, Outcome: tc.outcome, At: h.clock.Now(),
+			}))
+			h.restart()
+			require.Equal(t, tc.upToDate, h.sync().UpToDate)
+			h.restart()
+			require.Equal(t, tc.upToDate, h.sync().UpToDate, "the record keeps it across a restart")
+		})
+	}
+}
+
 func TestScheduler_SkipsWhenUnchangedAndRunsWhenChanged(t *testing.T) {
 	dataDir, db := seedDataDir(t)
 	h := newHarness(t, dataDir, db)
