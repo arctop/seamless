@@ -3,8 +3,10 @@ package console
 // The Approvers page: the owner's passkeys and Touch ID keys, which approve
 // access to locked projects, the passkey enrollment
 // ceremony, and the Touch ID helper's enrollment (`seam touchid enroll`). It
-// exists only while a project is locked (Config.Approvals set); otherwise
-// every route here is a 404 and nothing on any other page changes.
+// exists whenever peer_auth is on (Config.Approvals set), whether or not a
+// project is locked yet -- an approver is enrolled before the first lock needs
+// one. With peer_auth off every route here is a 404 and nothing on any other
+// page changes.
 //
 // The page lists and adds; it never removes. Removing a credential, or
 // resetting them all, is `seamlessd approvers remove|reset`, run as the

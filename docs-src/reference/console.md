@@ -85,15 +85,17 @@ nothing, and their rows say so.
 | Sign in / sign out | `POST /console/login`, `POST /console/logout` | Sets or clears the console cookie. Touches no data. |
 
 Read the shape of that list. There is no "create memory", no "edit note", no
-"delete", no "add task", no "start session". The direct writes to knowledge
+"delete memory", no "add task", no "start session". The direct writes to knowledge
 state are **archive a memory**, **approve a captured plan**, the **star**
 flag, and - with write screening on - **releasing a held write**, which lands
 exactly what an agent wrote, never text of the console's own; the rest either
 manage gardener proposals - which are themselves
 proposals, reviewed before they do anything - or free a task claim, or set a
 configuration knob (briefing overrides, feature switches, project families, the
-update switches) that shapes future briefings, or what is exposed, without
-touching any memory's content. The console level is presentation state of the same kind: it changes
+update switches, the backup schedule and folder) that shapes future briefings,
+what is exposed, or how the install runs, without touching any memory's
+content. **Back up now** and **Delete a backup** make and remove copies of the
+data, never the data itself. The console level is presentation state of the same kind: it changes
 what this console shows you and nothing else. The access, lock, unlock and
 approver rows exist only with [peer_auth](/guides/peer-auth/) or read grants on
 (both optional, and off by default; every one of those routes answers 404
