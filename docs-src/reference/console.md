@@ -11,9 +11,10 @@ is not how Seamless is driven; it is how you watch it.
 
 ## What the console can change
 
-The console is **read-mostly**. That is a design claim, so here is the whole list
-- every write it is capable of, taken from the `POST` routes in
-`internal/console/console.go`. There are no others.
+The console is **read-mostly**. That is a design claim, so here is the whole
+list - every write it is capable of, taken from the `POST` routes in
+`internal/console/console.go`. There are no others. A few of those routes write
+nothing, and their rows say so.
 
 | Action | Route | Effect |
 |---|---|---|
@@ -39,8 +40,24 @@ The console is **read-mostly**. That is a design claim, so here is the whole lis
 | Mark a flagged item safe | `POST /console/held/corpus/safe` | `path=` the item's file. Safe as it reads now; a memory is also stamped owner-confirmed. |
 | Accept a file changed outside Seamless | `POST /console/held/corpus/accept` | `path=` the file. Records it as it stands, lifts its quarantine, and stamps a memory owner-confirmed. |
 | Set a project's isolation | `POST /console/projects/{slug}/isolation` | Changes how far a project's knowledge travels. A tightening that would cut existing context first renders a confirmation step; nothing is written until it is confirmed. |
+| Begin a lock change | `POST /console/lock/{project}/begin` | Only under [peer_auth](/guides/peer-auth/#lock-from-the-console-or-force-lock-in-the-file), and only from a signed-in browser. `action=lock` or `remove`. Refuses first a change that could not apply - a force-locked project, a lock already on, no console lock to remove, a project that is not confidential or sealed, no passkey enrolled - then returns a WebAuthn challenge naming this ceremony, the project and the direction. Writes nothing. |
+| Lock a project, or remove its lock | `POST /console/lock/{project}/finish` | Verifies the passkey assertion for that ceremony, then stores the lock or removes it. Turning a lock on ends, in the same transaction, the project's agent leases, read grants and console unlocks, so every agent and browser asks again. It removes only a lock the console set: one `peer_auth.force_locked` holds stays. Seamless then restarts to apply the change. |
+| Begin a passkey unlock | `POST /console/unlock/{project}/begin` | Only for a project peer_auth locks, and only from the signed-in browser that proves its unlock key. Records a waiting [console unlock](/guides/peer-auth/#leases-and-the-process-tree) bound to this browser's cookie and key, sets the `seamless_unlock` cookie when the browser holds no live unlock yet, and returns the passkey challenge. Refused while no passkey is enrolled; the terminal path still works. Opens nothing yet. |
+| Unlock a project in this browser | `POST /console/unlock/{project}/finish` | Verifies the passkey assertion for that waiting unlock, from the browser that began it, and makes it live: this browser reads the project for three hours, or less when `peer_auth.max_lease` is shorter. It is never a lease: no agent reads the project through it. |
+| Begin a terminal unlock | `POST /console/unlock/{project}/terminal` | **Approve from a terminal**: the passkey begin's gates, without needing a passkey. Records a waiting unlock bound to this browser and returns a pairing code with the `seamlessd console-open --unlock` command that approves it, run as the daemon's account within ten minutes. The code only names that unlock, so it is not a secret. Opens nothing until the command runs. |
+| Ask for access | `POST /console/access/request` | The agent's ask, not your decision: `seam access request`, run from the agent's own shell, files an [access request](/guides/peer-auth/#requests) for a locked project or, with [read grants](/guides/peer-auth/#read-grants-and-the-advisory-tier) on, a read grant request for a confidential project no lock covers. It writes a waiting request, with the agent's reason of at most 200 characters, and opens nothing. An agent that already holds the access is answered with it. |
+| Approve an access request | `POST /console/access/{id}/approve` | Your decision: writes the agent's lease on a locked project, or a read grant, for `duration=` (until the session ends, 1 hour or 4 hours), and only while the request's facts still match `digest=`, the digest of the facts you were shown. Under peer_auth it takes a proof: a passkey assertion from the request's page, or a Touch ID signature from Seamless Approve (`proof=touchid`), accepted on the peer_auth socket only. In the advisory tier - read grants without peer_auth - a decision with no passkey is the bearer key's, which is what `seam approve` sends. |
+| Deny an access request | `POST /console/access/{id}/deny` | Closes a waiting request with no lease or grant; the project stays closed to that agent. Refused over the peer_auth socket: deny on the console, or with `seam approve` in your own terminal. |
+| Revoke an agent's lease | `POST /console/access/leases/{id}/revoke` | **Revoke** under Agent leases on `/console/access`: ends that lease before its expiry and records an `access.revoked` event. Refused over the peer_auth socket. |
+| Revoke a read grant | `POST /console/access/grants/{id}/revoke` | **Revoke** under Read grants: ends a live grant before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket. |
+| Lock a console unlock again | `POST /console/access/unlocks/{id}/end` | **Lock again** on `/console/access`, or **Lock it again** on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket. |
+| Begin a passkey enrollment | `POST /console/approvers/passkey/begin` | Only under peer_auth: `name=` the passkey (1 to 64 characters on one line). Returns the WebAuthn creation options, excluding every passkey already [enrolled](/guides/peer-auth/#enroll-an-approver). Holds the enrollment in memory and stores nothing. Refused over the peer_auth socket, since a passkey is created in a browser. |
+| Create the passkey | `POST /console/approvers/passkey/finish` | Verifies the browser's new passkey and returns its key's fingerprint with the `seamlessd approvers enroll-code` command that mints its code. Still stores nothing: the passkey waits for that code. |
+| Enroll the passkey | `POST /console/approvers/passkey/confirm` | `code=` the one-time code that command minted for this key. Stores the passkey and uses up the code in one transaction. A code that is mistyped, expired, used or minted for another key leaves the passkey waiting, so it can be typed again. |
+| Enroll a Touch ID key | `POST /console/approvers/touchid/enroll` | Seamless Approve's call, from the app `seam touchid enroll` opens, accepted on the peer_auth socket only - never with the TCP key or the console cookie. Stores the Mac's new Touch ID key, proven by an enrollment code minted for that key and the key's signature over it. An earlier Touch ID key of the same Mac that signs its own retirement is retired in the same step. No console route removes any other credential: that is `seamlessd approvers remove`. |
 | Save briefing settings | `POST /console/settings/briefing` | Writes the briefing knobs as a runtime **override row** in the DB. It never writes the config file. |
 | Reset briefing settings | `POST /console/settings/briefing/reset` | Clears the override row, reverting to the file/env configuration. |
+| Preview a briefing | `POST /console/settings/briefing/preview` | A read, not a write: it POSTs only to carry the Briefing form's unsaved values, which it checks with the save's own validation, and answers with the briefing a new session in the chosen project would start with. Writes no settings row and records no event. A locked project is not previewed. |
 | Force utility ranking for a scope | `POST /console/settings/utility` | Sets or clears the owner's per-scope force: `on` and `off` win over the gardener's readiness latch, `auto` defers to it again. |
 | Switch embeddings off or back on | `POST /console/settings/embeddings/mode` | Stores or clears the embedder off switch. It is read at serve start, so the change applies from the next restart - the page says so. |
 | Re-embed everything | `POST /console/settings/embeddings/reembed` | Starts a background pass that re-embeds every memory and note with the active model. It changes vectors, never content. |
@@ -73,11 +90,18 @@ state are **archive a memory**, **approve a captured plan**, the **star**
 flag, and - with write screening on - **releasing a held write**, which lands
 exactly what an agent wrote, never text of the console's own; the rest either
 manage gardener proposals - which are themselves
-proposals, reviewed before they do anything - or free a lock, or set a
+proposals, reviewed before they do anything - or free a task claim, or set a
 configuration knob (briefing overrides, feature switches, project families, the
 update switches) that shapes future briefings, or what is exposed, without
 touching any memory's content. The console level is presentation state of the same kind: it changes
-what this console shows you and nothing else. **Update now** and **Resume
+what this console shows you and nothing else. The access, lock, unlock and
+approver rows exist only with [peer_auth](/guides/peer-auth/) or read grants on
+(both optional, and off by default; every one of those routes answers 404
+otherwise), and they are your decisions about who may reach a project, not
+writes to knowledge: they record requests, leases, read grants, console
+unlocks, locks and approver credentials, and never a memory's or a note's
+content. The one an agent calls, **Ask for access**, only files a request for
+you to decide. **Update now** and **Resume
 automatic updates** act on the install rather than on knowledge: the first
 starts the same backed-up update `seamlessd update` runs, the second lets
 automatic updates run again. A **restore** is the one write that changes
