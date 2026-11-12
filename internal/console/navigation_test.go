@@ -142,6 +142,129 @@ func TestQueryControls_AreWiredAcrossConsole(t *testing.T) {
 	}
 }
 
+// A POST's redirect to a #anchor must land there in place too. fetch() follows a
+// 303 out of sight and a Response's url never carries a fragment (measured in
+// Chrome: a header set on the 303 reads null after the follow, and
+// redirect:'manual' is an opaque status-0 answer), so the in-place client asks
+// for the redirect to be named instead. Each redirecting handler answers that
+// request with exactly the location its 303 would send, fragment included, and
+// answers every other caller with the 303 as before.
+func TestMutationRedirects_NameTheirAnchorToTheInPlaceClient(t *testing.T) {
+	db, mux := newConsole(t)
+	seedIsolationProject(t, db, "acme")
+
+	for _, tc := range []struct {
+		name, path, body, prefix, anchor string
+	}{
+		{"settingsBack", "/console/settings/features", "", "/console/settings?s=features&notice=", "features"},
+		{"backups flash", "/console/settings/backups/restore/dismiss", "", "/console/settings?s=backups&error=", "backups"},
+		{"isolation confirm", "/console/projects/acme/isolation", "state=confidential",
+			"/console/projects/acme?tab=overview&isolate=confidential", "isolation"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plain := postForm(mux, tc.path, tc.body)
+			require.Equal(t, http.StatusSeeOther, plain.Code, plain.Body.String())
+			loc := plain.Header().Get("Location")
+			require.True(t, strings.HasPrefix(loc, tc.prefix), "got %q", loc)
+			require.True(t, strings.HasSuffix(loc, "#"+tc.anchor), "the redirect lands on its block: %q", loc)
+			require.Empty(t, plain.Header().Get(locationHeader), "only a caller that asks gets the named form")
+
+			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer "+testKey)
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set(partialHeader, "1")
+			req.Header.Set(followHeader, "1")
+			named := do(mux, req)
+			require.Equal(t, http.StatusNoContent, named.Code,
+				"a 3xx would be followed by fetch() out of sight, fragment and all")
+			require.Empty(t, named.Header().Get("Location"))
+			require.Equal(t, loc, named.Header().Get(locationHeader),
+				"the named location is exactly the redirect's, #anchor included")
+			require.Equal(t, "no-store", named.Header().Get("Cache-Control"))
+			require.Empty(t, named.Body.String())
+		})
+	}
+}
+
+// followWriter names only a redirect the browser would follow with a GET. A 307
+// or 308 repeats the method and body, which only the browser can do, and an
+// answer that is not a redirect is the answer.
+func TestFollowable_NamesOnlyGetRedirects(t *testing.T) {
+	answer := func(code int, follow bool) *httptest.ResponseRecorder {
+		h := followable(func(w http.ResponseWriter, r *http.Request) {
+			if code >= 300 && code < 400 {
+				http.Redirect(w, r, "/console/x?y=1#z", code)
+				return
+			}
+			w.WriteHeader(code)
+			_, _ = w.Write([]byte("page"))
+		})
+		req := httptest.NewRequest(http.MethodPost, "/console/p", nil)
+		if follow {
+			req.Header.Set(followHeader, "1")
+		}
+		rr := httptest.NewRecorder()
+		h(rr, req)
+		return rr
+	}
+
+	for _, code := range []int{http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther} {
+		rr := answer(code, true)
+		require.Equal(t, http.StatusNoContent, rr.Code, "%d", code)
+		require.Equal(t, "/console/x?y=1#z", rr.Header().Get(locationHeader), "%d", code)
+		require.Empty(t, rr.Header().Get("Location"), "%d", code)
+
+		rr = answer(code, false)
+		require.Equal(t, code, rr.Code)
+		require.Equal(t, "/console/x?y=1#z", rr.Header().Get("Location"))
+	}
+	for _, code := range []int{http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		rr := answer(code, true)
+		require.Equal(t, code, rr.Code, "a %d keeps its method: the browser follows it", code)
+		require.Equal(t, "/console/x?y=1#z", rr.Header().Get("Location"))
+		require.Empty(t, rr.Header().Get(locationHeader))
+	}
+	rr := answer(http.StatusOK, true)
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, "page", rr.Body.String())
+	require.Empty(t, rr.Header().Get(locationHeader))
+}
+
+// The client half: an in-place load keeps the fragment of the URL it asked for
+// (or of the location a mutation's redirect names), puts it in history, and
+// lands on the anchor after the morph. A Response's url has no fragment, so a
+// load that took its next URL from response.url alone lost the anchor, its
+// history entry and its scroll.
+func TestNavigationJS_KeepsTheAnchor(t *testing.T) {
+	js := string(navigationJS)
+
+	require.Contains(t, js, "if (mutation) headers['"+followHeader+"'] = '1';",
+		"a mutation asks for its redirect to be named")
+	require.Contains(t, js, "response.headers.get('"+locationHeader+"')")
+	require.Contains(t, js, "landing = new URL(named, target.href);")
+	require.Contains(t, js, "if (landing.origin !== location.origin) throw",
+		"a named location off the console is never fetched")
+	require.Equal(t, 2, strings.Count(js, "heldViews("),
+		"only a GET's own fetch sends held views: a mutation's follow is answered whole, so it never retries the POST")
+
+	require.Contains(t, js, "var landing = target;", "a GET lands where it asked to, fragment included")
+	require.Contains(t, js, "finalURL.hash = landing.hash;", "response.url drops the fragment: put it back")
+	require.Contains(t, js, "if (!canonical.hash) canonical.hash = finalURL.hash;",
+		"a canonical URL from the page keeps the fragment too")
+	require.NotContains(t, js, "new URL(response.url || target.href",
+		"the next URL is not response.url alone: it has no fragment")
+
+	// Order: morph, then history, then the scroll.
+	patch := strings.Index(js, "patchPage(doc, options.source")
+	push := strings.Index(js, "history.pushState(state, '', nextURL)")
+	keep := strings.Index(js, "nextURL = canonical.href;")
+	scroll := strings.Index(js, "anchor.scrollIntoView({ block: 'start' })")
+	require.True(t, patch >= 0 && keep > patch && push > keep && scroll > push,
+		"the fragment goes into history and the view lands on it after the morph")
+	require.Contains(t, js, "if (currentViewURL.hash && (mutation || currentViewURL.href !== shown))",
+		"a mutation always lands on its anchor; drawing the shown view again keeps the scroll")
+}
+
 func TestMutationForms_UseInPlaceNavigation(t *testing.T) {
 	client := string(navigationJS)
 	require.Contains(t, client, `method === 'post' && !!form.closest('.main')`,

@@ -300,7 +300,9 @@
   // reveal brings a card that has just appeared into view: the confirm card
   // in its row (focused, for the keyboard), and the progress card or result
   // banner at the top of the section after a restore starts or finishes.
-  // The in-place load drops the URL's fragment, so the browser does not.
+  // An in-place load lands on its URL's #anchor (navigation.js), but these
+  // cards mostly appear in a redraw -- a backup.* event, the steps, the
+  // restart -- which lands nowhere, and an anchor never moves focus.
   var shown = {};
   function reveal(updated) {
     ['backup-restore', 'backup-progress', 'backup-result', 'backup-failed'].forEach(function (id) {

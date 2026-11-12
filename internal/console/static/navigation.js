@@ -326,14 +326,40 @@
     // A mutation is answered whole: a stale answer is retried, and a POST
     // must never be sent twice.
     if (!mutation) heldViews(headers);
+    // fetch() follows a redirect out of sight, and a Response's url never
+    // carries a fragment. So a mutation asks the server to name where its
+    // redirect goes, #anchor included (follow.go), and follows it here with
+    // one GET, which is answered whole too.
+    if (mutation) headers['X-Seam-Follow'] = '1';
+    // landing is where this load is going, fragment included: the URL asked
+    // for, or the place a mutation's redirect names. shown is the view on the
+    // page now: a load that only draws it again keeps the scroll where it is.
+    var landing = target;
+    var shown = currentViewURL.href;
+    var signal = controller ? controller.signal : undefined;
     return fetch(target.href, {
       method: method,
       body: method === 'GET' || method === 'HEAD' ? undefined : options.body,
       credentials: 'same-origin',
       headers: headers,
-      signal: controller ? controller.signal : undefined
+      signal: signal
     }).then(function (response) {
-      var finalURL = new URL(response.url || target.href, location.href);
+      var named = mutation ? response.headers.get('X-Seam-Location') : null;
+      if (!named) return response;
+      landing = new URL(named, target.href);
+      if (!landing.hash) landing.hash = target.hash;
+      if (landing.origin !== location.origin) throw new Error('redirect away from the console');
+      return fetch(landing.href, {
+        credentials: 'same-origin',
+        headers: { Accept: 'text/html', 'X-Seam-Partial': '1' },
+        signal: signal
+      });
+    }).then(function (response) {
+      var finalURL = new URL(response.url || landing.href, location.href);
+      // response.url never carries the fragment: keep landing's. A redirect
+      // that names no fragment of its own keeps the one asked for, as a
+      // browser's does.
+      finalURL.hash = landing.hash;
       if (finalURL.pathname === '/console/login') {
         location.assign(finalURL.href);
         return null;
@@ -346,13 +372,19 @@
           throw new Error('invalid console document');
         }
         var nextURL = canonicalURL(doc, finalURL.href);
+        var canonical = new URL(nextURL, location.href);
+        if (!canonical.hash) canonical.hash = finalURL.hash;
+        nextURL = canonical.href;
         if (options.history !== 'none') {
           var state = { seamView: 'query' };
           if (options.history === 'replace') history.replaceState(state, '', nextURL);
           else history.pushState(state, '', nextURL);
         }
         currentViewURL = new URL(nextURL, location.href);
-        if (currentViewURL.hash) {
+        // Land on the #anchor, as a page load would. A mutation always lands;
+        // a GET of the view already shown (drawing it again in place) keeps
+        // the owner's scroll, as a reload would.
+        if (currentViewURL.hash && (mutation || currentViewURL.href !== shown)) {
           try {
             var anchor = document.getElementById(decodeURIComponent(currentViewURL.hash.slice(1)));
             if (anchor) anchor.scrollIntoView({ block: 'start' });

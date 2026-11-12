@@ -238,7 +238,7 @@ func New(cfg Config) (*Service, error) {
 func (s *Service) Register(mux *http.ServeMux) {
 	handle := func(pattern string, h http.HandlerFunc) { mux.HandleFunc(pattern, secured(h)) }
 	post := func(pattern string, maxBytes int64, h http.HandlerFunc) {
-		handle(pattern, s.auth(s.parseForm(maxBytes, h)))
+		handle(pattern, s.auth(s.parseForm(maxBytes, followable(h))))
 	}
 	// gated composes into the same helpers, so an optional feature's routes
 	// inherit security headers and auth exactly like every other route and can
