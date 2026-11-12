@@ -312,11 +312,16 @@ func (s *Service) write(ctx context.Context, spec jobSpec, dir, staging, install
 
 	rec := &Record{
 		Name: name, Dir: dir, Kind: spec.kind, At: m.CreatedAt, Bytes: w.n,
-		Fingerprint: m.Fingerprint, Projects: len(m.Projects) + m.ProjectsOmitted,
+		Fingerprint: m.Fingerprint, Projects: m.ProjectsOmitted,
 	}
 	for _, p := range m.Projects {
 		rec.Memories += p.Memories
 		rec.Notes += p.Notes
+		// The global scope is in the manifest's list but is no project: the
+		// console's list of backups leaves it out, and so does this count.
+		if p.Slug != "" {
+			rec.Projects++
+		}
 	}
 	return rec, nil
 }

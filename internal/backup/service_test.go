@@ -97,6 +97,23 @@ func TestScheduler_ARestoreThatChangedTheDataEndsUpToDate(t *testing.T) {
 	}
 }
 
+// The record counts projects the way the console's list of backups does:
+// the global scope is in the manifest's list but is no project. Otherwise
+// the status card said "in 5 projects" for a backup the list said held 4,
+// whenever the folder could not be read.
+func TestScheduler_RecordCountsProjectsWithoutTheGlobalScope(t *testing.T) {
+	dataDir, db := seedDataDir(t)
+	_, err := db.Exec(`INSERT INTO memories_index (id, kind, name, project, file_path, content_hash, created_at, updated_at) VALUES ('01MEMGLOBAL', 'gotcha', 'g', '', 'memory/_global/g.md', 'h', '2026-11-11T00:00:00Z', '2026-11-11T00:00:00Z')`)
+	require.NoError(t, err)
+	h := newHarness(t, dataDir, db)
+	st := h.runScheduled(firstRunDelay)
+	require.Equal(t, OutcomeCreated, st.LastRun.Outcome, st.LastRun.Error)
+	require.Equal(t, 1, st.LastBackup.Projects, "alpha; the global scope is not a project")
+	created := h.rec.of(core.EventBackupCreated)
+	require.Len(t, created, 1)
+	require.EqualValues(t, 1, created[0].Payload["projects"])
+}
+
 func TestScheduler_SkipsWhenUnchangedAndRunsWhenChanged(t *testing.T) {
 	dataDir, db := seedDataDir(t)
 	h := newHarness(t, dataDir, db)
