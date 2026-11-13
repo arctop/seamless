@@ -1301,20 +1301,14 @@ func (n *dgNormalizer) encode(t *testing.T, v any) []byte {
 // fails, so it never hides anything beyond what was accepted and a stale entry
 // shows. Nothing is mapped while writing the golden from main. Once main
 // carries the change, drop the entry and regenerate the golden there.
+//
+// None is open: main carries every difference accepted so far, and the golden
+// is written from it.
 var dgAccepted = []struct {
 	file, why    string
 	branch, main string
 	n            int
-}{
-	{
-		file: "console.txt",
-		why: "the System and Privacy screens (e9ba8b0f) are new for every install at Standard, so the Settings " +
-			"page's Standard level card names them (owner decision 2026-11-08, task 01M6YG8XFZJ1GDJSXR1BE6X20D)",
-		branch: "<li>Trials</li><li>System</li><li>Privacy</li><li>Settings: Briefing and Workspaces</li>",
-		main:   "<li>Trials</li><li>Settings: Briefing and Workspaces</li>",
-		n:      1,
-	},
-}
+}{}
 
 // dgAccept maps the accepted differences in file's normalized text back to
 // main's text.

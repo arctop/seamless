@@ -4744,7 +4744,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
           <input type="hidden" name="return" value="/console/settings?s=experience">
           <header class="level-card-head"><h3>Standard</h3></header>
           <p class="level-card-line">Curate knowledge and follow the work.</p>
-          <div class="level-card-items"><span class="level-card-lead">Adds</span><ul><li>Now</li><li>Projects</li><li>Plans</li><li>Tasks</li><li>Labs</li><li>Trials</li><li>Settings: Briefing and Workspaces</li></ul>
+          <div class="level-card-items"><span class="level-card-lead">Adds</span><ul><li>Now</li><li>Projects</li><li>Plans</li><li>Tasks</li><li>Labs</li><li>Trials</li><li>System</li><li>Privacy</li><li>Settings: Briefing and Workspaces</li></ul>
             <ul class="level-card-details"><li>Overview: the observation window, the vitals, and the workspaces table and the knowledge rail</li><li>Memories: the Reach and Utility sorts, how often each memory surfaced, and the utility score in the reader</li><li>Gardener: the Type and Source filters, the project-split example, the Hidden forever list, Retarget on a proposal, and Hide forever on a proposal</li><li>Sessions: the Retained filter, the Sort menu, and a session&#39;s review signals</li><li>Search: the Updated window and the Sort control</li><li>Settings › Features: the precedence line and the agent tool names</li></ul></div>
           <button class="btn small primary" type="submit">Use Standard</button>
         </form>
