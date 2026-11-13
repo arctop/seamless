@@ -134,43 +134,61 @@ func (h *Handler) captureLocal(ctx context.Context, what string, id hookIdentity
 // planCaptureRuns decides whether a plan capture runs: the daemon's own read
 // of the plan file (captureLocal) when no capture was pushed -- always, with
 // peer_auth off -- or, under peer_auth, what `seam hook` pushed, once the
-// fences pass it (fenceNotePush), which also place it (p.Project). When notice
-// is non-nil, a push refused at a lock sets the notice header and the notice
-// as the hook's context; nil refuses silently.
+// fences pass it (fenceNotePush), which also place it (p.Project). Either way
+// the capture goes where its conversation's record goes (captureTarget,
+// p.Route): the cwd's project, or the isolated project the conversation bound
+// itself to. When notice is non-nil, a capture refused with a notice sets the
+// notice header and the notice as the hook's context; nil refuses silently.
 func (h *Handler) planCaptureRuns(ctx context.Context, w http.ResponseWriter, what string, p *toolPayload, reach sessionReach, lockedProject string, notice *preparedHookContext) bool {
-	if p.Capture == nil {
-		if !h.captureLocal(ctx, what, p.Identity) {
-			return false
-		}
-		if !h.readGrants {
-			return true
-		}
-		refusal := h.captureConfined(ctx, ClientClaudeCode, p.SessionID, h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD), "this plan")
+	refuse := func(refusal string) {
 		if refusal != "" && notice != nil {
 			h.refuseCapture(w, refusal)
 			*notice = refusalContext(refusal)
 		}
+	}
+	if p.Capture == nil {
+		if !h.captureLocal(ctx, what, p.Identity) {
+			return false
+		}
+		route, refusal := h.captureTarget(ctx, ClientClaudeCode, p.SessionID, h.hostOf(p.Identity), p.CWD, "this plan")
+		if refusal != "" {
+			refuse(refusal)
+			return false
+		}
+		p.Route = route
+		if !h.readGrants {
+			return true
+		}
+		refusal = h.captureConfined(ctx, ClientClaudeCode, p.SessionID, route.project, "this plan")
+		refuse(refusal)
 		return refusal == ""
 	}
 	if !h.captureEnabled() || (p.Capture.Plan == nil && p.ToolName != "ExitPlanMode") {
 		return false // an iteration whose plan file the client could not read: nothing to capture
 	}
-	target := h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD)
-	project, verdict := h.fenceNotePush(ctx, ClientClaudeCode, reach, lockedProject, p.SessionID, target, "this plan")
-	if verdict.notice != "" && notice != nil {
-		h.refuseCapture(w, verdict.notice)
-		*notice = refusalContext(verdict.notice)
+	route, refusal := h.captureTarget(ctx, ClientClaudeCode, p.SessionID, h.hostOf(p.Identity), p.CWD, "this plan")
+	if refusal != "" {
+		refuse(refusal)
+		return false
 	}
+	project, verdict := h.fenceNotePush(ctx, ClientClaudeCode, reach, lockedProject, p.SessionID, route, "this plan")
+	refuse(verdict.notice)
 	p.Project = project
+	route.project = project
+	p.Route = route
 	return verdict.ok
 }
 
 // captureProject is the project a plan capture lands in: where the fences
-// placed a pushed one (under peer_auth), else the one the hook's cwd resolves
-// to, as always.
+// placed a pushed one (under peer_auth), else the isolated project its
+// conversation's record goes to (planCaptureRuns), else the one the hook's cwd
+// resolves to, as always.
 func (h *Handler) captureProject(ctx context.Context, p toolPayload) string {
-	if p.Capture != nil {
+	switch {
+	case p.Capture != nil:
 		return p.Project
+	case p.Route.routed:
+		return p.Route.project
 	}
 	return h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD)
 }
@@ -278,7 +296,7 @@ func (h *Handler) capturePlanApproval(ctx context.Context, p toolPayload) prepar
 	}
 	if basename == "" {
 		// No usable filePath: correlate via the session's captured draft.
-		if meta, ok := h.sessionPlanMeta(ctx, p.SessionID); ok {
+		if meta, ok := h.sessionPlanMeta(ctx, p.SessionID, p.Route); ok {
 			basename = meta.Basename
 		}
 	}
@@ -298,7 +316,7 @@ func (h *Handler) capturePlanApproval(ctx context.Context, p toolPayload) prepar
 
 // markPlanPresented flips the session's draft plan note to presented.
 func (h *Handler) markPlanPresented(ctx context.Context, p toolPayload) {
-	meta, ok := h.sessionPlanMeta(ctx, p.SessionID)
+	meta, ok := h.sessionPlanMeta(ctx, p.SessionID, p.Route)
 	if !ok || meta.Basename == "" || meta.Status != plans.StatusDraft {
 		return
 	}
@@ -323,8 +341,8 @@ func (h *Handler) markPlanPresented(ctx context.Context, p toolPayload) {
 		return
 	}
 	meta.Status = plans.StatusPresented
-	h.setSessionPlanMeta(ctx, p.SessionID, meta)
-	h.recordPlanEvent(ctx, core.EventPlanPresented, p.SessionID, written.ID, map[string]any{
+	h.setSessionPlanMeta(ctx, p.SessionID, p.Route, meta)
+	h.recordPlanEvent(ctx, core.EventPlanPresented, p.SessionID, p.Route, written.ID, map[string]any{
 		"basename": meta.Basename, "plan_slug": meta.PlanSlug,
 	})
 }

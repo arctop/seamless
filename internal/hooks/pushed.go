@@ -89,14 +89,16 @@ type pushVerdict struct {
 	notice string
 }
 
-// fenceNotePush judges a pushed plan or subagent capture whose hook's cwd
-// resolves to target, from the session the hook named: its reach
-// (sessionReachOf, before any blanking), the locked project that reach found,
-// and its id (blank when the reach is not reachOK). what names the capture in
-// the notice. A capture that passes lands in project: target, placed as a
-// session would be (View.SessionScope).
-func (h *Handler) fenceNotePush(ctx context.Context, client Client, reach sessionReach, lockedProject, sessionID, target, what string) (project string, verdict pushVerdict) {
+// fenceNotePush judges a pushed plan or subagent capture headed for
+// route.project -- the project its hook's cwd resolves to, or the isolated
+// project its conversation's record goes to (captureTarget) -- from the
+// session the hook named: its reach (sessionReachOf, before any blanking), the
+// locked project that reach found, and its id (blank when the reach is not
+// reachOK). what names the capture in the notice. A capture that passes lands
+// in project: the target, placed as a session would be (View.SessionScope).
+func (h *Handler) fenceNotePush(ctx context.Context, client Client, reach sessionReach, lockedProject, sessionID string, route captureRoute, what string) (project string, verdict pushVerdict) {
 	v, _ := access.FromContext(ctx)
+	target := route.project
 	switch {
 	case reach == reachLocked:
 		return "", pushVerdict{notice: captureRefusedNotice(what, lockedProject)}
@@ -111,8 +113,10 @@ func (h *Handler) fenceNotePush(ctx context.Context, client Client, reach sessio
 	if err != nil {
 		return "", pushVerdict{} // out of reach: nothing about it is the caller's to learn
 	}
+	// The capture's events are filed under the session captureRef names: the
+	// ambient row's, or a routed capture's own.
 	if _, leased := v.Lease(project); leased {
-		if _, sessionProject := h.ambientRef(ctx, client, sessionID); sessionProject != project {
+		if _, sessionProject := h.captureRef(ctx, client, sessionID, route); sessionProject != project {
 			return "", pushVerdict{notice: crossProjectNotice(what, project)}
 		}
 	}

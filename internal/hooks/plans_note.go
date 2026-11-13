@@ -150,9 +150,9 @@ func (h *Handler) upsertPlanNote(ctx context.Context, p toolPayload, basename, c
 	// session accrued their slugs while no plan slug was known; tag them into
 	// the now-minted composition and clear the pending list (the fresh meta
 	// below carries none).
-	prior, _ := h.sessionPlanMeta(ctx, p.SessionID)
+	prior, _ := h.sessionPlanMeta(ctx, p.SessionID, p.Route)
 	adopted := h.adoptPendingAgents(ctx, project, planSlug, prior.PendingAgents)
-	h.setSessionPlanMeta(ctx, p.SessionID, planCaptureMeta{Basename: basename, PlanSlug: planSlug, Status: status})
+	h.setSessionPlanMeta(ctx, p.SessionID, p.Route, planCaptureMeta{Basename: basename, PlanSlug: planSlug, Status: status})
 
 	kind := core.EventPlanCaptured
 	if approve {
@@ -168,7 +168,7 @@ func (h *Handler) upsertPlanNote(ctx context.Context, p toolPayload, basename, c
 	if adopted > 0 {
 		payload["adopted_agents"] = adopted
 	}
-	h.recordPlanEvent(ctx, kind, p.SessionID, written.ID, payload)
+	h.recordPlanEvent(ctx, kind, p.SessionID, p.Route, written.ID, payload)
 	return planUpsert{note: written, planSlug: planSlug, first: prior.Basename == ""}, true
 }
 
@@ -245,7 +245,7 @@ func (h *Handler) ensurePlanTask(ctx context.Context, p toolPayload, note core.N
 	if !created {
 		return
 	}
-	h.recordPlanEvent(ctx, core.EventTaskTransition, p.SessionID, task.ID, map[string]any{
+	h.recordPlanEvent(ctx, core.EventTaskTransition, p.SessionID, p.Route, task.ID, map[string]any{
 		"to": string(core.TaskOpen), "created": true, "plan_slug": planSlug,
 	})
 }
@@ -298,8 +298,9 @@ func (h *Handler) planCaptureContext(ctx context.Context, p toolPayload, note co
 	// injected-then-read funnel that surfaced nothing to read. When there ARE
 	// hits, telemetry and response consume the same prepared value, so the two
 	// cannot drift apart.
-	if len(ids) > 0 {
-		h.recordInjection(ctx, "post-tool-use", ClientClaudeCode, p.SessionID, "", prepared, ids)
+	if len(ids) > 0 && h.events != nil {
+		sessionID, project := h.captureRef(ctx, ClientClaudeCode, p.SessionID, p.Route)
+		h.recordInjectionIn(ctx, "post-tool-use", ClientClaudeCode, p.SessionID, "", prepared, ids, sessionID, project)
 	}
 	return prepared
 }
@@ -343,13 +344,15 @@ func (h *Handler) relatedPlanKnowledge(ctx context.Context, note core.Note) (str
 }
 
 // recordPlanEvent appends a plan-capture event, attributed to the ambient
-// session (best-effort) with the Claude session id riding in the payload.
-func (h *Handler) recordPlanEvent(ctx context.Context, kind core.EventKind, claudeSessionID, itemID string, payload map[string]any) {
+// session (best-effort) -- or, for a capture routed to an isolated session,
+// to that session (captureRef) -- with the Claude session id riding in the
+// payload.
+func (h *Handler) recordPlanEvent(ctx context.Context, kind core.EventKind, claudeSessionID string, route captureRoute, itemID string, payload map[string]any) {
 	if h.events == nil {
 		return
 	}
 	// Plan capture is Claude Code-only (Codex registers no plan-capture hooks).
-	sessionID, project := h.ambientRef(ctx, ClientClaudeCode, claudeSessionID)
+	sessionID, project := h.captureRef(ctx, ClientClaudeCode, claudeSessionID, route)
 	payload["claude_session_id"] = claudeSessionID
 	payload["external_client"] = ClientClaudeCode.externalIdentity()
 	if _, err := h.events.Record(ctx, core.Event{

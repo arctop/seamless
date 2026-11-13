@@ -108,15 +108,15 @@ func TestFenceNotePush_ReadGrantConfinesTheProcessTree(t *testing.T) {
 		return access.WithView(ctx, v)
 	}
 
-	project, verdict := h.fenceNotePush(view(holder), ClientClaudeCode, reachOK, "", "", "demo", "this subagent's report")
+	project, verdict := h.fenceNotePush(view(holder), ClientClaudeCode, reachOK, "", "", captureRoute{project: "demo"}, "this subagent's report")
 	require.True(t, verdict.ok, "the asking project takes the capture")
 	require.Equal(t, "demo", project)
 
-	_, verdict = h.fenceNotePush(view(holder), ClientClaudeCode, reachOK, "", "", "other", "this subagent's report")
+	_, verdict = h.fenceNotePush(view(holder), ClientClaudeCode, reachOK, "", "", captureRoute{project: "other"}, "this subagent's report")
 	require.False(t, verdict.ok)
 	require.Equal(t, "Seamless did not record this subagent's report: this agent was granted a read of another project, "+
 		"so it writes only into demo, and this would land in project other.", verdict.notice)
 
-	_, verdict = h.fenceNotePush(view(stranger), ClientClaudeCode, reachOK, "", "", "other", "this subagent's report")
+	_, verdict = h.fenceNotePush(view(stranger), ClientClaudeCode, reachOK, "", "", captureRoute{project: "other"}, "this subagent's report")
 	require.True(t, verdict.ok, "another process tree holds no grant")
 }

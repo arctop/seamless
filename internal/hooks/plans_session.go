@@ -3,7 +3,9 @@ package hooks
 // Session correlation for capture. A Claude session's in-flight plan is tracked
 // in the ambient session's Metadata["plan_capture"], which is how an approval
 // (whose payload carries no plan content) finds the draft it belongs to. Shared
-// with subagent.go, which parks pre-plan agent notes on the same metadata.
+// with subagent.go, which parks pre-plan agent notes on the same metadata. A
+// capture routed to the isolated session its conversation bound itself to
+// (route.go) tracks its plan on that session instead (planSession).
 
 import (
 	"context"
@@ -24,9 +26,10 @@ type planCaptureMeta struct {
 	PendingAgents []string
 }
 
-// sessionPlanMeta returns the ambient session's plan_capture metadata.
-func (h *Handler) sessionPlanMeta(ctx context.Context, claudeSessionID string) (planCaptureMeta, bool) {
-	sess, ok := h.ambientSession(ctx, claudeSessionID)
+// sessionPlanMeta returns the plan_capture metadata of the session a capture
+// correlates with (planSession): the ambient session, or a routed capture's.
+func (h *Handler) sessionPlanMeta(ctx context.Context, claudeSessionID string, route captureRoute) (planCaptureMeta, bool) {
+	sess, ok := h.planSession(ctx, claudeSessionID, route)
 	if !ok {
 		return planCaptureMeta{}, false
 	}
@@ -49,9 +52,10 @@ func (h *Handler) sessionPlanMeta(ctx context.Context, claudeSessionID string) (
 	return meta, true
 }
 
-// setSessionPlanMeta stores meta on the ambient session (best-effort).
-func (h *Handler) setSessionPlanMeta(ctx context.Context, claudeSessionID string, meta planCaptureMeta) {
-	sess, ok := h.ambientSession(ctx, claudeSessionID)
+// setSessionPlanMeta stores meta on the session a capture correlates with
+// (planSession; best-effort).
+func (h *Handler) setSessionPlanMeta(ctx context.Context, claudeSessionID string, route captureRoute, meta planCaptureMeta) {
+	sess, ok := h.planSession(ctx, claudeSessionID, route)
 	if !ok {
 		return
 	}
@@ -65,7 +69,12 @@ func (h *Handler) setSessionPlanMeta(ctx context.Context, claudeSessionID string
 		m["pending_agents"] = meta.PendingAgents
 	}
 	sess.Metadata["plan_capture"] = m
-	sess.UpdatedAt = time.Now().UTC()
+	// A routed capture's session may have ended (the agent's session_end, the
+	// reaper) while the conversation goes on: it keeps the time it was last
+	// alive, which is when it ended.
+	if !route.routed || sess.Status == core.SessionActive {
+		sess.UpdatedAt = time.Now().UTC()
+	}
 	if err := store.UpdateSession(ctx, h.db, sess); err != nil {
 		h.logger.Warn("hooks: session plan meta", "error", err)
 	}

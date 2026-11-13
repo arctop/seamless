@@ -542,3 +542,139 @@ func TestMigration019_ExistingRowsDefaultOpen(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, core.IsolationOpen, p.Isolation)
 }
+
+// recordDestProjects registers example projects in every isolation state for
+// the RecordDestinationOf tests: two open, two confidential, one sealed.
+func recordDestProjects(t *testing.T, db *sql.DB) context.Context {
+	t.Helper()
+	ctx := context.Background()
+	at := time.Date(2026, 11, 12, 8, 0, 0, 0, time.UTC)
+	for i, p := range []struct {
+		slug  string
+		state core.Isolation
+	}{
+		{"example-ops", core.IsolationOpen},
+		{"example-docs", core.IsolationOpen},
+		{"example-finance", core.IsolationConfidential},
+		{"example-legal", core.IsolationConfidential},
+		{"example-sealed", core.IsolationSealed},
+	} {
+		require.NoError(t, CreateProject(ctx, db, core.Project{
+			ID: "01PRJ" + string(rune('A'+i)), Slug: p.slug, Name: p.slug, Isolation: p.state,
+			CreatedAt: at, UpdatedAt: at,
+		}))
+	}
+	return ctx
+}
+
+// TestRecordDestination_Matrix pins where a conversation's own record goes,
+// from the isolation of the projects its ambient row and its links (explicit
+// sessions sharing its external identity, in any status) are in: the ambient
+// row while no isolated project is held or the only one is its own; the
+// newest link in the one isolated project held elsewhere; nowhere for two or
+// more.
+func TestRecordDestination_Matrix(t *testing.T) {
+	type link struct {
+		project string
+		status  core.SessionStatus
+	}
+	tests := []struct {
+		name    string
+		ambient string // "-" for a conversation with no ambient row
+		links   []link // oldest first
+		kind    RecordDestKind
+		link    int // index into links of the destination, for RecordDestLink
+		fenced  []string
+	}{
+		{name: "open, nothing linked", ambient: "example-ops", kind: RecordDestAmbient},
+		{name: "open, linked to another open project", ambient: "example-ops",
+			links: []link{{"example-docs", core.SessionActive}}, kind: RecordDestAmbient},
+		{name: "open, linked to confidential", ambient: "example-ops",
+			links: []link{{"example-finance", core.SessionActive}},
+			kind:  RecordDestLink, link: 0, fenced: []string{"example-finance"}},
+		{name: "open, linked to sealed", ambient: "example-ops",
+			links: []link{{"example-sealed", core.SessionActive}},
+			kind:  RecordDestLink, link: 0, fenced: []string{"example-sealed"}},
+		{name: "global, linked to confidential", ambient: "",
+			links: []link{{"example-finance", core.SessionActive}},
+			kind:  RecordDestLink, link: 0, fenced: []string{"example-finance"}},
+		{name: "a rebind back to open keeps the destination", ambient: "example-ops",
+			links: []link{{"example-finance", core.SessionActive}, {"example-docs", core.SessionActive}},
+			kind:  RecordDestLink, link: 0, fenced: []string{"example-finance"}},
+		{name: "an ended link still counts", ambient: "example-ops",
+			links: []link{{"example-finance", core.SessionCompleted}},
+			kind:  RecordDestLink, link: 0, fenced: []string{"example-finance"}},
+		{name: "an expired link still counts", ambient: "example-ops",
+			links: []link{{"example-sealed", core.SessionExpired}},
+			kind:  RecordDestLink, link: 0, fenced: []string{"example-sealed"}},
+		{name: "two links into one isolated project: the newest", ambient: "example-ops",
+			links: []link{{"example-finance", core.SessionCompleted}, {"example-finance", core.SessionActive}},
+			kind:  RecordDestLink, link: 1, fenced: []string{"example-finance"}},
+		{name: "no ambient row, linked to confidential", ambient: "-",
+			links: []link{{"example-finance", core.SessionActive}},
+			kind:  RecordDestLink, link: 0, fenced: []string{"example-finance"}},
+		{name: "native confidential, nothing linked", ambient: "example-finance",
+			kind: RecordDestAmbient, fenced: []string{"example-finance"}},
+		{name: "native confidential, linked to open", ambient: "example-finance",
+			links: []link{{"example-ops", core.SessionActive}},
+			kind:  RecordDestAmbient, fenced: []string{"example-finance"}},
+		{name: "native confidential, linked to itself", ambient: "example-finance",
+			links: []link{{"example-finance", core.SessionActive}},
+			kind:  RecordDestAmbient, fenced: []string{"example-finance"}},
+		{name: "native confidential, linked to another confidential", ambient: "example-finance",
+			links: []link{{"example-legal", core.SessionActive}},
+			kind:  RecordDestWithheld, fenced: []string{"example-finance", "example-legal"}},
+		{name: "native sealed, linked to confidential", ambient: "example-sealed",
+			links: []link{{"example-finance", core.SessionCompleted}},
+			kind:  RecordDestWithheld, fenced: []string{"example-finance", "example-sealed"}},
+		{name: "open, linked to two isolated projects", ambient: "example-ops",
+			links: []link{{"example-finance", core.SessionActive}, {"example-sealed", core.SessionExpired}},
+			kind:  RecordDestWithheld, fenced: []string{"example-finance", "example-sealed"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			db := openTestDB(t)
+			ctx := recordDestProjects(t, db)
+			base := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+			const ext = "conv-0001"
+			if tc.ambient != "-" {
+				linkSession(t, db, "01AMB", tc.ambient, true, "claude-code", ext, core.SessionActive, base)
+			}
+			ids := make([]string, len(tc.links))
+			for i, l := range tc.links {
+				ids[i] = "01LNK" + string(rune('A'+i))
+				linkSession(t, db, ids[i], l.project, false, "claude-code", ext, l.status, base.Add(time.Duration(i+1)*time.Minute))
+			}
+			// Another conversation's link never counts.
+			linkSession(t, db, "01OTHER", "example-legal", false, "claude-code", "conv-0002", core.SessionActive, base)
+
+			d, err := RecordDestinationOf(ctx, db, "claude-code", ext)
+			require.NoError(t, err)
+			require.Equal(t, tc.kind, d.Kind)
+			require.Equal(t, tc.fenced, d.Fenced)
+			require.Equal(t, tc.ambient != "-", d.HasAmbient)
+			require.Len(t, d.Links, len(tc.links))
+			if tc.kind == RecordDestLink {
+				require.Equal(t, ids[tc.link], d.Session.ID)
+			} else {
+				require.Empty(t, d.Session.ID)
+			}
+			for _, f := range tc.fenced {
+				require.True(t, d.Holds(f))
+			}
+			require.False(t, d.Holds("example-ops"))
+		})
+	}
+}
+
+// An incomplete identity names no conversation: the ambient row, as always,
+// with nothing looked up.
+func TestRecordDestination_IncompleteIdentity(t *testing.T) {
+	db := openTestDB(t)
+	ctx := recordDestProjects(t, db)
+	for _, id := range [][2]string{{"", "conv-0001"}, {"claude-code", ""}} {
+		d, err := RecordDestinationOf(ctx, db, id[0], id[1])
+		require.NoError(t, err)
+		require.Equal(t, RecordDestination{}, d)
+	}
+}

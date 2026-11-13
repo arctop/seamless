@@ -115,7 +115,9 @@ an authentication boundary.
 - **To move this connection to another project.** A `project` other than your
   own session's starts a separate session there - linked to yours, so a
   SessionEnd closes both - and binds the connection to it. An argument-less
-  `session_start` hands the connection back to your own session.
+  `session_start` hands the connection back to your own session. Moving into a
+  confidential or sealed project also moves
+  [where your conversation's record goes](#moved-record).
 - **To resume a named session.** `name` takes a `sess/*` name or the `cc/...` or
   `cx/...` on the briefing's `Seam session` line; a new name starts a separate
   named session.
@@ -123,6 +125,54 @@ an authentication boundary.
 The result carries the briefing for the project actually bound and a `scope`
 note saying how that project was chosen. When the call only adopted your own
 session, the note says so: you did not need it.
+
+### Where a moved conversation's record goes {#moved-record}
+
+A Claude Code or Codex agent's hooks keep describing the repository it runs
+in, so its ambient session stays in that repository's project when
+`session_start` binds its tool calls somewhere else. The conversation's own
+record - the SessionEnd harvest (for Codex, each `Stop`'s provisional
+findings), plan captures and planning-subagent reports - follows the
+[isolated projects](https://thereisnospoon.org/docs/concepts/project-isolation/) the conversation holds,
+counting the ambient session's project and every session `session_start`
+linked to it, ended or not:
+
+| The conversation holds | Its record goes to |
+|---|---|
+| no confidential or sealed project | the ambient session, as always |
+| one, the ambient session's own | the ambient session, as always |
+| one, bound with `session_start` | the session `session_start` opened there (the newest, if it opened several) |
+| two or more | none of them |
+
+- **Moved, the record stays moved.** Once the conversation binds itself to an
+  isolated project, its harvest and captures go there for the rest of the
+  conversation, and so do their events: an argument-less `session_start`, a
+  move to an open project, or `session_end` on the isolated session does not
+  bring them back. In the harvest's place the ambient session's findings
+  become a pointer -
+  `Continued in project <slug>; this conversation's findings go there, not here.` -
+  and its `session.ended` event carries that line, never the harvest.
+- **Your own findings win.** If that session already has findings you wrote
+  with `session_update` or `session_end`, the harvest does not replace them;
+  findings the hooks wrote there, such as an earlier harvest, it does replace.
+  A SessionEnd that gives the harvest to a session the idle reaper had expired
+  also completes it.
+- **Two isolated projects, no record.** A conversation bound to two or more -
+  a session native to one that binds itself to another counts - keeps its
+  harvest and captures in none of them. The ambient session, and each active
+  isolated session without findings of your own, takes a line naming the
+  projects in the harvest's place, and the hook's notice says why.
+- **What stays where it was.** Token totals are metadata and stay on the
+  ambient session. Briefings and prompt recall still follow the repository. A
+  session native to an isolated project that binds itself to no other, a move
+  between open projects, and a client that cannot link its session (an older
+  `seam` that names no agent process) record exactly as before.
+
+This applies on every install, whether or not
+[`isolation.requests`](https://thereisnospoon.org/docs/reference/configuration/#isolation-requests) is on.
+With it on, a read grant that confines the conversation's writes to another
+project keeps its harvest and captures out of the isolated session as well:
+they land nowhere, and the notice says so.
 
 ## An actual briefing, annotated
 

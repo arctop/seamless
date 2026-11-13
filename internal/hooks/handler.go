@@ -244,6 +244,10 @@ type toolPayload struct {
 	// Project is where the fences placed a pushed capture (planCaptureRuns);
 	// read only when Capture is set (captureProject).
 	Project string `json:"-"`
+	// Route is where the capture's conversation keeps its record
+	// (planCaptureRuns, route.go): the note's project when routed, and the
+	// session its events and plan metadata are filed under.
+	Route captureRoute `json:"-"`
 }
 
 // subagentPayload is the normalized SubagentStart/SubagentStop shape. Both
@@ -267,6 +271,9 @@ type subagentPayload struct {
 	StopHookActive       bool          `json:"stop_hook_active"`
 	Identity             hookIdentity  `json:"-"`
 	Capture              *harvest.Push `json:"-"` // pushed under peer_auth (pushed.go)
+	// Route is where the capture's conversation keeps its record
+	// (captureSubagent, route.go).
+	Route captureRoute `json:"-"`
 }
 
 // hookResponse is the Claude Code hook response envelope; the field names are
@@ -422,7 +429,10 @@ func (h *Handler) sessionEnd(w http.ResponseWriter, r *http.Request) {
 	if reach == reachLocked && pushCarries(p.Capture) {
 		h.refuseCapture(w, captureRefusedNotice("this session's findings and token totals", lockedProject))
 	}
-	h.completeClaudeSessions(ctx, client, p, reach == reachLocked)
+	// A harvest that lands nowhere (route.go) is answered with its one line too.
+	if notice := h.completeClaudeSessions(ctx, client, p, reach == reachLocked); notice != "" {
+		h.refuseCapture(w, notice)
+	}
 	// SessionEnd has no hookSpecificOutput variant in Claude Code's schema, so
 	// the response is a bare ack -- emitting one fails root validation.
 	writeHookAck(w)
@@ -469,7 +479,9 @@ func (h *Handler) stop(w http.ResponseWriter, r *http.Request) {
 	if client == ClientCodex {
 		switch {
 		case reach != reachLocked:
-			h.harvestCodexStop(ctx, host, p)
+			if notice := h.harvestCodexStop(ctx, host, p); notice != "" {
+				h.refuseCapture(w, notice)
+			}
 		case pushCarries(p.Capture):
 			h.refuseCapture(w, captureRefusedNotice("this turn's findings and token totals", lockedProject))
 		}
@@ -486,22 +498,22 @@ func (h *Handler) stop(w http.ResponseWriter, r *http.Request) {
 // contract: a missing session id or DB, a turn with nothing to harvest, or a
 // store error all leave the heartbeat above as the Stop's only effect, logged at
 // debug rather than surfaced. Repeated Stops converge findings on the latest turn.
-func (h *Handler) harvestCodexStop(ctx context.Context, host string, p stopPayload) {
+// notice is the one line for findings that landed nowhere (applyCodexStop).
+func (h *Handler) harvestCodexStop(ctx context.Context, host string, p stopPayload) (notice string) {
 	if h.db == nil || p.SessionID == "" {
-		return
+		return ""
 	}
 	// Under peer_auth the daemon reads no rollout: `seam hook stop` read it and
 	// pushed the same two values (pushed.go), which land the same way.
 	if p.Capture != nil {
-		h.applyCodexStop(ctx, p.SessionID, p.Capture.Tokens, p.Capture.Findings)
-		return
+		return h.applyCodexStop(ctx, p.SessionID, p.Capture.Tokens, p.Capture.Findings)
 	}
 	// Everything below reads the agent's rollout file. On another machine that
 	// path either does not exist here or, worse, is a DIFFERENT session's
 	// rollout under the same username and home layout -- so the turn is recorded
 	// as skipped rather than harvested from the wrong file.
 	if !h.localDiskOK(ctx, "codex-rollout", ClientCodex, host) {
-		return
+		return ""
 	}
 	// Real token totals: the rollout carries a cumulative token_count every turn, so
 	// re-reading the latest one each Stop and overwriting is idempotent (Codex has no
@@ -511,13 +523,15 @@ func (h *Handler) harvestCodexStop(ctx context.Context, host string, p stopPaylo
 	if usage, ok := codexRolloutTokens(p.TranscriptPath); ok {
 		tokens = &usage
 	}
-	h.applyCodexStop(ctx, p.SessionID, tokens, codexStopFindings(p.LastAssistantMessage, p.TranscriptPath))
+	return h.applyCodexStop(ctx, p.SessionID, tokens, codexStopFindings(p.LastAssistantMessage, p.TranscriptPath))
 }
 
-// applyCodexStop records one Codex turn's harvest on its ambient session: the
-// absolute token totals when there are any, and the findings when the turn had
-// assistant text ("" leaves the previous turn's in place).
-func (h *Handler) applyCodexStop(ctx context.Context, externalSessionID string, tokens *core.TokenUsage, findings string) {
+// applyCodexStop records one Codex turn's harvest: the absolute token totals
+// when there are any (on the ambient row: metadata), and the findings when the
+// turn had assistant text ("" leaves the previous turn's in place) -- on the
+// ambient row, as always, unless the conversation's record goes elsewhere
+// (codexStopRouted).
+func (h *Handler) applyCodexStop(ctx context.Context, externalSessionID string, tokens *core.TokenUsage, findings string) (notice string) {
 	if tokens != nil {
 		if _, err := store.SetAmbientSessionTokens(
 			ctx, h.db, ClientCodex.externalIdentity(), externalSessionID, *tokens, time.Now().UTC(),
@@ -526,12 +540,79 @@ func (h *Handler) applyCodexStop(ctx context.Context, externalSessionID string, 
 		}
 	}
 	if findings == "" {
-		return // nothing this turn; the heartbeat kept the session alive
+		return "" // nothing this turn; the heartbeat kept the session alive
 	}
+	dest, err := store.RecordDestinationOf(ctx, h.db, ClientCodex.externalIdentity(), externalSessionID)
+	if err != nil {
+		// Where the record goes is unknown, so it goes nowhere this turn.
+		h.recordHookError(ctx, "codex-stop-record-destination", ClientCodex, err, "external_session_id", externalSessionID)
+		return ""
+	}
+	if dest.Kind != store.RecordDestAmbient {
+		return h.codexStopRouted(ctx, externalSessionID, dest, findings)
+	}
+	h.setCodexAmbientFindings(ctx, externalSessionID, findings)
+	return ""
+}
+
+// codexStopRouted records a Codex turn of a conversation whose record does not
+// go to its ambient row: the findings go to the isolated session it bound
+// itself to unless the agent wrote that session's findings itself, and the
+// ambient row keeps only the pointer -- or, withheld, every row takes the line
+// saying why (endFindings has the same rules for a SessionEnd). Codex has no
+// SessionEnd, so its findings are provisional every turn, there as here.
+func (h *Handler) codexStopRouted(ctx context.Context, externalSessionID string, dest store.RecordDestination, findings string) (notice string) {
+	now := time.Now().UTC()
+	line := withheldLine(dest.Fenced)
+	if dest.Kind == store.RecordDestLink {
+		line = routedPointer(dest.Session.ProjectSlug)
+	}
+	// The ambient row takes the line in the harvest's place
+	// (UpdateAmbientFindings, which reindexes that row's search mirror).
+	if !dest.HasAmbient || dest.Ambient.Findings != line {
+		h.setCodexAmbientFindings(ctx, externalSessionID, line)
+	}
+	if dest.Kind == store.RecordDestWithheld {
+		for _, link := range dest.Links {
+			if link.Status != core.SessionActive || !dest.Holds(link.ProjectSlug) || !hookFindings(link.Findings) {
+				continue
+			}
+			if ok, _ := linkWritable(ctx, link, "this turn's findings"); ok {
+				h.setLinkFindings(ctx, link, line, now)
+			}
+		}
+		return withheldNotice("this turn's findings", dest.Fenced)
+	}
+	link := dest.Session
+	if !hookFindings(link.Findings) {
+		return ""
+	}
+	ok, refused := h.linkTakes(ctx, ClientCodex, externalSessionID, link, "this turn's findings")
+	if !ok {
+		return refused
+	}
+	h.setLinkFindings(ctx, link, findings, now)
+	return ""
+}
+
+// setCodexAmbientFindings writes a Codex turn's findings onto its active
+// ambient row.
+func (h *Handler) setCodexAmbientFindings(ctx context.Context, externalSessionID, findings string) {
 	if _, err := store.UpdateAmbientFindings(
 		ctx, h.db, ClientCodex.externalIdentity(), externalSessionID, findings, time.Now().UTC(),
 	); err != nil {
 		h.recordHookError(ctx, "codex-stop-findings-harvest", ClientCodex, err, "external_session_id", externalSessionID)
+	}
+}
+
+// setLinkFindings writes a Codex turn's findings onto a linked session, unless
+// they no longer read what the caller read (store.LinkUpdateFindings).
+func (h *Handler) setLinkFindings(ctx context.Context, link core.Session, findings string, now time.Time) {
+	if link.Findings == findings {
+		return
+	}
+	if _, _, err := store.LinkUpdateFindings(ctx, h.db, link.ID, link.Findings, findings, false, now); err != nil {
+		h.recordHookError(ctx, "codex-stop-link-findings", ClientCodex, err, "session", link.ID)
 	}
 }
 
@@ -712,22 +793,29 @@ func (h *Handler) stampAgentProcess(ctx context.Context, client Client, sessionI
 // metadataOnly completes a session recorded in a locked project before any
 // approval: status, claims and leases only -- no transcript is read for it and
 // no findings are written into it.
-func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p endPayload, metadataOnly bool) {
+//
+// Which row takes the harvest is where the conversation's record goes
+// (store.RecordDestinationOf, route.go): its ambient row, as always; or, once
+// it bound itself to an isolated project with session_start, the session there
+// -- also when that session is no longer active -- with a pointer left on the
+// ambient row; or, holding more than one isolated project, no row at all.
+// notice is the one line for a harvest that landed nowhere, "" otherwise.
+func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p endPayload, metadataOnly bool) (notice string) {
 	if h.db == nil || p.SessionID == "" {
-		return
+		return ""
 	}
 	sessions, err := store.ActiveSessionsByExternalIdentity(
 		ctx, h.db, client.externalIdentity(), p.SessionID)
 	if err != nil {
 		h.recordHookError(ctx, "session-end-lookup", client, err)
-		return
+		return ""
 	}
 	if len(sessions) == 0 {
 		// Nothing active to complete (an explicit session_end already ran, or a
 		// crash left it to the reaper). Returning here rather than falling into an
 		// empty loop is what keeps a remote end from recording a skipped capture
 		// for work there was none of.
-		return
+		return ""
 	}
 
 	now := time.Now().UTC()
@@ -754,7 +842,37 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 	case pushed:
 		finalModel = push.Model
 	}
-	harvested := "" // harvest the transcript once, lazily, only when an ambient needs it
+	// The harvest: read once, lazily, only when a row takes it. Absent pushed
+	// findings are the daemon's own default for a transcript with nothing to
+	// harvest.
+	harvested := ""
+	harvest := func() string {
+		if harvested == "" {
+			if pushed {
+				harvested = cmp.Or(push.Findings, harvestFallback)
+			} else {
+				harvested = harvestFindings(p.TranscriptPath)
+			}
+		}
+		return harvested
+	}
+	// Where the conversation's record goes decides which row takes the
+	// harvest. It is read only for an end that harvests; one that cannot be
+	// read harvests nothing anywhere, rather than guess.
+	harvesting, unread := localDisk || pushed, false
+	var dest store.RecordDestination
+	if harvesting {
+		if dest, err = store.RecordDestinationOf(ctx, h.db, client.externalIdentity(), p.SessionID); err != nil {
+			h.recordHookError(ctx, "session-end-record-destination", client, err)
+			harvesting, unread = false, true
+		}
+	}
+	// A link takes the harvest only where the caller may write it (linkTakes);
+	// one whose findings the agent wrote itself keeps them, with nothing to say.
+	linkOK := false
+	if harvesting && dest.Kind == store.RecordDestLink && hookFindings(dest.Session.Findings) {
+		linkOK, notice = h.linkTakes(ctx, client, p.SessionID, dest.Session, "this conversation's findings")
+	}
 	for _, sess := range sessions {
 		// UpdateSession deliberately does not write model (the live model setter is
 		// targeted so another lifecycle write cannot clobber it). Stamp while the
@@ -769,42 +887,77 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 		}
 		sess.Status = core.SessionCompleted
 		sess.UpdatedAt = now
-		if sess.Ambient && localDisk {
-			if harvested == "" {
-				harvested = harvestFindings(p.TranscriptPath)
+		// Unrouted, the ambient row takes the harvest and explicit sessions keep
+		// their session_update findings, as always (endFindings).
+		took := sess.Ambient && !unread
+		if harvesting {
+			findings, t, ok := endFindings(dest, linkOK, sess, harvest)
+			if ok {
+				sess.Findings = findings
 			}
-			sess.Findings = harvested // explicit sessions keep their session_update findings
+			took = t
+		}
+		if sess.Ambient && localDisk {
 			// Overwrite the real token totals while the row is STILL active, before the
 			// UpdateSession below flips it to completed -- SetAmbientSessionTokens guards
-			// on status = 'active'.
+			// on status = 'active'. Token totals are metadata: they stay on the
+			// ambient row wherever the findings go.
 			h.harvestClaudeTokens(ctx, client, host, p.SessionID, p.TranscriptPath, now)
 		}
-		if sess.Ambient && pushed {
-			// Absent findings are the daemon's own default for a transcript with
-			// nothing to harvest.
-			sess.Findings = cmp.Or(push.Findings, harvestFallback)
-			if push.Tokens != nil {
-				h.setSessionTokens(ctx, client, p.SessionID, *push.Tokens, now)
-			}
+		if sess.Ambient && pushed && push.Tokens != nil {
+			h.setSessionTokens(ctx, client, p.SessionID, *push.Tokens, now)
 		}
 		if err := store.UpdateSession(ctx, h.db, sess); err != nil {
 			h.recordHookError(ctx, "session-end-complete", client, err, "session", sess.ID)
 			continue
 		}
-		released, rerr := store.ReleaseClaimsForSession(ctx, h.db, sess.ID, now)
-		if rerr != nil {
-			h.recordHookError(ctx, "session-end-release-claims", client, rerr, "session", sess.ID)
+		h.endedSession(ctx, client, sess, p.Reason, took, now)
+	}
+	switch {
+	case !harvesting:
+	case dest.Kind == store.RecordDestWithheld:
+		notice = withheldNotice("this conversation's findings", dest.Fenced)
+	case linkOK && !slices.ContainsFunc(sessions, func(s core.Session) bool { return s.ID == dest.Session.ID }):
+		h.harvestEndedLink(ctx, client, dest.Session, p.Reason, harvest, now)
+	}
+	return notice
+}
+
+// endedSession closes out one session a SessionEnd completed: its task claims
+// are released, its leases on locked projects end, and its session.ended event
+// is recorded under its own project. took is whether it took the
+// conversation's harvest; the event carries the findings it ended with, so a
+// row the harvest skipped never carries the harvest's text.
+func (h *Handler) endedSession(ctx context.Context, client Client, sess core.Session, reason string, took bool, now time.Time) {
+	released, rerr := store.ReleaseClaimsForSession(ctx, h.db, sess.ID, now)
+	if rerr != nil {
+		h.recordHookError(ctx, "session-end-release-claims", client, rerr, "session", sess.ID)
+	}
+	if h.revokeLeases != nil {
+		if _, lerr := h.revokeLeases(ctx, sess.ID); lerr != nil {
+			h.recordHookError(ctx, "session-end-revoke-leases", client, lerr, "session", sess.ID)
 		}
-		if h.revokeLeases != nil {
-			if _, lerr := h.revokeLeases(ctx, sess.ID); lerr != nil {
-				h.recordHookError(ctx, "session-end-revoke-leases", client, lerr, "session", sess.ID)
-			}
-		}
-		h.recordSession(ctx, core.EventSessionEnded, sess, map[string]any{
-			"ambient": sess.Ambient, "harvested": sess.Ambient, "linked": !sess.Ambient,
-			"reason": p.Reason, "claims_released": released,
-			"findings": events.Truncate(sess.Findings, h.maxEventChars),
-		})
+	}
+	h.recordSession(ctx, core.EventSessionEnded, sess, map[string]any{
+		"ambient": sess.Ambient, "harvested": took, "linked": !sess.Ambient,
+		"reason": reason, "claims_released": released,
+		"findings": events.Truncate(sess.Findings, h.maxEventChars),
+	})
+}
+
+// harvestEndedLink gives the conversation's harvest to the isolated session
+// its record goes to when that session is no longer active -- the idle reaper
+// expired it, or an earlier end of this resumed conversation completed it --
+// and ends it. The caller has judged that it may (linkTakes) and that its
+// findings are the hooks' own; findings the agent wrote in the meantime are
+// kept (store.LinkUpdateFindings is a compare-and-set).
+func (h *Handler) harvestEndedLink(ctx context.Context, client Client, link core.Session, reason string, harvest func() string, now time.Time) {
+	ended, ok, err := store.LinkUpdateFindings(ctx, h.db, link.ID, link.Findings, harvest(), true, now)
+	if err != nil {
+		h.recordHookError(ctx, "session-end-link-harvest", client, err, "session", link.ID)
+	}
+	if ok {
+		h.endedSession(ctx, client, ended, reason, true, now)
 	}
 }
 
@@ -1154,6 +1307,18 @@ func (h *Handler) recordInjection(ctx context.Context, hook string, client Clien
 	if h.events == nil {
 		return
 	}
+	sessionID, project := h.ambientRef(ctx, client, claudeSessionID)
+	h.recordInjectionIn(ctx, hook, client, claudeSessionID, prompt, prepared, itemIDs, sessionID, project)
+}
+
+// recordInjectionIn is recordInjection filed under the given session and
+// project: a routed plan capture's injection (planCaptureContext) carries what
+// the isolated project's recall surfaced, so it is filed under the session
+// there (captureRef), never under the ambient row.
+func (h *Handler) recordInjectionIn(ctx context.Context, hook string, client Client, claudeSessionID, prompt string, prepared preparedHookContext, itemIDs []string, sessionID, project string) {
+	if h.events == nil {
+		return
+	}
 	// A post-assembly cap can remove memory lines without retaining a structured
 	// id-to-line map, so on truncation the list is a superset of what reached the
 	// model -- item_ids_exact records that. The ids are still credited, because
@@ -1164,7 +1329,6 @@ func (h *Handler) recordInjection(ctx context.Context, hook string, client Clien
 	// one more staleness cycle. Err toward the recoverable direction.
 	originalItemCount := len(itemIDs)
 	itemIDsExact := !prepared.truncated || originalItemCount == 0
-	sessionID, project := h.ambientRef(ctx, client, claudeSessionID)
 	payload := map[string]any{
 		"hook": hook, "claude_session_id": claudeSessionID,
 		"external_client":           client.externalIdentity(),

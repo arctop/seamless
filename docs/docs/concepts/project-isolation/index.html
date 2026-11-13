@@ -373,6 +373,19 @@ very thing the fence exists to keep in. They do not hide that the project
 outside agent refused at the fence is told to bind to the project with
 <code>session_start project=&lt;slug&gt;</code> if its task really is that project, and to
 leave it alone otherwise.</li>
+<li><strong>A conversation that binds itself in keeps its record inside.</strong> A Claude
+Code or Codex agent working in an open project's repository (or in none)
+that binds itself to a confidential or sealed project with
+<code>session_start project=&lt;slug&gt;</code> records its SessionEnd harvest (for Codex,
+each <code>Stop</code>'s findings), its plan captures and its planning-subagent reports
+in that project, under the session <code>session_start</code> opened there, with their
+events - for the rest of the conversation, wherever it binds afterwards. The
+session it left in the open project ends with a pointer naming the project
+and nothing it holds. A conversation bound to two isolated projects - a
+confidential project's own agent binding itself to another counts - keeps
+that record in none of them. This holds on every install, whether or not
+<code>isolation.requests</code> is on
+(<a href="../../concepts/sessions/#moved-record">details</a>).</li>
 <li><strong>Task answers withhold what blocks across the fence.</strong> A confidential
 project's task that blocks an outside project's task reaches an outside
 session as a withheld entry in <code>tasks_ready</code>, a <code>depends_on_withheld</code> count in

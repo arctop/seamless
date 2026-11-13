@@ -146,6 +146,19 @@ nothing.
   outside agent refused at the fence is told to bind to the project with
   `session_start project=<slug>` if its task really is that project, and to
   leave it alone otherwise.
+- **A conversation that binds itself in keeps its record inside.** A Claude
+  Code or Codex agent working in an open project's repository (or in none)
+  that binds itself to a confidential or sealed project with
+  `session_start project=<slug>` records its SessionEnd harvest (for Codex,
+  each `Stop`'s findings), its plan captures and its planning-subagent reports
+  in that project, under the session `session_start` opened there, with their
+  events - for the rest of the conversation, wherever it binds afterwards. The
+  session it left in the open project ends with a pointer naming the project
+  and nothing it holds. A conversation bound to two isolated projects - a
+  confidential project's own agent binding itself to another counts - keeps
+  that record in none of them. This holds on every install, whether or not
+  `isolation.requests` is on
+  ([details](/concepts/sessions/#moved-record)).
 - **Task answers withhold what blocks across the fence.** A confidential
   project's task that blocks an outside project's task reaches an outside
   session as a withheld entry in `tasks_ready`, a `depends_on_withheld` count in

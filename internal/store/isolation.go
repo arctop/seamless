@@ -469,3 +469,124 @@ func CanWrite(ctx context.Context, db *sql.DB, callerProject, targetProject stri
 	}
 	return !target.FencesInbound(), nil
 }
+
+// RecordDestKind names where a conversation's own record goes
+// (RecordDestinationOf).
+type RecordDestKind uint8
+
+const (
+	// RecordDestAmbient: the conversation's ambient row, as always. A
+	// conversation that holds no isolated project keeps its record there, and
+	// so does one whose only isolated project is its ambient row's own (a
+	// session native to a confidential or sealed project).
+	RecordDestAmbient RecordDestKind = iota
+	// RecordDestLink: the explicit session the conversation bound itself to,
+	// with session_start, in the one isolated project it holds, which its
+	// ambient row is not in. The record goes there for the rest of the
+	// conversation, whatever it binds to afterwards.
+	RecordDestLink
+	// RecordDestWithheld: nowhere. The conversation holds more than one
+	// isolated project, so a record written in any one of them could carry
+	// another's content into it, and an open project's would carry them out.
+	RecordDestWithheld
+)
+
+// RecordDestination is where one conversation's own record goes -- the
+// SessionEnd harvest, Codex's Stop findings, and its plan and subagent
+// captures -- and what that was decided from. A conversation is one client
+// session id: its ambient row plus the explicit sessions session_start linked
+// to it (LinkedSessionsByExternalIdentity).
+type RecordDestination struct {
+	Kind RecordDestKind
+	// Session is the link the record goes to (RecordDestLink); the zero
+	// Session otherwise.
+	Session core.Session
+	// Ambient is the conversation's ambient row, when HasAmbient.
+	Ambient    core.Session
+	HasAmbient bool
+	// Links are the conversation's explicit sessions in any status, newest
+	// first.
+	Links []core.Session
+	// Fenced lists the distinct isolated (confidential or sealed) projects the
+	// conversation holds -- its ambient row's and its links' -- sorted. It
+	// names projects only, never anything they hold.
+	Fenced []string
+}
+
+// Holds reports whether project is one of the isolated projects the
+// conversation holds.
+func (d RecordDestination) Holds(project string) bool {
+	return slices.Contains(d.Fenced, project)
+}
+
+// RecordDestinationOf decides where the conversation a client's full external
+// identity names keeps its own record, from the projects of its ambient row and
+// of every explicit session linked to it, in any status: a link the agent
+// ended, or the idle reaper expired, still says where the conversation went.
+//
+// The isolated projects among them decide, judged by the matrix's own
+// predicate (FencesOutbound: a session bound to the project may not write
+// outside it). None: the ambient row, as always. One, the ambient row's own:
+// the ambient row too, so a native session is unchanged. One elsewhere: the
+// newest link in it, since a record kept anywhere else would carry that
+// project's content out of it. Two or more: nowhere (RecordDestWithheld).
+//
+// It reads no View and no grant: where a conversation's record goes is a fact
+// about the conversation, and the caller still judges whether it may write
+// there (the hooks ask the View before writing into a link).
+func RecordDestinationOf(ctx context.Context, db *sql.DB, externalClient, externalSessionID string) (RecordDestination, error) {
+	if externalClient == "" || externalSessionID == "" {
+		return RecordDestination{}, nil
+	}
+	ambient, found, err := AmbientSessionByExternalIdentity(ctx, db, externalClient, externalSessionID)
+	if err != nil {
+		return RecordDestination{}, fmt.Errorf("store.RecordDestinationOf: %w", err)
+	}
+	links, err := LinkedSessionsByExternalIdentity(ctx, db, externalClient, externalSessionID)
+	if err != nil {
+		return RecordDestination{}, fmt.Errorf("store.RecordDestinationOf: %w", err)
+	}
+	d, err := recordDestinationFrom(ctx, db, RecordDestination{Ambient: ambient, HasAmbient: found, Links: links})
+	if err != nil {
+		return RecordDestination{}, fmt.Errorf("store.RecordDestinationOf: %w", err)
+	}
+	return d, nil
+}
+
+// recordDestinationFrom decides d's Kind, Session and Fenced from its ambient
+// row and links (RecordDestinationOf), reading isolation over any executor.
+func recordDestinationFrom(ctx context.Context, q rowQuerier, d RecordDestination) (RecordDestination, error) {
+	slugs := make([]string, 0, len(d.Links)+1)
+	if d.HasAmbient {
+		slugs = append(slugs, d.Ambient.ProjectSlug)
+	}
+	for _, l := range d.Links {
+		slugs = append(slugs, l.ProjectSlug)
+	}
+	slices.Sort(slugs)
+	fenced, err := isolatedSlugsTx(ctx, q, slices.Compact(slugs))
+	if err != nil {
+		return RecordDestination{}, err
+	}
+	d.Fenced = nil
+	for _, f := range fenced {
+		d.Fenced = append(d.Fenced, f.Slug)
+	}
+	d.Kind, d.Session = RecordDestAmbient, core.Session{}
+	switch {
+	case len(d.Fenced) == 0:
+	case len(d.Fenced) > 1:
+		d.Kind = RecordDestWithheld
+	case d.HasAmbient && d.Ambient.ProjectSlug == d.Fenced[0]:
+	default:
+		// Links are newest first, so this is the newest link into the project.
+		// A slug that names none (isolatedSlugsTx trims, a stored slug never
+		// needs it) is not a place to guess: nowhere.
+		if i := slices.IndexFunc(d.Links, func(l core.Session) bool { return l.ProjectSlug == d.Fenced[0] }); i >= 0 {
+			d.Kind, d.Session = RecordDestLink, d.Links[i]
+		} else {
+			d.Kind = RecordDestWithheld
+		}
+	}
+	return d, nil
+}

@@ -164,36 +164,44 @@ var errAgentCaptureDropped = errors.New("agent capture dropped")
 // Under peer_auth the prompt and report are the ones `seam hook` pushed, and
 // they land only once the fences pass them (fenceNotePush, judged with the
 // parent session's reach); the notice for one refused at a lock is returned
-// for the response. It is "" in every other case.
+// for the response. Either way the note goes where the conversation's record
+// goes (captureTarget): the cwd's project, or the isolated project the
+// conversation bound itself to, and one that lands nowhere returns its notice
+// too. It is "" in every other case.
 func (h *Handler) captureSubagent(ctx context.Context, p subagentPayload, reach sessionReach, lockedProject string) (notice string) {
 	if p.AgentID == "" {
 		return ""
 	}
-	meta, hasMeta := h.sessionPlanMeta(ctx, p.ParentSessionID)
+	const what = "this subagent's report"
+	route, refusal := h.captureTarget(ctx, ClientClaudeCode, p.ParentSessionID, h.hostOf(p.Identity), p.CWD, what)
+	p.Route = route
+	meta, hasMeta := h.sessionPlanMeta(ctx, p.ParentSessionID, p.Route)
 	planning := hasMeta && (meta.Status == plans.StatusDraft || meta.Status == plans.StatusPresented)
 	if !planning && p.PermissionMode != "plan" {
 		return ""
+	}
+	if refusal != "" {
+		return refusal
 	}
 	if p.Capture == nil {
 		prompt, report, ok := h.subagentReportFromDisk(ctx, p)
 		if !ok {
 			return ""
 		}
-		project := h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD)
-		if refusal := h.captureConfined(ctx, ClientClaudeCode, p.ParentSessionID, project, "this subagent's report"); refusal != "" {
+		if refusal := h.captureConfined(ctx, ClientClaudeCode, p.ParentSessionID, route.project, what); refusal != "" {
 			return refusal
 		}
-		h.writeSubagentNote(ctx, p, meta, project, prompt, report)
+		h.writeSubagentNote(ctx, p, meta, route.project, prompt, report)
 		return ""
 	}
 	if p.Capture.Prompt == "" && p.Capture.Report == "" {
 		return "" // the client found no transcript, or nothing in it
 	}
-	target := h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD)
-	project, verdict := h.fenceNotePush(ctx, ClientClaudeCode, reach, lockedProject, p.ParentSessionID, target, "this subagent's report")
+	project, verdict := h.fenceNotePush(ctx, ClientClaudeCode, reach, lockedProject, p.ParentSessionID, route, what)
 	if !verdict.ok {
 		return verdict.notice
 	}
+	p.Route.project = project
 	h.writeSubagentNote(ctx, p, meta, project, p.Capture.Prompt, p.Capture.Report)
 	return ""
 }
@@ -278,9 +286,9 @@ func (h *Handler) writeSubagentNote(ctx context.Context, p subagentPayload, meta
 	// plan capture adopts it into the composition.
 	if meta.PlanSlug == "" && !slices.Contains(meta.PendingAgents, noteSlug) {
 		meta.PendingAgents = append(meta.PendingAgents, noteSlug)
-		h.setSessionPlanMeta(ctx, p.ParentSessionID, meta)
+		h.setSessionPlanMeta(ctx, p.ParentSessionID, p.Route, meta)
 	}
-	h.recordPlanEvent(ctx, core.EventSubagentCaptured, p.ParentSessionID, written.ID, map[string]any{
+	h.recordPlanEvent(ctx, core.EventSubagentCaptured, p.ParentSessionID, p.Route, written.ID, map[string]any{
 		"content":  report, // verbatim, unbounded by design
 		"prompt":   events.Truncate(prompt, h.maxEventChars),
 		"agent_id": p.AgentID, "agent_type": p.AgentType, "plan_slug": meta.PlanSlug,
