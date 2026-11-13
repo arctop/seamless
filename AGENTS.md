@@ -900,10 +900,13 @@ attempt files. Every other install only notifies. Owner decisions: memory
   to the sha256 manifest in the signed tag (`releasekit check-darwin`) before
   `checksum.extra_files` lists it, behind the owner's approval of the
   `release` environment. CI holds no secret, and the Homebrew cask is pushed
-  by the owner (`scripts/release/cask.sh`). Keep the darwin assets' names and
-  layout goreleaser's: the installers, the updater and `seam touchid enroll`
-  read them (`TestDarwinArchive_IsLaidOutAsV082`,
-  `TestRenderCask_IsGoreleasersCask`). Steps: `scripts/release/README.md`.
+  by the owner (`scripts/release/cask.sh`). The site is published from a tag
+  too (`pages.yml`: the release's own, or an admin-only `site-*` tag), never
+  from a main push, so main alone cannot change the installers it serves.
+  Keep the darwin assets' names and layout goreleaser's: the installers, the
+  updater and `seam touchid enroll` read them
+  (`TestDarwinArchive_IsLaidOutAsV082`, `TestRenderCask_IsGoreleasersCask`).
+  Steps: `scripts/release/README.md`.
 - **Text from parsed versions only.** Every notice, banner, row and event
   payload is built from `update.Version` values, `update.ReleaseURL` and the
   fixed `update.Hint` for the install kind -- never from the release API's

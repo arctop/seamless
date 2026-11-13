@@ -81,7 +81,8 @@ approval, and the owner pushes the Homebrew cask.
      and stops on any difference.
    - Then it builds linux and windows, signs `checksums.txt`, and publishes
      the draft.
-   - Then it re-verifies the signatures and publishes to the MCP registry.
+   - Then it re-verifies the signatures, publishes to the MCP registry, and
+     publishes the site from the tag (`pages.yml`).
    - (Step D will add the owner's hardware-key signature over `checksums.txt`
      between CI's draft and the publish.)
 5. **The cask:** `scripts/release/cask.sh vX.Y.Z`. Add `--dry-run` first to
@@ -92,6 +93,14 @@ approval, and the owner pushes the Homebrew cask.
      `arctop/homebrew-tap` with your login.
    - A prerelease gets no cask.
 6. **The changelog:** `make changelog`, then commit and push.
+   - A main push no longer reaches the site, so publish the refreshed site
+     with a `site-*` tag:
+
+     ```bash
+     git tag -s site-YYYYMMDD -m site-YYYYMMDD && git push origin site-YYYYMMDD
+     ```
+
+   - Then `make indexnow`.
 
 **Dry runs.**
 - `scripts/release/macos.sh vX.Y.Z --dry-run` does everything up to the

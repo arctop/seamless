@@ -20,7 +20,7 @@
 #      (step D will add the owner's hardware-key signature over checksums.txt
 #      here, between CI's draft and the publish)
 #   4. scripts/release/cask.sh vX.Y.Z: the Homebrew cask
-#   5. make changelog
+#   5. make changelog, then a site-* tag publishes the refreshed site
 #
 # One-time setup of the Mac that releases is in scripts/release/README.md.
 #

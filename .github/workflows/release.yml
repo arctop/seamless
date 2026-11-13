@@ -11,9 +11,11 @@ name: Release
 # signed checksums, installer bundles and changelog; the last step
 # re-verifies the published checksums signatures against this tag's exact
 # signing identity. Once that passes, the mcp-registry job publishes
-# server.json to the MCP registry (mcp-registry.yml). The Homebrew cask is
-# pushed by the owner afterwards (scripts/release/cask.sh). No step reads a
-# secret but the GITHUB_TOKEN; scripts/release/README.md has the steps.
+# server.json to the MCP registry (mcp-registry.yml), and the pages job
+# publishes the site, installers included, from this tag (pages.yml). The
+# Homebrew cask is pushed by the owner afterwards (scripts/release/cask.sh).
+# No step reads a secret but the GITHUB_TOKEN; scripts/release/README.md has
+# the steps.
 on:
   push:
     tags: ["v*"]
@@ -218,3 +220,18 @@ jobs:
     uses: ./.github/workflows/mcp-registry.yml
     with:
       tag: ${{ github.ref_name }}
+
+  # Publish the site from this tag, once the release is published and its
+  # signatures verified: the installers it serves are then the ones this
+  # release signed. A prerelease (a tag with a suffix, v0.9.0-rc.1) leaves
+  # the site as it was, like the update check and /releases/latest. A
+  # failure leaves the release intact; the next site-* tag or release
+  # publishes the site.
+  pages:
+    needs: goreleaser
+    if: ${{ !cancelled() && needs.goreleaser.result == 'success' && !contains(github.ref_name, '-') }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml

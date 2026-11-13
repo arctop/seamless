@@ -19,7 +19,8 @@ claude-app/index.html   hand-written page for people who use Claude in the
                         it does not load home.js, which drives the landing's
                         own sections
 CNAME                   custom domain: thereisnospoon.org
-.nojekyll               disable Jekyll (it would skip our _-prefixed paths)
+.nojekyll               disable Jekyll (it would skip our _-prefixed paths); the
+                        Actions deploy runs no Jekyll either
 sitemap.xml             GENERATED (docsgen): the landing page + every docs page
 robots.txt              GENERATED (docsgen): crawl policy + the sitemap pointer
 llms.txt                GENERATED (docsgen): the nav as a linked outline for LLMs
@@ -331,7 +332,24 @@ then open http://127.0.0.1:8899/.
 
 ## Go live (manual, owner-gated)
 
-1. GitHub repo Settings -> Pages -> Source: `main` branch, `/docs` folder.
+The site is published from a tag, never from a push to main
+(`.github/workflows/pages.yml`):
+- Every release publishes it from its own tag: release.yml's `pages` job,
+  after the release is published and verified. A prerelease does not.
+- Between releases, an admin-only `site-*` tag publishes it, for example
+  the changelog refresh after a release or a docs fix:
+  `git tag -s site-YYYYMMDD -m site-YYYYMMDD && git push origin site-YYYYMMDD`.
+
+Pushing main therefore changes nothing at thereisnospoon.org, the installers
+included.
+
+1. GitHub repo Settings -> Pages -> Build and deployment -> Source: **GitHub
+   Actions**. (It was the legacy `main` branch, `/docs` folder build.) Then:
+   - The `github-pages` environment admits the tags `v*` and `site-*`, and
+     no branch.
+   - The tag ruleset that keeps `v*` tags admin-only also covers `site-*`.
+   - Under Actions the `CNAME` file is not read; the custom domain is the
+     one set in the Pages settings.
 2. DNS for thereisnospoon.org: apex A records to GitHub Pages IPs
    (185.199.108.153 .. 185.199.111.153) + AAAA if desired; `www` CNAME to
    `arctop.github.io` (optional). The `CNAME` file here is already in place.

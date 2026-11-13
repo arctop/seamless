@@ -1,0 +1,62 @@
+name: Pages
+
+# Publish the site -- thereisnospoon.org, docs/ verbatim, the one-line
+# installers among it -- from a tag, never from a push to main. release.yml
+# calls this once a release (a v* tag that is not a prerelease) is published
+# and its signatures verified. Between releases, an admin-only site-* tag
+# (site-YYYYMMDD) publishes the docs: the changelog refresh after a release,
+# a docs fix. Pushing main changes nothing live, so a write to main alone
+# cannot change the installer every new user pipes into sh (plan
+# agent-accounts-and-releases, step F).
+#
+# The repository settings this needs, once (the owner's; SITE.md "Go live"):
+# - Pages > Build and deployment > Source: GitHub Actions, which replaces
+#   the legacy build of main:/docs. The custom domain stays as set there.
+# - The github-pages environment admits the tags v* and site-*.
+# - The tag ruleset that keeps v* tags admin-only covers site-* too.
+on:
+  push:
+    tags: ["site-*"]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    # A fork has no thereisnospoon.org.
+    if: github.repository == 'arctop/seamless'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    # One deploy at a time; a queued one waits rather than cancelling the one
+    # under way, and the last tag to arrive is what stays live.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      # The tag that triggered the run (site-*), or the release's tag when
+      # release.yml calls this. Third-party actions are pinned to full commit
+      # SHAs, as in release.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: docs
+          # docs/.well-known/ (the agent card and the MCP server card) and
+          # docs/.nojekyll are dot-paths, which the action leaves out unless
+          # told; the legacy build served them.
+          include-hidden-files: true
+
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
