@@ -85,13 +85,14 @@ func (s *Server) handleTasksAdd(ctx context.Context, req mcp.CallToolRequest) (*
 
 func tasksUpdateTool() mcp.Tool {
 	return mcp.NewTool("tasks_update", hintSet(),
-		mcp.WithDescription("Update a task: change status (open|in_progress|done|dropped), edit title/body, or add dependencies. Moving to done/dropped closes it and unblocks its dependents. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it."),
+		mcp.WithDescription("Update a task: change status (open|in_progress|done|dropped), edit title/body, or add or remove dependencies. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it."),
 		mcp.WithString("id", mcp.Required(), mcp.Description("task id")),
 		mcp.WithString("status", enumOf(core.TaskStatuses), mcp.Description("new status")),
 		mcp.WithString("title", mcp.Description("new title")),
 		mcp.WithString("body", mcp.Description("new body (aliases: content, text)")),
 		mcp.WithString("project", mcp.Description("reassign the task to another project slug (used when a split moves a project's open work to a child)")),
 		mcp.WithArray("add_depends_on", mcp.WithStringItems(), mcp.Description("task ids to add as blockers (a comma-separated string is also accepted)")),
+		mcp.WithArray(removeDependsOnParam, mcp.WithStringItems(), mcp.Description("task ids to remove as blockers (a comma-separated string is also accepted); an id that is not a blocker of this task is a no-op, named back in not_depends_on")),
 		mcp.WithString("session", mcp.Description("the acting agent's session (the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session name); needed only to mutate a task you hold a live claim on when several agents are active")),
 		mcp.WithString("session_id", mcp.Description(actorSessionIDArgDesc)),
 		mcp.WithArray(commitsParam, mcp.WithStringItems(), mcp.Description(taskCommitsArgDesc)),
@@ -133,6 +134,10 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 	if err := s.reachableDeps(ctx, patch.AddDependsOn); err != nil {
 		return errResult("tasks_update", err)
 	}
+	// Removals need no reach check here: the store judges each against the
+	// request's View inside the update's transaction, and a blocker the caller
+	// may not reach reads exactly like an id that names nothing (removeDeps).
+	patch.RemoveDependsOn = argStrings(req, removeDependsOnParam)
 	commits, err := s.commitsArg(req)
 	if err != nil {
 		return errResult("tasks_update", err)
@@ -140,11 +145,11 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 	patch.AddCommits = commits
 
 	if patch.Status == nil && patch.Title == nil && patch.Body == nil && patch.ProjectSlug == nil &&
-		len(patch.AddDependsOn) == 0 && len(patch.AddCommits) == 0 {
+		len(patch.AddDependsOn) == 0 && len(patch.RemoveDependsOn) == 0 && len(patch.AddCommits) == 0 {
 		if s.cfg.RecordCommits {
-			return errResult("tasks_update", errors.New("nothing to update: pass status, title, body, project, add_depends_on, or commits"))
+			return errResult("tasks_update", errors.New("nothing to update: pass status, title, body, project, add_depends_on, remove_depends_on, or commits"))
 		}
-		return errResult("tasks_update", errors.New("nothing to update: pass status, title, body, project, or add_depends_on"))
+		return errResult("tasks_update", errors.New("nothing to update: pass status, title, body, project, add_depends_on, or remove_depends_on"))
 	}
 	// A task id is globally unique, so nothing above resolved a write scope. The
 	// row is loaded first purely to learn the project the fence judges against;
@@ -178,18 +183,31 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 	if err != nil && !errors.Is(err, errAmbiguousActor) {
 		return errResult("tasks_update", err)
 	}
-	// The commits ride in the patch: UpdateTask records them in the same
-	// transaction and behind the same holder lock as every other change, so
-	// whoever may update the task may record its commits, and nobody else.
-	updated, err := store.UpdateTask(ctx, s.cfg.DB, id, patch, actor, time.Now().UTC())
+	// The commits and the removals ride in the patch: UpdateTask applies them
+	// in the same transaction and behind the same holder lock as every other
+	// change, so whoever may update the task may record its commits or drop
+	// its blockers, and nobody else.
+	res, err := store.UpdateTaskDetailed(ctx, s.cfg.DB, id, patch, actor, time.Now().UTC())
 	if err != nil {
 		return errResult("tasks_update", err)
 	}
-	transition := map[string]any{"to": string(updated.Status)}
-	if len(commits) > 0 {
-		transition["commits_recorded"] = len(commits)
+	updated := res.Task
+	// A call whose only ask was removals that named no blocker changed nothing,
+	// so the task's history gains nothing either.
+	if !res.Unchanged {
+		// from is the status before the call, read inside its transaction, so
+		// the history tells a status move (from != to) from an update that moved
+		// none -- an edit, a new or removed blocker, a commit, a project move --
+		// which a bare to would read as a move to the status the task had.
+		transition := map[string]any{"to": string(updated.Status), "from": string(res.From)}
+		if len(commits) > 0 {
+			transition["commits_recorded"] = len(commits)
+		}
+		if len(res.RemovedDependsOn) > 0 {
+			transition[removedDependsOnKey] = res.RemovedDependsOn
+		}
+		s.record(ctx, core.EventTaskTransition, actor, updated.ProjectSlug, id, transition)
 	}
-	s.record(ctx, core.EventTaskTransition, actor, updated.ProjectSlug, id, transition)
 	// The response is judged against the project the task now sits in: a move
 	// INTO a fenced project is sanctioned, but the item it lands on is that
 	// project's content from the moment it arrives.
@@ -197,8 +215,31 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 	if len(commits) > 0 {
 		out["commits_recorded"] = len(commits)
 	}
+	if _, withheld := out[withheldKey]; !withheld {
+		// The removal's report names only ids the caller sent. A caller that may
+		// write the task but not read it gets no report: whether an id was one
+		// of its blockers is that project's dependency graph (taskContentFields).
+		if len(res.RemovedDependsOn) > 0 {
+			out[removedDependsOnKey] = res.RemovedDependsOn
+		}
+		if len(res.AbsentDependsOn) > 0 {
+			out[notDependsOnKey] = res.AbsentDependsOn
+		}
+	}
 	return jsonResult(out)
 }
+
+// removeDependsOnParam is tasks_update's blocker-removal argument.
+const removeDependsOnParam = "remove_depends_on"
+
+// removedDependsOnKey lists, in a tasks_update answer and in its
+// task.transition record, the remove_depends_on ids that were blockers and no
+// longer are; notDependsOnKey the ones that were not, each a no-op. Both are
+// present only when non-empty, so an answer without a removal reads as before.
+const (
+	removedDependsOnKey = "removed_depends_on"
+	notDependsOnKey     = "not_depends_on"
+)
 
 func tasksReadyTool() mcp.Tool {
 	return mcp.NewTool("tasks_ready", hintRead(),

@@ -653,6 +653,14 @@ any of it.
   a browser page of a locked plan or session goes to the project's unlock
   page (`lockedItem`, `?item=` and a `safeNext` `?next=`), a fragment says
   so in place.
+- **A blocker removal judges reach like an add.** `tasks_update
+  remove_depends_on` applies the add path's rule inside the store
+  (`store.removeDeps`, `access.Visible`): a blocker the caller may not reach is
+  kept and named in `not_depends_on` exactly like an id that names nothing,
+  behind the same holder lock, and a withheld answer carries neither
+  `removed_depends_on` nor `not_depends_on`. Every `tasks_update` transition
+  records `from` (the status before the call), so readers tell an edit from a
+  status move; events without `from` read as before.
 - **The console reads through `store.OpenView`**: TEMP VIEWs that shadow every
   project-scoped table on a read-only handle. While a project is locked it
   reads through a `store.Views` pool instead (one handle per hidden set),

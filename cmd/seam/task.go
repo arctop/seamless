@@ -174,6 +174,93 @@ func runTaskTransition(ctx context.Context, e *env, o *taskActorOpts, sub, statu
 	return nil
 }
 
+// --- task block / unblock ---
+
+// taskBlockerSpec builds `task block` and `task unblock` from one declaration:
+// both are a tasks_update of the task's blockers, differing only in the
+// argument that carries the ids. unblock is how a blocker that turned out to be
+// the wrong task is dropped without re-creating the task under a new id, and
+// block is how the right one is then added; together they edit an existing
+// task's schedule, which `task add --depends` sets only at creation.
+//
+// "unblock" means what it means in done's and drop's summaries: the blocker no
+// longer holds the task back.
+func taskBlockerSpec(sub, param, summary, long string) cmd {
+	return spec("task "+sub, groupTasks, summary, atLeast(2, "id", "blocker"), bindTaskActor,
+		func(ctx context.Context, e *env, o *taskActorOpts, pos []string) error {
+			return runTaskBlockers(ctx, e, o, sub, param, pos[0], pos[1:])
+		}).withLong(long)
+}
+
+var (
+	taskBlockCmd = taskBlockerSpec("block", "add_depends_on", "make a task wait on more blockers",
+		`Adds each blocker id to the task's dependencies (tasks_update add_depends_on):
+the task is not ready until every one of them is done or dropped. Each must be
+an existing task and must not create a cycle; one already a blocker is kept.`)
+	taskUnblockCmd = taskBlockerSpec("unblock", "remove_depends_on", "remove blockers from a task",
+		`Removes each blocker id from the task's dependencies (tasks_update
+remove_depends_on), so a wrong blocker is dropped without re-creating the task.
+Removing its last unfinished blocker makes the task ready. An id that is not
+one of its blockers changes nothing, and is named as such.`)
+)
+
+func runTaskBlockers(ctx context.Context, e *env, o *taskActorOpts, sub, param, id string, blockers []string) error {
+	ids := blockerIDs(blockers)
+	if len(ids) == 0 {
+		return fmt.Errorf("seam task %s: no blocker id given", sub)
+	}
+	cli, _, err := e.dial(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = cli.Close() }()
+	out, err := callTool(ctx, cli, "tasks_update", map[string]any{"id": id, param: ids, "session": *o.session})
+	if err != nil {
+		return err
+	}
+	// Blocker ids print in full: ids minted close together share their leading
+	// characters, so short ones would not tell two blockers apart.
+	removed, absent := strs(out["removed_depends_on"]), strs(out["not_depends_on"])
+	switch {
+	case sub == "block":
+		fmt.Fprintf(e.stdout, "task %s now waits on %s\n", shortID(id), strings.Join(ids, ", "))
+	case len(removed) == 0 && len(absent) == 0:
+		// A task this connection may write but not read: the answer withholds
+		// its dependencies, so there is nothing to report but the update.
+		fmt.Fprintf(e.stdout, "task %s %s -> %s\n", shortID(id), sub, str(out["status"]))
+	}
+	if len(removed) > 0 {
+		noun := "blocker"
+		if len(removed) > 1 {
+			noun = "blockers"
+		}
+		fmt.Fprintf(e.stdout, "task %s: removed %s %s\n", shortID(id), noun, strings.Join(removed, ", "))
+	}
+	if len(absent) > 0 {
+		verb := "is not a blocker"
+		if len(absent) > 1 {
+			verb = "are not blockers"
+		}
+		fmt.Fprintf(e.stdout, "task %s: %s %s; nothing removed\n", shortID(id), strings.Join(absent, ", "), verb)
+	}
+	return nil
+}
+
+// blockerIDs reads the blocker positionals: each is an id, and a
+// comma-separated list is ids too, as `task add --depends` takes them. Blanks
+// are dropped; the server drops repeats.
+func blockerIDs(args []string) []string {
+	var ids []string
+	for _, a := range args {
+		for id := range strings.SplitSeq(a, ",") {
+			if id = strings.TrimSpace(id); id != "" {
+				ids = append(ids, id)
+			}
+		}
+	}
+	return ids
+}
+
 // --- task claim / heartbeat ---
 
 // taskClaimSpec builds `task claim` and `task heartbeat` from one declaration:

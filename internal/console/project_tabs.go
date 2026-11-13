@@ -625,6 +625,13 @@ func transitionVerb(payload map[string]any) (verb, iconName, tone string) {
 		return "claimed", "lock", "brand"
 	case payloadBool(payload, "released"):
 		return "released", "arrow-up-down", "muted"
+	case blockersRemovedOnly(payload):
+		if len(payloadStrList(payload, "removed_depends_on")) > 1 {
+			return "blockers removed", "link", "muted"
+		}
+		return "blocker removed", "link", "muted"
+	case statusUnmoved(payload):
+		return "updated", "pencil", "muted"
 	}
 	switch payloadStr(payload, "to") {
 	case string(core.TaskDone):
@@ -636,6 +643,22 @@ func transitionVerb(payload map[string]any) (verb, iconName, tone string) {
 	default:
 		return "reopened", "circle", "warn"
 	}
+}
+
+// statusUnmoved reports a tasks_update that moved no status -- an edit, a new
+// or removed blocker, a commit, a project move: it carries its status before
+// the call as from, and from equals to, so the status words ("reopened",
+// "done") would name a move that did not happen. An event without from (every
+// one written before tasks_update recorded it, and every other writer's) is
+// not judged here and reads as it always has.
+func statusUnmoved(payload map[string]any) bool {
+	from := payloadStr(payload, "from")
+	return from != "" && from == payloadStr(payload, "to")
+}
+
+// blockersRemovedOnly reports a statusUnmoved update that removed blockers.
+func blockersRemovedOnly(payload map[string]any) bool {
+	return statusUnmoved(payload) && len(payloadStrList(payload, "removed_depends_on")) > 0
 }
 
 // stalePlanSlugs flags the plans a pending gardener settlement names -- the

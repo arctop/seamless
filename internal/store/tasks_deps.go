@@ -1,5 +1,6 @@
 // The task dependency DAG: edge insertion with dangling-reference and cycle
-// rejection, plus the depends-on reads (single and batched) the queue builds on.
+// rejection, edge removal, plus the depends-on reads (single and batched) the
+// queue builds on.
 package store
 
 import (
@@ -7,6 +8,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"github.com/arctop/seamless/internal/access"
 )
 
 // cycleWalkCap bounds the dependency walk in createsCycle, a backstop against a
@@ -45,6 +48,46 @@ func addDeps(ctx context.Context, tx *sql.Tx, taskID string, deps []string) erro
 		}
 	}
 	return nil
+}
+
+// removeDeps deletes taskID's depends-on edges to deps (deduplicated by the
+// caller) inside the caller's transaction, and reports which were edges
+// (removed) and which were not (absent), each in deps' order. Dropping an edge
+// can close no cycle, so there is nothing to check but reach: an edge to a
+// task in a project the request's View does not reach (access.Visible, under
+// peer_auth) is reported absent and kept, so the answer never tells a blocker
+// the caller may not see from an id that names nothing. With no View every
+// project is reachable and every edge removable.
+func removeDeps(ctx context.Context, tx *sql.Tx, taskID string, deps []string) (removed, absent []string, err error) {
+	if len(deps) == 0 {
+		return nil, nil, nil
+	}
+	var projects map[string]string
+	if _, on := access.FromContext(ctx); on {
+		if projects, err = taskProjectsTx(ctx, tx, deps); err != nil {
+			return nil, nil, err
+		}
+	}
+	for _, dep := range deps {
+		if project, known := projects[dep]; known && !access.Visible(ctx, project) {
+			absent = append(absent, dep)
+			continue
+		}
+		res, err := tx.ExecContext(ctx, `DELETE FROM task_deps WHERE task_id = ? AND depends_on = ?`, taskID, dep)
+		if err != nil {
+			return nil, nil, fmt.Errorf("store: delete dep: %w", err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return nil, nil, fmt.Errorf("store: delete dep: %w", err)
+		}
+		if n > 0 {
+			removed = append(removed, dep)
+		} else {
+			absent = append(absent, dep)
+		}
+	}
+	return removed, absent, nil
 }
 
 // createsCycle reports whether adding the edge taskID -> dep (taskID is blocked
@@ -140,6 +183,12 @@ func dependsOnForTasks(ctx context.Context, q rowQuerier, taskIDs []string) (map
 // input for a dependency list: a depends_on edge names only the task id, and a
 // surface judges each against its caller by the project the task sits in.
 func TaskProjects(ctx context.Context, db *sql.DB, ids []string) (map[string]string, error) {
+	return taskProjectsTx(ctx, db, ids)
+}
+
+// taskProjectsTx is TaskProjects through any querier, so removeDeps reads the
+// blockers' projects inside its transaction.
+func taskProjectsTx(ctx context.Context, db rowQuerier, ids []string) (map[string]string, error) {
 	ids = dedupeStrings(ids)
 	out := make(map[string]string, len(ids))
 	for start := 0; start < len(ids); start += depsBatchSize {

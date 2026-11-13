@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#how-claiming-works">How claiming works</a></li><li class="lvl-2"><a href="#plan-steps-are-not-queue-items">Plan steps are not queue items</a></li><li class="lvl-2"><a href="#results-and-refusal-modes">Results and refusal modes</a></li><li class="lvl-2"><a href="#commit-records">Commit records</a></li><li class="lvl-2"><a href="#tasks_add">tasks_add</a></li><li class="lvl-2"><a href="#tasks_update">tasks_update</a></li><li class="lvl-2"><a href="#tasks_ready">tasks_ready</a></li><li class="lvl-2"><a href="#tasks_list">tasks_list</a></li><li class="lvl-2"><a href="#tasks_claim">tasks_claim</a></li><li class="lvl-2"><a href="#tasks_release">tasks_release</a></li>
+      <li class="lvl-2"><a href="#how-claiming-works">How claiming works</a></li><li class="lvl-2"><a href="#plan-steps-are-not-queue-items">Plan steps are not queue items</a></li><li class="lvl-2"><a href="#changing-a-tasks-blockers">Changing a task&#39;s blockers</a></li><li class="lvl-2"><a href="#results-and-refusal-modes">Results and refusal modes</a></li><li class="lvl-2"><a href="#commit-records">Commit records</a></li><li class="lvl-2"><a href="#tasks_add">tasks_add</a></li><li class="lvl-2"><a href="#tasks_update">tasks_update</a></li><li class="lvl-2"><a href="#tasks_ready">tasks_ready</a></li><li class="lvl-2"><a href="#tasks_list">tasks_list</a></li><li class="lvl-2"><a href="#tasks_claim">tasks_claim</a></li><li class="lvl-2"><a href="#tasks_release">tasks_release</a></li>
     </ul>
   </details>
   <p>Tasks are how agents hand work to each other. A task is <strong>ready</strong> when it has no
@@ -266,6 +266,29 @@ did not claim; the point is that well-behaved agents do not collide.</p>
 the default <code>tasks_ready</code> and <code>tasks_list</code>. That keeps a twelve-step plan from
 burying the handful of tasks that are actually loose work. Pass <code>plan=&lt;slug&gt;</code> to
 either tool to see that plan's steps instead.</p>
+<h2 id="changing-a-tasks-blockers">Changing a task's blockers</h2>
+<p><code>tasks_update</code> edits an existing task's schedule: <code>add_depends_on</code> adds blockers
+(each must exist and must not create a cycle) and <code>remove_depends_on</code> removes
+them, so a blocker that turned out to be the wrong task is dropped without
+re-creating the task under a new id - its dependents, and every note that cites
+it, keep the id they have. Removing a task's last unfinished blocker makes it
+ready. One call may not both add and remove the same id.</p>
+<p>The answer lists the ids it removed under <code>removed_depends_on</code>. An id that is
+not one of the task's blockers - another task, or no task at all - changes
+nothing and is listed under <code>not_depends_on</code>; a call whose only ask was such
+removals writes nothing, not even the task's <code>updated_at</code>. A removal is recorded
+in the task's history as a <code>task.transition</code> event under the acting session,
+with <code>removed_depends_on</code> beside <code>to</code> and <code>from</code> - every <code>tasks_update</code> event
+carries <code>from</code>, the status before the call, so an edit reads as an edit rather
+than a status move - and it never changes the task's <code>updated_account</code>. It is behind the
+same claim lock as every other update.</p>
+<p>A blocker the caller may not reach - under <code>peer_auth</code>, a task in a project the
+connection does not reach, the rule <code>add_depends_on</code> applies - is not one it can
+remove, and is listed under <code>not_depends_on</code> exactly as an id that names nothing
+would be. A caller that may write the task but not read it (outside a
+confidential project) may remove its blockers, but its answer is withheld like
+any other, with neither list: which ids were blockers is that project's
+dependency graph.</p>
 <h2 id="results-and-refusal-modes">Results and refusal modes</h2>
 <p>Every successful task mutation returns the resulting task row, including its id,
 status, dependency state, claim holder, and lease fields when present.</p>
@@ -295,7 +318,7 @@ withholds, gets the generic words.</p>
 </tr>
 <tr>
 <td><code>tasks_update</code></td>
-<td>Nothing was supplied to change, a new dependency is invalid, a <code>commits</code> entry is not a full commit id, or another live session holds the task</td>
+<td>Nothing was supplied to change, a new dependency is invalid, one id is both added and removed, a <code>commits</code> entry is not a full commit id, or another live session holds the task</td>
 </tr>
 <tr>
 <td><code>tasks_claim</code></td>
@@ -369,7 +392,7 @@ call and behind the same claim lock. Off, the argument does not exist. See
 </table>
 </div>
 <h2 id="tasks_update">tasks_update</h2>
-<p>Update a task: change status (open|in_progress|done|dropped), edit title/body, or add dependencies. Moving to done/dropped closes it and unblocks its dependents. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.</p>
+<p>Update a task: change status (open|in_progress|done|dropped), edit title/body, or add or remove dependencies. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -410,6 +433,12 @@ call and behind the same claim lock. Off, the argument does not exist. See
 <td>string</td>
 <td>no</td>
 <td>reassign the task to another project slug (used when a split moves a project's open work to a child)</td>
+</tr>
+<tr>
+<td><code>remove_depends_on</code></td>
+<td>array</td>
+<td>no</td>
+<td>task ids to remove as blockers (a comma-separated string is also accepted); an id that is not a blocker of this task is a no-op, named back in not_depends_on</td>
 </tr>
 <tr>
 <td><code>session</code></td>
@@ -609,7 +638,7 @@ call and behind the same claim lock. Off, the argument does not exist. See
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#how-claiming-works">How claiming works</a></li><li class="lvl-2"><a href="#plan-steps-are-not-queue-items">Plan steps are not queue items</a></li><li class="lvl-2"><a href="#results-and-refusal-modes">Results and refusal modes</a></li><li class="lvl-2"><a href="#commit-records">Commit records</a></li><li class="lvl-2"><a href="#tasks_add">tasks_add</a></li><li class="lvl-2"><a href="#tasks_update">tasks_update</a></li><li class="lvl-2"><a href="#tasks_ready">tasks_ready</a></li><li class="lvl-2"><a href="#tasks_list">tasks_list</a></li><li class="lvl-2"><a href="#tasks_claim">tasks_claim</a></li><li class="lvl-2"><a href="#tasks_release">tasks_release</a></li>
+      <li class="lvl-2"><a href="#how-claiming-works">How claiming works</a></li><li class="lvl-2"><a href="#plan-steps-are-not-queue-items">Plan steps are not queue items</a></li><li class="lvl-2"><a href="#changing-a-tasks-blockers">Changing a task&#39;s blockers</a></li><li class="lvl-2"><a href="#results-and-refusal-modes">Results and refusal modes</a></li><li class="lvl-2"><a href="#commit-records">Commit records</a></li><li class="lvl-2"><a href="#tasks_add">tasks_add</a></li><li class="lvl-2"><a href="#tasks_update">tasks_update</a></li><li class="lvl-2"><a href="#tasks_ready">tasks_ready</a></li><li class="lvl-2"><a href="#tasks_list">tasks_list</a></li><li class="lvl-2"><a href="#tasks_claim">tasks_claim</a></li><li class="lvl-2"><a href="#tasks_release">tasks_release</a></li>
     </ul>
   </aside>
   

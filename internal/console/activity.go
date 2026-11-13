@@ -257,6 +257,12 @@ func eventSummary(e core.Event) string {
 		core.EventBackupRestored, core.EventBackupRestoreFailed:
 		return backupEventSummary(e)
 	case core.EventTaskTransition:
+		switch {
+		case blockersRemovedOnly(p):
+			return "task: removed " + plural(len(payloadStrList(p, "removed_depends_on")), "blocker", "blockers")
+		case statusUnmoved(p):
+			return "task updated"
+		}
 		if to := payloadStr(p, "to"); to != "" {
 			return "task -> " + to
 		}

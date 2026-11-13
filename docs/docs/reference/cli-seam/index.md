@@ -285,19 +285,54 @@ list of blocker task ids. `--plan S` composes the task as a step of the plan
 ### seam task done|start|drop|reopen {#seam_task_transition}
 
 ```bash
-seam task done <id>
-seam task start <id>
-seam task drop <id>
-seam task reopen <id>
+seam task done [--session NAME] <id>
+seam task start [--session NAME] <id>
+seam task drop [--session NAME] <id>
+seam task reopen [--session NAME] <id>
 ```
 
 Calls `tasks_update` with the mapped status: `done` → `done`, `start` →
-`in_progress`, `drop` → `dropped`, `reopen` → `open`. These parse no flags.
+`in_progress`, `drop` → `dropped`, `reopen` → `open`. `--session` is their one
+flag, here and on every task command below that takes it: it names the acting
+session (a `cc/...`, `cx/...` or `sess/...` name), which a task under your own
+live claim needs when several agents are active, since a fresh CLI connection
+cannot be attributed to one of them.
+
+### seam task block|unblock {#seam_task_blockers}
+
+```bash
+seam task block [--session NAME] <id> <blocker>...
+seam task unblock [--session NAME] <id> <blocker>...
+```
+
+Edit an existing task's blockers, which `task add --depends` sets only at
+creation. `block` calls `tasks_update` with `add_depends_on`: the task waits on
+each blocker until it is `done` or `dropped`, and each must exist and must not
+create a cycle. `unblock` calls it with `remove_depends_on`, so a blocker that
+turned out to be the wrong task is dropped without re-creating the task under a
+new id (and every dependent and note keeps the id they cite). Removing a task's
+last unfinished blocker makes it ready. Each blocker is its own positional, and
+a comma-separated list is accepted too.
+
+```bash
+seam task unblock 01K7ABCD 01K7BBBBBBBBBBBBBBBBBBBBBB   # the wrong blocker
+# task 01K7ABCD: removed blocker 01K7BBBBBBBBBBBBBBBBBBBBBB
+seam task block 01K7ABCD 01K7CCCCCCCCCCCCCCCCCCCCCC     # the right one
+# task 01K7ABCD now waits on 01K7CCCCCCCCCCCCCCCCCCCCCC
+```
+
+An id that is not one of the task's blockers changes nothing, and `unblock`
+says so: `task 01K7ABCD: 01K7BBBBBBBBBBBBBBBBBBBBBB is not a blocker; nothing
+removed`. Blocker ids print in full, because ids minted close together share
+their first characters. The removal is recorded in the task's history under the
+acting session, and it is behind the same claim lock as any other update: a
+task another session holds refuses it until the lease lapses or the holder
+releases it.
 
 ### seam task claim {#seam_task_claim}
 
 ```bash
-seam task claim [--lease SECS] <id>
+seam task claim [--lease SECS] [--session NAME] <id>
 ```
 
 Calls `tasks_claim` to atomically take a ready task, printing the new status and
@@ -307,7 +342,7 @@ it is only sent when greater than zero.
 ### seam task heartbeat {#seam_task_heartbeat}
 
 ```bash
-seam task heartbeat [--lease SECS] <id>
+seam task heartbeat [--lease SECS] [--session NAME] <id>
 ```
 
 The same `tasks_claim` call as `claim`. Re-claiming a task you already hold
@@ -317,7 +352,7 @@ is for during long work. There is no separate heartbeat tool.
 ### seam task release {#seam_task_release}
 
 ```bash
-seam task release [--force] <id>
+seam task release [--force] [--session NAME] <id>
 ```
 
 Without `--force`, calls `tasks_release`, which only releases a claim you hold.

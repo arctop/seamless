@@ -474,7 +474,9 @@ func nowContribution(evs []core.Event, dayStart time.Time) *nowContribVM {
 		case core.EventNoteWritten:
 			c.Notes++
 		case core.EventTaskTransition:
-			if to, _ := e.Payload["to"].(string); to == string(core.TaskDone) {
+			// An update of a task already done (from == to) closed nothing; an
+			// event without from counts by its to, as it always has.
+			if to, _ := e.Payload["to"].(string); to == string(core.TaskDone) && !statusUnmoved(e.Payload) {
 				c.Closed++
 			}
 		}

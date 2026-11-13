@@ -32,6 +32,13 @@ tasks_add title="delete the old path" depends_on=B
 work abandoned on purpose should not wedge the queue forever. Cycles are rejected
 at creation rather than discovered at scheduling time.
 
+A schedule is corrected in place. When a blocker turns out to be the wrong task,
+`tasks_update remove_depends_on=<wrong>` drops it and `add_depends_on=<right>`
+adds the right one (`seam task unblock` and `seam task block` from a shell), so
+the task keeps its id and nothing that cites it goes stale. Removing a task's
+last unfinished blocker makes it ready; naming an id that is not a blocker
+changes nothing and the answer says so.
+
 Every worker then runs the same loop, and needs no knowledge of the others:
 
 ```text

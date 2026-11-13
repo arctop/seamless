@@ -98,3 +98,162 @@ func TestOpenBlockerProjects(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, got)
 }
+
+// Removing a blocker: the ids that were blockers stop being ones, the rest are
+// named back as absent, and a task whose last unfinished blocker goes is
+// ready. The row's updated_at moves; its updated_account does not.
+func TestUpdateTaskDetailed_RemovesBlockers(t *testing.T) {
+	db := newTaskDB(t)
+	ctx := context.Background()
+	open := addTask(t, db, "demo", "open blocker", 1)
+	done := addTask(t, db, "demo", "done blocker", 2)
+	setStatus(t, db, done, core.TaskDone)
+	stranger := addTask(t, db, "demo", "not a blocker", 3)
+	waits := addTask(t, db, "demo", "waits", 4, open, done)
+	missing, err := core.NewID()
+	require.NoError(t, err)
+	require.Equal(t, []string{"open blocker", "not a blocker"}, readyTitles(t, db, "demo"))
+
+	before, err := TaskByID(ctx, db, waits)
+	require.NoError(t, err)
+	at := before.UpdatedAt.Add(time.Hour)
+	res, err := UpdateTaskDetailed(ctx, db, waits,
+		TaskPatch{RemoveDependsOn: []string{stranger, open, "", missing, open}}, "", at)
+	require.NoError(t, err)
+	require.False(t, res.Unchanged)
+	require.Equal(t, []string{open}, res.RemovedDependsOn)
+	require.Equal(t, []string{stranger, missing}, res.AbsentDependsOn, "the patch's order, deduplicated, blanks dropped")
+	require.Equal(t, core.TaskOpen, res.From)
+	require.Equal(t, []string{done}, res.Task.DependsOn, "the finished blocker stays an edge")
+	require.True(t, res.Task.UpdatedAt.Equal(at.UTC()), "a removal is a change of the row")
+	require.Empty(t, res.Task.UpdatedAccount)
+
+	require.Equal(t, []string{"open blocker", "not a blocker", "waits"}, readyTitles(t, db, "demo"),
+		"its last unfinished blocker gone, the task is ready")
+	blocked, err := BlockedTasks(ctx, db, "demo")
+	require.NoError(t, err)
+	require.Empty(t, blocked)
+
+	// UpdateTask is the same update, answering the task alone.
+	got, err := UpdateTask(ctx, db, waits, TaskPatch{RemoveDependsOn: []string{done}}, "", at)
+	require.NoError(t, err)
+	require.Empty(t, got.DependsOn)
+}
+
+// A patch of removals alone that names no blocker writes nothing: the row,
+// its updated_at and the search mirror are as they were. With another field
+// in the patch the update lands as always and the removal is still reported.
+func TestUpdateTaskDetailed_RemovingANonBlockerIsANoOp(t *testing.T) {
+	db := newTaskDB(t)
+	ctx := context.Background()
+	blocker := addTask(t, db, "demo", "blocker", 1)
+	other := addTask(t, db, "demo", "other", 2)
+	waits := addTask(t, db, "demo", "waits", 3, blocker)
+	before, err := TaskByID(ctx, db, waits)
+	require.NoError(t, err)
+
+	res, err := UpdateTaskDetailed(ctx, db, waits, TaskPatch{RemoveDependsOn: []string{other}}, "", before.UpdatedAt.Add(time.Hour))
+	require.NoError(t, err)
+	require.True(t, res.Unchanged)
+	require.Empty(t, res.RemovedDependsOn)
+	require.Equal(t, []string{other}, res.AbsentDependsOn)
+	require.Equal(t, before, res.Task, "the answer is the row as it stands")
+	after, err := TaskByID(ctx, db, waits)
+	require.NoError(t, err)
+	require.Equal(t, before, after, "nothing written, updated_at included")
+
+	title := "waits, renamed"
+	res, err = UpdateTaskDetailed(ctx, db, waits, TaskPatch{Title: &title, RemoveDependsOn: []string{other}}, "", before.UpdatedAt.Add(time.Hour))
+	require.NoError(t, err)
+	require.False(t, res.Unchanged)
+	require.Equal(t, []string{other}, res.AbsentDependsOn)
+	require.Equal(t, title, res.Task.Title)
+	require.Equal(t, []string{blocker}, res.Task.DependsOn)
+}
+
+// The holder lock comes first: a task another session holds refuses a
+// removal, one that would be a no-op included, and keeps its edges. The holder
+// removes freely.
+func TestUpdateTaskDetailed_RemovalBehindTheHolderLock(t *testing.T) {
+	db := newTaskDB(t)
+	ctx := context.Background()
+	blocker := addTask(t, db, "demo", "blocker", 1)
+	setStatus(t, db, blocker, core.TaskDone)
+	held := addTask(t, db, "demo", "held", 2, blocker)
+	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	_, err := ClaimTask(ctx, db, held, "cc/holder", time.Hour, now)
+	require.NoError(t, err)
+
+	for _, ids := range [][]string{{blocker}, {"01JZZZZZZZZZZZZZZZZZZZZZZZ"}} {
+		_, err = UpdateTaskDetailed(ctx, db, held, TaskPatch{RemoveDependsOn: ids}, "cc/other", now)
+		require.ErrorIs(t, err, ErrTaskClaimConflict, "%v", ids)
+	}
+	tk, err := TaskByID(ctx, db, held)
+	require.NoError(t, err)
+	require.Equal(t, []string{blocker}, tk.DependsOn)
+
+	res, err := UpdateTaskDetailed(ctx, db, held, TaskPatch{RemoveDependsOn: []string{blocker}}, "cc/holder", now)
+	require.NoError(t, err)
+	require.Equal(t, []string{blocker}, res.RemovedDependsOn)
+	require.Equal(t, core.TaskInProgress, res.Task.Status, "a removal moves no status, and keeps the claim")
+	require.Equal(t, "cc/holder", res.Task.ClaimedBy)
+}
+
+// One patch may not both add and remove the same blocker: refused before
+// anything is written.
+func TestUpdateTaskDetailed_AddAndRemoveTheSameBlockerRefused(t *testing.T) {
+	db := newTaskDB(t)
+	ctx := context.Background()
+	blocker := addTask(t, db, "demo", "blocker", 1)
+	other := addTask(t, db, "demo", "other", 2)
+	waits := addTask(t, db, "demo", "waits", 3, blocker)
+
+	_, err := UpdateTaskDetailed(ctx, db, waits, TaskPatch{
+		AddDependsOn: []string{other, blocker}, RemoveDependsOn: []string{blocker},
+	}, "", time.Now())
+	require.ErrorIs(t, err, ErrTaskDepConflict)
+	require.Equal(t, `store.UpdateTask: dependency both added and removed: "`+blocker+`"`, err.Error())
+	tk, err := TaskByID(ctx, db, waits)
+	require.NoError(t, err)
+	require.Equal(t, []string{blocker}, tk.DependsOn)
+
+	// Adding one and removing another is one update.
+	res, err := UpdateTaskDetailed(ctx, db, waits, TaskPatch{
+		AddDependsOn: []string{other}, RemoveDependsOn: []string{blocker},
+	}, "", time.Now())
+	require.NoError(t, err)
+	require.Equal(t, []string{other}, res.Task.DependsOn)
+}
+
+// Under peer_auth, a blocker in a project the request does not reach counts
+// as not a blocker: kept, and reported exactly like an id that names nothing.
+// A restricted account's removal of a blocker it reaches keeps the task's
+// text label: the label follows the title and body, never the edges.
+func TestUpdateTaskDetailed_RemovalJudgesTheBlockersReach(t *testing.T) {
+	db := openTestDB(t)
+	acct := restrictedCtx(t, "example-open")
+	owner := context.Background()
+	near := addTask(t, db, "example-open", "near", 1)
+	far := addTask(t, db, "example-closed", "far", 2)
+	waits := addTask(t, db, "example-open", "waits", 3, near, far)
+	missing, err := core.NewID()
+	require.NoError(t, err)
+	at := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+
+	res, err := UpdateTaskDetailed(acct, db, waits, TaskPatch{RemoveDependsOn: []string{far, missing}}, "", at)
+	require.NoError(t, err)
+	require.True(t, res.Unchanged)
+	require.Equal(t, []string{far, missing}, res.AbsentDependsOn, "the unreachable blocker reads like a missing id")
+
+	res, err = UpdateTaskDetailed(acct, db, waits, TaskPatch{RemoveDependsOn: []string{near, far}}, "", at)
+	require.NoError(t, err)
+	require.Equal(t, []string{near}, res.RemovedDependsOn)
+	require.Equal(t, []string{far}, res.AbsentDependsOn)
+	require.Empty(t, res.Task.UpdatedAccount, "a removal writes no text, so it puts no label on")
+
+	// The owner, with no View, reaches it.
+	res, err = UpdateTaskDetailed(owner, db, waits, TaskPatch{RemoveDependsOn: []string{far}}, "", at)
+	require.NoError(t, err)
+	require.Equal(t, []string{far}, res.RemovedDependsOn)
+	require.Empty(t, res.Task.DependsOn)
+}

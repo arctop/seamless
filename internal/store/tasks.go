@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/arctop/seamless/internal/access"
@@ -35,18 +36,57 @@ type rowQuerier interface {
 // ProjectSlug reassigns the task to another project (used when a split moves a
 // project's open work to a child); the holder-lock still applies.
 //
+// RemoveDependsOn edges are removed: each id that is one of the task's
+// blockers stops being one, and an id that is not is left alone and reported
+// (TaskUpdateResult.AbsentDependsOn) -- a no-op, never an error. A blocker in a
+// project the request's View does not reach (access.Visible, peer_auth) counts
+// as not a blocker: it is neither removed nor told apart from an id that
+// names nothing, the rule the MCP surface applies to an added one. An id may
+// not be both added and removed in one patch (ErrTaskDepConflict).
+//
 // AddCommits records commit ids on the task (commit records: full lowercase
 // ids, each a no-op when already recorded), attributed to the actor. They land
 // in the same transaction as the rest of the patch and behind the same holder
 // lock, so whoever may update the task may record its commits, and a task
 // another session holds refuses them like any other change.
 type TaskPatch struct {
-	Status       *core.TaskStatus
-	Title        *string
-	Body         *string
-	ProjectSlug  *string
-	AddDependsOn []string
-	AddCommits   []string
+	Status          *core.TaskStatus
+	Title           *string
+	Body            *string
+	ProjectSlug     *string
+	AddDependsOn    []string
+	RemoveDependsOn []string
+	AddCommits      []string
+}
+
+// onlyRemovals reports whether the patch asks for nothing but blocker
+// removals, so a patch whose every removal names a non-blocker changes nothing.
+func (p TaskPatch) onlyRemovals() bool {
+	return len(p.RemoveDependsOn) > 0 && p.Status == nil && p.Title == nil && p.Body == nil &&
+		p.ProjectSlug == nil && len(p.AddDependsOn) == 0 && len(p.AddCommits) == 0
+}
+
+// ErrTaskDepConflict is returned when one patch both adds and removes the same
+// dependency: the two orders mean opposite things, so neither is guessed.
+var ErrTaskDepConflict = errors.New("dependency both added and removed")
+
+// TaskUpdateResult is UpdateTaskDetailed's answer: the task after the patch,
+// and what the patch's removals did.
+type TaskUpdateResult struct {
+	Task core.Task
+	// From is the task's status before the patch, read inside its transaction:
+	// a history record of the update tells a status move (From !=
+	// Task.Status) from an update that moved none.
+	From core.TaskStatus
+	// RemovedDependsOn are the RemoveDependsOn ids that were blockers of the
+	// task and no longer are; AbsentDependsOn the rest (not a blocker, no such
+	// task, or a blocker the request may not reach). Both keep the patch's
+	// order, deduplicated.
+	RemovedDependsOn []string
+	AbsentDependsOn  []string
+	// Unchanged is true when the patch carried only removals and none named a
+	// blocker: nothing was written, updated_at included.
+	Unchanged bool
 }
 
 // CreateTask inserts a task and its dependency edges in one transaction. Every
@@ -99,34 +139,74 @@ func CreateTask(ctx context.Context, db *sql.DB, t core.Task) error {
 
 // UpdateTask applies patch to the task and returns the updated task (with deps).
 // Moving to a terminal status stamps closed_at; reopening clears it. Added deps
-// are validated for existence and cycles like CreateTask.
+// are validated for existence and cycles like CreateTask; removed ones need no
+// check (dropping an edge cannot close a cycle).
 //
 // actor is the caller's session id (empty for callers with no session). A task
 // with a live claim (see core.Task.ClaimLive) is locked to its holder: any
 // mutation by a different actor is rejected with ErrTaskClaimConflict, so an
 // agent's claimed task cannot be edited or closed out from under it. The holder
 // itself, an expired lease, and the owner override (ForceReleaseTask) are the
-// only ways past the lock.
+// only ways past the lock. The lock is judged before anything else, a removal
+// that would be a no-op included.
 //
 // updated_account moves only when the title or body actually changes
 // (taskTextAccount); a status, project, dependency or commit change keeps it.
+//
+// UpdateTaskDetailed is the same update, answering what the removals did too.
 func UpdateTask(ctx context.Context, db *sql.DB, id string, patch TaskPatch, actor string, now time.Time) (core.Task, error) {
+	res, err := UpdateTaskDetailed(ctx, db, id, patch, actor, now)
+	if err != nil {
+		return core.Task{}, err
+	}
+	return res.Task, nil
+}
+
+// UpdateTaskDetailed is UpdateTask answering a TaskUpdateResult: which of the
+// patch's RemoveDependsOn ids were blockers (now removed) and which were not,
+// and the status the task had before. A patch of removals alone that names no
+// blocker writes nothing (Unchanged). Its errors carry UpdateTask's prefix:
+// they reach agents verbatim through tasks_update.
+func UpdateTaskDetailed(ctx context.Context, db *sql.DB, id string, patch TaskPatch, actor string, now time.Time) (TaskUpdateResult, error) {
+	remove := dedupeStrings(patch.RemoveDependsOn)
+	for _, dep := range patch.AddDependsOn {
+		if slices.Contains(remove, dep) {
+			return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w: %q", ErrTaskDepConflict, dep)
+		}
+	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return core.Task{}, fmt.Errorf("store.UpdateTask: begin: %w", err)
+		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	t, ok, err := taskByIDTx(ctx, tx, id)
 	if err != nil {
-		return core.Task{}, err
+		return TaskUpdateResult{}, err
 	}
 	if !ok {
-		return core.Task{}, fmt.Errorf("store.UpdateTask: %w: %q", ErrTaskNotFound, id)
+		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w: %q", ErrTaskNotFound, id)
 	}
 	if t.ClaimLive(now) && t.ClaimedBy != actor {
-		return core.Task{}, fmt.Errorf("store.UpdateTask: %w: task %q held by %q",
+		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w: task %q held by %q",
 			ErrTaskClaimConflict, id, t.ClaimedBy)
+	}
+
+	res := TaskUpdateResult{From: t.Status}
+	res.RemovedDependsOn, res.AbsentDependsOn, err = removeDeps(ctx, tx, t.ID, remove)
+	if err != nil {
+		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w", err)
+	}
+	if patch.onlyRemovals() && len(res.RemovedDependsOn) == 0 {
+		// Nothing to change: answer the row as it stands, read inside this
+		// transaction (the pool has one connection), and roll back.
+		deps, err := dependsOnOf(ctx, tx, t.ID)
+		if err != nil {
+			return TaskUpdateResult{}, err
+		}
+		t.DependsOn = deps
+		res.Task, res.Unchanged = t, true
+		return res, nil
 	}
 
 	prevTitle, prevBody := t.Title, t.Body
@@ -179,34 +259,38 @@ func UpdateTask(ctx context.Context, db *sql.DB, id string, patch TaskPatch, act
 		 WHERE id = ?`,
 		t.Title, t.Body, t.ProjectSlug, string(t.Status), core.FormatTime(t.UpdatedAt), closedAt,
 		t.ClaimedBy, leaseAt, t.UpdatedAccount, t.ID); err != nil {
-		return core.Task{}, fmt.Errorf("store.UpdateTask: update: %w", err)
+		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: update: %w", err)
 	}
 	if err := addDeps(ctx, tx, t.ID, patch.AddDependsOn); err != nil {
-		return core.Task{}, err
+		return TaskUpdateResult{}, err
 	}
 	if _, err := recordCommitsTx(ctx, tx, CommitOwnerTask, t.ID, actor, patch.AddCommits, now); err != nil {
-		return core.Task{}, fmt.Errorf("store.UpdateTask: %w", err)
+		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w", err)
 	}
 	// Title, body, and project are all indexed, and a patch may change any of
 	// them; refreshing unconditionally keeps the mirror correct without the
 	// writer having to know which fields FTS reads.
 	if err := IndexTaskFTS(ctx, tx, t); err != nil {
-		return core.Task{}, fmt.Errorf("store.UpdateTask: %w", err)
+		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return core.Task{}, fmt.Errorf("store.UpdateTask: commit: %w", err)
+		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: commit: %w", err)
 	}
-	return TaskByID(ctx, db, id)
+	res.Task, err = TaskByID(ctx, db, id)
+	if err != nil {
+		return TaskUpdateResult{}, err
+	}
+	return res, nil
 }
 
 // taskTextAccount is a task's updated_account after a change: the restricted
 // account (peer_auth.restricted) whose words the title or body may still
 // carry, or "" when none can. It follows the text, the rule a memory's or
 // note's account label follows (mcp's accountAfter), and nothing else: a
-// status flip, a claim or release, a lease lapsing, a project move, a new
-// dependency, a recorded commit or a star keeps the value the row has, so the
-// owner closing a task an account rewrote leaves the label on, and an account
-// that only claimed the owner's task never puts one there.
+// status flip, a claim or release, a lease lapsing, a project move, a
+// dependency added or removed, a recorded commit or a star keeps the value the
+// row has, so the owner closing a task an account rewrote leaves the label on,
+// and an account that only claimed the owner's task never puts one there.
 //
 // writer is the account the change speaks for ("" for the owner). A
 // restricted account's change of the title or the body stamps its name. The

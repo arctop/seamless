@@ -281,7 +281,8 @@ RRF-fused, spanning durable knowledge AND the work record: memories, notes,
 tasks, trials, session findings),
 notes (`notes_create/read/update/append/delete`), projects (`project_list/create`),
 tasks (`tasks_add/update/ready/list` -- `tasks_list id=<id>` loads a single task
-by its globally-unique id -- plus `tasks_claim`/`tasks_release` for
+by its globally-unique id, and `tasks_update` adds and removes blockers with
+`add_depends_on`/`remove_depends_on` -- plus `tasks_claim`/`tasks_release` for
 atomic lease-based claiming), research lab (`lab_open`, `trial_record`,
 `trial_query`), gardener (`gardener_proposals`, `gardener_apply`, plus the
 natural-language `gardener_request` and the project-split planner

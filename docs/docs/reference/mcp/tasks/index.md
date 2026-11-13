@@ -34,6 +34,33 @@ the default `tasks_ready` and `tasks_list`. That keeps a twelve-step plan from
 burying the handful of tasks that are actually loose work. Pass `plan=<slug>` to
 either tool to see that plan's steps instead.
 
+## Changing a task's blockers
+
+`tasks_update` edits an existing task's schedule: `add_depends_on` adds blockers
+(each must exist and must not create a cycle) and `remove_depends_on` removes
+them, so a blocker that turned out to be the wrong task is dropped without
+re-creating the task under a new id - its dependents, and every note that cites
+it, keep the id they have. Removing a task's last unfinished blocker makes it
+ready. One call may not both add and remove the same id.
+
+The answer lists the ids it removed under `removed_depends_on`. An id that is
+not one of the task's blockers - another task, or no task at all - changes
+nothing and is listed under `not_depends_on`; a call whose only ask was such
+removals writes nothing, not even the task's `updated_at`. A removal is recorded
+in the task's history as a `task.transition` event under the acting session,
+with `removed_depends_on` beside `to` and `from` - every `tasks_update` event
+carries `from`, the status before the call, so an edit reads as an edit rather
+than a status move - and it never changes the task's `updated_account`. It is behind the
+same claim lock as every other update.
+
+A blocker the caller may not reach - under `peer_auth`, a task in a project the
+connection does not reach, the rule `add_depends_on` applies - is not one it can
+remove, and is listed under `not_depends_on` exactly as an id that names nothing
+would be. A caller that may write the task but not read it (outside a
+confidential project) may remove its blockers, but its answer is withheld like
+any other, with neither list: which ids were blockers is that project's
+dependency graph.
+
 ## Results and refusal modes
 
 Every successful task mutation returns the resulting task row, including its id,
@@ -56,7 +83,7 @@ withholds, gets the generic words.
 | Call | Refuses when |
 |---|---|
 | `tasks_add` | A blocker is missing or the new dependency would create a cycle |
-| `tasks_update` | Nothing was supplied to change, a new dependency is invalid, a `commits` entry is not a full commit id, or another live session holds the task |
+| `tasks_update` | Nothing was supplied to change, a new dependency is invalid, one id is both added and removed, a `commits` entry is not a full commit id, or another live session holds the task |
 | `tasks_claim` | The task is blocked, closed, or held by another live claimant; each error names the actual cause |
 | `tasks_release` | The acting session is not the holder; force release exists only on the owner console/CLI surface |
 
@@ -86,7 +113,7 @@ Add a task to the dependency-aware ready queue. depends_on lists task ids that m
 
 ## tasks_update {#tasks_update}
 
-Update a task: change status (open|in_progress|done|dropped), edit title/body, or add dependencies. Moving to done/dropped closes it and unblocks its dependents. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.
+Update a task: change status (open|in_progress|done|dropped), edit title/body, or add or remove dependencies. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -95,6 +122,7 @@ Update a task: change status (open|in_progress|done|dropped), edit title/body, o
 | `body` | string | no | new body (aliases: content, text) |
 | `commits` | array | no | Full ids of the commits that did this task's work, recorded on the task for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints (git rev-parse HEAD), never an abbreviation. Recording them is an update like any other: a task another session holds refuses it. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
 | `project` | string | no | reassign the task to another project slug (used when a split moves a project's open work to a child) |
+| `remove_depends_on` | array | no | task ids to remove as blockers (a comma-separated string is also accepted); an id that is not a blocker of this task is a no-op, named back in not_depends_on |
 | `session` | string | no | the acting agent's session (the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a session name); needed only to mutate a task you hold a live claim on when several agents are active |
 | `session_id` | string | no | the acting agent's session ULID; takes precedence over session and the bound session |
 | `status` | string | no | new status. One of: `open`, `in_progress`, `done`, `dropped`. |

@@ -122,3 +122,91 @@ func TestDispatch_BareFamilyNameListsItsSubcommands(t *testing.T) {
 	require.Equal(t, 2, dispatch(context.Background(), e, []string{"task", "bogus"}))
 	require.Contains(t, errb.String(), `unknown command "task bogus": valid values are task list`)
 }
+
+// task block and task unblock take the task id and at least one blocker, with
+// --session on either side, and send the blockers as tasks_update's
+// add_depends_on / remove_depends_on.
+func TestTaskParse_BlockerVerbs(t *testing.T) {
+	for _, sub := range []string{"block", "unblock"} {
+		_, err := parse(commands(), []string{"task", sub, "01AAA"})
+		require.Error(t, err, sub)
+		require.Contains(t, err.Error(), "missing argument: seam task "+sub+" requires <id> <blocker>...")
+
+		for _, argv := range [][]string{
+			{"task", sub, "--session", "cc/x", "01AAA", "01BBB", "01CCC"},
+			{"task", sub, "01AAA", "01BBB", "--session", "cc/x", "01CCC"},
+		} {
+			p, err := parse(commands(), argv)
+			require.NoError(t, err, "%v", argv)
+			require.Equal(t, []string{"01AAA", "01BBB", "01CCC"}, p.pos)
+			require.Equal(t, "cc/x", *p.opts.(*taskActorOpts).session)
+		}
+	}
+	require.Equal(t, "seam task unblock [--session NAME] <id> <blocker>...", synopsis(taskUnblockCmd))
+	require.Equal(t, "seam task block [--session NAME] <id> <blocker>...", synopsis(taskBlockCmd))
+}
+
+const (
+	task      = "01KDDDDDDDDDDDDDDDDDDDDDDD"
+	blocker   = "01KEEEEEEEEEEEEEEEEEEEEEEE"
+	stranger  = "01KGGGGGGGGGGGGGGGGGGGGGGG"
+	stranger2 = "01KHHHHHHHHHHHHHHHHHHHHHHH"
+)
+
+// What the verbs send and print, against the stand-in daemon: unblock names
+// what it removed and what was not a blocker (in full: the ids share their
+// leading characters), block names what the task now waits on, and a task
+// whose answer is withheld prints only the update.
+func TestTaskBlockers_SendAndPrint(t *testing.T) {
+	fx := newDaemonFixture(t, map[string]toolFunc{
+		"tasks_update": func(a map[string]any) toolReply {
+			switch {
+			case a["id"] == "01KWWWWWWWWWWWWWWWWWWWWWWW":
+				return toolReply{text: `{"id":"01KWWWWWWWWWWWWWWWWWWWWWWW","project":"example-vault","status":"open",` +
+					`"withheld":{"reason":"example","fields":["title"]}}`}
+			case a["add_depends_on"] != nil:
+				return toolReply{text: `{"id":"` + task + `","status":"open","depends_on":["` + blocker + `"]}`}
+			case len(a["remove_depends_on"].([]any)) == 1:
+				return toolReply{text: `{"id":"` + task + `","status":"open","removed_depends_on":["` + blocker + `"]}`}
+			}
+			return toolReply{text: `{"id":"` + task + `","status":"open","removed_depends_on":["` + blocker + `"],` +
+				`"not_depends_on":["` + stranger + `","` + stranger2 + `"]}`}
+		},
+	}, nil, "")
+
+	for _, tc := range []struct {
+		name   string
+		argv   []string
+		param  string
+		sent   []any
+		stdout string
+	}{
+		{"unblock one", []string{"task", "unblock", task, blocker}, "remove_depends_on", []any{blocker},
+			"task 01KDDDDD: removed blocker " + blocker + "\n"},
+		{"unblock with non-blockers, comma form", []string{"task", "unblock", task, blocker + ", " + stranger, stranger2},
+			"remove_depends_on", []any{blocker, stranger, stranger2},
+			"task 01KDDDDD: removed blocker " + blocker + "\n" +
+				"task 01KDDDDD: " + stranger + ", " + stranger2 + " are not blockers; nothing removed\n"},
+		{"block", []string{"task", "block", task, blocker}, "add_depends_on", []any{blocker},
+			"task 01KDDDDD now waits on " + blocker + "\n"},
+		{"unblock withheld", []string{"task", "unblock", "01KWWWWWWWWWWWWWWWWWWWWWWW", blocker}, "remove_depends_on", []any{blocker},
+			"task 01KWWWWW unblock -> open\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stdout, stderr, code := fx.run(t, tc.argv...)
+			require.Equal(t, 0, code, "stderr: %s", stderr)
+			require.Equal(t, tc.stdout, stdout)
+			call := fx.lastCall(t)
+			require.Equal(t, "tasks_update", call.name)
+			require.Equal(t, tc.sent, call.args[tc.param])
+			require.Equal(t, tc.argv[2], call.args["id"])
+		})
+	}
+
+	n := fx.callCount()
+	stdout, stderr, code := fx.run(t, "task", "unblock", task, " , ")
+	require.Equal(t, 1, code)
+	require.Empty(t, stdout)
+	require.Contains(t, stderr, "seam task unblock: no blocker id given")
+	require.Equal(t, n, fx.callCount(), "nothing was sent")
+}

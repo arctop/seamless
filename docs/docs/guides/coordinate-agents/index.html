@@ -261,6 +261,12 @@ once:</p>
 <code>open</code> or <code>in_progress</code>; either <code>done</code> or <code>dropped</code> unblocks a dependent, because
 work abandoned on purpose should not wedge the queue forever. Cycles are rejected
 at creation rather than discovered at scheduling time.</p>
+<p>A schedule is corrected in place. When a blocker turns out to be the wrong task,
+<code>tasks_update remove_depends_on=&lt;wrong&gt;</code> drops it and <code>add_depends_on=&lt;right&gt;</code>
+adds the right one (<code>seam task unblock</code> and <code>seam task block</code> from a shell), so
+the task keeps its id and nothing that cites it goes stale. Removing a task's
+last unfinished blocker makes it ready; naming an id that is not a blocker
+changes nothing and the answer says so.</p>
 <p>Every worker then runs the same loop, and needs no knowledge of the others:</p>
 <figure class="doc-figure" data-tone="ok" aria-labelledby="worker-loop-caption">
   <span class="figure-kicker">Worker loop</span>
