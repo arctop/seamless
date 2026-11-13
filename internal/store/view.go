@@ -87,6 +87,10 @@ var viewTables = []struct {
 	// one session: hidden with either (the hidden items hold every session and
 	// task id in a hidden project).
 	{"commit_records", "owner_id NOT IN %[3]s AND recorded_by NOT IN %[2]s"},
+	// A provenance stamp is about one item of one project: hidden with the item
+	// and with the project it is in. The project whose content it may hold is
+	// named, never hidden: a slug is no content.
+	{"item_provenance", "project_slug NOT IN %[1]s AND item_id NOT IN %[3]s"},
 }
 
 // payloadVisible keeps a row whose JSON payload mentions no hidden slug and no
@@ -109,6 +113,10 @@ var viewExempt = map[string]string{
 	// isolation.requests' read grants: the access page lists them beside the
 	// leases, metadata about a confidential project the console never hides.
 	"access_grants": "read grants of confidential projects: slugs, process keys, session ids and times; no corpus content",
+	// fenced-sessions: a conversation's moves into fenced projects and the
+	// flows between projects its approvals cleared, listed beside the grants.
+	"access_moves": "approved moves of a conversation into a fenced project: slugs, holder keys, session ids, the deciding proof and times; no corpus content",
+	"access_flows": "the flows between projects an approval cleared for one holder: slugs, holder keys, approval ids and times; no corpus content",
 	// The owner's approver credentials and enrollment codes: key material and
 	// hashes about no project at all.
 	"approver_credentials":  "approver credentials (passkeys, Touch ID keys): public keys and labels, about no project; no corpus content",

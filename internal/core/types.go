@@ -285,6 +285,11 @@ type Session struct {
 	// is set once, at creation, and the session -- its findings included --
 	// belongs to that principal alone (access.SessionAccountOK).
 	Account string `json:"account,omitempty"`
+	// ParentSessionID is the session this one continues: a move into a fenced
+	// project (isolation.requests) opens a child session there whose parent is
+	// the session the conversation left. "" for every other session. It is set
+	// once, at creation, and nothing changes it afterwards.
+	ParentSessionID string `json:"parentSessionId,omitempty"`
 	// Tokens is the real model token consumption harvested from the agent's
 	// transcript (Claude Code at SessionEnd, Codex every Stop) -- the actual burn,
 	// not the injection estimate. Zero until harvested, or for a client with no

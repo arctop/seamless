@@ -17,6 +17,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -29,6 +30,19 @@ import (
 // session or one agent process: it never comes near this many, and a lookup
 // that did would be a table growing without anyone approving it.
 const maxGrantRows = 200
+
+// The access a grant opens (migration 039): what the owner approved.
+const (
+	// GrantAccessRead reads the target, and never writes it: every grant from
+	// before migration 039, and the default.
+	GrantAccessRead = "read"
+	// GrantAccessWrite reads and writes the target, between confidential
+	// projects, as the owner chose on the approval.
+	GrantAccessWrite = "write"
+)
+
+// GrantAccesses is the canonical access set of a grant.
+var GrantAccesses = []string{GrantAccessRead, GrantAccessWrite}
 
 var (
 	// ErrGrantNotFound is a grant id with no row.
@@ -57,6 +71,19 @@ type GrantRequest struct {
 	Program    string
 
 	SessionID, SessionName, CWD, Repo, Model, Reason string
+
+	// Access is what the request asks for (migration 039): GrantAccessRead,
+	// GrantAccessWrite, or "" for read. The owner may approve another.
+	Access string
+	// Carry is what the request states (migration 039): Home is From, Holds
+	// names Project, and a write request's WriteTo names Project too. The zero
+	// Carry states nothing, as every request did before.
+	Carry Carry
+	// ConversationClient and ConversationID name the asking conversation
+	// without peer_auth (migration 039), both or neither: then the
+	// conversation, not SessionID, is the holder. SessionID still names the
+	// session that asked.
+	ConversationClient, ConversationID string
 }
 
 func validGrantRequest(r GrantRequest) error {
@@ -85,6 +112,27 @@ func validGrantRequest(r GrantRequest) error {
 			return fmt.Errorf("%w: %s is limited to %d bytes of valid UTF-8", ErrInvalidAccessRequest, f.name, maxAccessFieldBytes)
 		}
 	}
+	if r.Access != "" && !slices.Contains(GrantAccesses, r.Access) {
+		return fmt.Errorf("%w: access %q: valid values are %s", ErrInvalidAccessRequest, r.Access, strings.Join(GrantAccesses, ", "))
+	}
+	if r.ConversationClient != "" || r.ConversationID != "" {
+		if _, err := HolderOfConversation(r.ConversationClient, r.ConversationID); err != nil {
+			return err
+		}
+	}
+	if !r.Carry.IsZero() {
+		c, err := CarryOf(r.Carry.Home, r.Carry.Holds, r.Carry.WriteTo)
+		switch {
+		case err != nil:
+			return err
+		case c.Home != r.From:
+			return fmt.Errorf("%w: the carry's home %q is not the asking project %q", ErrInvalidAccessRequest, c.Home, r.From)
+		case !slices.Contains(c.Holds, r.Project):
+			return fmt.Errorf("%w: the carry does not hold %q, the project it asks for", ErrInvalidAccessRequest, r.Project)
+		case r.Access == GrantAccessWrite && !slices.Contains(c.WriteTo, r.Project):
+			return fmt.Errorf("%w: a write request's carry does not write to %q", ErrInvalidAccessRequest, r.Project)
+		}
+	}
 	return nil
 }
 
@@ -103,13 +151,23 @@ func CreateGrantRequest(ctx context.Context, db *sql.DB, req GrantRequest, now t
 		return AccessApproval{}, fmt.Errorf("store.CreateGrantRequest: challenge: %w", err)
 	}
 	now = now.UTC()
+	asked := req.Access
+	if asked == "" {
+		asked = GrantAccessRead
+	}
+	carry, err := carryJSON(req.Carry)
+	if err != nil {
+		return AccessApproval{}, fmt.Errorf("store.CreateGrantRequest: %w", err)
+	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO access_approvals (id, project_slug, kind, challenge, status,
 		requested_at, expires_at, lease_seconds, peer_uid, peer_pid, process_key, program,
-		session_id, session_name, cwd, repo, model, reason, from_project)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		session_id, session_name, cwd, repo, model, reason, from_project,
+		requested_access, carry, conversation_client, conversation_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, req.Project, AccessKindGrant, challenge, ApprovalPending, core.FormatTime(now), core.FormatTime(now.Add(req.TTL)),
 		int64(req.Lease/time.Second), int64(req.PeerUID), int64(req.PeerPID), req.ProcessKey, req.Program,
-		req.SessionID, req.SessionName, req.CWD, req.Repo, req.Model, req.Reason, req.From); err != nil {
+		req.SessionID, req.SessionName, req.CWD, req.Repo, req.Model, req.Reason, req.From,
+		asked, carry, req.ConversationClient, req.ConversationID); err != nil {
 		return AccessApproval{}, fmt.Errorf("store.CreateGrantRequest: %w", err)
 	}
 	stored, err := AccessApprovalByID(ctx, db, id)
@@ -219,6 +277,19 @@ type AccessGrant struct {
 
 	RevokedAt     *time.Time
 	RevokedReason string
+
+	// Access is what the owner approved (migration 039): GrantAccessRead, or
+	// GrantAccessWrite.
+	Access string
+	// ConversationClient and ConversationID name the conversation it was
+	// granted to without peer_auth (migration 039), both "" otherwise.
+	ConversationClient, ConversationID string
+}
+
+// Holder is who the grant belongs to: its process under peer_auth, else its
+// conversation, else its session.
+func (g AccessGrant) Holder() Holder {
+	return holderOfRow(g.ProcessKey, g.ConversationClient, g.ConversationID, g.SessionID)
 }
 
 // Grant is the row as the access layer judges it.
@@ -246,7 +317,7 @@ func AccessGrants(rows []AccessGrant) []access.Grant {
 }
 
 const grantCols = `id, project_slug, from_project, process_key, session_id, peer_uid, peer_pid, approval_id,
-	decided_by, granted_at, expires_at, revoked_at, revoked_reason`
+	decided_by, granted_at, expires_at, revoked_at, revoked_reason, access, conversation_client, conversation_id`
 
 func scanGrants(rows *sql.Rows) ([]AccessGrant, error) {
 	var out []AccessGrant
@@ -268,7 +339,8 @@ func scanGrant(row interface{ Scan(...any) error }) (AccessGrant, error) {
 		uid, pid         int64
 	)
 	if err := row.Scan(&g.ID, &g.Project, &g.FromProject, &g.ProcessKey, &g.SessionID, &uid, &pid, &g.ApprovalID,
-		&g.DecidedBy, &granted, &expires, &revoked, &g.RevokedReason); err != nil {
+		&g.DecidedBy, &granted, &expires, &revoked, &g.RevokedReason, &g.Access,
+		&g.ConversationClient, &g.ConversationID); err != nil {
 		return AccessGrant{}, err
 	}
 	var err error
@@ -290,7 +362,8 @@ func scanGrant(row interface{ Scan(...any) error }) (AccessGrant, error) {
 }
 
 // ApproveAccessGrant turns a pending grant request into a grant, in one
-// transaction, and is the only writer of one: the request must be of kind
+// transaction, and is (with GrantAccessApprove, through the same transaction)
+// the only writer of one: the request must be of kind
 // grant, pending, before its deadline, and carry exactly the challenge the
 // decision was made over (so a proof over one request can never approve
 // another). Single use: a second approve of the same id is
@@ -299,15 +372,40 @@ func scanGrant(row interface{ Scan(...any) error }) (AccessGrant, error) {
 // extended. decidedBy names the proof that decided; length is the grant's
 // length, a whole number of seconds, or 0 for the length the request carried.
 //
+// The grant reads only (GrantAccessRead), whatever the request asked: the
+// decision it records binds no access. It records no flow either; the grant
+// row implies its own (HolderFlows). GrantAccessApprove is the approval that
+// binds the owner's chosen access and the request's carry.
+//
 // A request found past its deadline is marked expired, and the call returns
 // ErrApprovalExpired.
 func ApproveAccessGrant(ctx context.Context, db *sql.DB, id string, challenge []byte, decidedBy string, length time.Duration, now time.Time) (AccessGrant, error) {
-	const op = "store.ApproveAccessGrant"
+	return grantAccessApprove(ctx, db, "store.ApproveAccessGrant", id, challenge, decidedBy, length, GrantAccessRead, false, now)
+}
+
+// GrantAccessApprove is ApproveAccessGrant with the access the owner chose on
+// the approval (GrantAccessRead or GrantAccessWrite), bound by the decision's
+// proof, and the request's carry (isolation.requests, migration 039). In the
+// same transaction it records the flows the carry lists as approved: the
+// target held, and a write destination exactly when the owner chose write
+// (whatever the request asked) -- each held project into each write
+// destination (Carry.Flows). A request without a carry records the grant
+// alone, whose own flows HolderFlows implies.
+func GrantAccessApprove(ctx context.Context, db *sql.DB, id string, challenge []byte, decidedBy string, length time.Duration, grantAccess string, now time.Time) (AccessGrant, error) {
+	return grantAccessApprove(ctx, db, "store.GrantAccessApprove", id, challenge, decidedBy, length, grantAccess, true, now)
+}
+
+// grantAccessApprove is the one approve transaction of a grant request.
+func grantAccessApprove(ctx context.Context, db *sql.DB, op, id string, challenge []byte, decidedBy string, length time.Duration,
+	grantAccess string, withFlows bool, now time.Time) (AccessGrant, error) {
 	if decidedBy == "" {
 		return AccessGrant{}, fmt.Errorf("%s: %w: no deciding proof named", op, ErrInvalidAccessRequest)
 	}
 	if length < 0 || length%time.Second != 0 {
 		return AccessGrant{}, fmt.Errorf("%s: %w: grant %s is not a whole number of seconds", op, ErrInvalidAccessRequest, length)
+	}
+	if !slices.Contains(GrantAccesses, grantAccess) {
+		return AccessGrant{}, fmt.Errorf("%s: %w: access %q: valid values are %s", op, ErrInvalidAccessRequest, grantAccess, strings.Join(GrantAccesses, ", "))
 	}
 	now = now.UTC()
 	tx, err := db.BeginTx(ctx, nil)
@@ -322,7 +420,7 @@ func ApproveAccessGrant(ctx context.Context, db *sql.DB, id string, challenge []
 	case err != nil:
 		return AccessGrant{}, fmt.Errorf("%s: %w", op, err)
 	case a.Kind != AccessKindGrant:
-		return AccessGrant{}, fmt.Errorf("%s: %w: %s is a lock's request, not a read grant's", op, ErrInvalidAccessRequest, id)
+		return AccessGrant{}, fmt.Errorf("%s: %w: %s is a %s request, not a read grant's", op, ErrInvalidAccessRequest, id, a.Kind)
 	case a.Status != ApprovalPending:
 		return AccessGrant{}, fmt.Errorf("%s: %w: %s is %s", op, ErrApprovalNotPending, id, a.Status)
 	}
@@ -338,8 +436,17 @@ func ApproveAccessGrant(ctx context.Context, db *sql.DB, id string, challenge []
 	if len(challenge) != AccessChallengeBytes || subtle.ConstantTimeCompare(challenge, a.Challenge) != 1 {
 		return AccessGrant{}, fmt.Errorf("%s: %w", op, ErrApprovalChallenge)
 	}
-	if a.FromProject == "" || a.FromProject == a.Project || (a.ProcessKey == "" && a.SessionID == "") {
+	holder := a.Holder()
+	if a.FromProject == "" || a.FromProject == a.Project || (a.ProcessKey == "" && a.SessionID == "") || holder.IsZero() {
 		return AccessGrant{}, fmt.Errorf("%s: %w: %s names no holder or project to open it to", op, ErrInvalidAccessRequest, id)
+	}
+	var flows []FlowPair
+	if withFlows && !a.Carry.IsZero() {
+		if a.Carry.Home != a.FromProject {
+			return AccessGrant{}, fmt.Errorf("%s: %w: %s states the home %q, not its asking project %q",
+				op, ErrInvalidAccessRequest, id, a.Carry.Home, a.FromProject)
+		}
+		flows = a.Carry.with(a.Project, grantAccess == GrantAccessWrite).Flows()
 	}
 	grantID, err := core.NewID()
 	if err != nil {
@@ -357,11 +464,7 @@ func ApproveAccessGrant(ctx context.Context, db *sql.DB, id string, challenge []
 	if n != 1 {
 		return AccessGrant{}, fmt.Errorf("%s: %w: %s", op, ErrApprovalNotPending, id)
 	}
-	var keys []string
-	if a.ProcessKey != "" {
-		keys = []string{a.ProcessKey}
-	}
-	clause, args, _, err := holderClause(keys, a.SessionID)
+	clause, args, _, err := holderAccessClause([]Holder{holder})
 	if err != nil {
 		return AccessGrant{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -374,15 +477,23 @@ func ApproveAccessGrant(ctx context.Context, db *sql.DB, id string, challenge []
 	g := AccessGrant{
 		ID: grantID, Project: a.Project, FromProject: a.FromProject, ProcessKey: a.ProcessKey, SessionID: a.SessionID,
 		PeerUID: a.PeerUID, PeerPID: a.PeerPID, ApprovalID: a.ID, DecidedBy: decidedBy, GrantedAt: now, ExpiresAt: now.Add(a.Lease),
+		Access: grantAccess, ConversationClient: a.ConversationClient, ConversationID: a.ConversationID,
 	}
 	if length > 0 {
 		g.ExpiresAt = now.Add(length)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO access_grants (id, project_slug, from_project, process_key, session_id,
-		peer_uid, peer_pid, approval_id, decided_by, granted_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		peer_uid, peer_pid, approval_id, decided_by, granted_at, expires_at, access, conversation_client, conversation_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		g.ID, g.Project, g.FromProject, g.ProcessKey, g.SessionID, int64(g.PeerUID), int64(g.PeerPID), g.ApprovalID,
-		g.DecidedBy, core.FormatTime(g.GrantedAt), core.FormatTime(g.ExpiresAt)); err != nil {
+		g.DecidedBy, core.FormatTime(g.GrantedAt), core.FormatTime(g.ExpiresAt), g.Access,
+		g.ConversationClient, g.ConversationID); err != nil {
 		return AccessGrant{}, fmt.Errorf("%s: %w", op, err)
+	}
+	if len(flows) > 0 {
+		if _, err := flowRecordTx(ctx, tx, holder, a.ID, flows, now); err != nil {
+			return AccessGrant{}, fmt.Errorf("%s: %w", op, err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return AccessGrant{}, fmt.Errorf("%s: commit: %w", op, err)
@@ -412,6 +523,32 @@ func AccessGrantsForHolder(ctx context.Context, db *sql.DB, processKeys []string
 	out, err := scanGrants(rows)
 	if err != nil {
 		return nil, fmt.Errorf("store.AccessGrantsForHolder: %w", err)
+	}
+	return out, nil
+}
+
+// HolderAccessGrants returns every grant any of holders was ever approved --
+// live, expired and revoked alike, newest first, at most maxGrantRows -- by the
+// holder each row names (Holder): a conversation's grants never answer for the
+// session that asked, nor a session's for a conversation. With no holder it
+// returns none.
+func HolderAccessGrants(ctx context.Context, db *sql.DB, holders []Holder) ([]AccessGrant, error) {
+	clause, args, ok, err := holderAccessClause(holders)
+	if err != nil {
+		return nil, fmt.Errorf("store.HolderAccessGrants: %w", err)
+	}
+	if !ok {
+		return nil, nil
+	}
+	rows, err := db.QueryContext(ctx, `SELECT `+grantCols+` FROM access_grants WHERE `+clause+`
+		ORDER BY granted_at DESC, id DESC LIMIT `+fmt.Sprint(maxGrantRows), args...)
+	if err != nil {
+		return nil, fmt.Errorf("store.HolderAccessGrants: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out, err := scanGrants(rows)
+	if err != nil {
+		return nil, fmt.Errorf("store.HolderAccessGrants: %w", err)
 	}
 	return out, nil
 }

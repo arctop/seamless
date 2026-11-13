@@ -36,11 +36,17 @@ const (
 	// (isolation.requests; grants.go). It is filed by CreateGrantRequest and
 	// approved by ApproveAccessGrant only: it never becomes a lease.
 	AccessKindGrant = "grant"
+	// AccessKindMove is a conversation's request to move into a fenced project
+	// for good (isolation.requests, migration 039; moves.go). It is filed by
+	// MoveRequestCreate and approved by MoveApprove only: it never becomes a
+	// lease or a grant.
+	AccessKindMove = "move"
 )
 
 // AccessKinds is the canonical kind set of a LOCK's requests, the ones
 // CreateAccessApproval files and ApproveAccess turns into a lease. A grant
-// request (AccessKindGrant) is deliberately not in it.
+// request (AccessKindGrant) and a move request (AccessKindMove) are
+// deliberately not in it.
 var AccessKinds = []string{AccessKindRequest, AccessKindRefresh}
 
 // Approval statuses.
@@ -135,8 +141,23 @@ type AccessApproval struct {
 	SessionID, SessionName, CWD, Repo, Model, Reason string
 
 	// FromProject is a grant request's asking project (migration 034): the
-	// grant opens Project to sessions working there. "" for a lock's request.
+	// grant opens Project to sessions working there. For a move request it is
+	// the home the conversation would leave ("" for the global scope). "" for a
+	// lock's request.
 	FromProject string
+
+	// RequestedAccess is the access a grant request asks for (migration 039):
+	// GrantAccessRead or GrantAccessWrite. A lock's request and a move keep
+	// GrantAccessRead, which they do not use.
+	RequestedAccess string
+	// Carry is what a grant or move request states, which its approval binds
+	// (migration 039); the zero Carry for a lock's request and every row from
+	// before the migration.
+	Carry Carry
+	// ConversationClient and ConversationID name the conversation that asked
+	// (migration 039): both "" (a process or a session asked) or both set.
+	// Holder derives the row's holder from them and the columns above.
+	ConversationClient, ConversationID string
 
 	DecidedAt *time.Time
 	DecidedBy string
@@ -240,7 +261,7 @@ func CreateAccessApproval(ctx context.Context, db *sql.DB, req AccessRequest, no
 
 const approvalCols = `id, project_slug, kind, challenge, status, requested_at, expires_at, lease_seconds,
 	peer_uid, peer_pid, process_key, program, session_id, session_name, cwd, repo, model, reason,
-	decided_at, decided_by, lease_id, from_project`
+	decided_at, decided_by, lease_id, from_project, requested_access, carry, conversation_client, conversation_id`
 
 func scanApproval(row interface{ Scan(...any) error }) (AccessApproval, error) {
 	var (
@@ -249,13 +270,18 @@ func scanApproval(row interface{ Scan(...any) error }) (AccessApproval, error) {
 		decided            sql.NullString
 		leaseSecs          int64
 		uid, pid           int64
+		carry              string
 	)
 	if err := row.Scan(&a.ID, &a.Project, &a.Kind, &a.Challenge, &a.Status, &requested, &expires, &leaseSecs,
 		&uid, &pid, &a.ProcessKey, &a.Program, &a.SessionID, &a.SessionName, &a.CWD, &a.Repo, &a.Model, &a.Reason,
-		&decided, &a.DecidedBy, &a.LeaseID, &a.FromProject); err != nil {
+		&decided, &a.DecidedBy, &a.LeaseID, &a.FromProject, &a.RequestedAccess, &carry,
+		&a.ConversationClient, &a.ConversationID); err != nil {
 		return AccessApproval{}, err
 	}
 	var err error
+	if a.Carry, err = carryFromJSON(carry); err != nil {
+		return AccessApproval{}, fmt.Errorf("approval %s carry: %w", a.ID, err)
+	}
 	if a.RequestedAt, err = core.ParseTime(requested); err != nil {
 		return AccessApproval{}, fmt.Errorf("approval %s requested_at: %w", a.ID, err)
 	}
@@ -274,6 +300,12 @@ func scanApproval(row interface{ Scan(...any) error }) (AccessApproval, error) {
 	return a, nil
 }
 
+// Holder is who the request belongs to: its process under peer_auth, else its
+// conversation, else its session (the zero Holder when it names none).
+func (a AccessApproval) Holder() Holder {
+	return holderOfRow(a.ProcessKey, a.ConversationClient, a.ConversationID, a.SessionID)
+}
+
 // AccessApprovalByID loads one approval.
 func AccessApprovalByID(ctx context.Context, db *sql.DB, id string) (AccessApproval, error) {
 	a, err := scanApproval(db.QueryRowContext(ctx, `SELECT `+approvalCols+` FROM access_approvals WHERE id = ?`, id))
@@ -289,11 +321,15 @@ func AccessApprovalByID(ctx context.Context, db *sql.DB, id string) (AccessAppro
 // PendingAccessApproval returns the newest lock request still waiting for a
 // decision at now for this process and project, so a repeated request can
 // answer with the link it already has instead of piling up challenges. A
-// grant request is never one (PendingGrantRequest finds those).
+// grant or move request is never one (PendingGrantRequest finds grants).
 func PendingAccessApproval(ctx context.Context, db *sql.DB, processKey, project string, now time.Time) (AccessApproval, bool, error) {
+	args := []any{processKey, project, ApprovalPending, core.FormatTime(now)}
+	for _, k := range AccessKinds {
+		args = append(args, k)
+	}
 	a, err := scanApproval(db.QueryRowContext(ctx, `SELECT `+approvalCols+` FROM access_approvals
-		WHERE process_key = ? AND project_slug = ? AND status = ? AND expires_at > ? AND kind <> ?
-		ORDER BY requested_at DESC, id DESC LIMIT 1`, processKey, project, ApprovalPending, core.FormatTime(now), AccessKindGrant))
+		WHERE process_key = ? AND project_slug = ? AND status = ? AND expires_at > ? AND kind IN (`+placeholders(len(AccessKinds))+`)
+		ORDER BY requested_at DESC, id DESC LIMIT 1`, args...))
 	if errors.Is(err, sql.ErrNoRows) {
 		return AccessApproval{}, false, nil
 	}
@@ -306,11 +342,15 @@ func PendingAccessApproval(ctx context.Context, db *sql.DB, processKey, project 
 // LastAccessApproval returns the newest lock request for this process and
 // project, whatever its status: a refusal reads it to tell a request the owner
 // denied -- which it then names, filing nothing -- from one that only lapsed.
-// A grant request is never one (LastGrantRequest finds those).
+// A grant or move request is never one (LastGrantRequest finds grants).
 func LastAccessApproval(ctx context.Context, db *sql.DB, processKey, project string) (AccessApproval, bool, error) {
+	args := []any{processKey, project}
+	for _, k := range AccessKinds {
+		args = append(args, k)
+	}
 	a, err := scanApproval(db.QueryRowContext(ctx, `SELECT `+approvalCols+` FROM access_approvals
-		WHERE process_key = ? AND project_slug = ? AND kind <> ?
-		ORDER BY requested_at DESC, id DESC LIMIT 1`, processKey, project, AccessKindGrant))
+		WHERE process_key = ? AND project_slug = ? AND kind IN (`+placeholders(len(AccessKinds))+`)
+		ORDER BY requested_at DESC, id DESC LIMIT 1`, args...))
 	if errors.Is(err, sql.ErrNoRows) {
 		return AccessApproval{}, false, nil
 	}
@@ -441,6 +481,10 @@ func ApproveAccessFor(ctx context.Context, db *sql.DB, id string, challenge []by
 	case a.Kind == AccessKindGrant:
 		// A read grant is never a lease: ApproveAccessGrant is its one writer.
 		return AccessLease{}, fmt.Errorf("store.ApproveAccess: %w: %s is a read grant request, not a lock's", ErrInvalidAccessRequest, id)
+	case !slices.Contains(AccessKinds, a.Kind):
+		// Nor is a move (MoveApprove is its one writer), or any kind a later
+		// release files: only a lock's request becomes a lease.
+		return AccessLease{}, fmt.Errorf("store.ApproveAccess: %w: %s is a %s request, not a lock's", ErrInvalidAccessRequest, id, a.Kind)
 	}
 	if !a.ExpiresAt.After(now) {
 		if err := expireApprovalTx(ctx, tx, id, now); err != nil {

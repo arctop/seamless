@@ -55,6 +55,10 @@ import (
 //   - access_grants: read grants of confidential projects, bound to this
 //     machine's sessions and processes; merging one would be a grant nobody
 //     approved here.
+//   - access_moves, access_flows: a conversation's moves into fenced projects
+//     and the flows its approvals cleared, bound to this machine's
+//     conversations, processes and approvals (none of which a merge carries);
+//     merging one would be a clearance nobody approved here.
 //   - mcp_sessions: what this machine's own connections declared, keyed by
 //     connection ids that mean nothing anywhere else.
 //   - schema_migrations: the destination's own migration history.
@@ -66,8 +70,26 @@ import (
 // commit_records rides with the sessions and tasks it hangs off, as task_deps
 // does: it holds commit ids, no path, and a merged session or task without its
 // recorded commits would read as work that recorded none.
+//
+// item_provenance rides the same way. A provenance stamp ("may contain content
+// from <project>") is a warning, never a permission: nothing judges a
+// conversation's reach or clearance from it. Tasks and session findings carry
+// their stamp only in this table, so a merge without it would hand over
+// confidential work that reads as unstamped; memories and notes carry theirs
+// in frontmatter too, and the table's key (item_kind, item_id, source_project)
+// makes the row pass and the files pass agree. Two leftovers are expected and
+// harmless: a stamp for an item the merge skipped is an orphan nothing joins,
+// and a stamp's approval_id names an approval the merge does not carry. The
+// table stays empty until the stamps are written (plan fenced-sessions, step
+// P6, behind isolation.requests).
+//
+// sessions carries parent_session_id (a move's child names the session it
+// continued) as written. A child whose parent the merge skipped keeps a
+// pointer to a session that is not here: nothing follows it to decide
+// anything, and a reader treats it as "parent not here".
 var mergeTables = []string{
 	"projects", "sessions", "tasks", "task_deps", "trials", "events", "gardener_proposals", "commit_records",
+	"item_provenance",
 }
 
 // uniqueNameColumns are the UNIQUE columns whose collisions are worth naming in

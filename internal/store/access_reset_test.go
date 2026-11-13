@@ -84,3 +84,46 @@ func TestResetRestoredAccess_ADatabaseWithoutTheTables(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, got.Total())
 }
+
+// Moves, flows and provenance stamps are history, not live permissions: a
+// restore ends the grants it brings back and keeps all three, so a label never
+// shrinks and a stamp is never stripped. The grant's row stays too, revoked,
+// and keeps implying its flows.
+func TestMigration039_ResetRestoredAccessKeepsHistory(t *testing.T) {
+	db := leaseDB(t)
+	ctx := context.Background()
+	conv := migration039Conversation(t)
+	ra, rg := flowApproved(t, db, flowGrantReq(t, "example-legal", "example-dataroom", "",
+		[]string{"example-dataroom", "example-legal"}, []string{"example-dataroom"}), GrantAccessRead, migration039Now)
+	_, mv := moveApproved(t, db, moveReq("example-vault", "example-dataroom", "example-dataroom", "example-legal"))
+	require.NoError(t, ProvenanceUpsert(ctx, db, ProvenanceStamp{ItemKind: "task", ItemID: "01TASK", Project: "example-vault",
+		Source: "example-legal", ApprovalID: ra.ID}, migration039Now))
+	flowsBefore, err := HolderFlows(ctx, db, []Holder{conv})
+	require.NoError(t, err)
+	labelBefore, err := HolderLabel(ctx, db, []Holder{conv}, "example-vault")
+	require.NoError(t, err)
+	counts := func() [3]int {
+		return [3]int{migration039Count(t, db, "access_moves"), migration039Count(t, db, "access_flows"),
+			migration039Count(t, db, "item_provenance")}
+	}
+	before := counts()
+	require.Equal(t, [3]int{1, 3, 1}, before)
+
+	got, err := ResetRestoredAccess(ctx, db, migration039Now.Add(time.Minute))
+	require.NoError(t, err)
+	require.Equal(t, RestoredAccess{Grants: 1}, got)
+	g, err := AccessGrantByID(ctx, db, rg.ID)
+	require.NoError(t, err)
+	require.Equal(t, LeaseRevokedReset, g.RevokedReason)
+
+	require.Equal(t, before, counts(), "no move, flow or stamp ends")
+	flowsAfter, err := HolderFlows(ctx, db, []Holder{conv})
+	require.NoError(t, err)
+	require.Equal(t, flowsBefore, flowsAfter)
+	labelAfter, err := HolderLabel(ctx, db, []Holder{conv}, "example-vault")
+	require.NoError(t, err)
+	require.Equal(t, labelBefore, labelAfter)
+	moves, err := MovesForHolder(ctx, db, []Holder{conv})
+	require.NoError(t, err)
+	require.Equal(t, []Move{mv}, moves)
+}

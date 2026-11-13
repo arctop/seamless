@@ -22,6 +22,15 @@ func (r RestoredAccess) Total() int64 { return r.Leases + r.Unlocks + r.Grants }
 // that kept them would reopen what the owner had closed. It fails closed:
 // locked projects' agents and browsers ask again.
 //
+// It leaves the history alone: a conversation's moves, the flows its
+// approvals cleared and the provenance stamps of what it wrote (access_moves,
+// access_flows and item_provenance, migration 039). None of them is a
+// permission the owner can have closed since the snapshot -- no owner action
+// ends one, and revocation and expiry never delete one -- so keeping them
+// reopens nothing, while ending one would only shrink a conversation's label
+// or strip a stamp: the one direction a restore must never move. Ended grants
+// stay too, as revoked rows, so what they confined and implied survives.
+//
 // Both restores call it: seamlessd import (internal/archive), on a database it
 // has migrated forward, and an update rollback that puts the pre-update
 // database back (cmd/seamlessd), on one it opened without migrating. The

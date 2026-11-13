@@ -469,6 +469,7 @@ func TestImport_Merge(t *testing.T) {
 	require.Equal(t, map[string]int{
 		"projects": 1, "sessions": 1, "tasks": 2, "task_deps": 1,
 		"trials": 1, "events": 1, "gardener_proposals": 0, "commit_records": 1,
+		"item_provenance": 0,
 	}, rep.Rows)
 	require.Zero(t, rep.Projects, "the archive's own projects row carried the slug")
 
@@ -620,6 +621,101 @@ func TestImport_MergeDryRunAccountsForItsOwnPendingWrites(t *testing.T) {
 	require.Equal(t, "memory/_global/same-name.md", live.PathCollisions[0].Path)
 	require.Equal(t, "01MEMSECOND", live.PathCollisions[0].IncomingID)
 	require.Equal(t, "01MEMFIRST", live.PathCollisions[0].ExistingID)
+}
+
+// An archive a release before migration 039 wrote merges into this one: the
+// staged snapshot migrates forward, so its sessions arrive continuing no other
+// and it carries no stamps. (The other way round, an archive this release
+// writes is refused by an older one as a newer schema: ErrSchemaTooNew.)
+func TestImport_MergeAnArchiveFromBefore039(t *testing.T) {
+	ctx := context.Background()
+	src := seedIndexed(t, specA)
+	db, err := store.OpenExisting(filepath.Join(src, DBName))
+	require.NoError(t, err)
+	// Put the snapshot back in schema 38's shape: what 039 added, gone.
+	for _, q := range []string{
+		`DROP INDEX idx_sessions_parent`, `DROP INDEX idx_sessions_conversation`,
+		`ALTER TABLE sessions DROP COLUMN parent_session_id`,
+		`DROP INDEX idx_access_approvals_conversation`,
+		`ALTER TABLE access_approvals DROP COLUMN conversation_id`, `ALTER TABLE access_approvals DROP COLUMN conversation_client`,
+		`ALTER TABLE access_approvals DROP COLUMN carry`, `ALTER TABLE access_approvals DROP COLUMN requested_access`,
+		`DROP INDEX idx_access_grants_conversation`,
+		`ALTER TABLE access_grants DROP COLUMN conversation_id`, `ALTER TABLE access_grants DROP COLUMN conversation_client`,
+		`ALTER TABLE access_grants DROP COLUMN access`,
+		`DROP TABLE item_provenance`, `DROP TABLE access_flows`, `DROP TABLE access_moves`,
+		`DELETE FROM schema_migrations WHERE version >= 39`,
+	} {
+		_, err := db.ExecContext(ctx, q)
+		require.NoError(t, err, q)
+	}
+	v, err := store.SchemaVersion(db)
+	require.NoError(t, err)
+	require.Equal(t, 38, v)
+	require.NoError(t, db.Close())
+
+	data := exportOf(t, src)
+	dst := seedIndexed(t, specB)
+	rep, err := Import(ctx, ImportOptions{DataDir: dst, Src: bytes.NewReader(data)})
+	require.NoError(t, err)
+	require.Equal(t, ModeMerge, rep.Mode)
+	require.Equal(t, 1, rep.Rows["sessions"])
+	require.Zero(t, rep.Rows["item_provenance"])
+
+	out, err := store.OpenExisting(filepath.Join(dst, DBName))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, out.Close()) }()
+	s, found, err := store.SessionByID(ctx, out, specA.sessionID)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Empty(t, s.ParentSessionID)
+	var null int
+	require.NoError(t, out.QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions WHERE id = ? AND parent_session_id IS NULL`,
+		specA.sessionID).Scan(&null))
+	require.Equal(t, 1, null)
+}
+
+// A provenance stamp rides with the items it stamps (mergeTables): a merge
+// carries it, a dry run predicts it, and the same archive imported again adds
+// no second copy, the stamp's key being the item, its kind and the source. The
+// approval it names stays named although approvals are never merged.
+func TestImport_MergeCarriesProvenanceStamps(t *testing.T) {
+	ctx := context.Background()
+	src := seedIndexed(t, specA)
+	srcDB, err := store.Open(filepath.Join(src, DBName))
+	require.NoError(t, err)
+	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	for _, s := range []store.ProvenanceStamp{
+		{ItemKind: core.ItemKindTask, ItemID: specA.taskA, Project: specA.project, Source: "example-finance", ApprovalID: "01APPROVALFIN"},
+		{ItemKind: core.ItemKindMemory, ItemID: specA.memID, Project: specA.project, Source: "example-finance", ApprovalID: "01APPROVALFIN"},
+		{ItemKind: core.ItemKindSession, ItemID: specA.sessionID, Project: specA.project, Source: "example-legal", ApprovalID: "01APPROVALLEG"},
+	} {
+		require.NoError(t, store.ProvenanceUpsert(ctx, srcDB, s, now))
+	}
+	require.NoError(t, srcDB.Close())
+	data := exportOf(t, src)
+
+	dry, err := Import(ctx, ImportOptions{DataDir: seedIndexed(t, specB), Src: bytes.NewReader(data), DryRun: true})
+	require.NoError(t, err)
+	dst := seedIndexed(t, specB)
+	live, err := Import(ctx, ImportOptions{DataDir: dst, Src: bytes.NewReader(data)})
+	require.NoError(t, err)
+	require.Equal(t, 3, live.Rows["item_provenance"])
+	require.Equal(t, live.Rows["item_provenance"], dry.Rows["item_provenance"], "the dry run predicts the stamps")
+
+	db, err := store.OpenExisting(filepath.Join(dst, DBName))
+	require.NoError(t, err)
+	got, err := store.ProvenanceForItem(ctx, db, core.ItemKindTask, specA.taskA)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, specA.project, got[0].Project)
+	require.Equal(t, "example-finance", got[0].Source)
+	require.Equal(t, "01APPROVALFIN", got[0].ApprovalID)
+	require.NoError(t, db.Close())
+
+	again, err := Import(ctx, ImportOptions{DataDir: dst, Src: bytes.NewReader(data)})
+	require.NoError(t, err)
+	require.Zero(t, again.Rows["item_provenance"], "the same archive again adds no second stamp")
+	require.Equal(t, 3, countsOf(t, dst)["item_provenance"])
 }
 
 // TestImport_MergeLeavesTablesOutsideTheContractAlone generalizes the settings
