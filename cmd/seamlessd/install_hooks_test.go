@@ -878,8 +878,13 @@ func TestClaudeMCPAddArgs_SocketUsesTheBridge(t *testing.T) {
 // sharedClientConfig writes a peer_auth client config (no key) outside the
 // home, as the shared /opt/seamless/etc/client.yaml would be, and returns its
 // path. SEAMLESS_CONFIG is registered for restore first: --config exports it.
+// It skips the test on Windows, where no unix:/// server_url is an absolute
+// path: a socket client is a Unix install.
 func sharedClientConfig(t *testing.T) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("a socket server_url names a Unix path")
+	}
 	t.Setenv("SEAMLESS_CONFIG", "")
 	require.NoError(t, os.Unsetenv("SEAMLESS_CONFIG"))
 	path := filepath.Join(t.TempDir(), "etc", "client.yaml")
