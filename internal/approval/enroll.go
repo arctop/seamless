@@ -89,7 +89,10 @@ type Config struct {
 
 // Service runs enrollments. It is safe for concurrent use.
 type Service struct {
-	cfg         Config
+	cfg Config
+	// lockless is the advisory read grants' own service (NewGrants without
+	// peer_auth): nothing is locked there, whatever a table remembers.
+	lockless    bool
 	mu          sync.Mutex
 	pending     map[string]*pendingEnroll
 	lockChanges map[string]*pendingLockChange

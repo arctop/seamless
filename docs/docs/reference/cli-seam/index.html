@@ -564,7 +564,7 @@ the rule and then the remedy, instead of <code>not found</code>. <code>seam plan
 projects they left out, <code>(not shown: locked projects acme-finance, example-legal)</code>: names only, never a count. With <code>--project</code> (<code>seam plan list</code>, <code>seam proposals</code>), only that project is named, when it is locked. Their
 <code>--json</code> answers carry the same names as <code>locked</code>.</p>
 <h3 id="seam_access_request">seam access request</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam access request <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>--reason TEXT<span class="o">]</span> &lt;project&gt;
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam access request <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>--reason TEXT<span class="o">]</span> <span class="o">[</span>--write<span class="o">]</span> &lt;project&gt;
 </span></span></code></pre></div>
 <p>Files an access request for a locked project, naming the agent that runs it:
 run it from the agent's own shell, where <code>seam</code> names the agent process that
@@ -597,9 +597,27 @@ so nothing was filed; or the connection has no agent process the daemon could
 verify, or the process asking is not an agent's (a shell, a terminal, a
 multiplexer such as tmux, or a login process), so nothing was filed - run it
 from the agent's own shell.</p>
+<p><code>--write</code> (with read grants on, <code>isolation.requests</code>) asks to change the
+project as well as read it, and files what the agent's home and the project
+call for, never a kind the agent picks. From a confidential project it asks
+for a grant of another confidential project that reads and writes; the owner
+may still approve it read-only:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">Requested read and write access to example-payroll for example-hr (R-7F3K; the owner may approve it read-only). The owner approves it with: seam approve R-7F3K
+</span></span></code></pre></div>
+<p>From an open project (or the global scope), or for a sealed project from
+anywhere, it asks to move the conversation into the project for good. After
+the move the agent can no longer write where it works now, so it records what
+belongs there first:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">Requested a move into example-hr from example-ops (R-7F3K). The owner approves it with: seam approve R-7F3K
+</span></span><span class="line"><span class="cl">Record what belongs in example-ops now: once the move is approved, this agent cannot write there.
+</span></span></code></pre></div>
+<p>One request waits per agent and project, whichever kind: asking again finds
+it. For the project the agent already works in, a lock's request is filed as
+without <code>--write</code>, since a lock's approval reads and writes already; without
+read grants <code>--write</code> changes nothing.</p>
 <h3 id="seam_approve">seam approve</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam approve <span class="o">[</span>--for DURATION<span class="o">]</span> <span class="o">[</span>&lt;request&gt;<span class="o">]</span>
-</span></span><span class="line"><span class="cl">seam approve --passkey <span class="o">[</span>--for DURATION<span class="o">]</span> <span class="o">[</span>&lt;request&gt;<span class="o">]</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam approve <span class="o">[</span>--access ACCESS<span class="o">]</span> <span class="o">[</span>--for DURATION<span class="o">]</span> <span class="o">[</span>&lt;request&gt;<span class="o">]</span>
+</span></span><span class="line"><span class="cl">seam approve --passkey <span class="o">[</span>--access ACCESS<span class="o">]</span> <span class="o">[</span>--for DURATION<span class="o">]</span> <span class="o">[</span>&lt;request&gt;<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seam approve --watch
 </span></span></code></pre></div>
 <p>The owner's terminal path. It needs a terminal on both stdin and stdout and
@@ -678,6 +696,28 @@ without its version (<code>An agent</code> when the daemon names none), the proj
 the command (<code>Claude Code asks for example-finance: seam approve R-7F3K</code>),
 never the agent's reason. Ctrl-C ends it. It decides nothing; it takes no
 request, <code>--for</code> or <code>--passkey</code>.</p>
+<p>With read grants on (<code>isolation.requests</code>), two more kinds of request come
+here. Their facts add what the request carries: <code>Holds</code> (every fenced project
+the agent holds once approved) and <code>May write to</code> (every project it may write
+to once approved), and the line that says where content may go, among the
+warnings.</p>
+<ul>
+<li>A grant between confidential projects asks <code>Which access?</code> before the
+duration: <code>read-only</code> (the default, Enter: <code>content from &lt;project&gt; may be copied into &lt;its home and the other projects it may write to&gt;</code>) or
+<code>read-write</code> (that line, and that it may change the project's tasks,
+memories and notes, with everything it holds copied into it). <code>It asks for: read and write</code> marks a request that asked for write; read-only stays the
+default. <code>--access read-only|read-write</code> answers the question, and is
+refused for a request that offers no choice. An approval with <code>read-write</code>
+adds <code>--access read-write</code> to the <code>seamlessd approve</code> command line.</li>
+<li>A move request (<code>Move request R-7F3K</code>) says where the agent worked, what it
+read, that it works in the project from now on, and that it can no longer
+write where it was before. It asks no duration (<code>If approved: Claude Code 2.1.319 (pid 4242) moves from example-ops into example-hr for good.</code>),
+unless the project is locked: then the duration is that of its lock, which
+the same approval opens.</li>
+</ul>
+<p><code>--passkey</code> opens the page with <code>--access</code>'s choice (<code>?access=read-write</code>) as
+well as <code>--for</code>'s. A move is approved here or with a passkey; Touch ID does
+not approve one.</p>
 <p>Exit status: 0 when a request was approved or denied, when nothing changed,
 and when nothing is waiting; 1 on any error, including a request that is no
 longer pending (and 2, as everywhere, for a command line it cannot parse).</p>

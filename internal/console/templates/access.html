@@ -11,7 +11,7 @@
   <li class="access-item" data-request="{{.ID}}">
     <a href="/console/access/{{.ID}}"><strong>{{.Short}}</strong></a>
     <span class="badge">{{.Project}}</span>
-    {{if eq .Kind "refresh"}}<span class="badge">refresh</span>{{end}}{{if eq .Kind "grant"}}<span class="badge">read-only, for {{.From}}</span>{{end}}
+    {{if eq .Kind "refresh"}}<span class="badge">refresh</span>{{end}}{{if eq .Kind "grant"}}<span class="badge">{{if .AccessChoices}}read-only or read and write{{else}}read-only{{end}}, for {{.From}}</span>{{if eq .AskedAccess "read-write"}}<span class="badge">asks to write</span>{{end}}{{end}}{{if eq .Kind "move"}}<span class="badge">move from {{if .From}}{{.From}}{{else}}the global scope{{end}}</span>{{end}}{{if .Locked}}<span class="badge">locked</span>{{end}}
     {{if .Warnings}}<span class="badge warn">{{len .Warnings}} warning{{if gt (len .Warnings) 1}}s{{end}}</span>{{end}}
     <small>{{if .Session}}{{.Session}}{{else}}no session{{end}} &middot; asked {{clock .RequestedAt}}, waits until {{clock .ExpiresAt}}</small>
   </li>
@@ -30,7 +30,7 @@
     <li class="access-item" data-grant="{{.ID}}">
       <span class="badge">{{.Project}}</span>
       <strong>{{if .Agent}}{{.Agent}}{{else if .Session}}{{.Session}}{{else}}pid {{.PID}}{{end}}</strong>
-      <small>{{if and .Agent .Session}}session {{.Session}} &middot; {{end}}read-only, for {{.From}} &middot; granted {{clock .GrantedAt}}, ends {{clock .ExpiresAt}}</small>
+      <small>{{if and .Agent .Session}}session {{.Session}} &middot; {{end}}{{if eq .Access "write"}}read and write{{else}}read-only{{end}}, for {{.From}} &middot; granted {{clock .GrantedAt}}, ends {{clock .ExpiresAt}}</small>
       <form method="post" action="/console/access/grants/{{.ID}}/revoke">
         <button class="btn" type="submit">Revoke</button>
       </form>

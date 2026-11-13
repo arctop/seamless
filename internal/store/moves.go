@@ -238,56 +238,89 @@ func MoveApprove(ctx context.Context, db *sql.DB, id string, challenge []byte, d
 		return Move{}, fmt.Errorf("%s: begin: %w", op, err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	a, err := scanApproval(tx.QueryRowContext(ctx, `SELECT `+approvalCols+` FROM access_approvals WHERE id = ?`, id))
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return Move{}, fmt.Errorf("%s: %w: %q", op, ErrApprovalNotFound, id)
-	case err != nil:
+	a, holder, expired, err := moveCheckTx(ctx, tx, id, challenge, now)
+	if err != nil {
 		return Move{}, fmt.Errorf("%s: %w", op, err)
-	case a.Kind != AccessKindMove:
-		return Move{}, fmt.Errorf("%s: %w: %s is a %s request, not a move's", op, ErrInvalidAccessRequest, id, a.Kind)
-	case a.Status != ApprovalPending:
-		return Move{}, fmt.Errorf("%s: %w: %s is %s", op, ErrApprovalNotPending, id, a.Status)
 	}
-	if !a.ExpiresAt.After(now) {
-		if err := expireApprovalTx(ctx, tx, id, now); err != nil {
-			return Move{}, fmt.Errorf("%s: %w", op, err)
-		}
+	if expired {
 		if err := tx.Commit(); err != nil {
 			return Move{}, fmt.Errorf("%s: commit: %w", op, err)
 		}
 		return Move{}, fmt.Errorf("%s: %w: %s ended at %s", op, ErrApprovalExpired, id, core.FormatTime(a.ExpiresAt))
 	}
+	if toSessionID == a.SessionID {
+		return Move{}, fmt.Errorf("%s: %w: the child session is the session it leaves", op, ErrInvalidAccessRequest)
+	}
+	m, err := moveRecordTx(ctx, tx, a, holder, decidedBy, toSessionID, "", now)
+	if err != nil {
+		return Move{}, fmt.Errorf("%s: %w", op, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Move{}, fmt.Errorf("%s: commit: %w", op, err)
+	}
+	return m, nil
+}
+
+// moveCheckTx reads move request id inside tx and checks that it may be
+// approved now: of kind move, pending, carrying exactly challenge, held by a
+// process or a conversation, naming the session it leaves, and stating a
+// move's carry. A request found past its deadline is marked expired in tx and
+// reported (expired true, no error): the caller commits that and returns
+// ErrApprovalExpired.
+func moveCheckTx(ctx context.Context, tx *sql.Tx, id string, challenge []byte, now time.Time) (AccessApproval, Holder, bool, error) {
+	a, err := scanApproval(tx.QueryRowContext(ctx, `SELECT `+approvalCols+` FROM access_approvals WHERE id = ?`, id))
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return AccessApproval{}, Holder{}, false, fmt.Errorf("%w: %q", ErrApprovalNotFound, id)
+	case err != nil:
+		return AccessApproval{}, Holder{}, false, err
+	case a.Kind != AccessKindMove:
+		return AccessApproval{}, Holder{}, false, fmt.Errorf("%w: %s is a %s request, not a move's", ErrInvalidAccessRequest, id, a.Kind)
+	case a.Status != ApprovalPending:
+		return AccessApproval{}, Holder{}, false, fmt.Errorf("%w: %s is %s", ErrApprovalNotPending, id, a.Status)
+	}
+	if !a.ExpiresAt.After(now) {
+		if err := expireApprovalTx(ctx, tx, id, now); err != nil {
+			return AccessApproval{}, Holder{}, false, err
+		}
+		return a, Holder{}, true, nil
+	}
 	if len(challenge) != AccessChallengeBytes || subtle.ConstantTimeCompare(challenge, a.Challenge) != 1 {
-		return Move{}, fmt.Errorf("%s: %w", op, ErrApprovalChallenge)
+		return AccessApproval{}, Holder{}, false, ErrApprovalChallenge
 	}
 	holder := a.Holder()
 	switch {
 	case holder.IsZero() || a.SessionID == "":
-		return Move{}, fmt.Errorf("%s: %w: %s names no holder or session to move", op, ErrInvalidAccessRequest, id)
+		return AccessApproval{}, Holder{}, false, fmt.Errorf("%w: %s names no holder or session to move", ErrInvalidAccessRequest, id)
 	case holder.Kind() == HolderSession:
-		return Move{}, fmt.Errorf("%s: %w: %s", op, ErrInvalidAccessRequest, moveSessionHolder)
-	case toSessionID == a.SessionID:
-		return Move{}, fmt.Errorf("%s: %w: the child session is the session it leaves", op, ErrInvalidAccessRequest)
+		return AccessApproval{}, Holder{}, false, fmt.Errorf("%w: %s", ErrInvalidAccessRequest, moveSessionHolder)
 	}
 	if err := moveValidCarry(a.Carry, a.Project, a.FromProject); err != nil {
-		return Move{}, fmt.Errorf("%s: %s: %w", op, id, err)
+		return AccessApproval{}, Holder{}, false, fmt.Errorf("%s: %w", id, err)
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE access_approvals SET status = ?, decided_at = ?, decided_by = ?
-		WHERE id = ? AND status = ?`, ApprovalApproved, core.FormatTime(now), decidedBy, id, ApprovalPending)
+	return a, holder, false, nil
+}
+
+// moveRecordTx records request a's approval inside tx: the request approved
+// (naming leaseID when the move carries a lease), the move row continuing in
+// toSessionID, and the flows its carry lists (each held project into the
+// project moved into, Carry.Flows).
+func moveRecordTx(ctx context.Context, tx *sql.Tx, a AccessApproval, holder Holder, decidedBy, toSessionID, leaseID string, now time.Time) (Move, error) {
+	res, err := tx.ExecContext(ctx, `UPDATE access_approvals SET status = ?, decided_at = ?, decided_by = ?, lease_id = ?
+		WHERE id = ? AND status = ?`, ApprovalApproved, core.FormatTime(now), decidedBy, leaseID, a.ID, ApprovalPending)
 	if err != nil {
-		return Move{}, fmt.Errorf("%s: %w", op, err)
+		return Move{}, err
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return Move{}, fmt.Errorf("%s: %w", op, err)
+		return Move{}, err
 	}
 	if n != 1 {
-		return Move{}, fmt.Errorf("%s: %w: %s", op, ErrApprovalNotPending, id)
+		return Move{}, fmt.Errorf("%w: %s", ErrApprovalNotPending, a.ID)
 	}
 	moveID, err := core.NewID()
 	if err != nil {
-		return Move{}, fmt.Errorf("%s: %w", op, err)
+		return Move{}, err
 	}
 	m := Move{
 		ID: moveID, ApprovalID: a.ID, Holder: holder, FromSessionID: a.SessionID, ToSessionID: toSessionID,
@@ -296,13 +329,10 @@ func MoveApprove(ctx context.Context, db *sql.DB, id string, challenge []byte, d
 	if _, err := tx.ExecContext(ctx, `INSERT INTO access_moves (`+moveCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		m.ID, m.ApprovalID, m.Holder.Key(), m.FromSessionID, m.ToSessionID, m.FromProject, m.ToProject,
 		m.DecidedBy, core.FormatTime(m.MovedAt)); err != nil {
-		return Move{}, fmt.Errorf("%s: %w", op, err)
+		return Move{}, err
 	}
 	if _, err := flowRecordTx(ctx, tx, holder, a.ID, a.Carry.Flows(), now); err != nil {
-		return Move{}, fmt.Errorf("%s: %w", op, err)
-	}
-	if err := tx.Commit(); err != nil {
-		return Move{}, fmt.Errorf("%s: commit: %w", op, err)
+		return Move{}, err
 	}
 	return m, nil
 }

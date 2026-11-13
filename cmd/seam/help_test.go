@@ -42,8 +42,8 @@ func TestHelpText_CoversTheWholeCommandSet(t *testing.T) {
 	help := helpText()
 	for _, want := range []string{
 		"seam plan approve <slug>",
-		"seam access request [--json] [--reason TEXT] <project>",
-		"seam approve [--for DURATION] [--passkey] [--watch] [<request>]",
+		"seam access request [--json] [--reason TEXT] [--write] <project>",
+		"seam approve [--access ACCESS] [--for DURATION] [--passkey] [--watch] [<request>]",
 		"seam status",
 		"seam hook",
 	} {

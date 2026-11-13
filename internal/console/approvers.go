@@ -57,6 +57,9 @@ type ApprovalsView interface {
 	Facts(ctx context.Context, id string) (approval.Facts, error)
 	Resolve(ctx context.Context, ref string) (store.AccessApproval, error)
 	AssertionOptionsFor(ctx context.Context, id, duration, digest string) ([]byte, error)
+	// AssertionOptionsForAccess is AssertionOptionsFor for an access choice
+	// too (a grant's read-only or read-write; "" for the facts' own).
+	AssertionOptionsForAccess(ctx context.Context, id, duration, accessChoice, digest string) ([]byte, error)
 	Approve(ctx context.Context, d approval.Decision) (store.AccessLease, error)
 	Deny(ctx context.Context, id, by string) error
 	Page(id string) string

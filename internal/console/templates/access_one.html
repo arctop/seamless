@@ -3,7 +3,7 @@
 {{with .Request}}
 <div class="access-one" data-access-one="{{.ID}}">
 <header class="mv2-bar">
-  <h1>{{icon "lock"}}{{.Short}}: {{.Project}}</h1>{{if eq .Kind "grant"}}{{about "An agent is asking to read a confidential project. Read the facts; the reason is the agent's own words."}}{{else}}{{about "An agent is asking for a locked project. Read the facts; the reason is the agent's own words."}}{{end}}
+  <h1>{{icon "lock"}}{{.Short}}: {{.Project}}</h1>{{if eq .Kind "move"}}{{about "An agent is asking to move into a fenced project for good. Read the facts and what it carries; the reason is the agent's own words."}}{{else if .AccessChoices}}{{about "An agent is asking for a confidential project. Read the facts and what it carries, and choose read-only or read and write; the reason is the agent's own words."}}{{else if eq .Kind "grant"}}{{about "An agent is asking to read a confidential project. Read the facts; the reason is the agent's own words."}}{{else}}{{about "An agent is asking for a locked project. Read the facts; the reason is the agent's own words."}}{{end}}
 </header>
 
 {{if .Warnings}}
@@ -13,12 +13,12 @@
 {{end}}
 
 <dl class="access-facts">
-  <dt>Project</dt><dd>{{.Project}} ({{.Isolation}}), {{.Access}}</dd>{{if .From}}<dt>For</dt><dd>sessions working in {{.From}}</dd>{{end}}{{if .Agent}}<dt>Agent</dt><dd>{{.Agent}}</dd>{{end}}
+  <dt>Project</dt><dd>{{.Project}} ({{.Isolation}}{{if .Locked}}, locked{{end}}), {{.Access}}</dd>{{if eq .Kind "move"}}<dt>Leaves</dt><dd>{{if .From}}{{.From}}{{else}}the global scope{{end}}</dd>{{else if .From}}<dt>For</dt><dd>sessions working in {{.From}}</dd>{{end}}{{with .Carry}}<dt>Holds</dt><dd>{{joinAnd .Holds}} <span class="faint">(once approved)</span></dd><dt>May write to</dt><dd>{{if .WriteTo}}{{joinAnd .WriteTo}}{{else}}nowhere{{end}} <span class="faint">(once approved{{if $.Data.Request.AccessChoices}}, read-only{{end}})</span></dd>{{end}}{{if eq .AskedAccess "read-write"}}<dt>It asks for</dt><dd>read and write</dd>{{end}}{{if .Locked}}<dt>Lock</dt><dd>approving also opens the lock to this agent's process tree, for the duration chosen</dd>{{end}}{{if .Agent}}<dt>Agent</dt><dd>{{.Agent}}</dd>{{end}}
   <dt>Asking</dt><dd>{{if not .PID}}a session (without peer_auth the daemon knows no process){{else}}{{if .Program}}<code>{{.Program}}</code>{{else}}a process{{end}}, pid {{.PID}}, uid {{.UID}}{{end}}</dd>
   <dt>Session</dt><dd>{{if .Session}}{{.Session}}{{else}}none{{end}}{{if .Model}} &middot; {{.Model}}{{end}}</dd>
   <dt>Working in</dt><dd>{{if .CWD}}<code>{{.CWD}}</code>{{else}}unknown{{end}} <span class="faint">The working directory, repository and model are what the agent reported. The daemon cannot check them.</span></dd>
   <dt>The agent says</dt><dd>{{if .Reason}}<q>{{.Reason}}</q> <span class="faint">(the agent's own words, not checked)</span>{{else}}(no reason given){{end}}</dd>
-  <dt>Kind</dt><dd>{{if eq .Kind "refresh"}}a refresh of a lease it holds{{else if eq .Kind "grant"}}a read-only grant of a confidential project{{else}}a first request{{end}}</dd>
+  <dt>Kind</dt><dd>{{if eq .Kind "refresh"}}a refresh of a lease it holds{{else if eq .Kind "move"}}a move into a fenced project, for good{{else if and (eq .Kind "grant") .AccessChoices}}a grant of a confidential project: read-only, or read and write as you choose{{else if eq .Kind "grant"}}a read-only grant of a confidential project{{else}}a first request{{end}}</dd>
   <dt>{{if eq $.Data.Status "pending"}}Waits until{{else}}Waited until{{end}}</dt><dd>{{clock .ExpiresAt}}</dd>
 </dl>
 {{end}}
@@ -27,11 +27,18 @@
 <form class="access-form" method="post" action="/console/access/{{.Request.ID}}/approve">
   <input type="hidden" name="digest" value="{{.Request.Digest}}">
   <input type="hidden" name="next" value="/console/access/{{.Request.ID}}">
-  <fieldset>
+  {{if .Accesses}}<fieldset>
+    <legend>Access</legend>
+    {{range $i, $c := .Accesses}}<label><input type="radio" name="access" value="{{$c.Value}}"{{if eq $i 0}} checked{{end}}> {{$c.Words}}</label>
+    {{end}}
+  </fieldset>
+  {{end}}{{if .ForGood}}<input type="hidden" name="duration" value="{{(index .Choices 0).Value}}">
+  <p class="access-duration">How long: <strong>{{(index .Choices 0).Words}}</strong></p>
+  {{else}}<fieldset>
     <legend>For how long</legend>
     {{range $i, $c := .Choices}}<label><input type="radio" name="duration" value="{{$c.Value}}"{{if eq $i 0}} checked{{end}}> {{$c.Words}}</label>
     {{end}}
-  </fieldset>
+  </fieldset>{{end}}
   <p class="held-sub">{{icon "triangle-alert"}} Without peer_auth this approval is advisory: any process holding the bearer key can make it.</p>
   <button class="btn primary" type="submit">Approve</button>
 </form>
@@ -40,16 +47,16 @@
   <button class="btn" type="submit">Deny</button>
 </form>
 {{else}}
-<div class="access-decide" data-access-id="{{.Request.ID}}" data-deny-confirm="Deny this request? {{.Request.Project}} stays {{if eq .Request.Kind "grant"}}closed to{{else}}locked for{{end}} that session.">
+<div class="access-decide" data-access-id="{{.Request.ID}}" data-deny-confirm="Deny this request? {{if eq .Request.Kind "move"}}The agent stays where it is, and {{.Request.Project}} stays closed to it.{{else}}{{.Request.Project}} stays {{if eq .Request.Kind "grant"}}closed to{{else}}locked for{{end}} that session.{{end}}">
 {{if .For}}
-<form id="access-form" class="access-form" data-digest="{{.Request.Digest}}" data-duration="{{.For}}" data-options="{{printf "%s" .PasskeyOptions}}">
-  <p class="access-duration">For how long: <strong>{{.ForWords}}</strong> &middot; <a href="/console/access/{{.Request.ID}}" data-seam-query>choose another duration</a></p>
+<form id="access-form" class="access-form" data-digest="{{.Request.Digest}}" data-duration="{{.For}}"{{if .Access}} data-access="{{.Access}}"{{end}} data-options="{{printf "%s" .PasskeyOptions}}">
+  <p class="access-duration">{{if .ForGood}}How long: <strong>{{.ForWords}}</strong>{{else}}For how long: <strong>{{.ForWords}}</strong>{{end}}{{if .Accesses}} &middot; Access: <strong>{{if eq .Access "read-write"}}read and write{{else}}read-only{{end}}</strong>{{end}}{{if not .ForGood}} &middot; <a href="/console/access/{{.Request.ID}}" data-seam-query>{{if .Accesses}}choose again{{else}}choose another duration{{end}}</a>{{end}}</p>
   {{if and .PasskeyOptions .OnOrigin}}
   <button class="btn primary" id="access-approve" type="submit">{{icon "key-round"}} Approve with a passkey</button>
   {{else if and .PasskeyReady (not .OnOrigin)}}
-  <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/access/{{.Request.ID}}?for={{.For}}">{{.Origin}}</a>.</p>
+  <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/access/{{.Request.ID}}?for={{.For}}{{if .Access}}&amp;access={{.Access}}{{end}}">{{.Origin}}</a>.</p>
   {{else if .PasskeyReady}}
-  <p class="held-sub">{{icon "triangle-alert"}} The request changed while this page loaded. <a href="/console/access/{{.Request.ID}}?for={{.For}}" data-seam-query>Look at it again</a>.</p>
+  <p class="held-sub">{{icon "triangle-alert"}} The request changed while this page loaded. <a href="/console/access/{{.Request.ID}}?for={{.For}}{{if .Access}}&amp;access={{.Access}}{{end}}" data-seam-query>Look at it again</a>.</p>
   {{else}}
   <p class="held-sub">No passkey is enrolled here, so approve it in your own terminal: <code>seam approve {{.Request.Short}}</code></p>
   {{end}}
@@ -58,12 +65,17 @@
 {{else}}
 <form id="access-choose" class="access-form" method="get" action="/console/access/{{.Request.ID}}" data-seam-query>
   {{if and .PasskeyReady .OnOrigin}}
-  <fieldset>
+  {{if .Accesses}}<fieldset>
+    <legend>Access</legend>
+    {{range $i, $c := .Accesses}}<label><input type="radio" name="access" value="{{$c.Value}}"{{if eq $i 0}} checked{{end}}> {{$c.Words}}</label>
+    {{end}}
+  </fieldset>
+  {{end}}<fieldset>
     <legend>For how long</legend>
     {{range $i, $c := .Choices}}<label><input type="radio" name="for" value="{{$c.Value}}"{{if eq $i 0}} checked{{end}}> {{$c.Words}}</label>
     {{end}}
   </fieldset>
-  <p class="held-sub">The passkey signs the duration you choose, with the facts above.</p>
+  <p class="held-sub">The passkey signs the {{if .Accesses}}access and the {{end}}duration you choose, with the facts above.</p>
   <button class="btn primary" id="access-continue" type="submit">{{icon "key-round"}} Continue to approve with a passkey</button>
   {{else if .PasskeyReady}}
   <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/access/{{.Request.ID}}">{{.Origin}}</a>.</p>
@@ -166,9 +178,12 @@ window.SEAM_NO_LIVE_REFRESH = true; // an approval in progress must not be clobb
       if (!raw || !window.PublicKeyCredential) { say('This browser cannot use a passkey here.'); return; }
       say('Follow your browser\'s prompt.');
       navigator.credentials.get({ publicKey: requestOptions(JSON.parse(raw).publicKey) }).then(function (cred) {
-        return post('/console/access/' + id + '/approve', {
+        var fields = {
           duration: form.getAttribute('data-duration'), digest: form.getAttribute('data-digest'), response: JSON.stringify(toJSON(cred))
-        });
+        };
+        // The access the passkey signed, where the request offers a choice.
+        if (form.getAttribute('data-access')) fields.access = form.getAttribute('data-access');
+        return post('/console/access/' + id + '/approve', fields);
       }).then(function (done) {
         say('Approved ' + done.approved + ' for ' + done.project + '.');
         refresh();

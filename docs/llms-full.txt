@@ -9975,13 +9975,14 @@ Fetch a web page (SSRF-guarded: private/loopback addresses are rejected) and sav
 
 ## access_request {#access_request}
 
-Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another, and a reason given then fills in one the waiting request lacks. The answer says which: filed is true when this call filed a new request, false when it found one already waiting or the access is already held (nothing filed); reason is added when this call's reason was stored on the request, kept when the waiting request already had one, so this one was not used, and none when this call gave no reason or nothing was filed. Once the owner denies a request, refused calls file nothing more and say so: ask again here, with a reason, when the owner tells you to. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to 110 seconds for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then. An agent that already holds the access it asks for is answered with it, and nothing is filed, until 30 minutes before it ends. With read grants on (isolation.requests), it also asks for a read of a confidential project no lock covers.
+Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another, and a reason given then fills in one the waiting request lacks. The answer says which: filed is true when this call filed a new request, false when it found one already waiting or the access is already held (nothing filed); reason is added when this call's reason was stored on the request, kept when the waiting request already had one, so this one was not used, and none when this call gave no reason or nothing was filed. Once the owner denies a request, refused calls file nothing more and say so: ask again here, with a reason, when the owner tells you to. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to 110 seconds for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then. An agent that already holds the access it asks for is answered with it, and nothing is filed, until 30 minutes before it ends. With read grants on (isolation.requests), it also asks for a read of a confidential project no lock covers, and write asks to change the project too.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `project` | string | **yes** | the locked project's slug |
 | `reason` | string | no | optional: why the work needs the project, in at most 200 characters. The owner sees it labeled as this agent's own words. |
 | `session` | string | no | the session to act as: the name session_start returned, the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless |
+| `write` | boolean | no | optional, with read grants on (isolation.requests): ask to change the project as well as read it. From a confidential project it asks for a read-and-write grant, which the owner may still approve read-only; from an open project, or for a sealed one, it asks to move this conversation into the project for good, after which it can no longer write where it works now, so record what belongs there first. Without read grants a locked project's approval reads and writes already. |
 
 ---
 
@@ -10817,7 +10818,7 @@ list`, `seam proposals`), only that project is named, when it is locked. Their
 ### seam access request {#seam_access_request}
 
 ```bash
-seam access request [--json] [--reason TEXT] <project>
+seam access request [--json] [--reason TEXT] [--write] <project>
 ```
 
 Files an access request for a locked project, naming the agent that runs it:
@@ -10856,11 +10857,36 @@ verify, or the process asking is not an agent's (a shell, a terminal, a
 multiplexer such as tmux, or a login process), so nothing was filed - run it
 from the agent's own shell.
 
+`--write` (with read grants on, `isolation.requests`) asks to change the
+project as well as read it, and files what the agent's home and the project
+call for, never a kind the agent picks. From a confidential project it asks
+for a grant of another confidential project that reads and writes; the owner
+may still approve it read-only:
+
+```text
+Requested read and write access to example-payroll for example-hr (R-7F3K; the owner may approve it read-only). The owner approves it with: seam approve R-7F3K
+```
+
+From an open project (or the global scope), or for a sealed project from
+anywhere, it asks to move the conversation into the project for good. After
+the move the agent can no longer write where it works now, so it records what
+belongs there first:
+
+```text
+Requested a move into example-hr from example-ops (R-7F3K). The owner approves it with: seam approve R-7F3K
+Record what belongs in example-ops now: once the move is approved, this agent cannot write there.
+```
+
+One request waits per agent and project, whichever kind: asking again finds
+it. For the project the agent already works in, a lock's request is filed as
+without `--write`, since a lock's approval reads and writes already; without
+read grants `--write` changes nothing.
+
 ### seam approve {#seam_approve}
 
 ```bash
-seam approve [--for DURATION] [<request>]
-seam approve --passkey [--for DURATION] [<request>]
+seam approve [--access ACCESS] [--for DURATION] [<request>]
+seam approve --passkey [--access ACCESS] [--for DURATION] [<request>]
 seam approve --watch
 ```
 
@@ -10961,6 +10987,32 @@ without its version (`An agent` when the daemon names none), the project and
 the command (`Claude Code asks for example-finance: seam approve R-7F3K`),
 never the agent's reason. Ctrl-C ends it. It decides nothing; it takes no
 request, `--for` or `--passkey`.
+
+With read grants on (`isolation.requests`), two more kinds of request come
+here. Their facts add what the request carries: `Holds` (every fenced project
+the agent holds once approved) and `May write to` (every project it may write
+to once approved), and the line that says where content may go, among the
+warnings.
+
+- A grant between confidential projects asks `Which access?` before the
+  duration: `read-only` (the default, Enter: `content from <project> may be
+  copied into <its home and the other projects it may write to>`) or
+  `read-write` (that line, and that it may change the project's tasks,
+  memories and notes, with everything it holds copied into it). `It asks for:
+  read and write` marks a request that asked for write; read-only stays the
+  default. `--access read-only|read-write` answers the question, and is
+  refused for a request that offers no choice. An approval with `read-write`
+  adds `--access read-write` to the `seamlessd approve` command line.
+- A move request (`Move request R-7F3K`) says where the agent worked, what it
+  read, that it works in the project from now on, and that it can no longer
+  write where it was before. It asks no duration (`If approved: Claude Code
+  2.1.319 (pid 4242) moves from example-ops into example-hr for good.`),
+  unless the project is locked: then the duration is that of its lock, which
+  the same approval opens.
+
+`--passkey` opens the page with `--access`'s choice (`?access=read-write`) as
+well as `--for`'s. A move is approved here or with a passkey; Touch ID does
+not approve one.
 
 Exit status: 0 when a request was approved or denied, when nothing changed,
 and when nothing is waiting; 1 on any error, including a request that is no
@@ -12136,7 +12188,7 @@ in your own terminal.
 ## seamlessd approve {#seamlessd_approve}
 
 ```bash
-seamlessd approve <request> --for <session|1h|4h> --digest <facts digest>
+seamlessd approve <request> --for <session|1h|4h> --digest <facts digest> [--access <read-only|read-write>]
 seamlessd approve <request> --deny
 ```
 
@@ -12167,6 +12219,21 @@ shown: run seam approve again and look at them first`), the request expired
 before the decision reached it (`R-7F3K expired at 14:05, before this
 decision: nothing changed ...`), or it was decided meanwhile (`R-7F3K was
 already approved: nothing changed`).
+
+With read grants on (`isolation.requests`) it decides the two other kinds as
+well. `--access read-write` approves a grant between confidential projects
+read and write (read-only is the default, and `--access` names only an access
+the request offers): `Approved R-7F3K: pid 200, working in example-hr, may
+read and write example-payroll until 15:05; content from example-payroll may
+be copied into example-hr, and it may change example-payroll's tasks, memories
+and notes; content from example-hr may be copied into example-payroll.` A move
+request moves the agent into the project for good, as a new session that
+continues the one it left: `Approved R-7F3K: Claude Code 2.1.319 (pid 4242)
+moved from example-ops into example-hr for good, as session
+cc/08eb9006-5c473accb1746e1b@example-hr.`, with `; its lock is open to it
+until ...` for a locked project, whose lease the same approval records. A
+denied move answers `Denied R-7F3K: the agent stays in example-ops, and
+example-hr stays closed to it.`
 
 ## seamlessd console-open {#seamlessd_console_open}
 

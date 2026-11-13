@@ -11,7 +11,9 @@ package main
 //
 // A confidential project's fence works the same way when the daemon offers
 // read grants (isolation.requests): the request asks for read-only access to
-// that one project for the asking session's own project.
+// that one project for the asking session's own project. --write asks for what
+// the agent's home and the project call for: a grant that asks for read and
+// write between confidential projects, or a move into the project.
 //
 // The routes are the console's /console/access family. They are 404 with a JSON
 // message when the daemon locks nothing, and that message is the answer the
@@ -66,6 +68,23 @@ type accessFacts struct {
 	ExpiresAt   time.Time       `json:"expires_at"`
 	Digest      string          `json:"digest"`
 	From        string          `json:"from,omitempty"`
+	// The grant's and move's facts (isolation.requests): what the request
+	// carries, the accesses the owner may choose between with what read and
+	// write adds, and whether approving opens a lock too.
+	Carry         *accessCarry `json:"carry,omitempty"`
+	AccessChoices []string     `json:"access_choices,omitempty"`
+	AskedAccess   string       `json:"asked_access,omitempty"`
+	ReadWrite     string       `json:"read_write,omitempty"`
+	Locked        bool         `json:"locked,omitempty"`
+}
+
+// accessCarry mirrors approval.CarryFacts: the home a request leaves or asks
+// from ("" for the global scope), every fenced project the conversation holds
+// once approved, and every project it may write to once approved.
+type accessCarry struct {
+	Home    string   `json:"home"`
+	Holds   []string `json:"holds"`
+	WriteTo []string `json:"write_to"`
 }
 
 // accessWarning mirrors approval.Warning.
@@ -120,6 +139,8 @@ type accessFiled struct {
 	Filed   *bool  `json:"filed"`
 	Reason  string `json:"reason"`
 	Page    string `json:"page"`
+	// Access is write for a grant that asks for read and write (--write).
+	Access string `json:"access"`
 }
 
 // The Reason values of accessFiled the answer says something about; "none"
@@ -129,8 +150,14 @@ const (
 	reasonKept  = "kept"
 )
 
-// kindGrant is a read grant request's kind (store.AccessKindGrant).
-const kindGrant = "grant"
+// The kinds of a fenced project's requests (store.AccessKindGrant and
+// store.AccessKindMove), and a grant's read-and-write access
+// (store.GrantAccessWrite).
+const (
+	kindGrant   = "grant"
+	kindMove    = "move"
+	accessWrite = "write"
+)
 
 // The paths of the access routes.
 const (
@@ -226,7 +253,11 @@ the explicit form, with a reason the owner sees labeled as the agent's words
 
 On a daemon that offers read grants (isolation.requests), a confidential
 project can be asked for the same way: read-only, for the asking session's own
-project, whose writes then stay inside that project.
+project, whose writes then stay inside that project. --write asks to change
+the project too: from a confidential project it asks for a read-and-write
+grant (the owner may still approve it read-only); from an open project, or
+for a sealed one, it asks to move the conversation into the project for good,
+after which it can no longer write where it works now.
 
 Asking again while a request is pending answers with that request and says
 what became of this call's reason. The owner decides it with seam approve
@@ -235,12 +266,15 @@ daemon names one.`)
 
 type accessRequestOpts struct {
 	reason *string
+	write  *bool
 	asJSON *bool
 }
 
 func bindAccessRequest(fs *flag.FlagSet) *accessRequestOpts {
 	return &accessRequestOpts{
 		reason: fs.String("reason", "", "why it needs the project, in the agent's own `TEXT` (at most 200 characters)"),
+		write: fs.Bool("write", false, "ask to change the project too: a read-and-write grant between confidential "+
+			"projects, else a move into it (read grants on)"),
 		asJSON: jsonFlag(fs, jsonUsage),
 	}
 }
@@ -258,6 +292,9 @@ func runAccessRequest(_ context.Context, e *env, o *accessRequestOpts, pos []str
 	if reason != "" {
 		form.Set("reason", reason)
 	}
+	if *o.write {
+		form.Set("write", "true")
+	}
 	b, err := accessCall(cfg, http.MethodPost, accessRequestPath, form)
 	if err != nil {
 		return err
@@ -272,6 +309,20 @@ func runAccessRequest(_ context.Context, e *env, o *accessRequestOpts, pos []str
 	short := printable(got.Short)
 	waiting := got.Filed != nil && !*got.Filed
 	switch {
+	case got.Kind == kindMove && waiting:
+		fmt.Fprintf(e.stdout, "A move into %s (%s) was already waiting. The owner approves it with: seam approve %s\n",
+			printable(got.Project), short, short)
+	case got.Kind == kindMove:
+		fmt.Fprintf(e.stdout, "Requested a move into %s from %s (%s). The owner approves it with: seam approve %s\n",
+			printable(got.Project), homeWords(got.From), short, short)
+		fmt.Fprintf(e.stdout, "Record what belongs in %s now: once the move is approved, this agent cannot write there.\n",
+			homeWords(got.From))
+	case got.Kind == kindGrant && got.Access == accessWrite && waiting:
+		fmt.Fprintf(e.stdout, "Read and write access to %s for %s (%s) was already waiting. The owner approves it with: seam approve %s\n",
+			printable(got.Project), printable(got.From), short, short)
+	case got.Kind == kindGrant && got.Access == accessWrite:
+		fmt.Fprintf(e.stdout, "Requested read and write access to %s for %s (%s; the owner may approve it read-only). "+
+			"The owner approves it with: seam approve %s\n", printable(got.Project), printable(got.From), short, short)
 	case got.Kind == kindGrant && waiting:
 		fmt.Fprintf(e.stdout, "Read access to %s for %s (%s, read-only) was already waiting. The owner approves it with: seam approve %s\n",
 			printable(got.Project), printable(got.From), short, short)
@@ -295,4 +346,12 @@ func runAccessRequest(_ context.Context, e *env, o *accessRequestOpts, pos []str
 		fmt.Fprintf(e.stdout, "or with a passkey: %s\n", printable(got.Page))
 	}
 	return nil
+}
+
+// homeWords names a home for the owner: its slug, or the global scope.
+func homeWords(home string) string {
+	if home == "" {
+		return "the global scope"
+	}
+	return printable(home)
 }

@@ -98,7 +98,11 @@ A read grant request (isolation.requests: an agent asking to read a
 confidential project) is decided the same way. On a daemon without peer_auth
 it is committed over the console with the bearer key instead of through sudo,
 and seam approve says so: that approval is advisory, since any process holding
-the key could make it.
+the key could make it. A grant between confidential projects shows what it
+carries and asks whether to approve it read-only (the default) or read and
+write, unless --access names one. A move request (an agent moving into a
+fenced project for good) shows what it carries and asks no duration unless the
+project is locked, when the duration is its lock's.
 
 Before anything is shown it asks the kernel who answers on server_url's socket,
 and refuses a socket served by your own account or by root, or by an account
@@ -113,6 +117,7 @@ prints each once and raises a notification.`)
 
 type approveOpts struct {
 	duration *presentString
+	access   *presentString
 	passkey  *bool
 	watch    *bool
 }
@@ -120,10 +125,12 @@ type approveOpts struct {
 func bindApprove(fs *flag.FlagSet) *approveOpts {
 	o := &approveOpts{
 		duration: &presentString{},
+		access:   &presentString{},
 		passkey:  fs.Bool("passkey", false, "open the request's passkey page in the browser instead (with --for's duration)"),
 		watch:    fs.Bool("watch", false, "watch for new requests: print each once and raise a notification"),
 	}
 	fs.Var(o.duration, "for", "approve for `DURATION`: session (until the session ends), 1h or 4h; asked when absent")
+	fs.Var(o.access, "access", "approve with `ACCESS`: read-only or read-write, where a grant offers the choice; asked when absent")
 	return o
 }
 
@@ -158,8 +165,8 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 	if !e.isTerminal() {
 		return errNotTerminal
 	}
-	if *o.watch && (len(pos) > 0 || *o.passkey || o.duration.set) {
-		return errors.New("--watch only watches: it takes no request, --for or --passkey")
+	if *o.watch && (len(pos) > 0 || *o.passkey || o.duration.set || o.access.set) {
+		return errors.New("--watch only watches: it takes no request, --for, --access or --passkey")
 	}
 	cfg, err := e.loadConfig()
 	if err != nil {
@@ -217,8 +224,15 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 	if o.duration.set && !slices.Contains(one.Durations, duration) {
 		return fmt.Errorf("invalid value %q for --for: valid values are %s", duration, strings.Join(one.Durations, ", "))
 	}
+	accessChosen := o.access.val
+	if o.access.set {
+		if offered := accessesOf(f); !slices.Contains(offered, accessChosen) {
+			return fmt.Errorf("invalid value %q for --access: valid values for %s are %s", accessChosen, printable(f.Short),
+				strings.Join(offered, ", "))
+		}
+	}
 	if *o.passkey {
-		return openPasskeyPage(ctx, e, one, duration)
+		return openPasskeyPage(ctx, e, one, duration, accessChosen)
 	}
 
 	renderFacts(e, f)
@@ -226,7 +240,25 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 		warnAdvisory(e)
 	}
 	answer := ""
-	if !o.duration.set {
+	if len(f.AccessChoices) > 0 && !o.access.set {
+		a, got, err := askAccess(e, in, f)
+		switch {
+		case err != nil:
+			return err
+		case got == durationNoAnswer:
+			fmt.Fprintln(e.stdout, "Nothing changed.")
+			return nil
+		case got == durationDenied:
+			answer = "deny"
+		default:
+			accessChosen = a
+		}
+	}
+	if forGood(f) && !o.duration.set {
+		// A move no lock covers lasts for good: no duration to choose. The
+		// decision still names the default one, which the proof signs.
+		duration = durationSession
+	} else if !o.duration.set && answer == "" {
 		d, got, err := askDuration(e, in, one)
 		switch {
 		case err != nil:
@@ -246,11 +278,11 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 	// What y grants, said before anything runs: the agent, the project, the
 	// access and the duration. sudo's prompt follows only after the answer.
 	if answer == "" {
-		fmt.Fprintln(e.stdout, "If approved: "+grantWords(f, duration, one.MaxLease, e.clock()))
+		fmt.Fprintln(e.stdout, "If approved: "+decisionWords(f, duration, accessChosen, one.MaxLease, e.clock()))
 		answer, _ = prompt(e, in, "Approve "+printable(f.Short)+"? [y/N/d=deny] ")
 	}
 	if one.Advisory {
-		return decideOverConsole(e, cfg, f, strings.ToLower(answer), duration)
+		return decideOverConsole(e, cfg, f, strings.ToLower(answer), duration, accessChosen)
 	}
 	var argv []string
 	what, done := "", ""
@@ -259,7 +291,10 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 		if !durationArg.MatchString(duration) {
 			return fmt.Errorf("the daemon offered %q as a duration, which seamlessd approve could not take", duration)
 		}
-		argv, what, done = approveArgv(t, f, duration), "approval", "approved"
+		if accessChosen != "" && !accessArg.MatchString(accessChosen) {
+			return fmt.Errorf("the daemon offered %q as an access, which seamlessd approve could not take", accessChosen)
+		}
+		argv, what, done = approveArgvWith(t, f, duration, accessChosen), "approval", "approved"
 	case "d", "deny":
 		argv, what, done = denyArgv(t, f), "denial", "denied"
 	default:
@@ -291,13 +326,34 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 // project, and until when -- for a fixed duration, the wall-clock end too,
 // counted from now.
 func grantWords(f accessFacts, duration, maxLease string, now time.Time) string {
+	return decisionWords(f, duration, "", maxLease, now)
+}
+
+// decisionWords is grantWords for an access choice too ("" for the facts'
+// own): a grant approved read and write says so. A move says where the agent
+// works from now on, for good, and when its lock opens too, for how long.
+func decisionWords(f accessFacts, duration, accessChoice, maxLease string, now time.Time) string {
 	who := askerWords(f)
+	project := printable(f.Project)
+	if f.Kind == kindMove {
+		s := who + " moves from " + homeWords(f.From) + " into " + project + " for good"
+		if f.Locked {
+			s += ", and its lock opens to it " + durationWords(duration, maxLease)
+			if length, ok := grantLength(duration, maxLease); ok {
+				s += ", until " + clockTime(now.Add(length))
+			}
+		}
+		return s + "."
+	}
 	if f.From != "" {
 		who += ", working in " + printable(f.From) + ","
 	}
-	project := printable(f.Project)
+	access := f.Access
+	if accessChoice != "" {
+		access = accessChoice
+	}
 	var reach string
-	switch f.Access {
+	switch access {
 	case "read-write":
 		reach = "read and write " + project
 	case "read-only":
@@ -312,7 +368,91 @@ func grantWords(f accessFacts, duration, maxLease string, now time.Time) string 
 	if f.Kind == "refresh" {
 		s += ", in place of the lease it holds now"
 	}
+	if f.Locked {
+		s += ", its lock open to it as long"
+	}
 	return s + "."
+}
+
+// The accesses a grant offers the owner (approval's words).
+const (
+	accessReadOnly  = "read-only"
+	accessReadWrite = "read-write"
+)
+
+// accessesOf are the accesses f may be approved with: its choices, else its
+// own access alone.
+func accessesOf(f accessFacts) []string {
+	if len(f.AccessChoices) > 0 {
+		return f.AccessChoices
+	}
+	if f.Access == "" {
+		return nil
+	}
+	return []string{f.Access}
+}
+
+// forGood reports a move no lock covers: it never ends, so no duration is
+// asked.
+func forGood(f accessFacts) bool { return f.Kind == kindMove && !f.Locked }
+
+// askAccess asks which access to approve a grant with: read-only (the
+// default, Enter) or read and write, each with what it lets happen. The answer
+// is an access's name or the start of one, in any case; denyWord, in full,
+// denies instead; end of input decides nothing.
+func askAccess(e *env, in *bufio.Reader, f accessFacts) (string, durationAnswer, error) {
+	choices := f.AccessChoices
+	if len(choices) == 0 {
+		return "", durationNoAnswer, errors.New("the daemon offered no access to approve with")
+	}
+	fmt.Fprintln(e.stdout, "Which access?")
+	width := 0
+	for _, c := range choices {
+		width = max(width, len(printable(c)))
+	}
+	for i, c := range choices {
+		words := accessChoiceWords(f, c)
+		if i == 0 {
+			words += " (the default)"
+		}
+		fmt.Fprintf(e.stdout, "  %-*s  %s\n", width, printable(c), words)
+	}
+	listed := strings.Join(choices, ", ")
+	q := "Access [" + listed + "; Enter for " + printable(choices[0]) + "; deny to deny it]: "
+	for {
+		ans, ok := prompt(e, in, q)
+		if !ok {
+			return "", durationNoAnswer, nil
+		}
+		if ans == "" {
+			return choices[0], durationChosen, nil
+		}
+		c, matches := matchDuration(choices, ans)
+		switch {
+		case matches == 1:
+			return c, durationChosen, nil
+		case matches > 1:
+			fmt.Fprintf(e.stderr, "%q starts more than one of %s: type more of it\n", ans, listed)
+		case strings.EqualFold(ans, denyWord):
+			return "", durationDenied, nil
+		default:
+			fmt.Fprintf(e.stderr, "answer with one of %s, or the start of one (or %s, in full, to deny it)\n", listed, denyWord)
+		}
+	}
+}
+
+// accessChoiceWords says what approving a grant with access c lets happen:
+// the copy line for read-only, the read-and-write line for read and write.
+func accessChoiceWords(f accessFacts, c string) string {
+	if c == accessReadWrite && f.ReadWrite != "" {
+		return printable(f.ReadWrite)
+	}
+	for _, w := range f.Warnings {
+		if w.Code == "copy_into" {
+			return printable(w.Text)
+		}
+	}
+	return ""
 }
 
 // askerWords names who asks: the agent the daemon names and its pid, else
@@ -377,12 +517,18 @@ type accessDecided struct {
 	Project   string    `json:"project"`
 	From      string    `json:"from"`
 	ExpiresAt time.Time `json:"expires_at"`
+	// Kind is move for an approved move, Session the session the agent
+	// continues in; Access is a grant's approved access (read or write).
+	Kind    string `json:"kind"`
+	Session string `json:"session"`
+	Access  string `json:"access"`
 }
 
-// decideOverConsole commits the owner's answer to an advisory read grant
-// request with the bearer key: y approves it for duration over the digest of
-// the facts shown, d denies it, anything else changes nothing.
-func decideOverConsole(e *env, cfg config.Config, f accessFacts, answer, duration string) error {
+// decideOverConsole commits the owner's answer to an advisory grant or move
+// request with the bearer key: y approves it for duration (and a grant's
+// access, "" for read-only) over the digest of the facts shown, d denies it,
+// anything else changes nothing.
+func decideOverConsole(e *env, cfg config.Config, f accessFacts, answer, duration, accessChoice string) error {
 	short := printable(f.Short)
 	var path string
 	form := url.Values{}
@@ -391,6 +537,9 @@ func decideOverConsole(e *env, cfg config.Config, f accessFacts, answer, duratio
 		path = "/console/access/" + url.PathEscape(f.ID) + "/approve?format=json"
 		form.Set("duration", duration)
 		form.Set("digest", f.Digest)
+		if accessChoice != "" {
+			form.Set("access", accessChoice)
+		}
 	case "d", "deny":
 		path = "/console/access/" + url.PathEscape(f.ID) + "/deny?format=json"
 	default:
@@ -405,12 +554,22 @@ func decideOverConsole(e *env, cfg config.Config, f accessFacts, answer, duratio
 	if err := json.Unmarshal(b, &got); err != nil {
 		return fmt.Errorf("unreadable console response from %s: %w", path, err)
 	}
-	if got.Denied != "" {
+	switch {
+	case got.Denied != "" && f.Kind == kindMove:
+		fmt.Fprintf(e.stdout, "Denied %s: the agent stays in %s, and %s stays closed to it.\n", short, homeWords(f.From),
+			printable(got.Project))
+	case got.Denied != "":
 		fmt.Fprintf(e.stdout, "Denied %s: %s stays closed to that session.\n", short, printable(got.Project))
-		return nil
+	case got.Kind == kindMove:
+		fmt.Fprintf(e.stdout, "Approved %s: the agent works in %s from now on, as session %s.\n", short,
+			printable(got.Project), printable(got.Session))
+	case got.Access == accessWrite:
+		fmt.Fprintf(e.stdout, "Approved %s: sessions working in %s may read and write %s until %s.\n", short,
+			printable(got.From), printable(got.Project), clockTime(got.ExpiresAt))
+	default:
+		fmt.Fprintf(e.stdout, "Approved %s: sessions working in %s may read %s (read-only) until %s.\n", short,
+			printable(got.From), printable(got.Project), clockTime(got.ExpiresAt))
 	}
-	fmt.Fprintf(e.stdout, "Approved %s: sessions working in %s may read %s (read-only) until %s.\n", short,
-		printable(got.From), printable(got.Project), clockTime(got.ExpiresAt))
 	return nil
 }
 
@@ -512,6 +671,9 @@ func decidable(e *env, one accessOne) error {
 		return fmt.Errorf("%s expired at %s without a decision: nothing to decide (the agent asks again with its next call to %s)",
 			short, clockTime(f.ExpiresAt), project)
 	case statusDenied:
+		if f.Kind == kindMove {
+			return fmt.Errorf("%s was denied: nothing to decide (the agent stays in %s until it asks again)", short, homeWords(f.From))
+		}
 		return fmt.Errorf("%s was denied: nothing to decide (%s stays %s that session until the agent asks again)",
 			short, project, closedWord(f.Kind))
 	case statusApproved:
@@ -552,7 +714,11 @@ const (
 // repository, the working directory and the model are the agent's own report
 // too, as the closing note says.
 func renderFacts(e *env, f accessFacts) {
-	fmt.Fprintf(e.stdout, "\nAccess request %s\n\n", printable(f.Short))
+	head := "Access request"
+	if f.Kind == kindMove {
+		head = "Move request"
+	}
+	fmt.Fprintf(e.stdout, "\n%s %s\n\n", head, printable(f.Short))
 	for _, w := range f.Warnings {
 		fmt.Fprintln(e.stdout, warningLine(e, "  ", printable(w.Text)))
 	}
@@ -561,9 +727,33 @@ func renderFacts(e *env, f accessFacts) {
 	}
 	var rows [][2]string
 	fact := func(label, value string) { rows = append(rows, [2]string{label, value}) }
-	fact("Project", fmt.Sprintf("%s (%s, %s)", printable(f.Project), printable(orDash(f.Isolation)), printable(orDash(f.Access))))
-	if f.From != "" {
+	isolation := printable(orDash(f.Isolation))
+	if f.Locked {
+		isolation += ", locked"
+	}
+	fact("Project", fmt.Sprintf("%s (%s, %s)", printable(f.Project), isolation, printable(orDash(f.Access))))
+	switch {
+	case f.Kind == kindMove:
+		fact("Leaves", homeWords(f.From))
+	case f.From != "":
 		fact("For", "sessions working in "+printable(f.From))
+	}
+	if c := f.Carry; c != nil {
+		fact("Holds", printable(joinAnd(c.Holds))+" (once approved)")
+		writes, note := "nowhere", " (once approved)"
+		if len(c.WriteTo) > 0 {
+			writes = printable(joinAnd(c.WriteTo))
+		}
+		if len(f.AccessChoices) > 0 {
+			note = " (once approved, read-only)"
+		}
+		fact("May write to", writes+note)
+	}
+	if f.AskedAccess == accessReadWrite {
+		fact("It asks for", "read and write")
+	}
+	if f.Locked {
+		fact("Lock", "approving also opens the lock to this agent's process tree, for the duration chosen")
 	}
 	if f.Agent != "" {
 		fact("Agent", printable(f.Agent))
@@ -596,7 +786,7 @@ func renderFacts(e *env, f accessFacts) {
 		says = strconv.Quote(f.Reason) + "  (the agent's own words, not checked)"
 	}
 	fact("The agent says", says)
-	fact("Kind", kindWords(f.Kind))
+	fact("Kind", kindWordsOf(f))
 	waits := clockTime(f.ExpiresAt)
 	if left := f.ExpiresAt.Sub(e.clock()); !f.ExpiresAt.IsZero() && left > 0 {
 		waits += " (" + compactDuration(left.Round(time.Minute)) + " left)"
@@ -632,6 +822,26 @@ func orUnknown(s string) string {
 	return s
 }
 
+// kindWordsOf names f's kind for the owner: kindWords, with a grant between
+// confidential projects saying the access is the owner's to choose.
+func kindWordsOf(f accessFacts) string {
+	if f.Kind == kindGrant && len(f.AccessChoices) > 0 {
+		return "a grant of a confidential project: read-only, or read and write as you choose"
+	}
+	return kindWords(f.Kind)
+}
+
+// joinAnd lists names as a sentence does: "a", "a and b", "a, b and c".
+func joinAnd(names []string) string {
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
 // kindWords names a request's kind for the owner.
 func kindWords(kind string) string {
 	switch kind {
@@ -641,6 +851,8 @@ func kindWords(kind string) string {
 		return "refresh of a lease this agent already holds"
 	case kindGrant:
 		return "a read-only grant of a confidential project"
+	case kindMove:
+		return "a move into a fenced project, for good"
 	default:
 		return orDash(printable(kind))
 	}
@@ -852,6 +1064,7 @@ var (
 	requestID   = regexp.MustCompile(`^[0-9A-Za-z]+$`)
 	hexDigest   = regexp.MustCompile(`^[0-9a-f]+$`)
 	durationArg = regexp.MustCompile(`^[0-9A-Za-z]+$`)
+	accessArg   = regexp.MustCompile(`^[a-z]+(-[a-z]+)*$`)
 )
 
 // terminalOf returns how to reach the terminal path's commit, or says what the
@@ -913,9 +1126,16 @@ func sudoArgv(t terminalApprover, tail ...string) []string {
 	return append(argv, tail...)
 }
 
-// approveArgv approves f for duration over the digest of the facts shown.
-func approveArgv(t terminalApprover, f accessFacts, duration string) []string {
-	return sudoArgv(t, f.ID, "--for", duration, "--digest", f.Digest)
+// approveArgvWith approves f for duration over the digest of the facts shown,
+// with an access choice: a grant approved read and write names it
+// (--access); the default, read-only, adds nothing, so the command line stays
+// what every seamlessd takes.
+func approveArgvWith(t terminalApprover, f accessFacts, duration, accessChoice string) []string {
+	tail := []string{f.ID, "--for", duration, "--digest", f.Digest}
+	if accessChoice != "" && accessChoice != f.Access {
+		tail = append(tail, "--access", accessChoice)
+	}
+	return sudoArgv(t, tail...)
 }
 
 // denyArgv denies f.
@@ -953,7 +1173,7 @@ func warnPasswordless(ctx context.Context, e *env, t terminalApprover) (password
 // it when no browser could be opened. duration, when given (--for, already
 // checked against the daemon's durations), rides as the page's for= query:
 // the page opens with it chosen, and the passkey's approval binds it.
-func openPasskeyPage(ctx context.Context, e *env, one accessOne, duration string) error {
+func openPasskeyPage(ctx context.Context, e *env, one accessOne, duration, accessChoice string) error {
 	short := printable(one.Request.Short)
 	if one.Page == "" {
 		return fmt.Errorf("%s has no passkey page: this daemon offers no passkey approval, so decide it here: seam approve %s", short, short)
@@ -969,6 +1189,11 @@ func openPasskeyPage(ctx context.Context, e *env, one accessOne, duration string
 		u.RawQuery = q.Encode()
 		chosen = " (approving there grants it " + durationWords(duration, one.MaxLease) + ")"
 	}
+	if accessChoice != "" && accessChoice != one.Request.Access {
+		q := u.Query()
+		q.Set(passkeyAccessParam, accessChoice)
+		u.RawQuery = q.Encode()
+	}
 	page := u.String()
 	if code, err := e.run(ctx, openerArgv(e.platform(), page), nil, io.Discard, io.Discard); err != nil || code != 0 {
 		fmt.Fprintf(e.stdout, "Could not open a browser. Open this page to decide %s with a passkey%s:\n  %s\n", short, chosen, page)
@@ -980,7 +1205,12 @@ func openPasskeyPage(ctx context.Context, e *env, one accessOne, duration string
 
 // passkeyDurationParam is the passkey page's duration query
 // (/console/access/<id>?for=<session|1h|4h>): the page opens with it chosen.
-const passkeyDurationParam = "for"
+// passkeyAccessParam is its access query (?access=read-write): a grant's
+// page opens with that access chosen.
+const (
+	passkeyDurationParam = "for"
+	passkeyAccessParam   = "access"
+)
 
 // openerArgv is the platform's command to open a URL in the default browser.
 func openerArgv(goos, page string) []string {

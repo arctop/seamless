@@ -1,12 +1,16 @@
 package approval
 
-// Read grants (isolation.requests, step G; off by default): a read refused at
-// a confidential project's fence files a request, and the owner may approve
-// it as a grant -- read-only, one project, to the one asker, for a limited
-// time. A grant request is an access_approvals row of kind grant: it shares
-// the short id, the facts and their digest, the pending list and the deny
-// path with a lock's request. Only Grants.Approve decides one, and it writes a
-// grant (store.ApproveAccessGrant), never a lease.
+// Grants (isolation.requests, step G; off by default): a read refused at a
+// confidential project's fence files a request, and the owner may approve it
+// as a grant -- one project, to the one asker, for a limited time; read-only,
+// or, between confidential projects and as the owner chooses, read and write
+// (plan fenced-sessions). A grant request is an access_approvals row of kind
+// grant: it shares the short id, the facts and their digest, the pending list
+// and the deny path with a lock's request. Only Grants.Approve decides one,
+// and it writes a grant (store.GrantAccessApproveWith) and the flows its carry
+// lists -- with a locked target's lease under peer_auth, in the same
+// transaction -- never a lease alone. A move request (ask.go) shares all of
+// it too, and only Grants.ApproveMove decides one.
 //
 // Two tiers, by what the daemon can know about the asker:
 //
@@ -15,11 +19,12 @@ package approval
 //     connection's kernel-verified chain, exactly as for a lock's lease, and
 //     the decision needs the same proofs (the daemon's account through
 //     seamlessd approve, a passkey, a Touch ID key);
-//   - without peer_auth (advisory), the asker is the session the connection
-//     is bound to, and the decision is the bearer key's (ProofKey): seam
-//     approve's y/N in a terminal, or the console's Approve. Any process that
-//     holds the key can make it, so this tier is advisory, and every surface
-//     says so.
+//   - without peer_auth (advisory), the asker is the conversation of the
+//     session the connection is bound to (its client and the session id it
+//     issued), or that session when it names none, and the decision is the
+//     bearer key's (ProofKey): seam approve's y/N in a terminal, or the
+//     console's Approve. Any process that holds the key can make it, so this
+//     tier is advisory, and every surface says so.
 //
 // Never offered: anything involving a sealed project, on either side, and a
 // target that is not confidential. Every check runs again at approval, so a
@@ -31,9 +36,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
@@ -116,8 +119,10 @@ func NewGrants(cfg GrantsConfig) *Grants {
 	if cfg.Approvals != nil {
 		return &Grants{svc: cfg.Approvals}
 	}
-	return &Grants{advisory: true, svc: New(Config{DB: cfg.DB, Events: cfg.Events, Host: cfg.Host,
-		LeaseCap: cfg.LeaseCap, Now: cfg.Now, Logger: cfg.Logger})}
+	svc := New(Config{DB: cfg.DB, Events: cfg.Events, Host: cfg.Host, LeaseCap: cfg.LeaseCap, Now: cfg.Now, Logger: cfg.Logger})
+	// Without peer_auth nothing is locked, whatever a table remembers.
+	svc.lockless = true
+	return &Grants{advisory: true, svc: svc}
 }
 
 // Advisory reports whether this is the advisory tier: no peer_auth, and the
@@ -173,132 +178,36 @@ func (g *Grants) eligible(ctx context.Context, target, from string) error {
 // live grant of the pair files nothing while more than access.ExpiryWarning
 // of it remains: the answer is an *AccessLiveError naming it, as for a
 // lease (Service.Request).
+//
+// The asker is its agent process under peer_auth, else its conversation when
+// the session names one (the client and the session id it issued), else the
+// session. A request from a confidential project states its carry, so the
+// owner sees, and may choose, read-only or read and write; one from an open
+// project states none, as before (Ask files the kind the home and the target
+// call for instead).
 func (g *Grants) RequestGrant(ctx context.Context, in GrantInput) (store.AccessApproval, error) {
-	const op = "approval.RequestGrant"
-	if err := refuseRestricted(ctx); err != nil {
-		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
-	}
-	db, now := g.svc.cfg.DB, g.svc.cfg.Now()
-	target := strings.TrimSpace(in.Project)
-	if target == "" {
-		return store.AccessApproval{}, fmt.Errorf("%s: %w: name the project", op, store.ErrInvalidAccessRequest)
-	}
-	req := store.GrantRequest{Project: target, Lease: g.svc.leaseCap(), TTL: RequestTTL}
-	v, hasView := access.FromContext(ctx)
-	if g.advisory {
-		if hasView {
-			// A View means peer_auth, whose asker is a process: an advisory
-			// service never serves one.
-			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, ErrNoProcess)
-		}
-		sessionID := in.SessionID
-		if sessionID == "" && in.AgentProcess != "" {
-			if found, err := ownAgentSessions(ctx, db, in.Host, in.AgentProcess); err == nil && len(found) == 1 {
-				sessionID = found[0].ID
-			}
-		}
-		req.SessionID = sessionID
-	} else {
-		chain := v.Principal().Chain
-		if !hasView || v.Principal().Kind != access.KindOwner || !v.Principal().Socket || len(chain) == 0 {
-			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, ErrNoProcess)
-		}
-		got, err := g.svc.anchorFor(ctx, chain, in.SessionID, in.AgentProcess, in.Host)
-		if err != nil {
-			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
-		}
-		req.SessionID, req.ProcessKey, req.PeerPID, req.PeerUID, req.Program = got.sessionID, got.token.Key(), got.token.PID, v.Principal().UID, got.program
-	}
-	if req.SessionID == "" {
-		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, ErrNoSession)
-	}
-	sess, ok, err := store.SessionByID(ctx, db, req.SessionID)
+	a, err := g.file(ctx, AskInput{GrantInput: in}, askGrant)
 	if err != nil {
-		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
+		return store.AccessApproval{}, fmt.Errorf("approval.RequestGrant: %w", err)
 	}
-	if !ok || sess.Status == core.SessionCompleted {
-		// A session the idle reaper expired is still its agent's (a call
-		// revives it); one completed on purpose asks nothing.
-		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, ErrNoSession)
-	}
-	from := sess.ProjectSlug
-	switch {
-	case in.From != "" && in.From != from:
-		return store.AccessApproval{}, fmt.Errorf("%s: %w: the session works in %q, not %q", op, store.ErrInvalidAccessRequest, from, in.From)
-	case from == "":
-		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, ErrNoProject)
-	case from == target:
-		return store.AccessApproval{}, fmt.Errorf("%s: %w: a session always reads its own project", op, ErrNotConfidential)
-	}
-	// peer_auth has the first word: neither side may be beyond this
-	// connection's reach (a locked target is the lock's to open, never a
-	// grant's).
-	if !access.Visible(ctx, target) || !access.Writable(ctx, from) {
-		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, access.ErrNotReachable)
-	}
-	if err := g.eligible(ctx, target, from); err != nil {
-		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
-	}
-	if live, err := g.liveGrant(ctx, req, target, from, now); err != nil {
-		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
-	} else if live != nil {
-		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, live)
-	}
-	if pending, ok, err := store.PendingGrantRequest(ctx, db, req.ProcessKey, req.SessionID, target, from, now); err != nil {
-		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
-	} else if ok {
-		if pending, err = g.svc.explained(ctx, pending, in.Via, in.Reason, now); err != nil {
-			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
-		}
-		return pending, nil
-	}
-	if in.Via == ViaRefusal {
-		last, ok, err := store.LastGrantRequest(ctx, db, req.ProcessKey, req.SessionID, target, from)
-		if err != nil {
-			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
-		}
-		if ok && last.Status == store.ApprovalDenied {
-			return store.AccessApproval{}, fmt.Errorf("%s: %w", op, &DeniedError{Request: last})
-		}
-	}
-	req.From = from
-	req.Reason = strings.TrimSpace(in.Reason)
-	if utf8.RuneCountInString(req.Reason) > store.MaxAccessReasonRunes {
-		return store.AccessApproval{}, fmt.Errorf("%s: %w: the reason is limited to %d characters", op,
-			store.ErrInvalidAccessRequest, store.MaxAccessReasonRunes)
-	}
-	req.SessionName, req.CWD, req.Model = sess.Name, sess.CWD, sess.Model
-	req.Repo = repoName(sess.CWD)
-	a, err := store.CreateGrantRequest(ctx, db, req, now)
-	if err != nil {
-		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
-	}
-	via := in.Via
-	if via == "" {
-		via = ViaRequest
-	}
-	g.svc.record(ctx, core.Event{Kind: core.EventAccessRequested, ItemID: a.ID, SessionID: a.SessionID, ProjectSlug: a.Project,
-		Payload: map[string]any{"kind": store.AccessKindGrant, "via": via, "from_project": from}})
 	return a, nil
 }
 
 // liveGrant is the asker's live grant of target from from that covers a new
-// ask -- more than access.ExpiryWarning from its end -- as an
-// *AccessLiveError; nil when there is none. The asker is req's: its agent
-// process under peer_auth, else its session.
-func (g *Grants) liveGrant(ctx context.Context, req store.GrantRequest, target, from string, now time.Time) (*AccessLiveError, error) {
-	var keys []string
-	sessionID := req.SessionID
-	if req.ProcessKey != "" {
-		keys, sessionID = []string{req.ProcessKey}, ""
-	}
-	rows, err := store.AccessGrantsForHolder(ctx, g.svc.cfg.DB, keys, sessionID)
+// ask -- more than access.ExpiryWarning from its end, and read and write when
+// write is asked for -- as an *AccessLiveError; nil when there is none. held
+// are the asker's holders (asker.held), every one of whose grants is its own.
+func (g *Grants) liveGrant(ctx context.Context, held []store.Holder, target, from string, write bool, now time.Time) (*AccessLiveError, error) {
+	rows, err := heldGrants(ctx, g.svc.cfg.DB, held)
 	if err != nil {
 		return nil, err
 	}
 	var live *AccessLiveError
 	for _, r := range rows {
 		if r.Project != target || r.FromProject != from || r.RevokedAt != nil || r.ExpiresAt.Sub(now) <= access.ExpiryWarning {
+			continue
+		}
+		if write && r.Access != store.GrantAccessWrite {
 			continue
 		}
 		if live == nil || r.ExpiresAt.After(live.Expires) {
@@ -308,10 +217,14 @@ func (g *Grants) liveGrant(ctx context.Context, req store.GrantRequest, target, 
 	return live, nil
 }
 
-// Approve decides a read grant request: the facts digest the owner saw, the
-// fence as it stands now, and the proof -- ProofKey only in the advisory
-// tier, the approve core's proofs (Service.prove) otherwise. The grant is
-// written by store.ApproveAccessGrant (single use, bound to the challenge).
+// Approve decides a grant request: the facts digest the owner saw, the
+// access the owner chose (d.Access: read-only, the default, or read and write
+// where the facts offer it), the fence as it stands now, and the proof --
+// ProofKey only in the advisory tier, the approve core's proofs
+// (Service.prove, over the chosen access) otherwise. The grant, the flows its
+// carry lists and -- for a locked target under peer_auth -- the target's lease
+// are one transaction (store.GrantAccessApproveWith: single use, bound to the
+// challenge).
 func (g *Grants) Approve(ctx context.Context, d Decision) (store.AccessGrant, error) {
 	const op = "approval.Grants.Approve"
 	if err := refuseRestricted(ctx); err != nil {
@@ -345,30 +258,39 @@ func (g *Grants) Approve(ctx context.Context, d Decision) (store.AccessGrant, er
 	if d.Digest == "" || d.Digest != facts.Digest {
 		return store.AccessGrant{}, fmt.Errorf("%s: %w", op, ErrFactsChanged)
 	}
+	word, err := accessWord(facts, d)
+	if err != nil {
+		return store.AccessGrant{}, fmt.Errorf("%s: %w", op, err)
+	}
 	// The fence as it stands now: a project tightened to sealed, or loosened
 	// to open, while the request waited is not opened by it.
 	if err := g.eligible(ctx, a.Project, a.FromProject); err != nil {
 		return store.AccessGrant{}, fmt.Errorf("%s: %w", op, err)
 	}
 	now := g.svc.cfg.Now()
-	var decidedBy string
-	switch {
-	case d.Proof.Kind == ProofKey && g.advisory:
-		decidedBy = decidedByKey
-	case d.Proof.Kind == ProofKey:
-		return store.AccessGrant{}, fmt.Errorf("%s: %w", op, ErrPeerProof)
-	default:
-		if decidedBy, err = g.svc.prove(ctx, a, facts, d, now); err != nil {
-			return store.AccessGrant{}, fmt.Errorf("%s: %w", op, err)
-		}
-	}
-	grant, err := store.ApproveAccessGrant(ctx, db, a.ID, a.Challenge, decidedBy, length, now)
+	decidedBy, err := g.decidedBy(ctx, a, facts, d, word, now)
 	if err != nil {
 		return store.AccessGrant{}, fmt.Errorf("%s: %w", op, err)
 	}
+	grantAccess := store.GrantAccessRead
+	if word == accessReadWrite {
+		grantAccess = store.GrantAccessWrite
+	}
+	grant, lease, err := store.GrantAccessApproveWith(ctx, db, store.GrantDecision{ID: a.ID, Challenge: a.Challenge,
+		DecidedBy: decidedBy, Length: length, Access: grantAccess, Lease: !g.advisory && a.ProcessKey != "" && facts.Locked}, now)
+	if err != nil {
+		return store.AccessGrant{}, fmt.Errorf("%s: %w", op, err)
+	}
+	payload := map[string]any{"grant": grant.ID, "from_project": a.FromProject, "proof": d.Proof.Kind,
+		"seconds": int64(grant.ExpiresAt.Sub(grant.GrantedAt) / time.Second), "duration": d.Duration}
+	if grantAccess == store.GrantAccessWrite {
+		payload["access"] = grantAccess
+	}
+	if lease != nil {
+		payload["lease"] = lease.ID
+	}
 	g.svc.record(ctx, core.Event{Kind: core.EventAccessGranted, ItemID: a.ID, SessionID: a.SessionID, ProjectSlug: a.Project,
-		Payload: map[string]any{"grant": grant.ID, "from_project": a.FromProject, "proof": d.Proof.Kind,
-			"seconds": int64(grant.ExpiresAt.Sub(grant.GrantedAt) / time.Second), "duration": d.Duration}})
+		Payload: payload})
 	if iso, err := store.IsolationOf(ctx, db, a.FromProject); err == nil && iso == core.IsolationOpen {
 		g.svc.record(ctx, core.Event{Kind: core.EventAccessConfined, ItemID: a.ID, SessionID: a.SessionID, ProjectSlug: a.FromProject,
 			Payload: map[string]any{"grant": grant.ID, "target_project": a.Project}})
@@ -393,14 +315,33 @@ func (g *Grants) RevokeGrant(ctx context.Context, id string) (store.AccessGrant,
 }
 
 // RevokeSession ends every live grant a session asked for: its end, which is
-// what "until the session ends" means. It returns how many.
+// what "until the session ends" means. When the session is its
+// conversation's own (ambient) row, its end is the conversation's, so every
+// live grant the conversation holds ends too, whichever of its sessions asked.
+// A move ends a session without this: the conversation goes on in the child.
+// Flows and the label stay: ending a grant does not unread what it read. It
+// returns how many grants ended.
 func (g *Grants) RevokeSession(ctx context.Context, sessionID string) (int64, error) {
 	if sessionID == "" {
 		return 0, nil
 	}
-	n, err := store.RevokeAccessGrantsForSession(ctx, g.svc.cfg.DB, sessionID, store.LeaseRevokedSessionEnded, g.svc.cfg.Now())
+	db, now := g.svc.cfg.DB, g.svc.cfg.Now()
+	n, err := store.RevokeAccessGrantsForSession(ctx, db, sessionID, store.LeaseRevokedSessionEnded, now)
 	if err != nil {
 		return 0, fmt.Errorf("approval.Grants.RevokeSession: %w", err)
+	}
+	sess, ok, err := store.SessionByID(ctx, db, sessionID)
+	if err != nil {
+		return n, fmt.Errorf("approval.Grants.RevokeSession: %w", err)
+	}
+	if ok && sess.Ambient && sess.ExternalClient != "" && sess.ExternalSessionID != "" {
+		if holder, herr := store.HolderOfConversation(sess.ExternalClient, sess.ExternalSessionID); herr == nil {
+			m, err := store.RevokeAccessGrantsForHolder(ctx, db, holder, store.LeaseRevokedSessionEnded, now)
+			if err != nil {
+				return n, fmt.Errorf("approval.Grants.RevokeSession: %w", err)
+			}
+			n += m
+		}
 	}
 	if n > 0 {
 		g.svc.record(ctx, core.Event{Kind: core.EventAccessRevoked, SessionID: sessionID,

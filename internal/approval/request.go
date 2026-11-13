@@ -170,13 +170,19 @@ func (e *DeniedError) Error() string {
 func (e *DeniedError) Unwrap() error { return ErrDenied }
 
 // What names the denied request's kind for an agent: "access request",
-// "refresh request" or "read request".
+// "refresh request", "read request", "read-and-write request" (a grant that
+// asked for write) or "move request".
 func (e *DeniedError) What() string {
 	switch e.Request.Kind {
 	case store.AccessKindRefresh:
 		return "refresh request"
 	case store.AccessKindGrant:
+		if e.Request.RequestedAccess == store.GrantAccessWrite {
+			return "read-and-write request"
+		}
 		return "read request"
+	case store.AccessKindMove:
+		return "move request"
 	}
 	return "access request"
 }
@@ -269,9 +275,34 @@ type Facts struct {
 	ExpiresAt   time.Time `json:"expires_at"`
 	Digest      string    `json:"digest"`
 	// From is a read grant request's asking project (isolation.requests):
-	// the grant would open Project to sessions working there. Empty, and
-	// absent from the JSON, for a lock's request.
+	// the grant would open Project to sessions working there. For a move it
+	// is the home the conversation leaves (empty for the global scope).
+	// Empty, and absent from the JSON, for a lock's request.
 	From string `json:"from,omitempty"`
+	// Carry is what a grant or move request states (isolation.requests,
+	// carry.go): the home, every fenced project the conversation holds once
+	// approved and every project it may write to once approved -- for a
+	// grant as its default, read-only, approval binds it (ReadWrite says what
+	// read and write adds). Absent for a lock's request, and for a grant that
+	// states none (one asked from an open project, or filed before migration
+	// 039).
+	Carry *CarryFacts `json:"carry,omitempty"`
+	// AccessChoices are the accesses the owner may approve, the default
+	// first: read-only and read-write for a grant between confidential
+	// projects that states its carry. Absent where the access is Access alone.
+	AccessChoices []string `json:"access_choices,omitempty"`
+	// AskedAccess is the access the agent asked for, where the owner chooses
+	// (AccessChoices): read-only or read-write. The default is read-only
+	// whatever was asked.
+	AskedAccess string `json:"asked_access,omitempty"`
+	// ReadWrite is what approving read and write lets happen, as one line
+	// (ReadWriteLine), where AccessChoices offers it.
+	ReadWrite string `json:"read_write,omitempty"`
+	// Locked marks a grant or move whose target is locked: approving it also
+	// opens the lock to this agent's process tree (the target's lease) for
+	// the duration chosen. Absent for a lock's own request, which is nothing
+	// else.
+	Locked bool `json:"locked,omitempty"`
 }
 
 // SelfReportedNote says, on every approval surface that shows them, that the
@@ -302,6 +333,9 @@ const (
 	WarnAnchorRuntime  = "anchor_is_runtime"
 	WarnNoSession      = "no_session"
 	WarnRefreshOfLease = "refresh"
+	// WarnMove is a move request's line (MoveLine): what the move carries
+	// and where the agent can no longer write.
+	WarnMove = "move"
 )
 
 // WarningOrder is the order the facts serve their warnings in, most serious
@@ -314,6 +348,8 @@ const (
 //   - anchor_is_runtime: the process is a JS runtime that only its own hook
 //     calls an agent, and an editor's server is one too, so one approval could
 //     cover everything that server started;
+//   - move: an approved move takes the agent into the project for good, with
+//     everything it carries, and out of every place it could write before;
 //   - copy_into: an approved read lets the project's content leave, into
 //     another project's memories;
 //   - session_tainted: the session read text from outside, so the request and
@@ -327,7 +363,7 @@ const (
 //   - refresh: the agent holds a lease on the project already; approving
 //     replaces it and adds no reach.
 var WarningOrder = []string{
-	WarnAnchorIsShell, WarnAnchorRuntime, WarnCopyInto, WarnTainted, WarnOtherPending, WarnCWDOutside, WarnNoSession, WarnRefreshOfLease,
+	WarnAnchorIsShell, WarnAnchorRuntime, WarnMove, WarnCopyInto, WarnTainted, WarnOtherPending, WarnCWDOutside, WarnNoSession, WarnRefreshOfLease,
 }
 
 // warningRank is a warning's place in WarningOrder; a code it does not list
@@ -711,21 +747,27 @@ func (s *Service) factsOf(ctx context.Context, a store.AccessApproval) (Facts, e
 	if isoWord == "" {
 		isoWord = string(core.IsolationOpen)
 	}
-	grant := a.Kind == store.AccessKindGrant
+	grant, move := a.Kind == store.AccessKindGrant, a.Kind == store.AccessKindMove
 	f := Facts{
 		ID: a.ID, Short: ShortID(a.ID), Project: a.Project, Isolation: isoWord, Access: accessReadWrite, Kind: a.Kind,
 		Program: a.Program, Agent: agentName(a.Program), PID: a.PeerPID, UID: a.PeerUID, Session: a.SessionName, SessionID: a.SessionID,
 		CWD: a.CWD, Repo: a.Repo, Model: a.Model, Reason: a.Reason, RequestedAt: a.RequestedAt, ExpiresAt: a.ExpiresAt,
 	}
 	// A read grant opens the project read-only to the asking project, and its
-	// repository is the one the session should be working in.
+	// repository is the one the session should be working in; a move's is the
+	// home it leaves.
 	home := a.Project
 	if grant {
 		f.Access, f.From, home = accessReadOnly, a.FromProject, a.FromProject
 	}
+	if move {
+		f.From, home = a.FromProject, a.FromProject
+	}
 	warn := func(code, text string) { f.Warnings = append(f.Warnings, Warning{Code: code, Text: text}) }
-	if grant {
-		warn(WarnCopyInto, CopyIntoLine(a.Project, a.FromProject))
+	if grant || move {
+		if err := s.kindFacts(ctx, a, iso, &f); err != nil {
+			return Facts{}, fmt.Errorf("%s: %w", op, err)
+		}
 	}
 	if a.Kind == store.AccessKindRefresh {
 		warn(WarnRefreshOfLease, "this session already holds a lease on the project; approving replaces it")
@@ -741,7 +783,7 @@ func (s *Service) factsOf(ctx context.Context, a store.AccessApproval) (Facts, e
 	if a.SessionID == "" {
 		warn(WarnNoSession, "no session named this agent; its cwd and model are unknown")
 	}
-	if a.CWD != "" && s.cfg.Host != "" {
+	if a.CWD != "" && s.cfg.Host != "" && home != "" {
 		roots, err := store.RepoRootsForProject(ctx, s.cfg.DB, s.cfg.Host)
 		if err != nil {
 			return Facts{}, fmt.Errorf("%s: %w", op, err)
@@ -875,6 +917,26 @@ type Decision struct {
 	Duration string
 	Digest   string
 	Proof    Proof
+	// Access is the access approved: "" for the facts' own (Facts.Access, the
+	// default), or one of Facts.AccessChoices -- a grant's read-only or
+	// read-write. A passkey or Touch ID proof signs it.
+	Access string
+}
+
+// accessWord is the access decision d approves over facts f: f.Access when d
+// names none, else d.Access, which must be f.Access or one of f's choices.
+func accessWord(f Facts, d Decision) (string, error) {
+	switch {
+	case d.Access == "" || d.Access == f.Access:
+		return f.Access, nil
+	case slices.Contains(f.AccessChoices, d.Access):
+		return d.Access, nil
+	}
+	valid := f.AccessChoices
+	if len(valid) == 0 {
+		valid = []string{f.Access}
+	}
+	return "", fmt.Errorf("%w %q for %s: valid values are %s", ErrAccess, d.Access, f.Short, strings.Join(valid, ", "))
 }
 
 // TouchIDApproveMessage is what a Touch ID key signs to approve a request:
@@ -920,9 +982,14 @@ func (s *Service) Approve(ctx context.Context, d Decision) (store.AccessLease, e
 	if err != nil {
 		return store.AccessLease{}, fmt.Errorf("%s: %w", op, err)
 	}
-	if a.Kind == store.AccessKindGrant {
+	switch a.Kind {
+	case store.AccessKindGrant:
 		// A read grant is decided by Grants.Approve, and never becomes a lease.
 		return store.AccessLease{}, fmt.Errorf("%s: %w: %s", op, ErrIsGrant, ShortID(a.ID))
+	case store.AccessKindMove:
+		// A move is decided by Grants.ApproveMove: a lease is only its lock's
+		// half, never the move.
+		return store.AccessLease{}, fmt.Errorf("%s: %w: %s", op, ErrIsMove, ShortID(a.ID))
 	}
 	if a.Status != store.ApprovalPending {
 		return store.AccessLease{}, fmt.Errorf("%s: %w: %s is %s", op, store.ErrApprovalNotPending, ShortID(a.ID), a.Status)
@@ -939,8 +1006,12 @@ func (s *Service) Approve(ctx context.Context, d Decision) (store.AccessLease, e
 	if d.Digest == "" || d.Digest != facts.Digest {
 		return store.AccessLease{}, fmt.Errorf("%s: %w", op, ErrFactsChanged)
 	}
+	word, err := accessWord(facts, d)
+	if err != nil {
+		return store.AccessLease{}, fmt.Errorf("%s: %w", op, err)
+	}
 	now := s.cfg.Now()
-	decidedBy, err := s.prove(ctx, a, facts, d, now)
+	decidedBy, err := s.prove(ctx, a, facts, d, word, now)
 	if err != nil {
 		return store.AccessLease{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -954,10 +1025,11 @@ func (s *Service) Approve(ctx context.Context, d Decision) (store.AccessLease, e
 }
 
 // prove verifies a decision's proof over request a, whose facts (and their
-// digest) the owner was shown, and returns who decided: the daemon's account,
-// or the approver credential that signed. It is the one proof check of the
-// approve core, for a lock's lease and a read grant alike.
-func (s *Service) prove(ctx context.Context, a store.AccessApproval, facts Facts, d Decision, now time.Time) (string, error) {
+// digest) the owner was shown, for word, the access chosen (accessWord), and
+// returns who decided: the daemon's account, or the approver credential that
+// signed. It is the one proof check of the approve core, for a lock's lease, a
+// grant and a move alike.
+func (s *Service) prove(ctx context.Context, a store.AccessApproval, facts Facts, d Decision, word string, now time.Time) (string, error) {
 	switch d.Proof.Kind {
 	case ProofDaemon:
 		return decidedByDaemon, nil
@@ -986,10 +1058,10 @@ func (s *Service) prove(ctx context.Context, a store.AccessApproval, facts Facts
 		// digest each options were issued for, and the daemon keeps no such
 		// state (owner decision 2026-11-08). signedOtherwise recognizes only
 		// what it can recompute: another duration, or the bare challenge.
-		binding := PasskeyApproveChallenge(a.ID, a.Challenge, facts.Digest, facts.Access, d.Duration)
+		binding := PasskeyApproveChallenge(a.ID, a.Challenge, facts.Digest, word, d.Duration)
 		used, err := s.cfg.Passkeys.FinishAssertion(binding, allowed, d.Proof.Assertion)
 		if err != nil {
-			if signedOtherwise(a, facts, d) {
+			if signedOtherwise(a, facts, d, word) {
 				return "", fmt.Errorf("%w: %w", ErrFactsChanged, ErrBindingChanged)
 			}
 			return "", err
@@ -1007,7 +1079,7 @@ func (s *Service) prove(ctx context.Context, a store.AccessApproval, facts Facts
 		if err != nil || row.Kind != store.ApproverTouchID {
 			return "", fmt.Errorf("%w: no such Touch ID key", ErrTouchIDKey)
 		}
-		msg := TouchIDApproveMessage(a.ID, a.Challenge, d.Digest, facts.Access, d.Duration)
+		msg := TouchIDApproveMessage(a.ID, a.Challenge, d.Digest, word, d.Duration)
 		if err := VerifyTouchID(row.PublicKey, msg, d.Proof.Signature); err != nil {
 			return "", err
 		}
@@ -1021,12 +1093,13 @@ func (s *Service) prove(ctx context.Context, a store.AccessApproval, facts Facts
 }
 
 // signedOtherwise reports whether a passkey assertion that failed against
-// decision d's binding was made for this request with another duration, or
-// over its bare challenge (an older daemon's page): a decision changed after
-// it was signed, which is refused as changed facts rather than as a bad
-// passkey. Anything else -- another request's assertion, a forged or
-// unreadable one -- is not, and keeps the passkey's own refusal.
-func signedOtherwise(a store.AccessApproval, facts Facts, d Decision) bool {
+// decision d's binding was made for this request with another duration or
+// another access (one of the facts' choices), or over its bare challenge (an
+// older daemon's page): a decision changed after it was signed, which is
+// refused as changed facts rather than as a bad passkey. Anything else --
+// another request's assertion, a forged or unreadable one -- is not, and
+// keeps the passkey's own refusal.
+func signedOtherwise(a store.AccessApproval, facts Facts, d Decision, word string) bool {
 	got, err := passkey.AssertionChallenge(d.Proof.Assertion)
 	if err != nil {
 		return false
@@ -1034,9 +1107,12 @@ func signedOtherwise(a store.AccessApproval, facts Facts, d Decision) bool {
 	if bytes.Equal(got, a.Challenge) {
 		return true
 	}
-	for _, other := range Durations {
-		if other != d.Duration && bytes.Equal(got, PasskeyApproveChallenge(a.ID, a.Challenge, facts.Digest, facts.Access, other)) {
-			return true
+	words := append([]string{facts.Access}, facts.AccessChoices...)
+	for _, w := range words {
+		for _, other := range Durations {
+			if (other != d.Duration || w != word) && bytes.Equal(got, PasskeyApproveChallenge(a.ID, a.Challenge, facts.Digest, w, other)) {
+				return true
+			}
 		}
 	}
 	return false
@@ -1086,6 +1162,14 @@ func (s *Service) RevokeSession(ctx context.Context, sessionID string) (int64, e
 // not the facts' as they stand now is ErrFactsChanged: the options are issued
 // only for a decision the owner is looking at.
 func (s *Service) AssertionOptionsFor(ctx context.Context, id, duration, digest string) ([]byte, error) {
+	return s.AssertionOptionsForAccess(ctx, id, duration, "", digest)
+}
+
+// AssertionOptionsForAccess is AssertionOptionsFor for the access the page
+// chose as well (Decision.Access: "" for the facts' own): the assertion
+// signs it, so a passkey that approved read-only cannot be lifted onto read
+// and write. An access the request does not offer is ErrAccess.
+func (s *Service) AssertionOptionsForAccess(ctx context.Context, id, duration, accessChoice, digest string) ([]byte, error) {
 	const op = "approval.AssertionOptionsFor"
 	if err := refuseRestricted(ctx); err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
@@ -1110,11 +1194,15 @@ func (s *Service) AssertionOptionsFor(ctx context.Context, id, duration, digest 
 	if digest == "" || digest != facts.Digest {
 		return nil, fmt.Errorf("%s: %w", op, ErrFactsChanged)
 	}
+	word, err := accessWord(facts, Decision{Access: accessChoice})
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
 	creds, err := s.passkeys(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	opts, err := s.cfg.Passkeys.BeginAssertion(PasskeyApproveChallenge(a.ID, a.Challenge, facts.Digest, facts.Access, duration), creds)
+	opts, err := s.cfg.Passkeys.BeginAssertion(PasskeyApproveChallenge(a.ID, a.Challenge, facts.Digest, word, duration), creds)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}

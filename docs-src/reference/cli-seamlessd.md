@@ -786,7 +786,7 @@ in your own terminal.
 ## seamlessd approve {#seamlessd_approve}
 
 ```bash
-seamlessd approve <request> --for <session|1h|4h> --digest <facts digest>
+seamlessd approve <request> --for <session|1h|4h> --digest <facts digest> [--access <read-only|read-write>]
 seamlessd approve <request> --deny
 ```
 
@@ -817,6 +817,21 @@ shown: run seam approve again and look at them first`), the request expired
 before the decision reached it (`R-7F3K expired at 14:05, before this
 decision: nothing changed ...`), or it was decided meanwhile (`R-7F3K was
 already approved: nothing changed`).
+
+With read grants on (`isolation.requests`) it decides the two other kinds as
+well. `--access read-write` approves a grant between confidential projects
+read and write (read-only is the default, and `--access` names only an access
+the request offers): `Approved R-7F3K: pid 200, working in example-hr, may
+read and write example-payroll until 15:05; content from example-payroll may
+be copied into example-hr, and it may change example-payroll's tasks, memories
+and notes; content from example-hr may be copied into example-payroll.` A move
+request moves the agent into the project for good, as a new session that
+continues the one it left: `Approved R-7F3K: Claude Code 2.1.319 (pid 4242)
+moved from example-ops into example-hr for good, as session
+cc/08eb9006-5c473accb1746e1b@example-hr.`, with `; its lock is open to it
+until ...` for a locked project, whose lease the same approval records. A
+denied move answers `Denied R-7F3K: the agent stays in example-ops, and
+example-hr stays closed to it.`
 
 ## seamlessd console-open {#seamlessd_console_open}
 

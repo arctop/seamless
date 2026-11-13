@@ -453,7 +453,7 @@ list`, `seam proposals`), only that project is named, when it is locked. Their
 ### seam access request {#seam_access_request}
 
 ```bash
-seam access request [--json] [--reason TEXT] <project>
+seam access request [--json] [--reason TEXT] [--write] <project>
 ```
 
 Files an access request for a locked project, naming the agent that runs it:
@@ -492,11 +492,36 @@ verify, or the process asking is not an agent's (a shell, a terminal, a
 multiplexer such as tmux, or a login process), so nothing was filed - run it
 from the agent's own shell.
 
+`--write` (with read grants on, `isolation.requests`) asks to change the
+project as well as read it, and files what the agent's home and the project
+call for, never a kind the agent picks. From a confidential project it asks
+for a grant of another confidential project that reads and writes; the owner
+may still approve it read-only:
+
+```text
+Requested read and write access to example-payroll for example-hr (R-7F3K; the owner may approve it read-only). The owner approves it with: seam approve R-7F3K
+```
+
+From an open project (or the global scope), or for a sealed project from
+anywhere, it asks to move the conversation into the project for good. After
+the move the agent can no longer write where it works now, so it records what
+belongs there first:
+
+```text
+Requested a move into example-hr from example-ops (R-7F3K). The owner approves it with: seam approve R-7F3K
+Record what belongs in example-ops now: once the move is approved, this agent cannot write there.
+```
+
+One request waits per agent and project, whichever kind: asking again finds
+it. For the project the agent already works in, a lock's request is filed as
+without `--write`, since a lock's approval reads and writes already; without
+read grants `--write` changes nothing.
+
 ### seam approve {#seam_approve}
 
 ```bash
-seam approve [--for DURATION] [<request>]
-seam approve --passkey [--for DURATION] [<request>]
+seam approve [--access ACCESS] [--for DURATION] [<request>]
+seam approve --passkey [--access ACCESS] [--for DURATION] [<request>]
 seam approve --watch
 ```
 
@@ -597,6 +622,32 @@ without its version (`An agent` when the daemon names none), the project and
 the command (`Claude Code asks for example-finance: seam approve R-7F3K`),
 never the agent's reason. Ctrl-C ends it. It decides nothing; it takes no
 request, `--for` or `--passkey`.
+
+With read grants on (`isolation.requests`), two more kinds of request come
+here. Their facts add what the request carries: `Holds` (every fenced project
+the agent holds once approved) and `May write to` (every project it may write
+to once approved), and the line that says where content may go, among the
+warnings.
+
+- A grant between confidential projects asks `Which access?` before the
+  duration: `read-only` (the default, Enter: `content from <project> may be
+  copied into <its home and the other projects it may write to>`) or
+  `read-write` (that line, and that it may change the project's tasks,
+  memories and notes, with everything it holds copied into it). `It asks for:
+  read and write` marks a request that asked for write; read-only stays the
+  default. `--access read-only|read-write` answers the question, and is
+  refused for a request that offers no choice. An approval with `read-write`
+  adds `--access read-write` to the `seamlessd approve` command line.
+- A move request (`Move request R-7F3K`) says where the agent worked, what it
+  read, that it works in the project from now on, and that it can no longer
+  write where it was before. It asks no duration (`If approved: Claude Code
+  2.1.319 (pid 4242) moves from example-ops into example-hr for good.`),
+  unless the project is locked: then the duration is that of its lock, which
+  the same approval opens.
+
+`--passkey` opens the page with `--access`'s choice (`?access=read-write`) as
+well as `--for`'s. A move is approved here or with a passkey; Touch ID does
+not approve one.
 
 Exit status: 0 when a request was approved or denied, when nothing changed,
 and when nothing is waiting; 1 on any error, including a request that is no

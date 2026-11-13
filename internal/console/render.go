@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 )
 
@@ -316,6 +317,9 @@ var funcs = template.FuncMap{
 	"about":         pageAbout,
 	"sameHost":      sameHost,
 	"sortLabel":     sortLabel,
+	// joinAnd lists names as a sentence does ("a, b and c"): the access
+	// pages' carry.
+	"joinAnd": approval.JoinAnd,
 }
 
 // pageAbout renders a page's one-line purpose as an (i) disclosure beside its

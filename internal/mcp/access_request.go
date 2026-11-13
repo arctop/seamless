@@ -21,6 +21,12 @@ package mcp
 // until access.ExpiryWarning before it ends; from then on asking again files
 // a new approval: a refresh, or a new read grant request
 // (approval.AccessLiveError).
+//
+// write (with read grants on) asks for what the asker's home and the project
+// call for (approval.Grants.Ask): between confidential projects a grant that
+// asks for read and write -- the owner still chooses -- and from an open
+// project, or into a sealed one, a move into the project for good. Without
+// read grants it changes nothing: a lock's lease reads and writes already.
 
 import (
 	"context"
@@ -45,6 +51,9 @@ const AccessRequestTool = "access_request"
 // such and never recorded in a tool.call event.
 const accessReasonParam = "reason"
 
+// accessWriteParam asks for read and write, or a move (accessRequestAsk).
+const accessWriteParam = "write"
+
 func accessRequestTool() mcp.Tool {
 	return mcp.NewTool(AccessRequestTool, hintSet(),
 		mcp.WithDescription("Ask the owner for access to a locked project. Present only on a server that locks projects "+
@@ -63,10 +72,15 @@ func accessRequestTool() mcp.Tool {
 			"project to this agent's process tree until the time the result names: retry the work then. An agent that "+
 			"already holds the access it asks for is answered with it, and nothing is filed, until 30 minutes before it "+
 			"ends. With read grants on (isolation.requests), it also asks for a read of a confidential project no lock "+
-			"covers."),
+			"covers, and write asks to change the project too."),
 		mcp.WithString("project", mcp.Required(), mcp.Description("the locked project's slug")),
 		mcp.WithString(accessReasonParam, mcp.Description(fmt.Sprintf("optional: why the work needs the project, in at "+
 			"most %d characters. The owner sees it labeled as this agent's own words.", store.MaxAccessReasonRunes))),
+		mcp.WithBoolean(accessWriteParam, mcp.Description("optional, with read grants on (isolation.requests): ask to "+
+			"change the project as well as read it. From a confidential project it asks for a read-and-write grant, which "+
+			"the owner may still approve read-only; from an open project, or for a sealed one, it asks to move this "+
+			"conversation into the project for good, after which it can no longer write where it works now, so record "+
+			"what belongs there first. Without read grants a locked project's approval reads and writes already.")),
 	)
 }
 
@@ -76,11 +90,16 @@ type accessRequestResult struct {
 	ShortID string `json:"short_id"`
 	Project string `json:"project"`
 	// Kind is request, refresh for a tree whose lease on the project ends
-	// within the expiry warning (approving replaces it), or grant for a read
-	// grant of a confidential project (isolation.requests).
+	// within the expiry warning (approving replaces it), grant for a grant of
+	// a confidential project, or move for a move into a fenced project
+	// (isolation.requests).
 	Kind string `json:"kind"`
-	// From is a read grant's asking project; absent for a lock's request.
+	// From is a grant's asking project, or the home a move leaves; absent for
+	// a lock's request.
 	From string `json:"from,omitempty"`
+	// Access is write when the request asks for read and write (a grant the
+	// write argument filed); absent otherwise.
+	Access string `json:"access,omitempty"`
 	// Status is pending, approved, denied or expired. A live lease that
 	// covers the ask answers approved, with the request that opened it.
 	Status string `json:"status"`
@@ -132,7 +151,11 @@ func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolReques
 	if s.cfg.Approvals == nil {
 		return errResult(AccessRequestTool, errors.New("this server locks no project: nothing to request"))
 	}
-	if s.cfg.Grants != nil && !lockCovers(ctx, project) {
+	if s.cfg.Grants != nil && argBool(req, accessWriteParam, false) {
+		if res, ok, err := s.accessRequestAsk(ctx, start, project, reason); ok {
+			return res, err
+		}
+	} else if s.cfg.Grants != nil && !lockCovers(ctx, project) {
 		return s.accessRequestGrant(ctx, start, project, reason)
 	}
 	var asked approval.Asked
@@ -189,6 +212,95 @@ func (s *Server) accessRequestGrant(ctx context.Context, start time.Time, projec
 	}
 	out.Filed, out.Reason = asked.Outcome(a)
 	return s.accessRequestAnswer(ctx, start, t, ways, out)
+}
+
+// grantAsker is the read grants' ask of a kind (*approval.Grants.Ask):
+// asserted, so the Grants interface the rest of the server holds keeps its
+// shape.
+type grantAsker interface {
+	Ask(ctx context.Context, in approval.AskInput) (store.AccessApproval, error)
+}
+
+// accessRequestAsk files (or finds) what write asks for: the kind the
+// conversation's home and the project call for (approval.Grants.Ask) -- a
+// grant asking for read and write between confidential projects, or a move.
+// ok is false, with nothing answered, for the project the asker already
+// works in when a lock covers it: that is the lock's lease to ask for, which
+// reads and writes already. A move is answered at once, without the approval
+// dialog: the dialog words a lock's lease or a grant, not a move, and Touch ID
+// does not approve one (approval.ErrTouchIDMove); the owner decides it with a
+// passkey or in their own terminal.
+func (s *Server) accessRequestAsk(ctx context.Context, start time.Time, project, reason string) (*mcp.CallToolResult, bool, error) {
+	asker, ok := s.cfg.Grants.(grantAsker)
+	if !ok {
+		res, err := errResult(AccessRequestTool, errors.New("this server cannot ask for write access: nothing was filed"))
+		return res, true, err
+	}
+	var asked approval.Asked
+	a, err := asker.Ask(approval.WithAsked(ctx, &asked), approval.AskInput{GrantInput: approval.GrantInput{
+		Project: project, SessionID: s.boundSession(ctx), AgentProcess: callerAgentProcess(ctx), Host: s.callerHost(ctx),
+		Reason: reason, Via: approval.ViaRequest,
+	}, Write: true})
+	if errors.Is(err, approval.ErrIsHome) && lockCovers(ctx, project) {
+		return nil, false, nil
+	}
+	var live *approval.AccessLiveError
+	if errors.As(err, &live) {
+		res, err := jsonResult(s.liveAccessResult(ctx, live))
+		return res, true, err
+	}
+	if err != nil {
+		res, err := errResult(AccessRequestTool, askRequestError(err, project))
+		return res, true, err
+	}
+	move := a.Kind == store.AccessKindMove
+	t := dialogTarget{ID: a.ID, Short: approval.ShortID(a.ID), Project: a.Project, Grant: !move}
+	ways := callWays(ctx, s.cfg.Grants.Ways(ctx, a.ID))
+	if move {
+		ways.TouchID = false
+	}
+	out := accessRequestResult{
+		ID: a.ID, ShortID: t.Short, Project: a.Project, Kind: a.Kind, From: a.FromProject, Status: s.stateOf(a), Page: ways.Page,
+	}
+	if a.Kind == store.AccessKindGrant && a.RequestedAccess == store.GrantAccessWrite {
+		out.Access = store.GrantAccessWrite
+	}
+	out.Filed, out.Reason = asked.Outcome(a)
+	if move {
+		out.Next = accessRequestNext(t, ways, dialogEnd{state: out.Status})
+		if out.Status == store.ApprovalPending {
+			out.Next = moveFirstLine(a.FromProject) + " " + out.Next
+		}
+		res, err := jsonResult(out)
+		return res, true, err
+	}
+	res, err := s.accessRequestAnswer(ctx, start, t, ways, out)
+	return res, true, err
+}
+
+// moveFirstLine is what a move request tells the agent before anything else:
+// after the move it cannot write where it works now.
+func moveFirstLine(home string) string {
+	if home == "" {
+		return "Once the owner approves the move, this conversation can no longer write to the global scope."
+	}
+	return "Record what belongs in " + home + " now: once the owner approves the move, this conversation can no longer write there."
+}
+
+// askRequestError words the refusals of an ask of a kind for an agent, as
+// the console's access request route does for `seam access request --write`.
+func askRequestError(err error, project string) error {
+	switch {
+	case errors.Is(err, approval.ErrIsHome):
+		return errors.New("this conversation already works in " + project + ": nothing to request")
+	case errors.Is(err, approval.ErrNoConversation):
+		return errors.New("a move needs this agent's own session, the one its SessionStart hook recorded; this call names none")
+	case errors.Is(err, approval.ErrNotConfidential):
+		return errors.New("that project is neither confidential nor sealed: nothing to request")
+	case errors.Is(err, approval.ErrSealed):
+		return errors.New("a sealed project's session asks for no other project: nothing to request")
+	}
+	return grantRequestError(err)
 }
 
 // liveAccessResult is the answer to an ask live access already covers -- a

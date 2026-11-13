@@ -637,6 +637,24 @@ any of it.
   Event slugs ride `from_project`/`target_project`, never a key in
   `feed.frameFields`. Off, no request carries grants and every check answers
   as before.
+- **Moves and read-and-write grants are one approval each**
+  (`isolation.requests`; `approval/ask.go`, `approval/carry.go`,
+  `store/approvalkind.go`). The kind follows from the conversation's home and
+  the target (`approval.KindFor`): an open or global home reaching a
+  confidential project, or any home reaching a sealed one, is a move; a
+  confidential home reaching a confidential project is a grant; nothing else
+  is offered. A grant between confidential projects is read-only unless the
+  owner chooses read and write (`Decision.Access`, which a passkey or Touch ID
+  proof signs beside the facts digest). The facts state the carry (home, held
+  projects, write destinations), and an approval records exactly the flows it
+  lists. `store.MoveApproveWith` ends the pre-move ambient row (ambient = 0,
+  completed, a metadata-only pointer, its task claims kept for receipts) and
+  inserts the child (`parent_session_id`) as the conversation's one ambient
+  row, plus a locked target's lease bound to the child, in one transaction.
+  `ReactivateAmbientSession` never re-scopes a move's child. The lock core
+  refuses a move (`ErrIsMove`), and Touch ID approves none until the helper
+  words one (`ErrTouchIDMove`). Explicit asks without `write` keep today's
+  kinds (a lock request, or a read grant from the asking session's project).
 - **The identity comes from the transport, never the client.** A header, a
   `session=` handle, a body field or an agent-process identity can only ever
   narrow what the View allows. `getBinding` drops a binding to an unreachable

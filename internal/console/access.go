@@ -80,6 +80,8 @@ type grantRow struct {
 	PID       int32     `json:"pid,omitempty"`
 	GrantedAt time.Time `json:"granted_at"`
 	ExpiresAt time.Time `json:"expires_at"`
+	// Access is what the owner approved: read, or write (read and write).
+	Access string `json:"access"`
 }
 
 // GrantsView is what the access pages need of the daemon's read grants
@@ -87,7 +89,12 @@ type grantRow struct {
 type GrantsView interface {
 	Advisory() bool
 	RequestGrant(ctx context.Context, in approval.GrantInput) (store.AccessApproval, error)
+	// Ask files the kind the asker's home and the target call for (a move,
+	// or a grant asking for read and write): `seam access request --write`.
+	Ask(ctx context.Context, in approval.AskInput) (store.AccessApproval, error)
 	Approve(ctx context.Context, d approval.Decision) (store.AccessGrant, error)
+	// ApproveMove decides a move request (isolation.requests).
+	ApproveMove(ctx context.Context, d approval.Decision) (approval.MoveApproved, error)
 	RevokeGrant(ctx context.Context, id string) (store.AccessGrant, error)
 	Live(ctx context.Context) ([]store.AccessGrant, error)
 	accessCore
@@ -187,6 +194,54 @@ type accessOneData struct {
 	// Choices are the duration radios, the default first, each worded as
 	// durationWords says it: a choice max_lease cuts short reads as the cap.
 	Choices []durationChoice `json:"-"`
+	// Access is the access ?access= chose, one of the request's
+	// Facts.AccessChoices ("" for the default, read-only): the passkey options
+	// sign it with the duration. Accesses are the access radios, the default
+	// first, where the request offers a choice.
+	Access   string         `json:"access,omitempty"`
+	Accesses []accessChoice `json:"-"`
+	// ForGood marks a move into a project no lock covers: it never ends, so
+	// the page asks no duration (the proof still signs the default one).
+	ForGood bool `json:"-"`
+}
+
+// accessChoice is one access radio: its value and its words.
+type accessChoice struct{ Value, Words string }
+
+// accessChoices words a request's access choices, the default first:
+// read-only, then read and write with what it adds.
+func accessChoices(f approval.Facts) []accessChoice {
+	var out []accessChoice
+	for _, c := range f.AccessChoices {
+		words := "read-only (the default): " + accessCopyLine(f)
+		if c == accessReadWrite {
+			words = "read and write: " + f.ReadWrite
+		}
+		out = append(out, accessChoice{Value: c, Words: words})
+	}
+	return out
+}
+
+// accessReadWrite is a grant's read-and-write choice (approval's word).
+const accessReadWrite = "read-write"
+
+// accessCopyLine is a grant's copy line, the facts' copy_into warning.
+func accessCopyLine(f approval.Facts) string {
+	for _, w := range f.Warnings {
+		if w.Code == approval.WarnCopyInto {
+			return w.Text
+		}
+	}
+	return ""
+}
+
+// chosenAccess is the access ?access= names, "" when it names none or one
+// the request does not offer: then the default, read-only, stands.
+func chosenAccess(r *http.Request, f approval.Facts) string {
+	if v := r.URL.Query().Get("access"); slices.Contains(f.AccessChoices, v) {
+		return v
+	}
+	return ""
 }
 
 // durationChoice is one duration radio: its value and its words.
@@ -314,7 +369,7 @@ func (s *Service) readGrants(ctx context.Context) ([]grantRow, error) {
 	rows := make([]grantRow, 0, len(live))
 	for _, g := range live {
 		row := grantRow{ID: g.ID, Project: g.Project, From: g.FromProject, PID: g.PeerPID, GrantedAt: g.GrantedAt, ExpiresAt: g.ExpiresAt,
-			Agent: approval.AgentLabel("", g.PeerPID)}
+			Agent: approval.AgentLabel("", g.PeerPID), Access: g.Access}
 		if a, err := store.AccessApprovalByID(ctx, s.writeDB(), g.ApprovalID); err == nil {
 			row.Session, row.Agent = a.SessionName, approval.AgentLabel(a.Program, g.PeerPID)
 		}
@@ -396,9 +451,16 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 	if status == store.ApprovalPending && !time.Now().Before(a.ExpiresAt) {
 		status = store.ApprovalExpired
 	}
+	kindOfGrants := a.Kind == store.AccessKindGrant || a.Kind == store.AccessKindMove
 	d := accessOneData{Request: facts, Status: status, Page: s.core().Page(a.ID), Terminal: s.cfg.Terminal,
-		Durations: approval.Durations, MaxLease: s.maxLease(), Advisory: a.Kind == store.AccessKindGrant && s.advisory()}
+		Durations: approval.Durations, MaxLease: s.maxLease(), Advisory: kindOfGrants && s.advisory()}
 	d.Choices = durationChoices(d.MaxLease)
+	d.Accesses, d.Access = accessChoices(facts), chosenAccess(r, facts)
+	if d.ForGood = a.Kind == store.AccessKindMove && !facts.Locked; d.ForGood {
+		// A move no lock covers lasts for good: there is no duration to
+		// choose, and the proof signs the default.
+		d.Choices = []durationChoice{{Value: approval.ForSession, Words: forGoodWords}}
+	}
 	if status == store.ApprovalPending && access.PeerAuthenticated(r.Context()) && wantsJSON(r) {
 		d.Challenge = base64.StdEncoding.EncodeToString(a.Challenge)
 	}
@@ -418,12 +480,18 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 		d.PasskeyReady = s.cfg.Approvals.Ways(r.Context(), "").Passkey
 		// The options only once the duration is chosen: they sign it, with
 		// the facts this page shows.
-		if d.For = chosenDuration(r); d.For != "" {
+		if d.For = chosenDuration(r); d.ForGood {
+			d.For = approval.ForSession
+		}
+		if d.For != "" {
 			d.ForWords = durationWords(d.For, d.MaxLease)
+			if d.ForGood {
+				d.ForWords = forGoodWords
+			}
 			if d.PasskeyReady {
 				// Options over the binding of the request, the chosen
-				// duration and the facts digest this page shows.
-				if opts, err := s.cfg.Approvals.AssertionOptionsFor(r.Context(), a.ID, d.For, facts.Digest); err == nil {
+				// duration and access, and the facts digest this page shows.
+				if opts, err := s.cfg.Approvals.AssertionOptionsForAccess(r.Context(), a.ID, d.For, d.Access, facts.Digest); err == nil {
 					d.PasskeyOptions = opts
 				} else {
 					s.logger.Debug("console: passkey options", "request", facts.Short, "error", err)
@@ -433,6 +501,9 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, r, "access_one", pageData{Title: "Access request " + facts.Short, Active: "access", Data: d})
 }
+
+// forGoodWords is how long a move no lock covers lasts, as the pages say it.
+const forGoodWords = "for good: a move does not end"
 
 func containsString(list []string, v string) bool {
 	for _, s := range list {
@@ -457,11 +528,30 @@ func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	project := strings.TrimSpace(r.PostForm.Get("project"))
 	host := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Seamless-Host")))
+	// write is read only with read grants on: off, the route reads the form
+	// it always read.
+	var write bool
+	if s.cfg.Grants != nil {
+		var err error
+		if write, err = formFlag(r, "write"); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+	}
 	// A read grant is for a project no lock covers: a locked project this
 	// tree holds a lease on is still the lock's (a live lease answers, or a
 	// refresh is filed).
 	_, leased := v.Lease(project)
-	if s.cfg.Grants != nil && !access.Locked(r.Context(), project) && !leased {
+	lockCovers := access.Locked(r.Context(), project) || leased
+	// write asks for what the asker's home and the target call for: a
+	// read-and-write grant between confidential projects, else a move (with
+	// read grants on; without them a lock's lease reads and writes already).
+	switch {
+	case s.cfg.Grants != nil && write:
+		if s.askRequest(w, r, project, proc, host, lockCovers) {
+			return
+		}
+	case s.cfg.Grants != nil && !lockCovers:
 		s.grantRequest(w, r, project, proc, host)
 		return
 	}
@@ -534,12 +624,16 @@ func (s *Service) accessApprove(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such access request"})
 		return
 	}
-	if a.Kind == store.AccessKindGrant {
+	switch a.Kind {
+	case store.AccessKindGrant:
 		if ok {
 			s.grantApproveTouchID(w, r, a, touch)
 			return
 		}
 		s.grantApprove(w, r, a)
+		return
+	case store.AccessKindMove:
+		s.moveApprove(w, r, a, touch, ok)
 		return
 	}
 	if s.cfg.Approvals == nil {
@@ -552,6 +646,7 @@ func (s *Service) accessApprove(w http.ResponseWriter, r *http.Request) {
 	}
 	lease, err := s.cfg.Approvals.Approve(r.Context(), approval.Decision{
 		ID: a.ID, Duration: r.PostForm.Get("duration"), Digest: r.PostForm.Get("digest"), Proof: proof,
+		Access: r.PostForm.Get("access"),
 	})
 	if err != nil {
 		s.accessError(w, r, err)
@@ -604,16 +699,83 @@ func (s *Service) grantApproveTouchID(w http.ResponseWriter, r *http.Request, a 
 	}
 	grant, err := s.cfg.Grants.Approve(r.Context(), approval.Decision{
 		ID: a.ID, Duration: r.PostForm.Get("duration"), Digest: r.PostForm.Get("digest"), Proof: proof,
+		Access: r.PostForm.Get("access"),
 	})
 	if err != nil {
 		s.accessError(w, r, err)
 		return
 	}
-	afterAccessWrite(w, r, map[string]any{
-		"approved": approval.ShortID(a.ID), "project": a.Project, "from": a.FromProject, "grant": grant.ID,
-		"expires_at": grant.ExpiresAt.UTC().Format(time.RFC3339),
-	}, "Approved "+approval.ShortID(a.ID)+": "+a.Project+" is readable from "+a.FromProject+", read-only, until "+
-		grant.ExpiresAt.Local().Format("15:04")+".")
+	afterAccessWrite(w, r, grantApproved(a, grant), grantNotice(a, grant))
+}
+
+// grantApproved is the JSON answer to an approved grant: access names what
+// the owner chose (read or write).
+func grantApproved(a store.AccessApproval, g store.AccessGrant) map[string]any {
+	return map[string]any{
+		"approved": approval.ShortID(a.ID), "project": a.Project, "from": a.FromProject, "grant": g.ID,
+		"access": g.Access, "expires_at": g.ExpiresAt.UTC().Format(time.RFC3339),
+	}
+}
+
+// grantNotice is the page's notice for an approved grant: what it opens, how,
+// and until when.
+func grantNotice(a store.AccessApproval, g store.AccessGrant) string {
+	how := "readable from " + a.FromProject + ", read-only,"
+	if g.Access == store.GrantAccessWrite {
+		how = "readable and writable from " + a.FromProject + ","
+	}
+	return "Approved " + approval.ShortID(a.ID) + ": " + a.Project + " is " + how + " until " + g.ExpiresAt.Local().Format("15:04") + "."
+}
+
+// moveApprove decides a move request: a passkey assertion, or -- in the
+// advisory tier only -- the bearer key's decision (no passkey response).
+// Moves exist only with read grants on (isolation.requests). A Touch ID proof
+// reaches the approve core, which refuses it for a move (ErrTouchIDMove).
+func (s *Service) moveApprove(w http.ResponseWriter, r *http.Request, a store.AccessApproval, touch approval.Proof, isTouch bool) {
+	if s.cfg.Grants == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "moves are off (isolation.requests)"})
+		return
+	}
+	proof := approval.Proof{Kind: approval.ProofKey}
+	switch {
+	case isTouch:
+		proof = touch
+	case r.PostForm.Get("response") != "":
+		proof = approval.Proof{Kind: approval.ProofPasskey, Assertion: []byte(r.PostForm.Get("response"))}
+	}
+	done, err := s.cfg.Grants.ApproveMove(r.Context(), approval.Decision{
+		ID: a.ID, Duration: r.PostForm.Get("duration"), Digest: r.PostForm.Get("digest"), Proof: proof,
+		Access: r.PostForm.Get("access"),
+	})
+	if err != nil {
+		s.accessError(w, r, err)
+		return
+	}
+	payload := map[string]any{"approved": approval.ShortID(a.ID), "kind": a.Kind, "project": a.Project, "from": a.FromProject,
+		"session": done.Child.Name}
+	notice := "Approved " + approval.ShortID(a.ID) + ": the agent works in " + a.Project + " from now on, as session " +
+		done.Child.Name + "."
+	if done.Lease != nil {
+		payload["expires_at"] = done.Lease.ExpiresAt.UTC().Format(time.RFC3339)
+		notice = strings.TrimSuffix(notice, ".") + "; its lock is open to it until " + done.Lease.ExpiresAt.Local().Format("15:04") + "."
+	}
+	afterAccessWrite(w, r, payload, notice)
+}
+
+// formFlag reads a boolean form field: absent is false; 1, true and on are
+// true; 0 and false are false. Anything else is refused, never read as
+// absent.
+func formFlag(r *http.Request, name string) (bool, error) {
+	if !r.PostForm.Has(name) {
+		return false, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(r.PostForm.Get(name))) {
+	case "1", "true", "on":
+		return true, nil
+	case "0", "false":
+		return false, nil
+	}
+	return false, fmt.Errorf("invalid %s %q: valid values are true and false", name, r.PostForm.Get(name))
 }
 
 // accessDeny closes a request without a lease. An agent's socket connection
@@ -638,10 +800,23 @@ func (s *Service) accessDeny(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]any{"denied": approval.ShortID(a.ID), "project": a.Project}
 	if s.cfg.Approvals == nil {
 		// The advisory tier's page denies with a plain form.
-		afterAccessWrite(w, r, payload, "Denied "+approval.ShortID(a.ID)+": "+a.Project+" stays closed to that session.")
+		afterAccessWrite(w, r, payload, "Denied "+approval.ShortID(a.ID)+": "+deniedWords(a)+".")
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
+}
+
+// deniedWords says what a denial leaves: a move's agent stays where it is, a
+// fenced project stays closed to the session that asked.
+func deniedWords(a store.AccessApproval) string {
+	if a.Kind == store.AccessKindMove {
+		home := a.FromProject
+		if home == "" {
+			home = "the global scope"
+		}
+		return "the agent stays in " + home + ", and " + a.Project + " stays closed to it"
+	}
+	return a.Project + " stays closed to that session"
 }
 
 func (s *Service) accessError(w http.ResponseWriter, r *http.Request, err error) {
@@ -675,6 +850,12 @@ func (s *Service) accessError(w http.ResponseWriter, r *http.Request, err error)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "the Touch ID signature does not verify for this request, " +
 			"this duration and these facts with that key: approve again from the agent's dialog"})
 		return
+	case errors.Is(err, approval.ErrAccess):
+		msg = "choose an access the request offers: read-only, or read and write where it asks between confidential projects"
+	case errors.Is(err, approval.ErrTouchIDMove):
+		msg = approval.ErrTouchIDMove.Error()
+	case errors.Is(err, approval.ErrNotAMove):
+		msg = "this move no longer fits the projects as they stand (its home is confidential now): deny it, and the agent asks again"
 	case errors.Is(err, approval.ErrSealed):
 		msg = "a sealed project is never granted, and never granted to: deny the request"
 	case errors.Is(err, approval.ErrNotConfidential):

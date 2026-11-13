@@ -132,6 +132,11 @@ func UpdateSession(ctx context.Context, db *sql.DB, s core.Session) error {
 // only when project is non-empty, and bumps recency without touching findings or
 // metadata. Returning the row gives callers its actual display name, including a
 // legacy pre-digest name preserved by migration 010.
+//
+// A move's child (parent_session_id set, migration 039) is never re-scoped: it
+// is the conversation's home for good, and a resume or compact from the
+// repository it left must not carry it back there. No other session has a
+// parent, so every install without isolation.requests resumes as before.
 func ReactivateAmbientSession(
 	ctx context.Context,
 	db *sql.DB,
@@ -144,7 +149,7 @@ func ReactivateAmbientSession(
 	sess, found, err := sessionOne(ctx, db, `
 		UPDATE sessions
 		   SET status = 'active',
-		       project_slug = CASE WHEN ? = '' THEN project_slug ELSE ? END,
+		       project_slug = CASE WHEN ? = '' OR parent_session_id IS NOT NULL THEN project_slug ELSE ? END,
 		       updated_at = ?
 		 WHERE ambient = 1
 		   AND external_client = ?
@@ -964,7 +969,7 @@ func sessionOne(ctx context.Context, db *sql.DB, query string, args ...any) (cor
 	return s, true, nil
 }
 
-func scanSession(rows *sql.Rows) (core.Session, error) {
+func scanSession(rows interface{ Scan(dest ...any) error }) (core.Session, error) {
 	var (
 		s                core.Session
 		status, meta     string

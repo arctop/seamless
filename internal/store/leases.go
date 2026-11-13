@@ -514,11 +514,6 @@ func ApproveAccessFor(ctx context.Context, db *sql.DB, id string, challenge []by
 	if n != 1 {
 		return AccessLease{}, fmt.Errorf("store.ApproveAccess: %w: %s", ErrApprovalNotPending, id)
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE access_leases SET revoked_at = ?, revoked_reason = ?
-		WHERE process_key = ? AND project_slug = ? AND revoked_at IS NULL AND expires_at > ?`,
-		core.FormatTime(now), LeaseRevokedRefreshed, a.ProcessKey, a.Project, core.FormatTime(now)); err != nil {
-		return AccessLease{}, fmt.Errorf("store.ApproveAccess: retire the previous lease: %w", err)
-	}
 	lease := AccessLease{
 		ID: leaseID, Project: a.Project, ProcessKey: a.ProcessKey, PeerUID: a.PeerUID, PeerPID: a.PeerPID,
 		SessionID: a.SessionID, ApprovalID: a.ID, GrantedAt: now, ExpiresAt: now.Add(a.Lease),
@@ -526,16 +521,38 @@ func ApproveAccessFor(ctx context.Context, db *sql.DB, id string, challenge []by
 	if length > 0 {
 		lease.ExpiresAt = now.Add(length)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO access_leases (id, project_slug, process_key, peer_uid, peer_pid,
-		session_id, approval_id, granted_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		lease.ID, lease.Project, lease.ProcessKey, int64(lease.PeerUID), int64(lease.PeerPID), lease.SessionID,
-		lease.ApprovalID, core.FormatTime(lease.GrantedAt), core.FormatTime(lease.ExpiresAt)); err != nil {
+	if err := leaseInsertTx(ctx, tx, lease); err != nil {
 		return AccessLease{}, fmt.Errorf("store.ApproveAccess: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return AccessLease{}, fmt.Errorf("store.ApproveAccess: commit: %w", err)
 	}
 	return lease, nil
+}
+
+// leaseInsertTx records lease inside an approval's transaction: any live lease
+// the same process holds on the same project is revoked as refreshed first --
+// a lease is replaced, never extended -- and then the new row is inserted. It
+// is the one insert of access_leases, for a lock's approval and for the lease
+// a move or grant into a locked project carries (approvalkind.go). The caller
+// names the lease on its approval row (lease_id).
+func leaseInsertTx(ctx context.Context, tx *sql.Tx, lease AccessLease) error {
+	if lease.ProcessKey == "" {
+		return fmt.Errorf("%w: no process: a lease is bound to the requesting connection's process", ErrInvalidAccessRequest)
+	}
+	now := core.FormatTime(lease.GrantedAt)
+	if _, err := tx.ExecContext(ctx, `UPDATE access_leases SET revoked_at = ?, revoked_reason = ?
+		WHERE process_key = ? AND project_slug = ? AND revoked_at IS NULL AND expires_at > ?`,
+		now, LeaseRevokedRefreshed, lease.ProcessKey, lease.Project, now); err != nil {
+		return fmt.Errorf("retire the previous lease: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO access_leases (id, project_slug, process_key, peer_uid, peer_pid,
+		session_id, approval_id, granted_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		lease.ID, lease.Project, lease.ProcessKey, int64(lease.PeerUID), int64(lease.PeerPID), lease.SessionID,
+		lease.ApprovalID, now, core.FormatTime(lease.ExpiresAt)); err != nil {
+		return err
+	}
+	return nil
 }
 
 func expireApprovalTx(ctx context.Context, tx *sql.Tx, id string, now time.Time) error {

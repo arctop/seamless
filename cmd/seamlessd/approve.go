@@ -35,13 +35,15 @@ import (
 // data directory is that account's and 0700. This command checks it really
 // runs as that account before it commits anything.
 
-const approveUsage = `usage: seamlessd approve <request> --for <session|1h|4h> --digest <facts digest>
+const approveUsage = `usage: seamlessd approve <request> --for <session|1h|4h> --digest <facts digest> [--access <read-only|read-write>]
        seamlessd approve <request> --deny
 
 Approves (or denies) an access request for a locked project, or -- with
-isolation.requests on -- a read grant request for a confidential one. Run it
-as the daemon's own account: seam approve, in the owner's terminal, runs it
-through sudo -k with the digest of the facts it showed.
+isolation.requests on -- a grant request for a confidential project or a move
+request into a fenced one. --access approves a grant between confidential
+projects read and write (read-only is the default). Run it as the daemon's
+own account: seam approve, in the owner's terminal, runs it through sudo -k
+with the digest of the facts it showed.
 `
 
 func runApprove(args []string) error {
@@ -152,6 +154,7 @@ func approveWith(ctx context.Context, svc *approval.Service, grants *approval.Gr
 	fs.SetOutput(io.Discard)
 	duration := fs.String("for", "", "the lease's duration: "+strings.Join(approval.Durations, ", "))
 	digest := fs.String("digest", "", "the digest of the facts the owner was shown")
+	accessChoice := fs.String("access", "", "a grant's access: read-only (the default) or read-write, where it offers the choice")
 	deny := fs.Bool("deny", false, "deny the request instead")
 	var ref string
 	rest := args
@@ -176,11 +179,16 @@ func approveWith(ctx context.Context, svc *approval.Service, grants *approval.Gr
 	}
 	grant := a.Kind == store.AccessKindGrant
 	if *deny {
-		if *duration != "" || *digest != "" {
-			return errors.New("--deny takes no --for or --digest")
+		if *duration != "" || *digest != "" || *accessChoice != "" {
+			return errors.New("--deny takes no --for, --digest or --access")
 		}
 		if err := svc.Deny(ctx, a.ID, "daemon-account"); err != nil {
 			return settled(ctx, svc, a, err)
+		}
+		if a.Kind == store.AccessKindMove {
+			fmt.Fprintf(out, "Denied %s: the agent stays in %s, and %s stays closed to it.\n", approval.ShortID(a.ID),
+				homeWords(a.FromProject), a.Project)
+			return nil
 		}
 		fmt.Fprintf(out, "Denied %s: %s stays %s that session.\n", approval.ShortID(a.ID), a.Project, closedWord(grant))
 		return nil
@@ -191,10 +199,15 @@ func approveWith(ctx context.Context, svc *approval.Service, grants *approval.Gr
 	// Who asks, as the owner was shown: read before the decision, from the
 	// facts the digest covers. A failure costs only the name.
 	who := askerOf(ctx, svc, a)
-	if grant {
-		return approveGrant(ctx, svc, grants, out, a, who, *duration, *digest)
+	d := approval.Decision{ID: a.ID, Duration: *duration, Digest: *digest, Access: *accessChoice,
+		Proof: approval.Proof{Kind: approval.ProofDaemon}}
+	switch a.Kind {
+	case store.AccessKindGrant:
+		return approveGrant(ctx, svc, grants, out, a, who, d)
+	case store.AccessKindMove:
+		return approveMove(ctx, svc, grants, out, a, who, d)
 	}
-	lease, err := svc.Approve(ctx, approval.Decision{ID: a.ID, Duration: *duration, Digest: *digest, Proof: approval.Proof{Kind: approval.ProofDaemon}})
+	lease, err := svc.Approve(ctx, d)
 	if err != nil {
 		return settled(ctx, svc, a, err)
 	}
@@ -203,20 +216,75 @@ func approveWith(ctx context.Context, svc *approval.Service, grants *approval.Gr
 	return nil
 }
 
-// approveGrant commits a read grant with the daemon account's proof.
+// approveGrant commits a grant with the daemon account's proof: read-only,
+// or read and write when d.Access chose it. It closes with the line that
+// says where the target's content may go, as the facts said it.
 func approveGrant(ctx context.Context, svc *approval.Service, grants *approval.Grants, out io.Writer, a store.AccessApproval,
-	who, duration, digest string) error {
+	who string, d approval.Decision) error {
 	short := approval.ShortID(a.ID)
 	if grants == nil {
 		return fmt.Errorf("%s is a read grant request, and read grants are off here (isolation.requests): nothing to approve", short)
 	}
-	g, err := grants.Approve(ctx, approval.Decision{ID: a.ID, Duration: duration, Digest: digest, Proof: approval.Proof{Kind: approval.ProofDaemon}})
+	line := approval.CopyIntoLine(a.Project, a.FromProject)
+	if f, err := svc.Facts(ctx, a.ID); err == nil {
+		line = copyLineOf(f, d.Access)
+	}
+	g, err := grants.Approve(ctx, d)
 	if err != nil {
 		return settled(ctx, svc, a, err)
 	}
-	fmt.Fprintf(out, "Approved %s: %s, working in %s, may read %s (read-only) %s; %s.\n", short, who, a.FromProject,
-		a.Project, untilWords(duration, g.ExpiresAt), approval.CopyIntoLine(a.Project, a.FromProject))
+	how := "may read " + a.Project + " (read-only)"
+	if g.Access == store.GrantAccessWrite {
+		how = "may read and write " + a.Project
+	}
+	fmt.Fprintf(out, "Approved %s: %s, working in %s, %s %s; %s.\n", short, who, a.FromProject, how,
+		untilWords(d.Duration, g.ExpiresAt), line)
 	return nil
+}
+
+// copyLineOf is the line a grant's facts say for the access chosen: the copy
+// line for read-only (the default), the read-and-write line for read and
+// write.
+func copyLineOf(f approval.Facts, accessChoice string) string {
+	if accessChoice == "read-write" && f.ReadWrite != "" {
+		return f.ReadWrite
+	}
+	for _, w := range f.Warnings {
+		if w.Code == approval.WarnCopyInto {
+			return w.Text
+		}
+	}
+	return approval.CopyIntoLine(f.Project, f.From)
+}
+
+// approveMove commits a move with the daemon account's proof: the agent works
+// in the project from now on, as a new session continuing the one it left,
+// and a locked project's lock opens to it for the duration chosen.
+func approveMove(ctx context.Context, svc *approval.Service, grants *approval.Grants, out io.Writer, a store.AccessApproval,
+	who string, d approval.Decision) error {
+	short := approval.ShortID(a.ID)
+	if grants == nil {
+		return fmt.Errorf("%s is a move request, and moves are off here (isolation.requests): nothing to approve", short)
+	}
+	done, err := grants.ApproveMove(ctx, d)
+	if err != nil {
+		return settled(ctx, svc, a, err)
+	}
+	fmt.Fprintf(out, "Approved %s: %s moved from %s into %s for good, as session %s", short, who, homeWords(a.FromProject),
+		a.Project, done.Child.Name)
+	if done.Lease != nil {
+		fmt.Fprintf(out, "; its lock is open to it %s", untilWords(d.Duration, done.Lease.ExpiresAt))
+	}
+	fmt.Fprintln(out, ".")
+	return nil
+}
+
+// homeWords names a home for the owner: its slug, or the global scope.
+func homeWords(home string) string {
+	if home == "" {
+		return "the global scope"
+	}
+	return home
 }
 
 // untilWords says when an approval for duration, ending at expires, ends.
