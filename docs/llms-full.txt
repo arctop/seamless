@@ -2009,6 +2009,26 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.8.3 {#v0-8-3}
+
+Released 2026-11-13 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.8.3)
+
+### Features
+
+- feat(site): publish the site from release and site-* tags, never from main
+- feat(release): macOS builds, signing and notarization move to the owner's Mac
+- feat(feed): the security feed and commit snapshot name a restricted account
+- feat(tasks): tasks_update removes blockers; seam task block and unblock
+- feat(store): migration 039 and the store layer for fenced sessions
+
+### Fixes
+
+- fix(hooks): a conversation native to an isolated project keeps its record at home
+- fix(mcp): a restricted account's expired session is revived by its own process header
+- fix(config): client commands never read ./seamless.yaml; doctor knows a shared client config
+- fix(hooks): a conversation bound to an isolated project keeps its record there
+- fix(store): a Codex turn's findings reach search on its ambient row
+
 ## v0.8.2 {#v0-8-2}
 
 Released 2026-11-12 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.8.2)
