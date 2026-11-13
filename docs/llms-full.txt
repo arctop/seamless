@@ -4083,7 +4083,7 @@ nothing:
 
 ```text
 project example-finance is confidential: reads require a session bound to it -- ...
-Remedy: read request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console's Access requests page; retry once it is approved. An approved read is read-only, and confines this session's writes to example-ops for the rest of its life. When you document this work in example-ops (task details, memories, notes, findings), refer to example-finance's items by reference -- project slug plus the item's name or id -- and leave out example-finance's confidential details.
+Remedy: read request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console's Access requests page; retry once it is approved. An approved read is read-only, and confines this session's writes to example-finance for the rest of its life: once it holds example-finance's content, it writes into no open project, example-ops included, and not into the global scope.
 ```
 
 An agent can also ask explicitly, with its reason, from its own shell:
@@ -4122,21 +4122,27 @@ While it lives, the granted project also joins that session's `recall` scope,
 its trials show in `trial_query`, and its proposals show in `gardener_proposals`;
 the briefing does not change. Another session is still refused.
 
-**Writes are never granted.** A grant never lets a session write into the
-project it reads. A session in an open project that receives a grant is
-write-confined like a confidential project's session, for the rest of its
-life: no writes to other projects, and none to the global scope. Its next tool
-result says so, and the confinement is recorded as an event. Expiry and
-revocation end the read, never the confinement - what was read stays read.
+**Writes follow what the session holds.** Every write must be cleared for
+everything the session holds: each confidential or sealed project whose
+content it may hold is the destination, or you approved its content into the
+destination. An open project and the global scope are cleared only while the
+session holds nothing fenced. So a session in a confidential project that
+receives a grant writes only into its own project, and a session in an open
+project that receives one writes only into the project it read - no open
+project, its own included, and not the global scope. Its next tool result says
+so, and the confinement is recorded as an event. Expiry and revocation end the
+read, never what the session holds - what was read stays read.
 
-**Writing up the work.** The session documents what it did in the project it
-asked from: task details, memories, notes and findings there stay open to it,
-during the grant and after it. The grant tells the agent to cite the
+**Writing up the work.** A session in a confidential project documents what
+it did in its own project: task details, memories, notes and findings there
+stay open to it, during the grant and after it. The grant tells the agent to cite the
 confidential project by reference, with the project slug and the item's name or
 id, and to leave that project's confidential details out. That is an instruction
 to the agent, not a filter, which is why the line you approve still says content
-may be copied. A plan or planning-subagent report captured from a directory that
-belongs to any other project is dropped, and the agent is told why.
+may be copied. A session in an open project has no such place: it writes only
+into the project it read, its `session_end` findings included. A plan or
+planning-subagent report captured where the session may not write is dropped,
+and the agent is told why.
 
 **How much an approval proves.** Without `peer_auth` the approval is
 **advisory**: `seam approve` asks for a y/N in a terminal (it refuses to run
@@ -4144,10 +4150,10 @@ without one) and commits over the console with the bearer key, and the
 console's Approve does the same. Any process that holds the key - which every
 local agent can read - can make that call, so an approval guards against an
 agent wandering into a confidential project, not against one set on it. The
-holder of such a grant is also the session a call speaks for, which is
-self-reported: an agent that rebinds with `session_start`, or names another
-session with `session=`, writes where that session may, past the grant's write
-confinement. Under `peer_auth` a grant needs the same proofs as a
+holder of such a grant is the conversation the agent's process identity
+names, which is self-reported; a client that sends none is held by the session
+a call speaks for, so one that rebinds with `session_start`, or names another
+session with `session=`, writes where that session may. Under `peer_auth` a grant needs the same proofs as a
 [locked project's lease](/guides/peer-auth/): your terminal through `sudo` to
 the daemon's account, a passkey, or a Touch ID key. Its holder is then the
 asking agent's process tree, and those moves are refused. No tier stops an agent
@@ -7313,11 +7319,11 @@ and takes the same proofs: `seam approve`, a passkey or a Touch ID key. Without
 peer_auth the approval is **advisory**. `seam approve` asks for a y/N in a terminal
 and commits over the console with the bearer key, and the console's Approve does
 the same, so any process that holds the key can approve a request, its own
-included. The holder of an advisory grant is also the session a call speaks for,
-which is self-reported: an agent that rebinds with `session_start`, or names another
-session with `session=`, writes where that session may, past the grant's write
-confinement. Under peer_auth the holder is the process tree, and the same moves are
-refused. Use the advisory tier to keep an agent from wandering into a confidential
+included. The holder of an advisory grant is the conversation the agent's process
+identity names, which is self-reported; a client that sends none is held by the
+session a call speaks for, so one that rebinds with `session_start`, or names another
+session with `session=`, writes where that session may. Under peer_auth the holder is
+the process tree, and those moves are refused. Use the advisory tier to keep an agent from wandering into a confidential
 project, not against one set on it.
 
 Neither tier stops an agent running as you from reading a `confidential` or
@@ -12527,10 +12533,12 @@ default; off is exactly the behavior of every earlier release.
   refused at a confidential project's fence into an access request you can
   approve: a **read grant** of that one project, read-only, to the one session
   that asked, for a limited time (until the session ends, 1 hour or 4 hours,
-  capped by `peer_auth.max_lease`, `8h` when unset). A session in an open
-  project that is granted a read writes only into its own project for the rest
-  of its life. Nothing that involves a sealed project is ever offered, writes
-  are never granted, and briefings do not change.
+  capped by `peer_auth.max_lease`, `8h` when unset). Every write must then be
+  cleared for everything the session holds: a session in a confidential
+  project that is granted a read writes only into its own project, and one in
+  an open project only into the project it read, for the rest of its life.
+  Nothing that involves a sealed project is ever offered, a read grant never
+  opens a write, and briefings do not change.
   [Asking for access](/concepts/project-isolation/#asking-for-access) has the
   whole model.
 

@@ -939,11 +939,11 @@ and takes the same proofs: <code>seam approve</code>, a passkey or a Touch ID ke
 peer_auth the approval is <strong>advisory</strong>. <code>seam approve</code> asks for a y/N in a terminal
 and commits over the console with the bearer key, and the console's Approve does
 the same, so any process that holds the key can approve a request, its own
-included. The holder of an advisory grant is also the session a call speaks for,
-which is self-reported: an agent that rebinds with <code>session_start</code>, or names another
-session with <code>session=</code>, writes where that session may, past the grant's write
-confinement. Under peer_auth the holder is the process tree, and the same moves are
-refused. Use the advisory tier to keep an agent from wandering into a confidential
+included. The holder of an advisory grant is the conversation the agent's process
+identity names, which is self-reported; a client that sends none is held by the
+session a call speaks for, so one that rebinds with <code>session_start</code>, or names another
+session with <code>session=</code>, writes where that session may. Under peer_auth the holder is
+the process tree, and those moves are refused. Use the advisory tier to keep an agent from wandering into a confidential
 project, not against one set on it.</p>
 <p>Neither tier stops an agent running as you from reading a <code>confidential</code> or
 <code>sealed</code> project. A session's project is the agent's word, so <code>session_start project=&lt;slug&gt;</code>, a hook naming that repository, or <code>session=</code> on a tool reads the

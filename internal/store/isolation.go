@@ -116,9 +116,10 @@ func isolationOfTx(ctx context.Context, q rowQuerier, slug string) (core.Isolati
 // still reads nothing. With peer_auth off no View is set and this check is a
 // no-op.
 //
-// After the View, and only for a CONFIDENTIAL target, a live read grant
+// After the View, and only for a CONFIDENTIAL target, a live grant
 // (isolation.requests) opens the target to the one caller project it was
-// approved from (access.ReadGranted over the grants the request carries). It
+// approved from (access.ReadGranted over the grants the request carries). A
+// live read-and-write grant is a live grant: it reads as a read grant does. It
 // never opens a sealed target, and a sealed caller still reads nothing outside
 // itself. With isolation.requests off no request carries grants and this is a
 // no-op too.
@@ -430,27 +431,36 @@ func GlobalMemoriesFromProjectSessions(ctx context.Context, db *sql.DB, project 
 }
 
 // CanWrite reports whether a session bound to callerProject may write into
-// targetProject ("" is the global scope). A scope always writes itself; a
-// fenced caller writes nowhere else -- an agent-initiated outside write,
-// global included, is an outbound leak; a sealed target admits nothing from
-// outside, while a confidential target stays writable from outside (inbound
-// is unchanged -- relocating knowledge INTO the fence is how it gets there).
+// targetProject ("" is the global scope). It asks, in this order:
 //
-// The peer_auth View has the first word here too: a restricted account writes
-// only into the open projects it reaches (never the global scope), and the
-// owner never writes into a locked project without a lease.
-//
-// A read grant never opens a write: nothing here asks whether one is live. The
-// one thing a grant leaves behind that this consults is its confinement
-// (access.WriteConfined), and that only ever refuses: a holder that was granted
-// a read writes only into the projects its grants were approved from, for the
-// rest of its life, so content it read cannot be carried anywhere else. With
-// isolation.requests off nothing is confined.
+//  1. The request's peer_auth View: a restricted account writes only into the
+//     open projects it reaches (never the global scope), and the owner never
+//     writes into a locked project without a lease. With peer_auth off no
+//     View is set and this is a no-op.
+//  2. Clearance (isolation.requests, access.WriteCleared), which only
+//     refuses: the destination must be cleared for everything the
+//     conversation the request speaks for holds -- every fenced project in
+//     its label is the destination or has an approved flow into it, and an
+//     open project or the global scope only while the label is empty. It
+//     holds for the caller's own project too: a conversation holding fenced
+//     content does not write it into an open project by binding there. With
+//     isolation.requests off no request carries a conversation, and nothing
+//     is refused here.
+//  3. The caller's outbound fence: a fenced caller writes nowhere else -- an
+//     agent-initiated outside write, global included, is an outbound leak.
+//     A scope always writes itself. The one thing that opens it is a live
+//     read-and-write grant of the target approved from the conversation's
+//     home, when the caller is that home and confidential (access.WriteGranted,
+//     the mirror of ReadGranted in CanRead); a sealed caller is never opened.
+//  4. The target's inbound fence: a sealed target admits nothing from
+//     outside, and no grant ever opens one, while a confidential target stays
+//     writable from outside (relocating knowledge INTO the fence is how it
+//     gets there).
 func CanWrite(ctx context.Context, db *sql.DB, callerProject, targetProject string) (bool, error) {
 	if !access.Writable(ctx, targetProject) || !access.Visible(ctx, callerProject) {
 		return false, nil
 	}
-	if access.WriteConfined(ctx, targetProject) {
+	if !access.WriteCleared(ctx, targetProject) {
 		return false, nil
 	}
 	if callerProject == targetProject {
@@ -460,7 +470,8 @@ func CanWrite(ctx context.Context, db *sql.DB, callerProject, targetProject stri
 	if err != nil {
 		return false, fmt.Errorf("store.CanWrite: %w", err)
 	}
-	if caller.FencesOutbound() {
+	if caller.FencesOutbound() &&
+		(caller != core.IsolationConfidential || !access.WriteGranted(ctx, callerProject, targetProject)) {
 		return false, nil
 	}
 	target, err := IsolationOf(ctx, db, targetProject)
@@ -535,7 +546,11 @@ func (d RecordDestination) Holds(project string) bool {
 //
 // It reads no View and no grant: where a conversation's record goes is a fact
 // about the conversation, and the caller still judges whether it may write
-// there (the hooks ask the View before writing into a link).
+// there (the hooks ask the View before writing into a link). The clearance
+// rule agrees with it over the same rows (ConversationClearance): a fenced
+// home is cleared for what its own sessions reach, the one fenced project an
+// open home's links reach is cleared for itself, and two refuse each other.
+// Grants it does not read: what one adds to the label the clearance judges.
 func RecordDestinationOf(ctx context.Context, db *sql.DB, externalClient, externalSessionID string) (RecordDestination, error) {
 	if externalClient == "" || externalSessionID == "" {
 		return RecordDestination{}, nil

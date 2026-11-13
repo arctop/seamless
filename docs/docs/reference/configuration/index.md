@@ -235,10 +235,12 @@ default; off is exactly the behavior of every earlier release.
   refused at a confidential project's fence into an access request you can
   approve: a **read grant** of that one project, read-only, to the one session
   that asked, for a limited time (until the session ends, 1 hour or 4 hours,
-  capped by `peer_auth.max_lease`, `8h` when unset). A session in an open
-  project that is granted a read writes only into its own project for the rest
-  of its life. Nothing that involves a sealed project is ever offered, writes
-  are never granted, and briefings do not change.
+  capped by `peer_auth.max_lease`, `8h` when unset). Every write must then be
+  cleared for everything the session holds: a session in a confidential
+  project that is granted a read writes only into its own project, and one in
+  an open project only into the project it read, for the rest of its life.
+  Nothing that involves a sealed project is ever offered, a read grant never
+  opens a write, and briefings do not change.
   [Asking for access](https://thereisnospoon.org/docs/concepts/project-isolation/#asking-for-access) has the
   whole model.
 

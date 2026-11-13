@@ -410,7 +410,7 @@ ULID - files an access request, and the refusal names it. A read that only
 filters, such as <code>recall</code> without <code>project=</code> or <code>trial_query</code>, asks for
 nothing:</p>
 <div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">project example-finance is confidential: reads require a session bound to it -- ...
-</span></span><span class="line"><span class="cl">Remedy: read request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console&#39;s Access requests page; retry once it is approved. An approved read is read-only, and confines this session&#39;s writes to example-ops for the rest of its life. When you document this work in example-ops (task details, memories, notes, findings), refer to example-finance&#39;s items by reference -- project slug plus the item&#39;s name or id -- and leave out example-finance&#39;s confidential details.
+</span></span><span class="line"><span class="cl">Remedy: read request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console&#39;s Access requests page; retry once it is approved. An approved read is read-only, and confines this session&#39;s writes to example-finance for the rest of its life: once it holds example-finance&#39;s content, it writes into no open project, example-ops included, and not into the global scope.
 </span></span></code></pre></div>
 <p>An agent can also ask explicitly, with its reason, from its own shell:
 <code>seam access request example-finance --reason &quot;...&quot;</code>.</p>
@@ -442,30 +442,36 @@ expires, you revoke it from the Access requests page, or the session ends.
 While it lives, the granted project also joins that session's <code>recall</code> scope,
 its trials show in <code>trial_query</code>, and its proposals show in <code>gardener_proposals</code>;
 the briefing does not change. Another session is still refused.</p>
-<p><strong>Writes are never granted.</strong> A grant never lets a session write into the
-project it reads. A session in an open project that receives a grant is
-write-confined like a confidential project's session, for the rest of its
-life: no writes to other projects, and none to the global scope. Its next tool
-result says so, and the confinement is recorded as an event. Expiry and
-revocation end the read, never the confinement - what was read stays read.</p>
-<p><strong>Writing up the work.</strong> The session documents what it did in the project it
-asked from: task details, memories, notes and findings there stay open to it,
-during the grant and after it. The grant tells the agent to cite the
+<p><strong>Writes follow what the session holds.</strong> Every write must be cleared for
+everything the session holds: each confidential or sealed project whose
+content it may hold is the destination, or you approved its content into the
+destination. An open project and the global scope are cleared only while the
+session holds nothing fenced. So a session in a confidential project that
+receives a grant writes only into its own project, and a session in an open
+project that receives one writes only into the project it read - no open
+project, its own included, and not the global scope. Its next tool result says
+so, and the confinement is recorded as an event. Expiry and revocation end the
+read, never what the session holds - what was read stays read.</p>
+<p><strong>Writing up the work.</strong> A session in a confidential project documents what
+it did in its own project: task details, memories, notes and findings there
+stay open to it, during the grant and after it. The grant tells the agent to cite the
 confidential project by reference, with the project slug and the item's name or
 id, and to leave that project's confidential details out. That is an instruction
 to the agent, not a filter, which is why the line you approve still says content
-may be copied. A plan or planning-subagent report captured from a directory that
-belongs to any other project is dropped, and the agent is told why.</p>
+may be copied. A session in an open project has no such place: it writes only
+into the project it read, its <code>session_end</code> findings included. A plan or
+planning-subagent report captured where the session may not write is dropped,
+and the agent is told why.</p>
 <p><strong>How much an approval proves.</strong> Without <code>peer_auth</code> the approval is
 <strong>advisory</strong>: <code>seam approve</code> asks for a y/N in a terminal (it refuses to run
 without one) and commits over the console with the bearer key, and the
 console's Approve does the same. Any process that holds the key - which every
 local agent can read - can make that call, so an approval guards against an
 agent wandering into a confidential project, not against one set on it. The
-holder of such a grant is also the session a call speaks for, which is
-self-reported: an agent that rebinds with <code>session_start</code>, or names another
-session with <code>session=</code>, writes where that session may, past the grant's write
-confinement. Under <code>peer_auth</code> a grant needs the same proofs as a
+holder of such a grant is the conversation the agent's process identity
+names, which is self-reported; a client that sends none is held by the session
+a call speaks for, so one that rebinds with <code>session_start</code>, or names another
+session with <code>session=</code>, writes where that session may. Under <code>peer_auth</code> a grant needs the same proofs as a
 <a href="../../guides/peer-auth/">locked project's lease</a>: your terminal through <code>sudo</code> to
 the daemon's account, a passkey, or a Touch ID key. Its holder is then the
 asking agent's process tree, and those moves are refused. No tier stops an agent

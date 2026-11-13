@@ -683,11 +683,11 @@ and takes the same proofs: `seam approve`, a passkey or a Touch ID key. Without
 peer_auth the approval is **advisory**. `seam approve` asks for a y/N in a terminal
 and commits over the console with the bearer key, and the console's Approve does
 the same, so any process that holds the key can approve a request, its own
-included. The holder of an advisory grant is also the session a call speaks for,
-which is self-reported: an agent that rebinds with `session_start`, or names another
-session with `session=`, writes where that session may, past the grant's write
-confinement. Under peer_auth the holder is the process tree, and the same moves are
-refused. Use the advisory tier to keep an agent from wandering into a confidential
+included. The holder of an advisory grant is the conversation the agent's process
+identity names, which is self-reported; a client that sends none is held by the
+session a call speaks for, so one that rebinds with `session_start`, or names another
+session with `session=`, writes where that session may. Under peer_auth the holder is
+the process tree, and those moves are refused. Use the advisory tier to keep an agent from wandering into a confidential
 project, not against one set on it.
 
 Neither tier stops an agent running as you from reading a `confidential` or

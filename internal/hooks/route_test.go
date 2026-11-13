@@ -731,12 +731,11 @@ func TestFencedRoute_PushedIntoALockedProjectRefused(t *testing.T) {
 		requireAmbientSession(t, e.db, ClientClaudeCode, "push-2").Findings)
 }
 
-// With isolation.requests on, a read grant confines its holder's writes to the
-// project it asked from, and the record routing obeys that as a capture's own
-// target does: a conversation holding a grant confined to its open project
-// that binds itself to a confidential one records its harvest and captures in
-// neither -- the confined-to project would take the isolated project's
-// content, the isolated project the granted one's.
+// With isolation.requests on, the record routing obeys the clearance rule as
+// a capture's own target does: a conversation in an open project holding a
+// read grant of one confidential project that binds itself to another
+// records its harvest and captures in neither -- no project is cleared for
+// both projects' content, and the open one for neither.
 func TestFencedRoute_ReadGrantConfinementHolds(t *testing.T) {
 	e := newRouteEnvWith(t, func(c *Config) { c.ReadGrants = true })
 	ctx := context.Background()
@@ -744,8 +743,8 @@ func TestFencedRoute_ReadGrantConfinementHolds(t *testing.T) {
 	approveGrant(t, &captureEnv{db: e.db}, rtOps, rtLegal, amb.ID, "")
 	link := e.bind(ClientClaudeCode, rtFin, core.SessionActive, "")
 	confined := func(what string) string {
-		return "Seamless did not record " + what + ": this session was granted a read of another project, so it " +
-			"writes only into " + rtOps + ", and this would land in project " + rtFin + "."
+		return "Seamless did not record " + what + ": this session holds content from " + rtFin + ", " + rtLegal +
+			", and no project is cleared for all of it: this would land in project " + rtFin + "."
 	}
 
 	plan := filepath.Join(e.plansDir, "quiet-ledger.md")

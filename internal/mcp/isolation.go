@@ -65,9 +65,9 @@ func (s *Server) fenceRead(ctx context.Context, target string) error {
 
 // fenceReadNoAsk is fenceRead without the access request: for a read that is
 // one half of a move or a gardener apply, which a read grant could never let
-// through -- the other half writes into the fenced project, and the
-// confinement a grant brings refuses exactly that. Off (no read grants) it is
-// fenceRead.
+// through -- the other half writes into the fenced project, and a read grant
+// clears no write there (store.CanWrite; only a read-and-write grant does).
+// Off (no read grants) it is fenceRead.
 func (s *Server) fenceReadNoAsk(ctx context.Context, target string) error {
 	err := s.fenceReadQuiet(ctx, target)
 	s.noteRefusal(ctx, err, target)
@@ -144,10 +144,11 @@ func (s *Server) fenceWriteQuiet(ctx context.Context, target string) error {
 	if allowed {
 		return nil
 	}
-	// A read grant's confinement (isolation.requests) refuses before either
-	// fence: its copy names the rule it is, not a state the target is not in.
-	if access.WriteConfined(ctx, target) {
-		return &fenceRefusal{reason: screening.RefusedFenceWrite, err: s.confinedRefusal(ctx, target)}
+	// The clearance rule (isolation.requests) refuses before either fence:
+	// its copy names the rule it is -- what the conversation holds, where it
+	// may still write -- not a state the target is not in.
+	if !access.WriteCleared(ctx, target) {
+		return &fenceRefusal{reason: screening.RefusedFenceWrite, err: s.clearanceRefusal(ctx, target)}
 	}
 	// CanWrite judges the caller's outbound fence first (the mirror of fenceRead),
 	// and only a sealed target can be the other side.

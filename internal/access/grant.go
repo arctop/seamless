@@ -25,38 +25,55 @@ import (
 //
 // What a grant opens is narrow on purpose (store.CanRead): reads of a
 // CONFIDENTIAL target, from the one project the grant was approved from, after
-// the View has had its word. It never opens a sealed project, never lets a
-// sealed project's session read out, and never lets anything write
-// (store.CanWrite consults only the confinement a grant leaves behind, which
-// only ever refuses).
+// the View has had its word. It never opens a sealed project and never lets a
+// sealed project's session read out. A read-and-write grant (migration 039)
+// reads the same way, and also opens its holder's home's outbound fence for
+// its target (WriteGranted, clearance.go).
 //
-// Confinement: a holder that was ever granted a read writes only into the
-// projects its grants were approved from, for the rest of its life -- a
-// session's life without peer_auth, the agent process's under it -- whether
-// or not a grant is still live. Content it read may be in its context, and the
-// owner approved copying it into exactly those projects.
+// JudgeGrants is the judge of the previous release: it keeps the rows of a
+// holder ctx speaks for and confines that holder's writes to the projects its
+// grants were approved from (WriteConfined's meaning before the clearance
+// rule). The MCP edge and the hooks now judge the whole conversation instead
+// (JudgeConversation, clearance.go): its grants, its label, its approved
+// flows and its home, so that every write meets the one clearance rule.
 
-// Grant is one approved read grant as the access layer judges it. Project is
-// the target it opens, From the project it was approved from. Process is the
-// ProcessToken.Key of the agent process it was granted to (peer_auth), Session
-// the session it was granted to (no peer_auth); exactly one is set. Ended
-// reports a grant revoked before its expiry.
+// Grant is one approved grant as the access layer judges it. Project is the
+// target it opens, From the project it was approved from. Its holder is
+// exactly one of: Process, the ProcessToken.Key of the agent process it was
+// granted to (peer_auth); Conversation, the conversation it was granted to
+// without peer_auth (migration 039: the agent client and the session id it
+// issued, "<client>/<external id>"); Session, the session it was granted to
+// (no peer_auth, a grant from before migration 039 or of a client without
+// hooks). Ended reports a grant revoked before its expiry. Write reports a
+// read-and-write grant (migration 039): it reads like any grant, and also
+// opens its holder's home's outbound fence for its target (WriteGranted).
 type Grant struct {
-	ID      string
-	Project string
-	From    string
-	Process string
-	Session string
-	Expires time.Time
-	Ended   bool
+	ID           string
+	Project      string
+	From         string
+	Process      string
+	Session      string
+	Conversation string
+	Expires      time.Time
+	Ended        bool
+	Write        bool
 }
 
-// Grants is one request's judged grants: the live ones, and the projects the
-// holder is confined to writing. The zero value holds nothing and confines
-// nothing.
+// Grants is one request's judged state: the live grants and the projects a
+// legacy judge confines the holder to writing (JudgeGrants), or -- judged by
+// JudgeConversation -- the conversation's label, approved flows and home as
+// well. The zero value holds nothing and refuses nothing.
 type Grants struct {
 	live     []Grant
 	confined []string
+
+	// judged reports a conversation judged by JudgeConversation: then the
+	// clearance rule (Cleared) decides writes, and confined is only the
+	// From projects of its grants, kept for Confined's readers.
+	judged bool
+	home   string
+	label  []string
+	flows  []Flow
 }
 
 // JudgeGrants keeps the grants in rows that name the holder ctx speaks for
@@ -138,7 +155,8 @@ func GrantsFrom(ctx context.Context) (Grants, bool) {
 
 // ReadGranted reports whether ctx holds a live grant of target to a caller in
 // from. It is store.CanRead's one question about grants, asked only after
-// the View and only for a confidential target.
+// the View and only for a confidential target. A live read-and-write grant
+// is a live grant, so it reads too.
 func ReadGranted(ctx context.Context, from, target string) bool {
 	if from == "" || target == "" || from == target {
 		return false
@@ -169,14 +187,13 @@ func GrantedTargets(ctx context.Context, from string) []string {
 	return out
 }
 
-// WriteConfined reports whether a write into target is refused by the
-// confinement a grant left behind: the holder was granted a read, and target
-// is none of the projects its grants were approved from (the global scope
-// included). With no grants in ctx nothing is confined.
+// WriteConfined reports whether a write into target is refused: it is
+// !WriteCleared, kept for the previous release's callers. For a legacy
+// judged state (JudgeGrants) that is the confinement a grant left behind --
+// the holder was granted a read, and target is none of the projects its
+// grants were approved from (the global scope included); for a conversation
+// (JudgeConversation) it is the clearance rule. With nothing in ctx nothing is
+// refused.
 func WriteConfined(ctx context.Context, target string) bool {
-	g, _ := GrantsFrom(ctx)
-	if len(g.confined) == 0 {
-		return false
-	}
-	return target == "" || !slices.Contains(g.confined, target)
+	return !WriteCleared(ctx, target)
 }

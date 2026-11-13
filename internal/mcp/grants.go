@@ -6,15 +6,18 @@ package mcp
 //
 // On:
 //
-//   - every tool call carries the grants of whoever it speaks for
-//     (grantsMiddleware): the kernel-verified process chain of the owner's
-//     socket connection under peer_auth, else the session the connection is
-//     bound to (getBinding -- identification, never ambient inference). The
-//     access layer judges the rows (access.JudgeGrants) and store.CanRead /
-//     CanWrite ask them, so every fence inherits them: a live grant opens one
-//     confidential project, read-only, to the one project it was approved
-//     from, and every grant a holder was ever approved confines its writes to
-//     the projects it was approved from;
+//   - every tool call carries the judged state of the conversation it speaks
+//     for (grantsMiddleware, store.ConversationClearance): under peer_auth the
+//     kernel-verified process chain of the owner's socket connection, else
+//     the conversation the agent-process identity names (conversationRef --
+//     identification, never ambient inference; a client that sends no
+//     identity is held by its bound session, as before). The access layer
+//     judges the rows (access.JudgeConversation) and store.CanRead / CanWrite
+//     ask the state, so every fence inherits it: a live grant opens one
+//     confidential project to the one project it was approved from, and every
+//     write must be cleared for everything the conversation holds
+//     (access.WriteCleared: its label, the flows the owner approved, its
+//     home);
 //   - a read refused at a confidential project's fence files a request
 //     (grantRequestRefusal) when the caller is an identified session in an
 //     open or confidential project, and the refusal names it; anything that
@@ -30,6 +33,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -100,19 +104,46 @@ func (s *Server) grantsMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.Tool
 	}
 }
 
-// loadGrants judges the grants of the holder this call speaks for: the owner's
-// socket process chain under peer_auth (a TCP request or a restricted account
-// holds none), else the bound session.
+// loadGrants judges the conversation this call speaks for
+// (store.ConversationClearance): the owner's socket process chain under
+// peer_auth (a TCP request or a restricted account holds nothing), else the
+// conversation conversationRef names.
 func (s *Server) loadGrants(ctx context.Context) (access.Grants, error) {
-	sessionID := ""
-	if _, hasView := access.FromContext(ctx); !hasView {
-		b, ok := s.getBinding(ctx)
-		if !ok || b.sessionID == "" {
-			return access.Grants{}, nil
-		}
-		sessionID = b.sessionID
+	ref, err := s.conversationRef(ctx)
+	if err != nil {
+		return access.Grants{}, err
 	}
-	return store.HolderGrants(ctx, s.cfg.DB, sessionID, s.now())
+	return store.ConversationClearance(ctx, s.cfg.DB, ref, s.now())
+}
+
+// conversationRef names the conversation this call speaks for: the client and
+// session id of the agent's own session, found from the agent-process
+// identity the connection named (listedProcessSession) -- never the
+// connection's binding, so neither session_start, session= nor a move changes
+// it. Under peer_auth that is all (the store holds it to the kernel's chain).
+// Without peer_auth, a call whose process names no such session falls back to
+// the session it is bound to (getBinding): that session's conversation when
+// its row carries one, else the session itself -- a client that sends no
+// agent-process identity, today's holder and the documented limit.
+func (s *Server) conversationRef(ctx context.Context) (store.ConversationRef, error) {
+	if own, ok := s.listedProcessSession(ctx); ok && own.ExternalClient != "" && own.ExternalSessionID != "" {
+		return store.ConversationRef{Client: own.ExternalClient, ExternalID: own.ExternalSessionID}, nil
+	}
+	if _, hasView := access.FromContext(ctx); hasView {
+		return store.ConversationRef{}, nil
+	}
+	b, ok := s.getBinding(ctx)
+	if !ok || b.sessionID == "" {
+		return store.ConversationRef{}, nil
+	}
+	sess, found, err := store.SessionByID(ctx, s.cfg.DB, b.sessionID)
+	if err != nil {
+		return store.ConversationRef{}, err
+	}
+	if found && sess.ExternalClient != "" && sess.ExternalSessionID != "" {
+		return store.ConversationRef{Client: sess.ExternalClient, ExternalID: sess.ExternalSessionID}, nil
+	}
+	return store.ConversationRef{SessionID: b.sessionID}, nil
 }
 
 // grantRequestRefusal turns a read refused at a confidential project's fence
@@ -158,30 +189,50 @@ func (s *Server) grantRequestRefusal(ctx context.Context, err error, target stri
 	// The refusal names this request: the approval dialog may offer it
 	// (elicit.go; only ever on the peer_auth socket).
 	noteDialogTarget(ctx, dialogTarget{ID: a.ID, Short: approval.ShortID(a.ID), Project: a.Project, Grant: true})
-	confines := false
-	if iso, ierr := store.IsolationOf(ctx, s.cfg.DB, b.project); ierr == nil && iso == core.IsolationOpen {
-		confines = true
+	fromFenced := false
+	if iso, ierr := store.IsolationOf(ctx, s.cfg.DB, b.project); ierr == nil && iso.FencesOutbound() {
+		fromFenced = true
 	}
-	return &fenceRefusal{reason: f.reason, err: s.grantRefusal(f.err, a, confines, callWays(ctx, s.cfg.Grants.Ways(ctx, a.ID)))}
+	g, _ := access.GrantsFrom(ctx)
+	after := g.WithRead(a.Project, a.FromProject, fromFenced)
+	return &fenceRefusal{reason: f.reason, err: s.grantRefusal(f.err, a, after, callWays(ctx, s.cfg.Grants.Ways(ctx, a.ID)))}
 }
 
 // grantRefusal is the fence's refusal with its remedy line: the request, how
 // the owner approves it (only the paths ways holds), and what an approval
-// brings with it.
-func (s *Server) grantRefusal(rule error, a store.AccessApproval, confines bool, ways access.Ways) error {
+// brings with it -- judged from after, the conversation as it would stand
+// once the read is approved (access.Grants.WithRead).
+func (s *Server) grantRefusal(rule error, a store.AccessApproval, after access.Grants, ways access.Ways) error {
 	short := approval.ShortID(a.ID)
 	how := ways.OwnerApproves(short)
 	if s.cfg.Grants.Advisory() {
 		how = fmt.Sprintf("the owner approves it in their own terminal with `seam approve %s`, or with Approve on the "+
 			"console's Access requests page", short)
 	}
-	cite := approval.CiteByReferenceLine(a.Project, a.FromProject)
-	brings := "An approved read is read-only, and nothing read from " + a.Project + " may be written anywhere but " + a.FromProject + ". " + cite
-	if confines {
-		brings = fmt.Sprintf("An approved read is read-only, and confines this %s's writes to %s for the rest of its life. %s",
-			s.holderWord(), a.FromProject, cite)
+	brings := "An approved read is read-only, and nothing read from " + a.Project + " may be written anywhere but " + a.FromProject +
+		". " + approval.CiteByReferenceLine(a.Project, a.FromProject)
+	if after.Judged() && !after.Cleared(a.FromProject) {
+		// Once the read is held, the asking project is not cleared for it: an
+		// open project never is, a fenced one when the conversation holds what
+		// no approval let into it.
+		brings = fmt.Sprintf("An approved read is read-only, and confines this %s's writes to %s for the rest of its life",
+			s.holderWord(), confinedTo(after.ClearedProjects()))
+		if !slices.Contains(after.Label(), a.FromProject) {
+			brings += fmt.Sprintf(": once it holds %s's content, it writes into no open project, %s included, and not into "+
+				"the global scope", a.Project, a.FromProject)
+		}
+		brings += "."
 	}
 	return fmt.Errorf("%w\nRemedy: read request %s is waiting -- %s; retry once it is approved. %s", rule, short, how, brings)
+}
+
+// confinedTo names the projects a conversation may still write into, for a
+// sentence ending "writes ... to <this>".
+func confinedTo(cleared []string) string {
+	if len(cleared) == 0 {
+		return "no project"
+	}
+	return strings.Join(cleared, ", ")
 }
 
 // holderWord names what holds a grant: a session without peer_auth, the agent
@@ -194,11 +245,30 @@ func (s *Server) holderWord() string {
 }
 
 // grantNews is what a result says about a grant the first time this server
-// sees it: what was approved, until when, and the confinement that came with
-// it.
+// sees it: what was approved, until when, and where the conversation may now
+// write (the judged state ctx carries, which holds the grant).
 func (s *Server) grantNews(ctx context.Context, l access.Grant) string {
-	head := fmt.Sprintf("Read access to %s was approved until %s, read-only. Nothing read from %s may be written anywhere but %s. %s",
-		l.Project, access.Clock(l.Expires), l.Project, l.From, approval.CiteByReferenceLine(l.Project, l.From))
+	g, _ := access.GrantsFrom(ctx)
+	what := "Read access to %s was approved until %s, read-only."
+	if l.Write {
+		what = "Read and write access to %s was approved until %s."
+	}
+	head := fmt.Sprintf(what, l.Project, access.Clock(l.Expires))
+	if g.Judged() && !g.Cleared(l.From) {
+		// Its asking project is not cleared for what it now holds (an open
+		// project): it writes only where it may, and documents nothing there.
+		return head + fmt.Sprintf(" This %s now writes only into %s, for the rest of its life: a write to another project "+
+			"or the global scope is refused.", s.holderWord(), confinedTo(g.ClearedProjects()))
+	}
+	if l.Write {
+		return head + fmt.Sprintf(" This %s now writes only into %s. %s", s.holderWord(), confinedTo(g.ClearedProjects()),
+			approval.CiteByReferenceLine(l.Project, l.From))
+	}
+	head += fmt.Sprintf(" Nothing read from %s may be written anywhere but %s. %s", l.Project, l.From,
+		approval.CiteByReferenceLine(l.Project, l.From))
+	if g.Judged() {
+		return head
+	}
 	iso, err := store.IsolationOf(ctx, s.cfg.DB, l.From)
 	if err != nil || iso != core.IsolationOpen {
 		return head
@@ -207,17 +277,27 @@ func (s *Server) grantNews(ctx context.Context, l access.Grant) string {
 		"or the global scope is refused.", s.holderWord(), l.From)
 }
 
-// confinedRefusal is the refusal of a write a read grant's confinement
-// refuses: the rule, and where the holder may still write.
-func (s *Server) confinedRefusal(ctx context.Context, target string) error {
+// clearanceRefusal is the refusal of a write the clearance rule refuses
+// (access.WriteCleared): what the conversation holds, and where it may still
+// write. It names projects only, never anything they hold.
+func (s *Server) clearanceRefusal(ctx context.Context, target string) error {
 	g, _ := access.GrantsFrom(ctx)
-	confined, _ := g.Confined()
 	where := "project " + target
 	if target == "" {
 		where = "the global scope"
 	}
-	return fmt.Errorf("this %s was granted a read of another project, so it writes only into %s for the rest of its life: "+
-		"a write into %s is refused", s.holderWord(), strings.Join(confined, ", "), where)
+	if !g.Judged() {
+		confined, _ := g.Confined()
+		return fmt.Errorf("this %s was granted a read of another project, so it writes only into %s for the rest of its life: "+
+			"a write into %s is refused", s.holderWord(), strings.Join(confined, ", "), where)
+	}
+	cleared := g.ClearedProjects()
+	if len(cleared) == 0 {
+		return fmt.Errorf("this %s holds content from %s, and no project is cleared for all of it: a write into %s is refused",
+			s.holderWord(), strings.Join(g.Label(), ", "), where)
+	}
+	return fmt.Errorf("this %s holds content from %s, so it writes only into %s: a write into %s is refused",
+		s.holderWord(), strings.Join(g.Label(), ", "), strings.Join(cleared, ", "), where)
 }
 
 // claimGrant records a grant as announced and reports whether this call is

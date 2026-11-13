@@ -228,7 +228,8 @@ func TestGrants_OnRefusalNamesTheRequest(t *testing.T) {
 		require.Equal(t, id, short, "a repeated refusal names the same request")
 		require.Contains(t, remedy, "seam approve "+short)
 		require.Contains(t, remedy, "the console's Access requests page")
-		require.Contains(t, remedy, "confines this session's writes to example-ops for the rest of its life")
+		require.Contains(t, remedy, "confines this session's writes to example-finance for the rest of its life: once it "+
+			"holds example-finance's content, it writes into no open project, example-ops included, and not into the global scope.")
 		require.NotContains(t, text, "reconciliation notes", "a refusal never echoes the content it withholds")
 	}
 	require.Equal(t, 1, r.count(`SELECT COUNT(*) FROM access_approvals WHERE kind = 'grant' AND status = 'pending'`))
@@ -265,10 +266,8 @@ func TestGrants_OnApprovedGrantReadsOneProjectAndConfinesWrites(t *testing.T) {
 	require.Len(t, items, 2)
 	require.Contains(t, items[0], "quarterly ledger reconciliation notes", "the grant reads the target")
 	require.Contains(t, items[1], "Read access to example-finance was approved until")
-	require.Contains(t, items[1], "Nothing read from example-finance may be written anywhere but example-ops.")
-	require.Contains(t, items[1], "refer to example-finance's items by reference")
 	require.NotContains(t, items[1], "may be copied")
-	require.Contains(t, items[1], "This session now writes only into example-ops, for the rest of its life")
+	require.Contains(t, items[1], "This session now writes only into example-finance, for the rest of its life")
 	items, _ = r.call(ops, "memory_read", map[string]any{"id": r.finMem})
 	require.Len(t, items, 1, "announced once")
 
@@ -291,18 +290,19 @@ func TestGrants_OnApprovedGrantReadsOneProjectAndConfinesWrites(t *testing.T) {
 	text = r.refused(other, "notes_read", map[string]any{"id": r.finNote})
 	require.True(t, strings.HasPrefix(text, "notes_read: "+offRefusal+"\n"), text)
 
-	// Writes: never into the target, never out of the asker's project.
+	// Writes (the clearance rule): holding the target's content, the open
+	// asker writes into the target alone -- never into an open project, its
+	// own included, nor the global scope.
 	for where, w := range map[string]map[string]any{
-		"project example-finance": {"name": "copied-into-fin", "kind": "reference", "description": "d", "body": "b\n", "project": gFin},
-		"project example-hr":      {"name": "copied-into-hr", "kind": "reference", "description": "d", "body": "b\n", "project": gHR},
-		"the global scope":        {"name": "copied-into-global", "kind": "reference", "description": "d", "body": "b\n", "project": "global"},
+		"project example-hr":  {"name": "copied-into-hr", "kind": "reference", "description": "d", "body": "b\n", "project": gHR},
+		"the global scope":    {"name": "copied-into-global", "kind": "reference", "description": "d", "body": "b\n", "project": "global"},
+		"project example-ops": {"name": "ops-own", "kind": "reference", "description": "d", "body": "b\n"},
 	} {
-		require.Equal(t, "memory_write: this session was granted a read of another project, so it writes only into example-ops "+
-			"for the rest of its life: a write into "+where+" is refused", r.refused(ops, "memory_write", w))
+		require.Equal(t, "memory_write: this session holds content from example-finance, so it writes only into "+
+			"example-finance: a write into "+where+" is refused", r.refused(ops, "memory_write", w))
 	}
-	require.Contains(t, r.refused(ops, "notes_append", map[string]any{"id": r.finNote, "body": "appended from outside"}),
-		"a write into project example-finance is refused")
-	r.ok(ops, "memory_write", map[string]any{"name": "ops-own", "kind": "reference", "description": "d", "body": "b\n"})
+	r.ok(ops, "memory_write", map[string]any{"name": "into-fin", "kind": "reference", "description": "d", "body": "b\n", "project": gFin})
+	r.ok(ops, "notes_append", map[string]any{"id": r.finNote, "body": "appended from outside"})
 	require.Equal(t, 1, r.count(`SELECT COUNT(*) FROM events WHERE kind = 'access.granted'`))
 	require.Equal(t, 1, r.count(`SELECT COUNT(*) FROM events WHERE kind = 'access.confined' AND project_slug = ?`, gOps))
 
@@ -341,10 +341,19 @@ func TestGrants_OnExpiryRevokeAndSessionEnd(t *testing.T) {
 	r.refused(ops, "notes_read", read)
 	require.Equal(t, 1, r.count(`SELECT COUNT(*) FROM events WHERE kind = 'access.revoked'`))
 
-	// session_end revokes what the session holds.
-	text = r.refused(ops, "notes_read", read)
+	// The open asker's session_end would leave its findings in the open
+	// project: the clearance rule refuses it like any write there.
+	require.Equal(t, "session_end: this session holds content from example-finance, so it writes only into example-finance: "+
+		"a write into project example-ops is refused", r.refused(ops, "session_end", map[string]any{"findings": "done"}))
+
+	// session_end revokes what the session holds: a confidential asker's
+	// home is cleared for what it read.
+	legal := r.bind(gLegal, "cc/legal")
+	text = r.refused(legal, "notes_read", read)
 	third := r.approveKey(gShort.FindString(text), approval.ForSession)
-	r.ok(ops, "session_end", map[string]any{"findings": "done"})
+	_, isErr = r.call(legal, "notes_read", read)
+	require.False(t, isErr)
+	r.ok(legal, "session_end", map[string]any{"findings": "done"})
 	g, err := store.AccessGrantByID(context.Background(), r.db, third.ID)
 	require.NoError(t, err)
 	require.Equal(t, store.LeaseRevokedSessionEnded, g.RevokedReason)
@@ -444,7 +453,8 @@ func TestGrants_PeerTierDaemonProof(t *testing.T) {
 	text, isErr := call(ops, "notes_read", read)
 	require.True(t, isErr)
 	require.True(t, strings.HasPrefix(text, "notes_read: "+offRefusal+"\nRemedy: read request R-"), text)
-	require.Contains(t, text, "confines this agent's writes to example-ops")
+	require.Contains(t, text, "confines this agent's writes to example-finance for the rest of its life: once it holds "+
+		"example-finance's content, it writes into no open project, example-ops included")
 	a, err := grants.Resolve(ctx, gShort.FindString(text))
 	require.NoError(t, err)
 	require.Equal(t, lkAgent.Key(), a.ProcessKey, "the request is anchored to the agent, not the bridge that asked")
@@ -495,38 +505,39 @@ func TestGrants_PeerTierDaemonProof(t *testing.T) {
 
 var lkOther = access.ProcessToken{PID: 500, Version: 5000, Boot: lkBoot}
 
-// The case a read grant exists for: an agent working a task in its own project
-// needs a confidential project's knowledge, asks, the owner approves, and the
-// agent writes up the work in that task. The write-up stays open to it after
-// the grant ends, the grant tells it to cite the project by reference, and
-// nothing else opens.
+// The case a read grant exists for: an agent working a task in its own
+// confidential project needs another confidential project's knowledge, asks,
+// the owner approves, and the agent writes up the work in that task. The
+// write-up stays open to it after the grant ends, the grant tells it to cite
+// the project by reference, and nothing else opens. (From an open project a
+// read leaves the agent writing only into the target: the clearance rule.)
 func TestGrants_HolderDocumentsItsWorkInTheAskingProject(t *testing.T) {
 	r := newGrantRig(t, true)
-	ops := r.bind(gOps, "cc/ops")
+	legal := r.bind(gLegal, "cc/legal")
 	hr := r.bind(gHR, "cc/hr")
-	task := r.ok(ops, "tasks_add", map[string]any{"title": "reconcile the quarter", "plan": "close-the-books"})["id"].(string)
+	task := r.ok(legal, "tasks_add", map[string]any{"title": "reconcile the quarter", "plan": "close-the-books"})["id"].(string)
 	elsewhere := r.ok(hr, "tasks_add", map[string]any{"title": "an hr task"})["id"].(string)
 
-	const cite = "When you document this work in example-ops (task details, memories, notes, findings), refer to " +
+	const cite = "When you document this work in example-legal (task details, memories, notes, findings), refer to " +
 		"example-finance's items by reference -- project slug plus the item's name or id -- and leave out " +
 		"example-finance's confidential details."
-	text := r.refused(ops, "recall", map[string]any{"query": "ledger reconciliation", "project": gFin})
+	text := r.refused(legal, "recall", map[string]any{"query": "ledger reconciliation", "project": gFin})
 	require.Contains(t, text, cite, "the instruction arrives with the request")
 	r.approveKey(gShort.FindString(text), approval.For1h)
 
-	items, isErr := r.call(ops, "notes_read", map[string]any{"id": r.finNote})
+	items, isErr := r.call(legal, "notes_read", map[string]any{"id": r.finNote})
 	require.False(t, isErr, "%v", items)
 	require.Len(t, items, 2)
 	require.Contains(t, items[1], cite, "and with the approval")
 
 	const writeUp = "Reconciled against example-finance:quarterly-ledger-notes."
-	require.Equal(t, writeUp, r.ok(ops, "tasks_update", map[string]any{"id": task, "body": writeUp})["body"])
-	r.ok(ops, "memory_write", map[string]any{"name": "quarter-closed", "kind": "reference", "description": "d", "body": writeUp + "\n"})
-	r.ok(ops, "notes_create", map[string]any{"title": "close notes", "body": writeUp})
+	require.Equal(t, writeUp, r.ok(legal, "tasks_update", map[string]any{"id": task, "body": writeUp})["body"])
+	r.ok(legal, "memory_write", map[string]any{"name": "quarter-closed", "kind": "reference", "description": "d", "body": writeUp + "\n"})
+	r.ok(legal, "notes_create", map[string]any{"title": "close notes", "body": writeUp})
 
-	require.Contains(t, r.refused(ops, "tasks_update", map[string]any{"id": elsewhere, "body": "x"}),
-		"so it writes only into example-ops", "another project's task stays closed to it")
+	require.Contains(t, r.refused(legal, "tasks_update", map[string]any{"id": elsewhere, "body": "x"}),
+		"so it writes only into example-legal", "another project's task stays closed to it")
 
 	r.advance(2 * time.Hour)
-	r.ok(ops, "tasks_update", map[string]any{"id": task, "body": writeUp + " Closed."})
+	r.ok(legal, "tasks_update", map[string]any{"id": task, "body": writeUp + " Closed."})
 }

@@ -591,25 +591,44 @@ any of it.
   items outside `logMiddleware`, and a leased connection's tool.call events
   keep no arguments, result or error text: the event is filed under the bound
   session's project, and must never copy a locked project's content there.
-- **Read grants are judged, never trusted, and only ever read**
-  (`isolation.requests`, off by default; `access/grant.go`, `approval/grant.go`,
-  `store/grants.go`, migration 034). A grant request is an `access_approvals`
-  row of kind `grant` (with `from_project`); `store.ApproveAccessGrant` is the
-  only writer of an `access_grants` row -- single use, bound to the request's
+- **Grants are judged, never trusted; every write meets the clearance rule**
+  (`isolation.requests`, off by default; `access/grant.go`,
+  `access/clearance.go`, `approval/grant.go`, `store/grants.go`,
+  `store/clearance.go`, migrations 034 and 039). A grant request is an
+  `access_approvals` row of kind `grant` (with `from_project`);
+  `store.ApproveAccessGrant` and `store.GrantAccessApprove(With)` are the only
+  writers of an `access_grants` row -- single use, bound to the request's
   challenge -- and `ApproveAccess(For)` refuses a grant request, so a grant is
-  never a lease. The MCP edge (`grantsMiddleware`) loads the rows of whoever
-  the call speaks for -- the owner's socket chain under peer_auth, else the
-  session `getBinding` names, never an ambient inference -- and
-  `access.JudgeGrants` keeps only that holder's. `store.CanRead` honors a live
-  grant after the View, for a confidential target and only from its
-  `from_project`; never a sealed project on either side. `store.CanWrite`
-  never asks whether a grant is live: it consults only `access.WriteConfined`,
-  the confinement every grant a holder was ever approved leaves, which only
-  refuses (writes only into those `from_project`s, for the holder's life).
-  The MCP write funnel applies it to an inherited scope too
+  never a lease. The MCP edge (`grantsMiddleware`) and the hooks
+  (`captureConfined`) load the state of the conversation the call speaks for
+  (`store.ConversationClearance`): the owner's socket chain under peer_auth;
+  else the conversation (client + external session id) the agent-process
+  identity names (`mcp.conversationRef`) or the hook body names, plus every
+  session of it as a session holder (grants filed before migration 039 name
+  the session that asked); else, for a client that sends no identity, the
+  session `getBinding` names -- never an ambient inference.
+  `access.JudgeConversation` keeps only that holder's grants and carries its
+  label, its flows into fenced projects and its home (the ambient row's
+  project). `store.CanRead` honors a live grant (read or write) after the
+  View, for a confidential target and only from its `from_project`; never a
+  sealed project on either side. `store.CanWrite` asks, in order: the View;
+  clearance (`access.WriteCleared`, which only refuses: every fenced project
+  in the label is the destination or has an approved flow into it, and an open
+  project or the global scope only while the label is empty -- the caller's
+  own project included); the caller's outbound fence, which only a live
+  read-and-write grant of the destination from the conversation's home opens
+  (`access.WriteGranted`; a confidential caller that is the home); the
+  destination's inbound fence, which nothing opens. A fenced home is cleared
+  for its own sessions' fenced projects (`RecordDestinationOf`'s native-home
+  rule). The MCP write funnel applies the clearance to an inherited scope too
   (`resolveWriteScope`: the binding, an ambient session or the peer's home),
-  so a confined holder that rebinds with `session_start` or names another
-  session with `session=` still writes only into its `from_project`s.
+  so a conversation that rebinds with `session_start` or names another session
+  with `session=` still holds what it holds. `access.WriteConfined` is
+  `!WriteCleared`; `access.JudgeGrants`/`store.HolderGrants` are the previous
+  release's judge and no surface calls them. Receipts (`store.JudgeReceipt`)
+  are the one content-free write past the rule: done or dropped on a task a
+  pre-move session claimed, at most one reference into the home, never from a
+  sealed home.
   Requests are filed only by `fenceRead` (an explicit `project=` or a by-ULID
   read), never by a filter (`fenceReadQuiet`) or the read half of a move or
   apply (`fenceReadNoAsk`). Without peer_auth the decision is the bearer

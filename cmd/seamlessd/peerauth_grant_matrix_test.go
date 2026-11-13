@@ -2,19 +2,22 @@ package main
 
 // The read-grant rows of the peer_auth matrix (isolation.requests, step G of
 // the locked-projects plan; step 10's acceptance: a grant only reads, and only
-// for its own tree).
+// for its own tree), under the clearance rule (plan fenced-sessions P2): a
+// write's destination must be cleared for everything the conversation holds.
 //
 //   - TestPeerAuthMatrix_Grants: peer_auth on, isolation.requests on. A grant
 //     approved for one agent's process tree reads its confidential target
-//     through every read tool and writes nothing into it through every other
-//     tool; the tree is write-confined to its own project; the grant never
+//     through every read tool; holding that content, the tree writes only into
+//     the target -- never into an open project, its own included, nor the
+//     global scope, and it carries nothing out of the target; the grant never
 //     reaches a sealed or a locked project; it is the tree's alone (its
 //     descendants read; a sibling, an orphan, another session and the TCP key
-//     do not); it ends at expiry, revoke and session_end. T-anchor row 5: a
-//     tmux pane files no grant row.
+//     do not); it ends at expiry, revoke and the session's end, and the label
+//     stays with the tree. T-anchor row 5: a tmux pane files no grant row.
 //   - TestPeerAuthMatrix_Advisory: peer_auth off, isolation.requests on (the
-//     advisory tier): the same, keyed on the session and decided by the
-//     bearer key over the console, and its texts verbatim.
+//     advisory tier): the same, held by the conversation the agent-process
+//     identity names and decided by the bearer key over the console, and its
+//     texts verbatim.
 //   - TestPeerAuthMatrix_AdvisoryOff: both off: the fence refuses word for
 //     word as on main and files nothing.
 
@@ -56,6 +59,18 @@ const (
 	gmAnchorCure = "Remedy: run the work from an agent session (Claude Code or Codex), which asks for itself; for a " +
 		"one-off, the owner approves that session's request with `seam approve` in their own terminal."
 )
+
+// gmHolds is the clearance rule's refusal of a write into where, by a holder
+// ("agent" or "session") holding held and cleared only for cleared ("" for
+// none), as internal/mcp's clearanceRefusal words it.
+func gmHolds(holder, held, cleared, where string) string {
+	if cleared == "" {
+		return "this " + holder + " holds content from " + held + ", and no project is cleared for all of it: a write into " +
+			where + " is refused"
+	}
+	return "this " + holder + " holds content from " + held + ", so it writes only into " + cleared + ": a write into " +
+		where + " is refused"
+}
 
 // gmLines splits a one-item refusal into its lines.
 func gmLines(t *testing.T, items []string) []string {
@@ -242,7 +257,8 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 		require.NotEmpty(t, short, ls[1])
 		require.Equal(t, "Remedy: read request "+short+" is waiting -- the owner approves it in their own terminal with "+
 			"`seam approve "+short+"`; retry once it is approved. An approved read is read-only, and confines this agent's "+
-			"writes to "+gmOpen+" for the rest of its life. "+approval.CiteByReferenceLine(gmConf, gmOpen), ls[1])
+			"writes to "+gmConf+" for the rest of its life: once it holds "+gmConf+"'s content, it writes into no open project, "+
+			gmOpen+" included, and not into the global scope.", ls[1])
 		gmNoSecretsBut(t, items[0], "the refusal")
 		// A repeated refusal names the same request.
 		items, _ = gmCall(t, agent, "memory_read", map[string]any{"id": conf.memID})
@@ -358,7 +374,7 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 		require.Len(t, items, 2, "the result, then the grant's news once")
 		require.Contains(t, items[0], conf.secret)
 		require.Contains(t, items[1], "Read access to "+gmConf+" was approved until")
-		require.Contains(t, items[1], "This agent now writes only into "+gmOpen+", for the rest of its life")
+		require.Contains(t, items[1], "This agent now writes only into "+gmConf+", for the rest of its life")
 		items, _ = gmCall(t, agent, "notes_read", map[string]any{"id": conf.noteID})
 		require.Len(t, items, 1, "announced once")
 		r.reads(agent, "the grantee", conf, true)
@@ -391,10 +407,33 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 		require.Equal(t, 1, r.count(`SELECT COUNT(*) FROM access_grants`))
 	})
 
-	t.Run("the grantee writes nothing into its target", func(t *testing.T) {
+	// The target is cleared for its own content: the grantee writes into it as
+	// any open project's session may (inbound to a confidential project was
+	// always open). Carrying it out is a write into the open home, and that
+	// is refused.
+	t.Run("the grantee writes into its target, and carries nothing out of it", func(t *testing.T) {
 		r := r.at(t)
-		r.writes(agent, "the grantee", conf, registered, true)
-		r.writes(child, "a child", conf, registered, true)
+		for i, cli := range []*mcpclient.Client{agent, child} {
+			got := gmOK(t, cli, "memory_write", map[string]any{"project": gmConf, "name": "grantee-in-" + string(rune('a'+i)),
+				"kind": "reference", "description": "d", "body": "b\n"})
+			require.Equal(t, gmConf, got["project"])
+			for _, c := range []struct {
+				tool string
+				args map[string]any
+			}{
+				{"notes_update", map[string]any{"id": conf.noteID, "project": gmOpen}},
+				{"tasks_update", map[string]any{"id": conf.openTaskID, "project": gmOpen}},
+				{"tasks_update", map[string]any{"id": conf.taskID, "project": gmOpen}},
+			} {
+				items, isErr := gmCall(t, cli, c.tool, c.args)
+				require.True(t, isErr, "%s %v: %v", c.tool, c.args, items)
+				require.Equal(t, c.tool+": "+gmHolds("agent", gmConf, gmConf, "project "+gmOpen), items[0])
+			}
+		}
+		// Every write tool into a project its label does not clear: refused,
+		// and nothing there changes.
+		r.writes(agent, "the grantee", sealed, registered, true)
+		r.unchanged(conf, "after the grantee's writes")
 		r.unchanged(sealed, "after the grantee's writes")
 		r.unchanged(fin, "after the grantee's writes")
 	})
@@ -412,19 +451,14 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 		}
 	})
 
-	// AGENTS.md (Read grants): CanWrite "consults only access.WriteConfined,
-	// the confinement every grant a holder was ever approved leaves ...
-	// (writes only into those from_projects, for the holder's life)"; under
-	// peer_auth the holder is the agent's process tree. A connection of the
-	// tree that rebinds elsewhere is the same holder: an implicit-scope create
-	// there is refused like an explicit one.
-	//
-	// FAILS on the branch as of 4989ebee: resolveWriteScope
-	// (internal/mcp/server.go) returns the bound or ambient project
-	// without asking CanWrite, so WriteConfined is never consulted for a create
-	// that names no project -- every create lands in the rebound project,
-	// the global scope included.
-	t.Run("a rebind does not lift the tree's confinement", func(t *testing.T) {
+	// The clearance rule judges the conversation -- under peer_auth the
+	// agent's process tree -- never the connection's binding. A connection of
+	// the tree that rebinds elsewhere holds what the tree holds: an
+	// implicit-scope create there meets the rule as an explicit one does
+	// (resolveWriteScope asks access.WriteCleared of an inherited scope). Bound
+	// into the target it holds, the tree writes there as the target's own
+	// sessions do.
+	t.Run("a rebind does not lift the tree's label", func(t *testing.T) {
 		r := r.at(t)
 		for _, target := range []string{gmConf, gmDocs, "global"} {
 			cli := r.dial(agentSrv.URL, "", gmAgent)
@@ -444,7 +478,14 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 				{"trial_record", map[string]any{"lab": conf.lab, "title": "rebind probe"}},
 			} {
 				items, isErr := gmCall(t, cli, c.tool, c.args)
-				assert.True(t, isErr, "bound to %s by a rebind, the confined tree's %s must be refused: %v", target, c.tool, items)
+				if target == gmConf {
+					assert.False(t, isErr, "bound into the target it holds, the tree's %s lands there: %v", c.tool, items)
+					continue
+				}
+				assert.True(t, isErr, "bound to %s by a rebind, the tree's %s must be refused: %v", target, c.tool, items)
+			}
+			if target == gmConf {
+				continue
 			}
 			slug := target
 			if slug == "global" {
@@ -456,16 +497,16 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 		// agent's own connection.
 		items, isErr := gmCall(t, agent, "memory_write", map[string]any{"session": "docs-agent-session",
 			"name": "handle-probe", "kind": "reference", "description": "d", "body": "b\n"})
-		assert.True(t, isErr, "speaking for another project's session, the confined tree's write must be refused: %v", items)
+		assert.True(t, isErr, "speaking for another project's session, the tree's write must be refused: %v", items)
 		r.noLanded(gmDocs, "session= docs-agent-session", "handle-probe", "handle probe")
 	})
 
-	t.Run("a session= handle does not lift the tree's confinement for an explicit project", func(t *testing.T) {
+	t.Run("a session= handle does not lift the tree's label for an explicit project", func(t *testing.T) {
 		r := r.at(t)
 		items, isErr := gmCall(t, agent, "memory_write", map[string]any{"session": "docs-agent-session", "project": gmDocs,
 			"name": "probe-out", "kind": "reference", "description": "d", "body": "b\n"})
 		require.True(t, isErr, "%v", items)
-		require.Contains(t, items[0], "writes only into "+gmOpen)
+		require.Equal(t, "memory_write: "+gmHolds("agent", gmConf, gmConf, "project "+gmDocs), items[0])
 		r.noProbes(gmDocs, "session= with project=")
 	})
 
@@ -488,7 +529,10 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 		gmNoSecretsBut(t, gmText(items), "recall from "+gmDocs)
 	})
 
-	t.Run("the open-project grantee is write-confined to its own project", func(t *testing.T) {
+	// Leak path 2 of the plan closed: holding the target's content, the
+	// open-project grantee writes into no open project -- its own included --
+	// nor the global scope, and writes into the target alone.
+	t.Run("the open-project grantee writes only into its target", func(t *testing.T) {
 		r := r.at(t)
 		for _, c := range []struct {
 			tool  string
@@ -499,28 +543,31 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 			{"memory_write", map[string]any{"project": "global", "name": "probe-out", "kind": "reference", "description": "d", "body": "b\n"}, "the global scope"},
 			{"notes_create", map[string]any{"project": gmDocs, "title": "probe out", "body": "b"}, "project " + gmDocs},
 			{"tasks_add", map[string]any{"project": gmDocs, "title": "probe out"}, "project " + gmDocs},
+			{"memory_write", map[string]any{"name": "probe-out", "kind": "reference", "description": "d", "body": "b\n"}, "project " + gmOpen},
+			{"notes_create", map[string]any{"title": "probe out", "body": "b"}, "project " + gmOpen},
+			{"tasks_add", map[string]any{"title": "probe out"}, "project " + gmOpen},
 		} {
 			for _, cli := range []*mcpclient.Client{agent, child} {
 				items, isErr := gmCall(t, cli, c.tool, c.args)
 				require.True(t, isErr, "%s %v: %v", c.tool, c.args, items)
-				require.Equal(t, c.tool+": this agent was granted a read of another project, so it writes only into "+gmOpen+
-					" for the rest of its life: a write into "+c.where+" is refused", items[0])
+				require.Equal(t, c.tool+": "+gmHolds("agent", gmConf, gmConf, c.where), items[0])
 			}
 		}
-		r.noProbes(gmDocs, "the confined writes")
-		r.noProbes("", "the confined writes")
-		// Inside its own project, writes land.
-		gmOK(t, agent, "memory_write", map[string]any{"name": "open-own", "kind": "reference", "description": "d", "body": "b\n"})
-		_, found, err := store.MemoryByName(r.ctx, r.db, gmOpen, "open-own")
+		r.noProbes(gmDocs, "the held writes")
+		r.noProbes(gmOpen, "the held writes")
+		r.noProbes("", "the held writes")
+		// Into its target, writes land.
+		gmOK(t, agent, "memory_write", map[string]any{"project": gmConf, "name": "conf-own", "kind": "reference", "description": "d", "body": "b\n"})
+		_, found, err := store.MemoryByName(r.ctx, r.db, gmConf, "conf-own")
 		require.NoError(t, err)
 		require.True(t, found)
-		note := gmOK(t, agent, "notes_create", map[string]any{"title": "open own note", "body": "b"})
-		require.Equal(t, gmOpen, note["project"])
-		task := gmOK(t, agent, "tasks_add", map[string]any{"title": "open own task"})
+		note := gmOK(t, agent, "notes_create", map[string]any{"project": gmConf, "title": "conf own note", "body": "b"})
+		require.Equal(t, gmConf, note["project"])
+		task := gmOK(t, agent, "tasks_add", map[string]any{"project": gmConf, "title": "conf own task"})
 		got, err := store.TaskByID(r.ctx, r.db, task["id"].(string))
 		require.NoError(t, err)
-		require.Equal(t, gmOpen, got.ProjectSlug)
-		// Confinement is the tree's: another session writes where it may.
+		require.Equal(t, gmConf, got.ProjectSlug)
+		// The label is the tree's: another session writes where it may.
 		gmOK(t, other, "memory_write", map[string]any{"project": gmDocs, "name": "other-into-docs", "kind": "reference", "description": "d", "body": "b\n"})
 	})
 
@@ -566,7 +613,7 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 		require.Zero(t, r.grantRows("process_key = ?", gmTmux.Key()))
 	})
 
-	t.Run("expiry ends the read, never the confinement", func(t *testing.T) {
+	t.Run("expiry ends the read, never the label", func(t *testing.T) {
 		r := r.at(t)
 		read := map[string]any{"id": conf.noteID}
 		r.clock.Advance(40 * time.Minute)
@@ -581,7 +628,7 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 		}
 		r.reads(agent, "after expiry", conf, false)
 		items, isErr = gmCall(t, agent, "memory_write", map[string]any{"project": gmDocs, "name": "probe-out", "kind": "reference", "description": "d", "body": "b\n"})
-		require.True(t, isErr, "still confined: %v", items)
+		require.True(t, isErr, "still held: %v", items)
 		r.noProbes(gmDocs, "after expiry")
 	})
 
@@ -601,26 +648,41 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 		r.reads(child, "a child after revoke", conf, false)
 	})
 
-	t.Run("session_end ends the read, and the agent stays confined for its life", func(t *testing.T) {
+	// The record follows the home in a later step of the plan (P5); until
+	// then session_end, which writes findings into the open home, is refused
+	// like every other write there. The session's end -- the SessionEnd hook
+	// -- ends the read; the label stays with the agent's tree for its life.
+	t.Run("the session's end ends the read, and the agent's label stays for its life", func(t *testing.T) {
 		r := r.at(t)
 		items, _ := gmCall(t, agent, "notes_read", map[string]any{"id": conf.noteID})
 		g := r.approveDaemon(gmShort.FindString(items[0]))
 		_, isErr := gmCall(t, agent, "notes_read", map[string]any{"id": conf.noteID})
 		require.False(t, isErr)
-		gmOK(t, agent, "session_end", map[string]any{"findings": "done"})
+		// The planted grants of the sealed and the locked project count too:
+		// the label holds every target the tree was ever approved.
+		held := strings.Join([]string{gmConf, gmFin, gmSealed}, ", ")
+		items, isErr = gmCall(t, agent, "session_end", map[string]any{"findings": "done"})
+		require.True(t, isErr, "%v", items)
+		require.Equal(t, "session_end: "+gmHolds("agent", held, "", "project "+gmOpen), items[0])
+		status, body := r.hook(agentSrv.URL, "", "session-end", map[string]any{"session_id": "cc/open-agent-ext",
+			"cwd": "/work/" + gmOpen, "reason": "exit"})
+		require.Equal(t, http.StatusOK, status, body)
 		ended, err := store.AccessGrantByID(r.ctx, r.db, g.ID)
 		require.NoError(t, err)
 		require.NotNil(t, ended.RevokedAt)
 		require.Equal(t, store.LeaseRevokedSessionEnded, ended.RevokedReason)
 		// The agent's next session (/clear): it reads nothing of the target,
-		// and is still confined -- the grant was the process's.
+		// and its label is still the tree's.
 		r.stamp(gmOpen, "cc/open-agent-next", gmAgent)
 		r.reads(agent, "the next session", conf, false)
 		items, isErr = gmCall(t, agent, "memory_write", map[string]any{"project": gmDocs, "name": "probe-out", "kind": "reference", "description": "d", "body": "b\n"})
 		require.True(t, isErr, "%v", items)
-		require.Contains(t, items[0], "writes only into "+gmOpen)
-		gmOK(t, agent, "memory_write", map[string]any{"name": "open-own-next", "kind": "reference", "description": "d", "body": "b\n"})
-		r.noProbes(gmDocs, "after session_end")
+		require.Equal(t, "memory_write: "+gmHolds("agent", held, "", "project "+gmDocs), items[0])
+		items, isErr = gmCall(t, agent, "memory_write", map[string]any{"name": "probe-out", "kind": "reference", "description": "d", "body": "b\n"})
+		require.True(t, isErr, "%v", items)
+		require.Equal(t, "memory_write: "+gmHolds("agent", held, "", "project "+gmOpen), items[0])
+		r.noProbes(gmDocs, "after the session's end")
+		r.noProbes(gmOpen, "after the session's end")
 	})
 
 	// seamlessd approvers reset's core: every live grant ends with the
@@ -671,9 +733,8 @@ func TestPeerAuthMatrix_Advisory(t *testing.T) {
 		// its example's id and asking project:
 		doc := "Remedy: read request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, " +
 			"or with Approve on the console's Access requests page; retry once it is approved. An approved read is read-only, " +
-			"and confines this session's writes to example-ops for the rest of its life. When you document this work in example-ops " +
-			"(task details, memories, notes, findings), refer to example-finance's items by reference -- project slug plus the " +
-			"item's name or id -- and leave out example-finance's confidential details."
+			"and confines this session's writes to example-finance for the rest of its life: once it holds example-finance's " +
+			"content, it writes into no open project, example-ops included, and not into the global scope."
 		require.Equal(t, strings.NewReplacer("R-7F3K", short, "example-ops", gmOpen, "example-finance", gmConf).Replace(doc), ls[1])
 		a, err := r.grants.Resolve(r.ctx, short)
 		require.NoError(t, err)
@@ -724,24 +785,32 @@ func TestPeerAuthMatrix_Advisory(t *testing.T) {
 		require.False(t, isErr, "%v", items)
 		require.Len(t, items, 2)
 		require.Equal(t, "Read access to "+gmConf+" was approved until "+access.Clock(r.liveGrantFor(s1).ExpiresAt)+
-			", read-only. Nothing read from "+gmConf+" may be written anywhere but "+gmOpen+". "+approval.CiteByReferenceLine(gmConf, gmOpen)+" This session "+
-			"now writes only into "+gmOpen+", for the rest of its life: a write to another project or the global scope is refused.", items[1])
+			", read-only. This session now writes only into "+gmConf+", for the rest of its life: a write to another project "+
+			"or the global scope is refused.", items[1])
 		r.reads(cli1, "the grantee session", conf, true)
 	})
 
-	t.Run("the session writes nothing into its target, and is confined", func(t *testing.T) {
+	t.Run("the session writes only into its target", func(t *testing.T) {
 		r := r.at(t)
-		r.writes(cli1, "the grantee session", conf, registered, false)
-		items, isErr := gmCall(t, cli1, "memory_write", map[string]any{"project": gmDocs, "name": "probe-out", "kind": "reference", "description": "d", "body": "b\n"})
-		require.True(t, isErr)
-		require.Equal(t, "memory_write: this session was granted a read of another project, so it writes only into "+gmOpen+
-			" for the rest of its life: a write into project "+gmDocs+" is refused", items[0])
-		items, isErr = gmCall(t, cli1, "memory_write", map[string]any{"project": "global", "name": "probe-out", "kind": "reference", "description": "d", "body": "b\n"})
-		require.True(t, isErr)
-		require.Contains(t, items[0], "a write into the global scope is refused")
-		gmOK(t, cli1, "memory_write", map[string]any{"name": "open-own", "kind": "reference", "description": "d", "body": "b\n"})
-		r.noProbes(gmDocs, "confined")
-		r.noProbes("", "confined")
+		got := gmOK(t, cli1, "memory_write", map[string]any{"project": gmConf, "name": "session-in", "kind": "reference", "description": "d", "body": "b\n"})
+		require.Equal(t, gmConf, got["project"])
+		for where, args := range map[string]map[string]any{
+			"project " + gmDocs: {"project": gmDocs, "name": "probe-out", "kind": "reference", "description": "d", "body": "b\n"},
+			"the global scope":  {"project": "global", "name": "probe-out", "kind": "reference", "description": "d", "body": "b\n"},
+			"project " + gmOpen: {"name": "probe-out", "kind": "reference", "description": "d", "body": "b\n"},
+		} {
+			items, isErr := gmCall(t, cli1, "memory_write", args)
+			require.True(t, isErr, "%s: %v", where, items)
+			require.Equal(t, "memory_write: "+gmHolds("session", gmConf, gmConf, where), items[0])
+		}
+		items, isErr := gmCall(t, cli1, "notes_update", map[string]any{"id": conf.noteID, "project": gmOpen})
+		require.True(t, isErr, "%v", items)
+		require.Equal(t, "notes_update: "+gmHolds("session", gmConf, gmConf, "project "+gmOpen), items[0])
+		r.noProbes(gmDocs, "held")
+		r.noProbes(gmOpen, "held")
+		r.noProbes("", "held")
+		r.writes(cli1, "the grantee session", sealed, registered, false)
+		r.unchanged(conf, "after the grantee's writes")
 		r.unchanged(sealed, "after the grantee's writes")
 		r.unchanged(fin, "after the grantee's writes")
 	})
@@ -753,40 +822,49 @@ func TestPeerAuthMatrix_Advisory(t *testing.T) {
 		gmOK(t, cli2, "memory_write", map[string]any{"project": gmDocs, "name": "other-into-docs", "kind": "reference", "description": "d", "body": "b\n"})
 	})
 
-	// "keyed on the session" (configuration reference, isolation.requests):
-	// whatever connection a call arrives on, the call speaks for the session
-	// it names, and carries that session's grants and confinement.
-	t.Run("the grant is the session's: a call naming it with session= holds it", func(t *testing.T) {
+	// A call that names no agent process speaks for the session it names, and
+	// a session that names a conversation carries that conversation's grants
+	// and label, whatever connection the call arrives on.
+	t.Run("the grant is the conversation's: a call naming its session with session= holds it", func(t *testing.T) {
 		items, isErr := gmCall(t, unbound, "notes_read", map[string]any{"id": conf.noteID, "session": "cc/open-1"})
 		require.False(t, isErr, "%v", items)
 		require.Contains(t, items[0], conf.secret)
 		items, isErr = gmCall(t, unbound, "memory_write", map[string]any{"session": "cc/open-1", "project": gmDocs,
 			"name": "probe-out", "kind": "reference", "description": "d", "body": "b\n"})
-		require.True(t, isErr, "and its confinement: %v", items)
+		require.True(t, isErr, "and its label: %v", items)
 		r.at(t).noProbes(gmDocs, "session= cc/open-1")
 	})
 
-	// The advisory tier's limit, pinned as it stands: its holder is the
-	// session a call speaks for, self-reported like every binding without
-	// peer_auth ("Honest limits"), so the grantee's agent, by binding or
-	// naming ANOTHER session, writes where that session may. The docs say the
-	// tier is advisory and keyed on the session; they do not spell this out.
-	// Under peer_auth the holder is the process tree, and the same moves are
-	// refused (TestPeerAuthMatrix_Grants).
-	t.Run("advisory limit: another session the grantee's agent binds or names is not confined", func(t *testing.T) {
+	// The advisory tier's holder is the conversation the agent-process
+	// identity names, never the binding: the grantee's agent, binding or
+	// naming ANOTHER session, still holds what it holds (the limit the
+	// previous release pinned here is closed for an agent that names its
+	// process). The limit that stands: a client that names no agent process
+	// speaks for the session it binds or names, self-reported like every
+	// binding without peer_auth ("Honest limits"). Under peer_auth the holder
+	// is the process tree (TestPeerAuthMatrix_Grants).
+	t.Run("the conversation holds whatever the grantee's agent binds or names", func(t *testing.T) {
 		r := r.at(t)
 		items, isErr := gmCall(t, cli1, "memory_write", map[string]any{"session": "docs-agent-session", "project": gmDocs,
 			"name": "advisory-handle", "kind": "reference", "description": "d", "body": "b\n"})
-		require.False(t, isErr, "%v", items)
+		require.True(t, isErr, "%v", items)
+		require.Equal(t, "memory_write: "+gmHolds("session", gmConf, gmConf, "project "+gmDocs), items[0])
 		rebound := r.dial(r.tcp.URL, gmKey, gmAgent)
 		gmOK(t, rebound, "session_start", map[string]any{"project": gmDocs})
-		_, isErr = gmCall(t, rebound, "memory_write", map[string]any{"name": "advisory-rebind", "kind": "reference", "description": "d", "body": "b\n"})
-		require.False(t, isErr)
+		items, isErr = gmCall(t, rebound, "memory_write", map[string]any{"name": "advisory-rebind", "kind": "reference", "description": "d", "body": "b\n"})
+		require.True(t, isErr, "%v", items)
+		require.Equal(t, "memory_write: "+gmHolds("session", gmConf, gmConf, "project "+gmDocs), items[0])
 		for _, name := range []string{"advisory-handle", "advisory-rebind"} {
 			_, found, err := store.MemoryByName(r.ctx, r.db, gmDocs, name)
 			require.NoError(t, err)
-			require.True(t, found, name)
+			require.False(t, found, name)
 		}
+		// The limit, pinned as it stands.
+		gmOK(t, unbound, "memory_write", map[string]any{"session": "docs-agent-session", "project": gmDocs,
+			"name": "advisory-limit", "kind": "reference", "description": "d", "body": "b\n"})
+		_, found, err := store.MemoryByName(r.ctx, r.db, gmDocs, "advisory-limit")
+		require.NoError(t, err)
+		require.True(t, found)
 	})
 
 	t.Run("expiry, revoke and the session's end each end the read", func(t *testing.T) {
