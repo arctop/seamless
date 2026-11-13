@@ -104,6 +104,10 @@ Register it with a stdio client, e.g. the local Codex host:
 
   codex mcp add seamless -- <abs seam> mcp-proxy --config <abs seamless.yaml>
 
+Config comes from --config, else $SEAMLESS_CONFIG, else
+~/.config/seamless/seamless.yaml; a seamless.yaml in the working directory is
+never read.
+
 It rides out a daemon restart: while seamlessd cannot be dialed, a request is
 retried for up to 30s and then answered with a JSON-RPC error. A request that
 may have reached the daemon is never sent twice, since a tool call may already
@@ -112,10 +116,11 @@ serving, because a stdio client does not restart a server that exits. Once
 serving, it exits only when stdin closes or stdout breaks.`)
 
 func runMCPProxy(ctx context.Context, e *env, o *mcpProxyOpts, _ []string) error {
-	// --config is config.Load's documented $SEAMLESS_CONFIG override, moved out of
-	// the shell because `codex mcp add` records an argv with no environment. Same
-	// path as runHook; setting it in this process is safe and keeps loadConfig's
-	// search order the single code path.
+	// --config is config.LoadClient's documented $SEAMLESS_CONFIG override, moved
+	// out of the shell because `codex mcp add` records an argv with no
+	// environment. Same path as runHook; setting it in this process is safe and
+	// keeps loadConfig's search order the single code path -- which, like the
+	// hook's, never reads a seamless.yaml in the client's working directory.
 	if o.config != "" {
 		if err := os.Setenv("SEAMLESS_CONFIG", o.config); err != nil {
 			return fmt.Errorf("set config path: %w", err)

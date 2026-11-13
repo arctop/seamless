@@ -86,6 +86,9 @@ type Config struct {
 
 	// sourcePath records which config file was loaded (empty = defaults only).
 	sourcePath string `yaml:"-"`
+	// fromWorkingDir records that sourcePath is ./seamless.yaml, reached as the
+	// last step of Load's search order (FromWorkingDir).
+	fromWorkingDir bool `yaml:"-"`
 }
 
 // Roles are the accepted role values.
@@ -628,12 +631,45 @@ func Defaults() Config {
 // Load resolves configuration from the first config file found in the search
 // order ($SEAMLESS_CONFIG, ~/.config/seamless/seamless.yaml, ./seamless.yaml),
 // then applies SEAMLESS_* environment overrides and expands paths.
+//
+// It is the daemon's search: seamlessd serve and its one-shot commands, which
+// the owner or a supervisor starts, and where ./seamless.yaml is the pre-install
+// layout's config (make run from a checkout). The client commands use
+// LoadClient, which never reads the working directory.
 func Load() (Config, error) {
-	path, err := findConfigFile()
+	return load(true)
+}
+
+// LoadClient is Load for the client commands -- the seam CLI's verbs, seam hook,
+// seam mcp-proxy and seam mcp-headers -- with the same search order except its
+// last step: $SEAMLESS_CONFIG, then ~/.config/seamless/seamless.yaml, and never
+// ./seamless.yaml.
+//
+// An agent client spawns its hooks and its MCP bridge in the agent's working
+// directory, which is a repository the agent can write and anyone can commit
+// to. A seamless.yaml there would otherwise decide, whenever the first two are
+// absent (a hook rendered without --config so several accounts can share it,
+// say), which server the session's prompts and transcripts go to -- and, with
+// SEAMLESS_MCP_API_KEY in the environment, the bearer key. The two places that
+// remain are the caller's own: the environment it was started with, and its
+// own home.
+func LoadClient() (Config, error) {
+	return load(false)
+}
+
+// load is Load and LoadClient: withWorkingDir says whether ./seamless.yaml is
+// the search's last step.
+func load(withWorkingDir bool) (Config, error) {
+	path, fromWorkingDir, err := findConfigFile(withWorkingDir)
 	if err != nil {
 		return Config{}, err
 	}
-	return LoadFrom(path)
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.fromWorkingDir = fromWorkingDir
+	return cfg, nil
 }
 
 // LoadFrom loads defaults, overlays the YAML file at path (if non-empty), applies
@@ -882,6 +918,11 @@ func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 // SourcePath returns the config file that was loaded, or "" if defaults+env only.
 func (c Config) SourcePath() string { return c.sourcePath }
 
+// FromWorkingDir reports whether the file loaded was ./seamless.yaml, the last
+// step of Load's search: a config this process reads and the client commands,
+// which never look there (LoadClient), do not.
+func (c Config) FromWorkingDir() bool { return c.fromWorkingDir }
+
 // DBPath is the SQLite database path.
 func (c Config) DBPath() string { return filepath.Join(c.DataDir, "seam.db") }
 
@@ -1077,26 +1118,34 @@ func (c *Config) applyEnv() error {
 	return nil
 }
 
-// findConfigFile returns the first existing config file in the search order. If
-// $SEAMLESS_CONFIG is set it must exist. Returns "" when no file is found.
-func findConfigFile() (string, error) {
+// WorkingDirConfig is the config file Load looks for in the working directory,
+// last: the pre-install layout's config. LoadClient never reads it.
+const WorkingDirConfig = "seamless.yaml"
+
+// findConfigFile returns the first existing config file in the search order,
+// and whether it is the working directory's (WorkingDirConfig). If
+// $SEAMLESS_CONFIG is set it must exist. withWorkingDir adds WorkingDirConfig
+// as the last step (Load), or leaves it out (LoadClient). Returns "" when no
+// file is found.
+func findConfigFile(withWorkingDir bool) (string, bool, error) {
 	if p := os.Getenv("SEAMLESS_CONFIG"); p != "" {
 		if _, err := os.Stat(p); err != nil {
-			return "", fmt.Errorf("config: SEAMLESS_CONFIG=%s: %w", p, err)
+			return "", false, fmt.Errorf("config: SEAMLESS_CONFIG=%s: %w", p, err)
 		}
-		return p, nil
+		return p, false, nil
 	}
-	var candidates []string
 	if home, err := os.UserHomeDir(); err == nil {
-		candidates = append(candidates, filepath.Join(home, ".config", "seamless", "seamless.yaml"))
-	}
-	candidates = append(candidates, "seamless.yaml")
-	for _, p := range candidates {
+		p := filepath.Join(home, ".config", "seamless", "seamless.yaml")
 		if _, err := os.Stat(p); err == nil {
-			return p, nil
+			return p, false, nil
 		}
 	}
-	return "", nil
+	if withWorkingDir {
+		if _, err := os.Stat(WorkingDirConfig); err == nil {
+			return WorkingDirConfig, true, nil
+		}
+	}
+	return "", false, nil
 }
 
 func envStr(key string, dst *string) {

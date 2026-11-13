@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -57,6 +59,14 @@ func runDoctor(ctx context.Context, e *env, _ *noOpts, _ []string) error {
 			failed++
 		}
 		fmt.Fprintf(e.stdout, "  [%-4s] %s: %s\n", label, name, detail)
+	}
+
+	// Which file answered comes first: every line below describes the server
+	// that file names. A ./seamless.yaml this command did not read is named
+	// too, since seamlessd still reads one and the two would then disagree.
+	report(true, "config", configSourceDetail(cfg))
+	if note := ignoredWorkingDirConfig(cfg); note != "" {
+		fmt.Fprintf(e.stdout, "  [%-4s] %s: %s\n", "note", "config", note)
 	}
 
 	// Health.
@@ -111,6 +121,37 @@ func runDoctor(ctx context.Context, e *env, _ *noOpts, _ []string) error {
 		return fmt.Errorf("doctor: %d check(s) failed", failed)
 	}
 	return nil
+}
+
+// configSourceDetail names the config file seam loaded, or that it found none.
+func configSourceDetail(cfg config.Config) string {
+	if src := cfg.SourcePath(); src != "" {
+		return "loaded from " + src
+	}
+	return "defaults + env (no $SEAMLESS_CONFIG and no ~/.config/seamless/seamless.yaml)"
+}
+
+// ignoredWorkingDirConfig is the note for a seamless.yaml in the working
+// directory that seam did not load: config.LoadClient never reads one, though
+// seamlessd's search still does, and a developer running ./bin/seam beside the
+// pre-install layout's config would otherwise see the defaults with no reason
+// given. "" when there is no such file, or it is the one loaded.
+func ignoredWorkingDirConfig(cfg config.Config) string {
+	here, err := os.Stat(config.WorkingDirConfig)
+	if err != nil {
+		return ""
+	}
+	if src := cfg.SourcePath(); src != "" {
+		if loaded, lerr := os.Stat(src); lerr == nil && os.SameFile(here, loaded) {
+			return ""
+		}
+	}
+	abs, err := filepath.Abs(config.WorkingDirConfig)
+	if err != nil {
+		abs = config.WorkingDirConfig
+	}
+	return fmt.Sprintf("%s is not read: seam reads $SEAMLESS_CONFIG, then ~/.config/seamless/seamless.yaml, never the working directory's; "+
+		"to use it, set SEAMLESS_CONFIG=%s", abs, abs)
 }
 
 // toolsCheck judges the live tools/list count and renders the mcp_tools detail.

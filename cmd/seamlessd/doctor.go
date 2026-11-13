@@ -92,13 +92,9 @@ func doctor(args []string) error {
 		checks = append(checks, check{statusFail, "config", err.Error()})
 		return reportChecks(checks)
 	}
-	src := cfg.SourcePath()
-	if src == "" {
-		src = "defaults + env (no seamless.yaml found)"
-	}
 	checks = append(checks,
-		check{statusOK, "config", "loaded from " + src},
-		configPermissionsCheck(cfg.SourcePath(), runtime.GOOS),
+		configSourceCheck(cfg),
+		configFileCheck(cfg, runtime.GOOS, defaultSharedConfigEnv()),
 	)
 
 	// The role branch, and it is placed here because everything below it reads
@@ -258,6 +254,24 @@ func clientChecks(cfg config.Config) []check {
 	// hooks on a client record their observations on the server, not here.
 	checks = append(checks, codexChecks(cfg, nil)...)
 	return checks
+}
+
+// configSourceCheck is the "config" row: which file doctor loaded. A
+// ./seamless.yaml reached as the search's last step is an info row, because the
+// seam CLI's search (config.LoadClient) never reads the working directory: the
+// report would describe a config seam itself does not load.
+func configSourceCheck(cfg config.Config) check {
+	src := cfg.SourcePath()
+	switch {
+	case src == "":
+		return check{statusOK, "config", "loaded from defaults + env (no seamless.yaml found)"}
+	case cfg.FromWorkingDir():
+		abs := absConfigPath(src)
+		return check{statusInfo, "config", fmt.Sprintf("loaded from %s, the working directory's: seamlessd reads it, but seam reads one only when it is named "+
+			"(--config, or SEAMLESS_CONFIG), never from the working directory -- hooks install-hooks wrote from here name it and keep working; "+
+			"run seam itself with SEAMLESS_CONFIG=%s, or move the file to ~/.config/seamless/seamless.yaml", abs, abs)}
+	}
+	return check{statusOK, "config", "loaded from " + src}
 }
 
 // configPermissionsCheck warns when an existing secret-bearing configuration

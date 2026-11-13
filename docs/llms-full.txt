@@ -1368,8 +1368,10 @@ what the running daemon and every agent's hooks execute. Swapping them is `make
 install`, deliberately - [Contributing](/internals/contributing/) covers using
 it as the edit-test loop.
 
-The config lands in `~/.config/seamless/`, one of the paths Seamless already
-searches ahead of `./seamless.yaml`, so the hooks resolve it from any directory.
+The config lands in `~/.config/seamless/`, the path both `seamlessd` and `seam`
+search after `$SEAMLESS_CONFIG`, so the hooks and the CLI resolve it from any
+directory. (`seam` never reads a `./seamless.yaml`; only `seamlessd` does, as
+the last step of [its search](/reference/configuration/#where-the-config-comes-from).)
 It is seeded **only when absent** - an install never clobbers a config holding
 your bearer key. Delete it to re-seed.
 
@@ -7340,7 +7342,8 @@ What such an account reaches:
 
 It is known only through the socket. The kernel names it by its uid, exactly as
 it names you; it never holds the bearer key, and a TCP request is always yours.
-Its config lives in its own home (`~/.config/seamless/seamless.yaml`, mode `0600`):
+Its config can live in its own home (`~/.config/seamless/seamless.yaml`, mode `0600`),
+or in one file every account shares (below):
 
 ```yaml
 role: client
@@ -7357,6 +7360,58 @@ sudo -u _example_agent -H /opt/seamless/bin/seamlessd install-hooks --client cla
 ```
 
 Keep the socket outside every home directory: the account cannot traverse yours.
+
+**One client config for several accounts.** The client config holds no secret,
+so one file can serve every account on the machine. When the hooks live in
+Claude Code's [managed settings](/reference/cli-seamlessd/#seamlessd_install_hooks_managed),
+which no account can edit, this is the shape to use: one root-owned file outside
+every home, named with `--config` by every hook, so no account's home holds it
+and no account can redirect it. As an administrator:
+
+```bash
+printf 'role: client\nserver_url: "unix:///opt/seamless/run/seamlessd.sock"\n' |
+  sudo tee /opt/seamless/etc/client.yaml >/dev/null
+sudo chmod 0644 /opt/seamless/etc/client.yaml
+```
+
+Then write the hooks into the managed settings, each naming that file. This is
+macOS's path; on Linux it is `/etc/claude-code/managed-settings.json`. An
+existing file keeps everything else in it, and re-running the command leaves
+its hooks in place:
+
+```bash
+sudo /opt/seamless/bin/seamlessd install-hooks --client claude \
+  --settings "/Library/Application Support/ClaudeCode/managed-settings.json" \
+  --config /opt/seamless/etc/client.yaml --seam /opt/seamless/bin/seam \
+  --mcp=false --skills=false
+```
+
+Each account then registers its own MCP bridge and skills, against the same
+file. Its hook events are left to the managed settings (`managed`), and the
+bridge is `seam mcp-proxy --config /opt/seamless/etc/client.yaml`:
+
+```bash
+sudo -u _example_agent -H /opt/seamless/bin/seamlessd install-hooks --client claude \
+  --config /opt/seamless/etc/client.yaml --seam /opt/seamless/bin/seam
+```
+
+The hooks and the bridge read the shared file because they name it. A `seam`
+command the account runs itself, or its agents run from a shell, reads
+`$SEAMLESS_CONFIG`, then `~/.config/seamless/seamless.yaml`, and never a
+`seamless.yaml` in the repository it runs in. So set
+`SEAMLESS_CONFIG=/opt/seamless/etc/client.yaml` in the environment the
+account's sessions start with, or give the account a home config of its own.
+Check the file as the account:
+
+```bash
+sudo -u _example_agent -H env SEAMLESS_CONFIG=/opt/seamless/etc/client.yaml \
+  /opt/seamless/bin/seamlessd doctor
+```
+
+Its `config permissions` line is **info**: the file holds no secret, and only
+root can rewrite it. One that another account could rewrite, or that sits under
+a directory another account owns, is a **warn** saying which. A client config
+that holds a key keeps the owner-only rule, so never share one.
 
 **Everything it writes is labeled.** Memories, notes, tasks and its rewrites of
 yours, plan steps, sessions and their findings, and trials record the account that
@@ -10159,8 +10214,11 @@ Star or unstar an item. Favorites sort first in the console, are pinned into ses
 URL: https://thereisnospoon.org/docs/reference/cli-seam/
 
 
-`seam` is the headless CLI. It does no work itself: it loads the same
-configuration the daemon does, then talks to a running `seamlessd` - over MCP at
+`seam` is the headless CLI. It does no work itself: it reads its configuration
+from `$SEAMLESS_CONFIG`, else `~/.config/seamless/seamless.yaml` - the daemon's
+search without its last step, so a `seamless.yaml` in the working directory is
+never read ([why](/reference/configuration/#where-the-config-comes-from)) - then
+talks to a running `seamlessd` - over MCP at
 `/api/mcp` for most commands, and over the console's JSON endpoints for the
 owner-only actions that do not exist as MCP tools (force-releasing a task lock,
 approving a plan, deciding a locked project's access request). Both paths authenticate with the static bearer key from
@@ -10934,8 +10992,11 @@ seam doctor
 
 Client-side checks, each reported `ok` or `FAIL`, exiting non-zero if any failed:
 
-1. **server** - `/healthz` reachable and reporting `ok`.
-2. **mcp_tools** - `tools/list` returns the tool count this CLI was built to
+1. **config** - the file loaded, or `defaults + env` when there is none. A
+   `note` line follows when a `seamless.yaml` in the working directory was not
+   read, with the `SEAMLESS_CONFIG=` that would use it.
+2. **server** - `/healthz` reachable and reporting `ok`.
+3. **mcp_tools** - `tools/list` returns the tool count this CLI was built to
    expect, minus the tools of any [optional
    feature](/reference/console/#optional-features) that is switched off (the
    line reads `31 registered, 28 exposed (research disabled)`). A mismatch that
@@ -10944,7 +11005,7 @@ Client-side checks, each reported `ok` or `FAIL`, exiting non-zero if any failed
    features, or its settings endpoint did not answer - the check judges the
    plausible range instead and names the reason rather than failing a healthy
    daemon.
-3. **projects** - `project_list` answers.
+4. **projects** - `project_list` answers.
 
 This is the client-side view. `seamlessd doctor` checks config, database, and
 credentials on the server side; they are different commands answering different
@@ -11196,7 +11257,8 @@ Checks stop early if config or the database cannot be loaded at all.
 | Check | What it reports |
 |---|---|
 | `binary` | The version that ran. |
-| `config` | Which file it loaded, or that it fell back to defaults + env. |
+| `config` | Which file it loaded, or that it fell back to defaults + env. A `./seamless.yaml` found as the search's last step is an **info** line: `seam` never reads the working directory's file, so it names the `SEAMLESS_CONFIG=` that would make `seam` read the same one. |
+| `config permissions` | Who can read and rewrite that file. A file that holds a secret (`mcp.api_key`, `llm.openai.api_key`, `llm.anthropic.api_key`, or a `server_url` or `base_url` with a user or password in it), and any `role: server` file, must be owner-only: a **warn** names a file or directory that grants group or other access, or a symlink, with the `chmod` that fixes it. A `role: client` file holding none of them may instead be a **shared client config**: a regular file owned by root or the [pinned daemon account](/guides/peer-auth/#deploy-it-the-daemon-runs-as-its-own-account), writable by no other account, under directories no other account can write (sticky ones aside). That is an **info** line, readable by every account; one that another account could rewrite is a **warn** naming how. A secret-free client file you own yourself keeps the owner-only rule. A [peer_auth](/guides/peer-auth/) daemon's own config is an **info** line here: the `peer_auth` rows hold it to `serve`'s rule instead (root's or the daemon's account's, writable by no other account, not world-readable), which the guide's `root:_seamless` `0640` layout meets. Windows is an **info** line: its ACLs are not checked. |
 | `data_dir` | The resolved data directory. |
 | `mcp.api_key` | Set, or a warning that `/api/mcp` will reject everything. |
 | `llm` | The provider, or a warning that its credential is missing. |
@@ -11467,7 +11529,7 @@ The account is the proof the console asks a passkey for.
 ## seamlessd install-hooks {#seamlessd_install_hooks}
 
 ```bash
-seamlessd install-hooks [--client claude|claude-desktop|codex|all|detect] [--settings PATH] [--codex-hooks PATH] [--desktop-config PATH] [--url BASE] [--server-url URL] [--api-key KEY] [--seam PATH] [--mcp=false] [--skills=false]
+seamlessd install-hooks [--client claude|claude-desktop|codex|all|detect] [--settings PATH] [--codex-hooks PATH] [--desktop-config PATH] [--config PATH] [--url BASE] [--server-url URL] [--api-key KEY] [--seam PATH] [--mcp=false] [--skills=false]
 ```
 
 Wires the selected install target(s) to Seamless: merges the hook entries into
@@ -11489,6 +11551,7 @@ it has no hooks and no skills - so selecting only it together with
 | `--settings` | `~/.claude/settings.json` | Target Claude Code settings file, created if absent. Point it at a project-scoped `.claude/settings.json` to scope the hooks to one repo. |
 | `--codex-hooks` | `$CODEX_HOME/hooks.json`, else `~/.codex/hooks.json` | Target Codex hooks file, created if absent. |
 | `--desktop-config` | the app's per-OS location | Claude app `claude_desktop_config.json` to register the chat-surface bridge in (macOS `~/Library/Application Support/Claude/`, Windows `%APPDATA%\Claude\`). |
+| `--config` | `$SEAMLESS_CONFIG`, then the search path | The config file to load and to wire every hook and MCP registration to, as `--config <absolute path>`. It must exist. Use it for a [shared client config](/guides/peer-auth/#restricted-local-accounts) that several accounts' hooks read. |
 | `--url` | derived from the config addr | Base URL of the daemon, for this run only. It does not change the config file. |
 | `--server-url` | none | Install as a **client** of the `seamlessd` at this base URL: writes `role: client`, `server_url`, and `mcp.api_key` into `~/.config/seamless/seamless.yaml` on first run, and wires every client against that URL. |
 | `--api-key` | `$SEAMLESS_MCP_API_KEY` | That server's bearer key, for `--server-url`. On its own it is an error, not a silent no-op - a server reads its own key from its config file. |
@@ -11498,10 +11561,12 @@ it has no hooks and no skills - so selecting only it together with
 
 It generates `mcp.api_key` on a true first run under the same rule as `serve`,
 and refuses to run when an existing config leaves the key empty, since the key
-is what the hooks authenticate with. The loaded config path is made absolute
-and passed to command hooks as `--config`, so they resolve config from any
-working directory. A `--seam` binary that cannot be found is a printed warning,
-not an error - the hooks would fail at fire time, so it says so now.
+is what the hooks authenticate with. The loaded config path (`--config`, else
+the search's) is made absolute and passed to command hooks, `seam mcp-headers`
+and `seam mcp-proxy` as `--config`, so they read that file from any working
+directory - `seam` itself never reads a `./seamless.yaml`. A `--seam` binary
+that cannot be found is a printed warning, not an error - the hooks would fail
+at fire time, so it says so now.
 
 With `--server-url`, that first-run step writes a *client* config instead -
 `role: client`, `server_url`, `mcp.api_key`, and deliberately no `data_dir` -
@@ -11563,7 +11628,10 @@ Seamless hook in both places fires twice, and the briefing is injected twice.
 
 `install-hooks` reads those files first. An event they already carry is left to
 them (`managed`), and a copy in the target file from an earlier install is
-removed (`removed`); every other event installs as usual. A `managed` row names
+removed (`removed`); every other event installs as usual. A `--settings` that
+names one of those files is the exception: an administrator writing the
+managed hooks there is installing them, so that file is not counted as
+carrying them, and a second run keeps its hooks. A `managed` row names
 the file the events run from. If a managed definition differs from what this
 install would write - another `seam` path, an older shape - the row says so
 instead of changing it, since the file belongs to whoever deployed it. The
@@ -12054,7 +12122,22 @@ The file is looked up in this order, first hit wins:
 
 1. `$SEAMLESS_CONFIG`
 2. `~/.config/seamless/seamless.yaml`
-3. `./seamless.yaml`
+3. `./seamless.yaml`, for `seamlessd` only
+
+The third step is the daemon's: `seamlessd serve` and its one-shot commands
+read a `seamless.yaml` in the working directory (the pre-install layout, where
+`make run` serves a checkout's gitignored `seamless.yaml`). The `seam` CLI never does - not its commands, not `seam hook`, not
+`seam mcp-proxy` or `seam mcp-headers`. Your agent client runs those in the
+agent's repository, and a `seamless.yaml` committed there would otherwise
+decide which server the session's hooks and bridge talk to. A `seam` command
+that finds neither of the first two runs on the defaults and the environment.
+
+To point `seam` at a file anywhere else, name it: `SEAMLESS_CONFIG=/path/to/seamless.yaml seam ...`,
+or `--config` on `seam hook`, `seam mcp-proxy` and `seam mcp-headers`. The hooks
+and MCP registration `seamlessd install-hooks` writes carry `--config` with the
+absolute path of the file it loaded (or the one its own `--config` names), so
+they read that file from any directory. `seam doctor` names the file it loaded,
+and notes a `./seamless.yaml` it did not read.
 
 ## Precedence
 
@@ -12417,7 +12500,9 @@ This is `seamless.yaml.example` from the repository, verbatim.
 #
 # Every key also has a SEAMLESS_* environment override, and env wins over the
 # file. Config file search order: $SEAMLESS_CONFIG, ~/.config/seamless/seamless.yaml,
-# ./seamless.yaml (gitignored -- the pre-install layout's config).
+# then, for seamlessd only, ./seamless.yaml (gitignored -- the pre-install
+# layout's config). The seam CLI, its hooks and its MCP bridge never read the
+# working directory's file: run them with SEAMLESS_CONFIG=$PWD/seamless.yaml.
 
 # HTTP bind address. Change it here and re-run `make install`: this file is the
 # single source of truth for the bind, and the Makefile reads the port back out

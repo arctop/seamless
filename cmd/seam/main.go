@@ -1,7 +1,11 @@
 // Command seam is the headless Seamless CLI. In P2 it speaks JSON-RPC to a
 // running seamlessd over /api/mcp for the minimal loop: prime (session_start +
-// briefing), remember (memory_write), recall, and status. It loads the same
-// config as the server, so it targets the same address and static key.
+// briefing), remember (memory_write), recall, and status. It reads the config
+// file the server's search would find in the same two places -- $SEAMLESS_CONFIG,
+// then ~/.config/seamless/seamless.yaml -- so it targets the same address and
+// static key. Unlike seamlessd it never reads ./seamless.yaml (config.LoadClient):
+// its hooks and bridge run in the agent's repository, which is not the owner's to
+// configure from.
 package main
 
 import (
@@ -109,9 +113,10 @@ func mcpHeaders(cfg config.Config) map[string]string {
 	return h
 }
 
-// dial loads config and returns an initialized MCP client plus the base URL.
+// dial loads config (config.LoadClient, never ./seamless.yaml) and returns an
+// initialized MCP client plus the base URL.
 func dial(ctx context.Context) (*mcpclient.Client, config.Config, error) {
-	cfg, err := config.Load()
+	cfg, err := config.LoadClient()
 	if err != nil {
 		return nil, cfg, err
 	}

@@ -246,8 +246,21 @@ override.</p>
 <ol>
 <li><code>$SEAMLESS_CONFIG</code></li>
 <li><code>~/.config/seamless/seamless.yaml</code></li>
-<li><code>./seamless.yaml</code></li>
+<li><code>./seamless.yaml</code>, for <code>seamlessd</code> only</li>
 </ol>
+<p>The third step is the daemon's: <code>seamlessd serve</code> and its one-shot commands
+read a <code>seamless.yaml</code> in the working directory (the pre-install layout, where
+<code>make run</code> serves a checkout's gitignored <code>seamless.yaml</code>). The <code>seam</code> CLI never does - not its commands, not <code>seam hook</code>, not
+<code>seam mcp-proxy</code> or <code>seam mcp-headers</code>. Your agent client runs those in the
+agent's repository, and a <code>seamless.yaml</code> committed there would otherwise
+decide which server the session's hooks and bridge talk to. A <code>seam</code> command
+that finds neither of the first two runs on the defaults and the environment.</p>
+<p>To point <code>seam</code> at a file anywhere else, name it: <code>SEAMLESS_CONFIG=/path/to/seamless.yaml seam ...</code>,
+or <code>--config</code> on <code>seam hook</code>, <code>seam mcp-proxy</code> and <code>seam mcp-headers</code>. The hooks
+and MCP registration <code>seamlessd install-hooks</code> writes carry <code>--config</code> with the
+absolute path of the file it loaded (or the one its own <code>--config</code> names), so
+they read that file from any directory. <code>seam doctor</code> names the file it loaded,
+and notes a <code>./seamless.yaml</code> it did not read.</p>
 <h2 id="precedence">Precedence</h2>
 <p>Four layers resolve each key. Later layers win:</p>
 <ol>
@@ -978,7 +991,9 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c">#</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># Every key also has a SEAMLESS_* environment override, and env wins over the</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># file. Config file search order: $SEAMLESS_CONFIG, ~/.config/seamless/seamless.yaml,</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c"># ./seamless.yaml (gitignored -- the pre-install layout&#39;s config).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># then, for seamlessd only, ./seamless.yaml (gitignored -- the pre-install</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># layout&#39;s config). The seam CLI, its hooks and its MCP bridge never read the</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># working directory&#39;s file: run them with SEAMLESS_CONFIG=$PWD/seamless.yaml.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># HTTP bind address. Change it here and re-run `make install`: this file is the</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># single source of truth for the bind, and the Makefile reads the port back out</span><span class="w">

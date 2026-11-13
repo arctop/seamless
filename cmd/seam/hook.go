@@ -242,9 +242,10 @@ type hookOpts struct {
 // bindHook registers --config and --client. install-hooks writes --config into
 // every command hook so the hook resolves config from any cwd: exec-form command
 // hooks carry no environment, so this flag replaces the old SEAMLESS_CONFIG env
-// prefix. runHook exports it back to SEAMLESS_CONFIG (config.Load's documented
-// override) before loading, keeping every command's cwd-relative search otherwise
-// unchanged. --client rides on the forwarded request as ?client=<value> so the
+// prefix. runHook exports it back to SEAMLESS_CONFIG (config.LoadClient's
+// documented override) before loading; without it the hook reads
+// ~/.config/seamless/seamless.yaml, and never a seamless.yaml in the agent's
+// working directory. --client rides on the forwarded request as ?client=<value> so the
 // daemon can pick the right per-client payload adapter; the codex install profile
 // sets it, and an omitted flag keeps every Claude Code hook request unchanged.
 func bindHook(fs *flag.FlagSet) *hookOpts {
@@ -268,6 +269,11 @@ Your agent client (Claude Code or Codex) invokes this; it is not run by hand.
 post-tool-use is Claude Code only and fires machine-wide
 on every Write/Edit, so it is pre-filtered locally: a non-plan file never reaches
 the network.
+
+Config comes from --config, else $SEAMLESS_CONFIG, else
+~/.config/seamless/seamless.yaml. A seamless.yaml in the working directory (the
+agent's repository) is never read, so a file committed there cannot redirect
+the session's hooks.
 
 With server_url naming the peer_auth Unix socket, the daemon reads none of the
 agent's files, so the hook reads them itself -- the transcript's findings, token
@@ -356,9 +362,12 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 		return nil
 	}
 
-	// --config is config.Load's documented $SEAMLESS_CONFIG override, moved out of
-	// the shell (exec-form hooks carry no env). Setting it in this short-lived hook
-	// process is safe and keeps loadConfig's search order the single code path.
+	// --config is config.LoadClient's documented $SEAMLESS_CONFIG override, moved
+	// out of the shell (exec-form hooks carry no env). Setting it in this
+	// short-lived hook process is safe and keeps loadConfig's search order the
+	// single code path. That search never reads the working directory, which here
+	// is the agent's repository: a seamless.yaml committed there cannot redirect
+	// the session's hooks.
 	if o.config != "" {
 		if err := os.Setenv("SEAMLESS_CONFIG", o.config); err != nil {
 			fmt.Fprintln(e.stderr, "seam hook: set config path:", err)

@@ -42,6 +42,7 @@ func runInstallHooks(args []string) error {
 	settings := fs.String("settings", "~/.claude/settings.json", "Claude Code settings.json to install into")
 	codexHooksFlag := fs.String("codex-hooks", "", "Codex hooks.json to install into (default $CODEX_HOME/hooks.json, else ~/.codex/hooks.json)")
 	desktopConfigFlag := fs.String("desktop-config", "", "Claude desktop app claude_desktop_config.json to register the MCP bridge in (default: the app's per-OS location)")
+	configFlag := fs.String("config", "", "the seamless.yaml every hook and MCP registration is wired to (`PATH`; overrides $SEAMLESS_CONFIG and the search path); it must exist")
 	urlFlag := fs.String("url", "", "base URL of seamlessd for this run only (default derived from config); does not change the config file")
 	serverURLFlag := fs.String("server-url", "", "install as a CLIENT of the seamlessd at this base `URL`: writes role: client, server_url and mcp.api_key to ~/.config/seamless/seamless.yaml on first run")
 	apiKeyFlag := fs.String("api-key", "", "that server's bearer `KEY`, for --server-url (default $SEAMLESS_MCP_API_KEY)")
@@ -75,6 +76,17 @@ func runInstallHooks(args []string) error {
 		return errors.New("seamlessd.install-hooks: --api-key applies to --server-url (a client install); a server reads its own key from its config file")
 	}
 
+	// --config is config.Load's $SEAMLESS_CONFIG override on the command line,
+	// as serve's is (applyServeEnv): one search, and the bootstrap below sees the
+	// same file the load does. The path every hook and registration then carries
+	// is the loaded one, made absolute (configPath below). It is how one shared
+	// client config -- a root-owned file outside every home -- is written into
+	// hooks that several accounts run, Claude Code's managed settings among them.
+	if *configFlag != "" {
+		if err := os.Setenv("SEAMLESS_CONFIG", *configFlag); err != nil {
+			return fmt.Errorf("seamlessd.install-hooks: set config path: %w", err)
+		}
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("seamlessd.install-hooks: %w", err)
@@ -798,7 +810,7 @@ func installClaudeHooks(cfg config.Config, settings, baseURL, seamBin, configPat
 	if err != nil {
 		return err
 	}
-	managed := inspectClaudeManagedHooks(claudeManagedSettingsDir(), opts)
+	managed := inspectClaudeManagedHooks(claudeManagedSettingsDir(), opts).without(path)
 	opts.Covered = managed.covered(profile)
 	res, err := hooks.Install(opts)
 	if err != nil {
@@ -810,6 +822,28 @@ func installClaudeHooks(cfg config.Config, settings, baseURL, seamBin, configPat
 		registerClaudeMCP(baseURL, seamBin, configPath)
 	}
 	return nil
+}
+
+// without drops target from the managed sources: an install whose --settings
+// IS a managed settings file (an administrator writing the hooks every account
+// runs) is writing those hooks, not running beside them. Counted as coverage,
+// they would be "left to the managed settings" and removed from the very file
+// that carries them, so a second run would empty it.
+func (m claudeManagedHooks) without(target string) claudeManagedHooks {
+	targetInfo, statErr := os.Stat(target)
+	out := claudeManagedHooks{errs: m.errs}
+	for _, src := range m.sources {
+		if filepath.Clean(src.path) == filepath.Clean(target) {
+			continue
+		}
+		if statErr == nil {
+			if info, err := os.Stat(src.path); err == nil && os.SameFile(info, targetInfo) {
+				continue
+			}
+		}
+		out.sources = append(out.sources, src)
+	}
+	return out
 }
 
 // installCodexHooks installs the shared local Codex host profile used by the

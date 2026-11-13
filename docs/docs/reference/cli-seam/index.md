@@ -2,8 +2,11 @@
 
 > Every seam subcommand - agent loop, memories and notes, tasks, plans, locked-project access requests, observability, seam call, hooks - plus --json output, the flag-order rules and what each one rejects.
 
-`seam` is the headless CLI. It does no work itself: it loads the same
-configuration the daemon does, then talks to a running `seamlessd` - over MCP at
+`seam` is the headless CLI. It does no work itself: it reads its configuration
+from `$SEAMLESS_CONFIG`, else `~/.config/seamless/seamless.yaml` - the daemon's
+search without its last step, so a `seamless.yaml` in the working directory is
+never read ([why](https://thereisnospoon.org/docs/reference/configuration/#where-the-config-comes-from)) - then
+talks to a running `seamlessd` - over MCP at
 `/api/mcp` for most commands, and over the console's JSON endpoints for the
 owner-only actions that do not exist as MCP tools (force-releasing a task lock,
 approving a plan, deciding a locked project's access request). Both paths authenticate with the static bearer key from
@@ -777,8 +780,11 @@ seam doctor
 
 Client-side checks, each reported `ok` or `FAIL`, exiting non-zero if any failed:
 
-1. **server** - `/healthz` reachable and reporting `ok`.
-2. **mcp_tools** - `tools/list` returns the tool count this CLI was built to
+1. **config** - the file loaded, or `defaults + env` when there is none. A
+   `note` line follows when a `seamless.yaml` in the working directory was not
+   read, with the `SEAMLESS_CONFIG=` that would use it.
+2. **server** - `/healthz` reachable and reporting `ok`.
+3. **mcp_tools** - `tools/list` returns the tool count this CLI was built to
    expect, minus the tools of any [optional
    feature](https://thereisnospoon.org/docs/reference/console/#optional-features) that is switched off (the
    line reads `31 registered, 28 exposed (research disabled)`). A mismatch that
@@ -787,7 +793,7 @@ Client-side checks, each reported `ok` or `FAIL`, exiting non-zero if any failed
    features, or its settings endpoint did not answer - the check judges the
    plausible range instead and names the reason rather than failing a healthy
    daemon.
-3. **projects** - `project_list` answers.
+4. **projects** - `project_list` answers.
 
 This is the client-side view. `seamlessd doctor` checks config, database, and
 credentials on the server side; they are different commands answering different

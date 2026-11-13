@@ -128,7 +128,10 @@ func EnsureClientConfig(url, key string) (Config, string, error) {
 		return Config{}, "", fmt.Errorf("config.EnsureClientConfig: %w", err)
 	}
 
-	existing, err := findConfigFile()
+	// The daemon's search (Load's), working directory included: install-hooks
+	// loads its config that way, so a file it would read is a file it must not
+	// write around.
+	existing, _, err := findConfigFile(true)
 	if err != nil {
 		return Config{}, "", fmt.Errorf("config.EnsureClientConfig: %w", err)
 	}

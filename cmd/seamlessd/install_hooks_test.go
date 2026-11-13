@@ -874,3 +874,112 @@ func TestClaudeMCPAddArgs_SocketUsesTheBridge(t *testing.T) {
 		`{"args":["mcp-proxy","--config","/etc/seamless.yaml"],"command":"/opt/seam","type":"stdio"}`,
 	}, args)
 }
+
+// sharedClientConfig writes a peer_auth client config (no key) outside the
+// home, as the shared /opt/seamless/etc/client.yaml would be, and returns its
+// path. SEAMLESS_CONFIG is registered for restore first: --config exports it.
+func sharedClientConfig(t *testing.T) string {
+	t.Helper()
+	t.Setenv("SEAMLESS_CONFIG", "")
+	require.NoError(t, os.Unsetenv("SEAMLESS_CONFIG"))
+	path := filepath.Join(t.TempDir(), "etc", "client.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("role: client\nserver_url: \"unix:///opt/seamless/run/seamlessd.sock\"\n"), 0o644))
+	return path
+}
+
+// hookConfigs is every --config value the Claude Code hooks in settings
+// carry, one per event.
+func hookConfigs(t *testing.T, settings string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	for event, entries := range readDoctorHookSettings(t, settings)["hooks"].(map[string]any) {
+		handler := entries.([]any)[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
+		args, _ := handler["args"].([]any)
+		for i := 0; i+1 < len(args); i++ {
+			if args[i] == "--config" {
+				out[event] = args[i+1].(string)
+			}
+		}
+	}
+	return out
+}
+
+// --config wires every hook to the named file, made absolute, and loads
+// nothing else: no home config is consulted or written. That is how one shared
+// client config reaches hooks several accounts run.
+func TestRunInstallHooks_ConfigFlagWiresEveryHookToTheNamedFile(t *testing.T) {
+	home := t.TempDir()
+	clientInstallEnv(t, home)
+	shared := sharedClientConfig(t)
+	// A config of the caller's own that --config must win over.
+	own := filepath.Join(home, ".config", "seamless", "seamless.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(own), 0o700))
+	require.NoError(t, os.WriteFile(own, []byte("mcp:\n  api_key: \"own-key\"\n"), 0o600))
+
+	settings := filepath.Join(t.TempDir(), "settings.json")
+	out := captureStdout(t, func() error {
+		return runInstallHooks([]string{
+			"--client", "claude", "--settings", settings, "--mcp=false", "--skills=false",
+			"--seam", absFixture("/opt/seam"), "--config", shared,
+		})
+	})
+
+	configs := hookConfigs(t, settings)
+	profile, err := hooks.InstalledEvents(hooks.ClientClaudeCode)
+	require.NoError(t, err)
+	require.Len(t, configs, len(profile), "under a socket every hook is a seam command hook")
+	for event, got := range configs {
+		require.Equal(t, shared, got, "%s must carry the shared config", event)
+	}
+	raw, err := os.ReadFile(settings)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "own-key")
+	require.Contains(t, out, "client of unix:///opt/seamless/run/seamlessd.sock")
+
+	// A --config naming nothing is an error, never a fall back to the search.
+	err = runInstallHooks([]string{
+		"--client", "claude", "--settings", settings, "--mcp=false", "--skills=false",
+		"--seam", absFixture("/opt/seam"), "--config", filepath.Join(t.TempDir(), "missing.yaml"),
+	})
+	require.ErrorContains(t, err, "SEAMLESS_CONFIG=")
+}
+
+// An administrator writes the hooks every account runs straight into Claude
+// Code's managed settings. That file is the install's target, not hooks running
+// beside it: a second run keeps every event there rather than "leaving it to
+// the managed settings" and removing it from itself.
+func TestRunInstallHooks_ManagedSettingsAsTheTargetKeepsItsHooks(t *testing.T) {
+	home := t.TempDir()
+	clientInstallEnv(t, home)
+	shared := sharedClientConfig(t)
+	managed := filepath.Join(useManagedSettingsDir(t), claudeManagedSettingsFile)
+	profile, err := hooks.InstalledEvents(hooks.ClientClaudeCode)
+	require.NoError(t, err)
+
+	for run := 1; run <= 2; run++ {
+		out := captureStdout(t, func() error {
+			return runInstallHooks([]string{
+				"--client", "claude", "--settings", managed, "--mcp=false", "--skills=false",
+				"--seam", absFixture("/opt/seam"), "--config", shared,
+			})
+		})
+		configs := hookConfigs(t, managed)
+		require.Len(t, configs, len(profile), "run %d: every event stays in the managed file", run)
+		require.NotContains(t, out, "not written here", "run %d: the target is not coverage of itself", run)
+		require.NotContains(t, out, ": removed", "run %d", run)
+	}
+
+	// An account's own install beside it leaves those events to the managed file.
+	user := filepath.Join(home, ".claude", "settings.json")
+	out := captureStdout(t, func() error {
+		return runInstallHooks([]string{
+			"--client", "claude", "--settings", user, "--mcp=false", "--skills=false",
+			"--seam", absFixture("/opt/seam"), "--config", shared,
+		})
+	})
+	require.Contains(t, out, "not written here")
+	if _, err := os.Stat(user); err == nil {
+		require.Empty(t, hookConfigs(t, user), "an event the managed settings carry is not written again")
+	}
+}

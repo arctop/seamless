@@ -749,7 +749,8 @@ What such an account reaches:
 
 It is known only through the socket. The kernel names it by its uid, exactly as
 it names you; it never holds the bearer key, and a TCP request is always yours.
-Its config lives in its own home (`~/.config/seamless/seamless.yaml`, mode `0600`):
+Its config can live in its own home (`~/.config/seamless/seamless.yaml`, mode `0600`),
+or in one file every account shares (below):
 
 ```yaml
 role: client
@@ -766,6 +767,58 @@ sudo -u _example_agent -H /opt/seamless/bin/seamlessd install-hooks --client cla
 ```
 
 Keep the socket outside every home directory: the account cannot traverse yours.
+
+**One client config for several accounts.** The client config holds no secret,
+so one file can serve every account on the machine. When the hooks live in
+Claude Code's [managed settings](/reference/cli-seamlessd/#seamlessd_install_hooks_managed),
+which no account can edit, this is the shape to use: one root-owned file outside
+every home, named with `--config` by every hook, so no account's home holds it
+and no account can redirect it. As an administrator:
+
+```bash
+printf 'role: client\nserver_url: "unix:///opt/seamless/run/seamlessd.sock"\n' |
+  sudo tee /opt/seamless/etc/client.yaml >/dev/null
+sudo chmod 0644 /opt/seamless/etc/client.yaml
+```
+
+Then write the hooks into the managed settings, each naming that file. This is
+macOS's path; on Linux it is `/etc/claude-code/managed-settings.json`. An
+existing file keeps everything else in it, and re-running the command leaves
+its hooks in place:
+
+```bash
+sudo /opt/seamless/bin/seamlessd install-hooks --client claude \
+  --settings "/Library/Application Support/ClaudeCode/managed-settings.json" \
+  --config /opt/seamless/etc/client.yaml --seam /opt/seamless/bin/seam \
+  --mcp=false --skills=false
+```
+
+Each account then registers its own MCP bridge and skills, against the same
+file. Its hook events are left to the managed settings (`managed`), and the
+bridge is `seam mcp-proxy --config /opt/seamless/etc/client.yaml`:
+
+```bash
+sudo -u _example_agent -H /opt/seamless/bin/seamlessd install-hooks --client claude \
+  --config /opt/seamless/etc/client.yaml --seam /opt/seamless/bin/seam
+```
+
+The hooks and the bridge read the shared file because they name it. A `seam`
+command the account runs itself, or its agents run from a shell, reads
+`$SEAMLESS_CONFIG`, then `~/.config/seamless/seamless.yaml`, and never a
+`seamless.yaml` in the repository it runs in. So set
+`SEAMLESS_CONFIG=/opt/seamless/etc/client.yaml` in the environment the
+account's sessions start with, or give the account a home config of its own.
+Check the file as the account:
+
+```bash
+sudo -u _example_agent -H env SEAMLESS_CONFIG=/opt/seamless/etc/client.yaml \
+  /opt/seamless/bin/seamlessd doctor
+```
+
+Its `config permissions` line is **info**: the file holds no secret, and only
+root can rewrite it. One that another account could rewrite, or that sits under
+a directory another account owns, is a **warn** saying which. A client config
+that holds a key keeps the owner-only rule, so never share one.
 
 **Everything it writes is labeled.** Memories, notes, tasks and its rewrites of
 yours, plan steps, sessions and their findings, and trials record the account that

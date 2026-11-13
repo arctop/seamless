@@ -186,8 +186,10 @@ what the running daemon and every agent's hooks execute. Swapping them is `make
 install`, deliberately - [Contributing](https://thereisnospoon.org/docs/internals/contributing/) covers using
 it as the edit-test loop.
 
-The config lands in `~/.config/seamless/`, one of the paths Seamless already
-searches ahead of `./seamless.yaml`, so the hooks resolve it from any directory.
+The config lands in `~/.config/seamless/`, the path both `seamlessd` and `seam`
+search after `$SEAMLESS_CONFIG`, so the hooks and the CLI resolve it from any
+directory. (`seam` never reads a `./seamless.yaml`; only `seamlessd` does, as
+the last step of [its search](https://thereisnospoon.org/docs/reference/configuration/#where-the-config-comes-from).)
 It is seeded **only when absent** - an install never clobbers a config holding
 your bearer key. Delete it to re-seed.
 

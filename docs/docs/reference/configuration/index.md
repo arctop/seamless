@@ -11,7 +11,22 @@ The file is looked up in this order, first hit wins:
 
 1. `$SEAMLESS_CONFIG`
 2. `~/.config/seamless/seamless.yaml`
-3. `./seamless.yaml`
+3. `./seamless.yaml`, for `seamlessd` only
+
+The third step is the daemon's: `seamlessd serve` and its one-shot commands
+read a `seamless.yaml` in the working directory (the pre-install layout, where
+`make run` serves a checkout's gitignored `seamless.yaml`). The `seam` CLI never does - not its commands, not `seam hook`, not
+`seam mcp-proxy` or `seam mcp-headers`. Your agent client runs those in the
+agent's repository, and a `seamless.yaml` committed there would otherwise
+decide which server the session's hooks and bridge talk to. A `seam` command
+that finds neither of the first two runs on the defaults and the environment.
+
+To point `seam` at a file anywhere else, name it: `SEAMLESS_CONFIG=/path/to/seamless.yaml seam ...`,
+or `--config` on `seam hook`, `seam mcp-proxy` and `seam mcp-headers`. The hooks
+and MCP registration `seamlessd install-hooks` writes carry `--config` with the
+absolute path of the file it loaded (or the one its own `--config` names), so
+they read that file from any directory. `seam doctor` names the file it loaded,
+and notes a `./seamless.yaml` it did not read.
 
 ## Precedence
 
@@ -374,7 +389,9 @@ This is `seamless.yaml.example` from the repository, verbatim.
 #
 # Every key also has a SEAMLESS_* environment override, and env wins over the
 # file. Config file search order: $SEAMLESS_CONFIG, ~/.config/seamless/seamless.yaml,
-# ./seamless.yaml (gitignored -- the pre-install layout's config).
+# then, for seamlessd only, ./seamless.yaml (gitignored -- the pre-install
+# layout's config). The seam CLI, its hooks and its MCP bridge never read the
+# working directory's file: run them with SEAMLESS_CONFIG=$PWD/seamless.yaml.
 
 # HTTP bind address. Change it here and re-run `make install`: this file is the
 # single source of truth for the bind, and the Makefile reads the port back out

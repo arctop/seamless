@@ -452,8 +452,10 @@ hooks/MCP definitions at the copies. Nothing live resolves through your working
 tree, so <code>make build</code>, a branch switch, and a moved or cleaned repo cannot change
 what the running daemon and every agent's hooks execute. Swapping them is <code>make install</code>, deliberately - <a href="../internals/contributing/">Contributing</a> covers using
 it as the edit-test loop.</p>
-<p>The config lands in <code>~/.config/seamless/</code>, one of the paths Seamless already
-searches ahead of <code>./seamless.yaml</code>, so the hooks resolve it from any directory.
+<p>The config lands in <code>~/.config/seamless/</code>, the path both <code>seamlessd</code> and <code>seam</code>
+search after <code>$SEAMLESS_CONFIG</code>, so the hooks and the CLI resolve it from any
+directory. (<code>seam</code> never reads a <code>./seamless.yaml</code>; only <code>seamlessd</code> does, as
+the last step of <a href="../reference/configuration/#where-the-config-comes-from">its search</a>.)
 It is seeded <strong>only when absent</strong> - an install never clobbers a config holding
 your bearer key. Delete it to re-seed.</p>
 <p><code>make install</code> refuses to replace an install the one-liner made, before it

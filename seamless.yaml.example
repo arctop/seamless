@@ -8,7 +8,9 @@
 #
 # Every key also has a SEAMLESS_* environment override, and env wins over the
 # file. Config file search order: $SEAMLESS_CONFIG, ~/.config/seamless/seamless.yaml,
-# ./seamless.yaml (gitignored -- the pre-install layout's config).
+# then, for seamlessd only, ./seamless.yaml (gitignored -- the pre-install
+# layout's config). The seam CLI, its hooks and its MCP bridge never read the
+# working directory's file: run them with SEAMLESS_CONFIG=$PWD/seamless.yaml.
 
 # HTTP bind address. Change it here and re-run `make install`: this file is the
 # single source of truth for the bind, and the Makefile reads the port back out

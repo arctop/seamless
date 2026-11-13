@@ -2,8 +2,8 @@ package main
 
 // The injectable world a command handler runs against: everything it touches that
 // a test cannot supply for itself. Handlers take *env rather than reaching for
-// os.Stdout / dial / config.Load directly, so their output and their server can
-// both be substituted.
+// os.Stdout / dial / config.LoadClient directly, so their output and their server
+// can both be substituted.
 //
 // parse deliberately takes none of this. Argument handling must be testable
 // without a network or a config file, which is why the parse/execute split is
@@ -37,9 +37,10 @@ type env struct {
 	// load config twice.
 	dial func(context.Context) (*mcpclient.Client, config.Config, error)
 
-	// loadConfig mirrors config.Load, for the commands that speak to the console
-	// JSON surface (client.go) and need the address and key without an MCP
-	// session.
+	// loadConfig mirrors config.LoadClient, for the commands that speak to the
+	// console JSON surface (client.go) and need the address and key without an
+	// MCP session, and for seam hook, mcp-proxy and mcp-headers. Every command
+	// here loads through it or through dial, so none reads ./seamless.yaml.
 	loadConfig func() (config.Config, error)
 
 	// The rest serves seam approve, the owner's terminal path, and each is nil
@@ -80,7 +81,7 @@ func newEnv() *env {
 		stdout:     os.Stdout,
 		stderr:     os.Stderr,
 		dial:       dial,
-		loadConfig: config.Load,
+		loadConfig: config.LoadClient,
 		terminal:   stdioIsTerminal,
 		exec:       runProgram,
 		getenv:     os.Getenv,

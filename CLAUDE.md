@@ -187,7 +187,9 @@ make seambench  # the AGENT-SCENARIO benchmark: runs a real `claude` over the
 ## Configuration
 
 Single YAML file (`$SEAMLESS_CONFIG`, `~/.config/seamless/seamless.yaml`, or
-`./seamless.yaml`; see `seamless.yaml.example` for every key) with `SEAMLESS_*`
+`./seamless.yaml` -- the last for seamlessd only: seam, its hooks and its MCP
+bridge never read the working directory's file, `config.LoadClient`; see
+`seamless.yaml.example` for every key) with `SEAMLESS_*`
 env overrides -- env wins over file, file over defaults. The `briefing:` block
 tunes what the SessionStart `<seam-briefing>` auto-injects (section counts,
 recency filters, family cross-over, hard-cap multiplier, and the

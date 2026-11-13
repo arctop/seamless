@@ -325,7 +325,11 @@ Checks stop early if config or the database cannot be loaded at all.</p>
 </tr>
 <tr>
 <td><code>config</code></td>
-<td>Which file it loaded, or that it fell back to defaults + env.</td>
+<td>Which file it loaded, or that it fell back to defaults + env. A <code>./seamless.yaml</code> found as the search's last step is an <strong>info</strong> line: <code>seam</code> never reads the working directory's file, so it names the <code>SEAMLESS_CONFIG=</code> that would make <code>seam</code> read the same one.</td>
+</tr>
+<tr>
+<td><code>config permissions</code></td>
+<td>Who can read and rewrite that file. A file that holds a secret (<code>mcp.api_key</code>, <code>llm.openai.api_key</code>, <code>llm.anthropic.api_key</code>, or a <code>server_url</code> or <code>base_url</code> with a user or password in it), and any <code>role: server</code> file, must be owner-only: a <strong>warn</strong> names a file or directory that grants group or other access, or a symlink, with the <code>chmod</code> that fixes it. A <code>role: client</code> file holding none of them may instead be a <strong>shared client config</strong>: a regular file owned by root or the <a href="../../guides/peer-auth/#deploy-it-the-daemon-runs-as-its-own-account">pinned daemon account</a>, writable by no other account, under directories no other account can write (sticky ones aside). That is an <strong>info</strong> line, readable by every account; one that another account could rewrite is a <strong>warn</strong> naming how. A secret-free client file you own yourself keeps the owner-only rule. A <a href="../../guides/peer-auth/">peer_auth</a> daemon's own config is an <strong>info</strong> line here: the <code>peer_auth</code> rows hold it to <code>serve</code>'s rule instead (root's or the daemon's account's, writable by no other account, not world-readable), which the guide's <code>root:_seamless</code> <code>0640</code> layout meets. Windows is an <strong>info</strong> line: its ACLs are not checked.</td>
 </tr>
 <tr>
 <td><code>data_dir</code></td>
@@ -749,7 +753,7 @@ the environment, as the console's command does:</p>
 </span></span></code></pre></div>
 <p>The account is the proof the console asks a passkey for.</p>
 <h2 id="seamlessd_install_hooks">seamlessd install-hooks</h2>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd install-hooks <span class="o">[</span>--client claude<span class="p">|</span>claude-desktop<span class="p">|</span>codex<span class="p">|</span>all<span class="p">|</span>detect<span class="o">]</span> <span class="o">[</span>--settings PATH<span class="o">]</span> <span class="o">[</span>--codex-hooks PATH<span class="o">]</span> <span class="o">[</span>--desktop-config PATH<span class="o">]</span> <span class="o">[</span>--url BASE<span class="o">]</span> <span class="o">[</span>--server-url URL<span class="o">]</span> <span class="o">[</span>--api-key KEY<span class="o">]</span> <span class="o">[</span>--seam PATH<span class="o">]</span> <span class="o">[</span>--mcp<span class="o">=</span>false<span class="o">]</span> <span class="o">[</span>--skills<span class="o">=</span>false<span class="o">]</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd install-hooks <span class="o">[</span>--client claude<span class="p">|</span>claude-desktop<span class="p">|</span>codex<span class="p">|</span>all<span class="p">|</span>detect<span class="o">]</span> <span class="o">[</span>--settings PATH<span class="o">]</span> <span class="o">[</span>--codex-hooks PATH<span class="o">]</span> <span class="o">[</span>--desktop-config PATH<span class="o">]</span> <span class="o">[</span>--config PATH<span class="o">]</span> <span class="o">[</span>--url BASE<span class="o">]</span> <span class="o">[</span>--server-url URL<span class="o">]</span> <span class="o">[</span>--api-key KEY<span class="o">]</span> <span class="o">[</span>--seam PATH<span class="o">]</span> <span class="o">[</span>--mcp<span class="o">=</span>false<span class="o">]</span> <span class="o">[</span>--skills<span class="o">=</span>false<span class="o">]</span>
 </span></span></code></pre></div>
 <p>Wires the selected install target(s) to Seamless: merges the hook entries into
 each hook client's file (Claude Code <code>settings.json</code>, Codex <code>hooks.json</code>),
@@ -794,6 +798,11 @@ it has no hooks and no skills - so selecting only it together with
 <td>Claude app <code>claude_desktop_config.json</code> to register the chat-surface bridge in (macOS <code>~/Library/Application Support/Claude/</code>, Windows <code>%APPDATA%\Claude\</code>).</td>
 </tr>
 <tr>
+<td><code>--config</code></td>
+<td><code>$SEAMLESS_CONFIG</code>, then the search path</td>
+<td>The config file to load and to wire every hook and MCP registration to, as <code>--config &lt;absolute path&gt;</code>. It must exist. Use it for a <a href="../../guides/peer-auth/#restricted-local-accounts">shared client config</a> that several accounts' hooks read.</td>
+</tr>
+<tr>
 <td><code>--url</code></td>
 <td>derived from the config addr</td>
 <td>Base URL of the daemon, for this run only. It does not change the config file.</td>
@@ -828,10 +837,12 @@ it has no hooks and no skills - so selecting only it together with
 </div>
 <p>It generates <code>mcp.api_key</code> on a true first run under the same rule as <code>serve</code>,
 and refuses to run when an existing config leaves the key empty, since the key
-is what the hooks authenticate with. The loaded config path is made absolute
-and passed to command hooks as <code>--config</code>, so they resolve config from any
-working directory. A <code>--seam</code> binary that cannot be found is a printed warning,
-not an error - the hooks would fail at fire time, so it says so now.</p>
+is what the hooks authenticate with. The loaded config path (<code>--config</code>, else
+the search's) is made absolute and passed to command hooks, <code>seam mcp-headers</code>
+and <code>seam mcp-proxy</code> as <code>--config</code>, so they read that file from any working
+directory - <code>seam</code> itself never reads a <code>./seamless.yaml</code>. A <code>--seam</code> binary
+that cannot be found is a printed warning, not an error - the hooks would fail
+at fire time, so it says so now.</p>
 <p>With <code>--server-url</code>, that first-run step writes a <em>client</em> config instead -
 <code>role: client</code>, <code>server_url</code>, <code>mcp.api_key</code>, and deliberately no <code>data_dir</code> -
 and the run wires every selected target against the server's URL. The same
@@ -884,7 +895,10 @@ files <em>alongside</em> the ones in <code>settings.json</code> rather than inst
 Seamless hook in both places fires twice, and the briefing is injected twice.</p>
 <p><code>install-hooks</code> reads those files first. An event they already carry is left to
 them (<code>managed</code>), and a copy in the target file from an earlier install is
-removed (<code>removed</code>); every other event installs as usual. A <code>managed</code> row names
+removed (<code>removed</code>); every other event installs as usual. A <code>--settings</code> that
+names one of those files is the exception: an administrator writing the
+managed hooks there is installing them, so that file is not counted as
+carrying them, and a second run keeps its hooks. A <code>managed</code> row names
 the file the events run from. If a managed definition differs from what this
 install would write - another <code>seam</code> path, an older shape - the row says so
 instead of changing it, since the file belongs to whoever deployed it. The
