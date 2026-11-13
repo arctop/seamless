@@ -57,6 +57,10 @@ const (
 	raUIDOwner    = 501
 	raUIDAgent    = 502
 	raUIDStranger = 4243
+	// raPeerAccount is a second restricted account, listed only by the
+	// daemons that need one (raPolicy lists raAccount alone).
+	raPeerAccount = "_example_peer"
+	raUIDPeer     = 503
 
 	// raSecret is in every content field planted in a project the account may
 	// not reach, and in no probe.
@@ -72,6 +76,7 @@ const (
 var raAccounts = map[string]access.Account{
 	"_example_owner": {UID: raUIDOwner, Name: "_example_owner", Home: "/Users/_example_owner"},
 	raAccount:        {UID: raUIDAgent, Name: raAccount, Home: "/Users/" + raAccount},
+	raPeerAccount:    {UID: raUIDPeer, Name: raPeerAccount, Home: "/Users/" + raPeerAccount},
 }
 
 // raPolicy is the block every raDaemon policy is built from: the owner, the
@@ -106,6 +111,13 @@ type raDaemon struct {
 
 func newRADaemon(t *testing.T) *raDaemon {
 	t.Helper()
+	return newRADaemonFor(t, raPolicy())
+}
+
+// newRADaemonFor is newRADaemon under the peer_auth block cfg, whose accounts
+// raResolve must know.
+func newRADaemonFor(t *testing.T, cfg config.PeerAuth) *raDaemon {
+	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "seam.db")
@@ -124,7 +136,7 @@ func newRADaemon(t *testing.T) *raDaemon {
 	require.NoError(t, store.AddRepoMapping(ctx, db, "/Users/"+raAccount+"/repos/open", raOpen))
 	require.NoError(t, store.AddRepoMapping(ctx, db, "/Users/"+raAccount+"/repos/conf", raConf))
 
-	policy, err := access.New(raPolicy(), raResolve)
+	policy, err := access.New(cfg, raResolve)
 	require.NoError(t, err)
 
 	mgr, err := files.NewManager(dir, db, nil)
@@ -169,14 +181,17 @@ func newRADaemon(t *testing.T) *raDaemon {
 	d := &raDaemon{db: db, mgr: mgr, screen: screen, policy: policy, mux: mux}
 	d.owner = httptest.NewServer(ownerHandler(policy, mux))
 	t.Cleanup(func() { closeServer(d.owner) })
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	sock := func(uid uint32) *httptest.Server {
-		srv := httptest.NewServer(injectPeer(uid, peerHandler(policy, storeLeases(db), logger, mux)))
-		t.Cleanup(func() { closeServer(srv) })
-		return srv
-	}
-	d.agent, d.stranger = sock(raUIDAgent), sock(raUIDStranger)
+	d.agent, d.stranger = d.socketFor(t, raUIDAgent), d.socketFor(t, raUIDStranger)
 	return d
+}
+
+// socketFor is the daemon's socket as the kernel names uid on it.
+func (d *raDaemon) socketFor(t *testing.T, uid uint32) *httptest.Server {
+	t.Helper()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	srv := httptest.NewServer(injectPeer(uid, peerHandler(d.policy, storeLeases(d.db), logger, d.mux)))
+	t.Cleanup(func() { closeServer(srv) })
+	return srv
 }
 
 // plantClosed writes a memory and a note straight through the files layer, as
@@ -450,4 +465,110 @@ func TestPeerAuthMatrix_Restricted(t *testing.T) {
 		text, isErr := paCall(t, agent, "favorite_set", map[string]any{"kind": "memory", "id": memID, "favorite": true})
 		require.True(t, isErr, text)
 	})
+
+	t.Run("revival: an expired session comes back for its own principal only", func(t *testing.T) {
+		raRevivalRows(t)
+	})
+}
+
+// raRevivalRows: an agent whose session the idle reaper expired gets it back
+// on its next call from the same live process -- a restricted account's agent
+// exactly as the owner's -- and no agent-process header, the account's or the
+// owner's, reopens another principal's session. A daemon of its own, with a
+// second restricted account listed, so every session here starts the way an
+// agent's does: from its SessionStart hook, on its own transport.
+func raRevivalRows(t *testing.T) {
+	cfg := raPolicy()
+	cfg.Restricted = []string{raAccount, raPeerAccount}
+	rv := newRADaemonFor(t, cfg)
+	ctx := context.Background()
+	require.NoError(t, store.AddRepoMapping(ctx, rv.db, "/work/docs", raDocs))
+	peerSock := rv.socketFor(t, raUIDPeer)
+
+	const (
+		ownerProc  = "6100.61000"
+		agentProc  = "6200.62000"
+		agentProc2 = "6300.63000" // a second agent of the account's, in raDocs
+		peerProc   = "6400.64000"
+	)
+	start := func(base, key, proc, sessionID, cwd string) {
+		q := url.Values{"host": {paHost}, "agent_process": {proc}, "repo_root": {cwd}, "main_root": {cwd}}
+		paHook(t, base+"/api/hooks/session-start?"+q.Encode(), key, "", map[string]any{
+			"session_id": sessionID, "cwd": cwd, "source": "startup", "hook_event_name": "SessionStart"})
+	}
+	start(rv.owner.URL, raKey, ownerProc, "rv-owner", "/work/open")
+	start(rv.agent.URL, "", agentProc, "rv-agent", "/work/open")
+	start(rv.agent.URL, "", agentProc2, "rv-agent-docs", "/work/docs")
+	start(peerSock.URL, "", peerProc, "rv-peer", "/work/open")
+
+	type rvSess struct{ id, name, project, account, status string }
+	byProc := func(proc string) rvSess {
+		t.Helper()
+		var s rvSess
+		require.NoError(t, rv.db.QueryRow(`SELECT id, name, project_slug, account, status FROM sessions
+			WHERE ambient = 1 AND agent_process = ?`, proc).Scan(&s.id, &s.name, &s.project, &s.account, &s.status))
+		return s
+	}
+	for proc, want := range map[string][2]string{
+		ownerProc: {raOpen, ""}, agentProc: {raOpen, raAccount}, agentProc2: {raDocs, raAccount}, peerProc: {raOpen, raPeerAccount},
+	} {
+		s := byProc(proc)
+		require.Equal(t, "active", s.status, "%s: its hook started it", proc)
+		require.Equal(t, want[0], s.project, proc)
+		require.Equal(t, want[1], s.account, proc)
+	}
+	_, err := store.ExpireStaleSessions(ctx, rv.db, time.Now().UTC().Add(time.Hour))
+	require.NoError(t, err)
+	// Since its agent went quiet, raDocs was made confidential: the account no
+	// longer reaches it.
+	require.NoError(t, store.SetProjectIsolation(ctx, rv.db, raDocs, core.IsolationConfidential))
+
+	revivals := func(id string) int {
+		return raCount(t, rv.db, `SELECT COUNT(*) FROM events WHERE kind = 'session.started'
+			AND session_id = ? AND json_extract(payload, '$.revived') = 1`, id)
+	}
+	dial := func(base, key, proc string) *mcpclient.Client {
+		return paClientHeaders(t, base, key, map[string]string{mcp.AgentProcessHeader: proc, mcp.HostHeader: paHost})
+	}
+
+	// No: each call is unbound, and the session its header names stays expired.
+	for _, row := range []struct {
+		label, base, key, proc string
+	}{
+		{"the account naming the owner's agent", rv.agent.URL, "", ownerProc},
+		{"the account naming another restricted account's agent", rv.agent.URL, "", peerProc},
+		{"the owner naming the account's agent", rv.owner.URL, raKey, agentProc},
+		{"the account's own session in a project it no longer reaches", rv.agent.URL, "", agentProc2},
+	} {
+		text, isErr := paCall(t, dial(row.base, row.key, row.proc), "tasks_add", map[string]any{"title": "unplaced"})
+		require.True(t, isErr, "%s: %s", row.label, text)
+		require.Contains(t, text, "ambiguous scope", row.label)
+		s := byProc(row.proc)
+		require.Equal(t, "expired", s.status, "%s: reopened nothing", row.label)
+		require.Zero(t, revivals(s.id), row.label)
+	}
+	require.Zero(t, raCount(t, rv.db, `SELECT COUNT(*) FROM tasks`))
+
+	// Yes: each principal's own agent revives its own session and is bound to it.
+	for _, row := range []struct {
+		label, base, key, proc, account string
+	}{
+		{"the account revives its own", rv.agent.URL, "", agentProc, raAccount},
+		{"another restricted account revives its own", peerSock.URL, "", peerProc, raPeerAccount},
+		{"the owner still revives its own", rv.owner.URL, raKey, ownerProc, ""},
+	} {
+		out := paCallOK(t, dial(row.base, row.key, row.proc), "tasks_add", map[string]any{"title": "back: " + row.label})
+		s := byProc(row.proc)
+		require.Equal(t, "active", s.status, row.label)
+		require.Equal(t, raOpen, out["project"], row.label)
+		require.Equal(t, s.name, out["created_by"], "%s: the call is credited to its session", row.label)
+		if row.account == "" {
+			require.NotContains(t, out, "account", row.label)
+		} else {
+			require.Equal(t, row.account, out["account"], row.label)
+			require.True(t, strings.HasPrefix(s.name, row.account+":"), "%s: %s", row.label, s.name)
+		}
+		require.Equal(t, 1, revivals(s.id), "%s: the revival is on the record", row.label)
+	}
+	require.Equal(t, "expired", byProc(agentProc2).status, "the unreachable one stayed expired throughout")
 }

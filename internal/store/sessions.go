@@ -535,38 +535,73 @@ func ActiveAmbientByAgentProcess(ctx context.Context, db *sql.DB, host, proc str
 // reopened behind anyone's back. More than one expired candidate is a process
 // that ran several sessions at once and revives nothing.
 //
+// The header naming the process is the client's own claim, and the revival is
+// a write, so it reopens only a session the caller in ctx may act in: one the
+// same principal started (access.SessionAccountOK) -- a restricted account's
+// own, or for the owner, background work and every call with peer_auth off a
+// session no restricted account started. Another principal's row is not a
+// candidate at all, so it is filtered before the candidates are counted: a
+// process runs as one OS account, so such a row is never this process's
+// second session, and a forged stamp can neither be reopened nor make the
+// caller's own revival ambiguous. The one candidate must also lie where the
+// caller may place a session (access.Writable), or in a project the owner has
+// locked (access.Locked: the owner's own session there revives as before and
+// binds nothing until a lease opens it). A restricted account's session in a
+// project it no longer reaches -- made confidential, sealed or locked since --
+// stays expired.
+//
 // found is false when there was nothing to revive, including when a concurrent
-// call revived the row first (the UPDATE re-checks the status).
+// call revived the row first (the UPDATE re-checks the status and project).
 func ReviveExpiredAgentSession(ctx context.Context, db *sql.DB, host, proc string, now time.Time) (core.Session, bool, error) {
 	if proc == "" {
 		return core.Session{}, false, nil
 	}
-	rows, err := db.QueryContext(ctx, `SELECT id FROM sessions
-		WHERE status = 'expired' AND ambient = 1 AND host = ? AND agent_process = ?
-		LIMIT 2`, host, proc)
+	candidates, err := expiredAgentSessions(ctx, db, host, proc, access.AccountOf(ctx))
 	if err != nil {
 		return core.Session{}, false, fmt.Errorf("store.ReviveExpiredAgentSession: %w", err)
 	}
-	ids := make(map[string]bool, 2)
-	if err := scanIDs(rows, ids); err != nil {
-		return core.Session{}, false, fmt.Errorf("store.ReviveExpiredAgentSession: %w", err)
-	}
-	if len(ids) != 1 {
+	if len(candidates) != 1 {
 		return core.Session{}, false, nil
 	}
-	var id string
-	for k := range ids {
-		id = k
+	c := candidates[0]
+	if !access.Writable(ctx, c.project) && !access.Locked(ctx, c.project) {
+		return core.Session{}, false, nil
 	}
 	sess, found, err := sessionOne(ctx, db, `
 		UPDATE sessions SET status = 'active', updated_at = ?
-		 WHERE id = ? AND status = 'expired'
+		 WHERE id = ? AND status = 'expired' AND project_slug = ?
 		 RETURNING `+sessionCols,
-		core.FormatTime(now.UTC()), id)
+		core.FormatTime(now.UTC()), c.id, c.project)
 	if err != nil {
 		return core.Session{}, false, fmt.Errorf("store.ReviveExpiredAgentSession: %w", err)
 	}
 	return sess, found, nil
+}
+
+// expiredAgentCandidate is one session ReviveExpiredAgentSession could reopen.
+type expiredAgentCandidate struct{ id, project string }
+
+// expiredAgentSessions returns up to two expired ambient sessions on host that
+// proc is stamped on and account started ("" the owner's): two are enough to
+// tell one candidate from several. The rows are closed before it returns, so
+// the caller's UPDATE never waits on this read's connection.
+func expiredAgentSessions(ctx context.Context, db *sql.DB, host, proc, account string) ([]expiredAgentCandidate, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id, project_slug FROM sessions
+		WHERE status = 'expired' AND ambient = 1 AND host = ? AND agent_process = ? AND account = ?
+		LIMIT 2`, host, proc, account)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []expiredAgentCandidate
+	for rows.Next() {
+		var c expiredAgentCandidate
+		if err := rows.Scan(&c.id, &c.project); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // ActiveSessionsByExternalIdentity returns every active session -- the ambient

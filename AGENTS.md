@@ -211,6 +211,15 @@ the pointer is where to look, not a substitute for reading it.
   ambient is by construction another agent's.
 - The process binding revives a session the idle reaper EXPIRED (a call from the
   same live process is proof of life), never one that was COMPLETED on purpose.
+- Revival, the active lookup before it, and the session an owner's access or
+  grant request falls back on see only the caller's own principal's sessions
+  (`store.ReviveExpiredAgentSession` reads the account from ctx;
+  `mcp.ownProcessSessions`; `approval.ownAgentSessions`), filtered BEFORE
+  counting: a restricted account revives its own expired session as the owner
+  does, and another principal's row stamped with the same process is neither
+  reopened nor a second candidate. The revived session must be `access.Writable`
+  or `access.Locked`: a restricted account's session in a project it no longer
+  reaches stays expired; the owner's in a locked project revives as before.
 - `session_start` adopts only the caller's OWN session when the request names a
   process. The sole-same-cwd adoption heuristic is for callers that name none;
   for one that does, a sole same-cwd ambient that is not its own belongs to

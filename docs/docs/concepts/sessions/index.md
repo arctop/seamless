@@ -331,6 +331,11 @@ the expired ambient session (recorded as a `session.started` event marked
 `revived`) and binds to it again. A session ended on purpose - by `session_end`
 or a SessionEnd hook - stays ended, and that agent's later calls are unbound.
 Two expired sessions stamped with the same process revive neither.
+With [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) on, a call revives only a session its own
+account started. A restricted account's agent gets its session back exactly
+as yours does, and no call - yours or an account's - reopens a session another
+account started, whatever agent process it names. A restricted account's
+session in a project it can no longer reach stays expired.
 
 `session_end` is the explicit findings path. Claude Code's SessionEnd hook calls
 the same lifecycle. Codex 0.144.6 has no SessionEnd event, so each `Stop` hook

@@ -563,7 +563,12 @@ back: the next Seamless tool call from the same live agent process reactivates
 the expired ambient session (recorded as a <code>session.started</code> event marked
 <code>revived</code>) and binds to it again. A session ended on purpose - by <code>session_end</code>
 or a SessionEnd hook - stays ended, and that agent's later calls are unbound.
-Two expired sessions stamped with the same process revive neither.</p>
+Two expired sessions stamped with the same process revive neither.
+With <a href="../../guides/peer-auth/">peer_auth</a> on, a call revives only a session its own
+account started. A restricted account's agent gets its session back exactly
+as yours does, and no call - yours or an account's - reopens a session another
+account started, whatever agent process it names. A restricted account's
+session in a project it can no longer reach stays expired.</p>
 <p><code>session_end</code> is the explicit findings path. Claude Code's SessionEnd hook calls
 the same lifecycle. Codex 0.144.6 has no SessionEnd event, so each <code>Stop</code> hook
 updates provisional findings from <code>last_assistant_message</code> and the reaper later

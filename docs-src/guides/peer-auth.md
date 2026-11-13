@@ -873,6 +873,11 @@ console and `seam` show its sessions by the qualified name, and that is the name
 you use for them. You cannot start a session of your own under a name beginning
 `_example_agent:`.
 
+When the idle reaper expires one of its sessions, the account's agent gets it
+back on its next call, exactly as yours does - but a call naming another
+account's agent process, or yours, reopens nothing, and a session in a project
+the account no longer reaches stays expired.
+
 ## Verify
 
 ```bash

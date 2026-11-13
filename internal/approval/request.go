@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -601,8 +602,8 @@ func (s *Service) anchorFor(ctx context.Context, chain []access.ProcessToken, se
 func (s *Service) resolveAnchor(ctx context.Context, chain []access.ProcessToken, sessionID, agentProcess, host string) (int, string, store.SessionProcess, error) {
 	if sessionID == "" && agentProcess != "" {
 		// No binding: the session the agent's SessionStart hook stamped with
-		// this process, when exactly one is live.
-		if found, err := store.ActiveAmbientByAgentProcess(ctx, s.cfg.DB, host, agentProcess); err == nil && len(found) == 1 {
+		// this process, when exactly one of the caller's own is live.
+		if found, err := ownAgentSessions(ctx, s.cfg.DB, host, agentProcess); err == nil && len(found) == 1 {
 			sessionID = found[0].ID
 		}
 	}
@@ -629,6 +630,29 @@ func (s *Service) resolveAnchor(ctx context.Context, chain []access.ProcessToken
 		}
 	}
 	return 0, "", store.SessionProcess{}, ErrAnchorNotInChain
+}
+
+// ownAgentSessions is store.ActiveAmbientByAgentProcess without the sessions
+// another principal started (access.SessionAccountOK), the rule the MCP
+// process binding applies too. Request and RequestGrant refuse a restricted
+// account before they ask (refuseRestricted), so the caller here is the owner,
+// and only sessions no restricted account started count. A process runs as one
+// OS account, so a restricted account's row stamped with the owner's agent --
+// a stamp its own hook may put on its own session -- is never that agent's
+// second session: left in, it would leave the owner's request with no session
+// (two rows) or file it under the account's session (the sole row).
+func ownAgentSessions(ctx context.Context, db *sql.DB, host, proc string) ([]core.Session, error) {
+	found, err := store.ActiveAmbientByAgentProcess(ctx, db, host, proc)
+	if err != nil {
+		return nil, err
+	}
+	own := found[:0]
+	for _, sess := range found {
+		if access.SessionAccountOK(ctx, sess.Account) {
+			own = append(own, sess)
+		}
+	}
+	return own, nil
 }
 
 // repoName is the repository a cwd sits in, for display: its last element.

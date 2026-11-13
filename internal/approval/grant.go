@@ -132,8 +132,8 @@ type GrantInput struct {
 	// MCP binding); it must agree with the session's own.
 	From string
 	// SessionID is the session the call is bound to, "" when none; then the
-	// session stamped with AgentProcess on Host stands in, when exactly one is
-	// live.
+	// session stamped with AgentProcess on Host stands in, when exactly one the
+	// owner's agents started is live (ownAgentSessions).
 	SessionID          string
 	AgentProcess, Host string
 	// Reason is the agent's own words, at most store.MaxAccessReasonRunes.
@@ -193,7 +193,7 @@ func (g *Grants) RequestGrant(ctx context.Context, in GrantInput) (store.AccessA
 		}
 		sessionID := in.SessionID
 		if sessionID == "" && in.AgentProcess != "" {
-			if found, err := store.ActiveAmbientByAgentProcess(ctx, db, in.Host, in.AgentProcess); err == nil && len(found) == 1 {
+			if found, err := ownAgentSessions(ctx, db, in.Host, in.AgentProcess); err == nil && len(found) == 1 {
 				sessionID = found[0].ID
 			}
 		}

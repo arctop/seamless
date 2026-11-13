@@ -1097,6 +1097,10 @@ the account cannot learn which session names exist where it cannot look. The
 console and <code>seam</code> show its sessions by the qualified name, and that is the name
 you use for them. You cannot start a session of your own under a name beginning
 <code>_example_agent:</code>.</p>
+<p>When the idle reaper expires one of its sessions, the account's agent gets it
+back on its next call, exactly as yours does - but a call naming another
+account's agent process, or yours, reopens nothing, and a session in a project
+the account no longer reaches stays expired.</p>
 <h2 id="verify">Verify</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="c1"># As root or the daemon&#39;s account: the policy, and nothing serve would refuse.</span>
 </span></span><span class="line"><span class="cl">sudo -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd doctor

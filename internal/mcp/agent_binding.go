@@ -66,9 +66,10 @@ type processSessionSlot struct {
 }
 
 // processSession returns the live ambient session the calling agent process
-// owns: exactly one active ambient session on the caller's host stamped with the
-// identity this connection named -- or, when there is none, the one the idle
-// reaper expired while the agent was away, revived (reviveProcessSession). No
+// owns: exactly one active ambient session on the caller's host, started by the
+// caller's own principal (ownProcessSessions), stamped with the identity this
+// connection named -- or, when there is none, the one the idle reaper expired
+// while the agent was away, revived (reviveProcessSession). No
 // row (no identity sent, a session already ended, an older hook) and several
 // rows (a process hosting more than one live session -- a Claude Code process
 // runs one at a time and ends the previous one on /clear and /resume, so this is
@@ -121,7 +122,7 @@ func (s *Server) listedProcessSession(ctx context.Context) (core.Session, bool) 
 
 func (s *Server) lookupProcessSession(ctx context.Context, proc string) (core.Session, bool) {
 	host := s.callerHost(ctx)
-	sessions, err := store.ActiveAmbientByAgentProcess(ctx, s.cfg.DB, host, proc)
+	sessions, err := s.ownProcessSessions(ctx, host, proc)
 	if err != nil {
 		s.logger.Warn("mcp: process binding lookup", "error", err)
 		return core.Session{}, false
@@ -136,6 +137,29 @@ func (s *Server) lookupProcessSession(ctx context.Context, proc string) (core.Se
 	}
 }
 
+// ownProcessSessions is store.ActiveAmbientByAgentProcess without the sessions
+// another principal started (access.SessionAccountOK). A process runs as one OS
+// account, so such a row is never this process's own second session: only a
+// stamp the other principal's hook put there, from a header it may forge. Left
+// in, it would make the caller's own session ambiguous (two rows bind
+// neither) or, as the sole row, stand in for the caller's own expired session
+// and stop its revival, before listedProcessSession dropped it anyway. With
+// peer_auth off every session the owner's agents start carries no account and
+// nothing is filtered.
+func (s *Server) ownProcessSessions(ctx context.Context, host, proc string) ([]core.Session, error) {
+	sessions, err := store.ActiveAmbientByAgentProcess(ctx, s.cfg.DB, host, proc)
+	if err != nil {
+		return nil, err
+	}
+	own := sessions[:0]
+	for _, sess := range sessions {
+		if access.SessionAccountOK(ctx, sess.Account) {
+			own = append(own, sess)
+		}
+	}
+	return own, nil
+}
+
 // reviveProcessSession is the process binding for an agent whose session the
 // idle reaper expired while it was away: this call, from the same live process,
 // is proof of life, so the session is reactivated and bound
@@ -144,16 +168,13 @@ func (s *Server) lookupProcessSession(ctx context.Context, proc string) (core.Se
 // timeline shows the session coming back rather than a heartbeat from nowhere.
 // If a concurrent call revived it first, the live row is simply read again.
 //
-// A restricted account's call revives nothing. The agent-process header is
-// the client's own claim, and the revival is a write the store makes before
-// anyone could see whose session it reopened: a header naming the owner's
-// agent would reopen the owner's session on a restricted account's behalf.
-// Such an account's agent whose session the reaper expired binds again on its
-// next SessionStart, or by resuming it with session_start name=<its name>.
+// A restricted account's agent is revived exactly as the owner's is, and only
+// ever in its own session. The agent-process header is the client's own claim
+// and the revival is a write, so the store reopens only a session the caller's
+// own principal started, in a project it may still place one in: a header
+// naming the owner's agent, or another account's, reopens nothing, and
+// neither does the owner's header naming an account's agent.
 func (s *Server) reviveProcessSession(ctx context.Context, host, proc string) (core.Session, bool) {
-	if access.AccountOf(ctx) != "" {
-		return core.Session{}, false
-	}
 	sess, ok, err := store.ReviveExpiredAgentSession(ctx, s.cfg.DB, host, proc, time.Now().UTC())
 	if err != nil {
 		s.logger.Warn("mcp: process binding revive", "error", err)
@@ -164,7 +185,7 @@ func (s *Server) reviveProcessSession(ctx context.Context, host, proc string) (c
 			map[string]any{"resumed": true, "revived": true, "agent_process": true})
 		return sess, true
 	}
-	sessions, err := store.ActiveAmbientByAgentProcess(ctx, s.cfg.DB, host, proc)
+	sessions, err := s.ownProcessSessions(ctx, host, proc)
 	if err != nil || len(sessions) != 1 {
 		return core.Session{}, false
 	}

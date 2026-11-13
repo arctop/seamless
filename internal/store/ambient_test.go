@@ -2,11 +2,14 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 )
 
@@ -181,6 +184,123 @@ func TestReviveExpiredAgentSession(t *testing.T) {
 	_, ok, err = ReviveExpiredAgentSession(ctx, db, "beta", "100.1", now)
 	require.NoError(t, err)
 	require.False(t, ok, "another machine's process is another process")
+}
+
+// reviveCallers are the principals a revival can speak for under a
+// peer_auth policy with two restricted accounts and one locked project: the
+// owner, each account (reaching example-open; example-locked is dropped by
+// the lock, example-conf is not open), and a call with no View at all
+// (peer_auth off, background work).
+func reviveCallers(t *testing.T) map[string]context.Context {
+	t.Helper()
+	uids := map[string]uint32{"owner": 501, "_example_agent": 502, "_example_peer": 503}
+	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner",
+		ForceLocked: []string{"example-locked"}, Restricted: []string{"_example_agent", "_example_peer"}},
+		func(name string) (access.Account, error) {
+			uid, ok := uids[name]
+			if !ok {
+				return access.Account{}, fmt.Errorf("no account %s", name)
+			}
+			return access.Account{UID: uid, Name: name}, nil
+		})
+	require.NoError(t, err)
+	peer := func(uid uint32) context.Context {
+		v, ok := p.PeerView(uid)
+		require.True(t, ok)
+		return access.WithView(context.Background(), v.WithOpenProjects([]string{"example-open", "example-locked"}))
+	}
+	return map[string]context.Context{
+		"owner": access.WithView(context.Background(), p.OwnerView()),
+		"agent": peer(502),
+		"peer":  peer(503),
+		"off":   context.Background(),
+	}
+}
+
+// A session belongs to the principal that started it, so proof of life from a
+// process revives only the caller's own expired session: a restricted account
+// its own and never the owner's or another account's, the owner (and a call
+// with peer_auth off) only a session no restricted account started. Another
+// principal's row stamped with the same process is not a candidate at all, so
+// it can neither be reopened nor block the caller's own revival. The one
+// candidate must lie where the caller may place a session: a restricted
+// account's in a project it still reaches, the owner's anywhere, a locked
+// project included, as before.
+func TestReviveExpiredAgentSession_OnlyTheCallersOwn(t *testing.T) {
+	callers := reviveCallers(t)
+	now := time.Now().UTC()
+	owners := map[string]string{"owner": "", "agent": "_example_agent", "peer": "_example_peer"}
+	type seed struct{ name, owner, project, proc string }
+	cases := []struct {
+		name   string
+		seeds  []seed
+		caller string
+		proc   string
+		want   string // the seed name revived, "" for none
+	}{
+		{name: "an account revives its own", caller: "agent", proc: "200.2", want: "cc/agent",
+			seeds: []seed{{"cc/agent", "agent", "example-open", "200.2"}}},
+		{name: "an account never revives the owner's", caller: "agent", proc: "100.1",
+			seeds: []seed{{"cc/owner", "owner", "example-open", "100.1"}}},
+		{name: "an account never revives another account's", caller: "agent", proc: "300.3",
+			seeds: []seed{{"cc/peer", "peer", "example-open", "300.3"}}},
+		{name: "the other account revives its own", caller: "peer", proc: "300.3", want: "cc/peer",
+			seeds: []seed{{"cc/peer", "peer", "example-open", "300.3"}}},
+		{name: "the owner revives its own", caller: "owner", proc: "100.1", want: "cc/owner",
+			seeds: []seed{{"cc/owner", "owner", "example-open", "100.1"}}},
+		{name: "the owner never revives an account's", caller: "owner", proc: "200.2",
+			seeds: []seed{{"cc/agent", "agent", "example-open", "200.2"}}},
+		{name: "peer_auth off revives the owner's", caller: "off", proc: "100.1", want: "cc/owner",
+			seeds: []seed{{"cc/owner", "owner", "example-open", "100.1"}}},
+		{name: "peer_auth off never revives an account's", caller: "off", proc: "200.2",
+			seeds: []seed{{"cc/agent", "agent", "example-open", "200.2"}}},
+		{name: "another principal's row does not block the owner's own", caller: "owner", proc: "100.1", want: "cc/owner",
+			seeds: []seed{{"cc/owner", "owner", "example-open", "100.1"}, {"cc/forged", "agent", "example-open", "100.1"}}},
+		{name: "another principal's row does not block an account's own", caller: "agent", proc: "200.2", want: "cc/agent",
+			seeds: []seed{{"cc/agent", "agent", "example-open", "200.2"}, {"cc/forged", "owner", "example-open", "200.2"}}},
+		{name: "two of the caller's own still revive neither", caller: "agent", proc: "200.2",
+			seeds: []seed{{"cc/one", "agent", "example-open", "200.2"}, {"cc/two", "agent", "example-open", "200.2"}}},
+		{name: "an account's own in a project it no longer reaches stays expired", caller: "agent", proc: "200.2",
+			seeds: []seed{{"cc/agent", "agent", "example-conf", "200.2"}}},
+		{name: "an account's own in a locked project stays expired", caller: "agent", proc: "200.2",
+			seeds: []seed{{"cc/agent", "agent", "example-locked", "200.2"}}},
+		{name: "the owner's own in a locked project revives, as before", caller: "owner", proc: "100.1", want: "cc/owner",
+			seeds: []seed{{"cc/owner", "owner", "example-locked", "100.1"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := openTestDB(t)
+			ids := map[string]string{}
+			for _, s := range tc.seeds {
+				id, err := core.NewID()
+				require.NoError(t, err)
+				require.NoError(t, CreateSession(context.Background(), db, core.Session{
+					ID: id, Name: s.name, ProjectSlug: s.project, Status: core.SessionExpired, Ambient: true,
+					Host: "alpha", Account: owners[s.owner],
+					CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour),
+				}))
+				require.NoError(t, SetSessionAgentProcess(context.Background(), db, id, s.proc))
+				ids[s.name] = id
+			}
+			got, ok, err := ReviveExpiredAgentSession(callers[tc.caller], db, "alpha", tc.proc, now)
+			require.NoError(t, err)
+			require.Equal(t, tc.want != "", ok)
+			if tc.want != "" {
+				require.Equal(t, ids[tc.want], got.ID)
+				require.Equal(t, core.SessionActive, got.Status)
+			}
+			for name, id := range ids {
+				s, found, err := SessionByID(context.Background(), db, id)
+				require.NoError(t, err)
+				require.True(t, found)
+				want := core.SessionExpired
+				if name == tc.want {
+					want = core.SessionActive
+				}
+				require.Equal(t, want, s.Status, "%s", name)
+			}
+		})
+	}
 }
 
 // TestAmbientScope_CallerExcludesOtherAgents pins the fallback's one new rule: a

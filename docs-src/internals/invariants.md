@@ -221,6 +221,22 @@ The process binding reactivates a session the idle reaper **expired**, because
 a call from the same live process is proof of life. A session **completed** on
 purpose - by `session_end` or the client's SessionEnd - stays ended.
 
+The revival reopens only the caller's own session
+(`store.ReviveExpiredAgentSession` reads the account from the request). The
+agent-process header is the client's own claim and the revival is a write, so
+under peer_auth a restricted account revives only a session it started, and the
+owner only one no restricted account started. Another principal's row stamped
+with the same process is dropped before the candidates are counted: a process
+runs as one OS account, so that row is never this process's second session,
+and a forged stamp can neither be reopened nor make the caller's own revival
+ambiguous. The one candidate must also sit where the caller could place a
+session now. A restricted account's session in a project it no longer reaches
+stays expired. The owner's session in a locked project revives as before and
+binds nothing until a lease opens the project. The active lookup
+(`ownProcessSessions`) drops other principals' rows the same way, and so does
+the session an owner's access or grant request falls back on
+(`approval.ownAgentSessions`).
+
 ### `session_start` adopts only the caller's own session
 
 When the request names a process. The sole-same-cwd adoption heuristic is for

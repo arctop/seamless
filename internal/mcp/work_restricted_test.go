@@ -47,13 +47,18 @@ const (
 	wkGhost  = "example-ghost"
 	wkHost   = "laptop"
 	wkAcct   = "_example_agent"
+	// wkPeer is a second restricted account: its sessions are as foreign to
+	// wkAcct as the owner's are.
+	wkPeer = "_example_peer"
 
 	wkOwnerUID = 501
 	wkAcctUID  = 502
+	wkPeerUID  = 503
 
 	// Agent-process identities (agentproc's pid.version shape).
 	wkOwnerProc = "200.2000"
 	wkAcctProc  = "300.3000"
+	wkPeerProc  = "400.4000"
 )
 
 // wkRig is one daemon's MCP server under a peer_auth policy with one locked
@@ -87,13 +92,15 @@ func newWkRig(t *testing.T) *wkRig {
 	require.NoError(t, store.AdoptLocalHost(ctx, db, wkHost))
 
 	policy, err := access.New(config.PeerAuth{
-		Enabled: true, Owner: "owner", ForceLocked: []string{wkLocked}, Restricted: []string{wkAcct},
+		Enabled: true, Owner: "owner", ForceLocked: []string{wkLocked}, Restricted: []string{wkAcct, wkPeer},
 	}, func(n string) (access.Account, error) {
 		switch n {
 		case "owner":
 			return access.Account{UID: wkOwnerUID, Name: "owner", Home: "/home/owner"}, nil
 		case wkAcct:
 			return access.Account{UID: wkAcctUID, Name: wkAcct, Home: "/home/" + wkAcct}, nil
+		case wkPeer:
+			return access.Account{UID: wkPeerUID, Name: wkPeer, Home: "/home/" + wkPeer}, nil
 		}
 		return access.Account{}, fmt.Errorf("no account %s", n)
 	})
@@ -126,9 +133,12 @@ func (r *wkRig) serve(view func() access.View) string {
 
 // restricted is the restricted account's socket transport: its reach is the
 // projects open at each request, as peerHandler loads them.
-func (r *wkRig) restricted() string {
+func (r *wkRig) restricted() string { return r.restrictedAs(wkAcctUID) }
+
+// restrictedAs is restricted for the restricted account with uid.
+func (r *wkRig) restrictedAs(uid uint32) string {
 	return r.serve(func() access.View {
-		v, ok := r.policy.PeerView(wkAcctUID)
+		v, ok := r.policy.PeerView(uid)
 		require.True(r.t, ok)
 		open, err := store.OpenProjectSlugs(context.Background(), r.db)
 		require.NoError(r.t, err)
@@ -170,6 +180,11 @@ func (r *wkRig) dial(base string, key bool, proc string) *mcpclient.Client {
 
 func (r *wkRig) acct(proc string) *mcpclient.Client  { return r.dial(r.restricted(), false, proc) }
 func (r *wkRig) owner(proc string) *mcpclient.Client { return r.dial(r.ownerTCP(), true, proc) }
+
+// peer dials as the second restricted account, wkPeer.
+func (r *wkRig) peer(proc string) *mcpclient.Client {
+	return r.dial(r.restrictedAs(wkPeerUID), false, proc)
+}
 
 // call returns a tool result's first text item and whether it is an error.
 func (r *wkRig) call(cli *mcpclient.Client, name string, args map[string]any) (string, bool) {
@@ -662,14 +677,106 @@ func TestRestricted_ImplicitBindingsNeverCross(t *testing.T) {
 		require.Equal(t, "sess/owner-bound", out["created_by"])
 	})
 
-	t.Run("a restricted call revives no expired session", func(t *testing.T) {
+	// Proof of life revives only the caller's own expired session: a restricted
+	// account's agent gets its session back exactly as the owner's does, and no
+	// header -- the account's or the owner's -- reopens another principal's.
+	t.Run("an expired session revives for its own principal only", func(t *testing.T) {
 		r := newWkRig(t)
-		expired := r.ambient("cc/owner-gone", wkOpen, "", wkOwnerProc, core.SessionExpired, now.Add(-2*time.Hour))
-		r.ok(r.acct(wkOwnerProc), "tasks_list", map[string]any{"project": wkOpen})
-		require.Equal(t, core.SessionExpired, r.session(expired.Name).Status, "the forged header reopened nothing")
-		// The owner's own agent still revives it, as before.
-		r.ok(r.owner(wkOwnerProc), "tasks_list", map[string]any{"project": wkOpen})
-		require.Equal(t, core.SessionActive, r.session(expired.Name).Status)
+		gone := now.Add(-2 * time.Hour)
+		ownerGone := r.ambient("cc/owner-gone", wkOpen, "", wkOwnerProc, core.SessionExpired, gone)
+		acctGone := r.ambient("cc/acct-gone", wkOpen, wkAcct, wkAcctProc, core.SessionExpired, gone)
+		peerGone := r.ambient("cc/peer-gone", wkOpen, wkPeer, wkPeerProc, core.SessionExpired, gone)
+		revivals := func(id string) int {
+			return r.count(`SELECT COUNT(*) FROM events WHERE kind = 'session.started'
+				AND session_id = ? AND json_extract(payload, '$.revived') = 1`, id)
+		}
+		// Every forged header first: each call is unbound and reopens nothing.
+		forged := []struct {
+			label  string
+			cli    *mcpclient.Client
+			target core.Session
+		}{
+			{"the account naming the owner's agent", r.acct(wkOwnerProc), ownerGone},
+			{"the account naming another account's agent", r.acct(wkPeerProc), peerGone},
+			{"the owner naming the account's agent", r.owner(wkAcctProc), acctGone},
+		}
+		for _, f := range forged {
+			text := r.refused(f.cli, "tasks_add", map[string]any{"title": "unplaced"})
+			require.Contains(t, text, "ambiguous scope", f.label)
+			got := r.session(f.target.Name)
+			require.Equal(t, core.SessionExpired, got.Status, "%s reopened nothing", f.label)
+			require.Equal(t, f.target.UpdatedAt, got.UpdatedAt, f.label)
+			require.Zero(t, revivals(f.target.ID), f.label)
+		}
+		require.Zero(t, r.count(`SELECT COUNT(*) FROM tasks`))
+
+		// Each principal's own agent revives its own session and is bound to it.
+		own := []struct {
+			label   string
+			cli     *mcpclient.Client
+			target  core.Session
+			account string
+		}{
+			{"the account", r.acct(wkAcctProc), acctGone, wkAcct},
+			{"the other account", r.peer(wkPeerProc), peerGone, wkPeer},
+			{"the owner, as before", r.owner(wkOwnerProc), ownerGone, ""},
+		}
+		for _, o := range own {
+			out := r.ok(o.cli, "tasks_add", map[string]any{"title": "back " + o.label})
+			require.Equal(t, wkOpen, out["project"], o.label)
+			require.Equal(t, o.target.Name, out["created_by"], o.label)
+			if o.account == "" {
+				require.NotContains(t, out, "account", o.label)
+			} else {
+				require.Equal(t, o.account, out["account"], o.label)
+			}
+			require.Equal(t, core.SessionActive, r.session(o.target.Name).Status, o.label)
+			require.Equal(t, 1, revivals(o.target.ID), "%s: the revival is on the record", o.label)
+		}
+	})
+
+	t.Run("an account's session in a project it no longer reaches stays expired", func(t *testing.T) {
+		r := newWkRig(t)
+		acctGone := r.ambient("cc/acct-gone", wkOther, wkAcct, wkAcctProc, core.SessionExpired, now.Add(-2*time.Hour))
+		require.NoError(t, store.SetProjectIsolation(context.Background(), r.db, wkOther, core.IsolationConfidential))
+		text := r.refused(r.acct(wkAcctProc), "tasks_add", map[string]any{"title": "unplaced"})
+		require.Contains(t, text, "ambiguous scope")
+		require.NotContains(t, text, wkOther)
+		require.Equal(t, core.SessionExpired, r.session(acctGone.Name).Status, "no write lands in a project it cannot reach")
+		require.Zero(t, r.count(`SELECT COUNT(*) FROM events WHERE kind = 'session.started'`))
+	})
+
+	t.Run("the owner's own session in a locked project still revives", func(t *testing.T) {
+		r := newWkRig(t)
+		ownerGone := r.ambient("cc/owner-locked", wkLocked, "", wkOwnerProc, core.SessionExpired, now.Add(-2*time.Hour))
+		// Revived as before; it binds nothing until a lease opens the project.
+		r.refused(r.owner(wkOwnerProc), "tasks_add", map[string]any{"title": "locked out"})
+		require.Equal(t, core.SessionActive, r.session(ownerGone.Name).Status)
+		require.Zero(t, r.count(`SELECT COUNT(*) FROM tasks`))
+	})
+
+	// A forged stamp is another principal's row: it neither makes the caller's
+	// own session ambiguous nor stands in for it.
+	t.Run("another principal's row stamped with the caller's process neither binds nor blocks", func(t *testing.T) {
+		r := newWkRig(t)
+		// The account's hook stamped its own live session with the owner's
+		// agent identity.
+		r.ambient("cc/acct-forged", wkOther, wkAcct, wkOwnerProc, core.SessionActive, now)
+		ownerLive := r.ambient("cc/owner-live", wkOpen, "", wkOwnerProc, core.SessionActive, now.Add(-time.Minute))
+		// An older client of the owner's in another project: without the
+		// process binding, the owner's call could only be inferred, ambiguously.
+		r.ambient("cc/owner-older", wkOther, "", "", core.SessionActive, now)
+		out := r.ok(r.owner(wkOwnerProc), "tasks_add", map[string]any{"title": "the owner's own"})
+		require.Equal(t, wkOpen, out["project"])
+		require.Equal(t, ownerLive.Name, out["created_by"], "the owner's own session, not an ambiguity")
+
+		r2 := newWkRig(t)
+		r2.ambient("cc/owner-forged", wkOther, "", wkAcctProc, core.SessionActive, now)
+		acctGone := r2.ambient("cc/acct-gone", wkOpen, wkAcct, wkAcctProc, core.SessionExpired, now.Add(-2*time.Hour))
+		out = r2.ok(r2.acct(wkAcctProc), "tasks_add", map[string]any{"title": "the account's own"})
+		require.Equal(t, wkOpen, out["project"])
+		require.Equal(t, acctGone.Name, out["created_by"], "the owner's live row did not stop the account's revival")
+		require.Equal(t, core.SessionActive, r2.session(acctGone.Name).Status)
 	})
 
 	t.Run("a sole same-cwd ambient of the owner's is not adopted", func(t *testing.T) {

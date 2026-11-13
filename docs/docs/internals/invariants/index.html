@@ -419,6 +419,21 @@ agent's project, and a bare <code>session_end</code> would complete that agent's
 <p>The process binding reactivates a session the idle reaper <strong>expired</strong>, because
 a call from the same live process is proof of life. A session <strong>completed</strong> on
 purpose - by <code>session_end</code> or the client's SessionEnd - stays ended.</p>
+<p>The revival reopens only the caller's own session
+(<code>store.ReviveExpiredAgentSession</code> reads the account from the request). The
+agent-process header is the client's own claim and the revival is a write, so
+under peer_auth a restricted account revives only a session it started, and the
+owner only one no restricted account started. Another principal's row stamped
+with the same process is dropped before the candidates are counted: a process
+runs as one OS account, so that row is never this process's second session,
+and a forged stamp can neither be reopened nor make the caller's own revival
+ambiguous. The one candidate must also sit where the caller could place a
+session now. A restricted account's session in a project it no longer reaches
+stays expired. The owner's session in a locked project revives as before and
+binds nothing until a lease opens the project. The active lookup
+(<code>ownProcessSessions</code>) drops other principals' rows the same way, and so does
+the session an owner's access or grant request falls back on
+(<code>approval.ownAgentSessions</code>).</p>
 <h3 id="session-start-adopts-only-the-callers-own-session"><code>session_start</code> adopts only the caller's own session</h3>
 <p>When the request names a process. The sole-same-cwd adoption heuristic is for
 callers that name none; for one that does, a sole same-cwd ambient that is not
