@@ -174,6 +174,38 @@ func TestIndexSessionFTS_AmbientFindingsPath(t *testing.T) {
 	require.Equal(t, "the lease heartbeat is a re-claim", body)
 }
 
+// An explicit session that session_start linked to the conversation shares the
+// ambient row's external identity. UpdateAmbientFindings writes only the
+// ambient row, so its search mirror must reindex that row, even when the link
+// was touched later than the Stop's clock read.
+func TestIndexSessionFTS_AmbientFindingsPathIgnoresLinkedSessions(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	require.NoError(t, CreateSession(ctx, db, core.Session{
+		ID: "01AMBLNK", Name: "cx/zy", ProjectSlug: "seam", Status: core.SessionActive,
+		ExternalClient: "codex", ExternalSessionID: "ext-2", Ambient: true,
+		CreatedAt: now, UpdatedAt: now,
+	}))
+	later := now.Add(time.Minute)
+	require.NoError(t, CreateSession(ctx, db, core.Session{
+		ID: "01LINKED", Name: "sess/linked", ProjectSlug: "example-finance", Status: core.SessionActive,
+		Findings:       "the link's own findings",
+		ExternalClient: "codex", ExternalSessionID: "ext-2",
+		CreatedAt: later, UpdatedAt: later,
+	}))
+
+	updated, err := UpdateAmbientFindings(ctx, db, "codex", "ext-2", "the ambient row's turn", now)
+	require.NoError(t, err)
+	require.True(t, updated)
+
+	_, project, _, _, _, body, found := ftsRow(t, db, "01AMBLNK")
+	require.True(t, found, "the ambient row's findings must reach the search mirror")
+	require.Equal(t, "seam", project)
+	require.Equal(t, "the ambient row's turn", body)
+}
+
 // TestMigration024_BackfillsTheWorkRecord upgrades a database whose tasks,
 // trials, and sessions predate the work-record mirror and verifies they become
 // searchable -- the half of the change that no writer hook can cover.

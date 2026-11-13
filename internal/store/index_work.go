@@ -117,16 +117,19 @@ func nonEmpty(parts ...string) []string {
 	return out
 }
 
-// reindexSessionFTSByExternal refreshes the FTS row for the session identified
-// by an external client + session id. UpdateAmbientFindings writes by that
-// identity rather than by id, so the mirror has to look the id up; the FTS table
-// is a rebuildable mirror, so this deliberately runs after (not inside) the
-// targeted write rather than turning it into a transaction.
+// reindexSessionFTSByExternal refreshes the FTS row for the ambient session
+// identified by an external client + session id. UpdateAmbientFindings writes
+// by that identity rather than by id, so the mirror has to look the id up; the
+// FTS table is a rebuildable mirror, so this deliberately runs after (not
+// inside) the targeted write rather than turning it into a transaction. Only
+// the ambient row qualifies: an explicit session that session_start linked to
+// the conversation shares the identity, and reindexing it instead would leave
+// the row just written stale in search.
 func reindexSessionFTSByExternal(ctx context.Context, db *sql.DB, externalClient, externalSessionID string) error {
 	var s core.Session
 	err := db.QueryRowContext(ctx, `
 		SELECT id, name, project_slug, findings FROM sessions
-		 WHERE external_client = ? AND claude_session_id = ?
+		 WHERE external_client = ? AND claude_session_id = ? AND ambient = 1
 		 ORDER BY updated_at DESC LIMIT 1`,
 		externalClient, externalSessionID).Scan(&s.ID, &s.Name, &s.ProjectSlug, &s.Findings)
 	if err != nil {
