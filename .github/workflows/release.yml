@@ -1,13 +1,19 @@
 name: Release
 
-# Cut a release by pushing a version tag: `git tag v0.3.0 && git push origin
-# v0.3.0`. goreleaser cross-compiles seamlessd + seam (see .goreleaser.yaml)
-# and publishes the cross-platform archives (binaries plus maintained
-# Claude Code/Codex skills), signed checksums, installer bundles, and changelog
-# as a GitHub release; the last step re-verifies the published checksums
-# signatures against this tag's exact signing identity. Once that passes, the
-# mcp-registry job publishes server.json to the MCP registry
-# (mcp-registry.yml).
+# Cut a release in two halves. On the owner's Mac, scripts/release/macos.sh
+# builds the darwin binaries and the Touch ID approver, signs them with the
+# project's Developer ID Application certificate, has Apple notarize them,
+# uploads them to the tag's draft release, and writes the SSH-signed tag whose
+# message carries their sha256 manifest; the owner pushes the tag. This
+# workflow then waits for the owner's approval of its `release` environment,
+# holds the draft's darwin assets to the tag's manifest, cross-compiles
+# linux and windows (.goreleaser.yaml), and publishes the draft with the
+# signed checksums, installer bundles and changelog; the last step
+# re-verifies the published checksums signatures against this tag's exact
+# signing identity. Once that passes, the mcp-registry job publishes
+# server.json to the MCP registry (mcp-registry.yml). The Homebrew cask is
+# pushed by the owner afterwards (scripts/release/cask.sh). No step reads a
+# secret but the GITHUB_TOKEN; scripts/release/README.md has the steps.
 on:
   push:
     tags: ["v*"]
@@ -26,176 +32,18 @@ permissions:
 # publishes what every user downloads. The trailing comment is the human-
 # readable version; dependabot (.github/dependabot.yml) bumps both together.
 jobs:
-  # The macOS Touch ID approver (macos/SeamApprove) ships as its own opt-in
-  # release asset, seamless-approve_<version>_darwin.zip, which only
-  # `seam touchid enroll` downloads; no install path uses it unasked. It needs
-  # one secret beyond the darwin signing ones: MACOS_APPROVER_PROFILE, the
-  # base64 of the Developer ID provisioning profile for the App ID
-  # com.arctop.seamless.approve (Keychain Sharing on). Without it --
-  # a fork, or this repo before the owner adds it -- the approver job is
-  # skipped and goreleaser publishes exactly what it did before: APPROVER_ZIP
-  # stays unset and the .goreleaser.yaml entries for it render empty.
-  #
-  # This gate runs on Linux so a release without the profile never waits for
-  # a macOS runner. A profile with a darwin signing secret missing is a
-  # half-configured release and fails here.
-  approver-gate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    outputs:
-      build: ${{ steps.gate.outputs.build }}
-    steps:
-      - name: Decide whether to build the Touch ID approver
-        id: gate
-        env:
-          MACOS_APPROVER_PROFILE: ${{ secrets.MACOS_APPROVER_PROFILE }}
-          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
-          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
-          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
-          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-        run: |
-          if [ -z "$MACOS_APPROVER_PROFILE" ]; then
-            echo "::notice::MACOS_APPROVER_PROFILE is not set: this release ships without the Touch ID approver"
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          missing=
-          for name in MACOS_SIGN_P12 MACOS_SIGN_PASSWORD MACOS_NOTARY_ISSUER_ID MACOS_NOTARY_KEY_ID MACOS_NOTARY_KEY; do
-            [ -n "$(printenv "$name")" ] || missing="$missing $name"
-          done
-          if [ -n "$missing" ]; then
-            echo "::error::MACOS_APPROVER_PROFILE is set, but signing the Touch ID approver also needs:$missing"
-            exit 1
-          fi
-          echo "build=true" >> "$GITHUB_OUTPUT"
-
-  # Build, sign, notarize and staple the approver, then zip it for goreleaser
-  # (scripts/approver/build.sh and notarize.sh; `make approver` is the same
-  # build unsigned). It signs with the same Developer ID certificate as the
-  # darwin binaries (MACOS_SIGN_P12), so the app's team identifier is theirs,
-  # which `seam touchid enroll` checks. The team id is read from the profile
-  # and, like the identity's hash, masked before first use: neither is in the
-  # source, and neither reaches the log.
-  approver:
-    needs: approver-gate
-    if: needs.approver-gate.outputs.build == 'true'
-    runs-on: macos-latest
-    # Apple's notary service usually answers in minutes; notarize.sh waits up
-    # to 20.
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Build, sign and notarize the Touch ID approver
-        env:
-          TAG_REF: ${{ github.ref }}
-          MACOS_APPROVER_PROFILE: ${{ secrets.MACOS_APPROVER_PROFILE }}
-          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
-          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
-          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
-          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-        run: |
-          set -eu
-          case "$TAG_REF" in
-            refs/tags/v*) ;;
-            *) echo "::error::the approver build needs a v* tag ref, got $TAG_REF"; exit 1 ;;
-          esac
-          # The version as goreleaser spells it (.Version: the tag without its v).
-          version=${TAG_REF#refs/tags/v}
-          work="$RUNNER_TEMP/approver"
-          mkdir -p "$work/dist"
-
-          # The provisioning profile, and the team id it was issued to.
-          printf '%s' "$MACOS_APPROVER_PROFILE" | base64 --decode > "$work/approver.provisionprofile"
-          security cms -D -i "$work/approver.provisionprofile" > "$work/profile.plist"
-          team=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$work/profile.plist")
-          echo "::add-mask::$team"
-
-          # A throwaway keychain holding only the Developer ID certificate,
-          # first in the search list so codesign finds it; removed below.
-          keychain="$work/signing.keychain-db"
-          kc_pass=$(openssl rand -hex 24)
-          echo "::add-mask::$kc_pass"
-          security create-keychain -p "$kc_pass" "$keychain"
-          security set-keychain-settings -lut 3600 "$keychain"
-          security unlock-keychain -p "$kc_pass" "$keychain"
-          printf '%s' "$MACOS_SIGN_P12" | base64 --decode > "$work/sign.p12"
-          security import "$work/sign.p12" -k "$keychain" -f pkcs12 -P "$MACOS_SIGN_PASSWORD" -T /usr/bin/codesign >/dev/null
-          rm -f "$work/sign.p12"
-          # Apple's Developer ID G2 intermediate, which issued the signing
-          # certificate. A P12 exported without its chain leaves find-identity
-          # with no valid identity on a runner that lacks it, so it is
-          # imported up front, pinned (owner, 2026-11-06). The hash is what
-          # apple.com/certificateauthority served on 2026-11-06, equal to the
-          # copy Xcode installs; the certificate is valid to 2031-09-17.
-          ca="$work/DeveloperIDG2CA.cer"
-          curl -fsSL --proto '=https' --retry 3 -o "$ca" https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
-          ca_sha=$(shasum -a 256 "$ca" | awk '{ print $1 }')
-          if [ "$ca_sha" != f16cd3c54c7f83cea4bf1a3e6a0819c8aaa8e4a1528fd144715f350643d2df3a ]; then
-            echo "::error::DeveloperIDG2CA.cer from apple.com has SHA-256 $ca_sha, not the pinned one"
-            exit 1
-          fi
-          # The P12 may carry it already.
-          if ! out=$(security import "$ca" -k "$keychain" 2>&1); then
-            case $out in
-              *"already exists"*) ;;
-              *) echo "$out"; exit 1 ;;
-            esac
-          fi
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kc_pass" "$keychain" >/dev/null
-          # shellcheck disable=SC2046 # the existing search list, one word per keychain
-          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
-          identity=$(security find-identity -v -p codesigning "$keychain" | awk '/"Developer ID Application: / { print $2; exit }')
-          if [ -z "$identity" ]; then
-            echo "::error::MACOS_SIGN_P12 holds no valid Developer ID Application identity"
-            exit 1
-          fi
-          echo "::add-mask::$identity"
-
-          printf '%s' "$MACOS_NOTARY_KEY" | base64 --decode > "$work/notary.p8"
-
-          APPROVER_SIGN_IDENTITY=$identity APPROVER_TEAM_ID=$team \
-            APPROVER_PROFILE="$work/approver.provisionprofile" \
-            APPROVER_VERSION=$version APPROVER_OUT="$work/out" \
-            scripts/approver/build.sh
-          APPROVER_NOTARY_KEY="$work/notary.p8" \
-            APPROVER_NOTARY_KEY_ID=$MACOS_NOTARY_KEY_ID APPROVER_NOTARY_ISSUER_ID=$MACOS_NOTARY_ISSUER_ID \
-            APPROVER_ZIP="$work/dist/seamless-approve_${version}_darwin.zip" \
-            scripts/approver/notarize.sh "$work/out/Seamless Approve.app"
-
-      - name: Remove the signing keychain and keys
-        if: always()
-        run: |
-          work="$RUNNER_TEMP/approver"
-          security delete-keychain "$work/signing.keychain-db" 2>/dev/null || true
-          rm -f "$work/sign.p12" "$work/notary.p8" "$work/approver.provisionprofile" "$work/profile.plist"
-
-      # Zipped again by the artifact store, unzipped by download-artifact in
-      # the goreleaser job: the release asset is the inner zip, byte for byte.
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: approver
-          path: ${{ runner.temp }}/approver/dist/
-          if-no-files-found: error
-          retention-days: 1
-
   goreleaser:
-    # After the approver: a release that built one waits for it, one that did
-    # not (the job skipped) goes ahead as before. A failed approver build
-    # stops the release, like a failed signing step would.
-    needs: [approver-gate, approver]
-    if: ${{ !cancelled() && needs.approver-gate.result == 'success' && (needs.approver.result == 'success' || needs.approver.result == 'skipped') }}
     runs-on: ubuntu-latest
-    # Apple notarizes each of the four darwin binaries (`notarize:` in
-    # .goreleaser.yaml) and goreleaser waits for every verdict; that usually
-    # takes minutes but can take far longer, so 15 was too tight.
-    timeout-minutes: 45
+    # The owner approves every release here (F, plan
+    # agent-accounts-and-releases): the environment's required reviewer is
+    # the owner, it admits only v* tags, and admins cannot bypass it. It holds
+    # no secret; what it guards is this job's GITHUB_TOKEN and its OIDC
+    # identity, which sign checksums.txt and publish. An environment changes
+    # neither the Sigstore certificate's identity
+    # (release.yml@refs/tags/vX.Y.Z, its job_workflow_ref) nor anything a
+    # verifier pins. A fork's release creates its own, unprotected one.
+    environment: release
+    timeout-minutes: 30
     steps:
       # Full history: the changelog is built from the commits since the
       # previous tag, which a shallow checkout cannot see.
@@ -203,34 +51,56 @@ jobs:
         with:
           fetch-depth: 0
 
-      # This repo's releases are Developer ID-signed and notarized. A missing
-      # secret would make goreleaser skip that step and quietly publish
-      # adhoc-signed darwin binaries, bringing back the macOS Background Items
-      # notice on every update, so the release stops here instead -- before the
-      # installer scripts are signed into Rekor below. Forks have no such
-      # secrets and build unsigned, as before.
-      - name: Require the macOS signing secrets
-        if: github.repository == 'arctop/seamless'
-        env:
-          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
-          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
-          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
-          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-        run: |
-          missing=
-          for name in MACOS_SIGN_P12 MACOS_SIGN_PASSWORD MACOS_NOTARY_ISSUER_ID MACOS_NOTARY_KEY_ID MACOS_NOTARY_KEY; do
-            [ -n "$(printenv "$name")" ] || missing="$missing $name"
-          done
-          if [ -n "$missing" ]; then
-            echo "::error::macOS signing secrets not set:$missing"
-            exit 1
-          fi
-
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
+
+      # The macOS assets: both darwin archives and the Touch ID approver,
+      # which scripts/release/macos.sh built, signed and notarized on the
+      # owner's Mac and uploaded to this tag's draft release. They are
+      # downloaded the way macos.sh read them back, held to the sha256
+      # manifest in the signed tag's message (only an admin may push a v* tag,
+      # so the manifest is the owner's), and handed to goreleaser as
+      # DARWIN_ASSETS: checksum.extra_files lists them in checksums.txt, which
+      # cosign signs, and the draft already holds them, so the published
+      # release has one copy of each. Any mismatch, missing or extra asset
+      # stops the release here (releasekit check-darwin; its tests are the
+      # fixtures), before anything below signs into the public Rekor log. The
+      # tag is fetched again because a checkout can leave a lightweight copy
+      # of it without the message.
+      #
+      # A fork: with no manifest in its tag, its release has no darwin
+      # archives (DARWIN_ASSETS stays unset); with one (macos.sh --adhoc), it
+      # is checked the same way.
+      - name: Check the macOS assets against the tag's manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # The ref reaches the script through env:, never as an expression
+          # inside run:, so no tag text is spliced into shell source.
+          TAG_REF: ${{ github.ref }}
+          CANONICAL: ${{ github.repository == 'arctop/seamless' }}
+        run: |
+          set -eu
+          case "$TAG_REF" in
+            refs/tags/v*) ;;
+            *) echo "::error::the release needs a v* tag ref, got $TAG_REF"; exit 1 ;;
+          esac
+          tag=${TAG_REF#refs/tags/}
+          git fetch --force --quiet origin "refs/tags/$tag:refs/tags/$tag"
+          if [ "$(git cat-file -t "$tag")" != tag ]; then
+            echo "::error::$tag is not an annotated tag: scripts/release/macos.sh writes a signed one carrying the macOS manifest"
+            exit 1
+          fi
+          git cat-file tag "$tag" > "$RUNNER_TEMP/tag-object.txt"
+          if [ "$CANONICAL" != true ] && ! grep -Eq '^[0-9a-f]{64}  ' "$RUNNER_TEMP/tag-object.txt"; then
+            echo "::notice::the tag carries no macOS manifest: this fork's release has no darwin archives"
+            exit 0
+          fi
+          scripts/release/fetch-draft.sh "$tag" "$RUNNER_TEMP/darwin"
+          go run ./cmd/releasekit check-darwin -tag "$tag" \
+            -tag-object "$RUNNER_TEMP/tag-object.txt" -assets "$RUNNER_TEMP/darwin"
+          echo "DARWIN_ASSETS=$RUNNER_TEMP/darwin/*" >> "$GITHUB_ENV"
 
       # goreleaser's `signs:` stage, the installer-signing step and the
       # post-release verify below all shell out to this binary. The version is
@@ -272,56 +142,15 @@ jobs:
               "docs/${script}"
           done
 
-      # The Touch ID approver, when the approver job built one. It lands
-      # outside the checkout (goreleaser refuses a dirty tree), and
-      # APPROVER_ZIP hands its path to the two .goreleaser.yaml entries that
-      # list it in checksums.txt and upload it. When the job was skipped,
-      # neither step runs and APPROVER_ZIP stays unset.
-      - name: Fetch the Touch ID approver
-        if: needs.approver.result == 'success'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: approver
-          path: ${{ runner.temp }}/approver
-
-      - name: Hand the Touch ID approver to goreleaser
-        if: needs.approver.result == 'success'
-        env:
-          TAG_REF: ${{ github.ref }}
-        run: |
-          zip="$RUNNER_TEMP/approver/seamless-approve_${TAG_REF#refs/tags/v}_darwin.zip"
-          if [ ! -f "$zip" ]; then
-            echo "::error::the approver artifact holds no $(basename "$zip")"
-            ls -la "$RUNNER_TEMP/approver" || true
-            exit 1
-          fi
-          set -- "$RUNNER_TEMP"/approver/*
-          if [ "$#" -ne 1 ]; then
-            echo "::error::the approver artifact holds $# files, not one"
-            exit 1
-          fi
-          echo "APPROVER_ZIP=$zip" >> "$GITHUB_ENV"
-
+      # Publishes the draft macos.sh made (release.use_existing_draft), which
+      # it finds by its title, the tag. A tag pushed with no draft fails the
+      # check above first.
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           version: "~> v2"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Pushes the Homebrew cask to arctop/homebrew-tap (`homebrew_casks:`
-          # in .goreleaser.yaml). GITHUB_TOKEN cannot cross repos, so this is a
-          # fine-grained PAT with contents:write on that single repo -- keep it
-          # that narrow; this job builds what every user downloads.
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          # Developer ID signing + notarization of the darwin binaries
-          # (`notarize:` in .goreleaser.yaml): the .p12 (certificate + key) in
-          # base64 and its password, and an App Store Connect API key (issuer,
-          # key id, the .p8 in base64) for notarytool.
-          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
-          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
-          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
-          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
 
       # Post-release verify. goreleaser signed checksums.txt twice (the two
       # `signs:` entries in .goreleaser.yaml); fetch it and both signatures
@@ -333,13 +162,14 @@ jobs:
       # over the wrong bytes: the two entries run concurrently, and each
       # rewrites checksums.txt (same bytes) just before it signs.
       #
-      # This runs after goreleaser has published the release (and, for a
-      # non-prerelease tag, pushed the cask), so a red result cannot stop the
-      # release. Rule out a network failure first -- the same two cosign
-      # commands give the same verdict from any machine -- then pull the
-      # release: mark it prerelease, which is the yank (the update check and
-      # /releases/latest both skip prereleases), revert the cask commit in
-      # arctop/homebrew-tap, then fix the cause and cut a new patch tag.
+      # This runs after goreleaser has published the release, so a red result
+      # cannot stop the release. Rule out a network failure first -- the same
+      # two cosign commands give the same verdict from any machine -- then
+      # pull the release: mark it prerelease, which is the yank (the update
+      # check and /releases/latest both skip prereleases), and do not push
+      # its cask (scripts/release/cask.sh refuses a prerelease; revert the
+      # tap's commit if it was already pushed), then fix the cause and cut a
+      # new patch tag.
       - name: Verify published checksums signatures (exact tag identity)
         env:
           # The ref reaches the script through env:, never as an expression
@@ -381,8 +211,6 @@ jobs:
   # `gh workflow run mcp-registry.yml -f tag=<tag>`.
   mcp-registry:
     needs: goreleaser
-    # Said explicitly: the default success() also looks past goreleaser to
-    # the jobs it needs, and a skipped approver job would then skip this one.
     if: ${{ !cancelled() && needs.goreleaser.result == 'success' }}
     permissions:
       contents: read

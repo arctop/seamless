@@ -36,9 +36,10 @@ func AssetURL(base string, v Version, name string) string {
 }
 
 // ApproverAsset is the macOS Touch ID approver app of release v (plan step
-// T): a zip of "Seamless Approve.app", built, signed and notarized by the
-// release workflow as a separate, opt-in asset, and listed in the release's
-// checksums.txt like every archive.
+// T): a zip of "Seamless Approve.app", built, signed and notarized on the
+// owner's Mac with the darwin binaries (scripts/release/macos.sh) as a
+// separate, opt-in asset, and listed in the release's checksums.txt like
+// every archive. cmd/releasekit spells the same name.
 func ApproverAsset(v Version) string {
 	return fmt.Sprintf("seamless-approve_%s_darwin.zip", v)
 }

@@ -193,7 +193,10 @@ func TestDistributionDefaultsToSource(t *testing.T) {
 
 // TestOnlyGoreleaserStampsRelease guards the same constraint from the other
 // side: the release pipeline is the one build that stamps
-// main.distribution, and no other script that links seamlessd may.
+// main.distribution, and no other script that links seamlessd may. The
+// darwin half of a release (scripts/release/macos.sh) builds through
+// cmd/releasekit, which reads the stamp from .goreleaser.yaml's ldflags
+// rather than spelling it.
 func TestOnlyGoreleaserStampsRelease(t *testing.T) {
 	root := filepath.Join("..", "..")
 	gr, err := os.ReadFile(filepath.Join(root, ".goreleaser.yaml"))
@@ -205,6 +208,9 @@ func TestOnlyGoreleaserStampsRelease(t *testing.T) {
 		filepath.Join("deploy", "glama", "build.sh"),
 		filepath.Join("deploy", "glama", "Dockerfile"),
 		filepath.Join("scripts", "fixture", "harness.sh"),
+		filepath.Join("scripts", "release", "macos.sh"),
+		filepath.Join("cmd", "releasekit", "darwin.go"),
+		filepath.Join("cmd", "releasekit", "goreleaser.go"),
 	} {
 		b, err := os.ReadFile(filepath.Join(root, f))
 		require.NoError(t, err, f)

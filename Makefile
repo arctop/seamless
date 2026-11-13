@@ -468,17 +468,19 @@ uninstall-git-hooks:
 	@echo "git hooks disabled"
 
 # Local dry-run of the release pipeline (.goreleaser.yaml): validates the
-# config and cross-compiles every platform into dist/ without tagging or
+# config and cross-compiles linux and windows into dist/ without tagging or
 # publishing. Real releases run in CI on a v* tag (.github/workflows/release.yml).
+# The darwin half is scripts/release/macos.sh, whose dry run is
+# `scripts/release/macos.sh vX.Y.Z --dry-run` (add --adhoc without the signing
+# setup, scripts/release/README.md).
 # --skip=sign: the `signs:` stage is keyless cosign, which needs the GitHub OIDC
 # token that only exists inside the release workflow. Off a runner it falls back
 # to an interactive browser flow, so a local dry-run would hang instead of
 # validating the build. Signing is exercised for real on a v* tag.
-# Needs goreleaser v2.19.0+: older versions refuse the cask's
-# hooks.post.install_steps ("field install_steps not found").
+# Needs goreleaser v2.5.0+ (release.use_existing_draft).
 release-snapshot:
 	@command -v goreleaser >/dev/null \
-	    || { echo "ERROR: goreleaser not found (brew install goreleaser, v2.19.0+)"; exit 1; }
+	    || { echo "ERROR: goreleaser not found (brew install goreleaser, v2.5.0+)"; exit 1; }
 	goreleaser release --snapshot --clean --skip=sign
 
 # The macOS Touch ID approver (macos/SeamApprove, Swift; macOS only, opt-in):

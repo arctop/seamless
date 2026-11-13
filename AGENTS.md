@@ -557,19 +557,17 @@ any of it.
   `access.PeerAuthenticated`; a request's `challenge` appears in its JSON only
   when pending and read over the socket (a nonce, not a secret). Never put a
   team ID in source: the pin is read at run time from seam's own signature,
-  and the build substitutes it from the environment. A release ships the app
-  only when the repository secret `MACOS_APPROVER_PROFILE` is set (the base64
-  Developer ID provisioning profile for `com.arctop.seamless.approve`,
-  Keychain Sharing on): release.yml's `approver` job signs it with
-  `MACOS_SIGN_P12`'s Developer ID (the team seam pins) after importing Apple's
-  G2 intermediate pinned by hash, notarizes and staples it, and hands
-  `seamless-approve_<version>_darwin.zip` to goreleaser as `APPROVER_ZIP`, in
-  both `release.extra_files` and `checksum.extra_files`, so the cosign-signed
-  checksums.txt lists it. Without the secret the job is skipped and the
-  release is unchanged; with it but a darwin signing secret missing,
-  `approver-gate` fails the release. A renewed certificate needs a
-  regenerated profile: build.sh refuses a profile that does not list the
-  signing certificate.
+  and the build substitutes it from the environment. Every release ships the
+  app: `scripts/release/macos.sh` builds it on the owner's Mac with the
+  Developer ID identity that signs the darwin binaries (the team seam pins),
+  from the local Developer ID provisioning profile for
+  `com.arctop.seamless.approve` (Keychain Sharing on; the team id is read
+  from the profile), notarizes and staples it (`notarize.sh` with a notarytool
+  keychain profile), and uploads `seamless-approve_<version>_darwin.zip` to
+  the tag's draft release with the darwin archives. The signed tag's manifest
+  names it, and release.yml lists it in the cosign-signed checksums.txt like
+  them. A renewed certificate needs a regenerated profile: build.sh refuses a
+  profile that does not list the signing certificate.
 - **The locked view at the agent surfaces** (`internal/mcp/locked.go`,
   `internal/hooks/locked.go`). The SessionStart hook in a locked project's
   repository records the session there, metadata only, files its access
@@ -886,11 +884,26 @@ attempt files. Every other install only notifies. Owner decisions: memory
 
 - **Only a release build counts.** `main.distribution` is stamped `release` by
   `.goreleaser.yaml` alone (`buildinfo_test.go` fails if another build script
-  stamps it), and `update.IsReleaseBuild` also wants a clean X.Y.Z version. A
+  stamps it; the darwin build reads it from there), and
+  `update.IsReleaseBuild` also wants a clean X.Y.Z version. A
   source build -- `make run`, `make install`, the fixtures, seambench, CI --
   never asks GitHub unless `update.check: true`, never writes
   `<data_dir>/update/state.json`, gets no updater spawner, and is never an
   installer install (constraint `dev-and-fixture-daemons-never-self-update`).
+- **A release is built in two places, from one config.** goreleaser builds
+  linux and windows in release.yml; the darwin binaries and the Touch ID
+  approver are built, Developer ID-signed and notarized on the owner's Mac
+  (`scripts/release/macos.sh`, through `cmd/releasekit`, which builds and packs
+  `.goreleaser.yaml`'s own builds and archive and refuses any key it does not
+  implement, so a config change cannot make darwin differ silently). They
+  reach the release as the tag's draft; release.yml holds every draft asset
+  to the sha256 manifest in the signed tag (`releasekit check-darwin`) before
+  `checksum.extra_files` lists it, behind the owner's approval of the
+  `release` environment. CI holds no secret, and the Homebrew cask is pushed
+  by the owner (`scripts/release/cask.sh`). Keep the darwin assets' names and
+  layout goreleaser's: the installers, the updater and `seam touchid enroll`
+  read them (`TestDarwinArchive_IsLaidOutAsV082`,
+  `TestRenderCask_IsGoreleasersCask`). Steps: `scripts/release/README.md`.
 - **Text from parsed versions only.** Every notice, banner, row and event
   payload is built from `update.Version` values, `update.ReleaseURL` and the
   fixed `update.Hint` for the install kind -- never from the release API's

@@ -311,8 +311,8 @@ jobs:
       # exact pin here would validate a binary the release never runs. As a
       # result, a goreleaser release that rejects the config turns this job
       # red with no repo change; the next tag would have failed the same way.
-      # It needs no secrets: the notarize block is disabled when
-      # MACOS_SIGN_P12 is unset, and check does not sign anything.
+      # It needs no secrets: the release holds none, and check does not sign
+      # anything.
       - name: goreleaser check
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:

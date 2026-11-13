@@ -2,23 +2,33 @@
 # Triggered by .github/workflows/release.yml on a v* tag; dry-run locally with
 # `make release-snapshot`. The version comes from the git tag (leading v
 # stripped), injected as main.version -- see cmd/seamlessd/main.go.
+#
+# goreleaser builds linux and windows. The darwin binaries are built, signed
+# with the project's Developer ID Application certificate and notarized on the
+# owner's Mac before the tag is pushed (scripts/release/macos.sh), from THIS
+# file's builds and archive: cmd/releasekit reads both and refuses any key it
+# does not implement, so the two halves cannot drift. They reach the release
+# as the tag's draft, and release.yml holds them to the manifest in the signed
+# tag before checksum.extra_files below lists them.
 version: 2
 
 project_name: seamless
 
 builds:
   # No CGO anywhere (pure-Go SQLite), so plain cross-compilation covers every
-  # target. Windows joins darwin + linux: Claude Code hooks use exec form,
+  # target. Windows joins linux: Claude Code hooks use exec form,
   # Codex hooks carry a command_windows override, and the daemon runs under a
   # per-user Scheduled Task. The public Codex compatibility matrix distinguishes
   # this release/syntax coverage from a live Codex-on-Windows verification.
-  # goreleaser appends .exe automatically for the windows targets.
+  # goreleaser appends .exe automatically for the windows targets. darwin is
+  # not in goos: releasekit builds these same entries for darwin, for every
+  # goarch listed, and refuses a build that names darwin here.
   - id: seamlessd
     main: ./cmd/seamlessd
     binary: seamlessd
     env:
       - CGO_ENABLED=0
-    goos: [darwin, linux, windows]
+    goos: [linux, windows]
     goarch: [amd64, arm64]
     flags: [-trimpath]
     # main.distribution=release is stamped HERE AND NOWHERE ELSE: it is what
@@ -43,46 +53,29 @@ builds:
     binary: seam
     env:
       - CGO_ENABLED=0
-    goos: [darwin, linux, windows]
+    goos: [linux, windows]
     goarch: [amd64, arm64]
     flags: [-trimpath]
     ldflags: [-s -w]
     mod_timestamp: "{{ .CommitTimestamp }}"
 
-# Developer ID signing and notarization of the darwin binaries, done from
-# the Linux runner by goreleaser's quill integration, before the
-# archives (and so checksums.txt) are made. Why it matters:
+# No notarize block: the darwin binaries are signed and notarized on the
+# owner's Mac (scripts/release/macos.sh), with the hardened runtime and a
+# secure timestamp, before they are archived. Why it matters:
 # - macOS Background Task Management keys a LaunchAgent's item to its binary's
 #   signing identity. An adhoc-signed binary is a new item on every update,
 #   which posts a "seamlessd can run in the background" notice each time; only
 #   a Team ID identity stays the same (lab detached-updater-os-spikes).
 # - Notarized binaries pass Gatekeeper when they are quarantined. The Homebrew
-#   cask's quarantine strip (homebrew_casks below) stays as a fallback for
+#   cask's quarantine strip (cmd/releasekit/cask.go) stays as a fallback for
 #   the cases notarization does not cover.
-# It runs only when the signing secret is non-empty: release.yml passes the
-# five secrets (an unset secret arrives as an empty string, which isEnvSet
-# would still call set), and a fork or a local `make release-snapshot` without
-# them builds the adhoc-signed binaries as before. wait makes the release fail
-# rather than publish a binary Apple has not accepted.
-notarize:
-  macos:
-    - ids: [seamlessd, seam]
-      enabled: '{{ ne (envOrDefault "MACOS_SIGN_P12" "") "" }}'
-      sign:
-        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
-        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
-      notarize:
-        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
-        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
-        key: "{{ .Env.MACOS_NOTARY_KEY }}"
-        wait: true
-        timeout: 20m
 
 # One archive per platform holding both binaries, plus the files a fresh
 # install needs: the example config `make install` seeds from, and the portable
 # Claude Code/Codex skills embedded by seamlessd. They are also bundled as
 # ordinary skill packages so a release archive is self-describing and supports
-# manual installation without a clone.
+# manual installation without a clone. releasekit packs the darwin archives
+# from this entry too (name_template and files; formats must stay tar.gz).
 archives:
   - formats: [tar.gz]
     # zip on Windows: the PowerShell installer (docs/install.ps1) uses
@@ -111,17 +104,21 @@ archives:
 
 checksum:
   name_template: checksums.txt
-  # The macOS Touch ID approver (macos/SeamApprove), when this release built
-  # one: seamless-approve_<version>_darwin.zip, made, signed, notarized and
-  # stapled by release.yml's approver job on macOS, which sets APPROVER_ZIP to
-  # its path. Listed here so checksums.txt -- the file cosign signs below --
-  # vouches for it like every archive; `seam touchid enroll` checks the zip
-  # against that line. Without the approver secrets (forks, or before the
-  # owner adds the profile) APPROVER_ZIP is unset, the glob renders empty,
-  # and goreleaser skips the entry ("ignoring empty glob"): checksums.txt
-  # and the release stay exactly as they were.
+  # The macOS assets: both darwin archives and the Touch ID approver
+  # (seamless-approve_<version>_darwin.zip), which scripts/release/macos.sh
+  # built, signed and notarized on the owner's Mac and uploaded to the tag's
+  # draft release. release.yml downloads them, holds each to the sha256 the
+  # signed tag's manifest gives (releasekit check-darwin), and sets
+  # DARWIN_ASSETS to a glob over the checked copies. Listed here so
+  # checksums.txt -- the file cosign signs below -- vouches for them like
+  # every archive; the installers, the updater and `seam touchid enroll`
+  # check them against those lines. They are NOT in release.extra_files: the
+  # draft already holds them, and the release must hold one copy of each. A
+  # fork whose tag carries no manifest leaves DARWIN_ASSETS unset, the glob
+  # renders empty, and goreleaser skips the entry ("ignoring empty glob"):
+  # that release has no darwin archives.
   extra_files:
-    - glob: '{{ envOrDefault "APPROVER_ZIP" "" }}'
+    - glob: '{{ envOrDefault "DARWIN_ASSETS" "" }}'
 
 # Sign checksums.txt so it proves AUTHENTICITY, not just integrity.
 #
@@ -203,10 +200,12 @@ release:
     - glob: docs/install.ps1
     - glob: sigs/install.sigstore.json
     - glob: sigs/install.ps1.sigstore.json
-    # The Touch ID approver's zip, the same opt-in entry as in checksum:
-    # above (checksum.extra_files only checksums; this uploads it). Empty
-    # without the approver secrets, and then skipped.
-    - glob: '{{ envOrDefault "APPROVER_ZIP" "" }}'
+  # The release is the draft scripts/release/macos.sh created for the tag,
+  # holding the macOS assets; goreleaser finds it by its title (the tag),
+  # uploads the rest, and publishes it. The draft's placeholder notes are
+  # replaced with the changelog. A fork with no draft gets a new release.
+  use_existing_draft: true
+  mode: replace
   # A tag with a semver prerelease suffix (v0.7.0-rc.1) publishes as a GitHub
   # prerelease; a plain vX.Y.Z publishes as a normal release. The update check
   # skips prereleases, and GitHub's /releases/latest (what both installers
@@ -217,64 +216,11 @@ release:
   # reverted in the tap.
   prerelease: auto
 
-# Homebrew tap: `brew install arctop/tap/seamless`. Each release pushes a
-# regenerated cask to arctop/homebrew-tap, which also gives the project an
-# indexed third-party page carrying the name and description. A cask, not a
-# formula: goreleaser deprecated `brews` for pre-compiled binaries, and the
-# generated cask carries on_macos and on_linux stanzas, so Linux brew is
-# covered too. The workflow GITHUB_TOKEN is scoped to this repo, so the
-# push needs HOMEBREW_TAP_TOKEN (release.yml): a fine-grained PAT with
-# contents:write on the tap repo only -- that job publishes what every user
-# downloads, so the extra credential stays as narrow as possible. description
-# is the GitHub repo description verbatim (cross-surface consistency rule).
-homebrew_casks:
-  - name: seamless
-    repository:
-      owner: arctop
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    homepage: https://thereisnospoon.org
-    description: "Local-first shared memory and task coordination for AI coding agents. One Go binary, MCP server, markdown files you own. Hooks for Claude Code and Codex CLI (and their desktop apps)."
-    commit_msg_template: "seamless {{ .Tag }}"
-    # Same test as release.prerelease: auto. A prerelease tag leaves the tap
-    # alone, so `brew upgrade` never moves anyone onto a release candidate.
-    skip_upload: auto
-    binaries:
-      - seamlessd
-      - seam
-    # No url.verified: Homebrew 7 deprecated the parameter, goreleaser
-    # v2.18.1+ no longer writes it, and `goreleaser check` fails on it.
-    caveats: |
-      Connect your agent clients (hooks, MCP registration, skills):
-        seamlessd install-hooks
-      Then start the daemon (it bootstraps config + key on first run):
-        seamlessd serve
-      Quickstart: https://thereisnospoon.org/docs/quickstart/
-    # Homebrew quarantines every cask download on macOS; strip the attribute
-    # after install. A release's darwin binaries are notarized (notarize:
-    # above), but the strip stays as a fallback for what that cannot cover:
-    # - A bare Mach-O cannot carry a stapled ticket, so Gatekeeper checks a
-    #   quarantined binary with Apple online at first launch, and an offline
-    #   first run can still be refused.
-    # - Snapshot and fork builds without the signing secrets skip notarize
-    #   and ship adhoc-signed binaries.
-    # Drop it only after a clean-Mac test of the notarized cask.
-    # install_steps (goreleaser v2.19.0+, goreleaser/goreleaser#6873) writes
-    # Homebrew 7's declarative postflight_steps in normal stanza order;
-    # hooks.post.install would write a Ruby `postflight` block, which
-    # Homebrew 7 deprecates with a warning on every install. The body is
-    # Homebrew's install-steps DSL, not Ruby, and the .StagedPath field
-    # renders as Homebrew's staged_path token. must_succeed: false keeps the
-    # strip from ever failing the install (xattr -dr already exits 0 when the
-    # attribute is absent).
-    hooks:
-      post:
-        install_steps: |
-          on_macos do
-            run "/usr/bin/xattr",
-                args:         ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/seamlessd", "{{ .StagedPath }}/seam"],
-                must_succeed: false
-          end
+# No homebrew_casks block: the cask (`brew install arctop/tap/seamless`, on
+# macOS and Linux) is rendered from the published release's checksums.txt and
+# pushed to arctop/homebrew-tap with the owner's own login
+# (scripts/release/cask.sh, cmd/releasekit/cask.go), so this workflow holds
+# no token for the tap. A prerelease gets no cask.
 
 changelog:
   sort: asc

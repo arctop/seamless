@@ -674,8 +674,10 @@ provisioning profile for it whose keychain group covers the app's:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nv">APPROVER_SIGN_IDENTITY</span><span class="o">=</span>&lt;identity hash&gt; <span class="nv">APPROVER_TEAM_ID</span><span class="o">=</span>&lt;team id&gt; <span class="nv">APPROVER_PROFILE</span><span class="o">=</span>&lt;file&gt; make approver
 </span></span><span class="line"><span class="cl">seam touchid enroll --app <span class="s2">&#34;bin/approver/Seamless Approve.app&#34;</span>
 </span></span></code></pre></div>
-<p><code>scripts/approver/notarize.sh</code> notarizes and staples a Developer ID build
-(<code>APPROVER_NOTARY_KEY</code>, <code>APPROVER_NOTARY_KEY_ID</code>, <code>APPROVER_NOTARY_ISSUER_ID</code>). A
+<p><code>scripts/approver/notarize.sh</code> notarizes and staples a Developer ID build, with
+a notarytool keychain profile (<code>APPROVER_NOTARY_PROFILE</code>) or an App Store
+Connect API key (<code>APPROVER_NOTARY_KEY</code>, <code>APPROVER_NOTARY_KEY_ID</code>,
+<code>APPROVER_NOTARY_ISSUER_ID</code>). A
 source or prerelease <code>seam</code> has no release of the app to fetch: pass <code>--app</code> with
 a downloaded zip or a local build.</p>
 <h3 id="the-passkey-origin">The passkey origin</h3>

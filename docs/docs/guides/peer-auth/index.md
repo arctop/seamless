@@ -430,8 +430,10 @@ APPROVER_SIGN_IDENTITY=<identity hash> APPROVER_TEAM_ID=<team id> APPROVER_PROFI
 seam touchid enroll --app "bin/approver/Seamless Approve.app"
 ```
 
-`scripts/approver/notarize.sh` notarizes and staples a Developer ID build
-(`APPROVER_NOTARY_KEY`, `APPROVER_NOTARY_KEY_ID`, `APPROVER_NOTARY_ISSUER_ID`). A
+`scripts/approver/notarize.sh` notarizes and staples a Developer ID build, with
+a notarytool keychain profile (`APPROVER_NOTARY_PROFILE`) or an App Store
+Connect API key (`APPROVER_NOTARY_KEY`, `APPROVER_NOTARY_KEY_ID`,
+`APPROVER_NOTARY_ISSUER_ID`). A
 source or prerelease `seam` has no release of the app to fetch: pass `--app` with
 a downloaded zip or a local build.
 

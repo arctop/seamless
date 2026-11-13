@@ -5,8 +5,13 @@
 #
 # The app must come from scripts/approver/build.sh in signed mode (Developer
 # ID identity, Developer ID provisioning profile). Apple's notary service
-# needs an App Store Connect API key:
+# needs credentials, one of:
 #
+#   APPROVER_NOTARY_PROFILE    a notarytool keychain profile
+#                              (xcrun notarytool store-credentials; what
+#                              scripts/release/macos.sh passes)
+#
+#   or an App Store Connect API key, all three:
 #   APPROVER_NOTARY_KEY        path to the key's .p8 file
 #   APPROVER_NOTARY_KEY_ID     the key id
 #   APPROVER_NOTARY_ISSUER_ID  the issuer id
@@ -31,10 +36,26 @@ die() {
 [ $# -eq 1 ] || die "usage: notarize.sh <path to Seamless Approve.app>"
 APP=$1
 [ -d "$APP/Contents" ] || die "$APP is not an app bundle"
+# notary_auth runs `xcrun notarytool <its arguments>` with the credentials:
+# the keychain profile, or the API key trio, never both.
+key_set=0
 for name in APPROVER_NOTARY_KEY APPROVER_NOTARY_KEY_ID APPROVER_NOTARY_ISSUER_ID; do
-	[ -n "$(printenv "$name" || true)" ] || die "$name is not set"
+	if [ -n "$(printenv "$name" || true)" ]; then
+		key_set=$((key_set + 1))
+	fi
 done
-[ -f "$APPROVER_NOTARY_KEY" ] || die "APPROVER_NOTARY_KEY does not name a file"
+if [ -n "${APPROVER_NOTARY_PROFILE:-}" ]; then
+	[ "$key_set" -eq 0 ] || die "set APPROVER_NOTARY_PROFILE or the APPROVER_NOTARY_KEY trio, not both"
+	notary_auth() { xcrun notarytool "$@" --keychain-profile "$APPROVER_NOTARY_PROFILE"; }
+else
+	for name in APPROVER_NOTARY_KEY APPROVER_NOTARY_KEY_ID APPROVER_NOTARY_ISSUER_ID; do
+		[ -n "$(printenv "$name" || true)" ] || die "$name is not set (or set APPROVER_NOTARY_PROFILE)"
+	done
+	[ -f "$APPROVER_NOTARY_KEY" ] || die "APPROVER_NOTARY_KEY does not name a file"
+	notary_auth() {
+		xcrun notarytool "$@" --key "$APPROVER_NOTARY_KEY" --key-id "$APPROVER_NOTARY_KEY_ID" --issuer "$APPROVER_NOTARY_ISSUER_ID"
+	}
+fi
 codesign --verify --strict --deep "$APP" || die "$APP is not validly signed"
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/seam-notary.XXXXXX")
@@ -42,9 +63,7 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 
 # notarytool takes a zip, a dmg or a pkg; the ticket is stapled to the app.
 ditto -c -k --keepParent "$APP" "$TMP/submit.zip"
-if ! xcrun notarytool submit "$TMP/submit.zip" \
-	--key "$APPROVER_NOTARY_KEY" --key-id "$APPROVER_NOTARY_KEY_ID" --issuer "$APPROVER_NOTARY_ISSUER_ID" \
-	--wait --timeout 20m --output-format json >"$TMP/result.json"; then
+if ! notary_auth submit "$TMP/submit.zip" --wait --timeout 20m --output-format json >"$TMP/result.json"; then
 	cat "$TMP/result.json" >&2 || true
 	die "notarytool submit failed"
 fi
@@ -53,8 +72,7 @@ id=$(plutil -extract id raw -o - "$TMP/result.json" 2>/dev/null || true)
 if [ "$status" != Accepted ]; then
 	echo "approver: notarization status: ${status:-unknown} (submission ${id:-unknown})" >&2
 	if [ -n "$id" ]; then
-		xcrun notarytool log "$id" \
-			--key "$APPROVER_NOTARY_KEY" --key-id "$APPROVER_NOTARY_KEY_ID" --issuer "$APPROVER_NOTARY_ISSUER_ID" >&2 || true
+		notary_auth log "$id" >&2 || true
 	fi
 	die "Apple did not accept the approver"
 fi

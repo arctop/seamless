@@ -31,6 +31,10 @@ cmd/demoseed/      thin CLI over internal/demokit: the console-fleet seed
 cmd/seambench/     agent-scenario benchmark: `run` (headless scenario x condition
                    matrix) + `report` (grade, uplift, version deltas). Driven by
                    `make seambench`; see cmd/seambench/README.md
+cmd/releasekit/    the release's macOS half: builds and packs the darwin binaries
+                   from .goreleaser.yaml's builds and archive, the tag's sha256
+                   manifest and release.yml's check of the draft against it,
+                   and the Homebrew cask. Driven by scripts/release/
 docs-src/          docs site markdown + nav.yaml (source; docs/docs/ is output)
 internal/core/     domain types: Project, Memory, Session, Task, Trial, Event
 internal/config/   single YAML + env config (static key, budgets, briefing tunables, llm,
@@ -111,6 +115,9 @@ scripts/fixture/   the shared throwaway fixture: make-myapp.sh (demo repo) +
                    harness.sh --mode record|bench (branding | benchmark arms)
 scripts/branding/  GH-Pages surface: record.sh, distill.py (verbatim-audited
                    scene data), console-shots.js -- see its README.md
+scripts/release/   cutting a release on the owner's Mac: macos.sh (darwin build,
+                   Developer ID signing, notarization, draft, signed tag),
+                   cask.sh (the Homebrew cask), fetch-draft.sh -- see README.md
 macos/SeamApprove/ the optional macOS Touch ID approver app (Swift/SwiftPM, not
                    part of the Go build): SeamApproveCore + the AppKit
                    executable; scripts/approver/ builds (make approver) and
