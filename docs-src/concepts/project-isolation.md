@@ -154,10 +154,10 @@ nothing.
   in that project, under the session `session_start` opened there, with their
   events - for the rest of the conversation, wherever it binds afterwards. The
   session it left in the open project ends with a pointer naming the project
-  and nothing it holds. A conversation bound to two isolated projects - a
-  confidential project's own agent binding itself to another counts - keeps
-  that record in none of them. This holds on every install, whether or not
-  `isolation.requests` is on
+  and nothing it holds. One that binds itself to two isolated projects keeps
+  that record in none of them. A confidential or sealed project's own agent
+  keeps its record at home, whatever it binds itself to. This holds on every
+  install, whether or not `isolation.requests` is on
   ([details](/concepts/sessions/#moved-record)).
 - **Task answers withhold what blocks across the fence.** A confidential
   project's task that blocks an outside project's task reaches an outside

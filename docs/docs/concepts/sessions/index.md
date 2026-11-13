@@ -137,19 +137,19 @@ findings), plan captures and planning-subagent reports - follows the
 counting the ambient session's project and every session `session_start`
 linked to it, ended or not:
 
-| The conversation holds | Its record goes to |
+| The conversation | Its record goes to |
 |---|---|
-| no confidential or sealed project | the ambient session, as always |
-| one, the ambient session's own | the ambient session, as always |
-| one, bound with `session_start` | the session `session_start` opened there (the newest, if it opened several) |
-| two or more | none of them |
+| holds no confidential or sealed project | the ambient session, as always |
+| started in one (its ambient session is there), whatever it binds itself to | the ambient session, as always |
+| started outside them, and bound itself to one with `session_start` | the session `session_start` opened there (the newest, if it opened several) |
+| started outside them, and bound itself to two or more | none of them |
 
-- **Moved, the record stays moved.** Once the conversation binds itself to an
-  isolated project, its harvest and captures go there for the rest of the
-  conversation, and so do their events: an argument-less `session_start`, a
-  move to an open project, or `session_end` on the isolated session does not
-  bring them back. In the harvest's place the ambient session's findings
-  become a pointer -
+- **Moved, the record stays moved.** Once a conversation that started
+  outside them binds itself to an isolated project, its harvest and captures
+  go there for the rest of the conversation, and so do their events: an
+  argument-less `session_start`, a move to an open project, or `session_end`
+  on the isolated session does not bring them back. In the harvest's place
+  the ambient session's findings become a pointer -
   `Continued in project <slug>; this conversation's findings go there, not here.` -
   and its `session.ended` event carries that line, never the harvest.
 - **Your own findings win.** If that session already has findings you wrote
@@ -157,14 +157,18 @@ linked to it, ended or not:
   findings the hooks wrote there, such as an earlier harvest, it does replace.
   A SessionEnd that gives the harvest to a session the idle reaper had expired
   also completes it.
-- **Two isolated projects, no record.** A conversation bound to two or more -
-  a session native to one that binds itself to another counts - keeps its
-  harvest and captures in none of them. The ambient session, and each active
-  isolated session without findings of your own, takes a line naming the
-  projects in the harvest's place, and the hook's notice says why.
+- **A home keeps its record.** A conversation that started in a confidential
+  or sealed project keeps its harvest and captures there, under its ambient
+  session, whatever it binds itself to - other isolated projects included -
+  with no pointer and no line.
+- **Two isolated projects, no record.** A conversation that started outside
+  them and bound itself to two or more keeps its harvest and captures in none
+  of them. The ambient session, and each active isolated session without
+  findings of your own, takes a line naming the projects in the harvest's
+  place, and the hook's notice says why.
 - **What stays where it was.** Token totals are metadata and stay on the
   ambient session. Briefings and prompt recall still follow the repository. A
-  session native to an isolated project that binds itself to no other, a move
+  session native to an isolated project, whatever it binds itself to, a move
   between open projects, and a client that cannot link its session (an older
   `seam` that names no agent process) record exactly as before.
 

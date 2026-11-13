@@ -795,10 +795,11 @@ func (h *Handler) stampAgentProcess(ctx context.Context, client Client, sessionI
 // no findings are written into it.
 //
 // Which row takes the harvest is where the conversation's record goes
-// (store.RecordDestinationOf, route.go): its ambient row, as always; or, once
-// it bound itself to an isolated project with session_start, the session there
-// -- also when that session is no longer active -- with a pointer left on the
-// ambient row; or, holding more than one isolated project, no row at all.
+// (store.RecordDestinationOf, route.go): its ambient row, as always, and
+// always when that row is in an isolated project; or, once it bound itself to
+// an isolated project with session_start, the session there -- also when that
+// session is no longer active -- with a pointer left on the ambient row; or,
+// its links reaching more than one isolated project, no row at all.
 // notice is the one line for a harvest that landed nowhere, "" otherwise.
 func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p endPayload, metadataOnly bool) (notice string) {
 	if h.db == nil || p.SessionID == "" {

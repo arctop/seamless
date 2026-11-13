@@ -6,12 +6,14 @@ package hooks
 // row -- in the cwd's project, which may be open. Its SessionEnd harvest,
 // Codex's Stop findings and its plan and subagent captures would carry the
 // isolated project's content into that project. store.RecordDestinationOf
-// decides where they go instead -- the ambient row as always, the isolated
-// session the conversation bound itself to, or nowhere when it holds more than
-// one isolated project -- and the ambient row is then left a pointer, metadata
-// only. The policy lives in internal/store/isolation.go: nothing here tests an
-// isolation state. The View still has its word on every write into a link
-// (access.Writable), as it has on every other hook write.
+// decides where they go instead -- the ambient row as always (also for a
+// conversation native to an isolated project, whatever it binds to), the
+// isolated session the conversation bound itself to, or nowhere when its
+// links reach more than one isolated project -- and the ambient row is then
+// left a pointer, metadata only. The policy lives in
+// internal/store/isolation.go: nothing here tests an isolation state. The View
+// still has its word on every write into a link (access.Writable), as it has
+// on every other hook write.
 
 import (
 	"context"
@@ -35,10 +37,10 @@ type captureRoute struct {
 
 // captureTarget is where a plan or subagent capture for the conversation
 // externalSessionID names lands, before the fences judge it: the project its
-// cwd resolves to, as always, or -- once the conversation bound itself to an
-// isolated project its ambient row is not in -- that project, for the rest of
-// the conversation, whatever it binds to afterwards. notice is non-empty when
-// the capture lands nowhere: the conversation holds more than one isolated
+// cwd resolves to, as always, or -- once a conversation whose ambient row is in
+// no isolated project bound itself to one -- that project, for the rest of the
+// conversation, whatever it binds to afterwards. notice is non-empty when the
+// capture lands nowhere: the conversation's links reach more than one isolated
 // project, or where its record goes could not be read.
 func (h *Handler) captureTarget(ctx context.Context, client Client, externalSessionID, host, cwd, what string) (captureRoute, string) {
 	if h.db == nil {

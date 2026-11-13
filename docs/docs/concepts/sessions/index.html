@@ -392,37 +392,37 @@ linked to it, ended or not:</p>
 <table>
 <thead>
 <tr>
-<th>The conversation holds</th>
+<th>The conversation</th>
 <th>Its record goes to</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>no confidential or sealed project</td>
+<td>holds no confidential or sealed project</td>
 <td>the ambient session, as always</td>
 </tr>
 <tr>
-<td>one, the ambient session's own</td>
+<td>started in one (its ambient session is there), whatever it binds itself to</td>
 <td>the ambient session, as always</td>
 </tr>
 <tr>
-<td>one, bound with <code>session_start</code></td>
+<td>started outside them, and bound itself to one with <code>session_start</code></td>
 <td>the session <code>session_start</code> opened there (the newest, if it opened several)</td>
 </tr>
 <tr>
-<td>two or more</td>
+<td>started outside them, and bound itself to two or more</td>
 <td>none of them</td>
 </tr>
 </tbody>
 </table>
 </div>
 <ul>
-<li><strong>Moved, the record stays moved.</strong> Once the conversation binds itself to an
-isolated project, its harvest and captures go there for the rest of the
-conversation, and so do their events: an argument-less <code>session_start</code>, a
-move to an open project, or <code>session_end</code> on the isolated session does not
-bring them back. In the harvest's place the ambient session's findings
-become a pointer -
+<li><strong>Moved, the record stays moved.</strong> Once a conversation that started
+outside them binds itself to an isolated project, its harvest and captures
+go there for the rest of the conversation, and so do their events: an
+argument-less <code>session_start</code>, a move to an open project, or <code>session_end</code>
+on the isolated session does not bring them back. In the harvest's place
+the ambient session's findings become a pointer -
 <code>Continued in project &lt;slug&gt;; this conversation's findings go there, not here.</code> -
 and its <code>session.ended</code> event carries that line, never the harvest.</li>
 <li><strong>Your own findings win.</strong> If that session already has findings you wrote
@@ -430,14 +430,18 @@ with <code>session_update</code> or <code>session_end</code>, the harvest does n
 findings the hooks wrote there, such as an earlier harvest, it does replace.
 A SessionEnd that gives the harvest to a session the idle reaper had expired
 also completes it.</li>
-<li><strong>Two isolated projects, no record.</strong> A conversation bound to two or more -
-a session native to one that binds itself to another counts - keeps its
-harvest and captures in none of them. The ambient session, and each active
-isolated session without findings of your own, takes a line naming the
-projects in the harvest's place, and the hook's notice says why.</li>
+<li><strong>A home keeps its record.</strong> A conversation that started in a confidential
+or sealed project keeps its harvest and captures there, under its ambient
+session, whatever it binds itself to - other isolated projects included -
+with no pointer and no line.</li>
+<li><strong>Two isolated projects, no record.</strong> A conversation that started outside
+them and bound itself to two or more keeps its harvest and captures in none
+of them. The ambient session, and each active isolated session without
+findings of your own, takes a line naming the projects in the harvest's
+place, and the hook's notice says why.</li>
 <li><strong>What stays where it was.</strong> Token totals are metadata and stay on the
 ambient session. Briefings and prompt recall still follow the repository. A
-session native to an isolated project that binds itself to no other, a move
+session native to an isolated project, whatever it binds itself to, a move
 between open projects, and a client that cannot link its session (an older
 <code>seam</code> that names no agent process) record exactly as before.</li>
 </ul>

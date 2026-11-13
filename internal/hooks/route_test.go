@@ -24,16 +24,17 @@ import (
 )
 
 const (
-	rtOps     = "example-ops"     // open: the agent's cwd maps here
-	rtDocs    = "example-docs"    // open
-	rtFin     = "example-finance" // confidential; its own repository too
-	rtLegal   = "example-legal"   // confidential
-	rtSealed  = "example-sealed"  // sealed
-	rtConv    = "conv-5a1d-0001"  // the conversation's client session id
-	rtSecret  = "SECRET-DIGEST"   // text only the isolated project may hold
-	rtOpsCWD  = "/work/ops"
-	rtFinCWD  = "/work/finance"
-	rtHarvest = "(auto-harvested) " + rtSecret + " of the review."
+	rtOps       = "example-ops"     // open: the agent's cwd maps here
+	rtDocs      = "example-docs"    // open
+	rtFin       = "example-finance" // confidential; its own repository too
+	rtLegal     = "example-legal"   // confidential
+	rtSealed    = "example-sealed"  // sealed; its own repository too
+	rtConv      = "conv-5a1d-0001"  // the conversation's client session id
+	rtSecret    = "SECRET-DIGEST"   // text only the isolated project may hold
+	rtOpsCWD    = "/work/ops"
+	rtFinCWD    = "/work/finance"
+	rtSealedCWD = "/work/sealed"
+	rtHarvest   = "(auto-harvested) " + rtSecret + " of the review."
 )
 
 // routeEnv is a hook server with the files layer and plan capture on, over an
@@ -63,7 +64,7 @@ func newRouteEnvWith(t *testing.T, change func(*Config)) *routeEnv {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	require.NoError(t, store.SetSetting(ctx, db, store.SettingRepoProjectMap,
-		`{"`+rtOpsCWD+`":"`+rtOps+`","`+rtFinCWD+`":"`+rtFin+`"}`))
+		`{"`+rtOpsCWD+`":"`+rtOps+`","`+rtFinCWD+`":"`+rtFin+`","`+rtSealedCWD+`":"`+rtSealed+`"}`))
 	for _, p := range []struct {
 		slug  string
 		state core.Isolation
@@ -316,9 +317,11 @@ func TestFencedRoute_RebindKeepsTheRouting(t *testing.T) {
 	})
 }
 
-// A conversation bound to two isolated projects keeps its harvest in none of
-// them: every row it ends takes the line saying why, the agent's own findings
-// stay, and the hook answers with the notice.
+// A conversation whose ambient row is in an open project and whose links reach
+// two isolated projects keeps its harvest in none of them: every row it ends
+// takes the line saying why, the agent's own findings stay, and the hook
+// answers with the notice. (A conversation native to an isolated project keeps
+// its record at home instead: TestFencedRoute_UnlinkedAndNativeUnchanged.)
 func TestFencedRoute_TwoIsolatedBindingsWithholdTheHarvest(t *testing.T) {
 	line := "Not recorded: this conversation was bound to more than one isolated project (" +
 		rtFin + ", " + rtSealed + "), and its record goes to none of them."
@@ -343,22 +346,13 @@ func TestFencedRoute_TwoIsolatedBindingsWithholdTheHarvest(t *testing.T) {
 		}
 		require.Equal(t, map[string]map[string]int{"events": {}, "sessions": {}, "fts": {}}, e.whereIs(rtSecret))
 	})
-
-	t.Run("native to one, bound to another", func(t *testing.T) {
-		e := newRouteEnv(t)
-		amb := e.start(ClientClaudeCode, rtFinCWD)
-		require.Equal(t, rtFin, amb.ProjectSlug)
-		e.bind(ClientClaudeCode, rtSealed, core.SessionExpired, "")
-
-		require.Equal(t, notice, e.end())
-		require.Equal(t, line, e.session(amb.ID).Findings)
-		require.Equal(t, map[string]map[string]int{"events": {}, "sessions": {}, "fts": {}}, e.whereIs(rtSecret))
-	})
 }
 
-// Nothing changes for a conversation that holds no isolated project but its
-// own: no link, a link into another open project, or a session native to a
-// confidential project, even one bound back to an open project.
+// Nothing changes for a conversation whose links reach no isolated project
+// (no link, or a link into another open project), nor for one native to a
+// confidential or sealed project, whatever it binds itself to: an open
+// project, its own home, or one or more other isolated projects. Its home
+// keeps its record, with no pointer and no withheld line.
 func TestFencedRoute_UnlinkedAndNativeUnchanged(t *testing.T) {
 	for _, tc := range []struct {
 		name, cwd, home string
@@ -369,6 +363,11 @@ func TestFencedRoute_UnlinkedAndNativeUnchanged(t *testing.T) {
 		{name: "native confidential", cwd: rtFinCWD, home: rtFin},
 		{name: "native confidential bound to an open project", cwd: rtFinCWD, home: rtFin, links: []string{rtOps}},
 		{name: "native confidential bound to itself", cwd: rtFinCWD, home: rtFin, links: []string{rtFin}},
+		{name: "native confidential bound to another confidential", cwd: rtFinCWD, home: rtFin, links: []string{rtLegal}},
+		{name: "native confidential bound to a sealed project", cwd: rtFinCWD, home: rtFin, links: []string{rtSealed}},
+		{name: "native confidential bound to two isolated projects", cwd: rtFinCWD, home: rtFin,
+			links: []string{rtLegal, rtSealed}},
+		{name: "native sealed bound to a confidential project", cwd: rtSealedCWD, home: rtSealed, links: []string{rtFin}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newRouteEnv(t)
@@ -514,6 +513,48 @@ func TestFencedRoute_CapturesWithheldWithANotice(t *testing.T) {
 	require.Empty(t, eventsOfKind(t, e.rec, core.EventSubagentCaptured))
 }
 
+// A conversation native to an isolated project keeps its captures at home,
+// whatever other isolated projects it binds itself to: the plan and the
+// subagent report land in its own project, filed under its ambient row, with
+// no notice.
+func TestFencedRoute_NativeHomeKeepsCaptures(t *testing.T) {
+	e := newRouteEnv(t)
+	ctx := context.Background()
+	amb := e.start(ClientClaudeCode, rtFinCWD)
+	require.Equal(t, rtFin, amb.ProjectSlug)
+	e.bind(ClientClaudeCode, rtLegal, core.SessionActive, "")
+	e.bind(ClientClaudeCode, rtSealed, core.SessionCompleted, "")
+
+	plan := filepath.Join(e.plansDir, "quiet-ledger.md")
+	require.NoError(t, os.WriteFile(plan, []byte("# Example ledger review\n\n1. "+rtSecret+" step one.\n"), 0o644))
+	out, refused := e.hook(ClientClaudeCode, "post-tool-use", map[string]any{
+		"session_id": rtConv, "cwd": rtFinCWD, "tool_name": "Write", "tool_input": map[string]any{"file_path": plan},
+	})
+	require.Empty(t, refused)
+	require.Contains(t, additionalContext(t, out), "composition plan:example-ledger-review")
+	_, refused = e.hook(ClientClaudeCode, "subagent-stop", map[string]any{
+		"session_id": rtConv, "cwd": rtFinCWD, "permission_mode": "plan",
+		"transcript_path": placeSubagentTranscript(t, "ag03"), "agent_id": "ag03", "agent_type": "Explore",
+	})
+	require.Empty(t, refused)
+
+	for _, project := range []string{rtFin, rtLegal, rtSealed, rtOps} {
+		for _, slug := range []string{plans.NotePrefix + "quiet-ledger", plans.AgentNotePrefix + "ag03"} {
+			_, ok, err := store.NoteBySlug(ctx, e.db, project, slug)
+			require.NoError(t, err)
+			require.Equal(t, project == rtFin, ok, "%s/%s", project, slug)
+		}
+	}
+	for _, kind := range []core.EventKind{core.EventPlanCaptured, core.EventSubagentCaptured} {
+		evs := eventsOfKind(t, e.rec, kind)
+		require.Len(t, evs, 1, kind)
+		require.Equal(t, amb.ID, evs[0].SessionID, kind)
+		require.Equal(t, rtFin, evs[0].ProjectSlug, kind)
+	}
+	_, onAmbient := e.session(amb.ID).Metadata["plan_capture"]
+	require.True(t, onAmbient, "the plan's tracking metadata is the home session's")
+}
+
 // Codex has no SessionEnd: each Stop's findings are provisional, and they go
 // where the conversation's record goes, every turn, while the ambient row keeps
 // the pointer. Findings the agent wrote on the link itself are never replaced.
@@ -561,6 +602,22 @@ func TestFencedRoute_CodexStopFollowsTheBinding(t *testing.T) {
 		require.Equal(t, line, e.session(amb.ID).Findings)
 		require.Equal(t, line, e.session(fin.ID).Findings)
 		require.Equal(t, map[string]map[string]int{"events": {}, "sessions": {}, "fts": {}}, e.whereIs(rtSecret))
+	})
+
+	t.Run("native home keeps it", func(t *testing.T) {
+		e := newRouteEnv(t)
+		amb := e.start(ClientCodex, rtFinCWD)
+		require.Equal(t, rtFin, amb.ProjectSlug)
+		legal := e.bind(ClientCodex, rtLegal, core.SessionActive, "")
+		sealed := e.bind(ClientCodex, rtSealed, core.SessionActive, "")
+		_, refused := e.hook(ClientCodex, "stop", map[string]any{
+			"session_id": rtConv, "cwd": rtFinCWD, "last_assistant_message": rtSecret + " turn.",
+		})
+		require.Empty(t, refused)
+		require.Equal(t, "(auto-harvested) "+rtSecret+" turn.", e.session(amb.ID).Findings)
+		require.Empty(t, e.session(legal.ID).Findings)
+		require.Empty(t, e.session(sealed.ID).Findings)
+		require.Equal(t, map[string]int{rtFin: 1}, e.whereIs(rtSecret)["sessions"])
 	})
 }
 
@@ -752,6 +809,43 @@ func TestFencedRoute_PushedCapturesWithheld(t *testing.T) {
 	require.NoError(t, rows.Scan(&n))
 	require.NoError(t, rows.Err())
 	require.Zero(t, n)
+}
+
+// Under peer_auth, a conversation native to a locked confidential project
+// that the owner approved keeps its pushed record at home, whatever other
+// isolated project it binds itself to: the plan lands in its own project and
+// the end's findings on its ambient row, with no notice.
+func TestFencedRoute_PushedNativeHomeKeepsItsRecord(t *testing.T) {
+	e := newPushHooks(t)
+	ctx := context.Background()
+	_, err := store.EnsureProject(ctx, e.db, rtLegal, rtLegal)
+	require.NoError(t, err)
+	require.NoError(t, store.SetProjectIsolation(ctx, e.db, rtLegal, core.IsolationConfidential))
+	e.send("session-start", "", map[string]any{"session_id": "push-4", "cwd": "/work/finance", "source": "startup"}, nil)
+	amb := requireAmbientSession(t, e.db, ClientClaudeCode, "push-4")
+	require.Equal(t, lkFin, amb.ProjectSlug)
+	e.grant(amb.ID, lkFin, time.Hour)
+	legal := pushLink(t, e, "push-4", rtLegal, core.SessionActive)
+
+	ctxText, refused := e.send("post-tool-use", "", map[string]any{"session_id": "push-4", "cwd": "/work/finance",
+		"tool_name": "Write", "tool_input": map[string]any{"file_path": "/home/owner/.claude/plans/fin-plan.md"}},
+		map[string]any{"version": 1, "plan": map[string]any{"basename": "fin-plan", "content": "# Fin plan\n\n" + rtSecret + "."}})
+	require.Empty(t, refused)
+	require.Contains(t, ctxText, "composition plan:fin-plan")
+	_, ok := e.note(lkFin, plans.NotePrefix+"fin-plan")
+	require.True(t, ok, "the plan lands at home")
+	_, ok = e.note(rtLegal, plans.NotePrefix+"fin-plan")
+	require.False(t, ok)
+
+	_, refused = e.send("session-end", "", map[string]any{"session_id": "push-4"},
+		map[string]any{"version": 1, "findings": "(auto-harvested) " + rtSecret + "."})
+	require.Empty(t, refused)
+	require.Equal(t, "(auto-harvested) "+rtSecret+".", requireAmbientSession(t, e.db, ClientClaudeCode, "push-4").Findings)
+	got, ok, err := store.SessionByID(ctx, e.db, legal.ID)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, core.SessionCompleted, got.Status)
+	require.Empty(t, got.Findings, "the link keeps its own (none)")
 }
 
 // The harvest replaces only findings the hooks wrote: none yet, the no-summary

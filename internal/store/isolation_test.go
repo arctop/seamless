@@ -570,9 +570,10 @@ func recordDestProjects(t *testing.T, db *sql.DB) context.Context {
 // TestRecordDestination_Matrix pins where a conversation's own record goes,
 // from the isolation of the projects its ambient row and its links (explicit
 // sessions sharing its external identity, in any status) are in: the ambient
-// row while no isolated project is held or the only one is its own; the
-// newest link in the one isolated project held elsewhere; nowhere for two or
-// more.
+// row while no isolated project is held, or while the ambient row's own is one
+// of them (a native conversation keeps its record at home, whatever it binds
+// to); otherwise the newest link in the one isolated project its links reach,
+// and nowhere for two or more.
 func TestRecordDestination_Matrix(t *testing.T) {
 	type link struct {
 		project string
@@ -623,10 +624,19 @@ func TestRecordDestination_Matrix(t *testing.T) {
 			kind:  RecordDestAmbient, fenced: []string{"example-finance"}},
 		{name: "native confidential, linked to another confidential", ambient: "example-finance",
 			links: []link{{"example-legal", core.SessionActive}},
-			kind:  RecordDestWithheld, fenced: []string{"example-finance", "example-legal"}},
+			kind:  RecordDestAmbient, fenced: []string{"example-finance", "example-legal"}},
+		{name: "native confidential, linked to sealed", ambient: "example-finance",
+			links: []link{{"example-sealed", core.SessionExpired}},
+			kind:  RecordDestAmbient, fenced: []string{"example-finance", "example-sealed"}},
 		{name: "native sealed, linked to confidential", ambient: "example-sealed",
 			links: []link{{"example-finance", core.SessionCompleted}},
-			kind:  RecordDestWithheld, fenced: []string{"example-finance", "example-sealed"}},
+			kind:  RecordDestAmbient, fenced: []string{"example-finance", "example-sealed"}},
+		{name: "native confidential, linked to two other isolated projects", ambient: "example-finance",
+			links: []link{{"example-legal", core.SessionActive}, {"example-sealed", core.SessionActive}},
+			kind:  RecordDestAmbient, fenced: []string{"example-finance", "example-legal", "example-sealed"}},
+		{name: "native confidential, linked to another confidential and back home", ambient: "example-finance",
+			links: []link{{"example-legal", core.SessionCompleted}, {"example-finance", core.SessionActive}},
+			kind:  RecordDestAmbient, fenced: []string{"example-finance", "example-legal"}},
 		{name: "open, linked to two isolated projects", ambient: "example-ops",
 			links: []link{{"example-finance", core.SessionActive}, {"example-sealed", core.SessionExpired}},
 			kind:  RecordDestWithheld, fenced: []string{"example-finance", "example-sealed"}},

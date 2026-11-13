@@ -477,17 +477,18 @@ type RecordDestKind uint8
 const (
 	// RecordDestAmbient: the conversation's ambient row, as always. A
 	// conversation that holds no isolated project keeps its record there, and
-	// so does one whose only isolated project is its ambient row's own (a
-	// session native to a confidential or sealed project).
+	// so does one native to a confidential or sealed project, whatever it binds
+	// itself to: its home keeps its record.
 	RecordDestAmbient RecordDestKind = iota
 	// RecordDestLink: the explicit session the conversation bound itself to,
-	// with session_start, in the one isolated project it holds, which its
-	// ambient row is not in. The record goes there for the rest of the
-	// conversation, whatever it binds to afterwards.
+	// with session_start, in the one isolated project its links reach from an
+	// ambient row outside every isolated project. The record goes there for the
+	// rest of the conversation, whatever it binds to afterwards.
 	RecordDestLink
-	// RecordDestWithheld: nowhere. The conversation holds more than one
-	// isolated project, so a record written in any one of them could carry
-	// another's content into it, and an open project's would carry them out.
+	// RecordDestWithheld: nowhere. From an ambient row outside every isolated
+	// project, the conversation's links reach more than one, so a record
+	// written in any one of them could carry another's content into it, and
+	// the ambient row's would carry them out.
 	RecordDestWithheld
 )
 
@@ -526,8 +527,9 @@ func (d RecordDestination) Holds(project string) bool {
 //
 // The isolated projects among them decide, judged by the matrix's own
 // predicate (FencesOutbound: a session bound to the project may not write
-// outside it). None: the ambient row, as always. One, the ambient row's own:
-// the ambient row too, so a native session is unchanged. One elsewhere: the
+// outside it). None: the ambient row, as always. The ambient row's own among
+// them: the ambient row, whatever else the links reach, so a conversation
+// native to an isolated project keeps its record at home. Otherwise one: the
 // newest link in it, since a record kept anywhere else would carry that
 // project's content out of it. Two or more: nowhere (RecordDestWithheld).
 //
@@ -575,9 +577,10 @@ func recordDestinationFrom(ctx context.Context, q rowQuerier, d RecordDestinatio
 	d.Kind, d.Session = RecordDestAmbient, core.Session{}
 	switch {
 	case len(d.Fenced) == 0:
+	case d.HasAmbient && d.Holds(d.Ambient.ProjectSlug):
+		// Native to an isolated project: its home keeps its record.
 	case len(d.Fenced) > 1:
 		d.Kind = RecordDestWithheld
-	case d.HasAmbient && d.Ambient.ProjectSlug == d.Fenced[0]:
 	default:
 		// Links are newest first, so this is the newest link into the project.
 		// A slug that names none (isolatedSlugsTx trims, a stored slug never
