@@ -1177,7 +1177,7 @@
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Update a task: change status (open|in_progress|done|dropped), edit title/body, or add dependencies. Moving to done/dropped closes it and unblocks its dependents. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.",
+      "description": "Update a task: change status (open|in_progress|done|dropped), edit title/body, or add or remove dependencies. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.",
       "inputSchema": {
         "properties": {
           "add_depends_on": {
@@ -1198,6 +1198,13 @@
           "project": {
             "description": "reassign the task to another project slug (used when a split moves a project's open work to a child)",
             "type": "string"
+          },
+          "remove_depends_on": {
+            "description": "task ids to remove as blockers (a comma-separated string is also accepted); an id that is not a blocker of this task is a no-op, named back in not_depends_on",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "session": {
             "description": "the acting agent's session (the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session name); needed only to mutate a task you hold a live claim on when several agents are active",
