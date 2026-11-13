@@ -166,10 +166,13 @@ type FeedSession struct {
 	ID          string
 	Name        string
 	ProjectSlug string
-	Active      bool
-	CWD         string
-	Host        string
-	CreatedAt   time.Time
+	// Account is the restricted account that started the session
+	// (core.Session.Account), "" for the owner's.
+	Account   string
+	Active    bool
+	CWD       string
+	Host      string
+	CreatedAt time.Time
 	// UpdatedAt is the session's last activity. For a session that is no
 	// longer active it is when it ended: session_end and the SessionEnd hook
 	// stamp it as they complete the row, and the idle reaper leaves it at the
@@ -182,13 +185,13 @@ type FeedSession struct {
 // after since. Oldest first.
 func FeedSessions(ctx context.Context, db *sql.DB, since, until time.Time) ([]FeedSession, error) {
 	var out []FeedSession
-	err := eachRow(ctx, db, `SELECT id, name, project_slug, status, cwd, host, created_at, updated_at
+	err := eachRow(ctx, db, `SELECT id, name, project_slug, account, status, cwd, host, created_at, updated_at
 		FROM sessions
 		WHERE created_at <= ? AND (status = 'active' OR updated_at >= ?)
 		ORDER BY created_at, id`, []any{core.FormatTime(until), core.FormatTime(since)}, func(rows *sql.Rows) error {
 		var s FeedSession
 		var status, created, updated string
-		if err := rows.Scan(&s.ID, &s.Name, &s.ProjectSlug, &status, &s.CWD, &s.Host, &created, &updated); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.ProjectSlug, &s.Account, &status, &s.CWD, &s.Host, &created, &updated); err != nil {
 			return err
 		}
 		s.Active = core.SessionStatus(status) == core.SessionActive
@@ -212,7 +215,12 @@ func FeedSessions(ctx context.Context, db *sql.DB, since, until time.Time) ([]Fe
 type FeedTask struct {
 	ID          string
 	ProjectSlug string
-	UpdatedAt   time.Time
+	// Account is the restricted account that created the task and
+	// UpdatedAccount the one whose words its text may still carry
+	// (core.Task.Account, UpdatedAccount); "" for the owner.
+	Account        string
+	UpdatedAccount string
+	UpdatedAt      time.Time
 }
 
 // FeedTasks returns the tasks a commit seen at or after since may name: every
@@ -220,7 +228,7 @@ type FeedTask struct {
 // a task and recording its commits both change it). Most recently changed
 // first, at most limit (limit <= 0 is no bound).
 func FeedTasks(ctx context.Context, db *sql.DB, since time.Time, limit int) ([]FeedTask, error) {
-	query := `SELECT id, project_slug, updated_at FROM tasks
+	query := `SELECT id, project_slug, account, updated_account, updated_at FROM tasks
 		WHERE status IN ('open', 'in_progress') OR updated_at >= ?
 		ORDER BY updated_at DESC, id`
 	args := []any{core.FormatTime(since)}
@@ -232,7 +240,7 @@ func FeedTasks(ctx context.Context, db *sql.DB, since time.Time, limit int) ([]F
 	err := eachRow(ctx, db, query, args, func(rows *sql.Rows) error {
 		var t FeedTask
 		var updated string
-		if err := rows.Scan(&t.ID, &t.ProjectSlug, &updated); err != nil {
+		if err := rows.Scan(&t.ID, &t.ProjectSlug, &t.Account, &t.UpdatedAccount, &updated); err != nil {
 			return err
 		}
 		var err error
@@ -244,6 +252,37 @@ func FeedTasks(ctx context.Context, db *sql.DB, since time.Time, limit int) ([]F
 	})
 	if err != nil {
 		return nil, fmt.Errorf("store.FeedTasks: %w", err)
+	}
+	return out, nil
+}
+
+// TaskCommitAccounts maps each of ids (tasks) that a restricted account
+// recorded commits on to that account: the account of the session that made
+// the task's earliest such record (commit_records.recorded_by names the
+// recording call's session). A task whose commits only the owner recorded, or
+// a call with no session, is absent. A session's own commits need no lookup:
+// only the principal that started a session may end it, so they are always
+// its account's.
+func TaskCommitAccounts(ctx context.Context, db *sql.DB, ids []string) (map[string]string, error) {
+	out := map[string]string{}
+	for chunk := range chunked(ids, sqlInChunk) {
+		err := eachRow(ctx, db, `SELECT c.owner_id, s.account FROM commit_records c
+			JOIN sessions s ON s.id = c.recorded_by
+			WHERE c.owner_kind = ? AND c.owner_id IN (`+placeholders(len(chunk))+`) AND s.account <> ''
+			ORDER BY c.owner_id, c.recorded_at, c.commit_id`, append([]any{string(CommitOwnerTask)}, anySlice(chunk)...),
+			func(rows *sql.Rows) error {
+				var task, account string
+				if err := rows.Scan(&task, &account); err != nil {
+					return err
+				}
+				if _, seen := out[task]; !seen {
+					out[task] = account
+				}
+				return nil
+			})
+		if err != nil {
+			return nil, fmt.Errorf("store.TaskCommitAccounts: %w", err)
+		}
 	}
 	return out, nil
 }

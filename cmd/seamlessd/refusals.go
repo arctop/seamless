@@ -16,7 +16,8 @@ import (
 //     a bearer refusal -- the MCP, hook, A2A and console handlers alike);
 //   - a reason a handler noted in the request (access.NoteRefusal): a socket
 //     caller whose OS account peer_auth does not know, a restricted account
-//     at the owner's console.
+//     at the owner's console -- named by the note, since this handler's own
+//     context never held the request's View.
 //
 // The fence refusals inside the MCP tools are recorded where they happen,
 // with the tool and the target project. Off -- the feature's default --
@@ -36,7 +37,7 @@ func refusalWatch(screen *screening.Service, next http.Handler) http.Handler {
 		if reason == "" {
 			return
 		}
-		screen.RecordRefused(ctx, screening.Refusal{Reason: reason, Surface: surfaceOf(r.URL.Path)})
+		screen.RecordRefused(ctx, screening.Refusal{Reason: reason, Surface: surfaceOf(r.URL.Path), Account: note.Account()})
 	})
 }
 

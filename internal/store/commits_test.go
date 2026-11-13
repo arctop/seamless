@@ -209,3 +209,74 @@ func TestFeedSessionsAndTasks_Window(t *testing.T) {
 	require.Len(t, tasks, 1)
 	require.Equal(t, newDone, tasks[0].ID)
 }
+
+// The feed's and the snapshot's reads carry the restricted account behind a
+// session or a task, and "" for the owner's: the account that started a
+// session, the one that created a task or wrote its text, and the one whose
+// session recorded a commit on it.
+func TestFeedReads_CarryTheAccount(t *testing.T) {
+	ctx := context.Background()
+	db := commitsDB(t)
+	at := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	session := func(name, account string) string {
+		t.Helper()
+		id, err := core.NewID()
+		require.NoError(t, err)
+		require.NoError(t, store.CreateSession(ctx, db, core.Session{ID: id, Name: name, ProjectSlug: "demo",
+			Status: core.SessionActive, Account: account, CreatedAt: at, UpdatedAt: at}))
+		return id
+	}
+	agent := session("cc/a1", "_example_agent")
+	peer := session("cc/p1", "_example_peer")
+	owner := session("cc/o1", "")
+
+	procs, err := store.SessionAgentProcesses(ctx, db, []string{agent, owner})
+	require.NoError(t, err)
+	require.Equal(t, store.SessionProcess{Name: "_example_agent:cc/a1", Account: "_example_agent"}, procs[agent])
+	require.Equal(t, store.SessionProcess{Name: "cc/o1"}, procs[owner])
+
+	sessions, err := store.FeedSessions(ctx, db, at.Add(-time.Hour), at.Add(time.Hour))
+	require.NoError(t, err)
+	accounts := map[string]string{}
+	for _, s := range sessions {
+		accounts[s.ID] = s.Account
+	}
+	require.Equal(t, map[string]string{agent: "_example_agent", peer: "_example_peer", owner: ""}, accounts)
+
+	filed := commitTask(t, db, "filed", core.TaskOpen, at)
+	_, err = db.ExecContext(ctx, `UPDATE tasks SET account = ?, updated_account = ? WHERE id = ?`, "_example_agent", "_example_peer", filed)
+	require.NoError(t, err)
+	mixed := commitTask(t, db, "mixed recorders", core.TaskOpen, at)
+	ownerOnly := commitTask(t, db, "the owner's", core.TaskOpen, at)
+	noSession := commitTask(t, db, "recorded with no session", core.TaskOpen, at)
+	for _, rec := range []struct {
+		task, by string
+		commit   string
+		at       time.Time
+	}{
+		{mixed, owner, sha1Of('1'), at},
+		{mixed, peer, sha1Of('2'), at.Add(time.Minute)},
+		{mixed, agent, sha1Of('3'), at.Add(2 * time.Minute)},
+		{ownerOnly, owner, sha1Of('4'), at},
+		{noSession, "", sha1Of('5'), at},
+	} {
+		_, err := store.UpdateTask(ctx, db, rec.task, store.TaskPatch{AddCommits: []string{rec.commit}}, rec.by, rec.at)
+		require.NoError(t, err)
+	}
+
+	tasks, err := store.FeedTasks(ctx, db, at, 0)
+	require.NoError(t, err)
+	byID := map[string]store.FeedTask{}
+	for _, x := range tasks {
+		byID[x.ID] = x
+	}
+	require.Equal(t, "_example_agent", byID[filed].Account)
+	require.Equal(t, "_example_peer", byID[filed].UpdatedAccount)
+	require.Empty(t, byID[mixed].Account)
+	require.Empty(t, byID[mixed].UpdatedAccount, "a recorded commit moves no text label")
+
+	recorders, err := store.TaskCommitAccounts(ctx, db, []string{filed, mixed, ownerOnly, noSession})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{mixed: "_example_peer"}, recorders,
+		"the earliest record a restricted account's session made; the owner's and a sessionless call's name none")
+}

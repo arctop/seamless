@@ -340,8 +340,8 @@ func (f *Feed) checkCursor(ctx context.Context, sp *spool) error {
 	return sp.setCursor(newest, newestID, true)
 }
 
-// sessionsOf resolves the sessions a run of events names: display name and
-// agent process.
+// sessionsOf resolves the sessions a run of events names: display name, agent
+// process and account.
 func (f *Feed) sessionsOf(ctx context.Context, evs []events.Logged) map[string]session {
 	out := map[string]session{}
 	var ids []string
@@ -362,7 +362,7 @@ func (f *Feed) sessionsOf(ctx context.Context, evs []events.Logged) map[string]s
 		return out
 	}
 	for id, p := range procs {
-		out[id] = session{name: p.Name, agentProcess: p.AgentProcess}
+		out[id] = session{name: p.Name, agentProcess: p.AgentProcess, account: p.Account}
 	}
 	return out
 }

@@ -1101,6 +1101,15 @@ you use for them. You cannot start a session of your own under a name beginning
 back on its next call, exactly as yours does - but a call naming another
 account's agent process, or yours, reopens nothing, and a session in a project
 the account no longer reaches stays expired.</p>
+<p><strong>A security monitor can tell its work from yours.</strong> With the
+<a href="../../guides/security-monitor/#what-a-frame-carries">metadata feed</a> on, every frame of its
+requests - tool calls, hooks and A2A, writes, proposals, task changes and refused
+reaches, its refusal at the console's door included - carries <code>actor.account</code>
+<code>_example_agent</code>, and <code>actor.session</code> its qualified session name. The
+<a href="../../guides/security-monitor/#the-commit-matching-snapshot-version-1">commit-matching snapshot</a>
+lists its sessions by that name with <code>account</code>, and gives <code>account</code> to the tasks it
+filed, rewrote or recorded a commit on. Your own frames and entries carry no <code>account</code>
+and look exactly as before.</p>
 <h2 id="verify">Verify</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="c1"># As root or the daemon&#39;s account: the policy, and nothing serve would refuse.</span>
 </span></span><span class="line"><span class="cl">sudo -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd doctor

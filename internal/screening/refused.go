@@ -5,7 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/events"
 )
 
 // Refusal events (write screening, part 2): every refused access becomes an
@@ -15,7 +17,8 @@ import (
 // cutover they are the clearest misuse signal Seamless can give.
 //
 // The event carries codes and names only: the reason, the surface, the tool,
-// the target project. Never the arguments, a key, or what was asked for.
+// the target project, and the restricted account that was refused
+// (events.PayloadAccount). Never the arguments, a key, or what was asked for.
 
 // Refusal reasons.
 const (
@@ -37,12 +40,18 @@ type Refusal struct {
 	Target    string // the project refused, when there is one ("" also means global)
 	SessionID string // the session the call ran in, when bound
 	Project   string // the caller's own scope, when known
+	// Account is the restricted account refused, for a caller whose ctx no
+	// longer carries its View (refusalWatch, which records outside the
+	// handler that refused, from access.RefusalNote); "" takes it from ctx
+	// (access.AccountOf).
+	Account string
 }
 
 // refusalLimiter bounds access.refused: a caller hammering the daemon with a
 // bad key must not be able to fill the event log. Per key (reason, surface,
-// tool, target, session) at most one event per refusalWindow; the refusals
-// in between are counted and ride on the next event as suppressed.
+// tool, target, session, account) at most one event per refusalWindow; the
+// refusals in between are counted and ride on the next event as suppressed --
+// never on another account's.
 type refusalLimiter struct {
 	mu   sync.Mutex
 	keys map[string]*refusalKey
@@ -81,7 +90,10 @@ func (s *Service) RecordRefused(ctx context.Context, r Refusal) {
 	if s == nil || !s.On(ctx) {
 		return
 	}
-	key := r.Reason + "\x00" + r.Surface + "\x00" + r.Tool + "\x00" + r.Target + "\x00" + r.SessionID
+	if r.Account == "" {
+		r.Account = access.AccountOf(ctx)
+	}
+	key := r.Reason + "\x00" + r.Surface + "\x00" + r.Tool + "\x00" + r.Target + "\x00" + r.SessionID + "\x00" + r.Account
 	ok, suppressed := s.refusals.allow(key, s.now())
 	if !ok {
 		return
@@ -95,6 +107,9 @@ func (s *Service) RecordRefused(ctx context.Context, r Refusal) {
 	}
 	if suppressed > 0 {
 		payload["suppressed"] = suppressed
+	}
+	if r.Account != "" {
+		payload[events.PayloadAccount] = r.Account
 	}
 	s.record(ctx, core.Event{Kind: core.EventAccessRefused, SessionID: r.SessionID, ProjectSlug: r.Project, Payload: payload})
 }

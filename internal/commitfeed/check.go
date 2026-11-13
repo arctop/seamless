@@ -59,11 +59,14 @@ func CheckJSON(raw []byte, now time.Time) error {
 	ids := make([]string, 0, len(sessions))
 	for i, x := range sessions {
 		w := fmt.Sprintf("snapshot.sessions[%d]", i)
-		e, err := object(x, w, []string{"id", "repo", "started_at", "ended_at"}, []string{"commits"})
+		e, err := object(x, w, []string{"id", "repo", "started_at", "ended_at"}, []string{"account", "commits"})
 		if err != nil {
 			return err
 		}
-		if err := str(e["id"], w+".id", 128, sessionIDRe); err != nil {
+		if err := str(e["id"], w+".id", maxSessionID, sessionIDRe); err != nil {
+			return err
+		}
+		if err := checkAccount(e["account"], w+".account"); err != nil {
 			return err
 		}
 		if e["repo"] != nil {
@@ -95,11 +98,14 @@ func CheckJSON(raw []byte, now time.Time) error {
 	ids = ids[:0]
 	for i, x := range tasks {
 		w := fmt.Sprintf("snapshot.tasks[%d]", i)
-		e, err := object(x, w, []string{"id"}, []string{"repo", "commits"})
+		e, err := object(x, w, []string{"id"}, []string{"account", "repo", "commits"})
 		if err != nil {
 			return err
 		}
 		if err := str(e["id"], w+".id", 26, ulidRe); err != nil {
+			return err
+		}
+		if err := checkAccount(e["account"], w+".account"); err != nil {
 			return err
 		}
 		if e["repo"] != nil {
@@ -217,6 +223,15 @@ func commitList(v any, where string) error {
 		ids = append(ids, x.(string))
 	}
 	return unique(ids, where)
+}
+
+// checkAccount checks an entry's optional account: absent or null, or a
+// restricted account's name (or its hash) on accountRefRe.
+func checkAccount(v any, where string) error {
+	if v == nil {
+		return nil
+	}
+	return str(v, where, 64, accountRefRe)
 }
 
 // commitRe is a commit id as the contract carries one.

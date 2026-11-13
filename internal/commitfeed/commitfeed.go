@@ -21,24 +21,33 @@
 //	since     the start of what it covers: the window before taken_at, or the
 //	          start of the first session when that is later; a commit seen
 //	          before since is outside it
-//	sessions  [{id, repo, started_at, ended_at, commits?}]: every session live
-//	          at some point since since. id is its name (cc/..., cx/...,
-//	          sess/...), or its ULID when the name is outside the contract's
-//	          pattern; repo the repository its working directory is in, or
-//	          null; ended_at null while it is active, and a session idle past
-//	          the liveness threshold ended at its last activity
-//	tasks     [{id, repo?, commits?}]: every open or in-progress task and every
-//	          task changed since since; repo its project's repository, when
-//	          the project maps exactly one
+//	sessions  [{id, account?, repo, started_at, ended_at, commits?}]: every
+//	          session live at some point since since. id is its name (cc/...,
+//	          cx/..., sess/..., and a restricted account's <account>:<name>),
+//	          or its ULID when the name is outside the contract's pattern;
+//	          account the restricted account that started it; repo the
+//	          repository its working directory is in, or null; ended_at null
+//	          while it is active, and a session idle past the liveness
+//	          threshold ended at its last activity
+//	tasks     [{id, account?, repo?, commits?}]: every open or in-progress
+//	          task and every task changed since since; account the restricted
+//	          account that had a hand in it (taskAccount); repo its project's
+//	          repository, when the project maps exactly one
 //
 // commits are the full lowercase ids recorded on the session or task, oldest
 // first. A repository's name is the last segment of its origin remote
-// (owner/name.git gives name), or of its path when it has no origin.
+// (owner/name.git gives name), or of its path when it has no origin. account
+// is left out for the owner, so a snapshot of the owner's work alone is what
+// it was before restricted accounts existed; a name outside the account
+// pattern is carried as "h:" and 24 hex digits of its SHA-256, the way the
+// metadata feed carries it.
 package commitfeed
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"slices"
@@ -72,8 +81,18 @@ const timeLayout = "2006-01-02T15:04:05.000Z"
 var (
 	// hostRe is the envelope's host: a lowercase host name.
 	hostRe = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$`)
-	// sessionIDRe is a session id the contract accepts: a session's name.
-	sessionIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`)
+	// sessionIDRe is a session id the contract accepts: a session's name, a
+	// restricted account's qualified one ("<account>:<name>", the account
+	// possibly starting with "_") included, at most maxSessionID characters.
+	sessionIDRe = regexp.MustCompile(`^(?:[A-Za-z0-9_][A-Za-z0-9._-]{0,63}:)?[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`)
+	// bareSessionRe is a session name outside any account's namespace: the
+	// pattern every owner's session is listed by.
+	bareSessionRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`)
+	// accountRe is a restricted account's name as the contract carries it.
+	accountRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$`)
+	// accountRefRe is an entry's account: a name on accountRe, or accountRef's
+	// stand-in for a name off it.
+	accountRefRe = regexp.MustCompile(`^(?:[A-Za-z0-9_][A-Za-z0-9._-]{0,63}|h:[0-9a-f]{24})$`)
 	// repoNameRe is a repository name, as a code host allows one.
 	repoNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 	// ulidRe is a task id.
@@ -92,9 +111,11 @@ type Snapshot struct {
 }
 
 // Session is one session: repo and ended_at are always present, null when
-// unknown (repo) or while the session is active (ended_at).
+// unknown (repo) or while the session is active (ended_at). Account is left
+// out for the owner's sessions.
 type Session struct {
 	ID        string   `json:"id"`
+	Account   string   `json:"account,omitempty"`
 	Repo      *string  `json:"repo"`
 	StartedAt string   `json:"started_at"`
 	EndedAt   *string  `json:"ended_at"`
@@ -102,9 +123,10 @@ type Session struct {
 }
 
 // Task is one task: repo is left out when its project names no single
-// repository.
+// repository, account when no restricted account had a hand in it.
 type Task struct {
 	ID      string   `json:"id"`
+	Account string   `json:"account,omitempty"`
 	Repo    *string  `json:"repo,omitempty"`
 	Commits []string `json:"commits,omitempty"`
 }
@@ -200,6 +222,10 @@ func Build(ctx context.Context, db *sql.DB, opts Options) (Snapshot, Trimmed, er
 	if err != nil {
 		return Snapshot{}, trim, fmt.Errorf("commitfeed.Build: %w", err)
 	}
+	recorders, err := store.TaskCommitAccounts(ctx, db, taskIDs)
+	if err != nil {
+		return Snapshot{}, trim, fmt.Errorf("commitfeed.Build: %w", err)
+	}
 
 	snap := Snapshot{
 		Kind: Kind, Version: Version, Host: opts.Host,
@@ -209,15 +235,15 @@ func Build(ctx context.Context, db *sql.DB, opts Options) (Snapshot, Trimmed, er
 	seen := make(map[string]bool, len(sessions))
 	for _, s := range sessions {
 		id := s.Name
-		if !sessionIDRe.MatchString(id) || seen[id] {
+		if !sessionNamed(id, s.Account) || seen[id] {
 			id = s.ID
 		}
-		if !sessionIDRe.MatchString(id) || seen[id] {
+		if !sessionNamed(id, s.Account) || seen[id] {
 			trim.Unnamed++
 			continue
 		}
 		seen[id] = true
-		out := Session{ID: id, StartedAt: s.CreatedAt.UTC().Format(timeLayout)}
+		out := Session{ID: id, Account: accountRef(s.Account), StartedAt: s.CreatedAt.UTC().Format(timeLayout)}
 		if !s.Active {
 			ended := s.UpdatedAt.UTC().Format(timeLayout)
 			out.EndedAt = &ended
@@ -236,7 +262,7 @@ func Build(ctx context.Context, db *sql.DB, opts Options) (Snapshot, Trimmed, er
 		if !ulidRe.MatchString(t.ID) {
 			continue // not an id the contract can name; tasks are minted as ULIDs
 		}
-		out := Task{ID: t.ID, Commits: validCommits(taskCommits[t.ID], &trim)}
+		out := Task{ID: t.ID, Account: accountRef(taskAccount(t, recorders[t.ID])), Commits: validCommits(taskCommits[t.ID], &trim)}
 		if !fence.hides(ctx, t.ProjectSlug) {
 			out.Repo = byProject[t.ProjectSlug]
 		}
@@ -244,6 +270,54 @@ func Build(ctx context.Context, db *sql.DB, opts Options) (Snapshot, Trimmed, er
 	}
 	slices.SortFunc(snap.Tasks, func(a, b Task) int { return strings.Compare(a.ID, b.ID) })
 	return snap, trim, nil
+}
+
+// maxSessionID is the contract's longest session id, a restricted account's
+// qualified name included.
+const maxSessionID = 128
+
+// sessionNamed reports whether a session is listed by its name: one on
+// bareSessionRe, or, for a restricted account's session, its qualified name
+// "<account>:<name>" (access.QualifiedSessionName) with the account on
+// accountRe and the rest on bareSessionRe, within maxSessionID in all. An
+// owner's session is held to bareSessionRe alone, exactly as before.
+func sessionNamed(name, account string) bool {
+	if bareSessionRe.MatchString(name) {
+		return true
+	}
+	rest, qualified := strings.CutPrefix(name, account+":")
+	return account != "" && qualified && len(name) <= maxSessionID && accountRe.MatchString(account) &&
+		bareSessionRe.MatchString(rest)
+}
+
+// taskAccount is the restricted account a task's entry names: the one whose
+// session recorded a commit on it (the earliest such record, recorder), else
+// the one that created it, else the one whose words its text may still carry
+// (updated_account). The first is the one a commit recorded on the task should
+// be attributed to; the other two make a task an account filed or rewrote --
+// one a commit message may name -- read as the account's even before anything
+// is recorded on it. "" when none of them is a restricted account: the owner's
+// task, listed exactly as before.
+func taskAccount(t store.FeedTask, recorder string) string {
+	for _, a := range []string{recorder, t.Account, t.UpdatedAccount} {
+		if a != "" {
+			return a
+		}
+	}
+	return ""
+}
+
+// accountRef is a restricted account as the snapshot names it: its name, or,
+// for a name outside accountRe, "h:" and the first 24 hex digits of the
+// name's SHA-256 -- never dropped, so a restricted account's entry never reads
+// as the owner's. The metadata feed names such an account the same way, so a
+// monitor can follow one across both. "" is the owner.
+func accountRef(account string) string {
+	if account == "" || accountRe.MatchString(account) {
+		return account
+	}
+	sum := sha256.Sum256([]byte(account))
+	return "h:" + hex.EncodeToString(sum[:])[:24]
 }
 
 // settleIdle applies the liveness threshold: a session still marked active

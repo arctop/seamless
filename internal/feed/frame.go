@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/events"
 )
 
 // A frame is one event's metadata, in the ingest contract's shape: who
@@ -40,11 +41,15 @@ type Frame struct {
 	Fields   map[string]any `json:"fields,omitempty"`
 }
 
-// Actor is who acted.
+// Actor is who acted. Account names the restricted local account
+// (peer_auth.restricted) an event was written or attempted by -- the one that
+// started its session, or that the request spoke for -- and is absent for the
+// owner, so the owner's frames are what they were before it existed.
 type Actor struct {
 	Kind    string `json:"kind"`
 	ID      string `json:"id,omitempty"`
 	Session string `json:"session,omitempty"`
+	Account string `json:"account,omitempty"`
 }
 
 // Target is what was acted on.
@@ -73,7 +78,49 @@ var (
 	// sessionNameRe is a session's display name (cc/<id>, cx/<id>, or an
 	// explicit session's name).
 	sessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`)
+	// accountRe is a restricted account's name as a frame carries it: an OS
+	// account name, which may start with "_" (a macOS service account's does).
+	accountRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$`)
+	// accountRefRe is a frame's actor.account: a name on accountRe, or the
+	// hash accountRef stands in for a name off it.
+	accountRefRe = regexp.MustCompile(`^(?:[A-Za-z0-9_][A-Za-z0-9._-]{0,63}|h:[0-9a-f]{24})$`)
 )
+
+// maxSessionName is the contract's longest session name, a restricted
+// account's qualified one included.
+const maxSessionName = 128
+
+// sessionName is a session's name as a frame carries it: the name itself when
+// it is on sessionNameRe, or a restricted account's qualified name,
+// "<account>:<name>" (access.QualifiedSessionName), when the session is that
+// account's, its account is on accountRe and the rest on sessionNameRe, within
+// maxSessionName in all. Anything else is no name a frame carries.
+func sessionName(name, account string) (string, bool) {
+	if sessionNameRe.MatchString(name) {
+		return name, true
+	}
+	rest, qualified := strings.CutPrefix(name, account+":")
+	if account == "" || !qualified || len(name) > maxSessionName || !accountRe.MatchString(account) ||
+		!sessionNameRe.MatchString(rest) {
+		return "", false
+	}
+	return name, true
+}
+
+// accountRef is a restricted account as a frame names it: its name, or, for a
+// name outside accountRe, "h:" and the first 24 hex digits of the name's
+// SHA-256 -- never dropped, so a restricted account's event never reads as the
+// owner's. The hash is not keyed: an account name is no secret from the
+// monitor, which can compute it from its own configuration, and the commit
+// snapshot (which has no key) names such an account the same way. "" is the
+// owner.
+func accountRef(account string) string {
+	if account == "" || accountRe.MatchString(account) {
+		return account
+	}
+	sum := sha256.Sum256([]byte(account))
+	return "h:" + hex.EncodeToString(sum[:])[:24]
+}
 
 // valueType is how a listed payload key's value is checked.
 type valueType int
@@ -190,6 +237,7 @@ var shapes = map[core.EventKind]eventShape{
 type session struct {
 	name         string
 	agentProcess string
+	account      string // the restricted account that started it; "" the owner's
 }
 
 // mapper turns events into frames.
@@ -282,17 +330,29 @@ func (m *mapper) frame(e core.Event, sess session) Frame {
 			f.Outcome = "failure"
 		}
 	}
-	// Who acted: an agent's session, the owner at the console, or the daemon.
+	// Who acted: an agent's session, a restricted account's request with no
+	// session, the owner at the console, or the daemon. A restricted account is
+	// the session's (a session belongs to the account that started it), else
+	// the one the event's request spoke for.
+	account := sess.account
+	if account == "" {
+		// The recorder names the account a request spoke for
+		// (events.PayloadAccount); it reaches the actor, never the fields.
+		account, _ = p[events.PayloadAccount].(string)
+	}
 	switch {
 	case e.SessionID != "":
-		a := &Actor{Kind: "agent"}
-		if sessionNameRe.MatchString(sess.name) {
-			a.Session = sess.name
+		a := &Actor{Kind: "agent", Account: accountRef(account)}
+		if name, ok := sessionName(sess.name, account); ok {
+			a.Session = name
 		}
 		if tokenRe.MatchString(sess.agentProcess) || sessionNameRe.MatchString(sess.agentProcess) {
 			a.ID = sess.agentProcess
 		}
 		f.Actor = a
+	case account != "":
+		// Never the owner, whatever the payload says of who acted.
+		f.Actor = &Actor{Kind: "agent", Account: accountRef(account)}
 	case p["by"] == "owner" || p["by"] == "console":
 		f.Actor = &Actor{Kind: "user", ID: "owner"}
 	default:
@@ -458,7 +518,8 @@ func (f Frame) validate() error {
 		return fmt.Errorf("activity %q", f.Activity)
 	}
 	if f.Actor != nil {
-		if !slices.Contains(frameActorKinds, f.Actor.Kind) || len(f.Actor.ID) > 128 || len(f.Actor.Session) > 128 {
+		if !slices.Contains(frameActorKinds, f.Actor.Kind) || len(f.Actor.ID) > 128 || len(f.Actor.Session) > maxSessionName ||
+			(f.Actor.Account != "" && !accountRefRe.MatchString(f.Actor.Account)) {
 			return fmt.Errorf("actor")
 		}
 	}

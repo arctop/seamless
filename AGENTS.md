@@ -794,6 +794,16 @@ Part 2 of the same feature (migration 029, `internal/screening/corpus.go`,
   new event payload key reaches the feed only by being listed there. The feed
   tails the event log by rowid (not by time, not through the lossy live
   fan-out) from a cursor in its spool.
+- **A restricted account is the actor's, never a field.** `events.Recorder.Record`
+  and `RecordOnce` stamp `events.PayloadAccount` from `access.AccountOf(ctx)` on
+  every event a restricted account's request records, on every surface, unless
+  the payload already names one (a copy; the caller's map is never written); the
+  feed reads it, or the event's session account, into `actor.account`. Record
+  with the request's ctx (`context.WithoutCancel` keeps it), never a fresh
+  `context.Background()`, or the account is lost. A refusal recorded outside the
+  handler that made it (`refusalWatch`) takes the account from the
+  `access.RefusalNote` (`Refusal.Account`). The owner's events and frames never
+  carry it (`TestFrames_OwnerGolden`).
 
 ### Commit records (`internal/commitfeed`)
 
@@ -821,6 +831,11 @@ Guide: docs-src/guides/security-monitor.md.
   row still active but idle past `gardener.session_idle_minutes` has ended
   there too (`settleIdle`), so a dead agent's session never reads as open
   while the reaper is off.
+- **The owner's entries are byte-identical.** `account` (a session's starter; a
+  task's `taskAccount`: recorder, then creator, then text author) and the
+  qualified `<account>:<name>` id appear only for a restricted account; an
+  owner's session is held to the bare pattern (`sessionNamed`).
+  `TestBuild_OwnerGolden` pins the shape.
 
 ### FTS5 and LIKE escaping (`internal/store`)
 

@@ -39,6 +39,12 @@ Each event becomes one **frame**, and frames travel in **batches** to the
 **consumer**, the program listening on the socket. The version is the `v` on
 every batch header, limits answer and receipt, and it is 1.
 
+Within a version a frame may gain an optional name, one that appears only where
+it applies, as `actor.account` did for
+[restricted accounts](/guides/peer-auth/#restricted-local-accounts). A consumer
+ignores a name it does not know. Removing or renaming a name, or changing what
+one holds, takes a new version.
+
 ### What a frame carries
 
 One JSON object per line on the wire, wrapped here to read:
@@ -61,7 +67,7 @@ One JSON object per line on the wire, wrapped here to read:
 | `activity` | The event's kind as one word: `memory.held` becomes `memory_held` |
 | `severity` | `info`, `low`, `medium` or `high` |
 | `outcome` | `success`, `failure`, `blocked` or `unknown` |
-| `actor` | Who acted: `kind` `agent`, with `session` the session's name and `id` its agent process (pid and start time); `kind` `user` with `id` `owner`; or `kind` `system` with `id` `seamless` |
+| `actor` | Who acted: `kind` `agent`, with `session` the session's name and `id` its agent process (pid and start time); `kind` `user` with `id` `owner`; or `kind` `system` with `id` `seamless`. `account` names a restricted account (below) |
 | `target.system` | `seamless` |
 | `target.asset` | The project: its slug, `global` for the global scope, or a keyed hash (below) |
 | `target.path_class` | The item kind, when the event has one |
@@ -90,6 +96,39 @@ Beside those, an event's frame has `event_id` and, when the event names an item,
 Nothing else reaches a frame, and a value that does not fit its pattern (free
 text where a code belongs) is dropped. So a frame never carries arguments,
 results, bodies, prompts, queries, names or titles.
+
+**A restricted account names itself.** Every event recorded for a
+[restricted local account](/guides/peer-auth/#restricted-local-accounts)'s
+request carries `actor.account`, the account's name, whatever the surface (its
+agents' tool calls, hooks and A2A recalls) and whatever the event: writes, held
+proposals, task changes, session starts and ends, and refused reaches, its
+refusal at the console's door included. In one of its sessions `session` is the
+session's qualified name (`_example_agent:cc/...`, the name the console and
+`seam` show); with no session bound the actor is `kind` `agent` with `account`
+alone. An event filed under one of its sessions names the account even when
+you caused it, as when you release or discard one of its proposals (those
+frames carry `by` `owner` or `released_hold_id` in `fields`):
+
+```json
+{"time": "2026-11-12T09:00:00.000Z", "host": "build-host",
+ "class": "auth", "activity": "access_refused", "severity": "medium", "outcome": "blocked",
+ "actor": {"kind": "agent", "session": "_example_agent:cc/0a1b2c3d-4e5f6a7b", "account": "_example_agent"},
+ "target": {"system": "seamless", "asset": "myapp"},
+ "fields": {"event_id": "01KX0000000000000000000R01", "reason": "peer.unreachable", "source_seq": 4813,
+            "surface": "mcp", "target_project": "h:401a93d78f42331c657f8eea", "tool": "memory_read"}}
+```
+
+Your own events never carry `account`, so your frames are exactly as they
+were. An account's name is 1 to
+64 of `A-Z a-z 0-9 . _ -`, not starting with `.` or `-`. A name outside that
+pattern travels as `h:` and the first 24 hex digits of the name's SHA-256, so
+the event still names the account. The hash is not keyed, so the monitor can
+compute it from its own configuration, and the snapshot below names such an
+account the same way. A session's name is 1 to 128 of
+`A-Z a-z 0-9 . _ : / -` starting with a letter or digit, or, for a restricted
+account's session, `<account>:` followed by such a name, 128 characters in
+all. A session name outside both is left out; the frame still names the
+account.
 
 **A fenced project travels as a keyed hash.** A confidential or sealed project,
 or one locked under [peer_auth](/guides/peer-auth/), appears only as `h:` and 24
@@ -241,11 +280,16 @@ is the contract's name; this file is not the metadata feed.)
      "ended_at": "2026-11-01T10:30:00.000Z",
      "commits": ["1111111111111111111111111111111111111111"]},
     {"id": "cx/0f0f0f0f-1e1e1e1e", "repo": null, "started_at": "2026-11-02T01:00:00.000Z",
-     "ended_at": null}
+     "ended_at": null},
+    {"id": "_example_agent:cc/5a6b7c8d-9e0f1a2b", "account": "_example_agent", "repo": "myapp",
+     "started_at": "2026-11-01T11:00:00.000Z", "ended_at": "2026-11-01T11:40:00.000Z",
+     "commits": ["3333333333333333333333333333333333333333"]}
   ],
   "tasks": [
     {"id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "repo": "myapp",
-     "commits": ["2222222222222222222222222222222222222222222222222222222222222222"]}
+     "commits": ["2222222222222222222222222222222222222222222222222222222222222222"]},
+    {"id": "01ARZ3NDEKTSV4RRFFQ69G5FAW", "account": "_example_agent", "repo": "myapp",
+     "commits": ["4444444444444444444444444444444444444444"]}
   ]
 }
 ```
@@ -255,10 +299,12 @@ is the contract's name; this file is not the metadata feed.)
 | `host` | The daemon's host name, lowercase |
 | `taken_at` | When it was built, UTC to the millisecond |
 | `since` | The start of what it covers: `snapshot_window` before `taken_at`, or the start of the first session when that is later. A commit seen before it is outside the snapshot |
-| `sessions[].id` | The session's name - the `cc/...` or `cx/...` on a briefing's `Seam session` line, or a `sess/*` name - so a commit message that mentions it matches. A name outside the contract's pattern, or one another listed session already took, is replaced by the session's ULID |
+| `sessions[].id` | The session's name - the `cc/...` or `cx/...` on a briefing's `Seam session` line, or a `sess/*` name, and for a restricted account's session its qualified name (`_example_agent:cc/...`) - so a commit message that mentions it matches. A name outside the contract's pattern, or one another listed session already took, is replaced by the session's ULID |
+| `sessions[].account` | The restricted account that started the session; left out for yours |
 | `sessions[].repo` | The repository the session's working directory is in, or `null` |
 | `sessions[].started_at`, `ended_at` | When it started, and when it ended - `null` while it is active. A session idle longer than `gardener.session_idle_minutes` has ended at its last activity, the end the idle reaper gives it: never at the moment it was reaped, and whether or not the reaper runs |
 | `tasks[].id` | A task's ULID, for a commit message that names one |
+| `tasks[].account` | The restricted account behind the task: the one whose session recorded one of its commits (the earliest such record), else the one that created it, else the one whose words its text carries. Left out when none is, as for your own tasks |
 | `tasks[].repo` | Its project's repository, when the project maps exactly one; left out otherwise |
 | `commits` | The ids recorded on the session or task, oldest first; left out when there are none |
 
@@ -272,12 +318,27 @@ least recently are left out.
 It carries identifiers and times only: never a finding, a title, a body, a
 path or a project slug.
 
+**Names and patterns.** A session id is 1 to 128 of `A-Z a-z 0-9 . _ : / -`
+starting with a letter or digit, or, for a restricted account's session, an
+account name and `:` followed by such a name, 128 characters in all. An
+`account` is the name, 1 to 64 of `A-Z a-z 0-9 . _ -` not starting with `.` or
+`-`, or, for a name outside that, `h:` and the first 24 hex digits of the name's
+SHA-256, as the metadata feed sends it.
+
+**`account` within version 1.** `account`, and session ids in the qualified
+form, appear only for sessions and tasks of a restricted account, so the
+snapshot of an install that lists none under `peer_auth.restricted` (the
+default) is exactly as it was. The check below holds every object to its
+names, and a consumer that does the same must accept `account` as optional:
+one that predates it refuses a snapshot listing a restricted account's work.
+
 The daemon writes the snapshot as it starts and every `snapshot_interval` after.
 Each write builds the whole document, checks it against the contract, writes it
 beside the file and renames it into place, so a reader never sees half of one.
-The check holds it to exactly the names above, each value of its type and on its
-pattern, no list past its bound, and no session id, task id or commit in one
-entry given twice. A snapshot that would break the contract is not written, and
+The check holds it to exactly the names above (the optional ones - `account`,
+`commits` and a task's `repo` - may be absent or null), each value of its type
+and on its pattern, no list past its bound, and no session id, task id or
+commit in one entry given twice. A snapshot that would break the contract is not written, and
 the last good file stays.
 
 ### Which repository a session is in
@@ -392,6 +453,10 @@ themselves live in the record, never in an event.
   session that ends through the client's own hook (most Claude Code sessions)
   records no commits unless the agent called `session_end` with them; its
   times and repository still reach the snapshot.
+- **A task's recorder needs a session.** The snapshot learns who recorded a
+  task's commit from the session the recording call ran in. A commit a
+  restricted account records on a task with no session bound names no recorder,
+  so that task's `account` falls back to whoever created or rewrote it.
 - **The snapshot is the record's view, not git's.** Commits that never reached a
   session's or task's record are matched, if at all, by the monitor's own
   rules - a message naming a listed session or task, or a commit time inside

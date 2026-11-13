@@ -1,8 +1,9 @@
 // Package feed is write screening's metadata feed: a subscriber on the event
 // log that turns every event into a metadata frame -- kind, time, session,
-// agent process, project (an isolated or sealed one as a keyed hash), item
-// kind, sizes and verdict codes -- and delivers the frames to a configured
-// Unix socket, spooling them on disk while the consumer is down.
+// agent process, the restricted account that acted (none for the owner),
+// project (an isolated or sealed one as a keyed hash), item kind, sizes and
+// verdict codes -- and delivers the frames to a configured Unix socket,
+// spooling them on disk while the consumer is down.
 //
 // It never writes an event's arguments, results, bodies, prompts, queries or
 // names: a frame is built from an allowlist of metadata keys (frame.go), and

@@ -11,10 +11,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
@@ -180,8 +182,39 @@ func (r *Recorder) publish(e core.Event) {
 	r.mu.Unlock()
 }
 
+// PayloadAccount is the payload key naming the restricted local account
+// (peer_auth.restricted) whose request recorded an event. Record and RecordOnce
+// set it (stampAccount), on every surface and for every kind, so the metadata
+// feed (internal/feed) can name the account on a frame's actor whether or not a
+// session was bound. No other payload uses the key.
+const PayloadAccount = "account"
+
+// stampAccount returns payload with PayloadAccount set to the restricted
+// account the request in ctx speaks for (access.AccountOf). For every other
+// caller -- the owner, background work with no View, peer_auth off -- and for
+// a payload that already names one (a refusal recorded where ctx no longer
+// holds the View), it returns payload itself, so those events are exactly what
+// they were. It never writes into the caller's map: the caller may still hold
+// it.
+func stampAccount(ctx context.Context, payload map[string]any) map[string]any {
+	acct := access.AccountOf(ctx)
+	if acct == "" {
+		return payload
+	}
+	if named, _ := payload[PayloadAccount].(string); named != "" {
+		return payload
+	}
+	out := maps.Clone(payload)
+	if out == nil {
+		out = make(map[string]any, 1)
+	}
+	out[PayloadAccount] = acct
+	return out
+}
+
 // Record appends an event, stamping a ULID id and UTC timestamp when absent and
-// serializing Payload to JSON. It returns the stored event's id. A non-fatal
+// serializing Payload to JSON. A restricted account's request names the account
+// in the payload (stampAccount). It returns the stored event's id. A non-fatal
 // logging call site may ignore the id but should not ignore the error.
 func (r *Recorder) Record(ctx context.Context, e core.Event) (string, error) {
 	if e.Kind == "" {
@@ -198,6 +231,7 @@ func (r *Recorder) Record(ctx context.Context, e core.Event) (string, error) {
 		e.TS = time.Now().UTC()
 	}
 
+	e.Payload = stampAccount(ctx, e.Payload)
 	payload := "{}"
 	if len(e.Payload) > 0 {
 		b, err := json.Marshal(e.Payload)
@@ -226,7 +260,7 @@ func (r *Recorder) Record(ctx context.Context, e core.Event) (string, error) {
 // mark. The guard and the insert are a single statement, so two concurrent
 // recorders cannot both mint the moment; recorded is false when the latch had
 // already been set, and subscribers see the event only when it actually
-// landed.
+// landed. Like Record, it names a restricted account (stampAccount).
 func (r *Recorder) RecordOnce(ctx context.Context, e core.Event) (id string, recorded bool, err error) {
 	if e.Kind == "" {
 		return "", false, fmt.Errorf("events.RecordOnce: empty kind")
@@ -244,6 +278,7 @@ func (r *Recorder) RecordOnce(ctx context.Context, e core.Event) (id string, rec
 	if e.TS.IsZero() {
 		e.TS = time.Now().UTC()
 	}
+	e.Payload = stampAccount(ctx, e.Payload)
 	payload := "{}"
 	if len(e.Payload) > 0 {
 		b, err := json.Marshal(e.Payload)

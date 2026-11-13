@@ -877,6 +877,16 @@ back on its next call, exactly as yours does - but a call naming another
 account's agent process, or yours, reopens nothing, and a session in a project
 the account no longer reaches stays expired.
 
+**A security monitor can tell its work from yours.** With the
+[metadata feed](https://thereisnospoon.org/docs/guides/security-monitor/#what-a-frame-carries) on, every frame of its
+requests - tool calls, hooks and A2A, writes, proposals, task changes and refused
+reaches, its refusal at the console's door included - carries `actor.account`
+`_example_agent`, and `actor.session` its qualified session name. The
+[commit-matching snapshot](https://thereisnospoon.org/docs/guides/security-monitor/#the-commit-matching-snapshot-version-1)
+lists its sessions by that name with `account`, and gives `account` to the tasks it
+filed, rewrote or recorded a commit on. Your own frames and entries carry no `account`
+and look exactly as before.
+
 ## Verify
 
 ```bash

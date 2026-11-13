@@ -302,6 +302,11 @@ landed, from a cursor it keeps in the spool, so a burst never loses an event.
 Each event becomes one <strong>frame</strong>, and frames travel in <strong>batches</strong> to the
 <strong>consumer</strong>, the program listening on the socket. The version is the <code>v</code> on
 every batch header, limits answer and receipt, and it is 1.</p>
+<p>Within a version a frame may gain an optional name, one that appears only where
+it applies, as <code>actor.account</code> did for
+<a href="../../guides/peer-auth/#restricted-local-accounts">restricted accounts</a>. A consumer
+ignores a name it does not know. Removing or renaming a name, or changing what
+one holds, takes a new version.</p>
 <h3 id="what-a-frame-carries">What a frame carries</h3>
 <p>One JSON object per line on the wire, wrapped here to read:</p>
 <div class="code-block" data-lang="json"><pre class="chroma"><code><span class="line"><span class="cl"><span class="p">{</span><span class="nt">&#34;time&#34;</span><span class="p">:</span> <span class="s2">&#34;2026-11-02T01:16:54.977Z&#34;</span><span class="p">,</span> <span class="nt">&#34;host&#34;</span><span class="p">:</span> <span class="s2">&#34;build-host&#34;</span><span class="p">,</span>
@@ -347,7 +352,7 @@ every batch header, limits answer and receipt, and it is 1.</p>
 </tr>
 <tr>
 <td><code>actor</code></td>
-<td>Who acted: <code>kind</code> <code>agent</code>, with <code>session</code> the session's name and <code>id</code> its agent process (pid and start time); <code>kind</code> <code>user</code> with <code>id</code> <code>owner</code>; or <code>kind</code> <code>system</code> with <code>id</code> <code>seamless</code></td>
+<td>Who acted: <code>kind</code> <code>agent</code>, with <code>session</code> the session's name and <code>id</code> its agent process (pid and start time); <code>kind</code> <code>user</code> with <code>id</code> <code>owner</code>; or <code>kind</code> <code>system</code> with <code>id</code> <code>seamless</code>. <code>account</code> names a restricted account (below)</td>
 </tr>
 <tr>
 <td><code>target.system</code></td>
@@ -390,6 +395,35 @@ must fit:</p>
 <p>Nothing else reaches a frame, and a value that does not fit its pattern (free
 text where a code belongs) is dropped. So a frame never carries arguments,
 results, bodies, prompts, queries, names or titles.</p>
+<p><strong>A restricted account names itself.</strong> Every event recorded for a
+<a href="../../guides/peer-auth/#restricted-local-accounts">restricted local account</a>'s
+request carries <code>actor.account</code>, the account's name, whatever the surface (its
+agents' tool calls, hooks and A2A recalls) and whatever the event: writes, held
+proposals, task changes, session starts and ends, and refused reaches, its
+refusal at the console's door included. In one of its sessions <code>session</code> is the
+session's qualified name (<code>_example_agent:cc/...</code>, the name the console and
+<code>seam</code> show); with no session bound the actor is <code>kind</code> <code>agent</code> with <code>account</code>
+alone. An event filed under one of its sessions names the account even when
+you caused it, as when you release or discard one of its proposals (those
+frames carry <code>by</code> <code>owner</code> or <code>released_hold_id</code> in <code>fields</code>):</p>
+<div class="code-block" data-lang="json"><pre class="chroma"><code><span class="line"><span class="cl"><span class="p">{</span><span class="nt">&#34;time&#34;</span><span class="p">:</span> <span class="s2">&#34;2026-11-12T09:00:00.000Z&#34;</span><span class="p">,</span> <span class="nt">&#34;host&#34;</span><span class="p">:</span> <span class="s2">&#34;build-host&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl"> <span class="nt">&#34;class&#34;</span><span class="p">:</span> <span class="s2">&#34;auth&#34;</span><span class="p">,</span> <span class="nt">&#34;activity&#34;</span><span class="p">:</span> <span class="s2">&#34;access_refused&#34;</span><span class="p">,</span> <span class="nt">&#34;severity&#34;</span><span class="p">:</span> <span class="s2">&#34;medium&#34;</span><span class="p">,</span> <span class="nt">&#34;outcome&#34;</span><span class="p">:</span> <span class="s2">&#34;blocked&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl"> <span class="nt">&#34;actor&#34;</span><span class="p">:</span> <span class="p">{</span><span class="nt">&#34;kind&#34;</span><span class="p">:</span> <span class="s2">&#34;agent&#34;</span><span class="p">,</span> <span class="nt">&#34;session&#34;</span><span class="p">:</span> <span class="s2">&#34;_example_agent:cc/0a1b2c3d-4e5f6a7b&#34;</span><span class="p">,</span> <span class="nt">&#34;account&#34;</span><span class="p">:</span> <span class="s2">&#34;_example_agent&#34;</span><span class="p">},</span>
+</span></span><span class="line"><span class="cl"> <span class="nt">&#34;target&#34;</span><span class="p">:</span> <span class="p">{</span><span class="nt">&#34;system&#34;</span><span class="p">:</span> <span class="s2">&#34;seamless&#34;</span><span class="p">,</span> <span class="nt">&#34;asset&#34;</span><span class="p">:</span> <span class="s2">&#34;myapp&#34;</span><span class="p">},</span>
+</span></span><span class="line"><span class="cl"> <span class="nt">&#34;fields&#34;</span><span class="p">:</span> <span class="p">{</span><span class="nt">&#34;event_id&#34;</span><span class="p">:</span> <span class="s2">&#34;01KX0000000000000000000R01&#34;</span><span class="p">,</span> <span class="nt">&#34;reason&#34;</span><span class="p">:</span> <span class="s2">&#34;peer.unreachable&#34;</span><span class="p">,</span> <span class="nt">&#34;source_seq&#34;</span><span class="p">:</span> <span class="mi">4813</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="nt">&#34;surface&#34;</span><span class="p">:</span> <span class="s2">&#34;mcp&#34;</span><span class="p">,</span> <span class="nt">&#34;target_project&#34;</span><span class="p">:</span> <span class="s2">&#34;h:401a93d78f42331c657f8eea&#34;</span><span class="p">,</span> <span class="nt">&#34;tool&#34;</span><span class="p">:</span> <span class="s2">&#34;memory_read&#34;</span><span class="p">}}</span>
+</span></span></code></pre></div>
+<p>Your own events never carry <code>account</code>, so your frames are exactly as they
+were. An account's name is 1 to
+64 of <code>A-Z a-z 0-9 . _ -</code>, not starting with <code>.</code> or <code>-</code>. A name outside that
+pattern travels as <code>h:</code> and the first 24 hex digits of the name's SHA-256, so
+the event still names the account. The hash is not keyed, so the monitor can
+compute it from its own configuration, and the snapshot below names such an
+account the same way. A session's name is 1 to 128 of
+<code>A-Z a-z 0-9 . _ : / -</code> starting with a letter or digit, or, for a restricted
+account's session, <code>&lt;account&gt;:</code> followed by such a name, 128 characters in
+all. A session name outside both is left out; the frame still names the
+account.</p>
 <p><strong>A fenced project travels as a keyed hash.</strong> A confidential or sealed project,
 or one locked under <a href="../../guides/peer-auth/">peer_auth</a>, appears only as <code>h:</code> and 24
 hex characters, in <code>target.asset</code> and in <code>target_project</code> alike. The key is
@@ -707,11 +741,16 @@ is the contract's name; this file is not the metadata feed.)</p>
 </span></span><span class="line"><span class="cl">     <span class="nt">&#34;ended_at&#34;</span><span class="p">:</span> <span class="s2">&#34;2026-11-01T10:30:00.000Z&#34;</span><span class="p">,</span>
 </span></span><span class="line"><span class="cl">     <span class="nt">&#34;commits&#34;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&#34;1111111111111111111111111111111111111111&#34;</span><span class="p">]},</span>
 </span></span><span class="line"><span class="cl">    <span class="p">{</span><span class="nt">&#34;id&#34;</span><span class="p">:</span> <span class="s2">&#34;cx/0f0f0f0f-1e1e1e1e&#34;</span><span class="p">,</span> <span class="nt">&#34;repo&#34;</span><span class="p">:</span> <span class="kc">null</span><span class="p">,</span> <span class="nt">&#34;started_at&#34;</span><span class="p">:</span> <span class="s2">&#34;2026-11-02T01:00:00.000Z&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">     <span class="nt">&#34;ended_at&#34;</span><span class="p">:</span> <span class="kc">null</span><span class="p">}</span>
+</span></span><span class="line"><span class="cl">     <span class="nt">&#34;ended_at&#34;</span><span class="p">:</span> <span class="kc">null</span><span class="p">},</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span><span class="nt">&#34;id&#34;</span><span class="p">:</span> <span class="s2">&#34;_example_agent:cc/5a6b7c8d-9e0f1a2b&#34;</span><span class="p">,</span> <span class="nt">&#34;account&#34;</span><span class="p">:</span> <span class="s2">&#34;_example_agent&#34;</span><span class="p">,</span> <span class="nt">&#34;repo&#34;</span><span class="p">:</span> <span class="s2">&#34;myapp&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">     <span class="nt">&#34;started_at&#34;</span><span class="p">:</span> <span class="s2">&#34;2026-11-01T11:00:00.000Z&#34;</span><span class="p">,</span> <span class="nt">&#34;ended_at&#34;</span><span class="p">:</span> <span class="s2">&#34;2026-11-01T11:40:00.000Z&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">     <span class="nt">&#34;commits&#34;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&#34;3333333333333333333333333333333333333333&#34;</span><span class="p">]}</span>
 </span></span><span class="line"><span class="cl">  <span class="p">],</span>
 </span></span><span class="line"><span class="cl">  <span class="nt">&#34;tasks&#34;</span><span class="p">:</span> <span class="p">[</span>
 </span></span><span class="line"><span class="cl">    <span class="p">{</span><span class="nt">&#34;id&#34;</span><span class="p">:</span> <span class="s2">&#34;01ARZ3NDEKTSV4RRFFQ69G5FAV&#34;</span><span class="p">,</span> <span class="nt">&#34;repo&#34;</span><span class="p">:</span> <span class="s2">&#34;myapp&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">     <span class="nt">&#34;commits&#34;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&#34;2222222222222222222222222222222222222222222222222222222222222222&#34;</span><span class="p">]}</span>
+</span></span><span class="line"><span class="cl">     <span class="nt">&#34;commits&#34;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&#34;2222222222222222222222222222222222222222222222222222222222222222&#34;</span><span class="p">]},</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span><span class="nt">&#34;id&#34;</span><span class="p">:</span> <span class="s2">&#34;01ARZ3NDEKTSV4RRFFQ69G5FAW&#34;</span><span class="p">,</span> <span class="nt">&#34;account&#34;</span><span class="p">:</span> <span class="s2">&#34;_example_agent&#34;</span><span class="p">,</span> <span class="nt">&#34;repo&#34;</span><span class="p">:</span> <span class="s2">&#34;myapp&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">     <span class="nt">&#34;commits&#34;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&#34;4444444444444444444444444444444444444444&#34;</span><span class="p">]}</span>
 </span></span><span class="line"><span class="cl">  <span class="p">]</span>
 </span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></div>
@@ -738,7 +777,11 @@ is the contract's name; this file is not the metadata feed.)</p>
 </tr>
 <tr>
 <td><code>sessions[].id</code></td>
-<td>The session's name - the <code>cc/...</code> or <code>cx/...</code> on a briefing's <code>Seam session</code> line, or a <code>sess/*</code> name - so a commit message that mentions it matches. A name outside the contract's pattern, or one another listed session already took, is replaced by the session's ULID</td>
+<td>The session's name - the <code>cc/...</code> or <code>cx/...</code> on a briefing's <code>Seam session</code> line, or a <code>sess/*</code> name, and for a restricted account's session its qualified name (<code>_example_agent:cc/...</code>) - so a commit message that mentions it matches. A name outside the contract's pattern, or one another listed session already took, is replaced by the session's ULID</td>
+</tr>
+<tr>
+<td><code>sessions[].account</code></td>
+<td>The restricted account that started the session; left out for yours</td>
 </tr>
 <tr>
 <td><code>sessions[].repo</code></td>
@@ -751,6 +794,10 @@ is the contract's name; this file is not the metadata feed.)</p>
 <tr>
 <td><code>tasks[].id</code></td>
 <td>A task's ULID, for a commit message that names one</td>
+</tr>
+<tr>
+<td><code>tasks[].account</code></td>
+<td>The restricted account behind the task: the one whose session recorded one of its commits (the earliest such record), else the one that created it, else the one whose words its text carries. Left out when none is, as for your own tasks</td>
 </tr>
 <tr>
 <td><code>tasks[].repo</code></td>
@@ -771,12 +818,25 @@ so the snapshot still covers everything it claims to, and the tasks changed
 least recently are left out.</p>
 <p>It carries identifiers and times only: never a finding, a title, a body, a
 path or a project slug.</p>
+<p><strong>Names and patterns.</strong> A session id is 1 to 128 of <code>A-Z a-z 0-9 . _ : / -</code>
+starting with a letter or digit, or, for a restricted account's session, an
+account name and <code>:</code> followed by such a name, 128 characters in all. An
+<code>account</code> is the name, 1 to 64 of <code>A-Z a-z 0-9 . _ -</code> not starting with <code>.</code> or
+<code>-</code>, or, for a name outside that, <code>h:</code> and the first 24 hex digits of the name's
+SHA-256, as the metadata feed sends it.</p>
+<p><strong><code>account</code> within version 1.</strong> <code>account</code>, and session ids in the qualified
+form, appear only for sessions and tasks of a restricted account, so the
+snapshot of an install that lists none under <code>peer_auth.restricted</code> (the
+default) is exactly as it was. The check below holds every object to its
+names, and a consumer that does the same must accept <code>account</code> as optional:
+one that predates it refuses a snapshot listing a restricted account's work.</p>
 <p>The daemon writes the snapshot as it starts and every <code>snapshot_interval</code> after.
 Each write builds the whole document, checks it against the contract, writes it
 beside the file and renames it into place, so a reader never sees half of one.
-The check holds it to exactly the names above, each value of its type and on its
-pattern, no list past its bound, and no session id, task id or commit in one
-entry given twice. A snapshot that would break the contract is not written, and
+The check holds it to exactly the names above (the optional ones - <code>account</code>,
+<code>commits</code> and a task's <code>repo</code> - may be absent or null), each value of its type
+and on its pattern, no list past its bound, and no session id, task id or
+commit in one entry given twice. A snapshot that would break the contract is not written, and
 the last good file stays.</p>
 <h3 id="which-repository-a-session-is-in">Which repository a session is in</h3>
 <p>A session's repository is found from its working directory through the repo
@@ -871,6 +931,10 @@ per-call bound keeps an agent from vouching for a whole history in one paste.</l
 session that ends through the client's own hook (most Claude Code sessions)
 records no commits unless the agent called <code>session_end</code> with them; its
 times and repository still reach the snapshot.</li>
+<li><strong>A task's recorder needs a session.</strong> The snapshot learns who recorded a
+task's commit from the session the recording call ran in. A commit a
+restricted account records on a task with no session bound names no recorder,
+so that task's <code>account</code> falls back to whoever created or rewrote it.</li>
 <li><strong>The snapshot is the record's view, not git's.</strong> Commits that never reached a
 session's or task's record are matched, if at all, by the monitor's own
 rules - a message naming a listed session or task, or a commit time inside
