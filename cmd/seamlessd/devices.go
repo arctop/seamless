@@ -118,8 +118,13 @@ func devicePairingChecks(ctx context.Context, cfg config.Config, db *sql.DB) []c
 	}
 	out := []check{{statusOK, name, how}}
 	if !cfg.TLSEnabled() {
-		out = append(out, check{statusWarn, name, "no TLS on this listener: a relay cannot pair (it needs a client " +
-			"certificate), and a key device's key crosses the network unencrypted; set tls.cert_file and tls.key_file"})
+		line := "no TLS on this listener: a relay cannot pair (it needs a client certificate), and a pairing over plain " +
+			"http from another computer is refused, since its code and a key device's key would cross the network in the clear"
+		if (devices.ServerFacts{URL: cfg.ServerURL()}).PairingNeedsTLS() {
+			line += "; server_url is plain http, so no other computer can pair here, and no code is minted"
+		}
+		out = append(out, check{statusWarn, name, line + "; give it TLS with seamlessd setup's address step, or set " +
+			"tls.cert_file and tls.key_file"})
 	} else if _, err := certFingerprintFile(cfg.TLS.CertFile); err != nil {
 		out = append(out, check{statusFail, name, err.Error()})
 	}
@@ -139,22 +144,31 @@ func devicePairingChecks(ctx context.Context, cfg config.Config, db *sql.DB) []c
 
 // serverPairingClosing writes what a Client needs from this Server: its
 // address, its certificate's fingerprint, how to get a pairing code, and the
-// client one-liners. code is a code just minted, or "" for the placeholder.
-// The server's setup prints it at its close; `seamlessd devices code` prints
-// it with the code.
+// client one-liners, which carry the fingerprint. code is a code just minted,
+// or "" for the placeholder. The server's setup prints it at its close;
+// `seamlessd devices code` prints it with the code. A Server no other
+// computer can pair with (devices.ServerFacts.PairingNeedsTLS) gets the
+// reason instead of a code and the one-liners.
 func serverPairingClosing(w io.Writer, facts devices.ServerFacts, code string, peerAuth bool) {
+	minutes := int(store.PairingCodeTTL / time.Minute)
 	fmt.Fprintf(w, "To connect another computer to this server:\n\n")
 	fmt.Fprintf(w, "  Address:                 %s\n", facts.URL)
 	if facts.CertFingerprint != "" {
 		fmt.Fprintf(w, "  Certificate fingerprint: %s\n", facts.CertFingerprint)
 		fmt.Fprintf(w, "    (the other computer shows it before it pairs: they must match)\n")
 	} else {
-		fmt.Fprintf(w, "  No TLS: only a key device can pair, and its key crosses the network unencrypted.\n")
+		fmt.Fprintf(w, "  No TLS: a relay cannot pair, and a pairing over plain http from another computer is refused.\n")
+	}
+	if facts.PairingNeedsTLS() {
+		fmt.Fprintf(w, "  Pairing needs TLS here: this address is plain http, so no other computer can pair with it.\n"+
+			"    Give the server TLS with seamlessd setup's address step, or tls.cert_file and tls.key_file,\n"+
+			"    then run `seamlessd devices code`.\n")
+		return
 	}
 	if code == "" {
 		fmt.Fprintf(w, "  Pairing code:            get one on the console's Devices page, or run `seamlessd devices code` here\n")
 	} else {
-		fmt.Fprintf(w, "  Pairing code:            %s (one computer, %d minutes)\n", code, int(store.PairingCodeTTL/time.Minute))
+		fmt.Fprintf(w, "  Pairing code:            %s (one computer, %d minutes)\n", code, minutes)
 	}
 	if peerAuth {
 		fmt.Fprintf(w, "    The code alone pairs nothing: approve the computer with your passkey on the Devices page,\n"+
@@ -166,9 +180,11 @@ func serverPairingClosing(w io.Writer, facts devices.ServerFacts, code string, p
 	if shown == "" {
 		shown = "<code>"
 	}
-	unix, windows := devices.ClientCommands(facts.URL, shown)
+	unix, windows := devices.ClientCommands(facts, shown)
 	fmt.Fprintf(w, "\n  macOS and Linux (pairs a relay):\n    %s\n", unix)
 	fmt.Fprintf(w, "  Windows (pairs a key device of its own):\n    %s\n", windows)
+	fmt.Fprintf(w, "  The code works once, within %d minutes: the line it leaves in that computer's shell history is dead after use.\n",
+		minutes)
 }
 
 const devicesUsage = `usage: seamlessd devices <verb>
@@ -259,12 +275,16 @@ func (c devicesCmd) run(ctx context.Context, db *sql.DB, cfg config.Config, out 
 		LocalHost: config.Hostname(), Server: facts})
 	switch c.verb {
 	case "code":
+		if facts.PairingNeedsTLS() {
+			// No other computer could use the code: refused, not minted.
+			return devices.ErrPairingNeedsTLS
+		}
 		code, err := svc.MintCode(ctx, store.DeviceByTerminal)
 		if err != nil {
 			return err
 		}
 		if c.asJSON {
-			unix, windows := devices.ClientCommands(facts.URL, code.Code)
+			unix, windows := devices.ClientCommands(facts, code.Code)
 			return writeDevicesJSON(out, map[string]any{"code": code.Code, "expires_at": code.ExpiresAt.UTC().Format(time.RFC3339),
 				"approval": code.Approval, "server": facts, "unix": unix, "windows": windows})
 		}

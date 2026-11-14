@@ -103,9 +103,12 @@ func (d deviceRow) ApprovedHow() string {
 type devicesData struct {
 	Server   devices.ServerFacts `json:"server"`
 	PeerAuth bool                `json:"peer_auth"`
-	Pending  []deviceRow         `json:"pending"`
-	Paired   []deviceRow         `json:"paired"`
-	Ended    []deviceRow         `json:"ended"`
+	// NeedsTLS says no other computer can pair with this server
+	// (devices.ServerFacts.PairingNeedsTLS): the page offers no code.
+	NeedsTLS bool        `json:"needs_tls,omitempty"`
+	Pending  []deviceRow `json:"pending"`
+	Paired   []deviceRow `json:"paired"`
+	Ended    []deviceRow `json:"ended"`
 	// Code is a code just minted, for a browser that posted the form without
 	// the page's script; nil otherwise. It is never in a URL.
 	Code *devices.Code `json:"code,omitempty"`
@@ -138,6 +141,7 @@ func (s *Service) devicesFor(r *http.Request, code *devices.Code) (devicesData, 
 	now := time.Now()
 	d := devicesData{Server: s.cfg.Devices.Server(), PeerAuth: s.cfg.Devices.PeerAuth(), Code: code,
 		CodeMinutes: int(store.PairingCodeTTL / time.Minute), Browser: s.classify(r) == credCookie}
+	d.NeedsTLS = d.Server.PairingNeedsTLS()
 	for _, dev := range list {
 		row := deviceRow{Device: dev, Now: dev.StatusAt(now)}
 		switch row.Now {
@@ -153,7 +157,7 @@ func (s *Service) devicesFor(r *http.Request, code *devices.Code) (devicesData, 
 	if code != nil {
 		shown = code.Code
 	}
-	d.UnixCommand, d.WindowsCommand = devices.ClientCommands(d.Server.URL, shown)
+	d.UnixCommand, d.WindowsCommand = devices.ClientCommands(d.Server, shown)
 	if a := s.cfg.Devices.Approvals(); a != nil {
 		d.PasskeysOn = a.PasskeysOn()
 		creds, err := store.ApproverCredentials(ctx, s.writeDB(), store.ApproverPasskey)
@@ -184,9 +188,15 @@ func (s *Service) devicesPage(w http.ResponseWriter, r *http.Request) {
 
 // devicesCode is POST /console/devices/code: a fresh pairing code, shown
 // once, in this answer: JSON for the page's script and the CLI, the page
-// itself for a browser without the script.
+// itself for a browser without the script. A server no other computer can
+// pair with (an address of plain http to another host) mints none: 409
+// (devices.ErrPairingNeedsTLS).
 func (s *Service) devicesCode(w http.ResponseWriter, r *http.Request) {
 	if s.devicesOff(w, r) {
+		return
+	}
+	if s.cfg.Devices.Server().PairingNeedsTLS() {
+		s.formError(w, r, http.StatusConflict, devices.ErrPairingNeedsTLS.Error())
 		return
 	}
 	code, err := s.cfg.Devices.MintCode(r.Context(), store.DeviceByConsole)
@@ -200,7 +210,7 @@ func (s *Service) devicesCode(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	if wantsJSON(r) {
-		unix, windows := devices.ClientCommands(s.cfg.Devices.Server().URL, code.Code)
+		unix, windows := devices.ClientCommands(s.cfg.Devices.Server(), code.Code)
 		writeJSON(w, http.StatusOK, map[string]any{"code": code.Code, "expires_at": code.ExpiresAt.UTC().Format(time.RFC3339),
 			"approval": code.Approval, "unix": unix, "windows": windows})
 		return

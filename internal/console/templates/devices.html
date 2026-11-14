@@ -12,8 +12,11 @@
   <ul class="access-list">
     <li class="access-item"><strong>Address</strong> <code>{{.Server.URL}}</code></li>
     {{if .Server.CertFingerprint}}<li class="access-item"><strong>Certificate fingerprint</strong> <small><code>{{.Server.CertFingerprint}}</code></small></li>
-    {{else}}<li class="access-item"><strong>No TLS</strong> <small>This server listens without TLS, so only a key device can pair, and its key crosses the network unencrypted. A relay needs TLS.</small></li>{{end}}
+    {{else}}<li class="access-item"><strong>No TLS</strong> <small>This server listens without TLS, so a relay cannot pair, and a pairing over plain http from another computer is refused: its code and a key device's key would cross the network in the clear.</small></li>{{end}}
   </ul>
+  {{if .NeedsTLS}}
+  <p class="held-sub" id="devices-needs-tls">{{icon "triangle-alert"}} Pairing needs TLS here: this server's address is plain http, so no other computer can pair with it. Give it TLS with <code>seamlessd setup</code>'s address step, or <code>tls.cert_file</code> and <code>tls.key_file</code>, then get a code here.</p>
+  {{else}}
   {{if .PeerAuth}}
   <p class="held-sub">{{icon "lock"}} A code alone pairs nothing here: each computer that uses one waits on this page until you approve it with your passkey, after checking that the fingerprint matches the one that computer shows.</p>
   {{else}}
@@ -24,11 +27,14 @@
   </form>
   <div id="devices-code" {{if not .Code}}hidden{{end}}>
     <p class="held-sub">Pairing code, valid for {{.CodeMinutes}} minutes and for one computer: <strong><code id="devices-code-value">{{with .Code}}{{.Code}}{{end}}</code></strong></p>
-    <p class="held-sub">Or paste one of these on the other computer:</p>
+    {{if and .Server.TLS .Server.CertFingerprint}}<p class="held-sub">Or paste one of these on the other computer. Each carries this server's certificate fingerprint, which setup there compares before it sends the code.</p>
+    {{else}}<p class="held-sub">Or paste one of these on the other computer:</p>{{end}}
     <pre id="devices-unix" data-command="unix">{{.UnixCommand}}</pre>
     <pre id="devices-windows" data-command="windows">{{.WindowsCommand}}</pre>
+    <p class="held-sub" id="devices-code-once">The code works once, within {{.CodeMinutes}} minutes: the line it leaves in that computer's shell history is dead after use.</p>
   </div>
   <p class="held-sub" id="devices-code-status" data-live-skip role="status" aria-live="polite"></p>
+  {{end}}
 </section>
 
 {{if .PeerAuth}}

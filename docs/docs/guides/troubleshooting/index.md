@@ -436,13 +436,14 @@ Then the Server's, from either:
 | `the server already pairs a device of this name` | revoke the old device of that name on the Devices page, or pair with `--name` |
 | `the server's certificate does not have the fingerprint you compared; nothing was sent` | the address reaches a computer whose certificate is not the one the Server shows: check the address, and the fingerprint `seamlessd devices code` prints on the Server |
 | `a relay pairs over TLS with its client certificate: the server's address must be https` | a relay needs TLS on the daemon's own listener: give the Server a certificate ([setup's address step](https://thereisnospoon.org/docs/guides/network-install/#set-up-the-server)) |
+| `the server refused the pairing (tls): this server refuses a pairing over plain http from another computer` | the Server has no TLS, and the pairing crossed the network: give the Server TLS ([setup's address step](https://thereisnospoon.org/docs/guides/network-install/#set-up-the-server)), then pair with its https address |
 | `the owner denied this pairing on the server`, `this pairing was not approved in time: get a new code and pair again` | under peer_auth the pairing waits 10 minutes for your passkey on the Devices page: pair again with a new code, and approve it there |
 | `this relay is already paired with <address> as <name> (device <id>)` | revoke that device on the Devices page, then pair with `--replace` |
 | `the relay runs as root`, `the relay runs as uid <n>, which is not a system account` | run it as its own account, created and pinned as [Deploy it](https://thereisnospoon.org/docs/guides/peer-auth/#deploy-it-the-daemon-runs-as-its-own-account) does |
 
 On the Server, `seamlessd devices` refusing with `this install serves no other
 computers, so it pairs none` means pairing is off: it is on only on a Server
-with TLS, a bind beyond loopback, or a `server_url` naming another host.
+with TLS, a bind beyond loopback, or a `server_url` naming another host. `devices code` refusing with `pairing needs TLS here` means its address is plain http to another host, which no computer can pair over: give it TLS first.
 
 ## An agent on another computer cannot open a locked project
 

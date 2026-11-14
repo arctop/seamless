@@ -126,8 +126,9 @@ To connect another computer to this server:
     The code is the approval: whoever enters it first pairs as you.
 ```
 
-It is followed by the one-liners for macOS and Linux and for Windows, and by
-locked projects as a step setup does not do yet, with the
+It is followed by the one-liners for macOS and Linux and for Windows, which
+carry the certificate's fingerprint, by a reminder that each code works once,
+and by locked projects as a step setup does not do yet, with the
 [guide that does it by hand](https://thereisnospoon.org/docs/guides/peer-auth/#move-an-existing-install-over).
 Run a one-liner on each Client, with a code of its own
 ([below](#step-3-pair-a-client)).
@@ -183,7 +184,8 @@ Its transport rows are the ones to read:
 | `tls.key_file` | Who can read the TLS key: your account alone is **info**, group or world a **warn**. |
 | `server_url.addresses` | Every address the `server_url` host resolves to, against what the daemon listens on. One the daemon does not hold is a **warn**. |
 | `tailscale` | **info** when the tailnet issues certificates for the host: then the bind holding every address of the name, not the TLS key, keeps another page off the console's origin. |
-| `device pairing` | How a computer pairs here, and how many are paired or waiting. No TLS is a **warn**: a relay cannot pair. |
+| `device pairing` | How a computer pairs here, and how many are paired or waiting. No TLS is a **warn**: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http `server_url` to another host no computer can pair, and no code is minted. |
+| `peer_auth devices` | Under peer_auth only: a **warn** for each key device paired with a one-time code alone, before peer_auth, which is still you over TCP though no passkey approved it: revoke it and pair it again, so a passkey approves it. |
 
 Every row is in [the doctor reference](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_doctor).
 
@@ -192,19 +194,21 @@ Every row is in [the doctor reference](https://thereisnospoon.org/docs/reference
 On the Server, get a pairing code: **Get a pairing code** on the console's
 [Devices page](#devices), or `seamlessd devices code` in the Server's terminal.
 Either shows the code once, valid for 10 minutes and for one computer, with a
-one-liner for each kind of Client. On the Client, run its one-liner:
+one-liner for each kind of Client that carries the Server certificate's
+fingerprint. The code works once, so the line the Client's shell keeps in its
+history is dead after use. On the Client, run its one-liner:
 
 **macOS · Linux:**
 
 ```bash
-curl -fsSL https://thereisnospoon.org/install | SEAMLESS_SETUP=client SEAMLESS_SERVER_URL=https://<server name>:8081 SEAMLESS_PAIR_CODE=<code> sh
+curl -fsSL https://thereisnospoon.org/install | SEAMLESS_SETUP=client SEAMLESS_SERVER_URL=https://<server name>:8081 SEAMLESS_SERVER_FINGERPRINT=<fingerprint> SEAMLESS_PAIR_CODE=<code> sh
 ```
 
 
 **Windows:**
 
 ```powershell
-$env:SEAMLESS_SETUP='client'; $env:SEAMLESS_SERVER_URL='https://<server name>:8081'; $env:SEAMLESS_PAIR_CODE='<code>'; irm https://thereisnospoon.org/install.ps1 | iex
+$env:SEAMLESS_SETUP='client'; $env:SEAMLESS_SERVER_URL='https://<server name>:8081'; $env:SEAMLESS_SERVER_FINGERPRINT='<fingerprint>'; $env:SEAMLESS_PAIR_CODE='<code>'; irm https://thereisnospoon.org/install.ps1 | iex
 ```
 
 
@@ -213,15 +217,15 @@ the install is done:
 
 1. **It shows the Server's certificate.** It reads the certificate in a
    handshake that sends nothing, and shows its SHA-256 fingerprint: compare it
-   with the `Certificate fingerprint` the Server printed. Add
-   `SEAMLESS_SERVER_FINGERPRINT=<that fingerprint>` to the line to have setup
-   compare it; on a mismatch nothing is sent. A certificate this computer's own
+   with the `Certificate fingerprint` the Server printed: the one-liner's
+   `SEAMLESS_SERVER_FINGERPRINT` has setup compare it (at a terminal without
+   it, setup asks you); on a mismatch nothing is sent. A certificate this computer's own
    roots do not trust - one made with mkcert or openssl - is trusted only once
    it was compared, and then as that certificate alone, kept in
    `~/.config/seamless/server-ca.crt`. Without the knob, such a run stops and
    names it. A plain `http://` address is refused unless it is this computer's
    own loopback: the code, and a key of this computer's, would cross the
-   network in the clear.
+   network in the clear, and the Server refuses such a pairing too.
 2. **It pairs as a relay or a key device.** On macOS and Linux it pairs a
    [relay](https://thereisnospoon.org/docs/concepts/networked/#the-relay), unless `SEAMLESS_PAIR_AS=key` makes
    it a key device, for a computer where you have no root (a container, CI).
@@ -410,8 +414,13 @@ neither exists.
 - **Revoked and expired**: what ended, and how.
 
 `seamlessd devices list` prints the same list in the terminal. Without TLS on
-the daemon's own listener only a key device can pair, and its key crosses the
-network unencrypted; a relay cannot pair at all.
+the daemon's own listener a relay cannot pair, and the Server refuses a pairing
+over plain http from another computer: its code, and a key device's key, would
+cross the network in the clear. A key device can still pair through a TLS proxy
+on the Server's own computer. Where `server_url` is plain http to another host
+no computer can pair, so the page and `seamlessd devices code` say pairing
+needs TLS there and mint no code; the devices paired before stay listed and
+revocable.
 
 ### Revoke a computer {#revoke-a-computer}
 
@@ -665,7 +674,7 @@ Doctor's transport rows are the ones [above](#check-the-server).
 Plain http over a LAN is a legitimate choice for a key client and Seamless will
 not stop you - `seamlessd client-config` prints a warning and continues. But
 the bearer key and every memory it fetches cross the network unencrypted, so
-prefer https. A relay needs it: it cannot pair over plain http.
+prefer https. Pairing needs it: the Server refuses a pairing over plain http from another computer, a relay's and a key device's alike.
 
 Both `tls.cert_file` and `tls.key_file` must be set; one without the other is
 refused at load, because it cannot serve TLS. With both set the listener is

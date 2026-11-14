@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -275,4 +276,72 @@ func TestDevices_PasskeyApprovalThroughThePage(t *testing.T) {
 	collected, err := pairing.Status(ctx, secret)
 	require.NoError(t, err)
 	require.True(t, devices.IsKey(collected.Key), "the approved device collects its own key")
+}
+
+// devices2Console is a console that pairs devices (peer_auth off) with the
+// server facts given, and returns its database and mux.
+func devices2Console(t *testing.T, facts devices.ServerFacts) (*sql.DB, *http.ServeMux) {
+	t.Helper()
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	rec := events.NewRecorder(db)
+	pairing := devices.New(devices.Config{DB: db, Events: rec, LocalHost: "example-server", Server: facts})
+	svc, err := New(Config{DB: db, Events: rec, APIKey: testKey, Retrieve: retrieve.New(db, nil, config.Defaults().Budgets, nil),
+		Devices: pairing})
+	require.NoError(t, err)
+	mux := http.NewServeMux()
+	svc.Register(mux)
+	return db, mux
+}
+
+// Where no other computer can pair -- this server's address is plain http to
+// another host, which the client and the edge both refuse -- the page says
+// pairing needs TLS and offers no code, and the code route mints none (409).
+func TestDevices2_PairingNeedsTLSMintsNothing(t *testing.T) {
+	db, mux := devices2Console(t, devices.ServerFacts{URL: "http://192.0.2.10:8081"})
+	page := getPeek(t, mux, "/console/devices")
+	require.Equal(t, http.StatusOK, page.Code)
+	body := page.Body.String()
+	require.Contains(t, body, "Pairing needs TLS here")
+	require.Contains(t, body, "<code>seamlessd setup</code>'s address step")
+	require.NotContains(t, body, `id="devices-code-form"`, "no code is offered")
+	require.NotContains(t, body, "SEAMLESS_PAIR_CODE", "nor a one-liner that could only fail")
+	require.Contains(t, body, "a pairing over plain http from another computer is refused")
+
+	for _, asJSON := range []bool{true, false} {
+		rr := devicePost(t, mux, "/console/devices/code", url.Values{}, asJSON)
+		require.Equal(t, http.StatusConflict, rr.Code)
+		require.Contains(t, rr.Body.String(), "pairing needs TLS here")
+	}
+	open, err := store.CountOpenPairingCodes(context.Background(), db, time.Now())
+	require.NoError(t, err)
+	require.Zero(t, open, "no code was minted")
+
+	// Loopback over plain http still pairs, on this computer.
+	_, mux = devices2Console(t, devices.ServerFacts{URL: "http://127.0.0.1:8081"})
+	require.Equal(t, http.StatusOK, devicePost(t, mux, "/console/devices/code", url.Values{}, true).Code)
+}
+
+// The one-liners carry this server's certificate fingerprint, in the form
+// setup on the other computer reads, and the page says the code works once.
+func TestDevices2_OneLinersCarryTheFingerprint(t *testing.T) {
+	fp := devices.CertFingerprint([]byte("example certificate"))
+	_, mux := devices2Console(t, devices.ServerFacts{URL: "https://example-server.example.ts.net:8081", TLS: true, CertFingerprint: fp})
+	rr := devicePost(t, mux, "/console/devices/code", url.Values{}, true)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	var minted struct {
+		Code, Unix, Windows string
+	}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &minted))
+	require.Contains(t, minted.Unix, "SEAMLESS_SERVER_URL=https://example-server.example.ts.net:8081 SEAMLESS_SERVER_FINGERPRINT="+fp+
+		" SEAMLESS_PAIR_CODE="+minted.Code+" sh")
+	require.Contains(t, minted.Windows, "$env:SEAMLESS_SERVER_FINGERPRINT='"+fp+"'; $env:SEAMLESS_PAIR_CODE='"+minted.Code+"'")
+
+	html := devicePost(t, mux, "/console/devices/code", url.Values{}, false)
+	require.Equal(t, http.StatusOK, html.Code)
+	body := html.Body.String()
+	require.Contains(t, body, "SEAMLESS_SERVER_FINGERPRINT="+fp+" SEAMLESS_PAIR_CODE=")
+	require.Contains(t, body, "Each carries this server's certificate fingerprint, which setup there compares before it sends the code.")
+	require.Contains(t, body, "The code works once, within 10 minutes: the line it leaves in that computer's shell history is dead after use.")
 }

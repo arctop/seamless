@@ -58,7 +58,7 @@ nothing, and their rows say so.
 | Begin adding a passkey | `POST /console/passkeys/add/begin` | Only with `console.sign_in: passkey`: the public Add a passkey page asks for the new passkey's `name=`. Returns the WebAuthn creation options. Writes nothing. |
 | Add a passkey, waiting | `POST /console/passkeys/add/finish` | Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: `seamlessd approvers approve --code`, on the server, adds exactly that passkey. At most 32 wait at once. |
 | Begin a terminal sign-in | `POST /console/signin/terminal/begin` | Only with `console.sign_in: passkey`, and only from a browser that proves its key: **Show a code** on the login page. Sets a fresh random sign-in cookie bound to that key and stores it waiting, with a short code, for 10 minutes. It signs nothing in: `seamlessd console-open --sign-in --code`, on the server (as the daemon's account under peer_auth), signs in exactly the browser that showed that code, for 7 days. At most 32 wait at once. A 404 while the key signs browsers in. |
-| Get a pairing code | `POST /console/devices/code` | Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
+| Get a pairing code | `POST /console/devices/code` | Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners, which carry the server certificate's fingerprint when it serves TLS; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused (409, `pairing needs TLS here`) where the server's address is plain http to another host. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
 | Begin a device approval | `POST /console/devices/{id}/approve/begin` | Only under peer_auth, from a signed-in browser, for a pairing that waits. Returns the WebAuthn challenge, bound to that device's id, kind, name, fingerprint and key, and a ticket. Writes nothing. |
 | Approve a device | `POST /console/devices/{id}/approve/finish` | Verifies the passkey assertion for that ticket over the device as it stands, records the passkey's use, and pairs the device: a relay's certificate is accepted from its next request, and a key device collects its own key, once, on its next status. |
 | Revoke a device, or deny a pairing | `POST /console/devices/{id}/revoke` | Revokes a paired device: its credential is refused from its next request, and the requests it is making end. A pairing that waits is denied instead. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
@@ -1093,8 +1093,12 @@ exist. The computers paired with this server, and how to pair another
 
 - **Pair a computer** - this server's address and its certificate's
   fingerprint, and **Get a pairing code**: a code shown once, valid for 10
-  minutes and for one computer, with the client one-liners. Without peer_auth
-  the page says the code is the approval.
+  minutes and for one computer, with the client one-liners, which carry the
+  fingerprint for setup on the other computer to compare. The code works once,
+  so the line left in that computer's shell history is dead after use. Without
+  peer_auth the page says the code is the approval. Where this server's address
+  is plain http to another host the page says pairing needs TLS, and offers no
+  code.
 - **Waiting for your approval** - under peer_auth only: each computer that used
   a code, its fingerprint and until when it waits, with **Approve with a
   passkey** and **Deny**. Approving needs a signed-in browser on the

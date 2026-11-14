@@ -836,7 +836,7 @@ installer.</p>
 </tr>
 <tr>
 <td><code>SEAMLESS_SERVER_FINGERPRINT</code></td>
-<td>the Server certificate's SHA-256 as its setup printed it: compared before the code is sent, and the certificate trusted alone when this computer's roots do not vouch for it</td>
+<td>the Server certificate's SHA-256 as its setup printed it (the Server's one-liners carry it): compared before the code is sent, and the certificate trusted alone when this computer's roots do not vouch for it</td>
 </tr>
 <tr>
 <td><code>SEAMLESS_PAIR_AS=relay|key</code></td>
@@ -1575,7 +1575,7 @@ denied move answers <code>Denied R-7F3K: the agent stays in example-ops, and exa
 </span></span></code></pre></div>
 <p>The computers paired with this server: relays (macOS and Linux clients) and key devices (Windows, or a machine where you have no root). Only on a server that serves other computers (TLS, a bind beyond loopback, or a <code>server_url</code> naming another host); elsewhere every verb refuses. Each verb opens the database directly: run it on the server, as the daemon's own account under peer_auth.</p>
 <ul>
-<li><code>code</code> mints a one-time pairing code (10 minutes, one computer; only its hash is stored) and prints what the other computer needs: this server's address, its certificate's SHA-256 fingerprint (as <code>openssl x509 -noout -fingerprint -sha256</code> prints it), the code and the client one-liners. Without peer_auth the code is the approval; under it the pairing waits for your passkey on the console's Devices page.</li>
+<li><code>code</code> mints a one-time pairing code (10 minutes, one computer; only its hash is stored) and prints what the other computer needs: this server's address, its certificate's SHA-256 fingerprint (as <code>openssl x509 -noout -fingerprint -sha256</code> prints it), the code and the client one-liners, which carry the fingerprint (<code>SEAMLESS_SERVER_FINGERPRINT</code>) so the other computer's setup compares it before it sends the code. The code works once, so the line left in that computer's shell history is dead after use. Where <code>server_url</code> is plain http to another host it refuses (<code>pairing needs TLS here</code>) and mints nothing. Without peer_auth the code is the approval; under it the pairing waits for your passkey on the console's Devices page.</li>
 <li><code>list</code> prints every device: id, name, kind, status, fingerprint or key prefix, last seen.</li>
 <li><code>revoke</code> revokes a paired device (refused from its next request; the daemon ends its running requests within 30 seconds, and a relay's leases, read grants and waiting access requests at once) or denies a pairing that waits, named by its id or by a live device's name. <a href="../../guides/network-install/#devices">The Devices page</a> does the same in the console.</li>
 </ul>

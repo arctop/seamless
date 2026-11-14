@@ -1,10 +1,12 @@
 package devices
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strings"
@@ -35,10 +37,33 @@ type pairRequest struct {
 
 // pairError is a refused pairing's JSON answer. Reason is a fixed word a
 // client can act on: code, name, key, secret, kind, input, certificate,
-// pairing, server.
+// pairing, server, tls.
 type pairError struct {
 	Error  string `json:"error"`
 	Reason string `json:"reason"`
+}
+
+// errPlainHTTPPairing is a pairing, or a pairing's status, asked over plain
+// http from another computer (review L5): what it carries -- the code, the
+// secret, and a key device's key in the answer -- would cross the network in
+// the clear. The edge refuses it before anything reads it, so the code is not
+// spent and no key is drawn. Loopback pairs over plain http as before: the
+// request never left this computer (a TLS proxy in front of the daemon, a
+// client on the same machine, the tests).
+var errPlainHTTPPairing = errors.New("this server refuses a pairing over plain http from another computer: the code, and a " +
+	"key device's key, would cross the network in the clear. Give the server TLS (on the server: seamlessd setup's address " +
+	"step, or tls.cert_file and tls.key_file), then pair with its https address")
+
+// clearPairing reports whether r, a pairing endpoint's request, would carry
+// its secrets over the network in the clear: no TLS, from a peer that is not
+// this computer's loopback. A peer address that does not parse counts as
+// another computer's.
+func clearPairing(r *http.Request) bool {
+	if r.TLS != nil {
+		return false
+	}
+	peer, err := netip.ParseAddrPort(r.RemoteAddr)
+	return err != nil || !peer.Addr().Unmap().IsLoopback()
 }
 
 // Edge is the daemon's TCP edge for paired devices, around the routes:
@@ -50,7 +75,9 @@ type pairError struct {
 //     request's context (RelayAttributesOf), for the daemon's relay judge.
 //     Every other request has them stripped unread, so a bearer request or a
 //     key device carrying them is judged as the bearer request it is.
-//   - It serves the pairing endpoints itself.
+//   - It serves the pairing endpoints itself, and only over TLS or from this
+//     computer's loopback: a pairing over plain http from another computer
+//     is refused unread (errPlainHTTPPairing, 403, reason tls).
 //   - A TLS connection that presented a client certificate is judged by that
 //     certificate alone, never by a key it also sends: the certificate's key
 //     must be an active relay's, else the request is refused (401) and the
@@ -61,18 +88,36 @@ type pairError struct {
 //   - A matched request carries its Credential (WithCredential), and speaks
 //     for the device's enrolled host name: the X-Seamless-Host header and a
 //     hook's host parameter are set to it, whatever the request said. Its
-//     context ends when the device is revoked.
+//     context ends when the device is revoked: the request is registered
+//     (track) before the device's status is read a last time, so a
+//     revocation through this daemon (Revoke), whenever it commits, either
+//     finds the request registered and ends it, or is seen by that read and
+//     refuses it (review I1). One from another process (the terminal) ends
+//     it at the next sweep (Run).
 //
 // A request with no client certificate and no device key passes untouched
 // but for the stripped headers, so the shared key is judged by the routes
 // exactly as before.
 func (s *Service) Edge(next http.Handler) http.Handler {
+	return s.edge(next, nil)
+}
+
+// edge is Edge. lookedUp, when set, is called once a request's credential
+// matched an active device, just before the request is registered: the test
+// seam for the revocation window (review I1). Edge passes nil.
+func (s *Service) edge(next http.Handler, lookedUp func(Credential)) http.Handler {
 	pair := http.NewServeMux()
 	pair.HandleFunc("POST "+PairPath, s.servePair)
 	pair.HandleFunc("POST "+PairStatusPath, s.serveStatus)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == PairPath || r.URL.Path == PairStatusPath {
 			StripRelayAttributes(r.Header)
+			if clearPairing(r) {
+				s.cfg.Logger.Warn("devices: refused a pairing over plain http from another computer", "path", r.URL.Path,
+					"peer", r.RemoteAddr)
+				writePairJSON(w, http.StatusForbidden, pairError{Error: errPlainHTTPPairing.Error(), Reason: "tls"})
+				return
+			}
 			pair.ServeHTTP(w, r)
 			return
 		}
@@ -101,8 +146,28 @@ func (s *Service) Edge(next http.Handler) http.Handler {
 		if err := store.TouchDevice(r.Context(), s.cfg.DB, cred.DeviceID, s.cfg.Now()); err != nil {
 			s.cfg.Logger.Warn("devices: record a device's use", "device", cred.DeviceID, "error", err)
 		}
+		if lookedUp != nil {
+			lookedUp(cred)
+		}
 		ctx, done := s.track(r.Context(), cred.DeviceID)
 		defer done()
+		// A revocation that committed after authenticate read the device, and
+		// ended the device's requests before this one was registered, did not
+		// end this one. Registered now, it is ended by any revocation to come;
+		// one that came already is in the device's status (review I1).
+		switch active, err := s.stillActive(r.Context(), cred.DeviceID); {
+		case err != nil:
+			s.refuse(w, r, err)
+			return
+		case !active && cred.Kind == KindRelay:
+			s.refuse(w, r, ErrRelayRevoked)
+			return
+		case !active:
+			// A revoked key is no credential: it passes on unmarked, and the
+			// routes refuse it as a wrong key.
+			next.ServeHTTP(w, r)
+			return
+		}
 		ctx = WithCredential(ctx, cred)
 		if forwarded {
 			ctx = withRelayAttributes(ctx, attrs)
@@ -153,6 +218,19 @@ func (s *Service) authenticate(r *http.Request) (Credential, bool, error) {
 		return Credential{}, false, nil
 	}
 	return Credential{DeviceID: d.ID, Kind: d.Kind, Name: d.Name, Approved: d.ApprovedBy != ""}, true, nil
+}
+
+// stillActive reports whether the device id is active, read now: after the
+// request it makes was registered.
+func (s *Service) stillActive(ctx context.Context, id string) (bool, error) {
+	d, err := store.DeviceByID(ctx, s.cfg.DB, id)
+	switch {
+	case errors.Is(err, store.ErrDeviceNotFound):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+	return d.Status == store.DeviceActive, nil
 }
 
 // refuse answers a request whose credential the edge refused: a relay's as

@@ -154,9 +154,13 @@ type Code struct {
 	Approval string `json:"approval,omitempty"`
 }
 
-// MintCode mints a one-time pairing code, from by (console or terminal).
+// MintCode mints a one-time pairing code, from by (console or terminal). A
+// server no other computer can pair with mints none (ErrPairingNeedsTLS).
 func (s *Service) MintCode(ctx context.Context, by string) (Code, error) {
 	const op = "devices.MintCode"
+	if s.cfg.Server.PairingNeedsTLS() {
+		return Code{}, fmt.Errorf("%s: %w", op, ErrPairingNeedsTLS)
+	}
 	code, expires, err := store.MintPairingCode(ctx, s.cfg.DB, by, s.cfg.Now())
 	if err != nil {
 		return Code{}, fmt.Errorf("%s: %w", op, err)

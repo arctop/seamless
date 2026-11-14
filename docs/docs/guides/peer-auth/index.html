@@ -1035,7 +1035,9 @@ relay you map, in the daemon's config, followed by a restart:</p>
 </span></span></span></code></pre></div>
 <p><code>seamlessd doctor</code>, run as the daemon's account, checks each mapping: a name no
 paired relay holds, or a relay no passkey approved, is a <strong>warn</strong>, and a
-mapping that holds names the restricted accounts there.</p>
+mapping that holds names the restricted accounts there. It warns too for each
+key device paired with a one-time code alone, before peer_auth (<code>peer_auth devices</code>): it is still you over TCP, though no passkey approved it, so revoke
+it and pair it again, so a passkey approves it.</p>
 <p>Through a mapped relay, your uid there is you, judged as this socket judges
 you: with the chain the relay reported, and the leases that chain holds. A
 lease is keyed on the relay and the process. It opens the project to that

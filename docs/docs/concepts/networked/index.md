@@ -122,8 +122,9 @@ Client that uses the Server's own key has not paired.
   after checking that the fingerprint there is the one that computer shows.
 - **Two fingerprints.** The Server's certificate fingerprint (its SHA-256, as
   `openssl x509 -noout -fingerprint -sha256` prints it): the Client shows it
-  before it sends the code, for you to compare with the one the Server printed,
-  and a relay pins that certificate from then on. A certificate the Client's
+  before it sends the code, and compares it with the one the Server's one-liner
+  carries (at a terminal without it, you compare it), and a relay pins that
+  certificate from then on. A certificate the Client's
   own roots do not trust is trusted only once compared, and then as that
   certificate alone. The relay's key fingerprint: the relay prints it, and the
   Devices page shows it for your approval.
@@ -138,7 +139,7 @@ Client that uses the Server's own key has not paired.
 
 A relay needs TLS on the daemon's own listener. It proves itself with a client
 certificate in the TLS handshake, so a proxy that ends TLS in front of the
-daemon lets key devices pair but not relays.
+daemon on the Server's own computer lets key devices pair but not relays. Pairing never crosses the network in the clear: the Server refuses a pairing over plain http from another computer, and one whose address is plain http to another host mints no code.
 
 Pairing is on only on a Server that serves other computers: TLS, a bind beyond
 loopback, or a `server_url` naming another host. A default install has no

@@ -753,6 +753,10 @@ the computer.</p>
 <td>a relay needs TLS on the daemon's own listener: give the Server a certificate (<a href="../../guides/network-install/#set-up-the-server">setup's address step</a>)</td>
 </tr>
 <tr>
+<td><code>the server refused the pairing (tls): this server refuses a pairing over plain http from another computer</code></td>
+<td>the Server has no TLS, and the pairing crossed the network: give the Server TLS (<a href="../../guides/network-install/#set-up-the-server">setup's address step</a>), then pair with its https address</td>
+</tr>
+<tr>
 <td><code>the owner denied this pairing on the server</code>, <code>this pairing was not approved in time: get a new code and pair again</code></td>
 <td>under peer_auth the pairing waits 10 minutes for your passkey on the Devices page: pair again with a new code, and approve it there</td>
 </tr>
@@ -768,7 +772,7 @@ the computer.</p>
 </table>
 </div>
 <p>On the Server, <code>seamlessd devices</code> refusing with <code>this install serves no other computers, so it pairs none</code> means pairing is off: it is on only on a Server
-with TLS, a bind beyond loopback, or a <code>server_url</code> naming another host.</p>
+with TLS, a bind beyond loopback, or a <code>server_url</code> naming another host. <code>devices code</code> refusing with <code>pairing needs TLS here</code> means its address is plain http to another host, which no computer can pair over: give it TLS first.</p>
 <h2 id="an-agent-on-another-computer-cannot-open-a-locked-project">An agent on another computer cannot open a locked project</h2>
 <p><strong>What is happening.</strong> A locked project opens only to an agent whose process
 tree holds a lease, and the Server can name that tree only for its own socket

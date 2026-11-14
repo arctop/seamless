@@ -898,9 +898,17 @@ any of it.
   `console/devices.go`, `cmd/seamlessd/devices.go`, `cmd/seamlessd/peerauth_relay.go`, migration 043). Pairing exists only on a
   server that serves other computers (`pairingOn`: TLS, a bind beyond loopback,
   or a `server_url` naming another host); off, there is no Devices page, no
-  `/api/pair` and no client-certificate request. A one-time code (80 bits, 10
-  minutes, one computer, only its hash stored) comes from the console or
-  `seamlessd devices code`. Without peer_auth the code is the approval; under it
+  `/api/pair` and no client-certificate request. A pairing travels over TLS or
+  never leaves the server's computer: the edge refuses `/api/pair` and its
+  status over plain http from a peer that is not loopback, unread (403, reason
+  `tls`, review L5), and where the address clients dial is plain http to
+  another host (`ServerFacts.PairingNeedsTLS`) the Devices page and `seamlessd
+  devices code` mint no code (`ErrPairingNeedsTLS`); `pairingOn` stays on
+  there, so the devices paired before keep the edge, the list and revoke. A
+  one-time code (80 bits, 10 minutes, one computer, only its hash stored)
+  comes from the console or `seamlessd devices code`, with one-liners that
+  carry the server certificate's fingerprint (`devices.ClientCommands`,
+  `SEAMLESS_SERVER_FINGERPRINT`). Without peer_auth the code is the approval; under it
   the pairing waits until the owner approves it with a passkey on the Devices
   page, whose challenge binds the device's id, kind, name, fingerprint and key,
   and `store.ApproveDevice` compares the fingerprint inside its write: the code
@@ -945,7 +953,7 @@ any of it.
   (`notThroughDevice`) and an approval with no passkey or Touch ID proof
   (`deviceNeedsProof`). Its reads, and the writes an agent may make, stay
   open: `seam` on a client reads console JSON through the relay.
-  Revoking refuses the credential from its next request, ends the requests it is making and, in the same transaction, a relay's live leases, grants and waiting requests (`store.RevokeDeviceEndingAccess`). A merge carries no device, a fresh import revokes the snapshot's,
+  Revoking refuses the credential from its next request, ends the requests it is making and, in the same transaction, a relay's live leases, grants and waiting requests (`store.RevokeDeviceEndingAccess`); the edge registers a request (`track`) before it reads the device's status a last time, so no revocation slips between its lookup and its registration (review I1). Under peer_auth doctor warns for each key device a code alone paired (`peer_auth devices`, review I2). A merge carries no device, a fresh import revokes the snapshot's,
   and a backup restore keeps today's (`keptTables`).
 - **The relay forwards and judges nothing** (plan networked-relay;
   `internal/relay`, `cmd/seamlessd/relay.go`, `doctor_relay.go`). `seamlessd

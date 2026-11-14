@@ -1322,7 +1322,7 @@ script](https://thereisnospoon.org/install) with no dependencies to audit.
 | `SEAMLESS_SERVER_NAME` | the name the other computers reach a Server at ([setup's address step](/reference/cli-seamlessd/#seamlessd_setup_address)); with `SEAMLESS_SETUP=server` only |
 | `SEAMLESS_TLS_CERT`, `SEAMLESS_TLS_KEY` | that name's certificate and key, full paths; none for this computer's Tailscale name |
 | `SEAMLESS_PAIR_CODE` | a client's pairing code, from the server's Devices page or `seamlessd devices code` there (one computer, 10 minutes): with `SEAMLESS_SERVER_URL`, setup pairs this computer before anything is installed - a relay, whose root step it prints, or a key of its own. See [Share one daemon across your computers](/guides/network-install/#step-3-pair-a-client) |
-| `SEAMLESS_SERVER_FINGERPRINT` | the server certificate's SHA-256, as its setup printed it: setup compares it before the code is sent, and sends nothing on a mismatch. Without it, a script pairs only with a certificate this computer already trusts |
+| `SEAMLESS_SERVER_FINGERPRINT` | the server certificate's SHA-256, as its setup printed it (the server's one-liners carry it): setup compares it before the code is sent, and sends nothing on a mismatch. Without it, a script pairs only with a certificate this computer already trusts |
 | `SEAMLESS_PAIR_AS=relay\|key` | what a client pairs as: `relay`, the default on macOS and Linux, or `key`, for a computer where you have no root (a container, CI). Windows is always `key` |
 | `SEAMLESS_NO_HOOKS=1` | skip agent hooks, MCP registration, and skills, and the client detection that would choose them |
 | `SEAMLESS_NO_ONBOARD_SKILL=1` | skip the selected client(s)' one-shot onboarding skill |
@@ -4757,8 +4757,9 @@ Client that uses the Server's own key has not paired.
   after checking that the fingerprint there is the one that computer shows.
 - **Two fingerprints.** The Server's certificate fingerprint (its SHA-256, as
   `openssl x509 -noout -fingerprint -sha256` prints it): the Client shows it
-  before it sends the code, for you to compare with the one the Server printed,
-  and a relay pins that certificate from then on. A certificate the Client's
+  before it sends the code, and compares it with the one the Server's one-liner
+  carries (at a terminal without it, you compare it), and a relay pins that
+  certificate from then on. A certificate the Client's
   own roots do not trust is trusted only once compared, and then as that
   certificate alone. The relay's key fingerprint: the relay prints it, and the
   Devices page shows it for your approval.
@@ -4773,7 +4774,7 @@ Client that uses the Server's own key has not paired.
 
 A relay needs TLS on the daemon's own listener. It proves itself with a client
 certificate in the TLS handshake, so a proxy that ends TLS in front of the
-daemon lets key devices pair but not relays.
+daemon on the Server's own computer lets key devices pair but not relays. Pairing never crosses the network in the clear: the Server refuses a pairing over plain http from another computer, and one whose address is plain http to another host mints no code.
 
 Pairing is on only on a Server that serves other computers: TLS, a bind beyond
 loopback, or a `server_url` naming another host. A default install has no
@@ -7122,8 +7123,9 @@ To connect another computer to this server:
     The code is the approval: whoever enters it first pairs as you.
 ```
 
-It is followed by the one-liners for macOS and Linux and for Windows, and by
-locked projects as a step setup does not do yet, with the
+It is followed by the one-liners for macOS and Linux and for Windows, which
+carry the certificate's fingerprint, by a reminder that each code works once,
+and by locked projects as a step setup does not do yet, with the
 [guide that does it by hand](/guides/peer-auth/#move-an-existing-install-over).
 Run a one-liner on each Client, with a code of its own
 ([below](#step-3-pair-a-client)).
@@ -7179,7 +7181,8 @@ Its transport rows are the ones to read:
 | `tls.key_file` | Who can read the TLS key: your account alone is **info**, group or world a **warn**. |
 | `server_url.addresses` | Every address the `server_url` host resolves to, against what the daemon listens on. One the daemon does not hold is a **warn**. |
 | `tailscale` | **info** when the tailnet issues certificates for the host: then the bind holding every address of the name, not the TLS key, keeps another page off the console's origin. |
-| `device pairing` | How a computer pairs here, and how many are paired or waiting. No TLS is a **warn**: a relay cannot pair. |
+| `device pairing` | How a computer pairs here, and how many are paired or waiting. No TLS is a **warn**: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http `server_url` to another host no computer can pair, and no code is minted. |
+| `peer_auth devices` | Under peer_auth only: a **warn** for each key device paired with a one-time code alone, before peer_auth, which is still you over TCP though no passkey approved it: revoke it and pair it again, so a passkey approves it. |
 
 Every row is in [the doctor reference](/reference/cli-seamlessd/#seamlessd_doctor).
 
@@ -7188,19 +7191,21 @@ Every row is in [the doctor reference](/reference/cli-seamlessd/#seamlessd_docto
 On the Server, get a pairing code: **Get a pairing code** on the console's
 [Devices page](#devices), or `seamlessd devices code` in the Server's terminal.
 Either shows the code once, valid for 10 minutes and for one computer, with a
-one-liner for each kind of Client. On the Client, run its one-liner:
+one-liner for each kind of Client that carries the Server certificate's
+fingerprint. The code works once, so the line the Client's shell keeps in its
+history is dead after use. On the Client, run its one-liner:
 
 **macOS · Linux:**
 
 ```bash
-curl -fsSL https://thereisnospoon.org/install | SEAMLESS_SETUP=client SEAMLESS_SERVER_URL=https://<server name>:8081 SEAMLESS_PAIR_CODE=<code> sh
+curl -fsSL https://thereisnospoon.org/install | SEAMLESS_SETUP=client SEAMLESS_SERVER_URL=https://<server name>:8081 SEAMLESS_SERVER_FINGERPRINT=<fingerprint> SEAMLESS_PAIR_CODE=<code> sh
 ```
 
 
 **Windows:**
 
 ```powershell
-$env:SEAMLESS_SETUP='client'; $env:SEAMLESS_SERVER_URL='https://<server name>:8081'; $env:SEAMLESS_PAIR_CODE='<code>'; irm https://thereisnospoon.org/install.ps1 | iex
+$env:SEAMLESS_SETUP='client'; $env:SEAMLESS_SERVER_URL='https://<server name>:8081'; $env:SEAMLESS_SERVER_FINGERPRINT='<fingerprint>'; $env:SEAMLESS_PAIR_CODE='<code>'; irm https://thereisnospoon.org/install.ps1 | iex
 ```
 
 
@@ -7209,15 +7214,15 @@ the install is done:
 
 1. **It shows the Server's certificate.** It reads the certificate in a
    handshake that sends nothing, and shows its SHA-256 fingerprint: compare it
-   with the `Certificate fingerprint` the Server printed. Add
-   `SEAMLESS_SERVER_FINGERPRINT=<that fingerprint>` to the line to have setup
-   compare it; on a mismatch nothing is sent. A certificate this computer's own
+   with the `Certificate fingerprint` the Server printed: the one-liner's
+   `SEAMLESS_SERVER_FINGERPRINT` has setup compare it (at a terminal without
+   it, setup asks you); on a mismatch nothing is sent. A certificate this computer's own
    roots do not trust - one made with mkcert or openssl - is trusted only once
    it was compared, and then as that certificate alone, kept in
    `~/.config/seamless/server-ca.crt`. Without the knob, such a run stops and
    names it. A plain `http://` address is refused unless it is this computer's
    own loopback: the code, and a key of this computer's, would cross the
-   network in the clear.
+   network in the clear, and the Server refuses such a pairing too.
 2. **It pairs as a relay or a key device.** On macOS and Linux it pairs a
    [relay](/concepts/networked/#the-relay), unless `SEAMLESS_PAIR_AS=key` makes
    it a key device, for a computer where you have no root (a container, CI).
@@ -7406,8 +7411,13 @@ neither exists.
 - **Revoked and expired**: what ended, and how.
 
 `seamlessd devices list` prints the same list in the terminal. Without TLS on
-the daemon's own listener only a key device can pair, and its key crosses the
-network unencrypted; a relay cannot pair at all.
+the daemon's own listener a relay cannot pair, and the Server refuses a pairing
+over plain http from another computer: its code, and a key device's key, would
+cross the network in the clear. A key device can still pair through a TLS proxy
+on the Server's own computer. Where `server_url` is plain http to another host
+no computer can pair, so the page and `seamlessd devices code` say pairing
+needs TLS there and mint no code; the devices paired before stay listed and
+revocable.
 
 ### Revoke a computer {#revoke-a-computer}
 
@@ -7661,7 +7671,7 @@ Doctor's transport rows are the ones [above](#check-the-server).
 Plain http over a LAN is a legitimate choice for a key client and Seamless will
 not stop you - `seamlessd client-config` prints a warning and continues. But
 the bearer key and every memory it fetches cross the network unencrypted, so
-prefer https. A relay needs it: it cannot pair over plain http.
+prefer https. Pairing needs it: the Server refuses a pairing over plain http from another computer, a relay's and a key device's alike.
 
 Both `tls.cert_file` and `tls.key_file` must be set; one without the other is
 refused at load, because it cannot serve TLS. With both set the listener is
@@ -8668,7 +8678,10 @@ peer_auth:
 
 `seamlessd doctor`, run as the daemon's account, checks each mapping: a name no
 paired relay holds, or a relay no passkey approved, is a **warn**, and a
-mapping that holds names the restricted accounts there.
+mapping that holds names the restricted accounts there. It warns too for each
+key device paired with a one-time code alone, before peer_auth (`peer_auth
+devices`): it is still you over TCP, though no passkey approved it, so revoke
+it and pair it again, so a passkey approves it.
 
 Through a mapped relay, your uid there is you, judged as this socket judges
 you: with the chain the relay reported, and the leases that chain holds. A
@@ -10716,13 +10729,14 @@ Then the Server's, from either:
 | `the server already pairs a device of this name` | revoke the old device of that name on the Devices page, or pair with `--name` |
 | `the server's certificate does not have the fingerprint you compared; nothing was sent` | the address reaches a computer whose certificate is not the one the Server shows: check the address, and the fingerprint `seamlessd devices code` prints on the Server |
 | `a relay pairs over TLS with its client certificate: the server's address must be https` | a relay needs TLS on the daemon's own listener: give the Server a certificate ([setup's address step](/guides/network-install/#set-up-the-server)) |
+| `the server refused the pairing (tls): this server refuses a pairing over plain http from another computer` | the Server has no TLS, and the pairing crossed the network: give the Server TLS ([setup's address step](/guides/network-install/#set-up-the-server)), then pair with its https address |
 | `the owner denied this pairing on the server`, `this pairing was not approved in time: get a new code and pair again` | under peer_auth the pairing waits 10 minutes for your passkey on the Devices page: pair again with a new code, and approve it there |
 | `this relay is already paired with <address> as <name> (device <id>)` | revoke that device on the Devices page, then pair with `--replace` |
 | `the relay runs as root`, `the relay runs as uid <n>, which is not a system account` | run it as its own account, created and pinned as [Deploy it](/guides/peer-auth/#deploy-it-the-daemon-runs-as-its-own-account) does |
 
 On the Server, `seamlessd devices` refusing with `this install serves no other
 computers, so it pairs none` means pairing is off: it is on only on a Server
-with TLS, a bind beyond loopback, or a `server_url` naming another host.
+with TLS, a bind beyond loopback, or a `server_url` naming another host. `devices code` refusing with `pairing needs TLS here` means its address is plain http to another host, which no computer can pair over: give it TLS first.
 
 ## An agent on another computer cannot open a locked project
 
@@ -13606,7 +13620,7 @@ installer.
 | `SEAMLESS_SETUP=standalone\|server\|client` | the kind, for a script (`standalone\|client` on Windows). On a re-run, the installed kind keeps it as it is and `server` makes a Standalone install the Server; any other change is refused, naming why |
 | `SEAMLESS_SERVER_URL`, `SEAMLESS_MCP_API_KEY` | a Client's Server and its key, as the installers have always read them (a Client of the Server's own key, which pairs nothing); `SEAMLESS_SETUP` may only agree |
 | `SEAMLESS_PAIR_CODE` | a Client's pairing code from the Server's Devices page (one computer, 10 minutes): with `SEAMLESS_SERVER_URL`, setup pairs this computer -- a relay on macOS and Linux, whose root step it prints, or a key device of its own |
-| `SEAMLESS_SERVER_FINGERPRINT` | the Server certificate's SHA-256 as its setup printed it: compared before the code is sent, and the certificate trusted alone when this computer's roots do not vouch for it |
+| `SEAMLESS_SERVER_FINGERPRINT` | the Server certificate's SHA-256 as its setup printed it (the Server's one-liners carry it): compared before the code is sent, and the certificate trusted alone when this computer's roots do not vouch for it |
 | `SEAMLESS_PAIR_AS=relay\|key` | what a macOS or Linux Client pairs as; `key` where you have no root (a container, CI). Windows is always `key` |
 | `SEAMLESS_IMPORT` | a backup a first Standalone or Server install starts from ([below](#seamlessd_setup_import)) |
 | `SEAMLESS_IMPORT_LOCKS=keep\|remove` | what that import does with the backup's locked projects when no passkey can open them, as `--keep-locks` and `--remove-locks` answer [`seamlessd import`](#seamlessd_import) |
@@ -14234,7 +14248,7 @@ seamlessd devices revoke <id|name>
 
 The computers paired with this server: relays (macOS and Linux clients) and key devices (Windows, or a machine where you have no root). Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host); elsewhere every verb refuses. Each verb opens the database directly: run it on the server, as the daemon's own account under peer_auth.
 
-- `code` mints a one-time pairing code (10 minutes, one computer; only its hash is stored) and prints what the other computer needs: this server's address, its certificate's SHA-256 fingerprint (as `openssl x509 -noout -fingerprint -sha256` prints it), the code and the client one-liners. Without peer_auth the code is the approval; under it the pairing waits for your passkey on the console's Devices page.
+- `code` mints a one-time pairing code (10 minutes, one computer; only its hash is stored) and prints what the other computer needs: this server's address, its certificate's SHA-256 fingerprint (as `openssl x509 -noout -fingerprint -sha256` prints it), the code and the client one-liners, which carry the fingerprint (`SEAMLESS_SERVER_FINGERPRINT`) so the other computer's setup compares it before it sends the code. The code works once, so the line left in that computer's shell history is dead after use. Where `server_url` is plain http to another host it refuses (`pairing needs TLS here`) and mints nothing. Without peer_auth the code is the approval; under it the pairing waits for your passkey on the console's Devices page.
 - `list` prints every device: id, name, kind, status, fingerprint or key prefix, last seen.
 - `revoke` revokes a paired device (refused from its next request; the daemon ends its running requests within 30 seconds, and a relay's leases, read grants and waiting access requests at once) or denies a pairing that waits, named by its id or by a live device's name. [The Devices page](/guides/network-install/#devices) does the same in the console.
 
@@ -16669,7 +16683,7 @@ nothing, and their rows say so.
 | Begin adding a passkey | `POST /console/passkeys/add/begin` | Only with `console.sign_in: passkey`: the public Add a passkey page asks for the new passkey's `name=`. Returns the WebAuthn creation options. Writes nothing. |
 | Add a passkey, waiting | `POST /console/passkeys/add/finish` | Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: `seamlessd approvers approve --code`, on the server, adds exactly that passkey. At most 32 wait at once. |
 | Begin a terminal sign-in | `POST /console/signin/terminal/begin` | Only with `console.sign_in: passkey`, and only from a browser that proves its key: **Show a code** on the login page. Sets a fresh random sign-in cookie bound to that key and stores it waiting, with a short code, for 10 minutes. It signs nothing in: `seamlessd console-open --sign-in --code`, on the server (as the daemon's account under peer_auth), signs in exactly the browser that showed that code, for 7 days. At most 32 wait at once. A 404 while the key signs browsers in. |
-| Get a pairing code | `POST /console/devices/code` | Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
+| Get a pairing code | `POST /console/devices/code` | Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners, which carry the server certificate's fingerprint when it serves TLS; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused (409, `pairing needs TLS here`) where the server's address is plain http to another host. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
 | Begin a device approval | `POST /console/devices/{id}/approve/begin` | Only under peer_auth, from a signed-in browser, for a pairing that waits. Returns the WebAuthn challenge, bound to that device's id, kind, name, fingerprint and key, and a ticket. Writes nothing. |
 | Approve a device | `POST /console/devices/{id}/approve/finish` | Verifies the passkey assertion for that ticket over the device as it stands, records the passkey's use, and pairs the device: a relay's certificate is accepted from its next request, and a key device collects its own key, once, on its next status. |
 | Revoke a device, or deny a pairing | `POST /console/devices/{id}/revoke` | Revokes a paired device: its credential is refused from its next request, and the requests it is making end. A pairing that waits is denied instead. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
@@ -17704,8 +17718,12 @@ exist. The computers paired with this server, and how to pair another
 
 - **Pair a computer** - this server's address and its certificate's
   fingerprint, and **Get a pairing code**: a code shown once, valid for 10
-  minutes and for one computer, with the client one-liners. Without peer_auth
-  the page says the code is the approval.
+  minutes and for one computer, with the client one-liners, which carry the
+  fingerprint for setup on the other computer to compare. The code works once,
+  so the line left in that computer's shell history is dead after use. Without
+  peer_auth the page says the code is the approval. Where this server's address
+  is plain http to another host the page says pairing needs TLS, and offers no
+  code.
 - **Waiting for your approval** - under peer_auth only: each computer that used
   a code, its fingerprint and until when it waits, with **Approve with a
   passkey** and **Deny**. Approving needs a signed-in browser on the

@@ -19,6 +19,14 @@
 // on the console's Devices page (internal/approval), after comparing the
 // fingerprint both ends show: the code alone opens nothing.
 //
+// A pairing travels over TLS, or never leaves the server's computer: the edge
+// refuses one that arrives over plain http from another computer, since its
+// code, and a key device's key in the answer, would cross the network in the
+// clear, and a server whose address is plain http to another host mints no
+// code (ServerFacts.PairingNeedsTLS). The one-liners that pair a computer
+// carry the server certificate's fingerprint (ClientCommands), so the other
+// computer's setup compares it before it sends the code.
+//
 // The daemon's edge (Service.Edge) authenticates a paired credential before
 // any route sees the request, and marks the request with it (WithCredential).
 // Every surface that checks the bearer key asks Bearer, the one verifier, so a
@@ -51,6 +59,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -599,18 +608,59 @@ func NormalizeName(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
 }
 
+// ErrPairingNeedsTLS is a pairing code asked of a server no other computer
+// can pair with: its address (ServerFacts.URL) is plain http to another host,
+// and a pairing over plain http from another computer is refused at both ends
+// (the client's ErrPlainHTTP, the edge's refusal), since the code and a key
+// device's key would cross the network in the clear. The Devices page and
+// `seamlessd devices code` mint no code there: one could only expire.
+var ErrPairingNeedsTLS = errors.New("pairing needs TLS here: this server's address is plain http, and a pairing over plain " +
+	"http from another computer is refused, since its code and a key device's key would cross the network in the clear. " +
+	"Give the server TLS (seamlessd setup's address step, or tls.cert_file and tls.key_file), then get a code")
+
+// PairingNeedsTLS reports whether no other computer can pair through the
+// address clients dial: it is plain http to a host other than this
+// computer's loopback, and the server serves no TLS of its own. An https
+// address pairs (the server's own TLS, or a TLS proxy in front of it), and so
+// does loopback over plain http, on this computer alone.
+func (f ServerFacts) PairingNeedsTLS() bool {
+	if f.TLS {
+		return false
+	}
+	u, err := url.Parse(strings.TrimSpace(f.URL))
+	if err != nil || !strings.EqualFold(u.Scheme, "http") {
+		return false
+	}
+	return !loopbackHost(u.Hostname())
+}
+
 // The installer one-liners that pair another computer with this server. The
 // environment names are the ones docs/install and docs/install.ps1 read
 // (`seamlessd setup`'s knobs), written once here so the Devices page, the
 // server's setup and `seamlessd devices code` print the same commands.
 const (
-	unixPairCommand    = "curl -fsSL https://thereisnospoon.org/install | SEAMLESS_SETUP=client SEAMLESS_SERVER_URL=%s SEAMLESS_PAIR_CODE=%s sh"
-	windowsPairCommand = "$env:SEAMLESS_SETUP='client'; $env:SEAMLESS_SERVER_URL='%s'; $env:SEAMLESS_PAIR_CODE='%s'; irm https://thereisnospoon.org/install.ps1 | iex"
+	unixPairCommand    = "curl -fsSL https://thereisnospoon.org/install | SEAMLESS_SETUP=client SEAMLESS_SERVER_URL=%s %sSEAMLESS_PAIR_CODE=%s sh"
+	windowsPairCommand = "$env:SEAMLESS_SETUP='client'; $env:SEAMLESS_SERVER_URL='%s'; %s$env:SEAMLESS_PAIR_CODE='%s'; irm https://thereisnospoon.org/install.ps1 | iex"
+	// The certificate's fingerprint, between the address and the code, when
+	// the server serves TLS.
+	unixPairFingerprint    = "SEAMLESS_SERVER_FINGERPRINT=%s "
+	windowsPairFingerprint = "$env:SEAMLESS_SERVER_FINGERPRINT='%s'; "
 )
 
-// ClientCommands are the one-liners that pair another computer with the
-// server at serverURL using code: macOS and Linux (whose client pairs a
-// relay), and Windows (a key device). code may be a placeholder.
-func ClientCommands(serverURL, code string) (unix, windows string) {
-	return fmt.Sprintf(unixPairCommand, serverURL, code), fmt.Sprintf(windowsPairCommand, serverURL, code)
+// ClientCommands are the one-liners that pair another computer with server
+// using code: macOS and Linux (whose client pairs a relay), and Windows (a key
+// device). code may be a placeholder. When the server serves TLS they carry
+// its certificate's fingerprint (SEAMLESS_SERVER_FINGERPRINT, in
+// CertFingerprint's form), so the other computer's setup compares the
+// certificate it is shown before it sends the code, with no one at its
+// terminal as with someone there, instead of trusting whatever answers. A
+// proxy's https address names no fingerprint: the server does not know the
+// proxy's certificate.
+func ClientCommands(server ServerFacts, code string) (unix, windows string) {
+	unixFP, windowsFP := "", ""
+	if server.TLS && server.CertFingerprint != "" {
+		unixFP = fmt.Sprintf(unixPairFingerprint, server.CertFingerprint)
+		windowsFP = fmt.Sprintf(windowsPairFingerprint, server.CertFingerprint)
+	}
+	return fmt.Sprintf(unixPairCommand, server.URL, unixFP, code), fmt.Sprintf(windowsPairCommand, server.URL, windowsFP, code)
 }

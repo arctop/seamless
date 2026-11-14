@@ -425,8 +425,9 @@ prints it:</p>
 </span></span><span class="line"><span class="cl">  Pairing code:            get one on the console&#39;s Devices page, or run `seamlessd devices code` here
 </span></span><span class="line"><span class="cl">    The code is the approval: whoever enters it first pairs as you.
 </span></span></code></pre></div>
-<p>It is followed by the one-liners for macOS and Linux and for Windows, and by
-locked projects as a step setup does not do yet, with the
+<p>It is followed by the one-liners for macOS and Linux and for Windows, which
+carry the certificate's fingerprint, by a reminder that each code works once,
+and by locked projects as a step setup does not do yet, with the
 <a href="../../guides/peer-auth/#move-an-existing-install-over">guide that does it by hand</a>.
 Run a one-liner on each Client, with a code of its own
 (<a href="#step-3-pair-a-client">below</a>).</p>
@@ -498,7 +499,11 @@ that is <a href="#step-1-widen-the-server">by hand</a>.</p>
 </tr>
 <tr>
 <td><code>device pairing</code></td>
-<td>How a computer pairs here, and how many are paired or waiting. No TLS is a <strong>warn</strong>: a relay cannot pair.</td>
+<td>How a computer pairs here, and how many are paired or waiting. No TLS is a <strong>warn</strong>: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http <code>server_url</code> to another host no computer can pair, and no code is minted.</td>
+</tr>
+<tr>
+<td><code>peer_auth devices</code></td>
+<td>Under peer_auth only: a <strong>warn</strong> for each key device paired with a one-time code alone, before peer_auth, which is still you over TCP though no passkey approved it: revoke it and pair it again, so a passkey approves it.</td>
 </tr>
 </tbody>
 </table>
@@ -508,15 +513,17 @@ that is <a href="#step-1-widen-the-server">by hand</a>.</p>
 <p>On the Server, get a pairing code: <strong>Get a pairing code</strong> on the console's
 <a href="#devices">Devices page</a>, or <code>seamlessd devices code</code> in the Server's terminal.
 Either shows the code once, valid for 10 minutes and for one computer, with a
-one-liner for each kind of Client. On the Client, run its one-liner:</p>
+one-liner for each kind of Client that carries the Server certificate's
+fingerprint. The code works once, so the line the Client's shell keeps in its
+history is dead after use. On the Client, run its one-liner:</p>
 <div class="ctx-variant" data-ctx-os="macos linux">
 <p class="ctx-label"><span class="ctx-chip">macOS</span><span class="ctx-chip">Linux</span></p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">curl -fsSL https://thereisnospoon.org/install <span class="p">|</span> <span class="nv">SEAMLESS_SETUP</span><span class="o">=</span>client <span class="nv">SEAMLESS_SERVER_URL</span><span class="o">=</span>https://&lt;server name&gt;:8081 <span class="nv">SEAMLESS_PAIR_CODE</span><span class="o">=</span>&lt;code&gt; sh
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">curl -fsSL https://thereisnospoon.org/install <span class="p">|</span> <span class="nv">SEAMLESS_SETUP</span><span class="o">=</span>client <span class="nv">SEAMLESS_SERVER_URL</span><span class="o">=</span>https://&lt;server name&gt;:8081 <span class="nv">SEAMLESS_SERVER_FINGERPRINT</span><span class="o">=</span>&lt;fingerprint&gt; <span class="nv">SEAMLESS_PAIR_CODE</span><span class="o">=</span>&lt;code&gt; sh
 </span></span></code></pre></div>
 </div>
 <div class="ctx-variant" data-ctx-os="windows">
 <p class="ctx-label"><span class="ctx-chip">Windows</span></p>
-<div class="code-block" data-lang="powershell"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nv">$env:SEAMLESS_SETUP</span><span class="p">=</span><span class="s1">&#39;client&#39;</span><span class="p">;</span> <span class="nv">$env:SEAMLESS_SERVER_URL</span><span class="p">=</span><span class="s1">&#39;https://&lt;server name&gt;:8081&#39;</span><span class="p">;</span> <span class="nv">$env:SEAMLESS_PAIR_CODE</span><span class="p">=</span><span class="s1">&#39;&lt;code&gt;&#39;</span><span class="p">;</span> <span class="nb">irm </span><span class="n">https</span><span class="err">:</span><span class="p">//</span><span class="n">thereisnospoon</span><span class="p">.</span><span class="n">org</span><span class="p">/</span><span class="n">install</span><span class="p">.</span><span class="py">ps1</span> <span class="p">|</span> <span class="nb">iex
+<div class="code-block" data-lang="powershell"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nv">$env:SEAMLESS_SETUP</span><span class="p">=</span><span class="s1">&#39;client&#39;</span><span class="p">;</span> <span class="nv">$env:SEAMLESS_SERVER_URL</span><span class="p">=</span><span class="s1">&#39;https://&lt;server name&gt;:8081&#39;</span><span class="p">;</span> <span class="nv">$env:SEAMLESS_SERVER_FINGERPRINT</span><span class="p">=</span><span class="s1">&#39;&lt;fingerprint&gt;&#39;</span><span class="p">;</span> <span class="nv">$env:SEAMLESS_PAIR_CODE</span><span class="p">=</span><span class="s1">&#39;&lt;code&gt;&#39;</span><span class="p">;</span> <span class="nb">irm </span><span class="n">https</span><span class="err">:</span><span class="p">//</span><span class="n">thereisnospoon</span><span class="p">.</span><span class="n">org</span><span class="p">/</span><span class="n">install</span><span class="p">.</span><span class="py">ps1</span> <span class="p">|</span> <span class="nb">iex
 </span></span></span></code></pre></div>
 </div>
 <p>Setup then pairs the computer before anything is installed, and finishes once
@@ -524,15 +531,15 @@ the install is done:</p>
 <ol>
 <li><strong>It shows the Server's certificate.</strong> It reads the certificate in a
 handshake that sends nothing, and shows its SHA-256 fingerprint: compare it
-with the <code>Certificate fingerprint</code> the Server printed. Add
-<code>SEAMLESS_SERVER_FINGERPRINT=&lt;that fingerprint&gt;</code> to the line to have setup
-compare it; on a mismatch nothing is sent. A certificate this computer's own
+with the <code>Certificate fingerprint</code> the Server printed: the one-liner's
+<code>SEAMLESS_SERVER_FINGERPRINT</code> has setup compare it (at a terminal without
+it, setup asks you); on a mismatch nothing is sent. A certificate this computer's own
 roots do not trust - one made with mkcert or openssl - is trusted only once
 it was compared, and then as that certificate alone, kept in
 <code>~/.config/seamless/server-ca.crt</code>. Without the knob, such a run stops and
 names it. A plain <code>http://</code> address is refused unless it is this computer's
 own loopback: the code, and a key of this computer's, would cross the
-network in the clear.</li>
+network in the clear, and the Server refuses such a pairing too.</li>
 <li><strong>It pairs as a relay or a key device.</strong> On macOS and Linux it pairs a
 <a href="../../concepts/networked/#the-relay">relay</a>, unless <code>SEAMLESS_PAIR_AS=key</code> makes
 it a key device, for a computer where you have no root (a container, CI).
@@ -707,8 +714,13 @@ code approved it, and when it was last seen.</p>
 </li>
 </ul>
 <p><code>seamlessd devices list</code> prints the same list in the terminal. Without TLS on
-the daemon's own listener only a key device can pair, and its key crosses the
-network unencrypted; a relay cannot pair at all.</p>
+the daemon's own listener a relay cannot pair, and the Server refuses a pairing
+over plain http from another computer: its code, and a key device's key, would
+cross the network in the clear. A key device can still pair through a TLS proxy
+on the Server's own computer. Where <code>server_url</code> is plain http to another host
+no computer can pair, so the page and <code>seamlessd devices code</code> say pairing
+needs TLS there and mint no code; the devices paired before stay listed and
+revocable.</p>
 <h3 id="revoke-a-computer">Revoke a computer</h3>
 <p><strong>Revoke</strong> on the Devices page, or in the Server's terminal (as the daemon's
 account under peer_auth, like <code>devices code</code>):</p>
@@ -940,7 +952,7 @@ naming one somewhere is what turns the guard on there.)</p>
 <p>Plain http over a LAN is a legitimate choice for a key client and Seamless will
 not stop you - <code>seamlessd client-config</code> prints a warning and continues. But
 the bearer key and every memory it fetches cross the network unencrypted, so
-prefer https. A relay needs it: it cannot pair over plain http.</p>
+prefer https. Pairing needs it: the Server refuses a pairing over plain http from another computer, a relay's and a key device's alike.</p>
 <p>Both <code>tls.cert_file</code> and <code>tls.key_file</code> must be set; one without the other is
 refused at load, because it cannot serve TLS. With both set the listener is
 https (TLS 1.2 floor), the console session cookie is marked <code>Secure</code>, and

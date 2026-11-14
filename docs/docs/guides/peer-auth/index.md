@@ -769,7 +769,10 @@ peer_auth:
 
 `seamlessd doctor`, run as the daemon's account, checks each mapping: a name no
 paired relay holds, or a relay no passkey approved, is a **warn**, and a
-mapping that holds names the restricted accounts there.
+mapping that holds names the restricted accounts there. It warns too for each
+key device paired with a one-time code alone, before peer_auth (`peer_auth
+devices`): it is still you over TCP, though no passkey approved it, so revoke
+it and pair it again, so a passkey approves it.
 
 Through a mapped relay, your uid there is you, judged as this socket judges
 you: with the chain the relay reported, and the leases that chain holds. A

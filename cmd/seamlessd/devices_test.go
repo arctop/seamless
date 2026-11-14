@@ -20,6 +20,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -455,22 +456,34 @@ func TestPairingOn_OnlyForAServerThatServesOthers(t *testing.T) {
 }
 
 // The closing output names the address, the certificate, how to get a code
-// and the client one-liners; with a code, the code.
+// and the client one-liners, which carry the certificate's fingerprint, and
+// says the code works once; with a code, the code. Where no other computer
+// can pair (plain http to another host) it says why, and offers no code.
 func TestServerPairingClosing(t *testing.T) {
 	var b bytes.Buffer
 	facts := devices.ServerFacts{URL: "https://example-server.example.ts.net:8081", CertFingerprint: "AB:CD", TLS: true}
 	serverPairingClosing(&b, facts, "", false)
 	out := b.String()
 	for _, want := range []string{"https://example-server.example.ts.net:8081", "AB:CD", "seamlessd devices code",
-		"The code is the approval", "SEAMLESS_PAIR_CODE=<code>", "$env:SEAMLESS_PAIR_CODE='<code>'"} {
+		"The code is the approval", "SEAMLESS_SERVER_FINGERPRINT=AB:CD SEAMLESS_PAIR_CODE=<code>",
+		"$env:SEAMLESS_SERVER_FINGERPRINT='AB:CD'; $env:SEAMLESS_PAIR_CODE='<code>'",
+		"The code works once, within 10 minutes: the line it leaves in that computer's shell history is dead after use."} {
 		require.Contains(t, out, want)
 	}
 	b.Reset()
-	serverPairingClosing(&b, devices.ServerFacts{URL: "http://192.168.1.20:8081"}, "ABCD-EFGH-JKMN-PQRS", true)
+	serverPairingClosing(&b, devices.ServerFacts{URL: "http://127.0.0.1:8081"}, "ABCD-EFGH-JKMN-PQRS", true)
 	out = b.String()
 	require.Contains(t, out, "ABCD-EFGH-JKMN-PQRS")
 	require.Contains(t, out, "approve the computer with your passkey")
 	require.Contains(t, out, "No TLS")
+	require.NotContains(t, out, "FINGERPRINT", "without TLS the one-liners are as they were")
+	b.Reset()
+	serverPairingClosing(&b, devices.ServerFacts{URL: "http://192.168.1.20:8081"}, "", false)
+	out = b.String()
+	require.Contains(t, out, "No TLS")
+	require.Contains(t, out, "Pairing needs TLS here")
+	require.Contains(t, out, "seamlessd setup's address step")
+	require.NotContains(t, out, "SEAMLESS_PAIR_CODE", "no one-liner that could only fail")
 }
 
 // seamlessd devices: code, list and revoke against the served database,
@@ -547,12 +560,196 @@ func TestDevicePairingChecks(t *testing.T) {
 	require.Empty(t, devicePairingChecks(context.Background(), config.Defaults(), nil), "a default install has no such rows")
 	cfg := config.Defaults()
 	cfg.Addr = "0.0.0.0:8081"
-	rows := devicePairingChecks(context.Background(), cfg, nil)
-	require.NotEmpty(t, rows)
-	var warned bool
-	for _, r := range rows {
-		require.Equal(t, "device pairing", r.name)
-		warned = warned || (r.status == statusWarn && strings.Contains(r.detail, "no TLS"))
+	warning := func(cfg config.Config) string {
+		t.Helper()
+		rows := devicePairingChecks(context.Background(), cfg, nil)
+		require.NotEmpty(t, rows)
+		warned := ""
+		for _, r := range rows {
+			require.Equal(t, "device pairing", r.name)
+			if r.status == statusWarn && strings.Contains(r.detail, "no TLS") {
+				warned = r.detail
+			}
+		}
+		require.NotEmpty(t, warned, "without TLS a relay cannot pair: doctor says so")
+		return warned
 	}
-	require.True(t, warned, "without TLS a relay cannot pair: doctor says so")
+	line := warning(cfg)
+	require.Contains(t, line, "a pairing over plain http from another computer is refused")
+	require.Contains(t, line, "seamlessd setup's address step")
+	require.NotContains(t, line, "no other computer can pair here", "server_url names loopback: this computer still pairs")
+
+	cfg.Addr = "192.168.1.20:8081"
+	require.Contains(t, warning(cfg), "server_url is plain http, so no other computer can pair here, and no code is minted")
+}
+
+// devices2CodeConfig is a Server's config with TLS from a fresh certificate
+// in dir, and that certificate's DER.
+func devices2CodeConfig(t *testing.T, dir string) (config.Config, []byte) {
+	t.Helper()
+	cert, _ := deviceServerCert(t)
+	certPath := filepath.Join(dir, "cert.pem")
+	require.NoError(t, os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Certificate[0]}), 0o600))
+	cfg := config.Defaults()
+	cfg.Addr = "0.0.0.0:8081"
+	cfg.AdvertisedURL = "https://example-server.example.ts.net:8081"
+	cfg.TLS.CertFile, cfg.TLS.KeyFile = certPath, filepath.Join(dir, "key.pem")
+	return cfg, cert.Certificate[0]
+}
+
+// devices2UnixEnv is the environment a macOS and Linux one-liner gives the
+// installer: its SEAMLESS_* assignments, in order.
+func devices2UnixEnv(t *testing.T, line string) []string {
+	t.Helper()
+	pipe, rest, ok := strings.Cut(line, " | ")
+	require.True(t, ok, line)
+	require.Equal(t, "curl -fsSL https://thereisnospoon.org/install", pipe)
+	fields := strings.Fields(rest)
+	require.Equal(t, "sh", fields[len(fields)-1], line)
+	env := fields[:len(fields)-1]
+	for _, f := range env {
+		require.Regexp(t, `^SEAMLESS_[A-Z_]+=[^\s'"$;|&]+$`, f, "a plain assignment the shell passes as it is")
+	}
+	return env
+}
+
+// devices2WindowsEnv is the environment a Windows one-liner gives the
+// installer: its $env: assignments, in order.
+func devices2WindowsEnv(t *testing.T, line string) []string {
+	t.Helper()
+	const tail = "irm https://thereisnospoon.org/install.ps1 | iex"
+	require.True(t, strings.HasSuffix(line, tail), line)
+	var env []string
+	for _, stmt := range strings.Split(strings.TrimSuffix(line, tail), "; ") {
+		if stmt = strings.TrimSpace(stmt); stmt == "" {
+			continue
+		}
+		m := regexp.MustCompile(`^\$env:(SEAMLESS_[A-Z_]+)='([^']*)'$`).FindStringSubmatch(stmt)
+		require.Len(t, m, 3, "%q is one quoted assignment", stmt)
+		env = append(env, m[1]+"="+m[2])
+	}
+	return env
+}
+
+// seamlessd devices code: the one-liners carry this server's certificate
+// fingerprint, in the form setup on the other computer reads
+// (SEAMLESS_SERVER_FINGERPRINT), and the code is said to work once. Each
+// one-liner, run as it is, is accepted by setup's own knobs: the certificate
+// it is shown is compared with no one at the terminal, the code goes only to
+// it, and another certificate answering for the address gets nothing.
+func TestDevices2_OneLinersCarryTheFingerprintSetupReads(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	cfg, der := devices2CodeConfig(t, dir)
+	fp := devices.CertFingerprint(der)
+
+	var out bytes.Buffer
+	cmd, err := parseDevices([]string{"code"})
+	require.NoError(t, err)
+	require.NoError(t, cmd.run(ctx, db, cfg, &out))
+	text := out.String()
+	require.Contains(t, text, "Certificate fingerprint: "+fp)
+	require.Contains(t, text, "SEAMLESS_SERVER_URL=https://example-server.example.ts.net:8081 SEAMLESS_SERVER_FINGERPRINT="+fp+" SEAMLESS_PAIR_CODE=")
+	require.Contains(t, text, "$env:SEAMLESS_SERVER_FINGERPRINT='"+fp+"'; $env:SEAMLESS_PAIR_CODE='")
+	require.Contains(t, text, "The code works once, within 10 minutes: the line it leaves in that computer's shell history is dead after use.")
+
+	out.Reset()
+	cmd, err = parseDevices([]string{"code", "--json"})
+	require.NoError(t, err)
+	require.NoError(t, cmd.run(ctx, db, cfg, &out))
+	var minted struct {
+		Code, Unix, Windows string
+	}
+	require.NoError(t, json.Unmarshal(out.Bytes(), &minted))
+	unixEnv, windowsEnv := devices2UnixEnv(t, minted.Unix), devices2WindowsEnv(t, minted.Windows)
+	want := []string{"SEAMLESS_SETUP=client", "SEAMLESS_SERVER_URL=https://example-server.example.ts.net:8081",
+		"SEAMLESS_SERVER_FINGERPRINT=" + fp, "SEAMLESS_PAIR_CODE=" + minted.Code}
+	require.Equal(t, want, unixEnv)
+	require.Equal(t, want, windowsEnv)
+
+	// The certificate the other computer is shown: the server's, which its
+	// own roots do not vouch for, so setup trusts it only once compared.
+	shown := clientServerCert{tls: true, fingerprint: fp, pem: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
+		why: "x509: certificate signed by unknown authority"}
+
+	// macOS and Linux: compared unattended, and the relay's step goes on.
+	r, rout, _ := setupTestRun(t, "linux", unixEnv, setupFactsFresh, false, "")
+	clientArrange(t, r, shown)
+	st, err := clientFirstHalf(t, r)
+	require.NoError(t, err, rout.String())
+	require.Contains(t, rout.String(), "matches SEAMLESS_SERVER_FINGERPRINT")
+	require.Equal(t, setupDeviceRelay, st.device)
+	require.Equal(t, fp, st.fingerprint, "the relay pins the certificate compared")
+
+	// Windows: the key device pairs with the code, only to that certificate.
+	r, wout, wrote := setupTestRun(t, "windows", windowsEnv, setupFactsFresh, false, "")
+	w := clientArrange(t, r, shown)
+	_, err = clientFirstHalf(t, r)
+	require.NoError(t, err, wout.String())
+	require.Contains(t, wout.String(), "matches SEAMLESS_SERVER_FINGERPRINT")
+	require.Len(t, w.pairs, 1)
+	require.Equal(t, minted.Code, w.pairs[0].Code)
+	require.Equal(t, fp, w.pairs[0].ServerFingerprint, "the code goes only to the certificate compared")
+	require.Len(t, *wrote, 1)
+
+	// Another certificate answering for the address gets nothing.
+	other := shown
+	other.fingerprint = devices.CertFingerprint([]byte("another certificate"))
+	for goos, env := range map[string][]string{"linux": unixEnv, "windows": windowsEnv} {
+		r, _, wrote := setupTestRun(t, goos, env, setupFactsFresh, false, "")
+		w := clientArrange(t, r, other)
+		_, err := clientFirstHalf(t, r)
+		require.ErrorIs(t, err, errSetupRefused, goos)
+		require.ErrorContains(t, err, "nothing was sent to it", goos)
+		require.Empty(t, w.pairs, goos)
+		require.Empty(t, *wrote, goos)
+	}
+}
+
+// A Server whose address is plain http to another host mints no code: no
+// other computer could pair with it (the client refuses plain http off
+// loopback, and the edge a pairing over it from another computer). The list
+// and revoke still work there, for the devices paired before. A wildcard
+// bind with no server_url names loopback, which pairs on this computer as
+// before.
+func TestDevices2_CodeNeedsTLSWhereNoComputerCanPair(t *testing.T) {
+	ctx := context.Background()
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	for _, edit := range []func(*config.Config){
+		func(c *config.Config) { c.Addr = "192.168.1.20:8081" },
+		func(c *config.Config) { c.Addr, c.AdvertisedURL = "0.0.0.0:8081", "http://example-server.example:8081" },
+	} {
+		cfg := config.Defaults()
+		edit(&cfg)
+		require.True(t, pairingOn(cfg))
+		for _, args := range [][]string{{"code"}, {"code", "--json"}} {
+			var out bytes.Buffer
+			cmd, err := parseDevices(args)
+			require.NoError(t, err)
+			err = cmd.run(ctx, db, cfg, &out)
+			require.ErrorIs(t, err, devices.ErrPairingNeedsTLS, cfg.ServerURL())
+			require.ErrorContains(t, err, "seamlessd setup's address step")
+			require.Empty(t, out.String())
+		}
+		var out bytes.Buffer
+		cmd, err := parseDevices([]string{"list"})
+		require.NoError(t, err)
+		require.NoError(t, cmd.run(ctx, db, cfg, &out), "the devices paired before stay listed")
+	}
+	open, err := store.CountOpenPairingCodes(ctx, db, time.Now())
+	require.NoError(t, err)
+	require.Zero(t, open, "no code was minted")
+
+	cfg := config.Defaults()
+	cfg.Addr = "0.0.0.0:8081"
+	cmd, err := parseDevices([]string{"code"})
+	require.NoError(t, err)
+	var out bytes.Buffer
+	require.NoError(t, cmd.run(ctx, db, cfg, &out), "loopback pairs on this computer, as before")
+	require.Contains(t, out.String(), "SEAMLESS_SERVER_URL=http://127.0.0.1:8081 SEAMLESS_PAIR_CODE=")
 }

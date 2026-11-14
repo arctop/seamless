@@ -139,7 +139,7 @@ script](https://thereisnospoon.org/install) with no dependencies to audit.
 | `SEAMLESS_SERVER_NAME` | the name the other computers reach a Server at ([setup's address step](/reference/cli-seamlessd/#seamlessd_setup_address)); with `SEAMLESS_SETUP=server` only |
 | `SEAMLESS_TLS_CERT`, `SEAMLESS_TLS_KEY` | that name's certificate and key, full paths; none for this computer's Tailscale name |
 | `SEAMLESS_PAIR_CODE` | a client's pairing code, from the server's Devices page or `seamlessd devices code` there (one computer, 10 minutes): with `SEAMLESS_SERVER_URL`, setup pairs this computer before anything is installed - a relay, whose root step it prints, or a key of its own. See [Share one daemon across your computers](/guides/network-install/#step-3-pair-a-client) |
-| `SEAMLESS_SERVER_FINGERPRINT` | the server certificate's SHA-256, as its setup printed it: setup compares it before the code is sent, and sends nothing on a mismatch. Without it, a script pairs only with a certificate this computer already trusts |
+| `SEAMLESS_SERVER_FINGERPRINT` | the server certificate's SHA-256, as its setup printed it (the server's one-liners carry it): setup compares it before the code is sent, and sends nothing on a mismatch. Without it, a script pairs only with a certificate this computer already trusts |
 | `SEAMLESS_PAIR_AS=relay\|key` | what a client pairs as: `relay`, the default on macOS and Linux, or `key`, for a computer where you have no root (a container, CI). Windows is always `key` |
 | `SEAMLESS_NO_HOOKS=1` | skip agent hooks, MCP registration, and skills, and the client detection that would choose them |
 | `SEAMLESS_NO_ONBOARD_SKILL=1` | skip the selected client(s)' one-shot onboarding skill |
