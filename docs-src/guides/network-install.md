@@ -132,7 +132,9 @@ carry the certificate's fingerprint, by a reminder that each code works once,
 and by locked projects as a step setup does not do yet, with the
 [guide that does it by hand](/guides/peer-auth/#move-an-existing-install-over).
 Run a one-liner on each Client, with a code of its own
-([below](#step-3-pair-a-client)).
+([below](#step-3-pair-a-client)). On a Server widened by hand without
+`server_url`, the address is this computer's loopback, and the closing says
+another computer cannot use the one-liners ([below](#devices)).
 
 A script answers the same questions in the environment: `SEAMLESS_SETUP=server`
 with `SEAMLESS_SERVER_NAME`, plus `SEAMLESS_TLS_CERT` and `SEAMLESS_TLS_KEY`
@@ -185,7 +187,7 @@ Its transport rows are the ones to read:
 | `tls.key_file` | Who can read the TLS key: your account alone is **info**, group or world a **warn**. |
 | `server_url.addresses` | Every address the `server_url` host resolves to, against what the daemon listens on. One the daemon does not hold is a **warn**. |
 | `tailscale` | **info** when the tailnet issues certificates for the host: then the bind holding every address of the name, not the TLS key, keeps another page off the console's origin. |
-| `device pairing` | How a computer pairs here, and how many are paired or waiting. No TLS is a **warn**: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http `server_url` to another host no computer can pair, and no code is minted. |
+| `device pairing` | How a computer pairs here, and how many are paired or waiting. No TLS is a **warn**: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http `server_url` to another host no computer can pair, and no code is minted. An address of this computer's loopback (`server_url` unset on a wildcard bind derives `http://127.0.0.1:8081`) is a **warn** too: the one-liners carry it, so another computer cannot use them. |
 | `peer_auth devices` | Under peer_auth only: a **warn** for each key device paired with a one-time code alone, before peer_auth, which is still you over TCP though no passkey approved it: revoke it and pair it again, so a passkey approves it. |
 
 Every row is in [the doctor reference](/reference/cli-seamlessd/#seamlessd_doctor).
@@ -444,6 +446,14 @@ on the Server's own computer. Where `server_url` is plain http to another host
 no computer can pair, so the page and `seamlessd devices code` say pairing
 needs TLS there and mint no code; the devices paired before stay listed and
 revocable.
+
+Where the Server's address is this computer's loopback - `server_url` unset on a
+wildcard bind derives `http://127.0.0.1:8081`, or `https://` with TLS - the
+page, `seamlessd devices code`, setup's closing and doctor say the one-liners
+carry it, so another computer cannot use them: they pair a client on the
+Server's own computer only. Set `server_url` to the address the other computers
+reach the Server at ([by hand](#step-1-widen-the-server); setup's address step
+writes it only when it makes a computer the Server), then restart the daemon.
 
 ### Revoke a computer {#revoke-a-computer}
 

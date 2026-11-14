@@ -917,7 +917,11 @@ any of it.
   `tls`, review L5), and where the address clients dial is plain http to
   another host (`ServerFacts.PairingNeedsTLS`) the Devices page and `seamlessd
   devices code` mint no code (`ErrPairingNeedsTLS`); `pairingOn` stays on
-  there, so the devices paired before keep the edge, the list and revoke. A
+  there, so the devices paired before keep the edge, the list and revoke. Where
+  that address is this computer's loopback (`ServerFacts.PairingLoopbackOnly`:
+  no `server_url` on a wildcard bind) they mint one, for a client on this
+  computer, and every surface showing the one-liners (the page, `devices code`,
+  setup's closing, doctor) says another computer cannot use them. A
   one-time code (80 bits, 10 minutes, one computer, only its hash stored)
   comes from the console or `seamlessd devices code`, with one-liners that
   carry the server certificate's fingerprint (`devices.ClientCommands`,

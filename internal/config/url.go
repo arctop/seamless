@@ -71,6 +71,29 @@ func (c Config) SocketPath() string {
 	return u.Path
 }
 
+// ServerURLNamesUser reports whether server_url is an http(s) URL that names
+// a user (https://user:password@host:8081). Seamless uses none: the daemon
+// takes a bearer key, a paired device's credential or a socket peer's uid,
+// never Basic auth. Yet Go's HTTP client sends the user as Basic auth on
+// every request that carries no Authorization header of its own (doctor's
+// reachability probe, which verifies no certificate, among them), and every
+// surface that prints or writes ServerURL -- doctor's rows, the hooks and
+// the MCP registration install-hooks writes -- carries the password.
+//
+// It is named, for doctor's warning, rather than refused at load:
+// `seamlessd install-hooks --server-url` (EnsureClientConfig, which the
+// installers' SEAMLESS_SERVER_URL with SEAMLESS_MCP_API_KEY runs) writes
+// such a value into a client config, and a config it wrote must keep
+// loading. Setup's own address questions refuse one. A socket URL never
+// names a user: validateSocketURL refuses it.
+func (c Config) ServerURLNamesUser() bool {
+	if c.SocketPath() != "" {
+		return false
+	}
+	u, err := url.Parse(strings.TrimSpace(c.AdvertisedURL))
+	return err == nil && u.User != nil
+}
+
 // HookBaseURL is the base URL the hook and MCP installers describe this
 // install's daemon by: ServerURL, except for a socket server_url, where it is
 // the unix:///path itself -- the one spelling from which the installers can

@@ -46,10 +46,14 @@ var (
 	// ErrKeyLost is a key device paired whose key never arrived: the answer
 	// that carried it was lost. The owner revokes it and pairs again.
 	ErrKeyLost = errors.New("the device paired, but its key was lost on the way: revoke it on the server's Devices page and pair again")
-	// ErrPlainHTTP is a pairing asked of a server on another computer over
-	// plain http: the code, and a key device's key in the answer, would cross
-	// the network in the clear. Only loopback may pair over http.
-	ErrPlainHTTP = errors.New("pairing with a server on another computer needs https: over plain http the code and this computer's key would cross the network in the clear")
+	// ErrPlainHTTP is a pairing over plain http between two computers: the
+	// code, and a key device's key in the answer, would cross the network in
+	// the clear. Only loopback may pair over http. Pair refuses one before it
+	// sends anything, and a server's refusal of one (its edge's, reason tls:
+	// this computer dialed loopback, yet the server saw the request come from
+	// another computer, through a forwarded port) is this error too.
+	ErrPlainHTTP = errors.New("pairing with a server on another computer needs https: over plain http the code and this computer's key " +
+		"would cross the network in the clear. Give the server TLS, then pair with its https address")
 )
 
 // PairRequest is one pairing, as a device asks for it.
@@ -355,6 +359,11 @@ func postPair(ctx context.Context, hc *http.Client, target string, body pairRequ
 			return PairAnswer{}, fp, fmt.Errorf("%w: %s", ErrNameTaken, refused.Error)
 		case "pairing":
 			return PairAnswer{}, fp, ErrUnknownPairing
+		case "tls":
+			// The edge's refusal, unread: the code is not spent. Its own text
+			// is the server's ("this server refuses ..."), which under the
+			// generic wording below would read "refused ... refuses".
+			return PairAnswer{}, fp, ErrPlainHTTP
 		}
 		return PairAnswer{}, fp, fmt.Errorf("the server refused the pairing (%s): %s", refused.Reason, refused.Error)
 	}

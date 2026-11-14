@@ -753,8 +753,8 @@ the computer.</p>
 <td>a relay needs TLS on the daemon's own listener: give the Server a certificate (<a href="../../guides/network-install/#set-up-the-server">setup's address step</a>)</td>
 </tr>
 <tr>
-<td><code>the server refused the pairing (tls): this server refuses a pairing over plain http from another computer</code></td>
-<td>the Server has no TLS, and the pairing crossed the network: give the Server TLS (<a href="../../guides/network-install/#set-up-the-server">setup's address step</a>), then pair with its https address</td>
+<td><code>pairing with a server on another computer needs https: over plain http the code and this computer's key would cross the network in the clear</code></td>
+<td>the Server has no TLS, and the pairing crossed the network (the Server saw it arrive from another computer, a forwarded port on this one included): give the Server TLS (<a href="../../guides/network-install/#set-up-the-server">setup's address step</a>), then pair with its https address</td>
 </tr>
 <tr>
 <td><code>the owner denied this pairing on the server</code>, <code>this pairing was not approved in time: get a new code and pair again</code></td>

@@ -564,6 +564,9 @@ func clientServerURLCheck(cfg config.Config) check {
 // or its root step on a Client (relaySocketServer), and the daemon elsewhere.
 func clientServerURLCheckWith(cfg config.Config, env relaySocketEnv) check {
 	const name = "server_url"
+	if cfg.ServerURLNamesUser() {
+		return serverURLUserCheck()
+	}
 	base := cfg.ServerURL()
 	probe := reachabilityProbe()
 	if cfg.SocketPath() != "" {
@@ -655,6 +658,9 @@ func bindCheck(cfg config.Config, paired []netip.Addr) check {
 // header it was just told to advertise.
 func serverURLCheck(cfg config.Config) check {
 	const name = "server_url"
+	if cfg.ServerURLNamesUser() {
+		return serverURLUserCheck()
+	}
 	base := cfg.ServerURL()
 	detail := base
 	if strings.TrimSpace(cfg.AdvertisedURL) == "" {
@@ -675,6 +681,19 @@ func serverURLCheck(cfg config.Config) check {
 		return check{statusWarn, name, fmt.Sprintf("%s answered %s", detail, resp.Status)}
 	}
 	return check{statusOK, name, detail + " reaches this daemon"}
+}
+
+// serverURLUserCheck is both server_url rows for a server_url that names a
+// user (config.Config.ServerURLNamesUser): a warning, since install-hooks
+// --server-url wrote such client configs and they still load. It probes
+// nothing and prints no URL: the probe would send the user and password as
+// Basic auth to whatever answers (it verifies no certificate), and the row
+// would show them.
+func serverURLUserCheck() check {
+	return check{statusWarn, "server_url", "names a user (user:password@host): Seamless uses none, yet its HTTP client sends it as " +
+		"Basic auth on every request that carries no key of its own, and it travels wherever the address does (the MCP " +
+		"registration, a server's log), so doctor does not probe it: take the user out of server_url, leaving scheme://host:port, " +
+		"then run seamlessd install-hooks again (and restart the daemon on a server)"}
 }
 
 // tlsExpiryWarning is how close to expiry a certificate earns a warning. A

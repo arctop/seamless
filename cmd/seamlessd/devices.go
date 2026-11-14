@@ -128,6 +128,10 @@ func devicePairingChecks(ctx context.Context, cfg config.Config, db *sql.DB) []c
 	} else if _, err := certFingerprintFile(cfg.TLS.CertFile); err != nil {
 		out = append(out, check{statusFail, name, err.Error()})
 	}
+	if dial := cfg.ServerURL(); (devices.ServerFacts{URL: dial}).PairingLoopbackOnly() {
+		out = append(out, check{statusWarn, name, "the address clients dial, " + dial + ", is this computer's loopback, and the " +
+			"pairing one-liners carry it, so another computer cannot use them: " + pairingLoopbackFix})
+	}
 	if db != nil {
 		c, err := store.CountDevices(ctx, db, time.Now())
 		if err != nil {
@@ -142,13 +146,24 @@ func devicePairingChecks(ctx context.Context, cfg config.Config, db *sql.DB) []c
 	return out
 }
 
+// pairingLoopbackFix is how a Server whose address is this computer's
+// loopback (devices.ServerFacts.PairingLoopbackOnly) becomes one the other
+// computers can pair with. It names no setup step: setup's address step
+// writes server_url when it makes a computer the Server, and a computer that
+// is the Server already changes its address by hand (setupChanges offers it
+// no address step).
+const pairingLoopbackFix = "set server_url to the address the other computers reach this one at, then restart the daemon (" +
+	setupDocs + "guides/network-install/#step-1-widen-the-server)"
+
 // serverPairingClosing writes what a Client needs from this Server: its
 // address, its certificate's fingerprint, how to get a pairing code, and the
 // client one-liners, which carry the fingerprint. code is a code just minted,
 // or "" for the placeholder. The server's setup prints it at its close;
 // `seamlessd devices code` prints it with the code. A Server no other
 // computer can pair with (devices.ServerFacts.PairingNeedsTLS) gets the
-// reason instead of a code and the one-liners.
+// reason instead of a code and the one-liners; one whose address is this
+// computer's loopback (devices.ServerFacts.PairingLoopbackOnly) gets both,
+// for a client on this computer, and says another computer cannot use them.
 func serverPairingClosing(w io.Writer, facts devices.ServerFacts, code string, peerAuth bool) {
 	minutes := int(store.PairingCodeTTL / time.Minute)
 	fmt.Fprintf(w, "To connect another computer to this server:\n\n")
@@ -158,6 +173,11 @@ func serverPairingClosing(w io.Writer, facts devices.ServerFacts, code string, p
 		fmt.Fprintf(w, "    (the other computer shows it before it pairs: they must match)\n")
 	} else {
 		fmt.Fprintf(w, "  No TLS: a relay cannot pair, and a pairing over plain http from another computer is refused.\n")
+	}
+	if facts.PairingLoopbackOnly() {
+		fmt.Fprintf(w, "  This address is this computer's loopback, and the one-liners below carry it, so another computer cannot use them:\n"+
+			"    there it names that computer itself. They pair a client on this computer only. To pair another computer,\n"+
+			"    %s.\n", pairingLoopbackFix)
 	}
 	if facts.PairingNeedsTLS() {
 		fmt.Fprintf(w, "  Pairing needs TLS here: this address is plain http, so no other computer can pair with it.\n"+
@@ -285,8 +305,14 @@ func (c devicesCmd) run(ctx context.Context, db *sql.DB, cfg config.Config, out 
 		}
 		if c.asJSON {
 			unix, windows := devices.ClientCommands(facts, code.Code)
-			return writeDevicesJSON(out, map[string]any{"code": code.Code, "expires_at": code.ExpiresAt.UTC().Format(time.RFC3339),
-				"approval": code.Approval, "server": facts, "unix": unix, "windows": windows})
+			minted := map[string]any{"code": code.Code, "expires_at": code.ExpiresAt.UTC().Format(time.RFC3339),
+				"approval": code.Approval, "server": facts, "unix": unix, "windows": windows}
+			if facts.PairingLoopbackOnly() {
+				// The one-liners name this computer's loopback: no other
+				// computer can use them (the text output says so).
+				minted["loopback"] = true
+			}
+			return writeDevicesJSON(out, minted)
 		}
 		serverPairingClosing(out, facts, code.Code, cfg.PeerAuth.Enabled)
 		return nil

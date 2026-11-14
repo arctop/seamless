@@ -1095,6 +1095,9 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c"># A wildcard host here is refused at load (0.0.0.0, ::, [::0], ...): that</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># answers &#34;where do I listen&#34;, not &#34;where do I dial&#34;, so it belongs in addr</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># instead.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># Give no user in it (https://user:password@host): Seamless uses none, the</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># HTTP client would send it as Basic auth on every request that carries no</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># key, and seamlessd doctor warns.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># A client of a peer_auth daemon (see peer_auth below) names its socket here</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># instead -- unix:///absolute/path.sock -- and needs no mcp.api_key: the daemon</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># identifies the calling OS account by the uid the kernel reports.</span><span class="w">

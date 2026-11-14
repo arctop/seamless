@@ -345,3 +345,48 @@ func TestDevices2_OneLinersCarryTheFingerprint(t *testing.T) {
 	require.Contains(t, body, "Each carries this server's certificate fingerprint, which setup there compares before it sends the code.")
 	require.Contains(t, body, "The code works once, within 10 minutes: the line it leaves in that computer's shell history is dead after use.")
 }
+
+// Where this server's address is its own loopback -- a wildcard bind with no
+// server_url, TLS or not -- the page says plainly that the one-liners name
+// it, so another computer cannot use them, and how to fix it. It still
+// offers a code, for a client on this computer, and its JSON says loopback.
+// An address other computers reach has no such note.
+func TestFdev_DevicesPageNamesLoopback(t *testing.T) {
+	for _, facts := range []devices.ServerFacts{
+		{URL: "http://127.0.0.1:8081"},
+		{URL: "https://127.0.0.1:8081", TLS: true, CertFingerprint: devices.CertFingerprint([]byte("example certificate"))},
+	} {
+		_, mux := devices2Console(t, facts)
+		page := getPeek(t, mux, "/console/devices")
+		require.Equal(t, http.StatusOK, page.Code)
+		body := page.Body.String()
+		require.Contains(t, body, `id="devices-loopback"`, facts.URL)
+		require.Contains(t, body, "This address is this computer's loopback")
+		require.Contains(t, body, "another computer cannot use them")
+		require.Contains(t, body, "set <code>server_url</code> to the address the other computers reach this one at")
+		require.Contains(t, body, "restart the daemon")
+		require.Contains(t, body, `id="devices-code-form"`, "a code is still offered, for a client on this computer")
+
+		req := httptest.NewRequest(http.MethodGet, "/console/devices", nil)
+		req.Header.Set("Accept", "application/json")
+		rr := do(mux, authedReq(req))
+		require.Equal(t, http.StatusOK, rr.Code)
+		var data struct {
+			Loopback bool `json:"loopback"`
+		}
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &data), rr.Body.String())
+		require.True(t, data.Loopback)
+
+		minted := devicePost(t, mux, "/console/devices/code", url.Values{}, true)
+		require.Equal(t, http.StatusOK, minted.Code, minted.Body.String())
+		require.Contains(t, minted.Body.String(), "SEAMLESS_SERVER_URL="+facts.URL+" ")
+	}
+
+	_, mux := devices2Console(t, devices.ServerFacts{URL: "https://example-server.example.ts.net:8081", TLS: true, CertFingerprint: "AB:CD"})
+	page := getPeek(t, mux, "/console/devices")
+	require.Equal(t, http.StatusOK, page.Code)
+	require.NotContains(t, page.Body.String(), `id="devices-loopback"`)
+	req := httptest.NewRequest(http.MethodGet, "/console/devices", nil)
+	req.Header.Set("Accept", "application/json")
+	require.NotContains(t, do(mux, authedReq(req)).Body.String(), `"loopback"`)
+}

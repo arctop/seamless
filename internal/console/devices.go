@@ -105,7 +105,12 @@ type devicesData struct {
 	PeerAuth bool                `json:"peer_auth"`
 	// NeedsTLS says no other computer can pair with this server
 	// (devices.ServerFacts.PairingNeedsTLS): the page offers no code.
-	NeedsTLS bool        `json:"needs_tls,omitempty"`
+	NeedsTLS bool `json:"needs_tls,omitempty"`
+	// Loopback says this server's address is this computer's loopback
+	// (devices.ServerFacts.PairingLoopbackOnly): the one-liners carry it, so
+	// no other computer can use them. The page says so, and still offers a
+	// code, for a client on this computer.
+	Loopback bool        `json:"loopback,omitempty"`
 	Pending  []deviceRow `json:"pending"`
 	Paired   []deviceRow `json:"paired"`
 	Ended    []deviceRow `json:"ended"`
@@ -142,6 +147,7 @@ func (s *Service) devicesFor(r *http.Request, code *devices.Code) (devicesData, 
 	d := devicesData{Server: s.cfg.Devices.Server(), PeerAuth: s.cfg.Devices.PeerAuth(), Code: code,
 		CodeMinutes: int(store.PairingCodeTTL / time.Minute), Browser: s.classify(r) == credCookie}
 	d.NeedsTLS = d.Server.PairingNeedsTLS()
+	d.Loopback = d.Server.PairingLoopbackOnly()
 	for _, dev := range list {
 		row := deviceRow{Device: dev, Now: dev.StatusAt(now)}
 		switch row.Now {

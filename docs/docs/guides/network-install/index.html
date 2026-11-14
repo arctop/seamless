@@ -430,7 +430,9 @@ carry the certificate's fingerprint, by a reminder that each code works once,
 and by locked projects as a step setup does not do yet, with the
 <a href="../../guides/peer-auth/#move-an-existing-install-over">guide that does it by hand</a>.
 Run a one-liner on each Client, with a code of its own
-(<a href="#step-3-pair-a-client">below</a>).</p>
+(<a href="#step-3-pair-a-client">below</a>). On a Server widened by hand without
+<code>server_url</code>, the address is this computer's loopback, and the closing says
+another computer cannot use the one-liners (<a href="#devices">below</a>).</p>
 <p>A script answers the same questions in the environment: <code>SEAMLESS_SETUP=server</code>
 with <code>SEAMLESS_SERVER_NAME</code>, plus <code>SEAMLESS_TLS_CERT</code> and <code>SEAMLESS_TLS_KEY</code>
 unless the name is this computer's Tailscale name, whose certificate setup gets
@@ -499,7 +501,7 @@ that is <a href="#step-1-widen-the-server">by hand</a>.</p>
 </tr>
 <tr>
 <td><code>device pairing</code></td>
-<td>How a computer pairs here, and how many are paired or waiting. No TLS is a <strong>warn</strong>: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http <code>server_url</code> to another host no computer can pair, and no code is minted.</td>
+<td>How a computer pairs here, and how many are paired or waiting. No TLS is a <strong>warn</strong>: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http <code>server_url</code> to another host no computer can pair, and no code is minted. An address of this computer's loopback (<code>server_url</code> unset on a wildcard bind derives <code>http://127.0.0.1:8081</code>) is a <strong>warn</strong> too: the one-liners carry it, so another computer cannot use them.</td>
 </tr>
 <tr>
 <td><code>peer_auth devices</code></td>
@@ -740,6 +742,13 @@ on the Server's own computer. Where <code>server_url</code> is plain http to ano
 no computer can pair, so the page and <code>seamlessd devices code</code> say pairing
 needs TLS there and mint no code; the devices paired before stay listed and
 revocable.</p>
+<p>Where the Server's address is this computer's loopback - <code>server_url</code> unset on a
+wildcard bind derives <code>http://127.0.0.1:8081</code>, or <code>https://</code> with TLS - the
+page, <code>seamlessd devices code</code>, setup's closing and doctor say the one-liners
+carry it, so another computer cannot use them: they pair a client on the
+Server's own computer only. Set <code>server_url</code> to the address the other computers
+reach the Server at (<a href="#step-1-widen-the-server">by hand</a>; setup's address step
+writes it only when it makes a computer the Server), then restart the daemon.</p>
 <h3 id="revoke-a-computer">Revoke a computer</h3>
 <p><strong>Revoke</strong> on the Devices page, or in the Server's terminal (as the daemon's
 account under peer_auth, like <code>devices code</code>):</p>

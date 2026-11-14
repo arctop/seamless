@@ -25,7 +25,9 @@
 // clear, and a server whose address is plain http to another host mints no
 // code (ServerFacts.PairingNeedsTLS). The one-liners that pair a computer
 // carry the server certificate's fingerprint (ClientCommands), so the other
-// computer's setup compares it before it sends the code.
+// computer's setup compares it before it sends the code. Where they carry
+// this computer's loopback, no other computer can use them, and every
+// surface that shows them says so (ServerFacts.PairingLoopbackOnly).
 //
 // The daemon's edge (Service.Edge) authenticates a paired credential before
 // any route sees the request, and marks the request with it (WithCredential).
@@ -632,6 +634,23 @@ func (f ServerFacts) PairingNeedsTLS() bool {
 		return false
 	}
 	return !loopbackHost(u.Hostname())
+}
+
+// PairingLoopbackOnly reports whether the address clients dial (URL) is this
+// computer's loopback, http or https: a wildcard bind with no server_url
+// derives http://127.0.0.1:8081 (https:// with TLS). The one-liners
+// (ClientCommands) carry that address, and on another computer it names
+// that computer itself, so no other computer can use them. A code is minted
+// all the same, since a client on this computer (another account, a TLS
+// proxy's, the tests) pairs over loopback; the Devices page, `seamlessd
+// devices code`, setup's closing and doctor say so instead, and that
+// server_url is the fix.
+func (f ServerFacts) PairingLoopbackOnly() bool {
+	u, err := url.Parse(strings.TrimSpace(f.URL))
+	if err != nil || (!strings.EqualFold(u.Scheme, "http") && !strings.EqualFold(u.Scheme, "https")) {
+		return false
+	}
+	return loopbackHost(u.Hostname())
 }
 
 // The installer one-liners that pair another computer with this server. The

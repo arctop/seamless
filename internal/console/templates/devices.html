@@ -14,6 +14,9 @@
     {{if .Server.CertFingerprint}}<li class="access-item"><strong>Certificate fingerprint</strong> <small><code>{{.Server.CertFingerprint}}</code></small></li>
     {{else}}<li class="access-item"><strong>No TLS</strong> <small>This server listens without TLS, so a relay cannot pair, and a pairing over plain http from another computer is refused: its code and a key device's key would cross the network in the clear.</small></li>{{end}}
   </ul>
+  {{if .Loopback}}
+  <p class="held-sub" id="devices-loopback">{{icon "triangle-alert"}} This address is this computer's loopback, and the one-liners carry it, so another computer cannot use them: there it names that computer itself. They pair a client on this computer only. To pair another computer, set <code>server_url</code> to the address the other computers reach this one at, then restart the daemon (<a href="https://thereisnospoon.org/docs/guides/network-install/#step-1-widen-the-server" target="_blank" rel="noopener">how &nearr;</a>).</p>
+  {{end}}
   {{if .NeedsTLS}}
   <p class="held-sub" id="devices-needs-tls">{{icon "triangle-alert"}} Pairing needs TLS here: this server's address is plain http, so no other computer can pair with it. Give it TLS with <code>seamlessd setup</code>'s address step, or <code>tls.cert_file</code> and <code>tls.key_file</code>, then get a code here.</p>
   {{else}}

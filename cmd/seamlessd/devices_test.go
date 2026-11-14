@@ -753,3 +753,127 @@ func TestDevices2_CodeNeedsTLSWhereNoComputerCanPair(t *testing.T) {
 	require.NoError(t, cmd.run(ctx, db, cfg, &out), "loopback pairs on this computer, as before")
 	require.Contains(t, out.String(), "SEAMLESS_SERVER_URL=http://127.0.0.1:8081 SEAMLESS_PAIR_CODE=")
 }
+
+// fdevRequireLoopbackNote holds out, a pairing surface's text, to saying
+// plainly that the one-liners name this computer's loopback, so another
+// computer cannot use them, and how to fix it.
+func fdevRequireLoopbackNote(t *testing.T, out string) {
+	t.Helper()
+	require.Contains(t, out, "this computer's loopback")
+	require.Contains(t, out, "another computer cannot use them")
+	require.Contains(t, out, "set server_url to the address the other computers reach this one at")
+	require.Contains(t, out, "restart the daemon")
+}
+
+// Where the address clients dial is this computer's loopback -- a wildcard
+// bind with no server_url derives http://127.0.0.1:8081, https:// with TLS --
+// the closing (setup's, and `seamlessd devices code`'s) says so plainly, and
+// how to fix it. The one-liners stay: a client on this computer pairs over
+// loopback.
+func TestFdev_ServerPairingClosingNamesLoopback(t *testing.T) {
+	for _, facts := range []devices.ServerFacts{
+		{URL: "http://127.0.0.1:8081"},
+		{URL: "https://127.0.0.1:8081", TLS: true, CertFingerprint: "AB:CD"},
+		{URL: "http://localhost:8081"},
+	} {
+		for _, code := range []string{"", "ABCD-EFGH-JKMN-PQRS"} {
+			var b bytes.Buffer
+			serverPairingClosing(&b, facts, code, false)
+			out := b.String()
+			fdevRequireLoopbackNote(t, out)
+			require.Contains(t, out, "SEAMLESS_SERVER_URL="+facts.URL, "a client on this computer still pairs with them")
+		}
+	}
+	for _, facts := range []devices.ServerFacts{
+		{URL: "https://example-server.example.ts.net:8081", TLS: true, CertFingerprint: "AB:CD"},
+		{URL: "http://192.168.1.20:8081"},
+	} {
+		var b bytes.Buffer
+		serverPairingClosing(&b, facts, "", false)
+		require.NotContains(t, b.String(), "loopback", facts.URL)
+	}
+}
+
+// `seamlessd devices code` on a wildcard bind with no server_url (TLS or
+// not) still mints a code, for a client on this computer, and says the
+// one-liners name loopback; --json carries it as loopback: true. With a
+// server_url other computers reach, neither.
+func TestFdev_DevicesCodeNamesLoopback(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	tlsCfg, _ := devices2CodeConfig(t, dir)
+	tlsCfg.AdvertisedURL = ""
+	plain := config.Defaults()
+	plain.Addr = "0.0.0.0:8081"
+	for _, cfg := range []config.Config{plain, tlsCfg} {
+		require.True(t, pairingOn(cfg))
+		var out bytes.Buffer
+		cmd, err := parseDevices([]string{"code"})
+		require.NoError(t, err)
+		require.NoError(t, cmd.run(ctx, db, cfg, &out), cfg.ServerURL())
+		fdevRequireLoopbackNote(t, out.String())
+		require.Contains(t, out.String(), "SEAMLESS_SERVER_URL="+cfg.ServerURL()+" ")
+
+		out.Reset()
+		cmd, err = parseDevices([]string{"code", "--json"})
+		require.NoError(t, err)
+		require.NoError(t, cmd.run(ctx, db, cfg, &out))
+		var minted struct {
+			Code     string
+			Loopback bool
+		}
+		require.NoError(t, json.Unmarshal(out.Bytes(), &minted), out.String())
+		require.NotEmpty(t, minted.Code, "a code is minted, for a client on this computer")
+		require.True(t, minted.Loopback, out.String())
+	}
+
+	cfg := tlsCfg
+	cfg.AdvertisedURL = "https://example-server.example.ts.net:8081"
+	var out bytes.Buffer
+	cmd, err := parseDevices([]string{"code"})
+	require.NoError(t, err)
+	require.NoError(t, cmd.run(ctx, db, cfg, &out))
+	require.NotContains(t, out.String(), "loopback")
+	out.Reset()
+	cmd, err = parseDevices([]string{"code", "--json"})
+	require.NoError(t, err)
+	require.NoError(t, cmd.run(ctx, db, cfg, &out))
+	require.NotContains(t, out.String(), "loopback", "the JSON is as it was")
+}
+
+// Doctor's device pairing section says it too, as a warning: a separate row
+// from the no-TLS one, with TLS or without. A server_url other computers
+// reach has no such row.
+func TestFdev_DevicePairingChecksNameLoopback(t *testing.T) {
+	loopbackRow := func(cfg config.Config) string {
+		t.Helper()
+		found := ""
+		for _, r := range devicePairingChecks(context.Background(), cfg, nil) {
+			require.Equal(t, "device pairing", r.name)
+			if strings.Contains(r.detail, "loopback") {
+				require.Equal(t, statusWarn, r.status, r.detail)
+				require.NotContains(t, r.detail, "no TLS", "its own row")
+				found = r.detail
+			}
+		}
+		return found
+	}
+	cfg := config.Defaults()
+	cfg.Addr = "0.0.0.0:8081"
+	line := loopbackRow(cfg)
+	require.NotEmpty(t, line, "a wildcard bind with no server_url hands out loopback")
+	require.Contains(t, line, "http://127.0.0.1:8081")
+	fdevRequireLoopbackNote(t, line)
+
+	tlsCfg, _ := devices2CodeConfig(t, t.TempDir())
+	tlsCfg.AdvertisedURL = ""
+	require.Contains(t, loopbackRow(tlsCfg), "https://127.0.0.1:8081")
+
+	tlsCfg.AdvertisedURL = "https://example-server.example.ts.net:8081"
+	require.Empty(t, loopbackRow(tlsCfg))
+	cfg.Addr = "192.168.1.20:8081"
+	require.Empty(t, loopbackRow(cfg), "a LAN bind names its own address")
+}

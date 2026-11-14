@@ -45,6 +45,9 @@ role: "server"
 # A wildcard host here is refused at load (0.0.0.0, ::, [::0], ...): that
 # answers "where do I listen", not "where do I dial", so it belongs in addr
 # instead.
+# Give no user in it (https://user:password@host): Seamless uses none, the
+# HTTP client would send it as Basic auth on every request that carries no
+# key, and seamlessd doctor warns.
 # A client of a peer_auth daemon (see peer_auth below) names its socket here
 # instead -- unix:///absolute/path.sock -- and needs no mcp.api_key: the daemon
 # identifies the calling OS account by the uid the kernel reports.

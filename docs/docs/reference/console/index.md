@@ -1098,7 +1098,10 @@ exist. The computers paired with this server, and how to pair another
   so the line left in that computer's shell history is dead after use. Without
   peer_auth the page says the code is the approval. Where this server's address
   is plain http to another host the page says pairing needs TLS, and offers no
-  code.
+  code. Where it is this computer's loopback (no `server_url` on a wildcard
+  bind) the page says the one-liners carry it, so another computer cannot use
+  them, and that `server_url` is the fix; it still offers a code, for a client
+  on this computer.
 - **Waiting for your approval** - under peer_auth only: each computer that used
   a code, its fingerprint and until when it waits, with **Approve with a
   passkey** and **Deny**. Approving needs a signed-in browser on the
