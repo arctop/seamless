@@ -37,7 +37,7 @@ func TestTerminalSignIn_BoundToTheBrowserThatBegan(t *testing.T) {
 	_, _, err = svc.TerminalSignInState(ctx, begun.ID, again.Cookie, "key-A")
 	require.ErrorIs(t, err, store.ErrTerminalSignInNotFound, "another of this browser's cookies is another sign-in")
 
-	_, err = store.ApproveTerminalSignIn(ctx, db, begun.Code, SignInLifetime, clock.now)
+	_, err = store.ApproveTerminalSignIn(ctx, db, begun.ID, begun.Code, SignInLifetime, clock.now)
 	require.NoError(t, err)
 	row, state, err := svc.TerminalSignInState(ctx, begun.ID, begun.Cookie, "key-A")
 	require.NoError(t, err)

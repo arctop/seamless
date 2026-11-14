@@ -253,8 +253,10 @@
     }).then(function (begun) {
       text.textContent = begun.command;
       box.style.display = '';
+      var seen = begun.browser || {};
       say('Code ' + begun.code + ': run the command above in your own terminal on the server within ' + begun.minutes +
-        ' minutes. This page signs in once it is approved.');
+        ' minutes. It shows this browser as ' + (seen.user_agent || 'no browser name') + ', from ' +
+        (seen.address || 'an unknown address') + ': say yes only if that matches. This page signs in once it is approved.');
       poll(begun.id);
     }).catch(function (err) {
       go.disabled = false;

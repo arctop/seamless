@@ -887,8 +887,16 @@ any of it.
   (store/signin_terminal.go, console/signin_terminal.go, `console-open
   --sign-in`). The browser begins it under a fresh cookie bound to its key; the
   daemon's account approves its code (`store.ApproveTerminalSignIn`), which
-  signs in that browser and no other. A waiting row lives in `console_signins`
-  with `credential` `terminal-code:<code hash>` and `expires_at` equal to
+  signs in that browser and no other. Anyone who reaches the console can begin
+  one, so the begin records the request's peer address and User-Agent
+  (`remote_addr`, `user_agent`, migration 044; `store.TerminalSignInBrowser`,
+  kept and read back as bounded printable ASCII by `Clean`), handed from the
+  console through `approval.WithTerminalSignInBrowser` (`SignInView` is
+  unchanged). `console-open --sign-in` shows them with the begin time
+  (`store.TerminalSignInByCode`) and asks y/N before it approves exactly the row
+  it showed (`ApproveTerminalSignIn` takes the id and the code). It runs only at
+  a terminal; no flag approves a code unseen. A waiting row lives in
+  `console_signins` with `credential` `terminal-code:<code hash>` and `expires_at` equal to
   `created_at`, so no reader of a live sign-in counts it; approval is its one
   transition, a compare-and-set to `SignInByDaemon`. `endSignIns` ends waiting
   rows too (sign-out, restore, reset). `PasskeySignInsSince`, setup's proof,

@@ -548,8 +548,9 @@ continues from where things are when you run `seamlessd setup` again, and until
 the key is gone each run asks for a fresh passkey sign-in first.
 
 With every passkey lost, the login page's **Show a code** is the way in: run
-the command it shows, `console-open --sign-in --code`, as the daemon's account
-([below](#seamlessd_console_open)). Run setup again on a retired key to bring a
+the command it shows, `console-open --sign-in --code`, as the daemon's account at
+a terminal ([below](#seamlessd_console_open)); it shows which browser the code
+names and asks before it signs it in. Run setup again on a retired key to bring a
 key back: it mints a fresh one (never the old one), writes it into
 `console.yaml`, and waits for root to copy it into the daemon's config; it never
 prints the key.
@@ -1162,13 +1163,22 @@ daemon's account under peer_auth (as you, without it):
 sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd console-open --sign-in --code 7KQ2-M9XD
 ```
 
-It signs in the browser that showed the code, for 7 days, as a passkey sign-in
-lasts, and says so; the page goes on by itself. The code works once, within ten
-minutes, and signs in no other browser: whoever else saw it, or read the cookie
-on another port, gets nothing. A malformed, mistyped, used or expired code is
-refused and changes nothing; without `--code` it asks in a terminal and refuses
-anywhere else. It refuses `--browser`, `--unlock` and `--for`, and a config
-whose `console.sign_in` is `key`.
+Before it signs anything in, it shows the browser the code names, as the console
+recorded it when that browser chose **Show a code**: when it began, the address
+its request came from (another computer, or this computer, which a proxy in
+front of the console also is) and its User-Agent, as plain text that cannot act
+on your terminal. Then it asks `Sign in this browser? [y/N]`. Anyone who reaches
+the console can show a code, so say yes only to a code your own browser shows
+you now, never to one someone sent you. Yes signs in that browser, for 7 days,
+as a passkey sign-in lasts, and says so; the page goes on by itself. No, Enter
+or the end of input signs nothing in and leaves the code waiting. The code works
+once, within ten minutes, and signs in no other browser: whoever else saw it, or
+read the cookie on another port, gets nothing. A malformed, mistyped, used or
+expired code is refused before anything is asked, and changes nothing. Because
+it asks, it runs only at a terminal (over ssh, `ssh -t`): anywhere else it
+refuses, with or without `--code`, and no flag skips the question. Without
+`--code` it asks for the code first. It refuses `--browser`, `--unlock` and
+`--for`, and a config whose `console.sign_in` is `key`.
 
 An unlock is per browser: the one that showed the code reads the project, and
 another browser, the TCP key and every agent stay locked out, whoever else saw

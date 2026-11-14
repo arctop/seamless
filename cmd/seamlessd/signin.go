@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/console"
@@ -271,13 +274,23 @@ func signInPageFor(cfg config.Config) string {
 // runConsoleSignIn is console-open --sign-in: the terminal's half of a
 // terminal sign-in, the way in for an owner with no passkey left. The browser
 // begins it on the sign-in page ("Show a code") under a cookie bound to its
-// key; this approves the code that page shows, as the daemon's account under
-// peer_auth (as the owner without it, whose every process is the owner), and
-// that browser, and no other, is signed in. Nothing it reads or prints is a
-// credential, and it launches nothing.
+// key; this shows the browser that code names -- when it began, the address
+// it came from, its User-Agent -- and asks, and once the owner says yes it
+// approves the code, as the daemon's account under peer_auth (as the owner
+// without it, whose every process is the owner), and that browser, and no
+// other, is signed in. Nothing it reads or prints is a credential, and it
+// launches nothing.
 func runConsoleSignIn(cfg config.Config, code, browser string) error {
 	return consoleSignIn(cfg, code, browser, stdioUnlockTerminal(), time.Now)
 }
+
+// errSignInNoTerminal refuses console-open --sign-in where no one can answer
+// its question. Anyone who reaches the console can show a code, so the
+// approval shows which browser a code names and asks first; a script that
+// approves codes it was handed, unseen, is the very risk the question is
+// there for, so there is no flag that skips it.
+var errSignInNoTerminal = errors.New("console-open --sign-in shows the browser a code would sign in and asks you before it " +
+	"signs it in, so it runs only at a terminal: run it in one (over ssh, ssh -t). Nothing changed")
 
 // consoleSignIn is runConsoleSignIn with its terminal and clock given.
 func consoleSignIn(cfg config.Config, code, browser string, tty unlockTerminal, now func() time.Time) error {
@@ -293,29 +306,40 @@ func consoleSignIn(cfg config.Config, code, browser string, tty unlockTerminal, 
 			return err
 		}
 	}
-	// Settled before the database is opened: nothing to ask the owner with.
-	if strings.TrimSpace(code) == "" && !tty.interactive {
-		return fmt.Errorf("console-open --sign-in needs --code: open %s in the browser to sign in, choose Show a code, "+
-			"and run the command it shows", signInPageFor(cfg))
+	// Settled before the database is opened: no one to ask.
+	if !tty.interactive {
+		if strings.TrimSpace(code) == "" {
+			return fmt.Errorf("console-open --sign-in needs --code, at a terminal: open %s in the browser to sign in, choose Show a code, "+
+				"and run the command it shows", signInPageFor(cfg))
+		}
+		return errSignInNoTerminal
 	}
 	db, err := openServedDB(cfg, os.Stderr)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = db.Close() }()
-	return approveConsoleSignIn(context.Background(), cfg, db, tty, code, now())
+	return approveConsoleSignIn(context.Background(), cfg, db, tty, code, now)
 }
 
 // approveConsoleSignIn is console-open --sign-in's testable core: it asks for
-// the code when none was given, approves it, and says what it signed in. A
-// code that is malformed, mistyped, used or expired changes nothing.
-func approveConsoleSignIn(ctx context.Context, cfg config.Config, db *sql.DB, tty unlockTerminal, code string, now time.Time) error {
+// the code when none was given, shows the browser that code names
+// (writeTerminalSignIn) and asks whether to sign it in, and on a yes approves
+// exactly that sign-in and says so. A code that is malformed, mistyped, used,
+// expired or ended is refused before anything is asked; any answer but yes --
+// no, Enter, the end of input -- changes nothing, and so does no terminal at
+// all (errSignInNoTerminal). now is read at each step: the owner may take a
+// while to answer, and a code that expires meanwhile is not approved.
+func approveConsoleSignIn(ctx context.Context, cfg config.Config, db *sql.DB, tty unlockTerminal, code string, now func() time.Time) error {
+	if !tty.interactive {
+		return errSignInNoTerminal
+	}
+	// One reader for both questions: a second one would lose what the first
+	// buffered past its line.
+	in := bufio.NewReader(tty.in)
 	if strings.TrimSpace(code) == "" {
-		if !tty.interactive {
-			return fmt.Errorf("console-open --sign-in needs --code: open %s and choose Show a code", signInPageFor(cfg))
-		}
 		fmt.Fprintf(tty.out, "Open %s in the browser to sign in, and choose Show a code.\nCode it shows: ", signInPageFor(cfg))
-		line, err := bufio.NewReader(tty.in).ReadString('\n')
+		line, err := in.ReadString('\n')
 		if err != nil && line == "" {
 			return fmt.Errorf("no code was typed: nothing changed (%w)", err)
 		}
@@ -324,19 +348,122 @@ func approveConsoleSignIn(ctx context.Context, cfg config.Config, db *sql.DB, tt
 		}
 	}
 	shown := store.FormatUnlockCode(code)
-	s, err := store.ApproveTerminalSignIn(ctx, db, code, approval.SignInLifetime, now)
-	switch {
-	case errors.Is(err, store.ErrInvalidSignIn) && shown == "":
-		return &ownerError{msg: fmt.Sprintf("%q is not a sign-in code: the sign-in page shows one as XXXX-XXXX, 8 letters and digits. Nothing changed.", code), cause: err}
-	case errors.Is(err, store.ErrTerminalSignInNotFound):
+	if shown == "" {
+		return &ownerError{msg: fmt.Sprintf("%q is not a sign-in code: the sign-in page shows one as XXXX-XXXX, 8 letters and digits. Nothing changed.", code),
+			cause: store.ErrInvalidSignIn}
+	}
+	notWaiting := func(err error) error {
 		return &ownerError{msg: fmt.Sprintf("no sign-in is waiting for code %s: it may be mistyped, already used, or expired (a code lasts %s). "+
 			"Nothing changed. Start again on %s.", shown, minutesWords(store.TerminalSignInTTL), signInPageFor(cfg)), cause: err}
+	}
+	w, err := store.TerminalSignInByCode(ctx, db, code, now())
+	switch {
+	case errors.Is(err, store.ErrTerminalSignInNotFound):
+		return notWaiting(err)
+	case err != nil:
+		return err
+	}
+	writeTerminalSignIn(tty.out, w, shown, now(), thisComputersAddrs)
+	fmt.Fprint(tty.out, "Sign in this browser? [y/N]: ")
+	answer, err := in.ReadString('\n')
+	if err != nil && answer == "" {
+		fmt.Fprintln(tty.out)
+		return fmt.Errorf("no answer: nothing changed (%w)", err)
+	}
+	if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
+		fmt.Fprintln(tty.out, "Not signed in. Nothing changed.")
+		return nil
+	}
+	s, err := store.ApproveTerminalSignIn(ctx, db, w.ID, code, approval.SignInLifetime, now())
+	switch {
+	case errors.Is(err, store.ErrTerminalSignInNotFound):
+		return notWaiting(err)
 	case err != nil:
 		return err
 	}
 	fmt.Fprintf(tty.out, "Signed in the browser that showed code %s, until %s. Add a passkey there (Add a passkey) before that ends.\n",
 		shown, s.ExpiresAt.Local().Format("2006-01-02 15:04"))
 	return nil
+}
+
+// writeTerminalSignIn shows the owner the browser a terminal sign-in's code
+// would sign in, as its begin recorded it: when it began, the address it came
+// from (placed by signInAddrWords, over own) and the User-Agent it sent. The
+// store hands both back as bounded printable ASCII
+// (store.TerminalSignInBrowser), so nothing a browser sent can write an
+// escape into this terminal.
+func writeTerminalSignIn(out io.Writer, w store.WaitingTerminalSignIn, code string, now time.Time, own func() ([]netip.Addr, error)) {
+	agent := w.Browser.UserAgent
+	switch {
+	case agent != "":
+	case w.Browser.Addr != "":
+		agent = "none sent"
+	default:
+		agent = "not recorded"
+	}
+	fmt.Fprintf(out, "Code %s names a browser waiting to sign in to this console:\n", code)
+	fmt.Fprintf(out, "  began    %s, %s\n", access.Clock(w.CreatedAt), agoWords(now.Sub(w.CreatedAt)))
+	fmt.Fprintf(out, "  from     %s\n", signInAddrWords(w.Browser.Addr, own))
+	fmt.Fprintf(out, "  browser  %s\n", agent)
+	fmt.Fprintf(out, "Yes signs that browser in as you for %d days. Say yes only to a code your own browser shows you now, "+
+		"never to one someone sent you: anyone who reaches the console can show one.\n", int(approval.SignInLifetime/(24*time.Hour)))
+}
+
+// signInAddrWords is the address a terminal sign-in came from as the owner
+// reads it: the address, and whose it is -- this computer's (loopback, which
+// a proxy in front of the console also is, or one of own's addresses) or
+// another computer's. When own cannot be read, the address alone.
+func signInAddrWords(addr string, own func() ([]netip.Addr, error)) string {
+	if addr == "" {
+		return "not recorded"
+	}
+	a, err := netip.ParseAddr(addr)
+	if err != nil {
+		return addr
+	}
+	a = a.Unmap().WithZone("")
+	if a.IsLoopback() {
+		return addr + " (this computer, or a proxy in front of the console)"
+	}
+	mine, err := own()
+	if err != nil {
+		return addr
+	}
+	for _, m := range mine {
+		if m.Unmap().WithZone("") == a {
+			return addr + " (this computer)"
+		}
+	}
+	return addr + " (another computer)"
+}
+
+// thisComputersAddrs is the addresses of this computer's own interfaces.
+func thisComputersAddrs() ([]netip.Addr, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, err
+	}
+	var out []netip.Addr
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok {
+			if ip, ok := netip.AddrFromSlice(n.IP); ok {
+				out = append(out, ip)
+			}
+		}
+	}
+	return out, nil
+}
+
+// agoWords says how long ago something began, in whole minutes.
+func agoWords(d time.Duration) string {
+	switch m := int(d / time.Minute); {
+	case m < 1:
+		return "less than a minute ago"
+	case m == 1:
+		return "1 minute ago"
+	default:
+		return fmt.Sprintf("%d minutes ago", m)
+	}
 }
 
 // retiredKey reports a daemon whose key was retired for passkey sign-in

@@ -14,7 +14,7 @@ import (
 func TestTerminalSignIn_ApprovalSignsInOnlyTheBrowserThatBegan(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
-	row, code, err := BeginTerminalSignIn(ctx, db, "cookie-a", "key-a", apNow)
+	row, code, err := BeginTerminalSignIn(ctx, db, "cookie-a", "key-a", TerminalSignInBrowser{}, apNow)
 	require.NoError(t, err)
 	require.NotEmpty(t, FormatUnlockCode(code))
 
@@ -30,7 +30,7 @@ func TestTerminalSignIn_ApprovalSignsInOnlyTheBrowserThatBegan(t *testing.T) {
 	_, _, err = TerminalSignInFor(ctx, db, row.ID, HashConsoleSignIn("cookie-a", "key-b"), apNow)
 	require.ErrorIs(t, err, ErrTerminalSignInNotFound, "the cookie with another browser's key names nothing")
 
-	s, err := ApproveTerminalSignIn(ctx, db, code, 7*24*time.Hour, apNow.Add(time.Minute))
+	s, err := ApproveTerminalSignIn(ctx, db, row.ID, code, 7*24*time.Hour, apNow.Add(time.Minute))
 	require.NoError(t, err)
 	require.Equal(t, SignInByDaemon, s.Credential)
 	require.Equal(t, apNow.Add(time.Minute+7*24*time.Hour), s.ExpiresAt)
@@ -46,7 +46,7 @@ func TestTerminalSignIn_ApprovalSignsInOnlyTheBrowserThatBegan(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, TerminalSignInLive, state)
 
-	_, err = ApproveTerminalSignIn(ctx, db, code, time.Hour, apNow.Add(2*time.Minute))
+	_, err = ApproveTerminalSignIn(ctx, db, row.ID, code, time.Hour, apNow.Add(2*time.Minute))
 	require.ErrorIs(t, err, ErrTerminalSignInNotFound, "a code works once")
 	since, err := PasskeySignInsSince(ctx, db, apNow.Add(-time.Hour))
 	require.NoError(t, err)
@@ -58,31 +58,31 @@ func TestTerminalSignIn_ApprovalSignsInOnlyTheBrowserThatBegan(t *testing.T) {
 func TestTerminalSignIn_Refusals(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
-	_, err := ApproveTerminalSignIn(ctx, db, "bad!", time.Hour, apNow)
+	_, err := ApproveTerminalSignIn(ctx, db, "01NOROW", "bad!", time.Hour, apNow)
 	require.ErrorIs(t, err, ErrInvalidSignIn)
-	_, _, err = BeginTerminalSignIn(ctx, db, "", "key", apNow)
+	_, _, err = BeginTerminalSignIn(ctx, db, "", "key", TerminalSignInBrowser{}, apNow)
 	require.ErrorIs(t, err, ErrInvalidSignIn, "no cookie, nothing to bind")
-	_, _, err = BeginTerminalSignIn(ctx, db, "cookie", "", apNow)
+	_, _, err = BeginTerminalSignIn(ctx, db, "cookie", "", TerminalSignInBrowser{}, apNow)
 	require.ErrorIs(t, err, ErrInvalidSignIn, "no key, nothing to bind")
 
-	_, late, err := BeginTerminalSignIn(ctx, db, "cookie-late", "key", apNow)
+	lateRow, late, err := BeginTerminalSignIn(ctx, db, "cookie-late", "key", TerminalSignInBrowser{}, apNow)
 	require.NoError(t, err)
-	_, err = ApproveTerminalSignIn(ctx, db, late, time.Hour, apNow.Add(TerminalSignInTTL))
+	_, err = ApproveTerminalSignIn(ctx, db, lateRow.ID, late, time.Hour, apNow.Add(TerminalSignInTTL))
 	require.ErrorIs(t, err, ErrTerminalSignInNotFound, "past its deadline")
 
-	_, out, err := BeginTerminalSignIn(ctx, db, "cookie-out", "key", apNow)
+	outRow, out, err := BeginTerminalSignIn(ctx, db, "cookie-out", "key", TerminalSignInBrowser{}, apNow)
 	require.NoError(t, err)
 	n, err := EndConsoleSignInByCookie(ctx, db, "cookie-out", apNow)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n, "signing out ends a waiting sign-in of that cookie")
-	_, err = ApproveTerminalSignIn(ctx, db, out, time.Hour, apNow)
+	_, err = ApproveTerminalSignIn(ctx, db, outRow.ID, out, time.Hour, apNow)
 	require.ErrorIs(t, err, ErrTerminalSignInNotFound)
 
-	_, reset, err := BeginTerminalSignIn(ctx, db, "cookie-reset", "key", apNow)
+	resetRow, reset, err := BeginTerminalSignIn(ctx, db, "cookie-reset", "key", TerminalSignInBrowser{}, apNow)
 	require.NoError(t, err)
 	_, err = EndAllConsoleSignIns(ctx, db, SignInEndReset, apNow)
 	require.NoError(t, err)
-	_, err = ApproveTerminalSignIn(ctx, db, reset, time.Hour, apNow)
+	_, err = ApproveTerminalSignIn(ctx, db, resetRow.ID, reset, time.Hour, apNow)
 	require.ErrorIs(t, err, ErrTerminalSignInNotFound, "a restore ends the codes it found waiting")
 }
 
@@ -92,12 +92,12 @@ func TestTerminalSignIn_Capped(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
 	for i := range maxWaitingTerminalSignIns {
-		_, _, err := BeginTerminalSignIn(ctx, db, "cookie-"+string(rune('a'+i%26))+string(rune('a'+i/26)), "key", apNow)
+		_, _, err := BeginTerminalSignIn(ctx, db, "cookie-"+string(rune('a'+i%26))+string(rune('a'+i/26)), "key", TerminalSignInBrowser{}, apNow)
 		require.NoError(t, err)
 	}
-	_, _, err := BeginTerminalSignIn(ctx, db, "one-more", "key", apNow)
+	_, _, err := BeginTerminalSignIn(ctx, db, "one-more", "key", TerminalSignInBrowser{}, apNow)
 	require.ErrorIs(t, err, ErrTerminalSignInBusy)
-	_, _, err = BeginTerminalSignIn(ctx, db, "one-more", "key", apNow.Add(TerminalSignInTTL))
+	_, _, err = BeginTerminalSignIn(ctx, db, "one-more", "key", TerminalSignInBrowser{}, apNow.Add(TerminalSignInTTL))
 	require.NoError(t, err, "the expired ones are purged first")
 }
 
@@ -108,7 +108,7 @@ func TestPasskeySignInsSince(t *testing.T) {
 	ctx := context.Background()
 	_, err := CreateConsoleSignIn(ctx, db, "c1", "k1", "01CRED", time.Hour, apNow)
 	require.NoError(t, err)
-	_, _, err = BeginTerminalSignIn(ctx, db, "c2", "k2", apNow.Add(time.Minute))
+	_, _, err = BeginTerminalSignIn(ctx, db, "c2", "k2", TerminalSignInBrowser{}, apNow.Add(time.Minute))
 	require.NoError(t, err)
 	n, err := PasskeySignInsSince(ctx, db, apNow)
 	require.NoError(t, err)

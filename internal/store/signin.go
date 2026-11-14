@@ -94,13 +94,15 @@ func hashSignInCookie(cookie string) string {
 
 const consoleSignInCols = `id, credential, created_at, expires_at, ended_at, ended_reason`
 
-func scanConsoleSignIn(row interface{ Scan(...any) error }) (ConsoleSignIn, error) {
+// scanConsoleSignIn reads a row selected as consoleSignInCols, then any extra
+// columns the query added after them into extra.
+func scanConsoleSignIn(row interface{ Scan(...any) error }, extra ...any) (ConsoleSignIn, error) {
 	var (
 		s                ConsoleSignIn
 		created, expires string
 		ended            sql.NullString
 	)
-	if err := row.Scan(&s.ID, &s.Credential, &created, &expires, &ended, &s.EndedReason); err != nil {
+	if err := row.Scan(append([]any{&s.ID, &s.Credential, &created, &expires, &ended, &s.EndedReason}, extra...)...); err != nil {
 		return ConsoleSignIn{}, err
 	}
 	var err error

@@ -5,7 +5,9 @@ package approval
 // to its key, exactly as a passkey sign-in binds one, and shows a code; the
 // owner approves the code on the server as the daemon's account (`seamlessd
 // console-open --sign-in --code`), which opens the database directly, so no
-// route of this service approves one.
+// route of this service approves one. The begin records what its request
+// showed of the browser (WithTerminalSignInBrowser), which the owner's
+// terminal shows before it asks to approve the code.
 
 import (
 	"context"
@@ -17,17 +19,32 @@ import (
 
 // TerminalSignIn is a terminal sign-in a browser just began: the cookie to
 // give it (its only copy; the row keeps a hash), the row's id the page asks
-// after, the code it shows, and how long the code waits.
+// after, the code it shows, how long the code waits, and the browser as the
+// row recorded it -- what the owner's terminal will show beside the code.
 type TerminalSignIn struct {
 	ID           string
 	Cookie       string
 	Code         string
 	PendingUntil time.Time
+	Browser      store.TerminalSignInBrowser
+}
+
+// terminalSignInBrowserKey carries a begin request's browser in its context.
+type terminalSignInBrowserKey struct{}
+
+// WithTerminalSignInBrowser returns ctx carrying what the request beginning a
+// terminal sign-in showed of its browser -- the address it came from and its
+// User-Agent -- for BeginTerminalSignIn to record. The console sets it from
+// the request; a begin without it records nothing, and the owner's terminal
+// then says so.
+func WithTerminalSignInBrowser(ctx context.Context, b store.TerminalSignInBrowser) context.Context {
+	return context.WithValue(ctx, terminalSignInBrowserKey{}, b)
 }
 
 // BeginTerminalSignIn begins a terminal sign-in for the browser whose key
-// (browserproof) is browserKey, under a fresh cookie. It signs nothing in: the
-// daemon's account approving the code does.
+// (browserproof) is browserKey, under a fresh cookie, recording the browser
+// ctx carries (WithTerminalSignInBrowser). It signs nothing in: the daemon's
+// account approving the code does.
 func (s *SignIn) BeginTerminalSignIn(ctx context.Context, browserKey string) (TerminalSignIn, error) {
 	const op = "approval.SignIn.BeginTerminalSignIn"
 	if err := refuseRestricted(ctx); err != nil {
@@ -40,11 +57,13 @@ func (s *SignIn) BeginTerminalSignIn(ctx context.Context, browserKey string) (Te
 	if err != nil {
 		return TerminalSignIn{}, fmt.Errorf("%s: %w", op, err)
 	}
-	row, code, err := store.BeginTerminalSignIn(ctx, s.cfg.DB, cookie, browserKey, s.cfg.Now())
+	from, _ := ctx.Value(terminalSignInBrowserKey{}).(store.TerminalSignInBrowser)
+	row, code, err := store.BeginTerminalSignIn(ctx, s.cfg.DB, cookie, browserKey, from, s.cfg.Now())
 	if err != nil {
 		return TerminalSignIn{}, fmt.Errorf("%s: %w", op, err)
 	}
-	return TerminalSignIn{ID: row.ID, Cookie: cookie, Code: code, PendingUntil: row.CreatedAt.Add(store.TerminalSignInTTL)}, nil
+	return TerminalSignIn{ID: row.ID, Cookie: cookie, Code: code, PendingUntil: row.CreatedAt.Add(store.TerminalSignInTTL),
+		Browser: row.Browser}, nil
 }
 
 // TerminalSignInState reports terminal sign-in id to the browser holding

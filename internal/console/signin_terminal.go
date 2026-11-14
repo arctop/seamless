@@ -13,6 +13,12 @@ package console
 // the browser holding both the cookie and the key it was begun with
 // (constraint console-unlock-begun-by-the-browser-it-opens).
 //
+// Anyone who reaches the console can begin one, so the begin records what it
+// sees of the browser -- the address the request came from and its User-Agent
+// (terminalSignInBrowser) -- and the owner's terminal shows that, with when it
+// began, and asks before it approves the code. The page shows the same beside
+// the code, for the owner to compare.
+//
 // Both routes sit behind signInRoute: a 404 while the key signs browsers in,
 // the owner only, never over the socket, and a write only from this origin.
 //
@@ -23,11 +29,13 @@ package console
 import (
 	"errors"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -39,15 +47,30 @@ func (s *Service) terminalSignInCommand(code string) string {
 	return s.daemonCommand("console-open --sign-in --code " + code)
 }
 
+// terminalSignInBrowser is what a terminal sign-in's begin records of the
+// browser: the address the request came from -- its connection's peer, as
+// the console trusts no forwarding header, so a proxy's address behind one --
+// and the User-Agent it sent. The store keeps both as bounded printable ASCII
+// (store.TerminalSignInBrowser).
+func terminalSignInBrowser(r *http.Request) store.TerminalSignInBrowser {
+	addr := r.RemoteAddr
+	if peer, err := netip.ParseAddrPort(addr); err == nil {
+		addr = peer.Addr().Unmap().String()
+	}
+	return store.TerminalSignInBrowser{Addr: addr, UserAgent: r.UserAgent()}
+}
+
 // terminalSignInBegin begins a terminal sign-in for the browser whose key the
-// request proves, under a fresh cookie, and answers the code and the command.
-// A cookie the browser held before ends with it: it is signing in again.
+// request proves, under a fresh cookie, recording the browser
+// (terminalSignInBrowser), and answers the code, the command, and the browser
+// as recorded: what the owner's terminal will show beside the code. A cookie
+// the browser held before ends with it: it is signing in again.
 func (s *Service) terminalSignInBegin(w http.ResponseWriter, r *http.Request) {
 	key, ok := s.signInKeyOf(w, r)
 	if !ok {
 		return
 	}
-	ctx := r.Context()
+	ctx := approval.WithTerminalSignInBrowser(r.Context(), terminalSignInBrowser(r))
 	begun, err := s.cfg.SignIn.BeginTerminalSignIn(ctx, key)
 	if err != nil {
 		s.signInError(w, r, err)
@@ -67,6 +90,7 @@ func (s *Service) terminalSignInBegin(w http.ResponseWriter, r *http.Request) {
 		"id": begun.ID, "code": begun.Code, "command": s.terminalSignInCommand(begun.Code),
 		"pending_until": begun.PendingUntil.UTC().Format(time.RFC3339),
 		"minutes":       int(store.TerminalSignInTTL / time.Minute),
+		"browser":       map[string]string{"address": begun.Browser.Addr, "user_agent": begun.Browser.UserAgent},
 	})
 }
 

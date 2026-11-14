@@ -70,13 +70,13 @@ var consoleLoginTmpl = template.Must(template.New("console-login").Parse(`<!doct
 // all (openSignInPage): there is no local path that signs a browser in
 // without the passkey, on the server or anywhere else. The way in without a
 // passkey begins in the browser too: the sign-in page's terminal sign-in shows
-// a code, which --sign-in --code approves as the daemon's account
-// (runConsoleSignIn).
+// a code, which --sign-in --code approves as the daemon's account once it has
+// shown the owner that browser and the owner said yes (runConsoleSignIn).
 func runConsoleOpen(args []string) error {
 	fs := flag.NewFlagSet("console-open", flag.ContinueOnError)
 	browser := fs.String("browser", "", `browser application to open instead of the default (e.g. "Google Chrome"; macOS only; not with --unlock or --sign-in, which open no browser)`)
 	unlock := fs.String("unlock", "", "approve a locked project's unlock in the browser that began it on its unlock page (run as the daemon's account, through sudo -k)")
-	signIn := fs.Bool("sign-in", false, "approve the terminal sign-in a browser began on the console's sign-in page, under passkey sign-in (run as the daemon's account, through sudo -k)")
+	signIn := fs.Bool("sign-in", false, "approve the terminal sign-in a browser began on the console's sign-in page, under passkey sign-in, after it shows that browser and asks (at a terminal; run as the daemon's account, through sudo -k)")
 	code := fs.String("code", "", "the code that browser's unlock or sign-in page shows (with --unlock or --sign-in; asked for when absent and stdin is a terminal)")
 	forFlag := fs.String("for", "", "how long the unlock lasts once approved (with --unlock; at most and by default 3h, capped by peer_auth.max_lease)")
 	if err := fs.Parse(args); err != nil {

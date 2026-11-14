@@ -213,8 +213,9 @@ func TestConsoleOpenUnlock_RefusesBrowser(t *testing.T) {
 
 // retireSignInDB is the daemon's database with passkey sign-in on in the
 // config console-open loads, and a terminal sign-in begun by the browser
-// holding cookie and key; it returns the config and the code that browser's
-// page shows.
+// holding cookie and key, from 192.0.2.44 with an example User-Agent; it
+// returns the config, the database's path and the code that browser's page
+// shows.
 func retireSignInDB(t *testing.T, cookie, key string) (config.Config, string, string) {
 	t.Helper()
 	dbPath := daemonDB(t, store.LatestSchemaVersion())
@@ -224,14 +225,16 @@ func retireSignInDB(t *testing.T, cookie, key string) (config.Config, string, st
 	db, err := store.OpenExisting(dbPath)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, db.Close()) }()
-	_, code, err := store.BeginTerminalSignIn(context.Background(), db, cookie, key, time.Now())
+	_, code, err := store.BeginTerminalSignIn(context.Background(), db, cookie, key,
+		store.TerminalSignInBrowser{Addr: "192.0.2.44", UserAgent: "Mozilla/5.0 (X11; Linux x86_64) Example/1.0"}, time.Now())
 	require.NoError(t, err)
 	return cfg, dbPath, code
 }
 
-// console-open --sign-in --code, as the daemon's account: it signs in the
-// browser whose page showed the code -- that browser's cookie with its own
-// key, and nothing else -- prints nothing secret, and launches nothing.
+// console-open --sign-in --code, as the daemon's account: it shows the
+// browser the code names and, once the owner says yes, signs in the browser
+// whose page showed the code -- that browser's cookie with its own key, and
+// nothing else -- prints nothing secret, and launches nothing.
 func TestConsoleOpenSignIn_SignsInTheBrowserThatShowedTheCode(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("peer_auth is a POSIX deployment: the account check refuses first")
@@ -241,7 +244,9 @@ func TestConsoleOpenSignIn_SignsInTheBrowserThatShowedTheCode(t *testing.T) {
 	cfg, dbPath, code := retireSignInDB(t, cookie, "browser-key-a")
 
 	var said bytes.Buffer
-	require.NoError(t, consoleSignIn(cfg, code, "", unlockTerminal{in: strings.NewReader(""), out: &said}, time.Now))
+	require.NoError(t, consoleSignIn(cfg, code, "", unlockTerminal{in: strings.NewReader("y\n"), out: &said, interactive: true}, time.Now))
+	require.Contains(t, said.String(), "192.0.2.44 (another computer)")
+	require.Contains(t, said.String(), "Mozilla/5.0 (X11; Linux x86_64) Example/1.0")
 	require.Contains(t, said.String(), "Signed in the browser that showed code "+code+", until ")
 	require.NotContains(t, said.String(), cookie)
 
@@ -256,9 +261,10 @@ func TestConsoleOpenSignIn_SignsInTheBrowserThatShowedTheCode(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrSignInNotFound, "the cookie in another browser signs nothing in")
 
 	said.Reset()
-	err = consoleSignIn(cfg, code, "", unlockTerminal{in: strings.NewReader(""), out: &said}, time.Now)
+	err = consoleSignIn(cfg, code, "", unlockTerminal{in: strings.NewReader("y\n"), out: &said, interactive: true}, time.Now)
 	require.ErrorContains(t, err, "no sign-in is waiting for code "+code, "a code works once")
 	require.ErrorContains(t, err, "Nothing changed.")
+	require.NotContains(t, said.String(), "Sign in this browser?", "refused before anything is asked")
 }
 
 // Every refusal changes nothing: --browser, a key-signs-in config, no code
@@ -280,8 +286,10 @@ func TestConsoleOpenSignIn_Refusals(t *testing.T) {
 	require.ErrorContains(t, err, "/console/login")
 	require.Empty(t, said.String(), "nothing asked where nobody can answer")
 
-	require.ErrorContains(t, consoleSignIn(cfg, "bad!", "", unlockTerminal{out: &said}, time.Now), "is not a sign-in code")
-	require.ErrorContains(t, consoleSignIn(cfg, "ZZZZ-ZZZZ", "", unlockTerminal{out: &said}, time.Now), "no sign-in is waiting for code ZZZZ-ZZZZ")
+	tty := unlockTerminal{in: strings.NewReader("y\ny\n"), out: &said, interactive: true}
+	require.ErrorContains(t, consoleSignIn(cfg, "bad!", "", tty, time.Now), "is not a sign-in code")
+	require.ErrorContains(t, consoleSignIn(cfg, "ZZZZ-ZZZZ", "", tty, time.Now), "no sign-in is waiting for code ZZZZ-ZZZZ")
+	require.Empty(t, said.String(), "a bad code is refused before anything is asked")
 
 	db, err := store.OpenExisting(dbPath)
 	require.NoError(t, err)

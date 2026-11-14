@@ -133,7 +133,7 @@ var viewExempt = map[string]string{
 	// Console sign-in with a passkey: which browsers are signed in, and the
 	// passkeys devices created that wait for the owner's approval. The console
 	// reads them before it knows which handle a request gets.
-	"console_signins":     "browsers signed in to the console: cookie and browser-key hashes, a credential id and times, about no project; no corpus content",
+	"console_signins":     "browsers signed in to the console: cookie and browser-key hashes, a credential id, times, and a terminal sign-in's address and User-Agent, about no project; no corpus content",
 	"passkey_enrollments": "passkeys waiting for the owner's approval: public keys, a label, a code hash and times, about no project; no corpus content",
 	// Device pairing (plan networked-relay): the computers paired with this
 	// server and the one-time codes that pair them. The edge reads them

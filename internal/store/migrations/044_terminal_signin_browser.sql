@@ -1,0 +1,36 @@
+-- A terminal sign-in shows the owner which browser it signs in (console.sign_in:
+-- passkey, off by default; store/signin_terminal.go). A browser begins one on
+-- the console's sign-in page and shows a code, and the owner approves the code
+-- on the server (`seamlessd console-open --sign-in --code`). Anyone who reaches
+-- the console can begin one, so before it signs anything in the approval shows
+-- what the begin recorded of that browser -- when it began (created_at), the
+-- address its request came from and the User-Agent it sent -- and asks.
+--
+-- Additive only: two columns on console_signins, each with a default. Nothing
+-- is dropped, renamed or retyped, and no CHECK or index changes. The previous
+-- release names its columns in every statement over console_signins, so it
+-- reads and writes a database this one migrated exactly as before, and its
+-- inserts take the default. Only a terminal sign-in's begin writes them: a
+-- passkey's sign-in, and every row from before this migration, keep ''.
+-- Metadata about a browser only, about no project; no corpus content.
+--
+--   remote_addr  the address the begin request came from: the connection's
+--                peer as the console saw it. The console trusts no forwarding
+--                header, so behind a proxy this is the proxy's address.
+--                Printable ASCII, at most 64 characters. '' when not recorded.
+--   user_agent   the User-Agent header the begin request sent, as it sent it
+--                (a script sends whatever it likes), reduced to printable
+--                ASCII and cut to 256 characters (store.TerminalSignInBrowser,
+--                Clean), so it can never carry a terminal escape. '' when none
+--                was sent, or not recorded.
+--
+-- RESTORE AND ROLLBACK. Nothing new: a restore ends every sign-in, and every
+-- terminal sign-in still waiting, that it brings back
+-- (store.ResetRestoredAccess). An update rollback to the previous release
+-- leaves both columns in place, unread; a terminal sign-in it begins records
+-- nothing, and this release then shows that browser as not recorded.
+--
+-- ARCHIVE MERGE. console_signins is never merged (internal/archive/merge.go).
+-- A backup carries both columns with the rest of the table.
+ALTER TABLE console_signins ADD COLUMN remote_addr TEXT NOT NULL DEFAULT '';
+ALTER TABLE console_signins ADD COLUMN user_agent TEXT NOT NULL DEFAULT '';

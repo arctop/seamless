@@ -80,7 +80,7 @@ func TestTerminalSignIn_SignsInTheBrowserThatBeganIt(t *testing.T) {
 	require.Equal(t, http.StatusOK, status)
 	require.Equal(t, string(store.TerminalSignInWaiting), state)
 
-	_, err := store.ApproveTerminalSignIn(context.Background(), sc.db, code, approval.SignInLifetime, time.Now())
+	_, err := store.ApproveTerminalSignIn(context.Background(), sc.db, id, code, approval.SignInLifetime, time.Now())
 	require.NoError(t, err)
 	status, state = retireStatus(t, sc, b, id)
 	require.Equal(t, http.StatusOK, status)
@@ -103,10 +103,10 @@ func TestTerminalSignIn_SignsInTheBrowserThatBeganIt(t *testing.T) {
 func TestTerminalSignIn_ACodeCannotSignInADifferentBrowser(t *testing.T) {
 	sc := signinNewConsole(t, nil)
 	owner, agent := signinNewBrowser(t), signinNewBrowser(t)
-	_, code := retireBegin(t, sc, owner)
+	ownerID, code := retireBegin(t, sc, owner)
 	agentID, _ := retireBegin(t, sc, agent)
 
-	_, err := store.ApproveTerminalSignIn(context.Background(), sc.db, code, approval.SignInLifetime, time.Now())
+	_, err := store.ApproveTerminalSignIn(context.Background(), sc.db, ownerID, code, approval.SignInLifetime, time.Now())
 	require.NoError(t, err)
 	require.True(t, retireSignedIn(t, sc, owner))
 	require.False(t, retireSignedIn(t, sc, agent), "a browser that began its own sign-in is not signed in by another's code")
@@ -195,7 +195,7 @@ func TestTerminalSignIn_AWayInWithTheKeyRetiredAndNoPasskey(t *testing.T) {
 	require.Contains(t, rr.Body.String(), "Sign in from a terminal on the server")
 
 	id, code := retireBegin(t, sc, b)
-	_, err := store.ApproveTerminalSignIn(context.Background(), sc.db, code, approval.SignInLifetime, time.Now())
+	_, err := store.ApproveTerminalSignIn(context.Background(), sc.db, id, code, approval.SignInLifetime, time.Now())
 	require.NoError(t, err)
 	_, state := retireStatus(t, sc, b, id)
 	require.Equal(t, string(store.TerminalSignInLive), state)
