@@ -71,8 +71,8 @@ func TestDialogLead_CountFirstThenWhatIsAsked(t *testing.T) {
 	require.Contains(t, msg, "\nUntil its session ends (90 minutes at most), unless you pick less below.\n")
 	require.Contains(t, msg, "\nAgent process: Claude Code 2.1.319\n")
 	require.NotContains(t, msg, "pid 4242")
-	require.True(t, strings.HasSuffix(msg, "Declining leaves the request pending for `seam approve R-K71M` in your own "+
-		"terminal, or a passkey at https://example.test/console/access/"+f.ID+"."), msg)
+	require.True(t, strings.HasSuffix(msg, "Declining leaves the request pending for `seam approve R-K71M` in a terminal "+
+		"of your own "+access.NotBang+", or a passkey at https://example.test/console/access/"+f.ID+"."), msg)
 	f.Agent, f.Program = "", ""
 	require.Contains(t, dialogMessage(f, dialogShown{capped: time.Hour}), "\nAgent process: pid 4242\n")
 	require.NotContains(t, dialogMessage(f, dialogShown{capped: time.Hour}), "\nProgram:")
@@ -185,11 +185,11 @@ func TestDialogLead_AWritesGrantSaysAcceptingIsReadOnly(t *testing.T) {
 	}
 	require.Equal(t, "1 warning. Claude Code 2.1.325 asks for read-write access to example-conf-b from project example-conf-a.\n"+
 		"Accepting here approves read-only, which clears no write; for read and write, use Passkey below and choose "+
-		"read and write on its page, or `seam approve R-7P7Y --access read-write` in your own terminal.",
+		"read and write on its page, or `seam approve R-7P7Y --access read-write` in a terminal of your own "+access.NotBang+".",
 		lead(access.Ways{TouchID: true, Passkey: true, Page: "https://example.test/console/access/x"}))
 	require.Equal(t, "1 warning. Claude Code 2.1.325 asks for read-write access to example-conf-b from project example-conf-a.\n"+
 		"Accepting here approves read-only, which clears no write; for read and write, use `seam approve R-7P7Y "+
-		"--access read-write` in your own terminal.", lead(access.Ways{TouchID: true}), "no passkey enrolled")
+		"--access read-write` in a terminal of your own "+access.NotBang+".", lead(access.Ways{TouchID: true}), "no passkey enrolled")
 
 	read := f
 	read.AskedAccess = "read-only"

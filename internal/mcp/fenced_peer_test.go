@@ -185,7 +185,7 @@ func TestFenced_PeerMoveOffersNoTouchID(t *testing.T) {
 	r.enrollTouchID()
 	text := r.refused(r.agent, "notes_read", map[string]any{"id": r.notes[dlgLegal]})
 	require.Contains(t, text, "\nRemedy: move request R-")
-	require.Contains(t, text, "the owner approves it in their own terminal with `seam approve R-")
+	require.Contains(t, text, "the owner approves it in a terminal of their own with `seam approve R-")
 	require.NotContains(t, text, "Touch ID")
 	require.Empty(t, o.dialogs(), "no dialog for a move without a passkey")
 }

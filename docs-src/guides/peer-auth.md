@@ -664,8 +664,9 @@ read grants are configured, until the connection has gone unused for 30 days. An
 agent connected before the release that keeps them shows the plain refusal until
 its next initialize.
 
-**`seam approve`.** In your own terminal (it refuses without one, so an agent
-cannot use it), `seam approve` lists what is waiting and shows the facts, asks for
+**`seam approve`.** In a terminal of your own (it refuses without one, so an
+agent cannot use it, and neither can `!` in an agent's session, which runs it in
+the agent's shell), `seam approve` lists what is waiting and shows the facts, asks for
 a duration, and commits the decision with `sudo -k -u <daemon account> seamlessd
 approve`. The `sudo -k` asks for your Touch ID or password every time, and
 becoming the daemon's account is the proof. Typing `deny` in full at the

@@ -262,8 +262,8 @@ after which it can no longer write where it works now.
 
 Asking again while a request is pending answers with that request and says
 what became of this call's reason. The owner decides it with seam approve
-<short id> in their own terminal, or on the console's passkey page when the
-daemon names one.`)
+<short id> in a terminal of their own (not ! in an agent's session: it needs a
+real terminal), or on the console's passkey page when the daemon names one.`)
 
 type accessRequestOpts struct {
 	reason *string

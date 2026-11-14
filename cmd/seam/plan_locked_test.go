@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 )
 
@@ -24,7 +25,7 @@ import (
 // (console.answerLocked, the socket wording of access.View.Refusal).
 const lockedRefusalFx = "project example-finance is locked: even the owner's own agents need the owner's approval, " +
 	"and this connection holds none.\nRemedy: run `seam access request example-finance` from the agent's shell to " +
-	"file an access request, and the owner approves it in their own terminal with `seam approve` and the request's id."
+	"file an access request, and the owner approves it in a terminal of their own with `seam approve` and the request's id " + access.NotBang + "."
 
 // lockedConsole serves canned console answers by "METHOD /path?query": a
 // status and a body. Anything else is a 404, as the console answers a miss.

@@ -78,7 +78,7 @@ const (
 	// pmAnchorRemedy is the anchor refusal's second line, word for word
 	// (approval/anchor.go anchorRemedy).
 	pmAnchorRemedy = "Remedy: run the work from an agent session (Claude Code or Codex), which asks for itself; for a one-off, " +
-		"the owner approves that session's request with `seam approve` in their own terminal."
+		"the owner approves that session's request with `seam approve` in a terminal of their own " + access.NotBang + "."
 	// pmTouchIDBad is the console's answer to a Touch ID proof that does not
 	// verify (console/access.go accessError).
 	pmTouchIDBad = "the Touch ID signature does not verify for this request, this duration and these facts with that key: " +
@@ -98,7 +98,7 @@ const (
 	// pmTouchIDFactsChanged is the same 409 said to the Touch ID helper, which
 	// has no page to reload.
 	pmTouchIDFactsChanged = "the request changed while Touch ID showed it (a new warning, or the agent's reason filled in), " +
-		"so nothing was approved: run seam approve in your own terminal to see it as it stands now, " +
+		"so nothing was approved: run seam approve in a terminal of your own " + access.NotBang + " to see it as it stands now, " +
 		"or have the agent ask again"
 )
 

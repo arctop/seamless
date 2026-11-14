@@ -277,7 +277,7 @@ The refusal names the request it filed. Here a conversation working in
 
 ```text
 notes_read: project example-finance is confidential: only a conversation working in it reads it -- if your task is about example-finance, ask the owner to move this conversation into it (session_start project=example-finance asks); otherwise leave it alone
-Remedy: move request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console's Access requests page; retry once it is approved. Record what belongs in example-ops now: once the owner approves the move, this conversation works in example-finance for good, and it can no longer write to example-ops or the global scope until the conversation ends. After the move it can still close a task it claimed there, with a receipt: tasks_update with status done or dropped, and no text. Its first result after the approval says so and carries example-finance's briefing.
+Remedy: move request R-7F3K is waiting -- the owner approves it in a terminal of their own with `seam approve R-7F3K` (not `!` in an agent's session: it needs a real terminal), or with Approve on the console's Access requests page; retry once it is approved. Record what belongs in example-ops now: once the owner approves the move, this conversation works in example-finance for good, and it can no longer write to example-ops or the global scope until the conversation ends. After the move it can still close a task it claimed there, with a receipt: tasks_update with status done or dropped, and no text. Its first result after the approval says so and carries example-finance's briefing.
 ```
 
 A locked project stays the lock's: a call refused at the lock files the lock's

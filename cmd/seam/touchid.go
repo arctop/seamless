@@ -67,7 +67,7 @@ var (
 	errTouchIDNotMac = errors.New("the Touch ID approver exists only on macOS")
 	// errTouchIDNotTerminal is seam touchid enroll without the owner's terminal.
 	errTouchIDNotTerminal = errors.New("seam touchid enroll is the owner's own terminal path: it needs a terminal on stdin and stdout, " +
-		"and an agent cannot use it")
+		"so an agent cannot use it, and " + notBangShell)
 )
 
 var touchIDEnrollCmd = spec("touchid enroll", groupAccess,
@@ -102,7 +102,8 @@ and the daemon retires its credential with the new enrollment once that
 earlier key has signed for it, so no dead key is left listed. A key another
 Mac holds, or a passkey, is never retired.
 
-It needs macOS, a terminal on stdin and stdout (an agent cannot use it), and
+It needs macOS, a terminal on stdin and stdout (an agent cannot use it, nor
+can ! in an agent's session, which runs it in the agent's shell), and
 server_url naming the daemon's peer_auth socket (unix:///path), which is how
 the app reaches the daemon.`)
 

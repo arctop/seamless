@@ -960,7 +960,7 @@ func dialogMessage(f approval.Facts, shown dialogShown) string {
 	if reason := plain(f.Reason); reason != "" {
 		b.WriteString("\nThe agent's reason, in its own words (Seamless did not check it):\n\"" + reason + "\"\n")
 	}
-	pending := "`seam approve " + plain(f.Short) + "` in your own terminal"
+	pending := "`seam approve " + plain(f.Short) + "` in a terminal of your own " + access.NotBang
 	if shown.ways.Page != "" {
 		pending += ", or a passkey at " + plain(shown.ways.Page)
 	}
@@ -1014,7 +1014,7 @@ func readOnlyLine(f approval.Facts, shown dialogShown) string {
 	if f.Kind != store.AccessKindGrant || f.AskedAccess != "read-write" || len(f.AccessChoices) < 2 {
 		return ""
 	}
-	how := "`seam approve " + plain(f.Short) + " --access read-write` in your own terminal"
+	how := "`seam approve " + plain(f.Short) + " --access read-write` in a terminal of your own " + access.NotBang
 	if shown.ways.Passkey {
 		how = "Passkey below and choose read and write on its page, or " + how
 	}

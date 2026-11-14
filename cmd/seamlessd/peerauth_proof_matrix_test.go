@@ -180,7 +180,7 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 		require.True(t, strings.HasPrefix(ls[1], "Remedy: the approval dialog stopped waiting at "), ls[1])
 		require.NotContains(t, ls[1], " is waiting -- ", "one remedy, as the dialog left it")
 		require.True(t, strings.HasSuffix(ls[1], " without a decision; access request "+short+" stays pending for the owner: `seam approve "+
-			short+"` in their own terminal, a passkey at "+page+", or Touch ID in the next approval dialog; retry once it is "+
+			short+"` in a terminal of their own "+access.NotBang+", a passkey at "+page+", or Touch ID in the next approval dialog; retry once it is "+
 			"approved, and keep to other projects until then."), ls[1])
 
 		// access_request, accepted the same way: still pending.
@@ -823,7 +823,7 @@ func TestPeerAuthMatrix_Anchors(t *testing.T) {
 			// Touch ID is never offered to a client with no elicitation; a
 			// form client that shows the dialog gets the dialog's remedy.
 			remedy := func() string {
-				ways := []string{"in their own terminal with `seam approve " + short + "`"}
+				ways := []string{"in a terminal of their own with `seam approve " + short + "` " + access.NotBang}
 				if c.passkey {
 					ways = append(ways, "with a passkey at "+page)
 				}
@@ -874,7 +874,7 @@ func TestPeerAuthMatrix_Anchors(t *testing.T) {
 				return
 			}
 			require.Len(t, o.dialogs(), 1)
-			still := []string{"`seam approve " + short + "` in their own terminal"}
+			still := []string{"`seam approve " + short + "` in a terminal of their own " + access.NotBang}
 			if c.passkey {
 				still = append(still, "a passkey at "+page)
 			}

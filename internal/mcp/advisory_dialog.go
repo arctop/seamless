@@ -439,7 +439,8 @@ func advisoryDialogMessage(af advisoryForm, stopAt time.Time) string {
 	b.WriteString("\nChoosing Approve decides the request now, with no other proof: without peer_auth this approval is " +
 		"advisory, since Seamless cannot tell who answers this dialog, and any process holding the bearer key could " +
 		"make the same decision. Choosing Deny denies it. Declining or cancelling decides nothing: the request stays " +
-		"pending for `seam approve " + plain(f.Short) + "` in your own terminal, or the console's Access requests page.")
+		"pending for `seam approve " + plain(f.Short) + "` in a terminal of your own " + access.NotBang + ", or the console's " +
+		"Access requests page.")
 	return b.String()
 }
 
@@ -481,17 +482,18 @@ func copyLineOf(f approval.Facts) string {
 }
 
 // advisoryApproves says how the owner approves request short in the advisory
-// tier: their own terminal, or the console's Access requests page.
+// tier: a terminal of their own (access.NotBang), or the console's Access
+// requests page.
 func advisoryApproves(short string) string {
-	return "the owner approves it in their own terminal with `seam approve " + short + "`, or with Approve on the " +
-		"console's Access requests page"
+	return "the owner approves it " + access.OwnTerminal + " with `seam approve " + short + "` " + access.NotBang +
+		", or with Approve on the console's Access requests page"
 }
 
 // advisoryStillPending says how the owner may still decide request short
-// once the advisory dialog ended without a decision: their own terminal, the
-// console, or the next dialog (the call that needs the project again, retried,
-// shows one).
+// once the advisory dialog ended without a decision: a terminal of their own
+// (access.NotBang), the console, or the next dialog (the call that needs the
+// project again, retried, shows one).
 func advisoryStillPending(short string) string {
-	return "`seam approve " + short + "` in their own terminal, Approve on the console's Access requests page, or " +
-		"Approve in the next approval dialog"
+	return "`seam approve " + short + "` " + access.OwnTerminal + " " + access.NotBang + ", Approve on the console's Access " +
+		"requests page, or Approve in the next approval dialog"
 }

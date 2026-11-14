@@ -435,7 +435,8 @@ func TestDialog_TouchIDProofApproves(t *testing.T) {
 	require.NotContains(t, msg, a.ID, "no full ids")
 	require.Contains(t, msg, "the session works outside "+lkFin+"'s repository")
 	require.Less(t, strings.Index(msg, "Warnings:"), strings.Index(msg, "Project:"), "warnings come first")
-	require.True(t, strings.HasSuffix(msg, "Declining leaves the request pending for `seam approve "+short+"` in your own terminal."), msg)
+	require.True(t, strings.HasSuffix(msg, "Declining leaves the request pending for `seam approve "+short+
+		"` in a terminal of your own "+access.NotBang+"."), msg)
 	require.NotContains(t, msg, "reason", "a refusal's request carries no reason")
 	schema, ok := shown[0].Params.RequestedSchema.(map[string]any)
 	require.True(t, ok)
@@ -472,7 +473,7 @@ func TestDialog_AcceptWithoutProofGrantsNothing(t *testing.T) {
 	require.NotContains(t, ls[1], " is waiting -- ", "one remedy, not the original with a second after it")
 	require.NotContains(t, ls[1], "passkey", "no passkey is enrolled: none is offered")
 	require.True(t, strings.HasSuffix(ls[1], " without a decision; access request "+short+
-		" stays pending for the owner: `seam approve "+short+"` in their own terminal, or Touch ID in the next approval "+
+		" stays pending for the owner: `seam approve "+short+"` in a terminal of their own "+access.NotBang+", or Touch ID in the next approval "+
 		"dialog; retry once it is approved, and keep to other projects until then."), ls[1], "Touch ID is offered: a key is enrolled")
 }
 
@@ -1003,7 +1004,7 @@ func TestDialog_TouchIDEndAnswersAtOnce(t *testing.T) {
 			ls := lines(text)
 			require.Len(t, ls, 2, text)
 			require.Equal(t, c.words+"access request "+short+" stays pending for the owner: `seam approve "+short+
-				"` in their own terminal, or Touch ID in the next approval dialog; retry once it is approved, and keep to "+
+				"` in a terminal of their own "+access.NotBang+", or Touch ID in the next approval dialog; retry once it is approved, and keep to "+
 				"other projects until then.", ls[1])
 			require.Empty(t, d.liveLeases())
 

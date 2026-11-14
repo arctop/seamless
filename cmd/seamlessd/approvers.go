@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
@@ -98,11 +99,12 @@ func approvers(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writer
 // `approvers list` and doctor: a passkey with a code minted as the daemon's
 // account and, where the daemon runs on a Mac and serves the peer_auth socket
 // the Touch ID app talks over, this Mac's Touch ID with `seam touchid enroll`
-// in the owner's own terminal (its window shows the command that mints its code).
+// in a terminal of the owner's (its window shows the command that mints its code).
 func firstApproverAdvice(goos string, peerAuth bool) string {
 	s := "create a passkey on the console's Approvers page, which shows the command that mints its code"
 	if goos == "darwin" && peerAuth {
-		s += "; or, for this Mac's Touch ID, run `seam touchid enroll` in the owner's own terminal, whose window shows the command that mints its code"
+		s += "; or, for this Mac's Touch ID, run `seam touchid enroll` in a terminal of the owner's " + access.NotBang +
+			", whose window shows the command that mints its code"
 	}
 	return s
 }

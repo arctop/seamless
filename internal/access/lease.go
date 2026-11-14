@@ -264,10 +264,10 @@ func (v View) lockedRefusal(project string) error {
 		return &RefusalError{msg: fmt.Sprintf("project %s is locked: the TCP connection and its bearer key never reach a "+
 			"locked project, because a shared key cannot be tied to one process.\n"+
 			"Remedy: work in it from an agent session whose seam mcp-proxy dials the peer_auth Unix socket; a call "+
-			"there files an access request, and the owner approves it in their own terminal.", project)}
+			"there files an access request, and the owner approves it "+OwnTerminal+" "+NotBang+".", project)}
 	}
 	return &RefusalError{msg: fmt.Sprintf("project %s is locked: even the owner's own agents need the owner's approval, "+
 		"and this connection holds none.\n"+
 		"Remedy: run `seam access request %s` from the agent's shell to file an access request, and the owner "+
-		"approves it in their own terminal with `seam approve` and the request's id.", project, project)}
+		"approves it "+OwnTerminal+" with `seam approve` and the request's id "+NotBang+".", project, project)}
 }

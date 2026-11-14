@@ -33,7 +33,7 @@ const (
 	tmuxRule = "Seamless files no access request for this process: it is tmux, a terminal multiplexer, not an agent, " +
 		"and an approval would open the project to every program it started, other agent sessions included."
 	anchorCure = "Remedy: run the work from an agent session (Claude Code or Codex), which asks for itself; for a " +
-		"one-off, the owner approves that session's request with `seam approve` in their own terminal."
+		"one-off, the owner approves that session's request with `seam approve` in a terminal of their own " + access.NotBang + "."
 )
 
 func TestAnchorRule_ATmuxPaneFilesNothing(t *testing.T) {
@@ -109,11 +109,11 @@ func TestRemedies_OfferOnlyThePathsThatExist(t *testing.T) {
 
 	// Passkeys are set up, but none is enrolled: no page is offered.
 	got := remedy(plain)
-	require.Contains(t, got, "-- the owner approves it in their own terminal with `seam approve R-")
+	require.Contains(t, got, "-- the owner approves it in a terminal of their own with `seam approve R-")
 	require.NotContains(t, got, "passkey")
 	require.NotContains(t, got, "Touch ID")
-	require.True(t, strings.HasSuffix(listed(plain), "explicitly; the owner approves it in their own terminal with `seam approve` "+
-		"and the request's id."))
+	require.True(t, strings.HasSuffix(listed(plain), "explicitly; the owner approves it in a terminal of their own with `seam approve` "+
+		"and the request's id "+access.NotBang+"."))
 
 	// A Touch ID key: offered to the client that shows dialogs, never to the
 	// one that cannot.
@@ -125,7 +125,7 @@ func TestRemedies_OfferOnlyThePathsThatExist(t *testing.T) {
 	// original remedy with a second one after it.
 	require.True(t, strings.HasPrefix(got, "Remedy: the approval dialog was declined; access request R-"), got)
 	require.NotContains(t, got, " is waiting -- ")
-	require.True(t, strings.HasSuffix(got, "in their own terminal, or Touch ID in the next approval dialog; retry once it is "+
+	require.True(t, strings.HasSuffix(got, "in a terminal of their own "+access.NotBang+", or Touch ID in the next approval dialog; retry once it is "+
 		"approved, and keep to other projects until then."), got)
 	require.Contains(t, listed(decliner), "explicitly; the owner approves it with Touch ID in the approval dialog")
 

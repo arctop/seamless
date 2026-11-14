@@ -448,7 +448,8 @@ func refusedFromAgent(w http.ResponseWriter, r *http.Request) bool {
 	if !access.FromAgent(r.Context()) {
 		return false
 	}
-	writeJSON(w, http.StatusForbidden, map[string]string{"error": "this is the owner's decision, and this request came from a process an agent started: run it in your own terminal, or on the console"})
+	writeJSON(w, http.StatusForbidden, map[string]string{"error": "this is the owner's decision, and this request came " +
+		"from a process an agent started: run it in a terminal of your own " + access.NotBang + ", or on the console"})
 	return true
 }
 

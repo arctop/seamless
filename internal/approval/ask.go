@@ -64,8 +64,8 @@ var (
 	// place the agent could write before); what the owner confirms with a
 	// touch must be what is granted. A passkey, whose page shows the move, or
 	// the owner's terminal decides one.
-	ErrTouchIDMove = errors.New("a move is approved with a passkey or seam approve in the owner's own terminal: " +
-		"the Touch ID approver does not word moves yet")
+	ErrTouchIDMove = errors.New("a move is approved with a passkey, or with seam approve in a terminal of the owner's " +
+		access.NotBang + "; the Touch ID approver does not word moves yet")
 )
 
 // AskInput is one ask for a fenced project (Ask).

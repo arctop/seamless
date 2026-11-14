@@ -351,7 +351,7 @@ func TestFencedExample_DataRoom(t *testing.T) {
 	require.Equal(t, "notes_read: project "+fmFinance+" is confidential: only a conversation working in it, or one the "+
 		"owner granted a read of it, reads it -- if your task is about "+fmFinance+", ask the owner for a grant of it "+
 		"(session_start project="+fmFinance+" asks); otherwise leave it alone\nRemedy: read request "+readFin+" is waiting "+
-		"-- the owner approves it in their own terminal with `seam approve "+readFin+"`, or with Approve on the console's "+
+		"-- the owner approves it in a terminal of their own with `seam approve "+readFin+"` "+access.NotBang+", or with Approve on the console's "+
 		"Access requests page; retry once it is approved. An approved read is read-only, and nothing read from "+fmFinance+
 		" may be written anywhere but "+fmDataRoom+". "+cite(fmFinance), text)
 	f1 := e.facts(readFin)
@@ -385,7 +385,7 @@ func TestFencedExample_DataRoom(t *testing.T) {
 	writeFin := fmShortOf(t, text)
 	require.Equal(t, "tasks_add: this session holds content from "+fmDataRoom+", "+fmFinance+", so it writes only into "+
 		fmDataRoom+": a write into project "+fmFinance+" is refused\nRemedy: read-and-write request "+writeFin+
-		" is waiting -- the owner approves it in their own terminal with `seam approve "+writeFin+"`, or with Approve on the "+
+		" is waiting -- the owner approves it in a terminal of their own with `seam approve "+writeFin+"` "+access.NotBang+", or with Approve on the "+
 		"console's Access requests page; retry once it is approved. Approved read and write, this session changes "+
 		fmFinance+"'s tasks, memories and notes as its own sessions do; approved read-only, it reads "+fmFinance+
 		" and writes nothing there. "+cite(fmFinance), text)

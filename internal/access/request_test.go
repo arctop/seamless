@@ -20,30 +20,36 @@ func TestWays_OwnerApproves(t *testing.T) {
 		want string
 	}{
 		{"no approvers", Ways{},
-			"the owner approves it in their own terminal with `seam approve R-K71M`"},
+			"the owner approves it in a terminal of their own with `seam approve R-K71M` " + notBang},
 		{"passkey only", Ways{Passkey: true, Page: page},
-			"the owner approves it in their own terminal with `seam approve R-K71M`, or with a passkey at " + page},
+			"the owner approves it in a terminal of their own with `seam approve R-K71M` " + notBang + ", or with a passkey at " + page},
 		{"Touch ID only", Ways{TouchID: true},
 			"the owner approves it with Touch ID in the approval dialog, " +
-				"or in their own terminal with `seam approve R-K71M`"},
+				"or in a terminal of their own with `seam approve R-K71M` " + notBang},
 		{"Touch ID, hedged", Ways{TouchID: true, TouchIDIf: "if this Codex shows one"},
 			"the owner approves it with Touch ID in the approval dialog if this Codex shows one, " +
-				"or in their own terminal with `seam approve R-K71M`"},
+				"or in a terminal of their own with `seam approve R-K71M` " + notBang},
 		{"both", Ways{TouchID: true, Passkey: true, Page: page},
 			"the owner approves it with Touch ID in the approval dialog, " +
-				"in their own terminal with `seam approve R-K71M`, or with a passkey at " + page},
+				"in a terminal of their own with `seam approve R-K71M` " + notBang + ", or with a passkey at " + page},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			require.Equal(t, c.want, c.w.OwnerApproves("R-K71M"))
 		})
 	}
-	require.Equal(t, "the owner approves it in their own terminal with `seam approve` and the request's id, "+
-		"or with a passkey on the request's console page", Ways{Passkey: true}.OwnerApproves(""), "no request yet")
+	require.Equal(t, "the owner approves it in a terminal of their own with `seam approve` and the request's id "+notBang+
+		", or with a passkey on the request's console page", Ways{Passkey: true}.OwnerApproves(""), "no request yet")
 
-	require.Equal(t, "`seam approve R-K71M` in their own terminal", Ways{}.StillPending("R-K71M"))
-	require.Equal(t, "`seam approve R-K71M` in their own terminal, a passkey at "+page+", or Touch ID in the next approval dialog",
-		Ways{TouchID: true, Passkey: true, Page: page}.StillPending("R-K71M"))
+	require.Equal(t, "`seam approve R-K71M` in a terminal of their own "+notBang, Ways{}.StillPending("R-K71M"))
+	require.Equal(t, "`seam approve R-K71M` in a terminal of their own "+notBang+", a passkey at "+page+
+		", or Touch ID in the next approval dialog", Ways{TouchID: true, Passkey: true, Page: page}.StillPending("R-K71M"))
+	require.Equal(t, notBang, NotBang, "the words every remedy and dialog says after an owner-only command")
 }
+
+// notBang is NotBang word for word: an agent relayed "in their own terminal"
+// as "run `! seam approve ...` here", where it has no terminal (P13,
+// 2026-11-14).
+const notBang = "(not `!` in an agent's session: it needs a real terminal)"
 
 // A lock refusal for a process no approval may name says why nothing was
 // filed and what to do, on its two lines, and names no request.

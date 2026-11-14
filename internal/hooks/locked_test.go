@@ -401,11 +401,11 @@ func TestLockedSessionStart_OffersTouchIDOnlyWhereTheDialogShows(t *testing.T) {
 	}{
 		{"Claude Code", "", func(short string) string {
 			return "Remedy: access request " + short + " is waiting -- the owner approves it with Touch ID in the " +
-				"approval dialog, or in their own terminal with `seam approve " + short + "`;"
+				"approval dialog, or in a terminal of their own with `seam approve " + short + "` " + access.NotBang + ";"
 		}, true},
 		{"Codex", string(ClientCodex), func(short string) string {
 			return "Remedy: access request " + short + " is waiting -- the owner approves it with Touch ID in the " +
-				"approval dialog if this Codex shows one, or in their own terminal with `seam approve " + short + "`;"
+				"approval dialog if this Codex shows one, or in a terminal of their own with `seam approve " + short + "` " + access.NotBang + ";"
 		}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

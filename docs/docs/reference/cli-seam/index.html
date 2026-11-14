@@ -554,7 +554,9 @@ one already exists.</p>
 every owner request - the owner's own agents included - until the owner
 approves a lease for the asking agent's process. A refused call files a
 pending access request by itself; an agent can also ask explicitly. The owner
-decides it in their own terminal with <code>seam approve</code>, on the console's passkey
+decides it in a terminal of their own with <code>seam approve</code> (never <code>!</code> in an
+agent's session, which runs it in the agent's shell, with no terminal; every
+remedy that names it says so), on the console's passkey
 page, or - when the agent's client supports MCP elicitation - in an approval
 dialog inside the agent's session, confirmed with Touch ID (<code>seam touchid enroll</code>) or a passkey. These commands talk to the console's <code>/console/access</code>
 routes, which answer <code>no project is locked</code> while the daemon locks nothing.</p>
@@ -627,9 +629,10 @@ read grants <code>--write</code> changes nothing.</p>
 </span></span><span class="line"><span class="cl">seam approve --watch
 </span></span></code></pre></div>
 <p>The owner's terminal path. It needs a terminal on both stdin and stdout and
-refuses otherwise, in one line naming the other ways: an agent asks with
-<code>seam access request &lt;project&gt;</code>; the owner decides in their own terminal, or
-with Touch ID or a passkey where one is enrolled. <code>&lt;request&gt;</code> is the short id
+refuses otherwise (<code>!</code> in an agent's session included: it runs the command in
+the agent's shell), in one line naming the other ways: an agent asks with
+<code>seam access request &lt;project&gt;</code>; the owner decides in a terminal of their own,
+or with Touch ID or a passkey where one is enrolled. <code>&lt;request&gt;</code> is the short id
 (<code>R-7F3K</code>) or the full id; without one, <code>seam approve</code> lists what is waiting
 (short id, project, session, warning count, and when each stops waiting),
 takes the only request, or asks which one by number or short id. With nothing

@@ -21,6 +21,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/store/storetest"
@@ -148,7 +149,8 @@ func TestApprovers_EmptyListAdvice(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	passkey := "No approver credentials are enrolled. To enroll one, create a passkey on the console's Approvers page, " +
 		"which shows the command that mints its code"
-	touchID := "; or, for this Mac's Touch ID, run `seam touchid enroll` in the owner's own terminal, whose window shows the command that mints its code"
+	touchID := "; or, for this Mac's Touch ID, run `seam touchid enroll` in a terminal of the owner's " + access.NotBang +
+		", whose window shows the command that mints its code"
 	for _, tc := range []struct {
 		goos     string
 		peerAuth bool

@@ -50,7 +50,7 @@ var ErrBroadAnchor = errors.New("the process asking is not an agent")
 
 // anchorRemedy is what the caller does instead, once for every surface.
 const anchorRemedy = "run the work from an agent session (Claude Code or Codex), which asks for itself; for a one-off, " +
-	"the owner approves that session's request with `seam approve` in their own terminal."
+	"the owner approves that session's request with `seam approve` " + access.OwnTerminal + " " + access.NotBang + "."
 
 // AnchorError is a request refused for its anchor. Program is the kernel's
 // name for it (a base name), What says what kind of process it is.

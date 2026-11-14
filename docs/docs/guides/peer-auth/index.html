@@ -931,8 +931,9 @@ declared dialog modes, for clients on the socket only and only while a lock or
 read grants are configured, until the connection has gone unused for 30 days. An
 agent connected before the release that keeps them shows the plain refusal until
 its next initialize.</p>
-<p><strong><code>seam approve</code>.</strong> In your own terminal (it refuses without one, so an agent
-cannot use it), <code>seam approve</code> lists what is waiting and shows the facts, asks for
+<p><strong><code>seam approve</code>.</strong> In a terminal of your own (it refuses without one, so an
+agent cannot use it, and neither can <code>!</code> in an agent's session, which runs it in
+the agent's shell), <code>seam approve</code> lists what is waiting and shows the facts, asks for
 a duration, and commits the decision with <code>sudo -k -u &lt;daemon account&gt; seamlessd approve</code>. The <code>sudo -k</code> asks for your Touch ID or password every time, and
 becoming the daemon's account is the proof. Typing <code>deny</code> in full at the
 duration question, or <code>d</code> at the confirmation, denies. <code>seam approve --watch</code>

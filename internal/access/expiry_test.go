@@ -73,9 +73,11 @@ func TestLockedRefusal_TwoLines(t *testing.T) {
 			"Remedy: run `seam access request " + lockFin + "`"},
 		{"a request", sock.RefusalFor(lockFin, LockRequest{ID: "01REQ", Short: "R-7F3K"}),
 			"project " + lockFin + " is locked: even the owner's own agents need the owner's approval, and this session holds none.",
-			"Remedy: access request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`"},
+			"Remedy: access request R-7F3K is waiting -- the owner approves it in a terminal of their own with " +
+				"`seam approve R-7F3K` " + NotBang},
 		{"a refresh, with a page", sock.RefusalFor(lockFin, LockRequest{ID: "01REQ", Short: "R-7F3K", Refresh: true, Page: "https://example.test/console/access/01REQ"}),
-			"is locked", "Remedy: refresh request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with a passkey at https://example.test/console/access/01REQ"},
+			"is locked", "Remedy: refresh request R-7F3K is waiting -- the owner approves it in a terminal of their own with " +
+				"`seam approve R-7F3K` " + NotBang + ", or with a passkey at https://example.test/console/access/01REQ"},
 		{"after a lease ended", sock.RefusalFor(lockFin, LockRequest{ID: "01REQ", Short: "R-7F3K", Ended: ended}),
 			"project " + lockFin + " is locked (access ended at " + Clock(ended), "Remedy: access request R-7F3K is waiting"},
 		{"no id: the plain refusal", sock.RefusalFor(lockFin, LockRequest{}), "even the owner's own agents", "Remedy: run `seam access request"},

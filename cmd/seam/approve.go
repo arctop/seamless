@@ -110,7 +110,8 @@ other than the one the daemon names. A server_url that is not a socket says
 nothing of who answered, so only an advisory request may go on: otherwise point
 it at the socket, or use --passkey.
 
-It needs a terminal on stdin and stdout: an agent cannot use it. --passkey
+It needs a terminal on stdin and stdout: an agent cannot use it, and neither
+can ! in an agent's session, which runs it in the agent's shell. --passkey
 opens the request's passkey page in the browser instead, with --for's duration
 chosen there when given; --watch polls for new requests every 3 seconds,
 prints each once and raises a notification.`)
@@ -156,10 +157,17 @@ func (p *presentString) Set(v string) error {
 
 // errNotTerminal is seam approve run without the owner's terminal: one line,
 // naming the ways that remain for an agent and for the owner. It is said
-// before any config is read, so it names the ways in general.
+// before any config is read, so it names the ways in general. `!` in an
+// agent's session is named because it is how an owner most often gets here:
+// an agent relays "seam approve in a terminal of their own" as "run
+// `! seam approve` here" (access.NotBang).
 var errNotTerminal = errors.New("seam approve is the owner's own terminal path: it needs a terminal on stdin and stdout, " +
-	"so an agent cannot use it. An agent asks with `seam access request <project>`; the owner decides in their own " +
-	"terminal, or with Touch ID or a passkey where one is enrolled")
+	"so an agent cannot use it, and " + notBangShell + ". An agent asks with `seam access request <project>`; the owner " +
+	"decides in a terminal of their own, or with Touch ID or a passkey where one is enrolled")
+
+// notBangShell is why `!` in an agent's session cannot run an owner's
+// terminal path, for the refusals that need a terminal.
+const notBangShell = "neither can `!` in an agent's session, which runs it in the agent's shell, with no terminal"
 
 func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error {
 	if !e.isTerminal() {

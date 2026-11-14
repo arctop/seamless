@@ -60,7 +60,7 @@ const (
 	gmTmuxRule = "Seamless files no access request for this process: it is tmux, a terminal multiplexer, not an agent, " +
 		"and an approval would open the project to every program it started, other agent sessions included."
 	gmAnchorCure = "Remedy: run the work from an agent session (Claude Code or Codex), which asks for itself; for a " +
-		"one-off, the owner approves that session's request with `seam approve` in their own terminal."
+		"one-off, the owner approves that session's request with `seam approve` in a terminal of their own " + access.NotBang + "."
 )
 
 // gmHolds is the clearance rule's refusal of a write into where, by a holder
@@ -287,8 +287,8 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 		require.Equal(t, "notes_read: "+gmGrantRule(gmConf), ls[0])
 		short = gmShort.FindString(ls[1])
 		require.NotEmpty(t, short, ls[1])
-		require.Equal(t, "Remedy: read request "+short+" is waiting -- the owner approves it in their own terminal with "+
-			"`seam approve "+short+"`; retry once it is approved. An approved read is read-only, and nothing read from "+
+		require.Equal(t, "Remedy: read request "+short+" is waiting -- the owner approves it in a terminal of their own with "+
+			"`seam approve "+short+"` "+access.NotBang+"; retry once it is approved. An approved read is read-only, and nothing read from "+
 			gmConf+" may be written anywhere but "+gmHome+". "+approval.CiteByReferenceLine(gmConf, gmHome), ls[1])
 		gmNoSecretsBut(t, items[0], "the refusal")
 		// A repeated refusal names the same request.
@@ -858,8 +858,8 @@ func TestPeerAuthMatrix_Advisory(t *testing.T) {
 		require.Equal(t, "notes_read: "+gmGrantRule(gmConf), ls[0])
 		short = gmShort.FindString(ls[1])
 		require.NotEmpty(t, short, ls[1])
-		require.Equal(t, "Remedy: read request "+short+" is waiting -- the owner approves it in their own terminal with "+
-			"`seam approve "+short+"`, or with Approve on the console's Access requests page; retry once it is approved. "+
+		require.Equal(t, "Remedy: read request "+short+" is waiting -- the owner approves it in a terminal of their own with "+
+			"`seam approve "+short+"` "+access.NotBang+", or with Approve on the console's Access requests page; retry once it is approved. "+
 			"An approved read is read-only, and nothing read from "+gmConf+" may be written anywhere but "+gmHome+". "+
 			approval.CiteByReferenceLine(gmConf, gmHome), ls[1])
 		a, err := r.grants.Resolve(r.ctx, short)

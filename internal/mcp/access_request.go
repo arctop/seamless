@@ -66,7 +66,8 @@ func accessRequestTool() mcp.Tool {
 		mcp.WithDescription("Ask the owner for access to a locked project. Present only on a server that locks projects "+
 			"(peer_auth), and answered only on its peer_auth socket. A locked project is closed even to the owner's "+
 			"own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in "+
-			"their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to "+
+			"a terminal of their own, never `!` in an agent's session, which has no terminal); a call refused at the lock "+
+			"already files one, so use this to ask ahead of the work, or to "+
 			"say why. Asking again finds the request already waiting rather than filing another, and a reason given then "+
 			"fills in one the waiting request lacks. The answer says which: filed is true when this call filed a new "+
 			"request, false when it found one already waiting or the access is already held (nothing filed); reason is "+
@@ -130,7 +131,8 @@ func grantsAccessRequestTool() mcp.Tool {
 		mcp.WithDescription("Ask the owner for a locked, confidential or sealed project. Present only on a server that "+
 			"locks projects (peer_auth), and answered only on its peer_auth socket; this server also has isolation.requests "+
 			"on. A locked project is closed even to the owner's own agents until the owner approves this agent's request with "+
-			"a proof (Touch ID, a passkey, or seam approve in their own terminal), and without write the ask is for its lease. "+
+			"a proof (Touch ID, a passkey, or seam approve in a terminal of their own, never `!` in an agent's session, which "+
+			"has no terminal), and without write the ask is for its lease. "+
 			"For a confidential or sealed project no lock covers, what is asked follows from the project this conversation "+
 			"works in and the one it names: from a confidential project, a grant of another confidential one (read-only "+
 			"unless write is set, and the owner still chooses); from an open project, or for a sealed one, a move of this "+
@@ -412,7 +414,7 @@ type grantAsker interface {
 // works in when a lock covers it: that is the lock's lease to ask for, which
 // reads and writes already. A move's dialog is its passkey page, never Touch
 // ID, which does not approve one (approval.ErrTouchIDMove); without a passkey
-// it is answered at once, and the owner decides it in their own terminal.
+// it is answered at once, and the owner decides it in a terminal of their own.
 func (s *Server) accessRequestAsk(ctx context.Context, start time.Time, project, reason string) (*mcp.CallToolResult, bool, error) {
 	asker, ok := s.cfg.Grants.(grantAsker)
 	if !ok {

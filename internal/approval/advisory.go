@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -37,7 +38,8 @@ const DecidedByDialog = "in-session-dialog"
 // ErrDialogPeerAuth is a decision of the in-session dialog under peer_auth,
 // where the dialog only starts a proof: it approves and denies nothing.
 var ErrDialogPeerAuth = errors.New("under peer_auth the in-session dialog decides nothing: an approval needs the owner's " +
-	"proof (seam approve in the owner's own terminal, a passkey or Touch ID), and a denial the owner's terminal or browser")
+	"proof -- Touch ID, a passkey, or seam approve in a terminal of the owner's " + access.NotBang + " -- and a denial the " +
+	"owner's terminal or browser")
 
 // DenyInDialog denies grant or move request id with the in-session dialog's
 // Deny, the advisory tier's denial there; decided_by names the dialog

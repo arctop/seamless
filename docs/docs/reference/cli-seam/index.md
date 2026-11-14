@@ -434,7 +434,9 @@ Under `peer_auth`, a locked project (see the
 every owner request - the owner's own agents included - until the owner
 approves a lease for the asking agent's process. A refused call files a
 pending access request by itself; an agent can also ask explicitly. The owner
-decides it in their own terminal with `seam approve`, on the console's passkey
+decides it in a terminal of their own with `seam approve` (never `!` in an
+agent's session, which runs it in the agent's shell, with no terminal; every
+remedy that names it says so), on the console's passkey
 page, or - when the agent's client supports MCP elicitation - in an approval
 dialog inside the agent's session, confirmed with Touch ID (`seam touchid
 enroll`) or a passkey. These commands talk to the console's `/console/access`
@@ -530,9 +532,10 @@ seam approve --watch
 ```
 
 The owner's terminal path. It needs a terminal on both stdin and stdout and
-refuses otherwise, in one line naming the other ways: an agent asks with
-`seam access request <project>`; the owner decides in their own terminal, or
-with Touch ID or a passkey where one is enrolled. `<request>` is the short id
+refuses otherwise (`!` in an agent's session included: it runs the command in
+the agent's shell), in one line naming the other ways: an agent asks with
+`seam access request <project>`; the owner decides in a terminal of their own,
+or with Touch ID or a passkey where one is enrolled. `<request>` is the short id
 (`R-7F3K`) or the full id; without one, `seam approve` lists what is waiting
 (short id, project, session, warning count, and when each stops waiting),
 takes the only request, or asks which one by number or short id. With nothing

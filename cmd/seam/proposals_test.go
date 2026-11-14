@@ -177,8 +177,9 @@ func TestPromote_RefusesWithoutATerminal(t *testing.T) {
 		e, out, errb := ac.env()
 		require.Equal(t, 1, dispatch(context.Background(), e, argv), "%v", argv)
 		require.Contains(t, errb.String(), "seam "+strings.Join(argv[:len(argv)-1], " ")+
-			" is the owner's own terminal path: it needs a terminal on stdin and stdout, and an agent cannot use it")
-		require.Contains(t, errb.String(), "(the owner decides proposals here, or on the console's Held screen)")
+			" is the owner's own terminal path: it needs a terminal on stdin and stdout, so an agent cannot use it, and neither "+
+			"can `!` in an agent's session, which runs it in the agent's shell, with no terminal")
+		require.Contains(t, errb.String(), "(the owner decides proposals here, in a terminal of their own, or on the console's Held screen)")
 		require.Empty(t, out.String())
 		require.Empty(t, ac.requests(), "nothing is fetched, let alone decided")
 	}

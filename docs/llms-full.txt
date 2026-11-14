@@ -4427,7 +4427,7 @@ The refusal names the request it filed. Here a conversation working in
 
 ```text
 notes_read: project example-finance is confidential: only a conversation working in it reads it -- if your task is about example-finance, ask the owner to move this conversation into it (session_start project=example-finance asks); otherwise leave it alone
-Remedy: move request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console's Access requests page; retry once it is approved. Record what belongs in example-ops now: once the owner approves the move, this conversation works in example-finance for good, and it can no longer write to example-ops or the global scope until the conversation ends. After the move it can still close a task it claimed there, with a receipt: tasks_update with status done or dropped, and no text. Its first result after the approval says so and carries example-finance's briefing.
+Remedy: move request R-7F3K is waiting -- the owner approves it in a terminal of their own with `seam approve R-7F3K` (not `!` in an agent's session: it needs a real terminal), or with Approve on the console's Access requests page; retry once it is approved. Record what belongs in example-ops now: once the owner approves the move, this conversation works in example-finance for good, and it can no longer write to example-ops or the global scope until the conversation ends. After the move it can still close a task it claimed there, with a receipt: tasks_update with status done or dropped, and no text. Its first result after the approval says so and carries example-finance's briefing.
 ```
 
 A locked project stays the lock's: a call refused at the lock files the lock's
@@ -8659,8 +8659,9 @@ read grants are configured, until the connection has gone unused for 30 days. An
 agent connected before the release that keeps them shows the plain refusal until
 its next initialize.
 
-**`seam approve`.** In your own terminal (it refuses without one, so an agent
-cannot use it), `seam approve` lists what is waiting and shows the facts, asks for
+**`seam approve`.** In a terminal of your own (it refuses without one, so an
+agent cannot use it, and neither can `!` in an agent's session, which runs it in
+the agent's shell), `seam approve` lists what is waiting and shows the facts, asks for
 a duration, and commits the decision with `sudo -k -u <daemon account> seamlessd
 approve`. The `sudo -k` asks for your Touch ID or password every time, and
 becoming the daemon's account is the proof. Typing `deny` in full at the
@@ -11859,7 +11860,7 @@ Fetch a web page (SSRF-guarded: private/loopback addresses are rejected) and sav
 
 ## access_request {#access_request}
 
-Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in their own terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another, and a reason given then fills in one the waiting request lacks. The answer says which: filed is true when this call filed a new request, false when it found one already waiting or the access is already held (nothing filed); reason is added when this call's reason was stored on the request, kept when the waiting request already had one, so this one was not used, and none when this call gave no reason or nothing was filed. Once the owner denies a request, refused calls file nothing more and say so: ask again here, with a reason, when the owner tells you to. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to 110 seconds for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then. An agent that already holds the access it asks for is answered with it, and nothing is filed, until 30 minutes before it ends. With read grants on (isolation.requests), it also asks for a read of a confidential project no lock covers, and write asks to change the project too.
+Ask the owner for access to a locked project. Present only on a server that locks projects (peer_auth), and answered only on its peer_auth socket. A locked project is closed even to the owner's own agents until the owner approves this agent's request with a proof (Touch ID, a passkey, or seam approve in a terminal of their own, never `!` in an agent's session, which has no terminal); a call refused at the lock already files one, so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather than filing another, and a reason given then fills in one the waiting request lacks. The answer says which: filed is true when this call filed a new request, false when it found one already waiting or the access is already held (nothing filed); reason is added when this call's reason was stored on the request, kept when the waiting request already had one, so this one was not used, and none when this call gave no reason or nothing was filed. Once the owner denies a request, refused calls file nothing more and say so: ask again here, with a reason, when the owner tells you to. When this agent's client can show an approval dialog, the call shows the owner the request and waits up to 110 seconds for the decision; otherwise it returns at once with the request's short id and how the owner approves it. An approval opens the project to this agent's process tree until the time the result names: retry the work then. An agent that already holds the access it asks for is answered with it, and nothing is filed, until 30 minutes before it ends. With read grants on (isolation.requests), it also asks for a read of a confidential project no lock covers, and write asks to change the project too.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -12701,7 +12702,9 @@ Under `peer_auth`, a locked project (see the
 every owner request - the owner's own agents included - until the owner
 approves a lease for the asking agent's process. A refused call files a
 pending access request by itself; an agent can also ask explicitly. The owner
-decides it in their own terminal with `seam approve`, on the console's passkey
+decides it in a terminal of their own with `seam approve` (never `!` in an
+agent's session, which runs it in the agent's shell, with no terminal; every
+remedy that names it says so), on the console's passkey
 page, or - when the agent's client supports MCP elicitation - in an approval
 dialog inside the agent's session, confirmed with Touch ID (`seam touchid
 enroll`) or a passkey. These commands talk to the console's `/console/access`
@@ -12797,9 +12800,10 @@ seam approve --watch
 ```
 
 The owner's terminal path. It needs a terminal on both stdin and stdout and
-refuses otherwise, in one line naming the other ways: an agent asks with
-`seam access request <project>`; the owner decides in their own terminal, or
-with Touch ID or a passkey where one is enrolled. `<request>` is the short id
+refuses otherwise (`!` in an agent's session included: it runs the command in
+the agent's shell), in one line naming the other ways: an agent asks with
+`seam access request <project>`; the owner decides in a terminal of their own,
+or with Touch ID or a passkey where one is enrolled. `<request>` is the short id
 (`R-7F3K`) or the full id; without one, `seam approve` lists what is waiting
 (short id, project, session, warning count, and when each stops waiting),
 takes the only request, or asks which one by number or short id. With nothing

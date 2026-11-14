@@ -184,8 +184,9 @@ func TestApprove_RefusesWithoutTheOwnersTerminal(t *testing.T) {
 		}
 		require.Equal(t, 1, dispatch(context.Background(), e, append([]string{"approve"}, argv...)), "%v", argv)
 		require.Equal(t, "error: seam approve is the owner's own terminal path: it needs a terminal on stdin and stdout, "+
-			"so an agent cannot use it. An agent asks with `seam access request <project>`; the owner decides in their "+
-			"own terminal, or with Touch ID or a passkey where one is enrolled\n", errb.String(), "one line")
+			"so an agent cannot use it, and neither can `!` in an agent's session, which runs it in the agent's shell, "+
+			"with no terminal. An agent asks with `seam access request <project>`; the owner decides in a terminal of "+
+			"their own, or with Touch ID or a passkey where one is enrolled\n", errb.String(), "one line")
 		require.Empty(t, out.String())
 	}
 }

@@ -238,7 +238,8 @@ screening is not a proposal and is refused here: decide it on the console's
 Held screen. A proposal whose target changed after it was proposed can only be
 discarded, since promoting it would undo that change.
 
-It needs a terminal on stdin and stdout: an agent cannot use it.`)
+It needs a terminal on stdin and stdout: an agent cannot use it, and neither
+can ! in an agent's session, which runs it in the agent's shell.`)
 
 var proposalsDiscardCmd = spec("proposals discard", groupRestricted,
 	"discard a proposal: nothing lands (owner's terminal)",
@@ -249,13 +250,15 @@ shows the proposal and asks to confirm: y discards, anything else changes
 nothing. A write held by write screening is refused here: decide it on the
 console's Held screen.
 
-It needs a terminal on stdin and stdout: an agent cannot use it.`)
+It needs a terminal on stdin and stdout: an agent cannot use it, and neither
+can ! in an agent's session, which runs it in the agent's shell.`)
 
 // ownerTerminalOnly is a proposal command run without the owner's terminal:
 // seam approve's refusal, for this command.
 func ownerTerminalOnly(name string) error {
 	return fmt.Errorf("seam %s is the owner's own terminal path: it needs a terminal on stdin and stdout, "+
-		"and an agent cannot use it\n%s(the owner decides proposals here, or on the console's Held screen)", name, hintIndent)
+		"so an agent cannot use it, and %s\n%s(the owner decides proposals here, in a terminal of their own, or on the "+
+		"console's Held screen)", name, notBangShell, hintIndent)
 }
 
 func runPromote(_ context.Context, e *env, _ *noOpts, pos []string) error {

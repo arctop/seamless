@@ -179,7 +179,7 @@ func TestAdvisoryDialog_RefusalFiledMove(t *testing.T) {
 		require.True(t, strings.HasSuffix(msg, "Choosing Approve decides the request now, with no other proof: without "+
 			"peer_auth this approval is advisory, since Seamless cannot tell who answers this dialog, and any process "+
 			"holding the bearer key could make the same decision. Choosing Deny denies it. Declining or cancelling decides "+
-			"nothing: the request stays pending for `seam approve "+short+"` in your own terminal, or the console's Access "+
+			"nothing: the request stays pending for `seam approve "+short+"` in a terminal of your own "+access.NotBang+", or the console's Access "+
 			"requests page."), msg)
 		require.NotContains(t, msg, "Touch ID")
 		require.NotContains(t, msg, "grants nothing by itself", "the peer_auth tier's words are not this tier's")
@@ -260,7 +260,7 @@ func TestAdvisoryDialog_RefusalFiledMove(t *testing.T) {
 			}[name]
 			require.True(t, strings.HasPrefix(ls[1], "Remedy: "+ended), ls[1])
 			require.Contains(t, ls[1], "; move request "+short+" stays pending for the owner: `seam approve "+short+
-				"` in their own terminal, Approve on the console's Access requests page, or Approve in the next approval "+
+				"` in a terminal of their own "+access.NotBang+", Approve on the console's Access requests page, or Approve in the next approval "+
 				"dialog; retry once it is approved. Record what belongs in "+gOps+" now: ")
 			require.NotContains(t, ls[1], " is waiting -- ", "one remedy, not the original with a second after it")
 
@@ -397,7 +397,7 @@ func TestAdvisoryDialog_RefusalFiledGrantReadAndWrite(t *testing.T) {
 				require.Len(t, ls, 2, text)
 				require.True(t, strings.HasPrefix(ls[1], c.pendingRemedyStart), ls[1])
 				require.Contains(t, ls[1], "; read-and-write request "+short+" stays pending for the owner: `seam approve "+
-					short+"` in their own terminal, Approve on the console's Access requests page, or Approve in the next "+
+					short+"` in a terminal of their own "+access.NotBang+", Approve on the console's Access requests page, or Approve in the next "+
 					"approval dialog; retry once it is approved. Approved read and write, this session changes "+gFin)
 				require.Zero(t, r.count(`SELECT COUNT(*) FROM access_grants`))
 			}
@@ -513,7 +513,7 @@ func TestAdvisoryDialog_ExplicitRequest(t *testing.T) {
 		require.Equal(t, store.ApprovalPending, res.Status)
 		require.Equal(t, "unanswered", res.Dialog)
 		require.Equal(t, "Record what belongs in "+gOps+" now: once the owner approves the move, this conversation can no "+
-			"longer write there. The owner approves it in their own terminal with `seam approve "+res.ShortID+"`, or with "+
+			"longer write there. The owner approves it in a terminal of their own with `seam approve "+res.ShortID+"` "+access.NotBang+", or with "+
 			"Approve on the console's Access requests page; keep to other projects until it is approved, then retry the work "+
 			"that needs "+gVault, res.Next)
 		require.Equal(t, store.ApprovalPending, r.advRequest(gVault).Status)
@@ -530,8 +530,8 @@ func TestAdvisoryDialog_ExplicitRequest(t *testing.T) {
 			res := decode(t, r.ok(cli, mcpserver.AccessRequestTool, map[string]any{"project": gFin}))
 			require.Equal(t, store.ApprovalPending, res.Status)
 			require.Empty(t, res.Dialog, "no dialog was shown")
-			require.True(t, strings.HasPrefix(res.Next, "the owner approves it in their own terminal with `seam approve "+
-				res.ShortID+"`, or with Approve on the console's Access requests page; "), res.Next)
+			require.True(t, strings.HasPrefix(res.Next, "the owner approves it in a terminal of their own with `seam approve "+
+				res.ShortID+"` "+access.NotBang+", or with Approve on the console's Access requests page; "), res.Next)
 			if o != nil {
 				require.Empty(t, o.dialogs(), "the advisory dialog is a form: a URL-only client gets none")
 			}

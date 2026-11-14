@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
@@ -263,7 +264,7 @@ func TestKindsConsole_TouchIDApprovesNoMove(t *testing.T) {
 	status, out = f.post(t, "/console/access/"+id+"/approve", url.Values{"duration": {"session"}, "digest": {facts.Digest},
 		"proof": {"touchid"}, "credential": {"01KCRED"}, "signature": {"AQID"}}, true)
 	require.Equal(t, http.StatusConflict, status)
-	require.Contains(t, string(out["error"]), "a move is approved with a passkey or seam approve in the owner's own terminal")
+	require.Contains(t, string(out["error"]), "a move is approved with a passkey, or with seam approve in a terminal of the owner's "+access.NotBang)
 	a, err := store.AccessApprovalByID(ctx, f.db, id)
 	require.NoError(t, err)
 	require.Equal(t, store.ApprovalPending, a.Status)

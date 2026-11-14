@@ -53,6 +53,18 @@ type LockRequest struct {
 	DeniedWhat string
 }
 
+// NotBang follows every owner-only command a remedy or a dialog in an agent's
+// session names (seam approve, in a terminal of the owner's own). Claude Code
+// teaches agents to offer `! <command>` for a command the owner runs, and `!`
+// runs it in the agent's own shell, where it has no terminal: an agent that
+// relayed "seam approve R-QBC0 in their own terminal" as "run `! seam approve
+// R-QBC0` here" sent the owner down a dead end (P13, 2026-11-14).
+const NotBang = "(not `!` in an agent's session: it needs a real terminal)"
+
+// OwnTerminal is where the owner runs an owner-only command, as every remedy
+// says it: "the owner approves it " + OwnTerminal + " with `seam approve`".
+const OwnTerminal = "in a terminal of their own"
+
 // Ways are the approval paths a daemon offers the owner for one request, as
 // every remedy names them; approval.Service.Ways fills them in. The owner's
 // own terminal (`seam approve`) is always one and is not listed.
@@ -78,13 +90,13 @@ func (r LockRequest) ways() Ways {
 }
 
 // OwnerApproves says how the owner approves request short, offering only the
-// paths w holds: Touch ID in the approval dialog, their own terminal (always),
-// a passkey. With short "" -- no request filed yet -- the words name "the
-// request's id" instead.
+// paths w holds: Touch ID in the approval dialog, a terminal of their own
+// (always, never `!` in the agent's session: NotBang), a passkey. With short
+// "" -- no request filed yet -- the words name "the request's id" instead.
 func (w Ways) OwnerApproves(short string) string {
-	terminal := "in their own terminal with `seam approve " + short + "`"
+	terminal := OwnTerminal + " with `seam approve " + short + "` " + NotBang
 	if short == "" {
-		terminal = "in their own terminal with `seam approve` and the request's id"
+		terminal = OwnTerminal + " with `seam approve` and the request's id " + NotBang
 	}
 	var ways []string
 	if w.TouchID {
@@ -105,10 +117,10 @@ func (w Ways) OwnerApproves(short string) string {
 }
 
 // StillPending says how the owner may still decide request short once an
-// approval dialog ended without a decision: their own terminal (always), a
-// passkey, Touch ID in the next dialog.
+// approval dialog ended without a decision: a terminal of their own (always;
+// NotBang), a passkey, Touch ID in the next dialog.
 func (w Ways) StillPending(short string) string {
-	ways := []string{"`seam approve " + short + "` in their own terminal"}
+	ways := []string{"`seam approve " + short + "` " + OwnTerminal + " " + NotBang}
 	if w.Page != "" {
 		ways = append(ways, "a passkey at "+w.Page)
 	}
