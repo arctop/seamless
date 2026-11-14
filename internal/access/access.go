@@ -12,6 +12,13 @@
 //     account; any other uid is refused at the door.
 //   - a TCP connection carrying the static bearer key is the owner. The key
 //     lives in the owner's account, so whoever holds it acts as the owner.
+//   - a request a paired relay forwarded from another computer (plan
+//     networked-relay) is judged as this machine's socket judges one, when
+//     peer_auth.relays maps that relay: the relay's own kernel named the
+//     caller's uid and process chain on the relay's socket, the relay's TLS
+//     certificate names the relay, and the mapping says which uid there is
+//     the owner (Policy.RelayChainView). An unmapped relay is the owner over
+//     TCP, as a bearer request is.
 //
 // The policy is two rules, and this file and restricted.go are the only places
 // they are written:
@@ -90,7 +97,8 @@ type Principal struct {
 	// User is the OS account name ("owner", "_example_agent").
 	User string
 	// Socket reports that the kernel authenticated this request on the Unix
-	// socket. Only such a request may skip the bearer key.
+	// socket: this daemon's own, or a paired relay's (Relay). Only such a
+	// request may skip the bearer key.
 	Socket bool
 	// Process is the kernel-reported process at the other end of the socket
 	// connection, when the transport could read one (HasProcess), and Chain
@@ -100,6 +108,12 @@ type Principal struct {
 	Process    ProcessToken
 	HasProcess bool
 	Chain      []ProcessToken
+	// Relay is the paired relay (its device id) that forwarded this request
+	// from another computer (plan networked-relay; Policy.RelayChainView):
+	// that computer's kernel named the caller on the relay's own Unix socket,
+	// and UID and Chain are its report, each process of the chain naming the
+	// relay (ProcessToken.Relay). "" for this machine's socket and for TCP.
+	Relay string
 }
 
 // View is one request's reach under the policy. The zero View (no policy, no
@@ -285,8 +299,9 @@ func SessionScope(ctx context.Context, project string) (string, error) {
 }
 
 // PeerAuthenticated reports whether the kernel authenticated this request on the
-// Unix socket. The bearer-key checks accept it in place of the key; nothing
-// else does.
+// Unix socket: this daemon's own, or, through a paired relay peer_auth.relays
+// maps, the relay's on its own computer (Principal.Relay). The bearer-key
+// checks accept it in place of the key; nothing else does.
 func PeerAuthenticated(ctx context.Context) bool {
 	v, ok := FromContext(ctx)
 	return ok && v.who.Socket

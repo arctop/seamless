@@ -136,6 +136,7 @@ func doctor(args []string) error {
 	checks = append(checks, consoleSignInChecks(ctx, cfg, d.current, systemNet)...)
 	// Device pairing: no rows on a server that serves no other computers.
 	checks = append(checks, devicePairingChecks(ctx, cfg, d.current)...)
+	checks = append(checks, relayMappingChecks(ctx, cfg, d.current)...)
 	checks = append(checks, needsCurrent("repo map", repoMapCheck))
 	checks = append(checks, needsCurrent("remote sessions", remoteSessionsCheck))
 	// mcp_tools compares a count with itself under either answer to "does it lock

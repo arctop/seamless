@@ -651,6 +651,9 @@ func TestImport_MergeAnArchiveFromBefore039(t *testing.T) {
 		`DROP TABLE console_signins`, `DROP TABLE passkey_enrollments`,
 		// What 042 added (device pairing).
 		`DROP TABLE devices`, `DROP TABLE device_pairing_codes`,
+		// What 043 added (a relay's leases and grants).
+		`DROP INDEX idx_access_leases_relay`, `ALTER TABLE access_leases DROP COLUMN relay_id`,
+		`DROP INDEX idx_access_grants_relay`, `ALTER TABLE access_grants DROP COLUMN relay_id`,
 		`DELETE FROM schema_migrations WHERE version >= 39`,
 	} {
 		_, err := db.ExecContext(ctx, q)

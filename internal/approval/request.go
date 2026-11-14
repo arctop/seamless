@@ -613,8 +613,13 @@ type resolvedAnchor struct {
 
 // anchorFor resolves a request's anchor (resolveAnchor) and applies the
 // anchor rule to it (anchor.go): an anchor that is not an agent's is an
-// *AnchorError, and nothing is filed.
+// *AnchorError, and nothing is filed. A relay's chain is ErrRelayUnnamed: its
+// processes are another computer's, whose programs this daemon cannot name
+// (relay.go).
 func (s *Service) anchorFor(ctx context.Context, chain []access.ProcessToken, sessionID, agentProcess, host string) (resolvedAnchor, error) {
+	if relayUnnamed(chain) {
+		return resolvedAnchor{}, ErrRelayUnnamed
+	}
 	i, sessionID, sess, err := s.resolveAnchor(ctx, chain, sessionID, agentProcess, host)
 	if err != nil {
 		return resolvedAnchor{}, err
@@ -995,8 +1000,12 @@ func (s *Service) Approve(ctx context.Context, d Decision) (store.AccessLease, e
 		return store.AccessLease{}, fmt.Errorf("%s: %w: %s is %s", op, store.ErrApprovalNotPending, ShortID(a.ID), a.Status)
 	}
 	// The anchor rule, again: a request an older daemon filed may name a
-	// broad ancestor, and no proof makes a lease on one safe.
+	// broad ancestor, and no proof makes a lease on one safe; nor on a relay's
+	// process nobody named (relay.go).
 	if err := storedAnchorRefusal(a.PeerPID, a.Program); err != nil {
+		return store.AccessLease{}, fmt.Errorf("%s: %s: %w", op, ShortID(a.ID), err)
+	}
+	if err := storedRelayRefusal(a); err != nil {
 		return store.AccessLease{}, fmt.Errorf("%s: %s: %w", op, ShortID(a.ID), err)
 	}
 	facts, err := s.factsOf(ctx, a)

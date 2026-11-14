@@ -92,7 +92,8 @@ type Conversation struct {
 //     kernel-verified process chain holds anything, and a grant is kept only
 //     when its process is a hop of that chain (a session's or a
 //     conversation's grant never is). A TCP request or a restricted account's
-//     holds nothing, and nothing is refused it here;
+//     holds nothing, and nothing is refused it here. A mapped relay's socket
+//     view counts, its hops' keys naming the relay;
 //   - without peer_auth, a grant is kept only when it names the conversation
 //     (Key), or -- naming neither a process nor a conversation -- one of its
 //     Sessions. A request no conversation and no session identifies holds

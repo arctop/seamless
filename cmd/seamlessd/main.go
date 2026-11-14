@@ -758,6 +758,12 @@ func runServe(args []string) error {
 	// routes check is the owner account's key.
 	var tcpRoutes http.Handler = mux
 	if pairing != nil {
+		if peer != nil {
+			// Under peer_auth a relay peer_auth.relays maps is judged by what
+			// it forwards of its local caller, as the socket judges a peer
+			// (relayHandler); every other request keeps the owner's view.
+			tcpRoutes = relayHandler(peer.policy, storeLeases(db), logger, tcpRoutes)
+		}
 		// A paired device's own credential is matched here, before any route:
 		// a relay's client certificate, a key device's key.
 		tcpRoutes = pairing.Edge(tcpRoutes)

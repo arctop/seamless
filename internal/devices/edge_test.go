@@ -82,9 +82,11 @@ func TestEdge_RelayCertificateIsMatchedByItsKey(t *testing.T) {
 
 	d := f.pairRelayDevice(t, "example-laptop", id)
 	status, _, p, reached := deviceGet(t, client, ts.URL+"/api/hooks/session-start?client=claude&host=example-ci", http.Header{
-		"X-Seamless-Host":      {"example-ci"},
-		"X-Seamless-Relay-Uid": {"501"},
-		"Authorization":        {"Bearer not-the-key"},
+		"X-Seamless-Host":          {"example-ci"},
+		"X-Seamless-Relay-Version": {"1"},
+		"X-Seamless-Relay-Uid":     {"501"},
+		"X-Seamless-Relay-Chain":   {judgeChainHeader},
+		"Authorization":            {"Bearer not-the-key"},
 	}, seen)
 	require.Equal(t, http.StatusOK, status)
 	require.True(t, reached)
@@ -92,7 +94,9 @@ func TestEdge_RelayCertificateIsMatchedByItsKey(t *testing.T) {
 	require.Equal(t, Credential{DeviceID: d.ID, Kind: KindRelay, Name: "example-laptop"}, p.cred)
 	require.Equal(t, "example-laptop", p.host, "the enrolled name is the request's host")
 	require.Equal(t, "example-laptop", p.hookHost, "a hook's host parameter too")
-	require.Empty(t, p.relayHdrs, "a relay's forwarded attributes do not count yet")
+	require.Empty(t, p.relayHdrs, "a relay's forwarded headers never reach a route raw")
+	require.True(t, p.forwarded, "what the relay forwarded rides the request's context")
+	require.Equal(t, judgeAttrs, p.relay)
 	used, err := store.DeviceByID(context.Background(), f.db, d.ID)
 	require.NoError(t, err)
 	require.NotNil(t, used.LastUsedAt, "the device's last use is recorded")

@@ -34,9 +34,11 @@ func validBoot(s string) bool {
 // boot: the process exited, its pid now belongs to another, or t was never a
 // process the kernel reported here. The name is read only while the pid
 // still names t's process -- the start time is checked before and after --
-// so it can never be a newer process's that reused the pid.
+// so it can never be a newer process's that reused the pid. A process a relay
+// reported (t.Relay) runs on another computer, whose processes this kernel
+// cannot name: "" too, never this machine's process of the same pid.
 func ProgramOf(t ProcessToken) string {
-	if !t.Valid() {
+	if !t.Valid() || t.Relay != "" {
 		return ""
 	}
 	boot, err := bootID()

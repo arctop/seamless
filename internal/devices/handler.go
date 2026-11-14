@@ -43,9 +43,13 @@ type pairError struct {
 
 // Edge is the daemon's TCP edge for paired devices, around the routes:
 //
-//   - It strips every relay attribute header (RelayAttributePrefix) from every
-//     request: nothing honors one yet, and a bearer request carrying one is
-//     judged as the bearer request it is.
+//   - No relay attribute header (RelayAttributePrefix) reaches a route raw.
+//     Under an active relay's Credential the edge reads them first
+//     (ParseRelayAttributes): present, they must be well formed, or the
+//     request is refused (400) before any route runs; what they say rides the
+//     request's context (RelayAttributesOf), for the daemon's relay judge.
+//     Every other request has them stripped unread, so a bearer request or a
+//     key device carrying them is judged as the bearer request it is.
 //   - It serves the pairing endpoints itself.
 //   - A TLS connection that presented a client certificate is judged by that
 //     certificate alone, never by a key it also sends: the certificate's key
@@ -67,16 +71,29 @@ func (s *Service) Edge(next http.Handler) http.Handler {
 	pair.HandleFunc("POST "+PairPath, s.servePair)
 	pair.HandleFunc("POST "+PairStatusPath, s.serveStatus)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		StripRelayAttributes(r.Header)
 		if r.URL.Path == PairPath || r.URL.Path == PairStatusPath {
+			StripRelayAttributes(r.Header)
 			pair.ServeHTTP(w, r)
 			return
 		}
 		cred, ok, err := s.authenticate(r)
 		if err != nil {
+			StripRelayAttributes(r.Header)
 			s.refuse(w, r, err)
 			return
 		}
+		var attrs RelayAttributes
+		forwarded := false
+		if ok && cred.Kind == KindRelay {
+			// The relay's own report of its local caller: read before the
+			// headers go, and refused whole when it does not parse.
+			if attrs, forwarded, err = ParseRelayAttributes(r.Header); err != nil {
+				s.cfg.Logger.Warn("devices: a relay's forwarded attributes are malformed", "device", cred.DeviceID, "path", r.URL.Path, "error", err)
+				http.Error(w, "bad request: "+plainError(err), http.StatusBadRequest)
+				return
+			}
+		}
+		StripRelayAttributes(r.Header)
 		if !ok {
 			next.ServeHTTP(w, r)
 			return
@@ -86,7 +103,11 @@ func (s *Service) Edge(next http.Handler) http.Handler {
 		}
 		ctx, done := s.track(r.Context(), cred.DeviceID)
 		defer done()
-		next.ServeHTTP(w, speakFor(r.Clone(WithCredential(ctx, cred)), cred.Name))
+		ctx = WithCredential(ctx, cred)
+		if forwarded {
+			ctx = withRelayAttributes(ctx, attrs)
+		}
+		next.ServeHTTP(w, speakFor(r.Clone(ctx), cred.Name))
 	})
 }
 
@@ -109,7 +130,7 @@ func (s *Service) authenticate(r *http.Request) (Credential, bool, error) {
 		}
 		switch d.Status {
 		case store.DeviceActive:
-			return Credential{DeviceID: d.ID, Kind: d.Kind, Name: d.Name}, true, nil
+			return Credential{DeviceID: d.ID, Kind: d.Kind, Name: d.Name, Approved: d.ApprovedBy != ""}, true, nil
 		case store.DevicePending:
 			return Credential{}, false, ErrRelayPending
 		case store.DeviceRevoked:
@@ -131,7 +152,7 @@ func (s *Service) authenticate(r *http.Request) (Credential, bool, error) {
 	if d.Status != store.DeviceActive {
 		return Credential{}, false, nil
 	}
-	return Credential{DeviceID: d.ID, Kind: d.Kind, Name: d.Name}, true, nil
+	return Credential{DeviceID: d.ID, Kind: d.Kind, Name: d.Name, Approved: d.ApprovedBy != ""}, true, nil
 }
 
 // refuse answers a request whose credential the edge refused: a relay's as

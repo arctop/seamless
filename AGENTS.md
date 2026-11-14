@@ -261,7 +261,9 @@ the pointer is where to look, not a substitute for reading it.
 
 With `peer_auth` on, every request carries a `View`: the owner's on TCP
 (`ownerHandler`), the kernel-named peer's on the socket (`peerConnContext` +
-`peerHandler`, cmd/seamlessd/peerauth.go). Off, no request carries one, and
+`peerHandler`, cmd/seamlessd/peerauth.go), and through a relay
+`peer_auth.relays` maps, the peer its relay's kernel named (`relayHandler`,
+cmd/seamlessd/peerauth_relay.go). Off, no request carries one, and
 every check below answers yes -- which is how "off is exactly the old
 behavior" holds. Read the guide (docs-src/guides/peer-auth.md) before touching
 any of it.
@@ -376,7 +378,8 @@ any of it.
   031). A locked
   project is closed to the owner: `View.Listed` (name and counts) is true,
   `Visible`/`Writable` are false. A View opens it only through
-  `View.WithLeases`, which keeps a lease only on the owner's socket view with a
+  `View.WithLeases`, which keeps a lease only on the owner's socket view (this
+  daemon's socket, or a mapped relay's) with a
   kernel-reported process token, and only one that names that process, a
   locked project and an expiry after now. A TCP view keeps none. Lease rows
   (`store.ActiveAccessLeasesFor`) are input to it and never a grant on their
@@ -875,7 +878,7 @@ any of it.
   passkey (`ResetRestoredAccess`); a merge carries neither.
 - **A paired device is the owner, and no more** (plan networked-relay;
   `internal/devices`, `approval/devices.go`, `store/devices.go`, migration 042,
-  `console/devices.go`, `cmd/seamlessd/devices.go`). Pairing exists only on a
+  `console/devices.go`, `cmd/seamlessd/devices.go`, `cmd/seamlessd/peerauth_relay.go`, migration 043). Pairing exists only on a
   server that serves other computers (`pairingOn`: TLS, a bind beyond loopback,
   or a `server_url` naming another host); off, there is no Devices page, no
   `/api/pair` and no client-certificate request. A one-time code (80 bits, 10
@@ -892,12 +895,8 @@ any of it.
   (`devices.WithCredential`) and makes it speak for the enrolled name (the host
   header and a hook's `host`); every bearer check asks `devices.Bearer`, so a
   new surface never compares the key by hand. A device key never signs a browser
-  in. Under peer_auth a paired device is a TCP caller: the owner's view, no
-  lease, so it never opens a locked project. Every `X-Seamless-Relay-*` header
-  is stripped from every request, a relay's too, until a relay's own requests
-  are judged like the socket's; read one only under a relay `Credential`.
-  Revoking refuses the credential from its next request and ends the requests it
-  is making. A merge carries no device, a fresh import revokes the snapshot's,
+  in. Under peer_auth a key device, and a relay `peer_auth.relays` does not map, is a TCP caller: the owner's view, no lease, so it never opens a locked project. The `X-Seamless-Relay-*` headers (wire v1: version, uid, chain) are read only under an active relay `Credential` (`devices.ParseRelayAttributes`; present but malformed is 400) and never reach a route raw (routes read `devices.RelayAttributesOf`); every other request has them stripped unread. A mapped relay (its enrolled name to the owner's uid there, file only) is judged as the socket is (`relayHandler`, `Policy.RelayChainView`): owner_uid is the owner on a socket (`Principal.Relay`), any other uid 403, nothing forwarded 400, a relay no passkey approved 403 until it pairs again; `/healthz` is not judged. Every token of a relay's chain names the relay (`ProcessToken.Relay`, key `relay/<id>/<boot>:<pid>:<version>`), so leases, grants and requests match on (relay, process) wherever keys are compared, and `access_leases`/`access_grants.relay_id` (migration 043) record it, written from the key by their one writer each. No request is filed for a relay's process (`approval.ErrRelayUnnamed`: the wire names no program, so the anchor rule cannot judge one), and the approve core refuses a stored relay row with no program. A relay's chain counts as an agent's (`FromAgent`).
+  Revoking refuses the credential from its next request, ends the requests it is making and, in the same transaction, a relay's live leases, grants and waiting requests (`store.RevokeDeviceEndingAccess`). A merge carries no device, a fresh import revokes the snapshot's,
   and a backup restore keeps today's (`keptTables`).
 - **Events reach the console through the filtered handle.** The console's live
   feed re-reads each event through it (`liveEventVisible`) and the event log's

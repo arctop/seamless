@@ -135,6 +135,10 @@ type deviceProbe struct {
 	relayHdrs []string
 	auth      string
 	ctxErr    func() error
+	// relay is what the edge read of a relay's forwarded attributes, and
+	// forwarded whether it read any (RelayAttributesOf).
+	relay     RelayAttributes
+	forwarded bool
 }
 
 // deviceServer is the edge in front of a probe route, on a TLS listener that
@@ -147,6 +151,7 @@ func (f *pairFixture) deviceServer(t *testing.T, seen chan<- deviceProbe, hold <
 		p := deviceProbe{host: r.Header.Get(hostHeader), hookHost: r.URL.Query().Get("host"), auth: r.Header.Get("Authorization"),
 			ctxErr: r.Context().Err}
 		p.cred, p.paired = CredentialOf(r.Context())
+		p.relay, p.forwarded = RelayAttributesOf(r.Context())
 		for name := range r.Header {
 			if strings.HasPrefix(strings.ToLower(name), strings.ToLower(RelayAttributePrefix)) {
 				p.relayHdrs = append(p.relayHdrs, name)

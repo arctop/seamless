@@ -322,10 +322,12 @@ func (s *Service) List(ctx context.Context) ([]store.Device, error) {
 
 // Revoke ends the device id, from by: an active device is revoked and its
 // credential refused from its next request on, and every request it is
-// making now ends; a pending pairing is denied.
+// making now ends; a pending pairing is denied. A relay's leases and grants,
+// and the access requests its processes still wait on, end in the
+// revocation's own transaction (store.RevokeDeviceEndingAccess).
 func (s *Service) Revoke(ctx context.Context, id, by string) (store.Device, error) {
 	const op = "devices.Revoke"
-	d, err := store.RevokeDevice(ctx, s.cfg.DB, id, by, s.cfg.Now())
+	d, endedAccess, err := store.RevokeDeviceEndingAccess(ctx, s.cfg.DB, id, by, s.cfg.Now())
 	if err != nil {
 		return store.Device{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -334,8 +336,19 @@ func (s *Service) Revoke(ctx context.Context, id, by string) (store.Device, erro
 	if d.Status == store.DeviceDenied {
 		action = "deny"
 	}
-	s.record(ctx, core.Event{Kind: EventRevoked, ItemID: d.ID, Payload: map[string]any{
-		"kind": d.Kind, "name": d.Name, "action": action, "by": by, "requests": ended}})
+	payload := map[string]any{"kind": d.Kind, "name": d.Name, "action": action, "by": by, "requests": ended}
+	for k, n := range map[string]int64{"leases": endedAccess.Leases, "grants": endedAccess.Grants, "access_requests": endedAccess.Requests} {
+		if n > 0 {
+			payload[k] = n
+		}
+	}
+	s.record(ctx, core.Event{Kind: EventRevoked, ItemID: d.ID, Payload: payload})
+	if endedAccess.Leases+endedAccess.Grants > 0 {
+		// Said the way every other early end of agents' access is said, so the
+		// access page and the feed see it without knowing about devices.
+		s.record(ctx, core.Event{Kind: core.EventAccessRevoked, Payload: map[string]any{
+			"reason": store.LeaseRevokedDevice, "leases": endedAccess.Leases, "grants": endedAccess.Grants}})
+	}
 	return d, nil
 }
 

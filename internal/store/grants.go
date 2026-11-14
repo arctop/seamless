@@ -284,6 +284,11 @@ type AccessGrant struct {
 	// ConversationClient and ConversationID name the conversation it was
 	// granted to without peer_auth (migration 039), both "" otherwise.
 	ConversationClient, ConversationID string
+	// RelayID is the relay whose process holds the grant (migration 043): the
+	// device id ProcessKey names (access.RelayOfKey), "" for this machine's
+	// processes and for every grant without peer_auth. The approve
+	// transaction writes it from the key.
+	RelayID string
 }
 
 // Holder is who the grant belongs to: its process under peer_auth, else its
@@ -317,7 +322,7 @@ func AccessGrants(rows []AccessGrant) []access.Grant {
 }
 
 const grantCols = `id, project_slug, from_project, process_key, session_id, peer_uid, peer_pid, approval_id,
-	decided_by, granted_at, expires_at, revoked_at, revoked_reason, access, conversation_client, conversation_id`
+	decided_by, granted_at, expires_at, revoked_at, revoked_reason, access, conversation_client, conversation_id, relay_id`
 
 func scanGrants(rows *sql.Rows) ([]AccessGrant, error) {
 	var out []AccessGrant
@@ -340,7 +345,7 @@ func scanGrant(row interface{ Scan(...any) error }) (AccessGrant, error) {
 	)
 	if err := row.Scan(&g.ID, &g.Project, &g.FromProject, &g.ProcessKey, &g.SessionID, &uid, &pid, &g.ApprovalID,
 		&g.DecidedBy, &granted, &expires, &revoked, &g.RevokedReason, &g.Access,
-		&g.ConversationClient, &g.ConversationID); err != nil {
+		&g.ConversationClient, &g.ConversationID, &g.RelayID); err != nil {
 		return AccessGrant{}, err
 	}
 	var err error
@@ -493,16 +498,17 @@ func grantAccessApprove(ctx context.Context, db *sql.DB, op string, d GrantDecis
 		ID: grantID, Project: a.Project, FromProject: a.FromProject, ProcessKey: a.ProcessKey, SessionID: a.SessionID,
 		PeerUID: a.PeerUID, PeerPID: a.PeerPID, ApprovalID: a.ID, DecidedBy: decidedBy, GrantedAt: now, ExpiresAt: now.Add(a.Lease),
 		Access: grantAccess, ConversationClient: a.ConversationClient, ConversationID: a.ConversationID,
+		RelayID: access.RelayOfKey(a.ProcessKey),
 	}
 	if length > 0 {
 		g.ExpiresAt = now.Add(length)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO access_grants (id, project_slug, from_project, process_key, session_id,
-		peer_uid, peer_pid, approval_id, decided_by, granted_at, expires_at, access, conversation_client, conversation_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		peer_uid, peer_pid, approval_id, decided_by, granted_at, expires_at, access, conversation_client, conversation_id, relay_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		g.ID, g.Project, g.FromProject, g.ProcessKey, g.SessionID, int64(g.PeerUID), int64(g.PeerPID), g.ApprovalID,
 		g.DecidedBy, core.FormatTime(g.GrantedAt), core.FormatTime(g.ExpiresAt), g.Access,
-		g.ConversationClient, g.ConversationID); err != nil {
+		g.ConversationClient, g.ConversationID, g.RelayID); err != nil {
 		return AccessGrant{}, nil, fmt.Errorf("%s: %w", op, err)
 	}
 	if len(flows) > 0 {
@@ -515,7 +521,7 @@ func grantAccessApprove(ctx context.Context, db *sql.DB, op string, d GrantDecis
 		// The lock's half of the same approval: the target's lease, as long as
 		// the grant, bound to the process the grant is.
 		lease = &AccessLease{ID: leaseID, Project: a.Project, ProcessKey: a.ProcessKey, PeerUID: a.PeerUID, PeerPID: a.PeerPID,
-			SessionID: a.SessionID, ApprovalID: a.ID, GrantedAt: now, ExpiresAt: g.ExpiresAt}
+			SessionID: a.SessionID, ApprovalID: a.ID, GrantedAt: now, ExpiresAt: g.ExpiresAt, RelayID: g.RelayID}
 		if err := leaseInsertTx(ctx, tx, *lease); err != nil {
 			return AccessGrant{}, nil, fmt.Errorf("%s: %w", op, err)
 		}

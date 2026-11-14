@@ -75,6 +75,9 @@ type Policy struct {
 	// restricted is peer_auth.restricted: the restricted local accounts, by
 	// uid (restricted.go).
 	restricted map[uint32]Account
+	// relays is peer_auth.relays: the owner's uid on each mapped relay's
+	// computer, by the relay's enrolled name (RelayChainView).
+	relays map[string]uint32
 }
 
 // ErrInvalidPolicy marks a peer_auth block whose accounts do not resolve or
@@ -104,6 +107,15 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 		owner:       owner,
 		ownerLocked: map[string]bool{},
 		restricted:  map[uint32]Account{},
+		relays:      map[string]uint32{},
+	}
+	for name, r := range cfg.Relays {
+		// The shape (a relay's name, an owner that is not root) was checked at
+		// load; a block that did not come through one is held to it here.
+		if name == "" || name != strings.ToLower(strings.TrimSpace(name)) || r.OwnerUID == 0 {
+			return nil, fmt.Errorf("%w: peer_auth.relays %q: a relay's enrolled name, and the owner's uid there (never root)", ErrInvalidPolicy, name)
+		}
+		p.relays[name] = r.OwnerUID
 	}
 	for _, slug := range cfg.ForceLocked {
 		slug = strings.TrimSpace(slug)
@@ -159,21 +171,78 @@ func (p *Policy) PeerProcessView(uid uint32, proc ProcessToken) (View, bool) {
 // PeerChainView is PeerView for a connection whose peer process, and that
 // process's verified ancestors, the kernel reported (Peer.Chain, the peer
 // first). The view carries the chain a lease is matched against (WithLeases).
-// A chain that is empty, longer than MaxChainHops, or holds an invalid token
-// or two boots is not attached at all -- the view then holds no lease, ever.
+// A chain that is empty, longer than MaxChainHops, or holds an invalid token,
+// two boots or a relay's process (this daemon's kernel never reports one) is
+// not attached at all -- the view then holds no lease, ever.
 func (p *Policy) PeerChainView(uid uint32, chain []ProcessToken) (View, bool) {
 	v, ok := p.PeerView(uid)
-	if !ok || len(chain) == 0 || len(chain) > MaxChainHops {
+	if !ok || !chainAttachable(chain, "") {
 		return v, ok
-	}
-	for _, t := range chain {
-		if !t.Valid() || t.Boot != chain[0].Boot {
-			return v, ok
-		}
 	}
 	v.who.Process, v.who.HasProcess = chain[0], true
 	v.who.Chain = slices.Clone(chain)
 	return v, ok
+}
+
+// chainAttachable reports whether chain is one a view may carry: one to
+// MaxChainHops valid tokens, of one boot, every one reported by relay ("" for
+// this machine's kernel).
+func chainAttachable(chain []ProcessToken, relay string) bool {
+	if len(chain) == 0 || len(chain) > MaxChainHops {
+		return false
+	}
+	for _, t := range chain {
+		if !t.Valid() || t.Boot != chain[0].Boot || t.Relay != relay {
+			return false
+		}
+	}
+	return true
+}
+
+// RelayMapped reports whether peer_auth.relays maps the relay enrolled as
+// name: only then are its requests judged by what it forwards
+// (RelayChainView). Any other paired relay is the owner over TCP, as a bearer
+// request is, and holds no lease.
+func (p *Policy) RelayMapped(name string) bool {
+	_, ok := p.relays[name]
+	return ok
+}
+
+// RelayChainView is the view of a request a paired relay forwarded from
+// another computer (plan networked-relay), as PeerChainView is this machine's
+// socket's: relay is the relay's device id and name its enrolled name, which
+// the server matched from the relay's TLS certificate; uid and chain are what
+// the relay's own kernel reported of the local caller on the relay's socket,
+// the peer first, as the relay forwarded them.
+//
+// The owner's uid on that computer (peer_auth.relays' owner_uid) is the owner,
+// on a socket (Principal.Socket) a relay authenticated (Principal.Relay). ok
+// is false for a relay the policy does not map and for any other uid: such a
+// request is refused before any route runs, never served as the owner. Every
+// token of the chain is the relay's (ProcessToken.Relay is set here), so a
+// lease, grant or request keyed on one of its processes names the relay too;
+// a chain that would not pass PeerChainView, or names another relay, is not
+// attached, and the view then holds no lease.
+func (p *Policy) RelayChainView(relay, name string, uid uint32, chain []ProcessToken) (View, bool) {
+	owner, mapped := p.relays[name]
+	if !mapped || relay == "" || uid != owner || !(ProcessToken{PID: 1, Boot: "b", Relay: relay}).Valid() {
+		return View{}, false
+	}
+	v := View{policy: p, who: Principal{Kind: KindOwner, UID: uid, HasUID: true, User: p.owner.Name, Socket: true, Relay: relay}}
+	tokens := make([]ProcessToken, len(chain))
+	for i, t := range chain {
+		if t.Relay != "" && t.Relay != relay {
+			return v, true
+		}
+		t.Relay = relay
+		tokens[i] = t
+	}
+	if !chainAttachable(tokens, relay) {
+		return v, true
+	}
+	v.who.Process, v.who.HasProcess = tokens[0], true
+	v.who.Chain = tokens
+	return v, true
 }
 
 // HasLocked reports whether the policy locks any project: only then does a

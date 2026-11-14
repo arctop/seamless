@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-3"><a href="#under-peer-auth">Under peer_auth</a></li><li class="lvl-3"><a href="#without-peer-auth-the-advisory-tier">Without peer_auth: the advisory tier</a></li><li class="lvl-3"><a href="#what-the-switch-changes-about-the-binding-limit">What the switch changes about the binding limit</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#restore">Backups and restore</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-3"><a href="#agents-on-another-computer-relays">Agents on another computer: relays</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-3"><a href="#under-peer-auth">Under peer_auth</a></li><li class="lvl-3"><a href="#without-peer-auth-the-advisory-tier">Without peer_auth: the advisory tier</a></li><li class="lvl-3"><a href="#what-the-switch-changes-about-the-binding-limit">What the switch changes about the binding limit</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#restore">Backups and restore</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </details>
   <p><a href="../../concepts/project-isolation/">Project isolation</a> keeps agents working on one
@@ -359,6 +359,18 @@ runs:</p>
 <td>The socket, from any other uid</td>
 <td>refused with <code>403</code> before any route runs</td>
 </tr>
+<tr>
+<td>TCP through a paired relay <code>peer_auth.relays</code> maps, from the owner's uid there</td>
+<td>the owner, with the process chain the relay's kernel reported (<a href="#agents-on-another-computer-relays">relays</a>)</td>
+</tr>
+<tr>
+<td>TCP through such a relay, from any other uid</td>
+<td>refused with <code>403</code> before any route runs</td>
+</tr>
+<tr>
+<td>TCP through any other paired device</td>
+<td>the owner, as the bearer key is</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -392,7 +404,7 @@ real projects, never the global scope, and none twice; <code>restricted</code> i
 only with <code>enabled</code> set, and never names the owner or the same account twice;
 <code>max_lease</code> and <code>passkeys</code> are well formed. With <code>enabled</code> set, also: the owner
 is named, the socket path is absolute and outside <code>data_dir</code>, and the mode is
-octal and keeps owner read and write.</p>
+octal and keeps owner read and write. <code>relays</code> is listed only with <code>enabled</code> set; each key is a relay's name as the Devices page shows it, and each <code>owner_uid</code> is a uid other than 0.</p>
 <p>Checked when <code>serve</code> starts, and refused if any fails:</p>
 <ul>
 <li>every account resolves on this machine (macOS role accounts live in the
@@ -928,7 +940,7 @@ that reused the pid. Per request it walks the parent chain from there, verifying
 every link. A link that does not verify ends the chain, so an orphan reparented to
 init, or a reused pid, reaches nothing above it. Nothing the client sends, the
 self-reported agent-process header included, enters the chain. Only the owner's
-socket connections can hold a lease; a TCP request never can.</p>
+socket connections can hold a lease; a TCP request never can. Through a relay you map, they can (<a href="#agents-on-another-computer-relays">relays</a>).</p>
 <p>A lease ends at its expiry, when its session ends (<code>session_end</code>, or the client's
 own session-end hook), when you Revoke it on <code>/console/access</code>, when you run
 <code>seamlessd approvers reset --yes</code>, or when the database is restored from a
@@ -958,6 +970,39 @@ and the daemon counts the unlock only on a request the key signed. A browser tha
 cannot run the service worker can't hold an unlock, and the page says so. That
 covers some private windows, and any page that is neither https nor localhost.
 A locked plan or session page in the console takes you to that unlock page.</p>
+<h3 id="agents-on-another-computer-relays">Agents on another computer: relays</h3>
+<p>On a server that serves other computers, a macOS or Linux client reaches the
+daemon through its relay, <code>seamlessd relay</code>. It runs as its own system account
+on that computer and serves the socket path agents use here. It reads each
+caller's uid and process chain from its own kernel and forwards the request
+over TLS with its client certificate.</p>
+<p>The server trusts what a relay forwards only under peer_auth, and only for a
+relay you map:</p>
+<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">peer_auth</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">relays</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">example-laptop</span><span class="p">:</span><span class="w">     </span><span class="c"># the relay&#39;s name, as the Devices page shows it</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">owner_uid</span><span class="p">:</span><span class="w"> </span><span class="m">501</span><span class="w">    </span><span class="c"># your uid on that computer (id -u there)</span><span class="w">
+</span></span></span></code></pre></div>
+<p>Through a mapped relay, your uid there is you, judged as this socket judges
+you: with the chain the relay reported, and the leases that chain holds. A
+lease is keyed on the relay and the process. It opens the project to that
+agent's tree on that computer and to nothing else: not a sibling agent there,
+not the same pid here, not another relay.</p>
+<p>Any other uid gets 403, and a request forwarding no caller gets 400. A relay
+paired with the code alone, while peer_auth was off, is refused until it pairs
+again and you approve it with a passkey. A relay you do not map is you over
+TCP, as the bearer key is, and never holds a lease.</p>
+<p>Seamless files no access request for an agent on another computer yet. The
+relay does not say which program is asking, and a request is filed only for an
+agent program. Until it does, work in a locked project from an agent session
+on the server's own computer.</p>
+<p>Passkeys approve from any browser. The Touch ID helper on a client Mac enrolls
+and approves through its relay, and the server verifies its signature.
+<code>seamlessd approve</code> stays a server command. Your own decisions (revoking,
+denying, Settings) are refused through a relay: make them in the console.</p>
+<p>Revoking a relay ends its leases, read grants and waiting requests at once. A
+console lock turned back on, and a restore, end a relay's leases as they end
+this machine's.</p>
 <h2 id="read-grants-and-the-advisory-tier">Read grants and the advisory tier</h2>
 <p><a href="../../concepts/project-isolation/#asking-for-access">Access requests</a>
 (<code>isolation.requests: true</code>) turn a call refused at a confidential or sealed
@@ -1427,9 +1472,11 @@ to 10 minutes.</li>
 <li><strong>A paired device is a TCP caller.</strong> A computer paired with a networked server
 (the console's Devices page) is you, as the bearer key is, but the daemon reads
 no process chain behind it, so it never holds a lease and never opens a locked
-project: a key device always, and a relay until its own requests are judged
-like the socket's. Pairing under peer_auth needs your passkey on the Devices
+project: a key device always, and a relay unless <code>peer_auth.relays</code> maps it (<a href="#agents-on-another-computer-relays">relays</a>). Pairing under peer_auth needs your passkey on the Devices
 page: the code alone pairs nothing.</li>
+<li><strong>A relay is trusted for its computer.</strong> Root or the relay's account there
+can report any uid and chain. Every lease is keyed on the relay, so a forged
+report reaches only what that relay's agents were approved.</li>
 <li><strong>The transcript holds what a session read.</strong> Once you approve an agent, its
 project's content is in that session's transcript and any tool result it kept.
 A lease ending does not unread it.</li>
@@ -1583,7 +1630,7 @@ wherever step 10 put it, is the fallback if anything in the move went wrong.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-3"><a href="#under-peer-auth">Under peer_auth</a></li><li class="lvl-3"><a href="#without-peer-auth-the-advisory-tier">Without peer_auth: the advisory tier</a></li><li class="lvl-3"><a href="#what-the-switch-changes-about-the-binding-limit">What the switch changes about the binding limit</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#restore">Backups and restore</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-3"><a href="#agents-on-another-computer-relays">Agents on another computer: relays</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-3"><a href="#under-peer-auth">Under peer_auth</a></li><li class="lvl-3"><a href="#without-peer-auth-the-advisory-tier">Without peer_auth: the advisory tier</a></li><li class="lvl-3"><a href="#what-the-switch-changes-about-the-binding-limit">What the switch changes about the binding limit</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#restore">Backups and restore</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </aside>
   

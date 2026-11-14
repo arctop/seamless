@@ -216,6 +216,11 @@ behavior of every earlier release. The guide is
   writes waits for you to promote it
   ([Restricted local accounts](https://thereisnospoon.org/docs/guides/peer-auth/#restricted-local-accounts)).
   Refused while `enabled` is false, and for the owner. File-only.
+- `relays` maps paired relays ([the guide](https://thereisnospoon.org/docs/guides/peer-auth/#agents-on-another-computer-relays)):
+  each relay's name as the Devices page shows it, to `owner_uid`, your uid on
+  that computer. Through a mapped relay that uid is you, judged as the socket
+  is; any other uid is refused. An unmapped relay is you over TCP and holds no
+  lease. Refused while `enabled` is false. File-only.
 - `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
   the owner's approver passkeys ([seamlessd approvers](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_approvers)).
   Unset, a TLS install whose `server_url` names a host uses that exact host as
@@ -415,6 +420,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `peer_auth.passkeys.origins` | []string | - |
 | `peer_auth.users` | map of string to any | - |
 | `peer_auth.restricted` | []string | - |
+| `peer_auth.relays` | map of string to {owner_uid uint32} | - |
 | `isolation.requests` | bool | - |
 
 ## Annotated example
@@ -995,6 +1001,12 @@ update:
 #   # protocol or stage it writes is a proposal until you promote it. Refused
 #   # while peer_auth is disabled, and for the owner. File only (no env).
 #   restricted: []
+#   # Paired relays whose requests are judged as this socket's: each relay's
+#   # name (as the Devices page shows it) to your uid on that computer
+#   # (owner_uid, never 0). Any other uid there is refused; a relay not listed
+#   # stays you over TCP, holding no lease. Refused while peer_auth is
+#   # disabled. File only (no env).
+#   relays: {}
 #   # users is retired: a non-empty users map is refused at load, even while the
 #   # block is disabled. List those projects under locked and remove users (the
 #   # peer_auth guide has the steps).

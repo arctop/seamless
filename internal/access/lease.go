@@ -1,6 +1,7 @@
 package access
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -30,16 +31,28 @@ import (
 // the boot it ran in. Together these are unique across pid reuse and reboots.
 // The token is compared as a whole (Key), never by its parts: two tokens are
 // equal exactly when they name one process.
+//
+// Relay names the computer when it is not this one (plan networked-relay): the
+// paired relay, by its device id, whose own kernel reported the process and
+// forwarded it with the request. "" is a process of this machine, as this
+// daemon's kernel reported it. Two computers' processes never share a key,
+// whatever their pid, start time and boot, so a lease, grant or request keyed
+// on one relay's process never applies to another relay's or to this machine's.
 type ProcessToken struct {
 	PID     int32
 	Version uint64
 	Boot    string
+	Relay   string
 }
 
-// Valid reports whether t names a process at all: a positive pid and a boot
-// identifier of letters, digits and dashes (a UUID, as both kernels give it).
+// maxRelayIDLen bounds ProcessToken.Relay: a device id is a ULID (26).
+const maxRelayIDLen = 64
+
+// Valid reports whether t names a process at all: a positive pid, a boot
+// identifier of letters, digits and dashes (a UUID, as both kernels give it),
+// and a relay that is "" or an id of letters and digits.
 func (t ProcessToken) Valid() bool {
-	if t.PID <= 0 || t.Boot == "" || len(t.Boot) > 64 {
+	if t.PID <= 0 || t.Boot == "" || len(t.Boot) > 64 || len(t.Relay) > maxRelayIDLen {
 		return false
 	}
 	for _, r := range t.Boot {
@@ -47,19 +60,89 @@ func (t ProcessToken) Valid() bool {
 			return false
 		}
 	}
+	for _, r := range t.Relay {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
+			return false
+		}
+	}
 	return true
 }
 
+// relayKeyPrefix starts the key of every process a relay reported:
+// "relay/<id>/". A boot never holds a slash, so no key of this machine's
+// processes starts with it.
+const relayKeyPrefix = "relay/"
+
 // Key is the token's one comparable form: what lease rows store and match on.
-// An invalid token has no key ("").
+// An invalid token has no key (""). A process of this machine is
+// "<boot>:<pid>:<version>", exactly as a relay forwards its own; one a relay
+// reported is "relay/<relay id>/<boot>:<pid>:<version>" (RelayKeyPrefix).
 func (t ProcessToken) Key() string {
 	if !t.Valid() {
 		return ""
 	}
-	return t.Boot + ":" + strconv.FormatInt(int64(t.PID), 10) + ":" + strconv.FormatUint(t.Version, 10)
+	key := t.Boot + ":" + strconv.FormatInt(int64(t.PID), 10) + ":" + strconv.FormatUint(t.Version, 10)
+	if t.Relay != "" {
+		return RelayKeyPrefix(t.Relay) + key
+	}
+	return key
 }
 
-// ChainKeys are the keys of p's kernel-verified process chain.
+// RelayKeyPrefix is how every key of a process relay reported starts:
+// "relay/<relay>/". The store finds a relay's rows by it.
+func RelayKeyPrefix(relay string) string { return relayKeyPrefix + relay + "/" }
+
+// RelayOfKey is the relay a process key names, "" for a process of this
+// machine (or a key that is not a process key at all).
+func RelayOfKey(key string) string {
+	rest, ok := strings.CutPrefix(key, relayKeyPrefix)
+	if !ok {
+		return ""
+	}
+	relay, _, ok := strings.Cut(rest, "/")
+	if !ok {
+		return ""
+	}
+	return relay
+}
+
+// ErrProcessKey is a process key that is not one ProcessToken.Key renders
+// for a process of the computer that sent it.
+var ErrProcessKey = errors.New("access: not a process key")
+
+// ParseProcessKey reads a key ProcessToken.Key rendered for a process of the
+// computer that sent it -- "<boot>:<pid>:<version>", as a relay forwards each
+// process of its caller's chain -- back into its token. It is strict: the key
+// must be exactly the token's own rendering (decimal, no sign, no leading
+// zero, nothing around it) and the token valid, so one process never has two
+// keys. A relay-qualified key is not one: the relay a process belongs to is
+// the server's to say (ProcessToken.Relay), never the sender's.
+func ParseProcessKey(key string) (ProcessToken, error) {
+	boot, rest, ok := strings.Cut(key, ":")
+	if !ok {
+		return ProcessToken{}, fmt.Errorf("%w: %q", ErrProcessKey, key)
+	}
+	pidText, versionText, ok := strings.Cut(rest, ":")
+	if !ok {
+		return ProcessToken{}, fmt.Errorf("%w: %q", ErrProcessKey, key)
+	}
+	pid, err := strconv.ParseInt(pidText, 10, 32)
+	if err != nil {
+		return ProcessToken{}, fmt.Errorf("%w: %q: the pid", ErrProcessKey, key)
+	}
+	version, err := strconv.ParseUint(versionText, 10, 64)
+	if err != nil {
+		return ProcessToken{}, fmt.Errorf("%w: %q: the start time", ErrProcessKey, key)
+	}
+	t := ProcessToken{PID: int32(pid), Version: version, Boot: boot}
+	if !t.Valid() || t.Key() != key {
+		return ProcessToken{}, fmt.Errorf("%w: %q", ErrProcessKey, key)
+	}
+	return t, nil
+}
+
+// ChainKeys are the keys of p's kernel-verified process chain: through a relay
+// (p.Relay), keys that name the relay too (ProcessToken.Key).
 func (p Principal) ChainKeys() []string {
 	keys := make([]string, 0, len(p.Chain))
 	for _, t := range p.Chain {
@@ -89,7 +172,10 @@ type Lease struct {
 // which every process it started shares) and a project the policy
 // lists, and it ends after now. Every other lease is dropped,
 // and every other view comes back unchanged, so a lease can never reach a TCP
-// request, another process, or a project that is not locked at all.
+// request, another process, or a project that is not locked at all. The socket
+// may be a paired relay's (Principal.Relay): then its chain's keys name that
+// relay (ProcessToken.Relay), so only a lease granted to that relay's process
+// matches, never this machine's or another relay's.
 //
 // The leases are judged once, at now: a request that began before a lease
 // ended finishes under it. The transport builds a View per request, so the
@@ -162,8 +248,15 @@ func (v View) Listed(project string) bool {
 
 // lockedRefusal is the refusal for a locked project when no request could be
 // filed for it: one line with the rule, one with the remedy, which differ
-// between the TCP key and the socket.
+// between the TCP key, a relay and this machine's socket.
 func (v View) lockedRefusal(project string) error {
+	if v.who.Relay != "" {
+		return &RefusalError{msg: fmt.Sprintf("project %s is locked: even the owner's own agents need the owner's approval, "+
+			"and this connection holds none. Seamless files no access request for an agent on another computer yet: "+
+			"its relay does not say which program is asking, and a request is filed only for an agent program.\n"+
+			"Remedy: work in %s from an agent session on the server's own computer, which asks for itself, and "+
+			"keep to other projects here.", project, project)}
+	}
 	if !v.who.Socket {
 		return &RefusalError{msg: fmt.Sprintf("project %s is locked: the TCP connection and its bearer key never reach a "+
 			"locked project, because a shared key cannot be tied to one process.\n"+

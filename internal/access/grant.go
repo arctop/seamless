@@ -19,7 +19,9 @@ import (
 //   - under peer_auth (a View in ctx), a process of the owner's socket
 //     connection's kernel-verified chain (the agent process the request was
 //     anchored to, so every process it started shares the grant), and never a
-//     session: a TCP request, or a restricted account's, holds none;
+//     session: a TCP request, or a restricted account's, holds none. Through
+//     a mapped relay the chain's processes name the relay (ProcessToken.Key),
+//     so a grant matches only the relay that asked;
 //   - without peer_auth (no View), the session the connection is bound to --
 //     identification, never ambient inference -- and never a process.
 //

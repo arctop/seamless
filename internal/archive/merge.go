@@ -42,8 +42,9 @@ import (
 //     store.RebuildRetrievalStats.
 //   - jobs: a work queue, not a record of anything.
 //   - access_approvals, access_leases: unlocks of locked projects,
-//     bound to processes of the exporting machine's boot. Merging one would
-//     be an unlock nobody approved here.
+//     bound to processes of the exporting machine's boot, or of a relay it
+//     paired (relay_id, migration 043). Merging one would be an unlock nobody
+//     approved here.
 //   - approver_credentials, approver_enroll_codes: who may approve those
 //     unlocks. A credential enrolled on another machine was never shown to
 //     this one's owner.
@@ -53,8 +54,8 @@ import (
 //     locks and skip the fence a lock needs here. applyArchiveLocks puts every
 //     archive lock on the destination's own project instead.
 //   - access_grants: read grants of confidential projects, bound to this
-//     machine's sessions and processes; merging one would be a grant nobody
-//     approved here.
+//     machine's sessions and processes and its relays' processes; merging one
+//     would be a grant nobody approved here.
 //   - access_moves, access_flows: a conversation's moves into fenced projects
 //     and the flows its approvals cleared, bound to this machine's
 //     conversations, processes and approvals (none of which a merge carries);

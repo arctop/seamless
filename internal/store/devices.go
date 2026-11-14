@@ -35,6 +35,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
 )
 
@@ -706,39 +707,140 @@ func CollectDeviceKey(ctx context.Context, db *sql.DB, secretHash, keyHash, keyP
 
 // RevokeDevice ends the device id at now, from by: an active device is
 // revoked, a pending one denied. Its credential is refused from the next
-// request on. A device already ended is ErrDeviceEnded. It returns the row as
-// it now stands.
+// request on, and a relay's access ends with it (RevokeDeviceEndingAccess). A
+// device already ended is ErrDeviceEnded. It returns the row as it now stands.
 func RevokeDevice(ctx context.Context, db *sql.DB, id, by string, now time.Time) (Device, error) {
+	d, _, err := RevokeDeviceEndingAccess(ctx, db, id, by, now)
+	return d, err
+}
+
+// DeviceAccessEnded counts what revoking a relay ended with it: its processes'
+// live leases and grants, and the access requests they were still waiting on.
+type DeviceAccessEnded struct {
+	Leases, Grants, Requests int64
+}
+
+// Total is how many permissions and requests were ended in all.
+func (e DeviceAccessEnded) Total() int64 { return e.Leases + e.Grants + e.Requests }
+
+// RevokeDeviceEndingAccess is RevokeDevice, and in the same transaction it
+// ends everything the device's processes still hold: a relay's live leases
+// and grants (relay_id, migration 043; revoked as LeaseRevokedDevice) and its
+// requests still waiting for a decision (every process key of the relay
+// starts with access.RelayKeyPrefix), marked expired so no proof can turn one
+// into a lease later. The revocation and the endings commit together or not
+// at all, so a relay is never recorded revoked with its access still open
+// behind it. A key device holds no lease, grant or request of its own: there
+// is nothing more to end.
+func RevokeDeviceEndingAccess(ctx context.Context, db *sql.DB, id, by string, now time.Time) (Device, DeviceAccessEnded, error) {
 	const op = "store.RevokeDevice"
+	var ended DeviceAccessEnded
 	if err := validDeviceBy(by); err != nil {
-		return Device{}, fmt.Errorf("%s: %w", op, err)
+		return Device{}, ended, fmt.Errorf("%s: %w", op, err)
 	}
 	at := core.FormatTime(now)
-	res, err := db.ExecContext(ctx, `UPDATE devices SET status = CASE status WHEN ? THEN ? ELSE ? END, revoked_at = ?, revoked_by = ?
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return Device{}, ended, fmt.Errorf("%s: %w", op, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `UPDATE devices SET status = CASE status WHEN ? THEN ? ELSE ? END, revoked_at = ?, revoked_by = ?
 		WHERE id = ? AND status IN (?, ?)`,
 		DevicePending, DeviceDenied, DeviceRevoked, at, by, id, DevicePending, DeviceActive)
 	if err != nil {
-		return Device{}, fmt.Errorf("%s: %w", op, err)
+		return Device{}, ended, fmt.Errorf("%s: %w", op, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return Device{}, fmt.Errorf("%s: %w", op, err)
+		return Device{}, ended, fmt.Errorf("%s: %w", op, err)
 	}
 	if n != 1 {
-		return Device{}, fmt.Errorf("%s: %w", op, explainDevice(ctx, db, id, ErrDeviceEnded))
+		if err := tx.Rollback(); err != nil {
+			return Device{}, ended, fmt.Errorf("%s: %w", op, err)
+		}
+		return Device{}, ended, fmt.Errorf("%s: %w", op, explainDevice(ctx, db, id, ErrDeviceEnded))
 	}
-	d, err := DeviceByID(ctx, db, id)
+	d, err := deviceWhere(ctx, tx, `id = ?`, id)
 	if err != nil {
-		return Device{}, fmt.Errorf("%s: %w", op, err)
+		return Device{}, ended, fmt.Errorf("%s: %w", op, err)
 	}
-	return d, nil
+	if d.Kind == DeviceRelayKind {
+		if ended, err = endRelayAccessTx(ctx, tx, []string{d.ID}, at); err != nil {
+			return Device{}, DeviceAccessEnded{}, fmt.Errorf("%s: %w", op, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return Device{}, DeviceAccessEnded{}, fmt.Errorf("%s: %w", op, err)
+	}
+	return d, ended, nil
+}
+
+// liveRelayIDsTx lists the relays still pending or active, inside tx.
+func liveRelayIDsTx(ctx context.Context, tx *sql.Tx) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM devices WHERE kind = ? AND status IN (?, ?) ORDER BY id`,
+		DeviceRelayKind, DevicePending, DeviceActive)
+	if err != nil {
+		return nil, fmt.Errorf("live relays: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("live relays: %w", err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("live relays: %w", err)
+	}
+	return out, nil
+}
+
+// endRelayAccessTx ends, inside tx at at, the live leases and grants of the
+// relays' processes and their requests still waiting for a decision.
+func endRelayAccessTx(ctx context.Context, tx *sql.Tx, relays []string, at string) (DeviceAccessEnded, error) {
+	var ended DeviceAccessEnded
+	for _, relay := range relays {
+		if relay == "" {
+			continue
+		}
+		prefix := access.RelayKeyPrefix(relay)
+		for _, e := range []struct {
+			n    *int64
+			q    string
+			args []any
+		}{
+			{&ended.Leases, `UPDATE access_leases SET revoked_at = ?, revoked_reason = ?
+				WHERE relay_id = ? AND revoked_at IS NULL AND expires_at > ?`, []any{at, LeaseRevokedDevice, relay, at}},
+			{&ended.Grants, `UPDATE access_grants SET revoked_at = ?, revoked_reason = ?
+				WHERE relay_id = ? AND revoked_at IS NULL AND expires_at > ?`, []any{at, LeaseRevokedDevice, relay, at}},
+			// substr, not LIKE: the prefix is compared as it is, with no pattern
+			// characters to escape.
+			{&ended.Requests, `UPDATE access_approvals SET status = ?, decided_at = ?
+				WHERE status = ? AND substr(process_key, 1, ?) = ?`,
+				[]any{ApprovalExpired, at, ApprovalPending, len(prefix), prefix}},
+		} {
+			res, err := tx.ExecContext(ctx, e.q, e.args...)
+			if err != nil {
+				return DeviceAccessEnded{}, fmt.Errorf("end the relay's access: %w", err)
+			}
+			n, err := res.RowsAffected()
+			if err != nil {
+				return DeviceAccessEnded{}, fmt.Errorf("end the relay's access: %w", err)
+			}
+			*e.n += n
+		}
+	}
+	return ended, nil
 }
 
 // RevokeAllDevices ends every pending and active device at now, from by, and
 // voids every pairing code still waiting to be used, returning how many
 // devices ended. A restored database brings its devices back as they stood
 // when the snapshot was taken, revoked ones included; archive.Import calls
-// this so none of them is accepted until it pairs again.
+// this so none of them is accepted until it pairs again. Each relay's access
+// ends with it, in the same transaction, as RevokeDeviceEndingAccess ends it.
 func RevokeAllDevices(ctx context.Context, db *sql.DB, by string, now time.Time) (int64, error) {
 	const op = "store.RevokeAllDevices"
 	if err := validDeviceBy(by); err != nil {
@@ -750,6 +852,13 @@ func RevokeAllDevices(ctx context.Context, db *sql.DB, by string, now time.Time)
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	relays, err := liveRelayIDsTx(ctx, tx)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+	if _, err := endRelayAccessTx(ctx, tx, relays, at); err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
 	res, err := tx.ExecContext(ctx, `UPDATE devices SET status = CASE status WHEN ? THEN ? ELSE ? END, revoked_at = ?, revoked_by = ?
 		WHERE status IN (?, ?)`, DevicePending, DeviceDenied, DeviceRevoked, at, by, DevicePending, DeviceActive)
 	if err != nil {

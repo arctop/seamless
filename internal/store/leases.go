@@ -66,10 +66,14 @@ const (
 	// LeaseRevokedLocked is the console locking the project again: an approval
 	// from before the lock came off must not outlive its return.
 	LeaseRevokedLocked = "locked"
+	// LeaseRevokedDevice is the owner revoking the relay whose process held it
+	// (RevokeDeviceEndingAccess): a relay's leases end with its pairing.
+	LeaseRevokedDevice = "device_revoked"
 )
 
 // LeaseRevokeReasons is the canonical revoke-reason set.
-var LeaseRevokeReasons = []string{LeaseRevokedRefreshed, LeaseRevokedSessionEnded, LeaseRevokedOwner, LeaseRevokedReset, LeaseRevokedLocked}
+var LeaseRevokeReasons = []string{LeaseRevokedRefreshed, LeaseRevokedSessionEnded, LeaseRevokedOwner, LeaseRevokedReset, LeaseRevokedLocked,
+	LeaseRevokedDevice}
 
 const (
 	// AccessChallengeBytes is the size of an approval's one-time challenge.
@@ -178,6 +182,11 @@ type AccessLease struct {
 
 	RevokedAt     *time.Time
 	RevokedReason string
+
+	// RelayID is the relay whose process holds the lease (migration 043): the
+	// device id ProcessKey names (access.RelayOfKey), "" for a process of this
+	// machine. leaseInsertTx writes it from the key, so the two never disagree.
+	RelayID string
 }
 
 // Lease is the row as the access layer judges it.
@@ -516,7 +525,7 @@ func ApproveAccessFor(ctx context.Context, db *sql.DB, id string, challenge []by
 	}
 	lease := AccessLease{
 		ID: leaseID, Project: a.Project, ProcessKey: a.ProcessKey, PeerUID: a.PeerUID, PeerPID: a.PeerPID,
-		SessionID: a.SessionID, ApprovalID: a.ID, GrantedAt: now, ExpiresAt: now.Add(a.Lease),
+		SessionID: a.SessionID, ApprovalID: a.ID, GrantedAt: now, ExpiresAt: now.Add(a.Lease), RelayID: access.RelayOfKey(a.ProcessKey),
 	}
 	if length > 0 {
 		lease.ExpiresAt = now.Add(length)
@@ -535,7 +544,8 @@ func ApproveAccessFor(ctx context.Context, db *sql.DB, id string, challenge []by
 // a lease is replaced, never extended -- and then the new row is inserted. It
 // is the one insert of access_leases, for a lock's approval and for the lease
 // a move or grant into a locked project carries (approvalkind.go). The caller
-// names the lease on its approval row (lease_id).
+// names the lease on its approval row (lease_id). The row's relay_id is the
+// relay the process key names (migration 043), whatever lease.RelayID says.
 func leaseInsertTx(ctx context.Context, tx *sql.Tx, lease AccessLease) error {
 	if lease.ProcessKey == "" {
 		return fmt.Errorf("%w: no process: a lease is bound to the requesting connection's process", ErrInvalidAccessRequest)
@@ -547,9 +557,9 @@ func leaseInsertTx(ctx context.Context, tx *sql.Tx, lease AccessLease) error {
 		return fmt.Errorf("retire the previous lease: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO access_leases (id, project_slug, process_key, peer_uid, peer_pid,
-		session_id, approval_id, granted_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		session_id, approval_id, granted_at, expires_at, relay_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		lease.ID, lease.Project, lease.ProcessKey, int64(lease.PeerUID), int64(lease.PeerPID), lease.SessionID,
-		lease.ApprovalID, now, core.FormatTime(lease.ExpiresAt)); err != nil {
+		lease.ApprovalID, now, core.FormatTime(lease.ExpiresAt), access.RelayOfKey(lease.ProcessKey)); err != nil {
 		return err
 	}
 	return nil
@@ -604,7 +614,7 @@ func ExpireAccessApprovals(ctx context.Context, db *sql.DB, now time.Time) (int6
 }
 
 const leaseCols = `id, project_slug, process_key, peer_uid, peer_pid, session_id, approval_id,
-	granted_at, expires_at, revoked_at, revoked_reason`
+	granted_at, expires_at, revoked_at, revoked_reason, relay_id`
 
 func scanLeases(rows *sql.Rows) ([]AccessLease, error) {
 	var out []AccessLease
@@ -616,7 +626,7 @@ func scanLeases(rows *sql.Rows) ([]AccessLease, error) {
 			uid, pid         int64
 		)
 		if err := rows.Scan(&l.ID, &l.Project, &l.ProcessKey, &uid, &pid, &l.SessionID, &l.ApprovalID,
-			&granted, &expires, &revoked, &l.RevokedReason); err != nil {
+			&granted, &expires, &revoked, &l.RevokedReason, &l.RelayID); err != nil {
 			return nil, err
 		}
 		var err error

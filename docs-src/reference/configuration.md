@@ -218,6 +218,11 @@ behavior of every earlier release. The guide is
   writes waits for you to promote it
   ([Restricted local accounts](/guides/peer-auth/#restricted-local-accounts)).
   Refused while `enabled` is false, and for the owner. File-only.
+- `relays` maps paired relays ([the guide](/guides/peer-auth/#agents-on-another-computer-relays)):
+  each relay's name as the Devices page shows it, to `owner_uid`, your uid on
+  that computer. Through a mapped relay that uid is you, judged as the socket
+  is; any other uid is refused. An unmapped relay is you over TCP and holds no
+  lease. Refused while `enabled` is false. File-only.
 - `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
   the owner's approver passkeys ([seamlessd approvers](/reference/cli-seamlessd/#seamlessd_approvers)).
   Unset, a TLS install whose `server_url` names a host uses that exact host as

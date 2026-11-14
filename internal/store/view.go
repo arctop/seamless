@@ -109,10 +109,10 @@ var viewExempt = map[string]string{
 	// a locked project's unlocks: the approval page must read a request for a
 	// LOCKED project, which is exactly the project this handle would hide.
 	"access_approvals": "unlock requests for locked projects: slugs, ids, the kernel's facts about the caller and a capped one-line reason; no corpus content, and the approval page reads it for a locked project",
-	"access_leases":    "granted unlocks: slugs, process keys, session ids and times; no corpus content",
+	"access_leases":    "granted unlocks: slugs, process keys, relay ids, session ids and times; no corpus content",
 	// isolation.requests' read grants: the access page lists them beside the
 	// leases, metadata about a confidential project the console never hides.
-	"access_grants": "read grants of confidential projects: slugs, process keys, session ids and times; no corpus content",
+	"access_grants": "read grants of confidential projects: slugs, process keys, relay ids, session ids and times; no corpus content",
 	// fenced-sessions: a conversation's moves into fenced projects and the
 	// flows between projects its approvals cleared, listed beside the grants.
 	"access_moves": "approved moves of a conversation into a fenced project: slugs, holder keys, session ids, the deciding proof and times; no corpus content",

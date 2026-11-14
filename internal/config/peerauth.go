@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/url"
 	"path/filepath"
@@ -88,6 +89,26 @@ type PeerAuth struct {
 	// read grants and holds no leases. Refused at load while peer_auth is
 	// disabled and for the owner. File only (no env).
 	Restricted []string `yaml:"restricted"`
+	// Relays maps the paired relays (plan networked-relay) whose requests the
+	// daemon judges as it judges its own socket's, each by its enrolled name
+	// (the name the Devices page shows) to the owner's uid on that computer.
+	// A request through a relay named here carries the uid and the process
+	// chain the relay's own kernel reported for the local caller: the owner's
+	// uid there is the owner, holding the leases that process chain holds; any
+	// other uid is refused. A relay a passkey never approved (paired while
+	// peer_auth was off, with the code alone) is refused until it pairs again.
+	// A relay not named here stays what every paired device is under
+	// peer_auth: the owner over TCP, holding no lease, so it never opens a
+	// locked project. Refused at load while peer_auth is disabled. File only
+	// (no env).
+	Relays map[string]PeerRelay `yaml:"relays"`
+}
+
+// PeerRelay is one relay's entry in peer_auth.relays.
+type PeerRelay struct {
+	// OwnerUID is the owner's numeric uid on the relay's computer (`id -u`
+	// there). Required; 0 (root) is never the owner.
+	OwnerUID uint32 `yaml:"owner_uid"`
 }
 
 // PeerPasskeys is the WebAuthn relying party of the approver passkeys. A
@@ -400,6 +421,9 @@ func (c Config) validatePeerAuth() error {
 	if err := validatePeerRestricted(p); err != nil {
 		return err
 	}
+	if err := validatePeerRelays(p); err != nil {
+		return err
+	}
 	if err := validatePeerPasskeys(p.Passkeys); err != nil {
 		return err
 	}
@@ -496,6 +520,55 @@ func validatePeerRestricted(p PeerAuth) error {
 			return fmt.Errorf("config: peer_auth.restricted lists %q twice: name each account once", raw)
 		}
 		seen[raw] = true
+	}
+	return nil
+}
+
+// validatePeerRelays is the relays map's shape: every key a relay's enrolled
+// name, every entry an owner's uid that is not root's, and none at all while
+// peer_auth is disabled -- a relay's forwarded uid and process chain are
+// judged only under peer_auth, so a mapping no judge could ever read is a
+// mistake to say out loud, not a setting to keep. Whether a paired relay holds
+// the name is the daemon's to see at each request.
+func validatePeerRelays(p PeerAuth) error {
+	if len(p.Relays) == 0 {
+		return nil
+	}
+	if !p.Enabled {
+		return fmt.Errorf("config: peer_auth.relays maps relays while peer_auth is disabled: a relay's forwarded uid and " +
+			"process chain are judged only under peer_auth -- enable peer_auth, or remove relays")
+	}
+	for _, name := range slices.Sorted(maps.Keys(p.Relays)) {
+		if err := validRelayName(name); err != nil {
+			return fmt.Errorf("config: peer_auth.relays %q: %w", name, err)
+		}
+		if p.Relays[name].OwnerUID == 0 {
+			return fmt.Errorf("config: peer_auth.relays %q: owner_uid is required: the owner's uid on that computer (id -u there); "+
+				"0 is root, which is never the owner", name)
+		}
+	}
+	return nil
+}
+
+// validRelayName accepts a relay's enrolled name as the Devices page shows it:
+// a lower-case host name of dot-separated labels of letters, digits, '-' and
+// '_', no label empty or starting or ending with '-', at most 253 characters
+// (store.ValidDeviceName, which this package cannot import; a test holds the
+// two together).
+func validRelayName(name string) error {
+	if name == "" || len(name) > 253 {
+		return fmt.Errorf("a relay's name is 1 to 253 characters")
+	}
+	for label := range strings.SplitSeq(name, ".") {
+		if label == "" || label[0] == '-' || label[len(label)-1] == '-' {
+			return fmt.Errorf("not a relay's name: a host name of lower-case letters, digits, '-', '_' and '.'")
+		}
+		for i := 0; i < len(label); i++ {
+			c := label[i]
+			if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' && c != '_' {
+				return fmt.Errorf("not a relay's name: a host name of lower-case letters, digits, '-', '_' and '.'")
+			}
+		}
 	}
 	return nil
 }

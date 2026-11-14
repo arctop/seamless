@@ -13,11 +13,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -473,7 +475,8 @@ func lookupGID(name string) (int, error) {
 
 // ownerHandler marks every TCP request as the owner's. The bearer key still
 // decides whether a request is authenticated at all; this only says whose reach
-// an authenticated one carries.
+// an authenticated one carries. A request a relay peer_auth.relays maps
+// forwarded is judged again inside the device edge (relayHandler).
 func ownerHandler(policy *access.Policy, next http.Handler) http.Handler {
 	view := policy.OwnerView()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -656,6 +659,9 @@ func (rt *peerAuthRuntime) logPolicy(logger *slog.Logger) {
 		"locked", strings.Join(rt.policy.OwnerLocked(), ","))
 	for _, a := range rt.policy.RestrictedAccounts() {
 		logger.Info("peer_auth restricted account", "user", a.Name, "uid", a.UID)
+	}
+	for _, name := range slices.Sorted(maps.Keys(rt.cfg.Relays)) {
+		logger.Info("peer_auth relay mapped", "relay", name, "owner_uid", rt.cfg.Relays[name].OwnerUID)
 	}
 	switch pin, pinned, err := rt.env.daemonPin(); {
 	case err != nil:

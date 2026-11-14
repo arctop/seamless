@@ -42,7 +42,7 @@ internal/core/     domain types: Project, Memory, Session, Task, Trial, Event
 internal/config/   single YAML + env config (static key, budgets, briefing tunables, llm,
                    peer_auth)
 internal/access/   peer_auth policy: who a request speaks for (the owner on TCP or the
-                   Unix socket, a restricted local account named by its kernel uid)
+                   Unix socket, a restricted local account named by its kernel uid, a caller a mapped relay forwarded)
                    and which projects it may reach (View); leases on locked
                    projects, judged per request; Unix-socket peer credentials.
                    Foundation layer

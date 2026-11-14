@@ -92,6 +92,9 @@ runs:
 | The socket, from the owner's uid | the owner, with its kernel-reported process chain |
 | The socket, from a uid listed under `peer_auth.restricted` | that [restricted account](#restricted-local-accounts) |
 | The socket, from any other uid | refused with `403` before any route runs |
+| TCP through a paired relay `peer_auth.relays` maps, from the owner's uid there | the owner, with the process chain the relay's kernel reported ([relays](#agents-on-another-computer-relays)) |
+| TCP through such a relay, from any other uid | refused with `403` before any route runs |
+| TCP through any other paired device | the owner, as the bearer key is |
 
 For the owner, the rule is simple. Every project that is not locked behaves
 exactly as it does without peer_auth, isolation fences included. A locked
@@ -129,7 +132,7 @@ real projects, never the global scope, and none twice; `restricted` is listed
 only with `enabled` set, and never names the owner or the same account twice;
 `max_lease` and `passkeys` are well formed. With `enabled` set, also: the owner
 is named, the socket path is absolute and outside `data_dir`, and the mode is
-octal and keeps owner read and write.
+octal and keeps owner read and write. `relays` is listed only with `enabled` set; each key is a relay's name as the Devices page shows it, and each `owner_uid` is a uid other than 0.
 
 Checked when `serve` starts, and refused if any fails:
 
@@ -662,7 +665,7 @@ that reused the pid. Per request it walks the parent chain from there, verifying
 every link. A link that does not verify ends the chain, so an orphan reparented to
 init, or a reused pid, reaches nothing above it. Nothing the client sends, the
 self-reported agent-process header included, enters the chain. Only the owner's
-socket connections can hold a lease; a TCP request never can.
+socket connections can hold a lease; a TCP request never can. Through a relay you map, they can ([relays](#agents-on-another-computer-relays)).
 
 A lease ends at its expiry, when its session ends (`session_end`, or the client's
 own session-end hook), when you Revoke it on `/console/access`, when you run
@@ -698,6 +701,49 @@ and the daemon counts the unlock only on a request the key signed. A browser tha
 cannot run the service worker can't hold an unlock, and the page says so. That
 covers some private windows, and any page that is neither https nor localhost.
 A locked plan or session page in the console takes you to that unlock page.
+
+### Agents on another computer: relays {#agents-on-another-computer-relays}
+
+On a server that serves other computers, a macOS or Linux client reaches the
+daemon through its relay, `seamlessd relay`. It runs as its own system account
+on that computer and serves the socket path agents use here. It reads each
+caller's uid and process chain from its own kernel and forwards the request
+over TLS with its client certificate.
+
+The server trusts what a relay forwards only under peer_auth, and only for a
+relay you map:
+
+```yaml
+peer_auth:
+  relays:
+    example-laptop:     # the relay's name, as the Devices page shows it
+      owner_uid: 501    # your uid on that computer (id -u there)
+```
+
+Through a mapped relay, your uid there is you, judged as this socket judges
+you: with the chain the relay reported, and the leases that chain holds. A
+lease is keyed on the relay and the process. It opens the project to that
+agent's tree on that computer and to nothing else: not a sibling agent there,
+not the same pid here, not another relay.
+
+Any other uid gets 403, and a request forwarding no caller gets 400. A relay
+paired with the code alone, while peer_auth was off, is refused until it pairs
+again and you approve it with a passkey. A relay you do not map is you over
+TCP, as the bearer key is, and never holds a lease.
+
+Seamless files no access request for an agent on another computer yet. The
+relay does not say which program is asking, and a request is filed only for an
+agent program. Until it does, work in a locked project from an agent session
+on the server's own computer.
+
+Passkeys approve from any browser. The Touch ID helper on a client Mac enrolls
+and approves through its relay, and the server verifies its signature.
+`seamlessd approve` stays a server command. Your own decisions (revoking,
+denying, Settings) are refused through a relay: make them in the console.
+
+Revoking a relay ends its leases, read grants and waiting requests at once. A
+console lock turned back on, and a restore, end a relay's leases as they end
+this machine's.
 
 ## Read grants and the advisory tier
 
@@ -1221,9 +1267,11 @@ and console unlock the backup held.
 - **A paired device is a TCP caller.** A computer paired with a networked server
   (the console's Devices page) is you, as the bearer key is, but the daemon reads
   no process chain behind it, so it never holds a lease and never opens a locked
-  project: a key device always, and a relay until its own requests are judged
-  like the socket's. Pairing under peer_auth needs your passkey on the Devices
+  project: a key device always, and a relay unless `peer_auth.relays` maps it ([relays](#agents-on-another-computer-relays)). Pairing under peer_auth needs your passkey on the Devices
   page: the code alone pairs nothing.
+- **A relay is trusted for its computer.** Root or the relay's account there
+  can report any uid and chain. Every lease is keyed on the relay, so a forged
+  report reaches only what that relay's agents were approved.
 - **The transcript holds what a session read.** Once you approve an agent, its
   project's content is in that session's transcript and any tool result it kept.
   A lease ending does not unread it.
