@@ -351,6 +351,12 @@ type sessionDetail struct {
 	// the peek footer's trial count) on the research feature. When it is false
 	// Trials is not even queried, so the section cannot half-render.
 	ShowTrials bool `json:"-"`
+	// Conversation is the session's conversation, one card on every page of
+	// it (conversation.go): its home chain, every project it reached with the
+	// approval and who decided it, and what it wrote in each. nil -- absent
+	// from the JSON, no card -- for a conversation that never moved, asked for
+	// nothing and wrote nothing stamped.
+	Conversation *conversationView `json:"conversation,omitempty"`
 }
 
 // claimedTaskVM is a task the session currently holds (a live claim), shown on
@@ -509,6 +515,18 @@ func (s *Service) sessionDetail(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			s.logger.Warn("console: session trials recorded", "session", sess.ID, "error", terr)
+		}
+	}
+	// The conversation's card (the page and the JSON; the peek fragment is a
+	// compact summary that shows none). A record that cannot be read costs the
+	// card its content, never the page, and the card says so rather than
+	// showing part of the record.
+	if r.URL.Query().Get("peek") != "1" {
+		if conv, cerr := s.conversationFor(ctx, sess, data.ShowTrials); cerr != nil {
+			s.logger.Warn("console: session conversation", "session", sess.ID, "error", cerr)
+			data.Conversation = &conversationView{Err: "This conversation's record could not be read; the daemon's log has the error."}
+		} else {
+			data.Conversation = conv
 		}
 	}
 

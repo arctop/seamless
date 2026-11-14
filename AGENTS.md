@@ -743,6 +743,21 @@ any of it.
   (`sourceJudge.readable`), is skipped without trace. The console warns before a
   stamped memory moves into a less fenced project (`console.moveWarning`) and
   blocks nothing.
+- **A conversation is one console page, read through the request's handle**
+  (`console/conversation.go`, `store/conversation.go`). Every session of a
+  conversation (client + external session id) shows one card: the home chain
+  (`access_moves`, `parent_session_id`), every project it reached with the
+  approval and who decided it, and what its sessions wrote (their write events)
+  with the stamps. Its rows are found by the sessions that asked, never by
+  holder. Everything but the access tables is read through `s.db(ctx)` and
+  `s.eventLog(ctx)`, so a locked project this request does not read shows its
+  name, the approval and an unlock link, and no session, item, count or stamp;
+  never read a conversation's sessions or items through `s.writeDB()`. The card
+  shows only for a move, a grant, a grant's or move's request, or a stamped item
+  (`convReached`). A project page's `?from=<project>` narrows Memories, Notes
+  and Plans & tasks to the items whose stamp names it (`store.CameFromSources`
+  and `CameFromItems`, joined with the items); nothing renders without a stamped
+  item.
 - **The identity comes from the transport, never the client.** A header, a
   `session=` handle, a body field or an agent-process identity can only ever
   narrow what the View allows. `getBinding` drops a binding to an unreachable

@@ -31,6 +31,9 @@ type taskRow struct {
 	// that project's slug, once per blocker, never the
 	// blocker itself. nil while nothing is locked -- absent from the JSON.
 	LockedBlockers []string `json:"lockedBlockers,omitempty"`
+	// MayContain is the task's provenance stamps, set only where a list shows
+	// them (a project page's came-from filter, camefrom.go).
+	MayContain []core.Stamp `json:"mayContain,omitempty"`
 }
 
 // BlockedBy counts every unfinished blocker of the row: the ones it names and

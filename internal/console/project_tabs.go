@@ -180,6 +180,9 @@ type projMemoryVM struct {
 	Reads      int
 	Updated    time.Time
 	Superseded bool
+	// MayContain is the memory's provenance stamps (camefrom.go): set on a
+	// project whose items carry any, nil otherwise.
+	MayContain []core.Stamp
 }
 
 // projNoteVM is one row on the Notes tab.
@@ -190,6 +193,8 @@ type projNoteVM struct {
 	Account string // restricted account that wrote the content ("" = owner)
 	Tags    []string
 	Updated time.Time
+	// MayContain is the note's provenance stamps, as projMemoryVM's.
+	MayContain []core.Stamp
 }
 
 // fillOverviewTab loads the Overview panel: memories-by-kind (project's active

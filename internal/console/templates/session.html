@@ -39,7 +39,7 @@
     <article class="card session-outcome-card">
       <header class="session-card-head">
         <div><span class="session-card-eyebrow">Session outcome</span><h2>{{if .Findings}}Findings{{else if eq .Session.Status "active"}}Work in progress{{else}}No recorded findings{{end}}</h2></div>
-        {{if .Findings}}<span class="session-review-cue">Start here</span>{{with .Session.Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{end}}
+        {{if .Findings}}<span class="session-review-cue">Start here</span>{{with .Session.Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .Session.MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}{{end}}
       </header>
       {{if .Findings}}
         <div class="prose session-findings">{{.FindingsHTML}}</div>
@@ -62,6 +62,7 @@
     </aside>
     {{end}}
   </section>
+  {{with .Conversation}}{{template "conversation" .}}{{end}}
 
   <div class="session-workspace">
     <main class="session-primary">
@@ -190,6 +191,76 @@
 </div>
 {{end}}
 {{end}}
+
+<!-- The conversation's card (conversation.go): one page for every session of
+     an agent conversation. A locked project this request does not read shows
+     its name, the approval that reached it and the way to unlock it in this
+     browser, and nothing from inside: no session, no item, no count, no
+     stamp. Rows are id-keyed for the live morph. -->
+{{define "conversation"}}
+<section class="card conversation-card" id="conversation" aria-label="Conversation">
+  <header class="session-card-head">
+    <div><span class="session-card-eyebrow">Conversation</span><h2>Home, reach and writes</h2><p>Every session of this agent conversation, each project it reached with the approval and who decided it, and what it wrote there.</p></div>
+    {{if not .Err}}<span class="session-card-count">{{len .Reach}} project{{if ne (len .Reach) 1}}s{{end}}</span>{{end}}
+  </header>
+  {{if .Err}}
+  <p class="conv-error" role="alert">{{icon "triangle-alert"}}{{.Err}}</p>
+  {{else}}
+  {{if .Hops}}
+  <div class="conv-block">
+    <h3>Home chain</h3>
+    <ol class="conv-chain">
+      {{range $i, $h := .Hops}}
+      <li class="conv-hop{{if .Current}} current{{end}}{{if .Locked}} locked{{end}}" id="conv-hop-{{$i}}">
+        {{with .Move}}<span class="conv-move">{{icon "arrow-right"}}moved &middot; {{template "conv-decision" .}}</span>{{end}}
+        <span class="conv-hop-body">
+          <span class="conv-project">{{icon "folder-tree"}}{{if not .Project}}global{{else if .Locked}}{{.Project}}{{else}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{end}}</span>
+          {{if .Locked}}<span class="kind" data-locked-hop="{{.Project}}">{{icon "lock"}}locked</span><a class="conv-unlock" href="{{.Unlock}}">Unlock to read it</a>
+          {{else if .SessionID}}<a class="mono conv-session" href="/console/sessions/{{.SessionID}}" data-peek>{{.Name}}</a><span class="kind">{{.Status}}</span>{{if .Current}}<span class="kind accent">this session</span>{{end}}
+          {{else}}<span class="faint">session not here</span>{{end}}
+        </span>
+      </li>
+      {{end}}
+    </ol>
+  </div>
+  {{end}}
+  <div class="conv-block">
+    <h3>Reach</h3>
+    <div class="conv-reach">
+      {{range .Reach}}
+      <div class="conv-reach-row{{if .Locked}} locked{{end}}" id="conv-reach-{{.Key}}">
+        <span class="conv-project">{{icon "folder-tree"}}{{if not .Project}}global{{else if .Locked}}{{.Project}}{{else}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{end}}{{if .Locked}} <span class="kind" data-locked-reach="{{.Project}}">{{icon "lock"}}locked</span>{{end}}</span>
+        <ul class="conv-ways">
+          {{range .Ways}}
+          <li class="conv-way" data-way="{{.Kind}}"><span class="kind {{.Tone}}">{{.Words}}</span>{{if .SessionID}} <a class="mono" href="/console/sessions/{{.SessionID}}" data-peek>{{.Session}}</a>{{end}}{{with .State}} <span class="conv-state">{{.}}</span>{{end}}{{with .Until}} <span class="conv-until">until {{clockDate .}}</span>{{end}}{{with .Decision}} <span class="conv-decision">{{template "conv-decision" .}}</span>{{end}}</li>
+          {{end}}
+        </ul>
+      </div>
+      {{end}}
+    </div>
+  </div>
+  <div class="conv-block">
+    <h3>Written</h3>
+    {{range .Written}}
+    <div class="conv-written" id="conv-w-{{.Key}}">
+      <span class="conv-project">{{icon "folder-tree"}}{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}</span>
+      <div class="session-entity-list conv-items">
+        {{range .Items}}<a id="conv-{{.ID}}" href="{{.Href}}" data-peek><span>{{.Title}}{{with .MayContain}} <em class="conv-stamp" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</em>{{end}}</span><small>{{.Kind}}</small></a>{{end}}
+      </div>
+      {{if .More}}<p class="faint conv-more">{{.More}} more not shown</p>{{end}}
+    </div>
+    {{else}}
+    <p class="session-inspector-empty">Nothing durable written yet.</p>
+    {{end}}
+    {{range .LockedOut}}
+    <p class="conv-locked-out" data-locked-out="{{.Project}}">{{icon "lock"}}What it wrote in {{.Project}} stays out while that project is locked. <a href="{{.Unlock}}">Unlock {{.Project}}</a></p>
+    {{end}}
+  </div>
+  {{end}}
+</section>
+{{end}}
+
+{{define "conv-decision"}}{{if .Link}}<a class="mono" href="{{.Link}}">{{.Short}}</a>{{else}}<span class="mono">{{.Short}}</span>{{end}}{{with .DecidedBy}} &middot; decided by {{.}}{{end}} &middot; {{clockDate .At}}{{end}}
 
 {{define "scripts"}}
 <script>

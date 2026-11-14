@@ -78,7 +78,14 @@ type projectWorkspaceData struct {
 	IxVolumeJSON string // compact JSON of the project's volume buckets, for IX.renderVolume
 
 	Context contextData
+
+	// CameFrom is the came-from filter (camefrom.go): nil -- no filter, no
+	// stamps on the rows -- for a project none of whose items carries a stamp.
+	CameFrom *cameFromView
 }
+
+// CameFromOn reports that the came-from filter narrows the tabs.
+func (d projectWorkspaceData) CameFromOn() bool { return d.CameFrom != nil && d.CameFrom.Active != "" }
 
 // projectTabVM is one entry in the workspace tab bar.
 type projectTabVM struct {
@@ -197,6 +204,20 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 		}
 		pending = state
 	}
+	// The came-from filter (?from=<project>): strict like ?tab=. A project
+	// no item names is a filter that matches nothing, not an error.
+	var from string
+	if values, ok := query["from"]; ok {
+		if len(values) != 1 {
+			s.badRequest(w, r, "parameter \"from\" must be provided exactly once")
+			return
+		}
+		if err := validate.Name(values[0]); err != nil {
+			s.badRequest(w, r, fmt.Sprintf("invalid from %q: a project slug", values[0]))
+			return
+		}
+		from = values[0]
+	}
 	now := time.Now().UTC()
 	win := store.ResolveRetrievalWindow(r.URL.Query().Get("w"), now)
 
@@ -287,6 +308,13 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 		s.serverError(w, r, err)
 		return
 	}
+	cameFrom, keep, err := s.cameFromFor(ctx, slug, from)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	data.CameFrom = cameFrom
+	s.applyCameFrom(ctx, &data, keep)
 	contextData, found, err := s.buildContextData(ctx, slug)
 	if err != nil {
 		s.serverError(w, r, err)
@@ -300,11 +328,16 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 	contextData.Project = slug
 	data.Context = contextData
 
+	taskCount, memCount := data.Metrics.OpenTasks, data.Metrics.Memories
+	if data.CameFromOn() {
+		// Narrowed, a tab counts what it lists.
+		taskCount, memCount = len(data.CameFrom.Tasks), len(data.Memories)
+	}
 	data.Tabs = []projectTabVM{
 		{Key: "overview", Label: "Overview", Icon: "gauge"},
-		{Key: "tasks", Label: "Plans & tasks", Icon: "list-checks", Count: data.Metrics.OpenTasks, HasCount: true},
+		{Key: "tasks", Label: "Plans & tasks", Icon: "list-checks", Count: taskCount, HasCount: true},
 		{Key: "sessions", Label: "Sessions", Icon: "terminal", Count: data.Metrics.Sessions, HasCount: true},
-		{Key: "memories", Label: "Memories", Icon: "brain", Count: data.Metrics.Memories, HasCount: true},
+		{Key: "memories", Label: "Memories", Icon: "brain", Count: memCount, HasCount: true},
 		{Key: "notes", Label: "Notes", Icon: "file-text", Count: len(data.Notes), HasCount: true},
 		{Key: "interactions", Label: "Interactions", Icon: "activity"},
 		{Key: "context", Label: "Context", Icon: "share-2"},

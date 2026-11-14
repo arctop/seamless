@@ -26,7 +26,7 @@
 
 <div class="tabs" id="tabs">
   {{range .Tabs}}
-  <a data-tab="{{.Key}}" href="?tab={{.Key}}" class="{{if .Active}}on{{end}}">{{icon .Icon}}{{.Label}}{{if .HasCount}} <span class="pill">{{.Count}}</span>{{end}}</a>
+  <a data-tab="{{.Key}}" href="?tab={{.Key}}{{with $.Data.CameFrom}}{{with .Active}}&amp;from={{.}}{{end}}{{end}}" class="{{if .Active}}on{{end}}">{{icon .Icon}}{{.Label}}{{if .HasCount}} <span class="pill">{{.Count}}</span>{{end}}</a>
   {{end}}
 </div>
 
@@ -107,11 +107,11 @@
      transitions, and step rows that expand IN PLACE into a lazily fetched task
      dossier. The dossier container carries data-live-skip so an SSE morph never
      clobbers the client-owned fragment inside it. -->
-<div class="tabpanel{{if eq .ActiveTab "tasks"}} on{{end}}" data-panel="tasks">
+<div class="tabpanel{{if eq .ActiveTab "tasks"}} on{{end}}" data-panel="tasks">{{with .CameFrom}}{{template "came-from" (.Bar "tasks")}}{{end}}
   {{$proj := .Slug}}
   {{/* The ?notice= flash an owner action redirects back with is rendered once,
        by the shared layout banner. */}}
-  {{range .Plans}}
+  {{if .CameFromOn}}{{template "came-from-tasks" .}}{{else}}{{range .Plans}}
   <div class="plan-card" id="plan-{{.Slug}}">
     <div class="plan-head">
       {{icon "git-merge"}}<a class="nm" href="/console/plans/{{.Slug}}">plan:{{.Slug}}</a>
@@ -174,7 +174,7 @@
     </table>
     </div>
     {{else}}<div class="empty">Nothing claimable right now</div>{{end}}
-  </div>
+  </div>{{end}}
 </div>
 
 <!-- TAB: sessions -->
@@ -192,14 +192,14 @@
 </div>
 
 <!-- TAB: memories -->
-<div class="tabpanel{{if eq .ActiveTab "memories"}} on{{end}}" data-panel="memories">
+<div class="tabpanel{{if eq .ActiveTab "memories"}} on{{end}}" data-panel="memories">{{with .CameFrom}}{{template "came-from" (.Bar "memories")}}{{end}}
   <div class="table-wrap">
     <table>
       <thead><tr><th>Name</th><th>Kind</th><th>Lineage</th><th class="num">Inj</th><th class="num">Read</th><th>Updated</th></tr></thead>
       <tbody>
         {{range .Memories}}
-        <tr id="{{.ID}}" class="row-link" data-href="/console/memories/{{.ID}}"><td class="mem-name"><a href="/console/memories/{{.ID}}"><strong>{{.Name}}</strong></a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{if .Desc}}<div class="desc">{{.Desc}}</div>{{end}}</td><td><span class="kind">{{.Kind}}</span></td><td>{{.Lineage}}</td><td class="num">{{.Injects}}</td><td class="num">{{.Reads}}</td><td class="muted">{{ago .Updated}}</td></tr>
-        {{else}}<tr><td colspan="6"><div class="empty">No memories in {{.Slug}}</div></td></tr>{{end}}
+        <tr id="{{.ID}}" class="row-link" data-href="/console/memories/{{.ID}}"><td class="mem-name"><a href="/console/memories/{{.ID}}"><strong>{{.Name}}</strong></a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}{{if .Desc}}<div class="desc">{{.Desc}}</div>{{end}}</td><td><span class="kind">{{.Kind}}</span></td><td>{{.Lineage}}</td><td class="num">{{.Injects}}</td><td class="num">{{.Reads}}</td><td class="muted">{{ago .Updated}}</td></tr>
+        {{else}}<tr><td colspan="6"><div class="empty">No memories in {{.Slug}}{{with .CameFrom}}{{with .Active}} may contain content from {{.}}{{end}}{{end}}</div></td></tr>{{end}}
         {{if .Inherited}}
         <tr class="subhead-row"><td colspan="6">Inherited &mdash; counted in parent/global scope, not {{.Slug}}</td></tr>
         {{range .Inherited}}
@@ -212,14 +212,14 @@
 </div>
 
 <!-- TAB: notes -->
-<div class="tabpanel{{if eq .ActiveTab "notes"}} on{{end}}" data-panel="notes">
+<div class="tabpanel{{if eq .ActiveTab "notes"}} on{{end}}" data-panel="notes">{{with .CameFrom}}{{template "came-from" (.Bar "notes")}}{{end}}
   <div class="table-wrap">
     <table>
       <thead><tr><th>Title</th><th>Tags</th><th>Updated</th></tr></thead>
       <tbody>
         {{range .Notes}}
-        <tr id="{{.ID}}" class="row-link" data-href="/console/notes/{{.ID}}"><td class="mem-name"><a href="/console/notes/{{.ID}}"><strong>{{.Title}}</strong></a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{if .Desc}}<div class="desc">{{.Desc}}</div>{{end}}</td><td><div style="display:flex;gap:6px;flex-wrap:wrap">{{range .Tags}}<span class="badge">{{.}}</span>{{end}}</div></td><td class="muted">{{ago .Updated}}</td></tr>
-        {{else}}<tr><td colspan="3"><div class="empty">No notes in {{.Slug}}</div></td></tr>
+        <tr id="{{.ID}}" class="row-link" data-href="/console/notes/{{.ID}}"><td class="mem-name"><a href="/console/notes/{{.ID}}"><strong>{{.Title}}</strong></a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}{{if .Desc}}<div class="desc">{{.Desc}}</div>{{end}}</td><td><div style="display:flex;gap:6px;flex-wrap:wrap">{{range .Tags}}<span class="badge">{{.}}</span>{{end}}</div></td><td class="muted">{{ago .Updated}}</td></tr>
+        {{else}}<tr><td colspan="3"><div class="empty">No notes in {{.Slug}}{{with .CameFrom}}{{with .Active}} may contain content from {{.}}{{end}}{{end}}</div></td></tr>
         {{end}}
       </tbody>
     </table>
@@ -312,6 +312,37 @@
 {{end}}
 {{end}}
 
+<!-- The came-from filter's bar (camefrom.go): this tab's items by the project
+     they may contain content from. Links load in place (data-seam-query); the
+     active source rides on the bar so a tab switch keeps it. -->
+{{define "came-from"}}
+<div class="camefrom" id="camefrom-{{.Tab}}" data-seam-query{{with .Active}} data-camefrom-active="{{.}}"{{end}}>
+  <span class="camefrom-label">{{icon "git-merge"}}Came from</span>
+  <a class="camefrom-chip{{if not .Active}} on{{end}}" href="{{.Any}}"{{if not .Active}} aria-current="true"{{end}}>any project</a>
+  {{range .Chips}}<a class="camefrom-chip{{if .On}} on{{end}}" href="{{.Href}}"{{if .On}} aria-current="true"{{end}} data-camefrom="{{.Project}}"{{if .Locked}} title="A locked project: its name only. The items listed are this project's own."{{end}}>{{if .Locked}}{{icon "lock"}}{{end}}{{.Project}} <span class="pill">{{.Count}}</span></a>{{end}}
+</div>
+{{end}}
+
+<!-- The Plans & tasks tab while the came-from filter is on: the tasks
+     themselves, any status, newest stamp first. -->
+{{define "came-from-tasks"}}
+<div class="card camefrom-tasks">
+  <h2>Tasks that may contain content from {{.CameFrom.Active}} <span class="h2-meta">{{len .CameFrom.Tasks}}</span></h2>
+  {{if .CameFrom.Tasks}}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Task</th><th>Status</th><th>Created</th></tr></thead>
+    <tbody>
+      {{range .CameFrom.Tasks}}
+      <tr id="{{.ID}}" class="row-link" data-href="/console/tasks/{{.ID}}"><td><span class="mono-id">{{shortID .ID}}</span> <a href="/console/tasks/{{.ID}}">{{.Title}}</a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}</td><td><span class="kind {{taskTone .Status}}">{{.Status}}</span></td><td class="muted">{{ago .Created}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}<div class="empty">No tasks in {{.Slug}} may contain content from {{.CameFrom.Active}}</div>{{end}}
+</div>
+{{end}}
+
 <!-- The tighten confirm step. Server-rendered rather than a JS dialog: it is a
      GET-addressable page state (?isolate=<state>), so it survives the fetch+morph
      path, a reload, and a shared link, and the same preview that renders it is
@@ -378,7 +409,24 @@
     e.preventDefault();
     activate(t.getAttribute('data-tab'));
   });
-})();
+})();{{if .Data.CameFrom}}
+
+(function () {
+  /* The came-from filter (?from=) holds across a tab switch: the switch above
+     writes ?tab= alone, and a live refresh re-reads that URL. The active
+     source rides on the filter bar, which every in-place load redraws. */
+  var bar = document.getElementById('tabs');
+  if (!bar) return;
+  bar.addEventListener('click', function (e) {
+    var t = e.target.closest ? e.target.closest('[data-tab]') : null;
+    var on = document.querySelector('[data-camefrom-active]');
+    if (!t || !on) return;
+    try {
+      history.replaceState(null, '', location.pathname + '?tab=' + encodeURIComponent(t.getAttribute('data-tab')) +
+        '&from=' + encodeURIComponent(on.getAttribute('data-camefrom-active')));
+    } catch (err) {}
+  });
+})();{{end}}
 
 (function () {
   /* Plans & tasks panel. Step rows are <details>; opening one fetches the task's
