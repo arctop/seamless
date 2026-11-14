@@ -592,7 +592,12 @@ func (s *Service) accessRequest(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, approval.ErrNotLocked):
 			msg = "that project is not locked: nothing to request"
 		case errors.Is(err, store.ErrInvalidAccessRequest):
-			msg = "the reason is limited to 200 characters"
+			// The reason's length, or a fact the store would not record as
+			// given (the program the kernel names, longer than 1024 bytes or
+			// not valid UTF-8): say which, without the internals' prefixes.
+			if _, detail, ok := strings.Cut(msg, store.ErrInvalidAccessRequest.Error()+": "); ok {
+				msg = "no access request was filed: " + detail
+			}
 		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
 		return

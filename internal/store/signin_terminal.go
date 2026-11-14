@@ -24,6 +24,15 @@ package store
 // and its User-Agent; migration 044), and the approval shows that, with when
 // it began (TerminalSignInByCode), and asks before it approves exactly the row
 // it showed.
+//
+// For the same reason the waiting codes are capped twice: at most
+// maxWaitingTerminalSignIns in all, and at most maxWaitingTerminalSignInsFrom
+// from one address (terminalSignInSource), so someone looping on the begin
+// from one host holds a few codes, not every one, and the owner's own begin
+// from another address still finds room. Behind a proxy every request comes
+// from the proxy's address, and that one address may then hold only the
+// per-address share: someone looping through the proxy still holds the
+// owner's begin off, as the single global cap let them before, and no longer.
 
 import (
 	"context"
@@ -32,6 +41,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -57,10 +67,27 @@ const terminalSignInWaiting = "terminal-code:"
 // the table without bound.
 const maxWaitingTerminalSignIns = 32
 
+// maxWaitingTerminalSignInsFrom caps the terminal sign-ins waiting at once
+// from one address (terminalSignInSource): a caller looping on the begin from
+// one host holds this many, not all maxWaitingTerminalSignIns. A browser that
+// begins again ends its own waiting code (the console's begin route signs its
+// earlier cookie out), so the owner needs one.
+const maxWaitingTerminalSignInsFrom = 4
+
+// terminalSignInSourceBits is the prefix an IPv6 address counts by: one host
+// may hold a whole /64 and pick a fresh address from it for every request.
+const terminalSignInSourceBits = 64
+
 var (
 	// ErrTerminalSignInBusy is a terminal sign-in begun while
 	// maxWaitingTerminalSignIns wait already.
 	ErrTerminalSignInBusy = errors.New("too many terminal sign-ins are waiting")
+	// ErrTerminalSignInBusyFrom is a terminal sign-in begun while
+	// maxWaitingTerminalSignInsFrom wait already from its address. It is an
+	// ErrTerminalSignInBusy too, so a surface that words only that one still
+	// answers it as busy.
+	ErrTerminalSignInBusyFrom = fmt.Errorf("%w from this address: use a code a page already shows, or wait until one expires",
+		ErrTerminalSignInBusy)
 	// ErrTerminalSignInNotFound is a code that names no terminal sign-in still
 	// waiting: mistyped, already approved, past its deadline, or never shown.
 	ErrTerminalSignInNotFound = errors.New("no terminal sign-in is waiting for that code")
@@ -172,11 +199,66 @@ var (
 // can force the re-roll.
 var newTerminalSignInCode = func() (string, error) { return newUnlockCode() }
 
+// terminalSignInSource is the address a terminal sign-in's begin counts
+// against (maxWaitingTerminalSignInsFrom), from the address it recorded
+// (TerminalSignInBrowser.Addr, as kept): an IPv4 address by itself (an
+// IPv4-mapped IPv6 address as its IPv4 address, an address with a port as
+// the address), every loopback address as one (they are all this computer),
+// an IPv6 address by its /64 without its zone, and anything else -- no
+// address at all included -- by its text, under a prefix no address's form
+// has.
+func terminalSignInSource(addr string) string {
+	ip, err := netip.ParseAddr(addr)
+	if err != nil {
+		ap, perr := netip.ParseAddrPort(addr)
+		if perr != nil {
+			return "text " + addr
+		}
+		ip = ap.Addr()
+	}
+	ip = ip.Unmap()
+	switch {
+	case ip.IsLoopback():
+		return "loopback"
+	case ip.Is4():
+		return ip.String()
+	}
+	p, err := ip.WithZone("").Prefix(terminalSignInSourceBits)
+	if err != nil {
+		return "text " + addr
+	}
+	return p.String()
+}
+
+// terminalSignInsWaiting counts the terminal sign-ins waiting past floor
+// (all), and those of them begun from source (terminalSignInSource). The
+// global cap keeps what it reads to maxWaitingTerminalSignIns rows.
+func terminalSignInsWaiting(ctx context.Context, tx *sql.Tx, floor, source string) (all, from int, err error) {
+	rows, err := tx.QueryContext(ctx, `SELECT remote_addr FROM console_signins WHERE `+waitingTerminalSignIn, floor)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var addr string
+		if err := rows.Scan(&addr); err != nil {
+			return 0, 0, err
+		}
+		all++
+		if terminalSignInSource(addr) == source {
+			from++
+		}
+	}
+	return all, from, rows.Err()
+}
+
 // BeginTerminalSignIn records a terminal sign-in for the browser that holds
 // cookie and browserKey, waiting TerminalSignInTTL for the daemon's account to
 // approve its code, with what the begin request showed of that browser (from,
 // kept Clean), and returns the row and the code. Waiting rows past their
-// deadline are purged first, and at most maxWaitingTerminalSignIns wait.
+// deadline are purged first; then at most maxWaitingTerminalSignInsFrom wait
+// from from's address (terminalSignInSource; ErrTerminalSignInBusyFrom), and
+// at most maxWaitingTerminalSignIns in all (ErrTerminalSignInBusy).
 func BeginTerminalSignIn(ctx context.Context, db *sql.DB, cookie, browserKey string, from TerminalSignInBrowser,
 	now time.Time) (WaitingTerminalSignIn, string, error) {
 	const op = "store.BeginTerminalSignIn"
@@ -200,11 +282,14 @@ func BeginTerminalSignIn(ctx context.Context, db *sql.DB, cookie, browserKey str
 		floor); err != nil {
 		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: purge: %w", op, err)
 	}
-	var waiting int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM console_signins WHERE `+waitingTerminalSignIn, floor).Scan(&waiting); err != nil {
+	waiting, fromHere, err := terminalSignInsWaiting(ctx, tx, floor, terminalSignInSource(from.Addr))
+	if err != nil {
 		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: %w", op, err)
 	}
-	if waiting >= maxWaitingTerminalSignIns {
+	switch {
+	case fromHere >= maxWaitingTerminalSignInsFrom:
+		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: %w", op, ErrTerminalSignInBusyFrom)
+	case waiting >= maxWaitingTerminalSignIns:
 		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: %w", op, ErrTerminalSignInBusy)
 	}
 	code := ""

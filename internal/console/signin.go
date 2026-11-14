@@ -293,6 +293,9 @@ func (s *Service) signInError(w http.ResponseWriter, r *http.Request, err error)
 		msg = "that passkey is not enrolled here: add it at " + passkeyAddPath + " first"
 	case errors.Is(err, store.ErrEnrollmentBusy):
 		msg, status = "too many passkeys are waiting for approval; try again in a few minutes", http.StatusTooManyRequests
+	case errors.Is(err, store.ErrTerminalSignInBusyFrom):
+		msg, status = fmt.Sprintf("too many sign-in codes are waiting from this address: use a code a page here already shows, "+
+			"or wait until one expires (a code waits %d minutes)", int(store.TerminalSignInTTL/time.Minute)), http.StatusTooManyRequests
 	case errors.Is(err, store.ErrTerminalSignInBusy):
 		msg, status = "too many terminal sign-ins are waiting; try again in a few minutes", http.StatusTooManyRequests
 	case errors.Is(err, store.ErrEnrollmentWaiting):

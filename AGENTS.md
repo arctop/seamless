@@ -892,7 +892,12 @@ any of it.
   (`remote_addr`, `user_agent`, migration 044; `store.TerminalSignInBrowser`,
   kept and read back as bounded printable ASCII by `Clean`), handed from the
   console through `approval.WithTerminalSignInBrowser` (`SignInView` is
-  unchanged). `console-open --sign-in` shows them with the begin time
+  unchanged). The begin caps the waiting codes per address
+  (`maxWaitingTerminalSignInsFrom`, 4; `terminalSignInSource`: IPv4 by itself,
+  IPv6 by its /64, every loopback address one, anything else by its text) and in
+  all (`maxWaitingTerminalSignIns`, 32); `ErrTerminalSignInBusyFrom` is an
+  `ErrTerminalSignInBusy`, so a surface words it first. `console-open --sign-in`
+  shows them with the begin time
   (`store.TerminalSignInByCode`) and asks y/N before it approves exactly the row
   it showed (`ApproveTerminalSignIn` takes the id and the code). It runs only at
   a terminal; no flag approves a code unseen. A waiting row lives in

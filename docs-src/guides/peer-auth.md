@@ -1416,9 +1416,14 @@ and console unlock the backup held.
   reads the key in your `console.yaml`, until you
   [retire the key](/reference/cli-seamlessd/#seamlessd_setup_retire).
 - **A terminal sign-in's code queue is open to anyone who reaches the console.**
-  At most 32 terminal sign-ins wait at once, so someone looping on **Show a
-  code** can hold yours off for up to 10 minutes; the code itself signs in only
-  the browser that showed it.
+  At most 4 codes wait at once from one address (an IPv6 address counts by its
+  /64, and every loopback address is one) and 32 in all, so someone looping on
+  **Show a code** from one computer holds 4 of them and yours, from another
+  address, still gets a code; from 8 addresses or more they can hold yours off
+  for up to 10 minutes. Behind a proxy every request comes from the proxy's
+  address (the console trusts no forwarding header), so there the limit is one
+  queue of 4 for everyone, and someone looping through the proxy holds yours off
+  as before. The code itself signs in only the browser that showed it.
 
 ## Move an existing install over
 

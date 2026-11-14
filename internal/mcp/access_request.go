@@ -552,9 +552,21 @@ func accessRequestError(err error) error {
 	case errors.Is(err, approval.ErrNotLocked):
 		return errors.New("that project is not locked: nothing to request")
 	case errors.Is(err, store.ErrInvalidAccessRequest):
-		return fmt.Errorf("the reason is limited to %d characters", store.MaxAccessReasonRunes)
+		return invalidAccessRequestError(err)
 	}
 	return err
+}
+
+// invalidAccessRequestError words a request the store would not record as
+// given (store.ErrInvalidAccessRequest) for an agent: what it refused -- the
+// reason's length, or a fact such as the program the kernel names, longer
+// than 1024 bytes or not valid UTF-8 -- without the internals' prefixes.
+func invalidAccessRequestError(err error) error {
+	_, detail, ok := strings.Cut(err.Error(), store.ErrInvalidAccessRequest.Error()+": ")
+	if !ok {
+		detail = store.ErrInvalidAccessRequest.Error()
+	}
+	return errors.New("no access request was filed: " + detail)
 }
 
 // grantRequestError words the read grants' refusals for an agent, as the
@@ -577,6 +589,8 @@ func grantRequestError(err error) error {
 		return errors.New("no agent session names this connection's agent process: ask from the agent's own session, whose seam names the agent that started it")
 	case errors.Is(err, access.ErrNotReachable):
 		return errors.New("that project is not reachable from this connection")
+	case errors.Is(err, store.ErrInvalidAccessRequest):
+		return invalidAccessRequestError(err)
 	}
 	return err
 }

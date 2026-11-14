@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -87,17 +88,20 @@ func TestTerminalSignIn_Refusals(t *testing.T) {
 }
 
 // The waiting sign-ins are capped, so a caller looping on the begin route
-// cannot grow the table; ones past their deadline make room.
+// cannot grow the table; ones past their deadline make room. Each begin here
+// comes from an address of its own, so only the global cap applies
+// (signin_terminal_from_test.go caps one address).
 func TestTerminalSignIn_Capped(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
+	from := func(i int) TerminalSignInBrowser { return TerminalSignInBrowser{Addr: "198.51.100." + strconv.Itoa(i)} }
 	for i := range maxWaitingTerminalSignIns {
-		_, _, err := BeginTerminalSignIn(ctx, db, "cookie-"+string(rune('a'+i%26))+string(rune('a'+i/26)), "key", TerminalSignInBrowser{}, apNow)
+		_, _, err := BeginTerminalSignIn(ctx, db, "cookie-"+string(rune('a'+i%26))+string(rune('a'+i/26)), "key", from(i), apNow)
 		require.NoError(t, err)
 	}
-	_, _, err := BeginTerminalSignIn(ctx, db, "one-more", "key", TerminalSignInBrowser{}, apNow)
+	_, _, err := BeginTerminalSignIn(ctx, db, "one-more", "key", from(200), apNow)
 	require.ErrorIs(t, err, ErrTerminalSignInBusy)
-	_, _, err = BeginTerminalSignIn(ctx, db, "one-more", "key", TerminalSignInBrowser{}, apNow.Add(TerminalSignInTTL))
+	_, _, err = BeginTerminalSignIn(ctx, db, "one-more", "key", from(200), apNow.Add(TerminalSignInTTL))
 	require.NoError(t, err, "the expired ones are purged first")
 }
 
