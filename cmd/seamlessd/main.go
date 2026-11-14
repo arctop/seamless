@@ -558,8 +558,9 @@ func runServe(args []string) error {
 		approvalSvc = svc
 		// A passkey works only under the relying party it was enrolled for, and
 		// only on an origin this daemon holds on every address: say so in the
-		// log as doctor does, without holding up the start.
-		warnPasskeyOrigin(ctx, cfg, bind, db, logger)
+		// log as doctor does, without holding up the start (the origins once
+		// the listeners are bound, warnPasskeyOrigins below).
+		warnPasskeyOrigin(ctx, cfg, db, logger)
 	}
 	// Read grants (isolation.requests): a read refused at a confidential
 	// project's fence files a request the owner may approve. Under peer_auth
@@ -689,7 +690,7 @@ func runServe(args []string) error {
 	if signIn != nil && approvalSvc == nil {
 		// Without peer_auth the passkeys sign in only, and their relying
 		// party is checked as peer_auth's start checks it.
-		warnPasskeyOrigin(ctx, cfg, bind, db, logger)
+		warnPasskeyOrigin(ctx, cfg, db, logger)
 	}
 	consoleSrv, err := console.New(console.Config{
 		DB: consoleDB, WriteDB: consoleWriteDB, Files: mgr, Gardener: garden, Events: consoleEvents, Retrieve: ret,
@@ -819,10 +820,28 @@ func runServe(args []string) error {
 	}
 	// Beside a concrete IPv4 address, the IPv6 addresses of its interface that
 	// reach no further (listen_pair.go). They are facts about the listener, as
-	// the bind host is, so the Host allowlist admits them the same way.
-	paired := listenPaired(ln, hostIfaceAddrs, net.Listen)
+	// the bind host is, so the Host allowlist admits them the same way. One
+	// another process may hold stops the start when it matters (pairedNeed):
+	// ::1, an address of a name browsers and clients dial, any under
+	// peer_auth. The service manager starts serve again, and it runs once the
+	// address is free.
+	lnPort := ""
+	if _, p, perr := net.SplitHostPort(ln.Addr().String()); perr == nil {
+		lnPort = p
+	}
+	paired, err := listenPaired(ctx, ln, hostIfaceAddrs, net.Listen, pairedNeedFor(cfg, lnPort))
+	if err != nil {
+		_ = ln.Close()
+		stop()
+		garden.Wait()
+		return fmt.Errorf("seamlessd.serve: %w", err)
+	}
 	lns := append([]net.Listener{ln}, paired...)
 	srv.Handler = daemonHandler(bind, append(cfg.AllowedHostsEffective(), listenerHosts(paired)...), activity, tcpRoutes)
+	if approvalSvc != nil || signIn != nil {
+		// The passkey origins, judged against what these listeners hold.
+		warnPasskeyOrigins(ctx, cfg, bind, heldBy(lns), logger)
+	}
 	// The peer_auth socket: the same routes, no Host guard (a Unix socket has no
 	// DNS name to rebind and no browser can reach it), and each connection's
 	// principal read from the kernel at accept. The refusal of an unknown peer

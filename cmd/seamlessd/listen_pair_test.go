@@ -103,20 +103,28 @@ func TestListenPaired(t *testing.T) {
 		return tcpListener(address), nil
 	}
 
-	got := listenPaired(tcpListener("100.64.0.7:43117"), ifaces, listen)
+	ctx := t.Context()
+	got, err := listenPaired(ctx, tcpListener("100.64.0.7:43117"), ifaces, listen, pairedNeed{})
+	require.NoError(t, err)
 	require.Equal(t, []string{"[fd7a:115c:a1e0::7]:43117"}, dialed)
 	require.Equal(t, []string{"fd7a:115c:a1e0::7"}, listenerHosts(got))
 
 	dialed = nil
-	got = listenPaired(tcpListener("203.0.113.5:43117"), ifaces, listen)
+	got, err = listenPaired(ctx, tcpListener("203.0.113.5:43117"), ifaces, listen, pairedNeed{})
+	require.NoError(t, err, "on an install without peer_auth, an address no name points at is skipped, as before")
 	require.Equal(t, []string{"[2001:db8:5::5]:43117", "[fd00:5::5]:43117"}, dialed)
 	require.Equal(t, []string{"2001:db8:5::5"}, listenerHosts(got), "the address in use is skipped")
 
 	dialed = nil
-	require.Empty(t, listenPaired(tcpListener("[::]:43117"), ifaces, listen))
-	require.Empty(t, listenPaired(tcpListener("[fd7a:115c:a1e0::7]:43117"), ifaces, listen))
-	require.Empty(t, listenPaired(tcpListener("127.0.0.1:43117"),
-		func() ([][]netip.Addr, error) { return nil, errors.New("no interfaces") }, listen))
+	for _, ln := range []net.Listener{tcpListener("[::]:43117"), tcpListener("[fd7a:115c:a1e0::7]:43117")} {
+		got, err = listenPaired(ctx, ln, ifaces, listen, pairedNeed{all: true})
+		require.NoError(t, err)
+		require.Empty(t, got)
+	}
+	got, err = listenPaired(ctx, tcpListener("127.0.0.1:43117"),
+		func() ([][]netip.Addr, error) { return nil, errors.New("no interfaces") }, listen, pairedNeed{})
+	require.NoError(t, err)
+	require.Empty(t, got)
 	require.Empty(t, dialed)
 }
 
@@ -126,9 +134,10 @@ func TestListenPaired_Loopback(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ln.Close() })
-	got := listenPaired(ln, func() ([][]netip.Addr, error) { return [][]netip.Addr{addrs("127.0.0.1", "::1")}, nil }, net.Listen)
-	if len(got) == 0 {
-		t.Skip("no ::1 here, or its port is taken")
+	got, err := listenPaired(t.Context(), ln, func() ([][]netip.Addr, error) { return [][]netip.Addr{addrs("127.0.0.1", "::1")}, nil },
+		net.Listen, pairedNeed{})
+	if err != nil || len(got) == 0 {
+		t.Skipf("no ::1 here, or its port is taken: %v", err)
 	}
 	t.Cleanup(func() { _ = got[0].Close() })
 	_, port, _ := net.SplitHostPort(ln.Addr().String())

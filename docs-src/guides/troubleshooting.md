@@ -366,6 +366,25 @@ older code.
   bridge; a disabled entry, stale binary/config path, or project override is a
   client-configuration problem even while `/healthz` is green.
 
+## The daemon will not start: `[::1]:8081 is in use by another process` {#paired-address-in-use}
+
+**What is happening.** Beside `127.0.0.1:8081` the daemon listens on
+`[::1]:8081`, and on a Server beside its IPv4 address on that interface's IPv6
+addresses. Another process holds one of them, and a browser or client that tries
+that address first would reach it instead of the daemon, so `serve` refuses to
+start (for `[::1]`, for an address the `server_url` or passkey origin's host
+resolves to, and under peer_auth for any). The service starts it again every few
+seconds and the log repeats the line; `seamlessd doctor`'s `bind.addresses` row
+is a **fail** naming the address.
+
+**Fix.** Find the process: `sudo lsof -nP -iTCP:8081 -sTCP:LISTEN` (Windows:
+`netstat -ano | findstr :8081`). Stop it, and the daemon starts at the service's
+next attempt (on Windows the Scheduled Task retries three times, a minute apart;
+after that, `seamlessd start`). If a program of yours needs the port, move
+Seamless instead (`addr`, and `server_url`). A process you do not recognize,
+under another account, is what this refusal exists for: find out what it is
+first.
+
 ## An agent on another computer gets no briefing {#an-agent-on-another-computer-gets-no-briefing}
 
 **What is happening.** A [Client](/concepts/networked/) keeps no data and

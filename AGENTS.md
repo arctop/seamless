@@ -468,7 +468,15 @@ any of it.
   further (`pairedIPv6` in `cmd/seamlessd/listen_pair.go`: ::1 beside loopback,
   only unique local ones beside a private or tailnet address), and doctor's
   held set (`boundAddrs`) reads the same function, as setup's address step does
-  when it picks the bind (`setupBindFor`), so the three cannot disagree.
+  when it picks the bind (`setupBindFor`), so the three cannot disagree. An
+  address serve cannot listen on that another process may hold stops the start
+  (`pairedNeed`, review M1): ::1, an address a name browsers and clients dial
+  resolves to (server_url's host, with passkeys on the origins'), and under
+  peer_auth any; only one no process can hold now (`addrUnheld`) is skipped
+  everywhere. serve judges its origins against its own listeners (`heldBy`);
+  doctor's run dials what `boundAddrs` would infer (`withListenerProbe`,
+  `doctor_net.go`). Never set the probe outside doctor, and never dial from
+  setup.
   Never pair a private address with a global one: that widens a LAN bind to the
   internet.
   The one exception is a Touch ID re-enrollment: a credential whose own key

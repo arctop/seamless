@@ -54,6 +54,17 @@ logs a `SECURITY` warning at startup whose text differs with TLS on or off, and
 a second warning when the bind is wide while `server_url` still names loopback.
 [Share one daemon across your computers](/guides/network-install/) is the setup guide.
 
+Beside a concrete IPv4 bind, `serve` also listens on the IPv6 addresses of that
+interface that reach no further: `[::1]` beside `127.0.0.1`, a tailnet's
+`fd7a:...` address beside its `100.x` one. If another process holds one of
+them, `serve` refuses to start rather than leave it to that process: `[::1]`
+always, an address the `server_url` host or (with passkeys on) a passkey
+origin's host resolves to, and under peer_auth any of them. The error names the
+address, says it is in use by another process and how to find it (`sudo lsof
+-nP -iTCP:<port> -sTCP:LISTEN`); the service starts `serve` again, and it runs
+once the address is free. An address this computer does not have yet is skipped
+with a warning, as is, without peer_auth, one no name points at.
+
 On a true first run - no config file anywhere in the search order and no
 `SEAMLESS_MCP_API_KEY` in the environment - it generates the bearer key and
 writes it to `~/.config/seamless/seamless.yaml` before starting. An existing
@@ -101,10 +112,11 @@ Checks stop early if config or the database cannot be loaded at all.
 | `llm` | The provider, or a warning that its credential is missing. |
 | `embedder` | Probes the embedder with a real embed call. Unreachable, unconfigured, or provider `anthropic` (no embeddings API) is a warning: recall degrades to FTS. |
 | `bind` | Loopback is OK. Non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication; non-loopback *without* TLS is a warning naming what travels in the clear. |
+| `bind.addresses` | Dials the bind and each IPv6 address `serve` listens on beside it, and reads the instance id `/healthz` names at each. One daemon at all of them is OK; another process answering beside it is a **fail** (stop it, then restart the daemon), as is one answering there while the daemon is not; nothing answering beside a daemon that answers is a **warn** (it could not listen there when it started, and another process can take it). The `server_url.addresses` and passkey rows read the same dial: an address another process answers at is not held, and on a passkey origin a **fail**. No row for a wildcard bind, a bind with nothing beside it, or while nothing answers. |
 | `server_url` | Fetches `/healthz` through the advertised URL. Not answering is **info** (the daemon is often stopped while doctor runs); a `421` is a **fail** naming the Host header it just refused, which means the allowlist and the advertised name disagree. A derived URL says so. |
 | `tls` | Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of `server_url` - the one that fails at the client's handshake with a message that names no file on the server. |
 | `tls.key_file` | Without peer_auth, on a server other computers reach: who can read the TLS key. Your account alone is **info** (the daemon runs as you, so every process of yours can read it and serve the daemon's name on any port; locked projects move it out of their reach); group- or world-readable is a **warn** with the `chmod 600`. Under peer_auth the `peer_auth` rows judge it, as `serve` does. |
-| `server_url.addresses` | Every address the configured `server_url` host resolves to, against what the daemon listens on (bind plus `serve`'s paired IPv6): all held is OK; one this machine holds and the daemon does not is a **warn** (another local process could answer for the name); one this machine does not hold is a **warn**. No row for a derived, loopback or proxied URL, or a host the passkey rows judge. |
+| `server_url.addresses` | Every address the configured `server_url` host resolves to, against what the daemon listens on (bind plus `serve`'s paired IPv6, each dialed: `bind.addresses`): all held is OK; one this machine holds and the daemon does not is a **warn** (another local process could answer for the name); one this machine does not hold is a **warn**. No row for a derived, loopback or proxied URL, or a host the passkey rows judge. |
 | `tailscale` | **info** when the tailnet issues certificates for the `server_url` host: an account allowed to run `tailscale cert` can serve the name with a valid certificate, so the daemon holding every address of the name is what keeps its pages off the origin. |
 | `database` | Path, schema version, and table count, or that none exists yet (a fresh install: the daemon creates it at its first start). Never creates or migrates a database. |
 | `schema version` | An **info** line pairing what the database has applied with what this binary compiles - `v25 applied / v25 compiled`. A database *ahead* of the binary warns: it was migrated by a newer `seamlessd` (a downgrade, or an update rollback that could not restore the pre-update database). Run that newer release again (`seamlessd update`), or restore a backup taken before it (`seamlessd restore`, or `seamlessd import` into an empty data directory). `serve` logs the same warning at startup, and an archive from such a database would be refused. A database *behind* the binary warns too: a daemon of this version migrates it at its next start, and doctor skips the checks that need the current schema. |

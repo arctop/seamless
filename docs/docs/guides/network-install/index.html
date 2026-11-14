@@ -473,6 +473,10 @@ that is <a href="#step-1-widen-the-server">by hand</a>.</p>
 <td>Loopback is OK. Non-loopback without TLS is a <strong>warn</strong> naming what travels in the clear; non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication.</td>
 </tr>
 <tr>
+<td><code>bind.addresses</code></td>
+<td>Dials the bind and the IPv6 addresses <code>serve</code> listens on beside it. Another process answering at one is a <strong>fail</strong>: it would answer for the daemon there, and <code>serve</code> refuses to start while it holds one a name points at.</td>
+</tr>
+<tr>
 <td><code>server_url</code></td>
 <td>Fetches <code>/healthz</code> through the advertised URL. A <code>421</code> here is a <strong>fail</strong> that names the Host header it just refused - the allowlist and the advertised name disagree.</td>
 </tr>
@@ -658,6 +662,10 @@ because every one of them describes a machine that is somewhere else. The
 <code>server_url</code> probe is a <strong>fail</strong> on a client rather than the server's info
 line: until the server answers there are no briefings, no memories, and no
 tools on this machine.</p>
+<p>On a relay's Client the socket is the relay's: one that does not answer names
+its service (<code>com.arctop.seamless.relay</code> on macOS, <code>seamless-relay.service</code> on
+Linux) and how to start it, or, with none installed yet,
+<a href="#the-relays-root-step">its root step</a>.</p>
 <p>On a computer with a relay, it adds the relay's rows: the account the relay
 runs as, its layout, its pairing, its socket, who may connect to it
 (<code>relay.access</code>, a <strong>warn</strong> when every local account can), and whether the

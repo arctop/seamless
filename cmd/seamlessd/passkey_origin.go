@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -164,16 +165,25 @@ func originChecks(ctx context.Context, cfg config.Config, bind, origin string, h
 	}
 	// An address of the name the daemon does not hold is a local process's to
 	// take only when this machine holds it; one it does not is another
-	// machine's, or nobody's.
-	var missing, elsewhere []netip.Addr
+	// machine's, or nobody's. One doctor found another process answering at
+	// is taken already.
+	var missing, elsewhere, taken []netip.Addr
 	for _, a := range addrs {
 		switch {
+		case held.isTaken(a):
+			taken = append(taken, a)
 		case held.covers(a):
 		case hn.holds(a):
 			missing = append(missing, a)
 		default:
 			elsewhere = append(elsewhere, a)
 		}
+	}
+	if len(taken) > 0 {
+		out = append(out, check{statusFail, name, fmt.Sprintf("origin %s: another process answers at %s port %s, where this daemon "+
+			"listens beside %s, instead of this daemon: a browser that tries that address first runs its passkey ceremonies with "+
+			"that process -- stop it (%s names it), then restart the daemon", origin, joinAddrs(taken), port, bind,
+			listenHint(port))})
 	}
 	switch {
 	case len(missing)+len(elsewhere) == 0:
@@ -213,18 +223,44 @@ func originChecks(ctx context.Context, cfg config.Config, bind, origin string, h
 type heldAddrs struct {
 	every bool
 	addrs []netip.Addr
+	// The rest is doctor's dial (confirmHeld), and empty without it: what
+	// answers at the bind, the addresses beside it where another process
+	// answers instead (taken), and those where nothing answers while the
+	// daemon does (silent). Neither is in addrs.
+	self          listenerAnswer
+	taken, silent []netip.Addr
 }
 
 func (h heldAddrs) covers(a netip.Addr) bool {
 	return h.every || slices.Contains(h.addrs, a.WithZone("").Unmap())
 }
 
+type heldAddrsKey struct{}
+
+// withHeldAddrs is ctx carrying what serve's listeners hold (heldBy), which
+// boundAddrs then answers with for any bind: serve's own.
+func withHeldAddrs(ctx context.Context, held heldAddrs) context.Context {
+	return context.WithValue(ctx, heldAddrsKey{}, held)
+}
+
+// isTaken reports whether doctor's dial found another process answering at a.
+func (h heldAddrs) isTaken(a netip.Addr) bool {
+	return slices.Contains(h.taken, a.WithZone("").Unmap())
+}
+
 // boundAddrs reads what serve listens on for bind: a wildcard or empty host is
 // every address (Go listens dual-stack); an IP is itself; a name is the address
 // net.Listen resolves it to, the first IPv4 one if any. Beside an IPv4 address
 // come the IPv6 ones serve pairs with it (pairedIPv6), as far as this
-// machine's interfaces can be read.
+// machine's interfaces can be read. Serve's ctx carries what its listeners
+// hold (withHeldAddrs), which is the answer; doctor's carries a probe
+// (withListenerProbe), and then every address beside the bind is dialed and
+// kept only where this daemon answers (confirmHeld) -- whichever check asks,
+// in whichever file.
 func boundAddrs(ctx context.Context, bind string, hn hostNet) (heldAddrs, error) {
+	if held, ok := ctx.Value(heldAddrsKey{}).(heldAddrs); ok {
+		return held, nil
+	}
 	host := bindHost(bind)
 	if config.IsWildcardHost(host) {
 		return heldAddrs{every: true}, nil
@@ -247,6 +283,13 @@ func boundAddrs(ctx context.Context, bind string, hn hostNet) (heldAddrs, error)
 	held := heldAddrs{addrs: []netip.Addr{primary.WithZone("").Unmap()}}
 	if all, ierr := hn.ifaces(); ierr == nil {
 		held.addrs = append(held.addrs, pairedIPv6(primary, all)...)
+	}
+	if probe := listenerProbeFrom(ctx); probe != nil && len(held.addrs) > 1 {
+		if _, p, err := net.SplitHostPort(bind); err == nil {
+			if port, err := strconv.ParseUint(p, 10, 16); err == nil && port != 0 {
+				held = confirmHeld(ctx, held, uint16(port), probe)
+			}
+		}
 	}
 	return held, nil
 }
@@ -328,16 +371,23 @@ func enrolledPasskeyChecks(ctx context.Context, db *sql.DB, rpID string) []check
 	return out
 }
 
-// warnPasskeyOrigin logs serve's copy of the doctor rows: the relying party in
-// effect, then every warning and failure about it and the passkeys it strands.
-// The database half runs now, while serve's handle is open; the origin half
-// resolves names, so it runs beside startup, never in front of it, and says
-// nothing once serve is shutting down.
-func warnPasskeyOrigin(ctx context.Context, cfg config.Config, bind string, db *sql.DB, logger *slog.Logger) {
+// warnPasskeyOrigin logs serve's copy of the doctor rows about the passkeys
+// a changed relying party strands, now, while serve's database handle is
+// open. The origin rows wait for the listeners (warnPasskeyOrigins).
+func warnPasskeyOrigin(ctx context.Context, cfg config.Config, db *sql.DB, logger *slog.Logger) {
 	rpID, _ := cfg.RelyingParty()
 	logPasskeyRows(logger, enrolledPasskeyChecks(ctx, db, rpID))
+}
+
+// warnPasskeyOrigins logs serve's copy of the origin rows: the relying party
+// in effect, then every warning and failure about it, judged against held,
+// what serve's listeners hold (heldBy) -- serve knows its own listeners, so
+// it infers nothing from the interfaces. The rows resolve names, so they run
+// beside the start, never in front of it, and say nothing once serve is
+// shutting down.
+func warnPasskeyOrigins(ctx context.Context, cfg config.Config, bind string, held heldAddrs, logger *slog.Logger) {
 	go func() {
-		rows := passkeyOriginChecks(ctx, cfg, bind, nil, systemNet)
+		rows := passkeyOriginChecks(withHeldAddrs(ctx, held), cfg, bind, nil, systemNet)
 		if ctx.Err() != nil {
 			return
 		}

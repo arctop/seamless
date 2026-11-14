@@ -112,9 +112,12 @@ func doctor(args []string) error {
 		llmCheck(cfg),
 		embedderCheck(cfg),
 	)
-	checks = append(checks, transportChecks(cfg)...)
+	// Every row below that judges what serve listens on dials it rather than
+	// infer it from the interfaces (doctor_net.go): this daemon's own
+	// listener, by the addresses its config names.
+	ctx := withListenerProbe(context.Background(), doctorListenerProbe(cfg, codexActivityTimeout))
+	checks = append(checks, transportChecksIn(ctx, cfg)...)
 
-	ctx := context.Background()
 	d, dbRow, ok := openDoctorDB(cfg)
 	checks = append(checks, dbRow)
 	if !ok {
@@ -506,6 +509,12 @@ func remoteSessionsCheck(db *sql.DB) check {
 // alone, and because a wrong answer here is what makes every remote client fail
 // in a way that looks like a network problem from the other end.
 func transportChecks(cfg config.Config) []check {
+	return transportChecksIn(context.Background(), cfg)
+}
+
+// transportChecksIn is transportChecks with doctor's context, which carries
+// its listener probe (withListenerProbe).
+func transportChecksIn(ctx context.Context, cfg config.Config) []check {
 	if cfg.IsClient() {
 		// A client install has no listener, no allowlist and no server
 		// certificate, so saying so is better than reporting a bind address it
@@ -516,15 +525,24 @@ func transportChecks(cfg config.Config) []check {
 			clientServerURLCheck(cfg),
 		}
 	}
-	return transportChecksWith(cfg, doctorTLSEnv{net: systemNet, tailscale: execTailscale{}, goos: runtime.GOOS, stat: os.Stat})
+	return transportRows(ctx, cfg, doctorTLSEnv{net: systemNet, tailscale: execTailscale{}, goos: runtime.GOOS, stat: os.Stat})
 }
 
 // transportChecksWith is transportChecks on a server install, reading the
 // machine through env: the bind, the advertised URL, the TLS pair, and who
 // else could answer for the daemon's name (serverNameChecks).
 func transportChecksWith(cfg config.Config, env doctorTLSEnv) []check {
-	ctx := context.Background()
-	out := []check{bindCheck(cfg, bindPaired(ctx, cfg.Addr, env.net)), serverURLCheck(cfg), tlsCheck(cfg)}
+	return transportRows(context.Background(), cfg, env)
+}
+
+// transportRows is transportChecksWith in ctx: with doctor's probe in it, the
+// bind.addresses row and every address the rows call held are dialed.
+func transportRows(ctx context.Context, cfg config.Config, env doctorTLSEnv) []check {
+	out := []check{bindCheck(cfg, bindPaired(ctx, cfg.Addr, env.net))}
+	if c, ok := bindAddressesCheck(ctx, cfg, env.net); ok {
+		out = append(out, c)
+	}
+	out = append(out, serverURLCheck(cfg), tlsCheck(cfg))
 	return append(out, serverNameChecks(ctx, cfg, env)...)
 }
 
@@ -537,6 +555,13 @@ func transportChecksWith(cfg config.Config, env doctorTLSEnv) []check {
 // briefings, no memories and no tools on this machine, and reporting that as
 // information would bury the only fault the report is able to find.
 func clientServerURLCheck(cfg config.Config) check {
+	return clientServerURLCheckWith(cfg, hostRelaySocketEnv())
+}
+
+// clientServerURLCheckWith is clientServerURLCheck reading who serves a socket
+// here through env: a socket that does not answer names the relay's service
+// or its root step on a Client (relaySocketServer), and the daemon elsewhere.
+func clientServerURLCheckWith(cfg config.Config, env relaySocketEnv) check {
 	const name = "server_url"
 	base := cfg.ServerURL()
 	probe := reachabilityProbe()
@@ -552,8 +577,13 @@ func clientServerURLCheck(cfg config.Config) check {
 	}
 	resp, err := probe.Get(cfg.ServerURL() + "/healthz")
 	if err != nil {
-		return check{statusFail, name, fmt.Sprintf(
-			"%s is not answering (%v) -- start seamlessd there, or correct server_url", base, err)}
+		repair := "start seamlessd there, or correct server_url"
+		if cfg.SocketPath() != "" {
+			if relay, installed := relaySocketServer(env); relay {
+				repair = relaySocketRepair(env.goos, installed)
+			}
+		}
+		return check{statusFail, name, fmt.Sprintf("%s is not answering (%v) -- %s", base, err, repair)}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	switch {

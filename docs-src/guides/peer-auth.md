@@ -520,7 +520,10 @@ That is why doctor checks two things about every origin:
   listen on and serve the same origin from, and a browser that picks that
   address runs its ceremonies there. So an IPv4 `addr` brings its interface's
   IPv6 addresses along: the tailnet's `fd7a:...` address beside its `100.x`
-  one, `[::1]` beside `127.0.0.1`. Doctor's `bind` row lists them. It never
+  one, `[::1]` beside `127.0.0.1`. Doctor's `bind` row lists them, and
+  `bind.addresses` dials each to confirm this daemon answers there. Under
+  peer_auth `serve` refuses to start while another process holds any of them,
+  and the service starts it again once the address is free. It never
   pairs a private address with a global IPv6 one, which would widen a LAN bind
   to the internet. An address the pairing misses, such as one on another
   interface, still needs the wildcard (`addr: "0.0.0.0:8081"` holds every

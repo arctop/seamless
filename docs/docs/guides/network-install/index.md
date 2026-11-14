@@ -177,6 +177,7 @@ Its transport rows are the ones to read:
 | Row | What it tells you |
 |---|---|
 | `bind` | Loopback is OK. Non-loopback without TLS is a **warn** naming what travels in the clear; non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication. |
+| `bind.addresses` | Dials the bind and the IPv6 addresses `serve` listens on beside it. Another process answering at one is a **fail**: it would answer for the daemon there, and `serve` refuses to start while it holds one a name points at. |
 | `server_url` | Fetches `/healthz` through the advertised URL. A `421` here is a **fail** that names the Host header it just refused - the allowlist and the advertised name disagree. |
 | `tls` | Off, or the certificate's expiry and whether its SANs cover the advertised host. |
 | `tls.key_file` | Who can read the TLS key: your account alone is **info**, group or world a **warn**. |
@@ -365,6 +366,11 @@ because every one of them describes a machine that is somewhere else. The
 `server_url` probe is a **fail** on a client rather than the server's info
 line: until the server answers there are no briefings, no memories, and no
 tools on this machine.
+
+On a relay's Client the socket is the relay's: one that does not answer names
+its service (`com.arctop.seamless.relay` on macOS, `seamless-relay.service` on
+Linux) and how to start it, or, with none installed yet,
+[its root step](#the-relays-root-step).
 
 On a computer with a relay, it adds the relay's rows: the account the relay
 runs as, its layout, its pairing, its socket, who may connect to it

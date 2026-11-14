@@ -773,7 +773,10 @@ name the daemon does not hold is one another process running as you can
 listen on and serve the same origin from, and a browser that picks that
 address runs its ceremonies there. So an IPv4 <code>addr</code> brings its interface's
 IPv6 addresses along: the tailnet's <code>fd7a:...</code> address beside its <code>100.x</code>
-one, <code>[::1]</code> beside <code>127.0.0.1</code>. Doctor's <code>bind</code> row lists them. It never
+one, <code>[::1]</code> beside <code>127.0.0.1</code>. Doctor's <code>bind</code> row lists them, and
+<code>bind.addresses</code> dials each to confirm this daemon answers there. Under
+peer_auth <code>serve</code> refuses to start while another process holds any of them,
+and the service starts it again once the address is free. It never
 pairs a private address with a global IPv6 one, which would widen a LAN bind
 to the internet. An address the pairing misses, such as one on another
 interface, still needs the wildcard (<code>addr: &quot;0.0.0.0:8081&quot;</code> holds every

@@ -281,6 +281,15 @@ unguarded case - naming one arms the guard there too. Binding beyond loopback
 logs a <code>SECURITY</code> warning at startup whose text differs with TLS on or off, and
 a second warning when the bind is wide while <code>server_url</code> still names loopback.
 <a href="../../guides/network-install/">Share one daemon across your computers</a> is the setup guide.</p>
+<p>Beside a concrete IPv4 bind, <code>serve</code> also listens on the IPv6 addresses of that
+interface that reach no further: <code>[::1]</code> beside <code>127.0.0.1</code>, a tailnet's
+<code>fd7a:...</code> address beside its <code>100.x</code> one. If another process holds one of
+them, <code>serve</code> refuses to start rather than leave it to that process: <code>[::1]</code>
+always, an address the <code>server_url</code> host or (with passkeys on) a passkey
+origin's host resolves to, and under peer_auth any of them. The error names the
+address, says it is in use by another process and how to find it (<code>sudo lsof -nP -iTCP:&lt;port&gt; -sTCP:LISTEN</code>); the service starts <code>serve</code> again, and it runs
+once the address is free. An address this computer does not have yet is skipped
+with a warning, as is, without peer_auth, one no name points at.</p>
 <p>On a true first run - no config file anywhere in the search order and no
 <code>SEAMLESS_MCP_API_KEY</code> in the environment - it generates the bearer key and
 writes it to <code>~/.config/seamless/seamless.yaml</code> before starting. An existing
@@ -354,6 +363,10 @@ Checks stop early if config or the database cannot be loaded at all.</p>
 <td>Loopback is OK. Non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication; non-loopback <em>without</em> TLS is a warning naming what travels in the clear.</td>
 </tr>
 <tr>
+<td><code>bind.addresses</code></td>
+<td>Dials the bind and each IPv6 address <code>serve</code> listens on beside it, and reads the instance id <code>/healthz</code> names at each. One daemon at all of them is OK; another process answering beside it is a <strong>fail</strong> (stop it, then restart the daemon), as is one answering there while the daemon is not; nothing answering beside a daemon that answers is a <strong>warn</strong> (it could not listen there when it started, and another process can take it). The <code>server_url.addresses</code> and passkey rows read the same dial: an address another process answers at is not held, and on a passkey origin a <strong>fail</strong>. No row for a wildcard bind, a bind with nothing beside it, or while nothing answers.</td>
+</tr>
+<tr>
 <td><code>server_url</code></td>
 <td>Fetches <code>/healthz</code> through the advertised URL. Not answering is <strong>info</strong> (the daemon is often stopped while doctor runs); a <code>421</code> is a <strong>fail</strong> naming the Host header it just refused, which means the allowlist and the advertised name disagree. A derived URL says so.</td>
 </tr>
@@ -367,7 +380,7 @@ Checks stop early if config or the database cannot be loaded at all.</p>
 </tr>
 <tr>
 <td><code>server_url.addresses</code></td>
-<td>Every address the configured <code>server_url</code> host resolves to, against what the daemon listens on (bind plus <code>serve</code>'s paired IPv6): all held is OK; one this machine holds and the daemon does not is a <strong>warn</strong> (another local process could answer for the name); one this machine does not hold is a <strong>warn</strong>. No row for a derived, loopback or proxied URL, or a host the passkey rows judge.</td>
+<td>Every address the configured <code>server_url</code> host resolves to, against what the daemon listens on (bind plus <code>serve</code>'s paired IPv6, each dialed: <code>bind.addresses</code>): all held is OK; one this machine holds and the daemon does not is a <strong>warn</strong> (another local process could answer for the name); one this machine does not hold is a <strong>warn</strong>. No row for a derived, loopback or proxied URL, or a host the passkey rows judge.</td>
 </tr>
 <tr>
 <td><code>tailscale</code></td>
