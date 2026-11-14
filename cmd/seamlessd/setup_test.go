@@ -2,11 +2,13 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"io"
 	"io/fs"
 	"maps"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -60,15 +63,34 @@ func setupTestRun(t *testing.T, goos string, environ []string, facts setupFacts,
 			calls = append(calls, setupClientCall{url, key})
 			return "/h/.config/seamless/seamless.yaml", nil
 		},
-		// An import no test arranged (setupImportTestRun does) must never load
-		// the machine's config, whose data dir is the live one.
+		// A step no test arranged must never load the machine's config, whose
+		// data dir is the live one: this run's is a loopback install's, in a
+		// scratch directory (setupImportTestRun arranges an import's).
 		home: "/h", host: "here",
 		loadConfig: func() (config.Config, error) {
-			t.Helper()
-			t.Fatal("setup loaded a config on a run whose test arranged no import")
-			return config.Config{}, nil
+			cfg := config.Defaults()
+			cfg.DataDir = filepath.Join(t.TempDir(), "data")
+			return cfg, nil
 		},
 		daemonUp: func(config.Config) bool { return false },
+		// The address step reads no real network, tailnet or pin, and writes
+		// no config, unless its test arranges one (setupAddrArrange).
+		network: hostNet{
+			lookup: func(_ context.Context, host string) ([]netip.Addr, error) {
+				t.Helper()
+				t.Fatalf("setup resolved %s on a run whose test arranged no network", host)
+				return nil, nil
+			},
+			ifaces: func() ([][]netip.Addr, error) { return nil, nil },
+		},
+		tailscale:     setupAddrTailnet{err: errNoTailscale},
+		now:           time.Now,
+		daemonAccount: func() string { return "_seamless" },
+		ensureServer: func(config.ServerAddress) (string, error) {
+			t.Helper()
+			t.Fatal("setup wrote a Server config on a run whose test arranged none")
+			return "", nil
+		},
 	}
 	return r, out, &calls
 }
@@ -288,6 +310,8 @@ func TestSetupDecide_ScriptedRunsNeverRead(t *testing.T) {
 		{"SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_MCP_API_KEY=k"},
 		{"SEAMLESS_NO_SERVICE=1"}, {"SEAMLESS_CLIENT=claude"},
 		{"SEAMLESS_IMPORT=/b.tar.gz"}, {"SEAMLESS_IMPORT=/b.tar.gz", "SEAMLESS_IMPORT_LOCKS=remove"},
+		{"SEAMLESS_SETUP=server", "SEAMLESS_SERVER_NAME=a.example"}, {"SEAMLESS_SERVER_NAME=a.example"},
+		{"SEAMLESS_SETUP=server", "SEAMLESS_SERVER_NAME=a.example", "SEAMLESS_TLS_CERT=/c.crt", "SEAMLESS_TLS_KEY=/c.key"},
 	}
 	for _, facts := range []setupFacts{setupFactsFresh, setupFactsStandalone, setupFactsServer, setupFactsClient, setupFactsLocked} {
 		for _, env := range envs {
@@ -319,12 +343,14 @@ func TestSetupDecide_UpdaterRunsAreScripted(t *testing.T) {
 	shape, err := installShape{dir: "/h/.local/bin", clients: []string{"claude"}}.knobs()
 	require.NoError(t, err)
 	knobs := mergeKnobs(shape, map[string]string{"SEAMLESS_VERSION": "0.9.0"})
-	owner := []string{"PATH=/usr/bin", "HOME=/h", "SEAMLESS_SETUP=server", "SEAMLESS_IMPORT=/b", "SEAMLESS_IMPORT_LOCKS=remove", "SEAMLESS_PAIR_CODE=1"}
+	owner := []string{"PATH=/usr/bin", "HOME=/h", "SEAMLESS_SETUP=server", "SEAMLESS_IMPORT=/b", "SEAMLESS_IMPORT_LOCKS=remove", "SEAMLESS_PAIR_CODE=1",
+		"SEAMLESS_SERVER_NAME=a.example", "SEAMLESS_TLS_CERT=/c.crt", "SEAMLESS_TLS_KEY=/c.key"}
+	setupKnobs := []string{setupKnobKind, setupKnobImport, setupKnobImportLocks, setupKnobPairCode, setupKnobServerName, setupKnobTLSCert, setupKnobTLSKey}
 
 	unattended, err := unattendedInstallerEnv("linux", owner, knobs)
 	require.NoError(t, err)
 	for _, kv := range unattended {
-		for _, knob := range []string{setupKnobKind, setupKnobImport, setupKnobImportLocks, setupKnobPairCode} {
+		for _, knob := range setupKnobs {
 			require.False(t, strings.HasPrefix(kv, knob+"="), "an unattended update passes no setup knob: %s", kv)
 		}
 	}
@@ -339,7 +365,7 @@ func TestSetupDecide_UpdaterRunsAreScripted(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, setupKept, st.answer)
 	}
-	for _, knob := range []string{setupKnobKind, setupKnobImport, setupKnobImportLocks, setupKnobPairCode} {
+	for _, knob := range setupKnobs {
 		require.NotContains(t, installerKnobs, knob, "the updater must never be able to pass a setup knob")
 	}
 
@@ -405,6 +431,52 @@ func TestSetupWords_OnePlace(t *testing.T) {
 	run("linux", []string{"SEAMLESS_IMPORT_LOCKS=keep"}, setupFactsFresh, false, "")
 	run("linux", []string{"SEAMLESS_PAIR_CODE=1"}, setupFactsFresh, false, "")
 	run("linux", nil, setupFactsFresh, true, "2\n")
+	// The address knobs' refusals, and the address step's own words: its
+	// refusal, its question, its rows, the lines for a config that exists,
+	// the root steps, and the closing.
+	run("linux", []string{"SEAMLESS_SERVER_NAME=a.example"}, setupFactsFresh, false, "")
+	run("linux", []string{"SEAMLESS_SERVER_URL=https://b", "SEAMLESS_MCP_API_KEY=k", "SEAMLESS_SERVER_NAME=a.example"}, setupFactsFresh, false, "")
+	run("linux", []string{"SEAMLESS_SERVER_NAME=a.example"}, setupFactsServer, false, "")
+	run("windows", []string{"SEAMLESS_SERVER_NAME=a.example"}, setupFactsFresh, false, "")
+	if runtime.GOOS != "windows" {
+		first := func(env []string, facts setupFacts, interactive bool, input string, ts tailscaleStatus, tsErr error) {
+			r, out, _ := setupTestRun(t, runtime.GOOS, env, facts, interactive, input)
+			setupAddrArrange(t, r, map[string][]string{setupAddrTSName: {setupAddrTailv4, setupAddrTailv6},
+				"lan.example": {setupAddrLANv4}}, setupAddrIfaces, ts, tsErr)
+			st, err := setupDecide(r)
+			if err == nil {
+				setupSummary(r, st)
+				err = setupHandOff(r, &st, setupStepsLeft(st, runtime.GOOS), false)
+			}
+			if err == nil {
+				err = setupWriteServer(r, &st)
+			}
+			if err != nil {
+				all.WriteString(err.Error() + "\n")
+			}
+			all.WriteString(out.String())
+		}
+		first([]string{"SEAMLESS_SETUP=hub"}, setupFactsFresh, false, "", setupAddrTailnetUp, nil)
+		first([]string{"SEAMLESS_SETUP=hub", "SEAMLESS_SERVER_NAME=" + setupAddrTSName}, setupFactsFresh, false, "", setupAddrTailnetUp, nil)
+		first([]string{"SEAMLESS_SETUP=hub", "SEAMLESS_SERVER_NAME=" + setupAddrTSName}, setupFactsStandalone, false, "", setupAddrTailnetUp, nil)
+		first([]string{"SEAMLESS_SETUP=hub", "SEAMLESS_SERVER_NAME=" + setupAddrTSName}, setupFactsLocked, false, "", setupAddrTailnetUp, nil)
+		first([]string{"SEAMLESS_SETUP=hub", "SEAMLESS_SERVER_NAME=lan.example"}, setupFactsFresh, false, "", tailscaleStatus{}, errNoTailscale)
+		first(nil, setupFactsFresh, true, "2\n1\n", tailscaleStatus{}, errNoTailscale)
+		first(nil, setupFactsFresh, true, "2\n1\n\n", setupAddrTailnetUp, nil)
+		for _, cfg := range []func() config.Config{
+			config.Defaults,
+			func() config.Config {
+				c := config.Defaults()
+				c.Role, c.AdvertisedURL = config.RoleClient, "unix:///opt/seamless/run/seamlessd.sock"
+				return c
+			},
+		} {
+			r, out, _ := setupTestRun(t, "linux", nil, setupFactsFresh, false, "")
+			r.loadConfig = func() (config.Config, error) { return cfg(), nil }
+			require.NoError(t, setupClientsStep(r, &setupState{}))
+			all.WriteString(out.String())
+		}
+	}
 	// The import step's question, asked in setup's first half.
 	for _, goos := range []string{"linux", "windows"} {
 		r, out, _ := setupTestRun(t, goos, nil, setupFactsFresh, true, "1\n\n")
@@ -476,9 +548,9 @@ func TestSetupHandOff_SaysWhatSetupDoesNotDoYet(t *testing.T) {
 		want []string
 		none bool
 	}{
-		{name: "a first Server: the import is setup's own now", st: setupState{kind: setupServer, role: config.RoleServer, answer: setupAsked},
-			want: []string{"by hand", "setup does not do these Server steps yet:", "network-install/#step-1-widen-the-server",
-				"peer-auth/#move-an-existing-install-over", "seamlessd client-config"}},
+		{name: "a first Server: the address, the import and the closing are setup's own now", st: setupState{kind: setupServer, role: config.RoleServer, answer: setupAsked},
+			want: []string{"by hand", "setup does not do this Server step yet:", "peer-auth/#move-an-existing-install-over",
+				"This Server serves no other computer yet"}},
 		{name: "a first Standalone: locked projects", st: setupState{kind: setupStandalone, role: config.RoleServer, answer: setupFromEnv},
 			want: []string{"setup does not do this Standalone step yet:", "locked"}},
 		{name: "a first Standalone on Windows: no locked projects there, and the import is built", goos: "windows",
@@ -487,7 +559,7 @@ func TestSetupHandOff_SaysWhatSetupDoesNotDoYet(t *testing.T) {
 			want: []string{"pairing", "this Client uses its Server's key"}},
 		{name: "a change to the Server: no import on a re-run",
 			st:   setupState{kind: setupServer, role: config.RoleServer, installed: setupStandalone, answer: setupAsked, change: "server"},
-			want: []string{"address", "locked", "clients"}},
+			want: []string{"locked", "This Server serves no other computer yet"}},
 		{name: "kept: nothing", st: setupState{kind: setupStandalone, role: config.RoleServer, installed: setupStandalone, answer: setupKept}, none: true},
 		{name: "the default: nothing", st: setupState{kind: setupStandalone, role: config.RoleServer, answer: setupDefault}, none: true},
 	} {
@@ -507,6 +579,7 @@ func TestSetupHandOff_SaysWhatSetupDoesNotDoYet(t *testing.T) {
 			}
 			require.NotContains(t, out.String(), "seamlessd restore", "the import is not a step by hand")
 			require.NotContains(t, out.String(), "start from a backup")
+			require.NotContains(t, out.String(), "widen-the-server", "the address is not a step by hand")
 			if goos == "windows" {
 				require.NotContains(t, out.String(), "peer_auth")
 			}
@@ -535,17 +608,41 @@ func TestSetupHandOff_SaysWhatSetupDoesNotDoYet(t *testing.T) {
 func TestSetupForInstallerAndFinish(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "setup.state")
+	// The Server without its address is refused before anything is written,
+	// naming the knob that answers it.
 	r, out, _ := setupTestRun(t, "linux", []string{"SEAMLESS_SETUP=server"}, setupFactsFresh, false, "")
-	require.NoError(t, setupForInstaller(r, path))
+	err := setupForInstaller(r, path)
+	require.ErrorIs(t, err, errSetupRefused)
+	require.ErrorContains(t, err, "set SEAMLESS_SERVER_NAME")
 	require.Contains(t, out.String(), "setup        Networked: Server (SEAMLESS_SETUP)")
-	require.NotContains(t, out.String(), "by hand", "the steps by hand come after the installer's own")
-	st, err := readSetupState(path)
-	require.NoError(t, err)
-	require.Equal(t, config.RoleServer, st.role)
+	require.NoFileExists(t, path)
 
-	r, out, _ = setupTestRun(t, "linux", nil, setupFactsFresh, false, "")
-	require.NoError(t, setupFinish(r, path))
-	require.Contains(t, out.String(), "setup does not do these Server steps yet:")
+	if runtime.GOOS != "windows" {
+		cert, key := setupAddrPair(t, setupAddrDomain)
+		r, out, _ = setupTestRun(t, runtime.GOOS, []string{"SEAMLESS_SETUP=server", "SEAMLESS_SERVER_NAME=" + setupAddrDomain,
+			"SEAMLESS_TLS_CERT=" + cert, "SEAMLESS_TLS_KEY=" + key}, setupFactsFresh, false, "")
+		w := setupAddrArrange(t, r, map[string][]string{setupAddrDomain: {setupAddrLANv4}}, setupAddrIfaces, tailscaleStatus{}, errNoTailscale)
+		require.NoError(t, setupForInstaller(r, path))
+		require.Contains(t, out.String(), "setup        Networked: Server (SEAMLESS_SETUP)")
+		require.NotContains(t, out.String(), "by hand", "the steps by hand come after the installer's own")
+		require.Len(t, w.wrote, 1, "the first half writes the Server's config")
+		st, err := readSetupState(path)
+		require.NoError(t, err)
+		require.Equal(t, config.RoleServer, st.role)
+
+		// --finish: what is left by hand, and the closing, read from the
+		// config the installer's own steps ran with.
+		r, out, _ = setupTestRun(t, runtime.GOOS, nil, setupFactsFresh, false, "")
+		r.loadConfig = func() (config.Config, error) {
+			cfg := config.Defaults()
+			cfg.Addr, cfg.AdvertisedURL, cfg.TLS.CertFile, cfg.TLS.KeyFile = w.wrote[0].Addr, w.wrote[0].ServerURL, cert, key
+			return cfg, nil
+		}
+		require.NoError(t, setupFinish(r, path))
+		require.Contains(t, out.String(), "setup does not do this Server step yet:")
+		require.Contains(t, out.String(), "To connect another computer to this server:")
+		require.Contains(t, out.String(), "Address:                 https://"+setupAddrDomain+":8081")
+	}
 
 	// A refusal writes no state.
 	refused := filepath.Join(dir, "refused.state")
@@ -599,11 +696,14 @@ func TestSetupDirect(t *testing.T) {
 	require.NoError(t, setupDirect(r))
 	require.Contains(t, out.String(), "with no SEAMLESS_* set (SEAMLESS_DATA_DIR is)")
 
-	// At a terminal: the change, handed off at once.
+	// At a terminal: the change, handed off at once -- the address step's
+	// question first, whose end of input names the knobs that answer it.
 	r, out, _ = setupTestRun(t, "linux", nil, setupFactsStandalone, true, "2\n")
-	require.NoError(t, setupDirect(r))
+	err := setupDirect(r)
+	require.ErrorIs(t, err, errSetupRefused)
+	require.ErrorContains(t, err, "SEAMLESS_SERVER_NAME")
 	require.Contains(t, out.String(), "Standalone, becoming the Server")
-	require.Contains(t, out.String(), "network-install/#step-1-widen-the-server")
+	require.Contains(t, out.String(), "Where will the other computers reach this one?")
 }
 
 func TestSetupUsage_EndsWithTheProtocolLine(t *testing.T) {
@@ -612,6 +712,8 @@ func TestSetupUsage_EndsWithTheProtocolLine(t *testing.T) {
 	lines := strings.Split(strings.TrimRight(w.String(), "\n"), "\n")
 	require.Equal(t, setupProtocolLine, lines[len(lines)-1])
 	require.Contains(t, w.String(), "SEAMLESS_SETUP=standalone|server|client")
+	require.Contains(t, w.String(), "SEAMLESS_SERVER_NAME")
+	require.Contains(t, w.String(), "SEAMLESS_TLS_CERT, SEAMLESS_TLS_KEY")
 
 	var win strings.Builder
 	setupUsage(&win, flagSetForSetupUsage(), "windows")
@@ -634,7 +736,8 @@ func TestSetupProtocol_TheInstallersSpeakIt(t *testing.T) {
 	require.Contains(t, string(ps), "$SetupHeader = '"+setupStateHeader+"'\n")
 	require.Contains(t, string(ps), "$line.StartsWith('role='")
 	require.Contains(t, string(ps), "$line.StartsWith('server_url='")
-	for _, knob := range []string{setupKnobKind, setupKnobPairCode, setupKnobImport, setupKnobImportLocks} {
+	for _, knob := range []string{setupKnobKind, setupKnobPairCode, setupKnobImport, setupKnobImportLocks,
+		setupKnobServerName, setupKnobTLSCert, setupKnobTLSKey} {
 		require.Contains(t, string(sh), "${"+knob+":-}", "docs/install looks for %s", knob)
 		// \b: $env:SEAMLESS_IMPORT must not pass on $env:SEAMLESS_IMPORT_LOCKS alone.
 		require.Regexp(t, `\$env:`+knob+`\b`, string(ps), "docs/install.ps1 looks for %s", knob)

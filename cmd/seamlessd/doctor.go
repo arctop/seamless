@@ -508,7 +508,16 @@ func transportChecks(cfg config.Config) []check {
 			clientServerURLCheck(cfg),
 		}
 	}
-	return []check{bindCheck(cfg, bindPaired(context.Background(), cfg.Addr, systemNet)), serverURLCheck(cfg), tlsCheck(cfg)}
+	return transportChecksWith(cfg, doctorTLSEnv{net: systemNet, tailscale: execTailscale{}, goos: runtime.GOOS, stat: os.Stat})
+}
+
+// transportChecksWith is transportChecks on a server install, reading the
+// machine through env: the bind, the advertised URL, the TLS pair, and who
+// else could answer for the daemon's name (serverNameChecks).
+func transportChecksWith(cfg config.Config, env doctorTLSEnv) []check {
+	ctx := context.Background()
+	out := []check{bindCheck(cfg, bindPaired(ctx, cfg.Addr, env.net)), serverURLCheck(cfg), tlsCheck(cfg)}
+	return append(out, serverNameChecks(ctx, cfg, env)...)
 }
 
 // clientServerURLCheck probes the server a client install dials.

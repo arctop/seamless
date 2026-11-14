@@ -46,14 +46,17 @@ type hostNet struct {
 // systemNet is this machine's resolver and interfaces.
 var systemNet = hostNet{lookup: lookupOriginHost, ifaces: hostIfaceAddrs}
 
-// holds reports whether one of this machine's interfaces holds a.
+// holds reports whether one of this machine's interfaces holds a. A zone (a
+// resolver's answer for a link-local address names its interface) is not
+// part of the address an interface lists.
 func (n hostNet) holds(a netip.Addr) bool {
 	all, err := n.ifaces()
 	if err != nil {
 		return true // unknown: judged as the worse case, an address a local process can take
 	}
+	a = a.WithZone("").Unmap()
 	for _, list := range all {
-		if slices.Contains(list, a.Unmap()) {
+		if slices.Contains(list, a) {
 			return true
 		}
 	}
@@ -213,7 +216,7 @@ type heldAddrs struct {
 }
 
 func (h heldAddrs) covers(a netip.Addr) bool {
-	return h.every || slices.Contains(h.addrs, a.Unmap())
+	return h.every || slices.Contains(h.addrs, a.WithZone("").Unmap())
 }
 
 // boundAddrs reads what serve listens on for bind: a wildcard or empty host is
@@ -241,7 +244,7 @@ func boundAddrs(ctx context.Context, bind string, hn hostNet) (heldAddrs, error)
 		}
 		primary = addrs[i]
 	}
-	held := heldAddrs{addrs: []netip.Addr{primary.Unmap()}}
+	held := heldAddrs{addrs: []netip.Addr{primary.WithZone("").Unmap()}}
 	if all, ierr := hn.ifaces(); ierr == nil {
 		held.addrs = append(held.addrs, pairedIPv6(primary, all)...)
 	}

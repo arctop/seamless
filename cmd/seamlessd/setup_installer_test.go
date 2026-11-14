@@ -506,6 +506,10 @@ func TestSetupInstaller_DispatchRule(t *testing.T) {
 		{name: "no terminal, SEAMLESS_IMPORT_LOCKS alone: setup runs, to refuse it", tty: false,
 			env: []string{"SEAMLESS_IMPORT_LOCKS=keep"}, stdin: "/dev/null"},
 		{name: "no terminal, SEAMLESS_PAIR_CODE", tty: false, env: []string{"SEAMLESS_PAIR_CODE=1"}, stdin: "/dev/null"},
+		{name: "no terminal, SEAMLESS_SERVER_NAME alone: setup runs, to refuse it", tty: false,
+			env: []string{"SEAMLESS_SERVER_NAME=a.example"}, stdin: "/dev/null"},
+		{name: "a terminal, SEAMLESS_TLS_CERT and SEAMLESS_TLS_KEY: a knob asks nothing", tty: true,
+			env: []string{"SEAMLESS_TLS_CERT=/c.crt", "SEAMLESS_TLS_KEY=/c.key"}, stdin: "/dev/null"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -592,6 +596,37 @@ func TestSetupInstaller_ImportPathIsTheStartDirectorys(t *testing.T) {
 				got = strings.Replace(got, real, start, 1)
 			}
 			require.Equal(t, want, got, "%s %q", shell, value)
+		}
+	}
+}
+
+// TestSetupInstaller_HealthPollDialsLoopbackForAWildcard runs docs/install's
+// probe_addr in every shell: a wildcard bind is polled on loopback, the one
+// host its Host allowlist always admits, since a named server_url turns the
+// allowlist on and refuses the wildcard's own spelling (421); every other
+// addr is polled as it is.
+func TestSetupInstaller_HealthPollDialsLoopbackForAWildcard(t *testing.T) {
+	setupE2ESupported(t)
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "install"))
+	require.NoError(t, err)
+	fn := regexp.MustCompile(`(?ms)^probe_addr\(\) \{\n.*?^\}\n`).Find(raw)
+	require.NotEmpty(t, fn, "docs/install defines probe_addr")
+	require.Contains(t, string(raw), `health_ok "$(probe_addr "$ADDR")"`, "wait_healthy polls through it")
+	for addr, want := range map[string]string{
+		"0.0.0.0:8081":      "127.0.0.1:8081",
+		"[::]:9443":         "127.0.0.1:9443",
+		":8081":             "127.0.0.1:8081",
+		"127.0.0.1:8081":    "127.0.0.1:8081",
+		"100.64.0.7:8081":   "100.64.0.7:8081",
+		"[fd00:1::9]:8081":  "[fd00:1::9]:8081",
+		"studio.local:8081": "studio.local:8081",
+	} {
+		for _, shell := range setupInstallerShells() {
+			cmd := exec.Command(shell, "-c", "set -eu\n"+string(fn)+`probe_addr "$1"`+"\n", "sh", addr)
+			cmd.Env = []string{"PATH=/usr/bin:/bin"}
+			out, err := cmd.CombinedOutput()
+			require.NoError(t, err, "%s %q: %s", shell, addr, out)
+			require.Equal(t, want, string(out), "%s %q", shell, addr)
 		}
 	}
 }

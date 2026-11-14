@@ -74,6 +74,11 @@
 #                                     the backup's locked projects when no
 #                                     passkey can open them here (without it, it
 #                                     stops and says why)
+#   $env:SEAMLESS_SERVER_NAME         the name the other computers reach a
+#   $env:SEAMLESS_TLS_CERT            server at, and its certificate and key:
+#   $env:SEAMLESS_TLS_KEY             answers for a server's setup, which is
+#                                     never this computer -- Windows is a
+#                                     client -- so setup refuses them, saying why
 #   $env:SEAMLESS_PAIR_CODE           a client's one-time pairing code: an
 #                                     answer `seamlessd setup` does not take
 #                                     yet, so it stops the install before
@@ -644,7 +649,8 @@ function Install-Binaries {
 # SEAMLESS_SERVER_URL and SEAMLESS_MCP_API_KEY too, with the meaning this
 # script has always given them, but they alone never make it run.
 function Test-SetupKnobs {
-    return [bool]($env:SEAMLESS_SETUP -or $env:SEAMLESS_PAIR_CODE -or $env:SEAMLESS_IMPORT -or $env:SEAMLESS_IMPORT_LOCKS)
+    return [bool]($env:SEAMLESS_SETUP -or $env:SEAMLESS_PAIR_CODE -or $env:SEAMLESS_IMPORT -or $env:SEAMLESS_IMPORT_LOCKS -or
+        $env:SEAMLESS_SERVER_NAME -or $env:SEAMLESS_TLS_CERT -or $env:SEAMLESS_TLS_KEY)
 }
 
 # Resolve-ImportPath: SEAMLESS_IMPORT names the backup a first install starts
@@ -738,7 +744,7 @@ function Invoke-SetupFront {
     if (-not $probe.Contains($SetupProtocol)) {
         if ($knobs) {
             if (-not $probe.Trim()) { Die "could not run $fresh to ask seamlessd setup; nothing was installed" }
-            Die "seamless $Version predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_IMPORT and SEAMLESS_IMPORT_LOCKS; unset them, or drop SEAMLESS_VERSION to get the latest"
+            Die "seamless $Version predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_IMPORT, SEAMLESS_IMPORT_LOCKS, SEAMLESS_SERVER_NAME, SEAMLESS_TLS_CERT and SEAMLESS_TLS_KEY; unset them, or drop SEAMLESS_VERSION to get the latest"
         }
         return
     }

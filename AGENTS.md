@@ -465,7 +465,8 @@ any of it.
   concrete IPv4 `addr` on its own interface's IPv6 addresses that reach no
   further (`pairedIPv6` in `cmd/seamlessd/listen_pair.go`: ::1 beside loopback,
   only unique local ones beside a private or tailnet address), and doctor's
-  held set (`boundAddrs`) reads the same function, so the two cannot disagree.
+  held set (`boundAddrs`) reads the same function, as setup's address step does
+  when it picks the bind (`setupBindFor`), so the three cannot disagree.
   Never pair a private address with a global one: that widens a LAN bind to the
   internet.
   The one exception is a Touch ID re-enrollment: a credential whose own key
@@ -1279,7 +1280,8 @@ health check stay theirs.
   no `SEAMLESS_*` set but `SEAMLESS_CONFIG` (`setupRun.asks`). The installers
   apply the same rule (`scripted_run`, `Test-ScriptedRun`) and do not even run
   setup unless a setup knob (`SEAMLESS_SETUP`, `SEAMLESS_PAIR_CODE`,
-  `SEAMLESS_IMPORT`, `SEAMLESS_IMPORT_LOCKS`) is set or that person is there.
+  `SEAMLESS_IMPORT`, `SEAMLESS_IMPORT_LOCKS`, `SEAMLESS_SERVER_NAME`,
+  `SEAMLESS_TLS_CERT`, `SEAMLESS_TLS_KEY`) is set or that person is there.
   Every updater run sets
   `SEAMLESS_VERSION` and `SEAMLESS_INSTALL_DIR`, so no update starts it; never
   add a setup knob to `installerKnobs`. `TestSetupInstaller_UnattendedRunsAreUnchanged`
@@ -1315,6 +1317,22 @@ health check stay theirs.
   what it restored. Its tests inject the config (`setupRun.loadConfig`) and
   never dial (`setupRun.daemonUp`); the installer helper refuses a data dir
   outside the world's home.
+- **The address step writes a first install's config, and no other**
+  (`setup_address.go`). The Server's before step: the name (this computer's
+  MagicDNS name when the tailnet issues it a certificate, via `tailscale cert`;
+  else a domain's or LAN name's own pair, checked as a pair for the name with a
+  key no other account reads), and the bind that holds every address the name
+  resolves to, picked by `boundAddrs` (serve's pairing, doctor's read): one IPv4
+  address of the name with the IPv6 serve pairs beside it, else the wildcard;
+  a name resolving to nothing, loopback, or an address this computer does not
+  hold is refused. `config.EnsureServerConfig` writes it with the bearer key
+  after every before step (`setupWriteServer`), so a stopped import leaves no
+  config to make the retry a re-run, and only when nothing is installed, so
+  never inside `seamlessd update`; every other run prints the lines, and under
+  peer_auth root's steps. Knobs `SEAMLESS_SERVER_NAME`, `SEAMLESS_TLS_CERT`,
+  `SEAMLESS_TLS_KEY` (not `SEAMLESS_TLS_*_FILE`, which the service never sees).
+  Tests fake the resolver, interfaces and tailnet (`setupAddrArrange`): no test
+  runs `tailscale` or resolves a name.
 - **dash.** Debian's and Ubuntu's `/bin/sh` is dash, where a failed
   redirection on a special built-in (`: </dev/tty`) ends the script: probe in
   a subshell (`tty_available`). The installer tests run every scenario under

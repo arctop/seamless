@@ -271,12 +271,18 @@ func TestSetupImport_PlainBackup(t *testing.T) {
 			t.Skip("Windows is never the Server")
 		}
 		dest := filepath.Join(t.TempDir(), "data")
-		r, out := setupImportTestRun(t, []string{"SEAMLESS_SETUP=server", "SEAMLESS_IMPORT=" + backup}, false, "", dest)
+		cert, key := setupAddrPair(t, setupAddrDomain)
+		r, out := setupImportTestRun(t, []string{"SEAMLESS_SETUP=server", "SEAMLESS_IMPORT=" + backup, "SEAMLESS_SERVER_NAME=" + setupAddrDomain,
+			"SEAMLESS_TLS_CERT=" + cert, "SEAMLESS_TLS_KEY=" + key}, false, "", dest)
+		home := r.home
+		w := setupAddrArrange(t, r, map[string][]string{setupAddrDomain: {setupAddrLANv4}}, setupAddrIfaces, tailscaleStatus{}, errNoTailscale)
+		r.home = home
 		st, err := setupImportFirstHalf(t, r)
 		require.NoError(t, err, out.String())
 		require.Equal(t, setupServer, st.kind)
 		require.Contains(t, out.String(), "Networked: Server (SEAMLESS_SETUP)")
 		impRestored(t, dest)
+		require.Len(t, w.wrote, 1, "the Server's config, written after the import")
 	})
 
 	t.Run("a ~ path", func(t *testing.T) {

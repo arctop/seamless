@@ -103,6 +103,9 @@ Checks stop early if config or the database cannot be loaded at all.
 | `bind` | Loopback is OK. Non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication; non-loopback *without* TLS is a warning naming what travels in the clear. |
 | `server_url` | Fetches `/healthz` through the advertised URL. Not answering is **info** (the daemon is often stopped while doctor runs); a `421` is a **fail** naming the Host header it just refused, which means the allowlist and the advertised name disagree. A derived URL says so. |
 | `tls` | Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of `server_url` - the one that fails at the client's handshake with a message that names no file on the server. |
+| `tls.key_file` | Without peer_auth, on a server other computers reach: who can read the TLS key. Your account alone is **info** (the daemon runs as you, so every process of yours can read it and serve the daemon's name on any port; locked projects move it out of their reach); group- or world-readable is a **warn** with the `chmod 600`. Under peer_auth the `peer_auth` rows judge it, as `serve` does. |
+| `server_url.addresses` | Every address the configured `server_url` host resolves to, against what the daemon listens on (bind plus `serve`'s paired IPv6): all held is OK; one this machine holds and the daemon does not is a **warn** (another local process could answer for the name); one this machine does not hold is a **warn**. No row for a derived, loopback or proxied URL, or a host the passkey rows judge. |
+| `tailscale` | **info** when the tailnet issues certificates for the `server_url` host: an account allowed to run `tailscale cert` can serve the name with a valid certificate, so the daemon holding every address of the name is what keeps its pages off the origin. |
 | `database` | Path, schema version, and table count, or that none exists yet (a fresh install: the daemon creates it at its first start). Never creates or migrates a database. |
 | `schema version` | An **info** line pairing what the database has applied with what this binary compiles - `v25 applied / v25 compiled`. A database *ahead* of the binary warns: it was migrated by a newer `seamlessd` (a downgrade, or an update rollback that could not restore the pre-update database). Run that newer release again (`seamlessd update`), or restore a backup taken before it (`seamlessd restore`, or `seamlessd import` into an empty data directory). `serve` logs the same warning at startup, and an archive from such a database would be refused. A database *behind* the binary warns too: a daemon of this version migrates it at its next start, and doctor skips the checks that need the current schema. |
 | `repo map` | Warns when mapped paths belonging to **this** host name directories that no longer exist on disk. A moved repo adopts its project at its next session start; a moved-and-renamed repo needs the printed `map-repo` override, and `unmap-repo --stale` clears the dead entries. Rows belonging to other hosts are counted and reported as not verifiable from here - never stat'd, never treated as missing. |
@@ -401,16 +404,57 @@ installer.
 | `SEAMLESS_PAIR_CODE` | a Client's one-time pairing code. Not built yet: it stops the install and says how to pair with the Server's key instead |
 | `SEAMLESS_IMPORT` | a backup a first Standalone or Server install starts from ([below](#seamlessd_setup_import)) |
 | `SEAMLESS_IMPORT_LOCKS=keep\|remove` | what that import does with the backup's locked projects when no passkey can open them, as `--keep-locks` and `--remove-locks` answer [`seamlessd import`](#seamlessd_import) |
+| `SEAMLESS_SERVER_NAME` | the name the other computers reach the Server at ([below](#seamlessd_setup_address)); with `SEAMLESS_SETUP=server` only |
+| `SEAMLESS_TLS_CERT`, `SEAMLESS_TLS_KEY` | that name's certificate and key, full paths; none for this computer's Tailscale name, whose certificate setup gets from the tailnet |
 
-A refusal stops the install before anything is installed. What each kind needs
-beyond today's install - the Server's address and TLS, locked projects, pairing
-with a code - is not built into setup yet; the install ends by naming each step
-with the guide that does it by hand.
+A refusal stops the install before anything is installed. Locked projects and
+pairing with a code are not built into setup yet: the install ends by naming
+each with the guide that does it by hand. A Server's install ends with what
+each Client needs - its address, its certificate's fingerprint, how to get a
+pairing code, and the one-liners - as `seamlessd devices code` prints them.
 
 `--state FILE` and `--finish` are the installers' hand-off, and
 `seamlessd setup -h` ends with `installer protocol: 1` for them to find: the
 first writes the answer to `FILE`, the second finishes setup's part once the
 installer's own steps are done.
+
+### The Server's address {#seamlessd_setup_address}
+
+A first Server install decides where the other computers reach it, before
+anything is installed, and says each choice in one line:
+
+- **The name.** This computer's Tailscale name (MagicDNS) when Tailscale runs
+  here and the tailnet issues certificates for it: setup gets the certificate
+  with `tailscale cert`, into `~/.config/seamless/tls`. Otherwise a domain of
+  yours with its certificate and key, or a name on your LAN, for which setup
+  prints the `mkcert` and `openssl` commands that make one, as
+  [the network-install guide](/guides/network-install/#step-2-tls) does. The
+  certificate must name the host and be valid, and its key be readable by
+  your account alone (`chmod 600`). A script gives `SEAMLESS_SERVER_NAME`, and
+  `SEAMLESS_TLS_CERT` and `SEAMLESS_TLS_KEY` unless it is this computer's
+  tailnet name; `SEAMLESS_SETUP=server` without a name is refused.
+- **The bind.** Setup resolves the name, A and AAAA, and binds the narrowest
+  address that holds every one: an IPv4 address of the name with the IPv6
+  addresses `serve` listens on beside it (a tailnet name's two), else the
+  wildcard. An address of the name the daemon did not hold is one another
+  local process could answer for the name from. A name that resolves to
+  nothing, to loopback, or to an address this computer does not hold is refused.
+- **The passkey origin** is [the one derived from `server_url`](/guides/peer-auth/#the-passkey-origin).
+- **The config.** On a first install setup writes `addr`, `server_url`,
+  `allowed_hosts` (empty) and `tls` into a new `~/.config/seamless/seamless.yaml`
+  with the bearer key, after its other steps before the install, so an import
+  that stops leaves no config behind. It never edits a config that exists:
+  elsewhere it prints the lines, and the installer's next run restarts the
+  daemon and wires the hooks for https.
+- **With locked projects on**, the daemon's config and TLS pair are its own
+  account's. Setup runs no root step: it prints the commands that put the pair
+  in `/opt/seamless/etc/tls` (`root:_seamless`, the key `0640`), the daemon
+  config's lines and the restart.
+
+When your account can get a certificate for the name itself (`tailscale cert`),
+setup says so: the TLS key is then not what keeps a page of yours off the
+console's origin; the bind holding every address of the name is. `seamlessd
+doctor` reports the same facts (`tls.key_file`, `server_url.addresses`, `tailscale`).
 
 ### Starting from a backup {#seamlessd_setup_import}
 

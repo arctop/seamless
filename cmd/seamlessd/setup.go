@@ -15,14 +15,16 @@ package main
 // setupSteps entries (a run func), and the question tree, the state file and
 // the installers' hand-off stay as they are when one lands. Until then a step
 // says in one line that setup does not do it yet, and how to do it by hand.
-// The import step is built (setup_import.go).
+// The import step is built (setup_import.go), and so are the Server's address
+// step and its closing (setup_address.go).
 //
 // Unattended means unchanged. Setup asks only a person at a terminal who set
 // no SEAMLESS_* variable at all (setupRun.asks); with any knob set, or no
 // terminal, the environment is the whole answer and an absent one is today's
 // install. The installers apply the same rule before they run it: a run with
 // no setup knob (SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_IMPORT,
-// SEAMLESS_IMPORT_LOCKS) that a script drives or that has no terminal never
+// SEAMLESS_IMPORT_LOCKS, SEAMLESS_SERVER_NAME, SEAMLESS_TLS_CERT,
+// SEAMLESS_TLS_KEY) that a script drives or that has no terminal never
 // starts setup at all. Every run the updater makes is one: it always sets
 // SEAMLESS_VERSION and SEAMLESS_INSTALL_DIR, and an unattended one carries no
 // SEAMLESS_* but the installerKnobs, which list no setup knob.
@@ -38,6 +40,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/term"
 
@@ -136,6 +139,12 @@ func setupDescribe(k setupKind, serverURL string, locked bool) string {
 // installers' own client knobs, with the meaning they always had.
 // SEAMLESS_IMPORT_LOCKS answers the import's lock question (keep or remove),
 // as --keep-locks and --remove-locks answer seamlessd import's.
+// SEAMLESS_SERVER_NAME, SEAMLESS_TLS_CERT and SEAMLESS_TLS_KEY answer the
+// Server's address step: the name the other computers dial, and its
+// certificate and key (setup gets both from the tailnet for this computer's
+// Tailscale name). They are not the config's own tls.cert_file and
+// tls.key_file overrides, which this run would read and the service never
+// sees: setup writes the answers into the config the service reads.
 const (
 	setupKnobKind        = "SEAMLESS_SETUP"
 	setupKnobServer      = "SEAMLESS_SERVER_URL"
@@ -143,6 +152,9 @@ const (
 	setupKnobPairCode    = "SEAMLESS_PAIR_CODE"
 	setupKnobImport      = "SEAMLESS_IMPORT"
 	setupKnobImportLocks = "SEAMLESS_IMPORT_LOCKS"
+	setupKnobServerName  = "SEAMLESS_SERVER_NAME"
+	setupKnobTLSCert     = "SEAMLESS_TLS_CERT"
+	setupKnobTLSKey      = "SEAMLESS_TLS_KEY"
 )
 
 // setupDocs is the docs site every by-hand pointer links into.
@@ -187,6 +199,11 @@ type setupState struct {
 	answer    setupAnswer
 	// change is the setupChange chosen on a re-run, "" for none.
 	change string
+	// server is the config a first install's address step decided on,
+	// written once every step of setup's first half has run
+	// (setupWriteServer); nil when there is none to write. The state file
+	// never carries it: it is written before the installer reads the state.
+	server *config.ServerAddress
 }
 
 // setupStep is one step of a kind's setup. Each is a task of its own; run is
@@ -219,9 +236,10 @@ type setupStep struct {
 // clients, the Server's closing (what a Client needs); pairing, a Client's
 // one-time code and its relay.
 var setupSteps = map[string]setupStep{
-	"address": {id: "address", label: "address",
+	"address": {id: "address", label: "address", knob: setupKnobServerName,
 		what:   "the address the other computers reach this one at, and its TLS certificate",
-		manual: setupDocs + "guides/network-install/#step-1-widen-the-server"},
+		manual: setupDocs + "guides/network-install/#step-1-widen-the-server",
+		run:    setupAddressStep},
 	"import": {id: "import", label: "import", knob: setupKnobImport, fresh: true,
 		what: "start from a backup instead of empty",
 		run:  setupImportStep},
@@ -229,8 +247,9 @@ var setupSteps = map[string]setupStep{
 		what:   "locked projects (peer_auth): a project only the agents you approve can open",
 		manual: setupDocs + "guides/peer-auth/#move-an-existing-install-over"},
 	"clients": {id: "clients", label: "clients", after: true,
-		what:   "what each {client} needs: this computer's address and key",
-		manual: "seamlessd client-config prints it, once the address is set up (" + setupDocs + "guides/network-install/#step-3-pair-a-client)"},
+		what:   "what each {client} needs: this computer's address, its certificate's fingerprint and a pairing code",
+		manual: "seamlessd devices code prints it, with a code (" + setupDocs + "guides/network-install/#step-3-pair-a-client)",
+		run:    setupClientsStep},
 	"pairing": {id: "pairing", label: "pairing", knob: setupKnobPairCode,
 		what:   "pairing with a one-time code instead of the {server}'s own key",
 		manual: "this {client} uses its {server}'s key, which seamlessd client-config prints on the {server}"},
@@ -342,6 +361,18 @@ type setupRun struct {
 	loadConfig func() (config.Config, error)
 	daemonUp   func(config.Config) bool
 	host       string
+
+	// The address step's view of the machine (setup_address.go): network
+	// resolves a name and reads the interfaces, tailscale asks the tailnet,
+	// now is the clock a certificate is judged by, daemonAccount names the
+	// account a peer_auth daemon runs as, and ensureServer writes a first
+	// install's config (config.EnsureServerConfig), returning the path it
+	// wrote ("" when the same config was already there).
+	network       hostNet
+	tailscale     tailscaleCLI
+	now           func() time.Time
+	daemonAccount func() string
+	ensureServer  func(config.ServerAddress) (string, error)
 }
 
 // realSetupRun is a run on this process's terminal and machine.
@@ -365,6 +396,15 @@ func realSetupRun() *setupRun {
 		loadConfig: config.Load,
 		daemonUp:   func(cfg config.Config) bool { return serverReachable(urlHostPort(cfg.ServerURL())) },
 		host:       config.Hostname(),
+
+		network:       systemNet,
+		tailscale:     execTailscale{},
+		now:           time.Now,
+		daemonAccount: setupDaemonAccount,
+		ensureServer: func(a config.ServerAddress) (string, error) {
+			_, wrote, err := config.EnsureServerConfig(a)
+			return wrote, err
+		},
 	}
 	r.secret = func() (string, error) {
 		raw, err := term.ReadPassword(int(os.Stdin.Fd()))
@@ -422,6 +462,16 @@ func setupRefusal(format string, args ...any) error {
 // the questions. It writes nothing but the client config a Client answers at
 // the terminal, which is install-hooks --server-url's own first step.
 func setupDecide(r *setupRun) (setupState, error) {
+	st, err := setupDecideKind(r)
+	if err != nil {
+		return st, err
+	}
+	return st, setupAddressKnobs(r, st)
+}
+
+// setupDecideKind is setupDecide up to the address knobs, which need the
+// steps the decision leaves.
+func setupDecideKind(r *setupRun) (setupState, error) {
 	in := setupInstalledOf(r.facts)
 	st := setupState{installed: in.kind, locked: in.locked, role: config.RoleServer}
 	want, err := setupKindKnob(r)
@@ -643,6 +693,13 @@ func setupOption(w io.Writer, n int, name, line string) {
 // def too, or stops the run when there is none, so a closed terminal cannot
 // loop forever.
 func setupChoose(r *setupRun, prompt string, def int, words [][]string) (int, error) {
+	return setupChooseOr(r, prompt, def, words,
+		setupRefusal("no answer: set %s=%s for a run without questions", setupKnobKind, setupEnvValues(r.goos, "|")))
+}
+
+// setupChooseOr is setupChoose with the refusal end of input makes when the
+// question has no default: the knobs that answer it.
+func setupChooseOr(r *setupRun, prompt string, def int, words [][]string, noAnswer error) (int, error) {
 	for {
 		fmt.Fprint(r.out, prompt)
 		line, err := r.in.ReadString('\n')
@@ -657,7 +714,7 @@ func setupChoose(r *setupRun, prompt string, def int, words [][]string) (int, er
 			if def > 0 {
 				return def, nil
 			}
-			return 0, setupRefusal("no answer: set %s=%s for a run without questions", setupKnobKind, setupEnvValues(r.goos, "|"))
+			return 0, noAnswer
 		}
 		fmt.Fprintf(r.out, "  please enter a number from 1 to %d\n", len(words))
 	}
@@ -904,6 +961,8 @@ will be used, and a script answers it in the environment:
 		{setupKnobServer + ", " + setupKnobKey, "a {client}'s {server}, and its key"},
 		{setupKnobImport, "a backup a first install starts from, instead of empty"},
 		{setupKnobImportLocks + "=keep|remove", "what that import does with the backup's locked projects"},
+		{setupKnobServerName, "the name the other computers reach the {server} at"},
+		{setupKnobTLSCert + ", " + setupKnobTLSKey, "that name's certificate and key (none for this computer's Tailscale name)"},
 		{setupKnobPairCode, "not built into setup yet"},
 	} {
 		fmt.Fprintf(w, "  %-42s %s\n", row[0], setupText(row[1]))
@@ -923,6 +982,9 @@ func setupForInstaller(r *setupRun, path string) error {
 	}
 	setupSummary(r, st)
 	if err := setupHandOff(r, &st, setupStepsLeft(st, r.goos), false); err != nil {
+		return err
+	}
+	if err := setupWriteServer(r, &st); err != nil {
 		return err
 	}
 	return writeSetupState(path, st)
@@ -953,6 +1015,14 @@ func setupDirect(r *setupRun) error {
 		if err := setupImportKnobs(r, in, want); err != nil {
 			return err
 		}
+		// The address knobs, judged as the installer's run would judge them.
+		fresh := setupState{kind: setupStandalone, role: config.RoleServer, answer: setupDefault}
+		if want != setupNone {
+			fresh.kind, fresh.answer = want, setupFromEnv
+		}
+		if err := setupAddressKnobs(r, fresh); err != nil {
+			return err
+		}
 		setupRow(r.out, "setup", "nothing is set up on this computer yet")
 		fmt.Fprintf(r.out, "%s%s\n%s%s\n", setupRowCont, dim("the installer sets it up, and asks how you will use Seamless:"),
 			setupRowCont, green(setupInstallCommand(r.goos)))
@@ -974,6 +1044,9 @@ func setupDirect(r *setupRun) error {
 	}
 	steps := setupStepsLeft(st, r.goos)
 	if err := setupHandOff(r, &st, steps, false); err != nil {
+		return err
+	}
+	if err := setupWriteServer(r, &st); err != nil {
 		return err
 	}
 	return setupHandOff(r, &st, steps, true)

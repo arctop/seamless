@@ -66,6 +66,13 @@
 #   SEAMLESS_IMPORT_LOCKS       keep|remove: what that import does with the
 #                               backup's locked projects when no passkey can
 #                               open them here (without it, it stops and says why)
+#   SEAMLESS_SERVER_NAME        the name the other computers reach this one
+#                               at, when setup makes it the server: setup
+#                               writes its addr, server_url and tls before
+#                               anything is installed
+#   SEAMLESS_TLS_CERT           that name's certificate and key (full paths);
+#   SEAMLESS_TLS_KEY            none for this computer's Tailscale name, whose
+#                               certificate setup gets from the tailnet
 #   SEAMLESS_PAIR_CODE          a client's one-time pairing code: an answer
 #                               `seamlessd setup` does not take yet, so it stops
 #                               the install before anything is installed
@@ -713,7 +720,7 @@ unpack() {
 # SEAMLESS_SERVER_URL and SEAMLESS_MCP_API_KEY too, with the meaning this
 # script has always given them, but they alone never make it run.
 setup_knobs() {
-	[ -n "${SEAMLESS_SETUP:-}${SEAMLESS_PAIR_CODE:-}${SEAMLESS_IMPORT:-}${SEAMLESS_IMPORT_LOCKS:-}" ]
+	[ -n "${SEAMLESS_SETUP:-}${SEAMLESS_PAIR_CODE:-}${SEAMLESS_IMPORT:-}${SEAMLESS_IMPORT_LOCKS:-}${SEAMLESS_SERVER_NAME:-}${SEAMLESS_TLS_CERT:-}${SEAMLESS_TLS_KEY:-}" ]
 }
 
 # import_path: SEAMLESS_IMPORT names the backup a first install starts from,
@@ -775,7 +782,7 @@ run_setup() {
 	if ! printf '%s\n' "$probe" | grep -qxF "$SETUP_PROTOCOL"; then
 		if setup_knobs; then
 			[ -n "$probe" ] || die "could not run $TMP/seamlessd to ask seamlessd setup; nothing was installed"
-			die "seamless $VERSION predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_IMPORT and SEAMLESS_IMPORT_LOCKS; unset them, or drop SEAMLESS_VERSION to get the latest"
+			die "seamless $VERSION predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_IMPORT, SEAMLESS_IMPORT_LOCKS, SEAMLESS_SERVER_NAME, SEAMLESS_TLS_CERT and SEAMLESS_TLS_KEY; unset them, or drop SEAMLESS_VERSION to get the latest"
 		fi
 		return 0
 	fi
@@ -1136,6 +1143,18 @@ EOF
 	step service "seamless.service (systemd --user)"
 }
 
+# probe_addr <addr>: where the health poll dials a daemon bound to <addr>. A
+# wildcard bind answers on loopback too, and loopback is the one host its
+# Host allowlist always admits: once server_url names the daemon, the
+# wildcard's own spelling is refused (421), and polling it would fail an
+# install that worked.
+probe_addr() {
+	case $1 in
+	0.0.0.0:* | '[::]:'* | :*) printf '127.0.0.1:%s' "${1##*:}" ;;
+	*) printf '%s' "$1" ;;
+	esac
+}
+
 # launchd and systemd both report success as soon as they have started the
 # process, but the daemon binds its listener ~100ms later, and a launchd job
 # that had to fall back to kickstart sits out a 10s throttle first. Poll for
@@ -1146,7 +1165,7 @@ wait_healthy() {
 	seen=
 	i=0
 	while [ "$i" -lt 150 ]; do
-		if health_ok "$ADDR"; then
+		if health_ok "$(probe_addr "$ADDR")"; then
 			served=$(served_version)
 			if [ "$served" = "$VERSION" ]; then
 				step healthz "ok -- $HEALTH_URL"

@@ -48,11 +48,10 @@ func EnsureAPIKey(cfg Config) (Config, string, error) {
 		return cfg, "", fmt.Errorf("config.EnsureAPIKey: %w", err)
 	}
 
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		return cfg, "", fmt.Errorf("config.EnsureAPIKey: generate key: %w", err)
+	key, err := generateAPIKey()
+	if err != nil {
+		return cfg, "", fmt.Errorf("config.EnsureAPIKey: %w", err)
 	}
-	key := hex.EncodeToString(buf)
 
 	// O_EXCL: if another process bootstrapped between our Load and now, its
 	// file wins -- load it instead of clobbering the key agents already hold.
@@ -89,6 +88,15 @@ func EnsureAPIKey(cfg Config) (Config, string, error) {
 	cfg.MCP.APIKey = key
 	cfg.sourcePath = path
 	return cfg, path, nil
+}
+
+// generateAPIKey is a new bearer key: 32 random bytes, hex.
+func generateAPIKey() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate key: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 // EnsureClientConfig writes the config file that makes THIS machine a client of

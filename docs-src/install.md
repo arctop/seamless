@@ -46,11 +46,14 @@ itself. No Go toolchain is involved. In order, it:
    how this computer will be used, before anything is installed:
    **Standalone** (everything on this computer, the default) or **Networked** -
    the **Server**, which the other computers connect to, or a **Client** of
-   one. A first Standalone or Server install then starts fresh or
+   one. A first Server install sets up
+   [its address](/reference/cli-seamlessd/#seamlessd_setup_address) - the name
+   the other computers reach it at, its certificate, and a bind holding every
+   address of the name. A first Standalone or Server install then starts fresh or
    [from a backup](/reference/cli-seamlessd/#seamlessd_setup_import), which
    setup restores into the still-empty data directory. Only a person at a
    terminal who set no `SEAMLESS_*` variable is asked; a script answers with
-   `SEAMLESS_SETUP` and `SEAMLESS_IMPORT`, and without them installs exactly as
+   `SEAMLESS_SETUP`, `SEAMLESS_SERVER_NAME` and `SEAMLESS_IMPORT`, and without them installs exactly as
    before. A re-run offers only the changes setup can make;
 3. installs `seamlessd` and `seam` into `~/.local/bin`;
 4. runs `seamlessd install-hooks`, which generates the bearer key into
@@ -124,6 +127,8 @@ script](https://thereisnospoon.org/install) with no dependencies to audit.
 | `SEAMLESS_SETUP=standalone\|server\|client` | answer [`seamlessd setup`](/reference/cli-seamlessd/#seamlessd_setup)'s question - how this computer will be used - without being asked; `client` needs `SEAMLESS_SERVER_URL` and `SEAMLESS_MCP_API_KEY` too, and Windows takes `standalone` or `client` |
 | `SEAMLESS_IMPORT=~/seamless-old-mac.tar.gz` | start a first install from this backup - a `seamlessd export` archive or one from Settings > Backups - restored into the empty data directory before anything is installed, as `seamlessd import` restores one ([details](/reference/cli-seamlessd/#seamlessd_setup_import)). A relative path is the directory you ran the installer in. Refused on a computer already set up (`seamlessd restore` is for that) and on a client, whose data is its server's |
 | `SEAMLESS_IMPORT_LOCKS=keep\|remove` | what that import does with the backup's [locked projects](/guides/data/#locked-projects) when no passkey can open them here, as `--keep-locks` and `--remove-locks` answer `seamlessd import`; without it such a backup stops the install with nothing changed |
+| `SEAMLESS_SERVER_NAME` | the name the other computers reach a Server at ([setup's address step](/reference/cli-seamlessd/#seamlessd_setup_address)); with `SEAMLESS_SETUP=server` only |
+| `SEAMLESS_TLS_CERT`, `SEAMLESS_TLS_KEY` | that name's certificate and key, full paths; none for this computer's Tailscale name |
 | `SEAMLESS_PAIR_CODE` | a client's one-time pairing code: setup does not take it yet, so it stops the install before anything is installed and says how to pair with the server's key instead |
 | `SEAMLESS_NO_HOOKS=1` | skip agent hooks, MCP registration, and skills, and the client detection that would choose them |
 | `SEAMLESS_NO_ONBOARD_SKILL=1` | skip the selected client(s)' one-shot onboarding skill |

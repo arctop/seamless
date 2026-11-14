@@ -12,10 +12,12 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -29,6 +31,9 @@ import (
 // tests is not one of the world's; and it dials no daemon, since one listening
 // on the machine running the tests is not the world's either. Its import loads
 // the config as seamlessd import does, which in the world resolves under $HOME.
+// Its address step asks no tailnet and reads no pin, and resolves only the
+// names SETUP_E2E_HOSTS lists, on the interfaces SETUP_E2E_IFACES lists
+// (setupE2ENet).
 func TestSetupHelperSeamlessd(t *testing.T) {
 	if os.Getenv("SETUP_E2E_HELPER_RUN") != "1" {
 		t.Skip("the stand-in seamlessd setup of the installer tests; not a test of its own")
@@ -42,6 +47,9 @@ func TestSetupHelperSeamlessd(t *testing.T) {
 		r := realSetupRun()
 		r.facts = setupFactsOf(setupHomeOnly(realSetupHost()))
 		r.daemonUp = func(config.Config) bool { return false }
+		r.tailscale = setupAddrTailnet{err: errNoTailscale}
+		r.daemonAccount = func() string { return "_seamless" }
+		r.network = setupE2ENet(os.Getenv("SETUP_E2E_HOSTS"), os.Getenv("SETUP_E2E_IFACES"))
 		r.loadConfig = func() (config.Config, error) {
 			cfg, err := config.Load()
 			if err == nil && (r.home == "" || !strings.HasPrefix(cfg.DataDir, r.home+string(filepath.Separator))) {
@@ -61,6 +69,28 @@ func TestSetupHelperSeamlessd(t *testing.T) {
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+// setupE2ENet is the world's network: hosts is "name=addr,addr;name=addr" and
+// ifaces "addr,addr;addr", one interface each; every other name fails.
+func setupE2ENet(hosts, ifaces string) hostNet {
+	table := map[string][]string{}
+	for entry := range strings.SplitSeq(hosts, ";") {
+		if name, list, ok := strings.Cut(entry, "="); ok {
+			table[name] = strings.Split(list, ",")
+		}
+	}
+	var all [][]netip.Addr
+	for entry := range strings.SplitSeq(ifaces, ";") {
+		var list []netip.Addr
+		for a := range strings.SplitSeq(entry, ",") {
+			if ip, err := netip.ParseAddr(a); err == nil {
+				list = append(list, ip)
+			}
+		}
+		all = append(all, list)
+	}
+	return hostNet{lookup: fakeLookup(table), ifaces: func() ([][]netip.Addr, error) { return all, nil }}
 }
 
 // setupHomeOnly narrows h to its home: a path outside it reads as absent.
@@ -83,17 +113,40 @@ func TestSetupInstaller_RealSetup(t *testing.T) {
 		installer := filepath.Join("..", "..", "docs", "install")
 		scripted := []string{"SETUP_E2E_SETUP=real", "SEAMLESS_VERSION=" + setupE2EVersion, "SEAMLESS_CLIENT=claude", "SEAMLESS_NO_SERVICE=1"}
 
-		t.Run("SEAMLESS_SETUP=server: the install, then what is by hand", func(t *testing.T) {
+		t.Run("SEAMLESS_SETUP=server alone: the address it needs stops the install", func(t *testing.T) {
 			w := newSetupInstallerWorld(t, shell, installer)
 			out, err := w.run(t, append(scripted, "SEAMLESS_SETUP=server")...)
-			require.NoError(t, err, out)
+			require.Error(t, err, out)
 			require.Contains(t, out, "Networked: Server (SEAMLESS_SETUP)")
-			require.Contains(t, out, "setup does not do these Server steps yet:")
-			require.Contains(t, out, "guides/network-install/#step-1-widen-the-server")
+			require.Contains(t, out, "SEAMLESS_SETUP=server needs the address the other computers reach this one at: set SEAMLESS_SERVER_NAME")
+			require.Contains(t, out, "seamlessd setup stopped the install; nothing was installed")
+			require.NoFileExists(t, filepath.Join(w.installDir, "seamlessd"))
+			require.NoFileExists(t, filepath.Join(w.home, ".config", "seamless", "seamless.yaml"))
+		})
+
+		t.Run("SEAMLESS_SETUP=server with its name and certificate: the config, the install, then the closing", func(t *testing.T) {
+			w := newSetupInstallerWorld(t, shell, installer)
+			cert, key := filepath.Join(w.home, "certs", "server.crt"), filepath.Join(w.home, "certs", "server.key")
+			setupAddrWritePair(t, cert, key, time.Now().Add(90*24*time.Hour), setupAddrDomain)
+			out, err := w.run(t, append(scripted, "SEAMLESS_SETUP=server", "SEAMLESS_SERVER_NAME="+setupAddrDomain,
+				"SEAMLESS_TLS_CERT="+cert, "SEAMLESS_TLS_KEY="+key,
+				"SETUP_E2E_HOSTS="+setupAddrDomain+"="+setupAddrLANv4, "SETUP_E2E_IFACES=127.0.0.1,::1;"+setupAddrLANv4)...)
+			require.NoError(t, err, out)
+			cfg, err := config.LoadFrom(filepath.Join(w.home, ".config", "seamless", "seamless.yaml"))
+			require.NoError(t, err, out)
+			require.Equal(t, setupAddrLANv4+":8081", cfg.Addr)
+			require.Equal(t, "https://"+setupAddrDomain+":8081", cfg.ServerURL())
+			require.Equal(t, cert, cfg.TLS.CertFile)
+			require.Len(t, cfg.MCP.APIKey, 64, "the first config carries the key install-hooks would have generated")
+			require.Contains(t, out, "config       wrote addr, server_url, allowed_hosts and tls")
 			require.Contains(t, w.calls(t), w.hooksCall("claude"))
-			require.FileExists(t, filepath.Join(w.installDir, "seamlessd"))
-			require.Less(t, strings.Index(out, "Networked: Server"), strings.Index(out, "installed "), "setup answers before anything is installed")
-			require.Greater(t, strings.Index(out, "by hand"), strings.Index(out, "skipped (SEAMLESS_NO_SERVICE)"), "the steps by hand close the install")
+			require.Less(t, strings.Index(out, "config       wrote"), strings.Index(out, "installed "), "the config is there before anything is installed")
+			fp, err := certFingerprintFile(cert)
+			require.NoError(t, err)
+			require.Contains(t, out, "Certificate fingerprint: "+fp)
+			require.Greater(t, strings.Index(out, "To connect another computer"), strings.Index(out, "skipped (SEAMLESS_NO_SERVICE)"),
+				"the closing ends the install")
+			require.Contains(t, out, "setup does not do this Server step yet:")
 		})
 
 		t.Run("SEAMLESS_SETUP=client with the existing client knobs", func(t *testing.T) {
@@ -129,14 +182,22 @@ func TestSetupInstaller_RealSetup(t *testing.T) {
 			})
 		}
 
-		t.Run("a re-run with SEAMLESS_SETUP=server makes the Standalone the Server", func(t *testing.T) {
+		t.Run("a re-run with SEAMLESS_SETUP=server makes the Standalone the Server, its config left as it is", func(t *testing.T) {
 			w := newSetupInstallerWorld(t, shell, installer)
 			w.config(t, "mcp:\n  api_key: \"k\"\n")
-			out, err := w.run(t, append(scripted, "SEAMLESS_SETUP=server")...)
+			cert, key := filepath.Join(w.home, "certs", "server.crt"), filepath.Join(w.home, "certs", "server.key")
+			setupAddrWritePair(t, cert, key, time.Now().Add(90*24*time.Hour), setupAddrDomain)
+			out, err := w.run(t, append(scripted, "SEAMLESS_SETUP=server", "SEAMLESS_SERVER_NAME="+setupAddrDomain,
+				"SEAMLESS_TLS_CERT="+cert, "SEAMLESS_TLS_KEY="+key,
+				"SETUP_E2E_HOSTS="+setupAddrDomain+"="+setupAddrLANv4, "SETUP_E2E_IFACES=127.0.0.1,::1;"+setupAddrLANv4)...)
 			require.NoError(t, err, out)
 			require.Contains(t, out, "Standalone, becoming the Server")
-			require.Contains(t, out, "guides/network-install/#step-1-widen-the-server")
+			require.Contains(t, out, "setup does not edit")
+			require.Contains(t, out, `addr: "`+setupAddrLANv4+`:8081"`)
 			require.NotContains(t, out, "seamlessd restore", "a re-run keeps its data: no import")
+			raw, err := os.ReadFile(filepath.Join(w.home, ".config", "seamless", "seamless.yaml"))
+			require.NoError(t, err)
+			require.Equal(t, "mcp:\n  api_key: \"k\"\n", string(raw), "the owner's config is never edited")
 		})
 
 		t.Run("a Client's config refuses SEAMLESS_SETUP=standalone", func(t *testing.T) {
