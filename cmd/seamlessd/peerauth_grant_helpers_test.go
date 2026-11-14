@@ -111,9 +111,9 @@ var (
 // shell zsh, the multiplexer tmux. Anything else the kernel no longer names.
 func gmPrograms(t access.ProcessToken) string {
 	switch t {
-	case gmAgent, gmAgent2, gmSealAgent, gmFinAgent:
+	case gmAgent, gmAgent2, gmSealAgent, gmFinAgent, fmAgent:
 		return gmClaude
-	case gmBridge, gmChild, gmBridge2, gmSealBridge, gmFinBridge, gmPane, gmSibling, gmOrphan:
+	case gmBridge, gmChild, gmBridge2, gmSealBridge, gmFinBridge, gmPane, gmSibling, gmOrphan, fmBridge, fmHooker:
 		return gmSeam
 	case gmSibShell:
 		return "/bin/zsh"
@@ -178,10 +178,12 @@ type gmRig struct {
 
 // newGMRig builds the daemon. peer is peer_auth (the owner, and gmFin
 // locked); requests is isolation.requests. Everything else follows main.go's
-// own decisions: the approval service exists only under peer_auth while it
-// locks a project or offers grants, the grants only with requests, the
-// access_request tool only while a project is locked, the socket edge walks
-// the owner's chain for grants only with requests.
+// own decisions: the approval service exists whenever peer_auth is on, the
+// grants only with requests, the access_request tool while a project is
+// locked or -- the advisory tier's explicit ask -- while requests are on
+// without peer_auth (mcp.OffersAccessRequest), the socket edge walks the
+// owner's chain for grants only with requests, and plan capture is on (the
+// config's default) with the plans directory inside the rig.
 func newGMRig(t *testing.T, peer, requests bool) *gmRig {
 	t.Helper()
 	ctx := context.Background()
@@ -230,8 +232,8 @@ func newGMRig(t *testing.T, peer, requests bool) *gmRig {
 	screen := screening.New(screening.Config{DB: db, Files: mgr, Events: r.rec, Gardener: garden,
 		Enabled: func(context.Context) bool { return false }})
 
-	if peer && (r.policy.HasLocked() || requests) {
-		r.svc = gmApprovals(t, db, r.rec, r.clock)
+	if peer {
+		r.svc = gmApprovals(t, db, r.rec, r.clock, cfg.PeerAuth.ForceLocked)
 	}
 	if requests {
 		r.grants = approval.NewGrants(approval.GrantsConfig{DB: db, Approvals: r.svc, Events: r.rec,
@@ -266,12 +268,13 @@ func newGMRig(t *testing.T, peer, requests bool) *gmRig {
 		DB: db, Files: mgr, Retrieve: ret, Events: r.rec, Gardener: garden, Screening: screen,
 		APIKey: gmKey, LocalHost: gmHost, Features: feats, Now: r.clock.Now,
 		Approvals: mcpApprovals, Grants: mcpGrants,
-		OfferAccessRequest: peer && r.policy.HasLocked(),
+		OfferAccessRequest: mcp.OffersAccessRequest(peer && r.policy.HasLocked(), peer, requests),
 	})
 	a2aSrv, err := a2a.New(a2a.Config{Retrieve: ret, Events: r.rec, APIKey: gmKey, Version: "test", Endpoint: "http://127.0.0.1:8081/api/a2a"})
 	require.NoError(t, err)
 	hooksH := hooks.NewHandler(hooks.Config{
 		DB: db, Retrieve: ret, Events: r.rec, Files: mgr, APIKey: gmKey, LocalHost: gmHost,
+		PlanCapture: cfg.PlanCapture, PlansDir: r.plansDir(),
 		Features: feats, Screening: screen, RevokeSessionLeases: revoke, Approvals: hookApprovals, ReadGrants: requests, Now: r.clock.Now,
 	})
 	consoleDB, consoleEvents := db, r.rec
@@ -306,15 +309,16 @@ func newGMRig(t *testing.T, peer, requests bool) *gmRig {
 }
 
 // gmApprovals is the matrix's approval service: newApprovals' wiring (a
-// passkey relying party, none enrolled), plus the injected kernel naming
-// (Programs) and the shared clock.
-func gmApprovals(t *testing.T, db *sql.DB, rec *events.Recorder, clock *gmClock) *approval.Service {
+// passkey relying party, none enrolled, and the config's force locks, which
+// a move's or a grant's approval reads to carry the lease), plus the injected
+// kernel naming (Programs) and the shared clock.
+func gmApprovals(t *testing.T, db *sql.DB, rec *events.Recorder, clock *gmClock, forceLocked []string) *approval.Service {
 	t.Helper()
 	v, err := passkey.New(passkey.Config{RPID: "localhost", Origins: []string{"http://localhost:8081"}})
 	require.NoError(t, err)
 	return approval.New(approval.Config{DB: db, Passkeys: v, Origins: []string{"http://localhost:8081"},
 		UserName: "owner", UserDisplayName: "Seamless owner", Events: rec, Host: gmHost, LeaseCap: 8 * time.Hour,
-		Programs: gmPrograms, Now: clock.Now, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+		ForceLocked: forceLocked, Programs: gmPrograms, Now: clock.Now, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 }
 
 // at is the rig as seen from subtest t: its helpers fail t, never the parent.

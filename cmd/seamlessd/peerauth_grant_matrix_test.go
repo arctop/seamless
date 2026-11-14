@@ -23,6 +23,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -32,11 +33,13 @@ import (
 	"time"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
+	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
+	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/mcp"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -761,6 +764,72 @@ func TestPeerAuthMatrix_Grants(t *testing.T) {
 		r.unchanged(sealed, "the end")
 		r.unchanged(fin, "the end")
 	})
+
+	// Receipts (plan fenced-sessions P8, owner decision D5): another agent's
+	// tree claims two steps in its open home, the owner moves it into the
+	// confidential project, and it closes one step with a receipt -- the
+	// status and one reference to an item in its new home, nothing else --
+	// written as the session that claimed it. A receipt carrying text is
+	// refused with the rule; nothing else it writes reaches the home it left;
+	// and a process outside its tree that forges its header sends none.
+	t.Run("a moved tree closes a step it claimed before moving with a receipt, and nothing else", func(t *testing.T) {
+		r := r.at(t)
+		step := gmOK(t, other, "tasks_add", map[string]any{"title": "build the export", "body": "export steps"})["id"].(string)
+		twin := gmOK(t, other, "tasks_add", map[string]any{"title": "build the import"})["id"].(string)
+		for _, id := range []string{step, twin} {
+			gmOK(t, other, "tasks_claim", map[string]any{"id": id})
+		}
+		claimed, err := store.TaskByID(r.ctx, r.db, step)
+		require.NoError(t, err)
+		require.Equal(t, gmOpen, claimed.ProjectSlug)
+		left := claimed.ClaimedBy
+		require.NotEmpty(t, left)
+
+		items, isErr := gmCall(t, other, "session_start", map[string]any{"project": gmConf})
+		require.True(t, isErr, "%v", items)
+		move := gmShort.FindString(items[0])
+		require.Contains(t, items[0], "\nRemedy: move request "+move+" is waiting")
+		f := r.gmFacts(r.tcp.URL, gmKey, move)
+		var out bytes.Buffer
+		require.NoError(t, approveWith(r.ctx, r.svc, r.grants, &out, []string{move, "--for", approval.For1h, "--digest", f.Digest}))
+		require.Contains(t, out.String(), "Approved "+move+": ")
+
+		// A forged header outside the tree is no conversation: it sends none.
+		forged := r.dial(r.socket(gmSibling, gmSibShell).URL, "", gmAgent2)
+		items, isErr = gmCall(t, forged, "tasks_update", map[string]any{"id": step, "status": "done"})
+		require.True(t, isErr, "a forged header closes nothing: %v", items)
+		// Text is refused with the rule.
+		items, isErr = gmCall(t, other, "tasks_update", map[string]any{"id": twin, "status": "done", "title": "imported"})
+		require.True(t, isErr, "%v", items)
+		require.Contains(t, items[0], "a receipt carries no text: it sets the status alone, with at most one reference to "+
+			"an item in the conversation's home, "+gmConf+", so title is refused")
+		// The receipt: the status and one reference into the new home.
+		ref := gmConf + ":" + conf.noteID
+		got := gmOK(t, other, "tasks_update", map[string]any{"id": step, "status": "done", "reference": ref})
+		require.Equal(t, true, got["receipt"], "%v", got)
+		require.Equal(t, ref, got["reference"])
+		gmNoSecretsBut(t, mustJSON(t, got), "the receipt's answer")
+		closed, err := store.TaskByID(r.ctx, r.db, step)
+		require.NoError(t, err)
+		require.Equal(t, core.TaskDone, closed.Status)
+		require.Empty(t, closed.ClaimedBy, "closing the step releases the claim")
+		require.Equal(t, "build the export", closed.Title)
+		require.Equal(t, "export steps", closed.Body, "a receipt carries nothing but the status")
+		require.Equal(t, gmOpen, closed.ProjectSlug)
+		require.Equal(t, 1, r.count(`SELECT COUNT(*) FROM events WHERE kind = 'task.transition' AND item_id = ?
+			AND session_id = ? AND project_slug = ? AND json_extract(payload, '$.receipt') = 1
+			AND json_extract(payload, '$.reference') = ? AND json_extract(payload, '$.to') = 'done'`, step, left, gmOpen, ref),
+			"the step's history records the receipt and its reference, as the session that claimed it")
+		twinNow, err := store.TaskByID(r.ctx, r.db, twin)
+		require.NoError(t, err)
+		require.Equal(t, core.TaskInProgress, twinNow.Status, "the refused receipt changed nothing")
+		require.Equal(t, left, twinNow.ClaimedBy)
+		// Anything else into the home it left is refused by the clearance rule.
+		items, isErr = gmCall(t, other, "tasks_add", map[string]any{"project": gmOpen, "title": "probe after the move"})
+		require.True(t, isErr, "%v", items)
+		require.Equal(t, "tasks_add: "+gmHolds("agent", gmConf, gmConf, "project "+gmOpen), items[0])
+		r.noLanded(gmOpen, "after the move", "probe-after-the-move", "probe after the move")
+	})
 }
 
 func TestPeerAuthMatrix_Advisory(t *testing.T) {
@@ -775,7 +844,8 @@ func TestPeerAuthMatrix_Advisory(t *testing.T) {
 	cli2 := r.dial(r.tcp.URL, gmKey, gmAgent2)
 	unbound := r.dial(r.tcp.URL, gmKey, access.ProcessToken{})
 	registered := gmRegistered(t, cli1)
-	require.False(t, registered[mcp.AccessRequestTool], "nothing is locked: access_request is not registered")
+	require.True(t, registered[mcp.AccessRequestTool], "nothing is locked, and the advisory tier registers access_request "+
+		"(mcp.OffersAccessRequest), as serve does")
 	held := strings.Join([]string{gmConf, gmHome}, ", ")
 
 	var short string
@@ -821,6 +891,52 @@ func TestPeerAuthMatrix_Advisory(t *testing.T) {
 		require.Contains(t, body, "that project is not confidential: nothing to request")
 		require.Zero(t, r.grantRows("project_slug IN (?, ?)", gmSealed, gmDocs))
 		require.Equal(t, 1, r.moveRows("project_slug = ? AND session_id = ?", gmSealed, s1))
+	})
+
+	// The advisory tier's explicit ask (plan fenced-sessions P9): registered
+	// as serve registers it, in its own words, and asking for what the
+	// conversation's home and the project call for -- here the two requests
+	// the fence filed, found waiting, and nothing filed for an open project.
+	t.Run("access_request finds what the fence filed, and asks nothing for an open project", func(t *testing.T) {
+		r := r.at(t)
+		res, err := cli1.ListTools(context.Background(), mcpgo.ListToolsRequest{})
+		require.NoError(t, err)
+		var desc string
+		for _, tool := range res.Tools {
+			if tool.Name == mcp.AccessRequestTool {
+				desc = tool.Description
+			}
+		}
+		require.True(t, strings.HasPrefix(desc, "Ask the owner for a confidential or sealed project. Present with read grants "+
+			"on (isolation.requests) on a server without peer_auth."), desc)
+		grants, moves := r.grantRows(""), r.moveRows("")
+		for _, c := range []struct{ project, kind, short string }{
+			{gmConf, store.AccessKindGrant, short}, {gmSealed, store.AccessKindMove, ""},
+		} {
+			items, isErr := gmCall(t, cli1, mcp.AccessRequestTool, map[string]any{"project": c.project, "reason": "the close needs it"})
+			require.False(t, isErr, "%v", items)
+			var asked struct {
+				ShortID             string `json:"short_id"`
+				Kind, Project, From string
+				Status              string
+				Filed               bool
+			}
+			require.NoError(t, json.Unmarshal([]byte(items[0]), &asked), items[0])
+			require.Equal(t, c.kind, asked.Kind, items[0])
+			require.Equal(t, c.project, asked.Project)
+			require.Equal(t, gmHome, asked.From)
+			require.Equal(t, store.ApprovalPending, asked.Status)
+			require.False(t, asked.Filed, "the request the fence filed, found waiting: %s", items[0])
+			if c.short != "" {
+				require.Equal(t, c.short, asked.ShortID)
+			}
+			gmNoSecretsBut(t, items[0], "access_request "+c.project)
+		}
+		items, isErr := gmCall(t, cli1, mcp.AccessRequestTool, map[string]any{"project": gmDocs})
+		require.True(t, isErr, "%v", items)
+		require.Equal(t, []string{mcp.AccessRequestTool + ": that project is neither confidential nor sealed: nothing to request"}, items)
+		require.Equal(t, grants, r.grantRows(""), "nothing filed")
+		require.Equal(t, moves, r.moveRows(""), "nothing filed")
 	})
 
 	t.Run("the bearer key approves it over the console", func(t *testing.T) {

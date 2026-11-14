@@ -276,7 +276,12 @@ any of it.
   drive every `mcp.Catalog()` tool (a tool without a probe fails the
   coverage check), every console route, the hooks, A2A, the live feed and a
   real `seam` binary over a real socket, with secrets planted in every closed
-  project. A new tool or route gets its probe there. `make defaults-golden`
+  project. A new tool or route gets its probe there. The fenced-sessions rows
+  are `TestFencedMatrix` (tier x target x conversation x action: rebind,
+  session=, receipt, write grant, stamps, subagent, captures, harvest, resume,
+  /clear) and `TestFencedExample_DataRoom` (the owner's data-room example on a
+  throwaway `seamlessd serve`); a new `isolation.requests` surface gets a row
+  there. `make defaults-golden`
   (build tag `defaultsgolden`, not in check) compares every surface with
   peer_auth and isolation.requests off against a golden written on main: run
   it before branch locked-projects merges. A difference the owner accepts as a
