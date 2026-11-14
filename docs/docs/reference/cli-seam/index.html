@@ -572,7 +572,11 @@ started it (the same identity every MCP request carries, see
 <a href="#which-session">which session a command acts in</a>). <code>--reason</code> is the agent's
 own words on why it needs the project, at most 200 characters; the owner sees
 it quoted and labeled as the agent's, never as a fact. A longer reason is
-refused before anything is sent.</p>
+refused before anything is sent. With access requests on
+(<code>isolation.requests</code>), it also asks for a confidential or sealed project no
+lock covers, as a read refused at that project's fence would: from a
+confidential project a read grant, and from an open project, or for a sealed
+one, a move into the project for good, printed as <code>--write</code>'s move below.</p>
 <div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">Requested R-7F3K for example-finance (request). The owner approves it with: seam approve R-7F3K
 </span></span><span class="line"><span class="cl">or with a passkey: https://seamless.example.org/console/access/01K...
 </span></span></code></pre></div>

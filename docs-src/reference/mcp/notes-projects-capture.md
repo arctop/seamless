@@ -61,7 +61,7 @@ plausible, is the silent corruption the exact-match contract exists to prevent.
 `notes_update` gains the same staleness guard (`expect_hash`) plus `tags_add` and
 `tags_remove`, which are race-friendlier than replacing the whole tag list and
 are the only way to clear a tag - an empty `tags` array reads as absent. See
-[Concurrency](/reference/mcp/sessions-memory-recall/#concurrency-content_hash-and-expect_hash).
+[Concurrency](/reference/mcp/sessions-memory-recall/#concurrency-content-hash-and-expect-hash).
 
 Every note mutation now records a `note.written` event, and `notes_read` records
 `note.read` - the note-side twin of `memory.read`, which is what lets note demand
@@ -88,14 +88,26 @@ the [MCP API overview](/reference/mcp/).
 
 ## access_request asks the owner for a locked project
 
-`access_request` exists only on a daemon whose `peer_auth` locks a project;
-every other install neither lists nor accepts it. It files the same request a
-call refused at the lock files by itself, with an optional reason of up to 200
+`access_request` exists only on a daemon whose `peer_auth` locks a project, or
+whose access requests (`isolation.requests`) are on without `peer_auth`; every
+other install neither lists nor accepts it. It files the same request a call
+refused at the lock files by itself, with an optional reason of up to 200
 characters that the owner sees quoted and labeled as the agent's own words.
-With read grants on (`isolation.requests`), it also asks for a read of a
-confidential project no lock covers (kind `grant`, with `from`), the request a
-read refused at the project's fence files; with them off, such a project is
-not locked and nothing is filed.
+
+With [access requests](/concepts/project-isolation/#asking-for-access) on, it
+also asks for a confidential or sealed project no lock covers, as a refusal at
+that project's fence would: what the conversation's home and the project call
+for. From a confidential home that is a grant of another confidential project
+(kind `grant`, with `from`); from an open home, or for a sealed project from
+any home, a move of the conversation into the project for good (kind `move`,
+with `from` the home it would leave). `write` asks for read and write: a grant
+the owner may still approve read-only, or the move. For a locked project,
+`write` files the move or grant whose approval opens its lock too; without it
+the ask is for the lock's lease, which opens the project only to a conversation
+that works in it. A move still waiting tells the agent, first in `next`, to
+record what belongs in its current home, since it can write there no longer
+once the move is approved. With access requests off, a project no lock covers
+is not locked, and nothing is filed.
 
 The answer says what the call did: `filed` is `true` when it filed a new
 request, and `false` when it found one already waiting or the agent already
@@ -125,7 +137,20 @@ keeps a connection's declared dialog modes while a lock or read grants are
 configured, for clients on the socket, so an agent that was already connected
 keeps the dialog. Once approved, retry the call. A call whose asking process is
 not an agent's (a tmux pane, a terminal, an ssh login) files nothing and says
-why: an approval would cover every program that process started.
+why: an approval would cover every program that process started. A move's
+dialog never offers Touch ID, which approves no move: it is the request's
+passkey page, or none.
+
+On a daemon without `peer_auth` (the advisory tier) the tool is registered in
+words of its own: nothing is locked and no proof is asked, so every ask is a
+grant or a move. In a client that shows MCP forms, the dialog's **Approve** or
+**Deny** decides the request itself, advisory like `seam approve` and the
+console's Approve; a grant's form asks for the access and how long, a move's
+only for the decision. `dialog` may then also be `changed` (the request changed
+while the dialog showed it, so nothing was approved) or `failed` (the decision
+did not go through), both leaving the request pending, as declining, cancelling
+or 110 seconds without an answer do. The daemon keeps a TCP client's declared
+dialog modes in this tier too, so the dialog survives a restart.
 
 ## capture_url is SSRF-safe on purpose
 

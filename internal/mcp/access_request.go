@@ -103,13 +103,61 @@ func OffersAccessRequest(locksProjects, peerAuth, readGrants bool) bool {
 
 // accessRequestToolFor is access_request as this server registers it: in the
 // advisory tier, where nothing is locked and no proof is asked, in words of
-// its own (advisoryAccessRequestTool); everywhere else accessRequestTool, the
-// Catalog's, word for word.
+// its own (advisoryAccessRequestTool); under peer_auth with read grants on,
+// in words that say what the switch asks for (grantsAccessRequestTool); on
+// every other server accessRequestTool, the Catalog's, word for word.
 func (s *Server) accessRequestToolFor() mcp.Tool {
-	if s.advisoryTier() {
+	switch {
+	case s.advisoryTier():
 		return advisoryAccessRequestTool()
+	case s.cfg.Grants != nil:
+		return grantsAccessRequestTool()
 	}
 	return accessRequestTool()
+}
+
+// grantsAccessRequestTool is access_request on a server that locks a project
+// under peer_auth with read grants on (isolation.requests): the same name,
+// arguments and hints as accessRequestTool, worded for what the switch files.
+// A locked project is still the lock's to open, and asking for it without
+// write asks for its lease; a confidential or sealed project no lock covers is
+// asked for as its fence's refusal asks (approval.Grants.RequestGrant: the
+// kind the conversation's home and the project call for); and write asks for
+// the move or grant the home and the project call for, which opens a locked
+// target's lock too (approval.Grants.Ask).
+func grantsAccessRequestTool() mcp.Tool {
+	return mcp.NewTool(AccessRequestTool, hintSet(),
+		mcp.WithDescription("Ask the owner for a locked, confidential or sealed project. Present only on a server that "+
+			"locks projects (peer_auth), and answered only on its peer_auth socket; this server also has isolation.requests "+
+			"on. A locked project is closed even to the owner's own agents until the owner approves this agent's request with "+
+			"a proof (Touch ID, a passkey, or seam approve in their own terminal), and without write the ask is for its lease. "+
+			"For a confidential or sealed project no lock covers, what is asked follows from the project this conversation "+
+			"works in and the one it names: from a confidential project, a grant of another confidential one (read-only "+
+			"unless write is set, and the owner still chooses); from an open project, or for a sealed one, a move of this "+
+			"conversation into the project for good, which only a passkey or seam approve approves. With write, a locked "+
+			"project is asked for the same way, and the approval opens its lock too: a lease alone opens a locked project "+
+			"only to the conversation that works in it. A call refused at the lock or at a fence already files a request, "+
+			"so use this to ask ahead of the work, or to say why. Asking again finds the request already waiting rather "+
+			"than filing another, and a reason given then fills in one the waiting request lacks. The answer says which: "+
+			"filed is true when this call filed a new request, false when it found one already waiting or the access is "+
+			"already held (nothing filed); reason is added when this call's reason was stored on the request, kept when the "+
+			"waiting request already had one, so this one was not used, and none when this call gave no reason or nothing "+
+			"was filed. Once the owner denies a request, refused calls file nothing more and say so: ask again here, with a "+
+			"reason, when the owner tells you to. When this agent's client can show an approval dialog, the call shows the "+
+			"owner the request and waits up to 110 seconds for the decision; otherwise it returns at once with the "+
+			"request's short id and how the owner approves it. An approved lease or grant opens the project until the time "+
+			"the result names, and an approved move lasts for good: retry the work then. An agent that already holds the "+
+			"access it asks for is answered with it, and nothing is filed, until 30 minutes before it ends."),
+		mcp.WithString("project", mcp.Required(), mcp.Description("the locked, confidential or sealed project's slug")),
+		mcp.WithString(accessReasonParam, mcp.Description(fmt.Sprintf("optional: why the work needs the project, in at "+
+			"most %d characters. The owner sees it labeled as this agent's own words.", store.MaxAccessReasonRunes))),
+		mcp.WithBoolean(accessWriteParam, mcp.Description("optional: ask to work in the project, not only read it. From a "+
+			"confidential project it asks for a read-and-write grant, which the owner may still approve read-only; from an "+
+			"open project, or for a sealed one, it asks to move this conversation into the project for good, after which "+
+			"it can no longer write where it works now, so record what belongs there first. For a locked project the "+
+			"approval opens the lock too; for the locked project this conversation already works in, it asks for the "+
+			"lock's lease, which reads and writes already.")),
+	)
 }
 
 // advisoryAccessRequestTool is access_request in the advisory tier: the same
@@ -329,7 +377,7 @@ func (s *Server) askAnswer(ctx context.Context, start time.Time, a store.AccessA
 	out.Filed, out.Reason = asked.Outcome(a)
 	out = s.answerOut(ctx, start, t, ways, out)
 	if t.Move && out.Status == store.ApprovalPending {
-		out.Next = moveFirstLine(a.FromProject) + " " + sentenceStart(out.Next)
+		out.Next = moveFirstLine(a.FromProject) + s.receiptAfterMove(ctx, a.FromProject, a.Project) + " " + sentenceStart(out.Next)
 	}
 	return jsonResult(out)
 }

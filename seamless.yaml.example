@@ -578,15 +578,18 @@ update:
 # Project isolation beyond each project's own state (open, confidential or
 # sealed, set on the console's project Overview or with seam project
 # isolation). Off by default, and off is exactly the previous behavior.
-#   requests: a read refused at a confidential project's fence files an access
-#   request instead of only refusing: the owner may grant that one session
-#   (under peer_auth, that one agent process tree) read-only access to that one
-#   project for a limited time. A session in an open project that holds a grant
-#   may write only into its own project for the rest of its life. Nothing that
-#   involves a sealed project is ever offered, and writes are never granted.
-#   Without peer_auth the approval is advisory: seam approve and the console's
-#   Approve commit it with the bearer key, so any process holding the key can
-#   approve. Under peer_auth it takes the same proofs as a locked project's
+#   requests: the fence judges the agent's conversation (its client session;
+#   under peer_auth its process tree) instead of the session it is bound to,
+#   and a call refused at a confidential or sealed project's fence files a
+#   request the owner may approve: from an open project a move into the project
+#   for good, between confidential projects a grant (read-only, or read and
+#   write as the owner chooses), into a sealed project a move. Once a
+#   conversation holds a fenced project's content it writes only where the
+#   owner's approvals let that content go, never into an open project or the
+#   global scope. Without peer_auth the approval is advisory: seam approve and
+#   the console's Approve commit it with the bearer key, and Approve in the
+#   agent's in-session dialog decides it too, so any process holding the key
+#   can approve. Under peer_auth it takes the same proofs as a locked project's
 #   lease.
 # The block is new after v0.7.4 and releases before it refuse config keys they
 # do not know, so it is left commented out here.

@@ -219,7 +219,7 @@ func (s *Server) grantRequestRefusal(ctx context.Context, err error, target stri
 		// A session bound by name to a conversation's own row asks as that
 		// conversation (approval.Grants.RequestGrant): from an open home, a
 		// move.
-		return &fenceRefusal{reason: f.reason, err: fmt.Errorf("%w\nRemedy: %s", f.err, s.moveRemedy(a, s.requestWays(ctx, a)))}
+		return &fenceRefusal{reason: f.reason, err: fmt.Errorf("%w\nRemedy: %s", f.err, s.moveRemedy(ctx, a, s.requestWays(ctx, a)))}
 	}
 	fromFenced := false
 	if iso, ierr := store.IsolationOf(ctx, s.cfg.DB, b.project); ierr == nil && iso.FencesOutbound() {

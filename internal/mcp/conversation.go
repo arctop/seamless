@@ -162,6 +162,12 @@ func (s *Server) speakWhy(ctx context.Context, project string, readable bool) (s
 		return "", err
 	}
 	if !readable {
+		if !state.FencesOutbound() {
+			// Every conversation reads an open project (and the global scope)
+			// but one whose home's fence keeps it in: a sealed home reads
+			// nothing outside it, so the fence that refused is the home's.
+			return "its home's fence keeps its reads out of " + projectWords(project), nil
+		}
 		return fmt.Sprintf("%s is %s, and only a conversation working in it reads it", project, state), nil
 	}
 	if !access.WriteCleared(ctx, project) {
@@ -288,7 +294,7 @@ func (s *Server) requestRemedy(ctx context.Context, c conversation, a store.Acce
 	ways := s.requestWays(ctx, a)
 	switch {
 	case a.Kind == store.AccessKindMove:
-		return s.moveRemedy(a, ways)
+		return s.moveRemedy(ctx, a, ways)
 	case a.RequestedAccess == store.GrantAccessWrite:
 		return s.writeGrantRemedy(a, ways)
 	}
@@ -333,18 +339,45 @@ func (s *Server) moveUntil() string {
 // moveRemedy is the remedy of a move request: how the owner approves it, and
 // -- before anything else is done -- that what belongs in the home is
 // recorded there now, since after the move the conversation cannot write
-// there.
-func (s *Server) moveRemedy(a store.AccessApproval, ways access.Ways) string {
+// there, save the receipts that close a task it claimed there
+// (receiptAfterMove).
+func (s *Server) moveRemedy(ctx context.Context, a store.AccessApproval, ways access.Ways) string {
 	short := approval.ShortID(a.ID)
 	leave := "Record what belongs in " + a.FromProject + " now: once the owner approves the move, this conversation works " +
 		"in " + a.Project + " for good, and it can no longer write to " + a.FromProject + " or the global scope until " +
-		s.moveUntil() + "."
+		s.moveUntil() + "." + s.receiptAfterMove(ctx, a.FromProject, a.Project)
 	if a.FromProject == "" {
 		leave = "Record what belongs in the global scope now: once the owner approves the move, this conversation works in " +
 			a.Project + " for good, and it can no longer write to the global scope until " + s.moveUntil() + "."
 	}
 	return fmt.Sprintf("move request %s is waiting -- %s; retry once it is approved. %s Its first result after the "+
 		"approval says so and carries %s's briefing.", short, s.ownerApproves(short, ways), leave, a.Project)
+}
+
+// receiptAfterMove is the sentence a move request's words add about the one
+// write the move leaves the conversation in the home it leaves: a receipt
+// (store.JudgeReceipt), which closes a task its pre-move session claimed and
+// carries no text. "" for a move out of the global scope, and for a move into
+// a sealed project, whose conversation sends no receipts -- or when the
+// target's state cannot be read, since then the words promise nothing.
+func (s *Server) receiptAfterMove(ctx context.Context, from, target string) string {
+	if from == "" || !s.sendsReceipts(ctx, target) {
+		return ""
+	}
+	return " After the move it can still close a task it claimed there, with a receipt: tasks_update with status done " +
+		"or dropped, and no text."
+}
+
+// sendsReceipts reports whether a conversation homed in home may send
+// receipts once it moved there: every home but a sealed one. A state that
+// cannot be read sends none, as far as the words go.
+func (s *Server) sendsReceipts(ctx context.Context, home string) bool {
+	state, err := store.IsolationOf(ctx, s.cfg.DB, home)
+	if err != nil {
+		s.logger.Warn("mcp: the state of a move's target", "project", home, "error", err)
+		return false
+	}
+	return state != core.IsolationSealed
 }
 
 // writeGrantRemedy is the remedy of a grant request that asks for read and
@@ -448,7 +481,7 @@ func (s *Server) sessionStartReach(ctx context.Context, c conversation, dest str
 			how = "a conversation reaches " + dest + " only by moving in, once the owner approves"
 		}
 		return fmt.Errorf("nothing was bound: project %s is %s, and this conversation works in %s, so %s\nRemedy: %s",
-			dest, state, projectWords(c.home), how, s.moveRemedy(a, ways))
+			dest, state, projectWords(c.home), how, s.moveRemedy(ctx, a, ways))
 	}
 	return fmt.Errorf("nothing was bound: project %s is %s, and this conversation works in confidential project %s, which "+
 		"stays its home: it reaches %s only with the owner's grant\nRemedy: %s Once it is approved, name project=%s on the "+
@@ -601,6 +634,7 @@ func (s *Server) moveNews(ctx context.Context, child core.Session) string {
 		}
 		brief = err == nil && leaseWon
 	}
+	head += s.afterMoveLines(ctx, mi.Move)
 	if !brief {
 		return head
 	}
@@ -627,6 +661,38 @@ func (s *Server) moveNews(ctx context.Context, child core.Session) string {
 		return head
 	}
 	return head + " This is its briefing, sent once:\n" + briefing
+}
+
+// afterMoveLines is what the move notice adds about the home m left. A task
+// the pre-move session claimed is closed with a receipt (store.JudgeReceipt:
+// status done or dropped, no text, at most one reference to an item in the new
+// home), which the move's remedy promised (receiptAfterMove) -- unless the new
+// home is sealed, whose conversation sends none. And a move out of a fenced
+// home, which is always into a sealed project (a confidential home reaches
+// another confidential project by grant, approval.KindFor), is told where what
+// it writes about that home goes: its new home, citing the home's items by
+// reference in the one form the gardener reads (core.CitationForm), as a
+// grant's holder is asked to (approval.CiteByReferenceLine). Nothing for a
+// move out of the global scope.
+func (s *Server) afterMoveLines(ctx context.Context, m store.Move) string {
+	if m.FromProject == "" {
+		return ""
+	}
+	var out string
+	if s.sendsReceipts(ctx, m.ToProject) {
+		who := "it"
+		if left, ok, err := store.SessionByID(ctx, s.cfg.DB, m.FromSessionID); err == nil && ok {
+			who = "its session " + left.Name
+		}
+		out += " It can still close a task " + who + " claimed before the move, with a receipt: tasks_update with status " +
+			"done or dropped and no text, optionally with reference=" + core.CitationForm(m.ToProject) + " naming one item in " +
+			m.ToProject + "."
+	}
+	if from, err := store.IsolationOf(ctx, s.cfg.DB, m.FromProject); err == nil && from.FencesOutbound() {
+		out += " What it writes about " + m.FromProject + " goes in " + m.ToProject + ", citing " + m.FromProject +
+			"'s items by reference, each written " + core.CitationForm(m.FromProject) + " with the item's full id."
+	}
+	return out
 }
 
 func (m *moveSeen) forget(id string) {

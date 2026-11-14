@@ -46,6 +46,23 @@ func sessionStartTool() mcp.Tool {
 	)
 }
 
+// sessionStartToolFor is session_start as this server registers it: with
+// isolation.requests on, the catalog's tool with a description that also says
+// what the switch changes for a conversation its agent-process identity names
+// (sessionStartReach); off, the catalog's, word for word.
+func (s *Server) sessionStartToolFor() mcp.Tool {
+	t := sessionStartTool()
+	if s.cfg.Grants == nil {
+		return t
+	}
+	t.Description += " With isolation.requests on, as on this server, a Claude Code or Codex agent's conversation keeps " +
+		"one home, the project its own session is in: session_start into a confidential or sealed project binds nothing " +
+		"and asks the owner instead -- to move this conversation into it for good (from an open project, or into a " +
+		"sealed one), or for a grant of it (from a confidential project) -- and the refusal names the request; into an " +
+		"open project or the global scope it is refused once the conversation holds a fenced project's content."
+	return t
+}
+
 // scopeSource says how session_start arrived at the project it bound, so the
 // result can tell the agent -- in the one place it is guaranteed to look -- what
 // it got and what it did not need to do.

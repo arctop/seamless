@@ -301,6 +301,11 @@ found, <code>gardener_apply</code> to act on one.</p>
 <td><strong>archive</strong>: exposure without demand means it costs tokens and steers nothing</td>
 </tr>
 <tr>
+<td><strong>stale-copy</strong></td>
+<td>A memory with a <a href="../../concepts/project-isolation/#provenance-stamps">provenance stamp</a> whose body cites another project's memory, note or task (<code>&lt;project&gt;:&lt;id&gt;</code>) that changed after the memory was last written</td>
+<td><strong>archive</strong>: the copy may be out of date; the proposal names the changed sources by project and id, never their content</td>
+</tr>
+<tr>
 <td><strong>memory-wanted</strong></td>
 <td>The same recall query returned zero hits in 2+ sessions inside 14 days</td>
 <td><strong>memory_wanted</strong>: write the knowledge agents keep searching for; applying opens a task in the queue</td>
@@ -309,6 +314,11 @@ found, <code>gardener_apply</code> to act on one.</p>
 <td><strong>tool-error</strong></td>
 <td>The same normalized tool or hook error, 3+ times inside 14 days and still recent; tool errors must span 2+ sessions</td>
 <td><strong>tool_error</strong>: investigate and fix the recurring failure; applying opens a task with the observed error evidence</td>
+</tr>
+<tr>
+<td><strong>copy-relocate</strong></td>
+<td>A stamped memory that cites at least one item, whose stamps and <a href="../../concepts/project-isolation/#source-references">source references</a> all name one other project</td>
+<td><strong>relocate</strong> into that project, the one the copy is about</td>
 </tr>
 </tbody>
 </table>
@@ -341,7 +351,8 @@ name that does not exist yet.</li>
 nothing about knowledge that already escaped, so the tighten audits the global
 scope for memories whose source session belonged to the project and proposes
 moving each one behind the fence. Dismiss to leave it global. This is the only
-proposal kind an owner action files rather than a request or the timer.</li>
+proposal an owner action files rather than a request or the timer; the
+copy-relocate pass above files the same kind on the timer.</li>
 </ul>
 <h2 id="constraints-and-stages-are-exempt-from-staleness">Constraints and stages are exempt from staleness</h2>
 <p>Age-filtering and staleness-archiving never touch <code>constraint</code> or <code>stage</code>

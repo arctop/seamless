@@ -246,6 +246,11 @@ ones, precisely so Codex's harvest is not invisible. The practical consequence i
 that a Codex session's findings appear a few minutes after the last turn (once the
 reaper runs), rather than the instant the window closes.
 
+With [access requests](https://thereisnospoon.org/docs/concepts/project-isolation/#asking-for-access) on, each
+`Stop`'s findings go to the conversation's home. After an approved move, they are
+the child session's, in the project it moved into
+([details](https://thereisnospoon.org/docs/concepts/sessions/#home-record)).
+
 ## Verify
 
 ```bash

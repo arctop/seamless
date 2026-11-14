@@ -233,7 +233,9 @@ func TestFenced_MoveNoticeOnce(t *testing.T) {
 	require.Contains(t, text, "\nRemedy: move request R-")
 	require.Contains(t, text, "Record what belongs in example-ops now: once the owner approves the move, this conversation "+
 		"works in example-finance for good, and it can no longer write to example-ops or the global scope until the "+
-		"conversation ends. Its first result after the approval says so and carries example-finance's briefing.")
+		"conversation ends. After the move it can still close a task it claimed there, with a receipt: tasks_update with "+
+		"status done or dropped, and no text. Its first result after the approval says so and carries example-finance's "+
+		"briefing.")
 	done := r.approveMove(gShort.FindString(text))
 	require.Equal(t, gFin, done.Child.ProjectSlug)
 
@@ -247,7 +249,9 @@ func TestFenced_MoveNoticeOnce(t *testing.T) {
 	require.True(t, strings.HasPrefix(items[1], "This conversation moved into example-finance: the owner approved move request "+
 		approval.ShortID(done.Move.ApprovalID)+". example-finance is its home from now on -- its record goes there, and calls "+
 		"that name no project work there -- and it can no longer write to project example-ops or the global scope until the "+
-		"conversation ends. This is its briefing, sent once:\n"), items[1])
+		"conversation ends. It can still close a task its session cc/fs-agent claimed before the move, with a receipt: "+
+		"tasks_update with status done or dropped and no text, optionally with reference=example-finance:<id> naming one "+
+		"item in example-finance. This is its briefing, sent once:\n"), items[1])
 	require.Contains(t, items[1], "ledger-close-rule", "the new home's briefing")
 
 	// Handed back, it works in its new home; the notice is not repeated.

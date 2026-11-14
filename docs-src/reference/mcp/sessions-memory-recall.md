@@ -34,6 +34,15 @@ session there. Every other client calls it once per connection, with `cwd` or
 Whichever way it binds, the briefing it returns is for the project actually
 bound.
 
+With [access requests](/concepts/project-isolation/#asking-for-access)
+(`isolation.requests`) on, a Claude Code or Codex agent's `session_start` binds
+only where its conversation's [home](/concepts/sessions/#home) may read and
+write: into a confidential or sealed project it binds nothing and files the
+move or grant request the home and that project call for, and the refusal
+names it; into an open project or the global scope it is refused once the
+conversation holds a fenced project's content. Its description says so on such
+a server.
+
 `session_start` no longer takes `source`. The legacy values (`startup`,
 `resume`, `clear`, `compact`, `explicit`) are accepted and ignored, so older
 clients keep working; any other value is refused with
@@ -167,8 +176,8 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 
 | Call | Success result | Failure that matters |
 |---|---|---|
-| `session_start` | `session_id`, `name`, resolved `project`, explanatory `scope`, and `briefing`; resumed/adopted sessions also say `resumed: true`, and a `warning` flags a named `project` that was created or a remote `cwd` that could not be placed | Briefing assembly degrades to an empty string and logs; creating or binding the session itself still fails loudly, as does a `project` that contradicts the repository `cwd` is in |
+| `session_start` | `session_id`, `name`, resolved `project`, explanatory `scope`, and `briefing`; resumed/adopted sessions also say `resumed: true`, and a `warning` flags a named `project` that was created or a remote `cwd` that could not be placed | Briefing assembly degrades to an empty string and logs; creating or binding the session itself still fails loudly, as does a `project` that contradicts the repository `cwd` is in. With `isolation.requests` on, a binding the conversation's home may not make is refused and binds nothing; into a fenced project the refusal names the request it filed |
 | `memory_write` | Stable `id`, canonical `name`, resolved `project`, `updated`, optional `similar`, and optional `superseded` | An occupied tombstone path is an error; if the new memory lands but supersession fails, the tool errors while naming the kept replacement and the still-active target |
 | `memory_edit` | `id`, `name`, `project`, the new `content_hash`, a unified `diff`, and a `stage_hint` when a `kind=stage` body still has no parseable `Status` | An `old_string` that matches zero or several places is an error naming the count, and **nothing** is written - the edits apply all-or-nothing. A stale `expect_hash` is refused rather than overwriting |
 | `recall` | `hits`, possibly empty | Remote embedder failures degrade to lexical-only; local request/config construction errors surface |
-| `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`, and `commits_recorded` when it recorded commits; findings persist for the next briefing | A missing/ambiguous session is an error rather than a fabricated successful close; so is a `commits` entry that is not a full commit id, which leaves the session open |
+| `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`, and `commits_recorded` when it recorded commits; findings persist for the next briefing. With `isolation.requests` on, a session whose conversation holds content its project may not take still ends: its findings are not recorded, `findings_withheld` carries the line recorded in their place, and `mishaps_withheld` counts the mishaps not recorded | A missing/ambiguous session is an error rather than a fabricated successful close; so is a `commits` entry that is not a full commit id, which leaves the session open |

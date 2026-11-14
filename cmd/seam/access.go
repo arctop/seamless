@@ -251,9 +251,10 @@ names the agent that started it. A refused call files one by itself; this is
 the explicit form, with a reason the owner sees labeled as the agent's words
 (at most 200 characters).
 
-On a daemon that offers read grants (isolation.requests), a confidential
-project can be asked for the same way: read-only, for the asking session's own
-project, whose writes then stay inside that project. --write asks to change
+On a daemon that offers read grants (isolation.requests), a confidential or
+sealed project can be asked for the same way, as its fence's refusal asks: from
+a confidential project a read-only grant, from an open project or for a sealed
+one a move into the project for good. --write asks to change
 the project too: from a confidential project it asks for a read-and-write
 grant (the owner may still approve it read-only); from an open project, or
 for a sealed one, it asks to move the conversation into the project for good,

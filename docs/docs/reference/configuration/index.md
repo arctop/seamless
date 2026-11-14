@@ -241,26 +241,55 @@ The `isolation:` block is what [project isolation](https://thereisnospoon.org/do
 does beyond each project's own state. It holds one key, and it is off by
 default; off is exactly the behavior of every earlier release.
 
-- `requests` (`SEAMLESS_ISOLATION_REQUESTS`, default `false`) turns a read
-  refused at a confidential project's fence into an access request you can
-  approve: a **read grant** of that one project, read-only, to the one session
-  that asked, for a limited time (until the session ends, 1 hour or 4 hours,
-  capped by `peer_auth.max_lease`, `8h` when unset). Every write must then be
-  cleared for everything the session holds: a session in a confidential
-  project that is granted a read writes only into its own project, and one in
-  an open project only into the project it read, for the rest of its life.
-  Nothing that involves a sealed project is ever offered, a read grant never
-  opens a write, and briefings do not change.
+- `requests` (`SEAMLESS_ISOLATION_REQUESTS`, default `false`) lets a confidential
+  or sealed project's fence ask instead of only refusing, and makes the fence
+  judge the agent's **conversation** - its client session without `peer_auth`,
+  its process tree under it - instead of the session a connection is bound to.
   [Asking for access](https://thereisnospoon.org/docs/concepts/project-isolation/#asking-for-access) has the
-  whole model.
+  whole model. Turning it on changes these, and nothing else:
+  - **One home, one rule.** A conversation has one home, the project its own
+    session is in, and a label: every confidential or sealed project whose
+    content it may hold. Every write must be cleared for everything it holds:
+    once the label holds anything, it writes only into the projects your
+    approvals cleared, never an open project or the global scope.
+  - **Refusals file requests.** A read or write refused at a fenced project,
+    and `session_start` into one, file what the home and the project call for:
+    a **move** into the project for good (from an open home, or into a sealed
+    project), or a **grant** of it (between confidential projects, read-only
+    unless you choose read and write). Nothing is ever granted to or from a
+    sealed project. A locked project's refusal still files the lock's request.
+  - **Bindings stop at the home.** For a Claude Code or Codex agent,
+    `session_start` binds nothing outside what its home may read and write, and
+    `session=` acts as a session outside the home only there.
+  - **Approvals.** You decide each request with `seam approve`, on the
+    console's Access requests page or, in a client that shows MCP forms, in
+    the agent's in-session dialog. Without `peer_auth` that decision is
+    advisory, and `access_request` is registered so the agent can ask ahead;
+    under it, a grant or a move takes the same proofs as a lease, and one into
+    a locked project opens its lock too.
+  - **The record follows the home.** The SessionEnd harvest, Codex `Stop`
+    findings, plan and subagent captures, prompt recall and a resume's
+    briefing go to and read from the home; after a move, the project it moved
+    into.
+  - **Provenance stamps** on what a conversation writes while it holds another
+    fenced project's content (frontmatter `may_contain` on memories and
+    notes), which the gardener's stale-copy and copy-relocate passes read.
+  - **Receipts**: `tasks_update` gains `reference`, and a moved conversation
+    may close a task it claimed before the move.
+  - **The console** shows a conversation's moves, grants and writes on its
+    sessions' pages, and a **Came from** filter on a project's page.
+
+  A grant lasts until the conversation's session ends, 1 hour or 4 hours,
+  capped by `peer_auth.max_lease` (`8h` when unset); a move lasts for good.
 
 Without `peer_auth` the approval is **advisory**: `seam approve` and the
-console's Approve commit it with the bearer key, so any process that holds the
-key can approve a request, its own included. Under `peer_auth` a grant is
-bound to the asking agent's process tree, as a locked project's lease is, and
-needs the same proofs: `seam approve` in your terminal (through `sudo` to the
-daemon's account), a passkey, or a Touch ID key. Locks work without this
-switch; grants do not.
+console's Approve commit it with the bearer key, and so does Approve in the
+agent's in-session dialog, so any process that holds the key can approve a
+request, its own included. Under `peer_auth` a grant or a move is bound to the
+asking agent's process tree, as a locked project's lease is, and needs the same
+proofs: `seam approve` in your terminal (through `sudo` to the daemon's
+account), a passkey, or a Touch ID key, which approves no move. Locks work
+without this switch; grants and moves do not.
 
 The block is new after v0.7.4; releases before it refuse config keys they do
 not know, so the example file leaves it commented out.
@@ -973,15 +1002,18 @@ update:
 # Project isolation beyond each project's own state (open, confidential or
 # sealed, set on the console's project Overview or with seam project
 # isolation). Off by default, and off is exactly the previous behavior.
-#   requests: a read refused at a confidential project's fence files an access
-#   request instead of only refusing: the owner may grant that one session
-#   (under peer_auth, that one agent process tree) read-only access to that one
-#   project for a limited time. A session in an open project that holds a grant
-#   may write only into its own project for the rest of its life. Nothing that
-#   involves a sealed project is ever offered, and writes are never granted.
-#   Without peer_auth the approval is advisory: seam approve and the console's
-#   Approve commit it with the bearer key, so any process holding the key can
-#   approve. Under peer_auth it takes the same proofs as a locked project's
+#   requests: the fence judges the agent's conversation (its client session;
+#   under peer_auth its process tree) instead of the session it is bound to,
+#   and a call refused at a confidential or sealed project's fence files a
+#   request the owner may approve: from an open project a move into the project
+#   for good, between confidential projects a grant (read-only, or read and
+#   write as the owner chooses), into a sealed project a move. Once a
+#   conversation holds a fenced project's content it writes only where the
+#   owner's approvals let that content go, never into an open project or the
+#   global scope. Without peer_auth the approval is advisory: seam approve and
+#   the console's Approve commit it with the bearer key, and Approve in the
+#   agent's in-session dialog decides it too, so any process holding the key
+#   can approve. Under peer_auth it takes the same proofs as a locked project's
 #   lease.
 # The block is new after v0.7.4 and releases before it refuse config keys they
 # do not know, so it is left commented out here.

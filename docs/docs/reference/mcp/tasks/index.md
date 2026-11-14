@@ -83,7 +83,7 @@ withholds, gets the generic words.
 | Call | Refuses when |
 |---|---|
 | `tasks_add` | A blocker is missing or the new dependency would create a cycle |
-| `tasks_update` | Nothing was supplied to change, a new dependency is invalid, one id is both added and removed, a `commits` entry is not a full commit id, or another live session holds the task |
+| `tasks_update` | Nothing was supplied to change, a new dependency is invalid, one id is both added and removed, a `commits` entry is not a full commit id, or another live session holds the task; with `isolation.requests` on, a [receipt](#receipts) that breaks its rule |
 | `tasks_claim` | The task is blocked, closed, or held by another live claimant; each error names the actual cause |
 | `tasks_release` | The acting session is not the holder; force release exists only on the owner console/CLI surface |
 
@@ -97,6 +97,23 @@ On a server that records commits (`commits.record`, off by default),
 task's work, recorded on the task in the same transaction as the rest of the
 call and behind the same claim lock. Off, the argument does not exist. See
 [Feeding a security monitor](https://thereisnospoon.org/docs/guides/security-monitor/#recording-commits).
+
+## Receipts
+
+With `isolation.requests` on, a conversation the owner has
+[moved](https://thereisnospoon.org/docs/concepts/project-isolation/#moves) into another project can no longer
+write where it worked before, so a task its pre-move session claimed there
+would stay in progress for good. A **receipt** closes it: `tasks_update` with
+`status` `done` or `dropped` on a task whose claim, live or lapsed, that
+pre-move session still holds. It may name one `reference`, an item in the new
+home written `<project>:<id>` (a memory, note, task, trial or session there),
+and nothing else: a title, body, project, dependency or commit is refused with
+the rule, and so is a reference that names no item in the home. It sets the
+status alone, as that pre-move session, and releases the claim. The task's
+`task.transition` record carries `receipt` and `reference` beside `to` and
+`from`, and the answer carries `receipt: true`. A conversation whose home is
+sealed sends none. Off, the argument does not exist. See
+[Project isolation](https://thereisnospoon.org/docs/concepts/project-isolation/#receipts).
 
 ## tasks_add {#tasks_add}
 

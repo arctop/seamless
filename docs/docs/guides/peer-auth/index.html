@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#restore">Backups and restore</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-3"><a href="#under-peer-auth">Under peer_auth</a></li><li class="lvl-3"><a href="#without-peer-auth-the-advisory-tier">Without peer_auth: the advisory tier</a></li><li class="lvl-3"><a href="#what-the-switch-changes-about-the-binding-limit">What the switch changes about the binding limit</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#restore">Backups and restore</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </details>
   <p><a href="../../concepts/project-isolation/">Project isolation</a> keeps agents working on one
@@ -794,16 +794,25 @@ all.</p>
 project, its isolation and the access asked for, the agent the daemon names, its
 pid and uid, the session and model, the working directory, whether this is a
 first request or a refresh, and until when it waits - with the agent's reason
-quoted and labeled as its own. Warnings come first, most serious first:</p>
+quoted and labeled as its own. A grant or a move (with
+<a href="#read-grants-and-the-advisory-tier">access requests</a> on) also states what it
+carries: every fenced project the agent would hold once approved, and every
+project it could write to. Warnings come first, most serious first:</p>
 <ol>
 <li>the asking process is a broad process, on a request an older daemon filed (an
 approval will be refused);</li>
-<li>for a read grant, the project's content may be copied into the asking
-project's memories;</li>
+<li>the asking process is a JavaScript runtime (Claude Code installed with npm
+runs as <code>node</code>) that only its own hook calls an agent, so everything it
+started would share the approval;</li>
+<li>for a move, that the agent works in the project from now on, what it may
+write there, and that it can no longer write where it worked before;</li>
+<li>for a grant, where the project's content may be copied: the asking project
+first, then every other project the agent may write to;</li>
 <li>the session read text from outside (a web page, a file it was handed), so its
 reason may not be its own;</li>
 <li>the same agent is also asking for another project;</li>
-<li>the session works outside the project's repository;</li>
+<li>the session works outside the repository of the project it asks for (for a
+grant or a move, of the project it works in);</li>
 <li>no session names the agent, so its cwd and model are unknown;</li>
 <li>the agent already holds a lease on the project, and approving replaces it.</li>
 </ol>
@@ -812,9 +821,9 @@ filled in, a new mark on the session, another request from the same agent), the
 approval is refused and you look again.</p>
 <h2 id="approve-three-paths-one-core">Approve: three paths, one core</h2>
 <p>Every path ends in the same check: the facts you saw still hold, the proof is
-valid, and the lease is written once, bound to the request. Answering a dialog is
-never the approval, because any process of your account, or a client hook, could
-answer one.</p>
+valid, and the lease is written once, bound to the request (with access requests
+on, the grant or the move). Answering a dialog is never the approval, because any
+process of your account, or a client hook, could answer one.</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -852,7 +861,8 @@ facts from the daemon and signs over the request, the facts' digest, the access
 and the duration. A passkey opens the request's page for the duration you chose,
 and it signs the duration and the facts' digest too, so a tampered duration fails
 verification. Where a passkey is the only way the dialog can finish, the dialog
-is that page.</p>
+is that page. A move's dialog never offers Touch ID, and a grant's approves it
+read-only (<a href="#read-grants-and-the-advisory-tier">below</a>).</p>
 <p>The call waits up to 110 seconds from its start, then answers with the request
 still pending for the paths below. Declining or dismissing denies nothing, and an
 agent's connection cannot deny at all: the request waits for you. Cancelling the
@@ -949,29 +959,83 @@ cannot run the service worker can't hold an unlock, and the page says so. That
 covers some private windows, and any page that is neither https nor localhost.
 A locked plan or session page in the console takes you to that unlock page.</p>
 <h2 id="read-grants-and-the-advisory-tier">Read grants and the advisory tier</h2>
-<p><a href="../../concepts/project-isolation/#asking-for-access">Read grants</a>
-(<code>isolation.requests: true</code>) turn a read refused at a confidential project's fence
-into a request. A grant is read-only, one project, for a limited time, and never
-involves a <code>sealed</code> project on either side.</p>
-<p>Under peer_auth a grant is bound to the asking agent's process tree, as a lease is,
-and takes the same proofs: <code>seam approve</code>, a passkey or a Touch ID key. Without
-peer_auth the approval is <strong>advisory</strong>. <code>seam approve</code> asks for a y/N in a terminal
-and commits over the console with the bearer key, and the console's Approve does
-the same, so any process that holds the key can approve a request, its own
-included. The holder of an advisory grant is the conversation the agent's process
+<p><a href="../../concepts/project-isolation/#asking-for-access">Access requests</a>
+(<code>isolation.requests: true</code>) turn a call refused at a confidential or sealed
+project's fence into a request. What is asked follows from where the agent's
+conversation works, never from the agent's choice: from an open project, a
+<strong>move</strong> into the project for good; between confidential projects, a <strong>grant</strong>,
+read-only unless you choose read and write; into a sealed project, a move, from
+anywhere. Nothing ever grants a sealed project.</p>
+<h3 id="under-peer-auth">Under peer_auth</h3>
+<ul>
+<li><strong>The conversation is the agent's process tree.</strong> A grant or a move is bound
+to the asking agent's process tree, as a lease is, and everything the
+conversation holds belongs to that tree for the life of the process, <code>/clear</code>
+included. Its home is the project of the agent's own session, believed only
+when that session is stamped with a process of the tree.</li>
+<li><strong>The same proofs as a lease</strong>: <code>seam approve</code> in your terminal (through
+<code>sudo</code> to the daemon's account), a passkey, or a Touch ID key. Touch ID
+approves a grant, never a move: Seamless Approve words every request as
+access for a while, which a move is not, so a move's dialog is its passkey
+page or nothing, and its remedies name only your terminal and that page. The
+dialog approves a grant read-only; read and write is your choice in your
+terminal (<code>seam approve &lt;id&gt; --access read-write</code>) or on the request's passkey
+page.</li>
+<li><strong>A locked target's move or grant is also its lease.</strong> A call refused at the
+lock still files the lock's request, and that lease opens the project only to
+the conversation that works in it - an agent started in the project's
+repository. An agent working elsewhere asks with <code>access_request</code> and
+<code>write=true</code> (or <code>seam access request &lt;project&gt; --write</code>): that files the move
+from an open project, or the read-and-write grant from a confidential one,
+and approving it opens the lock too, in the same approval, for the duration
+you choose. After a move into a locked project, the agent's first tool result
+says until when the lock is open and carries the project's briefing, once.</li>
+</ul>
+<p>What a conversation holds binds the asking agent's process tree. A process that
+detaches from that tree, or a call over TCP with the bearer key, holds nothing
+and is not confined.</p>
+<h3 id="without-peer-auth-the-advisory-tier">Without peer_auth: the advisory tier</h3>
+<p>Without peer_auth the approval is <strong>advisory</strong>. <code>seam approve</code> asks for a y/N in
+a terminal and commits over the console with the bearer key, and the console's
+Approve does the same, so any process that holds the key can approve a request,
+its own included.</p>
+<p>In a client that shows MCP forms (Claude Code does, and so do Codex builds that
+declare form elicitation), a refusal that files a grant or a move,
+<code>session_start</code> into a fenced project, and <code>access_request</code> - which this tier
+registers too - open a dialog in the agent's session, and <strong>Approve or Deny
+there decides the request</strong>, with no other proof. It is advisory like the rest:
+Seamless cannot tell who answers a dialog, any more than who holds the key, so
+the form says so, and the record names the dialog (<code>in-session-dialog</code>). The
+form shows the facts, warnings first, what the request carries, and what
+read-only and read and write each let happen; a grant asks for the access
+(read-only by default) and how long, and a move only for the decision.
+Declining, cancelling, or no answer within 110 seconds decides nothing: the
+request stays pending for your terminal, the console, or the next dialog. The
+daemon keeps the client's declared dialog modes across a restart.</p>
+<p>The holder of an advisory grant or move is the conversation the agent's process
 identity names, which is self-reported; a client that sends none is held by the
-session a call speaks for, so one that rebinds with <code>session_start</code>, or names another
-session with <code>session=</code>, writes where that session may. Under peer_auth the holder is
-the process tree, and those moves are refused. Use the advisory tier to keep an agent from wandering into a confidential
-project, not against one set on it.</p>
-<p>Neither tier stops an agent running as you from reading a <code>confidential</code> or
-<code>sealed</code> project. A session's project is the agent's word, so <code>session_start project=&lt;slug&gt;</code>, a hook naming that repository, or <code>session=</code> on a tool reads the
-project with no grant at all, and the console answers your account for every
-project that is not locked. The fence keeps a careful agent out. The lock holds
-against one set on it, because it asks the kernel who is calling, so lock a
-project that must stay shut. A restricted account has none of these ways in.</p>
-<p>A grant's write confinement binds the asking agent's process tree. A process that
-detaches from that tree, or a call over TCP with the bearer key, is not confined.</p>
+session a call speaks for, so one that rebinds with <code>session_start</code>, or names
+another session with <code>session=</code>, writes where that session may. Under peer_auth
+the holder is the process tree, and those moves change nothing it holds. Use
+the advisory tier to keep an agent from wandering into a confidential project,
+not against one set on it.</p>
+<h3 id="what-the-switch-changes-about-the-binding-limit">What the switch changes about the binding limit</h3>
+<p>Without access requests, only a lock stops an agent running as you from
+reading a <code>confidential</code> or <code>sealed</code> project, with peer_auth or without it. A
+session's project is the agent's word, so <code>session_start project=&lt;slug&gt;</code>, a hook
+naming that repository, or <code>session=</code> on a tool reads the project with no grant
+at all, and the console answers your account for every project that is not
+locked.</p>
+<p>With them on, an agent whose conversation Seamless identifies - a Claude Code
+or Codex agent running the hooks with a current <code>seam</code> - can no longer name a
+fenced project as its own: <code>session_start</code> files a move or grant request
+instead of binding, and <code>session=</code> acts as another project's session only where
+the conversation's home may read and write. Two ways in remain, in both tiers:
+an agent started in the project's repository is that project's own, and a
+client that sends no agent-process identity binds as before.</p>
+<p>So the fence keeps a careful agent out, and the lock holds against one set on
+it, because it asks the kernel who is calling: lock a project that must stay
+shut. A restricted account has none of these ways in.</p>
 <p>A2A speaks for no session, so under peer_auth it refuses a <code>confidential</code> or
 <code>sealed</code> project unless the caller holds a lease on it.</p>
 <h2 id="restricted-local-accounts">Restricted local accounts</h2>
@@ -1015,8 +1079,9 @@ the account's clones of your repositories to them, as the daemon's account:</p>
 repository - is not recorded.</p>
 </li>
 <li>
-<p><strong>No approvals.</strong> It files no access requests, gets no read grants and holds
-no leases, so nothing it does can open a locked or confidential project.</p>
+<p><strong>No approvals.</strong> It files no access requests, gets no grants, is never
+moved and holds no leases, so nothing it does can open a locked or
+confidential project.</p>
 </li>
 </ul>
 <p>It is known only through the socket. The kernel names it by its uid, exactly as
@@ -1518,7 +1583,7 @@ wherever step 10 put it, is the fallback if anything in the move went wrong.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#restore">Backups and restore</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-3"><a href="#under-peer-auth">Under peer_auth</a></li><li class="lvl-3"><a href="#without-peer-auth-the-advisory-tier">Without peer_auth: the advisory tier</a></li><li class="lvl-3"><a href="#what-the-switch-changes-about-the-binding-limit">What the switch changes about the binding limit</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#restore">Backups and restore</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </aside>
   

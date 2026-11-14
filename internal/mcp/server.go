@@ -521,7 +521,7 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) registerTools() {
-	s.addTool(sessionStartTool(), s.handleSessionStart)
+	s.addTool(s.sessionStartToolFor(), s.handleSessionStart)
 	s.addTool(sessionUpdateTool(), s.handleSessionUpdate)
 	s.addTool(s.offerCommits(sessionEndTool()), s.handleSessionEnd)
 

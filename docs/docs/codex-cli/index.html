@@ -440,6 +440,10 @@ the briefing assembler includes expired ambient sessions, not just completed
 ones, precisely so Codex's harvest is not invisible. The practical consequence is
 that a Codex session's findings appear a few minutes after the last turn (once the
 reaper runs), rather than the instant the window closes.</p>
+<p>With <a href="../concepts/project-isolation/#asking-for-access">access requests</a> on, each
+<code>Stop</code>'s findings go to the conversation's home. After an approved move, they are
+the child session's, in the project it moved into
+(<a href="../concepts/sessions/#home-record">details</a>).</p>
 <h2 id="verify">Verify</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd doctor    <span class="c1"># config, database, tool count, hooks - now Codex-aware</span>
 </span></span></code></pre></div>

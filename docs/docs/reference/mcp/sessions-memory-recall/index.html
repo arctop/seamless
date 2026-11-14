@@ -255,6 +255,14 @@ session there. Every other client calls it once per connection, with <code>cwd</
 <code>project</code> - see <a href="../../../concepts/sessions/#when-to-call-session-start">when to call it</a>.
 Whichever way it binds, the briefing it returns is for the project actually
 bound.</p>
+<p>With <a href="../../../concepts/project-isolation/#asking-for-access">access requests</a>
+(<code>isolation.requests</code>) on, a Claude Code or Codex agent's <code>session_start</code> binds
+only where its conversation's <a href="../../../concepts/sessions/#home">home</a> may read and
+write: into a confidential or sealed project it binds nothing and files the
+move or grant request the home and that project call for, and the refusal
+names it; into an open project or the global scope it is refused once the
+conversation holds a fenced project's content. Its description says so on such
+a server.</p>
 <p><code>session_start</code> no longer takes <code>source</code>. The legacy values (<code>startup</code>,
 <code>resume</code>, <code>clear</code>, <code>compact</code>, <code>explicit</code>) are accepted and ignored, so older
 clients keep working; any other value is refused with
@@ -404,7 +412,7 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 <tr>
 <td><code>session_start</code></td>
 <td><code>session_id</code>, <code>name</code>, resolved <code>project</code>, explanatory <code>scope</code>, and <code>briefing</code>; resumed/adopted sessions also say <code>resumed: true</code>, and a <code>warning</code> flags a named <code>project</code> that was created or a remote <code>cwd</code> that could not be placed</td>
-<td>Briefing assembly degrades to an empty string and logs; creating or binding the session itself still fails loudly, as does a <code>project</code> that contradicts the repository <code>cwd</code> is in</td>
+<td>Briefing assembly degrades to an empty string and logs; creating or binding the session itself still fails loudly, as does a <code>project</code> that contradicts the repository <code>cwd</code> is in. With <code>isolation.requests</code> on, a binding the conversation's home may not make is refused and binds nothing; into a fenced project the refusal names the request it filed</td>
 </tr>
 <tr>
 <td><code>memory_write</code></td>
@@ -423,7 +431,7 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 </tr>
 <tr>
 <td><code>session_end</code></td>
-<td>Confirmation of the close - <code>session_id</code>, <code>claims_released</code>, <code>mishaps_recorded</code>, and <code>commits_recorded</code> when it recorded commits; findings persist for the next briefing</td>
+<td>Confirmation of the close - <code>session_id</code>, <code>claims_released</code>, <code>mishaps_recorded</code>, and <code>commits_recorded</code> when it recorded commits; findings persist for the next briefing. With <code>isolation.requests</code> on, a session whose conversation holds content its project may not take still ends: its findings are not recorded, <code>findings_withheld</code> carries the line recorded in their place, and <code>mishaps_withheld</code> counts the mishaps not recorded</td>
 <td>A missing/ambiguous session is an error rather than a fabricated successful close; so is a <code>commits</code> entry that is not a full commit id, which leaves the session open</td>
 </tr>
 </tbody>

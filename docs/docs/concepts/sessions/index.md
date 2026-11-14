@@ -105,6 +105,30 @@ a call belongs to - for scope, and for
 [project isolation](https://thereisnospoon.org/docs/concepts/project-isolation/#honest-limits) - but it is not
 an authentication boundary.
 
+### Home versus binding {#home}
+
+With [access requests](https://thereisnospoon.org/docs/concepts/project-isolation/#asking-for-access)
+(`isolation.requests`) on, two things that are usually the same come apart for
+a Claude Code or Codex agent:
+
+- **Its home** is the project its conversation's own session is in: the
+  repository's project when it starts, and after an approved
+  [move](https://thereisnospoon.org/docs/concepts/project-isolation/#moves) the project it moved into. The
+  fences judge every call from the home, and the conversation's record goes
+  there.
+- **Its binding** - the process binding, a `session_start`, or a call's
+  `session=` - still chooses which session a call is credited to and where a
+  call that names no project lands. It never changes what the fence lets
+  through: a binding or a `session=` handle that would have the conversation
+  act as a session outside its home is honored only where the home may read
+  and write, and refused anywhere else, with the rule and the remedy. So after
+  a move, a connection that `session_start` bound to the old home is refused
+  until an argument-less `session_start` hands it back to the conversation's
+  own session; the process binding follows the move by itself.
+
+A client that sends no agent-process identity has no home: its binding is
+judged as it always was.
+
 ### When to call `session_start` {#when-to-call-session-start}
 
 - **From a client without hooks**, once per connection, with `cwd` (the
@@ -117,7 +141,13 @@ an authentication boundary.
   SessionEnd closes both - and binds the connection to it. An argument-less
   `session_start` hands the connection back to your own session. Moving into a
   confidential or sealed project also moves
-  [where your conversation's record goes](#moved-record).
+  [where your conversation's record goes](#moved-record). With
+  `isolation.requests` on, a Claude Code or Codex agent's `session_start` moves
+  the connection only where its [home](#home) may read and write: into a
+  confidential or sealed project it binds nothing and files the request its
+  home and that project call for - a move into it for good, or a grant of it -
+  and the refusal names it; into an open project or the global scope it is
+  refused once the conversation holds a fenced project's content.
 - **To resume a named session.** `name` takes a `sess/*` name or the `cc/...` or
   `cx/...` on the briefing's `Seam session` line; a new name starts a separate
   named session.
@@ -167,16 +197,55 @@ linked to it, ended or not:
   findings of your own, takes a line naming the projects in the harvest's
   place, and the hook's notice says why.
 - **What stays where it was.** Token totals are metadata and stay on the
-  ambient session. Briefings and prompt recall still follow the repository. A
-  session native to an isolated project, whatever it binds itself to, a move
-  between open projects, and a client that cannot link its session (an older
-  `seam` that names no agent process) record exactly as before.
+  ambient session. Briefings and prompt recall still follow the repository
+  while `isolation.requests` is off. A session native to an isolated project,
+  whatever it binds itself to, a move between open projects, and a client that
+  cannot link its session (an older `seam` that names no agent process) record
+  exactly as before.
 
 This applies on every install, whether or not
 [`isolation.requests`](https://thereisnospoon.org/docs/reference/configuration/#isolation-requests) is on.
-With it on, a read grant that confines the conversation's writes to another
-project keeps its harvest and captures out of the isolated session as well:
-they land nowhere, and the notice says so.
+With it on, the routed record also meets the
+[clearance rule](https://thereisnospoon.org/docs/concepts/project-isolation/#the-one-rule): where what the
+conversation holds does not clear the isolated session's project, its harvest
+and captures land nowhere, and the notice says so. An identified conversation
+cannot bind itself into an isolated project with the switch on, so for one,
+the next section is the rule.
+
+### With `isolation.requests` on, the record follows the home {#home-record}
+
+Everything the hooks record for a conversation goes to its [home](#home),
+wherever the agent works, once the clearance rule clears it there:
+
+- **Findings.** The SessionEnd harvest (for Codex, each `Stop`'s findings) and
+  the findings a remote host pushes land on the conversation's own session in
+  its home. After an approved move that is the child session in the project it
+  moved into; the session it left keeps its own findings and the move's
+  pointer.
+- **Captures.** Plan captures and planning-subagent reports land in the home's
+  project, with their events.
+- **Recall.** Prompt recall and a subagent's briefing read the home, plus the
+  projects its live grants open; the constraints are the home's.
+- **Resume.** A resumed or compacted conversation stays in its home and is
+  briefed from there. It moves to the repository's project only where its home
+  may write there - never the child of a move, and never into a sealed project
+  from an open one. A home that is locked to the agent, whose lease has ended,
+  gets the locked notice and a request instead of a briefing.
+- **A home that is not cleared records nothing.** An open home that holds
+  fenced content - which only a read grant filed without the conversation's
+  identity gives it, or under `peer_auth` what the same agent process held
+  before `/clear` - takes no harvest and no capture. Its session's findings
+  become one line, and the hook's notice says why:
+  `Not recorded: this session holds content from example-finance, and its findings may not be written into project example-ops.`
+  The events about its prompts carry none of their text. Briefings skip that
+  line, and a move's pointer, as they skip a session with no findings.
+- **`/clear`** starts a new conversation without `peer_auth`, with an empty
+  label. Under `peer_auth` the label stays with the agent's process tree, so a
+  new conversation in the same process still holds what the old one read.
+- **Token totals** after a move count only what came after it: the child
+  session reports the conversation's totals minus every earlier session's.
+
+With the switch off, every hook is as the previous section describes.
 
 ## An actual briefing, annotated
 

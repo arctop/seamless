@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#ambient-vs-explicit-sessions">Ambient vs. explicit sessions</a></li><li class="lvl-2"><a href="#process-binding">How tool calls find their session</a></li><li class="lvl-3"><a href="#when-to-call-session-start">When to call session_start</a></li><li class="lvl-3"><a href="#moved-record">Where a moved conversation&#39;s record goes</a></li><li class="lvl-2"><a href="#an-actual-briefing-annotated">An actual briefing, annotated</a></li><li class="lvl-2"><a href="#the-budget-and-what-survives-it">The budget, and what survives it</a></li><li class="lvl-2"><a href="#liveness">Liveness</a></li>
+      <li class="lvl-2"><a href="#ambient-vs-explicit-sessions">Ambient vs. explicit sessions</a></li><li class="lvl-2"><a href="#process-binding">How tool calls find their session</a></li><li class="lvl-3"><a href="#home">Home versus binding</a></li><li class="lvl-3"><a href="#when-to-call-session-start">When to call session_start</a></li><li class="lvl-3"><a href="#moved-record">Where a moved conversation&#39;s record goes</a></li><li class="lvl-3"><a href="#home-record">With isolation.requests on, the record follows the home</a></li><li class="lvl-2"><a href="#an-actual-briefing-annotated">An actual briefing, annotated</a></li><li class="lvl-2"><a href="#the-budget-and-what-survives-it">The budget, and what survives it</a></li><li class="lvl-2"><a href="#liveness">Liveness</a></li>
     </ul>
   </details>
   <p>A Seamless <strong>session</strong> is one agent's stretch of work. A <strong>briefing</strong> is what
@@ -359,6 +359,28 @@ reconnect.</li>
 a call belongs to - for scope, and for
 <a href="../../concepts/project-isolation/#honest-limits">project isolation</a> - but it is not
 an authentication boundary.</p>
+<h3 id="home">Home versus binding</h3>
+<p>With <a href="../../concepts/project-isolation/#asking-for-access">access requests</a>
+(<code>isolation.requests</code>) on, two things that are usually the same come apart for
+a Claude Code or Codex agent:</p>
+<ul>
+<li><strong>Its home</strong> is the project its conversation's own session is in: the
+repository's project when it starts, and after an approved
+<a href="../../concepts/project-isolation/#moves">move</a> the project it moved into. The
+fences judge every call from the home, and the conversation's record goes
+there.</li>
+<li><strong>Its binding</strong> - the process binding, a <code>session_start</code>, or a call's
+<code>session=</code> - still chooses which session a call is credited to and where a
+call that names no project lands. It never changes what the fence lets
+through: a binding or a <code>session=</code> handle that would have the conversation
+act as a session outside its home is honored only where the home may read
+and write, and refused anywhere else, with the rule and the remedy. So after
+a move, a connection that <code>session_start</code> bound to the old home is refused
+until an argument-less <code>session_start</code> hands it back to the conversation's
+own session; the process binding follows the move by itself.</li>
+</ul>
+<p>A client that sends no agent-process identity has no home: its binding is
+judged as it always was.</p>
 <h3 id="when-to-call-session-start">When to call <code>session_start</code></h3>
 <ul>
 <li><strong>From a client without hooks</strong>, once per connection, with <code>cwd</code> (the
@@ -371,7 +393,13 @@ own session's starts a separate session there - linked to yours, so a
 SessionEnd closes both - and binds the connection to it. An argument-less
 <code>session_start</code> hands the connection back to your own session. Moving into a
 confidential or sealed project also moves
-<a href="#moved-record">where your conversation's record goes</a>.</li>
+<a href="#moved-record">where your conversation's record goes</a>. With
+<code>isolation.requests</code> on, a Claude Code or Codex agent's <code>session_start</code> moves
+the connection only where its <a href="#home">home</a> may read and write: into a
+confidential or sealed project it binds nothing and files the request its
+home and that project call for - a move into it for good, or a grant of it -
+and the refusal names it; into an open project or the global scope it is
+refused once the conversation holds a fenced project's content.</li>
 <li><strong>To resume a named session.</strong> <code>name</code> takes a <code>sess/*</code> name or the <code>cc/...</code> or
 <code>cx/...</code> on the briefing's <code>Seam session</code> line; a new name starts a separate
 named session.</li>
@@ -440,16 +468,53 @@ of them. The ambient session, and each active isolated session without
 findings of your own, takes a line naming the projects in the harvest's
 place, and the hook's notice says why.</li>
 <li><strong>What stays where it was.</strong> Token totals are metadata and stay on the
-ambient session. Briefings and prompt recall still follow the repository. A
-session native to an isolated project, whatever it binds itself to, a move
-between open projects, and a client that cannot link its session (an older
-<code>seam</code> that names no agent process) record exactly as before.</li>
+ambient session. Briefings and prompt recall still follow the repository
+while <code>isolation.requests</code> is off. A session native to an isolated project,
+whatever it binds itself to, a move between open projects, and a client that
+cannot link its session (an older <code>seam</code> that names no agent process) record
+exactly as before.</li>
 </ul>
 <p>This applies on every install, whether or not
 <a href="../../reference/configuration/#isolation-requests"><code>isolation.requests</code></a> is on.
-With it on, a read grant that confines the conversation's writes to another
-project keeps its harvest and captures out of the isolated session as well:
-they land nowhere, and the notice says so.</p>
+With it on, the routed record also meets the
+<a href="../../concepts/project-isolation/#the-one-rule">clearance rule</a>: where what the
+conversation holds does not clear the isolated session's project, its harvest
+and captures land nowhere, and the notice says so. An identified conversation
+cannot bind itself into an isolated project with the switch on, so for one,
+the next section is the rule.</p>
+<h3 id="home-record">With <code>isolation.requests</code> on, the record follows the home</h3>
+<p>Everything the hooks record for a conversation goes to its <a href="#home">home</a>,
+wherever the agent works, once the clearance rule clears it there:</p>
+<ul>
+<li><strong>Findings.</strong> The SessionEnd harvest (for Codex, each <code>Stop</code>'s findings) and
+the findings a remote host pushes land on the conversation's own session in
+its home. After an approved move that is the child session in the project it
+moved into; the session it left keeps its own findings and the move's
+pointer.</li>
+<li><strong>Captures.</strong> Plan captures and planning-subagent reports land in the home's
+project, with their events.</li>
+<li><strong>Recall.</strong> Prompt recall and a subagent's briefing read the home, plus the
+projects its live grants open; the constraints are the home's.</li>
+<li><strong>Resume.</strong> A resumed or compacted conversation stays in its home and is
+briefed from there. It moves to the repository's project only where its home
+may write there - never the child of a move, and never into a sealed project
+from an open one. A home that is locked to the agent, whose lease has ended,
+gets the locked notice and a request instead of a briefing.</li>
+<li><strong>A home that is not cleared records nothing.</strong> An open home that holds
+fenced content - which only a read grant filed without the conversation's
+identity gives it, or under <code>peer_auth</code> what the same agent process held
+before <code>/clear</code> - takes no harvest and no capture. Its session's findings
+become one line, and the hook's notice says why:
+<code>Not recorded: this session holds content from example-finance, and its findings may not be written into project example-ops.</code>
+The events about its prompts carry none of their text. Briefings skip that
+line, and a move's pointer, as they skip a session with no findings.</li>
+<li><strong><code>/clear</code></strong> starts a new conversation without <code>peer_auth</code>, with an empty
+label. Under <code>peer_auth</code> the label stays with the agent's process tree, so a
+new conversation in the same process still holds what the old one read.</li>
+<li><strong>Token totals</strong> after a move count only what came after it: the child
+session reports the conversation's totals minus every earlier session's.</li>
+</ul>
+<p>With the switch off, every hook is as the previous section describes.</p>
 <h2 id="an-actual-briefing-annotated">An actual briefing, annotated</h2>
 <p>This is a real briefing, in the order the assembler packs it:</p>
 <figure class="doc-figure" aria-labelledby="annotated-briefing-caption">
@@ -604,7 +669,7 @@ client exposes no transcript simply records none.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#ambient-vs-explicit-sessions">Ambient vs. explicit sessions</a></li><li class="lvl-2"><a href="#process-binding">How tool calls find their session</a></li><li class="lvl-3"><a href="#when-to-call-session-start">When to call session_start</a></li><li class="lvl-3"><a href="#moved-record">Where a moved conversation&#39;s record goes</a></li><li class="lvl-2"><a href="#an-actual-briefing-annotated">An actual briefing, annotated</a></li><li class="lvl-2"><a href="#the-budget-and-what-survives-it">The budget, and what survives it</a></li><li class="lvl-2"><a href="#liveness">Liveness</a></li>
+      <li class="lvl-2"><a href="#ambient-vs-explicit-sessions">Ambient vs. explicit sessions</a></li><li class="lvl-2"><a href="#process-binding">How tool calls find their session</a></li><li class="lvl-3"><a href="#home">Home versus binding</a></li><li class="lvl-3"><a href="#when-to-call-session-start">When to call session_start</a></li><li class="lvl-3"><a href="#moved-record">Where a moved conversation&#39;s record goes</a></li><li class="lvl-3"><a href="#home-record">With isolation.requests on, the record follows the home</a></li><li class="lvl-2"><a href="#an-actual-briefing-annotated">An actual briefing, annotated</a></li><li class="lvl-2"><a href="#the-budget-and-what-survives-it">The budget, and what survives it</a></li><li class="lvl-2"><a href="#liveness">Liveness</a></li>
     </ul>
   </aside>
   

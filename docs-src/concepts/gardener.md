@@ -40,8 +40,10 @@ found, `gardener_apply` to act on one.
 | **stale-plan** | A captured plan still unapproved after `gardener.stale_plan_days` (14) | settling it deliberately rather than by neglect: **merge_plans** when the capture owns no steps and another composition in the project holds the steps for the same work (fold it in there), **ship_plan** when commits since the capture's git stamp match the plan (the work landed without the approval ceremony), **abandon_plan** otherwise |
 | **stale-stage** | A `stage` memory whose `Status:` header is done, missing, or unrecognized, unchanged for `gardener.stale_stage_days` (14) | **archive**: a stage that gates nothing should not hold a permanent briefing pin |
 | **dead-weight** | A memory briefings injected 20+ times in 30 days without a single recall hit, prompt match, or read | **archive**: exposure without demand means it costs tokens and steers nothing |
+| **stale-copy** | A memory with a [provenance stamp](/concepts/project-isolation/#provenance-stamps) whose body cites another project's memory, note or task (`<project>:<id>`) that changed after the memory was last written | **archive**: the copy may be out of date; the proposal names the changed sources by project and id, never their content |
 | **memory-wanted** | The same recall query returned zero hits in 2+ sessions inside 14 days | **memory_wanted**: write the knowledge agents keep searching for; applying opens a task in the queue |
 | **tool-error** | The same normalized tool or hook error, 3+ times inside 14 days and still recent; tool errors must span 2+ sessions | **tool_error**: investigate and fix the recurring failure; applying opens a task with the observed error evidence |
+| **copy-relocate** | A stamped memory that cites at least one item, whose stamps and [source references](/concepts/project-isolation/#source-references) all name one other project | **relocate** into that project, the one the copy is about |
 
 The memory-wanted pass is the one place the gardener asks *for* knowledge
 instead of curating what exists: recurring zero-hit `recall` queries are demand
@@ -73,7 +75,8 @@ Four more proposal types come from an action rather than the timer:
   nothing about knowledge that already escaped, so the tighten audits the global
   scope for memories whose source session belonged to the project and proposes
   moving each one behind the fence. Dismiss to leave it global. This is the only
-  proposal kind an owner action files rather than a request or the timer.
+  proposal an owner action files rather than a request or the timer; the
+  copy-relocate pass above files the same kind on the timer.
 
 ## Constraints and stages are exempt from staleness
 

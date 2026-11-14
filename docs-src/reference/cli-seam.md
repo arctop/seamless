@@ -463,7 +463,11 @@ started it (the same identity every MCP request carries, see
 [which session a command acts in](#which-session)). `--reason` is the agent's
 own words on why it needs the project, at most 200 characters; the owner sees
 it quoted and labeled as the agent's, never as a fact. A longer reason is
-refused before anything is sent.
+refused before anything is sent. With access requests on
+(`isolation.requests`), it also asks for a confidential or sealed project no
+lock covers, as a read refused at that project's fence would: from a
+confidential project a read grant, and from an open project, or for a sealed
+one, a move into the project for good, printed as `--write`'s move below.
 
 ```text
 Requested R-7F3K for example-finance (request). The owner approves it with: seam approve R-7F3K

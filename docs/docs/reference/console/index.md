@@ -43,11 +43,11 @@ nothing, and their rows say so.
 | Begin a passkey unlock | `POST /console/unlock/{project}/begin` | Only for a project peer_auth locks, and only from the signed-in browser that proves its unlock key. Records a waiting [console unlock](https://thereisnospoon.org/docs/guides/peer-auth/#leases-and-the-process-tree) bound to this browser's cookie and key, sets the `seamless_unlock` cookie when the browser holds no live unlock yet, and returns the passkey challenge. Refused while no passkey is enrolled; the terminal path still works. Opens nothing yet. |
 | Unlock a project in this browser | `POST /console/unlock/{project}/finish` | Verifies the passkey assertion for that waiting unlock, from the browser that began it, and makes it live: this browser reads the project for three hours, or less when `peer_auth.max_lease` is shorter. It is never a lease: no agent reads the project through it. |
 | Begin a terminal unlock | `POST /console/unlock/{project}/terminal` | **Approve from a terminal**: the passkey begin's gates, without needing a passkey. Records a waiting unlock bound to this browser and returns a pairing code with the `seamlessd console-open --unlock` command that approves it, run as the daemon's account within ten minutes. The code only names that unlock, so it is not a secret. Opens nothing until the command runs. |
-| Ask for access | `POST /console/access/request` | The agent's ask, not your decision: `seam access request`, run from the agent's own shell, files an [access request](https://thereisnospoon.org/docs/guides/peer-auth/#requests) for a locked project or, with [read grants](https://thereisnospoon.org/docs/guides/peer-auth/#read-grants-and-the-advisory-tier) on, a read grant request for a confidential project no lock covers. It writes a waiting request, with the agent's reason of at most 200 characters, and opens nothing. An agent that already holds the access is answered with it. |
-| Approve an access request | `POST /console/access/{id}/approve` | Your decision: writes the agent's lease on a locked project, or a read grant, for `duration=` (until the session ends, 1 hour or 4 hours), and only while the request's facts still match `digest=`, the digest of the facts you were shown. Under peer_auth it takes a proof: a passkey assertion from the request's page, or a Touch ID signature from Seamless Approve (`proof=touchid`), accepted on the peer_auth socket only. In the advisory tier - read grants without peer_auth - a decision with no passkey is the bearer key's, which is what `seam approve` sends. |
-| Deny an access request | `POST /console/access/{id}/deny` | Closes a waiting request with no lease or grant; the project stays closed to that agent. Refused over the peer_auth socket: deny on the console, or with `seam approve` in your own terminal. |
+| Ask for access | `POST /console/access/request` | The agent's ask, not your decision: `seam access request`, run from the agent's own shell, files an [access request](https://thereisnospoon.org/docs/guides/peer-auth/#requests) for a locked project or, with [access requests](https://thereisnospoon.org/docs/guides/peer-auth/#read-grants-and-the-advisory-tier) on, what the agent's conversation and a confidential or sealed project no lock covers call for: a grant, or a move into the project. With `write=true` it asks for a read-and-write grant or a move, a locked project's included, whose approval opens the lock too. It writes a waiting request, with the agent's reason of at most 200 characters, and opens nothing. An agent that already holds the access is answered with it. |
+| Approve an access request | `POST /console/access/{id}/approve` | Your decision: writes the agent's lease on a locked project, or a grant, for `duration=` (until the session ends, 1 hour or 4 hours), and only while the request's facts still match `digest=`, the digest of the facts you were shown. A grant is read-only unless `access=read-write` on a request that offers the choice. A move request is approved for good: it ends the conversation's session and opens its continuation in the project, and `duration=` bounds only a locked project's lock. Under peer_auth it takes a proof: a passkey assertion from the request's page, or a Touch ID signature from Seamless Approve (`proof=touchid`), accepted on the peer_auth socket only and never for a move. In the advisory tier - access requests without peer_auth - a decision with no passkey is the bearer key's, which is what `seam approve` sends. |
+| Deny an access request | `POST /console/access/{id}/deny` | Closes a waiting request with no lease, grant or move; the project stays closed to that agent, and a move's agent stays where it works. Refused over the peer_auth socket: deny on the console, or with `seam approve` in your own terminal. |
 | Revoke an agent's lease | `POST /console/access/leases/{id}/revoke` | **Revoke** under Agent leases on `/console/access`: ends that lease before its expiry and records an `access.revoked` event. Refused over the peer_auth socket. |
-| Revoke a read grant | `POST /console/access/grants/{id}/revoke` | **Revoke** under Read grants: ends a live grant before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket. |
+| Revoke a read grant | `POST /console/access/grants/{id}/revoke` | **Revoke** under Read grants: ends a live grant, read-only or read and write, before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket. |
 | Lock a console unlock again | `POST /console/access/unlocks/{id}/end` | **Lock again** on `/console/access`, or **Lock it again** on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket. |
 | Begin a passkey enrollment | `POST /console/approvers/passkey/begin` | Only under peer_auth: `name=` the passkey (1 to 64 characters on one line). Returns the WebAuthn creation options, excluding every passkey already [enrolled](https://thereisnospoon.org/docs/guides/peer-auth/#enroll-an-approver). Holds the enrollment in memory and stores nothing. Refused over the peer_auth socket, since a passkey is created in a browser. |
 | Create the passkey | `POST /console/approvers/passkey/finish` | Verifies the browser's new passkey and returns its key's fingerprint with the `seamlessd approvers enroll-code` command that mints its code. Still stores nothing: the passkey waits for that code. |
@@ -103,12 +103,13 @@ what is exposed, or how the install runs, without touching any memory's
 content. **Back up now** and **Delete a backup** make and remove copies of the
 data, never the data itself. The console level is presentation state of the same kind: it changes
 what this console shows you and nothing else. The access, lock, unlock and
-approver rows exist only with [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) or read grants on
-(both optional, and off by default; every one of those routes answers 404
-otherwise), and they are your decisions about who may reach a project, not
-writes to knowledge: they record requests, leases, read grants, console
-unlocks, locks and approver credentials, and never a memory's or a note's
-content. The one an agent calls, **Ask for access**, only files a request for
+approver rows exist only with [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) or access
+requests on (both optional, and off by default; every one of those routes
+answers 404 otherwise), and they are your decisions about who may reach a
+project, not writes to knowledge: they record requests, leases, grants, moves
+(a move ends the conversation's session and opens its continuation in the
+project it moved into), console unlocks, locks and approver credentials, and
+never a memory's or a note's content. The one an agent calls, **Ask for access**, only files a request for
 you to decide. **Update now** and **Resume
 automatic updates** act on the install rather than on knowledge: the first
 starts the same backed-up update `seamlessd update` runs, the second lets
@@ -646,6 +647,17 @@ project alone:
 | Interactions | The project-scoped slice of the feed. |
 | Context | The effective SessionStart flow into and out of the project: global and parent memory pools, sibling-family channels, and split lineage. |
 
+**Came from.** With [access requests](https://thereisnospoon.org/docs/concepts/project-isolation/#provenance-stamps)
+on, an item written by an agent that held a confidential or sealed project's
+content carries a provenance stamp ("may contain content from example-finance
+(grant R-7F3K)"). On a project with such items, the Memories, Notes and Plans &
+tasks tabs show the stamp on each row and a **Came from** bar: one chip per
+project the stamps name, with how many items of that tab's kind name it.
+Choosing one (`?from=<project>`) narrows the three tabs to those items, and
+Plans & tasks then lists the tasks themselves, any status. A locked project
+this browser has not unlocked is named only; the items listed are this
+project's own. A project with no stamped item shows no bar.
+
 A retired project still renders, with its banner - kept for provenance. Only an
 unknown slug is a 404.
 
@@ -672,6 +684,30 @@ A session's page is the workspace: its findings (rendered), its full event
 timeline as interaction rows, per-session counts (tool calls, memory reads and
 writes, items injected, and read-after-inject), the tasks it currently claims with
 their lease countdowns, and the memories it produced.
+
+### The conversation {#conversation}
+
+With [access requests](https://thereisnospoon.org/docs/concepts/project-isolation/#asking-for-access) on, a
+conversation can span sessions: a move into a fenced project continues it as a
+child session there. Every session of a conversation that moved, asked for or
+holds a grant, or wrote a stamped item shows one **Conversation** card (also in
+the page's JSON as `conversation`):
+
+- **Home chain**: the session it started in and each move's child, oldest
+  first, with the move's request, who decided it and when.
+- **Reach**: every project it reached - its homes, projects `session_start`
+  bound it to, read-only and read-and-write grants, leases, and requests still
+  waiting, denied or expired - each with its request (R-...) and who decided
+  it: a passkey or Touch ID key by name, the terminal (`seamlessd approve`), the
+  bearer key (`seam approve` or the console, advisory), the agent's approval
+  dialog (advisory), or a Deny on this console.
+- **Written**: what its sessions wrote, by project, each with its provenance
+  stamp.
+
+A locked project this browser has not unlocked shows its name, the request that
+reached it and an **Unlock** link back to the page, and nothing from inside. A
+conversation that never moved, asked for nothing and wrote nothing stamped shows
+no card.
 
 ## Memories
 

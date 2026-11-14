@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-three-states">The three states</a></li><li class="lvl-2"><a href="#the-console-is-exempt">The console is exempt</a></li><li class="lvl-2"><a href="#isolation-requires-a-standalone-project">Isolation requires a standalone project</a></li><li class="lvl-2"><a href="#tightening-and-loosening">Tightening and loosening</a></li><li class="lvl-2"><a href="#knowledge-that-already-got-out">Knowledge that already got out</a></li><li class="lvl-3"><a href="#in-the-console">In the console</a></li><li class="lvl-3"><a href="#from-the-cli">From the CLI</a></li><li class="lvl-2"><a href="#what-agents-see">What agents see</a></li><li class="lvl-2"><a href="#what-a-security-monitor-sees">What a security monitor sees</a></li><li class="lvl-2"><a href="#asking-for-access">Asking for access</a></li><li class="lvl-2"><a href="#honest-limits">Honest limits</a></li>
+      <li class="lvl-2"><a href="#the-three-states">The three states</a></li><li class="lvl-2"><a href="#the-console-is-exempt">The console is exempt</a></li><li class="lvl-2"><a href="#isolation-requires-a-standalone-project">Isolation requires a standalone project</a></li><li class="lvl-2"><a href="#tightening-and-loosening">Tightening and loosening</a></li><li class="lvl-2"><a href="#knowledge-that-already-got-out">Knowledge that already got out</a></li><li class="lvl-3"><a href="#in-the-console">In the console</a></li><li class="lvl-3"><a href="#from-the-cli">From the CLI</a></li><li class="lvl-2"><a href="#what-agents-see">What agents see</a></li><li class="lvl-2"><a href="#what-a-security-monitor-sees">What a security monitor sees</a></li><li class="lvl-2"><a href="#asking-for-access">Asking for access: one home per conversation</a></li><li class="lvl-3"><a href="#home-and-label">The conversation, its home and its label</a></li><li class="lvl-3"><a href="#the-one-rule">The one rule</a></li><li class="lvl-3"><a href="#what-a-refusal-asks-for">What a refused call asks for</a></li><li class="lvl-3"><a href="#what-you-approve">What you approve</a></li><li class="lvl-3"><a href="#moves">Moves</a></li><li class="lvl-3"><a href="#grants">Grants: read-only, or read and write</a></li><li class="lvl-3"><a href="#receipts">Receipts</a></li><li class="lvl-3"><a href="#records-follow-the-home">Where the conversation&#39;s record goes</a></li><li class="lvl-3"><a href="#provenance-stamps">Provenance stamps</a></li><li class="lvl-3"><a href="#source-references">Source references</a></li><li class="lvl-3"><a href="#how-much-an-approval-proves">How much an approval proves</a></li><li class="lvl-2"><a href="#honest-limits">Honest limits</a></li>
     </ul>
   </details>
   <p>By default, projects are cooperative rather than isolated. Any agent can read or
@@ -309,7 +309,9 @@ lock pill. Nothing about an isolated project's pages turns scary or
 half-rendered - the pill and the Overview control are the whole story.</p>
 <p>The one exception is a <a href="../../guides/peer-auth/">locked project</a> under <code>peer_auth</code>:
 there the threat <em>is</em> your own account, so the console shows its name and counts,
-and nothing inside it until you unlock it in that browser.</p>
+and nothing inside it until you unlock it in that browser. A session's
+<a href="../../reference/console/#conversation">Conversation card</a> follows the same rule: a
+locked project in it shows its name and nothing more.</p>
 <h2 id="isolation-requires-a-standalone-project">Isolation requires a standalone project</h2>
 <p>A project cannot be isolated while it is entangled in a family: no family
 membership, no parent, no children.</p>
@@ -372,7 +374,10 @@ very thing the fence exists to keep in. They do not hide that the project
 <em>exists</em>, because every scope error already lists the machine's projects. An
 outside agent refused at the fence is told to bind to the project with
 <code>session_start project=&lt;slug&gt;</code> if its task really is that project, and to
-leave it alone otherwise.</li>
+leave it alone otherwise. With <a href="#asking-for-access">access requests</a> on, a
+Claude Code or Codex agent is told instead to ask you to move its
+conversation into the project, or for a grant of it, and the refusal names
+the request it filed.</li>
 <li><strong>A conversation that binds itself in keeps its record inside.</strong> A Claude
 Code or Codex agent working in an open project's repository (or in none)
 that binds itself to a confidential or sealed project with
@@ -385,7 +390,10 @@ and nothing it holds. One that binds itself to two isolated projects keeps
 that record in none of them. A confidential or sealed project's own agent
 keeps its record at home, whatever it binds itself to. This holds on every
 install, whether or not <code>isolation.requests</code> is on
-(<a href="../../concepts/sessions/#moved-record">details</a>).</li>
+(<a href="../../concepts/sessions/#moved-record">details</a>). With <code>isolation.requests</code> on,
+everything the hooks record follows the conversation's home instead,
+wherever the agent works, and nothing lands where the clearance refuses
+(<a href="../../concepts/sessions/#home-record">details</a>).</li>
 <li><strong>Task answers withhold what blocks across the fence.</strong> A confidential
 project's task that blocks an outside project's task reaches an outside
 session as a withheld entry in <code>tasks_ready</code>, a <code>depends_on_withheld</code> count in
@@ -397,88 +405,284 @@ title or its id.</li>
 project without learning its name: the metadata feed sends a confidential or
 sealed project's slug only as a keyed hash, and the commit-matching snapshot
 never names its repository. Both are off by default.</p>
-<h2 id="asking-for-access">Asking for access</h2>
-<p>A refusal at a confidential project's fence can become a request you approve,
-when the daemon's config turns it on (<code>isolation.requests: true</code>; see
-<a href="../../reference/configuration/#isolation-requests">the configuration</a>). It is off by
-default, and off the refusal reads exactly as above and nothing is recorded.</p>
-<p>Isolation itself is unchanged by it: a confidential project's sessions still
-read open projects and global, and nothing leaves the project on its own. What
-changes is that a session refused a read of a confidential project - naming it
-with <code>project=</code> (in <code>recall</code> or any other read) or reading one of its items by
-ULID - files an access request, and the refusal names it. A read that only
-filters, such as <code>recall</code> without <code>project=</code> or <code>trial_query</code>, asks for
-nothing:</p>
-<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">project example-finance is confidential: reads require a session bound to it -- ...
-</span></span><span class="line"><span class="cl">Remedy: read request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console&#39;s Access requests page; retry once it is approved. An approved read is read-only, and confines this session&#39;s writes to example-finance for the rest of its life: once it holds example-finance&#39;s content, it writes into no open project, example-ops included, and not into the global scope.
+<h2 id="asking-for-access">Asking for access: one home per conversation</h2>
+<p>A refusal at a confidential or sealed project's fence can become a request you
+approve, when the daemon's config turns it on (<code>isolation.requests: true</code>; see
+<a href="../../reference/configuration/#isolation-requests">the configuration</a>). It is off
+by default, and off every refusal reads exactly as above and nothing is
+recorded.</p>
+<p>Isolation itself is unchanged by it: a confidential project's own sessions
+still read open projects and global, and nothing leaves a fenced project
+without your approval. What changes is who the fence judges. Without the
+switch it judges the session a connection is bound to, which an agent can
+change at will (<code>session_start</code>, <code>session=</code>). With it, the fence judges the
+<strong>conversation</strong>, and what a conversation has read only grows.</p>
+<h3 id="home-and-label">The conversation, its home and its label</h3>
+<ul>
+<li><strong>The conversation</strong> is one agent context. Without <code>peer_auth</code> it is the
+client's own session - the Claude Code or Codex session id that the
+agent-process identity on every call names
+(<a href="../../concepts/sessions/#process-binding">how</a>) - so <code>session_start</code>,
+<code>session=</code> and a move leave it the same conversation; a resume continues it,
+and <code>/clear</code> starts a new one. Under
+<a href="../../guides/peer-auth/#read-grants-and-the-advisory-tier"><code>peer_auth</code></a> it is the
+agent's process tree as the kernel reports it, for the life of the process,
+<code>/clear</code> included.</li>
+<li><strong>Its home</strong> is the project its own session is in: the repository's project
+when the agent starts, and after an approved move the project it moved
+into. Its own record goes there, and calls that name no project work there.
+The home does not limit what the conversation may reach.</li>
+<li><strong>Its label</strong> is every confidential or sealed project whose content it may
+hold: a fenced home, every project a grant opened to it, every project it
+moved through, and every fenced project one of its own sessions is in. The
+label only grows: a grant's expiry or revocation ends the reads, never what
+was read. A project you loosen to <code>open</code> leaves every label.</li>
+</ul>
+<p>A Claude Code or Codex agent running the hooks with a current <code>seam</code> is
+identified this way, from its own session. A client that sends no agent-process
+identity is not: it is held by the session it is bound to, and binds exactly as
+it did before.</p>
+<h3 id="the-one-rule">The one rule</h3>
+<p><strong>Every write must be cleared for everything the conversation holds.</strong> A
+destination is cleared when every project in the label is that destination or
+has a <strong>flow</strong> into it: your approval, recorded with the request that listed
+it, for one project's content to be written into another. An open project and
+the global scope are cleared only while the label is empty.</p>
+<p>So a conversation that holds nothing fenced writes wherever it always could.
+One that holds <code>example-finance</code>'s content writes only where you let that
+content go, and never again into an open project or the global scope - its own
+open home included. A confidential or sealed project's own conversation
+writes into it as before. The rule lives in the fence itself, so every tool,
+every hook and every other agent write meets it, and a refusal names the
+projects the conversation holds and where it may still write:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">memory_write: this session holds content from example-finance, example-legal, so it writes only into example-legal: a write into project example-hr is refused
 </span></span></code></pre></div>
-<p>An agent can also ask explicitly, with its reason, from its own shell:
-<code>seam access request example-finance --reason &quot;...&quot;</code>.</p>
-<p><strong>Asking again.</strong> One request waits per asker and project: a repeated refusal
-names the request already waiting rather than filing another, and an explicit
-ask with a reason fills in the reason of a waiting request that has none (the
-refusal never has one to give). That reason is one of the facts you approve,
-so if you were looking at the request when it arrived, the approval asks you
-to look again. A session that already holds a live read grant of the project
-from the same project is answered with it, and nothing is filed, until 30
-minutes before it ends; from then on asking again files a new request.</p>
-<p><strong>After you deny one.</strong> The agent's next refused read of that project says you
+<h3 id="what-a-refusal-asks-for">What a refused call asks for</h3>
+<p>The kind of request follows from the conversation's home and the project,
+never from the agent's choice:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>The conversation's home</th>
+<th>The project it reaches</th>
+<th>The request</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>open, or the global scope</td>
+<td>confidential</td>
+<td>a <strong>move</strong> into the project</td>
+</tr>
+<tr>
+<td>confidential</td>
+<td>another confidential project</td>
+<td>a <strong>grant</strong> of the project</td>
+</tr>
+<tr>
+<td>any</td>
+<td>sealed</td>
+<td>a <strong>move</strong> into the project</td>
+</tr>
+<tr>
+<td>sealed</td>
+<td>confidential</td>
+<td>none: a sealed project's conversation reaches no confidential project</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>An open project needs no request. A conversation that holds fenced content
+never goes back to one, so a write there, or a <code>session_start</code> there, is
+refused, and nothing is filed.</p>
+<p>What files one:</p>
+<ul>
+<li><strong>A refused read</strong> - naming the project with <code>project=</code> (in <code>recall</code> or any
+other read), or reading one of its items by ULID. A read that only filters,
+such as <code>recall</code> without <code>project=</code> or <code>trial_query</code>, asks for nothing.</li>
+<li><strong>A refused write</strong>, which asks for read and write.</li>
+<li><strong><code>session_start project=&lt;slug&gt;</code></strong> into a fenced project, which binds
+nothing, asks for read and write, and leaves the home where it is. A
+<code>session=</code> handle naming another project's session acts as that session only
+where the home may read and write; anywhere else the call is refused, and
+nothing is filed.</li>
+<li><strong>The agent's explicit ask</strong>: <code>access_request</code> (with <code>write</code> to ask for read
+and write) or, from its own shell,
+<code>seam access request example-finance --reason &quot;...&quot; [--write]</code>.</li>
+</ul>
+<p>The refusal names the request it filed. Here a conversation working in
+<code>example-ops</code>, an open project, reads one of <code>example-finance</code>'s items by id:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">notes_read: project example-finance is confidential: only a conversation working in it reads it -- if your task is about example-finance, ask the owner to move this conversation into it (session_start project=example-finance asks); otherwise leave it alone
+</span></span><span class="line"><span class="cl">Remedy: move request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console&#39;s Access requests page; retry once it is approved. Record what belongs in example-ops now: once the owner approves the move, this conversation works in example-finance for good, and it can no longer write to example-ops or the global scope until the conversation ends. After the move it can still close a task it claimed there, with a receipt: tasks_update with status done or dropped, and no text. Its first result after the approval says so and carries example-finance&#39;s briefing.
+</span></span></code></pre></div>
+<p>A locked project stays the lock's: a call refused at the lock files the lock's
+request, as without the switch. An agent working elsewhere that needs to work
+in a locked project asks with <code>access_request write=true</code> (or
+<code>seam access request &lt;project&gt; --write</code>), which files the move or the grant
+its home calls for; approving that opens the lock to it too. A lease alone
+opens a locked project only to the conversation that works in it
+(<a href="../../guides/peer-auth/#read-grants-and-the-advisory-tier">details</a>).</p>
+<p><strong>Asking again.</strong> One request waits per conversation and project, whatever its
+kind: a repeated refusal names the request already waiting rather than filing
+another, and an explicit ask with a reason fills in the reason of a waiting
+request that has none (a refusal never has one to give). That reason is one of
+the facts you approve, so if you were looking at the request when it arrived,
+the approval asks you to look again. A conversation that already holds a live
+grant of the project, with at least the access it asks for, is answered with
+it, and nothing is filed, until 30 minutes before it ends; from then on asking
+again files a new request.</p>
+<p><strong>After you deny one.</strong> The agent's next refused call for that project says you
 denied it, and when, and files nothing: a refused call never asks you again
 behind your back. If you denied it because it asked for the wrong thing, tell
-the agent what to ask for instead; its explicit request
-(<code>seam access request ... --reason &quot;...&quot;</code>) always files a new one.</p>
-<p><strong>Who may ask:</strong> a session bound to an open or a confidential project. Nothing
-that involves a sealed project is ever offered, on either side: a sealed
-project's refusal stays final, and a sealed project's session cannot ask for
-anything outside it.</p>
-<p><strong>What you approve.</strong> <code>seam approve</code> (or the console's Access requests page)
-shows the request's facts, including the line <em>content from example-finance
-may be copied into example-ops's memories</em>: an approved session can read the
-project, and nothing stops it from writing what it read into its own project.
-You choose how long: until the session ends, 1 hour or 4 hours.</p>
-<p><strong>What a grant is.</strong> Read-only, one project, to the one session that asked
-(under <code>peer_auth</code>, to the asking agent and the programs it started), until it
-expires, you revoke it from the Access requests page, or the session ends.
-While it lives, the granted project also joins that session's <code>recall</code> scope,
-its trials show in <code>trial_query</code>, and its proposals show in <code>gardener_proposals</code>;
-the briefing does not change. Another session is still refused.</p>
-<p><strong>Writes follow what the session holds.</strong> Every write must be cleared for
-everything the session holds: each confidential or sealed project whose
-content it may hold is the destination, or you approved its content into the
-destination. An open project and the global scope are cleared only while the
-session holds nothing fenced. So a session in a confidential project that
-receives a grant writes only into its own project, and a session in an open
-project that receives one writes only into the project it read - no open
-project, its own included, and not the global scope. Its next tool result says
-so, and the confinement is recorded as an event. Expiry and revocation end the
-read, never what the session holds - what was read stays read.</p>
-<p><strong>Writing up the work.</strong> A session in a confidential project documents what
-it did in its own project: task details, memories, notes and findings there
-stay open to it, during the grant and after it. The grant tells the agent to cite the
-confidential project by reference, with the project slug and the item's name or
-id, and to leave that project's confidential details out. That is an instruction
-to the agent, not a filter, which is why the line you approve still says content
-may be copied. A session in an open project has no such place: it writes only
-into the project it read, its <code>session_end</code> findings included. A plan or
-planning-subagent report captured where the session may not write is dropped,
-and the agent is told why.</p>
-<p><strong>How much an approval proves.</strong> Without <code>peer_auth</code> the approval is
-<strong>advisory</strong>: <code>seam approve</code> asks for a y/N in a terminal (it refuses to run
-without one) and commits over the console with the bearer key, and the
-console's Approve does the same. Any process that holds the key - which every
+the agent what to ask for instead; its explicit request always files a new one.</p>
+<h3 id="what-you-approve">What you approve</h3>
+<p>Every request states the whole carry: the conversation's home, every fenced
+project it would hold once approved, and every project it could write to then.
+Approving clears exactly the flows those facts list. <code>seam approve</code>, each
+request's page on the console (its passkey page under <code>peer_auth</code>) and the
+advisory tier's in-session dialog show it, and every surface shows the line
+that says what approving lets happen among the warnings:</p>
+<ul>
+<li><strong>A move</strong>: <em>This agent has worked in example-ops and read example-legal. If
+you approve, it works in example-finance from now on, and what it saw may be
+written into example-finance. It can no longer write to example-ops or the
+global scope until the conversation ends.</em> Into a sealed project the line
+adds that the project is sealed, so nothing enters it otherwise, and that
+approving lets in what the agent carries.</li>
+<li><strong>A grant</strong>: <em>content from example-finance may be copied into example-legal</em>,
+and into every other project the conversation may write to. Between
+confidential projects you choose <strong>read-only</strong> (the default) or <strong>read and
+write</strong>, which adds <em>and it may change example-finance's tasks, memories and
+notes; content from example-legal may be copied into example-finance</em>.</li>
+</ul>
+<p>A grant lasts as long as you choose: until the conversation's session ends, 1
+hour or 4 hours, capped by <code>peer_auth.max_lease</code> (8 hours when unset). A move
+lasts for good; into a locked project, the lock it opens lasts as long as you
+choose.</p>
+<h3 id="moves">Moves</h3>
+<p>An approved move takes the conversation into the project for good:</p>
+<ul>
+<li>the session it worked in ends, keeps the findings the agent wrote, and gains
+a pointer:
+<code>Moved to project example-finance; this conversation continues there as session cc/8dd2fd5b-55d96b8d15ff0104@example-finance, and its findings go there, not here.</code>
+Its task claims stay, for <a href="#receipts">receipts</a>;</li>
+<li>a child session opens in the project, linked to it, and becomes the
+conversation's own session, with the same client session and agent process;</li>
+<li>that project is the conversation's home from then on: its record goes there,
+and calls that name no project work there;</li>
+<li>it can no longer write to the home it left, or to the global scope, until the
+conversation ends (under <code>peer_auth</code>, until the agent process exits);</li>
+<li>its first tool result after the approval says so and carries the new home's
+briefing, once, even across a daemon restart. When it moved out of a
+confidential or sealed project, that notice also says where what it writes
+about that project goes: <a href="#source-references">into its new home, by reference</a>.</li>
+</ul>
+<p>Before the move, the request tells the agent to record what belongs in its
+current home first. Moving in is the only way into a sealed project, and it is
+how an open project's conversation reaches a confidential one. A resumed
+conversation resumes in the project it moved into
+(<a href="../../concepts/sessions/#home-record">details</a>).</p>
+<h3 id="grants">Grants: read-only, or read and write</h3>
+<p>A grant opens one confidential project to a conversation working in another
+confidential project. <strong>Read-only</strong>, the conversation reads the project, and
+what it reads may be written only into the projects the approval names: its
+home, and any project it already holds a read-and-write grant of. <strong>Read and
+write</strong>, it also changes the project's tasks, memories and notes as the
+project's own sessions do, and what it holds may be written into it. Nothing
+that involves a sealed project is ever granted, on either side.</p>
+<p>While a grant lives, the project also joins the conversation's <code>recall</code> scope,
+its trials show in <code>trial_query</code>, its proposals show in <code>gardener_proposals</code>,
+and prompt recall and a subagent's relevant memories read it; the briefing does
+not change. A grant ends at its expiry, when you revoke it from the Access
+requests page, or when the conversation's session ends. Ending it ends the
+reads, never what the conversation holds.</p>
+<p>The grant tells the agent to write up its work in its home and to refer to the
+project's items by reference, leaving its confidential details out. That is an
+instruction to the agent, not a filter, which is why the line you approve
+still says content may be copied.</p>
+<h3 id="receipts">Receipts</h3>
+<p>A move is one way: once you approve it, the conversation can no longer write
+into the project it left. One write is still allowed there, because without it
+the work it claimed before the move would stay in progress for good: a
+<strong>receipt</strong>. The conversation closes a task its pre-move session claimed -
+<code>done</code> or <code>dropped</code>, nothing else - and may point at one item in its new home
+(<code>reference=example-finance:&lt;id&gt;</code>, the project slug and the item's id). That
+is the only thing that crosses back: a receipt carries no title, body or other
+text, and Seamless refuses one that tries, or whose reference names no item in
+the home. The typical case is an orchestrator in an open project that claims a
+build step, then moves to read a confidential project's live data: the receipt
+closes the step without carrying any of that data back. The task's history
+shows the receipt and its reference under the session that claimed the step.
+A conversation whose home is sealed sends no receipts, and a task someone else
+has claimed since, or one you released from the console, is no receipt's to
+close. The move's request and its notice both tell the agent so.</p>
+<h3 id="records-follow-the-home">Where the conversation's record goes</h3>
+<p>With the switch on, everything the hooks record for a conversation goes to its
+home, wherever the agent works: the SessionEnd harvest (for Codex, each
+<code>Stop</code>'s findings), plan captures and planning-subagent reports, and the
+events about them. After a move that is the project it moved into. Prompt
+recall and a subagent's briefing read the home and the projects its live grants
+open. Where the rule refuses the home - an open home holding fenced content -
+nothing is recorded, and the session's findings say why
+(<a href="../../concepts/sessions/#home-record">details</a>).</p>
+<h3 id="provenance-stamps">Provenance stamps</h3>
+<p>Everything an agent writes while it holds content from a confidential or
+sealed project other than the destination records <em>may contain content from
+example-finance (grant R-7F3K)</em>: one stamp per such project, naming the grant
+or move that let its content in. That covers memories, notes, tasks, trials,
+session findings, and plan and subagent captures. Memories and notes keep it in
+frontmatter (<code>may_contain</code>); the rest only in the database. No write removes
+it, and a memory that supersedes another carries both memories' stamps. It
+names projects and approvals, never content. It shows on <code>recall</code> hits,
+<code>memory_read</code>, <code>notes_read</code>, <code>tasks_list</code> and <code>tasks_ready</code> answers, and the
+console's item pages and search; on a project's page, <strong>Came from</strong> narrows
+its items to the ones that name a project
+(<a href="../../reference/console/#projects">console</a>). Deleting <code>may_contain</code> from a file
+by hand removes the warning. Off, nothing is stamped.</p>
+<h3 id="source-references">Source references</h3>
+<p>Where the agent writes follows one placement rule: the destination must be
+cleared first; then the project the item is about; and when that project is not
+cleared, the item goes in the conversation's home, citing what it came from by
+reference. A reference is body text in one form, the project slug, a colon and
+the item's full id - <code>example-finance:01M7...</code> - so no tool takes an argument
+for it. The grant's text, the refusals that send a conversation home and the
+notice after a move out of a fenced project teach that form.</p>
+<p>The <a href="../../concepts/gardener/">gardener</a> reads references back from stamped
+memories, and never a source's content:</p>
+<ul>
+<li><strong>stale-copy</strong> proposes archiving a copy whose cited memory, note or task
+changed after the copy was last written;</li>
+<li><strong>copy-relocate</strong> proposes moving a copy whose stamps and references all name
+one other project into that project. Before you move a stamped memory into a
+project less fenced than one it may hold content from, the console warns you,
+and blocks nothing.</li>
+</ul>
+<p>A reference that does not resolve in the project it names, or points into a
+project the copy may not read, is skipped.</p>
+<h3 id="how-much-an-approval-proves">How much an approval proves</h3>
+<p>Without <code>peer_auth</code> an approval is <strong>advisory</strong>. <code>seam approve</code> asks for a y/N
+in a terminal (it refuses to run without one) and commits over the console
+with the bearer key; the console's Approve does the same, and so does Approve
+in the agent's in-session dialog. Any process that holds the key - which every
 local agent can read - can make that call, so an approval guards against an
-agent wandering into a confidential project, not against one set on it. The
-holder of such a grant is the conversation the agent's process identity
-names, which is self-reported; a client that sends none is held by the session
-a call speaks for, so one that rebinds with <code>session_start</code>, or names another
-session with <code>session=</code>, writes where that session may. Under <code>peer_auth</code> a grant needs the same proofs as a
+agent wandering into a fenced project, not against one set on it. The
+conversation is the one the agent's process identity names, which is
+self-reported; a client that sends none is held by the session a call speaks
+for, so one that rebinds with <code>session_start</code>, or names another session with
+<code>session=</code>, writes where that session may.</p>
+<p>Under <code>peer_auth</code> a grant or a move needs the same proofs as a
 <a href="../../guides/peer-auth/">locked project's lease</a>: your terminal through <code>sudo</code> to
-the daemon's account, a passkey, or a Touch ID key. Its holder is then the
-asking agent's process tree, and those moves are refused. An agent whose
-conversation Seamless identifies cannot name the confidential project as its
-own with <code>session_start</code> either: that files a move or grant request instead of
-binding. A client that sends no identity still can, in either tier; only a
-<a href="../../guides/peer-auth/">lock</a> holds against that.</p>
+the daemon's account, a passkey, or - for a grant - a Touch ID key; Touch ID
+approves no move yet. The conversation is then the asking agent's process tree,
+and a move or grant into a locked project opens its lock too, in the same
+approval.</p>
+<p>In either tier, an agent whose conversation Seamless identifies cannot name a
+fenced project as its own: <code>session_start</code> files a move or grant request
+instead of binding, and <code>session=</code> acts as another project's session only
+where the home may read and write. A client that sends no identity still can,
+and so can an agent started in that project's repository, which is that
+project's own; only a <a href="../../guides/peer-auth/">lock</a> holds against that.</p>
 <h2 id="honest-limits">Honest limits</h2>
 <p>This matters more than the feature list, so it is stated plainly.</p>
 <p><strong>What this is.</strong> A policy fence at every Seamless surface - briefings, recall,
@@ -500,6 +704,21 @@ it. A connection bound to nothing - a hookless client that skipped
 <code>session_start</code>, or an older <code>seam</code> that sends no identity - is judged as the
 global scope, which fails closed against reading an isolated project but also
 means the fence cannot recognize it as belonging to one.</p>
+<p><strong>With access requests on</strong>, the same holds, and more:</p>
+<ul>
+<li>Seamless guards its own surfaces only. An agent can still put what it read
+into files, commits, pull request text or another tool.</li>
+<li>Without <code>peer_auth</code> the conversation is the agent's word: the agent-process
+identity is self-reported, and <code>/clear</code> starts a new conversation with an
+empty label. A client that sends no identity is held by its session, as
+before.</li>
+<li>A fork, or a separate agent the conversation starts, is a new conversation to
+Seamless, and what it prints back is invisible to it.</li>
+<li>The event log records each tool call under the calling session's project,
+with its arguments and the start of its result, so a granted read's answer
+can appear in the asking project's history on the console. Agents read no
+events, and text already in the log stays there.</li>
+</ul>
 <p><strong>What makes it stronger.</strong> <a href="../../guides/peer-auth/">peer_auth</a> puts an
 authentication boundary under the fence: the daemon runs as its own OS account,
 names each caller by the uid the kernel reports for its Unix-socket connection,
@@ -526,7 +745,7 @@ dir, port, and key, run as its own account.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-three-states">The three states</a></li><li class="lvl-2"><a href="#the-console-is-exempt">The console is exempt</a></li><li class="lvl-2"><a href="#isolation-requires-a-standalone-project">Isolation requires a standalone project</a></li><li class="lvl-2"><a href="#tightening-and-loosening">Tightening and loosening</a></li><li class="lvl-2"><a href="#knowledge-that-already-got-out">Knowledge that already got out</a></li><li class="lvl-3"><a href="#in-the-console">In the console</a></li><li class="lvl-3"><a href="#from-the-cli">From the CLI</a></li><li class="lvl-2"><a href="#what-agents-see">What agents see</a></li><li class="lvl-2"><a href="#what-a-security-monitor-sees">What a security monitor sees</a></li><li class="lvl-2"><a href="#asking-for-access">Asking for access</a></li><li class="lvl-2"><a href="#honest-limits">Honest limits</a></li>
+      <li class="lvl-2"><a href="#the-three-states">The three states</a></li><li class="lvl-2"><a href="#the-console-is-exempt">The console is exempt</a></li><li class="lvl-2"><a href="#isolation-requires-a-standalone-project">Isolation requires a standalone project</a></li><li class="lvl-2"><a href="#tightening-and-loosening">Tightening and loosening</a></li><li class="lvl-2"><a href="#knowledge-that-already-got-out">Knowledge that already got out</a></li><li class="lvl-3"><a href="#in-the-console">In the console</a></li><li class="lvl-3"><a href="#from-the-cli">From the CLI</a></li><li class="lvl-2"><a href="#what-agents-see">What agents see</a></li><li class="lvl-2"><a href="#what-a-security-monitor-sees">What a security monitor sees</a></li><li class="lvl-2"><a href="#asking-for-access">Asking for access: one home per conversation</a></li><li class="lvl-3"><a href="#home-and-label">The conversation, its home and its label</a></li><li class="lvl-3"><a href="#the-one-rule">The one rule</a></li><li class="lvl-3"><a href="#what-a-refusal-asks-for">What a refused call asks for</a></li><li class="lvl-3"><a href="#what-you-approve">What you approve</a></li><li class="lvl-3"><a href="#moves">Moves</a></li><li class="lvl-3"><a href="#grants">Grants: read-only, or read and write</a></li><li class="lvl-3"><a href="#receipts">Receipts</a></li><li class="lvl-3"><a href="#records-follow-the-home">Where the conversation&#39;s record goes</a></li><li class="lvl-3"><a href="#provenance-stamps">Provenance stamps</a></li><li class="lvl-3"><a href="#source-references">Source references</a></li><li class="lvl-3"><a href="#how-much-an-approval-proves">How much an approval proves</a></li><li class="lvl-2"><a href="#honest-limits">Honest limits</a></li>
     </ul>
   </aside>
   

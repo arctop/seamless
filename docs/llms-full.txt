@@ -1125,6 +1125,11 @@ ones, precisely so Codex's harvest is not invisible. The practical consequence i
 that a Codex session's findings appear a few minutes after the last turn (once the
 reaper runs), rather than the instant the window closes.
 
+With [access requests](/concepts/project-isolation/#asking-for-access) on, each
+`Stop`'s findings go to the conversation's home. After an approved move, they are
+the child session's, in the project it moved into
+([details](/concepts/sessions/#home-record)).
+
 ## Verify
 
 ```bash
@@ -3308,6 +3313,30 @@ a call belongs to - for scope, and for
 [project isolation](/concepts/project-isolation/#honest-limits) - but it is not
 an authentication boundary.
 
+### Home versus binding {#home}
+
+With [access requests](/concepts/project-isolation/#asking-for-access)
+(`isolation.requests`) on, two things that are usually the same come apart for
+a Claude Code or Codex agent:
+
+- **Its home** is the project its conversation's own session is in: the
+  repository's project when it starts, and after an approved
+  [move](/concepts/project-isolation/#moves) the project it moved into. The
+  fences judge every call from the home, and the conversation's record goes
+  there.
+- **Its binding** - the process binding, a `session_start`, or a call's
+  `session=` - still chooses which session a call is credited to and where a
+  call that names no project lands. It never changes what the fence lets
+  through: a binding or a `session=` handle that would have the conversation
+  act as a session outside its home is honored only where the home may read
+  and write, and refused anywhere else, with the rule and the remedy. So after
+  a move, a connection that `session_start` bound to the old home is refused
+  until an argument-less `session_start` hands it back to the conversation's
+  own session; the process binding follows the move by itself.
+
+A client that sends no agent-process identity has no home: its binding is
+judged as it always was.
+
 ### When to call `session_start` {#when-to-call-session-start}
 
 - **From a client without hooks**, once per connection, with `cwd` (the
@@ -3320,7 +3349,13 @@ an authentication boundary.
   SessionEnd closes both - and binds the connection to it. An argument-less
   `session_start` hands the connection back to your own session. Moving into a
   confidential or sealed project also moves
-  [where your conversation's record goes](#moved-record).
+  [where your conversation's record goes](#moved-record). With
+  `isolation.requests` on, a Claude Code or Codex agent's `session_start` moves
+  the connection only where its [home](#home) may read and write: into a
+  confidential or sealed project it binds nothing and files the request its
+  home and that project call for - a move into it for good, or a grant of it -
+  and the refusal names it; into an open project or the global scope it is
+  refused once the conversation holds a fenced project's content.
 - **To resume a named session.** `name` takes a `sess/*` name or the `cc/...` or
   `cx/...` on the briefing's `Seam session` line; a new name starts a separate
   named session.
@@ -3370,16 +3405,55 @@ linked to it, ended or not:
   findings of your own, takes a line naming the projects in the harvest's
   place, and the hook's notice says why.
 - **What stays where it was.** Token totals are metadata and stay on the
-  ambient session. Briefings and prompt recall still follow the repository. A
-  session native to an isolated project, whatever it binds itself to, a move
-  between open projects, and a client that cannot link its session (an older
-  `seam` that names no agent process) record exactly as before.
+  ambient session. Briefings and prompt recall still follow the repository
+  while `isolation.requests` is off. A session native to an isolated project,
+  whatever it binds itself to, a move between open projects, and a client that
+  cannot link its session (an older `seam` that names no agent process) record
+  exactly as before.
 
 This applies on every install, whether or not
 [`isolation.requests`](/reference/configuration/#isolation-requests) is on.
-With it on, a read grant that confines the conversation's writes to another
-project keeps its harvest and captures out of the isolated session as well:
-they land nowhere, and the notice says so.
+With it on, the routed record also meets the
+[clearance rule](/concepts/project-isolation/#the-one-rule): where what the
+conversation holds does not clear the isolated session's project, its harvest
+and captures land nowhere, and the notice says so. An identified conversation
+cannot bind itself into an isolated project with the switch on, so for one,
+the next section is the rule.
+
+### With `isolation.requests` on, the record follows the home {#home-record}
+
+Everything the hooks record for a conversation goes to its [home](#home),
+wherever the agent works, once the clearance rule clears it there:
+
+- **Findings.** The SessionEnd harvest (for Codex, each `Stop`'s findings) and
+  the findings a remote host pushes land on the conversation's own session in
+  its home. After an approved move that is the child session in the project it
+  moved into; the session it left keeps its own findings and the move's
+  pointer.
+- **Captures.** Plan captures and planning-subagent reports land in the home's
+  project, with their events.
+- **Recall.** Prompt recall and a subagent's briefing read the home, plus the
+  projects its live grants open; the constraints are the home's.
+- **Resume.** A resumed or compacted conversation stays in its home and is
+  briefed from there. It moves to the repository's project only where its home
+  may write there - never the child of a move, and never into a sealed project
+  from an open one. A home that is locked to the agent, whose lease has ended,
+  gets the locked notice and a request instead of a briefing.
+- **A home that is not cleared records nothing.** An open home that holds
+  fenced content - which only a read grant filed without the conversation's
+  identity gives it, or under `peer_auth` what the same agent process held
+  before `/clear` - takes no harvest and no capture. Its session's findings
+  become one line, and the hook's notice says why:
+  `Not recorded: this session holds content from example-finance, and its findings may not be written into project example-ops.`
+  The events about its prompts carry none of their text. Briefings skip that
+  line, and a move's pointer, as they skip a session with no findings.
+- **`/clear`** starts a new conversation without `peer_auth`, with an empty
+  label. Under `peer_auth` the label stays with the agent's process tree, so a
+  new conversation in the same process still holds what the old one read.
+- **Token totals** after a move count only what came after it: the child
+  session reports the conversation's totals minus every earlier session's.
+
+With the switch off, every hook is as the previous section describes.
 
 ## An actual briefing, annotated
 
@@ -4067,7 +4141,9 @@ half-rendered - the pill and the Overview control are the whole story.
 
 The one exception is a [locked project](/guides/peer-auth/) under `peer_auth`:
 there the threat *is* your own account, so the console shows its name and counts,
-and nothing inside it until you unlock it in that browser.
+and nothing inside it until you unlock it in that browser. A session's
+[Conversation card](/reference/console/#conversation) follows the same rule: a
+locked project in it shows its name and nothing more.
 
 ## Isolation requires a standalone project
 
@@ -4149,7 +4225,10 @@ nothing.
   *exists*, because every scope error already lists the machine's projects. An
   outside agent refused at the fence is told to bind to the project with
   `session_start project=<slug>` if its task really is that project, and to
-  leave it alone otherwise.
+  leave it alone otherwise. With [access requests](#asking-for-access) on, a
+  Claude Code or Codex agent is told instead to ask you to move its
+  conversation into the project, or for a grant of it, and the refusal names
+  the request it filed.
 - **A conversation that binds itself in keeps its record inside.** A Claude
   Code or Codex agent working in an open project's repository (or in none)
   that binds itself to a confidential or sealed project with
@@ -4162,7 +4241,10 @@ nothing.
   that record in none of them. A confidential or sealed project's own agent
   keeps its record at home, whatever it binds itself to. This holds on every
   install, whether or not `isolation.requests` is on
-  ([details](/concepts/sessions/#moved-record)).
+  ([details](/concepts/sessions/#moved-record)). With `isolation.requests` on,
+  everything the hooks record follows the conversation's home instead,
+  wherever the agent works, and nothing lands where the clearance refuses
+  ([details](/concepts/sessions/#home-record)).
 - **Task answers withhold what blocks across the fence.** A confidential
   project's task that blocks an outside project's task reaches an outside
   session as a withheld entry in `tasks_ready`, a `depends_on_withheld` count in
@@ -4176,101 +4258,296 @@ project without learning its name: the metadata feed sends a confidential or
 sealed project's slug only as a keyed hash, and the commit-matching snapshot
 never names its repository. Both are off by default.
 
-## Asking for access
+## Asking for access: one home per conversation {#asking-for-access}
 
-A refusal at a confidential project's fence can become a request you approve,
-when the daemon's config turns it on (`isolation.requests: true`; see
-[the configuration](/reference/configuration/#isolation-requests)). It is off by
-default, and off the refusal reads exactly as above and nothing is recorded.
+A refusal at a confidential or sealed project's fence can become a request you
+approve, when the daemon's config turns it on (`isolation.requests: true`; see
+[the configuration](/reference/configuration/#isolation-requests)). It is off
+by default, and off every refusal reads exactly as above and nothing is
+recorded.
 
-Isolation itself is unchanged by it: a confidential project's sessions still
-read open projects and global, and nothing leaves the project on its own. What
-changes is that a session refused a read of a confidential project - naming it
-with `project=` (in `recall` or any other read) or reading one of its items by
-ULID - files an access request, and the refusal names it. A read that only
-filters, such as `recall` without `project=` or `trial_query`, asks for
-nothing:
+Isolation itself is unchanged by it: a confidential project's own sessions
+still read open projects and global, and nothing leaves a fenced project
+without your approval. What changes is who the fence judges. Without the
+switch it judges the session a connection is bound to, which an agent can
+change at will (`session_start`, `session=`). With it, the fence judges the
+**conversation**, and what a conversation has read only grows.
+
+### The conversation, its home and its label {#home-and-label}
+
+- **The conversation** is one agent context. Without `peer_auth` it is the
+  client's own session - the Claude Code or Codex session id that the
+  agent-process identity on every call names
+  ([how](/concepts/sessions/#process-binding)) - so `session_start`,
+  `session=` and a move leave it the same conversation; a resume continues it,
+  and `/clear` starts a new one. Under
+  [`peer_auth`](/guides/peer-auth/#read-grants-and-the-advisory-tier) it is the
+  agent's process tree as the kernel reports it, for the life of the process,
+  `/clear` included.
+- **Its home** is the project its own session is in: the repository's project
+  when the agent starts, and after an approved move the project it moved
+  into. Its own record goes there, and calls that name no project work there.
+  The home does not limit what the conversation may reach.
+- **Its label** is every confidential or sealed project whose content it may
+  hold: a fenced home, every project a grant opened to it, every project it
+  moved through, and every fenced project one of its own sessions is in. The
+  label only grows: a grant's expiry or revocation ends the reads, never what
+  was read. A project you loosen to `open` leaves every label.
+
+A Claude Code or Codex agent running the hooks with a current `seam` is
+identified this way, from its own session. A client that sends no agent-process
+identity is not: it is held by the session it is bound to, and binds exactly as
+it did before.
+
+### The one rule {#the-one-rule}
+
+**Every write must be cleared for everything the conversation holds.** A
+destination is cleared when every project in the label is that destination or
+has a **flow** into it: your approval, recorded with the request that listed
+it, for one project's content to be written into another. An open project and
+the global scope are cleared only while the label is empty.
+
+So a conversation that holds nothing fenced writes wherever it always could.
+One that holds `example-finance`'s content writes only where you let that
+content go, and never again into an open project or the global scope - its own
+open home included. A confidential or sealed project's own conversation
+writes into it as before. The rule lives in the fence itself, so every tool,
+every hook and every other agent write meets it, and a refusal names the
+projects the conversation holds and where it may still write:
 
 ```text
-project example-finance is confidential: reads require a session bound to it -- ...
-Remedy: read request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console's Access requests page; retry once it is approved. An approved read is read-only, and confines this session's writes to example-finance for the rest of its life: once it holds example-finance's content, it writes into no open project, example-ops included, and not into the global scope.
+memory_write: this session holds content from example-finance, example-legal, so it writes only into example-legal: a write into project example-hr is refused
 ```
 
-An agent can also ask explicitly, with its reason, from its own shell:
-`seam access request example-finance --reason "..."`.
+### What a refused call asks for {#what-a-refusal-asks-for}
 
-**Asking again.** One request waits per asker and project: a repeated refusal
-names the request already waiting rather than filing another, and an explicit
-ask with a reason fills in the reason of a waiting request that has none (the
-refusal never has one to give). That reason is one of the facts you approve,
-so if you were looking at the request when it arrived, the approval asks you
-to look again. A session that already holds a live read grant of the project
-from the same project is answered with it, and nothing is filed, until 30
-minutes before it ends; from then on asking again files a new request.
+The kind of request follows from the conversation's home and the project,
+never from the agent's choice:
 
-**After you deny one.** The agent's next refused read of that project says you
+| The conversation's home | The project it reaches | The request |
+|---|---|---|
+| open, or the global scope | confidential | a **move** into the project |
+| confidential | another confidential project | a **grant** of the project |
+| any | sealed | a **move** into the project |
+| sealed | confidential | none: a sealed project's conversation reaches no confidential project |
+
+An open project needs no request. A conversation that holds fenced content
+never goes back to one, so a write there, or a `session_start` there, is
+refused, and nothing is filed.
+
+What files one:
+
+- **A refused read** - naming the project with `project=` (in `recall` or any
+  other read), or reading one of its items by ULID. A read that only filters,
+  such as `recall` without `project=` or `trial_query`, asks for nothing.
+- **A refused write**, which asks for read and write.
+- **`session_start project=<slug>`** into a fenced project, which binds
+  nothing, asks for read and write, and leaves the home where it is. A
+  `session=` handle naming another project's session acts as that session only
+  where the home may read and write; anywhere else the call is refused, and
+  nothing is filed.
+- **The agent's explicit ask**: `access_request` (with `write` to ask for read
+  and write) or, from its own shell,
+  `seam access request example-finance --reason "..." [--write]`.
+
+The refusal names the request it filed. Here a conversation working in
+`example-ops`, an open project, reads one of `example-finance`'s items by id:
+
+```text
+notes_read: project example-finance is confidential: only a conversation working in it reads it -- if your task is about example-finance, ask the owner to move this conversation into it (session_start project=example-finance asks); otherwise leave it alone
+Remedy: move request R-7F3K is waiting -- the owner approves it in their own terminal with `seam approve R-7F3K`, or with Approve on the console's Access requests page; retry once it is approved. Record what belongs in example-ops now: once the owner approves the move, this conversation works in example-finance for good, and it can no longer write to example-ops or the global scope until the conversation ends. After the move it can still close a task it claimed there, with a receipt: tasks_update with status done or dropped, and no text. Its first result after the approval says so and carries example-finance's briefing.
+```
+
+A locked project stays the lock's: a call refused at the lock files the lock's
+request, as without the switch. An agent working elsewhere that needs to work
+in a locked project asks with `access_request write=true` (or
+`seam access request <project> --write`), which files the move or the grant
+its home calls for; approving that opens the lock to it too. A lease alone
+opens a locked project only to the conversation that works in it
+([details](/guides/peer-auth/#read-grants-and-the-advisory-tier)).
+
+**Asking again.** One request waits per conversation and project, whatever its
+kind: a repeated refusal names the request already waiting rather than filing
+another, and an explicit ask with a reason fills in the reason of a waiting
+request that has none (a refusal never has one to give). That reason is one of
+the facts you approve, so if you were looking at the request when it arrived,
+the approval asks you to look again. A conversation that already holds a live
+grant of the project, with at least the access it asks for, is answered with
+it, and nothing is filed, until 30 minutes before it ends; from then on asking
+again files a new request.
+
+**After you deny one.** The agent's next refused call for that project says you
 denied it, and when, and files nothing: a refused call never asks you again
 behind your back. If you denied it because it asked for the wrong thing, tell
-the agent what to ask for instead; its explicit request
-(`seam access request ... --reason "..."`) always files a new one.
+the agent what to ask for instead; its explicit request always files a new one.
 
-**Who may ask:** a session bound to an open or a confidential project. Nothing
-that involves a sealed project is ever offered, on either side: a sealed
-project's refusal stays final, and a sealed project's session cannot ask for
-anything outside it.
+### What you approve {#what-you-approve}
 
-**What you approve.** `seam approve` (or the console's Access requests page)
-shows the request's facts, including the line *content from example-finance
-may be copied into example-ops's memories*: an approved session can read the
-project, and nothing stops it from writing what it read into its own project.
-You choose how long: until the session ends, 1 hour or 4 hours.
+Every request states the whole carry: the conversation's home, every fenced
+project it would hold once approved, and every project it could write to then.
+Approving clears exactly the flows those facts list. `seam approve`, each
+request's page on the console (its passkey page under `peer_auth`) and the
+advisory tier's in-session dialog show it, and every surface shows the line
+that says what approving lets happen among the warnings:
 
-**What a grant is.** Read-only, one project, to the one session that asked
-(under `peer_auth`, to the asking agent and the programs it started), until it
-expires, you revoke it from the Access requests page, or the session ends.
-While it lives, the granted project also joins that session's `recall` scope,
-its trials show in `trial_query`, and its proposals show in `gardener_proposals`;
-the briefing does not change. Another session is still refused.
+- **A move**: *This agent has worked in example-ops and read example-legal. If
+  you approve, it works in example-finance from now on, and what it saw may be
+  written into example-finance. It can no longer write to example-ops or the
+  global scope until the conversation ends.* Into a sealed project the line
+  adds that the project is sealed, so nothing enters it otherwise, and that
+  approving lets in what the agent carries.
+- **A grant**: *content from example-finance may be copied into example-legal*,
+  and into every other project the conversation may write to. Between
+  confidential projects you choose **read-only** (the default) or **read and
+  write**, which adds *and it may change example-finance's tasks, memories and
+  notes; content from example-legal may be copied into example-finance*.
 
-**Writes follow what the session holds.** Every write must be cleared for
-everything the session holds: each confidential or sealed project whose
-content it may hold is the destination, or you approved its content into the
-destination. An open project and the global scope are cleared only while the
-session holds nothing fenced. So a session in a confidential project that
-receives a grant writes only into its own project, and a session in an open
-project that receives one writes only into the project it read - no open
-project, its own included, and not the global scope. Its next tool result says
-so, and the confinement is recorded as an event. Expiry and revocation end the
-read, never what the session holds - what was read stays read.
+A grant lasts as long as you choose: until the conversation's session ends, 1
+hour or 4 hours, capped by `peer_auth.max_lease` (8 hours when unset). A move
+lasts for good; into a locked project, the lock it opens lasts as long as you
+choose.
 
-**Writing up the work.** A session in a confidential project documents what
-it did in its own project: task details, memories, notes and findings there
-stay open to it, during the grant and after it. The grant tells the agent to cite the
-confidential project by reference, with the project slug and the item's name or
-id, and to leave that project's confidential details out. That is an instruction
-to the agent, not a filter, which is why the line you approve still says content
-may be copied. A session in an open project has no such place: it writes only
-into the project it read, its `session_end` findings included. A plan or
-planning-subagent report captured where the session may not write is dropped,
-and the agent is told why.
+### Moves {#moves}
 
-**How much an approval proves.** Without `peer_auth` the approval is
-**advisory**: `seam approve` asks for a y/N in a terminal (it refuses to run
-without one) and commits over the console with the bearer key, and the
-console's Approve does the same. Any process that holds the key - which every
+An approved move takes the conversation into the project for good:
+
+- the session it worked in ends, keeps the findings the agent wrote, and gains
+  a pointer:
+  `Moved to project example-finance; this conversation continues there as session cc/8dd2fd5b-55d96b8d15ff0104@example-finance, and its findings go there, not here.`
+  Its task claims stay, for [receipts](#receipts);
+- a child session opens in the project, linked to it, and becomes the
+  conversation's own session, with the same client session and agent process;
+- that project is the conversation's home from then on: its record goes there,
+  and calls that name no project work there;
+- it can no longer write to the home it left, or to the global scope, until the
+  conversation ends (under `peer_auth`, until the agent process exits);
+- its first tool result after the approval says so and carries the new home's
+  briefing, once, even across a daemon restart. When it moved out of a
+  confidential or sealed project, that notice also says where what it writes
+  about that project goes: [into its new home, by reference](#source-references).
+
+Before the move, the request tells the agent to record what belongs in its
+current home first. Moving in is the only way into a sealed project, and it is
+how an open project's conversation reaches a confidential one. A resumed
+conversation resumes in the project it moved into
+([details](/concepts/sessions/#home-record)).
+
+### Grants: read-only, or read and write {#grants}
+
+A grant opens one confidential project to a conversation working in another
+confidential project. **Read-only**, the conversation reads the project, and
+what it reads may be written only into the projects the approval names: its
+home, and any project it already holds a read-and-write grant of. **Read and
+write**, it also changes the project's tasks, memories and notes as the
+project's own sessions do, and what it holds may be written into it. Nothing
+that involves a sealed project is ever granted, on either side.
+
+While a grant lives, the project also joins the conversation's `recall` scope,
+its trials show in `trial_query`, its proposals show in `gardener_proposals`,
+and prompt recall and a subagent's relevant memories read it; the briefing does
+not change. A grant ends at its expiry, when you revoke it from the Access
+requests page, or when the conversation's session ends. Ending it ends the
+reads, never what the conversation holds.
+
+The grant tells the agent to write up its work in its home and to refer to the
+project's items by reference, leaving its confidential details out. That is an
+instruction to the agent, not a filter, which is why the line you approve
+still says content may be copied.
+
+### Receipts {#receipts}
+
+A move is one way: once you approve it, the conversation can no longer write
+into the project it left. One write is still allowed there, because without it
+the work it claimed before the move would stay in progress for good: a
+**receipt**. The conversation closes a task its pre-move session claimed -
+`done` or `dropped`, nothing else - and may point at one item in its new home
+(`reference=example-finance:<id>`, the project slug and the item's id). That
+is the only thing that crosses back: a receipt carries no title, body or other
+text, and Seamless refuses one that tries, or whose reference names no item in
+the home. The typical case is an orchestrator in an open project that claims a
+build step, then moves to read a confidential project's live data: the receipt
+closes the step without carrying any of that data back. The task's history
+shows the receipt and its reference under the session that claimed the step.
+A conversation whose home is sealed sends no receipts, and a task someone else
+has claimed since, or one you released from the console, is no receipt's to
+close. The move's request and its notice both tell the agent so.
+
+### Where the conversation's record goes {#records-follow-the-home}
+
+With the switch on, everything the hooks record for a conversation goes to its
+home, wherever the agent works: the SessionEnd harvest (for Codex, each
+`Stop`'s findings), plan captures and planning-subagent reports, and the
+events about them. After a move that is the project it moved into. Prompt
+recall and a subagent's briefing read the home and the projects its live grants
+open. Where the rule refuses the home - an open home holding fenced content -
+nothing is recorded, and the session's findings say why
+([details](/concepts/sessions/#home-record)).
+
+### Provenance stamps {#provenance-stamps}
+
+Everything an agent writes while it holds content from a confidential or
+sealed project other than the destination records *may contain content from
+example-finance (grant R-7F3K)*: one stamp per such project, naming the grant
+or move that let its content in. That covers memories, notes, tasks, trials,
+session findings, and plan and subagent captures. Memories and notes keep it in
+frontmatter (`may_contain`); the rest only in the database. No write removes
+it, and a memory that supersedes another carries both memories' stamps. It
+names projects and approvals, never content. It shows on `recall` hits,
+`memory_read`, `notes_read`, `tasks_list` and `tasks_ready` answers, and the
+console's item pages and search; on a project's page, **Came from** narrows
+its items to the ones that name a project
+([console](/reference/console/#projects)). Deleting `may_contain` from a file
+by hand removes the warning. Off, nothing is stamped.
+
+### Source references {#source-references}
+
+Where the agent writes follows one placement rule: the destination must be
+cleared first; then the project the item is about; and when that project is not
+cleared, the item goes in the conversation's home, citing what it came from by
+reference. A reference is body text in one form, the project slug, a colon and
+the item's full id - `example-finance:01M7...` - so no tool takes an argument
+for it. The grant's text, the refusals that send a conversation home and the
+notice after a move out of a fenced project teach that form.
+
+The [gardener](/concepts/gardener/) reads references back from stamped
+memories, and never a source's content:
+
+- **stale-copy** proposes archiving a copy whose cited memory, note or task
+  changed after the copy was last written;
+- **copy-relocate** proposes moving a copy whose stamps and references all name
+  one other project into that project. Before you move a stamped memory into a
+  project less fenced than one it may hold content from, the console warns you,
+  and blocks nothing.
+
+A reference that does not resolve in the project it names, or points into a
+project the copy may not read, is skipped.
+
+### How much an approval proves {#how-much-an-approval-proves}
+
+Without `peer_auth` an approval is **advisory**. `seam approve` asks for a y/N
+in a terminal (it refuses to run without one) and commits over the console
+with the bearer key; the console's Approve does the same, and so does Approve
+in the agent's in-session dialog. Any process that holds the key - which every
 local agent can read - can make that call, so an approval guards against an
-agent wandering into a confidential project, not against one set on it. The
-holder of such a grant is the conversation the agent's process identity
-names, which is self-reported; a client that sends none is held by the session
-a call speaks for, so one that rebinds with `session_start`, or names another
-session with `session=`, writes where that session may. Under `peer_auth` a grant needs the same proofs as a
+agent wandering into a fenced project, not against one set on it. The
+conversation is the one the agent's process identity names, which is
+self-reported; a client that sends none is held by the session a call speaks
+for, so one that rebinds with `session_start`, or names another session with
+`session=`, writes where that session may.
+
+Under `peer_auth` a grant or a move needs the same proofs as a
 [locked project's lease](/guides/peer-auth/): your terminal through `sudo` to
-the daemon's account, a passkey, or a Touch ID key. Its holder is then the
-asking agent's process tree, and those moves are refused. An agent whose
-conversation Seamless identifies cannot name the confidential project as its
-own with `session_start` either: that files a move or grant request instead of
-binding. A client that sends no identity still can, in either tier; only a
-[lock](/guides/peer-auth/) holds against that.
+the daemon's account, a passkey, or - for a grant - a Touch ID key; Touch ID
+approves no move yet. The conversation is then the asking agent's process tree,
+and a move or grant into a locked project opens its lock too, in the same
+approval.
+
+In either tier, an agent whose conversation Seamless identifies cannot name a
+fenced project as its own: `session_start` files a move or grant request
+instead of binding, and `session=` acts as another project's session only
+where the home may read and write. A client that sends no identity still can,
+and so can an agent started in that project's repository, which is that
+project's own; only a [lock](/guides/peer-auth/) holds against that.
 
 ## Honest limits
 
@@ -4296,6 +4573,21 @@ it. A connection bound to nothing - a hookless client that skipped
 `session_start`, or an older `seam` that sends no identity - is judged as the
 global scope, which fails closed against reading an isolated project but also
 means the fence cannot recognize it as belonging to one.
+
+**With access requests on**, the same holds, and more:
+
+- Seamless guards its own surfaces only. An agent can still put what it read
+  into files, commits, pull request text or another tool.
+- Without `peer_auth` the conversation is the agent's word: the agent-process
+  identity is self-reported, and `/clear` starts a new conversation with an
+  empty label. A client that sends no identity is held by its session, as
+  before.
+- A fork, or a separate agent the conversation starts, is a new conversation to
+  Seamless, and what it prints back is invisible to it.
+- The event log records each tool call under the calling session's project,
+  with its arguments and the start of its result, so a granted read's answer
+  can appear in the asking project's history on the console. Agents read no
+  events, and text already in the log stays there.
 
 **What makes it stronger.** [peer_auth](/guides/peer-auth/) puts an
 authentication boundary under the fence: the daemon runs as its own OS account,
@@ -4352,8 +4644,10 @@ found, `gardener_apply` to act on one.
 | **stale-plan** | A captured plan still unapproved after `gardener.stale_plan_days` (14) | settling it deliberately rather than by neglect: **merge_plans** when the capture owns no steps and another composition in the project holds the steps for the same work (fold it in there), **ship_plan** when commits since the capture's git stamp match the plan (the work landed without the approval ceremony), **abandon_plan** otherwise |
 | **stale-stage** | A `stage` memory whose `Status:` header is done, missing, or unrecognized, unchanged for `gardener.stale_stage_days` (14) | **archive**: a stage that gates nothing should not hold a permanent briefing pin |
 | **dead-weight** | A memory briefings injected 20+ times in 30 days without a single recall hit, prompt match, or read | **archive**: exposure without demand means it costs tokens and steers nothing |
+| **stale-copy** | A memory with a [provenance stamp](/concepts/project-isolation/#provenance-stamps) whose body cites another project's memory, note or task (`<project>:<id>`) that changed after the memory was last written | **archive**: the copy may be out of date; the proposal names the changed sources by project and id, never their content |
 | **memory-wanted** | The same recall query returned zero hits in 2+ sessions inside 14 days | **memory_wanted**: write the knowledge agents keep searching for; applying opens a task in the queue |
 | **tool-error** | The same normalized tool or hook error, 3+ times inside 14 days and still recent; tool errors must span 2+ sessions | **tool_error**: investigate and fix the recurring failure; applying opens a task with the observed error evidence |
+| **copy-relocate** | A stamped memory that cites at least one item, whose stamps and [source references](/concepts/project-isolation/#source-references) all name one other project | **relocate** into that project, the one the copy is about |
 
 The memory-wanted pass is the one place the gardener asks *for* knowledge
 instead of curating what exists: recurring zero-hit `recall` queries are demand
@@ -4385,7 +4679,8 @@ Four more proposal types come from an action rather than the timer:
   nothing about knowledge that already escaped, so the tighten audits the global
   scope for memories whose source session belonged to the project and proposes
   moving each one behind the fence. Dismiss to leave it global. This is the only
-  proposal kind an owner action files rather than a request or the timer.
+  proposal an owner action files rather than a request or the timer; the
+  copy-relocate pass above files the same kind on the timer.
 
 ## Constraints and stages are exempt from staleness
 
@@ -7315,18 +7610,27 @@ all.
 project, its isolation and the access asked for, the agent the daemon names, its
 pid and uid, the session and model, the working directory, whether this is a
 first request or a refresh, and until when it waits - with the agent's reason
-quoted and labeled as its own. Warnings come first, most serious first:
+quoted and labeled as its own. A grant or a move (with
+[access requests](#read-grants-and-the-advisory-tier) on) also states what it
+carries: every fenced project the agent would hold once approved, and every
+project it could write to. Warnings come first, most serious first:
 
 1. the asking process is a broad process, on a request an older daemon filed (an
    approval will be refused);
-2. for a read grant, the project's content may be copied into the asking
-   project's memories;
-3. the session read text from outside (a web page, a file it was handed), so its
+2. the asking process is a JavaScript runtime (Claude Code installed with npm
+   runs as `node`) that only its own hook calls an agent, so everything it
+   started would share the approval;
+3. for a move, that the agent works in the project from now on, what it may
+   write there, and that it can no longer write where it worked before;
+4. for a grant, where the project's content may be copied: the asking project
+   first, then every other project the agent may write to;
+5. the session read text from outside (a web page, a file it was handed), so its
    reason may not be its own;
-4. the same agent is also asking for another project;
-5. the session works outside the project's repository;
-6. no session names the agent, so its cwd and model are unknown;
-7. the agent already holds a lease on the project, and approving replaces it.
+6. the same agent is also asking for another project;
+7. the session works outside the repository of the project it asks for (for a
+   grant or a move, of the project it works in);
+8. no session names the agent, so its cwd and model are unknown;
+9. the agent already holds a lease on the project, and approving replaces it.
 
 The facts carry a digest. When any of them changes before you decide (a reason
 filled in, a new mark on the session, another request from the same agent), the
@@ -7335,9 +7639,9 @@ approval is refused and you look again.
 ## Approve: three paths, one core
 
 Every path ends in the same check: the facts you saw still hold, the proof is
-valid, and the lease is written once, bound to the request. Answering a dialog is
-never the approval, because any process of your account, or a client hook, could
-answer one.
+valid, and the lease is written once, bound to the request (with access requests
+on, the grant or the move). Answering a dialog is never the approval, because any
+process of your account, or a client hook, could answer one.
 
 | Path | The proof | Where |
 |---|---|---|
@@ -7354,7 +7658,8 @@ facts from the daemon and signs over the request, the facts' digest, the access
 and the duration. A passkey opens the request's page for the duration you chose,
 and it signs the duration and the facts' digest too, so a tampered duration fails
 verification. Where a passkey is the only way the dialog can finish, the dialog
-is that page.
+is that page. A move's dialog never offers Touch ID, and a grant's approves it
+read-only ([below](#read-grants-and-the-advisory-tier)).
 
 The call waits up to 110 seconds from its start, then answers with the request
 still pending for the paths below. Declining or dismissing denies nothing, and an
@@ -7451,33 +7756,92 @@ A locked plan or session page in the console takes you to that unlock page.
 
 ## Read grants and the advisory tier
 
-[Read grants](/concepts/project-isolation/#asking-for-access)
-(`isolation.requests: true`) turn a read refused at a confidential project's fence
-into a request. A grant is read-only, one project, for a limited time, and never
-involves a `sealed` project on either side.
+[Access requests](/concepts/project-isolation/#asking-for-access)
+(`isolation.requests: true`) turn a call refused at a confidential or sealed
+project's fence into a request. What is asked follows from where the agent's
+conversation works, never from the agent's choice: from an open project, a
+**move** into the project for good; between confidential projects, a **grant**,
+read-only unless you choose read and write; into a sealed project, a move, from
+anywhere. Nothing ever grants a sealed project.
 
-Under peer_auth a grant is bound to the asking agent's process tree, as a lease is,
-and takes the same proofs: `seam approve`, a passkey or a Touch ID key. Without
-peer_auth the approval is **advisory**. `seam approve` asks for a y/N in a terminal
-and commits over the console with the bearer key, and the console's Approve does
-the same, so any process that holds the key can approve a request, its own
-included. The holder of an advisory grant is the conversation the agent's process
+### Under peer_auth
+
+- **The conversation is the agent's process tree.** A grant or a move is bound
+  to the asking agent's process tree, as a lease is, and everything the
+  conversation holds belongs to that tree for the life of the process, `/clear`
+  included. Its home is the project of the agent's own session, believed only
+  when that session is stamped with a process of the tree.
+- **The same proofs as a lease**: `seam approve` in your terminal (through
+  `sudo` to the daemon's account), a passkey, or a Touch ID key. Touch ID
+  approves a grant, never a move: Seamless Approve words every request as
+  access for a while, which a move is not, so a move's dialog is its passkey
+  page or nothing, and its remedies name only your terminal and that page. The
+  dialog approves a grant read-only; read and write is your choice in your
+  terminal (`seam approve <id> --access read-write`) or on the request's passkey
+  page.
+- **A locked target's move or grant is also its lease.** A call refused at the
+  lock still files the lock's request, and that lease opens the project only to
+  the conversation that works in it - an agent started in the project's
+  repository. An agent working elsewhere asks with `access_request` and
+  `write=true` (or `seam access request <project> --write`): that files the move
+  from an open project, or the read-and-write grant from a confidential one,
+  and approving it opens the lock too, in the same approval, for the duration
+  you choose. After a move into a locked project, the agent's first tool result
+  says until when the lock is open and carries the project's briefing, once.
+
+What a conversation holds binds the asking agent's process tree. A process that
+detaches from that tree, or a call over TCP with the bearer key, holds nothing
+and is not confined.
+
+### Without peer_auth: the advisory tier
+
+Without peer_auth the approval is **advisory**. `seam approve` asks for a y/N in
+a terminal and commits over the console with the bearer key, and the console's
+Approve does the same, so any process that holds the key can approve a request,
+its own included.
+
+In a client that shows MCP forms (Claude Code does, and so do Codex builds that
+declare form elicitation), a refusal that files a grant or a move,
+`session_start` into a fenced project, and `access_request` - which this tier
+registers too - open a dialog in the agent's session, and **Approve or Deny
+there decides the request**, with no other proof. It is advisory like the rest:
+Seamless cannot tell who answers a dialog, any more than who holds the key, so
+the form says so, and the record names the dialog (`in-session-dialog`). The
+form shows the facts, warnings first, what the request carries, and what
+read-only and read and write each let happen; a grant asks for the access
+(read-only by default) and how long, and a move only for the decision.
+Declining, cancelling, or no answer within 110 seconds decides nothing: the
+request stays pending for your terminal, the console, or the next dialog. The
+daemon keeps the client's declared dialog modes across a restart.
+
+The holder of an advisory grant or move is the conversation the agent's process
 identity names, which is self-reported; a client that sends none is held by the
-session a call speaks for, so one that rebinds with `session_start`, or names another
-session with `session=`, writes where that session may. Under peer_auth the holder is
-the process tree, and those moves are refused. Use the advisory tier to keep an agent from wandering into a confidential
-project, not against one set on it.
+session a call speaks for, so one that rebinds with `session_start`, or names
+another session with `session=`, writes where that session may. Under peer_auth
+the holder is the process tree, and those moves change nothing it holds. Use
+the advisory tier to keep an agent from wandering into a confidential project,
+not against one set on it.
 
-Neither tier stops an agent running as you from reading a `confidential` or
-`sealed` project. A session's project is the agent's word, so `session_start
-project=<slug>`, a hook naming that repository, or `session=` on a tool reads the
-project with no grant at all, and the console answers your account for every
-project that is not locked. The fence keeps a careful agent out. The lock holds
-against one set on it, because it asks the kernel who is calling, so lock a
-project that must stay shut. A restricted account has none of these ways in.
+### What the switch changes about the binding limit
 
-A grant's write confinement binds the asking agent's process tree. A process that
-detaches from that tree, or a call over TCP with the bearer key, is not confined.
+Without access requests, only a lock stops an agent running as you from
+reading a `confidential` or `sealed` project, with peer_auth or without it. A
+session's project is the agent's word, so `session_start project=<slug>`, a hook
+naming that repository, or `session=` on a tool reads the project with no grant
+at all, and the console answers your account for every project that is not
+locked.
+
+With them on, an agent whose conversation Seamless identifies - a Claude Code
+or Codex agent running the hooks with a current `seam` - can no longer name a
+fenced project as its own: `session_start` files a move or grant request
+instead of binding, and `session=` acts as another project's session only where
+the conversation's home may read and write. Two ways in remain, in both tiers:
+an agent started in the project's repository is that project's own, and a
+client that sends no agent-process identity binds as before.
+
+So the fence keeps a careful agent out, and the lock holds against one set on
+it, because it asks the kernel who is calling: lock a project that must stay
+shut. A restricted account has none of these ways in.
 
 A2A speaks for no session, so under peer_auth it refuses a `confidential` or
 `sealed` project unless the caller holds a lease on it.
@@ -7523,8 +7887,9 @@ What such an account reaches:
 
   A session started anywhere else - an unmapped directory, a closed project's
   repository - is not recorded.
-- **No approvals.** It files no access requests, gets no read grants and holds
-  no leases, so nothing it does can open a locked or confidential project.
+- **No approvals.** It files no access requests, gets no grants, is never
+  moved and holds no leases, so nothing it does can open a locked or
+  confidential project.
 
 It is known only through the socket. The kernel names it by its uid, exactly as
 it names you; it never holds the bearer key, and a TCP request is always yours.
@@ -9673,6 +10038,11 @@ Writes **fail closed**: with no session and no explicit `project`, a durable
 write is rejected as ambiguous rather than silently landing in the global scope.
 Pass `project: global` to mean global deliberately.
 
+With [access requests](/concepts/project-isolation/#asking-for-access)
+(`isolation.requests`) on, scope still resolves this way, but the isolation
+fences judge a Claude Code or Codex agent's call from its conversation's home,
+whatever the call is bound to ([home versus binding](/concepts/sessions/#home)).
+
 ## Conventions
 
 - **Body aliases.** Tools taking a markdown body accept `body`, `content`, or
@@ -9689,12 +10059,13 @@ Pass `project: global` to mean global deliberately.
 ## The tool surface
 
 Seamless registers **33 tools**, and a 34th, `access_request`, on a daemon whose
-`peer_auth` locks a project. They are documented in groups:
+`peer_auth` locks a project, or whose access requests (`isolation.requests`) are
+on without `peer_auth`. They are documented in groups:
 
 | Group | Tools |
 |---|---|
 | Sessions, memory, and recall | `session_start`, `session_update`, `session_end`, `memory_write`, `memory_append`, `memory_edit`, `memory_read`, `memory_delete`, `recall` |
-| Notes, projects, and capture | `notes_create`, `notes_read`, `notes_update`, `notes_edit`, `notes_append`, `notes_delete`, `project_list`, `project_create`, `capture_url`, `access_request` (locked projects only) |
+| Notes, projects, and capture | `notes_create`, `notes_read`, `notes_update`, `notes_edit`, `notes_append`, `notes_delete`, `project_list`, `project_create`, `capture_url`, `access_request` (locked projects, or access requests without `peer_auth`) |
 | [Tasks](/reference/mcp/tasks/) | `tasks_add`, `tasks_update`, `tasks_ready`, `tasks_list`, `tasks_claim`, `tasks_release` |
 | Lab, gardener, and usage | `lab_open`, `trial_record`, `trial_query`, `gardener_proposals`, `gardener_request`, `gardener_split`, `gardener_apply`, `usage_summary`, `favorite_set` |
 
@@ -9737,6 +10108,15 @@ session there. Every other client calls it once per connection, with `cwd` or
 `project` - see [when to call it](/concepts/sessions/#when-to-call-session-start).
 Whichever way it binds, the briefing it returns is for the project actually
 bound.
+
+With [access requests](/concepts/project-isolation/#asking-for-access)
+(`isolation.requests`) on, a Claude Code or Codex agent's `session_start` binds
+only where its conversation's [home](/concepts/sessions/#home) may read and
+write: into a confidential or sealed project it binds nothing and files the
+move or grant request the home and that project call for, and the refusal
+names it; into an open project or the global scope it is refused once the
+conversation holds a fenced project's content. Its description says so on such
+a server.
 
 `session_start` no longer takes `source`. The legacy values (`startup`,
 `resume`, `clear`, `compact`, `explicit`) are accepted and ignored, so older
@@ -9871,11 +10251,11 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 
 | Call | Success result | Failure that matters |
 |---|---|---|
-| `session_start` | `session_id`, `name`, resolved `project`, explanatory `scope`, and `briefing`; resumed/adopted sessions also say `resumed: true`, and a `warning` flags a named `project` that was created or a remote `cwd` that could not be placed | Briefing assembly degrades to an empty string and logs; creating or binding the session itself still fails loudly, as does a `project` that contradicts the repository `cwd` is in |
+| `session_start` | `session_id`, `name`, resolved `project`, explanatory `scope`, and `briefing`; resumed/adopted sessions also say `resumed: true`, and a `warning` flags a named `project` that was created or a remote `cwd` that could not be placed | Briefing assembly degrades to an empty string and logs; creating or binding the session itself still fails loudly, as does a `project` that contradicts the repository `cwd` is in. With `isolation.requests` on, a binding the conversation's home may not make is refused and binds nothing; into a fenced project the refusal names the request it filed |
 | `memory_write` | Stable `id`, canonical `name`, resolved `project`, `updated`, optional `similar`, and optional `superseded` | An occupied tombstone path is an error; if the new memory lands but supersession fails, the tool errors while naming the kept replacement and the still-active target |
 | `memory_edit` | `id`, `name`, `project`, the new `content_hash`, a unified `diff`, and a `stage_hint` when a `kind=stage` body still has no parseable `Status` | An `old_string` that matches zero or several places is an error naming the count, and **nothing** is written - the edits apply all-or-nothing. A stale `expect_hash` is refused rather than overwriting |
 | `recall` | `hits`, possibly empty | Remote embedder failures degrade to lexical-only; local request/config construction errors surface |
-| `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`, and `commits_recorded` when it recorded commits; findings persist for the next briefing | A missing/ambiguous session is an error rather than a fabricated successful close; so is a `commits` entry that is not a full commit id, which leaves the session open |
+| `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`, and `commits_recorded` when it recorded commits; findings persist for the next briefing. With `isolation.requests` on, a session whose conversation holds content its project may not take still ends: its findings are not recorded, `findings_withheld` carries the line recorded in their place, and `mishaps_withheld` counts the mishaps not recorded | A missing/ambiguous session is an error rather than a fabricated successful close; so is a `commits` entry that is not a full commit id, which leaves the session open |
 
 ## session_start {#session_start}
 
@@ -10042,7 +10422,7 @@ plausible, is the silent corruption the exact-match contract exists to prevent.
 `notes_update` gains the same staleness guard (`expect_hash`) plus `tags_add` and
 `tags_remove`, which are race-friendlier than replacing the whole tag list and
 are the only way to clear a tag - an empty `tags` array reads as absent. See
-[Concurrency](/reference/mcp/sessions-memory-recall/#concurrency-content_hash-and-expect_hash).
+[Concurrency](/reference/mcp/sessions-memory-recall/#concurrency-content-hash-and-expect-hash).
 
 Every note mutation now records a `note.written` event, and `notes_read` records
 `note.read` - the note-side twin of `memory.read`, which is what lets note demand
@@ -10069,14 +10449,26 @@ the [MCP API overview](/reference/mcp/).
 
 ## access_request asks the owner for a locked project
 
-`access_request` exists only on a daemon whose `peer_auth` locks a project;
-every other install neither lists nor accepts it. It files the same request a
-call refused at the lock files by itself, with an optional reason of up to 200
+`access_request` exists only on a daemon whose `peer_auth` locks a project, or
+whose access requests (`isolation.requests`) are on without `peer_auth`; every
+other install neither lists nor accepts it. It files the same request a call
+refused at the lock files by itself, with an optional reason of up to 200
 characters that the owner sees quoted and labeled as the agent's own words.
-With read grants on (`isolation.requests`), it also asks for a read of a
-confidential project no lock covers (kind `grant`, with `from`), the request a
-read refused at the project's fence files; with them off, such a project is
-not locked and nothing is filed.
+
+With [access requests](/concepts/project-isolation/#asking-for-access) on, it
+also asks for a confidential or sealed project no lock covers, as a refusal at
+that project's fence would: what the conversation's home and the project call
+for. From a confidential home that is a grant of another confidential project
+(kind `grant`, with `from`); from an open home, or for a sealed project from
+any home, a move of the conversation into the project for good (kind `move`,
+with `from` the home it would leave). `write` asks for read and write: a grant
+the owner may still approve read-only, or the move. For a locked project,
+`write` files the move or grant whose approval opens its lock too; without it
+the ask is for the lock's lease, which opens the project only to a conversation
+that works in it. A move still waiting tells the agent, first in `next`, to
+record what belongs in its current home, since it can write there no longer
+once the move is approved. With access requests off, a project no lock covers
+is not locked, and nothing is filed.
 
 The answer says what the call did: `filed` is `true` when it filed a new
 request, and `false` when it found one already waiting or the agent already
@@ -10106,7 +10498,20 @@ keeps a connection's declared dialog modes while a lock or read grants are
 configured, for clients on the socket, so an agent that was already connected
 keeps the dialog. Once approved, retry the call. A call whose asking process is
 not an agent's (a tmux pane, a terminal, an ssh login) files nothing and says
-why: an approval would cover every program that process started.
+why: an approval would cover every program that process started. A move's
+dialog never offers Touch ID, which approves no move: it is the request's
+passkey page, or none.
+
+On a daemon without `peer_auth` (the advisory tier) the tool is registered in
+words of its own: nothing is locked and no proof is asked, so every ask is a
+grant or a move. In a client that shows MCP forms, the dialog's **Approve** or
+**Deny** decides the request itself, advisory like `seam approve` and the
+console's Approve; a grant's form asks for the access and how long, a move's
+only for the decision. `dialog` may then also be `changed` (the request changed
+while the dialog showed it, so nothing was approved) or `failed` (the decision
+did not go through), both leaving the request pending, as declining, cancelling
+or 110 seconds without an answer do. The daemon keeps a TCP client's declared
+dialog modes in this tier too, so the dialog survives a restart.
 
 ## capture_url is SSRF-safe on purpose
 
@@ -10327,7 +10732,7 @@ withholds, gets the generic words.
 | Call | Refuses when |
 |---|---|
 | `tasks_add` | A blocker is missing or the new dependency would create a cycle |
-| `tasks_update` | Nothing was supplied to change, a new dependency is invalid, one id is both added and removed, a `commits` entry is not a full commit id, or another live session holds the task |
+| `tasks_update` | Nothing was supplied to change, a new dependency is invalid, one id is both added and removed, a `commits` entry is not a full commit id, or another live session holds the task; with `isolation.requests` on, a [receipt](#receipts) that breaks its rule |
 | `tasks_claim` | The task is blocked, closed, or held by another live claimant; each error names the actual cause |
 | `tasks_release` | The acting session is not the holder; force release exists only on the owner console/CLI surface |
 
@@ -10341,6 +10746,23 @@ On a server that records commits (`commits.record`, off by default),
 task's work, recorded on the task in the same transaction as the rest of the
 call and behind the same claim lock. Off, the argument does not exist. See
 [Feeding a security monitor](/guides/security-monitor/#recording-commits).
+
+## Receipts
+
+With `isolation.requests` on, a conversation the owner has
+[moved](/concepts/project-isolation/#moves) into another project can no longer
+write where it worked before, so a task its pre-move session claimed there
+would stay in progress for good. A **receipt** closes it: `tasks_update` with
+`status` `done` or `dropped` on a task whose claim, live or lapsed, that
+pre-move session still holds. It may name one `reference`, an item in the new
+home written `<project>:<id>` (a memory, note, task, trial or session there),
+and nothing else: a title, body, project, dependency or commit is refused with
+the rule, and so is a reference that names no item in the home. It sets the
+status alone, as that pre-move session, and releases the claim. The task's
+`task.transition` record carries `receipt` and `reference` beside `to` and
+`from`, and the answer carries `receipt: true`. A conversation whose home is
+sealed sends none. Off, the argument does not exist. See
+[Project isolation](/concepts/project-isolation/#receipts).
 
 ## tasks_add {#tasks_add}
 
@@ -11083,7 +11505,11 @@ started it (the same identity every MCP request carries, see
 [which session a command acts in](#which-session)). `--reason` is the agent's
 own words on why it needs the project, at most 200 characters; the owner sees
 it quoted and labeled as the agent's, never as a fact. A longer reason is
-refused before anything is sent.
+refused before anything is sent. With access requests on
+(`isolation.requests`), it also asks for a confidential or sealed project no
+lock covers, as a read refused at that project's fence would: from a
+confidential project a read grant, and from an open project, or for a sealed
+one, a move into the project for good, printed as `--write`'s move below.
 
 ```text
 Requested R-7F3K for example-finance (request). The owner approves it with: seam approve R-7F3K
@@ -12975,26 +13401,55 @@ The `isolation:` block is what [project isolation](/concepts/project-isolation/)
 does beyond each project's own state. It holds one key, and it is off by
 default; off is exactly the behavior of every earlier release.
 
-- `requests` (`SEAMLESS_ISOLATION_REQUESTS`, default `false`) turns a read
-  refused at a confidential project's fence into an access request you can
-  approve: a **read grant** of that one project, read-only, to the one session
-  that asked, for a limited time (until the session ends, 1 hour or 4 hours,
-  capped by `peer_auth.max_lease`, `8h` when unset). Every write must then be
-  cleared for everything the session holds: a session in a confidential
-  project that is granted a read writes only into its own project, and one in
-  an open project only into the project it read, for the rest of its life.
-  Nothing that involves a sealed project is ever offered, a read grant never
-  opens a write, and briefings do not change.
+- `requests` (`SEAMLESS_ISOLATION_REQUESTS`, default `false`) lets a confidential
+  or sealed project's fence ask instead of only refusing, and makes the fence
+  judge the agent's **conversation** - its client session without `peer_auth`,
+  its process tree under it - instead of the session a connection is bound to.
   [Asking for access](/concepts/project-isolation/#asking-for-access) has the
-  whole model.
+  whole model. Turning it on changes these, and nothing else:
+  - **One home, one rule.** A conversation has one home, the project its own
+    session is in, and a label: every confidential or sealed project whose
+    content it may hold. Every write must be cleared for everything it holds:
+    once the label holds anything, it writes only into the projects your
+    approvals cleared, never an open project or the global scope.
+  - **Refusals file requests.** A read or write refused at a fenced project,
+    and `session_start` into one, file what the home and the project call for:
+    a **move** into the project for good (from an open home, or into a sealed
+    project), or a **grant** of it (between confidential projects, read-only
+    unless you choose read and write). Nothing is ever granted to or from a
+    sealed project. A locked project's refusal still files the lock's request.
+  - **Bindings stop at the home.** For a Claude Code or Codex agent,
+    `session_start` binds nothing outside what its home may read and write, and
+    `session=` acts as a session outside the home only there.
+  - **Approvals.** You decide each request with `seam approve`, on the
+    console's Access requests page or, in a client that shows MCP forms, in
+    the agent's in-session dialog. Without `peer_auth` that decision is
+    advisory, and `access_request` is registered so the agent can ask ahead;
+    under it, a grant or a move takes the same proofs as a lease, and one into
+    a locked project opens its lock too.
+  - **The record follows the home.** The SessionEnd harvest, Codex `Stop`
+    findings, plan and subagent captures, prompt recall and a resume's
+    briefing go to and read from the home; after a move, the project it moved
+    into.
+  - **Provenance stamps** on what a conversation writes while it holds another
+    fenced project's content (frontmatter `may_contain` on memories and
+    notes), which the gardener's stale-copy and copy-relocate passes read.
+  - **Receipts**: `tasks_update` gains `reference`, and a moved conversation
+    may close a task it claimed before the move.
+  - **The console** shows a conversation's moves, grants and writes on its
+    sessions' pages, and a **Came from** filter on a project's page.
+
+  A grant lasts until the conversation's session ends, 1 hour or 4 hours,
+  capped by `peer_auth.max_lease` (`8h` when unset); a move lasts for good.
 
 Without `peer_auth` the approval is **advisory**: `seam approve` and the
-console's Approve commit it with the bearer key, so any process that holds the
-key can approve a request, its own included. Under `peer_auth` a grant is
-bound to the asking agent's process tree, as a locked project's lease is, and
-needs the same proofs: `seam approve` in your terminal (through `sudo` to the
-daemon's account), a passkey, or a Touch ID key. Locks work without this
-switch; grants do not.
+console's Approve commit it with the bearer key, and so does Approve in the
+agent's in-session dialog, so any process that holds the key can approve a
+request, its own included. Under `peer_auth` a grant or a move is bound to the
+asking agent's process tree, as a locked project's lease is, and needs the same
+proofs: `seam approve` in your terminal (through `sudo` to the daemon's
+account), a passkey, or a Touch ID key, which approves no move. Locks work
+without this switch; grants and moves do not.
 
 The block is new after v0.7.4; releases before it refuse config keys they do
 not know, so the example file leaves it commented out.
@@ -13707,15 +14162,18 @@ update:
 # Project isolation beyond each project's own state (open, confidential or
 # sealed, set on the console's project Overview or with seam project
 # isolation). Off by default, and off is exactly the previous behavior.
-#   requests: a read refused at a confidential project's fence files an access
-#   request instead of only refusing: the owner may grant that one session
-#   (under peer_auth, that one agent process tree) read-only access to that one
-#   project for a limited time. A session in an open project that holds a grant
-#   may write only into its own project for the rest of its life. Nothing that
-#   involves a sealed project is ever offered, and writes are never granted.
-#   Without peer_auth the approval is advisory: seam approve and the console's
-#   Approve commit it with the bearer key, so any process holding the key can
-#   approve. Under peer_auth it takes the same proofs as a locked project's
+#   requests: the fence judges the agent's conversation (its client session;
+#   under peer_auth its process tree) instead of the session it is bound to,
+#   and a call refused at a confidential or sealed project's fence files a
+#   request the owner may approve: from an open project a move into the project
+#   for good, between confidential projects a grant (read-only, or read and
+#   write as the owner chooses), into a sealed project a move. Once a
+#   conversation holds a fenced project's content it writes only where the
+#   owner's approvals let that content go, never into an open project or the
+#   global scope. Without peer_auth the approval is advisory: seam approve and
+#   the console's Approve commit it with the bearer key, and Approve in the
+#   agent's in-session dialog decides it too, so any process holding the key
+#   can approve. Under peer_auth it takes the same proofs as a locked project's
 #   lease.
 # The block is new after v0.7.4 and releases before it refuse config keys they
 # do not know, so it is left commented out here.
@@ -14832,11 +15290,11 @@ nothing, and their rows say so.
 | Begin a passkey unlock | `POST /console/unlock/{project}/begin` | Only for a project peer_auth locks, and only from the signed-in browser that proves its unlock key. Records a waiting [console unlock](/guides/peer-auth/#leases-and-the-process-tree) bound to this browser's cookie and key, sets the `seamless_unlock` cookie when the browser holds no live unlock yet, and returns the passkey challenge. Refused while no passkey is enrolled; the terminal path still works. Opens nothing yet. |
 | Unlock a project in this browser | `POST /console/unlock/{project}/finish` | Verifies the passkey assertion for that waiting unlock, from the browser that began it, and makes it live: this browser reads the project for three hours, or less when `peer_auth.max_lease` is shorter. It is never a lease: no agent reads the project through it. |
 | Begin a terminal unlock | `POST /console/unlock/{project}/terminal` | **Approve from a terminal**: the passkey begin's gates, without needing a passkey. Records a waiting unlock bound to this browser and returns a pairing code with the `seamlessd console-open --unlock` command that approves it, run as the daemon's account within ten minutes. The code only names that unlock, so it is not a secret. Opens nothing until the command runs. |
-| Ask for access | `POST /console/access/request` | The agent's ask, not your decision: `seam access request`, run from the agent's own shell, files an [access request](/guides/peer-auth/#requests) for a locked project or, with [read grants](/guides/peer-auth/#read-grants-and-the-advisory-tier) on, a read grant request for a confidential project no lock covers. It writes a waiting request, with the agent's reason of at most 200 characters, and opens nothing. An agent that already holds the access is answered with it. |
-| Approve an access request | `POST /console/access/{id}/approve` | Your decision: writes the agent's lease on a locked project, or a read grant, for `duration=` (until the session ends, 1 hour or 4 hours), and only while the request's facts still match `digest=`, the digest of the facts you were shown. Under peer_auth it takes a proof: a passkey assertion from the request's page, or a Touch ID signature from Seamless Approve (`proof=touchid`), accepted on the peer_auth socket only. In the advisory tier - read grants without peer_auth - a decision with no passkey is the bearer key's, which is what `seam approve` sends. |
-| Deny an access request | `POST /console/access/{id}/deny` | Closes a waiting request with no lease or grant; the project stays closed to that agent. Refused over the peer_auth socket: deny on the console, or with `seam approve` in your own terminal. |
+| Ask for access | `POST /console/access/request` | The agent's ask, not your decision: `seam access request`, run from the agent's own shell, files an [access request](/guides/peer-auth/#requests) for a locked project or, with [access requests](/guides/peer-auth/#read-grants-and-the-advisory-tier) on, what the agent's conversation and a confidential or sealed project no lock covers call for: a grant, or a move into the project. With `write=true` it asks for a read-and-write grant or a move, a locked project's included, whose approval opens the lock too. It writes a waiting request, with the agent's reason of at most 200 characters, and opens nothing. An agent that already holds the access is answered with it. |
+| Approve an access request | `POST /console/access/{id}/approve` | Your decision: writes the agent's lease on a locked project, or a grant, for `duration=` (until the session ends, 1 hour or 4 hours), and only while the request's facts still match `digest=`, the digest of the facts you were shown. A grant is read-only unless `access=read-write` on a request that offers the choice. A move request is approved for good: it ends the conversation's session and opens its continuation in the project, and `duration=` bounds only a locked project's lock. Under peer_auth it takes a proof: a passkey assertion from the request's page, or a Touch ID signature from Seamless Approve (`proof=touchid`), accepted on the peer_auth socket only and never for a move. In the advisory tier - access requests without peer_auth - a decision with no passkey is the bearer key's, which is what `seam approve` sends. |
+| Deny an access request | `POST /console/access/{id}/deny` | Closes a waiting request with no lease, grant or move; the project stays closed to that agent, and a move's agent stays where it works. Refused over the peer_auth socket: deny on the console, or with `seam approve` in your own terminal. |
 | Revoke an agent's lease | `POST /console/access/leases/{id}/revoke` | **Revoke** under Agent leases on `/console/access`: ends that lease before its expiry and records an `access.revoked` event. Refused over the peer_auth socket. |
-| Revoke a read grant | `POST /console/access/grants/{id}/revoke` | **Revoke** under Read grants: ends a live grant before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket. |
+| Revoke a read grant | `POST /console/access/grants/{id}/revoke` | **Revoke** under Read grants: ends a live grant, read-only or read and write, before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket. |
 | Lock a console unlock again | `POST /console/access/unlocks/{id}/end` | **Lock again** on `/console/access`, or **Lock it again** on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket. |
 | Begin a passkey enrollment | `POST /console/approvers/passkey/begin` | Only under peer_auth: `name=` the passkey (1 to 64 characters on one line). Returns the WebAuthn creation options, excluding every passkey already [enrolled](/guides/peer-auth/#enroll-an-approver). Holds the enrollment in memory and stores nothing. Refused over the peer_auth socket, since a passkey is created in a browser. |
 | Create the passkey | `POST /console/approvers/passkey/finish` | Verifies the browser's new passkey and returns its key's fingerprint with the `seamlessd approvers enroll-code` command that mints its code. Still stores nothing: the passkey waits for that code. |
@@ -14892,12 +15350,13 @@ what is exposed, or how the install runs, without touching any memory's
 content. **Back up now** and **Delete a backup** make and remove copies of the
 data, never the data itself. The console level is presentation state of the same kind: it changes
 what this console shows you and nothing else. The access, lock, unlock and
-approver rows exist only with [peer_auth](/guides/peer-auth/) or read grants on
-(both optional, and off by default; every one of those routes answers 404
-otherwise), and they are your decisions about who may reach a project, not
-writes to knowledge: they record requests, leases, read grants, console
-unlocks, locks and approver credentials, and never a memory's or a note's
-content. The one an agent calls, **Ask for access**, only files a request for
+approver rows exist only with [peer_auth](/guides/peer-auth/) or access
+requests on (both optional, and off by default; every one of those routes
+answers 404 otherwise), and they are your decisions about who may reach a
+project, not writes to knowledge: they record requests, leases, grants, moves
+(a move ends the conversation's session and opens its continuation in the
+project it moved into), console unlocks, locks and approver credentials, and
+never a memory's or a note's content. The one an agent calls, **Ask for access**, only files a request for
 you to decide. **Update now** and **Resume
 automatic updates** act on the install rather than on knowledge: the first
 starts the same backed-up update `seamlessd update` runs, the second lets
@@ -15435,6 +15894,17 @@ project alone:
 | Interactions | The project-scoped slice of the feed. |
 | Context | The effective SessionStart flow into and out of the project: global and parent memory pools, sibling-family channels, and split lineage. |
 
+**Came from.** With [access requests](/concepts/project-isolation/#provenance-stamps)
+on, an item written by an agent that held a confidential or sealed project's
+content carries a provenance stamp ("may contain content from example-finance
+(grant R-7F3K)"). On a project with such items, the Memories, Notes and Plans &
+tasks tabs show the stamp on each row and a **Came from** bar: one chip per
+project the stamps name, with how many items of that tab's kind name it.
+Choosing one (`?from=<project>`) narrows the three tabs to those items, and
+Plans & tasks then lists the tasks themselves, any status. A locked project
+this browser has not unlocked is named only; the items listed are this
+project's own. A project with no stamped item shows no bar.
+
 A retired project still renders, with its banner - kept for provenance. Only an
 unknown slug is a 404.
 
@@ -15461,6 +15931,30 @@ A session's page is the workspace: its findings (rendered), its full event
 timeline as interaction rows, per-session counts (tool calls, memory reads and
 writes, items injected, and read-after-inject), the tasks it currently claims with
 their lease countdowns, and the memories it produced.
+
+### The conversation {#conversation}
+
+With [access requests](/concepts/project-isolation/#asking-for-access) on, a
+conversation can span sessions: a move into a fenced project continues it as a
+child session there. Every session of a conversation that moved, asked for or
+holds a grant, or wrote a stamped item shows one **Conversation** card (also in
+the page's JSON as `conversation`):
+
+- **Home chain**: the session it started in and each move's child, oldest
+  first, with the move's request, who decided it and when.
+- **Reach**: every project it reached - its homes, projects `session_start`
+  bound it to, read-only and read-and-write grants, leases, and requests still
+  waiting, denied or expired - each with its request (R-...) and who decided
+  it: a passkey or Touch ID key by name, the terminal (`seamlessd approve`), the
+  bearer key (`seam approve` or the console, advisory), the agent's approval
+  dialog (advisory), or a Deny on this console.
+- **Written**: what its sessions wrote, by project, each with its provenance
+  stamp.
+
+A locked project this browser has not unlocked shows its name, the request that
+reached it and an **Unlock** link back to the page, and nothing from inside. A
+conversation that never moved, asked for nothing and wrote nothing stamped shows
+no card.
 
 ## Memories
 

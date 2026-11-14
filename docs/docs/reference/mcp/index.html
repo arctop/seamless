@@ -284,6 +284,10 @@ session another agent's process owns.</li>
 <p>Writes <strong>fail closed</strong>: with no session and no explicit <code>project</code>, a durable
 write is rejected as ambiguous rather than silently landing in the global scope.
 Pass <code>project: global</code> to mean global deliberately.</p>
+<p>With <a href="../../concepts/project-isolation/#asking-for-access">access requests</a>
+(<code>isolation.requests</code>) on, scope still resolves this way, but the isolation
+fences judge a Claude Code or Codex agent's call from its conversation's home,
+whatever the call is bound to (<a href="../../concepts/sessions/#home">home versus binding</a>).</p>
 <h2 id="conventions">Conventions</h2>
 <ul>
 <li><strong>Body aliases.</strong> Tools taking a markdown body accept <code>body</code>, <code>content</code>, or
@@ -299,7 +303,8 @@ transport failures.</li>
 </ul>
 <h2 id="the-tool-surface">The tool surface</h2>
 <p>Seamless registers <strong>33 tools</strong>, and a 34th, <code>access_request</code>, on a daemon whose
-<code>peer_auth</code> locks a project. They are documented in groups:</p>
+<code>peer_auth</code> locks a project, or whose access requests (<code>isolation.requests</code>) are
+on without <code>peer_auth</code>. They are documented in groups:</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -315,7 +320,7 @@ transport failures.</li>
 </tr>
 <tr>
 <td>Notes, projects, and capture</td>
-<td><code>notes_create</code>, <code>notes_read</code>, <code>notes_update</code>, <code>notes_edit</code>, <code>notes_append</code>, <code>notes_delete</code>, <code>project_list</code>, <code>project_create</code>, <code>capture_url</code>, <code>access_request</code> (locked projects only)</td>
+<td><code>notes_create</code>, <code>notes_read</code>, <code>notes_update</code>, <code>notes_edit</code>, <code>notes_append</code>, <code>notes_delete</code>, <code>project_list</code>, <code>project_create</code>, <code>capture_url</code>, <code>access_request</code> (locked projects, or access requests without <code>peer_auth</code>)</td>
 </tr>
 <tr>
 <td><a href="../../reference/mcp/tasks/">Tasks</a></td>

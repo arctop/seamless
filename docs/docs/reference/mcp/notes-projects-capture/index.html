@@ -333,7 +333,7 @@ plausible, is the silent corruption the exact-match contract exists to prevent.<
 <p><code>notes_update</code> gains the same staleness guard (<code>expect_hash</code>) plus <code>tags_add</code> and
 <code>tags_remove</code>, which are race-friendlier than replacing the whole tag list and
 are the only way to clear a tag - an empty <code>tags</code> array reads as absent. See
-<a href="../../../reference/mcp/sessions-memory-recall/#concurrency-content_hash-and-expect_hash">Concurrency</a>.</p>
+<a href="../../../reference/mcp/sessions-memory-recall/#concurrency-content-hash-and-expect-hash">Concurrency</a>.</p>
 <p>Every note mutation now records a <code>note.written</code> event, and <code>notes_read</code> records
 <code>note.read</code> - the note-side twin of <code>memory.read</code>, which is what lets note demand
 count toward <a href="../../../concepts/recall/#the-utility-nudge">recall's utility nudge</a>.</p>
@@ -352,14 +352,25 @@ carries it - bound automatically under Claude Code or Codex, or by
 you pass on purpose, never a default you fall into - see the fail-closed rule in
 the <a href="../../../reference/mcp/">MCP API overview</a>.</p>
 <h2 id="access-request-asks-the-owner-for-a-locked-project">access_request asks the owner for a locked project</h2>
-<p><code>access_request</code> exists only on a daemon whose <code>peer_auth</code> locks a project;
-every other install neither lists nor accepts it. It files the same request a
-call refused at the lock files by itself, with an optional reason of up to 200
-characters that the owner sees quoted and labeled as the agent's own words.
-With read grants on (<code>isolation.requests</code>), it also asks for a read of a
-confidential project no lock covers (kind <code>grant</code>, with <code>from</code>), the request a
-read refused at the project's fence files; with them off, such a project is
-not locked and nothing is filed.</p>
+<p><code>access_request</code> exists only on a daemon whose <code>peer_auth</code> locks a project, or
+whose access requests (<code>isolation.requests</code>) are on without <code>peer_auth</code>; every
+other install neither lists nor accepts it. It files the same request a call
+refused at the lock files by itself, with an optional reason of up to 200
+characters that the owner sees quoted and labeled as the agent's own words.</p>
+<p>With <a href="../../../concepts/project-isolation/#asking-for-access">access requests</a> on, it
+also asks for a confidential or sealed project no lock covers, as a refusal at
+that project's fence would: what the conversation's home and the project call
+for. From a confidential home that is a grant of another confidential project
+(kind <code>grant</code>, with <code>from</code>); from an open home, or for a sealed project from
+any home, a move of the conversation into the project for good (kind <code>move</code>,
+with <code>from</code> the home it would leave). <code>write</code> asks for read and write: a grant
+the owner may still approve read-only, or the move. For a locked project,
+<code>write</code> files the move or grant whose approval opens its lock too; without it
+the ask is for the lock's lease, which opens the project only to a conversation
+that works in it. A move still waiting tells the agent, first in <code>next</code>, to
+record what belongs in its current home, since it can write there no longer
+once the move is approved. With access requests off, a project no lock covers
+is not locked, and nothing is filed.</p>
 <p>The answer says what the call did: <code>filed</code> is <code>true</code> when it filed a new
 request, and <code>false</code> when it found one already waiting or the agent already
 holds the access; <code>reason</code> is <code>added</code> when this call's reason was stored on the
@@ -387,7 +398,19 @@ keeps a connection's declared dialog modes while a lock or read grants are
 configured, for clients on the socket, so an agent that was already connected
 keeps the dialog. Once approved, retry the call. A call whose asking process is
 not an agent's (a tmux pane, a terminal, an ssh login) files nothing and says
-why: an approval would cover every program that process started.</p>
+why: an approval would cover every program that process started. A move's
+dialog never offers Touch ID, which approves no move: it is the request's
+passkey page, or none.</p>
+<p>On a daemon without <code>peer_auth</code> (the advisory tier) the tool is registered in
+words of its own: nothing is locked and no proof is asked, so every ask is a
+grant or a move. In a client that shows MCP forms, the dialog's <strong>Approve</strong> or
+<strong>Deny</strong> decides the request itself, advisory like <code>seam approve</code> and the
+console's Approve; a grant's form asks for the access and how long, a move's
+only for the decision. <code>dialog</code> may then also be <code>changed</code> (the request changed
+while the dialog showed it, so nothing was approved) or <code>failed</code> (the decision
+did not go through), both leaving the request pending, as declining, cancelling
+or 110 seconds without an answer do. The daemon keeps a TCP client's declared
+dialog modes in this tier too, so the dialog survives a restart.</p>
 <h2 id="capture-url-is-ssrf-safe-on-purpose">capture_url is SSRF-safe on purpose</h2>
 <p><code>capture_url</code> fetches a URL and returns its content as markdown. It is the one
 tool that makes an outbound request on an agent's behalf, so it is guarded:

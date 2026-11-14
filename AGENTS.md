@@ -220,7 +220,8 @@ the pointer is where to look, not a substitute for reading it.
   project it files the move or grant its home and the project call for
   (`sessionStartReach`), and into an open project or the global scope it is
   refused once the label holds anything. A client that sends no identity binds
-  as before.
+  as before. On such a server `session_start`'s description says so
+  (`sessionStartToolFor`).
 - A caller that named its process is never inferred into a session stamped
   with a different one: `store.AmbientScope.Caller` filters every ambient
   fallback lookup. Once such a caller's own session has ended, the sole live
@@ -248,6 +249,13 @@ the pointer is where to look, not a substitute for reading it.
 - Stamp provenance with `s.boundSession(ctx)`, not the raw binding.
 - A new tool must be registered in `registerTools` AND bump `ToolCount`, or
   `doctor` fails its tool-count assertion.
+- A tool whose words change with an optional feature is registered through a
+  `*ToolFor` method (`sessionStartToolFor`, `tasksUpdateToolFor`,
+  `accessRequestToolFor`) that returns the Catalog's tool word for word while
+  the feature is off. `Catalog()` keeps the default text, which the docs site
+  renders and the defaults golden (`tools_list.json`) pins: never edit a catalog
+  constructor's words for an opt-in feature; the docs page explains the
+  feature's words by hand.
 
 ### Peer-user auth (`internal/access`)
 
@@ -500,10 +508,13 @@ any of it.
   `access_request` (`internal/mcp/access_request.go`) files one explicitly and
   is registered only while peer_auth locks a project, or while
   `isolation.requests` is on without peer_auth (`mcp.OffersAccessRequest`: the
-  advisory tier's explicit ask, worded for that tier by `accessRequestToolFor`;
-  `Config.OfferAccessRequest`: the `offerCommits` pattern for a whole tool),
-  so every other install's tools/list, `ToolCount` and doctor line are
-  unchanged. `Catalog()` lists it last (`LockedOnlyTools`), `LockedToolCount`
+  advisory tier's explicit ask; `Config.OfferAccessRequest`: the `offerCommits`
+  pattern for a whole tool), so every other install's tools/list, `ToolCount`
+  and doctor line are unchanged. `accessRequestToolFor` words it for its tier:
+  the advisory tier's text (`advisoryAccessRequestTool`), the switch's under
+  peer_auth with `isolation.requests` on (`grantsAccessRequestTool`), and the
+  Catalog's, word for word, on every other server. `Catalog()` lists it last
+  (`LockedOnlyTools`), `LockedToolCount`
   counts it, and both doctors assert `ToolCountWith(locked)` (seam doctor
   mirrors it as `expectedTools` + `lockedOnlyTool`, pinned by a test). Its
   `reason` never reaches a tool.call event. `seam access request` files one
@@ -709,7 +720,13 @@ any of it.
   project, else what the kind rule calls for. The first result after an approved
   move announces it and carries the new home's briefing once
   (`moveNoticeMiddleware`, `access_moves.briefed_at`, migration 040); into a
-  locked project it is the lease's briefing too, sent once. A `session_end`
+  locked project it is the lease's briefing too, sent once. The move's remedy
+  and that notice offer the receipt for a task the pre-move session claimed,
+  except into a sealed project, whose conversation sends none
+  (`receiptAfterMove`, `afterMoveLines`); a move out of a fenced home -- always
+  into a sealed project, since a confidential home reaches a confidential one by
+  grant -- is told to write about that home in its new one, citing it in
+  `core.CitationForm`. A `session_end`
   refused only by the clearance rule still ends the conversation's own session,
   its findings not recorded (`unrecordedEnd`). A restore adds today's grants,
   moves and flows to the backup's (`store.ApplyKeptState`), so it never shrinks

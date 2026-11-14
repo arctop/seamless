@@ -10,7 +10,7 @@
       {{if .Dedicated}}
       <span class="pv-mode ok">Own account</span>
       <p class="pv-big">Seamless runs as its own account, <span class="mono">{{.DaemonUser}}</span>.</p>
-      <p>The operating system keeps your agents out of <span class="mono">{{.DataDir}}</span>{{with .DataDirMode}} (mode {{.}}){{end}}. They reach Seamless only through its doors. There a lock holds against any agent. A confidential or sealed fence keeps a careful agent out, but an agent running as you can name that project as its own, so lock what must stay shut.</p>
+      <p>The operating system keeps your agents out of <span class="mono">{{.DataDir}}</span>{{with .DataDirMode}} (mode {{.}}){{end}}. They reach Seamless only through its doors. There a lock holds against any agent. {{if .Requests}}A confidential or sealed fence keeps a careful agent out, and with access requests on an agent Seamless identifies asks you before it works in one. But an agent running as you can still start in that project&rsquo;s repository, or use a client that does not identify its conversation, and work there as its own, so lock what must stay shut.{{else}}A confidential or sealed fence keeps a careful agent out, but an agent running as you can name that project as its own, so lock what must stay shut.{{end}}</p>
       {{else}}
       <span class="pv-mode risk">Shared account</span>
       <p class="pv-big">Seamless and your agents run as the same account, <span class="mono">{{.Owner}}</span>.</p>
