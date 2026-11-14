@@ -1,6 +1,6 @@
 ---
 title: seamlessd CLI
-description: The daemon and operator CLI - serve, doctor, export, import, backups, restore, setup, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, devices, console-open, start/stop/restart/status, and version.
+description: The daemon and operator CLI - serve, doctor, export, import, backups, restore, setup, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, devices, relay, console-open, start/stop/restart/status, and version.
 ---
 
 `seamlessd` is both the server and the operator CLI. `serve` runs the daemon;
@@ -984,6 +984,35 @@ The computers paired with this server: relays (macOS and Linux clients) and key 
 - `code` mints a one-time pairing code (10 minutes, one computer; only its hash is stored) and prints what the other computer needs: this server's address, its certificate's SHA-256 fingerprint (as `openssl x509 -noout -fingerprint -sha256` prints it), the code and the client one-liners. Without peer_auth the code is the approval; under it the pairing waits for your passkey on the console's Devices page.
 - `list` prints every device: id, name, kind, status, fingerprint or key prefix, last seen.
 - `revoke` revokes a paired device (refused from its next request; the daemon ends its running requests within 30 seconds) or denies a pairing that waits, named by its id or by a live device's name.
+
+## seamlessd relay {#seamlessd_relay}
+
+```bash
+seamlessd relay serve [--socket PATH] [--socket-mode MODE] [--socket-group GROUP]
+seamlessd relay pair --server URL --code CODE [--fingerprint SHA256] [--ca-file FILE] [--replace] [--json]
+```
+
+The relay serves the socket agents dial beside a peer_auth daemon and forwards
+each request to the paired server, so the computer holds no key. macOS and
+Linux only. Both verbs run as the relay's own account and refuse root, your
+account, and any layout another account could change.
+
+- `serve`: the socket defaults to `/opt/seamless/run/seamlessd.sock`, mode
+  0666. It refuses while unpaired, and answers 502 with the reason when the
+  server is unreachable or presents another certificate, never from memory. On
+  a server without peer_auth every caller is you, so on a computer with other
+  accounts use `--socket-mode 0660 --socket-group <a group only your account is in>`.
+- `pair`: the code comes from the server's Devices page or `seamlessd devices
+  code` (`--code -` reads it from stdin). `--fingerprint` makes sure the code
+  goes only to that certificate; `--ca-file` names the root the server's
+  certificate chains to, copied into the data dir. Under peer_auth the pairing
+  waits for your passkey on the Devices page, which shows the same key
+  fingerprint. `--replace` pairs again after you revoked the old device;
+  `--json` prints the public facts.
+
+Its data dir is `/opt/seamless/relay` (the relay's account, 0700):
+`relay.json` (0600) holds the pairing and the relay's key. Doctor reports the
+relay; run it as the relay's account to see the pairing too.
 
 ## seamlessd console-open {#seamlessd_console_open}
 

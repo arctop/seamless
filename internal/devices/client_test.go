@@ -2,6 +2,7 @@ package devices
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -271,4 +272,56 @@ func TestPairEndpoint_RefusesMalformedRequests(t *testing.T) {
 	require.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 	devices, _ := f.pairCount(t)
 	require.Zero(t, devices)
+}
+
+// A relay's transport presents its certificate and forwards only to the
+// server certificate pinned at pairing; there is none without a pin.
+func TestRelayTransport_PresentsTheRelayAndPinsTheServer(t *testing.T) {
+	f := pairNewFixture(t, false)
+	seen := make(chan deviceProbe, 2)
+	ts, pool, certFP := f.deviceServer(t, seen, nil)
+	id := pairIdentity(t, "example-laptop")
+	dev := f.pairRelayDevice(t, "example-laptop", id)
+	base := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}}
+
+	tr, err := RelayTransport(base, id, strings.ToLower(certFP))
+	require.NoError(t, err)
+	status, _, p, ok := deviceGet(t, &http.Client{Transport: tr}, ts.URL+"/api/mcp", nil, seen)
+	require.Equal(t, http.StatusOK, status)
+	require.True(t, ok)
+	require.Equal(t, dev.ID, p.cred.DeviceID, "the edge matched the relay's certificate")
+
+	wrong, err := RelayTransport(base, id, strings.TrimSuffix(strings.Repeat("AB:", 32), ":"))
+	require.NoError(t, err)
+	_, err = (&http.Client{Transport: wrong}).Get(ts.URL + "/api/mcp")
+	require.ErrorIs(t, err, ErrServerFingerprint)
+	select {
+	case got := <-seen:
+		t.Fatalf("a request reached the server through another pin: %+v", got)
+	default:
+	}
+
+	_, err = RelayTransport(base, id, " ")
+	require.ErrorIs(t, err, ErrNoServerPin)
+	_, err = RelayTransport(base, nil, certFP)
+	require.ErrorIs(t, err, ErrRelayIdentity)
+	_, err = RelayTransport(nil, id, certFP)
+	require.Error(t, err)
+	require.Nil(t, base.Transport.(*http.Transport).TLSClientConfig.GetClientCertificate, "the client it copies is untouched")
+	require.Nil(t, base.Transport.(*http.Transport).TLSClientConfig.VerifyConnection)
+}
+
+func TestValidCertFingerprint(t *testing.T) {
+	fp := CertFingerprint([]byte("example certificate"))
+	for s, ok := range map[string]bool{
+		fp:                              true,
+		strings.ToLower(fp):             true,
+		strings.ReplaceAll(fp, ":", ""): true,
+		"AB:CD":                         false,
+		"":                              false,
+		fp + ":00":                      false,
+		"ZZ" + fp[2:]:                   false,
+	} {
+		require.Equal(t, ok, ValidCertFingerprint(s), s)
+	}
 }

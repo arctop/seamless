@@ -35,8 +35,9 @@ cmd/seamlessd, cmd/seam, cmd/seambench, cmd/demoseed, cmd/docsgen
 
 (`access` imports only `config`; `store` and `events` import `access`.
 `passkey` imports nothing internal; `approval` imports `store` and `passkey`.
-`devices` imports `store`, `events` and `config`; `approval` and the API surfaces
-import it.)
+`devices` imports `store`, `events` and `config`; `approval` and the API
+  surfaces import it. `relay` imports `devices`, `access`, `config` and `files`;
+  only `cmd/seamlessd` imports it.)
 
 (The dependency-aware ready-queue and lease-based claiming live in
 `internal/store/tasks*.go`; there is no `internal/tasks` package.)
@@ -322,10 +323,7 @@ any of it.
   uid 500, Linux below login.defs' UID_MIN, no range elsewhere). `seam`'s
   `verifyDaemon` (cmd/seam/daemon_peer.go), the Touch ID approver's
   `PeerGuard.admit` (Socket.swift, with DaemonPin.swift mirroring the pin;
-  `< 500` alone, it is macOS only) and serve's preflight
-  (`filesystemProblems`, which doctor reports, refusing too a restricted
-  account that is the pinned one) apply it, so a restricted or other account
-  serving a socket as itself is refused; keep the three in step. The same
+  `< 500` alone, it is macOS only) serve's preflight (`filesystemProblems`, which doctor reports, refusing too a restricted account that is the pinned one) and, on a client computer, the relay's (`relay.Env.AccountProblems`, against that computer's own pin) apply it, so a restricted or other account serving a socket as itself is refused; keep the four in step. The same
   preflight judges the TLS pair like the config file: rewritable by no one but
   root or the daemon's account, and the key readable by no account but the
   daemon's (never world, group only the daemon's own) -- whoever reads it
@@ -898,6 +896,24 @@ any of it.
   in. Under peer_auth a key device, and a relay `peer_auth.relays` does not map, is a TCP caller: the owner's view, no lease, so it never opens a locked project. The `X-Seamless-Relay-*` headers (wire v1: version, uid, chain) are read only under an active relay `Credential` (`devices.ParseRelayAttributes`; present but malformed is 400) and never reach a route raw (routes read `devices.RelayAttributesOf`); every other request has them stripped unread. A mapped relay (its enrolled name to the owner's uid there, file only) is judged as the socket is (`relayHandler`, `Policy.RelayChainView`): owner_uid is the owner on a socket (`Principal.Relay`), any other uid 403, nothing forwarded 400, a relay no passkey approved 403 until it pairs again; `/healthz` is not judged. Every token of a relay's chain names the relay (`ProcessToken.Relay`, key `relay/<id>/<boot>:<pid>:<version>`), so leases, grants and requests match on (relay, process) wherever keys are compared, and `access_leases`/`access_grants.relay_id` (migration 043) record it, written from the key by their one writer each. No request is filed for a relay's process (`approval.ErrRelayUnnamed`: the wire names no program, so the anchor rule cannot judge one), and the approve core refuses a stored relay row with no program. A relay's chain counts as an agent's (`FromAgent`).
   Revoking refuses the credential from its next request, ends the requests it is making and, in the same transaction, a relay's live leases, grants and waiting requests (`store.RevokeDeviceEndingAccess`). A merge carries no device, a fresh import revokes the snapshot's,
   and a backup restore keeps today's (`keptTables`).
+- **The relay forwards and judges nothing** (plan networked-relay;
+  `internal/relay`, `cmd/seamlessd/relay.go`, `doctor_relay.go`). `seamlessd
+  relay serve` serves the socket agents dial beside a peer_auth daemon on a
+  macOS or Linux client, as the account root pinned (else a system account,
+  never root); `relay.Env.Problems` holds its binary, the socket's directory,
+  its 0700 data dir (`/opt/seamless/relay`: `relay.json` 0600, the pairing and
+  key) and every directory above them to serve's preflight rules, and makes no
+  data dir for an account that fails them. Per connection it reads the caller's
+  uid and process from its own kernel (`relay.ConnContext`; the chain walked per
+  request), removes every `X-Seamless-Relay-*` and `Authorization` header a
+  local client sent, sets the wire contract's three, and forwards over its
+  client certificate (`devices.RelayTransport`: `config.HTTPClient`'s trust, the
+  server's certificate pinned on top). It interprets and caches nothing: an
+  unnamed caller is 403, an unreachable or re-certified server 502 with the
+  reason, and the server's answer goes back as it came. Without peer_auth on the
+  server a relayed request is the owner's whatever uid it names, so the socket's
+  mode and group (`--socket-mode`, `--socket-group`) keep other accounts out;
+  doctor says who may connect (`relay.access`).
 - **Events reach the console through the filtered handle.** The console's live
   feed re-reads each event through it (`liveEventVisible`) and the event log's
   reads go through `events.ReadingFrom`, so an event about a locked project

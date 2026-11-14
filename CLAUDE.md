@@ -23,7 +23,8 @@ preserved read-only as a fallback archive.
 ```
 cmd/seamlessd/     server daemon: serve, doctor, export, import, backups, restore,
                    setup, install-hooks, map-repo, unmap-repo, retire-project,
-                   family, console-open, devices
+                   family, console-open, devices, relay
+
 cmd/seam/          headless CLI (agents + owner observability)  [P2/P5]
 cmd/docsgen/       docs site generator: docs-src/ -> docs/docs/ (see SITE.md)
 cmd/demoseed/      thin CLI over internal/demokit: the console-fleet seed
@@ -54,6 +55,10 @@ internal/devices/  device pairing on a networked server (migration 042): one-tim
                    codes, relays' client certificates and per-device keys, the TCP
                    edge that matches them (devices.Bearer: the one bearer check),
                    and the client-side Pair the relay and setup call
+internal/relay/    the relay on a client computer (macOS, Linux): the local socket agents
+                   dial, the kernel's uid and process chain per request, forwarding over the
+                   paired client certificate with the server's certificate pinned; its layout
+                   preflight and pairing state (seamlessd relay serve|pair)
 internal/store/    SQLite: schema, FTS5, embeddings (BLOB + cosine), migrations;
                    index_work.go mirrors the DB-native work record (tasks,
                    trials, session findings) into the same fts table the files
@@ -263,6 +268,11 @@ on `/console/passkeys/add` and the owner approves the code it shows with
   update/attempt.json, attempts.jsonl, logs/   the updater's records (it writes, the daemon reads)
   feed/                            write screening's metadata-feed spool (only with screening.feed_socket set)
 ```
+
+A relay on a client computer keeps root's layout instead: `/opt/seamless/relay/`
+(the relay's account, 0700) holds `relay.json` (0600: server address, pinned
+certificate fingerprint, device, the relay's certificate and key),
+`server-ca-<hash>.pem` and `relay.lock`; it serves `/opt/seamless/run/seamlessd.sock`.
 
 Files are the source of truth for durable knowledge; the DB is the record for
 high-churn state (sessions, tasks, trials, events, telemetry) and a rebuildable

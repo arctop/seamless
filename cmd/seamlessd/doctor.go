@@ -96,6 +96,8 @@ func doctor(args []string) error {
 		configSourceCheck(cfg),
 		configFileCheck(cfg, runtime.GOOS, defaultSharedConfigEnv()),
 	)
+	// A relay on this computer (its data directory exists): no rows anywhere else.
+	checks = append(checks, relayDoctorChecks(context.Background(), defaultRelayDoctorEnv())...)
 
 	// The role branch, and it is placed here because everything below it reads
 	// LOCAL server state a client does not have: the report would describe a

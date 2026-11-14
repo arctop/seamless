@@ -190,6 +190,65 @@ func pairingClient(client *http.Client, req PairRequest) (*http.Client, error) {
 	if req.Relay == nil && req.ServerFingerprint == "" {
 		return &out, nil
 	}
+	tr, err := pinnedTransport(client, req.Relay, req.ServerFingerprint)
+	if err != nil {
+		return nil, fmt.Errorf("a pairing: %w", err)
+	}
+	out.Transport = tr
+	return &out, nil
+}
+
+// ValidCertFingerprint reports whether s has the shape CertFingerprint gives a
+// certificate's SHA-256 (32 bytes of hex; case, colons, spaces and dashes
+// aside, as sameCertFingerprint compares them): what a relay may pin.
+func ValidCertFingerprint(s string) bool {
+	hexOnly := strings.NewReplacer(":", "", " ", "", "-", "").Replace(strings.TrimSpace(s))
+	if len(hexOnly) != 64 {
+		return false
+	}
+	for _, c := range hexOnly {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return false
+		}
+	}
+	return true
+}
+
+// ErrNoServerPin is a relay transport asked for without the fingerprint of the
+// server certificate the relay pinned at pairing.
+var ErrNoServerPin = errors.New("a relay forwards only to the server certificate it pinned at pairing, and none is recorded")
+
+// RelayTransport returns the transport a paired relay forwards over (plan
+// networked-relay; package internal/relay): a copy of client's -- the one
+// config.Config.HTTPClient builds, so the trust decision is every other
+// surface's -- that presents id's certificate whenever the server asks
+// (ClientTLS: RelayALPN offered, so the server asks) and accepts only a
+// server certificate whose CertFingerprint is fingerprint, the one recorded at
+// pairing, on top of the chain's verification and never instead of it. Any
+// other certificate fails the handshake with ErrServerFingerprint before a
+// request is sent.
+func RelayTransport(client *http.Client, id *RelayIdentity, fingerprint string) (*http.Transport, error) {
+	const op = "devices.RelayTransport"
+	if client == nil {
+		return nil, fmt.Errorf("%s: no client: build it with config.Config.HTTPClient", op)
+	}
+	if id == nil {
+		return nil, fmt.Errorf("%s: %w: none", op, ErrRelayIdentity)
+	}
+	if strings.TrimSpace(fingerprint) == "" {
+		return nil, fmt.Errorf("%s: %w", op, ErrNoServerPin)
+	}
+	tr, err := pinnedTransport(client, id, fingerprint)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	return tr, nil
+}
+
+// pinnedTransport is a copy of client's transport with relay's certificate
+// presented (when relay is set) and the server's certificate pinned to
+// fingerprint (when it is set).
+func pinnedTransport(client *http.Client, relay *RelayIdentity, fingerprint string) (*http.Transport, error) {
 	var tr *http.Transport
 	switch t := client.Transport.(type) {
 	case nil:
@@ -197,17 +256,17 @@ func pairingClient(client *http.Client, req PairRequest) (*http.Client, error) {
 	case *http.Transport:
 		tr = t.Clone()
 	default:
-		return nil, fmt.Errorf("a pairing needs an *http.Transport to set its TLS on, not %T", client.Transport)
+		return nil, fmt.Errorf("an *http.Transport is needed to set TLS on, not %T", client.Transport)
 	}
 	tlsCfg := tr.TLSClientConfig
-	if req.Relay != nil {
-		tlsCfg = req.Relay.ClientTLS(tlsCfg)
+	if relay != nil {
+		tlsCfg = relay.ClientTLS(tlsCfg)
 	} else if tlsCfg == nil {
 		tlsCfg = &tls.Config{MinVersion: tls.VersionTLS12}
 	} else {
 		tlsCfg = tlsCfg.Clone()
 	}
-	if want := req.ServerFingerprint; want != "" {
+	if want := fingerprint; want != "" {
 		// On top of the chain's verification, never instead of it.
 		prior := tlsCfg.VerifyConnection
 		tlsCfg.VerifyConnection = func(cs tls.ConnectionState) error {
@@ -223,8 +282,7 @@ func pairingClient(client *http.Client, req PairRequest) (*http.Client, error) {
 		}
 	}
 	tr.TLSClientConfig = tlsCfg
-	out.Transport = tr
-	return &out, nil
+	return tr, nil
 }
 
 // transportError is a request that got no answer: nothing says whether the

@@ -19,6 +19,7 @@
 //	seamlessd family        manage project families
 //	seamlessd console-open  open the console in a browser, pre-authenticated
 //	seamlessd devices       the computers paired with this server: pairing codes, the list, revoke
+//	seamlessd relay         the relay on a client computer: serve the socket agents dial, or pair it with a server
 //	seamlessd start         start|stop|restart|status the installed service
 //	seamlessd version       print the version
 package main
@@ -150,6 +151,8 @@ func main() {
 		err = runApprove(args)
 	case "devices":
 		err = runDevices(args)
+	case "relay":
+		err = runRelay(args)
 	case "console-open":
 		err = runConsoleOpen(args)
 	case "start":
@@ -225,6 +228,8 @@ usage:
                            (--browser "Google Chrome" targets a specific browser; macOS only)
   seamlessd devices        the computers paired with this server, on a server that serves others
                            (code|list|revoke <id|name>; as the daemon's account under peer_auth)
+  seamlessd relay          the relay on a client computer, macOS and Linux (serve: the socket agents dial,
+                           forwarded to the server; pair --server URL --code CODE; as the relay's account)
   seamlessd start          start the installed service (launchd/systemd/Scheduled Task)
   seamlessd stop           stop the installed service
   seamlessd restart        restart the installed service in place
