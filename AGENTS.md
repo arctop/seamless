@@ -493,8 +493,10 @@ any of it.
   shows "(no reason given)"). The reason is a fact, so an owner mid-review
   gets the facts-changed answer.
   `access_request` (`internal/mcp/access_request.go`) files one explicitly and
-  is registered only while peer_auth locks a project
-  (`Config.OfferAccessRequest`: the `offerCommits` pattern for a whole tool),
+  is registered only while peer_auth locks a project, or while
+  `isolation.requests` is on without peer_auth (`mcp.OffersAccessRequest`: the
+  advisory tier's explicit ask, worded for that tier by `accessRequestToolFor`;
+  `Config.OfferAccessRequest`: the `offerCommits` pattern for a whole tool),
   so every other install's tools/list, `ToolCount` and doctor line are
   unchanged. `Catalog()` lists it last (`LockedOnlyTools`), `LockedToolCount`
   counts it, and both doctors assert `ToolCountWith(locked)` (seam doctor
@@ -542,6 +544,23 @@ any of it.
   (the app's FlowTests, cmd/seam's approverOutcome tests); the daemon takes it only
   on the socket, from a chain holding the request's process, while that
   dialog waits, and ends the wait at once. It grants and denies nothing.
+- **In the advisory tier the dialog's answer decides** (`isolation.requests`
+  without peer_auth; owner decision D7; `internal/mcp/advisory_dialog.go`,
+  `approval/advisory.go`). A TCP call that files or finds a grant or move
+  request (a refusal at a fenced project, `session_start` into one,
+  `access_request`) shows a form-elicitation client the facts (warnings first,
+  the carry, what read-only and read and write each let happen, the agent's
+  reason as its own) with a Decision (Approve or Deny, no default), the access
+  where offered (read-only by default) and, for a grant, the duration. Approve
+  goes through `Grants.Approve`/`ApproveMove` with `approval.ProofDialog` over
+  the digest the form showed; Deny through `Grants.DenyInDialog`; both record
+  `decided_by = in-session-dialog` (`approval.DecidedByDialog`), never
+  `bearer-key`. Declining, cancelling, a form with no decision and `DialogWait`
+  decide nothing. Only advisory Grants accept the proof: under peer_auth it is
+  `approval.ErrDialogPeerAuth` (`ErrNoProof` in the lock core), and
+  `advisoryCall` is false for any request carrying a View, so the 2026-11-06
+  rule stands there. The tier keeps a TCP client's declared capabilities
+  (`capsKept`), so the dialog survives a restart.
 - **The Touch ID approver is opt-in, socket-only, and keychain-bound**
   (`macos/`, `cmd/seam/touchid*.go`, `cmd/seam/approver_app.go`; console
   `approversTouchIDEnroll`, `touchIDProof`). Nothing installs or launches
@@ -648,8 +667,9 @@ any of it.
   write) and `session_start` (`askRefusal`, `sessionStartReach`); never by a
   filter (`fenceReadQuiet`) or the read half of a move or apply
   (`fenceReadNoAsk`). Without peer_auth the decision is the bearer
-  key's (`approval.ProofKey`, accepted only by advisory Grants -- the docs
-  call it advisory); under it, the approve core's proofs (`Service.prove`).
+  key's (`approval.ProofKey`, accepted only by advisory Grants -- the docs call
+  it advisory), or the in-session dialog's (`approval.ProofDialog`, likewise);
+  under it, the approve core's proofs (`Service.prove`).
   Event slugs ride `from_project`/`target_project`, never a key in
   `feed.frameFields`. Off, no request carries grants and every check answers
   as before.

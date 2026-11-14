@@ -89,7 +89,7 @@
 {{if or .Advisory .PasskeyReady}}<p class="held-sub">Or, in your own terminal: <code>seam approve {{.Request.Short}}</code></p>{{end}}
 <p class="held-sub" id="access-status" role="status" aria-live="polite"></p>
 {{else}}
-<p class="held-sub">This request is <strong>{{.Status}}</strong>.</p>
+<p class="held-sub">This request is <strong>{{.Status}}</strong>{{if .InDialog}}: decided in the agent's approval dialog, which without peer_auth is advisory{{end}}.</p>
 {{end}}
 {{end}}
 {{end}}

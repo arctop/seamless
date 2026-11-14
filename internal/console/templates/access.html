@@ -30,7 +30,7 @@
     <li class="access-item" data-grant="{{.ID}}">
       <span class="badge">{{.Project}}</span>
       <strong>{{if .Agent}}{{.Agent}}{{else if .Session}}{{.Session}}{{else}}pid {{.PID}}{{end}}</strong>
-      <small>{{if and .Agent .Session}}session {{.Session}} &middot; {{end}}{{if eq .Access "write"}}read and write{{else}}read-only{{end}}, for {{.From}} &middot; granted {{clock .GrantedAt}}, ends {{clock .ExpiresAt}}</small>
+      <small>{{if and .Agent .Session}}session {{.Session}} &middot; {{end}}{{if eq .Access "write"}}read and write{{else}}read-only{{end}}, for {{.From}} &middot; granted {{clock .GrantedAt}}{{if .Dialog}} in the agent's approval dialog{{end}}, ends {{clock .ExpiresAt}}</small>
       <form method="post" action="/console/access/grants/{{.ID}}/revoke">
         <button class="btn" type="submit">Revoke</button>
       </form>

@@ -82,6 +82,10 @@ type grantRow struct {
 	ExpiresAt time.Time `json:"expires_at"`
 	// Access is what the owner approved: read, or write (read and write).
 	Access string `json:"access"`
+	// Dialog marks a grant approved in the agent's in-session dialog (the
+	// advisory tier's Approve there, approval.DecidedByDialog); absent for
+	// every other decision.
+	Dialog bool `json:"dialog,omitempty"`
 }
 
 // GrantsView is what the access pages need of the daemon's read grants
@@ -203,6 +207,9 @@ type accessOneData struct {
 	// ForGood marks a move into a project no lock covers: it never ends, so
 	// the page asks no duration (the proof still signs the default one).
 	ForGood bool `json:"-"`
+	// InDialog marks a request decided in the agent's in-session dialog (the
+	// advisory tier's Approve or Deny there, approval.DecidedByDialog).
+	InDialog bool `json:"-"`
 }
 
 // accessChoice is one access radio: its value and its words.
@@ -369,7 +376,7 @@ func (s *Service) readGrants(ctx context.Context) ([]grantRow, error) {
 	rows := make([]grantRow, 0, len(live))
 	for _, g := range live {
 		row := grantRow{ID: g.ID, Project: g.Project, From: g.FromProject, PID: g.PeerPID, GrantedAt: g.GrantedAt, ExpiresAt: g.ExpiresAt,
-			Agent: approval.AgentLabel("", g.PeerPID), Access: g.Access}
+			Agent: approval.AgentLabel("", g.PeerPID), Access: g.Access, Dialog: g.DecidedBy == approval.DecidedByDialog}
 		if a, err := store.AccessApprovalByID(ctx, s.writeDB(), g.ApprovalID); err == nil {
 			row.Session, row.Agent = a.SessionName, approval.AgentLabel(a.Program, g.PeerPID)
 		}
@@ -453,7 +460,8 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 	}
 	kindOfGrants := a.Kind == store.AccessKindGrant || a.Kind == store.AccessKindMove
 	d := accessOneData{Request: facts, Status: status, Page: s.core().Page(a.ID), Terminal: s.cfg.Terminal,
-		Durations: approval.Durations, MaxLease: s.maxLease(), Advisory: kindOfGrants && s.advisory()}
+		Durations: approval.Durations, MaxLease: s.maxLease(), Advisory: kindOfGrants && s.advisory(),
+		InDialog: a.DecidedBy == approval.DecidedByDialog}
 	d.Choices = durationChoices(d.MaxLease)
 	d.Accesses, d.Access = accessChoices(facts), chosenAccess(r, facts)
 	if d.ForGood = a.Kind == store.AccessKindMove && !facts.Locked; d.ForGood {

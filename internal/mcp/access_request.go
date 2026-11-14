@@ -27,6 +27,12 @@ package mcp
 // asks for read and write -- the owner still chooses -- and from an open
 // project, or into a sealed one, a move into the project for good. Without
 // read grants it changes nothing: a lock's lease reads and writes already.
+//
+// In the advisory tier (read grants on without peer_auth; plan fenced-sessions
+// P9) it is the explicit ask the in-session dialog answers there, registered
+// with words of its own (accessRequestToolFor): nothing is locked, so every
+// ask is a grant or a move, and the dialog's Approve decides it
+// (advisory_dialog.go). Whether a daemon registers it is OffersAccessRequest.
 
 import (
 	"context"
@@ -34,6 +40,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -84,6 +91,58 @@ func accessRequestTool() mcp.Tool {
 	)
 }
 
+// OffersAccessRequest reports whether a daemon registers access_request
+// (Config.OfferAccessRequest): while peer_auth locks a project, and -- the
+// advisory tier's explicit ask, which its in-session dialog answers (plan
+// fenced-sessions P9) -- while read grants (isolation.requests) are on without
+// peer_auth. Every other install registers none: its tools/list, ToolCount
+// and doctor line are unchanged.
+func OffersAccessRequest(locksProjects, peerAuth, readGrants bool) bool {
+	return locksProjects || (!peerAuth && readGrants)
+}
+
+// accessRequestToolFor is access_request as this server registers it: in the
+// advisory tier, where nothing is locked and no proof is asked, in words of
+// its own (advisoryAccessRequestTool); everywhere else accessRequestTool, the
+// Catalog's, word for word.
+func (s *Server) accessRequestToolFor() mcp.Tool {
+	if s.advisoryTier() {
+		return advisoryAccessRequestTool()
+	}
+	return accessRequestTool()
+}
+
+// advisoryAccessRequestTool is access_request in the advisory tier: the same
+// name, arguments and hints as accessRequestTool, worded for a daemon without
+// peer_auth whose read grants are on.
+func advisoryAccessRequestTool() mcp.Tool {
+	return mcp.NewTool(AccessRequestTool, hintSet(),
+		mcp.WithDescription("Ask the owner for a confidential or sealed project. Present with read grants on "+
+			"(isolation.requests) on a server without peer_auth. A call refused at such a project's fence already files a "+
+			"request, so use this to ask ahead of the work, or to say why. What is asked follows from the project this "+
+			"conversation works in and the one it names: from a confidential project, a grant of another confidential one "+
+			"(read-only unless write is set, and the owner still chooses); from an open project, or for a sealed one, a move "+
+			"of this conversation into the project for good. Asking again finds the request already waiting rather than "+
+			"filing another, and a reason given then fills in one the waiting request lacks. The answer says which: filed is "+
+			"true when this call filed a new request, false when it found one already waiting or the access is already held "+
+			"(nothing filed); reason is added when this call's reason was stored on the request, kept when the waiting "+
+			"request already had one, so this one was not used, and none when this call gave no reason or nothing was "+
+			"filed. Once the owner denies a request, refused calls file nothing more and say so: ask again here, with a "+
+			"reason, when the owner tells you to. When this agent's client can show an approval dialog, the call shows the "+
+			"owner the request there and waits up to 110 seconds for the decision; otherwise it returns at once with the "+
+			"request's short id and how the owner approves it. An approved grant opens the project until the time the result "+
+			"names, and an approved move lasts for good: retry the work then. An agent that already holds the access it asks "+
+			"for is answered with it, and nothing is filed, until 30 minutes before it ends."),
+		mcp.WithString("project", mcp.Required(), mcp.Description("the confidential or sealed project's slug")),
+		mcp.WithString(accessReasonParam, mcp.Description(fmt.Sprintf("optional: why the work needs the project, in at "+
+			"most %d characters. The owner sees it labeled as this agent's own words.", store.MaxAccessReasonRunes))),
+		mcp.WithBoolean(accessWriteParam, mcp.Description("optional: from a confidential project, ask to change the other "+
+			"project as well as read it -- a read-and-write grant, which the owner may still approve read-only. From an open "+
+			"project, or for a sealed one, the ask is a move into the project for good either way, after which this "+
+			"conversation can no longer write where it works now, so record what belongs there first.")),
+	)
+}
+
 // accessRequestResult is access_request's answer.
 type accessRequestResult struct {
 	ID      string `json:"id"`
@@ -115,8 +174,10 @@ type accessRequestResult struct {
 	// Dialog is how the in-session approval dialog ended (accepted, declined,
 	// cancelled, unoffered, unanswered, or -- accepted with Touch ID --
 	// touchid_cancelled when the owner cancelled the Touch ID prompt and
-	// touchid_closed when the helper closed without approving); absent when
-	// none was shown.
+	// touchid_closed when the helper closed without approving; in the advisory
+	// tier, where accepting decides, changed when the request changed while
+	// the dialog showed it and failed when the decision did not go through,
+	// both leaving it pending); absent when none was shown.
 	Dialog string `json:"dialog,omitempty"`
 	// Page is the request's passkey approval page, when a passkey can
 	// approve it there (passkeys set up, and one enrolled).
@@ -149,6 +210,9 @@ func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolReques
 		return errResult(AccessRequestTool, fmt.Errorf("the reason is limited to %d characters", store.MaxAccessReasonRunes))
 	}
 	if s.cfg.Approvals == nil {
+		if s.advisoryTier() {
+			return s.advisoryAccessRequest(ctx, start, project, reason, argBool(req, accessWriteParam, false))
+		}
 		return errResult(AccessRequestTool, errors.New("this server locks no project: nothing to request"))
 	}
 	if s.cfg.Grants != nil && argBool(req, accessWriteParam, false) {
@@ -174,6 +238,27 @@ func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolReques
 	}
 	out.Filed, out.Reason = asked.Outcome(a)
 	return s.accessRequestAnswer(ctx, start, t, ways, out)
+}
+
+// advisoryAccessRequest is access_request in the advisory tier: nothing is
+// locked, so the ask is what the conversation's home and the project call
+// for -- with write, approval.Grants.Ask (accessRequestAsk); without it, the
+// read refused at the fence would ask for (accessRequestGrant) -- and the
+// dialog, when the client can show one, is the advisory tier's, whose Approve
+// decides it (advisory_dialog.go).
+func (s *Server) advisoryAccessRequest(ctx context.Context, start time.Time, project, reason string, write bool) (*mcp.CallToolResult, error) {
+	if c, ok := identifiedConversation(ctx); ok && c.home == project {
+		return errResult(AccessRequestTool, askRequestError(approval.ErrIsHome, project))
+	}
+	if !write {
+		return s.accessRequestGrant(ctx, start, project, reason)
+	}
+	res, ok, err := s.accessRequestAsk(ctx, start, project, reason)
+	if !ok {
+		// Only a lock's lease, which this tier never has, answers nothing here.
+		return errResult(AccessRequestTool, askRequestError(approval.ErrIsHome, project))
+	}
+	return res, err
 }
 
 // lockCovers reports whether project is a lock's for the
@@ -208,6 +293,11 @@ func (s *Server) accessRequestGrant(ctx context.Context, start time.Time, projec
 		return jsonResult(s.liveAccessResult(ctx, live))
 	}
 	if err != nil {
+		if s.advisoryTier() && errors.Is(err, approval.ErrNotConfidential) {
+			// Nothing is locked in this tier: a project with no fence is all
+			// that is left to name.
+			return errResult(AccessRequestTool, askRequestError(err, project))
+		}
 		return errResult(AccessRequestTool, grantRequestError(err))
 	}
 	return s.askAnswer(ctx, start, a, asked)
@@ -239,9 +329,19 @@ func (s *Server) askAnswer(ctx context.Context, start time.Time, a store.AccessA
 	out.Filed, out.Reason = asked.Outcome(a)
 	out = s.answerOut(ctx, start, t, ways, out)
 	if t.Move && out.Status == store.ApprovalPending {
-		out.Next = moveFirstLine(a.FromProject) + " " + out.Next
+		out.Next = moveFirstLine(a.FromProject) + " " + sentenceStart(out.Next)
 	}
 	return jsonResult(out)
+}
+
+// sentenceStart is s with its first letter upper-cased, for s to follow a
+// sentence ("... no longer write there. The owner approves it ...").
+func sentenceStart(s string) string {
+	r, n := utf8.DecodeRuneInString(s)
+	if !unicode.IsLower(r) {
+		return s
+	}
+	return string(unicode.ToUpper(r)) + s[n:]
 }
 
 // grantAsker is the read grants' ask of a kind (*approval.Grants.Ask):
@@ -349,7 +449,7 @@ func (s *Server) answerOut(ctx context.Context, start time.Time, t dialogTarget,
 		out.Next = accessRequestNext(t, ways, end)
 		return out
 	}
-	out.Next = accessRequestNext(t, ways, dialogEnd{state: out.Status})
+	out.Next = accessRequestNext(t, ways, dialogEnd{state: out.Status, advisory: s.advisoryCall(ctx)})
 	return out
 }
 
@@ -376,8 +476,17 @@ func accessRequestNext(t dialogTarget, ways access.Ways, end dialogEnd) string {
 		lead = "Touch ID was cancelled, so nothing was approved and " + t.what() + " is still pending: "
 	case answerTouchIDClosed:
 		lead = "the Touch ID approver closed without approving, so " + t.what() + " is still pending: "
+	case answerChanged:
+		lead = "the request changed while the approval dialog showed it, so nothing was approved and " + t.what() +
+			" is still pending: "
+	case answerFailed:
+		lead = "the decision in the approval dialog did not go through, so " + t.what() + " is still pending: "
 	}
-	return lead + ways.OwnerApproves(t.Short) + "; keep to other projects until it is approved, then retry the work that needs " + t.Project
+	approves := ways.OwnerApproves(t.Short)
+	if end.advisory {
+		approves = advisoryApproves(t.Short)
+	}
+	return lead + approves + "; keep to other projects until it is approved, then retry the work that needs " + t.Project
 }
 
 // accessRequestError words the approval service's refusals for an agent, as

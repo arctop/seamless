@@ -163,10 +163,12 @@ func (d *dialogSlot) get() (dialogTarget, bool) {
 // refusal report into, and after the call, when the result is that refusal
 // (an error naming the request), runs the dialog and rewrites the refusal's
 // remedy with how it ended. With no approval service, or off the peer_auth
-// socket, it is a pass-through.
+// socket, it is a pass-through -- except in the advisory tier (read grants on
+// without peer_auth), whose own dialog runs over TCP (advisory_dialog.go).
 func (s *Server) dialogMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		if s.cfg.Approvals == nil || !access.PeerAuthenticated(ctx) {
+		advisory := s.advisoryCall(ctx)
+		if !advisory && (s.cfg.Approvals == nil || !access.PeerAuthenticated(ctx)) {
 			return next(ctx, req)
 		}
 		start := time.Now()
@@ -188,10 +190,15 @@ func (s *Server) dialogMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.Tool
 		if !ran {
 			return res, err
 		}
+		// The advisory tier has no Touch ID or passkey path: its ways after the
+		// dialog are its own (refusalAfterDialog, advisoryStillPending).
+		var ways access.Ways
+		if !advisory {
+			ways = t.ways(callWays(ctx, s.cfg.Approvals.Ways(ctx, t.ID)))
+		}
 		out := *res
 		out.Content = slices.Clone(res.Content)
-		out.Content[0] = mcp.NewTextContent(refusalAfterDialog(req.Params.Name, first.Text, t, end,
-			t.ways(callWays(ctx, s.cfg.Approvals.Ways(ctx, t.ID))), s.cfg.OfferAccessRequest))
+		out.Content[0] = mcp.NewTextContent(refusalAfterDialog(req.Params.Name, first.Text, t, end, ways, s.cfg.OfferAccessRequest))
 		return &out, err
 	}
 }
@@ -211,6 +218,9 @@ type dialogEnd struct {
 	// stopped there rather than at a decision.
 	stopAt   time.Time
 	timedOut bool
+	// advisory marks the advisory tier's dialog (advisory_dialog.go), whose
+	// answer decides and whose remaining ways are its own.
+	advisory bool
 }
 
 // dialog runs the approval dialog for request t, filed by the call in ctx that
@@ -218,7 +228,12 @@ type dialogEnd struct {
 // unless every precondition holds: the call came over the peer_auth socket,
 // the client declared elicitation, a proof can finish in the dialog, the
 // request is pending, and this connection has no dialog open for it already.
+// A call of the advisory tier gets that tier's dialog instead
+// (advisoryDialog), whose answer decides.
 func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (dialogEnd, bool) {
+	if s.advisoryCall(ctx) {
+		return s.advisoryDialog(ctx, start, t)
+	}
 	if s.cfg.Approvals == nil || t.ID == "" || !access.PeerAuthenticated(ctx) {
 		return dialogEnd{}, false
 	}
@@ -1130,6 +1145,11 @@ func refusalAfterDialog(tool, text string, t dialogTarget, end dialogEnd, ways a
 		ended = "the Touch ID approver closed without approving"
 	case answerUnoffered:
 		ended = "the approval dialog's answer was not one it offered"
+	case answerChanged:
+		ended = "the request changed while the approval dialog showed it (a new warning, or the agent's reason filled in), " +
+			"so nothing was approved"
+	case answerFailed:
+		ended = "the decision in the approval dialog did not go through"
 	default:
 		ended = "the approval dialog stopped waiting at " + access.Clock(end.stopAt) + " without a decision"
 	}
@@ -1137,8 +1157,11 @@ func refusalAfterDialog(tool, text string, t dialogTarget, end dialogEnd, ways a
 	if i := strings.Index(remedy, "retry once it is approved"); i >= 0 {
 		closing = remedy[i:]
 	}
-	return rule + "\nRemedy: " + ended + "; " + what + " stays pending for the owner: " + ways.StillPending(t.Short) +
-		"; " + closing
+	still := ways.StillPending(t.Short)
+	if end.advisory {
+		still = advisoryStillPending(t.Short)
+	}
+	return rule + "\nRemedy: " + ended + "; " + what + " stays pending for the owner: " + still + "; " + closing
 }
 
 // openLine says what an approval opened, and until when.

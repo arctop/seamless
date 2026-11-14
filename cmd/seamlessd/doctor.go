@@ -1309,13 +1309,14 @@ func missingEmbedCredential(cfg config.Config) (bool, string) {
 // useful check on a SERVER install whose daemon may well be stopped.
 //
 // The one registration that depends on the config is access_request, which a
-// daemon that locks a project registers: the throwaway
-// server is built the way serve builds it, and the count it must match is
-// mcp.ToolCountWith that. Every other install reads exactly as before.
+// daemon that locks a project registers, and one whose read grants are on
+// without peer_auth (mcp.OffersAccessRequest): the throwaway server is built
+// the way serve builds it, and the count it must match is mcp.ToolCountWith
+// that. Every other install reads exactly as before.
 func mcpToolsCheck(ctx context.Context, cfg config.Config, db *sql.DB) check {
-	locked := locksProjects(ctx, cfg, db)
-	srv := mcp.New(mcp.Config{OfferAccessRequest: locked})
-	n, want := srv.NumTools(), mcp.ToolCountWith(locked)
+	offer := mcp.OffersAccessRequest(locksProjects(ctx, cfg, db), cfg.PeerAuth.Enabled, cfg.Isolation.Requests)
+	srv := mcp.New(mcp.Config{OfferAccessRequest: offer})
+	n, want := srv.NumTools(), mcp.ToolCountWith(offer)
 	if n != want {
 		return check{statusFail, "mcp_tools",
 			fmt.Sprintf("registered %d tools but ToolCount is %d", n, want)}

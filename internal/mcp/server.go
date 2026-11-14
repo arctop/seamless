@@ -277,8 +277,9 @@ type Config struct {
 	// granted project (grants.go). Nil -- the default -- changes nothing.
 	Grants Grants
 	// OfferAccessRequest registers the access_request tool (access_request.go):
-	// set while peer_auth locks a project. Off -- the zero value, and every
-	// install that locks nothing -- the tool does not exist: tools/list,
+	// set while peer_auth locks a project, and while read grants are on
+	// without peer_auth (OffersAccessRequest). Off -- the zero value, and
+	// every install that does neither -- the tool does not exist: tools/list,
 	// NumTools (ToolCount) and every refusal are exactly as before.
 	OfferAccessRequest bool
 	// DialogWait bounds an in-session approval dialog (elicit.go), counted
@@ -563,10 +564,12 @@ func (s *Server) registerTools() {
 
 	s.addTool(favoriteSetTool(), s.handleFavoriteSet)
 
-	// Registered last, and only while a project is locked, so a default
-	// server's registration is Catalog minus LockedOnlyTools, in order.
+	// Registered last, and only while a project is locked or the advisory
+	// tier's read grants are on (OffersAccessRequest), so a default server's
+	// registration is Catalog minus LockedOnlyTools, in order. The advisory
+	// tier registers it in words of its own (accessRequestToolFor).
 	if s.cfg.OfferAccessRequest {
-		s.addTool(accessRequestTool(), s.handleAccessRequest)
+		s.addTool(s.accessRequestToolFor(), s.handleAccessRequest)
 	}
 }
 

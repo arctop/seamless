@@ -316,8 +316,7 @@ func (s *Server) requestWays(ctx context.Context, a store.AccessApproval) access
 // holds, or the advisory tier's terminal and console.
 func (s *Server) ownerApproves(short string, ways access.Ways) string {
 	if s.cfg.Grants.Advisory() {
-		return fmt.Sprintf("the owner approves it in their own terminal with `seam approve %s`, or with Approve on the "+
-			"console's Access requests page", short)
+		return advisoryApproves(short)
 	}
 	return ways.OwnerApproves(short)
 }

@@ -18,8 +18,19 @@ package mcp
 // Capabilities are the client's own claim and grant nothing: a caller that names
 // another connection's id gets only what it could have declared itself.
 //
+// The advisory tier (read grants on without peer_auth; plan fenced-sessions P9)
+// keeps them too, over TCP, where its dialog runs (advisory_dialog.go): an
+// agent's client resends its Mcp-Session-Id after a restart there as well -- a
+// `seam mcp-proxy` bridge always, Claude Code's own HTTP client whenever it
+// does not initialize again -- and without the row its dialog, whose Approve
+// decides, would be gone until the agent restarted, saying nothing. A client
+// that names another connection's id gets only a dialog it could have asked
+// for by declaring elicitation itself, and the bearer key it holds decides as
+// much as that dialog's answer.
+//
 // Off, nothing here runs: no hook is registered, and a request that did not come
-// over the peer_auth socket never reaches the store.
+// over the peer_auth socket never reaches the store -- the advisory tier's
+// excepted.
 
 import (
 	"context"
@@ -42,11 +53,19 @@ const clientCapsTouchEvery = 24 * time.Hour
 // all: only then is what a client declared worth keeping.
 func (s *Server) keepsClientCaps() bool { return s.cfg.Approvals != nil || s.cfg.Grants != nil }
 
+// capsKept reports whether the connection of the request in ctx is one whose
+// declared capabilities are kept: the peer_auth socket's, and the advisory
+// tier's, whose dialog runs over TCP.
+func (s *Server) capsKept(ctx context.Context) bool {
+	return access.PeerAuthenticated(ctx) || s.advisoryCall(ctx)
+}
+
 // saveClientCaps is the initialize hook: it records the elicitation modes a
-// client on the peer_auth socket declared. A failure is logged: the connection
-// works as it is, and only a later restart would miss the dialog.
+// client on the peer_auth socket (or of the advisory tier) declared. A failure
+// is logged: the connection works as it is, and only a later restart would
+// miss the dialog.
 func (s *Server) saveClientCaps(ctx context.Context, _ any, req *mcp.InitializeRequest, _ *mcp.InitializeResult) {
-	if !access.PeerAuthenticated(ctx) || req == nil || req.Params.Capabilities.Elicitation == nil {
+	if !s.capsKept(ctx) || req == nil || req.Params.Capabilities.Elicitation == nil {
 		return
 	}
 	session := mcpserver.ClientSessionFromContext(ctx)
@@ -72,7 +91,7 @@ func (s *Server) saveClientCaps(ctx context.Context, _ any, req *mcp.InitializeR
 // answer a client that declared nothing gets.
 func (s *Server) clientCapsMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		if s.keepsClientCaps() && access.PeerAuthenticated(ctx) {
+		if s.keepsClientCaps() && s.capsKept(ctx) {
 			s.restoreClientCaps(ctx)
 		}
 		return next(ctx, req)

@@ -23,8 +23,10 @@ package approval
 //     session the connection is bound to (its client and the session id it
 //     issued), or that session when it names none, and the decision is the
 //     bearer key's (ProofKey): seam approve's y/N in a terminal, or the
-//     console's Approve. Any process that holds the key can make it, so this
-//     tier is advisory, and every surface says so.
+//     console's Approve -- or Approve in the agent's in-session dialog
+//     (ProofDialog, advisory.go; owner decision D7). Any process that holds
+//     the key can make it, so this tier is advisory, and every surface says
+//     so.
 //
 // Never offered: anything involving a sealed project, on either side, and a
 // target that is not confidential. Every check runs again at approval, so a
@@ -224,7 +226,7 @@ func (g *Grants) liveGrant(ctx context.Context, held []store.Holder, target, fro
 // Approve decides a grant request: the facts digest the owner saw, the
 // access the owner chose (d.Access: read-only, the default, or read and write
 // where the facts offer it), the fence as it stands now, and the proof --
-// ProofKey only in the advisory tier, the approve core's proofs
+// ProofKey or ProofDialog only in the advisory tier, the approve core's proofs
 // (Service.prove, over the chosen access) otherwise. The grant, the flows its
 // carry lists and -- for a locked target under peer_auth -- the target's lease
 // are one transaction (store.GrantAccessApproveWith: single use, bound to the

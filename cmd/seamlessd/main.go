@@ -599,9 +599,10 @@ func runServe(args []string) error {
 		Features:  cfg.Features,
 		Approvals: mcpApprovals,
 		Grants:    mcpGrants,
-		// access_request exists only while a project is locked: every other
-		// install's tool surface is unchanged.
-		OfferAccessRequest: peer != nil && peer.policy.HasLocked(),
+		// access_request exists only while a project is locked, or while read
+		// grants are on without peer_auth (the advisory tier's explicit ask):
+		// every other install's tool surface is unchanged.
+		OfferAccessRequest: mcp.OffersAccessRequest(peer != nil && peer.policy.HasLocked(), peer != nil, cfg.Isolation.Requests),
 	})
 	// A2A: the agent-to-agent surface, one recall skill over the same retrieve
 	// service and bearer key as MCP. The endpoint URL in the card is the URL

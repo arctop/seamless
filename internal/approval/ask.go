@@ -455,12 +455,12 @@ func (g *Grants) eligibleMove(ctx context.Context, home, target string) error {
 type MoveApproved = store.MoveApproved
 
 // ApproveMove decides a move request: the facts digest the owner saw, the
-// fence as it stands now, and the proof -- ProofKey only in the advisory
-// tier, the approve core's proofs (Service.prove) otherwise. The move, the
-// session it ends, the child it opens and, for a locked target under
-// peer_auth, the target's lease for the chosen duration are one transaction
-// (store.MoveApproveWith). A move into a project no lock covers lasts for good:
-// the duration chosen binds the proof and nothing else.
+// fence as it stands now, and the proof -- ProofKey or ProofDialog only in the
+// advisory tier, the approve core's proofs (Service.prove) otherwise. The
+// move, the session it ends, the child it opens and, for a locked target
+// under peer_auth, the target's lease for the chosen duration are one
+// transaction (store.MoveApproveWith). A move into a project no lock covers
+// lasts for good: the duration chosen binds the proof and nothing else.
 func (g *Grants) ApproveMove(ctx context.Context, d Decision) (MoveApproved, error) {
 	const op = "approval.Grants.ApproveMove"
 	if err := refuseRestricted(ctx); err != nil {
@@ -533,15 +533,20 @@ func (g *Grants) ApproveMove(ctx context.Context, d Decision) (MoveApproved, err
 	return done, nil
 }
 
-// decidedBy checks a grant's or a move's proof and names who decided: the
-// bearer key in the advisory tier (ProofKey, refused under peer_auth),
-// otherwise the approve core's proof over word, the access chosen.
+// decidedBy checks a grant's or a move's proof and names who decided: in the
+// advisory tier the bearer key (ProofKey) or the in-session dialog's Approve
+// (ProofDialog, advisory.go), both refused under peer_auth; otherwise the
+// approve core's proof over word, the access chosen.
 func (g *Grants) decidedBy(ctx context.Context, a store.AccessApproval, facts Facts, d Decision, word string, now time.Time) (string, error) {
 	switch {
 	case d.Proof.Kind == ProofKey && g.advisory:
 		return decidedByKey, nil
+	case d.Proof.Kind == ProofDialog && g.advisory:
+		return DecidedByDialog, nil
 	case d.Proof.Kind == ProofKey:
 		return "", ErrPeerProof
+	case d.Proof.Kind == ProofDialog:
+		return "", ErrDialogPeerAuth
 	}
 	return g.svc.prove(ctx, a, facts, d, word, now)
 }
