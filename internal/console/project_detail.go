@@ -217,6 +217,12 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 			return
 		}
 		from = values[0]
+		if _, chosen := query["tab"]; !chosen {
+			// The bar lives on the tabs it narrows: a link that names only
+			// the filter opens Memories, not an Overview that shows no bar
+			// while its tab counts are already narrowed (P13, 2026-11-14).
+			tab = "memories"
+		}
 	}
 	now := time.Now().UTC()
 	win := store.ResolveRetrievalWindow(r.URL.Query().Get("w"), now)

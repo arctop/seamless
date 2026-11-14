@@ -117,6 +117,16 @@ func TestCameFrom_ProjectPageFilter(t *testing.T) {
 	require.Contains(t, between(t, bar, "Memories", "<a", "</a>"), `<span class="pill">1</span>`, "a narrowed tab counts what it lists")
 	require.Contains(t, page, "on.getAttribute('data-camefrom-active')", "a tab switch keeps the filter")
 
+	// A link that names only the filter opens a tab the bar is on, Memories,
+	// not an Overview with no bar whose tab counts are already narrowed (P13,
+	// 2026-11-14); a tab named with it stays named.
+	page = getHTMLBody(t, f.mux, "/console/projects/example-legal?from=example-finance")
+	require.Contains(t, page, `<div class="tabpanel on" data-panel="memories">`, "the filter alone opens Memories")
+	require.NotContains(t, page, `<div class="tabpanel on" data-panel="overview">`)
+	require.Contains(t, tabPanel(t, page, "memories"), `data-camefrom-active="example-finance"`)
+	page = getHTMLBody(t, f.mux, "/console/projects/example-legal?tab=overview&from=example-finance")
+	require.Contains(t, page, `<div class="tabpanel on" data-panel="overview">`, "an explicit tab stays")
+
 	// A project no stamp names is a filter that matches nothing, named.
 	page = getHTMLBody(t, f.mux, "/console/projects/example-legal?from=example-nowhere")
 	require.Contains(t, tabPanel(t, page, "memories"), "No memories in example-legal may contain content from example-nowhere")
