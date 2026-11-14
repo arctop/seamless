@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/arctop/seamless/internal/access"
-	"github.com/arctop/seamless/internal/store"
 )
 
 // captureConfined is the refusal of a plan or subagent capture into target
@@ -16,33 +15,32 @@ import (
 // must be cleared for everything the conversation holds (access.WriteCleared
 // over store.ConversationClearance). The conversation is the one the hook
 // names -- its client and session id -- under peer_auth held to the caller's
-// kernel chain; a capture whose target is not cleared is dropped with this
-// notice. State that cannot be read refuses the capture, as it refuses a tool
+// kernel chain. With the switch on a capture's target is the conversation's
+// home (captureTarget, home.go) or the isolated session P0 routed it to, so a
+// capture is dropped with this notice only when that destination is not
+// cleared. State that cannot be read refuses the capture, as it refuses a tool
 // call.
 func (h *Handler) captureConfined(ctx context.Context, client Client, externalSessionID, target, what string) string {
 	if !h.readGrants {
 		return ""
 	}
-	ref := store.ConversationRef{}
-	if externalSessionID != "" {
-		ref.Client, ref.ExternalID = client.externalIdentity(), externalSessionID
-	}
-	g, err := store.ConversationClearance(ctx, h.db, ref, h.now())
+	g, err := h.clearanceOf(ctx, client, externalSessionID)
 	if err != nil {
 		h.logger.Warn("hooks: load the conversation's clearance", "error", err)
-		return "Seamless did not record " + what + ": the read grants of this connection could not be checked."
+		return unreadClearanceNotice(what)
 	}
+	return clearanceRefusal(ctx, g, target, what)
+}
+
+// clearanceRefusal is the one-line notice for a write of what into target
+// that the conversation's judged clearance g refuses, or "" when g clears it.
+// It names the projects the conversation holds and the ones it may still
+// write, never anything they hold.
+func clearanceRefusal(ctx context.Context, g access.Grants, target, what string) string {
 	if access.WriteCleared(access.WithGrants(ctx, g), target) {
 		return ""
 	}
-	holder := "session"
-	if _, hasView := access.FromContext(ctx); hasView {
-		holder = "agent"
-	}
-	where := "project " + target
-	if target == "" {
-		where = "the global scope"
-	}
+	holder, where := holderWord(ctx), whereWords(target)
 	cleared := g.ClearedProjects()
 	if len(cleared) == 0 {
 		return fmt.Sprintf("Seamless did not record %s: this %s holds content from %s, and no project is cleared for all of it: "+

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -147,7 +148,13 @@ func (s *Service) PromptRecall(ctx context.Context, host, cwd, prompt string) (s
 	if err != nil {
 		return "", nil, err
 	}
-	corpus, err := s.promptCorpusFor(ctx, project)
+	return s.promptRecallIn(ctx, promptScope{project: project}, tokens)
+}
+
+// promptRecallIn matches a tokenized prompt against scope's corpus and
+// renders the hits (PromptRecall past the scope's resolution).
+func (s *Service) promptRecallIn(ctx context.Context, scope promptScope, tokens []string) (string, []string, error) {
+	corpus, err := s.promptCorpusIn(ctx, scope)
 	if err != nil {
 		return "", nil, err
 	}
@@ -209,21 +216,60 @@ func promptHitIDs(hits []promptHit) []string {
 // The store read always runs with the lock released, so a prompt never
 // serializes behind an in-flight rebuild.
 func (s *Service) promptCorpusFor(ctx context.Context, project string) (*promptCorpus, error) {
+	return s.promptCorpusIn(ctx, promptScope{project: project})
+}
+
+// promptScope is the scope one prompt corpus is built over: a project -- its
+// own memories and, unless it is sealed, the global scope's -- and the further
+// projects read beside it (also, sorted and distinct: the targets of a
+// conversation's live grants, isolation.requests). Nothing widens the scope of
+// a cwd's recall, so its corpus is the project's own, as before.
+type promptScope struct {
+	project string
+	also    []string
+}
+
+// newPromptScope is the scope of project widened by also: blank slugs and the
+// project itself dropped, the rest sorted and distinct.
+func newPromptScope(project string, also []string) promptScope {
+	var extra []string
+	for _, p := range also {
+		if p != "" && p != project {
+			extra = append(extra, p)
+		}
+	}
+	slices.Sort(extra)
+	return promptScope{project: project, also: slices.Compact(extra)}
+}
+
+// key is the corpus cache's key for the scope: the project alone when nothing
+// widens it, exactly the key every corpus had before scopes were widened. A
+// slug never holds a NUL, so no widened key is another scope's.
+func (p promptScope) key() string {
+	if len(p.also) == 0 {
+		return p.project
+	}
+	return p.project + "\x00" + strings.Join(p.also, "\x00")
+}
+
+// promptCorpusIn is promptCorpusFor over a scope, keyed by scope.key().
+func (s *Service) promptCorpusIn(ctx context.Context, scope promptScope) (*promptCorpus, error) {
+	key := scope.key()
 	s.corpus.mu.Lock()
-	if c, ok := s.corpus.entries[project]; ok {
+	if c, ok := s.corpus.entries[key]; ok {
 		refresh := false
 		if time.Since(c.builtAt) >= promptCorpusTTL {
 			// Claim the rebuild under the same lock that publishes it, so two
 			// expired prompts cannot both conclude that nobody is rebuilding.
-			_, inFlight := s.corpus.refreshing[project]
-			refresh = !inFlight && !time.Now().Before(s.corpus.retryAfter[project])
+			_, inFlight := s.corpus.refreshing[key]
+			refresh = !inFlight && !time.Now().Before(s.corpus.retryAfter[key])
 			if refresh {
-				s.corpus.refreshing[project] = struct{}{}
+				s.corpus.refreshing[key] = struct{}{}
 			}
 		}
 		s.corpus.mu.Unlock()
 		if refresh {
-			s.refreshPromptCorpus(ctx, project)
+			s.refreshPromptCorpus(ctx, scope)
 		}
 		return c, nil
 	}
@@ -232,12 +278,12 @@ func (s *Service) promptCorpusFor(ctx context.Context, project string) (*promptC
 	// Cold. Concurrent cold prompts for the same project may each build -- that is
 	// bounded by in-flight hook requests, needs no goroutine, and is not worth
 	// serializing prompts behind a lock to avoid.
-	c, err := s.buildPromptCorpus(ctx, project)
+	c, err := s.buildScopedPromptCorpus(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
 	s.corpus.mu.Lock()
-	s.corpus.entries[project] = c
+	s.corpus.entries[key] = c
 	s.corpus.mu.Unlock()
 	return c, nil
 }
@@ -260,23 +306,24 @@ func (s *Service) promptCorpusFor(ctx context.Context, project string) (*promptC
 // goroutine writes only to the in-memory cache the exiting process is about to
 // drop, and *sql.DB is safe against a concurrent Close (a started query finishes
 // and Close waits for it; a later one fails and lands in the Warn below).
-func (s *Service) refreshPromptCorpus(ctx context.Context, project string) {
+func (s *Service) refreshPromptCorpus(ctx context.Context, scope promptScope) {
 	ctx = context.WithoutCancel(ctx)
+	key := scope.key()
 	go func() {
 		ctx, cancel := context.WithTimeout(ctx, promptCorpusRefreshTimeout)
 		defer cancel()
-		c, err := s.buildPromptCorpus(ctx, project)
+		c, err := s.buildScopedPromptCorpus(ctx, scope)
 
 		s.corpus.mu.Lock()
 		// Releasing the claim and publishing the result in one critical section is
 		// what makes single-flight hold: no prompt can ever observe "nobody is
 		// rebuilding" beside the stale corpus this build has already replaced.
-		delete(s.corpus.refreshing, project)
+		delete(s.corpus.refreshing, key)
 		if err == nil {
-			s.corpus.entries[project] = c
-			delete(s.corpus.retryAfter, project)
+			s.corpus.entries[key] = c
+			delete(s.corpus.retryAfter, key)
 		} else {
-			s.corpus.retryAfter[project] = time.Now().Add(promptCorpusRetryBackoff)
+			s.corpus.retryAfter[key] = time.Now().Add(promptCorpusRetryBackoff)
 		}
 		s.corpus.mu.Unlock()
 
@@ -284,7 +331,7 @@ func (s *Service) refreshPromptCorpus(ctx context.Context, project string) {
 			// Non-fatal, so log rather than return: the prompt was already served a
 			// usable stale corpus, and there is no caller left to hand an error to.
 			s.logger.Warn("retrieve: prompt corpus refresh failed, serving the stale corpus",
-				"project", project, "error", err)
+				"project", scope.project, "error", err)
 		}
 	}()
 }
@@ -296,8 +343,14 @@ func (s *Service) refreshPromptCorpus(ctx context.Context, project string) {
 // serving the wider one until the next rebuild, exactly like any other memory
 // change (see promptCorpusTTL).
 func (s *Service) buildPromptCorpus(ctx context.Context, project string) (*promptCorpus, error) {
+	return s.buildScopedPromptCorpus(ctx, promptScope{project: project})
+}
+
+// buildScopedPromptCorpus is buildPromptCorpus over a scope: the project's
+// visible memories and those of the projects also read beside it.
+func (s *Service) buildScopedPromptCorpus(ctx context.Context, scope promptScope) (*promptCorpus, error) {
 	s.corpus.builds.Add(1)
-	mems, err := s.scopedActiveMemories(ctx, project, nil)
+	mems, err := s.scopedActiveMemories(ctx, scope.project, scope.also)
 	if err != nil {
 		return nil, err
 	}

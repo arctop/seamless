@@ -37,21 +37,16 @@ func clCaptured(t *testing.T, e *routeEnv, project, base string) bool {
 }
 
 // A conversation native to a confidential project whose hook fires from an
-// open project's directory: with the switch on its capture lands nowhere
-// outside its home; off, as before.
+// open project's directory: with the switch on its capture goes to its home,
+// as everything it records does (home.go), and nothing lands outside it; off,
+// it lands by cwd, as before.
 func TestClearanceCapture_NativeConversationOutsideItsHome(t *testing.T) {
 	for _, on := range []bool{true, false} {
 		e := newRouteEnvWith(t, func(c *Config) { c.ReadGrants = on })
 		e.start(ClientClaudeCode, rtFinCWD)
-		refused := clPlan(t, e, rtOpsCWD, "away")
-		if on {
-			require.Equal(t, "Seamless did not record this plan: this session holds content from example-finance, so it writes "+
-				"only into example-finance, and this would land in project example-ops.", refused)
-			require.False(t, clCaptured(t, e, rtOps, "away"))
-		} else {
-			require.Empty(t, refused)
-			require.True(t, clCaptured(t, e, rtOps, "away"))
-		}
+		require.Empty(t, clPlan(t, e, rtOpsCWD, "away"))
+		require.Equal(t, !on, clCaptured(t, e, rtOps, "away"), "off: the cwd's project")
+		require.Equal(t, on, clCaptured(t, e, rtFin, "away"), "on: its home")
 		require.Empty(t, clPlan(t, e, rtFinCWD, "home"))
 		require.True(t, clCaptured(t, e, rtFin, "home"), "its home takes it, switch on or off")
 	}

@@ -28,18 +28,24 @@ import (
 // captureRoute is where one plan or subagent capture lands (captureTarget):
 // project takes the note. A routed capture's events and plan metadata are
 // filed under link, the isolated session its conversation bound itself to; an
-// unrouted one's go to the ambient row, as always.
+// unrouted one's go to the ambient row, as always. home marks an unrouted
+// capture whose project is the conversation's home rather than the cwd's
+// (isolation.requests, home.go).
 type captureRoute struct {
 	project string
 	routed  bool
 	link    core.Session
+	home    bool
 }
 
 // captureTarget is where a plan or subagent capture for the conversation
 // externalSessionID names lands, before the fences judge it: the project its
 // cwd resolves to, as always, or -- once a conversation whose ambient row is in
 // no isolated project bound itself to one -- that project, for the rest of the
-// conversation, whatever it binds to afterwards. notice is non-empty when the
+// conversation, whatever it binds to afterwards. With isolation.requests on, a
+// capture that goes to the ambient row goes to the conversation's home, its
+// ambient row's project (after a move, the child's), wherever the cwd is; the
+// fences then judge that (captureConfined). notice is non-empty when the
 // capture lands nowhere: the conversation's links reach more than one isolated
 // project, or where its record goes could not be read.
 func (h *Handler) captureTarget(ctx context.Context, client Client, externalSessionID, host, cwd, what string) (captureRoute, string) {
@@ -59,6 +65,11 @@ func (h *Handler) captureTarget(ctx context.Context, client Client, externalSess
 		return captureRoute{project: dest.Session.ProjectSlug, routed: true, link: dest.Session}, ""
 	case store.RecordDestWithheld:
 		return captureRoute{}, withheldNotice(what, dest.Fenced)
+	}
+	if h.readGrants {
+		if home, ok := dest.Home(); ok {
+			return captureRoute{project: home, home: true}, ""
+		}
 	}
 	return captureRoute{project: h.resolveProject(ctx, host, cwd)}, ""
 }

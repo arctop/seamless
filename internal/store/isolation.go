@@ -531,6 +531,19 @@ func (d RecordDestination) Holds(project string) bool {
 	return slices.Contains(d.Fenced, project)
 }
 
+// Home is the conversation's home when its record goes to its ambient row
+// (RecordDestAmbient): that row's project, which after a move is the child's.
+// With isolation.requests on, the hooks file the whole record there -- the
+// harvest and the captures, wherever the hook's cwd is -- once the clearance
+// clears it. ok is false for any other destination, and for a conversation
+// with no ambient row.
+func (d RecordDestination) Home() (string, bool) {
+	if d.Kind != RecordDestAmbient || !d.HasAmbient {
+		return "", false
+	}
+	return d.Ambient.ProjectSlug, true
+}
+
 // RecordDestinationOf decides where the conversation a client's full external
 // identity names keeps its own record, from the projects of its ambient row and
 // of every explicit session linked to it, in any status: a link the agent
@@ -550,7 +563,10 @@ func (d RecordDestination) Holds(project string) bool {
 // rule agrees with it over the same rows (ConversationClearance): a fenced
 // home is cleared for what its own sessions reach, the one fenced project an
 // open home's links reach is cleared for itself, and two refuse each other.
-// Grants it does not read: what one adds to the label the clearance judges.
+// Grants it does not read: what one adds to the label the clearance judges,
+// and with isolation.requests on the hooks ask the clearance of every
+// destination before writing there -- the home included -- so a record the
+// clearance refuses lands nowhere (internal/hooks home.go).
 func RecordDestinationOf(ctx context.Context, db *sql.DB, externalClient, externalSessionID string) (RecordDestination, error) {
 	if externalClient == "" || externalSessionID == "" {
 		return RecordDestination{}, nil

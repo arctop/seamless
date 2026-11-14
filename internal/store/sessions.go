@@ -289,6 +289,14 @@ func SetAmbientSessionModel(ctx context.Context, db *sql.DB, externalClient, ext
 // heartbeat. No-op on an incomplete identity or an empty (all-zero) usage (a turn
 // with no token record leaves any prior harvest intact). Reports whether a row
 // was updated.
+//
+// A move's child (isolation.requests) is the conversation's ambient row from
+// the move on, while the transcript's totals are the whole conversation's: the
+// session the move ended keeps what it harvested, and the child takes what
+// came after (the totals less its earlier sessions', carriedTokens), so the
+// conversation's usage is never counted twice. A difference of nothing writes
+// nothing. Every other row has no earlier session, and takes the totals as
+// they are.
 func SetAmbientSessionTokens(
 	ctx context.Context,
 	db *sql.DB,
@@ -298,6 +306,15 @@ func SetAmbientSessionTokens(
 ) (bool, error) {
 	if externalClient == "" || externalSessionID == "" || tokens.Empty() {
 		return false, nil
+	}
+	carried, err := carriedTokens(ctx, db, externalClient, externalSessionID)
+	if err != nil {
+		return false, fmt.Errorf("store.SetAmbientSessionTokens: %w", err)
+	}
+	if !carried.Empty() {
+		if tokens = tokensAfter(tokens, carried); tokens.Empty() {
+			return false, nil
+		}
 	}
 	res, err := db.ExecContext(ctx, `
 		UPDATE sessions
@@ -695,16 +712,25 @@ func AmbientSessionByExternalIdentity(
 // SessionEnd (which also sets 'completed'), so no CC row is active-with-findings
 // to be reaped, and a crashed explicit session (ambient = 0) still does not
 // surface -- the set added here is precisely Codex's reaper-ended sessions.
+//
+// A session whose findings are only a metadata-only line of the record
+// routing (isolation.requests: a move's pointer, the not-recorded line;
+// sessions_record.go) is skipped the same way: it says where a record went, or
+// why none was kept, and nothing more.
 func RecentFindings(ctx context.Context, db *sql.DB, project string, limit int) ([]core.Session, error) {
 	if limit <= 0 {
 		limit = 3
 	}
+	args := make([]any, 0, len(recordLineShapes)+3)
+	args = append(args, core.FindingNoSummary)
+	args = append(args, recordLineShapes...)
+	args = append(args, project, limit)
 	rows, err := db.QueryContext(ctx, `SELECT `+sessionCols+`
 		FROM sessions
 		WHERE (status = 'completed' OR (status = 'expired' AND ambient = 1))
-		  AND findings <> '' AND findings <> ?
+		  AND findings <> '' AND findings <> ?`+recordLineFilter+`
 		  AND (project_slug = ? OR project_slug = '')
-		ORDER BY updated_at DESC, id DESC LIMIT ?`, core.FindingNoSummary, project, limit)
+		ORDER BY updated_at DESC, id DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store.RecentFindings: %w", err)
 	}
@@ -917,8 +943,9 @@ func ActiveAmbientSessionsForProject(ctx context.Context, db *sql.DB, scope Ambi
 // briefing's "Sibling projects" section, so -- like RecentFindings -- it excludes
 // blank findings and the core.FindingNoSummary sentinel, and treats a
 // reaper-expired ambient session as ended so Codex's SessionEnd-less sessions
-// surface too (see RecentFindings for why the expired arm is ambient-only). An
-// empty slugs slice yields no results.
+// surface too (see RecentFindings for why the expired arm is ambient-only, and
+// for the metadata-only lines it skips as well). An empty slugs slice yields
+// no results.
 func SiblingFindings(ctx context.Context, db *sql.DB, slugs []string, limit int) ([]core.Session, error) {
 	if len(slugs) == 0 {
 		return nil, nil
@@ -926,8 +953,9 @@ func SiblingFindings(ctx context.Context, db *sql.DB, slugs []string, limit int)
 	if limit <= 0 {
 		limit = 2
 	}
-	args := make([]any, 0, len(slugs)+2)
+	args := make([]any, 0, len(slugs)+len(recordLineShapes)+2)
 	args = append(args, core.FindingNoSummary)
+	args = append(args, recordLineShapes...)
 	for _, s := range slugs {
 		args = append(args, s)
 	}
@@ -935,7 +963,7 @@ func SiblingFindings(ctx context.Context, db *sql.DB, slugs []string, limit int)
 	rows, err := db.QueryContext(ctx, `SELECT `+sessionCols+`
 		FROM sessions
 		WHERE (status = 'completed' OR (status = 'expired' AND ambient = 1))
-		  AND findings <> '' AND findings <> ?
+		  AND findings <> '' AND findings <> ?`+recordLineFilter+`
 		  AND project_slug IN (`+placeholders(len(slugs))+`)
 		ORDER BY updated_at DESC, id DESC LIMIT ?`, args...)
 	if err != nil {

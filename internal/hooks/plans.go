@@ -136,9 +136,11 @@ func (h *Handler) captureLocal(ctx context.Context, what string, id hookIdentity
 // peer_auth off -- or, under peer_auth, what `seam hook` pushed, once the
 // fences pass it (fenceNotePush), which also place it (p.Project). Either way
 // the capture goes where its conversation's record goes (captureTarget,
-// p.Route): the cwd's project, or the isolated project the conversation bound
-// itself to. When notice is non-nil, a capture refused with a notice sets the
-// notice header and the notice as the hook's context; nil refuses silently.
+// p.Route): the cwd's project, the isolated project the conversation bound
+// itself to, or -- with isolation.requests on -- its home, refused only when
+// that is not cleared (captureConfined). When notice is non-nil, a capture
+// refused with a notice sets the notice header and the notice as the hook's
+// context; nil refuses silently.
 func (h *Handler) planCaptureRuns(ctx context.Context, w http.ResponseWriter, what string, p *toolPayload, reach sessionReach, lockedProject string, notice *preparedHookContext) bool {
 	refuse := func(refusal string) {
 		if refusal != "" && notice != nil {
@@ -181,13 +183,14 @@ func (h *Handler) planCaptureRuns(ctx context.Context, w http.ResponseWriter, wh
 
 // captureProject is the project a plan capture lands in: where the fences
 // placed a pushed one (under peer_auth), else the isolated project its
-// conversation's record goes to (planCaptureRuns), else the one the hook's cwd
-// resolves to, as always.
+// conversation's record goes to or, with isolation.requests on, the
+// conversation's home (planCaptureRuns), else the one the hook's cwd resolves
+// to, as always.
 func (h *Handler) captureProject(ctx context.Context, p toolPayload) string {
 	switch {
 	case p.Capture != nil:
 		return p.Project
-	case p.Route.routed:
+	case p.Route.routed || p.Route.home:
 		return p.Route.project
 	}
 	return h.resolveProject(ctx, h.hostOf(p.Identity), p.CWD)

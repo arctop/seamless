@@ -38,9 +38,11 @@ func approveGrant(t *testing.T, e *captureEnv, from, target, sessionID, processK
 
 // What the hooks record for a conversation meets the clearance rule its tool
 // calls meet: holding a confidential project's content (here by a read grant
-// from the open project demo), it writes into no open project, so a plan
-// captured in demo or from another project's directory is dropped with a
-// notice. With read grants off nothing about a capture changes.
+// from the open project demo), it writes into no open project. Its captures go
+// to its home, demo, wherever its cwd is (home.go), and the clearance refuses
+// demo, so a plan captured in demo or from another project's directory is
+// dropped with a notice naming demo. With read grants off nothing about a
+// capture changes.
 func TestPlanCapture_ReadGrantConfinesTheCapture(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -79,7 +81,7 @@ func TestPlanCapture_ReadGrantConfinesTheCapture(t *testing.T) {
 			raw, err := json.Marshal(out)
 			require.NoError(t, err)
 			const notice = "Seamless did not record this plan: this session holds content from example-finance, " +
-				"so it writes only into example-finance, and this would land in project other."
+				"so it writes only into example-finance, and this would land in project demo."
 			if tc.wantLand {
 				require.NotContains(t, string(raw), "did not record")
 			} else {

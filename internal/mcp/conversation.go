@@ -477,8 +477,7 @@ func (s *Server) unrecordedEnd(ctx context.Context, sess core.Session, err error
 		return "", false
 	}
 	g, _ := access.GrantsFrom(ctx)
-	return "Not recorded: this " + s.holderWord() + " holds content from " + strings.Join(g.Label(), ", ") +
-		", and its findings may not be written into " + projectWords(sess.ProjectSlug) + ".", true
+	return store.UnrecordedFindings(s.holderWord(), g.Label(), projectWords(sess.ProjectSlug)), true
 }
 
 // The move notice: the first tool result after an approved move says the

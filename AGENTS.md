@@ -700,6 +700,15 @@ any of it.
   its findings not recorded (`unrecordedEnd`). A restore adds today's grants,
   moves and flows to the backup's (`store.ApplyKeptState`), so it never shrinks
   a label.
+- **The hooks file the record at the home** (`isolation.requests`,
+  internal/hooks/home.go): the harvest, the Codex Stop and pushed findings, the
+  captures and the prompt events go to `RecordDestination.Home` after P0's
+  routing, and only where the clearance clears them (`captureConfined`,
+  `homeRefused`, `store.UnrecordedFindings`). Recall and subagent briefings read
+  the home plus live grant targets (`conversationScope`,
+  `retrieve.ProjectPromptRecall`, `BriefingInput.Also`). A resume re-scopes only
+  where `store.CanWrite(home, cwd)` holds, and a locked home goes to
+  `lockedStart`. Off, every hook is P0's.
 - **The identity comes from the transport, never the client.** A header, a
   `session=` handle, a body field or an agent-process identity can only ever
   narrow what the View allows. `getBinding` drops a binding to an unreachable

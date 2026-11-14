@@ -37,6 +37,12 @@ type BriefingInput struct {
 	// main-session path never reads it, so main briefings stay byte-identical
 	// whether it is set or empty.
 	Prompt string
+	// Also are further projects the subagent path's RELEVANT matcher reads
+	// beside the project: the targets of the parent conversation's live grants
+	// (isolation.requests), each judged readable by the caller (store.CanRead),
+	// as recall's Also is. nil is the project's own scope, as before; the
+	// main-session path never reads it.
+	Also []string
 }
 
 // Briefing assembles the SessionStart briefing for an agent: constraints (always
@@ -178,7 +184,7 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 	if in.AgentType != "" {
 		var relevant []promptHit
 		if len(constraints) > 0 {
-			relevant = s.filterHits(ctx, hold, s.subagentRelevant(ctx, project, in.Prompt, constraints))
+			relevant = s.filterHits(ctx, hold, s.subagentRelevantIn(ctx, newPromptScope(project, in.Also), in.Prompt, constraints))
 		}
 		var marks map[string]string
 		if len(constraints) > 0 && s.provenanceOn(ctx) {
@@ -1109,11 +1115,17 @@ const subagentRelevantMax = 3
 // produced them: spawn-prompt matching is automated supply, not the child
 // choosing to ask. Demand stays the child's own memory_read/recall calls.
 func (s *Service) subagentRelevant(ctx context.Context, project, prompt string, constraints []core.Memory) []promptHit {
+	return s.subagentRelevantIn(ctx, promptScope{project: project}, prompt, constraints)
+}
+
+// subagentRelevantIn is subagentRelevant over a scope: the project and the
+// projects read beside it (BriefingInput.Also).
+func (s *Service) subagentRelevantIn(ctx context.Context, scope promptScope, prompt string, constraints []core.Memory) []promptHit {
 	tokens := promptTokenize(prompt)
 	if len(tokens) == 0 {
 		return nil
 	}
-	corpus, err := s.promptCorpusFor(ctx, project)
+	corpus, err := s.promptCorpusIn(ctx, scope)
 	if err != nil {
 		s.logger.Warn("retrieve: subagent prompt corpus unavailable, briefing omits the RELEVANT section", "error", err)
 		return nil

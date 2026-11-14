@@ -84,7 +84,22 @@ func (h *Handler) subagentStart(w http.ResponseWriter, r *http.Request) {
 	case h.localDiskOK(ctx, "subagent-spawn-prompt", client, host):
 		prompt = subagentSpawnPrompt(client, p)
 	}
-	briefing, injectedIDs, err := h.retrieve.Briefing(ctx, subagentBriefingInput(p, host, prompt))
+	// A subagent shares its parent conversation's home and label: with
+	// isolation.requests on its briefing is the home's, and its RELEVANT
+	// section reads the home plus the targets of the conversation's live
+	// grants (conversationScope); otherwise the cwd's, as always.
+	in := subagentBriefingInput(p, host, prompt)
+	var (
+		briefing    string
+		injectedIDs []string
+		err         error
+	)
+	if home, also, ok := h.conversationScope(ctx, client, p.ParentSessionID); ok {
+		in.Also = also
+		briefing, injectedIDs, err = h.retrieve.ProjectBriefing(ctx, home, in)
+	} else {
+		briefing, injectedIDs, err = h.retrieve.Briefing(ctx, in)
+	}
 	if err != nil {
 		h.logger.Warn("hooks: subagent-start briefing failed", "error", err)
 		briefing, injectedIDs = "", nil
@@ -165,9 +180,10 @@ var errAgentCaptureDropped = errors.New("agent capture dropped")
 // they land only once the fences pass them (fenceNotePush, judged with the
 // parent session's reach); the notice for one refused at a lock is returned
 // for the response. Either way the note goes where the conversation's record
-// goes (captureTarget): the cwd's project, or the isolated project the
-// conversation bound itself to, and one that lands nowhere returns its notice
-// too. It is "" in every other case.
+// goes (captureTarget): the cwd's project, the isolated project the
+// conversation bound itself to, or -- isolation.requests on -- the parent
+// conversation's home, and one that lands nowhere returns its notice too. It
+// is "" in every other case.
 func (h *Handler) captureSubagent(ctx context.Context, p subagentPayload, reach sessionReach, lockedProject string) (notice string) {
 	if p.AgentID == "" {
 		return ""

@@ -350,6 +350,15 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// isolation.requests: a conversation whose home -- its ambient row's
+	// project, after a move the child's -- is locked to the caller, its lease
+	// ended, resumes there, metadata only, and is answered with the locked
+	// notice and a request filed for it, wherever its cwd is (lockedStart).
+	if h.readGrants && reach == reachLocked && reachProject != "" {
+		h.lockedStart(ctx, w, client, host, p, reachProject)
+		return
+	}
+
 	// peer_auth: a project the owner has locked and this
 	// connection holds no lease on gets the locked notice: the session is
 	// recorded there, metadata only, and an access request is filed for it
@@ -369,9 +378,20 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 		p.SessionID = ""
 	}
 
-	briefing, injectedIDs, err := h.retrieve.Briefing(ctx, retrieve.BriefingInput{
-		CWD: p.CWD, Host: host, Source: p.Source, AgentType: p.AgentType,
-	})
+	// The briefing describes where the session works: the cwd's project, as
+	// always, or -- isolation.requests on -- the home a resumed conversation
+	// stays in (startHome).
+	in := retrieve.BriefingInput{CWD: p.CWD, Host: host, Source: p.Source, AgentType: p.AgentType}
+	var (
+		briefing    string
+		injectedIDs []string
+		err         error
+	)
+	if home, ok := h.startHome(ctx, client, host, p); ok {
+		briefing, injectedIDs, err = h.retrieve.ProjectBriefing(ctx, home, in)
+	} else {
+		briefing, injectedIDs, err = h.retrieve.Briefing(ctx, in)
+	}
 	if err != nil {
 		h.recordHookError(ctx, "session-start-briefing", client, err)
 		briefing, injectedIDs = "", nil // never block the agent
@@ -551,6 +571,17 @@ func (h *Handler) applyCodexStop(ctx context.Context, externalSessionID string, 
 	if dest.Kind != store.RecordDestAmbient {
 		return h.codexStopRouted(ctx, externalSessionID, dest, findings)
 	}
+	// isolation.requests: the turn's findings go to the conversation's home,
+	// its ambient row, only where the clearance clears it (homeRefused);
+	// refused, the row says why instead, once.
+	if home, ok := dest.Home(); ok && h.readGrants {
+		if refusal, line := h.homeRefused(ctx, ClientCodex, externalSessionID, home, "this turn's findings"); refusal != "" {
+			if next := unrecordedFindings(dest.Ambient.Findings, line); line != "" && next != dest.Ambient.Findings {
+				h.setCodexAmbientFindings(ctx, externalSessionID, next)
+			}
+			return refusal
+		}
+	}
 	h.setCodexAmbientFindings(ctx, externalSessionID, findings)
 	return ""
 }
@@ -674,6 +705,12 @@ func (h *Handler) ensureAmbientSessionIn(ctx context.Context, client Client, hos
 		h.recordHookError(ctx, "ambient-project-resolve", client, err, "cwd", p.CWD)
 		project = ""
 	}
+	if locked != "" && project != locked {
+		// lockedStart resuming a conversation whose locked home is elsewhere
+		// (isolation.requests): the session is resumed where it is -- never
+		// re-scoped out of the locked project, never created here.
+		return h.resumeInPlace(ctx, client, p)
+	}
 	// peer_auth: a caller is never given a session where it may not write
 	// (sessionStart answered those cases with a notice already -- this is the
 	// backstop). The one exception is the locked project the caller named: the
@@ -694,8 +731,10 @@ func (h *Handler) ensureAmbientSessionIn(ctx context.Context, client Client, hos
 	if own, exists := h.ownAmbient(ctx, client, p.SessionID); !own {
 		return "", ""
 	} else if exists {
+		// isolation.requests: never into a project its home may not write.
+		rescope := h.resumeScope(ctx, client, p.SessionID, project)
 		resumed, found, err := store.ReactivateAmbientSession(
-			ctx, h.db, externalClient, p.SessionID, project, now)
+			ctx, h.db, externalClient, p.SessionID, rescope, now)
 		if err != nil {
 			h.recordHookError(ctx, "ambient-resume", client, err)
 			return "", ""
@@ -746,6 +785,27 @@ func (h *Handler) ensureAmbientSessionIn(ctx context.Context, client Client, hos
 	h.stampAgentProcess(ctx, client, id, p.Identity.AgentProcess)
 	h.recordSession(ctx, core.EventSessionStarted, sess, map[string]any{"ambient": true})
 	return id, name
+}
+
+// resumeInPlace resumes the caller's own ambient session the client's id
+// names without re-scoping it (store.ReactivateAmbientSession with no
+// project), stamped with the agent process the hook names; "" when there is
+// none to resume. It never creates a session.
+func (h *Handler) resumeInPlace(ctx context.Context, client Client, p hookPayload) (id, name string) {
+	if own, exists := h.ownAmbient(ctx, client, p.SessionID); !own || !exists {
+		return "", ""
+	}
+	resumed, found, err := store.ReactivateAmbientSession(
+		ctx, h.db, client.externalIdentity(), p.SessionID, "", time.Now().UTC())
+	if err != nil {
+		h.recordHookError(ctx, "ambient-resume", client, err)
+		return "", ""
+	}
+	if !found {
+		return "", ""
+	}
+	h.stampAgentProcess(ctx, client, resumed.ID, p.Identity.AgentProcess)
+	return resumed.ID, resumed.Name
 }
 
 // ownAmbient reports whether the ambient session a client's id names may be
@@ -874,6 +934,18 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 	if harvesting && dest.Kind == store.RecordDestLink && hookFindings(dest.Session.Findings) {
 		linkOK, notice = h.linkTakes(ctx, client, p.SessionID, dest.Session, "this conversation's findings")
 	}
+	// isolation.requests: the harvest goes to the conversation's home, its
+	// ambient row -- after a move, the child -- only where the clearance clears
+	// it (homeRefused). Refused, the row takes the not-recorded line instead,
+	// and the hook answers with the notice.
+	unrecorded, homeShut := "", false
+	if harvesting && h.readGrants {
+		if home, ok := dest.Home(); ok {
+			if refusal, line := h.homeRefused(ctx, client, p.SessionID, home, "this conversation's findings"); refusal != "" {
+				notice, unrecorded, homeShut = refusal, line, true
+			}
+		}
+	}
 	for _, sess := range sessions {
 		// UpdateSession deliberately does not write model (the live model setter is
 		// targeted so another lifecycle write cannot clobber it). Stamp while the
@@ -891,7 +963,15 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 		// Unrouted, the ambient row takes the harvest and explicit sessions keep
 		// their session_update findings, as always (endFindings).
 		took := sess.Ambient && !unread
-		if harvesting {
+		switch {
+		case harvesting && homeShut && sess.Ambient:
+			// The home may not take it: the not-recorded line (none when the
+			// clearance could not be read, and the row keeps its findings).
+			if unrecorded != "" {
+				sess.Findings = unrecordedFindings(sess.Findings, unrecorded)
+			}
+			took = false
+		case harvesting:
 			findings, t, ok := endFindings(dest, linkOK, sess, harvest)
 			if ok {
 				sess.Findings = findings
@@ -1012,6 +1092,7 @@ func (h *Handler) sessionReachOf(ctx context.Context, client Client, externalID 
 	if !ok || h.db == nil || strings.TrimSpace(externalID) == "" {
 		return reachOK, ""
 	}
+	ambientID := "" // the conversation's ambient row, once found below
 	judge := func(sess core.Session) sessionReach {
 		project := sess.ProjectSlug
 		switch {
@@ -1020,7 +1101,7 @@ func (h *Handler) sessionReachOf(ctx context.Context, client Client, externalID 
 		case v.Writable(project):
 			// A session holding a lease or a read grant is its own tree's to
 			// end: another process naming its id would revoke that access.
-			if h.holdsAccess(ctx, sess.ID) && !h.sessionInChain(ctx, v, sess.ID) {
+			if h.holdsAccess(ctx, sess.ID) && !h.treeOwns(ctx, v, sess, ambientID) {
 				return reachForeign
 			}
 			return reachOK
@@ -1043,6 +1124,7 @@ func (h *Handler) sessionReachOf(ctx context.Context, client Client, externalID 
 		if reach == reachForeign {
 			return reachForeign, ""
 		}
+		ambientID = ambient.ID
 	}
 	linked, err := store.ActiveSessionsByExternalIdentity(ctx, h.db, client.externalIdentity(), externalID)
 	if err != nil {
@@ -1086,6 +1168,20 @@ func (h *Handler) sessionInChain(ctx context.Context, v access.View, id string) 
 		}
 	}
 	return false
+}
+
+// treeOwns reports whether sess is the caller's own tree's session
+// (sessionInChain). With isolation.requests on, an explicit session the
+// conversation linked with session_start -- which nothing stamps with an agent
+// process -- is the tree's own when the conversation's ambient row (ambientID,
+// "" when none was found) is: it carries the row's external identity, so only
+// the tree running that row may end it, and a lease or grant it holds no longer
+// blanks its conversation's every hook.
+func (h *Handler) treeOwns(ctx context.Context, v access.View, sess core.Session, ambientID string) bool {
+	if h.sessionInChain(ctx, v, sess.ID) {
+		return true
+	}
+	return h.readGrants && !sess.Ambient && ambientID != "" && h.sessionInChain(ctx, v, ambientID)
 }
 
 // holdsAccess reports whether session id holds a live lease or read grant. A
@@ -1271,7 +1367,19 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 	h.touchAmbient(ctx, client, p.SessionID)
 	h.setAmbientModel(ctx, client, p.Host, p.SessionID, pushedModel(p.Model, p.Capture), p.TranscriptPath)
 
-	out, injectedIDs, err := h.retrieve.PromptRecall(ctx, p.Host, p.CWD, p.UserPrompt)
+	// The recall reads where the conversation works: the cwd's project, as
+	// always, or -- isolation.requests on -- its home plus the targets of its
+	// live grants (conversationScope).
+	var (
+		out         string
+		injectedIDs []string
+		err         error
+	)
+	if home, also, ok := h.conversationScope(ctx, client, p.SessionID); ok {
+		out, injectedIDs, err = h.retrieve.ProjectPromptRecall(ctx, home, also, p.UserPrompt)
+	} else {
+		out, injectedIDs, err = h.retrieve.PromptRecall(ctx, p.Host, p.CWD, p.UserPrompt)
+	}
 	if err != nil {
 		h.recordHookError(ctx, "prompt-recall", client, err)
 		out, injectedIDs = "", nil
@@ -1304,12 +1412,17 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 // right agent; the Claude session id still rides in the payload. prompt (empty for
 // SessionStart) is the user turn that triggered a recall injection; content is the
 // full emitted block, stored verbatim with bounded cap metadata.
+//
+// With isolation.requests on the event is filed where the conversation's record
+// goes (eventRef), and where that is nowhere it keeps the ids and sizes of what
+// was injected and none of the text: no prompt, an empty content, and
+// text_withheld.
 func (h *Handler) recordInjection(ctx context.Context, hook string, client Client, claudeSessionID, prompt string, prepared preparedHookContext, itemIDs []string) {
 	if h.events == nil {
 		return
 	}
-	sessionID, project := h.ambientRef(ctx, client, claudeSessionID)
-	h.recordInjectionIn(ctx, hook, client, claudeSessionID, prompt, prepared, itemIDs, sessionID, project)
+	sessionID, project, bare := h.eventRef(ctx, client, claudeSessionID)
+	h.recordInjectionAt(ctx, hook, client, claudeSessionID, prompt, prepared, itemIDs, sessionID, project, bare)
 }
 
 // recordInjectionIn is recordInjection filed under the given session and
@@ -1317,8 +1430,17 @@ func (h *Handler) recordInjection(ctx context.Context, hook string, client Clien
 // the isolated project's recall surfaced, so it is filed under the session
 // there (captureRef), never under the ambient row.
 func (h *Handler) recordInjectionIn(ctx context.Context, hook string, client Client, claudeSessionID, prompt string, prepared preparedHookContext, itemIDs []string, sessionID, project string) {
+	h.recordInjectionAt(ctx, hook, client, claudeSessionID, prompt, prepared, itemIDs, sessionID, project, false)
+}
+
+// recordInjectionAt is recordInjectionIn, bare when the event must carry none
+// of the conversation's text (recordInjection).
+func (h *Handler) recordInjectionAt(ctx context.Context, hook string, client Client, claudeSessionID, prompt string, prepared preparedHookContext, itemIDs []string, sessionID, project string, bare bool) {
 	if h.events == nil {
 		return
+	}
+	if bare {
+		prompt, prepared.content = "", ""
 	}
 	// A post-assembly cap can remove memory lines without retaining a structured
 	// id-to-line map, so on truncation the list is a superset of what reached the
@@ -1344,6 +1466,9 @@ func (h *Handler) recordInjectionIn(ctx context.Context, hook string, client Cli
 	if prompt != "" {
 		payload["prompt"] = events.Truncate(prompt, h.maxEventChars)
 	}
+	if bare {
+		payload["text_withheld"] = true
+	}
 	if _, err := h.events.Record(ctx, core.Event{
 		Kind:        core.EventInjected,
 		SessionID:   sessionID,
@@ -1357,12 +1482,17 @@ func (h *Handler) recordInjectionIn(ctx context.Context, hook string, client Cli
 // recordHookPrompt logs a hook.prompt event for a UserPromptSubmit that matched
 // no memory -- the recall-miss case. Matched prompts ride on the retrieval.injected
 // event instead (no duplicate row), so BuildRetrievalReport (which counts injected
-// rows) is unaffected. Session stamping mirrors recordInjection.
+// rows) is unaffected. Session stamping mirrors recordInjection; a prompt
+// whose conversation's record goes nowhere (isolation.requests, eventRef) is
+// not recorded at all, as the event would be the prompt and nothing else.
 func (h *Handler) recordHookPrompt(ctx context.Context, client Client, claudeSessionID, prompt string) {
 	if h.events == nil || prompt == "" {
 		return
 	}
-	sessionID, project := h.ambientRef(ctx, client, claudeSessionID)
+	sessionID, project, bare := h.eventRef(ctx, client, claudeSessionID)
+	if bare {
+		return
+	}
 	if _, err := h.events.Record(ctx, core.Event{
 		Kind:        core.EventHookPrompt,
 		SessionID:   sessionID,
