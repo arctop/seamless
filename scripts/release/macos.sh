@@ -32,6 +32,16 @@
 #   SEAMLESS_NOTARY_PROFILE    notarytool keychain profile (default seamless-notary)
 #   SEAMLESS_APPROVER_PROFILE  the approver's Developer ID provisioning profile
 #                              (default ~/.config/seamless-release/approver.provisionprofile)
+#   SEAMLESS_RELEASE_SIGNER    the release signing helper that signs the tag with
+#                              the owner's hardware key, run under /usr/bin/env -i:
+#                              its absolute path (required), or `none` to sign
+#                              with git tag -s instead (a fork)
+#   SEAMLESS_RELEASE_SIGNER_KEY  the helper's --key (owner-yk1 or owner-yk2);
+#                              unset, the helper's own default
+#
+# The tag is checked against scripts/release/tag_signers as HEAD holds it,
+# with /usr/bin/ssh-keygen: never the ssh-keygen on PATH, never the owner's
+# global allowed_signers.
 #
 # Its output goes to dist/macos-<version>/ (dist/ is ignored). Nothing it
 # prints names the signing identity or its team.
@@ -66,6 +76,8 @@ esac
 printf '%s\n' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' ||
 	die "$TAG is not a release tag (vX.Y.Z or vX.Y.Z-pre)"
 VERSION=${TAG#v}
+SIGNER=${SEAMLESS_RELEASE_SIGNER:-}
+SIGNER_KEY=${SEAMLESS_RELEASE_SIGNER_KEY:-}
 NOTARY_PROFILE=${SEAMLESS_NOTARY_PROFILE:-seamless-notary}
 APPROVER_PROFILE_FILE=${SEAMLESS_APPROVER_PROFILE:-$HOME/.config/seamless-release/approver.provisionprofile}
 APPROVER_ASSET=seamless-approve_${VERSION}_darwin.zip
@@ -92,6 +104,35 @@ check() {
 [ -z "$(git status --porcelain --untracked-files=normal)" ] ||
 	die "the working tree is not clean; the build stamps HEAD's commit"
 HEAD=$(git rev-parse HEAD)
+
+# The tag's signer, and the list its signature is held to. The helper is
+# root-owned, so no process running as the owner can swap it; it signs with
+# the owner's hardware key (its PIN, then a touch) and refuses an
+# environment that could choose what signs, hence /usr/bin/env -i.
+case $SIGNER in
+'') check "set SEAMLESS_RELEASE_SIGNER to the release signing helper's absolute path, or to none to sign the tag with git tag -s" ;;
+none) ;;
+/*)
+	[ -f "$SIGNER" ] && [ -x "$SIGNER" ] ||
+		check "no release signing helper at $SIGNER (set SEAMLESS_RELEASE_SIGNER, or none to sign with git tag -s)"
+	;;
+*) die "SEAMLESS_RELEASE_SIGNER=$SIGNER is neither an absolute path nor none" ;;
+esac
+case $SIGNER_KEY in
+'' | owner-yk1 | owner-yk2) ;;
+*) die "SEAMLESS_RELEASE_SIGNER_KEY=$SIGNER_KEY is neither owner-yk1 nor owner-yk2" ;;
+esac
+git cat-file -e "HEAD:scripts/release/tag_signers" 2>/dev/null ||
+	die "HEAD holds no scripts/release/tag_signers, the keys a release tag must verify against"
+
+# verify_tag: the tag's SSH signature, by /usr/bin/ssh-keygen, against
+# tag_signers as HEAD holds it (the tree is clean, so it is also the file on
+# disk).
+verify_tag() {
+	git show "HEAD:scripts/release/tag_signers" >"$OUT/tag_signers"
+	git -c gpg.format=ssh -c gpg.ssh.program=/usr/bin/ssh-keygen \
+		-c gpg.ssh.allowedSignersFile="$OUT/tag_signers" tag -v "$1" >/dev/null 2>&1
+}
 git fetch --quiet origin main
 git merge-base --is-ancestor "$HEAD" origin/main || check "HEAD ($HEAD) is not on origin/main"
 ci=$(gh run list --repo "$REPO" --workflow CI --branch main --limit 100 \
@@ -237,6 +278,18 @@ rm -rf "$OUT/check"
 	cat "$OUT/manifest.txt"
 } >"$OUT/tag-message.txt"
 "$RK" check-darwin -tag "$TAG" -tag-object "$OUT/tag-message.txt" -assets "$OUT/assets" >/dev/null
+# The message is signed byte for byte, so it must be text git's clean-up
+# leaves alone (the helper refuses anything else): printable ASCII lines,
+# none starting with #, no trailing space, no blank line first, last or twice
+# in a row.
+LC_ALL=C awk '
+	/[^ -~]/ { print "release: tag-message.txt line " NR " is not printable ASCII" >"/dev/stderr"; bad = 1 }
+	/^#/ { print "release: tag-message.txt line " NR " starts with #" >"/dev/stderr"; bad = 1 }
+	/ $/ { print "release: tag-message.txt line " NR " ends with a space" >"/dev/stderr"; bad = 1 }
+	/^$/ { if (NR == 1 || prev_blank) { print "release: tag-message.txt line " NR " is a blank line first or twice" >"/dev/stderr"; bad = 1 }; prev_blank = 1; next }
+	{ prev_blank = 0 }
+	END { if (prev_blank) { print "release: tag-message.txt ends with a blank line" >"/dev/stderr"; bad = 1 }; exit bad }
+' "$OUT/tag-message.txt" || die "tag-message.txt is not a message the tag can carry byte for byte"
 
 if [ -n "$DRY" ]; then
 	say "dry run done; nothing was uploaded and no tag was made. $OUT/assets:"
@@ -269,9 +322,18 @@ scripts/release/fetch-draft.sh "$TAG" "$OUT/draft" "$REPO"
 "$RK" check-darwin -tag "$TAG" -tag-object "$OUT/tag-message.txt" -assets "$OUT/draft" >/dev/null
 
 # --- the tag: SSH-signed and annotated, with the manifest -------------------
-git tag -s "$TAG" -F "$OUT/tag-message.txt" "$HEAD"
-git tag -v "$TAG" >/dev/null 2>&1 ||
-	die "git tag -v does not verify $TAG (gpg.format ssh, gpg.ssh.allowedSignersFile); fix it, git tag -d $TAG, and run again"
+if [ "$SIGNER" = none ]; then
+	git tag -s "$TAG" -F "$OUT/tag-message.txt" "$HEAD"
+elif [ -n "$SIGNER_KEY" ]; then
+	/usr/bin/env -i "$SIGNER" tag "$ROOT" "$TAG" "$HEAD" --key "$SIGNER_KEY" -F "$OUT/tag-message.txt" ||
+		die "the release signing helper did not sign $TAG"
+else
+	/usr/bin/env -i "$SIGNER" tag "$ROOT" "$TAG" "$HEAD" -F "$OUT/tag-message.txt" ||
+		die "the release signing helper did not sign $TAG"
+fi
+[ "$(git rev-parse "$TAG^{commit}")" = "$HEAD" ] || die "the tag $TAG does not name $HEAD; git tag -d $TAG, and run again"
+verify_tag "$TAG" ||
+	die "$TAG does not verify against scripts/release/tag_signers (with /usr/bin/ssh-keygen); git tag -d $TAG, and run again"
 git cat-file tag "$TAG" >"$OUT/tag-object.txt"
 "$RK" check-darwin -tag "$TAG" -tag-object "$OUT/tag-object.txt" -assets "$OUT/draft" >/dev/null
 
@@ -281,8 +343,9 @@ cat >&2 <<EOF
 release: next, push the tag on its own (never together with main):
   git push origin $TAG
 then approve the release environment in the run: https://github.com/$REPO/actions/workflows/release.yml
-once its goreleaser job has filled the draft, sign it with your hardware key:
-  SEAMLESS_RELEASE_KEY=<key handle> scripts/release/sign.sh $TAG
+once its goreleaser job has filled the draft, sign it with your hardware key
+(with the same SEAMLESS_RELEASE_SIGNER):
+  scripts/release/sign.sh $TAG
 then approve the run's publish job, and once it has published:
   scripts/release/cask.sh $TAG
 EOF

@@ -53,16 +53,30 @@ the repository root, an OpenSSH allowed_signers file in the namespace
    - `macos.sh` reads the team id from this profile, and refuses when the
      signing identity belongs to another team.
    - After the certificate is renewed, regenerate the profile.
-4. **The tools.** Xcode (for notarytool and stapler), go, gh (logged in as
-   an admin of the repository), and git set up to sign tags (`gpg.format ssh`)
-   and to verify them (`gpg.ssh.allowedSignersFile`, so `git tag -v` works).
+4. **The tools.** Xcode (for notarytool and stapler), go and gh (logged in as
+   an admin of the repository).
 5. **The release key.** A hardware security key enrolled as an OpenSSH
    `sk-ssh-ed25519` (or `sk-ecdsa`) key that asks for its PIN (`ssh-keygen -t
-   ed25519-sk -O verify-required`, for example), its line in `release_signers`, and an
-   `ssh-keygen` that can sign with it:
-   - `SEAMLESS_RELEASE_KEY` names the key handle file `sign.sh` signs with.
-   - `SEAMLESS_SSH_KEYGEN` names that `ssh-keygen` when it is not the one on
-     PATH (macOS's own cannot use a FIDO key without a middleware).
+   ed25519-sk -O verify-required`, for example), with its line in both
+   `release_signers` (namespace `seamless-release`, for `checksums.txt`) and
+   `scripts/release/tag_signers` (namespace `git`, for the tag).
+   - **The release signing helper** signs with it: a root-owned program, so no
+     process running as you can swap it, named by its absolute path in
+     `SEAMLESS_RELEASE_SIGNER` and run under `/usr/bin/env -i`. Its
+     `tag <repo> <tag> <sha> [--key K] -F <file>` verb makes the release tag,
+     and its `checksums <file> [--key K]` verb writes `<file>.sig` in namespace
+     `seamless-release`. Each signature takes the key's PIN, then a touch.
+     `SEAMLESS_RELEASE_SIGNER_KEY` picks its `--key` (`owner-yk1` or
+     `owner-yk2`).
+   - **Without the helper** (a fork): `SEAMLESS_RELEASE_SIGNER=none` makes
+     `macos.sh` sign the tag with `git tag -s`, and `SEAMLESS_RELEASE_KEY`
+     makes `sign.sh` sign with `ssh-keygen -Y sign` and that key handle file.
+     `SEAMLESS_SSH_KEYGEN` names an `ssh-keygen` that can use the key when the
+     one on PATH cannot (macOS's own cannot use a FIDO key without a
+     middleware). List the key in `tag_signers` either way.
+   - Both scripts verify the tag with `/usr/bin/ssh-keygen` against
+     `tag_signers` as the tagged tree holds it, never with the `ssh-keygen` on
+     PATH and never against your global `allowed_signers`.
    - Check a key's fingerprint against `release_signers`:
      `ssh-keygen -l -f <key>.pub`.
 
@@ -70,7 +84,8 @@ the repository root, an OpenSSH allowed_signers file in the namespace
 
 1. **Prepare.** The prep commit (`docs: prepare vX.Y.Z`) is on main, and CI on
    it is green.
-2. **Build the macOS half:** `scripts/release/macos.sh vX.Y.Z`. It checks that:
+2. **Build the macOS half:** `SEAMLESS_RELEASE_SIGNER=<helper> scripts/release/macos.sh
+   vX.Y.Z`. It checks that:
    - the tree is clean;
    - HEAD is on origin/main, and CI is green on it;
    - the tag is on neither origin nor this clone;
@@ -85,8 +100,10 @@ the repository root, an OpenSSH allowed_signers file in the namespace
      (`seamless-approve_<version>_darwin.zip`);
    - uploads the three assets to a draft release titled with the tag, and
      reads them back;
-   - writes the SSH-signed annotated tag whose message carries their sha256
-     lines.
+   - writes the annotated tag whose message carries their sha256 lines,
+     signed by the release signing helper with your hardware key (its PIN,
+     then a touch), and checks it against `scripts/release/tag_signers` with
+     `/usr/bin/ssh-keygen`.
 
    Its output is in `dist/macos-<version>/`. Notarization usually takes a few
    minutes.
@@ -98,17 +115,21 @@ the repository root, an OpenSSH allowed_signers file in the namespace
      and stops on any difference.
    - Then it builds linux and windows, signs `checksums.txt` with Sigstore,
      and fills the draft. The release stays a draft.
-5. **Sign:** `SEAMLESS_RELEASE_KEY=<key handle> scripts/release/sign.sh
-   vX.Y.Z`, in an attended session, while the run's publish job waits.
-   `--dry-run` signs and checks but uploads nothing. It:
-   - verifies your signed tag (`git tag -v`);
+5. **Sign:** `SEAMLESS_RELEASE_SIGNER=<helper> scripts/release/sign.sh vX.Y.Z`,
+   in an attended session, while
+   the run's publish job waits. `--dry-run` signs and checks but uploads
+   nothing. It:
+   - verifies your signed tag against `scripts/release/tag_signers` as the
+     tag's tree holds it, with `/usr/bin/ssh-keygen`;
    - holds the draft's `checksums.txt` to its Sigstore bundle for this exact
      tag, and its macOS lines to the tag's manifest (`releasekit
      check-draft`);
    - prints `checksums.txt`, the keys that may sign this release, and any
      key this tag adds or removes, and asks you to type the tag;
-   - runs `ssh-keygen -Y sign -n seamless-release -f <key handle>
-     checksums.txt` (touch the key, enter its PIN);
+   - signs `checksums.txt` in namespace `seamless-release` with the release
+     signing helper's `checksums` verb (enter the key's PIN, then touch it),
+     or with `ssh-keygen -Y sign` and `SEAMLESS_RELEASE_KEY` without the
+     helper;
    - checks the signature as the publish job will (`releasekit
      verify-owner`), uploads it as `checksums.txt.sshsig`, and reads it back.
 6. **Approve the publish.** The publish job waits for a second approval of the

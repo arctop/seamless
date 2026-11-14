@@ -1,0 +1,15 @@
+# The keys whose signature makes a Seamless release TAG: an OpenSSH
+# allowed_signers file (ssh-keygen(1), ALLOWED SIGNERS), namespace git.
+#
+# scripts/release/macos.sh signs the release tag vX.Y.Z (its message is the
+# macOS assets' sha256 manifest) with the release signing helper, and then
+# checks it against this file, with /usr/bin/ssh-keygen, never the one on
+# PATH and never the owner's global allowed_signers. scripts/release/sign.sh
+# checks the tag the same way before it signs checksums.txt. Both refuse to
+# run on a dirty tree, so the list they check against is the one HEAD holds.
+#
+# These are the same two hardware keys release_signers lists for
+# checksums.txt, in namespace git here. A fork that signs its own release
+# tags lists its own keys here.
+owner-yk1 namespaces="git" sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAINd9uqZ0YLBjsCnvfvpExpYZXXWNQpK+afg2GUxlh9aUAAAAEnNzaDphcmN0b3AtcmVsZWFzZQ==
+owner-yk2 namespaces="git" sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIHaqnbLidFoOJONHvetlWqfvIF2xvMVWfWjWHyv9LFszAAAAEnNzaDphcmN0b3AtcmVsZWFzZQ==

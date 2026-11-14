@@ -11,7 +11,8 @@
 #   scripts/release/sign.sh vX.Y.Z --dry-run   sign and verify, upload nothing
 #
 # Before anything is signed it:
-#   - verifies the owner's own signed tag (git tag -v);
+#   - verifies the owner's own signed tag, with /usr/bin/ssh-keygen against
+#     scripts/release/tag_signers as the tag's own tree holds it;
 #   - holds the draft's checksums.txt to its Sigstore bundle by this tag's
 #     release workflow, and its macOS lines to the manifest in the tag
 #     (releasekit check-draft);
@@ -23,13 +24,20 @@
 # (releasekit verify-owner), uploads it, and reads it back.
 #
 # Environment:
-#   SEAMLESS_RELEASE_KEY   the key to sign with: the path ssh-keygen -f takes,
-#                          for a hardware key the key handle file (required)
-#   SEAMLESS_SSH_KEYGEN    the ssh-keygen to sign with (default: the one on
-#                          PATH); it must be able to use the hardware key
+#   SEAMLESS_RELEASE_SIGNER  the release signing helper that signs with the
+#                          owner's hardware key, run under /usr/bin/env -i: its
+#                          absolute path; `checksums checksums.txt` writes
+#                          checksums.txt.sig in namespace seamless-release
+#   SEAMLESS_RELEASE_SIGNER_KEY  the helper's --key (owner-yk1 or owner-yk2);
+#                          unset, the helper's own default
+#   SEAMLESS_RELEASE_KEY   sign with ssh-keygen instead of the helper: the path
+#                          ssh-keygen -f takes, for a hardware key the key handle
+#                          file (a fork, or a machine without the helper)
+#   SEAMLESS_SSH_KEYGEN    that ssh-keygen (default: the one on PATH); it must
+#                          be able to use the hardware key
 #
-# The signing command it runs is the one release_signers names:
-#   ssh-keygen -Y sign -n seamless-release -f "$SEAMLESS_RELEASE_KEY" checksums.txt
+# Either way the signature is the one release_signers names:
+#   ssh-keygen -Y sign -n seamless-release -f <key> checksums.txt
 set -eu
 
 die() {
@@ -61,13 +69,34 @@ printf '%s\n' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' ||
 NAMESPACE=seamless-release
 KEYGEN=${SEAMLESS_SSH_KEYGEN:-ssh-keygen}
 KEY=${SEAMLESS_RELEASE_KEY:-}
+SIGNER=${SEAMLESS_RELEASE_SIGNER:-}
+SIGNER_KEY=${SEAMLESS_RELEASE_SIGNER_KEY:-}
+# An explicit key file signs with ssh-keygen; otherwise the helper does.
+[ -z "$KEY" ] || SIGNER=none
 
 # --- preflight -------------------------------------------------------------
-for tool in git gh go "$KEYGEN"; do
+for tool in git gh go; do
 	command -v "$tool" >/dev/null 2>&1 || die "needs $tool"
 done
-[ -n "$KEY" ] || die "set SEAMLESS_RELEASE_KEY to the key to sign with (for a hardware key, its key handle file)"
-[ -f "$KEY" ] || die "SEAMLESS_RELEASE_KEY=$KEY is not a file"
+case $SIGNER in
+'') die "set SEAMLESS_RELEASE_SIGNER to the release signing helper's absolute path, or SEAMLESS_RELEASE_KEY to sign with ssh-keygen" ;;
+none)
+	command -v "$KEYGEN" >/dev/null 2>&1 || die "needs $KEYGEN"
+	[ -n "$KEY" ] || die "set SEAMLESS_RELEASE_KEY to the key to sign with (for a hardware key, its key handle file), or leave SEAMLESS_RELEASE_SIGNER to the helper"
+	[ -f "$KEY" ] || die "SEAMLESS_RELEASE_KEY=$KEY is not a file"
+	SIGNED_WITH=$KEY
+	;;
+/*)
+	[ -f "$SIGNER" ] && [ -x "$SIGNER" ] ||
+		die "no release signing helper at $SIGNER (set SEAMLESS_RELEASE_SIGNER, or SEAMLESS_RELEASE_KEY to sign with ssh-keygen)"
+	SIGNED_WITH="the release signing helper${SIGNER_KEY:+ ($SIGNER_KEY)}"
+	;;
+*) die "SEAMLESS_RELEASE_SIGNER=$SIGNER is neither an absolute path nor none" ;;
+esac
+case $SIGNER_KEY in
+'' | owner-yk1 | owner-yk2) ;;
+*) die "SEAMLESS_RELEASE_SIGNER_KEY=$SIGNER_KEY is neither owner-yk1 nor owner-yk2" ;;
+esac
 REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 
 # Every release tag, for release_signers at the previous release's tag, and
@@ -75,11 +104,18 @@ REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 git fetch --quiet --tags origin
 git fetch --quiet --force origin "refs/tags/$TAG:refs/tags/$TAG"
 [ "$(git cat-file -t "$TAG")" = tag ] || die "$TAG is not an annotated tag: scripts/release/macos.sh writes a signed one"
-git tag -v "$TAG" >/dev/null 2>&1 ||
-	die "git tag -v does not verify $TAG (gpg.format ssh, gpg.ssh.allowedSignersFile): sign only a tag you made"
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/seamless-sign.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT INT TERM
+
+# The tag's signature, by /usr/bin/ssh-keygen (never the one on PATH) against
+# tag_signers as the tag's own tree holds it (never the owner's global list):
+# the list macos.sh checked the tag against when it made it.
+git show "$TAG:scripts/release/tag_signers" >"$WORK/tag_signers" 2>/dev/null ||
+	die "$TAG holds no scripts/release/tag_signers: scripts/release/macos.sh tags only a tree that has one"
+git -c gpg.format=ssh -c gpg.ssh.program=/usr/bin/ssh-keygen \
+	-c gpg.ssh.allowedSignersFile="$WORK/tag_signers" tag -v "$TAG" >/dev/null 2>&1 ||
+	die "$TAG does not verify against scripts/release/tag_signers (with /usr/bin/ssh-keygen): sign only a tag you made"
 go build -o "$WORK/releasekit" ./cmd/releasekit
 RK=$WORK/releasekit
 
@@ -102,14 +138,23 @@ if grep -Eq '^(ADDED|REMOVED|BOOTSTRAP)' "$WORK/keys.txt"; then
 fi
 echo >&2
 [ -r /dev/tty ] || die "no terminal to confirm on: signing a release is an attended step"
-printf 'sign: type %s to sign it with %s: ' "$TAG" "$KEY" >/dev/tty
+printf 'sign: type %s to sign it with %s: ' "$TAG" "$SIGNED_WITH" >/dev/tty
 read -r answer </dev/tty
 [ "$answer" = "$TAG" ] || die "not confirmed; nothing signed"
 
 # --- sign ------------------------------------------------------------------
 mkdir "$WORK/sign"
 cp "$WORK/draft/checksums.txt" "$WORK/sign/checksums.txt"
-"$KEYGEN" -Y sign -n "$NAMESPACE" -f "$KEY" "$WORK/sign/checksums.txt"
+if [ "$SIGNER" = none ]; then
+	"$KEYGEN" -Y sign -n "$NAMESPACE" -f "$KEY" "$WORK/sign/checksums.txt"
+elif [ -n "$SIGNER_KEY" ]; then
+	/usr/bin/env -i "$SIGNER" checksums "$WORK/sign/checksums.txt" --key "$SIGNER_KEY" ||
+		die "the release signing helper did not sign checksums.txt"
+else
+	/usr/bin/env -i "$SIGNER" checksums "$WORK/sign/checksums.txt" ||
+		die "the release signing helper did not sign checksums.txt"
+fi
+[ -f "$WORK/sign/checksums.txt.sig" ] || die "no checksums.txt.sig was written"
 mv "$WORK/sign/checksums.txt.sig" "$WORK/sign/checksums.txt.sshsig"
 "$RK" verify-owner -require -tag "$TAG" -checksums "$WORK/sign/checksums.txt" -sig "$WORK/sign/checksums.txt.sshsig"
 
