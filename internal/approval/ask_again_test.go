@@ -157,13 +157,15 @@ func TestRequestGrant_AskingAgain(t *testing.T) {
 	var denied *DeniedError
 	require.ErrorAs(t, err, &denied)
 	require.Equal(t, a.ID, denied.Request.ID)
-	require.Equal(t, "read request", denied.What())
+	// The agent's own session in an open project asks for the move its home
+	// and the target call for (P4); the denial rules are the same per kind.
+	require.Equal(t, "move request", denied.What())
 	require.Equal(t, before, f.approvals(t))
 
 	asked, err := g.RequestGrant(ctx, GrantInput{Project: confHR, SessionID: sess, Via: ViaRequest, Reason: "the hiring plan, again"})
 	require.NoError(t, err)
 	require.NotEqual(t, a.ID, asked.ID)
-	require.Equal(t, store.AccessKindGrant, asked.Kind)
+	require.Equal(t, store.AccessKindMove, asked.Kind)
 }
 
 // What an ask did, for the answer to say so (access_request, seam access

@@ -63,6 +63,13 @@ type Conversation struct {
 	// Home is the conversation's home: the project of its one ambient row (""
 	// for the global scope, or when none was found).
 	Home string
+	// HomeKnown reports that Home is the project of the conversation's own
+	// ambient row, found for the holder ctx speaks for: under peer_auth a row
+	// stamped with a process of the verified chain, without it the ambient
+	// row of the conversation the surface named. False when no such row was
+	// found, and for a client with no external identity, whose Home is only
+	// the project of the session it is bound to.
+	HomeKnown bool
 	// Label is every fenced project the conversation holds, as the store found
 	// them fenced at the request.
 	Label []string
@@ -105,7 +112,7 @@ func JudgeConversation(ctx context.Context, now time.Time, c Conversation) Grant
 	} else if c.Key == "" && len(c.Sessions) == 0 {
 		return Grants{}
 	}
-	g := Grants{judged: true, home: c.Home}
+	g := Grants{judged: true, home: c.Home, homeKnown: c.HomeKnown}
 	for _, r := range c.Grants {
 		if r.Project == "" || r.From == "" || r.Project == r.From {
 			continue
@@ -173,6 +180,12 @@ func (g Grants) Judged() bool { return g.judged }
 
 // Home is the conversation's home ("" for the global scope or none known).
 func (g Grants) Home() string { return g.home }
+
+// HomeKnown reports that Home is the project of the conversation's own
+// ambient row (Conversation.HomeKnown): the conversation is identified, and
+// the surface may speak for it from its home. False for the zero value, a
+// legacy judged state, and a client with no external identity.
+func (g Grants) HomeKnown() bool { return g.judged && g.homeKnown }
 
 // Label returns the fenced projects the conversation holds, sorted.
 func (g Grants) Label() []string { return slices.Clone(g.label) }

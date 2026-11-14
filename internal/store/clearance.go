@@ -72,6 +72,9 @@ type clearanceHolders struct {
 	// under peer_auth (a process holder's sessions are not keyed to it).
 	tree []string
 	home string
+	// homeKnown: home is the project of the conversation's own ambient row
+	// (access.Conversation.HomeKnown).
+	homeKnown bool
 }
 
 // ConversationClearance judges the conversation ref names, for the holder ctx
@@ -140,7 +143,7 @@ func clearanceHoldersOf(ctx context.Context, db *sql.DB, ref ConversationRef) (c
 			// Another tree's conversation, or none of ours: it names no home.
 			return c, true, nil
 		}
-		c.home = amb.ProjectSlug
+		c.home, c.homeKnown = amb.ProjectSlug, true
 		if c.own, err = conversationSessions(ctx, db, amb, ref); err != nil {
 			return clearanceHolders{}, false, err
 		}
@@ -160,8 +163,8 @@ func clearanceHoldersOf(ctx context.Context, db *sql.DB, ref ConversationRef) (c
 		if err != nil {
 			return clearanceHolders{}, false, err
 		}
-		if found {
-			c.home = amb.ProjectSlug
+		if found && access.SessionAccountOK(ctx, amb.Account) {
+			c.home, c.homeKnown = amb.ProjectSlug, true
 		}
 		if c.own, err = conversationSessions(ctx, db, amb, ref); err != nil {
 			return clearanceHolders{}, false, err
@@ -239,7 +242,7 @@ func treeSessionProjects(ctx context.Context, db *sql.DB, host, stamp string) ([
 // than a process chain has hops), and builds what access.JudgeConversation
 // judges.
 func (c clearanceHolders) read(ctx context.Context, db *sql.DB) (access.Conversation, error) {
-	conv := access.Conversation{Key: c.key, Sessions: c.sessions, Home: c.home}
+	conv := access.Conversation{Key: c.key, Sessions: c.sessions, Home: c.home, HomeKnown: c.homeKnown}
 	label := map[string]bool{}
 	flows := map[FlowPair]bool{}
 	seen := map[string]bool{}

@@ -78,7 +78,9 @@ func TestDialog_DeniedSaysHowToAskAgain(t *testing.T) {
 		"access_request with a reason, or run `seam access request "+lkFin+" --reason \"...\"` with your own shell tool."), ls[1])
 }
 
-// The read grant's fence names a denial the same way.
+// The fence names a denial the same way. From an open home the request a
+// read refused at a confidential project files is a move (plan
+// fenced-sessions P4).
 func TestGrantRefusal_AfterADenialNamesItAndFilesNothing(t *testing.T) {
 	d := newDialogRig(t, dialogOpts{wait: dlgLong, grants: true})
 	admin := d.dial(d.serve(d.lockRig.srv, nil), false)
@@ -89,7 +91,7 @@ func TestGrantRefusal_AfterADenialNamesItAndFilesNothing(t *testing.T) {
 	plain := d.dialOwner(d.agentSocket(), nil, nil) // no elicitation: no dialog
 
 	first := d.refused(plain, "notes_read", map[string]any{"id": note["id"]})
-	require.Contains(t, first, "\nRemedy: read request R-", first)
+	require.Contains(t, first, "\nRemedy: move request R-", first)
 	pending := d.pending()
 	require.Len(t, pending, 1)
 	require.Equal(t, dlgLegal, pending[0].Project)
@@ -98,7 +100,7 @@ func TestGrantRefusal_AfterADenialNamesItAndFilesNothing(t *testing.T) {
 	text := d.refused(plain, "notes_read", map[string]any{"id": note["id"]})
 	ls := lines(text)
 	require.Len(t, ls, 2, text)
-	require.True(t, strings.HasPrefix(ls[1], "Remedy: the owner denied read request "+approval.ShortID(pending[0].ID)+" at "), ls[1])
+	require.True(t, strings.HasPrefix(ls[1], "Remedy: the owner denied move request "+approval.ShortID(pending[0].ID)+" at "), ls[1])
 	require.True(t, strings.HasSuffix(ls[1], ", so nothing new was filed; keep to other projects, and if the owner asks you "+
 		"to request again, call access_request with a reason, or run `seam access request "+dlgLegal+" --reason \"...\"` "+
 		"with your own shell tool."), ls[1])

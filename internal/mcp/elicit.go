@@ -99,16 +99,34 @@ func (s *Server) dialogPoll() time.Duration {
 type dialogTarget struct {
 	ID, Short, Project string
 	// Grant marks a read grant request (isolation.requests), Project its
-	// confidential target.
-	Grant bool
+	// confidential target; Write one that asked for read and write.
+	Grant, Write bool
+	// Move marks a move request (isolation.requests), Project the fenced
+	// project the conversation would move into. The Touch ID approver does
+	// not word a move (approval.ErrTouchIDMove), so no dialog or remedy
+	// offers Touch ID for one.
+	Move bool
 }
 
 // what names the request for the agent.
 func (t dialogTarget) what() string {
-	if t.Grant {
+	switch {
+	case t.Move:
+		return "move request " + t.Short
+	case t.Grant && t.Write:
+		return "read-and-write request " + t.Short
+	case t.Grant:
 		return "read request " + t.Short
 	}
 	return "access request " + t.Short
+}
+
+// ways are the approval paths still open for t: Touch ID never for a move.
+func (t dialogTarget) ways(ways access.Ways) access.Ways {
+	if t.Move {
+		ways.TouchID = false
+	}
+	return ways
 }
 
 // dialogSlotKey keys the per-call slot the requesters report into.
@@ -173,7 +191,7 @@ func (s *Server) dialogMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.Tool
 		out := *res
 		out.Content = slices.Clone(res.Content)
 		out.Content[0] = mcp.NewTextContent(refusalAfterDialog(req.Params.Name, first.Text, t, end,
-			callWays(ctx, s.cfg.Approvals.Ways(ctx, t.ID)), s.cfg.OfferAccessRequest))
+			t.ways(callWays(ctx, s.cfg.Approvals.Ways(ctx, t.ID))), s.cfg.OfferAccessRequest))
 		return &out, err
 	}
 }
@@ -185,8 +203,10 @@ type dialogEnd struct {
 	state   string
 	request store.AccessApproval
 	// until is when the access the approval opened ends (approved only;
-	// zero when it could not be read).
+	// zero when it could not be read); write reports a grant approved as
+	// read and write.
 	until time.Time
+	write bool
 	// stopAt is when the dialog stopped waiting, and timedOut whether it
 	// stopped there rather than at a decision.
 	stopAt   time.Time
@@ -210,12 +230,14 @@ func (s *Server) dialog(ctx context.Context, start time.Time, t dialogTarget) (d
 		return dialogEnd{}, false
 	}
 	form, urlMode := clientElicitation(session)
-	methods, page := s.dialogMethods(ctx, t.ID, form, urlMode)
-	if len(methods) == 0 {
-		return dialogEnd{}, false
-	}
 	a, err := store.AccessApprovalByID(ctx, s.cfg.DB, t.ID)
 	if err != nil || s.stateOf(a) != statePending {
+		return dialogEnd{}, false
+	}
+	// A move is never approved with Touch ID (approval.ErrTouchIDMove): its
+	// dialog is the passkey page, which shows the move, or none.
+	methods, page := s.dialogMethods(ctx, t.ID, form && a.Kind != store.AccessKindMove, urlMode)
+	if len(methods) == 0 {
 		return dialogEnd{}, false
 	}
 	key := session.SessionID() + "\x00" + t.ID
@@ -641,7 +663,7 @@ func (s *Server) settle(ctx, dctx context.Context, t dialogTarget, end dialogEnd
 	}
 	end.request, end.state = a, s.stateOf(a)
 	if end.state == stateApproved {
-		end.until = s.accessEnd(rctx, a)
+		end.until, end.write = s.accessEnd(rctx, a)
 	}
 	return end
 }
@@ -656,8 +678,10 @@ func (s *Server) stateOf(a store.AccessApproval) string {
 }
 
 // accessEnd is when the lease or read grant an approved request opened ends;
-// zero when it is not live (it may already have been revoked).
-func (s *Server) accessEnd(ctx context.Context, a store.AccessApproval) time.Time {
+// zero when it is not live (it may already have been revoked). write reports a
+// grant the owner approved as read and write. A move never ends: its end is
+// the lease it carries into a locked project, zero for none.
+func (s *Server) accessEnd(ctx context.Context, a store.AccessApproval) (until time.Time, write bool) {
 	var keys []string
 	if a.ProcessKey != "" {
 		keys = []string{a.ProcessKey}
@@ -669,25 +693,25 @@ func (s *Server) accessEnd(ctx context.Context, a store.AccessApproval) time.Tim
 		}
 		rows, err := store.AccessGrantsForHolder(ctx, s.cfg.DB, keys, sessionID)
 		if err != nil {
-			return time.Time{}
+			return time.Time{}, false
 		}
 		for _, g := range rows {
 			if g.ApprovalID == a.ID && g.RevokedAt == nil && g.ExpiresAt.After(s.now()) {
-				return g.ExpiresAt
+				return g.ExpiresAt, g.Access == store.GrantAccessWrite
 			}
 		}
-		return time.Time{}
+		return time.Time{}, false
 	}
 	rows, err := store.ActiveAccessLeasesFor(ctx, s.cfg.DB, keys, s.now())
 	if err != nil {
-		return time.Time{}
+		return time.Time{}, false
 	}
 	for _, l := range rows {
 		if l.ApprovalID == a.ID {
-			return l.ExpiresAt
+			return l.ExpiresAt, false
 		}
 	}
-	return time.Time{}
+	return time.Time{}, false
 }
 
 // claimDialog marks a dialog open for key, reporting false when one already
@@ -885,12 +909,24 @@ func dialogMessage(f approval.Facts, shown dialogShown) string {
 			b.WriteString(label + ": " + value + "\n")
 		}
 	}
-	if f.Kind == store.AccessKindGrant {
+	switch {
+	case f.Kind == store.AccessKindGrant:
 		line("Project", f.Project+" ("+f.Isolation+"), read from project "+f.From)
-	} else {
+	case f.Kind == store.AccessKindMove && f.From == "":
+		line("Project", f.Project+" ("+f.Isolation+"), moving from the global scope")
+	case f.Kind == store.AccessKindMove:
+		line("Project", f.Project+" ("+f.Isolation+"), moving from project "+f.From)
+	default:
 		line("Project", f.Project+" ("+f.Isolation+", locked)")
 	}
 	line("Access", f.Access)
+	if f.Kind == store.AccessKindGrant && len(f.AccessChoices) > 1 {
+		// The dialog's proofs sign the request's default access: read and
+		// write is the owner's choice in the terminal or on the passkey page.
+		line("Asked for", f.AskedAccess)
+		line("Read and write", "approved only with `seam approve "+f.Short+" --access read-write` or on the passkey page; "+
+			"this dialog approves read-only")
+	}
 	line("Session", f.Session)
 	line("Repository", f.Repo)
 	line("Working directory", f.CWD)
@@ -904,7 +940,7 @@ func dialogMessage(f approval.Facts, shown dialogShown) string {
 		// shows where it really runs from.
 		line("Program", f.Program)
 	}
-	line("Request", f.Short+", "+requestKindWords(f.Kind))
+	line("Request", f.Short+", "+requestKindWords(f))
 	line("This dialog stops waiting at", access.Clock(shown.stopAt))
 	line("The request expires at", access.Clock(f.ExpiresAt))
 	if reason := plain(f.Reason); reason != "" {
@@ -931,6 +967,16 @@ func dialogMessage(f approval.Facts, shown dialogShown) string {
 // The duration is the form's default, "until the session ends", which the
 // lease cap bounds; a request no session names has nothing to end it sooner.
 func dialogLead(f approval.Facts, capped time.Duration) string {
+	if f.Kind == store.AccessKindMove {
+		// A move lasts for good; a locked target's lease is the only thing
+		// the duration below bounds.
+		long := "For good; the duration below bounds only the approval"
+		if f.Locked {
+			long = "For good, and its lock opens until its session ends (" + spanWords(capped) + " at most)"
+		}
+		return warningCount(len(f.Warnings)) + ". " + plain(askerName(f)) + " asks to move into " + plain(f.Project) + ".\n" +
+			long + ", unless you pick less below."
+	}
 	asks := "asks for"
 	if f.Kind == store.AccessKindRefresh {
 		asks = "asks again for"
@@ -997,12 +1043,17 @@ func agentProcessName(f approval.Facts) string {
 }
 
 // requestKindWords says what kind of request it is, for the Request line.
-func requestKindWords(kind string) string {
-	switch kind {
+func requestKindWords(f approval.Facts) string {
+	switch f.Kind {
 	case store.AccessKindRefresh:
 		return "a refresh of the lease this agent holds"
 	case store.AccessKindGrant:
+		if f.AskedAccess == "read-write" {
+			return "a read-and-write request"
+		}
 		return "a read request"
+	case store.AccessKindMove:
+		return "a move request"
 	}
 	return "a new request"
 }
@@ -1092,8 +1143,18 @@ func refusalAfterDialog(tool, text string, t dialogTarget, end dialogEnd, ways a
 
 // openLine says what an approval opened, and until when.
 func openLine(t dialogTarget, end dialogEnd) string {
+	if t.Move {
+		open := "this conversation works in project " + t.Project + " from now on"
+		if !end.until.IsZero() {
+			open += ", and its lock is open to this agent until " + access.Clock(end.until)
+		}
+		return open
+	}
 	open := "project " + t.Project + " is open to this agent"
-	if t.Grant {
+	switch {
+	case t.Grant && end.write:
+		open = "project " + t.Project + " is readable and writable from project " + end.request.FromProject + ", nothing else"
+	case t.Grant:
 		open = "project " + t.Project + " is readable from project " + end.request.FromProject + ", nothing else"
 	}
 	if !end.until.IsZero() {

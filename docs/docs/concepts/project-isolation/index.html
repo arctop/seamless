@@ -474,9 +474,11 @@ a call speaks for, so one that rebinds with <code>session_start</code>, or names
 session with <code>session=</code>, writes where that session may. Under <code>peer_auth</code> a grant needs the same proofs as a
 <a href="../../guides/peer-auth/">locked project's lease</a>: your terminal through <code>sudo</code> to
 the daemon's account, a passkey, or a Touch ID key. Its holder is then the
-asking agent's process tree, and those moves are refused. No tier stops an agent
-running as you from naming the confidential project as its own with
-<code>session_start</code>; only a <a href="../../guides/peer-auth/">lock</a> holds against that.</p>
+asking agent's process tree, and those moves are refused. An agent whose
+conversation Seamless identifies cannot name the confidential project as its
+own with <code>session_start</code> either: that files a move or grant request instead of
+binding. A client that sends no identity still can, in either tier; only a
+<a href="../../guides/peer-auth/">lock</a> holds against that.</p>
 <h2 id="honest-limits">Honest limits</h2>
 <p>This matters more than the feature list, so it is stated plainly.</p>
 <p><strong>What this is.</strong> A policy fence at every Seamless surface - briefings, recall,

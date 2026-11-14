@@ -9,10 +9,14 @@ package approval
 //
 // Two entry points:
 //
-//   - RequestGrant (grant.go) asks for a read grant from the asking session's
-//     own project, whatever that project is, as before migration 039. A
-//     request from a confidential home states its carry; one from an open home
-//     states none, as before.
+//   - RequestGrant (grant.go) asks for a read: from a session that names its
+//     conversation (the agent's own session, whose ambient row is live), the
+//     kind the conversation's home and the target call for, as Ask without
+//     write (plan fenced-sessions P4); from any other session -- a client
+//     that sends no agent-process identity, the documented limit -- a read
+//     grant from that session's own project, whatever that project is, as
+//     before migration 039. Such a request from a confidential project states
+//     its carry; one from an open project states none, as before.
 //   - Ask files the kind the conversation's home and the target call for
 //     (KindFor): a move, or a grant that may ask for write too. The home is
 //     the conversation's: its ambient row's project, whichever of its
@@ -98,14 +102,22 @@ const (
 	// askKind is Ask's: the kind the conversation's home and the target call
 	// for.
 	askKind
+	// askAuto is RequestGrant's since P4: askKind for a session that names its
+	// conversation (asker.conversation), askGrant for any other. Its reach is
+	// askGrant's: a locked target is the lock's to open.
+	askAuto
 )
 
 // asker is who files a request, as filing settles it.
 type asker struct {
 	// sess is the session the call named or the agent's own; home is the
-	// conversation's home session (askKind), else sess.
+	// conversation's home session (askKind, askAuto), else sess.
 	sess, home core.Session
-	holder     store.Holder
+	// conversation reports that home is the conversation's own live ambient
+	// row, found from sess's external identity: the session names its
+	// conversation.
+	conversation bool
+	holder       store.Holder
 	// held are every holder whose rows are the conversation's, as the
 	// clearance reads them (store.ConversationClearance): under peer_auth the
 	// process chain, else the conversation and each of its own sessions (a
@@ -132,6 +144,15 @@ func (g *Grants) file(ctx context.Context, in AskInput, mode askMode) (store.Acc
 	if err != nil {
 		return store.AccessApproval{}, err
 	}
+	reach := mode
+	if mode == askAuto {
+		// The kind rule speaks for a conversation; a session that names none
+		// keeps the read grant it always asked for.
+		mode, reach = askGrant, askGrant
+		if who.conversation {
+			mode = askKind
+		}
+	}
 	home := who.home.ProjectSlug
 	if in.From != "" && in.From != home {
 		return store.AccessApproval{}, fmt.Errorf("%w: the session works in %q, not %q", store.ErrInvalidAccessRequest, home, in.From)
@@ -140,6 +161,10 @@ func (g *Grants) file(ctx context.Context, in AskInput, mode askMode) (store.Acc
 	switch mode {
 	case askKind:
 		if kind, err = kindFor(ctx, g.svc, home, target); err != nil {
+			if reach == askGrant && errors.Is(err, ErrIsHome) {
+				// RequestGrant's own answer for the project the asker works in.
+				return store.AccessApproval{}, fmt.Errorf("%w: a session always reads its own project", ErrNotConfidential)
+			}
 			return store.AccessApproval{}, err
 		}
 		write = in.Write && kind == store.AccessKindGrant
@@ -151,7 +176,7 @@ func (g *Grants) file(ctx context.Context, in AskInput, mode askMode) (store.Acc
 			return store.AccessApproval{}, fmt.Errorf("%w: a session always reads its own project", ErrNotConfidential)
 		}
 	}
-	if err := g.reachable(ctx, kind, mode, home, target); err != nil {
+	if err := g.reachable(ctx, kind, reach, home, target); err != nil {
 		return store.AccessApproval{}, err
 	}
 	if kind == store.AccessKindMove {
@@ -188,7 +213,7 @@ func (g *Grants) file(ctx context.Context, in AskInput, mode askMode) (store.Acc
 	} else if kind == store.AccessKindMove || hi == core.IsolationConfidential {
 		// An open home's read grant (RequestGrant) states no carry, as every
 		// request did before migration 039: what it confines is the grant's own.
-		if carry, err = g.svc.carryFor(ctx, who.held, home, target, kind, write, now); err != nil {
+		if carry, err = g.svc.carryFor(ctx, who, home, target, kind, write, now); err != nil {
 			return store.AccessApproval{}, err
 		}
 	}
@@ -276,13 +301,13 @@ func (g *Grants) askerOf(ctx context.Context, in GrantInput, mode askMode) (aske
 		return asker{}, ErrNoSession
 	}
 	who.sess, who.home = sess, sess
-	if mode == askKind && sess.ExternalClient != "" && sess.ExternalSessionID != "" {
+	if (mode == askKind || mode == askAuto) && sess.ExternalClient != "" && sess.ExternalSessionID != "" {
 		amb, found, err := store.AmbientSessionByExternalIdentity(ctx, db, sess.ExternalClient, sess.ExternalSessionID)
 		if err != nil {
 			return asker{}, err
 		}
 		if found && amb.Status != core.SessionCompleted && access.SessionAccountOK(ctx, amb.Account) {
-			who.home = amb
+			who.home, who.conversation = amb, true
 		}
 	}
 	switch {

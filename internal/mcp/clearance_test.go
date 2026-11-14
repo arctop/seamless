@@ -31,8 +31,11 @@ func clNative(t *testing.T, on bool) (*grantRig, string) {
 
 // Leak path 3: rebinding is free. A conversation native to a confidential
 // project binds itself to an open one -- with session_start or by naming
-// another session with session= -- and is refused writing there with the
-// switch on, whatever the binding says; with it off, as before.
+// another session with session= -- and with the switch on is refused both
+// (plan fenced-sessions P4): session_start into an open project is no way
+// back, a session= handle acts as a session only where the home may read and
+// write, and a write into the open project is refused whatever the call
+// names. With the switch off, as before.
 func TestClearance_ARebindDoesNotLiftTheLabel(t *testing.T) {
 	for _, on := range []bool{true, false} {
 		r, _ := clNative(t, on)
@@ -41,43 +44,56 @@ func TestClearance_ARebindDoesNotLiftTheLabel(t *testing.T) {
 		cli := dialAgent(t, ctx, r.url, clAgent)
 		r.ok(cli, "memory_write", map[string]any{"name": "legal-own", "kind": "reference", "description": "d", "body": "b\n"})
 
-		const rule = "this session holds content from example-legal, so it writes only into example-legal: a write into project example-ops is refused"
-		start := r.ok(cli, "session_start", map[string]any{"project": gOps})
-		require.Equal(t, gOps, start["project"])
-		cases := []struct {
-			tool string
-			args map[string]any
-		}{
-			{"memory_write", map[string]any{"name": "rebound-implicit", "kind": "reference", "description": "d", "body": "b\n"}},
-			{"memory_write", map[string]any{"name": "rebound-explicit", "kind": "reference", "description": "d", "body": "b\n", "project": gOps}},
-			{"notes_create", map[string]any{"title": "rebound note", "body": "b"}},
-			{"tasks_add", map[string]any{"title": "rebound task"}},
-		}
-		for _, c := range cases {
-			items, isErr := r.call(cli, c.tool, c.args)
-			if !on {
-				require.False(t, isErr, "off: %s lands as before: %v", c.tool, items)
-				continue
+		if !on {
+			start := r.ok(cli, "session_start", map[string]any{"project": gOps})
+			require.Equal(t, gOps, start["project"])
+			for _, args := range []map[string]any{
+				{"name": "rebound-implicit", "kind": "reference", "description": "d", "body": "b\n"},
+				{"name": "rebound-explicit", "kind": "reference", "description": "d", "body": "b\n", "project": gOps},
+				{"name": "named-other", "kind": "reference", "description": "d", "body": "b\n", "session": "cc/ops"},
+			} {
+				r.ok(cli, "memory_write", args)
 			}
-			require.True(t, isErr, "%s: %v", c.tool, items)
-			require.Equal(t, c.tool+": "+rule, items[0])
+			continue
 		}
-		items, isErr := r.call(cli, "memory_write", map[string]any{"name": "named-other", "kind": "reference",
-			"description": "d", "body": "b\n", "session": "cc/ops"})
-		require.Equal(t, on, isErr, "session= naming another session: %v", items)
-		if on {
-			require.Equal(t, "memory_write: "+rule, items[0])
-			require.Zero(t, r.count(`SELECT COUNT(*) FROM memories_index WHERE project = ?`, gOps))
-			// The global scope: never while the label holds anything.
-			items, isErr = r.call(cli, "memory_write", map[string]any{"name": "to-global", "kind": "reference",
-				"description": "d", "body": "b\n", "project": "global"})
-			require.True(t, isErr)
-			require.Equal(t, "memory_write: this session holds content from example-legal, so it writes only into "+
-				"example-legal: a write into the global scope is refused", items[0])
-		}
-		// Into its home, from anywhere it is bound, it writes.
+
+		require.Equal(t, "session_start: nothing was bound: this conversation holds content from example-legal, so it does "+
+			"not work in project example-ops: a conversation holding a fenced project's content never goes back to an open "+
+			"project or the global scope\nRemedy: keep working in project example-legal, your own session cc/legal-agent; "+
+			"record there what you meant to record in project example-ops, citing other projects' items by reference "+
+			"(project slug plus the item's name or id)", r.refused(cli, "session_start", map[string]any{"project": gOps}))
+		require.Equal(t, "session_start: nothing was bound: this conversation holds content from example-legal, so it does "+
+			"not work in the global scope: a conversation holding a fenced project's content never goes back to an open "+
+			"project or the global scope\nRemedy: keep working in project example-legal, your own session cc/legal-agent; "+
+			"record there what you meant to record in the global scope, citing other projects' items by reference "+
+			"(project slug plus the item's name or id)", r.refused(cli, "session_start", map[string]any{"project": "global"}))
+		// Resuming a session in the open project is the same rebind.
+		require.Contains(t, r.refused(cli, "session_start", map[string]any{"name": "cc/ops"}), "does not work in project example-ops")
+
+		// Nothing was bound: an unscoped write lands in the home.
+		mem := r.ok(cli, "memory_write", map[string]any{"name": "rebound-implicit", "kind": "reference", "description": "d", "body": "b\n"})
+		require.Equal(t, gLegal, mem["project"])
+		const rule = "this session holds content from example-legal, so it writes only into example-legal: a write into project example-ops is refused"
+		require.Equal(t, "memory_write: "+rule, r.refused(cli, "memory_write", map[string]any{"name": "rebound-explicit",
+			"kind": "reference", "description": "d", "body": "b\n", "project": gOps}))
+
+		// session= naming a session in the open project: refused at the handle.
+		require.Equal(t, "memory_write: session cc/ops works in project example-ops, and this conversation works in project "+
+			"example-legal: it holds content from example-legal, which may not be written into project example-ops, so it "+
+			"may not act as that session\nRemedy: leave session= off to act as your own session cc/legal-agent in project "+
+			"example-legal", r.refused(cli, "memory_write", map[string]any{"name": "named-other", "kind": "reference",
+			"description": "d", "body": "b\n", "session": "cc/ops"}))
+		require.Contains(t, r.refused(cli, "notes_create", map[string]any{"title": "rebound note", "body": "b", "session": "cc/ops"}),
+			"so it may not act as that session")
+		require.Zero(t, r.count(`SELECT COUNT(*) FROM memories_index WHERE project = ?`, gOps))
+		require.Zero(t, r.count(`SELECT COUNT(*) FROM notes_index WHERE project = ?`, gOps))
+		// The global scope: never while the label holds anything.
+		require.Equal(t, "memory_write: this session holds content from example-legal, so it writes only into "+
+			"example-legal: a write into the global scope is refused", r.refused(cli, "memory_write", map[string]any{
+			"name": "to-global", "kind": "reference", "description": "d", "body": "b\n", "project": "global"}))
+		// Its own home session, named by handle, is itself.
 		r.ok(cli, "memory_write", map[string]any{"name": "back-home", "kind": "reference", "description": "d", "body": "b\n",
-			"project": gLegal})
+			"session": "cc/legal-agent"})
 	}
 }
 
@@ -122,8 +138,22 @@ func TestClearance_WriteGrantAtTheSurface(t *testing.T) {
 		"project example-vault": gVault} {
 		text := r.refused(cli, "memory_write", map[string]any{"name": "out", "kind": "reference", "description": "d",
 			"body": "b\n", "project": project})
-		require.True(t, strings.HasSuffix(text, "a write into "+where+" is refused"), text)
+		rule, remedy, _ := strings.Cut(text, "\n")
+		require.True(t, strings.HasSuffix(rule, "a write into "+where+" is refused"), text)
+		if project == gVault {
+			// A sealed project is reached only by moving in: the refused write
+			// asks for that move (P4), and the move's carry names what it holds.
+			require.True(t, strings.HasPrefix(remedy, "Remedy: move request R-"), remedy)
+			continue
+		}
+		require.Empty(t, remedy, "into an open project or the global scope there is no way back: nothing to ask")
 	}
+	pending, err := store.PendingAccessApprovals(context.Background(), r.db, r.clock())
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	require.Equal(t, store.AccessKindMove, pending[0].Kind)
+	require.Equal(t, gVault, pending[0].Project)
+	require.Equal(t, []string{gFin, gLegal, gVault}, pending[0].Carry.Holds)
 }
 
 // With isolation.requests off nothing in ctx changes: the matrix alone, word

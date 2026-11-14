@@ -181,12 +181,16 @@ func (g *Grants) eligible(ctx context.Context, target, from string) error {
 //
 // The asker is its agent process under peer_auth, else its conversation when
 // the session names one (the client and the session id it issued), else the
-// session. A request from a confidential project states its carry, so the
-// owner sees, and may choose, read-only or read and write; one from an open
-// project states none, as before (Ask files the kind the home and the target
-// call for instead).
+// session. A session that names its conversation -- the agent's own, whose
+// ambient row is live -- asks for the kind the conversation's home and
+// in.Project call for, as Ask does without write (plan fenced-sessions P4):
+// from an open home (or the global scope) and for any sealed project a move,
+// from a confidential home a read grant. Any other session asks for a read
+// grant from its own project, as before: a request from a confidential
+// project states its carry, so the owner sees, and may choose, read-only or
+// read and write; one from an open project states none.
 func (g *Grants) RequestGrant(ctx context.Context, in GrantInput) (store.AccessApproval, error) {
-	a, err := g.file(ctx, AskInput{GrantInput: in}, askGrant)
+	a, err := g.file(ctx, AskInput{GrantInput: in}, askAuto)
 	if err != nil {
 		return store.AccessApproval{}, fmt.Errorf("approval.RequestGrant: %w", err)
 	}

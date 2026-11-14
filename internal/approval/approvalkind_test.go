@@ -347,10 +347,11 @@ func TestAsk_TheWholeCarry(t *testing.T) {
 	require.ElementsMatch(t, []store.FlowPair{{From: lockLeg, To: confDataroom}, {From: lockLeg, To: lockFin}}, fromLegal)
 }
 
-// RequestGrant keeps its meaning: a read grant from the asking session's own
-// project. From a confidential project it now states its carry, so the owner
-// sees the whole of it and may choose read and write; the conversation holds
-// it.
+// RequestGrant asks for a read. From a confidential project it states its
+// carry, so the owner sees the whole of it and may choose read and write; the
+// conversation holds it. From an open project, a conversation's session asks
+// for the move its home and the target call for (plan fenced-sessions P4),
+// and only a session that names no conversation keeps the legacy read grant.
 func TestRequestGrant_FromAConfidentialHomeStatesItsCarry(t *testing.T) {
 	f := newKindFixture(t)
 	g := f.advisory()
@@ -367,10 +368,21 @@ func TestRequestGrant_FromAConfidentialHomeStatesItsCarry(t *testing.T) {
 	require.Equal(t, []string{"read-only", "read-write"}, facts.AccessChoices)
 	require.Equal(t, "read-only", facts.AskedAccess)
 
-	// From an open project: the legacy read grant, its line word for word.
+	// From an open project, a conversation's session: the move its home
+	// and the target call for.
 	open := f.conversation(t, openOps, "ext-7", other)
-	b, err := g.RequestGrant(ctx, GrantInput{Project: confPayroll, SessionID: open})
+	m, err := g.RequestGrant(ctx, GrantInput{Project: confPayroll, SessionID: open})
 	require.NoError(t, err)
+	require.Equal(t, store.AccessKindMove, m.Kind)
+	require.Equal(t, openOps, m.FromProject)
+	require.Equal(t, store.Carry{Home: openOps, Holds: []string{confPayroll}, WriteTo: []string{confPayroll}}, m.Carry)
+
+	// A session that names no conversation: the legacy read grant, its line
+	// word for word.
+	plain := f.sessionIn(t, openOps, "sess/plain")
+	b, err := g.RequestGrant(ctx, GrantInput{Project: confPayroll, SessionID: plain})
+	require.NoError(t, err)
+	require.Equal(t, store.AccessKindGrant, b.Kind)
 	require.True(t, b.Carry.IsZero())
 	bf, err := g.Facts(ctx, b.ID)
 	require.NoError(t, err)
@@ -390,7 +402,9 @@ func TestGrantsRevokeSession_EndsTheConversationsGrants(t *testing.T) {
 	linked := f.link(t, confHR, "ext-8")
 	a, err := g.RequestGrant(ctx, GrantInput{Project: confPayroll, SessionID: linked})
 	require.NoError(t, err)
-	require.Equal(t, linked, a.SessionID)
+	// Asked from a session that names its conversation, the request is the
+	// conversation's, filed for its home row (P4).
+	require.Equal(t, home, a.SessionID)
 	facts, err := g.Facts(ctx, a.ID)
 	require.NoError(t, err)
 	_, err = g.Approve(ctx, Decision{ID: a.ID, Duration: For1h, Digest: facts.Digest, Proof: Proof{Kind: ProofKey}})

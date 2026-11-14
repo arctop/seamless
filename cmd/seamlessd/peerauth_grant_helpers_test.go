@@ -48,7 +48,11 @@ import (
 )
 
 const (
-	gmOpen   = "example-open"    // open: the asker's project
+	// gmHome is the grantee's home: confidential, not locked. A read grant
+	// is asked from a confidential home (plan fenced-sessions P4: from an
+	// open home a refused read asks for a move instead).
+	gmHome   = "example-home"
+	gmOpen   = "example-open"    // open: another agent's home, and a move's
 	gmDocs   = "example-docs"    // open: somewhere else to write
 	gmConf   = "example-conf"    // confidential, not locked: the grant's target
 	gmSealed = "example-sealed"  // isolation-sealed
@@ -188,6 +192,7 @@ func newGMRig(t *testing.T, peer, requests bool) *gmRig {
 	t.Cleanup(func() { _ = db.Close() })
 	require.NoError(t, store.AdoptLocalHost(ctx, db, gmHost))
 	for slug, state := range map[string]core.Isolation{
+		gmHome: core.IsolationConfidential,
 		gmOpen: core.IsolationOpen, gmDocs: core.IsolationOpen, gmConf: core.IsolationConfidential,
 		gmSealed: core.IsolationSealed, gmFin: core.IsolationConfidential,
 	} {
@@ -556,6 +561,17 @@ func (r *gmRig) count(query string, args ...any) int {
 	var n int
 	require.NoError(r.t, r.db.QueryRowContext(r.ctx, query, args...).Scan(&n))
 	return n
+}
+
+// moveRows counts the move requests filed (access_approvals rows of kind
+// move) matching where.
+func (r *gmRig) moveRows(where string, args ...any) int {
+	r.t.Helper()
+	q := `SELECT COUNT(*) FROM access_approvals WHERE kind = 'move'`
+	if where != "" {
+		q += " AND " + where
+	}
+	return r.count(q, args...)
 }
 
 // grantRows counts the read grant requests filed (access_approvals rows of

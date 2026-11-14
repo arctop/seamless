@@ -71,11 +71,18 @@ func kindFor(ctx context.Context, s *Service, home, target string) (string, erro
 }
 
 // carryFor is the carry a request of kind for target states, for the
-// conversation holders name, homed in home: what it holds once approved (its
+// conversation who asks for, homed in home: what it holds once approved (its
 // label and the target) and where it may write once approved -- for a move
 // the target alone; for a grant the home, every project a live write grant
 // from the home opens to it, and the target too when write is asked for.
-func (s *Service) carryFor(ctx context.Context, holders []store.Holder, home, target, kind string, write bool, now time.Time) (store.Carry, error) {
+//
+// The label is the one the clearance judges (store.ConversationClearance),
+// read for the holder ctx speaks for -- under peer_auth that adds the fenced
+// projects of the process tree's other conversations, which the asker's own
+// holders do not name -- together with every holder's own label
+// (store.HolderLabel), so neither reading can understate what is held.
+func (s *Service) carryFor(ctx context.Context, who asker, home, target, kind string, write bool, now time.Time) (store.Carry, error) {
+	holders := who.held
 	holds := []string{target}
 	for chunk := range slices.Chunk(holders, holderChunk) {
 		label, err := store.HolderLabel(ctx, s.cfg.DB, chunk, home)
@@ -86,6 +93,15 @@ func (s *Service) carryFor(ctx context.Context, holders []store.Holder, home, ta
 			holds = append(holds, e.Project)
 		}
 	}
+	ref := store.ConversationRef{SessionID: who.sess.ID}
+	if who.home.ExternalClient != "" && who.home.ExternalSessionID != "" {
+		ref = store.ConversationRef{Client: who.home.ExternalClient, ExternalID: who.home.ExternalSessionID}
+	}
+	judged, err := store.ConversationClearance(ctx, s.cfg.DB, ref, now)
+	if err != nil {
+		return store.Carry{}, err
+	}
+	holds = append(holds, judged.Label()...)
 	if kind == store.AccessKindMove {
 		return store.CarryOf(home, holds, []string{target})
 	}

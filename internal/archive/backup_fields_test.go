@@ -113,8 +113,13 @@ func TestVerify_AGoodArchive(t *testing.T) {
 
 func TestVerify_Refusals(t *testing.T) {
 	good := exportOf(t, seedIndexed(t, specA))
+	// The damaged byte is the stored CRC's first (the gzip trailer's), which
+	// the stream's end always checks. A byte flipped at an arbitrary place in
+	// the deflate data can land on bits that change nothing it decodes to (an
+	// unused code length in a block's Huffman header): the archive's layout
+	// moves with every schema change, and such an archive is not damaged.
 	flipped := bytes.Clone(good)
-	flipped[len(flipped)/2] ^= 0xff
+	flipped[len(flipped)-8] ^= 0xff
 
 	short := goodManifest()
 	short.Counts.MemoryFiles = 2

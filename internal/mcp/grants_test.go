@@ -62,6 +62,17 @@ type grantRig struct {
 	now time.Time
 
 	finNote, finMem string
+	// cfg is what the server was built from: restart builds another.
+	cfg mcpserver.Config
+}
+
+// restart serves a second server built from the rig's config over the same
+// database, as a daemon restart does, and returns its URL.
+func (r *grantRig) restart(t *testing.T) string {
+	t.Helper()
+	ts := httptest.NewServer(mcpserver.New(r.cfg).Handler())
+	t.Cleanup(ts.Close)
+	return ts.URL
 }
 
 // newGrantRig is a daemon's MCP server over a fresh database with the five
@@ -92,6 +103,7 @@ func newGrantRig(t *testing.T, on bool) *grantRig {
 		r.grants = approval.NewGrants(approval.GrantsConfig{DB: db, Events: r.rec, LeaseCap: 8 * time.Hour, Now: r.clock})
 		cfg.Grants = r.grants
 	}
+	r.cfg = cfg
 	ts := httptest.NewServer(mcpserver.New(cfg).Handler())
 	t.Cleanup(ts.Close)
 	r.url = ts.URL
@@ -342,9 +354,21 @@ func TestGrants_OnExpiryRevokeAndSessionEnd(t *testing.T) {
 	require.Equal(t, 1, r.count(`SELECT COUNT(*) FROM events WHERE kind = 'access.revoked'`))
 
 	// The open asker's session_end would leave its findings in the open
-	// project: the clearance rule refuses it like any write there.
-	require.Equal(t, "session_end: this session holds content from example-finance, so it writes only into example-finance: "+
-		"a write into project example-ops is refused", r.refused(ops, "session_end", map[string]any{"findings": "done"}))
+	// project: the clearance rule refuses them, and the session still ends
+	// -- its grants with it -- with its findings not recorded (P4).
+	end := r.ok(ops, "session_end", map[string]any{"findings": "done, citing example-finance's ledger notes",
+		"mishaps": []any{"read the ledger twice"}})
+	const withheld = "Not recorded: this session holds content from example-finance, and its findings may not be " +
+		"written into project example-ops."
+	require.Equal(t, withheld, end["findings_withheld"])
+	require.Equal(t, "completed", end["status"])
+	require.EqualValues(t, 0, end["mishaps_recorded"])
+	require.EqualValues(t, 1, end["mishaps_withheld"])
+	require.Equal(t, 1, r.count(`SELECT COUNT(*) FROM sessions WHERE name = 'cc/ops' AND status = 'completed' AND findings = ?`, withheld))
+	require.Zero(t, r.count(`SELECT COUNT(*) FROM events WHERE kind = 'agent.mishap'`))
+	require.Zero(t, r.count(`SELECT COUNT(*) FROM events WHERE (kind <> 'tool.call' OR json_extract(payload, '$.tool') = 'session_end')
+		AND payload LIKE '%ledger%' AND project_slug = ?`, gOps),
+		"nothing of what it wrote lands in the open project's record, the session_end's tool.call event included")
 
 	// session_end revokes what the session holds: a confidential asker's
 	// home is cleared for what it read.
@@ -372,7 +396,8 @@ func TestGrants_PeerTierDaemonProof(t *testing.T) {
 	mgr, err := files.NewManager(dir, db, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = mgr.Close() })
-	for slug, state := range map[string]core.Isolation{gOps: core.IsolationOpen, gFin: core.IsolationConfidential} {
+	for slug, state := range map[string]core.Isolation{gOps: core.IsolationOpen, gFin: core.IsolationConfidential,
+		gLegal: core.IsolationConfidential} {
 		_, err := store.EnsureProject(ctx, db, slug, slug)
 		require.NoError(t, err)
 		require.NoError(t, store.SetProjectIsolation(ctx, db, slug, state))
@@ -448,16 +473,41 @@ func TestGrants_PeerTierDaemonProof(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &note))
 	read := map[string]any{"id": note["id"]}
 
+	// From an open home, the agent's own conversation asks for a move into
+	// the project (plan fenced-sessions P4), anchored to the agent.
 	stamp(gOps, "cc/ops", lkAgent)
 	ops := dial(serve(chainView(lkBridge, lkAgent)), lkAgent)
 	text, isErr := call(ops, "notes_read", read)
 	require.True(t, isErr)
-	require.True(t, strings.HasPrefix(text, "notes_read: "+offRefusal+"\nRemedy: read request R-"), text)
-	require.Contains(t, text, "confines this agent's writes to example-finance for the rest of its life: once it holds "+
-		"example-finance's content, it writes into no open project, example-ops included")
+	require.True(t, strings.HasPrefix(text, "notes_read: project example-finance is confidential: only a conversation working "+
+		"in it reads it -- if your task is about example-finance, ask the owner to move this conversation into it "+
+		"(session_start project=example-finance asks); otherwise leave it alone\nRemedy: move request R-"), text)
+	require.Contains(t, text, "Record what belongs in example-ops now: once the owner approves the move, this conversation "+
+		"works in example-finance for good, and it can no longer write to example-ops or the global scope until the agent "+
+		"process exits.")
+	require.NotContains(t, text, "Touch ID", "the Touch ID approver words no move")
+	m, err := grants.Resolve(ctx, gShort.FindString(text))
+	require.NoError(t, err)
+	require.Equal(t, store.AccessKindMove, m.Kind)
+	require.Equal(t, lkAgent.Key(), m.ProcessKey, "the request is anchored to the agent, not the bridge that asked")
+	require.NoError(t, grants.Deny(ctx, m.ID, "owner"))
+	_, err = db.ExecContext(ctx, `UPDATE sessions SET status = 'completed' WHERE name = 'cc/ops'`)
+	require.NoError(t, err)
+
+	// From a confidential home, a read grant.
+	stamp(gLegal, "cc/legal", lkAgent)
+	legal := dial(serve(chainView(lkBridge, lkAgent)), lkAgent)
+	text, isErr = call(legal, "notes_read", read)
+	require.True(t, isErr)
+	require.True(t, strings.HasPrefix(text, "notes_read: project example-finance is confidential: only a conversation working "+
+		"in it, or one the owner granted a read of it, reads it -- if your task is about example-finance, ask the owner for "+
+		"a grant of it (session_start project=example-finance asks); otherwise leave it alone\nRemedy: read request R-"), text)
+	require.Contains(t, text, "An approved read is read-only, and nothing read from example-finance may be written anywhere but example-legal.")
 	a, err := grants.Resolve(ctx, gShort.FindString(text))
 	require.NoError(t, err)
+	require.Equal(t, store.AccessKindGrant, a.Kind)
 	require.Equal(t, lkAgent.Key(), a.ProcessKey, "the request is anchored to the agent, not the bridge that asked")
+	ops = legal
 
 	// The bearer key proves nothing here; the daemon's account does.
 	facts, err := grants.Facts(ctx, a.ID)
@@ -496,7 +546,9 @@ func TestGrants_PeerTierDaemonProof(t *testing.T) {
 	require.True(t, isErr)
 	ls := strings.Split(text, "\n")
 	require.Len(t, ls, 2, text)
-	require.Equal(t, "notes_read: "+offRefusal+"; "+strings.Replace(tmuxRule, "no access request", "no read request", 1), ls[0])
+	require.Equal(t, "notes_read: project example-finance is confidential: only a conversation working in it reads it -- if "+
+		"your task is about example-finance, ask the owner to move this conversation into it (session_start "+
+		"project=example-finance asks); otherwise leave it alone; "+strings.Replace(tmuxRule, "no access request", "no request", 1), ls[0])
 	require.Equal(t, anchorCure, ls[1])
 	after, err := grants.Pending(ctx)
 	require.NoError(t, err)

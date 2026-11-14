@@ -72,8 +72,11 @@ type Grants struct {
 	// From projects of its grants, kept for Confined's readers.
 	judged bool
 	home   string
-	label  []string
-	flows  []Flow
+	// homeKnown reports that home is the project of the conversation's own
+	// ambient row (Conversation.HomeKnown), not a stand-in.
+	homeKnown bool
+	label     []string
+	flows     []Flow
 }
 
 // JudgeGrants keeps the grants in rows that name the holder ctx speaks for

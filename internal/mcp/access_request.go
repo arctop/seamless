@@ -192,10 +192,15 @@ func lockCovers(ctx context.Context, project string) bool {
 // confidential project no lock covers, as a read refused at its fence would
 // (grantRequestRefusal), and answers like a lock's request: the dialog when
 // it can run, else at once.
+//
+// For a conversation identified by its agent process it asks for what the
+// conversation's home and the project call for, as a read refused at the fence
+// does (approval.Grants.RequestGrant): from an open home, or for a sealed
+// project, a move into it, answered like accessRequestAsk's.
 func (s *Server) accessRequestGrant(ctx context.Context, start time.Time, project, reason string) (*mcp.CallToolResult, error) {
 	var asked approval.Asked
 	a, err := s.cfg.Grants.RequestGrant(approval.WithAsked(ctx, &asked), approval.GrantInput{
-		Project: project, SessionID: s.boundSession(ctx), AgentProcess: callerAgentProcess(ctx), Host: s.callerHost(ctx),
+		Project: project, SessionID: s.askingSession(ctx), AgentProcess: callerAgentProcess(ctx), Host: s.callerHost(ctx),
 		Reason: reason, Via: approval.ViaRequest,
 	})
 	var live *approval.AccessLiveError
@@ -205,13 +210,38 @@ func (s *Server) accessRequestGrant(ctx context.Context, start time.Time, projec
 	if err != nil {
 		return errResult(AccessRequestTool, grantRequestError(err))
 	}
-	t := dialogTarget{ID: a.ID, Short: approval.ShortID(a.ID), Project: a.Project, Grant: true}
-	ways := callWays(ctx, s.cfg.Grants.Ways(ctx, a.ID))
+	return s.askAnswer(ctx, start, a, asked)
+}
+
+// askingSession is the session an explicit ask is filed for: an identified
+// conversation's own ambient row (isolation.requests), never the call's
+// binding; else the session the call is bound to, as before.
+func (s *Server) askingSession(ctx context.Context) string {
+	if c, ok := identifiedConversation(ctx); ok {
+		return c.homeSession.ID
+	}
+	return s.boundSession(ctx)
+}
+
+// askAnswer answers an explicit ask with the grant or move request a it filed
+// or found: the dialog when it can run (a move's is the passkey page, never
+// Touch ID), else at once. A move still waiting tells the agent first to
+// record what belongs in its home (moveFirstLine).
+func (s *Server) askAnswer(ctx context.Context, start time.Time, a store.AccessApproval, asked approval.Asked) (*mcp.CallToolResult, error) {
+	t := targetOf(a)
+	ways := s.requestWays(ctx, a)
 	out := accessRequestResult{
 		ID: a.ID, ShortID: t.Short, Project: a.Project, Kind: a.Kind, From: a.FromProject, Status: s.stateOf(a), Page: ways.Page,
 	}
+	if t.Write {
+		out.Access = store.GrantAccessWrite
+	}
 	out.Filed, out.Reason = asked.Outcome(a)
-	return s.accessRequestAnswer(ctx, start, t, ways, out)
+	out = s.answerOut(ctx, start, t, ways, out)
+	if t.Move && out.Status == store.ApprovalPending {
+		out.Next = moveFirstLine(a.FromProject) + " " + out.Next
+	}
+	return jsonResult(out)
 }
 
 // grantAsker is the read grants' ask of a kind (*approval.Grants.Ask):
@@ -226,10 +256,9 @@ type grantAsker interface {
 // grant asking for read and write between confidential projects, or a move.
 // ok is false, with nothing answered, for the project the asker already
 // works in when a lock covers it: that is the lock's lease to ask for, which
-// reads and writes already. A move is answered at once, without the approval
-// dialog: the dialog words a lock's lease or a grant, not a move, and Touch ID
-// does not approve one (approval.ErrTouchIDMove); the owner decides it with a
-// passkey or in their own terminal.
+// reads and writes already. A move's dialog is its passkey page, never Touch
+// ID, which does not approve one (approval.ErrTouchIDMove); without a passkey
+// it is answered at once, and the owner decides it in their own terminal.
 func (s *Server) accessRequestAsk(ctx context.Context, start time.Time, project, reason string) (*mcp.CallToolResult, bool, error) {
 	asker, ok := s.cfg.Grants.(grantAsker)
 	if !ok {
@@ -238,7 +267,7 @@ func (s *Server) accessRequestAsk(ctx context.Context, start time.Time, project,
 	}
 	var asked approval.Asked
 	a, err := asker.Ask(approval.WithAsked(ctx, &asked), approval.AskInput{GrantInput: approval.GrantInput{
-		Project: project, SessionID: s.boundSession(ctx), AgentProcess: callerAgentProcess(ctx), Host: s.callerHost(ctx),
+		Project: project, SessionID: s.askingSession(ctx), AgentProcess: callerAgentProcess(ctx), Host: s.callerHost(ctx),
 		Reason: reason, Via: approval.ViaRequest,
 	}, Write: true})
 	if errors.Is(err, approval.ErrIsHome) && lockCovers(ctx, project) {
@@ -253,28 +282,7 @@ func (s *Server) accessRequestAsk(ctx context.Context, start time.Time, project,
 		res, err := errResult(AccessRequestTool, askRequestError(err, project))
 		return res, true, err
 	}
-	move := a.Kind == store.AccessKindMove
-	t := dialogTarget{ID: a.ID, Short: approval.ShortID(a.ID), Project: a.Project, Grant: !move}
-	ways := callWays(ctx, s.cfg.Grants.Ways(ctx, a.ID))
-	if move {
-		ways.TouchID = false
-	}
-	out := accessRequestResult{
-		ID: a.ID, ShortID: t.Short, Project: a.Project, Kind: a.Kind, From: a.FromProject, Status: s.stateOf(a), Page: ways.Page,
-	}
-	if a.Kind == store.AccessKindGrant && a.RequestedAccess == store.GrantAccessWrite {
-		out.Access = store.GrantAccessWrite
-	}
-	out.Filed, out.Reason = asked.Outcome(a)
-	if move {
-		out.Next = accessRequestNext(t, ways, dialogEnd{state: out.Status})
-		if out.Status == store.ApprovalPending {
-			out.Next = moveFirstLine(a.FromProject) + " " + out.Next
-		}
-		res, err := jsonResult(out)
-		return res, true, err
-	}
-	res, err := s.accessRequestAnswer(ctx, start, t, ways, out)
+	res, err := s.askAnswer(ctx, start, a, asked)
 	return res, true, err
 }
 
@@ -324,6 +332,12 @@ func (s *Server) liveAccessResult(ctx context.Context, live *approval.AccessLive
 // with out as the dialog left it, else at once.
 func (s *Server) accessRequestAnswer(ctx context.Context, start time.Time, t dialogTarget, ways access.Ways,
 	out accessRequestResult) (*mcp.CallToolResult, error) {
+	return jsonResult(s.answerOut(ctx, start, t, ways, out))
+}
+
+// answerOut is accessRequestAnswer's result before it is encoded.
+func (s *Server) answerOut(ctx context.Context, start time.Time, t dialogTarget, ways access.Ways,
+	out accessRequestResult) accessRequestResult {
 	if end, ran := s.dialog(ctx, start, t); ran {
 		out.Status, out.Dialog = end.state, end.answer
 		if out.Dialog == answerNone {
@@ -333,10 +347,10 @@ func (s *Server) accessRequestAnswer(ctx context.Context, start time.Time, t dia
 			out.OpenUntil = end.until.UTC().Format(time.RFC3339)
 		}
 		out.Next = accessRequestNext(t, ways, end)
-		return jsonResult(out)
+		return out
 	}
 	out.Next = accessRequestNext(t, ways, dialogEnd{state: out.Status})
-	return jsonResult(out)
+	return out
 }
 
 // restrictedAccessRequestRefusal is access_request's answer to a restricted

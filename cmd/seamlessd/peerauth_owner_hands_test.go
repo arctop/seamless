@@ -74,7 +74,9 @@ func TestPeerAuth_SessionEndHook_LeavesAnotherTreesGrant(t *testing.T) {
 	r := newGMRig(t, true, true)
 	r.plantAll()
 	conf := r.items[gmConf]
-	r.stamp(gmOpen, "cc/open-agent", gmAgent)
+	// A read grant is asked from a confidential home (from an open one a
+	// refused read asks for a move: plan fenced-sessions P4).
+	r.stamp(gmHome, "cc/home-agent", gmAgent)
 	agent := r.dial(r.socket(gmBridge, gmAgent).URL, "", gmAgent)
 	items, _ := gmCall(t, agent, "notes_read", map[string]any{"id": conf.noteID})
 	short := gmShort.FindString(gmText(items))
@@ -83,7 +85,7 @@ func TestPeerAuth_SessionEndHook_LeavesAnotherTreesGrant(t *testing.T) {
 	_, isErr := gmCall(t, agent, "notes_read", map[string]any{"id": conf.noteID})
 	require.False(t, isErr, "the grant reads")
 
-	end := map[string]any{"session_id": "cc/open-agent-ext", "cwd": "/work/" + gmOpen, "hook_event_name": "SessionEnd", "reason": "other"}
+	end := map[string]any{"session_id": "cc/home-agent-ext", "cwd": "/work/" + gmHome, "hook_event_name": "SessionEnd", "reason": "other"}
 	const hook = "session-end?client=claude-code&host=" + gmHost
 	sibling := r.socket(gmSibling, gmSibShell)
 	status, body := r.hook(sibling.URL, "", hook, end)

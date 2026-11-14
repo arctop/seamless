@@ -42,6 +42,8 @@ import (
 const (
 	dlgOrigin = "http://localhost:8081"
 	dlgLegal  = "example-legal"
+	// dlgHR is a confidential home no lock covers (dialogRig.confidential).
+	dlgHR = "example-hr"
 	// dlgLong is a bound no test reaches: a dialog that must not wait.
 	dlgLong = time.Minute
 )
@@ -783,7 +785,10 @@ func TestDialog_ReadGrantRequest(t *testing.T) {
 	out, _ := d.ok(admin, "notes_create", map[string]any{"project": dlgLegal, "title": "contract notes", "body": "the vendor contract terms"})
 	var note map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &note))
-	d.session("cc/ops", lkOps)
+	// A read grant is asked from a confidential home: from an open one the
+	// read files a move (plan fenced-sessions P4).
+	d.confidential(dlgHR)
+	d.session("cc/hr", dlgHR)
 	key := d.enrollTouchID()
 	o := newOwner(accepting(approval.ForSession, approval.ProofTouchID))
 	agent := d.dialOwner(d.agentSocket(), o, nil)
@@ -800,12 +805,15 @@ func TestDialog_ReadGrantRequest(t *testing.T) {
 	text := d.refused(agent, "notes_read", map[string]any{"id": note["id"]})
 	require.NoError(t, within(t, done, "the proof"))
 	msg := o.dialogs()[0].Params.Message
-	require.Contains(t, msg, "Project: "+dlgLegal+" (confidential), read from project "+lkOps)
+	require.Contains(t, msg, "Project: "+dlgLegal+" (confidential), read from project "+dlgHR)
 	require.Contains(t, msg, "Access: read-only")
+	require.Contains(t, msg, "Request: R-")
+	require.Contains(t, msg, ", a read request\n")
+	require.Contains(t, msg, "Read and write: approved only with `seam approve R-", "the dialog's proof approves read-only")
 	ls := lines(text)
 	require.Len(t, ls, 2, text)
 	require.True(t, strings.HasPrefix(ls[0], "notes_read: the owner approved read request R-"), ls[0])
-	require.Contains(t, ls[0], ": project "+dlgLegal+" is readable from project "+lkOps+", nothing else until ")
+	require.Contains(t, ls[0], ": project "+dlgLegal+" is readable from project "+dlgHR+", nothing else until ")
 	require.Empty(t, d.liveLeases(), "a read grant is never a lease")
 
 	out, _ = d.ok(agent, "notes_read", map[string]any{"id": note["id"]})
@@ -1085,12 +1093,14 @@ func TestAccessRequest_LiveLeaseAnswersUntilTheExpiryWarning(t *testing.T) {
 }
 
 // With read grants on (isolation.requests), access_request for a
-// confidential project no lock covers files its read grant request, as
-// `seam access request` does; with them off, the answer is the lock's "not
-// locked", word for word.
+// confidential project no lock covers files what the conversation's home and
+// the project call for, as `seam access request` does: from a confidential
+// home its read grant request, from an open one a move (plan fenced-sessions
+// P4). With them off, the answer is the lock's "not locked", word for word.
 func TestAccessRequest_ReadGrantOfAConfidentialProject(t *testing.T) {
 	d := newDialogRig(t, dialogOpts{wait: dlgLong, grants: true})
-	sess := d.session("cc/ops", lkOps)
+	d.confidential(dlgHR)
+	sess := d.session("cc/hr", dlgHR)
 	agent := d.dialOwner(d.agentSocket(), nil, nil)
 
 	out, _ := d.ok(agent, mcpserver.AccessRequestTool, map[string]any{"project": dlgLegal, "reason": "read the vendor contract"})
@@ -1100,12 +1110,12 @@ func TestAccessRequest_ReadGrantOfAConfidentialProject(t *testing.T) {
 	require.Len(t, pending, 1)
 	short := approval.ShortID(pending[0].ID)
 	require.Equal(t, store.AccessKindGrant, pending[0].Kind)
-	require.Equal(t, lkOps, pending[0].FromProject)
+	require.Equal(t, dlgHR, pending[0].FromProject)
 	require.Equal(t, sess, pending[0].SessionID)
 	require.Equal(t, "read the vendor contract", pending[0].Reason)
 	require.Equal(t, pending[0].ID, res["id"])
 	require.Equal(t, "grant", res["kind"])
-	require.Equal(t, lkOps, res["from"])
+	require.Equal(t, dlgHR, res["from"])
 	require.Equal(t, dlgLegal, res["project"])
 	require.Equal(t, "pending", res["status"])
 	require.Contains(t, res["next"], "`seam approve "+short+"`")
@@ -1124,16 +1134,35 @@ func TestAccessRequest_ReadGrantOfAConfidentialProject(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &res))
 	require.Equal(t, "approved", res["status"])
 	require.Equal(t, "grant", res["kind"])
-	require.Equal(t, lkOps, res["from"])
+	require.Equal(t, dlgHR, res["from"])
 	require.Equal(t, pending[0].ID, res["id"])
 	require.Equal(t, grant.ExpiresAt.UTC().Format(time.RFC3339), res["open_until"])
-	require.True(t, strings.HasPrefix(res["next"].(string), "project "+dlgLegal+" is already readable from project "+lkOps+" until "), res["next"])
+	require.True(t, strings.HasPrefix(res["next"].(string), "project "+dlgLegal+" is already readable from project "+dlgHR+" until "), res["next"])
 	require.Empty(t, d.pending(), "the live grant answers: nothing filed")
 	out, _ = d.ok(agent, mcpserver.AccessRequestTool, map[string]any{"project": lkFin})
 	require.Contains(t, out, `"kind":"request"`)
 	require.Len(t, d.pending(), 1)
 	require.Contains(t, d.refused(agent, mcpserver.AccessRequestTool, map[string]any{"project": lkOps}),
 		"that project is neither locked nor confidential: nothing to request")
+
+	// From an open home the same ask is a move, answered with what to record
+	// first.
+	open := newDialogRig(t, dialogOpts{wait: dlgLong, grants: true})
+	ops := open.session("cc/ops", lkOps)
+	opsAgent := open.dialOwner(open.agentSocket(), nil, nil)
+	out, _ = open.ok(opsAgent, mcpserver.AccessRequestTool, map[string]any{"project": dlgLegal})
+	res = map[string]any{}
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	require.Equal(t, "move", res["kind"])
+	require.Equal(t, lkOps, res["from"])
+	require.Equal(t, "pending", res["status"])
+	require.True(t, strings.HasPrefix(res["next"].(string), "Record what belongs in example-ops now: once the owner "+
+		"approves the move, this conversation can no longer write there. "), res["next"])
+	require.NotContains(t, res["next"], "Touch ID")
+	moves := open.pending()
+	require.Len(t, moves, 1)
+	require.Equal(t, store.AccessKindMove, moves[0].Kind)
+	require.Equal(t, ops, moves[0].SessionID)
 
 	// Off: the same project is not locked, and nothing is filed.
 	off := newDialogRig(t, dialogOpts{wait: dlgLong})

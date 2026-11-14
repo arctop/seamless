@@ -218,11 +218,25 @@ func TestGrant_PeerTierAnchorsAndProves(t *testing.T) {
 	require.ErrorIs(t, err, access.ErrNotReachable)
 
 	vctx := access.WithView(ctx, f.view(t, bridge, agent, shell))
+	// From its open project the agent's own session asks for a move (P4).
+	m, err := g.RequestGrant(vctx, GrantInput{Project: confHR, SessionID: sess})
+	require.NoError(t, err)
+	require.Equal(t, store.AccessKindMove, m.Kind)
+	require.Equal(t, agent.Key(), m.ProcessKey)
+	require.NoError(t, g.Deny(ctx, m.ID, "owner"))
+
+	// From a confidential home it asks for a read grant.
+	_, err = store.EnsureProject(ctx, f.db, "example-contracts", "example-contracts")
+	require.NoError(t, err)
+	require.NoError(t, store.SetProjectIsolation(ctx, f.db, "example-contracts", core.IsolationConfidential))
+	_, err = f.db.ExecContext(ctx, `UPDATE sessions SET project_slug = 'example-contracts', cwd = '/work/contracts' WHERE id = ?`, sess)
+	require.NoError(t, err)
 	a, err := g.RequestGrant(vctx, GrantInput{Project: confHR, SessionID: sess})
 	require.NoError(t, err)
+	require.Equal(t, store.AccessKindGrant, a.Kind)
 	require.Equal(t, agent.Key(), a.ProcessKey, "the grant will name the agent, as a lease does")
 	require.Equal(t, agent.PID, a.PeerPID)
-	require.Equal(t, openOps, a.FromProject)
+	require.Equal(t, "example-contracts", a.FromProject)
 	facts, err := g.Facts(ctx, a.ID)
 	require.NoError(t, err)
 
@@ -241,9 +255,9 @@ func TestGrant_PeerTierAnchorsAndProves(t *testing.T) {
 	rows, err := store.AccessGrantsForHolder(ctx, f.db, []string{bridge.Key(), agent.Key(), shell.Key()}, "")
 	require.NoError(t, err)
 	judged := access.JudgeGrants(vctx, sess, f.now, store.AccessGrants(rows))
-	require.True(t, access.ReadGranted(access.WithGrants(vctx, judged), openOps, confHR))
+	require.True(t, access.ReadGranted(access.WithGrants(vctx, judged), "example-contracts", confHR))
 	stranger := access.WithView(ctx, f.view(t, otherBr, other))
-	require.False(t, access.ReadGranted(access.WithGrants(stranger, access.JudgeGrants(stranger, sess, f.now, store.AccessGrants(rows))), openOps, confHR))
+	require.False(t, access.ReadGranted(access.WithGrants(stranger, access.JudgeGrants(stranger, sess, f.now, store.AccessGrants(rows))), "example-contracts", confHR))
 
 	// No lease was written.
 	leases, err := store.LiveAccessLeases(ctx, f.db, f.now)

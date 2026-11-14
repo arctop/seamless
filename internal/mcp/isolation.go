@@ -37,7 +37,15 @@ import (
 // refuses those outright), so a connection whose scope cannot be pinned is judged
 // as global -- which owns nothing an isolated project fences, making the unpinned
 // case fail closed against isolated targets rather than inheriting their access.
+//
+// With isolation.requests on, a call that identifies its conversation is judged
+// against the conversation's home (conversation.go), whatever its session=
+// handle or an earlier session_start bound it to: the binding chooses where
+// unscoped calls land, never what the fence lets through.
 func (s *Server) callerScope(ctx context.Context) string {
+	if c, ok := identifiedConversation(ctx); ok {
+		return c.home
+	}
 	if b, ok := s.getBinding(ctx); ok {
 		return b.project
 	}
@@ -55,6 +63,10 @@ func (s *Server) callerScope(ctx context.Context) string {
 // With read grants on (isolation.requests), a refusal at a confidential
 // project's fence also files an access request and names it on a second line
 // (grantRequestRefusal); off, the refusal is exactly fenceReadQuiet's.
+//
+// For a call that identifies its conversation, the request is the kind its
+// home and the target call for (askRefusal): a move from an open home or for a
+// sealed project, a read grant between confidential projects.
 func (s *Server) fenceRead(ctx context.Context, target string) error {
 	err := s.fenceReadNoAsk(ctx, target)
 	if s.cfg.Grants != nil {
@@ -102,6 +114,16 @@ func (s *Server) fenceReadQuiet(ctx context.Context, target string) error {
 		return err
 	}
 	if state.FencesOutbound() {
+		if c, ok := identifiedConversation(ctx); ok {
+			// Binding is no way in for a conversation: working in it, or the
+			// owner's grant of it, is.
+			who := "only a conversation working in it reads it"
+			if s.offeredKind(ctx, c.home, target) == store.AccessKindGrant {
+				who = "only a conversation working in it, or one the owner granted a read of it, reads it"
+			}
+			return &fenceRefusal{reason: screening.RefusedFenceRead,
+				err: fmt.Errorf("project %s is %s: %s%s", target, state, who, s.bindRemedyFor(ctx, target))}
+		}
 		return &fenceRefusal{reason: screening.RefusedFenceRead,
 			err: fmt.Errorf("project %s is %s: reads require a session bound to it%s", target, state, bindRemedy(target))}
 	}
@@ -125,9 +147,20 @@ func (s *Server) fenceReadQuiet(ctx context.Context, target string) error {
 // sealed target admits nothing from outside, while a confidential target stays
 // writable from outside, because relocating knowledge INTO the fence is how it
 // gets there. store.CanWrite owns that matrix; nothing here restates it.
+//
+// With isolation.requests on, a write refused to a call that identifies its
+// conversation files the request the conversation's home and the target call
+// for, asking for read and write (askRefusal): a read-and-write grant between
+// confidential projects, a move for a sealed project or from an open home.
+// Into an open project or the global scope nothing is filed: a conversation
+// holding fenced content has no way back.
 func (s *Server) fenceWrite(ctx context.Context, target string) error {
 	err := s.fenceWriteQuiet(ctx, target)
 	s.noteRefusal(ctx, err, target)
+	var f *fenceRefusal
+	if c, ok := identifiedConversation(ctx); ok && errors.As(err, &f) && f.reason == screening.RefusedFenceWrite {
+		return s.askRefusal(ctx, c, f, target, true)
+	}
 	return err
 }
 
@@ -156,12 +189,41 @@ func (s *Server) fenceWriteQuiet(ctx context.Context, target string) error {
 	if err != nil {
 		return err
 	}
+	c, identified := identifiedConversation(ctx)
 	if state.FencesOutbound() {
+		if identified && state == core.IsolationConfidential {
+			return &fenceRefusal{reason: screening.RefusedFenceWrite, err: fmt.Errorf("this conversation works in %s "+
+				"project %s: it writes into another project only with the owner's read-and-write grant of it%s",
+				state, caller, s.writeRemedyFor(ctx, c, target))}
+		}
+		if identified {
+			return &fenceRefusal{reason: screening.RefusedFenceWrite, err: fmt.Errorf("this conversation works in %s "+
+				"project %s: writes outside it are disabled", state, caller)}
+		}
 		return &fenceRefusal{reason: screening.RefusedFenceWrite, err: fmt.Errorf("this session is bound to %s project %s: writes outside it are disabled",
 			state, caller)}
 	}
+	if identified {
+		return &fenceRefusal{reason: screening.RefusedFenceWrite, err: fmt.Errorf("project %s is %s: only a conversation "+
+			"working in it writes into it%s", target, core.IsolationSealed, s.bindRemedyFor(ctx, target))}
+	}
 	return &fenceRefusal{reason: screening.RefusedFenceWrite, err: fmt.Errorf("project %s is %s: writes into it require a session bound to it%s",
 		target, core.IsolationSealed, bindRemedy(target))}
+}
+
+// writeRemedyFor completes the refusal of a write out of a confidential home
+// with the request the kind rule offers for target: a read-and-write grant of
+// a confidential project, a move into a sealed one.
+func (s *Server) writeRemedyFor(ctx context.Context, c conversation, target string) string {
+	switch s.offeredKind(ctx, c.home, target) {
+	case store.AccessKindGrant:
+		return " -- if your task needs to change " + target + ", ask the owner for one (session_start project=" + target +
+			" asks); otherwise write in " + c.home
+	case store.AccessKindMove:
+		return " -- if your task is about " + target + ", ask the owner to move this conversation into it (session_start " +
+			"project=" + target + " asks); otherwise write in " + c.home
+	}
+	return ""
 }
 
 // fenceRefusal is a fence's refusal: the error the agent reads, and the
@@ -299,6 +361,10 @@ func (s *Server) withheldReason(ctx context.Context, project string) string {
 		s.logger.Warn("mcp: withheld state", "project", project, "error", err)
 	} else {
 		word = string(state)
+	}
+	if _, ok := identifiedConversation(ctx); ok {
+		return fmt.Sprintf("project %s is %s: the write landed, but this project's content is not returned "+
+			"to a conversation that may not read it. The listed fields are omitted whether or not they are set.", project, word)
 	}
 	return fmt.Sprintf("project %s is %s: the write landed, but this project's content is not returned "+
 		"to a session bound elsewhere. The listed fields are omitted whether or not they are set; "+

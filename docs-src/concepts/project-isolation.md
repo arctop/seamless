@@ -262,9 +262,11 @@ a call speaks for, so one that rebinds with `session_start`, or names another
 session with `session=`, writes where that session may. Under `peer_auth` a grant needs the same proofs as a
 [locked project's lease](/guides/peer-auth/): your terminal through `sudo` to
 the daemon's account, a passkey, or a Touch ID key. Its holder is then the
-asking agent's process tree, and those moves are refused. No tier stops an agent
-running as you from naming the confidential project as its own with
-`session_start`; only a [lock](/guides/peer-auth/) holds against that.
+asking agent's process tree, and those moves are refused. An agent whose
+conversation Seamless identifies cannot name the confidential project as its
+own with `session_start` either: that files a move or grant request instead of
+binding. A client that sends no identity still can, in either tier; only a
+[lock](/guides/peer-auth/) holds against that.
 
 ## Honest limits
 

@@ -66,14 +66,24 @@ func (s *Server) grantsMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.Tool
 		if s.cfg.Grants == nil {
 			return next(ctx, req)
 		}
-		g, err := s.loadGrants(ctx)
+		g, c, err := s.loadGrants(ctx)
 		if err != nil {
 			// Fail closed both ways: without its grants a call could neither be
 			// trusted to read nor to stay confined.
 			s.logger.Warn("mcp: load read grants", "tool", req.Params.Name, "error", err)
 			return errResult(req.Params.Name, errors.New("the read grants of this connection could not be checked: try again"))
 		}
-		ctx = access.WithGrants(ctx, g)
+		ctx = withConversation(access.WithGrants(ctx, g), c)
+		// The conversation speaks from its home: a session= handle or an
+		// earlier session_start binding acts as a session elsewhere only where
+		// the home may read and write (speakAs). session_start is how a
+		// connection is handed back, so it is never refused for its binding.
+		s.noteMove(ctx, c)
+		if c.identified && req.Params.Name != "session_start" {
+			if err := s.speakAs(ctx, c); err != nil {
+				return errResult(req.Params.Name, err)
+			}
+		}
 		res, err := next(ctx, req)
 		if err != nil || res == nil {
 			return res, err
@@ -107,13 +117,18 @@ func (s *Server) grantsMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.Tool
 // loadGrants judges the conversation this call speaks for
 // (store.ConversationClearance): the owner's socket process chain under
 // peer_auth (a TCP request or a restricted account holds nothing), else the
-// conversation conversationRef names.
-func (s *Server) loadGrants(ctx context.Context) (access.Grants, error) {
-	ref, err := s.conversationRef(ctx)
+// conversation conversationRef names. It also says whether the call speaks
+// for an identified conversation, and from which home (conversation).
+func (s *Server) loadGrants(ctx context.Context) (access.Grants, conversation, error) {
+	ref, own, fromProcess, err := s.conversationRef(ctx)
 	if err != nil {
-		return access.Grants{}, err
+		return access.Grants{}, conversation{}, err
 	}
-	return store.ConversationClearance(ctx, s.cfg.DB, ref, s.now())
+	g, err := store.ConversationClearance(ctx, s.cfg.DB, ref, s.now())
+	if err != nil {
+		return access.Grants{}, conversation{}, err
+	}
+	return g, identify(ctx, g, ref, own, fromProcess), nil
 }
 
 // conversationRef names the conversation this call speaks for: the client and
@@ -125,25 +140,28 @@ func (s *Server) loadGrants(ctx context.Context) (access.Grants, error) {
 // the session it is bound to (getBinding): that session's conversation when
 // its row carries one, else the session itself -- a client that sends no
 // agent-process identity, today's holder and the documented limit.
-func (s *Server) conversationRef(ctx context.Context) (store.ConversationRef, error) {
+//
+// own is the agent's own session when the agent-process identity found it
+// (fromProcess): the conversation's ambient row, its home session.
+func (s *Server) conversationRef(ctx context.Context) (ref store.ConversationRef, own core.Session, fromProcess bool, err error) {
 	if own, ok := s.listedProcessSession(ctx); ok && own.ExternalClient != "" && own.ExternalSessionID != "" {
-		return store.ConversationRef{Client: own.ExternalClient, ExternalID: own.ExternalSessionID}, nil
+		return store.ConversationRef{Client: own.ExternalClient, ExternalID: own.ExternalSessionID}, own, true, nil
 	}
 	if _, hasView := access.FromContext(ctx); hasView {
-		return store.ConversationRef{}, nil
+		return store.ConversationRef{}, core.Session{}, false, nil
 	}
 	b, ok := s.getBinding(ctx)
 	if !ok || b.sessionID == "" {
-		return store.ConversationRef{}, nil
+		return store.ConversationRef{}, core.Session{}, false, nil
 	}
 	sess, found, err := store.SessionByID(ctx, s.cfg.DB, b.sessionID)
 	if err != nil {
-		return store.ConversationRef{}, err
+		return store.ConversationRef{}, core.Session{}, false, err
 	}
 	if found && sess.ExternalClient != "" && sess.ExternalSessionID != "" {
-		return store.ConversationRef{Client: sess.ExternalClient, ExternalID: sess.ExternalSessionID}, nil
+		return store.ConversationRef{Client: sess.ExternalClient, ExternalID: sess.ExternalSessionID}, core.Session{}, false, nil
 	}
-	return store.ConversationRef{SessionID: b.sessionID}, nil
+	return store.ConversationRef{SessionID: b.sessionID}, core.Session{}, false, nil
 }
 
 // grantRequestRefusal turns a read refused at a confidential project's fence
@@ -154,10 +172,18 @@ func (s *Server) conversationRef(ctx context.Context) (store.ConversationRef, er
 // confidential target, asked from a project that is not sealed. Anything else
 // -- a sealed project on either side, a peer_auth refusal, a store failure --
 // comes back unchanged and files nothing.
+//
+// A call that identifies its conversation asks for the kind its home and the
+// target call for instead (askRefusal): a move from an open home or for a
+// sealed project, a read grant between confidential projects -- filed for the
+// conversation's own ambient row, whatever the call is bound to.
 func (s *Server) grantRequestRefusal(ctx context.Context, err error, target string) error {
 	var f *fenceRefusal
 	if s.cfg.Grants == nil || !errors.As(err, &f) || f.reason != screening.RefusedFenceRead {
 		return err
+	}
+	if c, ok := identifiedConversation(ctx); ok {
+		return s.askRefusal(ctx, c, f, target, false)
 	}
 	b, ok := s.getBinding(ctx)
 	if !ok || b.sessionID == "" || b.project == "" {
@@ -188,7 +214,13 @@ func (s *Server) grantRequestRefusal(ctx context.Context, err error, target stri
 	}
 	// The refusal names this request: the approval dialog may offer it
 	// (elicit.go; only ever on the peer_auth socket).
-	noteDialogTarget(ctx, dialogTarget{ID: a.ID, Short: approval.ShortID(a.ID), Project: a.Project, Grant: true})
+	noteDialogTarget(ctx, targetOf(a))
+	if a.Kind == store.AccessKindMove {
+		// A session bound by name to a conversation's own row asks as that
+		// conversation (approval.Grants.RequestGrant): from an open home, a
+		// move.
+		return &fenceRefusal{reason: f.reason, err: fmt.Errorf("%w\nRemedy: %s", f.err, s.moveRemedy(a, s.requestWays(ctx, a)))}
+	}
 	fromFenced := false
 	if iso, ierr := store.IsolationOf(ctx, s.cfg.DB, b.project); ierr == nil && iso.FencesOutbound() {
 		fromFenced = true
@@ -203,12 +235,14 @@ func (s *Server) grantRequestRefusal(ctx context.Context, err error, target stri
 // brings with it -- judged from after, the conversation as it would stand
 // once the read is approved (access.Grants.WithRead).
 func (s *Server) grantRefusal(rule error, a store.AccessApproval, after access.Grants, ways access.Ways) error {
+	return fmt.Errorf("%w\nRemedy: %s", rule, s.grantRemedy(a, after, ways))
+}
+
+// grantRemedy is a read grant request's remedy: the request, how the owner
+// approves it, and what an approval brings (grantRefusal).
+func (s *Server) grantRemedy(a store.AccessApproval, after access.Grants, ways access.Ways) string {
 	short := approval.ShortID(a.ID)
-	how := ways.OwnerApproves(short)
-	if s.cfg.Grants.Advisory() {
-		how = fmt.Sprintf("the owner approves it in their own terminal with `seam approve %s`, or with Approve on the "+
-			"console's Access requests page", short)
-	}
+	how := s.ownerApproves(short, ways)
 	brings := "An approved read is read-only, and nothing read from " + a.Project + " may be written anywhere but " + a.FromProject +
 		". " + approval.CiteByReferenceLine(a.Project, a.FromProject)
 	if after.Judged() && !after.Cleared(a.FromProject) {
@@ -223,7 +257,7 @@ func (s *Server) grantRefusal(rule error, a store.AccessApproval, after access.G
 		}
 		brings += "."
 	}
-	return fmt.Errorf("%w\nRemedy: read request %s is waiting -- %s; retry once it is approved. %s", rule, short, how, brings)
+	return fmt.Sprintf("read request %s is waiting -- %s; retry once it is approved. %s", short, how, brings)
 }
 
 // confinedTo names the projects a conversation may still write into, for a

@@ -339,6 +339,10 @@ type Server struct {
 	approverMu   sync.Mutex
 	approverEnds map[string]chan string
 	approverOnce sync.Once
+
+	// moves are the move children whose briefing this server found sent
+	// (conversation.go, moveNews).
+	moves moveSeen
 }
 
 // NumTools returns the number of registered MCP tools. doctor asserts it equals
@@ -418,6 +422,9 @@ func New(cfg Config) *Server {
 		//     locked project's briefing they append must not be copied into the
 		//     tool.call event, which is filed under whatever project the call
 		//     was bound to. Off (nothing locked) they add nothing.
+		//   - the move notice (conversation.go) beside them, outside log for the
+		//     same reason: it carries a moved conversation's new home's
+		//     briefing. Off (isolation.requests unset) it adds nothing.
 		//   - the read grants (grants.go) innermost, after the session= handle:
 		//     the grants a call carries are its own binding's. Off
 		//     (isolation.requests unset) they add nothing.
@@ -429,6 +436,7 @@ func New(cfg Config) *Server {
 		//     connection declared. Off, as for the dialog, it adds nothing.
 		mcpserver.WithToolHandlerMiddleware(s.authMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.leaseNoticeMiddleware),
+		mcpserver.WithToolHandlerMiddleware(s.moveNoticeMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.logMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.validateMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.sessionHandleMiddleware),
@@ -680,16 +688,22 @@ func (s *Server) getBinding(ctx context.Context) (binding, bool) {
 }
 
 func (s *Server) resolveBinding(ctx context.Context) (binding, bool) {
+	b, _, ok := s.bindingFrom(ctx)
+	return b, ok
+}
+
+// bindingFrom is resolveBinding with the route that produced the binding.
+func (s *Server) bindingFrom(ctx context.Context) (binding, bindingSource, bool) {
 	if b, ok := handleBinding(ctx); ok {
-		return b, true
+		return b, boundByHandle, true
 	}
 	if b, ok := s.rawBinding(ctx); ok && b.sessionID != "" && b.account == access.AccountOf(ctx) {
-		return b, true
+		return b, boundExplicitly, true
 	}
 	if sess, ok := s.listedProcessSession(ctx); ok {
-		return binding{sessionID: sess.ID, project: sess.ProjectSlug}, true
+		return binding{sessionID: sess.ID, project: sess.ProjectSlug}, boundByProcess, true
 	}
-	return binding{}, false
+	return binding{}, 0, false
 }
 
 // clearBinding drops the connection's explicit session binding, keeping any lab

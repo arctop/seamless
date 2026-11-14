@@ -205,6 +205,17 @@ the pointer is where to look, not a substitute for reading it.
 - Two active sessions stamped with one process are a host running several
   sessions at once: leave the call unbound. Never pick between them by recency
   or cwd -- that is the cross-agent bleed in a new place.
+- With `isolation.requests` on, a call that identifies its conversation (its
+  agent-process identity names its own ambient row: `mcp.identify`,
+  `access.Grants.HomeKnown`) is judged from the conversation's home whatever it
+  is bound to (`callerScope`). A `session=` handle or an earlier `session_start`
+  binding acts as a session outside the home only where the home may read and
+  write (`speakAs`), else the call is refused. `session_start` binds it only to
+  its home, or to an open project while its label is empty; into a fenced
+  project it files the move or grant its home and the project call for
+  (`sessionStartReach`), and into an open project or the global scope it is
+  refused once the label holds anything. A client that sends no identity binds
+  as before.
 - A caller that named its process is never inferred into a session stamped
   with a different one: `store.AmbientScope.Caller` filters every ambient
   fallback lookup. Once such a caller's own session has ended, the sole live
@@ -489,13 +500,16 @@ any of it.
   counts it, and both doctors assert `ToolCountWith(locked)` (seam doctor
   mirrors it as `expectedTools` + `lockedOnlyTool`, pinned by a test). Its
   `reason` never reaches a tool.call event. `seam access request` files one
-  from a shell. With `isolation.requests` on, `access_request` asks for the
-  read grant of a confidential project no lock covers, as `seam access
-  request` does.
+  from a shell. With `isolation.requests` on, `access_request` (and `seam access
+  request`, through `approval.Grants.RequestGrant`) asks for what the
+  conversation's home and a project no lock covers call for: a read grant from a
+  confidential home, a move from an open one or into a sealed project; a session
+  that names no conversation keeps the legacy read grant.
 - **The in-session approval dialog is a prompt, never a proof**
   (`internal/mcp/elicit.go`). A call on the peer_auth socket that files a
-  request (refused at a lock, refused at a confidential fence with a read
-  request, or `access_request`) shows the owner the request's facts as an MCP
+  request (refused at a lock; refused at a fenced project, or at
+  `session_start`, with a read, read-and-write or move request; or
+  `access_request`) shows the owner the request's facts as an MCP
   elicitation -- warnings first, every value stripped of control and format
   characters -- only when the client declared elicitation and a proof can
   finish in the dialog (an enrolled Touch ID key; or passkeys on, one
@@ -629,9 +643,11 @@ any of it.
   are the one content-free write past the rule: done or dropped on a task a
   pre-move session claimed, at most one reference into the home, never from a
   sealed home.
-  Requests are filed only by `fenceRead` (an explicit `project=` or a by-ULID
-  read), never by a filter (`fenceReadQuiet`) or the read half of a move or
-  apply (`fenceReadNoAsk`). Without peer_auth the decision is the bearer
+  Requests are filed by `fenceRead` (an explicit `project=` or a by-ULID read)
+  and, for an identified conversation, by `fenceWrite` (asking for read and
+  write) and `session_start` (`askRefusal`, `sessionStartReach`); never by a
+  filter (`fenceReadQuiet`) or the read half of a move or apply
+  (`fenceReadNoAsk`). Without peer_auth the decision is the bearer
   key's (`approval.ProofKey`, accepted only by advisory Grants -- the docs
   call it advisory); under it, the approve core's proofs (`Service.prove`).
   Event slugs ride `from_project`/`target_project`, never a key in
@@ -653,8 +669,15 @@ any of it.
   row, plus a locked target's lease bound to the child, in one transaction.
   `ReactivateAmbientSession` never re-scopes a move's child. The lock core
   refuses a move (`ErrIsMove`), and Touch ID approves none until the helper
-  words one (`ErrTouchIDMove`). Explicit asks without `write` keep today's
-  kinds (a lock request, or a read grant from the asking session's project).
+  words one (`ErrTouchIDMove`). A move's dialog never offers Touch ID: it is the
+  passkey page or none, and its remedies name only the terminal and the page. An
+  explicit ask without `write` is a lock request where a lock covers the
+  project, else what the kind rule calls for. The first result after an approved
+  move announces it and carries the new home's briefing once
+  (`moveNoticeMiddleware`, `access_moves.briefed_at`, migration 040); into a
+  locked project it is the lease's briefing too, sent once. A `session_end`
+  refused only by the clearance rule still ends the conversation's own session,
+  its findings not recorded (`unrecordedEnd`).
 - **The identity comes from the transport, never the client.** A header, a
   `session=` handle, a body field or an agent-process identity can only ever
   narrow what the View allows. `getBinding` drops a binding to an unreachable

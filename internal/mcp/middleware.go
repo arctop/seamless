@@ -187,6 +187,12 @@ func (s *Server) logMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.ToolHan
 			delete(payload, "error")
 			payload["leased"] = true
 		}
+		if slot, ok := ctx.Value(attributionSlotKey{}).(*attributionSlot); ok && slot.withheld {
+			delete(payload, "args")
+			delete(payload, "result")
+			delete(payload, "error")
+			payload["withheld"] = true
+		}
 		s.record(ctx, core.EventToolCall, sessionID, project, "", payload)
 		return result, err
 	}
@@ -207,6 +213,21 @@ type attributionSlotKey struct{}
 type attributionSlot struct {
 	sessionID string
 	project   string
+	// withheld keeps the call's arguments, result and error text out of its
+	// tool.call event (withholdCallText).
+	withheld bool
+}
+
+// withholdCallText keeps this call's arguments, result and error text out of
+// its tool.call event, as a leased connection's are kept: for a call whose
+// event is filed under a project that may not hold what the call carried
+// (isolation.requests: a session_end whose findings were not recorded,
+// unrecordedEnd). The call, its tool and its outcome are still recorded.
+// No-op outside the middleware chain.
+func withholdCallText(ctx context.Context) {
+	if slot, ok := ctx.Value(attributionSlotKey{}).(*attributionSlot); ok {
+		slot.withheld = true
+	}
 }
 
 // stashAttribution records the session a handler actually operated on, so the

@@ -140,6 +140,31 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 	// nothing, and neither did a call with no cwd and no project.
 	pinned := how == scopeFromArg || project != ""
 
+	// isolation.requests: a conversation identified by its agent process
+	// binds only its home, or an open project while it holds nothing fenced;
+	// into a fenced project it files the move or grant request its home and
+	// that project call for, and into an open one it is refused once it holds
+	// fenced content (sessionStartReach). Everyone else binds as before.
+	if c, ok := identifiedConversation(ctx); ok {
+		var existing core.Session
+		found := false
+		if name != "" {
+			var err error
+			if existing, found, err = store.SessionByName(ctx, s.cfg.DB, name); err != nil {
+				return errResult("session_start", err)
+			}
+		}
+		// What the resume below refuses for its own reasons -- a lock, a
+		// project out of reach, another principal's session -- it still
+		// refuses in its own words.
+		foreign := found && (!access.Visible(ctx, existing.ProjectSlug) || !access.SessionAccountOK(ctx, existing.Account))
+		if !foreign {
+			if err := s.sessionStartReach(ctx, c, sessionStartDest(c, name, pinned, project, existing, found)); err != nil {
+				return errResult("session_start", err)
+			}
+		}
+	}
+
 	// Resume a named session if it already exists.
 	if name != "" {
 		existing, ok, err := store.SessionByName(ctx, s.cfg.DB, name)
@@ -563,8 +588,22 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 	// caller outside a sealed project reach into it and drop another agent's work
 	// back on the queue. The fence runs before the attribution stash so a refused
 	// call is attributed to the caller, not to the session it was refused.
+	//
+	// With isolation.requests on, a conversation's own session still ends when
+	// only the clearance rule refuses its project (unrecordedEnd): ending it
+	// writes nothing of what the conversation holds, and its claims, leases and
+	// grants must end with it. Its findings and mishaps are then not
+	// recorded, and the answer says so.
+	withheld := ""
 	if err := s.fenceWrite(ctx, sess.ProjectSlug); err != nil {
-		return errResult("session_end", err)
+		line, ok := s.unrecordedEnd(ctx, sess, err)
+		if !ok {
+			return errResult("session_end", err)
+		}
+		withheld = line
+		// Its tool.call event is filed under the session's project: none of
+		// what the call carried goes there.
+		withholdCallText(ctx)
 	}
 	// Stash before completing: once the session flips to completed and its
 	// bindings are evicted, neither the binding nor the active-only ambient
@@ -579,6 +618,11 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 		if _, err := store.RecordSessionCommits(ctx, s.cfg.DB, sess.ID, sess.ID, commits, now); err != nil {
 			return errResult("session_end", err)
 		}
+	}
+	mishaps := argStrings(req, "mishaps")
+	withheldMishaps := 0
+	if withheld != "" {
+		findings, withheldMishaps, mishaps = withheld, len(mishaps), nil
 	}
 	sess.Status = core.SessionCompleted
 	sess.Findings = findings
@@ -611,7 +655,6 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 	// item_ids, so nothing ever re-matches against a corpus that has since
 	// changed. The linkage feeds the briefing's mishap promotion
 	// (store.RecentMishapItemIDs) and deliberately NOT the utility score.
-	mishaps := argStrings(req, "mishaps")
 	corpus := s.mishapMatchCorpus(ctx, sess.ProjectSlug, len(mishaps))
 	for _, m := range mishaps {
 		payload := map[string]any{"description": events.Truncate(m, s.cfg.ToolEventMaxChars)}
@@ -626,6 +669,12 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 	if len(commits) > 0 {
 		ended["commits_recorded"] = len(commits)
 		out["commits_recorded"] = len(commits)
+	}
+	if withheld != "" {
+		out["findings_withheld"] = withheld
+		if withheldMishaps > 0 {
+			out["mishaps_withheld"] = withheldMishaps
+		}
 	}
 	s.record(ctx, core.EventSessionEnded, sess.ID, sess.ProjectSlug, "", ended)
 	return jsonResult(out)
