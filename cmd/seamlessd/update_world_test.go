@@ -105,18 +105,24 @@ func (d *fakeDaemon) startQuiet(ver string) error {
 	}
 	d.mu.Lock()
 	d.starts++
-	d.version = ver
-	d.instance = "instance-" + strconv.Itoa(d.starts)
-	d.pid = 5000 + d.starts
+	inst, pid := "instance-"+strconv.Itoa(d.starts), 5000+d.starts
 	if d.ownPID {
-		d.pid = os.Getpid()
+		pid = os.Getpid()
 	}
-	inst, pid := d.instance, d.pid
 	d.mu.Unlock()
-	return update.SaveState(d.dataDir, update.State{Running: update.Running{
+	// The state first, then /healthz: a test that waits for the version to
+	// answer must find this start recorded, or the updater's preflight reads
+	// the previous start's PID (a flake seen on CI, 2026-11-14).
+	if err := update.SaveState(d.dataDir, update.State{Running: update.Running{
 		Version: v, Distribution: update.DistributionRelease, Kind: update.KindInstaller,
 		Instance: inst, PID: pid, StartedAt: time.Now().UTC(),
-	}})
+	}}); err != nil {
+		return err
+	}
+	d.mu.Lock()
+	d.version, d.instance, d.pid = ver, inst, pid
+	d.mu.Unlock()
+	return nil
 }
 
 // startUnrecorded serves ver with a fresh instance the update state does not
