@@ -23,8 +23,9 @@ package console
 //
 // The live leases agents hold, and every browser's unlocks, are listed on the
 // access page with Revoke and Lock again. Neither a revoke nor a lock-again may
-// come from an agent's socket connection: the owner's browser or the TCP key
-// only, like a deny. Every route here is a 404 unless a project is locked.
+// come from an agent's socket connection or a paired device: the owner's
+// browser or the TCP key only, like a deny. Every route here is a 404 unless a
+// project is locked.
 
 import (
 	"errors"
@@ -40,6 +41,7 @@ import (
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/console/browserproof"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/passkey"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -410,9 +412,13 @@ func (s *Service) unlockTerminalStatus(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ownerDecision refuses an agent's socket connection: revoking a lease and
-// locking an unlock again are the owner's, from the browser or the TCP key.
+// ownerDecision refuses an agent's socket connection, and a paired device
+// (refusedFromDevice): revoking a lease and locking an unlock again are the
+// owner's, from the browser or the TCP key.
 func ownerDecision(w http.ResponseWriter, r *http.Request) bool {
+	if refusedFromDevice(w, r) {
+		return false
+	}
 	if access.PeerAuthenticated(r.Context()) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "revoke from the console, or with the TCP key in the owner's terminal"})
 		return false
@@ -420,9 +426,10 @@ func ownerDecision(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// ownerHands refuses, for next, a request from a process an agent started: the
-// decision is the owner's, from their own terminal or the browser. It stops an
-// agent's ordinary tool calls and is not a wall (access.FromAgent says why).
+// ownerHands refuses, for next, a request a paired device made or one from a
+// process an agent started (refusedFromAgent): the decision is the owner's,
+// from their own terminal or the browser. It stops an agent's ordinary tool
+// calls and is not a wall (access.FromAgent says why).
 func ownerHands(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if refusedFromAgent(w, r) {
@@ -432,14 +439,72 @@ func ownerHands(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// refusedFromAgent answers a request from a process an agent started, and
-// reports that it did.
+// refusedFromAgent answers a request a paired device made (refusedFromDevice),
+// or one from a process an agent started, and reports that it did.
 func refusedFromAgent(w http.ResponseWriter, r *http.Request) bool {
+	if refusedFromDevice(w, r) {
+		return true
+	}
 	if !access.FromAgent(r.Context()) {
 		return false
 	}
 	writeJSON(w, http.StatusForbidden, map[string]string{"error": "this is the owner's decision, and this request came from a process an agent started: run it in your own terminal, or on the console"})
 	return true
+}
+
+// refusedFromDevice answers a request that came with a paired device's own
+// credential -- a relay's client certificate, or a key device's key, which the
+// daemon's edge matched (devices.CredentialOf) -- and reports that it did. A
+// paired computer carries its agents, never the owner's hands: without
+// peer_auth a relay forwards whichever account on its computer reaches its
+// socket, and even under it the server cannot tell the owner's own terminal
+// there from an agent's. So the owner's decisions are made in the server's
+// console, from a browser the owner signed in, or in a terminal on the server.
+// It holds with peer_auth on or off; the shared bearer key and the console
+// cookie are not a device's and pass as before.
+func refusedFromDevice(w http.ResponseWriter, r *http.Request) bool {
+	cred, ok := devices.CredentialOf(r.Context())
+	if !ok {
+		return false
+	}
+	via := "with the device key paired as " + cred.Name
+	if cred.Kind == devices.KindRelay {
+		via = "through the relay paired as " + cred.Name
+	}
+	writeJSON(w, http.StatusForbidden, map[string]string{"error": "this is the owner's decision, and this request came " + via +
+		": a paired computer carries its agents, never the owner's hands. Make it in the console of the server you sign in to, " +
+		"or in a terminal on the server itself"})
+	return true
+}
+
+// notThroughDevice refuses, for next, a request a paired device made
+// (refusedFromDevice), and nothing else: for an owner decision whose handler
+// answers an agent's socket connection in its own words (a deny, an
+// approver's passkey enrollment).
+func notThroughDevice(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if refusedFromDevice(w, r) {
+			return
+		}
+		next(w, r)
+	}
+}
+
+// deviceNeedsProof refuses, for next, an approval a paired device made
+// without the owner's own proof (refusedFromDevice). The approval itself
+// carries the proof when there is one -- a passkey assertion (response), or
+// the Touch ID helper's signature (proof=touchid), which the approve core
+// verifies whatever carried it, so the helper on a client computer approves
+// through its relay. Without one, the decision would rest on the transport,
+// as the bearer key's does in the advisory tier, and a device's credential is
+// not the owner's hands. It reads the parsed form (post's parseForm ran).
+func deviceNeedsProof(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.PostForm.Get("response") == "" && !r.PostForm.Has("proof") && refusedFromDevice(w, r) {
+			return
+		}
+		next(w, r)
+	}
 }
 
 // afterAccessWrite answers an access-page write: JSON for a script, else the

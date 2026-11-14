@@ -351,7 +351,8 @@ any of it.
   bringing a fence down, deciding held writes and changing features go through
   `refusedFromAgent`/`ownerHands` (`access.FromAgent`, the kernel's process chain,
   true when the chain cannot be read). It stops ordinary tool calls and is not a
-  wall: a detached process or the TCP key passes. The lock is the wall.
+  wall: a detached process or the TCP key passes. The lock is the wall. A paired
+  device's credential is refused there too (`refusedFromDevice`).
 - **A session belongs to the principal that started it**
   (`core.Session.Account`, set once by `store.CreateSession`). Every surface
   that resumes, binds to, names or writes into a session checks
@@ -929,6 +930,13 @@ any of it.
   there `KindRestricted`, labeled `access.RelayAccountLabel`, and the approve
   core refuses a stored relay row with
   no program. A relay's chain counts as an agent's (`FromAgent`).
+  A device's credential never makes the owner's decisions (review H1):
+  `refusedFromDevice` (console/unlock.go) answers 403 for a relay or a key
+  device, peer_auth on or off, inside `ownerHands`, `refusedFromAgent` and
+  `ownerDecision`, and on a deny and a passkey's enrollment
+  (`notThroughDevice`) and an approval with no passkey or Touch ID proof
+  (`deviceNeedsProof`). Its reads, and the writes an agent may make, stay
+  open: `seam` on a client reads console JSON through the relay.
   Revoking refuses the credential from its next request, ends the requests it is making and, in the same transaction, a relay's live leases, grants and waiting requests (`store.RevokeDeviceEndingAccess`). A merge carries no device, a fresh import revokes the snapshot's,
   and a backup restore keeps today's (`keptTables`).
 - **The relay forwards and judges nothing** (plan networked-relay;

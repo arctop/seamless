@@ -356,8 +356,11 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/access", s.auth(s.accessList))
 	handle("GET /console/access/{id}", s.auth(s.accessOne))
 	post("POST /console/access/request", formBodySmall, s.accessRequest)
-	post("POST /console/access/{id}/approve", formBodyPasskey, s.accessApprove)
-	post("POST /console/access/{id}/deny", formBodySmall, s.accessDeny)
+	// A paired device carries agents, never the owner's hands (unlock.go,
+	// refusedFromDevice): it approves only with the owner's own proof, and
+	// never denies. The revokes and Lock again refuse it in ownerDecision.
+	post("POST /console/access/{id}/approve", formBodyPasskey, deviceNeedsProof(s.accessApprove))
+	post("POST /console/access/{id}/deny", formBodySmall, notThroughDevice(s.accessDeny))
 	post("POST /console/access/leases/{id}/revoke", formBodySmall, s.leaseRevoke)
 	post("POST /console/access/grants/{id}/revoke", formBodySmall, s.grantRevoke)
 	post("POST /console/access/unlocks/{id}/end", formBodySmall, s.unlockEnd)
@@ -371,17 +374,21 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/lock/{project}/finish", formBodyPasskey, s.lockFinish)
 	// Device pairing (devices.go): the Devices page exists only on a server
 	// that serves other computers (Config.Devices); every route is a 404
-	// otherwise. A code and a revocation are the owner's own decisions; an
-	// approval is a passkey ceremony in a browser.
+	// otherwise. A code and a revocation are the owner's own decisions, never a
+	// paired device's (ownerHands); an approval is a passkey ceremony in a
+	// browser.
 	handle("GET /console/devices", s.auth(s.devicesPage))
 	post("POST /console/devices/code", formBodySmall, ownerHands(s.devicesCode))
 	post("POST /console/devices/{id}/approve/begin", formBodySmall, s.devicesApproveBegin)
 	post("POST /console/devices/{id}/approve/finish", formBodyPasskey, s.devicesApproveFinish)
 	post("POST /console/devices/{id}/revoke", formBodySmall, ownerHands(s.devicesRevoke))
 	handle("GET /console/approvers", s.auth(s.approversPage))
-	post("POST /console/approvers/passkey/begin", formBodySmall, s.approversBegin)
-	post("POST /console/approvers/passkey/finish", formBodyPasskey, s.approversFinish)
-	post("POST /console/approvers/passkey/confirm", formBodySmall, s.approversConfirm)
+	// A passkey is enrolled from a browser, never through a paired device; the
+	// Touch ID helper on a client computer enrolls through its relay, proven
+	// by a code minted on the server and its key's signature.
+	post("POST /console/approvers/passkey/begin", formBodySmall, notThroughDevice(s.approversBegin))
+	post("POST /console/approvers/passkey/finish", formBodyPasskey, notThroughDevice(s.approversFinish))
+	post("POST /console/approvers/passkey/confirm", formBodySmall, notThroughDevice(s.approversConfirm))
 	post("POST /console/approvers/touchid/enroll", formBodySmall, s.approversTouchIDEnroll)
 	// The queue itself is also the restricted accounts' proposals queue, so
 	// heldGate serves it while either reason holds; the rest is screening's.

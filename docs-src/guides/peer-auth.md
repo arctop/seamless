@@ -804,8 +804,11 @@ Passkeys approve from any browser. The Touch ID helper on a client Mac enrolls
 and approves through its relay, and the server verifies its signature.
 `seamlessd approve` stays a server command, as does every terminal path:
 `seam approve`, a console unlock's code and `seamlessd approvers` run on this
-computer, in a terminal here or over SSH. Your own decisions (revoking,
-denying, Settings) are refused through a relay: make them in the console.
+computer, in a terminal here or over SSH. Your own decisions (a pairing code,
+revoking, denying, approving without Touch ID or a passkey, held writes,
+features and backups) are refused through a relay or a device key, with or
+without peer_auth: make them in the console of the server you sign in to, or in
+a terminal on the server.
 
 Revoking a relay ends its leases, read grants and waiting requests at once. A
 console lock turned back on, and a restore, end a relay's leases as they end
