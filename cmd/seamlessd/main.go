@@ -18,6 +18,7 @@
 //	seamlessd retire-project mark a mistakenly minted, empty project retired (or --undo)
 //	seamlessd family        manage project families
 //	seamlessd console-open  open the console in a browser, pre-authenticated
+//	seamlessd devices       the computers paired with this server: pairing codes, the list, revoke
 //	seamlessd start         start|stop|restart|status the installed service
 //	seamlessd version       print the version
 package main
@@ -50,6 +51,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/console"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/features"
 	"github.com/arctop/seamless/internal/feed"
@@ -146,6 +148,8 @@ func main() {
 		err = runApprovers(args)
 	case "approve":
 		err = runApprove(args)
+	case "devices":
+		err = runDevices(args)
 	case "console-open":
 		err = runConsoleOpen(args)
 	case "start":
@@ -219,6 +223,8 @@ usage:
                            through sudo -k as the daemon's account)
   seamlessd console-open   open the console in a browser, pre-authenticated
                            (--browser "Google Chrome" targets a specific browser; macOS only)
+  seamlessd devices        the computers paired with this server, on a server that serves others
+                           (code|list|revoke <id|name>; as the daemon's account under peer_auth)
   seamlessd start          start the installed service (launchd/systemd/Scheduled Task)
   seamlessd stop           stop the installed service
   seamlessd restart        restart the installed service in place
@@ -564,6 +570,18 @@ func runServe(args []string) error {
 	if approvalSvc != nil {
 		mcpApprovals, hookApprovals, revokeLeases = approvalSvc, approvalSvc, approvalSvc.RevokeSession
 	}
+	// Device pairing (internal/devices): on a server that serves other
+	// computers (pairingOn), the Devices page, the pairing endpoint, the edge
+	// that authenticates a paired device and the client certificate a relay
+	// presents. Off -- a default install -- none of it exists.
+	pairing, err := newPairing(cfg, db, rec, approvalSvc, logger)
+	if err != nil {
+		return fmt.Errorf("seamlessd.serve: %w", err)
+	}
+	var consoleDevices console.DevicesView
+	if pairing != nil {
+		consoleDevices = pairing
+	}
 	var mcpGrants mcp.Grants
 	var consoleGrants console.GrantsView
 	if grantSvc != nil {
@@ -702,6 +720,7 @@ func runServe(args []string) error {
 		Terminal: terminal,
 		Views:    consoleViews,
 		SignIn:   signIn,
+		Devices:  consoleDevices,
 		// Restricted local accounts file proposals into the held queue, so the
 		// queue's list and Promote/Discard are served even with write screening
 		// off whenever peer_auth lists one.
@@ -738,8 +757,13 @@ func runServe(args []string) error {
 	// Under peer_auth every TCP request is the owner's: the bearer key the
 	// routes check is the owner account's key.
 	var tcpRoutes http.Handler = mux
+	if pairing != nil {
+		// A paired device's own credential is matched here, before any route:
+		// a relay's client certificate, a key device's key.
+		tcpRoutes = pairing.Edge(tcpRoutes)
+	}
 	if peer != nil {
-		tcpRoutes = ownerHandler(peer.policy, mux)
+		tcpRoutes = ownerHandler(peer.policy, tcpRoutes)
 	}
 	// Refusals (write screening's access.refused, when on) are watched on both
 	// listeners, outside everything that can refuse.
@@ -760,6 +784,12 @@ func runServe(args []string) error {
 			return fmt.Errorf("seamlessd.serve: load TLS key pair: %w", perr)
 		}
 		srv.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{pair}}
+		if pairing != nil {
+			// A client that offers the relay protocol is asked for its
+			// certificate, matched by its key at the edge; no other client
+			// is asked for one.
+			srv.TLSConfig = devices.WithRelayClientAuth(srv.TLSConfig)
+		}
 	}
 	warnNonLoopbackBind(bind, tlsOn)
 	warnAdvertisedLoopback(bind, serverURL)
@@ -805,6 +835,16 @@ func runServe(args []string) error {
 	}
 	upd.Start(ctx)
 	backups.Start(ctx)
+	if pairing != nil {
+		// Ends the running requests of a device revoked from the terminal.
+		pairingDone := make(chan struct{})
+		go func() {
+			defer close(pairingDone)
+			pairing.Run(ctx)
+		}()
+		defer func() { stop(); <-pairingDone }()
+		slog.Info("device pairing on", "peer_auth_approval", cfg.PeerAuth.Enabled, "tls", tlsOn)
+	}
 
 	errCh := make(chan error, len(lns)+1)
 	listening := []any{"addr", bind}

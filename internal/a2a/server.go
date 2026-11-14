@@ -2,7 +2,6 @@ package a2a
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/validate"
@@ -418,20 +418,15 @@ func metadataType(v any) string {
 	}
 }
 
-// verifyBearer mirrors internal/mcp's check: constant-time compare, and an
-// empty configured key rejects everything rather than waving everything in. A
-// peer_auth socket request was authenticated by the kernel and needs no key;
-// its recall still runs under that account's reach (retrieve.Recall).
+// verifyBearer is internal/mcp's check: the shared key (constant-time, and an
+// empty configured key rejects everything rather than waving everything in),
+// or a paired device's own credential the daemon's edge matched
+// (devices.Bearer, the one verifier every bearer surface shares). A peer_auth
+// socket request was authenticated by the kernel and needs no key; its recall
+// still runs under that account's reach (retrieve.Recall).
 func verifyBearer(r *http.Request, key string) bool {
 	if access.PeerAuthenticated(r.Context()) {
 		return true
 	}
-	if key == "" {
-		return false
-	}
-	parts := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(parts[1]), []byte(key)) == 1
+	return devices.Bearer(r, key)
 }

@@ -23,7 +23,7 @@ preserved read-only as a fallback archive.
 ```
 cmd/seamlessd/     server daemon: serve, doctor, export, import, backups, restore,
                    setup, install-hooks, map-repo, unmap-repo, retire-project,
-                   family, console-open
+                   family, console-open, devices
 cmd/seam/          headless CLI (agents + owner observability)  [P2/P5]
 cmd/docsgen/       docs site generator: docs-src/ -> docs/docs/ (see SITE.md)
 cmd/demoseed/      thin CLI over internal/demokit: the console-fleet seed
@@ -50,6 +50,10 @@ internal/passkey/  WebAuthn passkey ceremonies over go-webauthn (approver passke
                    for locked projects); stateless, imports nothing internal
 internal/approval/ approver credentials for locked projects: passkey and Touch ID
                    enrollment over store/approvers.go (migration 032)
+internal/devices/  device pairing on a networked server (migration 042): one-time
+                   codes, relays' client certificates and per-device keys, the TCP
+                   edge that matches them (devices.Bearer: the one bearer check),
+                   and the client-side Pair the relay and setup call
 internal/store/    SQLite: schema, FTS5, embeddings (BLOB + cosine), migrations;
                    index_work.go mirrors the DB-native work record (tasks,
                    trials, session findings) into the same fts table the files

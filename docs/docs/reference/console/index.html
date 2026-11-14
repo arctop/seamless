@@ -464,6 +464,26 @@ nothing, and their rows say so.</p>
 <td>Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: <code>seamlessd approvers approve --code</code>, on the server, adds exactly that passkey. At most 32 wait at once.</td>
 </tr>
 <tr>
+<td>Get a pairing code</td>
+<td><code>POST /console/devices/code</code></td>
+<td>Only on a server that serves other computers (TLS, a bind beyond loopback, or a <code>server_url</code> naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused from an agent's process on the peer_auth socket.</td>
+</tr>
+<tr>
+<td>Begin a device approval</td>
+<td><code>POST /console/devices/{id}/approve/begin</code></td>
+<td>Only under peer_auth, from a signed-in browser, for a pairing that waits. Returns the WebAuthn challenge, bound to that device's id, kind, name, fingerprint and key, and a ticket. Writes nothing.</td>
+</tr>
+<tr>
+<td>Approve a device</td>
+<td><code>POST /console/devices/{id}/approve/finish</code></td>
+<td>Verifies the passkey assertion for that ticket over the device as it stands, records the passkey's use, and pairs the device: a relay's certificate is accepted from its next request, and a key device collects its own key, once, on its next status.</td>
+</tr>
+<tr>
+<td>Revoke a device, or deny a pairing</td>
+<td><code>POST /console/devices/{id}/revoke</code></td>
+<td>Revokes a paired device: its credential is refused from its next request, and the requests it is making end. A pairing that waits is denied instead. Refused from an agent's process on the peer_auth socket.</td>
+</tr>
+<tr>
 <td>Save briefing settings</td>
 <td><code>POST /console/settings/briefing</code></td>
 <td>Writes the briefing knobs as a runtime <strong>override row</strong> in the DB. It never writes the config file.</td>

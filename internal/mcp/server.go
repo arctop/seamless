@@ -7,7 +7,6 @@ package mcp
 
 import (
 	"context"
-	"crypto/subtle"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -27,6 +26,7 @@ import (
 	"github.com/arctop/seamless/internal/capture"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/gardener"
@@ -609,17 +609,12 @@ func (s *Server) authMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.ToolHa
 	}
 }
 
-// verifyBearer constant-time-compares the request's bearer token to key. An
-// empty configured key rejects everything.
+// verifyBearer reports whether the request presents the owner's key: the
+// shared key (a constant-time compare; an empty configured key matches
+// nothing), or a paired device's own credential the daemon's edge matched
+// (devices.Bearer, the one verifier every bearer surface shares).
 func verifyBearer(r *http.Request, key string) bool {
-	if key == "" {
-		return false
-	}
-	parts := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(parts[1]), []byte(key)) == 1
+	return devices.Bearer(r, key)
 }
 
 // ---------------------------------------------------------------------------

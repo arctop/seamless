@@ -66,6 +66,10 @@ import (
 //     passkey would be one this owner never saw created.
 //   - mcp_sessions: what this machine's own connections declared, keyed by
 //     connection ids that mean nothing anywhere else.
+//   - devices, device_pairing_codes: the computers paired with the exporting
+//     server and the codes that pair them. A relay pinned that server's
+//     certificate, and a key device's key was issued by it; merging either
+//     would admit a computer nobody paired here, and a code would pair one.
 //   - schema_migrations: the destination's own migration history.
 //
 // A host-local table (one keyed by which machine a row came from) does not

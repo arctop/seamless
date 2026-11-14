@@ -1,6 +1,6 @@
 # seamlessd CLI
 
-> The daemon and operator CLI - serve, doctor, export, import, backups, restore, setup, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.
+> The daemon and operator CLI - serve, doctor, export, import, backups, restore, setup, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, devices, console-open, start/stop/restart/status, and version.
 
 `seamlessd` is both the server and the operator CLI. `serve` runs the daemon;
 every other subcommand is a one-shot that opens the same config and database
@@ -925,6 +925,20 @@ cc/08eb9006-5c473accb1746e1b@example-hr.`, with `; its lock is open to it
 until ...` for a locked project, whose lease the same approval records. A
 denied move answers `Denied R-7F3K: the agent stays in example-ops, and
 example-hr stays closed to it.`
+
+## seamlessd devices {#seamlessd_devices}
+
+```bash
+seamlessd devices code [--json]
+seamlessd devices list [--json]
+seamlessd devices revoke <id|name>
+```
+
+The computers paired with this server: relays (macOS and Linux clients) and key devices (Windows, or a machine where you have no root). Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host); elsewhere every verb refuses. Each verb opens the database directly: run it on the server, as the daemon's own account under peer_auth.
+
+- `code` mints a one-time pairing code (10 minutes, one computer; only its hash is stored) and prints what the other computer needs: this server's address, its certificate's SHA-256 fingerprint (as `openssl x509 -noout -fingerprint -sha256` prints it), the code and the client one-liners. Without peer_auth the code is the approval; under it the pairing waits for your passkey on the console's Devices page.
+- `list` prints every device: id, name, kind, status, fingerprint or key prefix, last seen.
+- `revoke` revokes a paired device (refused from its next request; the daemon ends its running requests within 30 seconds) or denies a pairing that waits, named by its id or by a live device's name.
 
 ## seamlessd console-open {#seamlessd_console_open}
 

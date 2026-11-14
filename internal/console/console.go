@@ -36,6 +36,7 @@ import (
 
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/features"
 	"github.com/arctop/seamless/internal/files"
@@ -175,7 +176,13 @@ type Config struct {
 	// derives no cookie, and the Add a passkey page serves (signin.go). Nil --
 	// the default -- is exactly the key's sign-in, and those routes are 404s.
 	SignIn SignInView
-	Logger *slog.Logger
+	// Devices is device pairing (*devices.Service in the daemon): the Devices
+	// page, where the owner mints a pairing code, approves a pairing under
+	// peer_auth and revokes a device. Set only on a server that serves other
+	// computers; nil -- the default -- makes every such route a 404, and no
+	// page names it (devices.go).
+	Devices DevicesView
+	Logger  *slog.Logger
 }
 
 // Service renders the console and serves its routes.
@@ -234,6 +241,13 @@ func New(cfg Config) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The Devices page parses with the layout like every page; it is listed
+	// here rather than in pageNames, beside the routes it serves.
+	devicesPage, err := template.New("layout").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", "templates/devices.html")
+	if err != nil {
+		return nil, fmt.Errorf("console: parse devices: %w", err)
+	}
+	pages["devices"] = devicesPage
 	host, hostName := "server", ""
 	if name, herr := os.Hostname(); herr == nil && strings.TrimSpace(name) != "" {
 		host = "server " + strings.TrimSpace(name)
@@ -349,6 +363,15 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/lock/{project}", s.auth(s.lockPage))
 	post("POST /console/lock/{project}/begin", formBodySmall, s.lockBegin)
 	post("POST /console/lock/{project}/finish", formBodyPasskey, s.lockFinish)
+	// Device pairing (devices.go): the Devices page exists only on a server
+	// that serves other computers (Config.Devices); every route is a 404
+	// otherwise. A code and a revocation are the owner's own decisions; an
+	// approval is a passkey ceremony in a browser.
+	handle("GET /console/devices", s.auth(s.devicesPage))
+	post("POST /console/devices/code", formBodySmall, ownerHands(s.devicesCode))
+	post("POST /console/devices/{id}/approve/begin", formBodySmall, s.devicesApproveBegin)
+	post("POST /console/devices/{id}/approve/finish", formBodyPasskey, s.devicesApproveFinish)
+	post("POST /console/devices/{id}/revoke", formBodySmall, ownerHands(s.devicesRevoke))
 	handle("GET /console/approvers", s.auth(s.approversPage))
 	post("POST /console/approvers/passkey/begin", formBodySmall, s.approversBegin)
 	post("POST /console/approvers/passkey/finish", formBodyPasskey, s.approversFinish)
@@ -549,13 +572,12 @@ func consoleToken(key string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// bearerEquals constant-time-compares the request's bearer token to key.
+// bearerEquals reports whether the request presents the owner's key: key,
+// the shared one (a constant-time compare), or a paired device's own
+// credential the daemon's edge matched (devices.Bearer, the one verifier
+// every bearer surface shares).
 func bearerEquals(r *http.Request, key string) bool {
-	parts := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(parts[1]), []byte(key)) == 1
+	return devices.Bearer(r, key)
 }
 
 // safeNext returns a same-origin relative path to redirect to after login, or

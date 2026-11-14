@@ -209,6 +209,10 @@ type eventShape struct {
 
 // shapes overrides the default shape (agent, info, success) per kind.
 var shapes = map[core.EventKind]eventShape{
+	core.EventDeviceCode:              {"auth", "low", "success"},
+	core.EventDevicePending:           {"auth", "medium", "success"},
+	core.EventDevicePaired:            {"auth", "high", "success"},
+	core.EventDeviceRevoked:           {"auth", "medium", "success"},
 	core.EventAccessRefused:           {"auth", "medium", "blocked"},
 	core.EventCorpusDrift:             {"file", "high", "blocked"},
 	core.EventCorpusReviewed:          {"finding", "info", "success"},

@@ -11,7 +11,6 @@ import (
 	"cmp"
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -28,6 +27,7 @@ import (
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/gitread"
@@ -1841,19 +1841,14 @@ func writeHookAck(w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(hookResponse{Continue: true, SuppressOutput: true})
 }
 
-// verifyBearer constant-time-compares the request's bearer token to key. A
-// peer_auth socket request needs no key: the kernel named its caller before it
-// got here (cmd/seamlessd), and that is the authentication.
+// verifyBearer reports whether the request presents the owner's key: the
+// shared key, or a paired device's own credential the daemon's edge matched
+// (devices.Bearer, the one verifier every bearer surface shares). A peer_auth
+// socket request needs no key: the kernel named its caller before it got here
+// (cmd/seamlessd), and that is the authentication.
 func verifyBearer(r *http.Request, key string) bool {
 	if access.PeerAuthenticated(r.Context()) {
 		return true
 	}
-	if key == "" {
-		return false
-	}
-	parts := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(parts[1]), []byte(key)) == 1
+	return devices.Bearer(r, key)
 }

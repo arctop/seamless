@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store/storetest"
@@ -103,6 +104,29 @@ func TestHandler_AuthIsHTTPLevel(t *testing.T) {
 		_ = resp.Body.Close()
 		require.Equal(t, http.StatusUnauthorized, resp.StatusCode, "key %q", key)
 		require.Equal(t, "Bearer", resp.Header.Get("WWW-Authenticate"))
+	}
+}
+
+// A paired device's credential, once the daemon's edge matched it, is the
+// owner's key here; the device key with no edge mark is a wrong key.
+func TestHandler_PairedDeviceIsTheOwnerOnlyWhenTheEdgeMatchedIt(t *testing.T) {
+	srv, err := New(Config{Retrieve: &stubRecaller{}, APIKey: testKey, Version: "1.2.3", Endpoint: "http://127.0.0.1:8081/api/a2a"})
+	require.NoError(t, err)
+	key, _, err := devices.NewKey()
+	require.NoError(t, err)
+	for _, marked := range []bool{true, false} {
+		req := httptest.NewRequest(http.MethodPost, "/api/a2a", strings.NewReader(sendBody("q", nil)))
+		req.Header.Set("Authorization", "Bearer "+key)
+		if marked {
+			req = req.WithContext(devices.WithCredential(req.Context(), devices.Credential{DeviceID: "01DEVICEEXAMPLE", Kind: devices.KindKey, Name: "example-ci"}))
+		}
+		rr := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rr, req)
+		if marked {
+			require.Equal(t, http.StatusOK, rr.Code)
+			continue
+		}
+		require.Equal(t, http.StatusUnauthorized, rr.Code)
 	}
 }
 

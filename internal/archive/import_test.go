@@ -5,11 +5,15 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -645,6 +649,8 @@ func TestImport_MergeAnArchiveFromBefore039(t *testing.T) {
 		`DROP TABLE item_provenance`, `DROP TABLE access_flows`, `DROP TABLE access_moves`,
 		// What 041 added (console sign-in with a passkey).
 		`DROP TABLE console_signins`, `DROP TABLE passkey_enrollments`,
+		// What 042 added (device pairing).
+		`DROP TABLE devices`, `DROP TABLE device_pairing_codes`,
 		`DELETE FROM schema_migrations WHERE version >= 39`,
 	} {
 		_, err := db.ExecContext(ctx, q)
@@ -766,6 +772,12 @@ func TestImport_MergeLeavesTablesOutsideTheContractAlone(t *testing.T) {
 	_, _, err = store.BeginPasskeyEnrollment(ctx, srcDB, store.ApproverCredential{Kind: store.ApproverPasskey,
 		CredentialID: []byte{7, 7}, PublicKey: []byte{9, 9}, Alg: -7, Name: "phone"}, store.PasskeyEnrollmentTTL, signedAt)
 	require.NoError(t, err)
+	// A computer paired with the exporting server, and a code that would pair
+	// another: a merge carries neither, or it would admit a computer nobody
+	// paired here.
+	pairImportDevice(t, srcDB, "example-laptop", signedAt)
+	_, _, err = store.MintPairingCode(ctx, srcDB, store.DeviceByConsole, signedAt)
+	require.NoError(t, err)
 	require.NoError(t, srcDB.Close())
 
 	data := exportOf(t, src)
@@ -793,6 +805,59 @@ func TestImport_MergeLeavesTablesOutsideTheContractAlone(t *testing.T) {
 	require.Equal(t, before["embeddings"], after["embeddings"])
 	require.Zero(t, after["console_signins"], "another machine's console sign-ins are not this machine's")
 	require.Zero(t, after["passkey_enrollments"], "nor are the passkeys waiting for its owner")
+	require.Zero(t, after["devices"], "nor the computers paired with it")
+	require.Zero(t, after["device_pairing_codes"], "nor the codes that would pair one")
+}
+
+// pairImportDevice pairs a key device named name in db at now, with no
+// passkey: the code is the approval.
+func pairImportDevice(t *testing.T, db *sql.DB, name string, now time.Time) store.Device {
+	t.Helper()
+	ctx := context.Background()
+	code, _, err := store.MintPairingCode(ctx, db, store.DeviceByConsole, now)
+	require.NoError(t, err)
+	sum := func(s string) string {
+		h := sha256.Sum256([]byte(s))
+		return hex.EncodeToString(h[:])
+	}
+	d, err := store.PairDevice(ctx, db, code, store.NewDevice{Kind: store.DeviceKeyKind, Name: name,
+		Fingerprint: store.ApproverKeyFingerprint([]byte(name)), KeyHash: sum("key:" + name), KeyPrefix: "seamless_dk_abcd",
+		SecretHash: sum("secret:" + name)}, now)
+	require.NoError(t, err)
+	require.Equal(t, store.DeviceActive, d.Status)
+	return d
+}
+
+// A paired device is a live credential the snapshot holds as it stood, one
+// revoked since included: a fresh restore revokes every one and voids the
+// codes that were waiting, and says so, and each computer pairs again.
+func TestImport_FreshRevokesRestoredDevices(t *testing.T) {
+	ctx := context.Background()
+	src := seedIndexed(t, specA)
+	srcDB, err := store.Open(filepath.Join(src, DBName))
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	d := pairImportDevice(t, srcDB, "example-laptop", now)
+	code, _, err := store.MintPairingCode(ctx, srcDB, store.DeviceByConsole, now)
+	require.NoError(t, err)
+	require.NoError(t, srcDB.Close())
+
+	dst := filepath.Join(t.TempDir(), "restored")
+	rep, err := Import(ctx, ImportOptions{DataDir: dst, Src: bytes.NewReader(exportOf(t, src))})
+	require.NoError(t, err)
+	require.True(t, slices.ContainsFunc(rep.Warnings, func(w string) bool { return strings.Contains(w, "pair each computer again") }),
+		"%v", rep.Warnings)
+	dstDB, err := store.Open(filepath.Join(dst, DBName))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = dstDB.Close() })
+	got, err := store.DeviceByID(ctx, dstDB, d.ID)
+	require.NoError(t, err)
+	require.Equal(t, store.DeviceRevoked, got.Status, "no device survives a restore")
+	require.Equal(t, store.DeviceByRestore, got.RevokedBy)
+	_, err = store.PairDevice(ctx, dstDB, code, store.NewDevice{Kind: store.DeviceKeyKind, Name: "example-ci",
+		Fingerprint: store.ApproverKeyFingerprint([]byte("x")), KeyHash: strings.Repeat("a", 64), KeyPrefix: "seamless_dk_abcd",
+		SecretHash: strings.Repeat("b", 64)}, time.Now())
+	require.ErrorIs(t, err, store.ErrPairingCode, "a code from the snapshot pairs nothing after it")
 }
 
 // A merge whose corpus names a project the archive's database does not carry

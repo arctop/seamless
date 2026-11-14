@@ -7908,6 +7908,12 @@ and console unlock the backup held.
   open to anyone who reaches the console: creating a passkey there adds nothing,
   but at most 32 wait at once, so someone looping on it can hold yours off for up
   to 10 minutes.
+- **A paired device is a TCP caller.** A computer paired with a networked server
+  (the console's Devices page) is you, as the bearer key is, but the daemon reads
+  no process chain behind it, so it never holds a lease and never opens a locked
+  project: a key device always, and a relay until its own requests are judged
+  like the socket's. Pairing under peer_auth needs your passkey on the Devices
+  page: the code alone pairs nothing.
 - **The transcript holds what a session read.** Once you approve an agent, its
   project's content is in that session's transcript and any tool result it kept.
   A lease ending does not unread it.
@@ -12579,6 +12585,20 @@ until ...` for a locked project, whose lease the same approval records. A
 denied move answers `Denied R-7F3K: the agent stays in example-ops, and
 example-hr stays closed to it.`
 
+## seamlessd devices {#seamlessd_devices}
+
+```bash
+seamlessd devices code [--json]
+seamlessd devices list [--json]
+seamlessd devices revoke <id|name>
+```
+
+The computers paired with this server: relays (macOS and Linux clients) and key devices (Windows, or a machine where you have no root). Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host); elsewhere every verb refuses. Each verb opens the database directly: run it on the server, as the daemon's own account under peer_auth.
+
+- `code` mints a one-time pairing code (10 minutes, one computer; only its hash is stored) and prints what the other computer needs: this server's address, its certificate's SHA-256 fingerprint (as `openssl x509 -noout -fingerprint -sha256` prints it), the code and the client one-liners. Without peer_auth the code is the approval; under it the pairing waits for your passkey on the console's Devices page.
+- `list` prints every device: id, name, kind, status, fingerprint or key prefix, last seen.
+- `revoke` revokes a paired device (refused from its next request; the daemon ends its running requests within 30 seconds) or denies a pairing that waits, named by its id or by a live device's name.
+
 ## seamlessd console-open {#seamlessd_console_open}
 
 ```bash
@@ -13182,6 +13202,13 @@ tls:
   # cert_file together with role: client is refused.
   # env: SEAMLESS_TLS_CA_FILE
   ca_file: ""
+  # Device pairing has no key of its own: a server that serves other computers
+  # (TLS here, an addr beyond loopback, or a server_url naming another host)
+  # pairs them, each with a one-time code from the console's Devices page or
+  # `seamlessd devices code`. A relay (macOS and Linux clients) presents a
+  # client certificate over its own key, so it needs TLS on this listener; a
+  # key device (Windows, a container, CI) gets a key of its own. A default
+  # loopback install pairs nothing.
 
 mcp:
   # Static bearer key protecting /api/mcp and the console. On a true first run
@@ -14819,6 +14846,10 @@ nothing, and their rows say so.
 | Sign in with a passkey | `POST /console/signin/finish` | Verifies the assertion for that challenge, from the browser that began it, records the passkey's use, and sets a fresh random sign-in cookie that counts only with this browser's key, for 7 days. A cookie the browser held before ends with it. |
 | Begin adding a passkey | `POST /console/passkeys/add/begin` | Only with `console.sign_in: passkey`: the public Add a passkey page asks for the new passkey's `name=`. Returns the WebAuthn creation options. Writes nothing. |
 | Add a passkey, waiting | `POST /console/passkeys/add/finish` | Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: `seamlessd approvers approve --code`, on the server, adds exactly that passkey. At most 32 wait at once. |
+| Get a pairing code | `POST /console/devices/code` | Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused from an agent's process on the peer_auth socket. |
+| Begin a device approval | `POST /console/devices/{id}/approve/begin` | Only under peer_auth, from a signed-in browser, for a pairing that waits. Returns the WebAuthn challenge, bound to that device's id, kind, name, fingerprint and key, and a ticket. Writes nothing. |
+| Approve a device | `POST /console/devices/{id}/approve/finish` | Verifies the passkey assertion for that ticket over the device as it stands, records the passkey's use, and pairs the device: a relay's certificate is accepted from its next request, and a key device collects its own key, once, on its next status. |
+| Revoke a device, or deny a pairing | `POST /console/devices/{id}/revoke` | Revokes a paired device: its credential is refused from its next request, and the requests it is making end. A pairing that waits is denied instead. Refused from an agent's process on the peer_auth socket. |
 | Save briefing settings | `POST /console/settings/briefing` | Writes the briefing knobs as a runtime **override row** in the DB. It never writes the config file. |
 | Reset briefing settings | `POST /console/settings/briefing/reset` | Clears the override row, reverting to the file/env configuration. |
 | Preview a briefing | `POST /console/settings/briefing/preview` | A read, not a write: it POSTs only to carry the Briefing form's unsaved values, which it checks with the save's own validation, and answers with the briefing a new session in the chosen project would start with. Writes no settings row and records no event. A locked project is not previewed. |

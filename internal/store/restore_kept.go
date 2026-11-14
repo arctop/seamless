@@ -59,9 +59,11 @@ var restoredSettings = []string{
 
 // keptTables are the tables a restore replaces wholesale with today's rows: who
 // may approve (an enrolled passkey removed since the backup stays removed, and
-// a used enrollment code stays used), and this install's repo routes, which say
-// which project an agent working in a repository belongs to.
-var keptTables = []string{"approver_credentials", "approver_enroll_codes", "repo_map"}
+// a used enrollment code stays used), which computers are paired (a device
+// revoked since the backup stays revoked, one paired since stays paired, and a
+// used pairing code stays used; migration 042), and this install's repo
+// routes, which say which project an agent working in a repository belongs to.
+var keptTables = []string{"approver_credentials", "approver_enroll_codes", "devices", "device_pairing_codes", "repo_map"}
 
 // keptAccessHistory are the tables of the access record that say what a
 // conversation holds: the read and write grants it was given, the moves it

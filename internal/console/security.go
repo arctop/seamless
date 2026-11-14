@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/devices"
 )
 
 // This file holds the console's browser-boundary defenses from the 2026-07-19
@@ -74,6 +75,12 @@ const (
 // from the key, which anything that reads the key can forge, names none. The
 // key stays a bearer token for scripts.
 //
+// A paired device's own credential (a key device's key, a relay's client
+// certificate), which the daemon's edge matched before the request got here
+// (internal/devices), is the bearer path too: a browser attaches neither on
+// its own. It never signs a browser in: the login form compares the shared
+// key alone.
+//
 // auth classifies once and keeps the answer in the request's context
 // (classified); a handler asking again gets that answer.
 func (s *Service) classify(r *http.Request) credential {
@@ -81,6 +88,9 @@ func (s *Service) classify(r *http.Request) credential {
 		return c
 	}
 	if access.PeerAuthenticated(r.Context()) {
+		return credBearer
+	}
+	if _, ok := devices.CredentialOf(r.Context()); ok {
 		return credBearer
 	}
 	key := s.cfg.APIKey

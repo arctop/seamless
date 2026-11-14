@@ -20,6 +20,7 @@ import (
 	"github.com/arctop/seamless/internal/agentguide"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/gardener"
@@ -757,6 +758,45 @@ func TestSessionEndTargetsExplicitID(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, core.SessionActive, bs.Status, "an id-targeted session_end must not complete a bystander session")
+}
+
+// A paired device's credential, once the daemon's edge matched it, is the
+// owner's key here (devices.Bearer); the same device key with no edge mark is
+// a wrong key, and so is one the edge refused (revoked: it marks nothing).
+func TestMCPAuth_PairedDeviceIsTheOwnerOnlyWhenTheEdgeMatchedIt(t *testing.T) {
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	srv := mcpserver.New(mcpserver.Config{DB: db, Events: events.NewRecorder(db), APIKey: testKey})
+	key, _, err := devices.NewKey()
+	require.NoError(t, err)
+	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + mcp.LATEST_PROTOCOL_VERSION +
+		`","capabilities":{},"clientInfo":{"name":"device-test","version":"0"}}}`
+	for _, tc := range []struct {
+		name   string
+		marked bool
+		auth   string
+		want   int
+	}{
+		{"marked device", true, "Bearer " + key, http.StatusOK},
+		{"marked device, no header", true, "", http.StatusOK},
+		{"unmarked device key", false, "Bearer " + key, http.StatusUnauthorized},
+		{"shared key", false, "Bearer " + testKey, http.StatusOK},
+		{"nothing", false, "", http.StatusUnauthorized},
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/api/mcp", strings.NewReader(initialize))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		if tc.auth != "" {
+			req.Header.Set("Authorization", tc.auth)
+		}
+		if tc.marked {
+			req = req.WithContext(devices.WithCredential(req.Context(), devices.Credential{DeviceID: "01DEVICEEXAMPLE", Kind: devices.KindKey, Name: "example-ci"}))
+		}
+		rr := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rr, req)
+		require.Equal(t, tc.want, rr.Code, tc.name)
+	}
 }
 
 func TestMCPAuthRejectsBadKey(t *testing.T) {

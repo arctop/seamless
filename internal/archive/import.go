@@ -2,6 +2,7 @@ package archive
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -425,6 +426,13 @@ func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, choi
 	if err := warnRestoredApprovers(ctx, db, rep); err != nil {
 		return err
 	}
+	// A paired device is a live credential the snapshot holds as it stood,
+	// one the owner revoked since included: every one ends here, and each
+	// computer pairs again. A backup restored through the backup service
+	// gets today's devices back on top (store.ApplyKeptState).
+	if err := revokeRestoredDevices(ctx, db, rep); err != nil {
+		return err
+	}
 	// The whole database is the archive's, so its console locks are the
 	// archive's. The manifest adds what the snapshot could not hold: the
 	// exporting config's force locks, or every lock of a --no-db archive.
@@ -451,6 +459,20 @@ func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, choi
 	}
 
 	rep.Warnings = append(rep.Warnings, embeddingWarnings(a.manifest, opts.Embedder, ModeFresh)...)
+	return nil
+}
+
+// revokeRestoredDevices revokes every device the restored database brought
+// back and voids its unused pairing codes, and says so in the report.
+func revokeRestoredDevices(ctx context.Context, db *sql.DB, rep *ImportReport) error {
+	n, err := store.RevokeAllDevices(ctx, db, store.DeviceByRestore, time.Now())
+	if err != nil {
+		return fmt.Errorf("archive.Import: %w", err)
+	}
+	if n > 0 {
+		rep.Warnings = append(rep.Warnings, fmt.Sprintf(
+			"revoked the %d paired device(s) this backup held: pair each computer again from the console's Devices page", n))
+	}
 	return nil
 }
 

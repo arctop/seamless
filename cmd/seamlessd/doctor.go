@@ -134,6 +134,8 @@ func doctor(args []string) error {
 	checks = append(checks, doctorPeerAuthChecks(ctx, cfg, d, defaultPeerAuthEnv())...)
 	// Console sign-in with a passkey: no rows while the key signs browsers in.
 	checks = append(checks, consoleSignInChecks(ctx, cfg, d.current, systemNet)...)
+	// Device pairing: no rows on a server that serves no other computers.
+	checks = append(checks, devicePairingChecks(ctx, cfg, d.current)...)
 	checks = append(checks, needsCurrent("repo map", repoMapCheck))
 	checks = append(checks, needsCurrent("remote sessions", remoteSessionsCheck))
 	// mcp_tools compares a count with itself under either answer to "does it lock

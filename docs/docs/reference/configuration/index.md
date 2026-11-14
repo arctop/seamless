@@ -468,6 +468,13 @@ tls:
   # cert_file together with role: client is refused.
   # env: SEAMLESS_TLS_CA_FILE
   ca_file: ""
+  # Device pairing has no key of its own: a server that serves other computers
+  # (TLS here, an addr beyond loopback, or a server_url naming another host)
+  # pairs them, each with a one-time code from the console's Devices page or
+  # `seamlessd devices code`. A relay (macOS and Linux clients) presents a
+  # client certificate over its own key, so it needs TLS on this listener; a
+  # key device (Windows, a container, CI) gets a key of its own. A default
+  # loopback install pairs nothing.
 
 mcp:
   # Static bearer key protecting /api/mcp and the console. On a true first run

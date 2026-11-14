@@ -34,7 +34,9 @@ cmd/seamlessd, cmd/seam, cmd/seambench, cmd/demoseed, cmd/docsgen
 ```
 
 (`access` imports only `config`; `store` and `events` import `access`.
-`passkey` imports nothing internal; `approval` imports `store` and `passkey`.)
+`passkey` imports nothing internal; `approval` imports `store` and `passkey`.
+`devices` imports `store`, `events` and `config`; `approval` and the API surfaces
+import it.)
 
 (The dependency-aware ready-queue and lease-based claiming live in
 `internal/store/tasks*.go`; there is no `internal/tasks` package.)
@@ -117,9 +119,12 @@ cmd/seamlessd, cmd/seam, cmd/seambench, cmd/demoseed, cmd/docsgen
   bytes (`internal/validate.Path`). Names that become filenames go through
   `validate.Name`; human titles through `validate.Title`.
 - Auth: a single static bearer key guards `/api/mcp` and the console. Bind
-  `127.0.0.1` by default. No JWT, no registration. The one other credential is
-  the kernel's: with `peer_auth` on, a Unix-socket request is authenticated by
-  its peer uid (see "Peer-user auth" below), and the TCP key is the owner.
+  `127.0.0.1` by default. No JWT, no registration. The other credentials are the
+  kernel's: with `peer_auth` on, a Unix-socket request is authenticated by its
+  peer uid (see "Peer-user auth" below), and the TCP key is the owner; and, on a
+  server that serves other computers, a paired device's own (a relay's client
+  certificate, a key device's key; "A paired device is the owner, and no more"
+  below), which every bearer check accepts through `devices.Bearer`.
 - SSRF: URL capture must reject private IPs, localhost, and `file://`.
 - Every JSON/body handler starts with `http.MaxBytesReader`.
 
@@ -845,6 +850,32 @@ any of it.
   approves. Every sign-in route is a 404 while the key signs browsers in, and
   refuses a restricted account first. A restore ends every sign-in and waiting
   passkey (`ResetRestoredAccess`); a merge carries neither.
+- **A paired device is the owner, and no more** (plan networked-relay;
+  `internal/devices`, `approval/devices.go`, `store/devices.go`, migration 042,
+  `console/devices.go`, `cmd/seamlessd/devices.go`). Pairing exists only on a
+  server that serves other computers (`pairingOn`: TLS, a bind beyond loopback,
+  or a `server_url` naming another host); off, there is no Devices page, no
+  `/api/pair` and no client-certificate request. A one-time code (80 bits, 10
+  minutes, one computer, only its hash stored) comes from the console or
+  `seamlessd devices code`. Without peer_auth the code is the approval; under it
+  the pairing waits until the owner approves it with a passkey on the Devices
+  page, whose challenge binds the device's id, kind, name, fingerprint and key,
+  and `store.ApproveDevice` compares the fingerprint inside its write: the code
+  alone opens nothing. A relay is matched by the key of the client certificate
+  its TLS connection presented (`devices.WithRelayClientAuth` asks only a client
+  offering `devices.RelayALPN`; no chain is ever verified, the handshake's
+  CertificateVerify proves the key); a key device by its key's hash.
+  `devices.Service.Edge`, in front of the TCP routes, marks a matched request
+  (`devices.WithCredential`) and makes it speak for the enrolled name (the host
+  header and a hook's `host`); every bearer check asks `devices.Bearer`, so a
+  new surface never compares the key by hand. A device key never signs a browser
+  in. Under peer_auth a paired device is a TCP caller: the owner's view, no
+  lease, so it never opens a locked project. Every `X-Seamless-Relay-*` header
+  is stripped from every request, a relay's too, until a relay's own requests
+  are judged like the socket's; read one only under a relay `Credential`.
+  Revoking refuses the credential from its next request and ends the requests it
+  is making. A merge carries no device, a fresh import revokes the snapshot's,
+  and a backup restore keeps today's (`keptTables`).
 - **Events reach the console through the filtered handle.** The console's live
   feed re-reads each event through it (`liveEventVisible`) and the event log's
   reads go through `events.ReadingFrom`, so an event about a locked project

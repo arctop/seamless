@@ -1148,6 +1148,12 @@ and console unlock the backup held.
   open to anyone who reaches the console: creating a passkey there adds nothing,
   but at most 32 wait at once, so someone looping on it can hold yours off for up
   to 10 minutes.
+- **A paired device is a TCP caller.** A computer paired with a networked server
+  (the console's Devices page) is you, as the bearer key is, but the daemon reads
+  no process chain behind it, so it never holds a lease and never opens a locked
+  project: a key device always, and a relay until its own requests are judged
+  like the socket's. Pairing under peer_auth needs your passkey on the Devices
+  page: the code alone pairs nothing.
 - **The transcript holds what a session read.** Once you approve an agent, its
   project's content is in that session's transcript and any tool result it kept.
   A lease ending does not unread it.

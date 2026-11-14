@@ -521,6 +521,13 @@ const (
 	EventAccessGranted      EventKind = "access.granted"              // the owner approved a read grant of a confidential project (isolation.requests; item_id: the request; session_id; project: the target; payload: grant, from_project, proof, seconds, duration)
 	EventAccessConfined     EventKind = "access.confined"             // a session in an open project was write-confined by its read grant (item_id: the request; session_id; project: the confined project; payload: grant, target_project)
 	EventConsoleLockChanged EventKind = "access.console_lock_changed" // a lock turned on or off, from the console or by an archive import (item_id: the proving credential, empty for an import; project: the project; payload: proof, action)
+	// Device pairing (internal/devices): the computers a networked server
+	// pairs. Payloads carry ids, kinds, a host name and fixed words -- never a
+	// code, a key or a secret.
+	EventDeviceCode    EventKind = "access.device_code"    // a pairing code was minted (payload: by -- console or terminal -- and minutes)
+	EventDevicePending EventKind = "access.device_pending" // a pairing waits for the owner's passkey, peer_auth only (item_id: the device; payload: kind, name)
+	EventDevicePaired  EventKind = "access.device_paired"  // a device was paired (item_id: the device; payload: kind, name, proof -- code or passkey -- and credential, the passkey)
+	EventDeviceRevoked EventKind = "access.device_revoked" // a device was revoked, or a waiting pairing denied (item_id: the device; payload: kind, name, action -- revoke or deny -- by, requests)
 
 	// Background update check (internal/update). Payload values are parsed
 	// X.Y.Z versions and fixed install-kind words, never release-API text.

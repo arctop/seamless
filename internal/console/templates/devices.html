@@ -1,0 +1,179 @@
+{{define "content"}}
+{{with .Data}}
+<div class="access-page" data-devices>
+<header class="mv2-bar">
+  <h1>{{icon "link"}}Devices</h1>{{about "The other computers that use this server. Each pairs once, with a one-time code you get here, and then holds a credential of its own: a relay on macOS and Linux, a key of its own on Windows or a machine where you have no root. Revoking a device ends its credential at once."}}
+  <span class="mv2-count" aria-label="{{len .Paired}} paired"><strong>{{len .Paired}}</strong>paired</span>
+</header>
+
+<section aria-labelledby="devices-pair-title">
+  <h2 id="devices-pair-title">Pair a computer</h2>
+  <p class="held-sub">On the other computer, run Seamless's installer and choose to make it a client of this server. It asks for this server's address, shows its certificate's fingerprint for you to compare, and asks for a pairing code from this page.</p>
+  <ul class="access-list">
+    <li class="access-item"><strong>Address</strong> <code>{{.Server.URL}}</code></li>
+    {{if .Server.CertFingerprint}}<li class="access-item"><strong>Certificate fingerprint</strong> <small><code>{{.Server.CertFingerprint}}</code></small></li>
+    {{else}}<li class="access-item"><strong>No TLS</strong> <small>This server listens without TLS, so only a key device can pair, and its key crosses the network unencrypted. A relay needs TLS.</small></li>{{end}}
+  </ul>
+  {{if .PeerAuth}}
+  <p class="held-sub">{{icon "lock"}} A code alone pairs nothing here: each computer that uses one waits on this page until you approve it with your passkey, after checking that the fingerprint matches the one that computer shows.</p>
+  {{else}}
+  <p class="held-sub">{{icon "triangle-alert"}} The code is the approval: whoever enters it first, within {{.CodeMinutes}} minutes, pairs as you. Use it on your own computer, and get a new one for each computer.</p>
+  {{end}}
+  <form id="devices-code-form" class="access-form" method="post" action="/console/devices/code">
+    <button class="btn primary" id="devices-code-go" type="submit">{{icon "key-round"}} Get a pairing code</button>
+  </form>
+  <div id="devices-code" {{if not .Code}}hidden{{end}}>
+    <p class="held-sub">Pairing code, valid for {{.CodeMinutes}} minutes and for one computer: <strong><code id="devices-code-value">{{with .Code}}{{.Code}}{{end}}</code></strong></p>
+    <p class="held-sub">Or paste one of these on the other computer:</p>
+    <pre id="devices-unix" data-command="unix">{{.UnixCommand}}</pre>
+    <pre id="devices-windows" data-command="windows">{{.WindowsCommand}}</pre>
+  </div>
+  <p class="held-sub" id="devices-code-status" data-live-skip role="status" aria-live="polite"></p>
+</section>
+
+{{if .PeerAuth}}
+<section aria-labelledby="devices-pending-title">
+  <h2 id="devices-pending-title">Waiting for your approval</h2>
+  {{if .Pending}}
+  {{if not .Browser}}
+  <p class="held-sub">Approving a device needs a passkey: open this page in the browser you sign in to the console with.</p>
+  {{else if not .PasskeysOn}}
+  <p class="held-sub">Passkeys are not configured on this daemon, so no pairing can be approved here.</p>
+  {{else if not .HasPasskey}}
+  <p class="held-sub">{{icon "key-round"}} You need a passkey to approve a device. <a href="/console/approvers">Add one on the Approvers page</a>, then come back.</p>
+  {{else if not .OnOrigin}}
+  <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/devices">{{.Origin}}</a>.</p>
+  {{end}}
+  <ul class="access-list">
+    {{range .Pending}}
+    <li class="access-item" data-device="{{.ID}}">
+      <span class="badge">{{.KindLabel}}</span>
+      <strong>{{.Name}}</strong>
+      <small>fingerprint <code>{{.Fingerprint}}</code> &middot; asked {{clock .CreatedAt}}, waits until {{clock .PendingUntil}}</small>
+      {{if and $.Data.Browser $.Data.PasskeysOn $.Data.HasPasskey $.Data.OnOrigin}}
+      <form class="access-form" data-device-approve="{{.ID}}">
+        <button class="btn primary" type="submit">{{icon "key-round"}} Approve with a passkey</button>
+      </form>
+      {{end}}
+      <form method="post" action="/console/devices/{{.ID}}/revoke">
+        <button class="btn" type="submit">Deny</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  <p class="held-sub">Approve only a device whose fingerprint is the one its own screen shows. One you do not recognize is someone else's: deny it.</p>
+  <p class="held-sub" id="devices-approve-status" data-live-skip role="status" aria-live="polite"></p>
+  {{else}}
+  <p class="held-sub">Nothing is waiting. A computer that pairs with a code appears here until you approve or deny it.</p>
+  {{end}}
+</section>
+{{end}}
+
+<section aria-labelledby="devices-paired-title">
+  <h2 id="devices-paired-title">Paired</h2>
+  {{if .Paired}}
+  <ul class="access-list">
+    {{range .Paired}}
+    <li class="access-item" data-device="{{.ID}}">
+      <span class="badge">{{.KindLabel}}</span>
+      <strong>{{.Name}}</strong>
+      <small>{{if eq .Kind "key"}}key {{else}}fingerprint {{end}}<code>{{.Ident}}</code> &middot; paired {{with .EnrolledAt}}{{clockDate .}}{{end}} by {{.ApprovedHow}} &middot; {{if .LastUsedAt}}last seen {{clockDate .LastUsedAt}}{{else}}not seen yet{{end}}{{if and (eq .Kind "key") (not .HasKey)}} &middot; its key is not collected yet{{end}}</small>
+      <form method="post" action="/console/devices/{{.ID}}/revoke">
+        <button class="btn" type="submit">Revoke</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{if $.Data.PeerAuth}}<p class="held-sub">A paired device is you, as the bearer key is: it never holds a lease, so it never opens a locked project.</p>{{end}}
+  {{else}}
+  <p class="held-sub">No computer is paired yet.</p>
+  {{end}}
+</section>
+
+{{if .Ended}}
+<section aria-labelledby="devices-ended-title">
+  <h2 id="devices-ended-title">Revoked and expired</h2>
+  <ul class="access-list">
+    {{range .Ended}}
+    <li class="access-item" data-device="{{.ID}}">
+      <span class="badge">{{.KindLabel}}</span>
+      <strong>{{.Name}}</strong>
+      <small>{{.Now}}{{with .RevokedAt}} {{clockDate .}}{{end}}{{with .RevokedBy}} from the {{.}}{{end}} &middot; fingerprint <code>{{.Fingerprint}}</code></small>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+</div>
+{{end}}
+{{end}}
+
+{{define "scripts"}}
+<script src="/console/static/passkey.js"></script>
+<script>
+window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a code on screen must not be clobbered by a refresh
+(function () {
+  var pk = window.SeamPasskey;
+  // Refresh the view in place (console-data-updates-never-reload-document).
+  function refresh() {
+    if (window.SeamConsole && window.SeamConsole.load) {
+      return window.SeamConsole.load(location.href, { history: 'replace', source: 'query' });
+    }
+    return Promise.resolve(false);
+  }
+  function enhance() {
+    var form = document.getElementById('devices-code-form');
+    if (form && !form._seamWired && pk) {
+      form._seamWired = true;
+      var status = document.getElementById('devices-code-status');
+      var go = document.getElementById('devices-code-go');
+      // The code is shown from this answer and never put in a URL, so the
+      // form does not go through the shared POST path.
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        go.disabled = true;
+        status.textContent = '';
+        pk.post('/console/devices/code', {}).then(function (minted) {
+          document.getElementById('devices-code-value').textContent = minted.code;
+          document.getElementById('devices-unix').textContent = minted.unix;
+          document.getElementById('devices-windows').textContent = minted.windows;
+          document.getElementById('devices-code').hidden = false;
+        }).catch(function (err) {
+          status.textContent = pk.refusal(err);
+        }).finally(function () { go.disabled = false; });
+      });
+    }
+    var said = document.getElementById('devices-approve-status');
+    Array.prototype.forEach.call(document.querySelectorAll('form[data-device-approve]'), function (f) {
+      if (f._seamWired || !pk) return;
+      f._seamWired = true;
+      var id = f.getAttribute('data-device-approve');
+      var base = '/console/devices/' + encodeURIComponent(id) + '/approve';
+      f.addEventListener('submit', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!pk.supported()) { if (said) said.textContent = 'This browser cannot use a passkey here.'; return; }
+        var button = f.querySelector('button');
+        var ticket = '';
+        button.disabled = true;
+        if (said) said.textContent = 'Follow your browser\'s prompt.';
+        pk.post(base + '/begin', {}).then(function (begun) {
+          ticket = begun.ticket;
+          return pk.assert(begun);
+        }).then(function (cred) {
+          return pk.post(base + '/finish', { ticket: ticket, response: JSON.stringify(pk.toJSON(cred)) });
+        }).then(function (done) {
+          if (said) said.textContent = 'Paired ' + done.name + '.';
+          return refresh();
+        }).catch(function (err) {
+          if (said) said.textContent = pk.refusal(err);
+        }).finally(function () { button.disabled = false; });
+      });
+    });
+  }
+  enhance();
+  document.addEventListener('seam:content-updated', enhance);
+})();
+</script>
+{{end}}
