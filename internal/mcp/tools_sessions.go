@@ -546,6 +546,12 @@ func (s *Server) handleSessionUpdate(ctx context.Context, req mcp.CallToolReques
 	// session this connection is not bound to -- is what this call operates on;
 	// attribute its tool.call there, not to the binding/ambient guess.
 	stashAttribution(ctx, sess.ID, sess.ProjectSlug)
+	// The findings' stamps go first (their only home is the index): a stamp
+	// that cannot be recorded leaves the findings unwritten, and a write that
+	// fails after it leaves only a warning the session's conversation earned.
+	if err := s.stampWorkItem(ctx, core.ItemKindSession, sess.ID, sess.ProjectSlug); err != nil {
+		return errResult("session_update", fmt.Errorf("the findings were not recorded, because their provenance stamp could not be: %w", err))
+	}
 	sess.Findings = findings
 	sess.UpdatedAt = time.Now().UTC()
 	if err := store.UpdateSession(ctx, s.cfg.DB, sess); err != nil {
@@ -623,6 +629,10 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 	withheldMishaps := 0
 	if withheld != "" {
 		findings, withheldMishaps, mishaps = withheld, len(mishaps), nil
+	} else if err := s.stampWorkItem(ctx, core.ItemKindSession, sess.ID, sess.ProjectSlug); err != nil {
+		// Recorded findings carry the conversation's stamps, first, as
+		// session_update's do; a withheld end records nothing it holds.
+		return errResult("session_end", fmt.Errorf("the session was not ended, because its findings' provenance stamp could not be recorded: %w", err))
 	}
 	sess.Status = core.SessionCompleted
 	sess.Findings = findings

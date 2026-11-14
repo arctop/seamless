@@ -134,6 +134,7 @@ func RenderMemory(m core.Memory) (string, error) {
 		Account:       m.Account,
 		Favorite:      m.Favorite,
 		Tags:          m.Tags,
+		MayContain:    stampEntries(m.MayContain),
 		Extra:         m.Extra,
 	}
 	if m.InvalidAt != nil {
@@ -197,6 +198,7 @@ func ParseMemory(content, relPath string) (core.Memory, error) {
 		Account:       fm.Account,
 		Favorite:      fm.Favorite,
 		ContentHash:   ContentHash(content),
+		MayContain:    stampsOf(fm.MayContain),
 		Extra:         fm.Extra,
 	}, nil
 }
@@ -220,6 +222,7 @@ func RenderNote(n core.Note) (string, error) {
 		Account:     n.Account,
 		Favorite:    n.Favorite,
 		Tags:        n.Tags,
+		MayContain:  stampEntries(n.MayContain),
 		Extra:       n.Extra,
 	}
 	data, err := yaml.Marshal(&fm)
@@ -264,6 +267,7 @@ func ParseNote(content, relPath string) (core.Note, error) {
 		Created:     created,
 		Updated:     updated,
 		ContentHash: ContentHash(content),
+		MayContain:  stampsOf(fm.MayContain),
 		Extra:       fm.Extra,
 	}, nil
 }

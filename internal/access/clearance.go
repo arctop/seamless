@@ -41,9 +41,13 @@ import (
 // the holders it derived from the same ctx (store.ConversationClearance).
 
 // Flow is one approved flow as the access layer judges it: content of From
-// may be written into To.
+// may be written into To. Via and Ref say what cleared it, as the store found
+// it -- an approval's kind and id, or the conversation's own session for a
+// fenced home's native flow -- for the provenance stamp a write by it carries
+// (Grants.Stamps). The rule never reads them.
 type Flow struct {
 	From, To string
+	Via, Ref string
 }
 
 // Conversation is the conversation a request speaks for as the store read it
@@ -154,8 +158,11 @@ func JudgeConversation(ctx context.Context, now time.Time, c Conversation) Grant
 			g.flows = append(g.flows, f)
 		}
 	}
-	slices.SortFunc(g.flows, compareFlows)
-	g.flows = slices.Compact(g.flows)
+	// One flow per pair, the first the store listed: what cleared a pair is
+	// the record a stamp names, and two records for one pair clear nothing
+	// more than one.
+	slices.SortStableFunc(g.flows, compareFlows)
+	g.flows = slices.CompactFunc(g.flows, func(a, b Flow) bool { return compareFlows(a, b) == 0 })
 	return g
 }
 
@@ -219,8 +226,13 @@ func (g Grants) Cleared(dest string) bool {
 }
 
 func (g Grants) flowsInto(from, to string) bool {
-	_, found := slices.BinarySearchFunc(g.flows, Flow{From: from, To: to}, compareFlows)
+	_, found := g.flowIndex(from, to)
 	return found
+}
+
+// flowIndex finds the flow from -> to in g's sorted flows.
+func (g Grants) flowIndex(from, to string) (int, bool) {
+	return slices.BinarySearchFunc(g.flows, Flow{From: from, To: to}, compareFlows)
 }
 
 // ClearedProjects returns the fenced projects g's writes are cleared for,
@@ -268,8 +280,8 @@ func (g Grants) WithRead(target, from string, fromFenced bool) Grants {
 	out.flows = slices.Clone(g.flows)
 	if fromFenced && from != "" && from != target {
 		out.flows = append(out.flows, Flow{From: target, To: from})
-		slices.SortFunc(out.flows, compareFlows)
-		out.flows = slices.Compact(out.flows)
+		slices.SortStableFunc(out.flows, compareFlows)
+		out.flows = slices.CompactFunc(out.flows, func(a, b Flow) bool { return compareFlows(a, b) == 0 })
 	}
 	return out
 }

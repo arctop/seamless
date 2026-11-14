@@ -285,6 +285,11 @@ func (h *Handler) writeSubagentNote(ctx context.Context, p subagentPayload, meta
 		// label: a restricted account's capture carries its name, the owner's
 		// none.
 		note.Account = access.AccountOf(ctx)
+		// The report is the conversation's subagent's text: it carries the
+		// parent conversation's stamps for the note's project (stamp.go).
+		if !h.stampNote(ctx, ClientClaudeCode, p.ParentSessionID, &note) {
+			return errAgentCaptureDropped
+		}
 
 		w, werr := h.files.WriteNote(ctx, note)
 		if werr != nil {

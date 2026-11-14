@@ -10,7 +10,7 @@
         <span class="badge accent">completed</span>
       {{end}}
       {{if .Session.Ambient}}<span class="kind faint">ambient</span>{{end}}
-      {{agentPill .Harness .Session.Model}}{{with .Session.Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
+      {{agentPill .Harness .Session.Model}}{{with .Session.Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .Session.MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}
     </div>
     <span class="session-peek-updated" title="{{ts .Session.UpdatedAt}}">updated {{ago .Session.UpdatedAt}}</span>
   </header>

@@ -3,7 +3,7 @@
   <header class="peek-head">
     <span class="kind">{{.Kind}}</span>
     <span class="badge {{if eq .Status "active"}}ok{{else if eq .Status "superseded"}}warn{{end}}">{{.Status}}</span>
-    {{agentPill .Harness .Model}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
+    {{agentPill .Harness .Model}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}
   </header>
   <h2 class="peek-title">{{.Name}}{{copyBtn .Name}}</h2>
   {{if .Description}}<p class="peek-desc">{{.Description}}</p>{{end}}

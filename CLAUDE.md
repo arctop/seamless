@@ -286,6 +286,9 @@ superseded_by: null        # ULID of the replacement
 source_session: 01K...     # the writing session's ULID (not its cc/... name)
 model: claude-fable-5      # the model that produced the content, verbatim as the provider names it
 tags: [x, y]
+may_contain:               # provenance stamps (isolation.requests only); never removed by a write
+  - project: example-legal
+    grant: 01M7...
 ---
 body markdown
 ```

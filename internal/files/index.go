@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/store"
 )
 
 // Item kinds, as stored in the fts.kind and embeddings.kind columns. Aliases
@@ -87,6 +89,11 @@ func (ix *Indexer) IndexMemory(ctx context.Context, m core.Memory) error {
 	if err := ftsUpsert(ctx, tx, m.ID, kindMemory, m.Project, "", m.Name, m.Description, m.Body); err != nil {
 		return err
 	}
+	// The stamps the file carries, in the same transaction: item_provenance
+	// mirrors may_contain exactly (store.ProvenanceMirror).
+	if err := store.ProvenanceMirror(ctx, tx, kindMemory, m.ID, m.Project, m.MayContain, time.Now().UTC()); err != nil {
+		return fmt.Errorf("files.IndexMemory: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("files.IndexMemory: commit: %w", err)
 	}
@@ -131,6 +138,9 @@ func (ix *Indexer) IndexNote(ctx context.Context, n core.Note) error {
 	if err := ftsUpsert(ctx, tx, n.ID, kindNote, n.Project, n.Title, "", n.Description, n.Body); err != nil {
 		return err
 	}
+	if err := store.ProvenanceMirror(ctx, tx, kindNote, n.ID, n.Project, n.MayContain, time.Now().UTC()); err != nil {
+		return fmt.Errorf("files.IndexNote: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("files.IndexNote: commit: %w", err)
 	}
@@ -145,9 +155,9 @@ func (ix *Indexer) DeleteByFilePath(ctx context.Context, relPath string) error {
 	if !ok {
 		return fmt.Errorf("files.DeleteByFilePath: %q is not under a known tree", relPath)
 	}
-	table := "memories_index"
+	table, kind := "memories_index", kindMemory
 	if tree == notesTree {
-		table = "notes_index"
+		table, kind = "notes_index", kindNote
 	}
 
 	tx, err := ix.db.BeginTx(ctx, nil)
@@ -173,6 +183,10 @@ func (ix *Indexer) DeleteByFilePath(ctx context.Context, relPath string) error {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM embeddings WHERE item_id = ?`, id); err != nil {
 		return fmt.Errorf("files.DeleteByFilePath: delete embedding: %w", err)
+	}
+	// The item left the corpus, so its stamps leave the index with it.
+	if err := store.ProvenanceForget(ctx, tx, kind, id); err != nil {
+		return fmt.Errorf("files.DeleteByFilePath: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("files.DeleteByFilePath: commit: %w", err)

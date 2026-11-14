@@ -15,6 +15,7 @@ import (
 
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/core"
 )
 
 //go:embed templates
@@ -289,6 +290,7 @@ var funcs = template.FuncMap{
 	"hasPrefix":     strings.HasPrefix,
 	"copyBtn":       copyBtn,
 	"agentPill":     agentPill,
+	"mayContain":    core.MayContainLine,
 	"isoPill":       isolationPill,
 	"evtTone":       evtTone,
 	"evtIcon":       evtIcon,

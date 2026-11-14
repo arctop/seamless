@@ -30,9 +30,12 @@ import (
 var ErrInvalidProvenance = errors.New("invalid provenance stamp")
 
 // ProvenanceKinds are the item kinds a stamp may name (core.ItemKind*): the
-// two knowledge kinds and the two kinds of the work record a conversation
-// writes. A trial records an experiment's outcome, which its lab owns.
-var ProvenanceKinds = []string{core.ItemKindMemory, core.ItemKindNote, core.ItemKindTask, core.ItemKindSession}
+// two knowledge kinds and the three kinds of the work record a conversation
+// writes. A trial is the agent's own text too -- trial_record writes its
+// title, changes, expected and actual results into a project the clearance
+// rule cleared, and recall and trial_query serve them to that project's
+// agents -- so it is stamped like a task (plan fenced-sessions P6).
+var ProvenanceKinds = []string{core.ItemKindMemory, core.ItemKindNote, core.ItemKindTask, core.ItemKindTrial, core.ItemKindSession}
 
 const (
 	// provenanceDefaultLimit and provenanceMaxLimit bound a list.
@@ -42,7 +45,9 @@ const (
 
 // ProvenanceStamp is one row of item_provenance: the item ItemID of kind
 // ItemKind, in Project ("" for the global scope), may contain content from
-// Source, cleared by the grant or move approval ApprovalID.
+// Source, cleared by the grant or move approval ApprovalID -- or, for a fenced
+// home's native flow, by the conversation's own session there, whose id
+// ApprovalID then holds (migration 039's column has no foreign key).
 type ProvenanceStamp struct {
 	ItemKind   string
 	ItemID     string
@@ -50,6 +55,16 @@ type ProvenanceStamp struct {
 	Source     string
 	ApprovalID string
 	CreatedAt  time.Time
+	// Via is what ApprovalID names, read back on every list (core.StampVia*:
+	// the approval's kind, or session for a session's id), "" when this
+	// database holds neither -- an approval an archive merge carried no row
+	// for. ProvenanceUpsert ignores it: it is derived, never stored.
+	Via string
+}
+
+// Stamp is s as a core.Stamp: what an item shows.
+func (s ProvenanceStamp) Stamp() core.Stamp {
+	return core.Stamp{Project: s.Source, Via: s.Via, Ref: s.ApprovalID}
 }
 
 // provenanceExecutor is the write subset shared by *sql.DB and *sql.Tx, so a
@@ -92,7 +107,19 @@ func ProvenanceUpsert(ctx context.Context, ex provenanceExecutor, s ProvenanceSt
 	return nil
 }
 
-const provenanceCols = `item_kind, item_id, project_slug, source_project, approval_id, created_at`
+// provenanceCols reads a stamp with what its approval_id names: the
+// approval's kind when the approval is here, session when the id is a
+// session's, else "".
+const provenanceCols = `p.item_kind, p.item_id, p.project_slug, p.source_project, p.approval_id, p.created_at,
+	CASE WHEN a.kind = '` + AccessKindGrant + `' THEN '` + core.StampViaGrant + `'
+	     WHEN a.kind = '` + AccessKindMove + `' THEN '` + core.StampViaMove + `'
+	     WHEN a.id IS NULL AND s.id IS NOT NULL THEN '` + core.StampViaSession + `'
+	     ELSE '' END`
+
+// provenanceFrom is the FROM clause provenanceCols reads.
+const provenanceFrom = ` FROM item_provenance p
+	LEFT JOIN access_approvals a ON a.id = p.approval_id
+	LEFT JOIN sessions s ON s.id = p.approval_id`
 
 func provenanceScan(rows *sql.Rows) ([]ProvenanceStamp, error) {
 	var out []ProvenanceStamp
@@ -101,7 +128,7 @@ func provenanceScan(rows *sql.Rows) ([]ProvenanceStamp, error) {
 			s       ProvenanceStamp
 			created string
 		)
-		if err := rows.Scan(&s.ItemKind, &s.ItemID, &s.Project, &s.Source, &s.ApprovalID, &created); err != nil {
+		if err := rows.Scan(&s.ItemKind, &s.ItemID, &s.Project, &s.Source, &s.ApprovalID, &created, &s.Via); err != nil {
 			return nil, err
 		}
 		t, err := core.ParseTime(created)
@@ -116,7 +143,7 @@ func provenanceScan(rows *sql.Rows) ([]ProvenanceStamp, error) {
 
 // provenanceQuery runs one list over item_provenance.
 func provenanceQuery(ctx context.Context, db *sql.DB, op, where string, args ...any) ([]ProvenanceStamp, error) {
-	rows, err := db.QueryContext(ctx, `SELECT `+provenanceCols+` FROM item_provenance WHERE `+where, args...)
+	rows, err := db.QueryContext(ctx, `SELECT `+provenanceCols+provenanceFrom+` WHERE `+where, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
@@ -140,7 +167,7 @@ func provenanceLimit(limit int) int {
 // recall hits and console page show.
 func ProvenanceForItem(ctx context.Context, db *sql.DB, kind, id string) ([]ProvenanceStamp, error) {
 	return provenanceQuery(ctx, db, "store.ProvenanceForItem",
-		`item_kind = ? AND item_id = ? ORDER BY source_project`, kind, id)
+		`p.item_kind = ? AND p.item_id = ? ORDER BY p.source_project`, kind, id)
 }
 
 // ProvenanceForProject returns the stamps of the items in project, newest
@@ -148,14 +175,14 @@ func ProvenanceForItem(ctx context.Context, db *sql.DB, kind, id string) ([]Prov
 // set, only the items that may contain content from it -- a project page's
 // "came from" filter.
 func ProvenanceForProject(ctx context.Context, db *sql.DB, project, source string, limit int) ([]ProvenanceStamp, error) {
-	where, args := `project_slug = ?`, []any{project}
+	where, args := `p.project_slug = ?`, []any{project}
 	if source != "" {
-		where += ` AND source_project = ?`
+		where += ` AND p.source_project = ?`
 		args = append(args, source)
 	}
 	args = append(args, provenanceLimit(limit))
 	return provenanceQuery(ctx, db, "store.ProvenanceForProject",
-		where+` ORDER BY created_at DESC, item_kind, item_id LIMIT ?`, args...)
+		where+` ORDER BY p.created_at DESC, p.item_kind, p.item_id LIMIT ?`, args...)
 }
 
 // ProvenanceFromSource returns the stamps naming source, in every project,
@@ -163,5 +190,5 @@ func ProvenanceForProject(ctx context.Context, db *sql.DB, project, source strin
 // project's content may have gone.
 func ProvenanceFromSource(ctx context.Context, db *sql.DB, source string, limit int) ([]ProvenanceStamp, error) {
 	return provenanceQuery(ctx, db, "store.ProvenanceFromSource",
-		`source_project = ? ORDER BY created_at DESC, item_kind, item_id LIMIT ?`, source, provenanceLimit(limit))
+		`p.source_project = ? ORDER BY p.created_at DESC, p.item_kind, p.item_id LIMIT ?`, source, provenanceLimit(limit))
 }

@@ -129,6 +129,7 @@ func (s *Server) handleNotesEdit(ctx context.Context, req mcp.CallToolRequest) (
 		// owner's edit never clears a label (accountAfter, starAfter).
 		cur.Account = accountAfter(cur.Account, access.AccountOf(ctx), true, false)
 		cur.Favorite = starAfter(cur.Favorite, access.AccountOf(ctx), true)
+		stampNote(ctx, &cur)
 		if screen {
 			if herr := s.judgeNoteWrite(ctx, "notes_edit", cur, before, "", screenSession, &jd); herr != nil {
 				return core.Note{}, herr

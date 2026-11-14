@@ -7,6 +7,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -99,4 +101,22 @@ func TestLabOpenDoesNotShadowAmbientFallback(t *testing.T) {
 
 	r := callJSON(t, ctx, cli, "memory_read", map[string]any{"name": "lab-then-ambient", "project": "demo"})
 	require.Equal(t, id, r["source_session"], "ambient provenance must survive lab_open")
+}
+
+// A trial a conversation records while it holds a grant's content is stamped
+// with the grant (plan fenced-sessions P6), in the index, and recall's hit
+// shows it.
+func TestStampTrial_RecordCarriesTheConversationsStamps(t *testing.T) {
+	r := newStampRig(t, true, nil)
+	agent, amb := r.agent("cc/stamp-trial", stLegal, stProc)
+	g := r.grant(amb, "cc/stamp-trial", stFin, stLegal, false, access.ProcessToken{})
+	tr := stampOK(t, agent, "trial_record", map[string]any{"title": "ledger reconciliation trial", "lab": "close",
+		"expected": "balances", "actual": "balanced"})
+	rows := r.rows(core.ItemKindTrial, tr["id"].(string))
+	require.Len(t, rows, 1)
+	require.Equal(t, stFin, rows[0].Source)
+	require.Equal(t, g.ApprovalID, rows[0].ApprovalID)
+	hits := stampOK(t, agent, "recall", map[string]any{"query": "ledger reconciliation trial", "scope": "trials"})["hits"].([]any)
+	require.Len(t, hits, 1)
+	require.Equal(t, stampField(stFin, core.StampViaGrant, g.ApprovalID), hits[0].(map[string]any)["may_contain"])
 }

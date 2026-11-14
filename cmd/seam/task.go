@@ -72,6 +72,9 @@ func runTaskList(ctx context.Context, e *env, o *taskListOpts, _ []string) error
 		if by := updatedBy(str(m["updated_account"])); by != "" {
 			line += "  [" + by + "]"
 		}
+		if mc := mayContain(m); mc != "" {
+			line += "  [" + mc + "]"
+		}
 		fmt.Fprintln(e.stdout, line)
 	}
 	return nil

@@ -148,6 +148,11 @@ type Memory struct {
 	// Frontmatter `account`, mirrored to the index.
 	Account     string `json:"account,omitempty"`
 	ContentHash string `json:"contentHash"`
+	// MayContain is the memory's provenance stamps (frontmatter may_contain,
+	// mirrored into item_provenance; see Stamp): set from the writing
+	// conversation's state, never from agent input, and never removed by a
+	// write. Empty for every memory written with isolation.requests off.
+	MayContain []Stamp `json:"mayContain,omitempty"`
 	// Extra preserves unknown frontmatter keys (e.g. Obsidian plugin fields) so
 	// a parse -> render round-trip is lossless. Not mirrored to the index.
 	Extra map[string]any `json:"extra,omitempty"`
@@ -186,6 +191,8 @@ type Note struct {
 	Created     time.Time `json:"created"`
 	Updated     time.Time `json:"updated"`
 	ContentHash string    `json:"contentHash"`
+	// MayContain is the note's provenance stamps, as Memory.MayContain.
+	MayContain []Stamp `json:"mayContain,omitempty"`
 	// Extra preserves unknown frontmatter keys for a lossless round-trip.
 	Extra map[string]any `json:"extra,omitempty"`
 }
@@ -290,6 +297,12 @@ type Session struct {
 	// the session the conversation left. "" for every other session. It is set
 	// once, at creation, and nothing changes it afterwards.
 	ParentSessionID string `json:"parentSessionId,omitempty"`
+	// MayContain is the provenance stamps of the session's findings (see
+	// Stamp), which live in item_provenance only: no sessions column holds
+	// them and no store read fills them; a surface that shows them reads the
+	// index and sets them (the console's session page). Empty for every
+	// session of an install that never turned isolation.requests on.
+	MayContain []Stamp `json:"mayContain,omitempty"`
 	// Tokens is the real model token consumption harvested from the agent's
 	// transcript (Claude Code at SessionEnd, Codex every Stop) -- the actual burn,
 	// not the injection estimate. Zero until harvested, or for a client with no

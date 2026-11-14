@@ -45,6 +45,9 @@ func (s *Server) handleCaptureURL(ctx context.Context, req mcp.CallToolRequest) 
 	if err != nil {
 		return errResult("capture_url", err)
 	}
+	// The page lands where the conversation writes, so it carries what the
+	// conversation's state stamps there (the URL is the agent's own text).
+	stampNote(ctx, &note)
 	// A captured page is outside text by definition, landing straight in the
 	// corpus where recall can serve it to every later session: it is screened
 	// like any other note write.

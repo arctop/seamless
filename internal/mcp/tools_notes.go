@@ -62,6 +62,8 @@ func (s *Server) handleNotesCreate(ctx context.Context, req mcp.CallToolRequest)
 		SourceURL: argString(req, "source_url"), Model: s.boundSessionModel(ctx),
 		Account: access.AccountOf(ctx), Created: now, Updated: now,
 	}
+	// Before the judge, so a held write holds its stamps too.
+	stampNote(ctx, &note)
 	screen := s.screeningOn(ctx)
 	var screenSession string
 	var jd judged
@@ -151,6 +153,8 @@ func (s *Server) handleNotesRead(ctx context.Context, req mcp.CallToolRequest) (
 	if note.Favorite {
 		out["favorite"] = true
 	}
+	// The file's stamps: which fenced projects' content this note may hold.
+	putStamps(ctx, out, note.MayContain, note.Project)
 	return jsonResult(out)
 }
 
@@ -227,6 +231,12 @@ func (s *Server) handleNotesUpdate(ctx context.Context, req mcp.CallToolRequest)
 		before := note
 		s.applyNoteUpdate(ctx, &note, patch)
 		note.Updated = time.Now().UTC()
+		// Text, or a move into another project, carries the conversation's
+		// stamps for the project the note ends up in; a tag removal alone
+		// writes nothing it holds.
+		if patch.writesText() || note.Project != oldProject {
+			stampNote(ctx, &note)
+		}
 
 		// The slug is id-addressed and stays stable; a project change moves the file.
 		// Refuse when a different note already owns the target path (the UNIQUE
@@ -346,6 +356,12 @@ func parseNoteUpdate(req mcp.CallToolRequest) (noteUpdatePatch, error) {
 	return p, nil
 }
 
+// writesText reports whether the patch writes text into the note: a title, a
+// description, a body, or tags set or added. A removal writes none.
+func (p noteUpdatePatch) writesText() bool {
+	return p.title != nil || p.description != nil || p.body != nil || p.tagsSet || len(p.tagsAdd) > 0
+}
+
 // empty reports whether the call asked for no change at all. expect_hash alone
 // is not a change: it is a precondition ON one, so a call carrying only that has
 // still not said what to write.
@@ -461,6 +477,7 @@ func (s *Server) handleNotesAppend(ctx context.Context, req mcp.CallToolRequest)
 		// never clears a label (accountAfter, starAfter).
 		note.Account = accountAfter(note.Account, access.AccountOf(ctx), true, false)
 		note.Favorite = starAfter(note.Favorite, access.AccountOf(ctx), true)
+		stampNote(ctx, &note)
 		if screen {
 			if herr := s.judgeNoteWrite(ctx, "notes_append", note, before, "", screenSession, &jd); herr != nil {
 				return core.Note{}, herr

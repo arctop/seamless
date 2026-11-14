@@ -336,6 +336,11 @@ func (s *Service) releaseMemoryWrite(ctx context.Context, h store.HeldWrite) (Re
 			return Released{}, fmt.Errorf("screening.Release: %s landed, but superseding %s failed (it is still active): %w",
 				lifecycle.MemoryRef(written.Project, written.Name), lifecycle.MemoryRef(target.Project, target.Name), err)
 		}
+		// Supersession keeps the union of both memories' provenance stamps.
+		if _, err := lifecycle.UnionStamps(ctx, s.cfg.Files, written, updated.MayContain); err != nil {
+			return Released{}, fmt.Errorf("screening.Release: %s superseded %s, but its provenance stamps were not carried over: %w",
+				lifecycle.MemoryRef(written.Project, written.Name), lifecycle.MemoryRef(target.Project, target.Name), err)
+		}
 		s.record(ctx, core.Event{Kind: core.EventMemorySuperseded, SessionID: h.SessionID, ProjectSlug: updated.Project,
 			ItemID: updated.ID, Payload: map[string]any{"name": updated.Name, "superseded_by": written.ID, "released": h.ID}})
 		out.Superseded = lifecycle.MemoryRef(updated.Project, updated.Name)

@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/arctop/seamless/internal/core"
 )
 
 func shortID(id string) string {
@@ -71,6 +73,37 @@ func writtenBy(account string) string {
 		return ""
 	}
 	return "written by account " + printable(account)
+}
+
+// mayContain renders an item's provenance stamps (a read answer's
+// may_contain, plan fenced-sessions P6) in the console's words: "may contain
+// content from example-legal (grant R-ABCD)", plus how many this connection
+// may not be told about. "" when the item carries none -- every item on an
+// install that never turned isolation.requests on -- which printField skips.
+func mayContain(m map[string]any) string {
+	list, _ := m["may_contain"].([]any)
+	stamps := make([]core.Stamp, 0, len(list))
+	for _, e := range list {
+		entry, _ := e.(map[string]any)
+		st := core.Stamp{Project: printable(str(entry["project"]))}
+		for _, via := range core.StampVias {
+			if ref := str(entry[via]); ref != "" {
+				st.Via, st.Ref = via, printable(ref)
+				break
+			}
+		}
+		stamps = append(stamps, st)
+	}
+	line := core.MayContainLine(stamps)
+	if n, _ := m["may_contain_withheld"].(float64); n > 0 {
+		if line == "" {
+			line = "may contain content from"
+		} else {
+			line += ","
+		}
+		line += fmt.Sprintf(" %d project(s) this connection may not name", int(n))
+	}
+	return line
 }
 
 // updatedBy labels a task whose title or body a restricted local account

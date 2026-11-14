@@ -28,3 +28,17 @@ func TestAgoShort(t *testing.T) {
 	require.Equal(t, "2h", agoShort(time.Now().Add(-2*time.Hour)))
 	require.Equal(t, "3d", agoShort(time.Now().Add(-72*time.Hour)))
 }
+
+// A read answer's provenance stamps render as the console words them, and an
+// item with none renders nothing (printField skips it).
+func TestMayContain_RendersTheStamps(t *testing.T) {
+	require.Equal(t, "may contain content from example-legal (grant R-JC4D), example-finance (move R-Y3C1)",
+		mayContain(map[string]any{"may_contain": []any{
+			map[string]any{"project": "example-legal", "grant": "01M7999M7MBPEKDYS4P1XBJC4D"},
+			map[string]any{"project": "example-finance", "move": "01M79FJBCPRF2WWPHWE592Y3C1"},
+		}}))
+	require.Equal(t, "may contain content from example-legal (grant R-JC4D), 1 project(s) this connection may not name",
+		mayContain(map[string]any{"may_contain": []any{map[string]any{"project": "example-legal", "grant": "01M7999M7MBPEKDYS4P1XBJC4D"}},
+			"may_contain_withheld": float64(1)}))
+	require.Empty(t, mayContain(map[string]any{"id": "01X"}))
+}

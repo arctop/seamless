@@ -123,6 +123,9 @@ func (s *Service) Search(ctx context.Context, in SearchInput) ([]Hit, error) {
 		}
 		out = append(out, h)
 	}
+	if err := s.attachStamps(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 

@@ -582,6 +582,11 @@ func (h *Handler) applyCodexStop(ctx context.Context, externalSessionID string, 
 			return refusal
 		}
 	}
+	// The turn's findings are the conversation's own text: they carry its
+	// stamps for the home (stamp.go), or do not land.
+	if dest.HasAmbient && !h.stampFindings(ctx, ClientCodex, externalSessionID, dest.Ambient) {
+		return ""
+	}
 	h.setCodexAmbientFindings(ctx, externalSessionID, findings)
 	return ""
 }
@@ -621,6 +626,9 @@ func (h *Handler) codexStopRouted(ctx context.Context, externalSessionID string,
 	ok, refused := h.linkTakes(ctx, ClientCodex, externalSessionID, link, "this turn's findings")
 	if !ok {
 		return refused
+	}
+	if !h.stampFindings(ctx, ClientCodex, externalSessionID, link) {
+		return ""
 	}
 	h.setLinkFindings(ctx, link, findings, now)
 	return ""
@@ -973,6 +981,11 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 			took = false
 		case harvesting:
 			findings, t, ok := endFindings(dest, linkOK, sess, harvest)
+			// The harvest is the conversation's own text: the row that takes
+			// it carries its stamps (stamp.go), or keeps what it had.
+			if t && !h.stampFindings(ctx, client, p.SessionID, sess) {
+				ok, t = false, false
+			}
 			if ok {
 				sess.Findings = findings
 			}
@@ -999,7 +1012,7 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 	case dest.Kind == store.RecordDestWithheld:
 		notice = withheldNotice("this conversation's findings", dest.Fenced)
 	case linkOK && !slices.ContainsFunc(sessions, func(s core.Session) bool { return s.ID == dest.Session.ID }):
-		h.harvestEndedLink(ctx, client, dest.Session, p.Reason, harvest, now)
+		h.harvestEndedLink(ctx, client, p.SessionID, dest.Session, p.Reason, harvest, now)
 	}
 	return notice
 }
@@ -1031,8 +1044,12 @@ func (h *Handler) endedSession(ctx context.Context, client Client, sess core.Ses
 // expired it, or an earlier end of this resumed conversation completed it --
 // and ends it. The caller has judged that it may (linkTakes) and that its
 // findings are the hooks' own; findings the agent wrote in the meantime are
-// kept (store.LinkUpdateFindings is a compare-and-set).
-func (h *Handler) harvestEndedLink(ctx context.Context, client Client, link core.Session, reason string, harvest func() string, now time.Time) {
+// kept (store.LinkUpdateFindings is a compare-and-set). The harvest carries
+// the conversation's stamps (externalSessionID names it), or does not land.
+func (h *Handler) harvestEndedLink(ctx context.Context, client Client, externalSessionID string, link core.Session, reason string, harvest func() string, now time.Time) {
+	if !h.stampFindings(ctx, client, externalSessionID, link) {
+		return
+	}
 	ended, ok, err := store.LinkUpdateFindings(ctx, h.db, link.ID, link.Findings, harvest(), true, now)
 	if err != nil {
 		h.recordHookError(ctx, "session-end-link-harvest", client, err, "session", link.ID)

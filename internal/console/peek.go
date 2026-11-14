@@ -66,18 +66,19 @@ type memoryDetail struct {
 	// BodyIsEcho reports that the stored body adds nothing to the description:
 	// absent, or the same sentence again. The reader says so instead of
 	// printing one sentence twice and calling the second one the body.
-	BodyIsEcho   bool        `json:"-"`
-	Source       string      `json:"sourceSession,omitempty"`   // session name
-	SourceID     string      `json:"sourceSessionId,omitempty"` // resolved ULID, for a link
-	Model        string      `json:"model,omitempty"`           // producing model, as the provider names it
-	Harness      string      `json:"harness,omitempty"`         // producing client, resolved from the source session
-	Account      string      `json:"account,omitempty"`         // restricted account that wrote the content ("" = owner)
-	Favorite     bool        `json:"favorite,omitempty"`
-	ReplacedBy   string      `json:"replacedBy,omitempty"` // name of the superseder
-	ReplacedByID string      `json:"replacedById,omitempty"`
-	Supersedes   []memoryRef `json:"supersedes,omitempty"` // reverse: memories this replaced
-	FilePath     string      `json:"filePath"`
-	AbsPath      string      `json:"absPath"`
+	BodyIsEcho   bool         `json:"-"`
+	Source       string       `json:"sourceSession,omitempty"`   // session name
+	SourceID     string       `json:"sourceSessionId,omitempty"` // resolved ULID, for a link
+	Model        string       `json:"model,omitempty"`           // producing model, as the provider names it
+	Harness      string       `json:"harness,omitempty"`         // producing client, resolved from the source session
+	Account      string       `json:"account,omitempty"`         // restricted account that wrote the content ("" = owner)
+	Favorite     bool         `json:"favorite,omitempty"`
+	MayContain   []core.Stamp `json:"mayContain,omitempty"` // the file's provenance stamps (console stamp.go)
+	ReplacedBy   string       `json:"replacedBy,omitempty"` // name of the superseder
+	ReplacedByID string       `json:"replacedById,omitempty"`
+	Supersedes   []memoryRef  `json:"supersedes,omitempty"` // reverse: memories this replaced
+	FilePath     string       `json:"filePath"`
+	AbsPath      string       `json:"absPath"`
 	// Level is the console level, for the reader's one gate (the utility
 	// score): the reader also renders standalone as a ?reader=1 fragment, with
 	// no page around it to ask. Presentation only -- never in the JSON.
@@ -117,7 +118,10 @@ func (s *Service) memoryDetailData(ctx context.Context, m core.Memory) (memoryDe
 			d.BodyText = full.Body
 			d.BodyLoaded = true
 			d.Body = s.renderBody(ctx, full.Body, m.Project)
+			d.MayContain = core.StampsShown(full.MayContain, m.Project)
 		}
+	} else {
+		d.MayContain = s.itemStamps(ctx, core.ItemKindMemory, m.ID, m.Project)
 	}
 
 	if stat, found, serr := store.GetRetrievalStat(ctx, s.db(ctx), m.ID); serr != nil {
@@ -235,6 +239,7 @@ type noteDetail struct {
 	Model       string        `json:"model,omitempty"`   // producing model, as the provider names it
 	Account     string        `json:"account,omitempty"` // restricted account that wrote the content ("" = owner)
 	Favorite    bool          `json:"favorite,omitempty"`
+	MayContain  []core.Stamp  `json:"mayContain,omitempty"` // the file's provenance stamps (console stamp.go)
 	Created     time.Time     `json:"created"`
 	Updated     time.Time     `json:"updated"`
 	FilePath    string        `json:"filePath"`
@@ -260,7 +265,10 @@ func (s *Service) noteDetailData(ctx context.Context, n core.Note) noteDetail {
 			d.BodyLoaded = true
 			d.Words = len(strings.Fields(full.Body))
 			d.Body = s.renderBody(ctx, full.Body, n.Project)
+			d.MayContain = core.StampsShown(full.MayContain, n.Project)
 		}
+	} else {
+		d.MayContain = s.itemStamps(ctx, core.ItemKindNote, n.ID, n.Project)
 	}
 	return d
 }
@@ -352,6 +360,9 @@ type taskDetail struct {
 	// still carry (never a status flip or a claim); "" for the owner.
 	Account        string `json:"account,omitempty"`
 	UpdatedAccount string `json:"updatedAccount,omitempty"`
+	// MayContain is the task's provenance stamps, from the index (console
+	// stamp.go).
+	MayContain []core.Stamp `json:"mayContain,omitempty"`
 	// Next is where this fragment's owner actions (star, release) return to,
 	// when the surface that fetched it asked for one. Empty leaves each action
 	// on its own default -- the task page or the tasks library.
@@ -380,6 +391,7 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 	// Task bodies get the same markdown + wiki-link treatment as memory/note
 	// bodies, scoped to the task's project.
 	d.Body = s.renderBody(ctx, t.Body, t.ProjectSlug)
+	d.MayContain = s.itemStamps(ctx, core.ItemKindTask, t.ID, t.ProjectSlug)
 	for _, depID := range t.DependsOn {
 		dep, derr := store.TaskByID(ctx, s.db(ctx), depID)
 		if derr != nil {

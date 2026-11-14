@@ -528,3 +528,49 @@ func TestApplyRekind_KeepsTheAccount(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "_example_agent", disk.Account, "file")
 }
+
+// A merge and a consolidation keep the union of the superseded memories'
+// provenance stamps (plan fenced-sessions P6): what a dropped source may have
+// held from a fenced project stays named on what replaced it.
+func TestApply_SupersessionKeepsTheStampsUnion(t *testing.T) {
+	g, mgr, cx := newApplyFixture(t)
+	ctx := cx()
+	now := time.Now().UTC()
+	stamp := func(name, project, source string) core.Memory {
+		t.Helper()
+		m, err := mgr.WriteMemory(ctx, core.Memory{ID: mustID(t), Kind: core.KindGotcha, Name: name, Description: name,
+			Project: project, Body: name + "\n", Created: now, Updated: now, ValidFrom: now,
+			MayContain: []core.Stamp{{Project: source, Via: core.StampViaGrant, Ref: "01" + name}}})
+		require.NoError(t, err)
+		return m
+	}
+	keep := stamp("keep-stamped", "example-data", "example-legal")
+	drop := stamp("drop-stamped", "example-data", "example-finance")
+	p, err := store.CreateProposal(ctx, g.db, store.ProposalMerge, map[string]any{
+		"key": mergeKey(keep.ID, drop.ID), "keep": map[string]any{"id": keep.ID, "name": keep.Name},
+		"drop": map[string]any{"id": drop.ID, "name": drop.Name},
+	})
+	require.NoError(t, err)
+	_, err = g.Apply(ctx, p.ID)
+	require.NoError(t, err)
+	kept, err := mgr.Store().ReadMemory(keep.FilePath)
+	require.NoError(t, err)
+	require.Equal(t, []string{"example-legal", "example-finance"}, []string{kept.MayContain[0].Project, kept.MayContain[1].Project})
+
+	a := stamp("fold-a", "example-data", "example-hr")
+	b := stamp("fold-b", "example-data", "example-desk")
+	c, err := store.CreateProposal(ctx, g.db, store.ProposalConsolidate, map[string]any{
+		"key": "consolidate:" + a.ID + "|" + b.ID, "name": "fold-unified", "kind": "runbook",
+		"project": "example-data", "description": "the unified fold", "body": "# Fold\ncombined",
+		"sources": []any{map[string]any{"id": a.ID, "name": a.Name}, map[string]any{"id": b.ID, "name": b.Name}},
+	})
+	require.NoError(t, err)
+	_, err = g.Apply(ctx, c.ID)
+	require.NoError(t, err)
+	unified, ok, err := store.MemoryByName(ctx, g.db, "example-data", "fold-unified")
+	require.NoError(t, err)
+	require.True(t, ok)
+	full, err := mgr.Store().ReadMemory(unified.FilePath)
+	require.NoError(t, err)
+	require.Len(t, full.MayContain, 2, "both sources' stamps")
+}

@@ -709,6 +709,14 @@ any of it.
   `retrieve.ProjectPromptRecall`, `BriefingInput.Also`). A resume re-scopes only
   where `store.CanWrite(home, cwd)` holds, and a locked home goes to
   `lockedStart`. Off, every hook is P0's.
+- **Provenance stamps are set from the conversation and never removed by a
+  write** (`core.Stamp`, `access.Grants.Stamps`, `store/stamp.go`,
+  `mcp/stamp.go`, `hooks/stamp.go`). The frontmatter `may_contain` is mirrored
+  exactly into `item_provenance` by `files.Indexer` (the file wins); tasks,
+  trials and findings live in the index only. Every content write stamps before
+  it writes; supersession unions through `lifecycle.UnionStamps` (memory_write,
+  the gardener, screening release); flag flips stamp nothing; reads name only
+  `View.Listed` projects.
 - **The identity comes from the transport, never the client.** A header, a
   `session=` handle, a body field or an agent-process identity can only ever
   narrow what the View allows. `getBinding` drops a binding to an unreachable

@@ -99,6 +99,11 @@ func (s *Server) handleTrialRecord(ctx context.Context, req mcp.CallToolRequest)
 	if err := store.CreateTrial(ctx, s.cfg.DB, tr); err != nil {
 		return errResult("trial_record", err)
 	}
+	// A trial is the agent's own text: it carries the conversation's
+	// provenance stamps for its project, in the index alone (stamp.go).
+	if err := s.stampWorkItem(ctx, core.ItemKindTrial, id, project); err != nil {
+		return errResult("trial_record", stampFailed("trial "+id+" was recorded", err))
+	}
 	s.record(ctx, core.EventTrialRecorded, tr.SessionID, project, id,
 		map[string]any{"lab": lab, "title": title, "outcome": string(tr.Outcome)})
 	return jsonResult(trialJSON(tr))

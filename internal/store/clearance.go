@@ -244,7 +244,7 @@ func treeSessionProjects(ctx context.Context, db *sql.DB, host, stamp string) ([
 func (c clearanceHolders) read(ctx context.Context, db *sql.DB) (access.Conversation, error) {
 	conv := access.Conversation{Key: c.key, Sessions: c.sessions, Home: c.home, HomeKnown: c.homeKnown}
 	label := map[string]bool{}
-	flows := map[FlowPair]bool{}
+	flows := map[FlowPair]flowRecord{}
 	seen := map[string]bool{}
 	for chunk := range slices.Chunk(c.holders, holderMaxLookup) {
 		entries, err := HolderLabel(ctx, db, chunk, c.home)
@@ -259,7 +259,8 @@ func (c clearanceHolders) read(ctx context.Context, db *sql.DB) (access.Conversa
 			return access.Conversation{}, err
 		}
 		for _, f := range hf {
-			flows[FlowPair{From: f.From, To: f.To}] = true
+			keepFlowRecord(flows, FlowPair{From: f.From, To: f.To},
+				flowRecord{via: stampVia(f.ApprovalKind), ref: f.ApprovalID, at: f.At})
 		}
 		grants, err := HolderAccessGrants(ctx, db, chunk)
 		if err != nil {
@@ -282,11 +283,13 @@ func (c clearanceHolders) read(ctx context.Context, db *sql.DB) (access.Conversa
 		}
 	}
 	// The native home (RecordDestinationOf): a fenced home keeps its record
-	// whatever the conversation's own sessions reach.
+	// whatever the conversation's own sessions reach. No approval cleared such
+	// a flow, so a stamp names the conversation's own session there.
 	if c.home != "" && label[c.home] {
 		for _, s := range c.own {
 			if s.ProjectSlug != c.home && label[s.ProjectSlug] {
-				flows[FlowPair{From: s.ProjectSlug, To: c.home}] = true
+				keepFlowRecord(flows, FlowPair{From: s.ProjectSlug, To: c.home},
+					flowRecord{via: core.StampViaSession, ref: s.ID, at: s.CreatedAt, native: true})
 			}
 		}
 	}
@@ -308,9 +311,9 @@ func (c clearanceHolders) read(ctx context.Context, db *sql.DB) (access.Conversa
 			fencedTo[f.Slug] = true
 		}
 	}
-	for f := range flows {
+	for f, rec := range flows {
 		if f.From != "" && f.To != "" && f.From != f.To && fencedTo[f.To] {
-			conv.Flows = append(conv.Flows, access.Flow{From: f.From, To: f.To})
+			conv.Flows = append(conv.Flows, access.Flow{From: f.From, To: f.To, Via: rec.via, Ref: rec.ref})
 		}
 	}
 	slices.SortFunc(conv.Flows, func(a, b access.Flow) int {
@@ -318,6 +321,44 @@ func (c clearanceHolders) read(ctx context.Context, db *sql.DB) (access.Conversa
 	})
 	conv.Label = slices.Sorted(maps.Keys(label))
 	return conv, nil
+}
+
+// flowRecord is what cleared one flow, for the stamp a write by it carries:
+// an approval's kind and id, or the conversation's own session (native).
+type flowRecord struct {
+	via, ref string
+	at       time.Time
+	native   bool
+}
+
+// keepFlowRecord records rec for pair unless a record that names it better is
+// there already: an approval before a native flow, then the earliest, then
+// the smallest reference -- so a stamp names one record whichever lookup
+// chunk found it.
+func keepFlowRecord(flows map[FlowPair]flowRecord, pair FlowPair, rec flowRecord) {
+	cur, ok := flows[pair]
+	switch {
+	case !ok:
+	case cur.native != rec.native:
+		if rec.native {
+			return
+		}
+	case rec.at.After(cur.at), rec.at.Equal(cur.at) && rec.ref >= cur.ref:
+		return
+	}
+	flows[pair] = rec
+}
+
+// stampVia is the stamp word (core.StampVia*) for an approval kind; "" for a
+// kind no stamp names.
+func stampVia(kind string) string {
+	switch kind {
+	case AccessKindGrant:
+		return core.StampViaGrant
+	case AccessKindMove:
+		return core.StampViaMove
+	}
+	return ""
 }
 
 // clearanceGrant is a grant row as the access layer judges it, by the holder

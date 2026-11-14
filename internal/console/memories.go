@@ -340,14 +340,33 @@ func (s *Service) memoryArchive(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/console/memories", http.StatusSeeOther)
 		return
 	}
-	mem, err := s.cfg.Files.Store().ReadMemory(idx.FilePath)
+	// The read that feeds the tombstone write happens under the file's lock
+	// (files.Manager.Mutate): read outside it, an agent's append landing in
+	// between was undone by the rewrite, with no error anywhere.
+	var updated core.Memory
+	already := false
+	err = s.cfg.Files.Mutate(ctx, idx.FilePath, func(ctx context.Context) error {
+		mem, rerr := s.cfg.Files.Store().ReadMemory(idx.FilePath)
+		if rerr != nil {
+			return rerr
+		}
+		if mem.InvalidAt != nil {
+			already = true // retired while this request waited
+			return nil
+		}
+		u, aerr := lifecycle.Archive(ctx, s.cfg.Files, mem, "archived from console", time.Now().UTC())
+		if aerr != nil {
+			return aerr
+		}
+		updated = u
+		return nil
+	})
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	updated, err := lifecycle.Archive(ctx, s.cfg.Files, mem, "archived from console", time.Now().UTC())
-	if err != nil {
-		s.serverError(w, r, err)
+	if already {
+		http.Redirect(w, r, "/console/memories", http.StatusSeeOther)
 		return
 	}
 	if s.cfg.Events != nil {

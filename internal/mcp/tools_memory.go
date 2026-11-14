@@ -220,6 +220,8 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 						existing.FilePath, rerr)
 				}
 				mem.Tags, mem.Favorite, mem.Extra = onDisk.Tags, onDisk.Favorite, onDisk.Extra
+				// Provenance stamps have no argument either, and no write removes one.
+				mem.MayContain = onDisk.MayContain
 				replaced = onDisk
 			}
 			// This write replaces the body and the description, so a restricted
@@ -250,6 +252,8 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 		if argPresent(req, "tags") {
 			mem.Tags = argStrings(req, "tags")
 		}
+		// Before the judge, so a held write holds its stamps too.
+		stampMemory(ctx, &mem)
 
 		if judge.active() {
 			if herr := s.judgeMemoryWrite(ctx, judge, mem, replaced, supersedeTarget); herr != nil {
@@ -299,7 +303,7 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 		return errResult("memory_write", serr)
 	}
 	if supersedes != "" {
-		superseded, serr := s.supersedeMemory(ctx, project, supersedes, written, explicitScope, now)
+		superseded, oldStamps, serr := s.supersedeMemoryStamps(ctx, project, supersedes, written, explicitScope, now)
 		if serr != nil {
 			// Partial failure: the new memory is kept -- its content is valid
 			// knowledge, an update-in-place has no previous body to restore, and
@@ -314,6 +318,12 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 		}
 		if superseded != "" {
 			resp["superseded"] = superseded
+		}
+		// The replacement carries the union of both memories' stamps: what the
+		// old memory may have held from a fenced project may be in what
+		// replaced it.
+		if _, uerr := lifecycle.UnionStamps(ctx, s.cfg.Files, written, oldStamps); uerr != nil {
+			return errResult("memory_write", stampFailed(fmt.Sprintf("memory %q written (id %s) and %q superseded", name, written.ID, supersedes), uerr))
 		}
 	}
 	// The dedup hint is another project's memory: its name, its description --
@@ -335,13 +345,22 @@ func (s *Server) handleMemoryWrite(ctx context.Context, req mcp.CallToolRequest)
 // project=: without it, a target whose name a restricted account's project
 // memory shares with a global rule is refused (refuseShadowedWrite).
 func (s *Server) supersedeMemory(ctx context.Context, project, target string, replacement core.Memory, explicit bool, now time.Time) (string, error) {
+	ref, _, err := s.supersedeMemoryStamps(ctx, project, target, replacement, explicit, now)
+	return ref, err
+}
+
+// supersedeMemoryStamps is supersedeMemory, also returning the superseded
+// memory's provenance stamps, which the replacement unions into its own
+// (lifecycle.UnionStamps) -- for a retried call too, whose earlier union may
+// not have landed.
+func (s *Server) supersedeMemoryStamps(ctx context.Context, project, target string, replacement core.Memory, explicit bool, now time.Time) (string, []core.Stamp, error) {
 	old, found, err := s.resolveMemory(ctx, project, target, true)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if found {
 		if err := s.refuseShadowedWrite(ctx, old, explicit); err != nil {
-			return "", err
+			return "", nil, err
 		}
 	}
 	if !found {
@@ -350,18 +369,24 @@ func (s *Server) supersedeMemory(ctx context.Context, project, target string, re
 		// goal state (a retried call), not a failure.
 		prev, ok, perr := s.resolveSupersededMemory(ctx, project, target)
 		if perr != nil {
-			return "", perr
+			return "", nil, perr
 		}
 		if ok && prev.SupersededBy == replacement.ID {
-			return lifecycle.MemoryRef(prev.Project, prev.Name), nil
+			// Its stamps are the file's (an index row carries none), for a
+			// retry whose earlier union did not land.
+			full, rerr := s.cfg.Files.Store().ReadMemory(prev.FilePath)
+			if rerr != nil {
+				return "", nil, rerr
+			}
+			return lifecycle.MemoryRef(prev.Project, prev.Name), full.MayContain, nil
 		}
 		if ok {
-			return "", fmt.Errorf("memory %q is already superseded or archived", target)
+			return "", nil, fmt.Errorf("memory %q is already superseded or archived", target)
 		}
-		return "", fmt.Errorf("no memory named %q to supersede", target)
+		return "", nil, fmt.Errorf("no memory named %q to supersede", target)
 	}
 	if old.ID == replacement.ID {
-		return "", nil // same memory: an in-place update, not a supersession
+		return "", nil, nil // same memory: an in-place update, not a supersession
 	}
 	// resolveMemory falls back to global, so the target can sit outside the
 	// caller's project -- and superseding it is a write there: Supersede rewrites
@@ -369,14 +394,14 @@ func (s *Server) supersedeMemory(ctx context.Context, project, target string, re
 	// which is a fenced project's vocabulary landing in a scope every project
 	// reads.
 	if err := s.fenceWrite(ctx, old.Project); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	// A restricted account's supersede of a briefing-injected kind is filed as a
 	// proposal before the write (memory_write judges the target it resolves
 	// ahead of the lock). Meeting one here means the target changed kind, or
 	// appeared, after that judgment: refuse rather than retire it unheld.
 	if access.AccountOf(ctx) != "" && screening.IsBriefingKind(old.Kind) {
-		return "", errSupersedeIsProposal(target, old.Kind)
+		return "", nil, errSupersedeIsProposal(target, old.Kind)
 	}
 	// Index rows carry no body; read the file so the tombstone appends to the
 	// real content rather than truncating it. Read and rewrite are one serialized
@@ -398,11 +423,11 @@ func (s *Server) supersedeMemory(ctx context.Context, project, target string, re
 		updated = u
 		return nil
 	}); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	s.record(ctx, core.EventMemorySuperseded, s.boundSession(ctx), updated.Project, updated.ID,
 		map[string]any{"name": updated.Name, "superseded_by": replacement.ID})
-	return lifecycle.MemoryRef(updated.Project, updated.Name), nil
+	return lifecycle.MemoryRef(updated.Project, updated.Name), updated.MayContain, nil
 }
 
 func memoryAppendTool() mcp.Tool {
@@ -471,6 +496,7 @@ func (s *Server) handleMemoryAppend(ctx context.Context, req mcp.CallToolRequest
 		// label, and the owner's never clears one (accountAfter).
 		cur.Account = accountAfter(cur.Account, judge.account, true, false)
 		cur.Favorite = starAfter(cur.Favorite, judge.account, true)
+		stampMemory(ctx, &cur)
 		// A restricted account's append to a briefing-injected kind -- its own
 		// promoted constraint included -- changes binding text: a proposal.
 		if judge.active() {
@@ -628,6 +654,8 @@ func (s *Server) handleMemoryRead(ctx context.Context, req mcp.CallToolRequest) 
 	if mem.Favorite {
 		out["favorite"] = true
 	}
+	// The file's stamps: which fenced projects' content this memory may hold.
+	putStamps(ctx, out, mem.MayContain, mem.Project)
 	shadow.render(out)
 	if !mem.Active() {
 		warning, fenced := s.supersededWarning(ctx, mem)

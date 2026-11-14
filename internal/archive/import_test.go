@@ -688,11 +688,20 @@ func TestImport_MergeCarriesProvenanceStamps(t *testing.T) {
 	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
 	for _, s := range []store.ProvenanceStamp{
 		{ItemKind: core.ItemKindTask, ItemID: specA.taskA, Project: specA.project, Source: "example-finance", ApprovalID: "01APPROVALFIN"},
-		{ItemKind: core.ItemKindMemory, ItemID: specA.memID, Project: specA.project, Source: "example-finance", ApprovalID: "01APPROVALFIN"},
 		{ItemKind: core.ItemKindSession, ItemID: specA.sessionID, Project: specA.project, Source: "example-legal", ApprovalID: "01APPROVALLEG"},
 	} {
 		require.NoError(t, store.ProvenanceUpsert(ctx, srcDB, s, now))
 	}
+	// A memory's stamp is its file's (frontmatter may_contain), and the files
+	// layer mirrors it into item_provenance, as a stamped write leaves it.
+	srcMgr, err := files.NewManager(src, srcDB, nil)
+	require.NoError(t, err)
+	mem, err := srcMgr.Store().ReadMemory(files.MemoryRelPath(specA.project, specA.memName))
+	require.NoError(t, err)
+	mem.MayContain = []core.Stamp{{Project: "example-finance", Via: core.StampViaGrant, Ref: "01APPROVALFIN"}}
+	_, err = srcMgr.WriteMemory(ctx, mem)
+	require.NoError(t, err)
+	require.NoError(t, srcMgr.Close())
 	require.NoError(t, srcDB.Close())
 	data := exportOf(t, src)
 
@@ -712,7 +721,13 @@ func TestImport_MergeCarriesProvenanceStamps(t *testing.T) {
 	require.Equal(t, specA.project, got[0].Project)
 	require.Equal(t, "example-finance", got[0].Source)
 	require.Equal(t, "01APPROVALFIN", got[0].ApprovalID)
+	merged, err := store.ProvenanceForItem(ctx, db, core.ItemKindMemory, specA.memID)
+	require.NoError(t, err)
+	require.Len(t, merged, 1, "the merged memory's file carries its stamp, and the index mirrors it")
 	require.NoError(t, db.Close())
+	mergedMem, err := files.NewStore(dst).ReadMemory(files.MemoryRelPath(specA.project, specA.memName))
+	require.NoError(t, err)
+	require.Equal(t, []core.Stamp{{Project: "example-finance", Via: core.StampViaGrant, Ref: "01APPROVALFIN"}}, mergedMem.MayContain)
 
 	again, err := Import(ctx, ImportOptions{DataDir: dst, Src: bytes.NewReader(data)})
 	require.NoError(t, err)

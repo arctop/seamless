@@ -192,6 +192,11 @@ func (s *Server) handleMemoryEdit(ctx context.Context, req mcp.CallToolRequest) 
 			textOwned(oldBody, newBody, false) && textOwned(before.Description, cur.Description, true))
 		cur.Favorite = starAfter(cur.Favorite, judge.account,
 			newBody != oldBody || cur.Description != before.Description)
+		// An edit that writes text -- body edits, a description, added tags --
+		// carries the conversation's stamps; a tag removal alone writes none.
+		if len(edits) > 0 || argPresent(req, "description") || argPresent(req, "tags_add") {
+			stampMemory(ctx, &cur)
+		}
 		// A restricted account's edit of a briefing-injected kind -- its own
 		// promoted constraint included, metadata-only edits too -- is a proposal.
 		if judge.active() {

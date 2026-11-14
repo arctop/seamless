@@ -72,6 +72,10 @@ func (s *Server) handleTasksAdd(ctx context.Context, req mcp.CallToolRequest) (*
 	if err := store.CreateTask(ctx, s.cfg.DB, task); err != nil {
 		return errResult("tasks_add", err)
 	}
+	// A task's stamps live in the index alone (store.StampWorkItem).
+	if err := s.stampWorkItem(ctx, core.ItemKindTask, id, project); err != nil {
+		return errResult("tasks_add", stampFailed("task "+id+" was created", err))
+	}
 	created, err := store.TaskByID(ctx, s.cfg.DB, id)
 	if err != nil {
 		return errResult("tasks_add", err)
@@ -192,6 +196,9 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 		return errResult("tasks_update", err)
 	}
 	updated := res.Task
+	if err := s.stampTaskUpdate(ctx, current, updated, patch); err != nil {
+		return errResult("tasks_update", stampFailed("task "+id+" was updated", err))
+	}
 	// A call whose only ask was removals that named no blocker changed nothing,
 	// so the task's history gains nothing either.
 	if !res.Unchanged {
@@ -227,6 +234,24 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 		}
 	}
 	return jsonResult(out)
+}
+
+// stampTaskUpdate keeps a task's stamps with it and adds the call's: a task
+// moved to another project takes its stamps along (store.ProvenanceRelocate),
+// and new text or a move carries the conversation's stamps for the project
+// the task is in now. A status, dependency or commit change writes nothing
+// the conversation holds and adds none.
+func (s *Server) stampTaskUpdate(ctx context.Context, before, after core.Task, patch store.TaskPatch) error {
+	moved := after.ProjectSlug != before.ProjectSlug
+	if moved {
+		if err := store.ProvenanceRelocate(ctx, s.cfg.DB, core.ItemKindTask, after.ID, after.ProjectSlug); err != nil {
+			return err
+		}
+	}
+	if moved || patch.Title != nil || patch.Body != nil {
+		return s.stampWorkItem(ctx, core.ItemKindTask, after.ID, after.ProjectSlug)
+	}
+	return nil
 }
 
 // removeDependsOnParam is tasks_update's blocker-removal argument.
@@ -665,11 +690,22 @@ func (s *Server) taskReader(ctx context.Context) func(project string) (bool, err
 // dependencies its caller may read (fenceTaskDeps).
 func (s *Server) tasksJSON(ctx context.Context, readable func(string) (bool, error), tasks []core.Task) ([]map[string]any, error) {
 	out := make([]map[string]any, len(tasks))
+	ids := make([]string, len(tasks))
 	for i, t := range tasks {
 		out[i] = taskJSON(t)
+		ids[i] = t.ID
 	}
 	if err := s.fenceTaskDeps(ctx, readable, tasks, out); err != nil {
 		return nil, err
+	}
+	// The stamps of the tasks answered (item_provenance, one lookup): which
+	// fenced projects' content each may hold.
+	stamps, err := store.ProvenanceForItems(ctx, s.cfg.DB, core.ItemKindTask, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i, t := range tasks {
+		putStamps(ctx, out[i], stamps[t.ID], t.ProjectSlug)
 	}
 	return out, nil
 }

@@ -27,6 +27,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -117,7 +118,10 @@ type searchRow struct {
 	// created, a trial it recorded, a session it started -- for the "written
 	// by account" chip; "" for the owner's items, which render as before.
 	Account string `json:"account,omitempty"`
-	Peek    bool   `json:"peek"`
+	// MayContain is the item's provenance stamps (console stamp.go): the
+	// hit's for a memory or a note, the index's for a task or a session.
+	MayContain []core.Stamp `json:"mayContain,omitempty"`
+	Peek       bool         `json:"peek"`
 }
 
 // searchGroup is one entity kind's results.
@@ -367,12 +371,18 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 			return nil, err
 		}
 		rows := make([]searchRow, 0, len(tasks))
+		ids := make([]string, len(tasks))
+		for i, t := range tasks {
+			ids[i] = t.ID
+		}
+		stamps := s.stampsByID(ctx, core.ItemKindTask, ids)
 		for _, t := range tasks {
 			row := searchRow{
 				Kind: "task", ID: t.ID, Title: t.Title, Project: t.ProjectSlug,
 				Age: ago(t.UpdatedAt), Href: "/console/tasks/" + t.ID,
 				Description: string(t.Status), Updated: t.UpdatedAt,
 				Favorite: t.Favorite, Account: t.Account, Lexical: true, Peek: true,
+				MayContain: core.StampsShown(stamps[t.ID], t.ProjectSlug),
 			}
 			row.MatchKind = store.IDIdentifierMatch(data.Query, t.ID)
 			if row.MatchKind != "" {
@@ -455,12 +465,18 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 			return nil, err
 		}
 		rows := make([]searchRow, 0, len(sessions))
+		ids := make([]string, len(sessions))
+		for i, sess := range sessions {
+			ids[i] = sess.ID
+		}
+		stamps := s.stampsByID(ctx, core.ItemKindSession, ids)
 		for _, sess := range sessions {
 			row := searchRow{
 				Kind: "session", ID: sess.ID, Title: sess.Name, Project: sess.ProjectSlug,
 				Age: ago(sess.UpdatedAt), Href: "/console/sessions/" + sess.ID,
 				Description: string(sess.Status), Updated: sess.UpdatedAt,
 				Favorite: sess.Favorite, Account: sess.Account, Lexical: true, Peek: true,
+				MayContain: core.StampsShown(stamps[sess.ID], sess.ProjectSlug),
 			}
 			row.MatchKind = store.IDIdentifierMatch(data.Query, sess.ID)
 			if row.MatchKind != "" {
@@ -483,7 +499,7 @@ func hitRow(h retrieve.Hit) searchRow {
 		Kind: h.Kind, ID: h.ID, Title: h.Title, Project: h.Project,
 		Identifier: h.Name, MatchKind: h.IdentifierMatch,
 		Age: h.Age, Description: h.Description, Updated: h.Updated,
-		Favorite: h.Favorite, Account: h.Account, Peek: true,
+		Favorite: h.Favorite, Account: h.Account, MayContain: h.MayContain, Peek: true,
 	}
 	if h.IdentifierMatch == store.IdentifierMatchExactID || h.IdentifierMatch == store.IdentifierMatchIDPrefix {
 		row.MatchedID = h.ID

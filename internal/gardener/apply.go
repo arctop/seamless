@@ -217,6 +217,11 @@ func (s *Service) applyMerge(ctx context.Context, p store.Proposal, now time.Tim
 	}); err != nil {
 		return nil, err
 	}
+	// Supersession keeps the union of both memories' provenance stamps.
+	if _, err := lifecycle.UnionStamps(ctx, s.files, keep, updated.MayContain); err != nil {
+		return nil, fmt.Errorf("%s superseded, but its provenance stamps were not carried to %s: %w",
+			lifecycle.MemoryRef(updated.Project, updated.Name), lifecycle.MemoryRef(keep.Project, keep.Name), err)
+	}
 	s.recordMemory(ctx, core.EventMemorySuperseded, updated, map[string]any{
 		"name": updated.Name, "superseded_by": keep.ID, "by": "gardener",
 	})
@@ -332,6 +337,12 @@ func (s *Service) applyConsolidate(ctx context.Context, p store.Proposal, now ti
 			return nil
 		}); merr != nil {
 			return nil, merr
+		}
+		// The unified memory folds its sources: it carries the union of their
+		// provenance stamps.
+		if _, uerr := lifecycle.UnionStamps(ctx, s.files, target, updated.MayContain); uerr != nil {
+			return nil, fmt.Errorf("%s superseded, but its provenance stamps were not carried to %s: %w",
+				lifecycle.MemoryRef(updated.Project, updated.Name), lifecycle.MemoryRef(target.Project, target.Name), uerr)
 		}
 		s.recordMemory(ctx, core.EventMemorySuperseded, updated, map[string]any{
 			"name": updated.Name, "superseded_by": target.ID, "by": "gardener",

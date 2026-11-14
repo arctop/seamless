@@ -151,6 +151,7 @@ var memoryKnownKeys = map[string]bool{
 	"project": true, "created": true, "updated": true, "valid_from": true,
 	"invalid_at": true, "superseded_by": true, "source_session": true,
 	"model": true, "favorite": true, "tags": true, "account": true,
+	stampsKey: true,
 }
 
 // memoryFrontmatter mirrors a memory file's YAML frontmatter. Timestamps are
@@ -173,6 +174,7 @@ type memoryFrontmatter struct {
 	Account       string         `yaml:"account"`
 	Favorite      bool           `yaml:"favorite"`
 	Tags          []string       `yaml:"tags"`
+	MayContain    []stampEntry   `yaml:"may_contain"`
 	Extra         map[string]any `yaml:"-"`
 }
 
@@ -210,7 +212,10 @@ func (fm *memoryFrontmatter) MarshalYAML() (any, error) {
 	if len(fm.Tags) > 0 {
 		b.put("tags", flowSeqNode(fm.Tags))
 	}
-	if err := b.putExtra(fm.Extra); err != nil {
+	if err := b.putStamps(fm.MayContain); err != nil {
+		return nil, err
+	}
+	if err := b.putExtra(extraBeside(fm.Extra, fm.MayContain)); err != nil {
 		return nil, err
 	}
 	return b.n, nil
@@ -224,6 +229,7 @@ var noteKnownKeys = map[string]bool{
 	"id": true, "title": true, "slug": true, "description": true,
 	"project": true, "created": true, "updated": true, "source_url": true,
 	"model": true, "favorite": true, "tags": true, "account": true,
+	stampsKey: true,
 }
 
 // noteFrontmatter mirrors a note file's YAML frontmatter.
@@ -240,6 +246,7 @@ type noteFrontmatter struct {
 	Account     string         `yaml:"account"`
 	Favorite    bool           `yaml:"favorite"`
 	Tags        []string       `yaml:"tags"`
+	MayContain  []stampEntry   `yaml:"may_contain"`
 	Extra       map[string]any `yaml:"-"`
 }
 
@@ -274,7 +281,10 @@ func (fm *noteFrontmatter) MarshalYAML() (any, error) {
 	if len(fm.Tags) > 0 {
 		b.put("tags", flowSeqNode(fm.Tags))
 	}
-	if err := b.putExtra(fm.Extra); err != nil {
+	if err := b.putStamps(fm.MayContain); err != nil {
+		return nil, err
+	}
+	if err := b.putExtra(extraBeside(fm.Extra, fm.MayContain)); err != nil {
 		return nil, err
 	}
 	return b.n, nil

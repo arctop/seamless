@@ -126,6 +126,12 @@ func (h *Handler) upsertPlanNote(ctx context.Context, p toolPayload, basename, c
 			note.Extra = map[string]any{}
 		}
 		note.Extra["plan_iteration"] = iter
+		// New plan content is the conversation's own text: it carries the
+		// conversation's stamps for the note's project (stamp.go). An approval
+		// with no text is metadata and keeps the note's.
+		if trimmed != "" && !h.stampNote(ctx, ClientClaudeCode, p.SessionID, &note) {
+			return errPlanCaptureDropped
+		}
 
 		w, werr := h.files.WriteNote(ctx, note)
 		if werr != nil {
@@ -245,6 +251,9 @@ func (h *Handler) ensurePlanTask(ctx context.Context, p toolPayload, note core.N
 	if !created {
 		return
 	}
+	// The tracking task's title is the plan's: the conversation's stamps for
+	// its project (stamp.go). A failure is recorded; the task stands.
+	h.stampWorkItem(ctx, ClientClaudeCode, p.SessionID, core.ItemKindTask, task.ID, task.ProjectSlug)
 	h.recordPlanEvent(ctx, core.EventTaskTransition, p.SessionID, p.Route, task.ID, map[string]any{
 		"to": string(core.TaskOpen), "created": true, "plan_slug": planSlug,
 	})

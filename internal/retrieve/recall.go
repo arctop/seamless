@@ -103,6 +103,15 @@ type Hit struct {
 	// Favorite marks a starred item. omitempty keeps the recall payload
 	// byte-identical to the pre-favorites contract for unstarred hits.
 	Favorite bool `json:"favorite,omitempty"`
+	// MayContain is the hit's provenance stamps (core.Stamp, from
+	// item_provenance): the fenced projects whose content it may hold, each
+	// with what cleared the write -- projects and approvals, never content.
+	// Only the projects the caller's View may list are named;
+	// MayContainWithheld counts the rest. Both omitempty: a hit with no stamp,
+	// every hit on an install that never turned isolation.requests on, reads
+	// byte for byte as before.
+	MayContain         []core.Stamp `json:"may_contain,omitempty"`
+	MayContainWithheld int          `json:"may_contain_withheld,omitempty"`
 	// IdentifierMatch is set only by the human-facing Search entry point when
 	// the query matched a stable id, memory name, or note slug. Recall never
 	// sets it, so the agent-facing payload remains unchanged.
@@ -527,6 +536,9 @@ func (s *Service) Recall(ctx context.Context, in RecallInput) ([]Hit, error) {
 			break
 		}
 	}
+	if err := s.attachStamps(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -571,6 +583,9 @@ func (s *Service) browseKind(ctx context.Context, kind, project string, also []s
 		if len(out) >= limit {
 			break
 		}
+	}
+	if err := s.attachStamps(ctx, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

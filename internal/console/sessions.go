@@ -459,6 +459,8 @@ func (s *Service) sessionDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
+	// Its findings' provenance stamps (item_provenance only; console stamp.go).
+	sess.MayContain = s.itemStamps(ctx, core.ItemKindSession, sess.ID, sess.ProjectSlug)
 	data := sessionDetail{
 		Session: sess, Harness: harnessOf(sess), Live: sess.LiveAsOf(now, s.cfg.SessionIdleTTL),
 		Duration: sessionDuration(sess, now), Findings: sess.Findings, Timeline: timeline,

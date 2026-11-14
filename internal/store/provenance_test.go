@@ -80,7 +80,7 @@ func TestProvenance_Validates(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
 	for name, s := range map[string]ProvenanceStamp{
-		"a trial":                  provenanceStamp(core.ItemKindTrial, "01TR", "example-ops", "example-legal", "01A"),
+		"a lab":                    provenanceStamp("lab", "01TR", "example-ops", "example-legal", "01A"),
 		"no kind":                  provenanceStamp("", "01T", "example-ops", "example-legal", "01A"),
 		"no item":                  provenanceStamp(core.ItemKindTask, "", "example-ops", "example-legal", "01A"),
 		"a padded item":            provenanceStamp(core.ItemKindTask, " 01T", "example-ops", "example-legal", "01A"),
@@ -94,6 +94,8 @@ func TestProvenance_Validates(t *testing.T) {
 	}
 	require.NoError(t, ProvenanceUpsert(ctx, db, provenanceStamp(core.ItemKindTask, "01T", "", "example-legal", "01A"), migration039Now),
 		"a global item may carry a stamp")
+	require.NoError(t, ProvenanceUpsert(ctx, db, provenanceStamp(core.ItemKindTrial, "01TR", "example-ops", "example-legal", "01A"), migration039Now),
+		"a trial is the agent's own text, stamped like a task")
 	require.Zero(t, migration039Count(t, db, "access_flows"), "a stamp opens and confines nothing")
 }
 

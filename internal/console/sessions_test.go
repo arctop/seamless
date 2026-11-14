@@ -438,3 +438,21 @@ func TestSameHost_FoldsLocalSuffixAndCase(t *testing.T) {
 	require.True(t, sameHost("", "example-host"), "an unknown host never earns a remote tag")
 	require.False(t, sameHost("example-remote", "example-host"))
 }
+
+// The session page shows its findings' stamps (the index's).
+func TestSessionDetail_ShowsTheFindingsStamps(t *testing.T) {
+	ctx := context.Background()
+	db, _, mux := stampConsole(t)
+	now := time.Now().UTC()
+	stamps := stampGrant(t, db)
+	sess := core.Session{ID: "01STAMPSESSION000000000000", Name: "cc/stamp-session", ProjectSlug: "example-data",
+		Status: core.SessionCompleted, Findings: "the quarter closed", CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, store.CreateSession(ctx, db, sess))
+	rr := getPeek(t, mux, "/console/sessions/"+sess.ID+"?peek=1")
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.NotContains(t, rr.Body.String(), "data-may-contain")
+	require.NoError(t, store.StampWorkItem(ctx, db, core.ItemKindSession, sess.ID, sess.ProjectSlug, stamps, now))
+	rr = getPeek(t, mux, "/console/sessions/"+sess.ID+"?peek=1")
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Contains(t, rr.Body.String(), core.MayContainLine(stamps))
+}

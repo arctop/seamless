@@ -73,6 +73,7 @@ func runMemoryRead(ctx context.Context, e *env, o *memoryReadOpts, pos []string)
 	printField(e.stdout, "tags", strings.Join(strs(out["tags"]), ", "))
 	printField(e.stdout, "model", str(out["model"]))
 	printField(e.stdout, "provenance", writtenBy(str(out["account"])))
+	printField(e.stdout, "provenance", mayContain(out))
 	printField(e.stdout, "warning", str(out["warning"]))
 	printBody(e.stdout, str(out["body"]))
 	return nil
