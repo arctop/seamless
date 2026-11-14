@@ -274,6 +274,19 @@ func TestRelayForward_ElicitationRoundTrip(t *testing.T) {
 	require.Equal(t, "accept: approved through the relay", text.Text, "the answer made the round trip")
 	require.Equal(t, "May example-laptop's agent read example-finance?", <-asked)
 
+	// The client has the call's result as soon as the last event is on the
+	// wire, which can be before the upstream handler returns and notes the
+	// call's end: wait for that note rather than race it.
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, s := range log {
+			if strings.HasPrefix(s, "end tools/call") {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 5*time.Millisecond, "the upstream handler noted the call's end")
 	mu.Lock()
 	got := append([]string(nil), log...)
 	seenHeaders := append([]http.Header(nil), headers...)
