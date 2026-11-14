@@ -205,8 +205,14 @@ type accessRequestResult struct {
 	// a lock's request.
 	From string `json:"from,omitempty"`
 	// Access is write when the request asks for read and write (a grant the
-	// write argument filed); absent otherwise.
+	// write argument filed); absent otherwise. It is what was asked: Granted
+	// is what an approval opened.
 	Access string `json:"access,omitempty"`
+	// Granted is the access an approved grant opened, read or write: less than
+	// Access asked when the owner approved read-only (the in-session dialog
+	// under peer_auth approves nothing else). Absent for a lock's lease and a
+	// move, and while nothing is approved.
+	Granted string `json:"granted,omitempty"`
 	// Status is pending, approved, denied or expired. A live lease that
 	// covers the ask answers approved, with the request that opened it.
 	Status string `json:"status"`
@@ -494,6 +500,12 @@ func (s *Server) answerOut(ctx context.Context, start time.Time, t dialogTarget,
 		if end.state == stateApproved && !end.until.IsZero() {
 			out.OpenUntil = end.until.UTC().Format(time.RFC3339)
 		}
+		if end.state == stateApproved && t.Grant {
+			out.Granted = store.GrantAccessRead
+			if end.write {
+				out.Granted = store.GrantAccessWrite
+			}
+		}
 		out.Next = accessRequestNext(t, ways, end)
 		return out
 	}
@@ -512,6 +524,12 @@ func restrictedAccessRequestRefusal(account string) error {
 func accessRequestNext(t dialogTarget, ways access.Ways, end dialogEnd) string {
 	switch end.state {
 	case stateApproved:
+		if t.Grant && t.Write && !end.write && end.request.FromProject != "" {
+			// Asked for read and write, approved read-only: the write it
+			// asked for stays refused, and asking again files another request.
+			return "the owner approved it as read-only: " + openLine(t, end) + "; a read grant clears no write, so " +
+				"write in " + end.request.FromProject + ", and ask the owner before asking for read and write again"
+		}
 		return "the owner approved it: " + openLine(t, end) + "; retry the work that needs it"
 	case stateDenied:
 		return "the owner denied it: keep to other projects, and " + access.AskAgain(t.Project, true)

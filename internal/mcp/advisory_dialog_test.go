@@ -398,8 +398,8 @@ func TestAdvisoryDialog_RefusalFiledGrantReadAndWrite(t *testing.T) {
 // words.
 func TestAdvisoryDialog_ExplicitRequest(t *testing.T) {
 	type result struct {
-		Kind, Status, Dialog, Next, OpenUntil, Access, ShortID, Page, Reason string
-		Filed                                                                bool
+		Kind, Status, Dialog, Next, OpenUntil, Access, Granted, ShortID, Page, Reason string
+		Filed                                                                         bool
 	}
 	decode := func(t *testing.T, out map[string]any) result {
 		t.Helper()
@@ -412,13 +412,15 @@ func TestAdvisoryDialog_ExplicitRequest(t *testing.T) {
 			Next      string `json:"next"`
 			OpenUntil string `json:"open_until"`
 			Access    string `json:"access"`
+			Granted   string `json:"granted"`
 			ShortID   string `json:"short_id"`
 			Page      string `json:"page"`
 			Reason    string `json:"reason"`
 			Filed     bool   `json:"filed"`
 		}
 		require.NoError(t, json.Unmarshal(b, &res))
-		return result{res.Kind, res.Status, res.Dialog, res.Next, res.OpenUntil, res.Access, res.ShortID, res.Page, res.Reason, res.Filed}
+		return result{res.Kind, res.Status, res.Dialog, res.Next, res.OpenUntil, res.Access, res.Granted, res.ShortID, res.Page,
+			res.Reason, res.Filed}
 	}
 
 	t.Run("a move, approved", func(t *testing.T) {
@@ -449,12 +451,31 @@ func TestAdvisoryDialog_ExplicitRequest(t *testing.T) {
 		res := decode(t, r.ok(cli, mcpserver.AccessRequestTool, map[string]any{"project": gFin, "write": true}))
 		require.Equal(t, store.AccessKindGrant, res.Kind)
 		require.Equal(t, store.GrantAccessWrite, res.Access)
+		require.Equal(t, store.GrantAccessWrite, res.Granted)
 		require.Equal(t, store.ApprovalApproved, res.Status)
 		require.Equal(t, r.clock().Add(4*time.Hour).UTC().Format(time.RFC3339), res.OpenUntil)
 		require.True(t, strings.HasPrefix(res.Next, "the owner approved it: project "+gFin+" is readable and writable from project "+
 			gLegal+", nothing else until "), res.Next)
 		got := r.ok(cli, "tasks_add", map[string]any{"project": gFin, "title": "reconcile", "body": "written under the grant"})
 		require.Equal(t, gFin, got["project"])
+	})
+
+	// Asked for read and write, approved with the defaults (read-only): the
+	// answer says what was granted and never "retry the work" (P13,
+	// 2026-11-14: "access":"write" beside a read-only approval misled).
+	t.Run("read and write asked, approved read-only", func(t *testing.T) {
+		r := newAdvRig(t, fsOrigins[1], dlgLong)
+		o := newOwner(advAnswer("approve", "", ""))
+		cli := advDial(t, r.url, o, nil)
+		res := decode(t, r.ok(cli, mcpserver.AccessRequestTool, map[string]any{"project": gFin, "write": true}))
+		require.Equal(t, store.GrantAccessWrite, res.Access, "what was asked")
+		require.Equal(t, store.GrantAccessRead, res.Granted, "what was granted")
+		require.Equal(t, store.ApprovalApproved, res.Status)
+		require.True(t, strings.HasPrefix(res.Next, "the owner approved it as read-only: project "+gFin+" is readable from project "+
+			gLegal+", nothing else until "), res.Next)
+		require.True(t, strings.HasSuffix(res.Next, "; a read grant clears no write, so write in "+gLegal+
+			", and ask the owner before asking for read and write again"), res.Next)
+		require.NotContains(t, res.Next, "retry")
 	})
 
 	t.Run("denied", func(t *testing.T) {

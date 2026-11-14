@@ -379,7 +379,10 @@ holds the access; <code>reason</code> is <code>added</code> when this call's rea
 request, <code>kept</code> when a waiting request already had one, and <code>none</code> otherwise.
 An agent that already holds the access it asks for is answered
 <code>status: approved</code> with <code>open_until</code>, and nothing is filed, until 30 minutes
-before it ends.</p>
+before it ends. <code>access</code> is what the request asked for; once a grant is
+approved, <code>granted</code> says what it opened (<code>read</code> or <code>write</code>). A request for read
+and write approved read-only answers with <code>granted: read</code>, and its <code>next</code> says
+the write stays refused rather than to retry.</p>
 <p>When the agent's client supports MCP elicitation (Claude Code does, and so do
 Codex builds that declare it), the request opens an approval dialog in the
 session: the owner sees the daemon's

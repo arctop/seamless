@@ -115,7 +115,10 @@ holds the access; `reason` is `added` when this call's reason was stored on the
 request, `kept` when a waiting request already had one, and `none` otherwise.
 An agent that already holds the access it asks for is answered
 `status: approved` with `open_until`, and nothing is filed, until 30 minutes
-before it ends.
+before it ends. `access` is what the request asked for; once a grant is
+approved, `granted` says what it opened (`read` or `write`). A request for read
+and write approved read-only answers with `granted: read`, and its `next` says
+the write stays refused rather than to retry.
 
 When the agent's client supports MCP elicitation (Claude Code does, and so do
 Codex builds that declare it), the request opens an approval dialog in the
