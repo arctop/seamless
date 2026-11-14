@@ -8,6 +8,7 @@
 //	seamlessd import        import a Seam v1 data directory, or a seamlessd export archive
 //	seamlessd backups       list the backups in the backup folder and <data_dir>/backups
 //	seamlessd restore       put a backup back (replace everything, or --merge what is missing)
+//	seamlessd setup         ask how this computer uses Seamless, or offer to change it (the installers run it)
 //	seamlessd install-hooks install agent hooks, MCP, and maintained skills
 //	seamlessd client-config print the pairing commands for a client machine
 //	seamlessd uninstall     remove Seamless (service, hooks, MCP, skills, binaries)
@@ -121,6 +122,8 @@ func main() {
 		err = runBackups(args)
 	case "restore":
 		err = runRestore(args)
+	case "setup":
+		err = runSetup(args)
 	case "install-hooks":
 		err = runInstallHooks(args)
 	case "install-summary":
@@ -192,6 +195,8 @@ usage:
   seamlessd backups        list the backups in the backup folder and in <data_dir>/backups (--json)
   seamlessd restore        put a backup back: <file|name>; replaces all data, today's saved first so it
                            can be undone (--merge only brings back what is missing; --yes skips the prompt)
+  seamlessd setup          ask how this computer uses Seamless, or offer to change it (the installers
+                           run it; SEAMLESS_SETUP answers it for a script)
   seamlessd install-hooks  install Claude Code/Codex hooks, MCP, and maintained skills
   seamlessd client-config  print the commands that pair another machine as a client (run on the SERVER;
                            --redact masks the key so the output is safe to paste into a ticket)

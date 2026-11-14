@@ -287,6 +287,13 @@ itself. No Go toolchain is involved. In order, it:</p>
 against the release's <code>checksums.txt</code> before unpacking anything; when
 <code>cosign</code> is available it also verifies that manifest's keyless signature
 against this repository's release workflow identity;</li>
+<li>asks the new <a href="../reference/cli-seamlessd/#seamlessd_setup"><code>seamlessd setup</code></a>
+how this computer will be used, before anything is installed:
+<strong>Standalone</strong> (everything on this computer, the default) or <strong>Networked</strong> -
+the <strong>Server</strong>, which the other computers connect to, or a <strong>Client</strong> of
+one. Only a person at a terminal who set no <code>SEAMLESS_*</code> variable is asked;
+a script answers with <code>SEAMLESS_SETUP</code>, and without it installs exactly as
+before. A re-run offers only the changes setup can make;</li>
 <li>installs <code>seamlessd</code> and <code>seam</code> into <code>~/.local/bin</code>;</li>
 <li>runs <code>seamlessd install-hooks</code>, which generates the bearer key into
 <code>~/.config/seamless/seamless.yaml</code> on first run, detects Claude Code, the
@@ -297,11 +304,11 @@ on macOS, systemd <code>--user</code> on Linux, an at-logon Scheduled Task on
 Windows - and polls <code>/healthz</code> for about 30 seconds until the daemon
 answers as the release it just installed.</li>
 </ol>
-<p>That is the order of a first install. Once a config exists, steps 3 and 4
+<p>That is the order of a first install. Once a config exists, steps 4 and 5
 swap: the service restarts on the new build and must answer before the
 clients are rewired, so a failure while wiring them still leaves the new
 release serving.</p>
-<p>Step 3 detects three install targets - <strong>Claude Code</strong>, the <strong>Claude app chat
+<p>Step 4 detects three install targets - <strong>Claude Code</strong>, the <strong>Claude app chat
 surface</strong> (<code>claude-desktop</code>, the app's <code>mcpServers</code> bridge; it has no hooks or
 skills), and <strong>Codex</strong> - and wires the detected set. That one selection
 drives hooks, MCP registrations, and the maintained skills together -
@@ -374,6 +381,14 @@ script</a> with no dependencies to audit.</p>
 <tr>
 <td><code>SEAMLESS_MCP_API_KEY=&lt;key&gt;</code></td>
 <td>the server's bearer key, required alongside <code>SEAMLESS_SERVER_URL</code> - <code>SEAMLESS_SERVER_URL</code> without it is a hard error, because a client needs both. <code>seamlessd client-config</code> on the server prints the whole command</td>
+</tr>
+<tr>
+<td><code>SEAMLESS_SETUP=standalone|server|client</code></td>
+<td>answer <a href="../reference/cli-seamlessd/#seamlessd_setup"><code>seamlessd setup</code></a>'s question - how this computer will be used - without being asked; <code>client</code> needs <code>SEAMLESS_SERVER_URL</code> and <code>SEAMLESS_MCP_API_KEY</code> too, and Windows takes <code>standalone</code> or <code>client</code></td>
+</tr>
+<tr>
+<td><code>SEAMLESS_PAIR_CODE</code>, <code>SEAMLESS_IMPORT</code></td>
+<td>a client's one-time pairing code, and a backup to start from: setup does not take them yet, so either stops the install before anything is installed and says what to do instead</td>
 </tr>
 <tr>
 <td><code>SEAMLESS_NO_HOOKS=1</code></td>

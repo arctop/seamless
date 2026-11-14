@@ -1136,6 +1136,44 @@ docs-src/guides/data.md; owner decisions: memory
   check answers "inside Seamless's data folder" before any other probe for any
   path in the data dir but `backups/`, so it is no oracle into the corpus.
 
+### The setup front door (`cmd/seamlessd/setup*.go`)
+
+`seamlessd setup` decides how a computer uses Seamless -- Standalone, or
+Networked: the Server or a Client of it (plan networked-relay). The installers
+run it on the release they just verified, before they install anything, and
+act on its answer; the binaries, the hooks, the per-user service and the
+health check stay theirs.
+
+- **Unattended means unchanged.** Setup asks only a person at a terminal with
+  no `SEAMLESS_*` set but `SEAMLESS_CONFIG` (`setupRun.asks`). The installers
+  apply the same rule (`scripted_run`, `Test-ScriptedRun`) and do not even run
+  setup unless a setup knob (`SEAMLESS_SETUP`, `SEAMLESS_PAIR_CODE`,
+  `SEAMLESS_IMPORT`) is set or that person is there. Every updater run sets
+  `SEAMLESS_VERSION` and `SEAMLESS_INSTALL_DIR`, so no update starts it; never
+  add a setup knob to `installerKnobs`. `TestSetupInstaller_UnattendedRunsAreUnchanged`
+  runs docs/install for real and holds its `seamlessd` calls to the old ones.
+- **Setup only adds an answer.** The installers keep their own client decision
+  (`SEAMLESS_SERVER_URL`, a config's `role: client`) and stop if setup's
+  state disagrees; its `role=client` counts only where they had none -- a
+  Client set up at the terminal, whose config setup wrote with
+  `config.EnsureClientConfig`, so the key never rides in argv.
+  `installerConfigValue` reads the config as `config_value` does
+  (`TestInstallerConfigValue_IsTheInstallersRead` runs the sh).
+- **The kinds' words live in `setupWords`.** Messages spell a kind only
+  through `setupText`'s `{standalone}`, `{networked}`, `{server}` and
+  `{client}`, and the installers never spell one; `TestSetupWords_OnePlace`
+  renames every kind and fails on a stray spelling.
+- **A branch step plugs in as a `setupSteps` entry** (its `run`, phase and
+  knob); the question tree, the state file (`setupStateHeader`) and the
+  hand-off (`setupProtocolLine`, `--state`, `--finish`) stay as they are. An
+  unbuilt step's knob refuses the run. A built step that changes the daemon's
+  config must not run inside `seamlessd update`, whose confirmation dials the
+  config it loaded before the install.
+- **dash.** Debian's and Ubuntu's `/bin/sh` is dash, where a failed
+  redirection on a special built-in (`: </dev/tty`) ends the script: probe in
+  a subshell (`tty_available`). The installer tests run every scenario under
+  `/bin/sh` and `/bin/dash`.
+
 ### Release discipline: the previous release must still run
 
 An automatic update rolls back to the release it replaced when the new one does

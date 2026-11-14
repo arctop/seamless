@@ -10,7 +10,10 @@
 # script that drifts.
 #
 # What it does: fetch this platform's release archive from GitHub, verify its
-# checksum, install seamlessd + seam into ~/.local/bin, wire the detected agent
+# checksum, ask `seamlessd setup` how this computer will use Seamless (only a
+# person at a terminal with no SEAMLESS_* set is asked; SEAMLESS_SETUP answers
+# it for a script, and the default is everything on this computer, as it always
+# was), install seamlessd + seam into ~/.local/bin, wire the detected agent
 # clients -- hooks + MCP + maintained skills for Claude Code/Codex, and the MCP
 # bridge for the Claude app chat surface (macOS; it has no hooks or skills) --
 # generating the bearer key on first run, then run the daemon as a per-user
@@ -52,6 +55,19 @@
 #   SEAMLESS_NO_RESEARCH_SKILL=1 skip the recurring seam-research skill
 #   SEAMLESS_NO_SERVICE=1       skip the service; install the binaries and stop
 #   SEAMLESS_ALLOW_ROOT=1       permit running as root (containers)
+#   SEAMLESS_SETUP              the answer to `seamlessd setup`'s question, how
+#                               this computer uses Seamless, for a script
+#                               (`seamlessd setup -h` lists the values); with
+#                               SEAMLESS_SERVER_URL set it may only agree
+#   SEAMLESS_PAIR_CODE          a client's one-time pairing code, and
+#   SEAMLESS_IMPORT             a backup to start from: answers `seamlessd setup`
+#                               does not take yet, so either stops the install
+#                               before anything is installed and says why
+#
+# Any SEAMLESS_* set, or no terminal, means a script is running this: nothing
+# asks how this computer will be used, and a run without the setup knobs does
+# exactly what it did before they existed. Every update seamlessd makes runs
+# this script that way.
 set -eu
 
 REPO=arctop/seamless
@@ -98,6 +114,17 @@ SERVER_KEY=
 # empty when nothing is pinned. read_checksums_pin sets it before any download.
 CHECKSUMS_PIN=
 
+# How this computer uses Seamless is `seamlessd setup`'s question
+# (cmd/seamlessd/setup.go): run_setup asks the binary this run just verified,
+# before anything is installed. SETUP_PROTOCOL is the line `seamlessd setup -h`
+# prints when it speaks the hand-off below, and SETUP_HEADER opens the answer it
+# writes to SETUP_STATE; a pinned release from before setup has neither, and
+# installs exactly as it always did. SETUP_STATE stays empty when setup did not
+# run, which is how finish_setup knows to stay out of the way.
+SETUP_PROTOCOL='installer protocol: 1'
+SETUP_HEADER='seamless-setup 1'
+SETUP_STATE=
+
 # The owner's signature over checksums.txt (verify_owner_signature). Every
 # release after OWNER_SIGNED_AFTER carries checksums.txt.sshsig, made by the
 # owner with one of these keys, on a hardware key, in the namespace
@@ -143,7 +170,11 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 # tty_available: a readable+writable controlling terminal exists. The explicit
 # redirection probe matters: /dev/tty can exist yet fail to open (CI, cron).
-tty_available() { { : </dev/tty; } 2>/dev/null && { : >/dev/tty; } 2>/dev/null; }
+# Each probe runs in a subshell: a redirection that fails on the special
+# built-in `:` ends the whole shell in dash (Debian's and Ubuntu's /bin/sh),
+# as POSIX has it, so a brace group would exit the installer with status 2
+# instead of answering no.
+tty_available() { (: </dev/tty) 2>/dev/null && (: >/dev/tty) 2>/dev/null; }
 
 # ask_tty <prompt>: print the prompt to the terminal and read REPLY from it.
 # Returns non-zero on EOF so callers can treat a vanished tty as "no answer".
@@ -657,14 +688,123 @@ install_binary() {
 	mv -f "$INSTALL_DIR/.$1.new" "$INSTALL_DIR/$1"
 }
 
-unpack() {
+# extract unpacks the verified archive into $TMP, where run_setup asks the new
+# seamlessd before unpack installs anything.
+extract() {
 	tar -xzf "$TMP/$TARBALL" -C "$TMP" ||
 		die "could not extract $TARBALL"
+}
+
+unpack() {
 	mkdir -p "$INSTALL_DIR"
 	install_binary seamlessd
 	install_binary seam
 	step installed "$INSTALL_DIR/seamlessd, $INSTALL_DIR/seam"
 }
+
+# BEGIN setup
+# setup_knobs: an answer only `seamlessd setup` reads is set. Setup reads
+# SEAMLESS_SERVER_URL and SEAMLESS_MCP_API_KEY too, with the meaning this
+# script has always given them, but they alone never make it run.
+setup_knobs() {
+	[ -n "${SEAMLESS_SETUP:-}${SEAMLESS_PAIR_CODE:-}${SEAMLESS_IMPORT:-}" ]
+}
+
+# scripted_run: a SEAMLESS_* variable other than SEAMLESS_CONFIG (which the
+# installer pins itself) is set, so a script is running this and nothing may
+# ask it a new question. seamlessd setup holds itself to the same rule
+# (setupRun.asks), and seamlessd's updater always sets SEAMLESS_VERSION and
+# SEAMLESS_INSTALL_DIR, so no update ever starts setup.
+scripted_run() {
+	env | grep '^SEAMLESS_' | grep -qv '^SEAMLESS_CONFIG='
+}
+
+# setup_stdin: what `seamlessd setup` reads its answers from -- the terminal
+# when a person is there to answer, and nothing otherwise: under curl | sh,
+# stdin is this script, which a question must never read.
+setup_stdin() {
+	if ! scripted_run && tty_available; then echo /dev/tty; else echo /dev/null; fi
+}
+
+# call_setup <seamlessd> <args...>: run `seamlessd setup` the way wire_hooks
+# runs install-hooks -- from $TMP, against $CONFIG once it exists -- reading
+# setup_stdin.
+call_setup() {
+	cs_bin=$1
+	shift
+	cs_in=$(setup_stdin)
+	if [ -f "$CONFIG" ]; then
+		(cd "$TMP" && SEAMLESS_CONFIG="$CONFIG" "$cs_bin" setup "$@" <"$cs_in")
+	else
+		(cd "$TMP" && unset SEAMLESS_CONFIG && "$cs_bin" setup "$@" <"$cs_in")
+	fi
+}
+
+# run_setup: ask the verified, not yet installed seamlessd how this computer
+# uses Seamless, and act on its answer. It runs only when it has something to
+# decide: a setup knob, or a person at a terminal with no SEAMLESS_* set.
+# Every other run -- a script's, an update's -- skips it and installs exactly
+# as before; scripted_run is asked first, so such a run never even opens
+# /dev/tty. A release that predates setup cannot take a setup knob, so one set
+# stops the install here, before anything changed.
+run_setup() {
+	if ! setup_knobs && { scripted_run || ! tty_available; }; then
+		return 0
+	fi
+	probe=$("$TMP/seamlessd" setup -h 2>&1 || true)
+	if ! printf '%s\n' "$probe" | grep -qxF "$SETUP_PROTOCOL"; then
+		if setup_knobs; then
+			[ -n "$probe" ] || die "could not run $TMP/seamlessd to ask seamlessd setup; nothing was installed"
+			die "seamless $VERSION predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE and SEAMLESS_IMPORT; unset them, or drop SEAMLESS_VERSION to get the latest"
+		fi
+		return 0
+	fi
+	SETUP_STATE=$TMP/setup.state
+	call_setup "$TMP/seamlessd" --state "$SETUP_STATE" ||
+		die "seamlessd setup stopped the install; nothing was installed"
+	read_setup_state
+}
+
+# read_setup_state: the two lines of setup's answer that are the installer's.
+# role=server runs the daemon here (the install as it always was), role=client
+# dials server_url. Setup only ever adds an answer this script did not have --
+# a client a person set up at the terminal -- so it never moves one that
+# SEAMLESS_SERVER_URL or the config's role: client gave: that would be a bug,
+# and stops the install before anything is installed.
+read_setup_state() {
+	[ -f "$SETUP_STATE" ] || die "seamlessd setup wrote no answer to $SETUP_STATE"
+	rs_head=$(head -1 "$SETUP_STATE")
+	[ "$rs_head" = "$SETUP_HEADER" ] ||
+		die "seamlessd setup answered in a form this installer does not read ($rs_head)"
+	rs_role=
+	rs_url=
+	while IFS= read -r rs_line; do
+		case $rs_line in
+		role=*) rs_role=${rs_line#role=} ;;
+		server_url=*) rs_url=${rs_line#server_url=} ;;
+		esac
+	done <"$SETUP_STATE"
+	case $rs_role in
+	server)
+		[ -z "$SERVER_URL" ] ||
+			die "seamlessd setup has this computer run the daemon, but it is a client of $SERVER_URL; please report this at https://github.com/$REPO/issues"
+		;;
+	client)
+		[ -n "$rs_url" ] || die "seamlessd setup made this computer a client of no server"
+		[ -n "$SERVER_URL" ] || SERVER_URL=$rs_url
+		;;
+	*) die "seamlessd setup answered with no role ($rs_role)" ;;
+	esac
+}
+
+# finish_setup: once the install is done, the rest of setup's answer -- today,
+# each step setup does not do yet, and how to do it by hand.
+finish_setup() {
+	[ -n "$SETUP_STATE" ] || return 0
+	call_setup "$INSTALL_DIR/seamlessd" --state "$SETUP_STATE" --finish ||
+		die "the install is complete, but seamlessd setup could not finish; run  seamlessd setup  to see where it stands"
+}
+# END setup
 
 # install-hooks does the config bootstrap too: it calls config.EnsureAPIKey,
 # which generates the bearer key into $CONFIG when no config file exists. So on
@@ -1085,6 +1225,12 @@ server and use the line it prints."
 	trap 'rm -rf "$TMP"' EXIT INT TERM
 
 	download
+	extract
+	# How this computer uses Seamless: seamlessd setup's question, asked of the
+	# verified binary before anything is installed. It may make this a client
+	# (SERVER_URL) a person set up at the terminal; with no setup knob and no
+	# person to ask, it is skipped and everything below runs as it always did.
+	run_setup
 	unpack
 
 	# Restart the service and wait for it to answer as the new build BEFORE
@@ -1127,6 +1273,7 @@ server and use the line it prints."
 	if [ "$HOOKS_FIRST" = 0 ]; then
 		wire_hooks
 	fi
+	finish_setup
 
 	printf '\n'
 	case ":$PATH:" in

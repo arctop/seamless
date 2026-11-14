@@ -5,20 +5,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>seamlessd CLI - Seamless docs</title>
-<meta name="description" content="The daemon and operator CLI - serve, doctor, export, import, backups, restore, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.">
+<meta name="description" content="The daemon and operator CLI - serve, doctor, export, import, backups, restore, setup, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.">
 <link rel="canonical" href="https://thereisnospoon.org/docs/reference/cli-seamlessd/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://thereisnospoon.org/docs/reference/cli-seamlessd/">
 <meta property="og:title" content="seamlessd CLI - Seamless docs">
-<meta property="og:description" content="The daemon and operator CLI - serve, doctor, export, import, backups, restore, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.">
+<meta property="og:description" content="The daemon and operator CLI - serve, doctor, export, import, backups, restore, setup, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Reference","item":"https://thereisnospoon.org/docs/reference/"},{"@type":"ListItem","position":3,"name":"seamlessd CLI","item":"https://thereisnospoon.org/docs/reference/cli-seamlessd/"}]},{"@type":"TechArticle","headline":"seamlessd CLI - Seamless docs","description":"The daemon and operator CLI - serve, doctor, export, import, backups, restore, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.","url":"https://thereisnospoon.org/docs/reference/cli-seamlessd/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Reference","item":"https://thereisnospoon.org/docs/reference/"},{"@type":"ListItem","position":3,"name":"seamlessd CLI","item":"https://thereisnospoon.org/docs/reference/cli-seamlessd/"}]},{"@type":"TechArticle","headline":"seamlessd CLI - Seamless docs","description":"The daemon and operator CLI - serve, doctor, export, import, backups, restore, setup, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.","url":"https://thereisnospoon.org/docs/reference/cli-seamlessd/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
 <link rel="icon" type="image/svg+xml" href="../../../static/favicon.svg">
@@ -232,11 +232,11 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 </nav>
 
   <h1>seamlessd CLI</h1>
-  <p class="lede">The daemon and operator CLI - serve, doctor, export, import, backups, restore, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.</p>
+  <p class="lede">The daemon and operator CLI - serve, doctor, export, import, backups, restore, setup, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.</p>
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
+      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_setup">seamlessd setup</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
     </ul>
   </details>
   <p><code>seamlessd</code> is both the server and the operator CLI. <code>serve</code> runs the daemon;
@@ -760,6 +760,65 @@ the environment, as the console's command does:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd restore &lt;file&gt;
 </span></span></code></pre></div>
 <p>The account is the proof the console asks a passkey for.</p>
+<h2 id="seamlessd_setup">seamlessd setup</h2>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd setup <span class="o">[</span>--state FILE <span class="o">[</span>--finish<span class="o">]]</span>
+</span></span></code></pre></div>
+<p>How this computer uses Seamless: <strong>Standalone</strong> - everything on this
+computer, the default install - or <strong>Networked</strong>: the <strong>Server</strong>, which keeps
+the data for the other computers, or a <strong>Client</strong> of one, which keeps none of
+its own. Set up the Server first: each Client needs its address and key.
+Windows is offered Standalone and Client only: it has no peer_auth and no
+relay, so a Windows computer can be a Client but not the Server.</p>
+<p>The installers ask through it. Once they have downloaded and verified a
+release, they run its <code>seamlessd setup</code> before anything is installed and act
+on the answer. It asks only a person at a terminal who set no <code>SEAMLESS_*</code>
+variable; with one set, or no terminal, the environment is the whole answer,
+and a run without the setup variables below installs exactly as it did before
+they existed - every run <code>seamlessd update</code> makes is one. On a re-run it says
+how the computer is set up and offers only the changes it can make: a
+Standalone install can become the Server, and a computer that runs the daemon
+can turn on locked projects. A Client chosen at the terminal is asked for its
+Server's address and key, which <code>seamlessd client-config</code> prints on the
+Server; the key goes straight into <code>~/.config/seamless/seamless.yaml</code> (<code>0600</code>).</p>
+<p>Run by itself, <code>seamlessd setup</code> says how this computer is set up and offers
+the same changes. On a computer with nothing installed it points at the
+installer.</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SEAMLESS_SETUP=standalone|server|client</code></td>
+<td>the kind, for a script (<code>standalone|client</code> on Windows). On a re-run, the installed kind keeps it as it is and <code>server</code> makes a Standalone install the Server; any other change is refused, naming why</td>
+</tr>
+<tr>
+<td><code>SEAMLESS_SERVER_URL</code>, <code>SEAMLESS_MCP_API_KEY</code></td>
+<td>a Client's Server and its key, as the installers have always read them; <code>SEAMLESS_SETUP</code> may only agree</td>
+</tr>
+<tr>
+<td><code>SEAMLESS_PAIR_CODE</code></td>
+<td>a Client's one-time pairing code. Not built yet: it stops the install and says how to pair with the Server's key instead</td>
+</tr>
+<tr>
+<td><code>SEAMLESS_IMPORT</code></td>
+<td>a backup to start from. Not built yet: it stops the install and says to restore the backup once the install is up</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A refusal stops the install before anything is installed. What each kind needs
+beyond today's install - the Server's address and TLS, importing a backup,
+locked projects, pairing with a code - is not built into setup yet; the install
+ends by naming each step with the guide that does it by hand.</p>
+<p><code>--state FILE</code> and <code>--finish</code> are the installers' hand-off, and
+<code>seamlessd setup -h</code> ends with <code>installer protocol: 1</code> for them to find: the
+first writes the answer to <code>FILE</code>, the second finishes setup's part once the
+installer's own steps are done.</p>
 <h2 id="seamlessd_install_hooks">seamlessd install-hooks</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd install-hooks <span class="o">[</span>--client claude<span class="p">|</span>claude-desktop<span class="p">|</span>codex<span class="p">|</span>all<span class="p">|</span>detect<span class="o">]</span> <span class="o">[</span>--settings PATH<span class="o">]</span> <span class="o">[</span>--codex-hooks PATH<span class="o">]</span> <span class="o">[</span>--desktop-config PATH<span class="o">]</span> <span class="o">[</span>--config PATH<span class="o">]</span> <span class="o">[</span>--url BASE<span class="o">]</span> <span class="o">[</span>--server-url URL<span class="o">]</span> <span class="o">[</span>--api-key KEY<span class="o">]</span> <span class="o">[</span>--seam PATH<span class="o">]</span> <span class="o">[</span>--mcp<span class="o">=</span>false<span class="o">]</span> <span class="o">[</span>--skills<span class="o">=</span>false<span class="o">]</span>
 </span></span></code></pre></div>
@@ -1467,7 +1526,7 @@ daemon is running older code than what you just built.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
+      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_setup">seamlessd setup</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
     </ul>
   </aside>
   

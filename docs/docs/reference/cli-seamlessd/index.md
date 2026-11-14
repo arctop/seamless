@@ -1,6 +1,6 @@
 # seamlessd CLI
 
-> The daemon and operator CLI - serve, doctor, export, import, backups, restore, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.
+> The daemon and operator CLI - serve, doctor, export, import, backups, restore, setup, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, console-open, start/stop/restart/status, and version.
 
 `seamlessd` is both the server and the operator CLI. `serve` runs the daemon;
 every other subcommand is a one-shot that opens the same config and database
@@ -363,6 +363,52 @@ sudo -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seaml
 ```
 
 The account is the proof the console asks a passkey for.
+
+## seamlessd setup {#seamlessd_setup}
+
+```bash
+seamlessd setup [--state FILE [--finish]]
+```
+
+How this computer uses Seamless: **Standalone** - everything on this
+computer, the default install - or **Networked**: the **Server**, which keeps
+the data for the other computers, or a **Client** of one, which keeps none of
+its own. Set up the Server first: each Client needs its address and key.
+Windows is offered Standalone and Client only: it has no peer_auth and no
+relay, so a Windows computer can be a Client but not the Server.
+
+The installers ask through it. Once they have downloaded and verified a
+release, they run its `seamlessd setup` before anything is installed and act
+on the answer. It asks only a person at a terminal who set no `SEAMLESS_*`
+variable; with one set, or no terminal, the environment is the whole answer,
+and a run without the setup variables below installs exactly as it did before
+they existed - every run `seamlessd update` makes is one. On a re-run it says
+how the computer is set up and offers only the changes it can make: a
+Standalone install can become the Server, and a computer that runs the daemon
+can turn on locked projects. A Client chosen at the terminal is asked for its
+Server's address and key, which `seamlessd client-config` prints on the
+Server; the key goes straight into `~/.config/seamless/seamless.yaml` (`0600`).
+
+Run by itself, `seamlessd setup` says how this computer is set up and offers
+the same changes. On a computer with nothing installed it points at the
+installer.
+
+| Variable | Answer |
+|---|---|
+| `SEAMLESS_SETUP=standalone\|server\|client` | the kind, for a script (`standalone\|client` on Windows). On a re-run, the installed kind keeps it as it is and `server` makes a Standalone install the Server; any other change is refused, naming why |
+| `SEAMLESS_SERVER_URL`, `SEAMLESS_MCP_API_KEY` | a Client's Server and its key, as the installers have always read them; `SEAMLESS_SETUP` may only agree |
+| `SEAMLESS_PAIR_CODE` | a Client's one-time pairing code. Not built yet: it stops the install and says how to pair with the Server's key instead |
+| `SEAMLESS_IMPORT` | a backup to start from. Not built yet: it stops the install and says to restore the backup once the install is up |
+
+A refusal stops the install before anything is installed. What each kind needs
+beyond today's install - the Server's address and TLS, importing a backup,
+locked projects, pairing with a code - is not built into setup yet; the install
+ends by naming each step with the guide that does it by hand.
+
+`--state FILE` and `--finish` are the installers' hand-off, and
+`seamlessd setup -h` ends with `installer protocol: 1` for them to find: the
+first writes the answer to `FILE`, the second finishes setup's part once the
+installer's own steps are done.
 
 ## seamlessd install-hooks {#seamlessd_install_hooks}
 

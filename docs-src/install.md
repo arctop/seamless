@@ -42,22 +42,29 @@ itself. No Go toolchain is involved. In order, it:
    against the release's `checksums.txt` before unpacking anything; when
    `cosign` is available it also verifies that manifest's keyless signature
    against this repository's release workflow identity;
-2. installs `seamlessd` and `seam` into `~/.local/bin`;
-3. runs `seamlessd install-hooks`, which generates the bearer key into
+2. asks the new [`seamlessd setup`](/reference/cli-seamlessd/#seamlessd_setup)
+   how this computer will be used, before anything is installed:
+   **Standalone** (everything on this computer, the default) or **Networked** -
+   the **Server**, which the other computers connect to, or a **Client** of
+   one. Only a person at a terminal who set no `SEAMLESS_*` variable is asked;
+   a script answers with `SEAMLESS_SETUP`, and without it installs exactly as
+   before. A re-run offers only the changes setup can make;
+3. installs `seamlessd` and `seam` into `~/.local/bin`;
+4. runs `seamlessd install-hooks`, which generates the bearer key into
    `~/.config/seamless/seamless.yaml` on first run, detects Claude Code, the
    Claude app chat surface, and Codex, and installs that set's hooks, MCP
    registrations, and skills;
-4. installs and starts the [per-user service](/reference/service/) - launchd
+5. installs and starts the [per-user service](/reference/service/) - launchd
    on macOS, systemd `--user` on Linux, an at-logon Scheduled Task on
    Windows - and polls `/healthz` for about 30 seconds until the daemon
    answers as the release it just installed.
 
-That is the order of a first install. Once a config exists, steps 3 and 4
+That is the order of a first install. Once a config exists, steps 4 and 5
 swap: the service restarts on the new build and must answer before the
 clients are rewired, so a failure while wiring them still leaves the new
 release serving.
 
-Step 3 detects three install targets - **Claude Code**, the **Claude app chat
+Step 4 detects three install targets - **Claude Code**, the **Claude app chat
 surface** (`claude-desktop`, the app's `mcpServers` bridge; it has no hooks or
 skills), and **Codex** - and wires the detected set. That one selection
 drives hooks, MCP registrations, and the maintained skills together -
@@ -111,6 +118,8 @@ script](https://thereisnospoon.org/install) with no dependencies to audit.
 | `SEAMLESS_CLIENT=claude\|claude-desktop\|codex\|all` | choose which target(s) to wire instead of auto-detection; comma lists work (`claude,claude-desktop`) |
 | `SEAMLESS_SERVER_URL=http://studio.local:8081` | install as a **client** of a Seamless daemon running elsewhere: wire this machine's agent clients to that URL, install no service, and keep no data dir here. Requires `SEAMLESS_MCP_API_KEY`, and wins over the `role` and `server_url` an existing config names. See [Share one daemon across a LAN](/guides/network-install/) |
 | `SEAMLESS_MCP_API_KEY=<key>` | the server's bearer key, required alongside `SEAMLESS_SERVER_URL` - `SEAMLESS_SERVER_URL` without it is a hard error, because a client needs both. `seamlessd client-config` on the server prints the whole command |
+| `SEAMLESS_SETUP=standalone\|server\|client` | answer [`seamlessd setup`](/reference/cli-seamlessd/#seamlessd_setup)'s question - how this computer will be used - without being asked; `client` needs `SEAMLESS_SERVER_URL` and `SEAMLESS_MCP_API_KEY` too, and Windows takes `standalone` or `client` |
+| `SEAMLESS_PAIR_CODE`, `SEAMLESS_IMPORT` | a client's one-time pairing code, and a backup to start from: setup does not take them yet, so either stops the install before anything is installed and says what to do instead |
 | `SEAMLESS_NO_HOOKS=1` | skip agent hooks, MCP registration, and skills, and the client detection that would choose them |
 | `SEAMLESS_NO_ONBOARD_SKILL=1` | skip the selected client(s)' one-shot onboarding skill |
 | `SEAMLESS_NO_RESEARCH_SKILL=1` | skip the selected client(s)' recurring research skill |

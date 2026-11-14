@@ -9,7 +9,10 @@
 # scripts/: a script living at two paths is a script that drifts.
 #
 # What it does: fetch this platform's release zip from GitHub, verify its
-# checksum, install seamlessd.exe + seam.exe into ~\.local\bin, wire the
+# checksum, ask `seamlessd setup` how this computer will use Seamless (only a
+# person at the console with no SEAMLESS_* set is asked; SEAMLESS_SETUP answers
+# it for a script, and the default is everything on this computer, as it always
+# was), install seamlessd.exe + seam.exe into ~\.local\bin, wire the
 # detected agent clients -- hooks + MCP + maintained skills for Claude
 # Code/Codex, and the MCP bridge for the Claude app chat surface (it has no
 # hooks or skills) -- generating the bearer key on first run, then run the
@@ -58,6 +61,21 @@
 #   $env:SEAMLESS_NO_ONBOARD_SKILL=1  skip the one-shot seam-onboard skill
 #   $env:SEAMLESS_NO_RESEARCH_SKILL=1 skip the recurring seam-research skill
 #   $env:SEAMLESS_NO_SERVICE=1        skip the service; install the binaries and stop
+#   $env:SEAMLESS_SETUP               the answer to `seamlessd setup`'s question,
+#                                     how this computer uses Seamless, for a
+#                                     script (`seamlessd setup -h` lists the
+#                                     values); with SEAMLESS_SERVER_URL set it
+#                                     may only agree
+#   $env:SEAMLESS_PAIR_CODE           a client's one-time pairing code, and
+#   $env:SEAMLESS_IMPORT              a backup to start from: answers `seamlessd
+#                                     setup` does not take yet, so either stops
+#                                     the install before anything is installed
+#                                     and says why
+#
+# Any SEAMLESS_* set, or a session that is not interactive, means a script is
+# running this: nothing asks how this computer will be used, and a run without
+# the setup knobs does exactly what it did before they existed. Every update
+# seamlessd makes runs this script that way.
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue' # no per-request progress bar spam
@@ -106,6 +124,15 @@ $LogFile = Join-Path $DataDir 'seamlessd.log'
 
 # Pre-config fallback for the health poll only; mirrors config.Defaults().
 $DefaultAddr = '127.0.0.1:8081'
+
+# How this computer uses Seamless is `seamlessd setup`'s question
+# (cmd/seamlessd/setup.go), asked of the binary this run just verified, before
+# anything is installed; mirrors run_setup in docs/install. $SetupProtocol is
+# the line `seamlessd setup -h` prints when it speaks the hand-off, and
+# $SetupHeader opens the answer it writes; a pinned release from before setup
+# has neither, and installs exactly as it always did.
+$SetupProtocol = 'installer protocol: 1'
+$SetupHeader = 'seamless-setup 1'
 
 # The owner's signature over checksums.txt (Test-OwnerSignature). Every
 # release after $OwnerSignedAfter carries checksums.txt.sshsig, made by the
@@ -592,9 +619,10 @@ function Install-OneBinary {
         Remove-Item -Force -ErrorAction SilentlyContinue
 }
 
+# Install-Binaries installs what Main expanded into $Tmp, where Invoke-SetupFront
+# asked the new seamlessd.exe before anything was stopped or installed.
 function Install-Binaries {
-    param([string]$ZipPath, [string]$Tmp, [string]$InstallDir)
-    Expand-Archive -Path $ZipPath -DestinationPath $Tmp -Force
+    param([string]$Tmp, [string]$InstallDir)
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     Install-OneBinary (Join-Path $Tmp 'seamlessd.exe') (Join-Path $InstallDir 'seamlessd.exe')
     Install-OneBinary (Join-Path $Tmp 'seam.exe') (Join-Path $InstallDir 'seam.exe')
@@ -603,6 +631,116 @@ function Install-Binaries {
         Say 'note: a running agent app still holds the previous seam.exe; restart it to pick up the new version'
     }
 }
+
+# BEGIN setup
+# Test-SetupKnobs: an answer only `seamlessd setup` reads is set. Setup reads
+# SEAMLESS_SERVER_URL and SEAMLESS_MCP_API_KEY too, with the meaning this
+# script has always given them, but they alone never make it run.
+function Test-SetupKnobs {
+    return [bool]($env:SEAMLESS_SETUP -or $env:SEAMLESS_PAIR_CODE -or $env:SEAMLESS_IMPORT)
+}
+
+# Test-ScriptedRun: a SEAMLESS_* variable other than SEAMLESS_CONFIG (which the
+# installer pins itself) is set, so a script is running this and nothing may
+# ask it a new question. seamlessd setup holds itself to the same rule, and
+# seamlessd's updater always sets SEAMLESS_VERSION and SEAMLESS_INSTALL_DIR
+# (and runs this script with its input redirected), so no update starts setup.
+function Test-ScriptedRun {
+    $set = @(Get-ChildItem Env: | Where-Object { $_.Name -like 'SEAMLESS_*' -and $_.Name -ne 'SEAMLESS_CONFIG' })
+    return ($set.Count -gt 0)
+}
+
+# Invoke-Setup runs `seamlessd setup` the way Invoke-WireHooks runs
+# install-hooks -- from $Tmp, against $Config once it exists -- and dies with
+# $Failure when it does not succeed. Called as a statement, never captured: a
+# captured native command writes into a pipe instead of the console, and a
+# question that ends without a newline would never show.
+function Invoke-Setup {
+    param([string]$Seamlessd, [string]$Tmp, [string[]]$SetupArgs, [string]$Failure)
+    Push-Location $Tmp
+    try {
+        if (Test-Path $Config) {
+            $env:SEAMLESS_CONFIG = $Config
+        } else {
+            Remove-Item Env:SEAMLESS_CONFIG -ErrorAction SilentlyContinue
+        }
+        & $Seamlessd setup @SetupArgs
+        if ($LASTEXITCODE -ne 0) { Die "$Failure (exit $LASTEXITCODE)" }
+    } finally {
+        Pop-Location
+        Remove-Item Env:SEAMLESS_CONFIG -ErrorAction SilentlyContinue
+    }
+}
+
+# Read-SetupState: the two lines of setup's answer that are the installer's.
+# role=server runs the daemon here (the install as it always was), role=client
+# dials server_url.
+function Read-SetupState {
+    param([string]$StatePath)
+    if (-not (Test-Path -LiteralPath $StatePath)) { Die "seamlessd setup wrote no answer to $StatePath" }
+    $lines = @(Get-Content -LiteralPath $StatePath)
+    if ($lines.Count -eq 0 -or $lines[0] -cne $SetupHeader) {
+        Die 'seamlessd setup answered in a form this installer does not read'
+    }
+    $answer = @{ Role = ''; ServerUrl = '' }
+    foreach ($line in $lines) {
+        if ($line.StartsWith('role=', [StringComparison]::Ordinal)) { $answer.Role = $line.Substring(5) }
+        elseif ($line.StartsWith('server_url=', [StringComparison]::Ordinal)) { $answer.ServerUrl = $line.Substring(11) }
+    }
+    return $answer
+}
+
+# Invoke-SetupFront: ask the verified, not yet installed seamlessd.exe how this
+# computer uses Seamless. It sets $script:SetupServerUrl to the server a client
+# set up at the console dials ('' for none) and $script:SetupStatePath to the
+# state for --finish ('' when setup did not run), and returns nothing: Main
+# calls it as a statement, so setup's questions reach the console (see
+# Invoke-Setup). It runs only when it has something to decide: a setup knob,
+# or a person at the console with no SEAMLESS_* set. Every other run -- a
+# script's, an update's -- skips it and installs exactly as before. Setup only
+# ever adds an answer this script did not have, so it never moves one that
+# SEAMLESS_SERVER_URL or the config gave ($ServerUrl): that would be a bug, and
+# stops the install before anything is stopped or installed.
+function Invoke-SetupFront {
+    param([string]$Tmp, [string]$Version, [string]$ServerUrl)
+    $script:SetupServerUrl = ''
+    $script:SetupStatePath = ''
+    $knobs = Test-SetupKnobs
+    if (-not $knobs -and (-not (Test-Interactive) -or (Test-ScriptedRun))) { return }
+    $fresh = Join-Path $Tmp 'seamlessd.exe'
+    $probe = ''
+    $prevEap = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $probe = (& $fresh setup -h 2>&1 | Out-String)
+    } catch {
+        $probe = ''
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    if (-not $probe.Contains($SetupProtocol)) {
+        if ($knobs) {
+            if (-not $probe.Trim()) { Die "could not run $fresh to ask seamlessd setup; nothing was installed" }
+            Die "seamless $Version predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE and SEAMLESS_IMPORT; unset them, or drop SEAMLESS_VERSION to get the latest"
+        }
+        return
+    }
+    $statePath = Join-Path $Tmp 'setup.state'
+    Invoke-Setup $fresh $Tmp @('--state', $statePath) 'seamlessd setup stopped the install; nothing was installed'
+    $answer = Read-SetupState $statePath
+    switch -CaseSensitive ($answer.Role) {
+        'server' {
+            if ($ServerUrl) { Die "seamlessd setup has this computer run the daemon, but it is a client of $ServerUrl; please report this at https://github.com/$Repo/issues" }
+        }
+        'client' {
+            if (-not $answer.ServerUrl) { Die 'seamlessd setup made this computer a client of no server' }
+            if (-not $ServerUrl) { $script:SetupServerUrl = $answer.ServerUrl }
+        }
+        default { Die "seamlessd setup answered with no role ($($answer.Role))" }
+    }
+    $script:SetupStatePath = $statePath
+}
+# END setup
 
 # install-hooks does the config bootstrap too: it calls config.EnsureAPIKey, which
 # generates the bearer key into $Config when no config file exists. So on a first
@@ -942,11 +1080,20 @@ server and use the line it prints.
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
     try {
         $zip = Get-Release $version $arch $tmp $checksumsPin
+        Expand-Archive -Path $zip -DestinationPath $tmp -Force
+
+        # How this computer uses Seamless: seamlessd setup's question, asked of
+        # the verified binary before the daemon is stopped or anything is
+        # installed. It may make this a client a person set up at the console;
+        # with no setup knob and no person to ask, it is skipped and everything
+        # below runs as it always did.
+        Invoke-SetupFront $tmp $version $serverUrl
+        if ($script:SetupServerUrl) { $serverUrl = $script:SetupServerUrl }
 
         # Best-effort: nothing is running on a first install.
         Stop-Daemon $InstallDir
 
-        Install-Binaries $zip $tmp $InstallDir
+        Install-Binaries $tmp $InstallDir
 
         # Restart the task and wait for it to answer as the new build BEFORE
         # rewiring the clients (make install restarts first too): a wiring
@@ -975,6 +1122,12 @@ server and use the line it prints.
         }
         if (-not $hooksFirst) {
             Invoke-WireHooks $tmp $InstallDir $agentClient $version $serverUrl $apiKey
+        }
+        # Once the install is done, the rest of setup's answer: today, each
+        # step setup does not do yet, and how to do it by hand.
+        if ($script:SetupStatePath) {
+            Invoke-Setup (Join-Path $InstallDir 'seamlessd.exe') $tmp @('--state', $script:SetupStatePath, '--finish') `
+                'the install is complete, but seamlessd setup could not finish; run  seamlessd setup  to see where it stands'
         }
     } finally {
         Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
