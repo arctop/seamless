@@ -88,21 +88,15 @@ fi
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/seam-approver.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT INT TERM
 
-# --- compile: one universal binary (arm64 + x86_64), macOS 12 and later
-# (Package.swift says why 12).
+# --- compile: arm64 only (Apple silicon), macOS 12 and later (Package.swift
+# says why 12). No Intel Mac runs the approver, and Xcode deprecates x86_64
+# for the current macOS deployment targets.
 mkdir -p "$OUT"
 SCRATCH="$OUT/.build"
-swift build --package-path "$PKG" --scratch-path "$SCRATCH" -c release --arch arm64 --arch x86_64
-BIN_DIR=$(swift build --package-path "$PKG" --scratch-path "$SCRATCH" -c release --arch arm64 --arch x86_64 --show-bin-path)
+swift build --package-path "$PKG" --scratch-path "$SCRATCH" -c release --arch arm64
+BIN_DIR=$(swift build --package-path "$PKG" --scratch-path "$SCRATCH" -c release --arch arm64 --show-bin-path)
 archs=$(lipo -archs "$BIN_DIR/$EXE")
-case " $archs " in
-*" arm64 "*) ;;
-*) die "the binary lacks arm64 (has: $archs)" ;;
-esac
-case " $archs " in
-*" x86_64 "*) ;;
-*) die "the binary lacks x86_64 (has: $archs)" ;;
-esac
+[ "$archs" = arm64 ] || die "the binary is not arm64 only (has: $archs)"
 
 # --- assemble the bundle.
 rm -rf "$APP"
