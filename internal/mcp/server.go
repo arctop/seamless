@@ -245,6 +245,10 @@ type Config struct {
 	// never screened, whatever the feature toggle says.
 	Screening *screening.Service
 	APIKey    string
+	// SocketURL is the peer_auth socket's server_url (unix:///path), "" with
+	// no socket. With it and no APIKey -- the key retired for passkey
+	// sign-in -- a TCP request is refused with a pointer to the socket.
+	SocketURL string
 	Version   string // build version advertised in the MCP handshake; defaults to serverVersion
 	// ToolEventMaxChars caps each captured field (tool.call args value/result,
 	// session findings) of a logged Interactions event at this many runes. 0 =
@@ -487,6 +491,13 @@ func (s *Server) Handler() http.Handler {
 		// authenticated by its peer uid before it got here (cmd/seamlessd), and
 		// carries no key at all.
 		if !verifyBearer(r, s.cfg.APIKey) && !access.PeerAuthenticated(r.Context()) {
+			if s.cfg.APIKey == "" && s.cfg.SocketURL != "" {
+				// No key exists to present: say where MCP is served, and send
+				// no Bearer challenge, which no key could answer.
+				http.Error(w, "forbidden: this daemon serves MCP only on its socket; set server_url: "+s.cfg.SocketURL+
+					" and run seamlessd install-hooks", http.StatusForbidden)
+				return
+			}
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return

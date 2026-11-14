@@ -81,6 +81,14 @@
         <button class="btn primary" id="signin-go" type="submit">{{icon "key-round"}} Sign in with a passkey</button>
         <p class="login-config-note" id="signin-status" role="status" aria-live="polite"></p>
       </form>
+      <section class="login-card" id="terminal-signin" aria-labelledby="terminal-signin-title">
+        <div class="login-section-label">No passkey at hand</div>
+        <h2 id="terminal-signin-title">Sign in from a terminal on the server</h2>
+        <p>This browser shows a code, and you approve it in your own terminal on the server, as the daemon's account. It signs in this browser only: the code is no use to anyone else.</p>
+        <button class="btn" id="terminal-go" type="button">{{icon "terminal"}} Show a code</button>
+        <div class="login-command" id="terminal-command" style="display:none"><code id="terminal-command-text"></code></div>
+        <p class="login-config-note" id="terminal-status" role="status" aria-live="polite"></p>
+      </section>
       {{else}}
       <form class="login-card" method="post" action="/console/login">
         <div class="login-section-label">Owner access</div>
@@ -206,6 +214,52 @@
     }).catch(function (err) {
       say(window.SeamPasskey.refusal(err));
     }).finally(function () { go.disabled = false; });
+  });
+})();
+/* The terminal sign-in (internal/console/signin_terminal.go): this browser
+   begins it under a cookie bound to its key and shows the code; the owner
+   approves the code on the server as the daemon's account, and this page,
+   asking with its own cookie and proof, finds itself signed in. */
+(function () {
+  'use strict';
+  var go = document.getElementById('terminal-go');
+  if (!go) return;
+  var status = document.getElementById('terminal-status');
+  var box = document.getElementById('terminal-command');
+  var text = document.getElementById('terminal-command-text');
+  var form = document.getElementById('signin-form');
+  var next = (form && form.getAttribute('data-next')) || '/console/';
+  var timer = null;
+  function say(msg) { status.textContent = msg; }
+  function poll(id) {
+    fetch('/console/signin/terminal/status?id=' + encodeURIComponent(id) + '&next=' + encodeURIComponent(next),
+      { credentials: 'same-origin', cache: 'no-store', headers: { 'Accept': 'application/json' } }
+    ).then(function (res) {
+      return res.json().catch(function () { return {}; });
+    }).then(function (d) {
+      if (d.state === 'signed-in') { say('Signed in.'); location.assign(d.next || next); return; }
+      if (d.state === 'pending') { timer = setTimeout(function () { poll(id); }, 2000); return; }
+      go.disabled = false;
+      say(d.error || (d.state === 'expired' ? 'The code expired before it was approved: show a new one.' : 'This sign-in ended: show a new code.'));
+    }, function () { timer = setTimeout(function () { poll(id); }, 4000); });
+  }
+  go.addEventListener('click', function () {
+    if (!window.SeamBrowserKey || !window.SeamBrowserKey.supported()) { say('This browser cannot hold a console sign-in here.'); return; }
+    go.disabled = true;
+    if (timer) clearTimeout(timer);
+    say('Getting a code...');
+    window.SeamBrowserKey.ready().then(function () {
+      return window.SeamPasskey.post('/console/signin/terminal/begin', {});
+    }).then(function (begun) {
+      text.textContent = begun.command;
+      box.style.display = '';
+      say('Code ' + begun.code + ': run the command above in your own terminal on the server within ' + begun.minutes +
+        ' minutes. This page signs in once it is approved.');
+      poll(begun.id);
+    }).catch(function (err) {
+      go.disabled = false;
+      say(err && err.message ? err.message : 'Something went wrong. Nothing changed.');
+    });
   });
 })();
 </script>

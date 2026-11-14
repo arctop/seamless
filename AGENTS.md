@@ -874,6 +874,16 @@ any of it.
   approves. Every sign-in route is a 404 while the key signs browsers in, and
   refuses a restricted account first. A restore ends every sign-in and waiting
   passkey (`ResetRestoredAccess`); a merge carries neither.
+- **The terminal sign-in is an unlock's terminal pattern, for the sign-in**
+  (store/signin_terminal.go, console/signin_terminal.go, `console-open
+  --sign-in`). The browser begins it under a fresh cookie bound to its key; the
+  daemon's account approves its code (`store.ApproveTerminalSignIn`), which
+  signs in that browser and no other. A waiting row lives in `console_signins`
+  with `credential` `terminal-code:<code hash>` and `expires_at` equal to
+  `created_at`, so no reader of a live sign-in counts it; approval is its one
+  transition, a compare-and-set to `SignInByDaemon`. `endSignIns` ends waiting
+  rows too (sign-out, restore, reset). `PasskeySignInsSince`, setup's proof,
+  counts a passkey's sign-ins only.
 - **A paired device is the owner, and no more** (plan networked-relay;
   `internal/devices`, `approval/devices.go`, `store/devices.go`, migration 042,
   `console/devices.go`, `cmd/seamlessd/devices.go`, `cmd/seamlessd/peerauth_relay.go`, migration 043). Pairing exists only on a
@@ -1376,6 +1386,18 @@ health check stay theirs.
   `SEAMLESS_TLS_KEY` (not `SEAMLESS_TLS_*_FILE`, which the service never sees).
   Tests fake the resolver, interfaces and tailnet (`setupAddrArrange`): no test
   runs `tailscale` or resolves a name.
+- **Retiring the key judges every step from what is there**
+  (`setup_retire.go`, the `retire-key` change, offered on a Standalone install
+  with locked projects). It reads the daemon over the owner's socket (`GET
+  /console/signin/state`), never the daemon's config; prints each root step
+  and waits for its effect; removes nothing before a passkey sign-in recorded
+  in this run (until the key is gone); and takes the key out of
+  `console.yaml` only once the daemon serves without it. A retired key is
+  `retiredKey` (peer_auth, `console.sign_in: passkey`, no `mcp.api_key`): MCP
+  over TCP then answers 403 with the socket's address, and doctor reports it as
+  meant. Bringing a key back mints a fresh one, written to `console.yaml`
+  (marked, so a stopped run resumes the wait) and never printed. Tests fake the
+  daemon (`retireEnv`): none dials, runs sudo, or reads the real home.
 - **dash.** Debian's and Ubuntu's `/bin/sh` is dash, where a failed
   redirection on a special built-in (`: </dev/tty`) ends the script: probe in
   a subshell (`tty_available`). The installer tests run every scenario under

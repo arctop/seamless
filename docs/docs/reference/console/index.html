@@ -464,6 +464,11 @@ nothing, and their rows say so.</p>
 <td>Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: <code>seamlessd approvers approve --code</code>, on the server, adds exactly that passkey. At most 32 wait at once.</td>
 </tr>
 <tr>
+<td>Begin a terminal sign-in</td>
+<td><code>POST /console/signin/terminal/begin</code></td>
+<td>Only with <code>console.sign_in: passkey</code>, and only from a browser that proves its key: <strong>Show a code</strong> on the login page. Sets a fresh random sign-in cookie bound to that key and stores it waiting, with a short code, for 10 minutes. It signs nothing in: <code>seamlessd console-open --sign-in --code</code>, on the server (as the daemon's account under peer_auth), signs in exactly the browser that showed that code, for 7 days. At most 32 wait at once. A 404 while the key signs browsers in.</td>
+</tr>
+<tr>
 <td>Get a pairing code</td>
 <td><code>POST /console/devices/code</code></td>
 <td>Only on a server that serves other computers (TLS, a bind beyond loopback, or a <code>server_url</code> naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused from an agent's process on the peer_auth socket.</td>
@@ -718,6 +723,15 @@ passkey; the page shows a short code and the key's fingerprint. Run
 account under peer_auth; the page shows the exact command). It shows the same
 name and key and asks before it adds. Approve only a code your own device
 shows.</li>
+<li><strong>No passkey at hand.</strong> Under <strong>Sign in from a terminal on the server</strong>, the
+login page's <strong>Show a code</strong> begins a terminal sign-in: the browser gets a
+cookie bound to its key and shows a code with the command that approves it,
+<code>sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd console-open --sign-in --code 7KQ2-M9XD</code>
+under peer_auth (<code>seamlessd console-open --sign-in --code 7KQ2-M9XD</code>
+without it). Approved, that browser is signed in for 7 days, as with a
+passkey, and the page goes on by itself. The code signs in no other browser,
+so reading it off your screen gives nothing away. It is the way back in when
+every passkey is lost: add a new one from the Add a passkey page.</li>
 <li><strong>Synced passkeys.</strong> A passkey synced through iCloud Keychain, Google Password
 Manager or another password manager is one passkey: add it once, and every
 device it syncs to signs in, with nothing more to add. A device without it can

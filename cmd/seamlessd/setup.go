@@ -253,6 +253,9 @@ var setupSteps = map[string]setupStep{
 	"pairing": {id: "pairing", label: "pairing", knob: setupKnobPairCode,
 		what:   "pairing with a one-time code instead of the {server}'s own key",
 		manual: "this {client} uses its {server}'s key, which seamlessd client-config prints on the {server}"},
+	"retire-key": {id: "retire-key", label: "retire key", after: true,
+		what: "sign in to the console with passkeys, then retire the bearer key the console's config keeps",
+		run:  setupRetireStep},
 }
 
 // setupPlans is each kind's steps, in the order its questions come: the
@@ -296,9 +299,10 @@ type setupChange struct {
 }
 
 // setupChanges is what setup can change on an installed computer: a
-// Standalone install can become the Server (not on Windows), and a computer
-// that runs the daemon can turn locked projects on (macOS and Linux). A
-// Client has nothing to change yet: its relay is not built.
+// Standalone install can become the Server (not on Windows), a computer
+// that runs the daemon can turn locked projects on (macOS and Linux), and a
+// Standalone install with locked projects can retire the key for passkey
+// sign-in. A Client has nothing to change yet: its relay is not built.
 func setupChanges(in setupInstall, goos string) []setupChange {
 	var out []setupChange
 	if in.kind == setupStandalone && goos != "windows" {
@@ -309,6 +313,13 @@ func setupChanges(in setupInstall, goos string) []setupChange {
 	if (in.kind == setupStandalone || in.kind == setupServer) && !in.locked && setupPeerAuthOS(goos) {
 		out = append(out, setupChange{id: "locked-projects", to: in.kind, steps: []string{"locked-projects"},
 			label: "Turn on locked projects (peer_auth)", doing: "turning on locked projects"})
+	}
+	// With locked projects on, the agents use the socket and the key is left
+	// only to the console's config: passkey sign-in retires it
+	// (setup_retire.go), and a run on a retired key offers a fresh one back.
+	if in.kind == setupStandalone && in.locked && setupPeerAuthOS(goos) {
+		out = append(out, setupChange{id: "retire-key", to: in.kind, steps: []string{"retire-key"},
+			label: "Sign in with passkeys and retire the key", doing: "retiring the key"})
 	}
 	return out
 }

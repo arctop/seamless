@@ -68,12 +68,16 @@ var consoleLoginTmpl = template.Must(template.New("console-login").Parse(`<!doct
 // Under passkey sign-in (console.sign_in: passkey) the key signs no browser
 // in, so it opens the console's sign-in page instead and writes no page at
 // all (openSignInPage): there is no local path that signs a browser in
-// without the passkey, on the server or anywhere else.
+// without the passkey, on the server or anywhere else. The way in without a
+// passkey begins in the browser too: the sign-in page's terminal sign-in shows
+// a code, which --sign-in --code approves as the daemon's account
+// (runConsoleSignIn).
 func runConsoleOpen(args []string) error {
 	fs := flag.NewFlagSet("console-open", flag.ContinueOnError)
-	browser := fs.String("browser", "", `browser application to open instead of the default (e.g. "Google Chrome"; macOS only; not with --unlock, which opens no browser)`)
+	browser := fs.String("browser", "", `browser application to open instead of the default (e.g. "Google Chrome"; macOS only; not with --unlock or --sign-in, which open no browser)`)
 	unlock := fs.String("unlock", "", "approve a locked project's unlock in the browser that began it on its unlock page (run as the daemon's account, through sudo -k)")
-	code := fs.String("code", "", "the code that browser's unlock page shows (with --unlock; asked for when absent and stdin is a terminal)")
+	signIn := fs.Bool("sign-in", false, "approve the terminal sign-in a browser began on the console's sign-in page, under passkey sign-in (run as the daemon's account, through sudo -k)")
+	code := fs.String("code", "", "the code that browser's unlock or sign-in page shows (with --unlock or --sign-in; asked for when absent and stdin is a terminal)")
 	forFlag := fs.String("for", "", "how long the unlock lasts once approved (with --unlock; at most and by default 3h, capped by peer_auth.max_lease)")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("seamlessd.console-open: %w", err)
@@ -81,6 +85,15 @@ func runConsoleOpen(args []string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("seamlessd.console-open: %w", err)
+	}
+	if *signIn {
+		if *unlock != "" || *forFlag != "" {
+			return errors.New("seamlessd.console-open: --sign-in takes only --code: a sign-in lasts as long as every console sign-in, and opens no locked project")
+		}
+		if err := runConsoleSignIn(cfg, *code, *browser); err != nil {
+			return fmt.Errorf("seamlessd.console-open: %w", err)
+		}
+		return nil
 	}
 	if *unlock != "" || *forFlag != "" || *code != "" {
 		if *unlock == "" {

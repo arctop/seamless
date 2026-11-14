@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -254,4 +255,115 @@ func consoleSignInChecks(ctx context.Context, cfg config.Config, db *sql.DB, hn 
 		out = append(out, passkeyOriginChecks(ctx, cfg, cfg.Addr, db, hn)...)
 	}
 	return out
+}
+
+// errSignInBrowser refuses --browser beside --sign-in: present, it would mean
+// nothing, since console-open --sign-in launches no browser.
+var errSignInBrowser = errors.New("--browser does not combine with --sign-in: a terminal sign-in begins on the console's sign-in page, " +
+	"in the browser it signs in, and console-open --sign-in only approves the code that page shows")
+
+// signInPageFor is the console's sign-in page on the relying party's first
+// origin: where a terminal sign-in begins. It is no secret.
+func signInPageFor(cfg config.Config) string {
+	return strings.TrimSuffix(passkeyAddAddress(cfg), "/console/passkeys/add") + "/console/login"
+}
+
+// runConsoleSignIn is console-open --sign-in: the terminal's half of a
+// terminal sign-in, the way in for an owner with no passkey left. The browser
+// begins it on the sign-in page ("Show a code") under a cookie bound to its
+// key; this approves the code that page shows, as the daemon's account under
+// peer_auth (as the owner without it, whose every process is the owner), and
+// that browser, and no other, is signed in. Nothing it reads or prints is a
+// credential, and it launches nothing.
+func runConsoleSignIn(cfg config.Config, code, browser string) error {
+	return consoleSignIn(cfg, code, browser, stdioUnlockTerminal(), time.Now)
+}
+
+// consoleSignIn is runConsoleSignIn with its terminal and clock given.
+func consoleSignIn(cfg config.Config, code, browser string, tty unlockTerminal, now func() time.Time) error {
+	if browser != "" {
+		return errSignInBrowser
+	}
+	if !cfg.Console.PasskeySignIn() {
+		return errors.New("console.sign_in is key in this config, so the console's key signs a browser in and there is no terminal sign-in " +
+			"to approve: run console-open as the owner instead, or set SEAMLESS_CONFIG to the daemon's config")
+	}
+	if cfg.PeerAuth.Enabled {
+		if err := approverAccountCheck(cfg, defaultPeerAuthEnv()); err != nil {
+			return err
+		}
+	}
+	// Settled before the database is opened: nothing to ask the owner with.
+	if strings.TrimSpace(code) == "" && !tty.interactive {
+		return fmt.Errorf("console-open --sign-in needs --code: open %s in the browser to sign in, choose Show a code, "+
+			"and run the command it shows", signInPageFor(cfg))
+	}
+	db, err := openServedDB(cfg, os.Stderr)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	return approveConsoleSignIn(context.Background(), cfg, db, tty, code, now())
+}
+
+// approveConsoleSignIn is console-open --sign-in's testable core: it asks for
+// the code when none was given, approves it, and says what it signed in. A
+// code that is malformed, mistyped, used or expired changes nothing.
+func approveConsoleSignIn(ctx context.Context, cfg config.Config, db *sql.DB, tty unlockTerminal, code string, now time.Time) error {
+	if strings.TrimSpace(code) == "" {
+		if !tty.interactive {
+			return fmt.Errorf("console-open --sign-in needs --code: open %s and choose Show a code", signInPageFor(cfg))
+		}
+		fmt.Fprintf(tty.out, "Open %s in the browser to sign in, and choose Show a code.\nCode it shows: ", signInPageFor(cfg))
+		line, err := bufio.NewReader(tty.in).ReadString('\n')
+		if err != nil && line == "" {
+			return fmt.Errorf("no code was typed: nothing changed (%w)", err)
+		}
+		if code = strings.TrimSpace(line); code == "" {
+			return errors.New("no code was typed: nothing changed")
+		}
+	}
+	shown := store.FormatUnlockCode(code)
+	s, err := store.ApproveTerminalSignIn(ctx, db, code, approval.SignInLifetime, now)
+	switch {
+	case errors.Is(err, store.ErrInvalidSignIn) && shown == "":
+		return &ownerError{msg: fmt.Sprintf("%q is not a sign-in code: the sign-in page shows one as XXXX-XXXX, 8 letters and digits. Nothing changed.", code), cause: err}
+	case errors.Is(err, store.ErrTerminalSignInNotFound):
+		return &ownerError{msg: fmt.Sprintf("no sign-in is waiting for code %s: it may be mistyped, already used, or expired (a code lasts %s). "+
+			"Nothing changed. Start again on %s.", shown, minutesWords(store.TerminalSignInTTL), signInPageFor(cfg)), cause: err}
+	case err != nil:
+		return err
+	}
+	fmt.Fprintf(tty.out, "Signed in the browser that showed code %s, until %s. Add a passkey there (Add a passkey) before that ends.\n",
+		shown, s.ExpiresAt.Local().Format("2006-01-02 15:04"))
+	return nil
+}
+
+// retiredKey reports a daemon whose key was retired for passkey sign-in
+// (setup's "Sign in with passkeys and retire the key"): peer_auth on, the
+// console signing browsers in with a passkey, and no mcp.api_key. TCP then
+// serves the console's sign-in, its pages and /healthz, and the agents use
+// the socket.
+func retiredKey(cfg config.Config) bool {
+	return strings.TrimSpace(cfg.MCP.APIKey) == "" && cfg.PeerAuth.Enabled && cfg.Console.PasskeySignIn() && !cfg.IsClient()
+}
+
+// retiredKeySocketURL is the socket's server_url an MCP request over TCP is
+// pointed to once the key is retired, "" otherwise: every other daemon
+// answers a missing key as it always did.
+func retiredKeySocketURL(cfg config.Config) string {
+	if !retiredKey(cfg) || strings.TrimSpace(cfg.PeerAuth.Socket.Path) == "" {
+		return ""
+	}
+	return "unix://" + cfg.PeerAuth.Socket.Path
+}
+
+// retiredKeyCheck is doctor's mcp.api_key row for a retired key, which is
+// meant, not missing; ok is false for every other daemon.
+func retiredKeyCheck(cfg config.Config) (check, bool) {
+	if !retiredKey(cfg) {
+		return check{}, false
+	}
+	return check{statusOK, "mcp.api_key", "retired: a browser signs in to the console with a passkey, the agents use the socket, and TCP " +
+		"serves only the console's sign-in, its pages and /healthz (seamlessd setup brings a fresh key back)"}, true
 }

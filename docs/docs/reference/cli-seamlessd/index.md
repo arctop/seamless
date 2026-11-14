@@ -387,8 +387,9 @@ variable; with one set, or no terminal, the environment is the whole answer,
 and a run without the setup variables below installs exactly as it did before
 they existed - every run `seamlessd update` makes is one. On a re-run it says
 how the computer is set up and offers only the changes it can make: a
-Standalone install can become the Server, and a computer that runs the daemon
-can turn on locked projects. A Client chosen at the terminal is asked for its
+Standalone install can become the Server, a computer that runs the daemon
+can turn on locked projects, and a Standalone install with locked projects can
+[sign in with passkeys and retire the key](#seamlessd_setup_retire). A Client chosen at the terminal is asked for its
 Server's address and key, which `seamlessd client-config` prints on the
 Server; the key goes straight into `~/.config/seamless/seamless.yaml` (`0600`).
 
@@ -489,6 +490,53 @@ serves them, install with `SEAMLESS_IMPORT_LOCKS=keep` and
 [move the install to peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/#move-an-existing-install-over)
 before you start the daemon: the move takes the data directory whole, with
 the backup's locks, fences and passkeys.
+
+### Retiring the key {#seamlessd_setup_retire}
+
+On a Standalone install with locked projects (peer_auth) your agents use the
+socket and hold no key: the key's only use left is the console's config,
+`~/.config/seamless/console.yaml`, which every process of yours can read. Run
+`seamlessd setup` at a terminal and choose **Sign in with passkeys and retire
+the key**. Setup runs no root step: it prints each one, then waits for its
+effect, asking the daemon over your socket, since the daemon's config is not
+yours to read.
+
+1. **Checks.** Your config names the socket; the daemon's account is pinned
+   (else it prints the two commands that pin it); a `localhost` passkey origin
+   answers as this daemon on both `127.0.0.1` and `::1`; and the daemon's
+   sign-in binds its cookie to the browser's key (a daemon too old for that is
+   refused, to be updated first).
+2. **Passkey sign-in on.** As an administrator, `sudo -e
+   /opt/seamless/etc/seamless.yaml`, add `sign_in: passkey` under `console:`,
+   keep `mcp.api_key`, and restart the daemon (the command is printed). With
+   no passkey yet, it shows the Add a passkey address and the
+   `approvers approve --code` command, and waits for one.
+3. **Proof.** Sign in to the console with your passkey. Setup waits until that
+   sign-in is recorded; nothing is removed before it.
+4. **What still dials TCP with the key.** It looks for the key, and for
+   `console.yaml`, in Claude Code's settings and MCP registration, Codex's
+   hooks and MCP registration, the Claude app's MCP bridge, and your other
+   Seamless configs, names each, and goes on only if you say so (with no
+   terminal, it stops). Scripts on other computers and A2A clients are not
+   seen: MCP over TCP names the socket to them.
+5. **Retire.** As an administrator, delete the `api_key` line under `mcp:` in
+   the daemon's config and restart it. Once the daemon serves without a key,
+   setup takes the key out of `console.yaml`, keeping every other line, and
+   points its `server_url` from `127.0.0.1` to the passkey origin
+   (`localhost`), so `console-open` opens the sign-in page where a passkey
+   works. TCP then serves the console's sign-in, its pages and `/healthz`; MCP
+   over TCP is refused with the socket's address.
+
+A run that stops anywhere - a timeout after 15 minutes, a crash, Ctrl-C -
+continues from where things are when you run `seamlessd setup` again, and until
+the key is gone each run asks for a fresh passkey sign-in first.
+
+With every passkey lost, the login page's **Show a code** is the way in: run
+the command it shows, `console-open --sign-in --code`, as the daemon's account
+([below](#seamlessd_console_open)). Run setup again on a retired key to bring a
+key back: it mints a fresh one (never the old one), writes it into
+`console.yaml`, and waits for root to copy it into the daemon's config; it never
+prints the key.
 
 ## seamlessd install-hooks {#seamlessd_install_hooks}
 
@@ -1018,6 +1066,7 @@ relay; run it as the relay's account to see the pairing too.
 ```bash
 seamlessd console-open [--browser APP]
 seamlessd console-open --unlock PROJECT [--code CODE] [--for DURATION]
+seamlessd console-open --sign-in [--code CODE]
 ```
 
 Opens the console in a browser, already authenticated. It renders a one-shot
@@ -1078,6 +1127,24 @@ for the code when standard input is a terminal; anywhere else it refuses,
 naming `--code` and the page. `--for` is how long the unlock lasts once
 approved: at most, and by default, the console lease of three hours (shorter
 when `peer_auth.max_lease` is).
+
+`--sign-in` is the terminal's half of a terminal sign-in, the way into the
+console under passkey sign-in with no passkey at all. The browser begins it:
+**Show a code** on the console's sign-in page gives that browser a cookie bound
+to its key and shows a code with the command that approves it, run as the
+daemon's account under peer_auth (as you, without it):
+
+```bash
+sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd console-open --sign-in --code 7KQ2-M9XD
+```
+
+It signs in the browser that showed the code, for 7 days, as a passkey sign-in
+lasts, and says so; the page goes on by itself. The code works once, within ten
+minutes, and signs in no other browser: whoever else saw it, or read the cookie
+on another port, gets nothing. A malformed, mistyped, used or expired code is
+refused and changes nothing; without `--code` it asks in a terminal and refuses
+anywhere else. It refuses `--browser`, `--unlock` and `--for`, and a config
+whose `console.sign_in` is `key`.
 
 An unlock is per browser: the one that showed the code reads the project, and
 another browser, the TCP key and every agent stay locked out, whoever else saw

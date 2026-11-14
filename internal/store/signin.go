@@ -191,7 +191,10 @@ func validSignInEnd(reason string) error {
 	return nil
 }
 
-// endSignIns ends the live sign-ins where says (with args), for reason, at now.
+// endSignIns ends the live sign-ins where says (with args), for reason, at now,
+// and the terminal sign-ins still waiting for their code there
+// (signin_terminal.go), so a code shown before a sign-out or a restore can no
+// longer sign anyone in.
 func endSignIns(ctx context.Context, q interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }, reason string, now time.Time, where string, args ...any) (int64, error) {
@@ -200,7 +203,7 @@ func endSignIns(ctx context.Context, q interface {
 	}
 	at := core.FormatTime(now)
 	res, err := q.ExecContext(ctx, `UPDATE console_signins SET ended_at = ?, ended_reason = ?
-		WHERE ended_at IS NULL AND expires_at > ? AND `+where, append([]any{at, reason, at}, args...)...)
+		WHERE ended_at IS NULL AND (expires_at > ? OR `+isTerminalWaiting+`) AND `+where, append([]any{at, reason, at}, args...)...)
 	if err != nil {
 		return 0, err
 	}

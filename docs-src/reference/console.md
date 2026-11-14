@@ -59,6 +59,7 @@ nothing, and their rows say so.
 | Sign in with a passkey | `POST /console/signin/finish` | Verifies the assertion for that challenge, from the browser that began it, records the passkey's use, and sets a fresh random sign-in cookie that counts only with this browser's key, for 7 days. A cookie the browser held before ends with it. |
 | Begin adding a passkey | `POST /console/passkeys/add/begin` | Only with `console.sign_in: passkey`: the public Add a passkey page asks for the new passkey's `name=`. Returns the WebAuthn creation options. Writes nothing. |
 | Add a passkey, waiting | `POST /console/passkeys/add/finish` | Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: `seamlessd approvers approve --code`, on the server, adds exactly that passkey. At most 32 wait at once. |
+| Begin a terminal sign-in | `POST /console/signin/terminal/begin` | Only with `console.sign_in: passkey`, and only from a browser that proves its key: **Show a code** on the login page. Sets a fresh random sign-in cookie bound to that key and stores it waiting, with a short code, for 10 minutes. It signs nothing in: `seamlessd console-open --sign-in --code`, on the server (as the daemon's account under peer_auth), signs in exactly the browser that showed that code, for 7 days. At most 32 wait at once. A 404 while the key signs browsers in. |
 | Get a pairing code | `POST /console/devices/code` | Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused from an agent's process on the peer_auth socket. |
 | Begin a device approval | `POST /console/devices/{id}/approve/begin` | Only under peer_auth, from a signed-in browser, for a pairing that waits. Returns the WebAuthn challenge, bound to that device's id, kind, name, fingerprint and key, and a ticket. Writes nothing. |
 | Approve a device | `POST /console/devices/{id}/approve/finish` | Verifies the passkey assertion for that ticket over the device as it stands, records the passkey's use, and pairs the device: a relay's certificate is accepted from its next request, and a key device collects its own key, once, on its next status. |
@@ -194,6 +195,15 @@ keeps sending the key.
   account under peer_auth; the page shows the exact command). It shows the same
   name and key and asks before it adds. Approve only a code your own device
   shows.
+- **No passkey at hand.** Under **Sign in from a terminal on the server**, the
+  login page's **Show a code** begins a terminal sign-in: the browser gets a
+  cookie bound to its key and shows a code with the command that approves it,
+  `sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd console-open --sign-in --code 7KQ2-M9XD`
+  under peer_auth (`seamlessd console-open --sign-in --code 7KQ2-M9XD`
+  without it). Approved, that browser is signed in for 7 days, as with a
+  passkey, and the page goes on by itself. The code signs in no other browser,
+  so reading it off your screen gives nothing away. It is the way back in when
+  every passkey is lost: add a new one from the Add a passkey page.
 - **Synced passkeys.** A passkey synced through iCloud Keychain, Google Password
   Manager or another password manager is one passkey: add it once, and every
   device it syncs to signs in, with nothing more to add. A device without it can

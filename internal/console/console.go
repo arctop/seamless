@@ -304,6 +304,12 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("POST /console/passkeys/add/begin", s.signInRoute(s.parseForm(formBodySmall, s.passkeyAddBegin)))
 	handle("POST /console/passkeys/add/finish", s.signInRoute(s.parseForm(formBodyPasskey, s.passkeyAddFinish)))
 	handle("GET /console/passkeys/add/status", s.signInRoute(s.passkeyAddStatus))
+	// The terminal sign-in: begun by the browser, its code approved on the
+	// server as the daemon's account (signin_terminal.go).
+	handle("POST /console/signin/terminal/begin", s.signInRoute(s.parseForm(formBodySmall, s.terminalSignInBegin)))
+	handle("GET /console/signin/terminal/status", s.signInRoute(s.terminalSignInStatus))
+	// How the console signs a browser in, for the owner's setup (signin_terminal.go).
+	handle("GET /console/signin/state", s.auth(s.signInStateJSON))
 
 	handle("GET /console/{$}", s.auth(s.overview))
 	handle("GET /console/now", s.auth(s.nowPage))

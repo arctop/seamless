@@ -255,6 +255,11 @@ func doctorPeerAuthChecks(ctx context.Context, cfg config.Config, d doctorDB, en
 func clientChecks(cfg config.Config) []check {
 	checks := transportChecks(cfg)
 	checks = append(checks, apiKeyCheck(cfg), clientMCPToolsCheck(cfg))
+	// The owner's half of a peer_auth install: a console.yaml that still keeps
+	// the key, and what else dials TCP with it (setup_retire.go).
+	if home, err := os.UserHomeDir(); err == nil {
+		checks = append(checks, retireDoctorChecks(cfg, home, runtime.GOOS)...)
+	}
 	checks = append(checks, claudeRuntimeChecks()...)
 	checks = append(checks, hooksCheck(cfg))
 	checks = append(checks, clientSeamChecks(cfg)...)
@@ -1460,6 +1465,9 @@ func remoteToolCount(ctx context.Context, cfg config.Config) (int, bool, error) 
 func apiKeyCheck(cfg config.Config) check {
 	if cfg.IsClient() && cfg.SocketPath() != "" {
 		return check{statusInfo, "mcp.api_key", "not used: server_url is a peer_auth socket, which identifies this OS account by its uid"}
+	}
+	if c, ok := retiredKeyCheck(cfg); ok {
+		return c
 	}
 	if strings.TrimSpace(cfg.MCP.APIKey) == "" {
 		if cfg.SourcePath() == "" {

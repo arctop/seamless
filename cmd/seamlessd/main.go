@@ -539,7 +539,9 @@ func runServe(args []string) error {
 	}
 	defer func() { stop(); commitSnap.Wait() }()
 
-	if cfg.MCP.APIKey == "" {
+	if cfg.MCP.APIKey == "" && retiredKey(cfg) {
+		slog.Info("mcp.api_key is retired: TCP serves the console's passkey sign-in, its pages and /healthz; MCP and hooks use the socket")
+	} else if cfg.MCP.APIKey == "" {
 		slog.Warn("mcp.api_key is empty; MCP and hook requests will be rejected -- set it in seamless.yaml")
 	}
 	// Locked projects: the approval service backs the lock's requests, the
@@ -610,6 +612,7 @@ func runServe(args []string) error {
 	mcpSrv := mcp.New(mcp.Config{
 		DB: db, Files: mgr, Retrieve: ret, Events: rec, Gardener: garden, Embedder: embedder, Screening: screen,
 		APIKey: cfg.MCP.APIKey, Version: buildVersion(), LocalHost: config.Hostname(),
+		SocketURL:           retiredKeySocketURL(cfg),
 		ToolEventMaxChars:   cfg.Budgets.ToolEventMaxChars,
 		CaptureAllowedPorts: cfg.Capture.AllowedPorts, Logger: logger,
 		// Commit records: off, session_end and tasks_update are registered

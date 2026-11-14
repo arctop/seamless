@@ -236,7 +236,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_setup">seamlessd setup</a></li><li class="lvl-3"><a href="#seamlessd_setup_address">The Server&#39;s address</a></li><li class="lvl-3"><a href="#seamlessd_setup_import">Starting from a backup</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_devices">seamlessd devices</a></li><li class="lvl-2"><a href="#seamlessd_relay">seamlessd relay</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
+      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_setup">seamlessd setup</a></li><li class="lvl-3"><a href="#seamlessd_setup_address">The Server&#39;s address</a></li><li class="lvl-3"><a href="#seamlessd_setup_import">Starting from a backup</a></li><li class="lvl-3"><a href="#seamlessd_setup_retire">Retiring the key</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_devices">seamlessd devices</a></li><li class="lvl-2"><a href="#seamlessd_relay">seamlessd relay</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
     </ul>
   </details>
   <p><code>seamlessd</code> is both the server and the operator CLI. <code>serve</code> runs the daemon;
@@ -788,8 +788,9 @@ variable; with one set, or no terminal, the environment is the whole answer,
 and a run without the setup variables below installs exactly as it did before
 they existed - every run <code>seamlessd update</code> makes is one. On a re-run it says
 how the computer is set up and offers only the changes it can make: a
-Standalone install can become the Server, and a computer that runs the daemon
-can turn on locked projects. A Client chosen at the terminal is asked for its
+Standalone install can become the Server, a computer that runs the daemon
+can turn on locked projects, and a Standalone install with locked projects can
+<a href="#seamlessd_setup_retire">sign in with passkeys and retire the key</a>. A Client chosen at the terminal is asked for its
 Server's address and key, which <code>seamlessd client-config</code> prints on the
 Server; the key goes straight into <code>~/.config/seamless/seamless.yaml</code> (<code>0600</code>).</p>
 <p>Run by itself, <code>seamlessd setup</code> says how this computer is set up and offers
@@ -910,6 +911,49 @@ serves them, install with <code>SEAMLESS_IMPORT_LOCKS=keep</code> and
 <a href="../../guides/peer-auth/#move-an-existing-install-over">move the install to peer_auth</a>
 before you start the daemon: the move takes the data directory whole, with
 the backup's locks, fences and passkeys.</p>
+<h3 id="seamlessd_setup_retire">Retiring the key</h3>
+<p>On a Standalone install with locked projects (peer_auth) your agents use the
+socket and hold no key: the key's only use left is the console's config,
+<code>~/.config/seamless/console.yaml</code>, which every process of yours can read. Run
+<code>seamlessd setup</code> at a terminal and choose <strong>Sign in with passkeys and retire
+the key</strong>. Setup runs no root step: it prints each one, then waits for its
+effect, asking the daemon over your socket, since the daemon's config is not
+yours to read.</p>
+<ol>
+<li><strong>Checks.</strong> Your config names the socket; the daemon's account is pinned
+(else it prints the two commands that pin it); a <code>localhost</code> passkey origin
+answers as this daemon on both <code>127.0.0.1</code> and <code>::1</code>; and the daemon's
+sign-in binds its cookie to the browser's key (a daemon too old for that is
+refused, to be updated first).</li>
+<li><strong>Passkey sign-in on.</strong> As an administrator, <code>sudo -e /opt/seamless/etc/seamless.yaml</code>, add <code>sign_in: passkey</code> under <code>console:</code>,
+keep <code>mcp.api_key</code>, and restart the daemon (the command is printed). With
+no passkey yet, it shows the Add a passkey address and the
+<code>approvers approve --code</code> command, and waits for one.</li>
+<li><strong>Proof.</strong> Sign in to the console with your passkey. Setup waits until that
+sign-in is recorded; nothing is removed before it.</li>
+<li><strong>What still dials TCP with the key.</strong> It looks for the key, and for
+<code>console.yaml</code>, in Claude Code's settings and MCP registration, Codex's
+hooks and MCP registration, the Claude app's MCP bridge, and your other
+Seamless configs, names each, and goes on only if you say so (with no
+terminal, it stops). Scripts on other computers and A2A clients are not
+seen: MCP over TCP names the socket to them.</li>
+<li><strong>Retire.</strong> As an administrator, delete the <code>api_key</code> line under <code>mcp:</code> in
+the daemon's config and restart it. Once the daemon serves without a key,
+setup takes the key out of <code>console.yaml</code>, keeping every other line, and
+points its <code>server_url</code> from <code>127.0.0.1</code> to the passkey origin
+(<code>localhost</code>), so <code>console-open</code> opens the sign-in page where a passkey
+works. TCP then serves the console's sign-in, its pages and <code>/healthz</code>; MCP
+over TCP is refused with the socket's address.</li>
+</ol>
+<p>A run that stops anywhere - a timeout after 15 minutes, a crash, Ctrl-C -
+continues from where things are when you run <code>seamlessd setup</code> again, and until
+the key is gone each run asks for a fresh passkey sign-in first.</p>
+<p>With every passkey lost, the login page's <strong>Show a code</strong> is the way in: run
+the command it shows, <code>console-open --sign-in --code</code>, as the daemon's account
+(<a href="#seamlessd_console_open">below</a>). Run setup again on a retired key to bring a
+key back: it mints a fresh one (never the old one), writes it into
+<code>console.yaml</code>, and waits for root to copy it into the daemon's config; it never
+prints the key.</p>
 <h2 id="seamlessd_install_hooks">seamlessd install-hooks</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd install-hooks <span class="o">[</span>--client claude<span class="p">|</span>claude-desktop<span class="p">|</span>codex<span class="p">|</span>all<span class="p">|</span>detect<span class="o">]</span> <span class="o">[</span>--settings PATH<span class="o">]</span> <span class="o">[</span>--codex-hooks PATH<span class="o">]</span> <span class="o">[</span>--desktop-config PATH<span class="o">]</span> <span class="o">[</span>--config PATH<span class="o">]</span> <span class="o">[</span>--url BASE<span class="o">]</span> <span class="o">[</span>--server-url URL<span class="o">]</span> <span class="o">[</span>--api-key KEY<span class="o">]</span> <span class="o">[</span>--seam PATH<span class="o">]</span> <span class="o">[</span>--mcp<span class="o">=</span>false<span class="o">]</span> <span class="o">[</span>--skills<span class="o">=</span>false<span class="o">]</span>
 </span></span></code></pre></div>
@@ -1537,6 +1581,7 @@ relay; run it as the relay's account to see the pairing too.</p>
 <h2 id="seamlessd_console_open">seamlessd console-open</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd console-open <span class="o">[</span>--browser APP<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seamlessd console-open --unlock PROJECT <span class="o">[</span>--code CODE<span class="o">]</span> <span class="o">[</span>--for DURATION<span class="o">]</span>
+</span></span><span class="line"><span class="cl">seamlessd console-open --sign-in <span class="o">[</span>--code CODE<span class="o">]</span>
 </span></span></code></pre></div>
 <p>Opens the console in a browser, already authenticated. It renders a one-shot
 self-submitting login page to a <code>0600</code> temp file and opens it; the page POSTs
@@ -1586,6 +1631,20 @@ for the code when standard input is a terminal; anywhere else it refuses,
 naming <code>--code</code> and the page. <code>--for</code> is how long the unlock lasts once
 approved: at most, and by default, the console lease of three hours (shorter
 when <code>peer_auth.max_lease</code> is).</p>
+<p><code>--sign-in</code> is the terminal's half of a terminal sign-in, the way into the
+console under passkey sign-in with no passkey at all. The browser begins it:
+<strong>Show a code</strong> on the console's sign-in page gives that browser a cookie bound
+to its key and shows a code with the command that approves it, run as the
+daemon's account under peer_auth (as you, without it):</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -k -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd console-open --sign-in --code 7KQ2-M9XD
+</span></span></code></pre></div>
+<p>It signs in the browser that showed the code, for 7 days, as a passkey sign-in
+lasts, and says so; the page goes on by itself. The code works once, within ten
+minutes, and signs in no other browser: whoever else saw it, or read the cookie
+on another port, gets nothing. A malformed, mistyped, used or expired code is
+refused and changes nothing; without <code>--code</code> it asks in a terminal and refuses
+anywhere else. It refuses <code>--browser</code>, <code>--unlock</code> and <code>--for</code>, and a config
+whose <code>console.sign_in</code> is <code>key</code>.</p>
 <p>An unlock is per browser: the one that showed the code reads the project, and
 another browser, the TCP key and every agent stay locked out, whoever else saw
 the code. It is a console cookie, never a lease, so it never opens the project
@@ -1652,7 +1711,7 @@ daemon is running older code than what you just built.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_setup">seamlessd setup</a></li><li class="lvl-3"><a href="#seamlessd_setup_address">The Server&#39;s address</a></li><li class="lvl-3"><a href="#seamlessd_setup_import">Starting from a backup</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_devices">seamlessd devices</a></li><li class="lvl-2"><a href="#seamlessd_relay">seamlessd relay</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
+      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_setup">seamlessd setup</a></li><li class="lvl-3"><a href="#seamlessd_setup_address">The Server&#39;s address</a></li><li class="lvl-3"><a href="#seamlessd_setup_import">Starting from a backup</a></li><li class="lvl-3"><a href="#seamlessd_setup_retire">Retiring the key</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_devices">seamlessd devices</a></li><li class="lvl-2"><a href="#seamlessd_relay">seamlessd relay</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
     </ul>
   </aside>
   

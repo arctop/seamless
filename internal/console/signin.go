@@ -58,6 +58,10 @@ type SignInView interface {
 	BeginEnrollment(ctx context.Context, name string) (approval.Ticketed, error)
 	FinishEnrollment(ctx context.Context, ticket, name string, response []byte) (approval.PasskeyAdded, error)
 	Enrollment(ctx context.Context, id string) (store.PasskeyEnrollment, error)
+	// The terminal sign-in (signin_terminal.go): begun by the browser, its
+	// code approved on the server as the daemon's account.
+	BeginTerminalSignIn(ctx context.Context, browserKey string) (approval.TerminalSignIn, error)
+	TerminalSignInState(ctx context.Context, id, cookie, browserKey string) (store.ConsoleSignIn, store.TerminalSignInState, error)
 }
 
 // SignInHeader names a login page served under passkey sign-in, so
@@ -289,6 +293,8 @@ func (s *Service) signInError(w http.ResponseWriter, r *http.Request, err error)
 		msg = "that passkey is not enrolled here: add it at " + passkeyAddPath + " first"
 	case errors.Is(err, store.ErrEnrollmentBusy):
 		msg, status = "too many passkeys are waiting for approval; try again in a few minutes", http.StatusTooManyRequests
+	case errors.Is(err, store.ErrTerminalSignInBusy):
+		msg, status = "too many terminal sign-ins are waiting; try again in a few minutes", http.StatusTooManyRequests
 	case errors.Is(err, store.ErrEnrollmentWaiting):
 		msg = fmt.Sprintf("that passkey is already waiting for approval: approve the code its page showed, or add it again after %d minutes",
 			int(store.PasskeyEnrollmentTTL/time.Minute))

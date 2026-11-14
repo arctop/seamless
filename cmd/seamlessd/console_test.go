@@ -210,3 +210,87 @@ func TestConsoleOpenUnlock_RefusesBrowser(t *testing.T) {
 		require.ErrorContains(t, runConsoleOpen(args), "--for and --code need --unlock <project>")
 	}
 }
+
+// retireSignInDB is the daemon's database with passkey sign-in on in the
+// config console-open loads, and a terminal sign-in begun by the browser
+// holding cookie and key; it returns the config and the code that browser's
+// page shows.
+func retireSignInDB(t *testing.T, cookie, key string) (config.Config, string, string) {
+	t.Helper()
+	dbPath := daemonDB(t, store.LatestSchemaVersion())
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	cfg.Console.SignIn = config.ConsoleSignInPasskey
+	db, err := store.OpenExisting(dbPath)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, db.Close()) }()
+	_, code, err := store.BeginTerminalSignIn(context.Background(), db, cookie, key, time.Now())
+	require.NoError(t, err)
+	return cfg, dbPath, code
+}
+
+// console-open --sign-in --code, as the daemon's account: it signs in the
+// browser whose page showed the code -- that browser's cookie with its own
+// key, and nothing else -- prints nothing secret, and launches nothing.
+func TestConsoleOpenSignIn_SignsInTheBrowserThatShowedTheCode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("peer_auth is a POSIX deployment: the account check refuses first")
+	}
+	cookie, err := store.NewConsoleToken()
+	require.NoError(t, err)
+	cfg, dbPath, code := retireSignInDB(t, cookie, "browser-key-a")
+
+	var said bytes.Buffer
+	require.NoError(t, consoleSignIn(cfg, code, "", unlockTerminal{in: strings.NewReader(""), out: &said}, time.Now))
+	require.Contains(t, said.String(), "Signed in the browser that showed code "+code+", until ")
+	require.NotContains(t, said.String(), cookie)
+
+	db, err := store.OpenExisting(dbPath)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, db.Close()) }()
+	ctx := context.Background()
+	s, err := store.LiveConsoleSignIn(ctx, db, store.HashConsoleSignIn(cookie, "browser-key-a"), time.Now())
+	require.NoError(t, err)
+	require.Equal(t, store.SignInByDaemon, s.Credential)
+	_, err = store.LiveConsoleSignIn(ctx, db, store.HashConsoleSignIn(cookie, "browser-key-b"), time.Now())
+	require.ErrorIs(t, err, store.ErrSignInNotFound, "the cookie in another browser signs nothing in")
+
+	said.Reset()
+	err = consoleSignIn(cfg, code, "", unlockTerminal{in: strings.NewReader(""), out: &said}, time.Now)
+	require.ErrorContains(t, err, "no sign-in is waiting for code "+code, "a code works once")
+	require.ErrorContains(t, err, "Nothing changed.")
+}
+
+// Every refusal changes nothing: --browser, a key-signs-in config, no code
+// with no one to ask, a malformed or unknown code, and --sign-in beside
+// --unlock or --for.
+func TestConsoleOpenSignIn_Refusals(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("peer_auth is a POSIX deployment: the account check refuses first")
+	}
+	require.ErrorIs(t, consoleSignIn(config.Defaults(), "ABCD-EFGH", "Safari", unlockTerminal{}, time.Now), errSignInBrowser)
+	require.ErrorContains(t, consoleSignIn(config.Defaults(), "ABCD-EFGH", "", unlockTerminal{}, time.Now), "console.sign_in is key")
+
+	cookie, err := store.NewConsoleToken()
+	require.NoError(t, err)
+	cfg, dbPath, _ := retireSignInDB(t, cookie, "browser-key-a")
+	var said bytes.Buffer
+	err = consoleSignIn(cfg, "", "", unlockTerminal{in: strings.NewReader(""), out: &said}, time.Now)
+	require.ErrorContains(t, err, "needs --code")
+	require.ErrorContains(t, err, "/console/login")
+	require.Empty(t, said.String(), "nothing asked where nobody can answer")
+
+	require.ErrorContains(t, consoleSignIn(cfg, "bad!", "", unlockTerminal{out: &said}, time.Now), "is not a sign-in code")
+	require.ErrorContains(t, consoleSignIn(cfg, "ZZZZ-ZZZZ", "", unlockTerminal{out: &said}, time.Now), "no sign-in is waiting for code ZZZZ-ZZZZ")
+
+	db, err := store.OpenExisting(dbPath)
+	require.NoError(t, err)
+	n, err := store.CountLiveConsoleSignIns(context.Background(), db, "", time.Now())
+	require.NoError(t, db.Close())
+	require.NoError(t, err)
+	require.Zero(t, n, "no refusal signed anything in")
+
+	for _, args := range [][]string{{"--sign-in", "--unlock", "example-finance"}, {"--sign-in", "--for", "1h"}} {
+		require.ErrorContains(t, runConsoleOpen(args), "--sign-in takes only --code")
+	}
+}
