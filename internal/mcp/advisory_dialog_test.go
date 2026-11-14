@@ -358,9 +358,19 @@ func TestAdvisoryDialog_RefusalFiledGrantReadAndWrite(t *testing.T) {
 				if c.access == store.GrantAccessWrite {
 					how = "readable and writable from project " + gLegal
 				}
-				require.Equal(t, "tasks_add: the owner approved read-and-write request "+short+": project "+gFin+" is "+how+
-					", nothing else until "+access.Clock(live[0].ExpiresAt)+".\nRemedy: this call ran before the approval and did "+
-					"nothing -- retry it now.", text)
+				if c.access == store.GrantAccessWrite {
+					require.Equal(t, "tasks_add: the owner approved read-and-write request "+short+": project "+gFin+" is "+how+
+						", nothing else until "+access.Clock(live[0].ExpiresAt)+".\nRemedy: this call ran before the approval and did "+
+						"nothing -- retry it now.", text)
+				} else {
+					// Approved read-only, the write stays refused: no "retry it now",
+					// which would only file another request (P13, 2026-11-14).
+					require.Equal(t, "tasks_add: the owner approved read-and-write request "+short+" as read-only: project "+gFin+
+						" is "+how+", nothing else until "+access.Clock(live[0].ExpiresAt)+".\nRemedy: a read grant clears no "+
+						"write, so this write stays refused. Write in "+gLegal+" instead; if the task needs to change "+gFin+
+						", ask the owner first whether to make it again: that files a new request, which they approve as read "+
+						"and write by choosing read and write in its dialog, or with `seam approve <its id> --access read-write`.", text)
+				}
 				items, isErr := r.call(cli, "tasks_add", ask)
 				require.Equal(t, !c.writesAfterwards, isErr, "%v", items)
 			case store.ApprovalDenied:

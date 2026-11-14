@@ -1099,7 +1099,9 @@ access for a while, which a move is not, so a move's dialog is its passkey
 page or nothing, and its remedies name only your terminal and that page. The
 dialog approves a grant read-only; read and write is your choice in your
 terminal (<code>seam approve &lt;id&gt; --access read-write</code>) or on the request's passkey
-page.</li>
+page. When the agent asked to write, the dialog's first lines say so, and
+that accepting it approves read-only: the write stays refused, and the agent
+is told to ask you before it tries again rather than file another request.</li>
 <li><strong>A locked target's move or grant is also its lease.</strong> A call refused at the
 lock still files the lock's request, and that lease opens the project only to
 the conversation that works in it - an agent started in the project's

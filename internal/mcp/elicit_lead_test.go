@@ -167,3 +167,56 @@ func TestPasskeyMessage_SaysWhatIsAsked(t *testing.T) {
 		})
 	}
 }
+
+// A write's grant between confidential projects (P13, 2026-11-14): the lead
+// names the access asked, read-write, and its second line says that accepting
+// approves read-only -- the owner who accepts the visible lines must not read
+// the write as approved -- and where read and write is approved instead.
+func TestDialogLead_AWritesGrantSaysAcceptingIsReadOnly(t *testing.T) {
+	f := approval.Facts{
+		Short: "R-7P7Y", Project: "example-conf-b", Isolation: "confidential", Access: "read-only",
+		Kind: store.AccessKindGrant, From: "example-conf-a", Agent: "Claude Code 2.1.325",
+		Session: "cc/a", SessionID: "01KSESSION", AccessChoices: []string{"read-only", "read-write"},
+		AskedAccess: "read-write", Warnings: []approval.Warning{{Code: approval.WarnCopyInto, Text: "copy"}},
+	}
+	lead := func(ways access.Ways) string {
+		l, _, _ := strings.Cut(dialogMessage(f, dialogShown{stopAt: time.Now(), capped: 8 * time.Hour, ways: ways}), "\n\n")
+		return l
+	}
+	require.Equal(t, "1 warning. Claude Code 2.1.325 asks for read-write access to example-conf-b from project example-conf-a.\n"+
+		"Accepting here approves read-only, which clears no write; for read and write, use Passkey below and choose "+
+		"read and write on its page, or `seam approve R-7P7Y --access read-write` in your own terminal.",
+		lead(access.Ways{TouchID: true, Passkey: true, Page: "https://example.test/console/access/x"}))
+	require.Equal(t, "1 warning. Claude Code 2.1.325 asks for read-write access to example-conf-b from project example-conf-a.\n"+
+		"Accepting here approves read-only, which clears no write; for read and write, use `seam approve R-7P7Y "+
+		"--access read-write` in your own terminal.", lead(access.Ways{TouchID: true}), "no passkey enrolled")
+
+	read := f
+	read.AskedAccess = "read-only"
+	require.Equal(t, "1 warning. Claude Code 2.1.325 asks for read-only access to example-conf-b from project example-conf-a.\n"+
+		"Until its session ends (8 hours at most), unless you pick less below.",
+		strings.SplitN(dialogMessage(read, dialogShown{capped: 8 * time.Hour}), "\n\n", 2)[0], "a read asks nothing more")
+}
+
+// Approved read-only, a write's call is told it stays refused, never to retry:
+// the retry would be refused again and file another request, whose dialog
+// approves read-only again (P13, 2026-11-14).
+func TestRefusalAfterDialog_AWriteApprovedReadOnly(t *testing.T) {
+	until := time.Date(2026, 11, 14, 17, 29, 0, 0, time.Local)
+	target := dialogTarget{ID: "01KREQ", Short: "R-7P7Y", Project: "example-conf-b", Grant: true, Write: true}
+	end := dialogEnd{state: stateApproved, request: store.AccessApproval{FromProject: "example-conf-a"}, until: until}
+	text := "memory_write: rule\nRemedy: remedy"
+
+	got := refusalAfterDialog("memory_write", text, target, end, access.Ways{}, true)
+	require.Equal(t, "memory_write: the owner approved read-and-write request R-7P7Y as read-only: project example-conf-b is "+
+		"readable from project example-conf-a, nothing else until "+access.Clock(until)+".\nRemedy: a read grant clears no "+
+		"write, so this write stays refused. Write in example-conf-a instead; if the task needs to change example-conf-b, "+
+		"ask the owner first whether to make it again: that files a new request, which they approve as read and write on "+
+		"its passkey page or with `seam approve <its id> --access read-write` (accepting its dialog approves read-only).", got)
+	require.NotContains(t, got, "retry it now")
+
+	end.write = true
+	require.Contains(t, refusalAfterDialog("memory_write", text, target, end, access.Ways{}, true),
+		"readable and writable from project example-conf-a, nothing else until "+access.Clock(until)+
+			".\nRemedy: this call ran before the approval and did nothing -- retry it now.", "approved read and write")
+}

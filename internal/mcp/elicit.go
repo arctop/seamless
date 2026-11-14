@@ -909,7 +909,7 @@ func dialogChoice(content any, durations, methods []string) (duration, method st
 // owner reads.
 func dialogMessage(f approval.Facts, shown dialogShown) string {
 	var b strings.Builder
-	b.WriteString(dialogLead(f, shown.capped) + "\n")
+	b.WriteString(dialogLead(f, shown) + "\n")
 	if len(f.Warnings) > 0 {
 		b.WriteString("\nWarnings:\n")
 		for _, w := range f.Warnings {
@@ -979,7 +979,8 @@ func dialogMessage(f approval.Facts, shown dialogShown) string {
 // The project's isolation and lock are on the Project line further down.
 // The duration is the form's default, "until the session ends", which the
 // lease cap bounds; a request no session names has nothing to end it sooner.
-func dialogLead(f approval.Facts, capped time.Duration) string {
+func dialogLead(f approval.Facts, shown dialogShown) string {
+	capped := shown.capped
 	if f.Kind == store.AccessKindMove {
 		// A move lasts for good; a locked target's lease is the only thing
 		// the duration below bounds.
@@ -990,12 +991,33 @@ func dialogLead(f approval.Facts, capped time.Duration) string {
 		return warningCount(len(f.Warnings)) + ". " + plain(askerName(f)) + " " + askedWhat(f) + ".\n" +
 			long + ", unless you pick less below."
 	}
+	if line := readOnlyLine(f, shown); line != "" {
+		// What accepting grants comes before how long: the owner who
+		// accepts the visible lines must not read a write as approved.
+		return warningCount(len(f.Warnings)) + ". " + plain(askerName(f)) + " " + askedWhat(f) + ".\n" + line
+	}
 	long := "Until its session ends (" + spanWords(capped) + " at most)"
 	if f.SessionID == "" {
 		long = "For " + spanWords(capped)
 	}
 	return warningCount(len(f.Warnings)) + ". " + plain(askerName(f)) + " " + askedWhat(f) + ".\n" +
 		long + ", unless you pick less below."
+}
+
+// readOnlyLine is the lead's second line for a grant the agent asked to read
+// and write: the dialog's proofs sign the request's default, read-only, so
+// accepting it never clears the write. It names where read and write is
+// approved -- the passkey page, which the form offers when a passkey is
+// enrolled, and the owner's terminal. "" for every other request.
+func readOnlyLine(f approval.Facts, shown dialogShown) string {
+	if f.Kind != store.AccessKindGrant || f.AskedAccess != "read-write" || len(f.AccessChoices) < 2 {
+		return ""
+	}
+	how := "`seam approve " + plain(f.Short) + " --access read-write` in your own terminal"
+	if shown.ways.Passkey {
+		how = "Passkey below and choose read and write on its page, or " + how
+	}
+	return "Accepting here approves read-only, which clears no write; for read and write, use " + how + "."
 }
 
 // passkeyMessage is the passkey page dialog's text: the warning count and what
@@ -1027,9 +1049,17 @@ func askedWhat(f approval.Facts) string {
 // accessPhrase is the access a request asks for, and where: "read-write
 // access to demo-vault", "read-only access to example-legal from project
 // example-ops". The isolation is left to the facts below it.
+//
+// A grant names the access the agent asked for (AskedAccess), not the default
+// the dialog approves: a write's request reads "read-write access" even though
+// accepting the form grants read-only (readOnlyLine says so).
 func accessPhrase(f approval.Facts) string {
 	if f.Kind == store.AccessKindGrant {
-		return f.Access + " access to " + f.Project + " from project " + f.From
+		asked := f.Access
+		if f.AskedAccess != "" {
+			asked = f.AskedAccess
+		}
+		return asked + " access to " + f.Project + " from project " + f.From
 	}
 	return f.Access + " access to " + f.Project
 }
@@ -1145,6 +1175,19 @@ func refusalAfterDialog(tool, text string, t dialogTarget, end dialogEnd, ways a
 		prefix := ""
 		if strings.HasPrefix(text, tool+": ") {
 			prefix = tool + ": "
+		}
+		if t.Grant && t.Write && !end.write {
+			// Approved as read-only: a read grant clears no write, so the
+			// retry would be refused again and file another request.
+			how := "on its passkey page or with `seam approve <its id> --access read-write` (accepting its dialog " +
+				"approves read-only)"
+			if end.advisory {
+				how = "by choosing read and write in its dialog, or with `seam approve <its id> --access read-write`"
+			}
+			return prefix + "the owner approved " + what + " as read-only: " + openLine(t, end) +
+				".\nRemedy: a read grant clears no write, so this write stays refused. Write in " +
+				end.request.FromProject + " instead; if the task needs to change " + t.Project + ", ask the owner " +
+				"first whether to make it again: that files a new request, which they approve as read and write " + how + "."
 		}
 		return prefix + "the owner approved " + what + ": " + openLine(t, end) +
 			".\nRemedy: this call ran before the approval and did nothing -- retry it now."
