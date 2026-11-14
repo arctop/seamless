@@ -7183,7 +7183,7 @@ Its transport rows are the ones to read:
 | `tls.key_file` | Who can read the TLS key: your account alone is **info**, group or world a **warn**. |
 | `server_url.addresses` | Every address the `server_url` host resolves to, against what the daemon listens on. One the daemon does not hold is a **warn**. |
 | `tailscale` | **info** when the tailnet issues certificates for the host: then the bind holding every address of the name, not the TLS key, keeps another page off the console's origin. |
-| `device pairing` | How a computer pairs here, and how many are paired or waiting. No TLS is a **warn**: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http `server_url` to another host no computer can pair, and no code is minted. An address of this computer's loopback (`server_url` unset on a wildcard bind derives `http://127.0.0.1:8081`) is a **warn** too: the one-liners carry it, so another computer cannot use them. |
+| `device pairing` | How a computer pairs here, and how many are paired or waiting. No TLS is a **warn**: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http `server_url` to another host no computer can pair, and no code is minted. An address of this computer's loopback (`server_url` unset on a wildcard bind derives `http://127.0.0.1:8081`) is a **warn** too: the one-liners carry it, so another computer cannot use them. A `server_url` that names a user is a **warn**: no code is minted and no one-liner printed until it is taken out. |
 | `peer_auth devices` | Under peer_auth only: a **warn** for each key device paired with a one-time code alone, before peer_auth, which is still you over TCP though no passkey approved it: revoke it and pair it again, so a passkey approves it. |
 
 Every row is in [the doctor reference](/reference/cli-seamlessd/#seamlessd_doctor).
@@ -7440,6 +7440,14 @@ on the Server's own computer. Where `server_url` is plain http to another host
 no computer can pair, so the page and `seamlessd devices code` say pairing
 needs TLS there and mint no code; the devices paired before stay listed and
 revocable.
+
+Where `server_url` names a user (`https://user:password@host`), the page,
+`seamlessd devices code`, setup's closing and doctor mint no code and print no
+one-liner, and say to take it out: Seamless uses none, the one-liners would
+carry it, password and all, into the other computer's shell history, and setup
+there refuses such an address. The address they show has no user. Leave
+`scheme://host:port` in `server_url` and restart the daemon; the devices paired
+before stay listed and revocable.
 
 Where the Server's address is this computer's loopback - `server_url` unset on a
 wildcard bind derives `http://127.0.0.1:8081`, or `https://` with TLS - the
@@ -10786,7 +10794,7 @@ Then the Server's, from either:
 
 On the Server, `seamlessd devices` refusing with `this install serves no other
 computers, so it pairs none` means pairing is off: it is on only on a Server
-with TLS, a bind beyond loopback, or a `server_url` naming another host. `devices code` refusing with `pairing needs TLS here` means its address is plain http to another host, which no computer can pair over: give it TLS first.
+with TLS, a bind beyond loopback, or a `server_url` naming another host. `devices code` refusing with `pairing needs TLS here` means its address is plain http to another host, which no computer can pair over: give it TLS first. Refusing with `server_url names a user` means `server_url` has `user:password@` in it, which Seamless never uses: leave `scheme://host:port` and restart the daemon.
 
 ## An agent on another computer cannot open a locked project
 
@@ -13366,7 +13374,7 @@ Checks stop early if config or the database cannot be loaded at all.
 | `embedder` | Probes the embedder with a real embed call. Unreachable, unconfigured, or provider `anthropic` (no embeddings API) is a warning: recall degrades to FTS. |
 | `bind` | Loopback is OK. Non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication; non-loopback *without* TLS is a warning naming what travels in the clear. |
 | `bind.addresses` | Dials the bind and each IPv6 address `serve` listens on beside it, and reads the instance id `/healthz` names at each. One daemon at all of them is OK; another process answering beside it is a **fail** (stop it, then restart the daemon), as is one answering there while the daemon is not; nothing answering beside a daemon that answers is a **warn** (it could not listen there when it started, and another process can take it). The `server_url.addresses` and passkey rows read the same dial: an address another process answers at is not held, and on a passkey origin a **fail**. No row for a wildcard bind, a bind with nothing beside it, or while nothing answers. |
-| `server_url` | Fetches `/healthz` through the advertised URL. Not answering is **info** (the daemon is often stopped while doctor runs); a `421` is a **fail** naming the Host header it just refused, which means the allowlist and the advertised name disagree. A derived URL says so. A `server_url` that names a user (`https://user:password@host`) is a **warn** instead, and is not fetched: the fetch would send the user and password as Basic auth. |
+| `server_url` | Fetches `/healthz` through the advertised URL. Not answering is **info** (the daemon is often stopped while doctor runs); a `421` is a **fail** naming the Host header it just refused, which means the allowlist and the advertised name disagree. A derived URL says so. A `server_url` that names a user (`https://user:password@host`) is a **warn** instead, and is not fetched: the fetch would send the user and password as Basic auth. Every other row, and serve's log, names the address without its user. |
 | `tls` | Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of `server_url` - the one that fails at the client's handshake with a message that names no file on the server. |
 | `tls.key_file` | Without peer_auth, on a server other computers reach: who can read the TLS key. Your account alone is **info** (the daemon runs as you, so every process of yours can read it and serve the daemon's name on any port; locked projects move it out of their reach); group- or world-readable is a **warn** with the `chmod 600`. Under peer_auth the `peer_auth` rows judge it, as `serve` does. |
 | `server_url.addresses` | Every address the configured `server_url` host resolves to, against what the daemon listens on (bind plus `serve`'s paired IPv6, each dialed: `bind.addresses`): all held is OK; one this machine holds and the daemon does not is a **warn** (another local process could answer for the name); one this machine does not hold is a **warn**. No row for a derived, loopback or proxied URL, or a host the passkey rows judge. |
@@ -13964,6 +13972,7 @@ cannot work:
 | `role: client` | This install has no clients of its own to pair. The message names the server to run it on instead. |
 | `mcp.api_key` empty | A client would have nothing to authenticate with. It names the config file and `openssl rand -hex 32`. |
 | `server_url` resolves to loopback | Pasted on a second machine that command dials *that* machine's port 8081 and fails as a connection error from the wrong end of the network. It names the fix (`server_url` plus `addr: 0.0.0.0:8081`, then restart) and points out that a second user **on the same box** needs none of that and can pair against `http://127.0.0.1:8081` directly. |
+| `server_url` names a user | Every command would carry it, password and all, to the other machine and its shell history, `--redact` included, and Seamless uses no user. It names the config file: leave `scheme://host:port`, then restart. |
 
 Plain `http://` is a warning, not a refusal - it is a legitimate choice on a
 trusted LAN, and the operator already had to widen the bind and name
@@ -14304,7 +14313,7 @@ seamlessd devices revoke <id|name>
 
 The computers paired with this server: relays (macOS and Linux clients) and key devices (Windows, or a machine where you have no root). Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host); elsewhere every verb refuses. Each verb opens the database directly: run it on the server, as the daemon's own account under peer_auth.
 
-- `code` mints a one-time pairing code (10 minutes, one computer; only its hash is stored) and prints what the other computer needs: this server's address, its certificate's SHA-256 fingerprint (as `openssl x509 -noout -fingerprint -sha256` prints it), the code and the client one-liners, which carry the fingerprint (`SEAMLESS_SERVER_FINGERPRINT`) so the other computer's setup compares it before it sends the code. The code works once, so the line left in that computer's shell history is dead after use. Where `server_url` is plain http to another host it refuses (`pairing needs TLS here`) and mints nothing. Where the address is this computer's loopback (no `server_url` on a wildcard bind) it mints the code, for a client on this computer, and says another computer cannot use the one-liners and that `server_url` is the fix; `--json` adds `"loopback": true`. Without peer_auth the code is the approval; under it the pairing waits for your passkey on the console's Devices page.
+- `code` mints a one-time pairing code (10 minutes, one computer; only its hash is stored) and prints what the other computer needs: this server's address, its certificate's SHA-256 fingerprint (as `openssl x509 -noout -fingerprint -sha256` prints it), the code and the client one-liners, which carry the fingerprint (`SEAMLESS_SERVER_FINGERPRINT`) so the other computer's setup compares it before it sends the code. The code works once, so the line left in that computer's shell history is dead after use. Where `server_url` is plain http to another host it refuses (`pairing needs TLS here`) and mints nothing. Where `server_url` names a user it refuses too (`server_url names a user: remove it, Seamless uses none`), giving both reasons when both hold, and mints nothing; the address it prints never carries a user. Where the address is this computer's loopback (no `server_url` on a wildcard bind) it mints the code, for a client on this computer, and says another computer cannot use the one-liners and that `server_url` is the fix; `--json` adds `"loopback": true`. Without peer_auth the code is the approval; under it the pairing waits for your passkey on the console's Devices page.
 - `list` prints every device: id, name, kind, status, fingerprint or key prefix, last seen.
 - `revoke` revokes a paired device (refused from its next request; the daemon ends its running requests within 30 seconds, and a relay's leases, read grants and waiting access requests at once) or denies a pairing that waits, named by its id or by a live device's name. [The Devices page](/guides/network-install/#devices) does the same in the console.
 
@@ -14989,7 +14998,9 @@ role: "server"
 # instead.
 # Give no user in it (https://user:password@host): Seamless uses none, the
 # HTTP client would send it as Basic auth on every request that carries no
-# key, and seamlessd doctor warns.
+# key, and seamlessd doctor warns. Every message, log line and page shows the
+# address without it, and a Server whose server_url names one mints no
+# pairing code and prints no one-liner (seamlessd client-config refuses too).
 # A client of a peer_auth daemon (see peer_auth below) names its socket here
 # instead -- unix:///absolute/path.sock -- and needs no mcp.api_key: the daemon
 # identifies the calling OS account by the uid the kernel reports.
@@ -16754,7 +16765,7 @@ nothing, and their rows say so.
 | Begin adding a passkey | `POST /console/passkeys/add/begin` | Only with `console.sign_in: passkey`: the public Add a passkey page asks for the new passkey's `name=`. Returns the WebAuthn creation options. Writes nothing. |
 | Add a passkey, waiting | `POST /console/passkeys/add/finish` | Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: `seamlessd approvers approve --code`, on the server, adds exactly that passkey. At most 32 wait at once. |
 | Begin a terminal sign-in | `POST /console/signin/terminal/begin` | Only with `console.sign_in: passkey`, and only from a browser that proves its key: **Show a code** on the login page. Sets a fresh random sign-in cookie bound to that key and stores it waiting, with a short code, for 10 minutes, with the address the request came from and its User-Agent (printable ASCII with each run of spaces as one, at most 256 characters), which the answer also carries for the page to show beside the code. It signs nothing in: `seamlessd console-open --sign-in --code`, on the server (as the daemon's account under peer_auth, at a terminal), shows those and when it began, asks, and on a yes signs in exactly the browser that showed that code, for 7 days. At most 4 wait at once from one address (an IPv6 address counts by its /64, and every loopback address is one), and 32 from every address but loopback, whose 4 are its own: however many other addresses wait, a begin from loopback (a browser on the server itself) gets a code while fewer than 4 wait from there. A begin past either cap is a 429 that says which (behind a proxy every request comes from the proxy's address). A 404 while the key signs browsers in. |
-| Get a pairing code | `POST /console/devices/code` | Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners, which carry the server certificate's fingerprint when it serves TLS; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused (409, `pairing needs TLS here`) where the server's address is plain http to another host. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
+| Get a pairing code | `POST /console/devices/code` | Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners, which carry the server certificate's fingerprint when it serves TLS; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused (409, `pairing needs TLS here`) where the server's address is plain http to another host. Refused (409, `server_url names a user`) where it names a user. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
 | Begin a device approval | `POST /console/devices/{id}/approve/begin` | Only under peer_auth, from a signed-in browser, for a pairing that waits. Returns the WebAuthn challenge, bound to that device's id, kind, name, fingerprint and key, and a ticket. Writes nothing. |
 | Approve a device | `POST /console/devices/{id}/approve/finish` | Verifies the passkey assertion for that ticket over the device as it stands, records the passkey's use, and pairs the device: a relay's certificate is accepted from its next request, and a key device collects its own key, once, on its next status. |
 | Revoke a device, or deny a pairing | `POST /console/devices/{id}/revoke` | Revokes a paired device: its credential is refused from its next request, and the requests it is making end. A pairing that waits is denied instead. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
@@ -17794,7 +17805,8 @@ exist. The computers paired with this server, and how to pair another
   so the line left in that computer's shell history is dead after use. Without
   peer_auth the page says the code is the approval. Where this server's address
   is plain http to another host the page says pairing needs TLS, and offers no
-  code. Where it is this computer's loopback (no `server_url` on a wildcard
+  code. Where it names a user the page shows it without the user, says to
+  take it out of `server_url`, and offers no code. Where it is this computer's loopback (no `server_url` on a wildcard
   bind) the page says the one-liners carry it, so another computer cannot use
   them, and that `server_url` is the fix; it still offers a code, for a client
   on this computer.

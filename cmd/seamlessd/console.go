@@ -269,14 +269,9 @@ func renderConsoleLoginPage(base, key string) (string, error) {
 // `serve --addr` still wins, because runServe writes the override back onto
 // cfg.Addr before anything derives a URL from it.
 func a2aEndpoint(cfg config.Config) string {
-	base := cfg.ServerURL()
 	// The card is public (a2a.Server.CardHandler): a user in server_url
 	// (config.Config.ServerURLNamesUser) never goes into it.
-	if u, err := url.Parse(base); err == nil && u.User != nil {
-		u.User = nil
-		base = u.String()
-	}
-	return base + "/api/a2a"
+	return config.RedactedURL(cfg.ServerURL()) + "/api/a2a"
 }
 
 // urlHostPort is the authority (host:port) of a base URL, for the callers that
@@ -365,7 +360,8 @@ func consoleBase(cfg config.Config) string {
 			return origins[0]
 		}
 	}
-	return cfg.ServerURL()
+	// A browser opens this, and console-open prints it: never with a user.
+	return config.RedactedURL(cfg.ServerURL())
 }
 
 // consoleOpenBase is where console-open signs in, for this config: consoleBase

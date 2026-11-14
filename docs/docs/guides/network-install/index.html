@@ -501,7 +501,7 @@ that is <a href="#step-1-widen-the-server">by hand</a>.</p>
 </tr>
 <tr>
 <td><code>device pairing</code></td>
-<td>How a computer pairs here, and how many are paired or waiting. No TLS is a <strong>warn</strong>: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http <code>server_url</code> to another host no computer can pair, and no code is minted. An address of this computer's loopback (<code>server_url</code> unset on a wildcard bind derives <code>http://127.0.0.1:8081</code>) is a <strong>warn</strong> too: the one-liners carry it, so another computer cannot use them.</td>
+<td>How a computer pairs here, and how many are paired or waiting. No TLS is a <strong>warn</strong>: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http <code>server_url</code> to another host no computer can pair, and no code is minted. An address of this computer's loopback (<code>server_url</code> unset on a wildcard bind derives <code>http://127.0.0.1:8081</code>) is a <strong>warn</strong> too: the one-liners carry it, so another computer cannot use them. A <code>server_url</code> that names a user is a <strong>warn</strong>: no code is minted and no one-liner printed until it is taken out.</td>
 </tr>
 <tr>
 <td><code>peer_auth devices</code></td>
@@ -742,6 +742,13 @@ on the Server's own computer. Where <code>server_url</code> is plain http to ano
 no computer can pair, so the page and <code>seamlessd devices code</code> say pairing
 needs TLS there and mint no code; the devices paired before stay listed and
 revocable.</p>
+<p>Where <code>server_url</code> names a user (<code>https://user:password@host</code>), the page,
+<code>seamlessd devices code</code>, setup's closing and doctor mint no code and print no
+one-liner, and say to take it out: Seamless uses none, the one-liners would
+carry it, password and all, into the other computer's shell history, and setup
+there refuses such an address. The address they show has no user. Leave
+<code>scheme://host:port</code> in <code>server_url</code> and restart the daemon; the devices paired
+before stay listed and revocable.</p>
 <p>Where the Server's address is this computer's loopback - <code>server_url</code> unset on a
 wildcard bind derives <code>http://127.0.0.1:8081</code>, or <code>https://</code> with TLS - the
 page, <code>seamlessd devices code</code>, setup's closing and doctor say the one-liners

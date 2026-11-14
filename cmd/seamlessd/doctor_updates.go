@@ -973,7 +973,7 @@ func tlsTrustCheck(cfg config.Config) (check, bool) {
 	if !cfg.TLSEnabled() {
 		return check{}, false
 	}
-	base := cfg.ServerURL()
+	base := config.RedactedURL(cfg.ServerURL()) // only parsed and printed below
 	if u, err := url.Parse(base); err != nil || u.Scheme != "https" {
 		return check{}, false
 	}

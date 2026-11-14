@@ -383,7 +383,7 @@ func setupImportDestination(r *setupRun, cfg config.Config) error {
 	}
 	if r.daemonUp(cfg) {
 		return setupRefusal("a Seamless daemon already answers at %s, and seamlessd import restores no backup while one does: "+
-			"stop it (seamlessd stop), then run the install again", cfg.ServerURL())
+			"stop it (seamlessd stop), then run the install again", config.RedactedURL(cfg.ServerURL()))
 	}
 	return nil
 }

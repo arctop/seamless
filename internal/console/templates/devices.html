@@ -14,12 +14,14 @@
     {{if .Server.CertFingerprint}}<li class="access-item"><strong>Certificate fingerprint</strong> <small><code>{{.Server.CertFingerprint}}</code></small></li>
     {{else}}<li class="access-item"><strong>No TLS</strong> <small>This server listens without TLS, so a relay cannot pair, and a pairing over plain http from another computer is refused: its code and a key device's key would cross the network in the clear.</small></li>{{end}}
   </ul>
-  {{if .Loopback}}
+  {{if .NamesUser}}
+  <p class="held-sub" id="devices-names-user">{{icon "triangle-alert"}} <code>server_url</code> names a user: remove it, Seamless uses none. The one-liners would carry it, password and all, into the other computer's shell history, and setup there refuses an address that names one. Leave <code>scheme://host:port</code> in <code>server_url</code>, restart the daemon, then get a code here.</p>
+  {{else if .Loopback}}
   <p class="held-sub" id="devices-loopback">{{icon "triangle-alert"}} This address is this computer's loopback, and the one-liners carry it, so another computer cannot use them: there it names that computer itself. They pair a client on this computer only. To pair another computer, set <code>server_url</code> to the address the other computers reach this one at, then restart the daemon (<a href="https://thereisnospoon.org/docs/guides/network-install/#step-1-widen-the-server" target="_blank" rel="noopener">how &nearr;</a>).</p>
   {{end}}
   {{if .NeedsTLS}}
   <p class="held-sub" id="devices-needs-tls">{{icon "triangle-alert"}} Pairing needs TLS here: this server's address is plain http, so no other computer can pair with it. Give it TLS with <code>seamlessd setup</code>'s address step, or <code>tls.cert_file</code> and <code>tls.key_file</code>, then get a code here.</p>
-  {{else}}
+  {{else if not .NamesUser}}
   {{if .PeerAuth}}
   <p class="held-sub">{{icon "lock"}} A code alone pairs nothing here: each computer that uses one waits on this page until you approve it with your passkey, after checking that the fingerprint matches the one that computer shows.</p>
   {{else}}

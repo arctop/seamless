@@ -212,7 +212,7 @@ func setupFromPairCode(r *setupRun, st setupState, in setupInstall, url string) 
 		return st, setupRefusal("%s: %s", setupKnobPairCode, setupCannotChange(in, setupClient))
 	}
 	if p := setupServerURLProblem(url); p != "" {
-		return st, setupRefusal("%s=%s: %s", setupKnobServer, url, p)
+		return st, setupRefusal("%s=%s: %s", setupKnobServer, config.RedactedURL(url), p)
 	}
 	st.kind, st.role, st.serverURL, st.answer, st.pairing = setupClient, config.RoleClient, url, setupFromEnv, true
 	return st, nil

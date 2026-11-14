@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/update"
 )
 
@@ -173,11 +174,11 @@ func confirmServing(ctx context.Context, p confirmParams) confirmResult {
 		matched := false
 		switch got, ok := servedRelease(ans.Version); {
 		case err != nil:
-			reason = fmt.Sprintf("no answer from %s/healthz: %v", p.baseURL, err)
+			reason = fmt.Sprintf("no answer from %s/healthz: %v", config.RedactedURL(p.baseURL), err)
 		case !ok:
-			reason = fmt.Sprintf("%s/healthz serves a version that is not a release", p.baseURL)
+			reason = fmt.Sprintf("%s/healthz serves a version that is not a release", config.RedactedURL(p.baseURL))
 		case got != p.want:
-			reason = fmt.Sprintf("%s/healthz serves v%s, not v%s", p.baseURL, got, p.want)
+			reason = fmt.Sprintf("%s/healthz serves v%s, not v%s", config.RedactedURL(p.baseURL), got, p.want)
 		case ans.Instance == "" || ans.Instance == p.prevInstance:
 			reason = fmt.Sprintf("v%s answers, but not from a process started since the install", p.want)
 		default:

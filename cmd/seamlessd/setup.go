@@ -125,7 +125,7 @@ func setupDescribe(k setupKind, serverURL string, locked bool) string {
 	case setupServer:
 		return setupText("{networked}: {server}")
 	case setupClient:
-		return setupText("{networked}: {client} of ") + serverURL
+		return setupText("{networked}: {client} of ") + config.RedactedURL(serverURL)
 	case setupStandalone:
 		if locked {
 			return setupText("{standalone}, with locked projects")

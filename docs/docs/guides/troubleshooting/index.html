@@ -772,7 +772,7 @@ the computer.</p>
 </table>
 </div>
 <p>On the Server, <code>seamlessd devices</code> refusing with <code>this install serves no other computers, so it pairs none</code> means pairing is off: it is on only on a Server
-with TLS, a bind beyond loopback, or a <code>server_url</code> naming another host. <code>devices code</code> refusing with <code>pairing needs TLS here</code> means its address is plain http to another host, which no computer can pair over: give it TLS first.</p>
+with TLS, a bind beyond loopback, or a <code>server_url</code> naming another host. <code>devices code</code> refusing with <code>pairing needs TLS here</code> means its address is plain http to another host, which no computer can pair over: give it TLS first. Refusing with <code>server_url names a user</code> means <code>server_url</code> has <code>user:password@</code> in it, which Seamless never uses: leave <code>scheme://host:port</code> and restart the daemon.</p>
 <h2 id="an-agent-on-another-computer-cannot-open-a-locked-project">An agent on another computer cannot open a locked project</h2>
 <p><strong>What is happening.</strong> A locked project opens only to an agent whose process
 tree holds a lease, and the Server can name that tree only for its own socket

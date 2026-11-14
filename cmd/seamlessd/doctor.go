@@ -522,7 +522,7 @@ func transportChecksIn(ctx context.Context, cfg config.Config) []check {
 		// never binds. The posture question it DOES have an answer to is the
 		// other end: does the URL it dials reach anything.
 		return []check{
-			{statusInfo, "role", "client: this install runs no daemon and dials " + cfg.ServerURL()},
+			{statusInfo, "role", "client: this install runs no daemon and dials " + cfg.DaemonAddress()},
 			clientServerURLCheck(cfg),
 		}
 	}

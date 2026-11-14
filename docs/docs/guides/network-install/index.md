@@ -186,7 +186,7 @@ Its transport rows are the ones to read:
 | `tls.key_file` | Who can read the TLS key: your account alone is **info**, group or world a **warn**. |
 | `server_url.addresses` | Every address the `server_url` host resolves to, against what the daemon listens on. One the daemon does not hold is a **warn**. |
 | `tailscale` | **info** when the tailnet issues certificates for the host: then the bind holding every address of the name, not the TLS key, keeps another page off the console's origin. |
-| `device pairing` | How a computer pairs here, and how many are paired or waiting. No TLS is a **warn**: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http `server_url` to another host no computer can pair, and no code is minted. An address of this computer's loopback (`server_url` unset on a wildcard bind derives `http://127.0.0.1:8081`) is a **warn** too: the one-liners carry it, so another computer cannot use them. |
+| `device pairing` | How a computer pairs here, and how many are paired or waiting. No TLS is a **warn**: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http `server_url` to another host no computer can pair, and no code is minted. An address of this computer's loopback (`server_url` unset on a wildcard bind derives `http://127.0.0.1:8081`) is a **warn** too: the one-liners carry it, so another computer cannot use them. A `server_url` that names a user is a **warn**: no code is minted and no one-liner printed until it is taken out. |
 | `peer_auth devices` | Under peer_auth only: a **warn** for each key device paired with a one-time code alone, before peer_auth, which is still you over TCP though no passkey approved it: revoke it and pair it again, so a passkey approves it. |
 
 Every row is in [the doctor reference](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_doctor).
@@ -443,6 +443,14 @@ on the Server's own computer. Where `server_url` is plain http to another host
 no computer can pair, so the page and `seamlessd devices code` say pairing
 needs TLS there and mint no code; the devices paired before stay listed and
 revocable.
+
+Where `server_url` names a user (`https://user:password@host`), the page,
+`seamlessd devices code`, setup's closing and doctor mint no code and print no
+one-liner, and say to take it out: Seamless uses none, the one-liners would
+carry it, password and all, into the other computer's shell history, and setup
+there refuses such an address. The address they show has no user. Leave
+`scheme://host:port` in `server_url` and restart the daemon; the devices paired
+before stay listed and revocable.
 
 Where the Server's address is this computer's loopback - `server_url` unset on a
 wildcard bind derives `http://127.0.0.1:8081`, or `https://` with TLS - the

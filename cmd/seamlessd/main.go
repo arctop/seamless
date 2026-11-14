@@ -266,7 +266,7 @@ func runServe(args []string) error {
 	// daemon of its own by definition, and serving one here would quietly give
 	// the machine a second, empty corpus that its own hooks never write to.
 	if cfg.IsClient() {
-		return fmt.Errorf("seamlessd.serve: role: client runs no daemon -- this install dials %s; remove `role: client` to serve here", cfg.ServerURL())
+		return fmt.Errorf("seamlessd.serve: role: client runs no daemon -- this install dials %s; remove `role: client` to serve here", cfg.DaemonAddress())
 	}
 	var keyPath string
 	cfg, keyPath, err = config.EnsureAPIKey(cfg)
@@ -286,7 +286,10 @@ func runServe(args []string) error {
 		bind = *addr
 		cfg.Addr = bind
 	}
-	serverURL := cfg.ServerURL()
+	// serverURL is for the log lines alone (the advertised-loopback warning,
+	// "seamlessd listening"): every daemon log has them, so they name it with
+	// any user and password taken out.
+	serverURL := config.RedactedURL(cfg.ServerURL())
 	logger := slog.Default()
 
 	// peer_auth: build the policy and refuse a deployment in which the boundary

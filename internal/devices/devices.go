@@ -23,7 +23,9 @@
 // refuses one that arrives over plain http from another computer, since its
 // code, and a key device's key in the answer, would cross the network in the
 // clear, and a server whose address is plain http to another host mints no
-// code (ServerFacts.PairingNeedsTLS). The one-liners that pair a computer
+// code (ServerFacts.PairingNeedsTLS). Nor does one whose address names a user
+// (ServerFacts.PairingNamesUser): the one-liners would carry it, password and
+// all, into another computer's shell history. The one-liners that pair a computer
 // carry the server certificate's fingerprint (ClientCommands), so the other
 // computer's setup compares it before it sends the code. Where they carry
 // this computer's loopback, no other computer can use them, and every
@@ -66,6 +68,7 @@ import (
 	"strings"
 
 	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -636,6 +639,54 @@ func (f ServerFacts) PairingNeedsTLS() bool {
 	return !loopbackHost(u.Hostname())
 }
 
+// ErrPairingNamesUser is a pairing code asked of a server whose address
+// (ServerFacts.URL, server_url) names a user (https://user:password@host).
+// Seamless uses none, and the one-liners would carry it, password and all,
+// into the other computer's shell history, where setup refuses an address
+// that names one (and a relay's address may name none). The Devices page,
+// `seamlessd devices code`, setup's closing and MintCode mint no code and
+// print no one-liner there; the owner takes the user out of server_url.
+var ErrPairingNamesUser = errors.New("server_url names a user: remove it, Seamless uses none. The one-liners would carry it, " +
+	"password and all, into the other computer's shell history, and setup there refuses an address that names one. " +
+	"Leave scheme://host:port in server_url, restart the daemon, then get a code")
+
+// PairingNamesUser reports whether the address clients dial (URL) names a
+// user: exactly when config.RedactedURL, the form every surface shows it in,
+// would take something out of it. A pairing there is refused
+// (ErrPairingNamesUser), never handed out without the user: the address the
+// other computer dials would then differ from the one this server names, and
+// the password would stay in this server's config, still sent as Basic auth
+// by every keyless request made from here.
+func (f ServerFacts) PairingNamesUser() bool {
+	u := strings.TrimSpace(f.URL)
+	return config.RedactedURL(u) != u
+}
+
+// PairingRefusal is why this server mints no pairing code, nil when it mints
+// one: its address names a user (ErrPairingNamesUser), or no other computer
+// can pair through it (ErrPairingNeedsTLS) -- both, joined, when both hold,
+// so the owner fixes them in one pass. Every surface that mints a code or
+// shows the one-liners asks it first.
+func (f ServerFacts) PairingRefusal() error {
+	var why []error
+	if f.PairingNamesUser() {
+		why = append(why, ErrPairingNamesUser)
+	}
+	if f.PairingNeedsTLS() {
+		why = append(why, ErrPairingNeedsTLS)
+	}
+	return errors.Join(why...)
+}
+
+// Shown is f as a surface shows it to a person -- the Devices page and its
+// JSON, setup's closing, `seamlessd devices code` -- with any user and
+// password taken out of URL (config.RedactedURL). The service keeps f as it
+// was configured, which is what PairingRefusal judges.
+func (f ServerFacts) Shown() ServerFacts {
+	f.URL = config.RedactedURL(f.URL)
+	return f
+}
+
 // PairingLoopbackOnly reports whether the address clients dial (URL) is this
 // computer's loopback, http or https: a wildcard bind with no server_url
 // derives http://127.0.0.1:8081 (https:// with TLS). The one-liners
@@ -675,7 +726,12 @@ const (
 // terminal as with someone there, instead of trusting whatever answers. A
 // proxy's https address names no fingerprint: the server does not know the
 // proxy's certificate.
+//
+// They never carry a user: every surface refuses before it gets here where
+// the address names one (PairingRefusal), and were one not to, the user is
+// left out (Shown) rather than written into another computer's history.
 func ClientCommands(server ServerFacts, code string) (unix, windows string) {
+	server = server.Shown()
 	unixFP, windowsFP := "", ""
 	if server.TLS && server.CertFingerprint != "" {
 		unixFP = fmt.Sprintf(unixPairFingerprint, server.CertFingerprint)

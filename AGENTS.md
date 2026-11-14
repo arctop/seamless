@@ -919,7 +919,13 @@ any of it.
   status over plain http from a peer that is not loopback, unread (403, reason
   `tls`, review L5), and where the address clients dial is plain http to
   another host (`ServerFacts.PairingNeedsTLS`) the Devices page and `seamlessd
-  devices code` mint no code (`ErrPairingNeedsTLS`); `pairingOn` stays on
+  devices code` mint no code (`ErrPairingNeedsTLS`), nor where that address
+  names a user (`ServerFacts.PairingNamesUser`, `ErrPairingNamesUser`: refused,
+  never handed out without the user; `ServerFacts.PairingRefusal` joins the two,
+  and MintCode, the page, `devices code`, setup's closing and `client-config`
+  ask it or refuse alike), and no surface prints, logs or shows server_url but
+  through `config.RedactedURL` (`DaemonAddress` does), which drops the user
+  whole; `pairingOn` stays on
   there, so the devices paired before keep the edge, the list and revoke. Where
   that address is this computer's loopback (`ServerFacts.PairingLoopbackOnly`:
   no `server_url` on a wildcard bind) they mint one, for a client on this

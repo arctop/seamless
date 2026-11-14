@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -76,9 +77,12 @@ func (c Config) SocketPath() string {
 // takes a bearer key, a paired device's credential or a socket peer's uid,
 // never Basic auth. Yet Go's HTTP client sends the user as Basic auth on
 // every request that carries no Authorization header of its own (doctor's
-// reachability probe, which verifies no certificate, among them), and every
-// surface that prints or writes ServerURL -- doctor's rows, the hooks and
-// the MCP registration install-hooks writes -- carries the password.
+// reachability probe, which verifies no certificate, among them), and what
+// writes ServerURL -- the hooks and the MCP registration install-hooks
+// writes -- carries the password. What prints, logs or shows it renders it
+// through RedactedURL (DaemonAddress does), and a pairing hand-off that would
+// carry it to another computer refuses instead (devices.ErrPairingNamesUser,
+// `seamlessd client-config`).
 //
 // It is named, for doctor's warning, rather than refused at load:
 // `seamlessd install-hooks --server-url` (EnsureClientConfig, which the
@@ -108,12 +112,53 @@ func (c Config) HookBaseURL() string {
 }
 
 // DaemonAddress is where this install's daemon is reached, for messages a
-// person reads: the socket path when server_url names one, else ServerURL.
+// person reads: the socket path when server_url names one, else ServerURL
+// with any user and password removed (RedactedURL).
 func (c Config) DaemonAddress() string {
 	if p := c.SocketPath(); p != "" {
 		return "unix:" + p
 	}
-	return c.ServerURL()
+	return RedactedURL(c.ServerURL())
+}
+
+// RedactedURL is raw with any user and password removed, for a person to
+// read: every message, log line, doctor row and page that shows server_url
+// renders it through here, since each travels further than the config does
+// (a terminal's scrollback, a daemon's log, a ticket). A URL that names no
+// user comes back exactly as given.
+//
+// The user is dropped whole, never masked as user:***@ (net/http's form for
+// its errors) or user:xxxxx@ (url.URL.Redacted's): a token is as often the
+// user itself, with no password (https://<token>@host), and both of those
+// forms print it. Seamless uses neither half -- the address a reader needs is
+// scheme://host:port -- and doctor's server_url row says that one is there
+// (config.Config.ServerURLNamesUser).
+//
+// A value url.Parse refuses loses whatever its authority holds before the
+// last "@" (how a parser reads userinfo), so a malformed URL is no way
+// around this: the question is what could leak, and an unparseable value is
+// no evidence that nothing can.
+func RedactedURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err == nil {
+		if u.User == nil {
+			return raw
+		}
+		u.User = nil
+		return u.String()
+	}
+	scheme, rest, ok := strings.Cut(raw, "://")
+	if !ok {
+		return raw
+	}
+	end := strings.IndexAny(rest, "/?#")
+	if end < 0 {
+		end = len(rest)
+	}
+	if at := strings.LastIndex(rest[:end], "@"); at >= 0 {
+		return scheme + "://" + rest[at+1:]
+	}
+	return raw
 }
 
 // ServerHost is the bare host of ServerURL: no scheme, no port, no IPv6
@@ -231,19 +276,27 @@ func validateServerURL(raw string) error {
 	if s == "" {
 		return nil
 	}
+	// Every refusal names the value as a person reads it: a password in it
+	// would reach the terminal, and a daemon's log when a start is refused.
+	shown := RedactedURL(s)
 	u, err := url.Parse(s)
 	if err != nil {
-		return fmt.Errorf("config: server_url %q is not a URL: %w", s, err)
+		var ue *url.Error
+		if shown != s && errors.As(err, &ue) {
+			// url.Error quotes the value whole, password and all.
+			err = ue.Err
+		}
+		return fmt.Errorf("config: server_url %q is not a URL: %w", shown, err)
 	}
 	switch u.Scheme {
 	case "http", "https":
 	case "unix":
 		return validateSocketURL(s, u)
 	default:
-		return fmt.Errorf("config: server_url %q must be an absolute http:// or https:// URL, or unix:///path/to/socket", s)
+		return fmt.Errorf("config: server_url %q must be an absolute http:// or https:// URL, or unix:///path/to/socket", shown)
 	}
 	if u.Hostname() == "" {
-		return fmt.Errorf("config: server_url %q names no host", s)
+		return fmt.Errorf("config: server_url %q names no host", shown)
 	}
 	// IsWildcardHost is the predicate reachableHost rewrites by, so the derive
 	// path and this refusal can never disagree about which hosts are
@@ -254,16 +307,16 @@ func validateServerURL(raw string) error {
 	// specific error.
 	if host := u.Hostname(); IsWildcardHost(host) {
 		return fmt.Errorf("config: server_url %q names the wildcard host %q, which says where the daemon LISTENS, not where a client dials: "+
-			"put the wildcard in addr and set server_url to the name or address other machines reach this one at", s, host)
+			"put the wildcard in addr and set server_url to the name or address other machines reach this one at", shown, host)
 	}
 	if strings.Trim(u.Path, "/") != "" || strings.Contains(u.Path, "//") {
-		return fmt.Errorf("config: server_url %q must be a bare base URL (scheme://host:port), with no path", s)
+		return fmt.Errorf("config: server_url %q must be a bare base URL (scheme://host:port), with no path", shown)
 	}
 	if u.RawQuery != "" || u.ForceQuery {
-		return fmt.Errorf("config: server_url %q must be a bare base URL, with no query string", s)
+		return fmt.Errorf("config: server_url %q must be a bare base URL, with no query string", shown)
 	}
 	if u.Fragment != "" {
-		return fmt.Errorf("config: server_url %q must be a bare base URL, with no fragment", s)
+		return fmt.Errorf("config: server_url %q must be a bare base URL, with no fragment", shown)
 	}
 	return nil
 }
@@ -340,14 +393,15 @@ func Hostname() string {
 // unix:/absolute/path): a daemon's peer_auth socket. There is no host, query or
 // fragment to carry, so any of them is a mistake rather than something to drop.
 func validateSocketURL(raw string, u *url.URL) error {
+	shown := RedactedURL(raw)
 	if u.Host != "" || u.User != nil {
-		return fmt.Errorf("config: server_url %q names a host; a socket URL is unix:///absolute/path", raw)
+		return fmt.Errorf("config: server_url %q names a host; a socket URL is unix:///absolute/path", shown)
 	}
 	if u.Opaque != "" || !filepath.IsAbs(u.Path) || filepath.Clean(u.Path) != u.Path {
-		return fmt.Errorf("config: server_url %q must name an absolute, clean socket path: unix:///absolute/path", raw)
+		return fmt.Errorf("config: server_url %q must name an absolute, clean socket path: unix:///absolute/path", shown)
 	}
 	if u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
-		return fmt.Errorf("config: server_url %q must be a bare socket URL, with no query or fragment", raw)
+		return fmt.Errorf("config: server_url %q must be a bare socket URL, with no query or fragment", shown)
 	}
 	return nil
 }

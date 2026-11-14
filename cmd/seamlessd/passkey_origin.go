@@ -89,7 +89,7 @@ func passkeyOriginChecks(ctx context.Context, cfg config.Config, bind string, db
 		source = "peer_auth.passkeys"
 	default:
 		if _, _, derived := cfg.ServedRelyingParty(); derived {
-			source = "derived from server_url " + cfg.ServerURL()
+			source = "derived from server_url " + config.RedactedURL(cfg.ServerURL())
 		}
 	}
 	out := []check{{statusOK, name, fmt.Sprintf("relying party %s (%s), origins %s: a passkey approves only under the rp_id "+

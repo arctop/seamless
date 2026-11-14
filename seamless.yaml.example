@@ -47,7 +47,9 @@ role: "server"
 # instead.
 # Give no user in it (https://user:password@host): Seamless uses none, the
 # HTTP client would send it as Basic auth on every request that carries no
-# key, and seamlessd doctor warns.
+# key, and seamlessd doctor warns. Every message, log line and page shows the
+# address without it, and a Server whose server_url names one mints no
+# pairing code and prints no one-liner (seamlessd client-config refuses too).
 # A client of a peer_auth daemon (see peer_auth below) names its socket here
 # instead -- unix:///absolute/path.sock -- and needs no mcp.api_key: the daemon
 # identifies the calling OS account by the uid the kernel reports.

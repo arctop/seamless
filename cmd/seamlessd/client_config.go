@@ -80,12 +80,20 @@ func clientConfigReport(w io.Writer, cfg config.Config, redact bool) error {
 	src := configSourceLabel(cfg)
 	if cfg.IsClient() {
 		return fmt.Errorf("seamlessd.client-config: role: client -- this install runs no daemon of its own, it dials %s; "+
-			"run `seamlessd client-config` on THAT machine to pair another client", cfg.ServerURL())
+			"run `seamlessd client-config` on THAT machine to pair another client", cfg.DaemonAddress())
 	}
 	key := strings.TrimSpace(cfg.MCP.APIKey)
 	if key == "" {
 		return fmt.Errorf("seamlessd.client-config: mcp.api_key is empty in %s -- a client has nothing to authenticate with; "+
 			"set it (openssl rand -hex 32) and restart the daemon", src)
+	}
+	if cfg.ServerURLNamesUser() {
+		// Every line below is a command for another machine, --redact's
+		// included: each would carry the user and password into its shell
+		// history, as the device one-liners would (devices.ErrPairingNamesUser).
+		return fmt.Errorf("seamlessd.client-config: server_url names a user: remove it, Seamless uses none -- the commands would "+
+			"carry it, password and all, to the other machine and its shell history; leave scheme://host:port in server_url "+
+			"in %s and restart the daemon", src)
 	}
 	url := cfg.ServerURL()
 	host := cfg.ServerHost()

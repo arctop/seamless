@@ -443,7 +443,7 @@ Then the Server's, from either:
 
 On the Server, `seamlessd devices` refusing with `this install serves no other
 computers, so it pairs none` means pairing is off: it is on only on a Server
-with TLS, a bind beyond loopback, or a `server_url` naming another host. `devices code` refusing with `pairing needs TLS here` means its address is plain http to another host, which no computer can pair over: give it TLS first.
+with TLS, a bind beyond loopback, or a `server_url` naming another host. `devices code` refusing with `pairing needs TLS here` means its address is plain http to another host, which no computer can pair over: give it TLS first. Refusing with `server_url names a user` means `server_url` has `user:password@` in it, which Seamless never uses: leave `scheme://host:port` and restart the daemon.
 
 ## An agent on another computer cannot open a locked project
 

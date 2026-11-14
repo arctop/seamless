@@ -117,6 +117,11 @@ func devicePairingChecks(ctx context.Context, cfg config.Config, db *sql.DB) []c
 			"console's Devices page"
 	}
 	out := []check{{statusOK, name, how}}
+	names := (devices.ServerFacts{URL: cfg.ServerURL()}).PairingNamesUser()
+	if names {
+		out = append(out, check{statusWarn, name, "server_url names a user, so no code is minted and no one-liner printed: " +
+			"remove it, Seamless uses none (leave scheme://host:port), then restart the daemon"})
+	}
 	if !cfg.TLSEnabled() {
 		line := "no TLS on this listener: a relay cannot pair (it needs a client certificate), and a pairing over plain " +
 			"http from another computer is refused, since its code and a key device's key would cross the network in the clear"
@@ -128,7 +133,7 @@ func devicePairingChecks(ctx context.Context, cfg config.Config, db *sql.DB) []c
 	} else if _, err := certFingerprintFile(cfg.TLS.CertFile); err != nil {
 		out = append(out, check{statusFail, name, err.Error()})
 	}
-	if dial := cfg.ServerURL(); (devices.ServerFacts{URL: dial}).PairingLoopbackOnly() {
+	if dial := cfg.DaemonAddress(); !names && (devices.ServerFacts{URL: dial}).PairingLoopbackOnly() {
 		out = append(out, check{statusWarn, name, "the address clients dial, " + dial + ", is this computer's loopback, and the " +
 			"pairing one-liners carry it, so another computer cannot use them: " + pairingLoopbackFix})
 	}
@@ -160,29 +165,40 @@ const pairingLoopbackFix = "set server_url to the address the other computers re
 // client one-liners, which carry the fingerprint. code is a code just minted,
 // or "" for the placeholder. The server's setup prints it at its close;
 // `seamlessd devices code` prints it with the code. A Server no other
-// computer can pair with (devices.ServerFacts.PairingNeedsTLS) gets the
-// reason instead of a code and the one-liners; one whose address is this
-// computer's loopback (devices.ServerFacts.PairingLoopbackOnly) gets both,
-// for a client on this computer, and says another computer cannot use them.
+// computer can pair with (devices.ServerFacts.PairingNeedsTLS), or whose
+// address names a user (devices.ServerFacts.PairingNamesUser), gets the
+// reasons instead of a code and the one-liners, and the address without its
+// user; one whose address is this computer's loopback
+// (devices.ServerFacts.PairingLoopbackOnly) gets both, for a client on this
+// computer, and says another computer cannot use them.
 func serverPairingClosing(w io.Writer, facts devices.ServerFacts, code string, peerAuth bool) {
 	minutes := int(store.PairingCodeTTL / time.Minute)
+	names := facts.PairingNamesUser()
 	fmt.Fprintf(w, "To connect another computer to this server:\n\n")
-	fmt.Fprintf(w, "  Address:                 %s\n", facts.URL)
+	fmt.Fprintf(w, "  Address:                 %s\n", facts.Shown().URL)
 	if facts.CertFingerprint != "" {
 		fmt.Fprintf(w, "  Certificate fingerprint: %s\n", facts.CertFingerprint)
 		fmt.Fprintf(w, "    (the other computer shows it before it pairs: they must match)\n")
 	} else {
 		fmt.Fprintf(w, "  No TLS: a relay cannot pair, and a pairing over plain http from another computer is refused.\n")
 	}
-	if facts.PairingLoopbackOnly() {
+	if facts.PairingLoopbackOnly() && !names {
 		fmt.Fprintf(w, "  This address is this computer's loopback, and the one-liners below carry it, so another computer cannot use them:\n"+
 			"    there it names that computer itself. They pair a client on this computer only. To pair another computer,\n"+
 			"    %s.\n", pairingLoopbackFix)
+	}
+	if names {
+		fmt.Fprintf(w, "  server_url names a user: remove it, Seamless uses none. The one-liners would carry it, password and all,\n"+
+			"    into the other computer's shell history, and setup there refuses an address that names one.\n"+
+			"    Leave scheme://host:port in server_url, restart the daemon, then run `seamlessd devices code`.\n")
 	}
 	if facts.PairingNeedsTLS() {
 		fmt.Fprintf(w, "  Pairing needs TLS here: this address is plain http, so no other computer can pair with it.\n"+
 			"    Give the server TLS with seamlessd setup's address step, or tls.cert_file and tls.key_file,\n"+
 			"    then run `seamlessd devices code`.\n")
+		return
+	}
+	if names {
 		return
 	}
 	if code == "" {
@@ -295,9 +311,10 @@ func (c devicesCmd) run(ctx context.Context, db *sql.DB, cfg config.Config, out 
 		LocalHost: config.Hostname(), Server: facts})
 	switch c.verb {
 	case "code":
-		if facts.PairingNeedsTLS() {
-			// No other computer could use the code: refused, not minted.
-			return devices.ErrPairingNeedsTLS
+		if err := facts.PairingRefusal(); err != nil {
+			// No other computer could use the code, or its one-liners would
+			// carry a user and password: refused, not minted.
+			return err
 		}
 		code, err := svc.MintCode(ctx, store.DeviceByTerminal)
 		if err != nil {

@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/relay"
 )
@@ -91,10 +92,10 @@ func (p clientRelayPlan) problem() string {
 	case p.owner == "" || strings.HasPrefix(p.owner, "-") || strings.ContainsFunc(p.owner, setupControl) || strings.ContainsAny(p.owner, " \t"):
 		return fmt.Sprintf("%q is not an account name", p.owner)
 	case !strings.HasPrefix(p.server, "https://"):
-		return fmt.Sprintf("the server address %q is not an https address", p.server)
+		return fmt.Sprintf("the server address %q is not an https address", config.RedactedURL(p.server))
 	}
 	if why := setupServerURLProblem(p.server); why != "" {
-		return fmt.Sprintf("the server address %q: %s", p.server, why)
+		return fmt.Sprintf("the server address %q: %s", config.RedactedURL(p.server), why)
 	}
 	switch {
 	case !devices.ValidCertFingerprint(p.fingerprint):

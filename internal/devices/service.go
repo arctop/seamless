@@ -155,11 +155,13 @@ type Code struct {
 }
 
 // MintCode mints a one-time pairing code, from by (console or terminal). A
-// server no other computer can pair with mints none (ErrPairingNeedsTLS).
+// server no other computer can pair with (ErrPairingNeedsTLS), or whose
+// address names a user (ErrPairingNamesUser), mints none
+// (ServerFacts.PairingRefusal).
 func (s *Service) MintCode(ctx context.Context, by string) (Code, error) {
 	const op = "devices.MintCode"
-	if s.cfg.Server.PairingNeedsTLS() {
-		return Code{}, fmt.Errorf("%s: %w", op, ErrPairingNeedsTLS)
+	if err := s.cfg.Server.PairingRefusal(); err != nil {
+		return Code{}, fmt.Errorf("%s: %w", op, err)
 	}
 	code, expires, err := store.MintPairingCode(ctx, s.cfg.DB, by, s.cfg.Now())
 	if err != nil {

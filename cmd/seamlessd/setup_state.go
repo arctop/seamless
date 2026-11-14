@@ -118,7 +118,7 @@ func parseSetupState(data []byte) (setupState, error) {
 		}
 		seen[key] = true
 		if why := setupStateValueProblem(key, val); why != "" {
-			return setupState{}, fmt.Errorf("seamlessd.setup: state %s %q: %s", key, val, why)
+			return setupState{}, fmt.Errorf("seamlessd.setup: state %s %q: %s", key, config.RedactedURL(val), why)
 		}
 		switch key {
 		case "role":
