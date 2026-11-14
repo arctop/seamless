@@ -35,19 +35,17 @@ import (
 
 const pairProofKey = "pair-proof-shared-key-0123456789"
 
-// pairProofServe runs serve in this process on a free loopback port with the
-// config yaml (extra lines appended), and returns its base URL and a client
-// that trusts its certificate. It stops when the test ends.
+// pairProofServe runs serve in this process on a port free on both loopback
+// addresses (frelayDualLoopbackPort) with the config yaml (extra lines
+// appended), and returns its base URL and a client that trusts its
+// certificate. It stops when the test ends.
 func pairProofServe(t *testing.T, withTLS bool) (string, *x509.CertPool) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	root := t.TempDir()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := ln.Addr().(*net.TCPAddr).Port
-	require.NoError(t, ln.Close())
+	port, release := frelayDualLoopbackPort(t)
 	yaml := fmt.Sprintf("addr: '127.0.0.1:%d'\ndata_dir: '%s'\nmcp:\n  api_key: '%s'\nupdate:\n  check: false\ngardener:\n  enabled: false\n",
 		port, filepath.Join(root, "data"), pairProofKey)
 	scheme := "http"
@@ -62,6 +60,7 @@ func pairProofServe(t *testing.T, withTLS bool) (string, *x509.CertPool) {
 	require.NoError(t, os.WriteFile(cfgPath, []byte(yaml), 0o600))
 	t.Setenv("SEAMLESS_CONFIG", cfgPath)
 	done := make(chan error, 1)
+	release() // serve binds both halves itself
 	go func() { done <- runServe([]string{"--config", cfgPath}) }()
 	base := fmt.Sprintf("%s://127.0.0.1:%d", scheme, port)
 	client := pairProofClient(pool, nil)

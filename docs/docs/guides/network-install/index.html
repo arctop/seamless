@@ -636,6 +636,15 @@ Linux the system unit <code>seamless-relay.service</code>, each running
 as <code>_seamless</code>. Only you, and the relay, reach its socket.</p>
 </li>
 </ol>
+<p><strong>After an update.</strong> Updating this computer replaces your own <code>seamlessd</code>
+(<code>~/.local/bin</code>) alone; the relay keeps running root's copy. Run
+<code>seamlessd setup</code> again and paste block 2 alone: it copies the new
+<code>seamlessd</code>, checks it, and moves it into place. Then restart the relay, which
+runs the binary it started with until then
+(<a href="../../reference/service/#relay">its service</a> says how). Blocks 1, 3 and 4 have
+nothing to do: the account exists, the relay is paired (block 3 would refuse),
+and the service is loaded. Until then <code>seamlessd doctor</code> warns
+(<code>relay.binary</code>).</p>
 <p>After the blocks, setup prints what the Server needs: under peer_auth it judges
 each caller this relay names once you map it, and refuses it until then. Add
 the line it prints to the daemon's config, <code>/opt/seamless/etc/seamless.yaml</code>,
@@ -682,7 +691,9 @@ its service (<code>com.arctop.seamless.relay</code> on macOS, <code>seamless-rel
 Linux) and how to start it, or, with none installed yet,
 <a href="#the-relays-root-step">its root step</a>.</p>
 <p>On a computer with a relay, it adds the relay's rows: the account the relay
-runs as, its layout, its pairing, its socket, who may connect to it
+runs as, its layout, whether root's copy of <code>seamlessd</code> is the one you run
+(<code>relay.binary</code>, a <strong>warn</strong> after an update until you update it), its pairing,
+its socket, who may connect to it
 (<code>relay.access</code>, a <strong>warn</strong> when every local account can), and whether the
 Server answers it. The pairing is readable by the relay's account alone, so
 run doctor as that account to see it

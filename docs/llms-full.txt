@@ -7321,6 +7321,16 @@ so none is found on your `PATH`, and every value is quoted for the shell:
    `/opt/seamless/bin/seamlessd relay serve --socket-mode 0660 --socket-group _seamlessowner`
    as `_seamless`. Only you, and the relay, reach its socket.
 
+**After an update.** Updating this computer replaces your own `seamlessd`
+(`~/.local/bin`) alone; the relay keeps running root's copy. Run
+`seamlessd setup` again and paste block 2 alone: it copies the new
+`seamlessd`, checks it, and moves it into place. Then restart the relay, which
+runs the binary it started with until then
+([its service](/reference/service/#relay) says how). Blocks 1, 3 and 4 have
+nothing to do: the account exists, the relay is paired (block 3 would refuse),
+and the service is loaded. Until then `seamlessd doctor` warns
+(`relay.binary`).
+
 After the blocks, setup prints what the Server needs: under peer_auth it judges
 each caller this relay names once you map it, and refuses it until then. Add
 the line it prints to the daemon's config, `/opt/seamless/etc/seamless.yaml`,
@@ -7382,7 +7392,9 @@ Linux) and how to start it, or, with none installed yet,
 [its root step](#the-relays-root-step).
 
 On a computer with a relay, it adds the relay's rows: the account the relay
-runs as, its layout, its pairing, its socket, who may connect to it
+runs as, its layout, whether root's copy of `seamlessd` is the one you run
+(`relay.binary`, a **warn** after an update until you update it), its pairing,
+its socket, who may connect to it
 (`relay.access`, a **warn** when every local account can), and whether the
 Server answers it. The pairing is readable by the relay's account alone, so
 run doctor as that account to see it
@@ -13359,6 +13371,7 @@ Checks stop early if config or the database cannot be loaded at all.
 | `updates` | The [automatic update check](/updating/#automatic-update-checks) and [automatic updates](/updating/#automatic-updates), read from the daemon's and the updater's own records (`~/.seamless/update/state.json`, `attempt.json`) without asking GitHub or the daemon. One line, the most urgent thing first. An update that could not be rolled back cleanly, and that the daemon has not settled, is a **warn** carrying the updater's recovery steps and its log. An update under way is **info**. Automatic updates that paused themselves are a **warn** naming why, with the way out: resume them in the console under **Settings > Updates**. A daemon that updates itself says, as **info**, what it installs next and when: once its soak (`update.min_age`) is over, then when no agent session is live, or at a lull in requests after its deadline (`update.max_defer`). A newer release that automatic updates skip (blocked after a failed attempt, or published without a signed checksums bundle) is a **warn** with the command to install it by hand; a hold after a deliberate downgrade is **info**. A daemon that only notifies is **ok** when up to date and a **warn** naming the newer release and the command for this install. The last attempt is added while it concerns the running release, with the updater's own error; one that applied with warnings names `seamlessd install-hooks`. One the updater's gates refused is a **warn** ending in the owner's action for that refusal: `seamlessd restart` when the installed seamlessd is not the version the daemon runs (a release installed without a restart) or the install no longer looks installer-made, and `seamlessd update`, run by hand, when the updater could not make sure it runs outside the service. Automatic updates turned off before it began need no action. **info** when checks are off (and why) or have not run yet. A check failing for a week is a **warn** - usually a proxy the service's environment does not know about. |
 | `update.release_signers` | Only while the config sets [`update.release_signers`](/updating/#owner-signed-releases): **ok** naming the keys a release must be signed with (principal and SHA256 fingerprint), and the last release the pin refused, from the daemon's record; **fail** when the file cannot be used - missing, unreadable, writable by another account, or naming no key for `seamless-release` - since every update is then refused. Under peer_auth the file is held to serve's rule (root's, through root's directories), so run doctor as the daemon's account to see what serve sees. |
 | `hooks' seam` | Only on a client of a [peer_auth](/guides/peer-auth/) socket: who can replace the `seam` the Claude Code hooks run. **info** when it is your own copy (every agent you run could rewrite it) or the daemon's (`/opt/seamless/bin/seam`, which the daemon's account could); **ok** for a copy only root can replace, naming whether it is the daemon's release; **warn** when root's copy was built from another commit than the daemon runs - refresh it ([how](/guides/peer-auth/#client-copy)) - or when another account can replace it. |
+| `relay.binary` | Only on a computer with a relay: root's copy of `seamlessd` (`/opt/seamless/bin/seamlessd`, the one the relay's service runs) against the `seamlessd` running doctor, by SHA-256. **info** when they are the same; a **warn** when they differ, since an update replaces your own copy alone (`~/.local/bin`): run `seamlessd setup` again, then block 2 of [the root step](/guides/network-install/#the-relays-root-step) as an administrator, and restart the relay. A **warn** too when root's copy is missing or cannot be read. |
 | `update drill` | Only while `~/.seamless/update/test-fail-confirm` exists: a **warn**, because the rollback drill's switch makes every update fail its confirmation and roll back. Delete the file to end the drill. |
 | `tls trust` | Whether this machine's own client verifies the certificate the daemon serves for `server_url`. That client is the one its hooks dial with, and the one an update confirms the new daemon through. The answer comes from the config (the system roots plus `tls.ca_file`) without a dial, so it answers while the daemon is down. **ok** when the client verifies it; otherwise a **warn** naming the repair, since every update would fail its confirmation, and so would its rollback's: the attempt ends not rolled back and automatic updates pause. A `tls.ca_file` that cannot be loaded warns on any install. Absent when TLS is off and the client is usable. |
 
@@ -14305,7 +14318,8 @@ account, and any layout another account could change.
 
 Its data dir is `/opt/seamless/relay` (the relay's account, 0700; `--data-dir`
 names another): `relay.json` (0600) holds the pairing and the relay's key.
-Doctor reports the relay; run it as the relay's account to see the pairing
+Doctor reports the relay, and warns when root's copy of seamlessd is not the one
+you run (`relay.binary`); run it as the relay's account to see the pairing
 too. [The relay's root step](/guides/network-install/#the-relays-root-step)
 has the account, the layout and every step.
 

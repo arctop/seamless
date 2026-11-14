@@ -327,6 +327,16 @@ so none is found on your `PATH`, and every value is quoted for the shell:
    `/opt/seamless/bin/seamlessd relay serve --socket-mode 0660 --socket-group _seamlessowner`
    as `_seamless`. Only you, and the relay, reach its socket.
 
+**After an update.** Updating this computer replaces your own `seamlessd`
+(`~/.local/bin`) alone; the relay keeps running root's copy. Run
+`seamlessd setup` again and paste block 2 alone: it copies the new
+`seamlessd`, checks it, and moves it into place. Then restart the relay, which
+runs the binary it started with until then
+([its service](/reference/service/#relay) says how). Blocks 1, 3 and 4 have
+nothing to do: the account exists, the relay is paired (block 3 would refuse),
+and the service is loaded. Until then `seamlessd doctor` warns
+(`relay.binary`).
+
 After the blocks, setup prints what the Server needs: under peer_auth it judges
 each caller this relay names once you map it, and refuses it until then. Add
 the line it prints to the daemon's config, `/opt/seamless/etc/seamless.yaml`,
@@ -388,7 +398,9 @@ Linux) and how to start it, or, with none installed yet,
 [its root step](#the-relays-root-step).
 
 On a computer with a relay, it adds the relay's rows: the account the relay
-runs as, its layout, its pairing, its socket, who may connect to it
+runs as, its layout, whether root's copy of `seamlessd` is the one you run
+(`relay.binary`, a **warn** after an update until you update it), its pairing,
+its socket, who may connect to it
 (`relay.access`, a **warn** when every local account can), and whether the
 Server answers it. The pairing is readable by the relay's account alone, so
 run doctor as that account to see it

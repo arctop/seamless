@@ -2,7 +2,8 @@ package main
 
 // doctor's relay report (plan networked-relay; internal/relay): on a computer
 // with a relay -- its data directory exists -- the account it runs as, the
-// layout its preflight holds it to, its pairing (which server, which pinned
+// layout its preflight holds it to, whether root's copy of seamlessd (the one
+// its service runs) is this one, its pairing (which server, which pinned
 // certificate), its socket, and whether the server answers it. Anywhere else
 // there is no row at all.
 //
@@ -20,6 +21,8 @@ import (
 	"net"
 	"net/http"
 	"os/user"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -98,6 +101,9 @@ func relayDoctorChecks(ctx context.Context, e relayDoctorEnv) []check {
 		}
 		out = append(out, check{statusOK, name, what + " pass the relay's preflight"})
 	}
+	if row, ok := relayBinaryRow(e); ok {
+		out = append(out, row)
+	}
 	st, pairing := relayPairingRow(dir, acct, e.account(acct))
 	out = append(out, pairing)
 	out = append(out, relaySocketRow(ctx, e, acct, asRelay))
@@ -137,6 +143,58 @@ func relayAccountRow(e relay.Env, uid uint32, account string) check {
 	}
 	return check{statusWarn, name, fmt.Sprintf("the relay runs as %s, and no pin at %s names it, so seam, its hooks, its bridge and "+
 		"the Touch ID helper accept any system account answering the socket: pin it, as an administrator%s", who, access.DaemonAccountPath, cmd)}
+}
+
+// relayLayoutBinary is root's copy of seamlessd in layout l, the one the
+// relay's service runs: bin/seamlessd beside the relay's data directory, as
+// the root step installs them (relay.DefaultBinary in the default layout).
+func relayLayoutBinary(l relay.Layout) string {
+	return filepath.Join(filepath.Dir(l.DataDir), "bin", "seamlessd")
+}
+
+// relayBinaryRow compares root's copy of seamlessd with the seamlessd running
+// doctor, by their SHA-256s. An update replaces the owner's own copy alone
+// (~/.local/bin), so the relay runs the one before until block 2 of its root
+// step copies this one into root's place and the relay restarts. Root's copy
+// is 0755, so any account reads it. No row when doctor cannot locate itself.
+func relayBinaryRow(e relayDoctorEnv) (check, bool) {
+	const name = "relay.binary"
+	if e.env.Exe == nil {
+		return check{}, false
+	}
+	bin := relayLayoutBinary(e.layout)
+	update := fmt.Sprintf("run seamlessd setup again and, as an administrator, block 2 of the root step it prints (root's own copy "+
+		"of seamlessd), then restart the relay (%s): %sguides/network-install/#the-relays-root-step", relayRestartCommand(runtime.GOOS), setupDocs)
+	theirs, err := clientExeSHA256(func() (string, error) { return bin, nil })
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return check{statusWarn, name, fmt.Sprintf("no seamlessd at %s, the one the relay's service runs -- put this one there: %s", bin, update)}, true
+	case err != nil:
+		return check{statusWarn, name, fmt.Sprintf("cannot compare root's copy of seamlessd, %s, with this one: %v", bin, err)}, true
+	}
+	self, err := e.env.Exe()
+	if err != nil {
+		return check{statusWarn, name, "cannot locate this seamlessd to compare it with root's copy, " + bin + ": " + err.Error()}, true
+	}
+	ours, err := clientExeSHA256(func() (string, error) { return self, nil })
+	switch {
+	case err != nil:
+		return check{statusWarn, name, fmt.Sprintf("cannot compare this seamlessd, %s, with root's copy, %s: %v", self, bin, err)}, true
+	case ours == theirs:
+		return check{statusInfo, name, fmt.Sprintf("root's copy of seamlessd, %s, which the relay's service runs, is this one", bin)}, true
+	}
+	return check{statusWarn, name, fmt.Sprintf("the relay runs a different seamlessd from this one (%s): root's copy, %s, which its "+
+		"service runs, differs (an update replaces yours alone) -- update root's copy: %s", self, bin, update)}, true
+}
+
+// relayRestartCommand restarts the relay's service on goos: its LaunchDaemon
+// on macOS, its system unit on Linux. The running relay keeps the binary it
+// started with until then.
+func relayRestartCommand(goos string) string {
+	if goos == "darwin" {
+		return "sudo launchctl kickstart -k system/" + clientRelayLabel
+	}
+	return "sudo systemctl restart " + strings.TrimSuffix(clientRelayUnit, ".service")
 }
 
 // relayPairingRow reads the pairing: which server, which certificate it pins,

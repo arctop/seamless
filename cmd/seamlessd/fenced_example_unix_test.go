@@ -28,7 +28,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -123,10 +122,9 @@ func fmStartExample(t *testing.T) *fmExample {
 	}
 	require.NoError(t, seed.Close())
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := ln.Addr().(*net.TCPAddr).Port
-	require.NoError(t, ln.Close())
+	// Free on both loopback addresses: the daemon listens on [::1] too, and
+	// refuses to start where another process holds it.
+	port, release := frelayDualLoopbackPort(t)
 	require.NotEqual(t, 8081, port, "never the live daemon's port")
 	e.url = fmt.Sprintf("http://127.0.0.1:%d", port)
 	cfgPath := filepath.Join(root, "seamless.yaml")
@@ -140,6 +138,7 @@ func fmStartExample(t *testing.T) *fmExample {
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + e.home, "TMPDIR=" + root, "LANG=C",
 		"SEAMLESS_CONFIG=" + cfgPath, fmExampleDaemonEnv + "=1"}
 	cmd.Stdout, cmd.Stderr = logFile, logFile
+	release() // the daemon binds both halves itself
 	require.NoError(t, cmd.Start())
 	t.Cleanup(func() {
 		_ = cmd.Process.Signal(syscall.SIGTERM)

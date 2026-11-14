@@ -12,7 +12,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,7 +33,8 @@ import (
 
 const relayE2EKey = "relay-e2e-shared-key-0123456789ab"
 
-// relayE2EServer is a real serve with TLS on a free loopback port.
+// relayE2EServer is a real serve with TLS on a port free on both loopback
+// addresses (frelayDualLoopbackPort).
 type relayE2EServer struct {
 	base    string
 	pool    *x509.CertPool
@@ -52,10 +52,7 @@ func relayE2EServe(t *testing.T) *relayE2EServer {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	root := t.TempDir()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := ln.Addr().(*net.TCPAddr).Port
-	require.NoError(t, ln.Close())
+	port, release := frelayDualLoopbackPort(t)
 	certPath, keyPath := filepath.Join(root, "cert.pem"), filepath.Join(root, "key.pem")
 	pool := pairProofCert(t, certPath, keyPath)
 	certPEM, err := os.ReadFile(certPath)
@@ -68,6 +65,7 @@ func relayE2EServe(t *testing.T) *relayE2EServer {
 	t.Setenv("SEAMLESS_CONFIG", cfgPath)
 	s := &relayE2EServer{base: fmt.Sprintf("https://127.0.0.1:%d", port), pool: pool, certPEM: certPEM,
 		dbPath: filepath.Join(data, "seam.db"), done: make(chan error, 1)}
+	release() // serve binds both halves itself
 	go func() { s.done <- runServe([]string{"--config", cfgPath}) }()
 	client := pairProofClient(pool, nil)
 	deadline := time.Now().Add(20 * time.Second)

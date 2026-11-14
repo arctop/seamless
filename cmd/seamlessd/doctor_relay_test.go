@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -47,6 +49,89 @@ func TestRelayDoctor_NoRelayNoRows(t *testing.T) {
 	def := defaultRelayDoctorEnv()
 	require.Equal(t, relay.DefaultLayout(), def.layout)
 	require.Equal(t, os.Geteuid(), def.env.EUID, "doctor judges as whoever runs it")
+	require.Equal(t, relay.DefaultBinary, relayLayoutBinary(def.layout), "root's copy, the one the relay's service runs")
+}
+
+// Root's copy of seamlessd, the one the relay's service runs, against the
+// seamlessd running doctor, by SHA-256: an update replaces the owner's own
+// copy alone, so a copy that differs is a warning that says how to update
+// it, the same one a note, and none a warning too -- whichever account runs
+// doctor, since root's copy is 0755.
+func TestRelayDoctor_SaysWhenRootsCopyIsNotThisSeamlessd(t *testing.T) {
+	l, env := relayCmdLayout(t)
+	require.NoError(t, os.Mkdir(l.DataDir, 0o700))
+	rootCopy := relayLayoutBinary(l)
+	self := filepath.Join(t.TempDir(), "seamlessd")
+	require.NoError(t, os.WriteFile(self, []byte("#!/bin/sh\n# the build an update just installed\n"), 0o755))
+	env.Exe = func() (string, error) { return self, nil }
+	e := relayDoctorEnv{layout: l, env: env, account: func(uint32) string { return "_example_relay" }, timeout: 5 * time.Second}
+
+	// Wired in after the preflight's rows, before the pairing's.
+	all := relayDoctorChecks(context.Background(), e)
+	var names []string
+	for _, r := range all {
+		names = append(names, r.name)
+	}
+	at := slices.Index(names, "relay.binary")
+	require.Positive(t, at, "%v", names)
+	require.Equal(t, "relay", names[at-1], "%v", names)
+	require.Equal(t, "relay.pairing", names[at+1], "%v", names)
+	row := all[at]
+	require.Equal(t, statusWarn, row.status)
+	for _, want := range []string{"the relay runs a different seamlessd from this one (" + self + ")", "root's copy, " + rootCopy,
+		"an update replaces yours alone", "run seamlessd setup again", "block 2 of the root step it prints",
+		"then restart the relay (" + relayRestartCommand(runtime.GOOS) + ")", setupDocs + "guides/network-install/#the-relays-root-step"} {
+		require.Contains(t, row.detail, want)
+	}
+
+	// Another account (the owner's, as doctor usually runs) compares the same.
+	owner := e
+	owner.env.EUID = os.Geteuid() + 1
+	require.Equal(t, row, relayDoctorOne(t, relayDoctorRows(relayDoctorChecks(context.Background(), owner)), "relay.binary"))
+
+	// Block 2 run again: root's copy is this one.
+	raw, err := os.ReadFile(self)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(rootCopy, raw, 0o755))
+	row, ok := relayBinaryRow(e)
+	require.True(t, ok)
+	require.Equal(t, statusInfo, row.status, row.detail)
+	require.Equal(t, "root's copy of seamlessd, "+rootCopy+", which the relay's service runs, is this one", row.detail)
+
+	// Unreadable, or none at all.
+	if os.Geteuid() != 0 {
+		require.NoError(t, os.Chmod(rootCopy, 0o000))
+		row, ok = relayBinaryRow(e)
+		require.NoError(t, os.Chmod(rootCopy, 0o755))
+		require.True(t, ok)
+		require.Equal(t, statusWarn, row.status)
+		require.Contains(t, row.detail, "cannot compare root's copy of seamlessd, "+rootCopy+", with this one")
+	}
+	require.NoError(t, os.Remove(rootCopy))
+	row, ok = relayBinaryRow(e)
+	require.True(t, ok)
+	require.Equal(t, statusWarn, row.status)
+	require.Contains(t, row.detail, "no seamlessd at "+rootCopy+", the one the relay's service runs")
+	require.Contains(t, row.detail, "block 2 of the root step it prints")
+
+	// Doctor that cannot locate itself says so; with no way to, no row.
+	lost := e
+	lost.env.Exe = func() (string, error) { return "", errors.New("example: no executable") }
+	require.NoError(t, os.WriteFile(rootCopy, raw, 0o755))
+	row, ok = relayBinaryRow(lost)
+	require.True(t, ok)
+	require.Equal(t, statusWarn, row.status)
+	require.Contains(t, row.detail, "cannot locate this seamlessd to compare it with root's copy, "+rootCopy+": example: no executable")
+	lost.env.Exe = nil
+	_, ok = relayBinaryRow(lost)
+	require.False(t, ok)
+}
+
+// The restart that puts root's new copy to work: the relay's LaunchDaemon on
+// macOS, its system unit on Linux, as the root step's block 4 names them.
+func TestRelayRestartCommand(t *testing.T) {
+	require.Equal(t, "sudo launchctl kickstart -k system/com.arctop.seamless.relay", relayRestartCommand("darwin"))
+	require.Equal(t, "sudo systemctl restart seamless-relay", relayRestartCommand("linux"))
 }
 
 // A paired, running relay, seen as its own account: the account (no pin, so a
@@ -84,6 +169,8 @@ func TestRelayDoctor_ReportsThePairingTheSocketAndTheServer(t *testing.T) {
 	require.Equal(t, statusOK, relayDoctorOne(t, rows, "relay.socket").status)
 	server := relayDoctorOne(t, rows, "relay.server")
 	require.Equal(t, statusOK, server.status, server.detail)
+	binary := relayDoctorOne(t, rows, "relay.binary")
+	require.Equal(t, statusInfo, binary.status, "the layout's seamlessd is the one running: %s", binary.detail)
 
 	// Pinned as the relay's account: the clients trust no other.
 	pinned := e
