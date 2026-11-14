@@ -544,7 +544,7 @@ func (s *Server) registerTools() {
 	s.addTool(projectCreateTool(), s.handleProjectCreate)
 
 	s.addTool(tasksAddTool(), s.handleTasksAdd)
-	s.addTool(s.offerCommits(tasksUpdateTool()), s.handleTasksUpdate)
+	s.addTool(s.tasksUpdateToolFor(), s.handleTasksUpdate)
 	s.addTool(tasksReadyTool(), s.handleTasksReady)
 	s.addTool(tasksListTool(), s.handleTasksList)
 	s.addTool(tasksClaimTool(), s.handleTasksClaim)

@@ -93,6 +93,8 @@ func TestCommits_OffIsExactlyThePreviousBehavior(t *testing.T) {
 		full := catalogTool(t, name).InputSchema
 		require.Contains(t, full.Properties, "commits", "the catalog documents it")
 		delete(full.Properties, "commits")
+		// tasks_update's receipt reference is isolation.requests', off here too.
+		delete(full.Properties, "reference")
 		want, err := json.Marshal(full)
 		require.NoError(t, err)
 		have, err := json.Marshal(got)

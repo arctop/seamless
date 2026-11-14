@@ -435,6 +435,12 @@ call and behind the same claim lock. Off, the argument does not exist. See
 <td>reassign the task to another project slug (used when a split moves a project's open work to a child)</td>
 </tr>
 <tr>
+<td><code>reference</code></td>
+<td>string</td>
+<td>no</td>
+<td>A receipt's one reference, to an item in this conversation's home, written &lt;project&gt;:&lt;id&gt; -- the home's slug and the id of a memory, note, task, trial or session there. Once the owner has moved this conversation into another project, it closes a task it claimed before the move with a receipt: tasks_update with status done or dropped and nothing else, plus, optionally, this reference, which the task's history records. A receipt carries no title, body, project, dependencies or commits, and a conversation whose home is sealed sends none. Offered only while isolation.requests is on</td>
+</tr>
+<tr>
 <td><code>remove_depends_on</code></td>
 <td>array</td>
 <td>no</td>

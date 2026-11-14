@@ -49,6 +49,12 @@ type rowQuerier interface {
 // in the same transaction as the rest of the patch and behind the same holder
 // lock, so whoever may update the task may record its commits, and a task
 // another session holds refuses them like any other change.
+//
+// IfClaimedBy changes nothing: it is a precondition. Set, the patch applies
+// only while the task's claim, live or lapsed, is held by that session, read
+// inside the update's transaction; otherwise the update is refused with
+// ErrTaskClaimConflict and writes nothing. A receipt's write (SendReceipt)
+// sets it to the pre-move session whose claim JudgeReceipt judged.
 type TaskPatch struct {
 	Status          *core.TaskStatus
 	Title           *string
@@ -57,6 +63,7 @@ type TaskPatch struct {
 	AddDependsOn    []string
 	RemoveDependsOn []string
 	AddCommits      []string
+	IfClaimedBy     *string
 }
 
 // onlyRemovals reports whether the patch asks for nothing but blocker
@@ -153,6 +160,12 @@ func CreateTask(ctx context.Context, db *sql.DB, t core.Task) error {
 // updated_account moves only when the title or body actually changes
 // (taskTextAccount); a status, project, dependency or commit change keeps it.
 //
+// A task moved to another project takes its provenance stamps along
+// (item_provenance, ProvenanceRelocate) once the move commits, whichever
+// surface moved it; a stamp naming its new project as the source leaves the
+// index. Should that step fail, the error says the move landed and the
+// stamps did not follow.
+//
 // UpdateTaskDetailed is the same update, answering what the removals did too.
 func UpdateTask(ctx context.Context, db *sql.DB, id string, patch TaskPatch, actor string, now time.Time) (core.Task, error) {
 	res, err := UpdateTaskDetailed(ctx, db, id, patch, actor, now)
@@ -191,8 +204,13 @@ func UpdateTaskDetailed(ctx context.Context, db *sql.DB, id string, patch TaskPa
 		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w: task %q held by %q",
 			ErrTaskClaimConflict, id, t.ClaimedBy)
 	}
+	if patch.IfClaimedBy != nil && t.ClaimedBy != *patch.IfClaimedBy {
+		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w: task %q is no longer held by %q",
+			ErrTaskClaimConflict, id, *patch.IfClaimedBy)
+	}
 
 	res := TaskUpdateResult{From: t.Status}
+	fromProject := t.ProjectSlug
 	res.RemovedDependsOn, res.AbsentDependsOn, err = removeDeps(ctx, tx, t.ID, remove)
 	if err != nil {
 		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w", err)
@@ -275,6 +293,15 @@ func UpdateTaskDetailed(ctx context.Context, db *sql.DB, id string, patch TaskPa
 	}
 	if err := tx.Commit(); err != nil {
 		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: commit: %w", err)
+	}
+	if t.ProjectSlug != fromProject {
+		// The stamps follow the task, so the came-from lists by project stay
+		// true. It runs on the pool once the move committed: the pool's one
+		// connection is the transaction's until then.
+		if err := ProvenanceRelocate(ctx, db, core.ItemKindTask, t.ID, t.ProjectSlug); err != nil {
+			return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: task %q moved to project %q, but its provenance "+
+				"stamps did not follow: %w", id, t.ProjectSlug, err)
+		}
 	}
 	res.Task, err = TaskByID(ctx, db, id)
 	if err != nil {

@@ -658,10 +658,19 @@ any of it.
   so a conversation that rebinds with `session_start` or names another session
   with `session=` still holds what it holds. `access.WriteConfined` is
   `!WriteCleared`; `access.JudgeGrants`/`store.HolderGrants` are the previous
-  release's judge and no surface calls them. Receipts (`store.JudgeReceipt`)
-  are the one content-free write past the rule: done or dropped on a task a
-  pre-move session claimed, at most one reference into the home, never from a
-  sealed home.
+  release's judge and no surface calls them. Receipts (`store/receipt.go`,
+  `mcp/receipt.go`) are the one content-free write past the rule: a
+  `tasks_update` that closes (done or dropped) a task whose claim, live or
+  lapsed, a session the conversation left by a move holds
+  (`store.ClaimedBeforeMove`), or that names `reference`, is a receipt.
+  `store.JudgeReceipt` decides it -- never from a sealed home, nothing but the
+  status and at most one `<home>:<id>` reference to an item that exists in the
+  home, any other field refused with the rule -- and `store.SendReceipt` writes
+  the status alone as the pre-move session, only while it still holds the claim
+  (`TaskPatch.IfClaimedBy`), which releases it. Its task.transition goes under
+  the task's project and that session with `receipt` and `reference`, never
+  `claimed_by` or `released`. `reference` is registered only while
+  isolation.requests is on (`tasksUpdateToolFor`); the catalog documents it.
   Requests are filed by `fenceRead` (an explicit `project=` or a by-ULID read)
   and, for an identified conversation, by `fenceWrite` (asking for read and
   write) and `session_start` (`askRefusal`, `sessionStartReach`); never by a

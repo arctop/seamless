@@ -473,7 +473,7 @@ const (
 	EventMemoryFirstReuse EventKind = "memory.first_reuse"         // momentum: a memory's first read by a session other than its writer (payload: name, kind, writer, reader); latched once per memory ever
 	EventProjectStage     EventKind = "project.stage_reached"      // momentum: a project's latched maturity stage advanced (payload: stage, from); minted once per stage per project
 	EventRecordBroken     EventKind = "gamification.record_broken" // gamification: a latched personal record advanced (payload: record, label, n, prev); minted at most once per record per local day
-	EventTaskTransition   EventKind = "task.transition"            // a task changed (payload: to; from, the status before, on every tasks_update; plus created, claimed_by/reclaimed/prior_holder, released, commits_recorded or removed_depends_on as the call set them)
+	EventTaskTransition   EventKind = "task.transition"            // a task changed (payload: to; from, the status before, on every tasks_update; plus created, claimed_by/reclaimed/prior_holder, released, commits_recorded or removed_depends_on as the call set them; receipt and reference for a moved conversation's receipt (isolation.requests))
 	EventInjected         EventKind = "retrieval.injected"
 	EventGardenerAction   EventKind = "gardener.action"
 	EventToolCall         EventKind = "tool.call"    // MCP tool invocation, logged live by the middleware (also the shape used by import)

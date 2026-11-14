@@ -100,6 +100,7 @@ func tasksUpdateTool() mcp.Tool {
 		mcp.WithString("session", mcp.Description("the acting agent's session (the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session name); needed only to mutate a task you hold a live claim on when several agents are active")),
 		mcp.WithString("session_id", mcp.Description(actorSessionIDArgDesc)),
 		mcp.WithArray(commitsParam, mcp.WithStringItems(), mcp.Description(taskCommitsArgDesc)),
+		mcp.WithString(receiptRefParam, mcp.Description(receiptRefArgDesc)),
 	)
 }
 
@@ -147,9 +148,15 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 		return errResult("tasks_update", err)
 	}
 	patch.AddCommits = commits
+	// A receipt's reference (isolation.requests): a call that names one is a
+	// receipt, judged as one below even if it sets nothing else.
+	ref, err := s.receiptRefArg(req)
+	if err != nil {
+		return errResult("tasks_update", err)
+	}
 
 	if patch.Status == nil && patch.Title == nil && patch.Body == nil && patch.ProjectSlug == nil &&
-		len(patch.AddDependsOn) == 0 && len(patch.RemoveDependsOn) == 0 && len(patch.AddCommits) == 0 {
+		len(patch.AddDependsOn) == 0 && len(patch.RemoveDependsOn) == 0 && len(patch.AddCommits) == 0 && ref.IsZero() {
 		if s.cfg.RecordCommits {
 			return errResult("tasks_update", errors.New("nothing to update: pass status, title, body, project, add_depends_on, remove_depends_on, or commits"))
 		}
@@ -161,6 +168,14 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 	current, err := s.taskByIDFor(ctx, id)
 	if err != nil {
 		return errResult("tasks_update", err)
+	}
+	// A moved conversation closing a step its pre-move session claimed sends a
+	// receipt (receipt.go): the one content-free write past the clearance
+	// rule, decided in the store. Off, no call is one.
+	if c, isReceipt, err := s.receiptOf(ctx, current, patch.Status, ref); err != nil {
+		return errResult("tasks_update", err)
+	} else if isReceipt {
+		return s.handleReceipt(ctx, req, c, current, patch.Status, ref)
 	}
 	if err := s.fenceWrite(ctx, current.ProjectSlug); err != nil {
 		return errResult("tasks_update", err)
@@ -236,19 +251,14 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 	return jsonResult(out)
 }
 
-// stampTaskUpdate keeps a task's stamps with it and adds the call's: a task
-// moved to another project takes its stamps along (store.ProvenanceRelocate),
-// and new text or a move carries the conversation's stamps for the project
-// the task is in now. A status, dependency or commit change writes nothing
-// the conversation holds and adds none.
+// stampTaskUpdate adds the call's stamps to a task: new text or a move
+// carries the conversation's stamps for the project the task is in now. The
+// stamps it had already moved with it, inside the update
+// (store.UpdateTaskDetailed relocates them on every move). A status,
+// dependency or commit change writes nothing the conversation holds and adds
+// none.
 func (s *Server) stampTaskUpdate(ctx context.Context, before, after core.Task, patch store.TaskPatch) error {
-	moved := after.ProjectSlug != before.ProjectSlug
-	if moved {
-		if err := store.ProvenanceRelocate(ctx, s.cfg.DB, core.ItemKindTask, after.ID, after.ProjectSlug); err != nil {
-			return err
-		}
-	}
-	if moved || patch.Title != nil || patch.Body != nil {
+	if after.ProjectSlug != before.ProjectSlug || patch.Title != nil || patch.Body != nil {
 		return s.stampWorkItem(ctx, core.ItemKindTask, after.ID, after.ProjectSlug)
 	}
 	return nil
