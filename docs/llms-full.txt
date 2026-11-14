@@ -2090,6 +2090,21 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.8.4 {#v0-8-4}
+
+Released 2026-11-14 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.8.4)
+
+### Features
+
+- feat(release): self-update, the cask and the installers can require the owner's signature
+- feat(isolation): the MCP edge speaks for the conversation
+- feat(approval): move requests and read-and-write grants, with the whole carry
+- feat(isolation): every write is cleared for what the conversation holds
+
+### Fixes
+
+- fix(restore): keep the grants, moves and flows recorded since the backup
+
 ## v0.8.3 {#v0-8-3}
 
 Released 2026-11-13 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.8.3)
