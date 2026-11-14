@@ -13,10 +13,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/devices"
 )
 
 // setupKindByEnv is a kind by its SEAMLESS_SETUP spelling, setupNone for none.
@@ -96,17 +98,27 @@ func readSetupState(path string) (setupState, error) {
 	return parseSetupState(data)
 }
 
-// parseSetupState is readSetupState over the file's bytes.
+// parseSetupState is readSetupState over the file's bytes. Every value is
+// checked against its format again (setupStateValueProblem), and a key given
+// twice is refused: the relay's root step prints what it reads.
 func parseSetupState(data []byte) (setupState, error) {
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	if !sc.Scan() || sc.Text() != setupStateHeader {
 		return setupState{}, fmt.Errorf("seamlessd.setup: the state file does not start with %q", setupStateHeader)
 	}
 	var st setupState
+	seen := map[string]bool{}
 	for sc.Scan() {
 		key, val, ok := strings.Cut(sc.Text(), "=")
 		if !ok {
 			return setupState{}, fmt.Errorf("seamlessd.setup: state line %q is not key=value", sc.Text())
+		}
+		if seen[key] {
+			return setupState{}, fmt.Errorf("seamlessd.setup: state key %q is given twice", key)
+		}
+		seen[key] = true
+		if why := setupStateValueProblem(key, val); why != "" {
+			return setupState{}, fmt.Errorf("seamlessd.setup: state %s %q: %s", key, val, why)
 		}
 		switch key {
 		case "role":
@@ -171,4 +183,51 @@ func parseSetupState(data []byte) (setupState, error) {
 		return setupState{}, errors.New("seamlessd.setup: the state names no role or kind")
 	}
 	return st, nil
+}
+
+// setupStateCAName is the name of the certificate copy setupCompareCert keeps
+// beside the Client config: the one name a state's ca_file may end in.
+const setupStateCAName = "server-ca.crt"
+
+// setupStateValueProblem says what is wrong with a state value of key, ""
+// when nothing is: each in the format setup writes it in. The keys parsed by
+// their own cases (role, kind, installed, locked, answer, pairing, device) are
+// judged there.
+func setupStateValueProblem(key, val string) string {
+	if strings.ContainsFunc(val, setupControl) {
+		return "it holds a control character"
+	}
+	switch key {
+	case "server_url":
+		if val == "" {
+			return ""
+		}
+		cfg := config.Defaults()
+		cfg.Role, cfg.AdvertisedURL = config.RoleClient, val
+		if err := cfg.Validate(); err != nil {
+			return strings.TrimPrefix(err.Error(), "config: ")
+		}
+	case "change":
+		if val == "" || strings.Trim(val, "abcdefghijklmnopqrstuvwxyz-") != "" {
+			return "not a change setup offers"
+		}
+	case "pair_server":
+		return setupServerURLProblem(val)
+	case "fingerprint":
+		if !devices.ValidCertFingerprint(val) {
+			return "not a certificate's SHA-256 fingerprint"
+		}
+	case "ca_file":
+		// Rooted rather than filepath.IsAbs alone: a Windows path setup
+		// joined from a rooted one has no drive.
+		rooted := filepath.IsAbs(val) || strings.HasPrefix(val, string(filepath.Separator))
+		if !rooted || filepath.Clean(val) != val || filepath.Base(val) != setupStateCAName {
+			return "not the full path of the " + setupStateCAName + " setup keeps"
+		}
+	case "binary_sha256":
+		if !rootstepSHA256(val) {
+			return "not a SHA-256 (64 lower-case hex digits)"
+		}
+	}
+	return ""
 }

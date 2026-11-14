@@ -398,10 +398,10 @@ it). On macOS it is the LaunchDaemon
 ```
 
 ```bash
-sudo launchctl bootstrap system /Library/LaunchDaemons/com.arctop.seamless.relay.plist
-sudo launchctl kickstart -k system/com.arctop.seamless.relay   # restart
-sudo launchctl print system/com.arctop.seamless.relay          # state, pid, last exit
-sudo launchctl bootout system/com.arctop.seamless.relay        # stop and unload
+/usr/bin/sudo /bin/launchctl bootstrap system /Library/LaunchDaemons/com.arctop.seamless.relay.plist
+/usr/bin/sudo /bin/launchctl kickstart -k system/com.arctop.seamless.relay   # restart
+/usr/bin/sudo /bin/launchctl print system/com.arctop.seamless.relay          # state, pid, last exit
+/usr/bin/sudo /bin/launchctl bootout system/com.arctop.seamless.relay        # stop and unload
 ```
 
 On Linux it is the system unit `/etc/systemd/system/seamless-relay.service`,
@@ -427,9 +427,9 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now seamless-relay
-sudo systemctl restart seamless-relay
+/usr/bin/sudo /bin/systemctl daemon-reload
+/usr/bin/sudo /bin/systemctl enable --now seamless-relay
+/usr/bin/sudo /bin/systemctl restart seamless-relay
 ```
 
 Nothing updates the relay's binary by itself yet: replace root's copy and

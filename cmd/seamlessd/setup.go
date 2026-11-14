@@ -36,6 +36,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/netip"
+	"net/url"
 	"os"
 	"runtime"
 	"slices"
@@ -775,19 +777,69 @@ func setupAskClient(r *setupRun) (string, error) {
 	return url, nil
 }
 
-// setupServerURLProblem says what is wrong with a Server address typed at the
-// terminal, "" when nothing is: an http(s) base URL the config accepts.
-func setupServerURLProblem(url string) string {
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+// setupServerURLProblem says what is wrong with a Server address a pairing
+// is made with -- typed at the terminal, given in SEAMLESS_SERVER_URL, or read
+// back from the state file -- "" when nothing is: an http(s) base URL the
+// config accepts, with no user, a port a port can be, and a host that is a
+// host name or an IP address (setupHostProblem). The relay's root step prints
+// it.
+func setupServerURLProblem(raw string) string {
+	if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") {
 		return "the address starts with https:// (or http://), like https://host:8081"
 	}
-	if strings.ContainsFunc(url, setupControl) {
+	if strings.ContainsFunc(raw, setupControl) {
 		return "the address holds a control character"
 	}
 	cfg := config.Defaults()
-	cfg.Role, cfg.AdvertisedURL = config.RoleClient, url
+	cfg.Role, cfg.AdvertisedURL = config.RoleClient, raw
 	if err := cfg.Validate(); err != nil {
 		return strings.TrimPrefix(err.Error(), "config: ")
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "the address is not a URL"
+	}
+	if u.User != nil {
+		return setupText("the address names a user: give the {server}'s https://host:port alone")
+	}
+	if why := setupHostProblem(u.Hostname()); why != "" {
+		return why
+	}
+	if port := u.Port(); port != "" {
+		if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+			return "the address's port is not one from 1 to 65535"
+		}
+	}
+	return ""
+}
+
+// setupHostProblem says what is wrong with the host of a Server address, ""
+// when nothing is: an IP address with no zone, or a host name of the letters,
+// digits, dots and dashes the address step takes for the Server's name
+// (setupServerNameProblem, through config.ServedRelyingParty), in any case and
+// with one final dot or none. A Server's address may be an IP address, which
+// its own name may not.
+func setupHostProblem(host string) string {
+	if addr, err := netip.ParseAddr(host); err == nil {
+		if addr.Zone() != "" {
+			return setupText("the address names a network interface (%" + addr.Zone() + "): give the {server}'s own address")
+		}
+		return ""
+	}
+	const why = "the address's host is not a host name or an IP address: a name is letters, digits, dots and dashes, like box.example"
+	name := strings.TrimSuffix(strings.ToLower(host), ".")
+	if name == "" || len(name) > 253 {
+		return why
+	}
+	for label := range strings.SplitSeq(name, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return why
+		}
+		for _, c := range label {
+			if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
+				return why
+			}
+		}
 	}
 	return ""
 }

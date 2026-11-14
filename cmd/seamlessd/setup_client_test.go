@@ -41,10 +41,11 @@ func clientArrange(t *testing.T, r *setupRun, cert clientServerCert) *clientWorl
 		}
 		return devices.Paired{DeviceID: "01EXAMPLEDEVICE", Kind: devices.KindKey, Name: req.Name, Key: "seamless_dk_example"}, nil
 	}
+	kept := r.client.writeFile
 	r.client.writeFile = func(path string, data []byte) error {
 		require.Contains(t, string(data), "BEGIN CERTIFICATE")
 		w.cas = append(w.cas, path)
-		return nil
+		return kept(path, data)
 	}
 	r.client.check = func(_ context.Context, out io.Writer, cfgPath string) error {
 		w.checks = append(w.checks, cfgPath)
@@ -105,13 +106,19 @@ func TestSetupClient_RelayUnattended(t *testing.T) {
 			out.Reset()
 			require.NoError(t, setupHandOff(r, &st, setupStepsLeft(st, goos), true))
 			text := out.String()
+			sum := map[string]string{"darwin": "/usr/bin/shasum -a 256", "linux": "/usr/bin/sha256sum"}[goos]
 			for _, want := range []string{
 				"its one root step. Setup runs nothing as root",
-				"sudo install -o root -g ",
-				"/opt/seamless/bin/seamlessd' | ",
-				"sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --server https://box.example:8081 --fingerprint " + clientFP + " --code -",
-				`echo "_seamless $(id -u _seamless)" | sudo tee /opt/seamless/etc/daemon-account`,
-				"code         ABCD-EFGH-JKMN-PQRS",
+				"Paste each block whole: it stops at its first failure.",
+				"\n/usr/bin/sudo /usr/bin/tee /opt/seamless/bin/.seamlessd.new >/dev/null < /h/.local/bin/seamlessd &&\n" +
+					"echo '" + st.binarySHA + "  /opt/seamless/bin/.seamlessd.new' | /usr/bin/sudo " + sum + " -c &&\n",
+				"/usr/bin/sudo /bin/mv -f /opt/seamless/bin/.seamlessd.new /opt/seamless/bin/seamlessd &&\n",
+				"\n/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://box.example:8081 --fingerprint " +
+					clientFP + " --code -\n",
+				"seamless_uid=$(/usr/bin/id -u _seamless) &&\n" +
+					`printf '%s %s\n' _seamless "$seamless_uid" | /usr/bin/sudo /usr/bin/tee /opt/seamless/etc/daemon-account >/dev/null &&` + "\n" +
+					"/usr/bin/sudo /bin/chmod 0644 /opt/seamless/etc/daemon-account\n",
+				"code         the one you set in SEAMLESS_PAIR_CODE",
 				"it never rides in a command line",
 				"peer_auth.relays: {here: {owner_uid: 501}}",
 				"seamlessd approve runs on the Server alone",
@@ -119,23 +126,20 @@ func TestSetupClient_RelayUnattended(t *testing.T) {
 			} {
 				require.Contains(t, text, want)
 			}
-			for _, line := range strings.Split(text, "\n") {
-				if strings.Contains(line, "sudo") || strings.Contains(line, "relay pair") {
-					require.NotContains(t, line, "ABCD-EFGH-JKMN-PQRS", "the code never rides in a command: %s", line)
-				}
-			}
+			require.NotContains(t, text, "ABCD-EFGH-JKMN-PQRS", "a code from the environment is not printed back")
+			rootstepPATHFree(t, text)
 			if goos == "darwin" {
-				require.Contains(t, text, "sudo dscl . -create /Users/_seamless UniqueID 480")
-				require.Contains(t, text, "sudo dscl . -append /Groups/_seamlessowner GroupMembership example-owner _seamless")
-				require.Contains(t, text, "sudo launchctl bootstrap system /Library/LaunchDaemons/com.arctop.seamless.relay.plist")
-				require.Contains(t, text, "shasum -a 256 -c")
-				require.Contains(t, text, "<string>--socket-mode</string>\n                     <string>0660</string>")
+				require.Contains(t, text, "\n/usr/bin/sudo /usr/bin/dscl . -create /Users/_seamless UniqueID 480 &&\n")
+				require.Contains(t, text, "\n/usr/bin/sudo /usr/bin/dscl . -append /Groups/_seamlessowner GroupMembership example-owner _seamless\n")
+				require.Contains(t, text, "\n/usr/bin/sudo /bin/launchctl bootstrap system /Library/LaunchDaemons/com.arctop.seamless.relay.plist\n")
+				require.Contains(t, text, "\n    <string>--socket-mode</string>\n    <string>0660</string>\n", "the plist reaches the shell as printed")
+				require.Contains(t, text, "\n</plist>\nEOF\n", "the here-document ends at the margin")
 			} else {
-				require.Contains(t, text, "sudo useradd --system --user-group --shell /usr/sbin/nologin --home-dir /opt/seamless/home _seamless")
-				require.Contains(t, text, "sudo usermod -aG _seamlessowner example-owner")
-				require.Contains(t, text, "sudo systemctl enable --now seamless-relay")
-				require.Contains(t, text, "sha256sum -c")
-				require.Contains(t, text, "relay serve --socket-mode 0660 --socket-group _seamlessowner")
+				require.Contains(t, text, "\n/usr/bin/sudo /usr/sbin/useradd --system --user-group --shell /usr/sbin/nologin --home-dir /opt/seamless/home _seamless &&\n")
+				require.Contains(t, text, "\n/usr/bin/sudo /usr/sbin/usermod -aG _seamlessowner example-owner &&\n")
+				require.Contains(t, text, "\n/usr/bin/sudo /bin/systemctl enable --now seamless-relay\n")
+				require.Contains(t, text, "\nExecStart=/opt/seamless/bin/seamlessd relay serve --socket-mode 0660 --socket-group _seamlessowner\n")
+				require.Contains(t, text, "\nWantedBy=multi-user.target\nEOF\n", "the here-document ends at the margin")
 				require.Contains(t, text, "log out and back in once")
 			}
 			require.Empty(t, w.checks, "a relay not yet serving is checked once its root step ran")
@@ -334,16 +338,21 @@ func TestSetupClient_TheServersKeyPairsNothing(t *testing.T) {
 }
 
 // The root step's commands, as pure text: an existing account and group are
-// not made again, a pin already there is not rewritten, a server certificate
-// copy is installed root's and handed to the pairing, and the code never
-// appears.
+// not made again, a pin already there is not rewritten, the certificate the
+// owner compared is written by root from the step itself and handed to the
+// pairing, and the code never appears.
 func TestClientRelayRootStep(t *testing.T) {
+	pemText := "-----BEGIN CERTIFICATE-----\nQUJD\n-----END CERTIFICATE-----\n"
 	p := clientRelayPlan{goos: "darwin", owner: "example-owner", server: "https://box.example:8081", fingerprint: clientFP,
-		caFile: "/h/.config/seamless/server-ca.crt", source: "/h/.local/bin/seamlessd", sha256: strings.Repeat("a", 64), uid: 480, gid: 479}
+		caPEM: pemText, source: "/h/.local/bin/seamlessd", sha256: strings.Repeat("a", 64), uid: 480, gid: 479}
+	require.Empty(t, p.problem())
 	text := clientRootText(clientRelayRootStep(p))
-	require.Contains(t, text, "sudo install -o root -g wheel -m 0644 /h/.config/seamless/server-ca.crt "+clientRelayCAFile)
+	require.Contains(t, text, "/usr/bin/sudo /usr/bin/tee "+clientRelayCAFile+" >/dev/null <<'EOF' &&\n"+pemText+"EOF\n"+
+		"/usr/bin/sudo /bin/chmod 0644 "+clientRelayCAFile+" &&\n")
+	require.NotContains(t, text, "/h/.config", "root reads no copy of the owner's")
 	require.Contains(t, text, "--ca-file "+clientRelayCAFile+" --code -")
-	require.Contains(t, text, "sudo dscl . -create /Groups/_seamlessowner PrimaryGroupID 479")
+	require.Contains(t, text, "/usr/bin/sudo /usr/bin/dscl . -create /Groups/_seamlessowner PrimaryGroupID 479 &&")
+	require.Contains(t, text, "/usr/bin/sudo /usr/sbin/chown root:wheel /opt/seamless/bin/.seamlessd.new &&")
 	require.Contains(t, text, "<key>UserName</key>          <string>_seamless</string>")
 	require.Contains(t, text, "<string>--socket-group</string>")
 
@@ -352,16 +361,19 @@ func TestClientRelayRootStep(t *testing.T) {
 	require.NotContains(t, text, "useradd")
 	require.NotContains(t, text, "groupadd")
 	require.NotContains(t, text, "daemon-account")
-	require.Contains(t, text, "sudo usermod -aG _seamlessowner _seamless")
-	require.Contains(t, text, "sudo install -d -o root -g root -m 0755 /opt/seamless /opt/seamless/bin /opt/seamless/etc")
+	require.Contains(t, text, "/usr/bin/sudo /usr/sbin/usermod -aG _seamlessowner _seamless\n")
+	require.Contains(t, text, "/usr/bin/sudo /usr/bin/install -d -o root -g root -m 0755 /opt/seamless /opt/seamless/bin /opt/seamless/etc &&")
+	require.Contains(t, text, "/usr/bin/sudo /bin/chown root:root /opt/seamless/bin/.seamlessd.new &&")
 	require.Contains(t, text, "ExecStart=/opt/seamless/bin/seamlessd relay serve --socket-mode 0660 --socket-group _seamlessowner")
 	require.Contains(t, text, "UMask=0077")
 }
 
+// clientRootText is the root step as setup prints its commands: each block
+// one AND-list.
 func clientRootText(blocks [][]string) string {
 	var b strings.Builder
 	for _, blk := range blocks {
-		b.WriteString(strings.Join(blk, "\n") + "\n")
+		b.WriteString(blk[0] + "\n" + rootstepChain(blk[1:]) + "\n")
 	}
 	return b.String()
 }

@@ -105,8 +105,10 @@ type clientHost struct {
 	// (config.EnsureDeviceClientConfig, config.EnsureSocketClientConfig).
 	ensureDevice func(serverURL, key, caFile string) (string, error)
 	ensureSocket func() (string, error)
-	// writeFile writes a certificate this computer trusts the Server by.
+	// writeFile writes a certificate this computer trusts the Server by, and
+	// readFile reads it back for the relay's root step (rootstepReadFile).
 	writeFile func(path string, data []byte) error
+	readFile  func(path string) ([]byte, error)
 	// exe is the seamlessd setup runs as, which the relay's root step copies.
 	exe func() (string, error)
 	// owner is the account this runs as, the agents', and ownerUID its uid.
@@ -143,7 +145,8 @@ func realClientHost() clientHost {
 			}
 			return os.WriteFile(path, data, 0o600)
 		},
-		exe: os.Executable,
+		readFile: rootstepReadFile,
+		exe:      os.Executable,
 		owner: func() string {
 			if u, err := user.Current(); err == nil {
 				return u.Username
@@ -485,36 +488,52 @@ func setupInstallDir(r *setupRun) string {
 
 // setupRelayStep is a relay Client's root step (setupSteps["relay"]), after
 // the installer's own: what the relay is and why it needs root, then the
-// commands, then where approvals happen.
+// commands, then where approvals happen. It prints them only from values that
+// hold their formats (clientRelayPlan.problem) and a certificate that is the
+// one compared, whatever the state file says.
 func setupRelayStep(r *setupRun, st *setupState) error {
 	if st.device != setupDeviceRelay {
 		return nil
 	}
+	codeSet := strings.TrimSpace(r.env(setupKnobPairCode)) != ""
 	code, err := setupPairCode(r)
 	if err != nil {
 		return err
 	}
+	var caPEM string
+	if st.caFile != "" {
+		if caPEM, err = rootstepCAPEM(r.client.readFile, st.caFile, st.fingerprint); err != nil {
+			return setupRefusal("the {server}'s certificate setup kept, %s, is not the one compared (%v): setup prints no root step "+
+				"from it. Run the installer again", tildePath(st.caFile), err)
+		}
+	}
 	acc := r.client.accounts()
-	plan := clientRelayPlan{goos: r.goos, owner: r.client.owner(), server: st.pairServer, fingerprint: st.fingerprint, caFile: st.caFile,
+	plan := clientRelayPlan{goos: r.goos, owner: r.client.owner(), server: st.pairServer, fingerprint: st.fingerprint, caPEM: caPEM,
 		source: filepath.Join(setupInstallDir(r), "seamlessd"), sha256: st.binarySHA,
 		accountExists: acc.accountExists, groupExists: acc.groupExists, uid: acc.uid, gid: acc.gid, pinned: acc.pinned}
+	if why := plan.problem(); why != "" {
+		return setupRefusal("setup prints no root step from these values: %s. Run the installer again", why)
+	}
 	fmt.Fprintln(r.out)
 	setupRow(r.out, "relay", setupText("the relay forwards your agents' requests to the {server}, naming each caller by the uid this computer's"))
 	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, setupText("kernel reports: it runs as an account of its own, so no process of yours can change what it says,"))
 	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, "and making that account is its one root step. Setup runs nothing as root: as an administrator, run")
-	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, "these, reading them first:")
+	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, "these, reading them first. Paste each block whole: it stops at its first failure.")
+	// The commands start at the margin: a here-document's lines, and the line
+	// that ends it, must reach the shell as printed.
 	for i, b := range clientRelayRootStep(plan) {
 		fmt.Fprintf(r.out, "\n%s%s\n", setupRowCont, dim(fmt.Sprintf("%d. %s", i+1, b[0])))
-		for _, c := range b[1:] {
-			for _, line := range strings.Split(c, "\n") {
-				fmt.Fprintf(r.out, "%s  %s\n", setupRowCont, line)
-			}
-		}
+		fmt.Fprintln(r.out, rootstepChain(b[1:]))
 	}
 	fmt.Fprintln(r.out)
-	if code != "" {
+	switch {
+	case codeSet:
+		// The environment's code stays out of this output, which a log or a
+		// transcript may keep where the environment was never seen.
+		setupRow(r.out, "code", dim("the one you set in "+setupKnobPairCode+": paste it when step 3 waits for it, within 10 minutes of its minting"))
+	case code != "":
 		setupRow(r.out, "code", code+dim(" -- paste it when step 3 waits for it: it pairs one computer, within 10 minutes of its minting"))
-	} else {
+	default:
 		setupRow(r.out, "code", dim(setupText("step 3 reads it from your paste: the {server}'s Devices page gives one, for one computer, within 10 minutes")))
 	}
 	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, dim("it never rides in a command line, where other accounts and your shell history would keep it"))

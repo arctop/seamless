@@ -175,9 +175,10 @@ func retirePreconditions(r *setupRun, env retireEnv, st console.SignInState, acc
 	case err != nil:
 		return retireStop("the daemon-account pin is there but not believed (%v): root rewrites it, as the peer-auth guide shows", err)
 	case !ok:
-		setupRow(r.out, "pin", "missing: setup runs no root step. As an administrator:")
-		fmt.Fprintf(r.out, "%s  echo \"%s $(id -u %s)\" | sudo tee %s >/dev/null\n%s  sudo chmod 0644 %s\n",
-			setupRowCont, acct, acct, access.DaemonAccountPath, setupRowCont, access.DaemonAccountPath)
+		setupRow(r.out, "pin", "missing: setup runs no root step. As an administrator, paste this whole:")
+		for _, line := range strings.Split(rootstepChain(rootstepPinCommands(rootstepToolsFor(r.goos), acct)), "\n") {
+			fmt.Fprintf(r.out, "%s  %s\n", setupRowCont, line)
+		}
 		return retireStop("the daemon's account is not pinned (%s)", access.DaemonAccountPath)
 	}
 	setupRow(r.out, "pin", pin.String()+dim(" ("+pin.Path+")"))
@@ -212,10 +213,11 @@ func retireAnswer(instance string) string {
 }
 
 // retireRootEdit prints one root step: an edit of the daemon's config, then
-// the restart.
+// the restart. Like every command setup prints for root, each names its tools
+// by their absolute paths (rootstepTools).
 func retireRootEdit(r *setupRun, label, what string, lines ...string) {
 	setupRow(r.out, label, what+": setup runs no root step. As an administrator:")
-	fmt.Fprintf(r.out, "%s  sudo -e %s\n", setupRowCont, setupPeerAuthConfig)
+	fmt.Fprintf(r.out, "%s  %s -e %s\n", setupRowCont, rootstepToolsFor(r.goos).sudo, setupPeerAuthConfig)
 	for _, l := range lines {
 		fmt.Fprintf(r.out, "%s    %s\n", setupRowCont, dim(l))
 	}
@@ -224,10 +226,11 @@ func retireRootEdit(r *setupRun, label, what string, lines ...string) {
 
 // retireRestartCommand restarts the peer_auth daemon.
 func retireRestartCommand(goos string) string {
+	t := rootstepToolsFor(goos)
 	if goos == "darwin" {
-		return "sudo launchctl kickstart -k system/" + systemDaemonLabel
+		return t.asRoot(t.launchctl, "kickstart", "-k", "system/"+systemDaemonLabel)
 	}
-	return "sudo systemctl restart " + strings.TrimSuffix(systemDaemonUnit, ".service")
+	return t.asRoot(t.systemctl, "restart", strings.TrimSuffix(systemDaemonUnit, ".service"))
 }
 
 // retireWait asks the daemon until done says so, or the patience runs out.
@@ -282,9 +285,12 @@ func retirePasskeyReady(r *setupRun, env retireEnv, st console.SignInState, acct
 	return retireWait(r, env, "a passkey to be added", time.Time{}, func(s console.SignInState) bool { return s.Passkeys+s.UnknownRP > 0 })
 }
 
-// retireDaemonCommand is a seamlessd command run as the daemon's account.
+// retireDaemonCommand is a seamlessd command run as the daemon's account:
+// sudo and env by their absolute paths, which are the same on macOS and
+// Linux, so neither is found on the owner's PATH.
 func retireDaemonCommand(acct, verb string) string {
-	return fmt.Sprintf("sudo -k -u %s env SEAMLESS_CONFIG=%s /opt/seamless/bin/seamlessd %s", acct, setupPeerAuthConfig, verb)
+	t := rootstepToolsFor("")
+	return fmt.Sprintf("%s -k -u %s %s SEAMLESS_CONFIG=%s /opt/seamless/bin/seamlessd %s", t.sudo, posixShellArg(acct), t.env, setupPeerAuthConfig, verb)
 }
 
 // retireProof waits for the owner to sign in with a passkey now: nothing is

@@ -554,7 +554,7 @@ on the Devices page.</li>
 config of <code>role: client</code> and <code>server_url: unix:///opt/seamless/run/seamlessd.sock</code>,
 with no key, and the installer wires your agents to that socket. Once the
 install is done, setup prints the relay's one root step
-(<a href="#the-relays-root-step">below</a>), with the pairing code on a row of its own.
+(<a href="#the-relays-root-step">below</a>), with a row of its own for the pairing code.
 It never runs a command as root.</li>
 <li><strong>It checks.</strong> For a key device, <code>seam doctor</code>, then a session called
 <code>seamless-setup-check</code>, whose host the Server reports back: the name the
@@ -591,7 +591,10 @@ and the Devices page does not list it (<a href="#pair-with-the-servers-key">by h
 kernel reports, so it runs as an account of its own, where no process of yours
 can change what it says, and making that account takes root once. Setup prints
 the commands with this computer's values, to read and then run as an
-administrator, in four blocks:</p>
+administrator, in four blocks. Each block is one list of commands whose lines
+end in <code>&amp;&amp;</code>: paste a block whole, and it stops at its first failure. Every
+command names its tools by their full paths (<code>/usr/bin/sudo</code>, <code>/usr/bin/tee</code>),
+so none is found on your <code>PATH</code>, and every value is quoted for the shell:</p>
 <ol>
 <li>
 <p><strong>Its account and a group.</strong> A system account, <code>_seamless</code> (on macOS made
@@ -602,23 +605,28 @@ with <code>dscl</code>, on Linux with <code>useradd --system</code>), and a grou
 <p><strong>The layout, root's copy of <code>seamlessd</code>, and the pin.</strong> Root's
 <code>/opt/seamless</code>, <code>/opt/seamless/bin</code> and <code>/opt/seamless/etc</code>; the relay's
 <code>/opt/seamless/run</code>, its home, and <code>/opt/seamless/relay</code> (<code>0700</code>) for its
-key. Root's own copy of the <code>seamlessd</code> the installer just put in your
-<code>~/.local/bin</code> goes to <code>/opt/seamless/bin/seamlessd</code>, and a
-<code>shasum -a 256 -c</code> (Linux: <code>sha256sum -c</code>) line checks it is the binary
-setup ran as. A certificate you compared is copied to
-<code>/opt/seamless/etc/server-ca.crt</code>. Then the account is pinned in
+key. Your shell reads the <code>seamlessd</code> the installer just put in your
+<code>~/.local/bin</code>, and root only writes what it reads, to
+<code>/opt/seamless/bin/.seamlessd.new</code>: root opens no file of yours, so a symlink
+there to a file only root may read fails before root runs. <code>shasum -a 256 -c</code>
+(Linux: <code>sha256sum -c</code>) checks that copy is the binary setup ran as, and only
+then is it made root's and moved to <code>/opt/seamless/bin/seamlessd</code>. A
+certificate you compared is printed in the step itself, and root writes
+<code>/opt/seamless/etc/server-ca.crt</code> from there. Then the account is pinned in
 <code>/opt/seamless/etc/daemon-account</code>, as
 <a href="../../guides/peer-auth/#deploy-it-the-daemon-runs-as-its-own-account">Deploy it</a>
 pins the daemon's.</p>
 </li>
 <li>
 <p><strong>The pairing, as its account:</strong></p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --server https://&lt;server name&gt;:8081 --fingerprint &lt;fingerprint&gt; --code -
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://&lt;server name&gt;:8081 --fingerprint &lt;fingerprint&gt; --code -
 </span></span></code></pre></div>
 <p>with <code>--ca-file /opt/seamless/etc/server-ca.crt</code> for a certificate you
-compared. It waits for you to paste the code, which setup shows on its own
-row and never puts in a command line, where other accounts and your shell
-history would keep it. The key it makes stays in <code>/opt/seamless/relay</code>.
+compared. It waits for you to paste the code. Setup never puts it in a
+command line, where other accounts and your shell history would keep it, and
+shows it again only when you typed it at its question: a code you set in
+<code>SEAMLESS_PAIR_CODE</code> is yours already. The key it makes stays in
+<code>/opt/seamless/relay</code>.
 Under peer_auth it waits again, until you approve it on the Devices page.</p>
 </li>
 <li>
@@ -1078,24 +1086,30 @@ Linux.</p>
 <code>dscl</code> lines in
 <a href="../../guides/peer-auth/#deploy-it-the-daemon-runs-as-its-own-account">Deploy it</a>,
 then the group, with another unused id below 500, and its two members:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo dscl . -create /Groups/_seamlessowner PrimaryGroupID &lt;unused id&gt;
-</span></span><span class="line"><span class="cl">sudo dscl . -append /Groups/_seamlessowner GroupMembership &lt;you&gt; _seamless
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo /usr/bin/dscl . -create /Groups/_seamlessowner PrimaryGroupID &lt;unused id&gt;
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /usr/bin/dscl . -append /Groups/_seamlessowner GroupMembership &lt;you&gt; _seamless
 </span></span></code></pre></div>
 <p>On Linux:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo useradd --system --user-group --shell /usr/sbin/nologin --home-dir /opt/seamless/home _seamless
-</span></span><span class="line"><span class="cl">sudo groupadd --system _seamlessowner
-</span></span><span class="line"><span class="cl">sudo usermod -aG _seamlessowner &lt;you&gt;
-</span></span><span class="line"><span class="cl">sudo usermod -aG _seamlessowner _seamless
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo /usr/sbin/useradd --system --user-group --shell /usr/sbin/nologin --home-dir /opt/seamless/home _seamless
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /usr/sbin/groupadd --system _seamlessowner
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /usr/sbin/usermod -aG _seamlessowner &lt;you&gt;
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /usr/sbin/usermod -aG _seamlessowner _seamless
 </span></span></code></pre></div>
 </li>
 <li>
-<p><strong>The layout, root's copy of <code>seamlessd</code>, and the pin:</strong></p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo install -d -o root -g wheel -m <span class="m">0755</span> /opt/seamless /opt/seamless/bin /opt/seamless/etc
-</span></span><span class="line"><span class="cl">sudo install -d -o _seamless -g _seamless -m <span class="m">0755</span> /opt/seamless/run
-</span></span><span class="line"><span class="cl">sudo install -d -o _seamless -g _seamless -m <span class="m">0700</span> /opt/seamless/home /opt/seamless/relay
-</span></span><span class="line"><span class="cl">sudo install -o root -g wheel -m <span class="m">0755</span> ~/.local/bin/seamlessd /opt/seamless/bin/seamlessd
-</span></span><span class="line"><span class="cl"><span class="nb">echo</span> <span class="s2">&#34;_seamless </span><span class="k">$(</span>id -u _seamless<span class="k">)</span><span class="s2">&#34;</span> <span class="p">|</span> sudo tee /opt/seamless/etc/daemon-account &gt;/dev/null
-</span></span><span class="line"><span class="cl">sudo chmod <span class="m">0644</span> /opt/seamless/etc/daemon-account
+<p><strong>The layout, root's copy of <code>seamlessd</code>, and the pin</strong> (macOS; on Linux use
+<code>-g root</code>, <code>root:root</code> and <code>/bin/chown</code>). Your shell reads the binary and
+root only writes it, so root opens no file of yours:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo /usr/bin/install -d -o root -g wheel -m <span class="m">0755</span> /opt/seamless /opt/seamless/bin /opt/seamless/etc <span class="o">&amp;&amp;</span>
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /usr/bin/install -d -o _seamless -g _seamless -m <span class="m">0755</span> /opt/seamless/run <span class="o">&amp;&amp;</span>
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /usr/bin/install -d -o _seamless -g _seamless -m <span class="m">0700</span> /opt/seamless/home /opt/seamless/relay <span class="o">&amp;&amp;</span>
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /usr/bin/tee /opt/seamless/bin/.seamlessd.new &gt;/dev/null &lt; ~/.local/bin/seamlessd <span class="o">&amp;&amp;</span>
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /usr/sbin/chown root:wheel /opt/seamless/bin/.seamlessd.new <span class="o">&amp;&amp;</span>
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /bin/chmod <span class="m">0755</span> /opt/seamless/bin/.seamlessd.new <span class="o">&amp;&amp;</span>
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /bin/mv -f /opt/seamless/bin/.seamlessd.new /opt/seamless/bin/seamlessd <span class="o">&amp;&amp;</span>
+</span></span><span class="line"><span class="cl"><span class="nv">seamless_uid</span><span class="o">=</span><span class="k">$(</span>/usr/bin/id -u _seamless<span class="k">)</span> <span class="o">&amp;&amp;</span>
+</span></span><span class="line"><span class="cl"><span class="nb">printf</span> <span class="s1">&#39;%s %s\n&#39;</span> _seamless <span class="s2">&#34;</span><span class="nv">$seamless_uid</span><span class="s2">&#34;</span> <span class="p">|</span> /usr/bin/sudo /usr/bin/tee /opt/seamless/etc/daemon-account &gt;/dev/null <span class="o">&amp;&amp;</span>
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /bin/chmod <span class="m">0644</span> /opt/seamless/etc/daemon-account
 </span></span></code></pre></div>
 <p>A certificate made with mkcert or openssl also goes in, for the pairing to
 trust: its root (mkcert's <code>rootCA.pem</code>, or the openssl certificate itself)
@@ -1107,7 +1121,7 @@ which.</p>
 <p><strong>Pair it, as its account</strong>, pasting the code when it waits (<code>--code -</code>
 keeps it out of the process list and your shell history), and adding
 <code>--ca-file /opt/seamless/etc/server-ca.crt</code> for the certificate above:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --server https://&lt;server name&gt;:8081 --fingerprint &lt;fingerprint&gt; --code -
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://&lt;server name&gt;:8081 --fingerprint &lt;fingerprint&gt; --code -
 </span></span></code></pre></div>
 <p><code>--fingerprint</code> makes sure the code goes only to that certificate. Under
 peer_auth the command waits until you approve the relay on the Devices page,

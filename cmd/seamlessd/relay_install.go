@@ -4,19 +4,22 @@ package main
 // 01M73RGB4PQVSXCN4V8VT5XNBX): what root does once so that `seamlessd relay
 // serve` runs on this computer as an account of its own -- the account and a
 // group holding only the owner (and the relay, which hands the socket to it),
-// the root-owned /opt/seamless layout, root's own copy of seamlessd (checked
-// against the binary setup ran as), the daemon-account pin, the pairing made
-// as the relay's account, and the LaunchDaemon or systemd unit. Setup prints
-// it and runs none of it (setupRelayStep): the commands are what the owner
-// runs as an administrator, read before they run, and doctor's relay rows
-// check the result (doctor_relay.go). Nothing here touches the machine.
+// the root-owned /opt/seamless layout, root's own copy of seamlessd (staged
+// and checked against the binary setup ran as before it goes into place), the
+// daemon-account pin, the pairing made as the relay's account, and the
+// LaunchDaemon or systemd unit. Setup prints it and runs none of it
+// (setupRelayStep): the commands are what the owner runs as an administrator,
+// read before they run, so they hold even against a process of the owner's
+// that rewrote every file the owner can write (rootstep_commands.go), and
+// doctor's relay rows check the result (doctor_relay.go). Nothing here
+// touches the machine.
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/relay"
 )
 
@@ -48,17 +51,25 @@ func clientRelayServeArgs() []string {
 	return []string{relay.DefaultBinary, "relay", "serve", "--socket-mode", "0660", "--socket-group", clientRelayGroup}
 }
 
+// clientRelayStaged is where root's copy of seamlessd is staged and checked
+// before it goes into place: in root's own directory, which no other account
+// can write or make a file in.
+const clientRelayStaged = "/opt/seamless/bin/.seamlessd.new"
+
 // clientRelayPlan is what the root step needs to know.
 type clientRelayPlan struct {
 	goos string
 	// owner is the account the agents run as: the socket group's member.
 	owner string
-	// server, fingerprint and caFile are the pairing's: the server's https
-	// address, the certificate fingerprint the owner compared, and the copy
-	// of that certificate to trust it by ("" when the system trusts it).
-	server, fingerprint, caFile string
-	// source is the seamlessd root copies, and sha256 its hash as setup
-	// read it ("" skips the check).
+	// server and fingerprint are the pairing's: the server's https address and
+	// the certificate fingerprint the owner compared.
+	server, fingerprint string
+	// caPEM is that certificate, as PEM, when this computer's roots do not
+	// vouch for it ("" when they do): the step prints it, and root writes its
+	// own copy from there, reading no file of the owner's.
+	caPEM string
+	// source is the seamlessd root's copy is made from, opened by the owner's
+	// shell, and sha256 its hash as setup read it: the staged copy must match.
 	source, sha256 string
 	// accountExists and groupExists: the account or the group is there
 	// already, and is not made again. uid and gid are the ids a macOS account
@@ -69,14 +80,51 @@ type clientRelayPlan struct {
 	pinned bool
 }
 
+// problem says why p cannot be printed as a root step, "" when it can: every
+// value root's commands carry has its format, whatever the state file said.
+// The commands quote each value as well; this keeps a wrong one from being
+// printed at all.
+func (p clientRelayPlan) problem() string {
+	switch {
+	case p.goos != "darwin" && p.goos != "linux":
+		return "the relay runs on macOS and Linux only"
+	case p.owner == "" || strings.HasPrefix(p.owner, "-") || strings.ContainsFunc(p.owner, setupControl) || strings.ContainsAny(p.owner, " \t"):
+		return fmt.Sprintf("%q is not an account name", p.owner)
+	case !strings.HasPrefix(p.server, "https://"):
+		return fmt.Sprintf("the server address %q is not an https address", p.server)
+	}
+	if why := setupServerURLProblem(p.server); why != "" {
+		return fmt.Sprintf("the server address %q: %s", p.server, why)
+	}
+	switch {
+	case !devices.ValidCertFingerprint(p.fingerprint):
+		return fmt.Sprintf("%q is not a certificate's SHA-256 fingerprint", p.fingerprint)
+	case !strings.HasPrefix(p.source, "/") || strings.ContainsFunc(p.source, setupControl):
+		return fmt.Sprintf("the seamlessd to copy, %q, is not a full path", p.source)
+	case !rootstepSHA256(p.sha256):
+		return fmt.Sprintf("%q is not the SHA-256 of the seamlessd setup ran as", p.sha256)
+	case p.goos == "darwin" && !p.accountExists && (p.uid <= 200 || p.uid >= 500):
+		return "no id below 500 is free for the relay's account"
+	case p.goos == "darwin" && !p.groupExists && (p.gid <= 200 || p.gid >= 500):
+		return "no id below 500 is free for the socket's group"
+	}
+	return ""
+}
+
 // clientRelayRootStep is the root step as numbered blocks of commands: each
-// block one line of why, then its commands.
+// block one line of why, then its commands, which rootstepChain joins into
+// one AND-list to paste whole. Every tool is named by its absolute path and
+// every value quoted (rootstep_commands.go). Root opens no file the owner can
+// write: the owner's shell opens the seamlessd to copy, root stages it in its
+// own directory and checks it there before it goes into place, and the
+// certificate the owner compared is printed for root to write.
 func clientRelayRootStep(p clientRelayPlan) [][]string {
+	t := rootstepToolsFor(p.goos)
 	wheel := "wheel"
 	if p.goos == "linux" {
 		wheel = "root"
 	}
-	acct, grp := clientRelayAccount, clientRelayGroup
+	acct, grp, owner := clientRelayAccount, clientRelayGroup, posixShellArg(p.owner)
 	var out [][]string
 
 	block := []string{"its account, a system account of its own, and a group holding you and it alone (the socket's)"}
@@ -85,71 +133,70 @@ func clientRelayRootStep(p clientRelayPlan) [][]string {
 		if !p.accountExists {
 			id := strconv.Itoa(p.uid)
 			block = append(block,
-				"sudo dscl . -create /Groups/"+acct+" PrimaryGroupID "+id,
-				"sudo dscl . -create /Users/"+acct+" UniqueID "+id,
-				"sudo dscl . -create /Users/"+acct+" PrimaryGroupID "+id,
-				"sudo dscl . -create /Users/"+acct+" UserShell /usr/bin/false",
-				"sudo dscl . -create /Users/"+acct+" NFSHomeDirectory "+clientRelayHome,
-				"sudo dscl . -create /Users/"+acct+" Password '*'",
-				"sudo dscl . -create /Users/"+acct+" IsHidden 1")
+				t.asRoot(t.dscl, ".", "-create", "/Groups/"+acct, "PrimaryGroupID", id),
+				t.asRoot(t.dscl, ".", "-create", "/Users/"+acct, "UniqueID", id),
+				t.asRoot(t.dscl, ".", "-create", "/Users/"+acct, "PrimaryGroupID", id),
+				t.asRoot(t.dscl, ".", "-create", "/Users/"+acct, "UserShell", "/usr/bin/false"),
+				t.asRoot(t.dscl, ".", "-create", "/Users/"+acct, "NFSHomeDirectory", clientRelayHome),
+				t.asRoot(t.dscl, ".", "-create", "/Users/"+acct, "Password", "'*'"),
+				t.asRoot(t.dscl, ".", "-create", "/Users/"+acct, "IsHidden", "1"))
 		}
 		if !p.groupExists {
-			block = append(block, "sudo dscl . -create /Groups/"+grp+" PrimaryGroupID "+strconv.Itoa(p.gid))
+			block = append(block, t.asRoot(t.dscl, ".", "-create", "/Groups/"+grp, "PrimaryGroupID", strconv.Itoa(p.gid)))
 		}
-		block = append(block, "sudo dscl . -append /Groups/"+grp+" GroupMembership "+p.owner+" "+acct)
+		block = append(block, t.asRoot(t.dscl, ".", "-append", "/Groups/"+grp, "GroupMembership", owner, acct))
 	default:
 		if !p.accountExists {
-			block = append(block, "sudo useradd --system --user-group --shell /usr/sbin/nologin --home-dir "+clientRelayHome+" "+acct)
+			block = append(block, t.asRoot(t.useradd, "--system", "--user-group", "--shell", "/usr/sbin/nologin", "--home-dir", clientRelayHome, acct))
 		}
 		if !p.groupExists {
-			block = append(block, "sudo groupadd --system "+grp)
+			block = append(block, t.asRoot(t.groupadd, "--system", grp))
 		}
-		block = append(block, "sudo usermod -aG "+grp+" "+p.owner, "sudo usermod -aG "+grp+" "+acct)
+		block = append(block, t.asRoot(t.usermod, "-aG", grp, owner), t.asRoot(t.usermod, "-aG", grp, acct))
 	}
 	out = append(out, block)
 
-	sum := "shasum -a 256 -c"
-	if p.goos == "linux" {
-		sum = "sha256sum -c"
-	}
 	block = []string{"the layout, root's own copy of seamlessd (no account but root can replace it), and the pin",
-		"sudo install -d -o root -g " + wheel + " -m 0755 /opt/seamless /opt/seamless/bin /opt/seamless/etc",
-		"sudo install -d -o " + acct + " -g " + acct + " -m 0755 /opt/seamless/run",
-		"sudo install -d -o " + acct + " -g " + acct + " -m 0700 " + clientRelayHome + " " + relay.DefaultDataDir,
-		"sudo install -o root -g " + wheel + " -m 0755 " + p.source + " " + relay.DefaultBinary}
-	if p.sha256 != "" {
-		block = append(block, fmt.Sprintf("echo '%s  %s' | %s", p.sha256, relay.DefaultBinary, sum))
-	}
-	if p.caFile != "" {
-		block = append(block, "sudo install -o root -g "+wheel+" -m 0644 "+p.caFile+" "+clientRelayCAFile)
+		t.asRoot(t.install, "-d", "-o", "root", "-g", wheel, "-m", "0755", "/opt/seamless", "/opt/seamless/bin", "/opt/seamless/etc"),
+		t.asRoot(t.install, "-d", "-o", acct, "-g", acct, "-m", "0755", "/opt/seamless/run"),
+		t.asRoot(t.install, "-d", "-o", acct, "-g", acct, "-m", "0700", clientRelayHome, relay.DefaultDataDir),
+		// The owner's shell opens the source; root only writes what it reads.
+		t.asRoot(t.tee, clientRelayStaged, ">/dev/null", "<", posixShellArg(p.source)),
+		// The staged copy is checked before anything else touches it, and an
+		// empty hash fails the check rather than skipping it.
+		"echo " + posixShellArg(p.sha256+"  "+clientRelayStaged) + " | " + t.asRoot(t.sum, "-c"),
+		t.asRoot(t.chown, "root:"+wheel, clientRelayStaged),
+		t.asRoot(t.chmod, "0755", clientRelayStaged),
+		t.asRoot(t.mv, "-f", clientRelayStaged, relay.DefaultBinary)}
+	if p.caPEM != "" {
+		block = append(block, rootstepHeredoc(t.asRoot(t.tee, clientRelayCAFile, ">/dev/null"), p.caPEM),
+			t.asRoot(t.chmod, "0644", clientRelayCAFile))
 	}
 	if !p.pinned {
-		block = append(block,
-			fmt.Sprintf(`echo "%s $(id -u %s)" | sudo tee %s >/dev/null`, acct, acct, access.DaemonAccountPath),
-			"sudo chmod 0644 "+access.DaemonAccountPath)
+		block = append(block, rootstepPinCommands(t, acct)...)
 	}
 	out = append(out, block)
 
-	pair := relay.DefaultBinary + " relay pair --server " + p.server
+	pair := []string{t.sudo, "-u", acct, "-H", relay.DefaultBinary, "relay", "pair", "--server", posixShellArg(p.server)}
 	if p.fingerprint != "" {
-		pair += " --fingerprint " + p.fingerprint
+		pair = append(pair, "--fingerprint", posixShellArg(p.fingerprint))
 	}
-	if p.caFile != "" {
-		pair += " --ca-file " + clientRelayCAFile
+	if p.caPEM != "" {
+		pair = append(pair, "--ca-file", clientRelayCAFile)
 	}
-	pair = "sudo -u " + acct + " " + pair + " --code -"
+	pair = append(pair, "--code", "-")
 	out = append(out, []string{"pair it, as its own account, pasting the code when it waits: the key it makes stays in " + relay.DefaultDataDir +
-		", which no other account reads", pair})
+		", which no other account reads", strings.Join(pair, " ")})
 
 	if p.goos == "darwin" {
 		out = append(out, []string{"its service, a LaunchDaemon that runs it as that account",
-			"sudo tee " + clientRelayPlistPath() + " >/dev/null <<'EOF'\n" + clientRelayPlist() + "EOF",
-			"sudo launchctl bootstrap system " + clientRelayPlistPath()})
+			rootstepHeredoc(t.asRoot(t.tee, clientRelayPlistPath(), ">/dev/null"), clientRelayPlist()),
+			t.asRoot(t.launchctl, "bootstrap", "system", clientRelayPlistPath())})
 	} else {
 		out = append(out, []string{"its service, a system unit that runs it as that account",
-			"sudo tee " + clientRelayUnitPath() + " >/dev/null <<'EOF'\n" + clientRelayUnitFile() + "EOF",
-			"sudo systemctl daemon-reload",
-			"sudo systemctl enable --now " + strings.TrimSuffix(clientRelayUnit, ".service")})
+			rootstepHeredoc(t.asRoot(t.tee, clientRelayUnitPath(), ">/dev/null"), clientRelayUnitFile()),
+			t.asRoot(t.systemctl, "daemon-reload"),
+			t.asRoot(t.systemctl, "enable", "--now", strings.TrimSuffix(clientRelayUnit, ".service"))})
 	}
 	return out
 }

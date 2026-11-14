@@ -97,20 +97,29 @@ func TestSetupClientE2E_RelayRootStepPairsAndServes(t *testing.T) {
 	require.Equal(t, relay.DefaultSocketPath, cfg.SocketPath(), "the hooks and MCP dial the relay's socket")
 	require.Empty(t, cfg.MCP.APIKey, "a relay's Client holds no key")
 	require.Contains(t, out, "skipped (client of "+config.RelaySocketURL+")")
-	pair := "sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --server " + srv.base + " --fingerprint " + fp +
-		" --ca-file " + clientRelayCAFile + " --code -"
+	pair := "\n/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server " + srv.base + " --fingerprint " + fp +
+		" --ca-file " + clientRelayCAFile + " --code -\n"
 	require.Contains(t, out, pair)
-	require.Contains(t, out, "code         "+code)
+	require.Contains(t, out, "code         the one you set in SEAMLESS_PAIR_CODE")
+	require.NotContains(t, out, code, "the code from the environment is not printed back")
 	require.Contains(t, out, "once the relay serves: seam doctor")
 	require.Contains(t, out, "peer_auth.relays: {example-laptop: {owner_uid: ")
 	require.Less(t, strings.Index(out, "installed "), strings.Index(out, pair), "the root step closes the install")
 
+	// The certificate root writes is the one the step prints, and the one the
+	// owner compared: what setup kept, and no file of the owner's is read.
+	kept, err := os.ReadFile(filepath.Join(w.home, ".config", "seamless", "server-ca.crt"))
+	require.NoError(t, err)
+	open := "\n/usr/bin/sudo /usr/bin/tee " + clientRelayCAFile + " >/dev/null <<'EOF' &&\n"
+	require.Contains(t, out, open)
+	ca, _, ok := strings.Cut(out[strings.Index(out, open)+len(open):], "EOF\n")
+	require.True(t, ok, "the certificate's here-document ends")
+	require.Equal(t, string(kept), ca)
+
 	// The root step's pairing and service, as the relay's account runs them.
 	l, env := relayCmdLayout(t)
-	ca, err := os.ReadFile(filepath.Join(w.home, ".config", "seamless", "server-ca.crt"))
-	require.NoError(t, err)
 	require.NoError(t, relayPair(context.Background(), relayPairOptions{dataDir: l.DataDir, env: env,
-		pair: relay.PairOptions{Server: srv.base, Code: code, Name: "example-laptop", ServerFingerprint: fp, CA: ca}},
+		pair: relay.PairOptions{Server: srv.base, Code: code, Name: "example-laptop", ServerFingerprint: fp, CA: []byte(ca)}},
 		&strings.Builder{}, &strings.Builder{}))
 	relayCmdStart(t, l, env)
 

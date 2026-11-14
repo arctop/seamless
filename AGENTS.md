@@ -1427,7 +1427,10 @@ health check stay theirs.
   macOS and Linux pair a relay (`SEAMLESS_PAIR_AS=key` opts out): setup writes
   the owner's socket config with no key (`config.EnsureSocketClientConfig`) and
   prints the relay's one root step (account, a socket group of the owner's and
-  the relay's alone, root's hash-checked copy of seamlessd, the pin, the pairing
+  the relay's alone, root's copy of seamlessd (root opens no file the owner can
+  write: the owner's shell reads the binary, root stages it in
+  `/opt/seamless/bin` and checks it before it goes into place; a compared
+  certificate is printed inline), the pin, the pairing
   as the relay's account with `--code -`, the service) and runs none of it;
   doctor's relay rows check the result. Windows and no-root computers pair a key
   device before anything is installed, its own key into a 0600 config
@@ -1435,7 +1438,10 @@ health check stay theirs.
   never rides in a printed command or the state file; the installers drop
   `SEAMLESS_SERVER_URL` after setup in a pairing. Tests arrange the server
   (`clientArrange`) and never dial the machine's socket
-  (`clientHost.relayServing`).
+  (`clientHost.relayServing`). Each block is one AND-list; every tool is named
+  by its absolute path (`rootstepToolsFor`) and every value goes through
+  `posixShellArg`; setup refuses a server host that is not a host name or an IP
+  literal (`setupHostProblem`), and `parseSetupState` checks every value again.
 - **Retiring the key judges every step from what is there**
   (`setup_retire.go`, the `retire-key` change, offered on a Standalone install
   with locked projects). It reads the daemon over the owner's socket (`GET

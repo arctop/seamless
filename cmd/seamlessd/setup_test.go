@@ -58,6 +58,8 @@ func setupTestRun(t *testing.T, goos string, environ []string, facts setupFacts,
 		src = setupNoRead{t}
 	}
 	in := bufio.NewReader(src)
+	// The certificates a run keeps, which its relay step reads back.
+	files := map[string][]byte{}
 	r := &setupRun{
 		goos: goos, environ: environ, facts: facts, interactive: interactive, in: in, out: out,
 		// A Client's steps reach no server, read no account and run no
@@ -83,11 +85,20 @@ func setupTestRun(t *testing.T, goos string, environ []string, facts setupFacts,
 				calls = append(calls, setupClientCall{config.RelaySocketURL, ""})
 				return "/h/.config/seamless/seamless.yaml", nil
 			},
-			writeFile: func(string, []byte) error { return nil },
-			exe:       os.Executable,
-			owner:     func() string { return "example-owner" },
-			ownerUID:  func() int { return 501 },
-			accounts:  func() clientAccounts { return clientAccounts{uid: 480, gid: 479} },
+			writeFile: func(path string, data []byte) error {
+				files[path] = data
+				return nil
+			},
+			readFile: func(path string) ([]byte, error) {
+				if data, ok := files[path]; ok {
+					return data, nil
+				}
+				return nil, fs.ErrNotExist
+			},
+			exe:      os.Executable,
+			owner:    func() string { return "example-owner" },
+			ownerUID: func() int { return 501 },
+			accounts: func() clientAccounts { return clientAccounts{uid: 480, gid: 479} },
 			check: func(context.Context, io.Writer, string) error {
 				t.Helper()
 				t.Fatal("setup ran the closing check on a run whose test arranged none")

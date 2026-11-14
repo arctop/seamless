@@ -7237,7 +7237,7 @@ the install is done:
    config of `role: client` and `server_url: unix:///opt/seamless/run/seamlessd.sock`,
    with no key, and the installer wires your agents to that socket. Once the
    install is done, setup prints the relay's one root step
-   ([below](#the-relays-root-step)), with the pairing code on a row of its own.
+   ([below](#the-relays-root-step)), with a row of its own for the pairing code.
    It never runs a command as root.
 5. **It checks.** For a key device, `seam doctor`, then a session called
    `seamless-setup-check`, whose host the Server reports back: the name the
@@ -7281,7 +7281,10 @@ The relay names each of your agents to the Server by the uid this computer's
 kernel reports, so it runs as an account of its own, where no process of yours
 can change what it says, and making that account takes root once. Setup prints
 the commands with this computer's values, to read and then run as an
-administrator, in four blocks:
+administrator, in four blocks. Each block is one list of commands whose lines
+end in `&&`: paste a block whole, and it stops at its first failure. Every
+command names its tools by their full paths (`/usr/bin/sudo`, `/usr/bin/tee`),
+so none is found on your `PATH`, and every value is quoted for the shell:
 
 1. **Its account and a group.** A system account, `_seamless` (on macOS made
    with `dscl`, on Linux with `useradd --system`), and a group,
@@ -7289,24 +7292,29 @@ administrator, in four blocks:
 2. **The layout, root's copy of `seamlessd`, and the pin.** Root's
    `/opt/seamless`, `/opt/seamless/bin` and `/opt/seamless/etc`; the relay's
    `/opt/seamless/run`, its home, and `/opt/seamless/relay` (`0700`) for its
-   key. Root's own copy of the `seamlessd` the installer just put in your
-   `~/.local/bin` goes to `/opt/seamless/bin/seamlessd`, and a
-   `shasum -a 256 -c` (Linux: `sha256sum -c`) line checks it is the binary
-   setup ran as. A certificate you compared is copied to
-   `/opt/seamless/etc/server-ca.crt`. Then the account is pinned in
+   key. Your shell reads the `seamlessd` the installer just put in your
+   `~/.local/bin`, and root only writes what it reads, to
+   `/opt/seamless/bin/.seamlessd.new`: root opens no file of yours, so a symlink
+   there to a file only root may read fails before root runs. `shasum -a 256 -c`
+   (Linux: `sha256sum -c`) checks that copy is the binary setup ran as, and only
+   then is it made root's and moved to `/opt/seamless/bin/seamlessd`. A
+   certificate you compared is printed in the step itself, and root writes
+   `/opt/seamless/etc/server-ca.crt` from there. Then the account is pinned in
    `/opt/seamless/etc/daemon-account`, as
    [Deploy it](/guides/peer-auth/#deploy-it-the-daemon-runs-as-its-own-account)
    pins the daemon's.
 3. **The pairing, as its account:**
 
    ```bash
-   sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --server https://<server name>:8081 --fingerprint <fingerprint> --code -
+   /usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://<server name>:8081 --fingerprint <fingerprint> --code -
    ```
 
    with `--ca-file /opt/seamless/etc/server-ca.crt` for a certificate you
-   compared. It waits for you to paste the code, which setup shows on its own
-   row and never puts in a command line, where other accounts and your shell
-   history would keep it. The key it makes stays in `/opt/seamless/relay`.
+   compared. It waits for you to paste the code. Setup never puts it in a
+   command line, where other accounts and your shell history would keep it, and
+   shows it again only when you typed it at its question: a code you set in
+   `SEAMLESS_PAIR_CODE` is yours already. The key it makes stays in
+   `/opt/seamless/relay`.
    Under peer_auth it waits again, until you approve it on the Devices page.
 4. **Its service**: on macOS the LaunchDaemon `com.arctop.seamless.relay`, on
    Linux the system unit `seamless-relay.service`, each running
@@ -7811,28 +7819,34 @@ Linux.
    then the group, with another unused id below 500, and its two members:
 
    ```bash
-   sudo dscl . -create /Groups/_seamlessowner PrimaryGroupID <unused id>
-   sudo dscl . -append /Groups/_seamlessowner GroupMembership <you> _seamless
+   /usr/bin/sudo /usr/bin/dscl . -create /Groups/_seamlessowner PrimaryGroupID <unused id>
+   /usr/bin/sudo /usr/bin/dscl . -append /Groups/_seamlessowner GroupMembership <you> _seamless
    ```
 
    On Linux:
 
    ```bash
-   sudo useradd --system --user-group --shell /usr/sbin/nologin --home-dir /opt/seamless/home _seamless
-   sudo groupadd --system _seamlessowner
-   sudo usermod -aG _seamlessowner <you>
-   sudo usermod -aG _seamlessowner _seamless
+   /usr/bin/sudo /usr/sbin/useradd --system --user-group --shell /usr/sbin/nologin --home-dir /opt/seamless/home _seamless
+   /usr/bin/sudo /usr/sbin/groupadd --system _seamlessowner
+   /usr/bin/sudo /usr/sbin/usermod -aG _seamlessowner <you>
+   /usr/bin/sudo /usr/sbin/usermod -aG _seamlessowner _seamless
    ```
 
-3. **The layout, root's copy of `seamlessd`, and the pin:**
+3. **The layout, root's copy of `seamlessd`, and the pin** (macOS; on Linux use
+   `-g root`, `root:root` and `/bin/chown`). Your shell reads the binary and
+   root only writes it, so root opens no file of yours:
 
    ```bash
-   sudo install -d -o root -g wheel -m 0755 /opt/seamless /opt/seamless/bin /opt/seamless/etc
-   sudo install -d -o _seamless -g _seamless -m 0755 /opt/seamless/run
-   sudo install -d -o _seamless -g _seamless -m 0700 /opt/seamless/home /opt/seamless/relay
-   sudo install -o root -g wheel -m 0755 ~/.local/bin/seamlessd /opt/seamless/bin/seamlessd
-   echo "_seamless $(id -u _seamless)" | sudo tee /opt/seamless/etc/daemon-account >/dev/null
-   sudo chmod 0644 /opt/seamless/etc/daemon-account
+   /usr/bin/sudo /usr/bin/install -d -o root -g wheel -m 0755 /opt/seamless /opt/seamless/bin /opt/seamless/etc &&
+   /usr/bin/sudo /usr/bin/install -d -o _seamless -g _seamless -m 0755 /opt/seamless/run &&
+   /usr/bin/sudo /usr/bin/install -d -o _seamless -g _seamless -m 0700 /opt/seamless/home /opt/seamless/relay &&
+   /usr/bin/sudo /usr/bin/tee /opt/seamless/bin/.seamlessd.new >/dev/null < ~/.local/bin/seamlessd &&
+   /usr/bin/sudo /usr/sbin/chown root:wheel /opt/seamless/bin/.seamlessd.new &&
+   /usr/bin/sudo /bin/chmod 0755 /opt/seamless/bin/.seamlessd.new &&
+   /usr/bin/sudo /bin/mv -f /opt/seamless/bin/.seamlessd.new /opt/seamless/bin/seamlessd &&
+   seamless_uid=$(/usr/bin/id -u _seamless) &&
+   printf '%s %s\n' _seamless "$seamless_uid" | /usr/bin/sudo /usr/bin/tee /opt/seamless/etc/daemon-account >/dev/null &&
+   /usr/bin/sudo /bin/chmod 0644 /opt/seamless/etc/daemon-account
    ```
 
    A certificate made with mkcert or openssl also goes in, for the pairing to
@@ -7845,7 +7859,7 @@ Linux.
    `--ca-file /opt/seamless/etc/server-ca.crt` for the certificate above:
 
    ```bash
-   sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --server https://<server name>:8081 --fingerprint <fingerprint> --code -
+   /usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://<server name>:8081 --fingerprint <fingerprint> --code -
    ```
 
    `--fingerprint` makes sure the code goes only to that certificate. Under
@@ -16373,10 +16387,10 @@ it). On macOS it is the LaunchDaemon
 ```
 
 ```bash
-sudo launchctl bootstrap system /Library/LaunchDaemons/com.arctop.seamless.relay.plist
-sudo launchctl kickstart -k system/com.arctop.seamless.relay   # restart
-sudo launchctl print system/com.arctop.seamless.relay          # state, pid, last exit
-sudo launchctl bootout system/com.arctop.seamless.relay        # stop and unload
+/usr/bin/sudo /bin/launchctl bootstrap system /Library/LaunchDaemons/com.arctop.seamless.relay.plist
+/usr/bin/sudo /bin/launchctl kickstart -k system/com.arctop.seamless.relay   # restart
+/usr/bin/sudo /bin/launchctl print system/com.arctop.seamless.relay          # state, pid, last exit
+/usr/bin/sudo /bin/launchctl bootout system/com.arctop.seamless.relay        # stop and unload
 ```
 
 On Linux it is the system unit `/etc/systemd/system/seamless-relay.service`,
@@ -16402,9 +16416,9 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now seamless-relay
-sudo systemctl restart seamless-relay
+/usr/bin/sudo /bin/systemctl daemon-reload
+/usr/bin/sudo /bin/systemctl enable --now seamless-relay
+/usr/bin/sudo /bin/systemctl restart seamless-relay
 ```
 
 Nothing updates the relay's binary by itself yet: replace root's copy and

@@ -590,10 +590,10 @@ it). On macOS it is the LaunchDaemon
 </span></span><span class="line"><span class="cl"><span class="nt">&lt;/dict&gt;</span>
 </span></span><span class="line"><span class="cl"><span class="nt">&lt;/plist&gt;</span>
 </span></span></code></pre></div>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo launchctl bootstrap system /Library/LaunchDaemons/com.arctop.seamless.relay.plist
-</span></span><span class="line"><span class="cl">sudo launchctl kickstart -k system/com.arctop.seamless.relay   <span class="c1"># restart</span>
-</span></span><span class="line"><span class="cl">sudo launchctl print system/com.arctop.seamless.relay          <span class="c1"># state, pid, last exit</span>
-</span></span><span class="line"><span class="cl">sudo launchctl bootout system/com.arctop.seamless.relay        <span class="c1"># stop and unload</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo /bin/launchctl bootstrap system /Library/LaunchDaemons/com.arctop.seamless.relay.plist
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /bin/launchctl kickstart -k system/com.arctop.seamless.relay   <span class="c1"># restart</span>
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /bin/launchctl print system/com.arctop.seamless.relay          <span class="c1"># state, pid, last exit</span>
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /bin/launchctl bootout system/com.arctop.seamless.relay        <span class="c1"># stop and unload</span>
 </span></span></code></pre></div>
 <p>On Linux it is the system unit <code>/etc/systemd/system/seamless-relay.service</code>,
 whose log is the journal's:</p>
@@ -614,9 +614,9 @@ whose log is the journal's:</p>
 </span></span><span class="line"><span class="cl"><span class="k">[Install]</span>
 </span></span><span class="line"><span class="cl"><span class="na">WantedBy</span><span class="o">=</span><span class="s">multi-user.target</span>
 </span></span></code></pre></div>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo systemctl daemon-reload
-</span></span><span class="line"><span class="cl">sudo systemctl <span class="nb">enable</span> --now seamless-relay
-</span></span><span class="line"><span class="cl">sudo systemctl restart seamless-relay
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo /bin/systemctl daemon-reload
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /bin/systemctl <span class="nb">enable</span> --now seamless-relay
+</span></span><span class="line"><span class="cl">/usr/bin/sudo /bin/systemctl restart seamless-relay
 </span></span></code></pre></div>
 <p>Nothing updates the relay's binary by itself yet: replace root's copy and
 restart the service (<a href="../../guides/network-install/#updates-on-a-shared-daemon">how</a>).</p>

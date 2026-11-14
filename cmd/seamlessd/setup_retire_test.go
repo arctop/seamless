@@ -157,11 +157,12 @@ func TestRetire_TheWholeWay(t *testing.T) {
 
 	got := out.String()
 	for _, want := range []string{"_example (uid 480)", "127.0.0.1 and ::1 are both this daemon", "under console: add  sign_in: passkey",
-		"sudo launchctl kickstart -k system/" + systemDaemonLabel, retireOrigin + "/console/login", "a passkey signed in",
-		"under mcp: delete the api_key line", "retired: TCP serves", "took the key out of",
-		"sudo -k -u _example env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd console-open --sign-in --code <code>"} {
+		"/usr/bin/sudo /bin/launchctl kickstart -k system/" + systemDaemonLabel, retireOrigin + "/console/login", "a passkey signed in",
+		"under mcp: delete the api_key line", "retired: TCP serves", "took the key out of", "/usr/bin/sudo -e /opt/seamless/etc/seamless.yaml",
+		"/usr/bin/sudo -k -u _example /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd console-open --sign-in --code <code>"} {
 		require.Contains(t, got, want)
 	}
+	rootstepPATHFree(t, got)
 	require.Less(t, strings.Index(got, "sign_in: passkey"), strings.Index(got, "a passkey signed in"))
 	require.Less(t, strings.Index(got, "a passkey signed in"), strings.Index(got, "delete the api_key line"),
 		"nothing is removed before the proof")
