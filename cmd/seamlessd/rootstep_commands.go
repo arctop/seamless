@@ -1,9 +1,9 @@
 package main
 
 // The commands setup prints for root, or for the relay's or the daemon's
-// account, for the owner to read and paste (relay_install.go, setup_retire.go).
-// Setup runs none of them, so what it prints must hold even when a process of
-// the owner's has rewritten every file the owner can write:
+// account, for the owner to read and paste (relay_install.go, setup_retire.go,
+// setup_address.go). Setup runs none of them, so what it prints must hold even
+// when a process of the owner's has rewritten every file the owner can write:
 //
 //   - Root never opens a path the owner can write. The owner's shell opens it
 //     and root only writes what it reads (sudo tee <staged> < <path>): a
@@ -12,6 +12,10 @@ package main
 //   - A copy is checked before anything else touches it: staged under root's
 //     own directory, hashed there, and only then made root's and moved into
 //     place, all in one AND-list, so a failed check stops the block.
+//   - A staged copy is root's alone until it passes (rootstepCopyCommands):
+//     what the owner's shell hands root may be any file the owner can read,
+//     and a TLS key is secret, so root makes the file empty and 0600 before
+//     tee fills it, and tee keeps the mode of the file it opens.
 //   - A file whose content is public (the Server's certificate) is printed in
 //     the step itself, as a here-document root writes from: no file of the
 //     owner's is read for it.
@@ -49,6 +53,10 @@ type rootstepTools struct {
 	// Linux's. /bin/systemctl holds on a Debian or Ubuntu whose /bin is not
 	// merged into /usr/bin, and wherever it is.
 	useradd, groupadd, usermod, systemctl string
+	// tailscale is the tailnet's command where its own packages put it,
+	// root's: the macOS app's, Linux's /usr/bin. Never a package manager's
+	// prefix the owner can write (Homebrew's), which root would run.
+	tailscale string
 }
 
 // rootstepToolsFor is goos's tools: macOS, else Linux.
@@ -58,10 +66,12 @@ func rootstepToolsFor(goos string) rootstepTools {
 	if goos == "darwin" {
 		t.chown, t.sum = "/usr/sbin/chown", "/usr/bin/shasum -a 256"
 		t.dscl, t.launchctl = "/usr/bin/dscl", "/bin/launchctl"
+		t.tailscale = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 		return t
 	}
 	t.chown, t.sum = "/bin/chown", "/usr/bin/sha256sum"
 	t.useradd, t.groupadd, t.usermod, t.systemctl = "/usr/sbin/useradd", "/usr/sbin/groupadd", "/usr/sbin/usermod", "/bin/systemctl"
+	t.tailscale = "/usr/bin/tailscale"
 	return t
 }
 
@@ -100,6 +110,37 @@ func rootstepHeredoc(cmd, body string) string {
 		delim = "EOF" + strconv.Itoa(n)
 	}
 	return cmd + " <<'" + delim + "'\n" + body + "\n" + delim
+}
+
+// rootstepCopy is a file root copies from one of the owner's: source, which
+// the owner's shell opens, whose bytes setup read and hashed (sha256); staged,
+// where root's copy is made and checked, beside dest in a directory only root
+// can make a file in; and dest, where it goes as owner:group with mode.
+type rootstepCopy struct {
+	source, sha256     string
+	staged, dest       string
+	owner, group, mode string
+}
+
+// rootstepCopyCommands copies c as root, opening no file of the owner's:
+// root makes the staged copy empty and its own alone (0600), so nothing root
+// writes there is readable by another account before it is checked, whatever
+// sudo's umask; the owner's shell opens the source and root only writes what
+// it reads (tee opens the file that is there, keeping its mode); the staged
+// copy is checked against the hash setup took, before anything else touches
+// it; and only then is it made owner:group, given its mode, and moved into
+// place in one rename.
+func rootstepCopyCommands(t rootstepTools, c rootstepCopy) []string {
+	staged := posixShellArg(c.staged)
+	return []string{
+		t.asRoot(t.install, "-m", "0600", "/dev/null", staged),
+		t.asRoot(t.tee, staged, ">/dev/null", "<", posixShellArg(c.source)),
+		// An empty hash fails the check rather than skipping it.
+		"echo " + posixShellArg(c.sha256+"  "+c.staged) + " | " + t.asRoot(t.sum, "-c"),
+		t.asRoot(t.chown, posixShellArg(c.owner+":"+c.group), staged),
+		t.asRoot(t.chmod, posixShellArg(c.mode), staged),
+		t.asRoot(t.mv, "-f", staged, posixShellArg(c.dest)),
+	}
 }
 
 // rootstepPinCommands pins acct as the daemon's account on this computer

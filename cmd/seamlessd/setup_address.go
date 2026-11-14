@@ -36,10 +36,13 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/netip"
 	"os"
@@ -76,8 +79,11 @@ type setupAddrPlan struct {
 	name, port string
 	source     setupAddrSource
 	// cert and key are the TLS pair's paths as the owner's account reads
-	// them (under peer_auth: where they come from, not where they go).
-	cert, key string
+	// them (under peer_auth: where they come from, not where they go), and
+	// certSHA and keySHA the SHA-256 of the bytes setup read and checked of
+	// each, which root's copies must match (setupTLSRootCommands).
+	cert, key       string
+	certSHA, keySHA string
 	// leaf is the certificate, nil when setup has none to read yet (a tailnet
 	// certificate root mints under peer_auth).
 	leaf *x509.Certificate
@@ -281,12 +287,13 @@ func setupAddressFromEnv(ctx context.Context, r *setupRun, st *setupState, ts ta
 	plan.issues = tsErr == nil && ts.issues(plan.name)
 	if cert := r.env(setupKnobTLSCert); cert != "" {
 		plan.source = setupAddrFiles
-		var p string
 		plan.cert, _ = setupAddrFilePath(r, cert)
 		plan.key, _ = setupAddrFilePath(r, r.env(setupKnobTLSKey))
-		if plan.leaf, p = setupCheckPair(plan.name, plan.cert, plan.key, r.now()); p != "" {
+		read, p := setupCheckPair(plan.name, plan.cert, plan.key, r.now())
+		if p != "" {
 			return plan, setupRefusal("%s and %s: %s", setupKnobTLSCert, setupKnobTLSKey, p)
 		}
+		plan.leaf, plan.certSHA, plan.keySHA = read.leaf, read.certSHA, read.keySHA
 		return plan, nil
 	}
 	if tsErr == nil && ts.name == plan.name && ts.usable() == "" {
@@ -330,15 +337,26 @@ func setupLANPair(r *setupRun, name string) (string, string) {
 // setupLANCertCommands makes a certificate for name at cert and key: mkcert,
 // which also makes the CA every other computer trusts, or openssl, whose
 // certificate is its own root (CA:TRUE). Both keep the key this account's
-// alone.
+// alone. They run as the owner, so they name their tools as the owner's
+// shell finds them; every path is quoted (setupHomeArg), and name is a host
+// name (setupServerNameProblem).
 func setupLANCertCommands(name, cert, key string) []string {
-	dir := tildePath(filepath.Dir(cert))
-	c, k := tildePath(cert), tildePath(key)
+	dir := setupHomeArg(tildePath(filepath.Dir(cert)))
+	c, k := setupHomeArg(tildePath(cert)), setupHomeArg(tildePath(key))
 	return []string{
 		fmt.Sprintf("mkdir -p %s && mkcert -install && mkcert -cert-file %s -key-file %s %s", dir, c, k, name),
 		fmt.Sprintf(`mkdir -p %s && openssl req -x509 -newkey rsa:2048 -sha256 -days 825 -nodes -keyout %s -out %s -subj "/CN=%s" `+
 			`-addext "subjectAltName=DNS:%s" -addext "basicConstraints=critical,CA:TRUE" && chmod 600 %s`, dir, k, c, name, name, k),
 	}
+}
+
+// setupHomeArg quotes a path for a command the owner runs (posixShellArg),
+// leaving a leading ~/ bare so the shell still reads it as the home.
+func setupHomeArg(p string) string {
+	if rest, ok := strings.CutPrefix(p, "~/"); ok {
+		return "~/" + posixShellArg(rest)
+	}
+	return posixShellArg(p)
 }
 
 // setupResolveAddress resolves plan.name on this computer and fills in the
@@ -413,40 +431,94 @@ func setupBindFor(ctx context.Context, addrs []netip.Addr, port string, hn hostN
 	return net.JoinHostPort("0.0.0.0", port), nil, true
 }
 
+// setupPairRead is a TLS pair as setup read it, once: its certificate, and
+// the SHA-256 of each file's bytes as checked, which root's copies must match
+// under locked projects (setupTLSRootCommands).
+type setupPairRead struct {
+	leaf            *x509.Certificate
+	certSHA, keySHA string
+}
+
+// setupMaxPairFile bounds what setup reads of a certificate's or a key's
+// file: a chain of certificates is a few kilobytes each.
+const setupMaxPairFile = 1 << 20
+
+// setupReadPairFile reads a certificate's or a key's file as the owner: a
+// regular file -- a FIFO or a device is refused before it is opened -- read
+// whole and once, so what setup checks is what it hashes. It returns the
+// bytes and the file's facts as opened.
+func setupReadPairFile(path string) ([]byte, os.FileInfo, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, nil, fmt.Errorf("%s is not a regular file", path)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = f.Close() }()
+	opened, err := f.Stat()
+	if err != nil {
+		return nil, nil, err
+	}
+	if !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
+		return nil, nil, fmt.Errorf("%s changed while setup read it", path)
+	}
+	data, err := io.ReadAll(io.LimitReader(f, setupMaxPairFile+1))
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(data) > setupMaxPairFile {
+		return nil, nil, fmt.Errorf("%s is larger than a certificate chain or a key", path)
+	}
+	return data, opened, nil
+}
+
 // setupCheckPair checks a TLS pair the Server would serve: it loads as a pair,
 // its certificate names name and is valid at now, and no account but this one
-// can read or rewrite the key. It returns the certificate, or what is wrong.
-func setupCheckPair(name, certFile, keyFile string, now time.Time) (*x509.Certificate, string) {
-	pair, err := tls.LoadX509KeyPair(certFile, keyFile)
+// can read or rewrite the key. Each file is read once, and the pair checked
+// is the pair hashed. It returns the pair as read, or what is wrong.
+func setupCheckPair(name, certFile, keyFile string, now time.Time) (setupPairRead, string) {
+	const notAPair = "the certificate and key do not load as a pair: "
+	certPEM, _, err := setupReadPairFile(certFile)
 	if err != nil {
-		return nil, "the certificate and key do not load as a pair: " + err.Error()
+		return setupPairRead{}, notAPair + err.Error()
+	}
+	keyPEM, keyInfo, err := setupReadPairFile(keyFile)
+	if err != nil {
+		return setupPairRead{}, notAPair + err.Error()
+	}
+	pair, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return setupPairRead{}, notAPair + err.Error()
 	}
 	leaf := pair.Leaf
 	if leaf == nil {
 		if leaf, err = x509.ParseCertificate(pair.Certificate[0]); err != nil {
-			return nil, "the certificate does not parse: " + err.Error()
+			return setupPairRead{}, "the certificate does not parse: " + err.Error()
 		}
 	}
+	certSum, keySum := sha256.Sum256(certPEM), sha256.Sum256(keyPEM)
+	read := setupPairRead{leaf: leaf, certSHA: hex.EncodeToString(certSum[:]), keySHA: hex.EncodeToString(keySum[:])}
 	switch {
 	case leaf.VerifyHostname(name) != nil:
-		return leaf, fmt.Sprintf("%s does not name %s (it names %s): every computer that dials the name would refuse it",
+		return read, fmt.Sprintf("%s does not name %s (it names %s): every computer that dials the name would refuse it",
 			tildePath(certFile), name, strings.Join(certNames(leaf), ", "))
 	case now.After(leaf.NotAfter):
-		return leaf, fmt.Sprintf("%s expired on %s", tildePath(certFile), leaf.NotAfter.UTC().Format(time.DateOnly))
+		return read, fmt.Sprintf("%s expired on %s", tildePath(certFile), leaf.NotAfter.UTC().Format(time.DateOnly))
 	case now.Before(leaf.NotBefore):
-		return leaf, fmt.Sprintf("%s is not valid until %s", tildePath(certFile), leaf.NotBefore.UTC().Format(time.DateOnly))
+		return read, fmt.Sprintf("%s is not valid until %s", tildePath(certFile), leaf.NotBefore.UTC().Format(time.DateOnly))
 	}
 	if runtime.GOOS != "windows" {
-		info, err := os.Stat(keyFile)
-		if err != nil {
-			return leaf, err.Error()
-		}
-		if perm := info.Mode().Perm(); perm&0o077 != 0 {
-			return leaf, fmt.Sprintf("%s is mode %04o: another account on this computer can read or replace the private key, and with it "+
-				"serve %s -- chmod 600 %s", tildePath(keyFile), perm, name, tildePath(keyFile))
+		if perm := keyInfo.Mode().Perm(); perm&0o077 != 0 {
+			return read, fmt.Sprintf("%s is mode %04o: another account on this computer can read or replace the private key, and with it "+
+				"serve %s -- chmod 600 %s", tildePath(keyFile), perm, name, setupHomeArg(tildePath(keyFile)))
 		}
 	}
-	return leaf, ""
+	return read, ""
 }
 
 // setupMint gets the tailnet's certificate for plan.name into setup's TLS
@@ -473,11 +545,11 @@ func setupMint(ctx context.Context, r *setupRun, st *setupState, plan *setupAddr
 			"of your own with %s and %s", plan.name, err, plan.name, setupKnobTLSCert, setupKnobTLSKey)
 	}
 	plan.minted = true
-	leaf, p := setupCheckPair(plan.name, plan.cert, plan.key, r.now())
+	read, p := setupCheckPair(plan.name, plan.cert, plan.key, r.now())
 	if p != "" {
 		return setupRefusal("the tailnet's certificate for %s: %s", plan.name, p)
 	}
-	plan.leaf = leaf
+	plan.leaf, plan.certSHA, plan.keySHA = read.leaf, read.certSHA, read.keySHA
 	return nil
 }
 
@@ -629,9 +701,10 @@ func setupAskPair(r *setupRun, plan *setupAddrPlan, certDef, keyDef string) erro
 		if key == "" {
 			return setupRefusal("no key: %s", knobs)
 		}
-		leaf, problem := setupCheckPair(plan.name, cert, key, r.now())
+		read, problem := setupCheckPair(plan.name, cert, key, r.now())
 		if problem == "" {
-			plan.source, plan.cert, plan.key, plan.leaf = setupAddrFiles, cert, key, leaf
+			plan.source, plan.cert, plan.key = setupAddrFiles, cert, key
+			plan.leaf, plan.certSHA, plan.keySHA = read.leaf, read.certSHA, read.keySHA
 			return nil
 		}
 		fmt.Fprintf(r.out, "  %s\n", problem)
@@ -660,7 +733,7 @@ func setupExplainAddress(r *setupRun, st *setupState, p setupAddrPlan) {
 	case p.source == setupAddrTailscale:
 		setupRow(r.out, "certificate", tildePath(p.cert)+", valid until "+p.leaf.NotAfter.UTC().Format(time.DateOnly))
 		why(fmt.Sprintf("from your tailnet (Let's Encrypt): renew it before then, and doctor warns 30 days ahead: "+
-			"tailscale cert --cert-file %s --key-file %s %s, then seamlessd restart", tildePath(p.cert), tildePath(p.key), p.name))
+			"tailscale cert --cert-file %s --key-file %s %s, then seamlessd restart", setupHomeArg(tildePath(p.cert)), setupHomeArg(tildePath(p.key)), p.name))
 	default:
 		setupRow(r.out, "certificate", tildePath(p.cert)+", valid until "+p.leaf.NotAfter.UTC().Format(time.DateOnly))
 		why("yours: renew it before then, then seamlessd restart (doctor warns 30 days ahead); a computer that does not trust " +
@@ -716,8 +789,7 @@ func setupApplyAddress(r *setupRun, st *setupState, p setupAddrPlan) error {
 	a := p.address(p.cert, p.key)
 	switch {
 	case st.locked:
-		setupPeerAuthAddress(r, p)
-		return nil
+		return setupPeerAuthAddress(r, p)
 	case st.installed == setupNone && !r.facts.configFound:
 		st.server = &a
 		return nil
@@ -738,38 +810,105 @@ func setupApplyAddress(r *setupRun, st *setupState, p setupAddrPlan) error {
 	return nil
 }
 
+// setupTLSRootPlan is what root's TLS step needs to know under locked
+// projects: this computer's OS, the daemon's account, the name, and where the
+// pair comes from -- the tailnet, which root asks itself, or the owner's
+// files, whose bytes setup read and hashed (setupCheckPair).
+type setupTLSRootPlan struct {
+	goos, acct, name string
+	source           setupAddrSource
+	cert, key        string
+	certSHA, keySHA  string
+}
+
+// problem says why p cannot be printed as root's commands, "" when it can:
+// every value they carry has its format, whatever produced it. The commands
+// quote each value as well; this keeps a wrong one from being printed at all.
+func (p setupTLSRootPlan) problem() string {
+	switch {
+	case p.goos != "darwin" && p.goos != "linux":
+		return "locked projects run on macOS and Linux only"
+	case !access.ValidDaemonAccountName(p.acct):
+		return fmt.Sprintf("%q is not an account name", p.acct)
+	case setupServerNameProblem(p.name) != "" || setupNormalName(p.name) != p.name:
+		return fmt.Sprintf("%q is not a host name", p.name)
+	case p.source != setupAddrFiles:
+		return ""
+	}
+	for _, f := range []struct{ what, path, sum string }{{"certificate", p.cert, p.certSHA}, {"key", p.key, p.keySHA}} {
+		switch {
+		case !strings.HasPrefix(f.path, "/") || strings.ContainsFunc(f.path, setupControl):
+			return fmt.Sprintf("the %s to copy, %q, is not a full path", f.what, f.path)
+		case !rootstepSHA256(f.sum):
+			return fmt.Sprintf("%q is not the SHA-256 of the %s setup read", f.sum, f.what)
+		}
+	}
+	return ""
+}
+
+// setupTLSRootCommands is root's TLS step, one AND-list's commands: the
+// guide's TLS directory, root's and the daemon's group's alone, then the
+// pair. From the tailnet, root asks for it into that directory itself
+// (tailscale cert writes the key 0600) and only then gives the daemon's group
+// read of the key. From the owner's files, each is copied as
+// rootstepCopyCommands copies -- the owner's shell reads it, root stages it
+// as its own alone and checks it against what setup read -- the certificate
+// 0644 and the key 0640, the daemon's group's.
+func setupTLSRootCommands(p setupTLSRootPlan) []string {
+	t := rootstepToolsFor(p.goos)
+	cert, key := setupPeerAuthPair(p.name)
+	qc, qk := posixShellArg(cert), posixShellArg(key)
+	cmds := []string{t.asRoot(t.install, "-d", "-o", "root", "-g", posixShellArg(p.acct), "-m", "0750", setupPeerAuthTLSDir)}
+	if p.source == setupAddrTailscale {
+		return append(cmds,
+			t.asRoot(t.tailscale, "cert", "--cert-file", qc, "--key-file", qk, posixShellArg(p.name)),
+			t.asRoot(t.chown, posixShellArg("root:"+p.acct), qc, qk),
+			t.asRoot(t.chmod, "0644", qc),
+			t.asRoot(t.chmod, "0640", qk))
+	}
+	for _, c := range []rootstepCopy{
+		{source: p.cert, sha256: p.certSHA, staged: setupTLSStaged(cert), dest: cert, owner: "root", group: p.acct, mode: "0644"},
+		{source: p.key, sha256: p.keySHA, staged: setupTLSStaged(key), dest: key, owner: "root", group: p.acct, mode: "0640"},
+	} {
+		cmds = append(cmds, rootstepCopyCommands(t, c)...)
+	}
+	return cmds
+}
+
+// setupTLSStaged is where root stages its copy of dest, a file in the guide's
+// TLS directory: beside it, in the directory only root can make a file in.
+func setupTLSStaged(dest string) string {
+	return setupPeerAuthTLSDir + "/." + strings.TrimPrefix(dest, setupPeerAuthTLSDir+"/") + ".new"
+}
+
 // setupPeerAuthAddress prints what root does on a computer whose daemon runs
 // as its own account: the TLS pair into the guide's directory, readable by
-// that account alone, the daemon's config, and the restart.
-func setupPeerAuthAddress(r *setupRun, p setupAddrPlan) {
-	acct := r.daemonAccount()
+// that account alone, the daemon's config, and the restart. It prints them
+// only from values that hold their formats (setupTLSRootPlan.problem).
+func setupPeerAuthAddress(r *setupRun, p setupAddrPlan) error {
+	plan := setupTLSRootPlan{goos: r.goos, acct: r.daemonAccount(), name: p.name, source: p.source,
+		cert: p.cert, key: p.key, certSHA: p.certSHA, keySHA: p.keySHA}
+	if why := plan.problem(); why != "" {
+		return setupRefusal("setup prints no root step from these values: %s", why)
+	}
 	cert, key := setupPeerAuthPair(p.name)
 	setupRow(r.out, "root steps", "locked projects are on: the daemon's config and its TLS pair are its own account's, and setup")
-	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, "runs no root step. As an administrator:")
-	cmds := []string{fmt.Sprintf("sudo install -d -o root -g %s -m 0750 %s", acct, setupPeerAuthTLSDir)}
-	if p.source == setupAddrTailscale {
-		cmds = append(cmds,
-			fmt.Sprintf("sudo tailscale cert --cert-file %s --key-file %s %s", cert, key, p.name),
-			fmt.Sprintf("sudo chown root:%s %s %s && sudo chmod 0644 %s && sudo chmod 0640 %s", acct, cert, key, cert, key))
-	} else {
-		cmds = append(cmds,
-			fmt.Sprintf("sudo install -o root -g %s -m 0644 %s %s", acct, p.cert, cert),
-			fmt.Sprintf("sudo install -o root -g %s -m 0640 %s %s", acct, p.key, key))
+	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, "runs no root step. As an administrator, run this, reading it first; paste it whole: it stops at its first failure.")
+	for _, line := range strings.Split(rootstepChain(setupTLSRootCommands(plan)), "\n") {
+		fmt.Fprintf(r.out, "%s  %s\n", setupRowCont, line)
 	}
-	for _, c := range cmds {
-		fmt.Fprintf(r.out, "%s  %s\n", setupRowCont, c)
+	if p.source == setupAddrFiles {
+		fmt.Fprintf(r.out, "%s%s\n", setupRowCont, dim("your shell reads your files and root only writes them; each copy is root's alone until it "+
+			"matches what setup checked, and only then goes in place"))
 	}
 	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, "then put these in the daemon's config ("+setupPeerAuthConfig+"), replacing any it has:")
 	fmt.Fprint(r.out, p.address(cert, key).Lines(setupRowCont+"  "))
-	restart := "sudo systemctl restart " + strings.TrimSuffix(systemDaemonUnit, ".service")
-	if r.goos == "darwin" {
-		restart = "sudo launchctl kickstart -k system/" + systemDaemonLabel
-	}
-	fmt.Fprintf(r.out, "%s%s\n%s  %s\n", setupRowCont, "then restart the daemon:", setupRowCont, restart)
+	fmt.Fprintf(r.out, "%s%s\n%s  %s\n", setupRowCont, "then restart the daemon:", setupRowCont, retireRestartCommand(r.goos))
 	if p.source == setupAddrFiles {
 		fmt.Fprintf(r.out, "%s%s\n", setupRowCont, "and delete "+tildePath(p.key)+" once it serves: every process of yours can read it there")
 	}
 	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, `and in the console's config (~/.config/seamless/console.yaml), server_url: "`+p.serverURL()+`"`)
+	return nil
 }
 
 // setupWriteServer writes the config a first install's address step decided
@@ -807,7 +946,7 @@ func setupClientsStep(r *setupRun, _ *setupState) error {
 		fmt.Fprintln(r.out)
 		fmt.Fprintln(r.out, setupText("The {server}'s daemon runs as its own account, which keeps its config: as that account, "+
 			"seamlessd devices code prints what each {client} needs, with a pairing code:"))
-		fmt.Fprintf(r.out, "  sudo -u %s env SEAMLESS_CONFIG=%s /opt/seamless/bin/seamlessd devices code\n", r.daemonAccount(), setupPeerAuthConfig)
+		fmt.Fprintf(r.out, "  %s\n", retireDaemonCommand(r.daemonAccount(), "devices code"))
 		return nil
 	}
 	if !pairingOn(cfg) {

@@ -1464,10 +1464,13 @@ so nothing inside needs rewriting. On one volume the move is a rename.
 
    If the daemon serves TLS, its certificate and key move too: the old config
    points into your home, which the daemon's account cannot read and every
-   process of yours can. Copy them into `/opt/seamless/etc/tls`
-   (`sudo install -o root -g _seamless -m 0644 <cert> /opt/seamless/etc/tls/`
-   and `sudo install -o root -g _seamless -m 0640 <key> /opt/seamless/etc/tls/`),
-   point `tls.cert_file` and `tls.key_file` at those copies, and delete the key
+   process of yours can. Copy them into `/opt/seamless/etc/tls` so that root
+   never opens a file of yours and the key is root's alone until it is
+   complete: your shell reads each file and root only writes it
+   (`sudo install -m 0600 /dev/null /opt/seamless/etc/tls/<name>.key`, then
+   `sudo tee /opt/seamless/etc/tls/<name>.key >/dev/null < <key>`, then
+   `sudo chown root:_seamless` and `sudo chmod 0640` it; the certificate the
+   same way, `0644`), point `tls.cert_file` and `tls.key_file` at those copies, and delete the key
    from your home once the new daemon serves. Whatever renews the certificate
    (`tailscale cert`, `certbot`) must from then on write there, as root: `serve`
    refuses a key another account can read, and `doctor` names the file.
@@ -1506,6 +1509,6 @@ Unload the LaunchDaemon or disable the system unit
 restore your server config without the `peer_auth` block - a release that predates
 it refuses the key - and reinstall the per-user service (`make install`, or the
 installer). A TLS key you deleted from your home in step 4 comes back the same
-way (`sudo install -o $(id -un) -m 0600 /opt/seamless/etc/tls/<key> <the old path>`),
+way, root reading its own copy and your shell writing yours (`(umask 077 && sudo cat /opt/seamless/etc/tls/<key> > <the old path>)`),
 or the per-user daemon cannot load its certificate. The export from step 2,
 wherever step 10 put it, is the fallback if anything in the move went wrong.

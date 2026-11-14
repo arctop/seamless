@@ -634,9 +634,10 @@ has no update check of its own and never updates itself.
 
 A relay runs root's own copy of `seamlessd`, `/opt/seamless/bin/seamlessd`,
 which nothing updates by itself yet: updating a Client leaves its relay on the
-old binary. Update the relay's copy with the root step again: the second
-block's `sudo install` line copies the `seamlessd` the installer just updated
-in `~/.local/bin` into place. Then restart the relay's service.
+old binary, and doctor warns (`relay.binary`). Run `seamlessd setup` again for
+a fresh root step and paste its second block alone (a block printed before the
+update carries the old binary's hash, so its check refuses the new one), then
+restart the relay ([after an update](#the-relays-root-step)).
 
 ## Windows: a second user on one box
 

@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/netip"
 	"os"
@@ -456,11 +458,16 @@ func TestSetupAddress_PeerAuth(t *testing.T) {
 		require.Empty(t, w.minted, "the owner's account mints no key the daemon would serve")
 		require.Empty(t, w.wrote)
 		crt, k := "/opt/seamless/etc/tls/"+setupAddrTSName+".crt", "/opt/seamless/etc/tls/"+setupAddrTSName+".key"
+		tools := rootstepToolsFor(goos)
+		in := setupRowCont + "  "
 		for _, want := range []string{
 			"  root steps   locked projects are on",
-			"sudo install -d -o root -g _example -m 0750 /opt/seamless/etc/tls",
-			"sudo tailscale cert --cert-file " + crt + " --key-file " + k + " " + setupAddrTSName,
-			"sudo chown root:_example " + crt + " " + k + " && sudo chmod 0644 " + crt + " && sudo chmod 0640 " + k,
+			"paste it whole: it stops at its first failure.",
+			in + "/usr/bin/sudo /usr/bin/install -d -o root -g _example -m 0750 /opt/seamless/etc/tls &&\n" +
+				in + "/usr/bin/sudo " + tools.tailscale + " cert --cert-file " + crt + " --key-file " + k + " " + setupAddrTSName + " &&\n" +
+				in + "/usr/bin/sudo " + tools.chown + " root:_example " + crt + " " + k + " &&\n" +
+				in + "/usr/bin/sudo /bin/chmod 0644 " + crt + " &&\n" +
+				in + "/usr/bin/sudo /bin/chmod 0640 " + k + "\n",
 			"then put these in the daemon's config (/opt/seamless/etc/seamless.yaml), replacing any it has:",
 			`addr: "` + setupAddrTailv4 + `:8081"`,
 			`cert_file: "` + crt + `"`,
@@ -469,13 +476,13 @@ func TestSetupAddress_PeerAuth(t *testing.T) {
 		} {
 			require.Contains(t, out, want)
 		}
-		restart := "sudo systemctl restart seamless-daemon"
+		restart := "/usr/bin/sudo /bin/systemctl restart seamless-daemon"
 		if goos == "darwin" {
-			restart = "sudo launchctl kickstart -k system/com.arctop.seamless.daemon"
+			restart = "/usr/bin/sudo /bin/launchctl kickstart -k system/com.arctop.seamless.daemon"
 		}
-		require.Contains(t, out, restart)
+		require.Contains(t, out, "then restart the daemon:\n"+in+restart+"\n")
 	})
-	t.Run("files of the owner's: root installs them, and the owner deletes the key from the home", func(t *testing.T) {
+	t.Run("files of the owner's: root copies what the owner's shell reads, checked, and the owner deletes the key from the home", func(t *testing.T) {
 		cert, key := setupAddrPair(t, setupAddrDomain)
 		r, _, _ := setupTestRun(t, goos, []string{"SEAMLESS_SETUP=server", "SEAMLESS_SERVER_NAME=" + setupAddrDomain,
 			"SEAMLESS_TLS_CERT=" + cert, "SEAMLESS_TLS_KEY=" + key}, setupFactsLocked, false, "")
@@ -484,11 +491,38 @@ func TestSetupAddress_PeerAuth(t *testing.T) {
 		out, _, err := setupAddrFirstHalf(t, r)
 		require.NoError(t, err, out)
 		require.Empty(t, w.wrote)
-		require.Contains(t, out, "sudo install -o root -g _seamless -m 0644 "+cert+" /opt/seamless/etc/tls/"+setupAddrDomain+".crt")
-		require.Contains(t, out, "sudo install -o root -g _seamless -m 0640 "+key+" /opt/seamless/etc/tls/"+setupAddrDomain+".key")
+		tools := rootstepToolsFor(goos)
+		in := setupRowCont + "  "
+		dir := "/opt/seamless/etc/tls/"
+		crt, k := dir+setupAddrDomain+".crt", dir+setupAddrDomain+".key"
+		sc, sk := dir+"."+setupAddrDomain+".crt.new", dir+"."+setupAddrDomain+".key.new"
+		certSum, keySum := addrstepSHA256File(t, cert), addrstepSHA256File(t, key)
+		require.Contains(t, out, "As an administrator, run this, reading it first; paste it whole: it stops at its first failure.\n"+
+			in+"/usr/bin/sudo /usr/bin/install -d -o root -g _seamless -m 0750 /opt/seamless/etc/tls &&\n"+
+			in+"/usr/bin/sudo /usr/bin/install -m 0600 /dev/null "+sc+" &&\n"+
+			in+"/usr/bin/sudo /usr/bin/tee "+sc+" >/dev/null < "+cert+" &&\n"+
+			in+"echo '"+certSum+"  "+sc+"' | /usr/bin/sudo "+tools.sum+" -c &&\n"+
+			in+"/usr/bin/sudo "+tools.chown+" root:_seamless "+sc+" &&\n"+
+			in+"/usr/bin/sudo /bin/chmod 0644 "+sc+" &&\n"+
+			in+"/usr/bin/sudo /bin/mv -f "+sc+" "+crt+" &&\n"+
+			in+"/usr/bin/sudo /usr/bin/install -m 0600 /dev/null "+sk+" &&\n"+
+			in+"/usr/bin/sudo /usr/bin/tee "+sk+" >/dev/null < "+key+" &&\n"+
+			in+"echo '"+keySum+"  "+sk+"' | /usr/bin/sudo "+tools.sum+" -c &&\n"+
+			in+"/usr/bin/sudo "+tools.chown+" root:_seamless "+sk+" &&\n"+
+			in+"/usr/bin/sudo /bin/chmod 0640 "+sk+" &&\n"+
+			in+"/usr/bin/sudo /bin/mv -f "+sk+" "+k+"\n")
 		require.Contains(t, out, "and delete "+tildePath(key)+" once it serves")
 		require.Contains(t, out, "  key          /opt/seamless/etc/tls/"+setupAddrDomain+".key: the daemon's account reads it, and no other")
 	})
+}
+
+// addrstepSHA256File is the hex SHA-256 of the file at path.
+func addrstepSHA256File(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 // At the terminal: the tailnet's name is the default when the tailnet can
@@ -651,7 +685,8 @@ func TestSetupClientsStep(t *testing.T) {
 		return cfg, nil
 	}
 	require.NoError(t, setupClientsStep(r, &setupState{}))
-	require.Contains(t, out.String(), "sudo -u _example env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd devices code")
+	require.Contains(t, out.String(), "\n  /usr/bin/sudo -k -u _example /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd devices code\n")
+	rootstepPATHFree(t, out.String())
 }
 
 func TestSetupServerNameProblem(t *testing.T) {

@@ -466,7 +466,11 @@ anything is installed, and says each choice in one line:
 - **With locked projects on**, the daemon's config and TLS pair are its own
   account's. Setup runs no root step: it prints the commands that put the pair
   in `/opt/seamless/etc/tls` (`root:_seamless`, the key `0640`), the daemon
-  config's lines and the restart.
+  config's lines and the restart. Root never opens a file of yours: your shell
+  reads the certificate and the key and root only writes them, each into a copy
+  that is root's alone until it matches what setup read and checked, and only
+  then moves into place. The commands are one AND-list, so the first failure
+  stops them, and every tool is named by its full path.
 
 When your account can get a certificate for the name itself (`tailscale cert`),
 setup says so: the TLS key is then not what keeps a page of yours off the

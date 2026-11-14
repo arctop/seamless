@@ -7628,9 +7628,10 @@ has no update check of its own and never updates itself.
 
 A relay runs root's own copy of `seamlessd`, `/opt/seamless/bin/seamlessd`,
 which nothing updates by itself yet: updating a Client leaves its relay on the
-old binary. Update the relay's copy with the root step again: the second
-block's `sudo install` line copies the `seamlessd` the installer just updated
-in `~/.local/bin` into place. Then restart the relay's service.
+old binary, and doctor warns (`relay.binary`). Run `seamlessd setup` again for
+a fresh root step and paste its second block alone (a block printed before the
+update carries the old binary's hash, so its check refuses the new one), then
+restart the relay ([after an update](#the-relays-root-step)).
 
 ## Windows: a second user on one box
 
@@ -9408,10 +9409,13 @@ so nothing inside needs rewriting. On one volume the move is a rename.
 
    If the daemon serves TLS, its certificate and key move too: the old config
    points into your home, which the daemon's account cannot read and every
-   process of yours can. Copy them into `/opt/seamless/etc/tls`
-   (`sudo install -o root -g _seamless -m 0644 <cert> /opt/seamless/etc/tls/`
-   and `sudo install -o root -g _seamless -m 0640 <key> /opt/seamless/etc/tls/`),
-   point `tls.cert_file` and `tls.key_file` at those copies, and delete the key
+   process of yours can. Copy them into `/opt/seamless/etc/tls` so that root
+   never opens a file of yours and the key is root's alone until it is
+   complete: your shell reads each file and root only writes it
+   (`sudo install -m 0600 /dev/null /opt/seamless/etc/tls/<name>.key`, then
+   `sudo tee /opt/seamless/etc/tls/<name>.key >/dev/null < <key>`, then
+   `sudo chown root:_seamless` and `sudo chmod 0640` it; the certificate the
+   same way, `0644`), point `tls.cert_file` and `tls.key_file` at those copies, and delete the key
    from your home once the new daemon serves. Whatever renews the certificate
    (`tailscale cert`, `certbot`) must from then on write there, as root: `serve`
    refuses a key another account can read, and `doctor` names the file.
@@ -9450,7 +9454,7 @@ Unload the LaunchDaemon or disable the system unit
 restore your server config without the `peer_auth` block - a release that predates
 it refuses the key - and reinstall the per-user service (`make install`, or the
 installer). A TLS key you deleted from your home in step 4 comes back the same
-way (`sudo install -o $(id -un) -m 0600 /opt/seamless/etc/tls/<key> <the old path>`),
+way, root reading its own copy and your shell writing yours (`(umask 077 && sudo cat /opt/seamless/etc/tls/<key> > <the old path>)`),
 or the per-user daemon cannot load its certificate. The export from step 2,
 wherever step 10 put it, is the fallback if anything in the move went wrong.
 
@@ -13711,7 +13715,11 @@ anything is installed, and says each choice in one line:
 - **With locked projects on**, the daemon's config and TLS pair are its own
   account's. Setup runs no root step: it prints the commands that put the pair
   in `/opt/seamless/etc/tls` (`root:_seamless`, the key `0640`), the daemon
-  config's lines and the restart.
+  config's lines and the restart. Root never opens a file of yours: your shell
+  reads the certificate and the key and root only writes them, each into a copy
+  that is root's alone until it matches what setup read and checked, and only
+  then moves into place. The commands are one AND-list, so the first failure
+  stops them, and every tool is named by its full path.
 
 When your account can get a certificate for the name itself (`tailscale cert`),
 setup says so: the TLS key is then not what keeps a page of yours off the

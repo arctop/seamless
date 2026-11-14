@@ -1424,7 +1424,15 @@ health check stay theirs.
   after every before step (`setupWriteServer`), so a stopped import leaves no
   config to make the retry a re-run, and only when nothing is installed, so
   never inside `seamlessd update`; every other run prints the lines, and under
-  peer_auth root's steps. Knobs `SEAMLESS_SERVER_NAME`, `SEAMLESS_TLS_CERT`,
+  peer_auth root's step (`setupTLSRootCommands`, one AND-list): the owner's
+  certificate and key are copied as `rootstepCopyCommands` copies any file of
+  the owner's (root makes the staged copy empty and 0600, the owner's shell
+  reads the file and root only tees it, the copy must match the SHA-256 setup
+  took of the bytes it checked as a pair, then owner, mode and one rename), so
+  root opens no file of the owner's and the key is readable by no other account
+  at any step; a tailnet certificate root mints with `tailscale` named by its
+  package's path (`rootstepTools.tailscale`). Knobs `SEAMLESS_SERVER_NAME`,
+  `SEAMLESS_TLS_CERT`,
   `SEAMLESS_TLS_KEY` (not `SEAMLESS_TLS_*_FILE`, which the service never sees).
   Tests fake the resolver, interfaces and tailnet (`setupAddrArrange`): no test
   runs `tailscale` or resolves a name.

@@ -1673,10 +1673,13 @@ and LLM keys. Check the slugs against your project list now: a misspelled
 entry is refused at startup, and <code>doctor</code> names it.</p>
 <p>If the daemon serves TLS, its certificate and key move too: the old config
 points into your home, which the daemon's account cannot read and every
-process of yours can. Copy them into <code>/opt/seamless/etc/tls</code>
-(<code>sudo install -o root -g _seamless -m 0644 &lt;cert&gt; /opt/seamless/etc/tls/</code>
-and <code>sudo install -o root -g _seamless -m 0640 &lt;key&gt; /opt/seamless/etc/tls/</code>),
-point <code>tls.cert_file</code> and <code>tls.key_file</code> at those copies, and delete the key
+process of yours can. Copy them into <code>/opt/seamless/etc/tls</code> so that root
+never opens a file of yours and the key is root's alone until it is
+complete: your shell reads each file and root only writes it
+(<code>sudo install -m 0600 /dev/null /opt/seamless/etc/tls/&lt;name&gt;.key</code>, then
+<code>sudo tee /opt/seamless/etc/tls/&lt;name&gt;.key &gt;/dev/null &lt; &lt;key&gt;</code>, then
+<code>sudo chown root:_seamless</code> and <code>sudo chmod 0640</code> it; the certificate the
+same way, <code>0644</code>), point <code>tls.cert_file</code> and <code>tls.key_file</code> at those copies, and delete the key
 from your home once the new daemon serves. Whatever renews the certificate
 (<code>tailscale cert</code>, <code>certbot</code>) must from then on write there, as root: <code>serve</code>
 refuses a key another account can read, and <code>doctor</code> names the file.</p>
@@ -1729,7 +1732,7 @@ daemon's account (<a href="#restricted-local-accounts">details</a>).</p>
 restore your server config without the <code>peer_auth</code> block - a release that predates
 it refuses the key - and reinstall the per-user service (<code>make install</code>, or the
 installer). A TLS key you deleted from your home in step 4 comes back the same
-way (<code>sudo install -o $(id -un) -m 0600 /opt/seamless/etc/tls/&lt;key&gt; &lt;the old path&gt;</code>),
+way, root reading its own copy and your shell writing yours (<code>(umask 077 &amp;&amp; sudo cat /opt/seamless/etc/tls/&lt;key&gt; &gt; &lt;the old path&gt;)</code>),
 or the per-user daemon cannot load its certificate. The export from step 2,
 wherever step 10 put it, is the fallback if anything in the move went wrong.</p>
 

@@ -159,15 +159,11 @@ func clientRelayRootStep(p clientRelayPlan) [][]string {
 	block = []string{"the layout, root's own copy of seamlessd (no account but root can replace it), and the pin",
 		t.asRoot(t.install, "-d", "-o", "root", "-g", wheel, "-m", "0755", "/opt/seamless", "/opt/seamless/bin", "/opt/seamless/etc"),
 		t.asRoot(t.install, "-d", "-o", acct, "-g", acct, "-m", "0755", "/opt/seamless/run"),
-		t.asRoot(t.install, "-d", "-o", acct, "-g", acct, "-m", "0700", clientRelayHome, relay.DefaultDataDir),
-		// The owner's shell opens the source; root only writes what it reads.
-		t.asRoot(t.tee, clientRelayStaged, ">/dev/null", "<", posixShellArg(p.source)),
-		// The staged copy is checked before anything else touches it, and an
-		// empty hash fails the check rather than skipping it.
-		"echo " + posixShellArg(p.sha256+"  "+clientRelayStaged) + " | " + t.asRoot(t.sum, "-c"),
-		t.asRoot(t.chown, "root:"+wheel, clientRelayStaged),
-		t.asRoot(t.chmod, "0755", clientRelayStaged),
-		t.asRoot(t.mv, "-f", clientRelayStaged, relay.DefaultBinary)}
+		t.asRoot(t.install, "-d", "-o", acct, "-g", acct, "-m", "0700", clientRelayHome, relay.DefaultDataDir)}
+	// The owner's shell opens the source and root only writes what it reads,
+	// into a copy that is root's alone until it passes its check.
+	block = append(block, rootstepCopyCommands(t, rootstepCopy{source: p.source, sha256: p.sha256, staged: clientRelayStaged,
+		dest: relay.DefaultBinary, owner: "root", group: wheel, mode: "0755"})...)
 	if p.caPEM != "" {
 		block = append(block, rootstepHeredoc(t.asRoot(t.tee, clientRelayCAFile, ">/dev/null"), p.caPEM),
 			t.asRoot(t.chmod, "0644", clientRelayCAFile))

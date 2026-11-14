@@ -904,7 +904,11 @@ daemon and wires the hooks for https.</li>
 <li><strong>With locked projects on</strong>, the daemon's config and TLS pair are its own
 account's. Setup runs no root step: it prints the commands that put the pair
 in <code>/opt/seamless/etc/tls</code> (<code>root:_seamless</code>, the key <code>0640</code>), the daemon
-config's lines and the restart.</li>
+config's lines and the restart. Root never opens a file of yours: your shell
+reads the certificate and the key and root only writes them, each into a copy
+that is root's alone until it matches what setup read and checked, and only
+then moves into place. The commands are one AND-list, so the first failure
+stops them, and every tool is named by its full path.</li>
 </ul>
 <p>When your account can get a certificate for the name itself (<code>tailscale cert</code>),
 setup says so: the TLS key is then not what keeps a page of yours off the
