@@ -9362,13 +9362,18 @@ and console unlock the backup held.
   [retire the key](/reference/cli-seamlessd/#seamlessd_setup_retire).
 - **A terminal sign-in's code queue is open to anyone who reaches the console.**
   At most 4 codes wait at once from one address (an IPv6 address counts by its
-  /64, and every loopback address is one) and 32 in all, so someone looping on
-  **Show a code** from one computer holds 4 of them and yours, from another
-  address, still gets a code; from 8 addresses or more they can hold yours off
-  for up to 10 minutes. Behind a proxy every request comes from the proxy's
-  address (the console trusts no forwarding header), so there the limit is one
-  queue of 4 for everyone, and someone looping through the proxy holds yours off
-  as before. The code itself signs in only the browser that showed it.
+  /64, and every loopback address is one), and 32 from every address but
+  loopback, so someone looping on **Show a code** from one computer holds 4 of
+  them and yours, from another address, still gets a code; from 8 addresses or
+  more they can hold yours off for up to 10 minutes, but not on the server
+  itself: loopback's 4 are its own, so a browser there that opens the console
+  at a loopback address (`127.0.0.1` or `localhost`, where the daemon listens
+  on loopback) still gets a code. Behind a proxy every request comes from the
+  proxy's address (the console trusts no forwarding header), so there the limit
+  is one queue of 4 for everyone, and someone looping through the proxy holds
+  yours off as before; a proxy on the server comes from loopback, so there it
+  holds off a browser on the server too. The code itself signs in only the
+  browser that showed it.
 
 ## Move an existing install over
 
@@ -14422,7 +14427,9 @@ Before it signs anything in, it shows the browser the code names, as the console
 recorded it when that browser chose **Show a code**: when it began, the address
 its request came from (another computer, or this computer, which a proxy in
 front of the console also is) and its User-Agent, as plain text that cannot act
-on your terminal. Then it asks `Sign in this browser? [y/N]`. Anyone who reaches
+on your terminal, each run of spaces shown as one, so that a long one cannot wrap
+into what looks like another of these lines. Then it asks
+`Sign in this browser? [y/N]`. Anyone who reaches
 the console can show a code, so say yes only to a code your own browser shows
 you now, never to one someone sent you. Yes signs in that browser, for 7 days,
 as a passkey sign-in lasts, and says so; the page goes on by itself. No, Enter
@@ -16746,7 +16753,7 @@ nothing, and their rows say so.
 | Sign in with a passkey | `POST /console/signin/finish` | Verifies the assertion for that challenge, from the browser that began it, records the passkey's use, and sets a fresh random sign-in cookie that counts only with this browser's key, for 7 days. A cookie the browser held before ends with it. |
 | Begin adding a passkey | `POST /console/passkeys/add/begin` | Only with `console.sign_in: passkey`: the public Add a passkey page asks for the new passkey's `name=`. Returns the WebAuthn creation options. Writes nothing. |
 | Add a passkey, waiting | `POST /console/passkeys/add/finish` | Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: `seamlessd approvers approve --code`, on the server, adds exactly that passkey. At most 32 wait at once. |
-| Begin a terminal sign-in | `POST /console/signin/terminal/begin` | Only with `console.sign_in: passkey`, and only from a browser that proves its key: **Show a code** on the login page. Sets a fresh random sign-in cookie bound to that key and stores it waiting, with a short code, for 10 minutes, with the address the request came from and its User-Agent (printable ASCII, at most 256 characters), which the answer also carries for the page to show beside the code. It signs nothing in: `seamlessd console-open --sign-in --code`, on the server (as the daemon's account under peer_auth, at a terminal), shows those and when it began, asks, and on a yes signs in exactly the browser that showed that code, for 7 days. At most 4 wait at once from one address (an IPv6 address counts by its /64, and every loopback address is one) and 32 in all; a begin past either is a 429 that says which (behind a proxy every request comes from the proxy's address). A 404 while the key signs browsers in. |
+| Begin a terminal sign-in | `POST /console/signin/terminal/begin` | Only with `console.sign_in: passkey`, and only from a browser that proves its key: **Show a code** on the login page. Sets a fresh random sign-in cookie bound to that key and stores it waiting, with a short code, for 10 minutes, with the address the request came from and its User-Agent (printable ASCII with each run of spaces as one, at most 256 characters), which the answer also carries for the page to show beside the code. It signs nothing in: `seamlessd console-open --sign-in --code`, on the server (as the daemon's account under peer_auth, at a terminal), shows those and when it began, asks, and on a yes signs in exactly the browser that showed that code, for 7 days. At most 4 wait at once from one address (an IPv6 address counts by its /64, and every loopback address is one), and 32 from every address but loopback, whose 4 are its own: however many other addresses wait, a begin from loopback (a browser on the server itself) gets a code while fewer than 4 wait from there. A begin past either cap is a 429 that says which (behind a proxy every request comes from the proxy's address). A 404 while the key signs browsers in. |
 | Get a pairing code | `POST /console/devices/code` | Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners, which carry the server certificate's fingerprint when it serves TLS; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused (409, `pairing needs TLS here`) where the server's address is plain http to another host. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
 | Begin a device approval | `POST /console/devices/{id}/approve/begin` | Only under peer_auth, from a signed-in browser, for a pairing that waits. Returns the WebAuthn challenge, bound to that device's id, kind, name, fingerprint and key, and a ticket. Writes nothing. |
 | Approve a device | `POST /console/devices/{id}/approve/finish` | Verifies the passkey assertion for that ticket over the device as it stands, records the passkey's use, and pairs the device: a relay's certificate is accepted from its next request, and a key device collects its own key, once, on its next status. |

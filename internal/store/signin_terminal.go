@@ -26,13 +26,19 @@ package store
 // it showed.
 //
 // For the same reason the waiting codes are capped twice: at most
-// maxWaitingTerminalSignIns in all, and at most maxWaitingTerminalSignInsFrom
-// from one address (terminalSignInSource), so someone looping on the begin
-// from one host holds a few codes, not every one, and the owner's own begin
-// from another address still finds room. Behind a proxy every request comes
-// from the proxy's address, and that one address may then hold only the
-// per-address share: someone looping through the proxy still holds the
-// owner's begin off, as the single global cap let them before, and no longer.
+// maxWaitingTerminalSignInsFrom from one address (terminalSignInSource), so
+// someone looping on the begin from one host holds a few codes, not every one,
+// and the owner's own begin from another address still finds room; and at
+// most maxWaitingTerminalSignIns from every address but loopback, so many
+// hosts together still hold a bounded queue. Loopback is outside that cap,
+// held to its own share alone: however many hosts fill the cap, a browser on
+// this computer -- the owner's way back in -- still gets a code while loopback
+// holds fewer than its share. Behind a proxy every request comes from the
+// proxy's address, and that one address may then hold only the per-address
+// share: someone looping through the proxy still holds the owner's begin off,
+// as the single global cap let them before, and no longer. A proxy on this
+// computer comes from loopback, so behind one a browser on this computer
+// shares the proxy's share.
 
 import (
 	"context"
@@ -62,9 +68,12 @@ const TerminalSignInTTL = 10 * time.Minute
 // waiting for its code, followed by the code's hash.
 const terminalSignInWaiting = "terminal-code:"
 
-// maxWaitingTerminalSignIns caps the terminal sign-ins waiting at once: a
-// caller looping on the begin route, which needs no credential, cannot grow
-// the table without bound.
+// maxWaitingTerminalSignIns caps the terminal sign-ins waiting at once from
+// every address but loopback (terminalSignInLoopback): a caller looping on the
+// begin route, which needs no credential, from however many hosts cannot grow
+// the table without bound. Loopback is held to its own
+// maxWaitingTerminalSignInsFrom alone, so hosts that fill this cap never hold
+// off a browser on this computer, and the table holds at most the two.
 const maxWaitingTerminalSignIns = 32
 
 // maxWaitingTerminalSignInsFrom caps the terminal sign-ins waiting at once
@@ -74,13 +83,18 @@ const maxWaitingTerminalSignIns = 32
 // earlier cookie out), so the owner needs one.
 const maxWaitingTerminalSignInsFrom = 4
 
+// terminalSignInLoopback is the address terminalSignInSource counts every
+// loopback address as: this computer, outside maxWaitingTerminalSignIns.
+const terminalSignInLoopback = "loopback"
+
 // terminalSignInSourceBits is the prefix an IPv6 address counts by: one host
 // may hold a whole /64 and pick a fresh address from it for every request.
 const terminalSignInSourceBits = 64
 
 var (
-	// ErrTerminalSignInBusy is a terminal sign-in begun while
-	// maxWaitingTerminalSignIns wait already.
+	// ErrTerminalSignInBusy is a terminal sign-in begun from an address other
+	// than loopback while maxWaitingTerminalSignIns wait already from such
+	// addresses.
 	ErrTerminalSignInBusy = errors.New("too many terminal sign-ins are waiting")
 	// ErrTerminalSignInBusyFrom is a terminal sign-in begun while
 	// maxWaitingTerminalSignInsFrom wait already from its address. It is an
@@ -133,7 +147,10 @@ const (
 // Clean returns b as a terminal sign-in keeps and shows it: each field
 // trimmed, every character outside printable ASCII (space to tilde) replaced
 // by '?' -- a control character, an escape's ESC, a newline, any non-ASCII
-// letter or invalid byte -- and cut to its maximum, ending in "...".
+// letter or invalid byte -- every run of spaces kept as one, and cut to its
+// maximum, ending in "...". With no two spaces in a row, a field the owner's
+// terminal wraps never starts a row with the indented label of a line printed
+// beside it, so it cannot pose as one ("  from     ...").
 func (b TerminalSignInBrowser) Clean() TerminalSignInBrowser {
 	return TerminalSignInBrowser{
 		Addr:      printableASCII(b.Addr, MaxTerminalSignInAddr),
@@ -142,19 +159,25 @@ func (b TerminalSignInBrowser) Clean() TerminalSignInBrowser {
 }
 
 // printableASCII is s trimmed, with every rune outside ' '..'~' replaced by
-// '?', and cut to at most limit bytes, the last three "..." when it was cut.
-// It reads no further than it keeps, however long s is.
+// '?' and every run of spaces kept as one, cut to at most limit bytes, the
+// last three "..." when it was cut. It stops at the first rune it has no room
+// for, however long s is.
 func printableASCII(s string, limit int) string {
 	s = strings.TrimSpace(s)
 	var b strings.Builder
+	space := false
 	for _, r := range s {
+		if r < ' ' || r > '~' {
+			r = '?'
+		}
+		if r == ' ' && space {
+			continue
+		}
 		if b.Len() == limit {
 			out := b.String()
 			return out[:limit-3] + "..."
 		}
-		if r < ' ' || r > '~' {
-			r = '?'
-		}
+		space = r == ' '
 		b.WriteRune(r)
 	}
 	return b.String()
@@ -219,7 +242,7 @@ func terminalSignInSource(addr string) string {
 	ip = ip.Unmap()
 	switch {
 	case ip.IsLoopback():
-		return "loopback"
+		return terminalSignInLoopback
 	case ip.Is4():
 		return ip.String()
 	}
@@ -230,10 +253,12 @@ func terminalSignInSource(addr string) string {
 	return p.String()
 }
 
-// terminalSignInsWaiting counts the terminal sign-ins waiting past floor
-// (all), and those of them begun from source (terminalSignInSource). The
-// global cap keeps what it reads to maxWaitingTerminalSignIns rows.
-func terminalSignInsWaiting(ctx context.Context, tx *sql.Tx, floor, source string) (all, from int, err error) {
+// terminalSignInsWaiting counts the terminal sign-ins waiting past floor that
+// were begun from an address other than loopback (elsewhere: what
+// maxWaitingTerminalSignIns caps), and those begun from source
+// (terminalSignInSource), loopback included. The caps keep what it reads to
+// maxWaitingTerminalSignIns rows and loopback's share.
+func terminalSignInsWaiting(ctx context.Context, tx *sql.Tx, floor, source string) (elsewhere, from int, err error) {
 	rows, err := tx.QueryContext(ctx, `SELECT remote_addr FROM console_signins WHERE `+waitingTerminalSignIn, floor)
 	if err != nil {
 		return 0, 0, err
@@ -244,12 +269,15 @@ func terminalSignInsWaiting(ctx context.Context, tx *sql.Tx, floor, source strin
 		if err := rows.Scan(&addr); err != nil {
 			return 0, 0, err
 		}
-		all++
-		if terminalSignInSource(addr) == source {
+		s := terminalSignInSource(addr)
+		if s != terminalSignInLoopback {
+			elsewhere++
+		}
+		if s == source {
 			from++
 		}
 	}
-	return all, from, rows.Err()
+	return elsewhere, from, rows.Err()
 }
 
 // BeginTerminalSignIn records a terminal sign-in for the browser that holds
@@ -258,7 +286,10 @@ func terminalSignInsWaiting(ctx context.Context, tx *sql.Tx, floor, source strin
 // kept Clean), and returns the row and the code. Waiting rows past their
 // deadline are purged first; then at most maxWaitingTerminalSignInsFrom wait
 // from from's address (terminalSignInSource; ErrTerminalSignInBusyFrom), and
-// at most maxWaitingTerminalSignIns in all (ErrTerminalSignInBusy).
+// at most maxWaitingTerminalSignIns from every address but loopback
+// (ErrTerminalSignInBusy), a cap a begin from loopback is not held to: one
+// from this computer begins while fewer than maxWaitingTerminalSignInsFrom
+// wait from loopback, however many other hosts wait.
 func BeginTerminalSignIn(ctx context.Context, db *sql.DB, cookie, browserKey string, from TerminalSignInBrowser,
 	now time.Time) (WaitingTerminalSignIn, string, error) {
 	const op = "store.BeginTerminalSignIn"
@@ -282,14 +313,15 @@ func BeginTerminalSignIn(ctx context.Context, db *sql.DB, cookie, browserKey str
 		floor); err != nil {
 		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: purge: %w", op, err)
 	}
-	waiting, fromHere, err := terminalSignInsWaiting(ctx, tx, floor, terminalSignInSource(from.Addr))
+	source := terminalSignInSource(from.Addr)
+	elsewhere, fromHere, err := terminalSignInsWaiting(ctx, tx, floor, source)
 	if err != nil {
 		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: %w", op, err)
 	}
 	switch {
 	case fromHere >= maxWaitingTerminalSignInsFrom:
 		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: %w", op, ErrTerminalSignInBusyFrom)
-	case waiting >= maxWaitingTerminalSignIns:
+	case source != terminalSignInLoopback && elsewhere >= maxWaitingTerminalSignIns:
 		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: %w", op, ErrTerminalSignInBusy)
 	}
 	code := ""

@@ -890,12 +890,15 @@ any of it.
   signs in that browser and no other. Anyone who reaches the console can begin
   one, so the begin records the request's peer address and User-Agent
   (`remote_addr`, `user_agent`, migration 044; `store.TerminalSignInBrowser`,
-  kept and read back as bounded printable ASCII by `Clean`), handed from the
+  kept and read back as bounded printable ASCII, each run of spaces as one, by
+  `Clean`), handed from the
   console through `approval.WithTerminalSignInBrowser` (`SignInView` is
   unchanged). The begin caps the waiting codes per address
   (`maxWaitingTerminalSignInsFrom`, 4; `terminalSignInSource`: IPv4 by itself,
-  IPv6 by its /64, every loopback address one, anything else by its text) and in
-  all (`maxWaitingTerminalSignIns`, 32); `ErrTerminalSignInBusyFrom` is an
+  IPv6 by its /64, every loopback address one, anything else by its text) and
+  from every address but loopback (`maxWaitingTerminalSignIns`, 32): loopback is
+  held to its own 4 alone, so hosts that fill the 32 never hold off a browser on
+  the server; `ErrTerminalSignInBusyFrom` is an
   `ErrTerminalSignInBusy`, so a surface words it first. `console-open --sign-in`
   shows them with the begin time
   (`store.TerminalSignInByCode`) and asks y/N before it approves exactly the row

@@ -1416,13 +1416,18 @@ and console unlock the backup held.
   [retire the key](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_setup_retire).
 - **A terminal sign-in's code queue is open to anyone who reaches the console.**
   At most 4 codes wait at once from one address (an IPv6 address counts by its
-  /64, and every loopback address is one) and 32 in all, so someone looping on
-  **Show a code** from one computer holds 4 of them and yours, from another
-  address, still gets a code; from 8 addresses or more they can hold yours off
-  for up to 10 minutes. Behind a proxy every request comes from the proxy's
-  address (the console trusts no forwarding header), so there the limit is one
-  queue of 4 for everyone, and someone looping through the proxy holds yours off
-  as before. The code itself signs in only the browser that showed it.
+  /64, and every loopback address is one), and 32 from every address but
+  loopback, so someone looping on **Show a code** from one computer holds 4 of
+  them and yours, from another address, still gets a code; from 8 addresses or
+  more they can hold yours off for up to 10 minutes, but not on the server
+  itself: loopback's 4 are its own, so a browser there that opens the console
+  at a loopback address (`127.0.0.1` or `localhost`, where the daemon listens
+  on loopback) still gets a code. Behind a proxy every request comes from the
+  proxy's address (the console trusts no forwarding header), so there the limit
+  is one queue of 4 for everyone, and someone looping through the proxy holds
+  yours off as before; a proxy on the server comes from loopback, so there it
+  holds off a browser on the server too. The code itself signs in only the
+  browser that showed it.
 
 ## Move an existing install over
 

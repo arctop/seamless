@@ -1173,7 +1173,9 @@ Before it signs anything in, it shows the browser the code names, as the console
 recorded it when that browser chose **Show a code**: when it began, the address
 its request came from (another computer, or this computer, which a proxy in
 front of the console also is) and its User-Agent, as plain text that cannot act
-on your terminal. Then it asks `Sign in this browser? [y/N]`. Anyone who reaches
+on your terminal, each run of spaces shown as one, so that a long one cannot wrap
+into what looks like another of these lines. Then it asks
+`Sign in this browser? [y/N]`. Anyone who reaches
 the console can show a code, so say yes only to a code your own browser shows
 you now, never to one someone sent you. Yes signs in that browser, for 7 days,
 as a passkey sign-in lasts, and says so; the page goes on by itself. No, Enter
