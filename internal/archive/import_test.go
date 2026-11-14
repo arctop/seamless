@@ -643,6 +643,8 @@ func TestImport_MergeAnArchiveFromBefore039(t *testing.T) {
 		`ALTER TABLE access_grants DROP COLUMN conversation_id`, `ALTER TABLE access_grants DROP COLUMN conversation_client`,
 		`ALTER TABLE access_grants DROP COLUMN access`,
 		`DROP TABLE item_provenance`, `DROP TABLE access_flows`, `DROP TABLE access_moves`,
+		// What 041 added (console sign-in with a passkey).
+		`DROP TABLE console_signins`, `DROP TABLE passkey_enrollments`,
 		`DELETE FROM schema_migrations WHERE version >= 39`,
 	} {
 		_, err := db.ExecContext(ctx, q)
@@ -738,6 +740,17 @@ func TestImport_MergeLeavesTablesOutsideTheContractAlone(t *testing.T) {
 		INSERT INTO jobs (id, type, payload, status, attempts, created_at, updated_at)
 		VALUES ('01JOBALPHA', 'embed', '{}', 'pending', 0, ?, ?)`, now, now)
 	require.NoError(t, err)
+	// A browser signed in to the exporting machine's console, and a passkey
+	// waiting for its owner: per-install live state, behind a cookie and a
+	// code only that machine's browser and owner hold. A merge carries
+	// neither: a sign-in merged here would be one nobody made here, and a
+	// waiting passkey one this owner never saw.
+	signedAt := time.Now()
+	_, err = store.CreateConsoleSignIn(ctx, srcDB, "sig-cookie", "sig-browser-key", "01PASSKEYALPHA", time.Hour, signedAt)
+	require.NoError(t, err)
+	_, _, err = store.BeginPasskeyEnrollment(ctx, srcDB, store.ApproverCredential{Kind: store.ApproverPasskey,
+		CredentialID: []byte{7, 7}, PublicKey: []byte{9, 9}, Alg: -7, Name: "phone"}, store.PasskeyEnrollmentTTL, signedAt)
+	require.NoError(t, err)
 	require.NoError(t, srcDB.Close())
 
 	data := exportOf(t, src)
@@ -763,6 +776,8 @@ func TestImport_MergeLeavesTablesOutsideTheContractAlone(t *testing.T) {
 	require.Zero(t, after["jobs"], "another machine's work queue is not this machine's")
 	require.Equal(t, before["settings"], after["settings"])
 	require.Equal(t, before["embeddings"], after["embeddings"])
+	require.Zero(t, after["console_signins"], "another machine's console sign-ins are not this machine's")
+	require.Zero(t, after["passkey_enrollments"], "nor are the passkeys waiting for its owner")
 }
 
 // A merge whose corpus names a project the archive's database does not carry
@@ -1099,4 +1114,39 @@ func TestImport_FreshRevokesRestoredLeases(t *testing.T) {
 	var reason string
 	require.NoError(t, dstDB.QueryRowContext(ctx, `SELECT revoked_reason FROM access_leases`).Scan(&reason))
 	require.Equal(t, store.LeaseRevokedReset, reason)
+}
+
+// A console sign-in is per-install live state, like a console unlock: a
+// restored database brings back the sign-ins it held when the snapshot was
+// taken, ones signed out since included, so a fresh restore ends every live
+// one and every passkey still waiting for approval (store.ResetRestoredAccess),
+// and the owner signs in again.
+func TestImport_FreshEndsRestoredSignIns(t *testing.T) {
+	ctx := context.Background()
+	src := seedIndexed(t, specA)
+	srcDB, err := store.Open(filepath.Join(src, DBName))
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	_, err = store.CreateConsoleSignIn(ctx, srcDB, "sig-cookie", "sig-browser-key", "01PASSKEYALPHA", 24*time.Hour, now)
+	require.NoError(t, err)
+	_, code, err := store.BeginPasskeyEnrollment(ctx, srcDB, store.ApproverCredential{Kind: store.ApproverPasskey,
+		CredentialID: []byte{7, 7}, PublicKey: []byte{9, 9}, Alg: -7, Name: "phone"}, store.PasskeyEnrollmentTTL, now)
+	require.NoError(t, err)
+	require.NoError(t, srcDB.Close())
+
+	dst := filepath.Join(t.TempDir(), "restored")
+	_, err = Import(ctx, ImportOptions{DataDir: dst, Src: bytes.NewReader(exportOf(t, src))})
+	require.NoError(t, err)
+	dstDB, err := store.Open(filepath.Join(dst, DBName))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = dstDB.Close() })
+	_, err = store.LiveConsoleSignIn(ctx, dstDB, store.HashConsoleSignIn("sig-cookie", "sig-browser-key"), time.Now())
+	require.ErrorIs(t, err, store.ErrSignInNotFound, "no sign-in survives a restore")
+	var reason string
+	require.NoError(t, dstDB.QueryRowContext(ctx, `SELECT ended_reason FROM console_signins`).Scan(&reason))
+	require.Equal(t, store.SignInEndReset, reason)
+	_, err = store.PasskeyEnrollmentByCode(ctx, dstDB, code, time.Now())
+	require.ErrorIs(t, err, store.ErrEnrollmentNotFound, "a passkey that waited in the snapshot cannot be approved after it")
+	_, _, err = store.ApprovePasskeyEnrollment(ctx, dstDB, code, time.Now())
+	require.ErrorIs(t, err, store.ErrEnrollmentNotFound)
 }

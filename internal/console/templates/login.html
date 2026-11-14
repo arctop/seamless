@@ -1,5 +1,5 @@
 {{define "login"}}<!doctype html>
-<html lang="en">
+<html lang="en"{{if .Checking}} data-browser-proof="missing"{{end}}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -34,6 +34,20 @@
         </div>
       </div>
 
+      {{if .SignIn}}
+      <section class="login-guide" aria-labelledby="console-open-title">
+        <div class="login-guide-icon">{{icon "key-round"}}</div>
+        <div class="login-guide-copy">
+          <span class="login-section-label">New device</span>
+          <h2 id="console-open-title">Add a passkey here</h2>
+          <p>Open <a href="{{.AddURL}}">Add a passkey</a> on the device that will hold it. The page creates the passkey and shows a short code; approve that code in your own terminal on the server. Nothing is added until you do.</p>
+          <div class="login-command">
+            <code>seamlessd approvers add</code>
+            {{copyBtn "seamlessd approvers add"}}
+          </div>
+        </div>
+      </section>
+      {{else}}
       <section class="login-guide" aria-labelledby="console-open-title">
         <div class="login-guide-icon">{{icon "terminal"}}</div>
         <div class="login-guide-copy">
@@ -46,6 +60,7 @@
           </div>
         </div>
       </section>
+      {{end}}
 
       <nav class="login-docs" aria-label="Documentation">
         <a href="https://thereisnospoon.org/docs/quickstart/" target="_blank" rel="noopener">Quickstart <span>&nearr;</span></a>
@@ -55,6 +70,18 @@
     </section>
 
     <aside class="login-access" aria-label="Console access">
+      {{if .SignIn}}
+      <form class="login-card" id="signin-form" data-next="{{.Next}}" autocomplete="off">
+        <div class="login-section-label">Owner access</div>
+        <h2>Sign in with a passkey</h2>
+        <p>Use a passkey you added to this console: this device's, one your password manager syncs here, or your phone's, through your browser's QR prompt. A sign-in lasts {{.Lifetime}} in this browser only, until you sign out.</p>
+        {{if .Error}}<div class="login-err" role="alert">{{icon "triangle-alert"}}<span>{{.Error}}</span></div>{{end}}
+        {{if not .OnOrigin}}<div class="login-err" role="alert">{{icon "triangle-alert"}}<span>A passkey signs in only on <a href="{{.Origin}}/console/login">{{.Origin}}</a>: open the console there.</span></div>{{end}}
+        {{if .NoPasskey}}<p>No passkey is added yet. <a href="{{.AddURL}}">Add one</a>, approve its code on the server, then sign in here.</p>{{end}}
+        <button class="btn primary" id="signin-go" type="submit">{{icon "key-round"}} Sign in with a passkey</button>
+        <p class="login-config-note" id="signin-status" role="status" aria-live="polite"></p>
+      </form>
+      {{else}}
       <form class="login-card" method="post" action="/console/login">
         <div class="login-section-label">Owner access</div>
         <h2>Sign in to this console</h2>
@@ -65,7 +92,19 @@
         <input type="hidden" name="next" value="{{.Next}}">
         <button class="btn primary" type="submit">Sign in</button>
       </form>
+      {{end}}
 
+      {{if .SignIn}}
+      <section class="login-config" aria-labelledby="login-config-title">
+        <div class="login-config-head">
+          <span class="login-config-icon">{{icon "key-round"}}</span>
+          <div><span class="login-section-label">Passkeys</span><h2 id="login-config-title">One passkey, every device it syncs to</h2></div>
+        </div>
+        <p>A passkey synced through iCloud Keychain, Google Password Manager or another password manager is one passkey: add it once, and every device it syncs to signs in. A device without it can use your phone's passkey through the browser's QR prompt.</p>
+        <p>A passkey belongs to this server's name{{if .Origin}} (<code>{{.Origin}}</code>){{end}}: one made for another site, or for <code>localhost</code> on another install, does not work here, and renaming the server strands every passkey made for the old name.</p>
+        <p class="login-config-note">The console's key no longer signs a browser in. The <code>seam</code> CLI still uses it.</p>
+      </section>
+      {{else}}
       <section class="login-config" aria-labelledby="login-config-title">
         <div class="login-config-head">
           <span class="login-config-icon">{{icon "file-text"}}</span>
@@ -84,6 +123,7 @@
         <p class="login-config-note">On a true first run&mdash;no config file and no key environment override&mdash;Seamless creates the default file and generates <code>mcp.api_key</code>. It never edits an existing config automatically.</p>
         <a class="login-config-doc" href="https://thereisnospoon.org/docs/reference/configuration/#where-the-config-comes-from" target="_blank" rel="noopener">How configuration is resolved {{icon "arrow-right"}}</a>
       </section>
+      {{end}}
     </aside>
   </div>
 </main>
@@ -112,7 +152,64 @@
   });
 })();
 </script>
-</body>
+{{if .SignIn}}<script src="/console/static/browserkey.js"></script>
+<script src="/console/static/passkey.js"></script>
+<script>
+/* Passkey sign-in (internal/console/signin.go). The sign-in is bound to this
+   browser's key, which the service worker proves on every request
+   (browserkey.js, sw.js), so the key and the worker are set up first, and the
+   two ceremony POSTs are page fetches the worker signs. */
+(function () {
+  'use strict';
+  var form = document.getElementById('signin-form');
+  var status = document.getElementById('signin-status');
+  var next = (form && form.getAttribute('data-next')) || '/console/';
+  function say(msg) { if (status) status.textContent = msg; }
+  var keySetup = null;
+  function keyReady() {
+    if (!window.SeamBrowserKey) return Promise.reject(new Error('This page did not load the browser key: reload it and try again.'));
+    if (!keySetup) keySetup = window.SeamBrowserKey.ready().catch(function (err) { keySetup = null; throw err; });
+    return keySetup;
+  }
+  // A page drawn without the browser's proof (a hard reload skips the
+  // worker): once the worker signs, ask for the page again. Once a minute per
+  // tab at most, so a browser whose worker never signs is not sent round.
+  if (document.documentElement.getAttribute('data-browser-proof') === 'missing') {
+    var mark = 'seamless-signin-recheck', last = 0;
+    try { last = +sessionStorage.getItem(mark) || 0; } catch (e) {}
+    if (Date.now() - last > 60000) {
+      try { sessionStorage.setItem(mark, String(Date.now())); } catch (e) {}
+      say('Checking this browser\'s sign-in...');
+      keyReady().then(function () { location.replace(next); }, function (err) { say(err && err.message ? err.message : 'This browser cannot hold a console sign-in here.'); });
+    }
+  } else if (window.SeamBrowserKey && window.SeamBrowserKey.supported()) {
+    keyReady().catch(function () {}); // ready before the click; a failure is said then
+  }
+  if (!form) return;
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (!window.SeamPasskey || !window.SeamPasskey.supported()) { say('This browser cannot use a passkey here.'); return; }
+    var go = document.getElementById('signin-go');
+    var ticket = '';
+    go.disabled = true;
+    say('Follow your browser\'s prompt.');
+    keyReady().then(function () {
+      return window.SeamPasskey.post('/console/signin/begin', {});
+    }).then(function (begun) {
+      ticket = begun.ticket;
+      return window.SeamPasskey.assert(begun);
+    }).then(function (cred) {
+      return window.SeamPasskey.post('/console/signin/finish', { ticket: ticket, next: next, response: JSON.stringify(window.SeamPasskey.toJSON(cred)) });
+    }).then(function (done) {
+      say('Signed in.');
+      location.assign(done.next || next); // signing in is a real view transition
+    }).catch(function (err) {
+      say(window.SeamPasskey.refusal(err));
+    }).finally(function () { go.disabled = false; });
+  });
+})();
+</script>
+{{end}}</body>
 </html>
 {{end}}
 

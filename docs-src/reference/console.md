@@ -55,6 +55,10 @@ nothing, and their rows say so.
 | Create the passkey | `POST /console/approvers/passkey/finish` | Verifies the browser's new passkey and returns its key's fingerprint with the `seamlessd approvers enroll-code` command that mints its code. Still stores nothing: the passkey waits for that code. |
 | Enroll the passkey | `POST /console/approvers/passkey/confirm` | `code=` the one-time code that command minted for this key. Stores the passkey and uses up the code in one transaction. A code that is mistyped, expired, used or minted for another key leaves the passkey waiting, so it can be typed again. |
 | Enroll a Touch ID key | `POST /console/approvers/touchid/enroll` | Seamless Approve's call, from the app `seam touchid enroll` opens, accepted on the peer_auth socket only - never with the TCP key or the console cookie. Stores the Mac's new Touch ID key, proven by an enrollment code minted for that key and the key's signature over it. An earlier Touch ID key of the same Mac that signs its own retirement is retired in the same step. No console route removes any other credential: that is `seamlessd approvers remove`. |
+| Begin a passkey sign-in | `POST /console/signin/begin` | Only with `console.sign_in: passkey`, and only from a browser that proves its key (the login page sets it up). Returns the WebAuthn challenge, bound to that key and to a ticket that works once. Writes nothing. A 404 while the key signs browsers in. |
+| Sign in with a passkey | `POST /console/signin/finish` | Verifies the assertion for that challenge, from the browser that began it, records the passkey's use, and sets a fresh random sign-in cookie that counts only with this browser's key, for 7 days. A cookie the browser held before ends with it. |
+| Begin adding a passkey | `POST /console/passkeys/add/begin` | Only with `console.sign_in: passkey`: the public Add a passkey page asks for the new passkey's `name=`. Returns the WebAuthn creation options. Writes nothing. |
+| Add a passkey, waiting | `POST /console/passkeys/add/finish` | Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: `seamlessd approvers approve --code`, on the server, adds exactly that passkey. At most 32 wait at once. |
 | Save briefing settings | `POST /console/settings/briefing` | Writes the briefing knobs as a runtime **override row** in the DB. It never writes the config file. |
 | Reset briefing settings | `POST /console/settings/briefing/reset` | Clears the override row, reverting to the file/env configuration. |
 | Preview a briefing | `POST /console/settings/briefing/preview` | A read, not a write: it POSTs only to carry the Briefing form's unsaved values, which it checks with the save's own validation, and answers with the briefing a new session in the chosen project would start with. Writes no settings row and records no event. A locked project is not previewed. |
@@ -150,10 +154,50 @@ requires the key.
 A browser sends its cookies to every port of the same host, so a program that
 can open your browser on another local port receives the console cookie too.
 Today that adds nothing to what reading the key gives such a program. A
-[console unlock](/guides/peer-auth/) of a locked project is worth more, so it is
-not just a cookie: it also needs a key the browser keeps for the console's own
-address, and a service worker signs each console request with that key. Only a
-browser that has started an unlock runs the service worker.
+[console unlock](/guides/peer-auth/) of a locked project is worth more, and so
+is a passkey sign-in, so neither is just a cookie: each also needs a key the
+browser keeps for the console's own address, and a service worker signs each
+console request with that key. The service worker runs in a browser that has
+started an unlock, and under passkey sign-in in every signed-in browser.
+
+### Sign in with a passkey {#sign-in-with-a-passkey}
+
+Set `console.sign_in: passkey` in the daemon's config (off by default; file
+only) and restart it, and a browser signs in with a passkey you added, in any
+browser, the server's included. No browser needs the key: the login page no
+longer takes it, and a cookie derived from it signs nothing in. The `seam` CLI
+keeps sending the key.
+
+- **Signing in.** The login page sets up the browser's key and service worker,
+  then asks for your passkey: this device's, one your password manager syncs
+  here, or your phone's through the browser's QR prompt. The daemon answers with
+  a random cookie and keeps only a hash of it and the browser's key together, so
+  the cookie read on another port opens nothing. A sign-in lasts 7 days in that
+  browser, or until you sign out from the sidebar (which also drops its console
+  unlocks), or until the passkey that made it is removed. A restore signs every
+  browser out.
+- **A page drawn without the proof** (a hard reload skips the worker) lands on
+  the login page, which sets the worker up and asks for the page again. A
+  browser that cannot run a service worker (some private windows) cannot sign
+  in.
+- **Adding a passkey for a new device.** On the server, `seamlessd approvers
+  add` prints the Add a passkey address (`/console/passkeys/add` on the passkey
+  origin). It is not a secret: anyone who reaches the console can open it, and
+  nothing is added until you approve. Open it on the device and create the
+  passkey; the page shows a short code and the key's fingerprint. Run
+  `seamlessd approvers approve --code 7KQ2-M9XD` on the server (as the daemon's
+  account under peer_auth; the page shows the exact command). It shows the same
+  name and key and asks before it adds. Approve only a code your own device
+  shows.
+- **Synced passkeys.** A passkey synced through iCloud Keychain, Google Password
+  Manager or another password manager is one passkey: add it once, and every
+  device it syncs to signs in, with nothing more to add. A device without it can
+  use your phone's passkey through the browser's QR prompt.
+- **The server's name.** A passkey works only for the name it was made for. One
+  made for another site, or for `localhost` on another install, does not work
+  here. With `localhost` passkeys only a browser on the server itself can make or
+  use one. Renaming the server, or turning TLS off, strands every passkey made
+  for the old name (doctor names them).
 
 ### `make console`
 
@@ -166,7 +210,9 @@ This builds, then runs `seamlessd console-open`, which renders a one-shot
 self-submitting login page to a `0600` temp file and opens it. The page POSTs the
 key to `/console/login`, which sets the cookie and 303s into the console - so you
 land on an authenticated page with nothing to paste. It refuses to run if
-`mcp.api_key` is empty or the server is not answering `/healthz`.
+`mcp.api_key` is empty or the server is not answering `/healthz`. Under passkey
+sign-in, console-open opens the sign-in page instead and writes no page and no
+key.
 
 `make console-chrome` exists for agents: they drive Chrome, so this hands the auth
 cookie to the browser they can actually see. (`--browser` is macOS-only.)

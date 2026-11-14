@@ -10,10 +10,13 @@
 // their schedule and folder, Back up now, deleting one, and restoring one.
 // Access is guarded by the same static bearer key as the MCP surface: a browser
 // trades the key for a cookie at /console/login, and the seam CLI presents the
-// key as a bearer token.
+// key as a bearer token. With console.sign_in: passkey (Config.SignIn) a
+// browser signs in with an enrolled passkey instead, and the key signs no
+// browser in (signin.go).
 package console
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -31,7 +34,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
@@ -43,8 +45,10 @@ import (
 	"github.com/arctop/seamless/internal/store"
 )
 
-// cookieName holds the console session token (a hash of the static key, never
-// the key itself). It is HttpOnly and scoped to /console.
+// cookieName holds the console session token: a hash of the static key, never
+// the key itself, or under passkey sign-in a random value whose sign-in row
+// binds it to the browser's key (signin.go). It is HttpOnly and scoped to
+// /console.
 const cookieName = "seamless_console"
 
 const (
@@ -164,7 +168,13 @@ type Config struct {
 	// locked projects it holds nothing open on (reach.go). DB is the pool's
 	// base handle then. Nil -- nothing locked -- reads every request through
 	// DB, as before.
-	Views  *store.Views
+	Views *store.Views
+	// SignIn is console sign-in with a passkey (console.sign_in: passkey;
+	// *approval.SignIn in the daemon). Set, a browser signs in with an
+	// enrolled passkey, bound to its key like a console unlock, the key
+	// derives no cookie, and the Add a passkey page serves (signin.go). Nil --
+	// the default -- is exactly the key's sign-in, and those routes are 404s.
+	SignIn SignInView
 	Logger *slog.Logger
 }
 
@@ -196,6 +206,9 @@ type Service struct {
 	// stats gates the retrieval-stats rebuild the analytics screens ask for
 	// on every render (freshRetrievalStats).
 	stats statsGate
+	// signinPages holds the Add a passkey page, a standalone document like
+	// the login page (signin.go).
+	signinPages *template.Template
 }
 
 // New builds a console Service, parsing its templates once.
@@ -217,6 +230,10 @@ func New(cfg Config) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	signinPages, err := signInTemplates()
+	if err != nil {
+		return nil, err
+	}
 	host, hostName := "server", ""
 	if name, herr := os.Hostname(); herr == nil && strings.TrimSpace(name) != "" {
 		host = "server " + strings.TrimSpace(name)
@@ -224,7 +241,7 @@ func New(cfg Config) (*Service, error) {
 	}
 	return &Service{
 		cfg: cfg, logger: logger, pages: pages, fragments: fragments,
-		host: host, hostName: hostName, baseLevel: baseLevel,
+		host: host, hostName: hostName, baseLevel: baseLevel, signinPages: signinPages,
 	}, nil
 }
 
@@ -262,7 +279,17 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/sw.js", s.serveServiceWorker)
 	handle("GET /console/login", s.loginForm)
 	handle("POST /console/login", s.parseForm(formBodySmall, s.loginSubmit))
-	post("POST /console/logout", formBodySmall, s.logout)
+	// The key's sign-out, behind passkey sign-in's when that is on: a signed-in
+	// browser signs out with its cookie alone (signOutFirst).
+	handle("POST /console/logout", s.signOutFirst(s.auth(s.parseForm(formBodySmall, followable(s.logout)))))
+	// Passkey sign-in and the Add a passkey page: public (their callers are
+	// not signed in yet), a 404 while the key signs browsers in (signin.go).
+	handle("POST /console/signin/begin", s.signInRoute(s.parseForm(formBodySmall, s.signInBegin)))
+	handle("POST /console/signin/finish", s.signInRoute(s.parseForm(formBodyPasskey, s.signInFinish)))
+	handle("GET /console/passkeys/add", s.signInRoute(s.passkeyAddPage))
+	handle("POST /console/passkeys/add/begin", s.signInRoute(s.parseForm(formBodySmall, s.passkeyAddBegin)))
+	handle("POST /console/passkeys/add/finish", s.signInRoute(s.parseForm(formBodyPasskey, s.passkeyAddFinish)))
+	handle("GET /console/passkeys/add/status", s.signInRoute(s.passkeyAddStatus))
 
 	handle("GET /console/{$}", s.auth(s.overview))
 	handle("GET /console/now", s.auth(s.nowPage))
@@ -446,23 +473,11 @@ func (s *Service) auth(next http.HandlerFunc) http.HandlerFunc {
 		// peer_auth: the console is the owner's surface. A restricted account
 		// on the socket works through its agents' tools, which carry its reach;
 		// the console's pages are built for the owner's.
-		if !access.OwnerOnly(r.Context()) {
-			access.NoteRefusal(r.Context(), screening.RefusedOwnerOnly)
-			msg := "forbidden: the console is the owner's surface"
-			// The request route is the agent's own (seam access request from
-			// its shell), so a restricted account hears access_request's
-			// answer there, not the console's.
-			if acct := access.AccountOf(r.Context()); acct != "" && r.URL.Path == "/console/access/request" {
-				msg = access.RestrictedNoRequests(acct)
-			}
-			if wantsJSON(r) {
-				writeJSON(w, http.StatusForbidden, map[string]string{"error": msg})
-				return
-			}
-			http.Error(w, msg, http.StatusForbidden)
+		if s.refusedNotOwner(w, r) {
 			return
 		}
-		switch cred := s.classify(r); cred {
+		r, cred := s.classified(r)
+		switch cred {
 		case credBearer:
 			next(w, s.withReach(r, cred))
 		case credCookie:
@@ -473,6 +488,10 @@ func (s *Service) auth(next http.HandlerFunc) http.HandlerFunc {
 				http.Error(w, "forbidden: cross-origin request", http.StatusForbidden)
 				return
 			}
+			// A passkey sign-in ends the request when it ends (signin.go).
+			var cancel context.CancelFunc
+			r, cancel = s.withSignIn(r)
+			defer cancel()
 			r = s.withReach(r, cred)
 			// A hover prefetch the service worker did not sign would be kept
 			// and shown as the locked page: refuse it, and the click itself
@@ -484,6 +503,19 @@ func (s *Service) auth(next http.HandlerFunc) http.HandlerFunc {
 			}
 			next(w, r)
 		default:
+			if s.cfg.SignIn != nil {
+				// Passkey sign-in: a prefetch the worker did not sign would keep
+				// the redirect to the login page and show it on the click.
+				if prefetchRequest(r) {
+					w.Header().Set("Cache-Control", "no-store")
+					http.Error(w, "not prefetched: this browser's sign-in needs its proof", http.StatusServiceUnavailable)
+					return
+				}
+				if wantsJSON(r) {
+					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized: sign in to the console with a passkey, or send the bearer key"})
+					return
+				}
+			}
 			if wantsJSON(r) {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized: bearer key required"})
 				return
@@ -497,13 +529,6 @@ func (s *Service) auth(next http.HandlerFunc) http.HandlerFunc {
 // Sec-Purpose names it, and the older Purpose header too.
 func prefetchRequest(r *http.Request) bool {
 	return strings.Contains(r.Header.Get("Sec-Purpose"), "prefetch") || r.Header.Get("Purpose") == "prefetch"
-}
-
-// authed reports whether the request carries a valid credential, ignoring which
-// one. Callers that only need "is this the owner" -- the login page deciding
-// whether to redirect -- use this; the write path uses classify instead.
-func (s *Service) authed(r *http.Request) bool {
-	return s.classify(r) != credNone
 }
 
 // cookieEquals constant-time-compares the request's console cookie to the token
@@ -543,14 +568,26 @@ func safeNext(raw string) string {
 }
 
 func (s *Service) loginForm(w http.ResponseWriter, r *http.Request) {
-	if s.authed(r) {
+	// Classified once: under passkey sign-in the page reads the same answer.
+	r, cred := s.classified(r)
+	if cred != credNone {
 		http.Redirect(w, r, safeNext(r.URL.Query().Get("next")), http.StatusSeeOther)
+		return
+	}
+	if s.cfg.SignIn != nil {
+		s.renderSignIn(w, r, http.StatusOK, "")
 		return
 	}
 	s.renderLogin(w, r, "")
 }
 
 func (s *Service) loginSubmit(w http.ResponseWriter, r *http.Request) {
+	// Passkey sign-in: the key signs no browser in, whatever it is. A browser
+	// that posts it is shown the passkey sign-in, and no cookie is set.
+	if s.cfg.SignIn != nil {
+		s.renderSignIn(w, r, http.StatusForbidden, "Passkey sign-in is on: the key no longer signs a browser in. Sign in with your passkey.")
+		return
+	}
 	key := s.cfg.APIKey
 	given := strings.TrimSpace(r.PostFormValue("key"))
 	if key == "" || given == "" || subtle.ConstantTimeCompare([]byte(given), []byte(key)) != 1 {
@@ -592,27 +629,70 @@ type loginData struct {
 	ConfigPath    string
 	ConfigEditURL template.URL
 	HasConfigFile bool
+
+	// The passkey sign-in (console.sign_in: passkey; signin.go). SignIn draws
+	// the passkey's card instead of the key's form.
+	SignIn bool
+	// Checking marks a page drawn for a browser that holds a cookie but sent
+	// no proof (a hard reload skips the service worker): the page sets up its
+	// key and worker, then asks for Next again, once.
+	Checking bool
+	// NoPasskey is known that no passkey is enrolled yet; AddURL is the Add a
+	// passkey page; Lifetime says how long a sign-in lasts.
+	NoPasskey bool
+	AddURL    string
+	Lifetime  string
+	// OnOrigin is whether the page was loaded on a relying party origin, the
+	// only places a passkey signs in; Origin is the first of them.
+	OnOrigin bool
+	Origin   string
 }
 
-// renderLogin renders the standalone login page (no nav chrome).
-func (s *Service) renderLogin(w http.ResponseWriter, r *http.Request, errMsg string) {
+// loginBase is the login page's data every mode shares.
+func (s *Service) loginBase(r *http.Request, errMsg string) loginData {
 	configPath := strings.TrimSpace(s.cfg.ConfigPath)
 	var configEditURL template.URL
 	if configPath != "" {
 		_, configEditURL = absAndEditURL("", configPath)
 	}
-	data := loginData{
+	return loginData{
 		Error:         errMsg,
 		Next:          safeNext(r.URL.Query().Get("next")),
 		ConfigPath:    configPath,
 		ConfigEditURL: configEditURL,
 		HasConfigFile: configPath != "",
 	}
+}
+
+// renderLogin renders the standalone login page (no nav chrome).
+func (s *Service) renderLogin(w http.ResponseWriter, r *http.Request, errMsg string) {
+	data := s.loginBase(r, errMsg)
 	tmpl := s.pages["login"]
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.ExecuteTemplate(w, "login", data); err != nil {
 		s.serverError(w, r, err)
 	}
+}
+
+// renderSignIn renders the login page under passkey sign-in, at status. It
+// names the mode in a header (SignInHeader) and is never stored: what it
+// draws depends on the browser's cookie and proof.
+func (s *Service) renderSignIn(w http.ResponseWriter, r *http.Request, status int, errMsg string) {
+	data := s.loginBase(r, errMsg)
+	if r.Method == http.MethodPost {
+		data.Next = safeNext(r.PostFormValue("next"))
+	}
+	s.signInLoginData(r, &data)
+	var buf bytes.Buffer
+	if err := s.pages["login"].ExecuteTemplate(&buf, "login", data); err != nil {
+		s.serverErrorBare(w, r, err)
+		return
+	}
+	w.Header().Set(SignInHeader, config.ConsoleSignInPasskey)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = buf.WriteTo(w)
 }
 
 func (s *Service) serveCSS(w http.ResponseWriter, _ *http.Request) {

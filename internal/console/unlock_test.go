@@ -75,6 +75,13 @@ func (lc *lockedConsole) tokenHash(t *testing.T, cookie string) string {
 
 func newLockedConsole(t *testing.T) *lockedConsole {
 	t.Helper()
+	return signinNewLockedConsole(t, nil)
+}
+
+// signinNewLockedConsole is newLockedConsole with mutate applied to the
+// console's Config before it is built (nil changes nothing).
+func signinNewLockedConsole(t *testing.T, mutate func(*Config)) *lockedConsole {
+	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "seam.db")
@@ -131,12 +138,16 @@ func newLockedConsole(t *testing.T) *lockedConsole {
 	lc.svc = approval.New(approval.Config{DB: db, Passkeys: v, Origins: []string{approverOrigin}, Events: rec, ForceLocked: []string{lockedSlug}})
 	ret := retrieve.New(db, nil, config.Defaults().Budgets, nil)
 	ret.SetBodyReader(mgr.Store())
-	cs, err := New(Config{
+	cfg := Config{
 		DB: base, WriteDB: db, Files: mgr, Events: rec.ReadingFrom(base), Retrieve: ret, DataDir: filepath.Join(dir, "data"),
 		APIKey: testKey, Level: "advanced", Approvals: lc.svc, Views: views, ForceLocked: []string{lockedSlug},
 		RequestRestart: func() { lc.restarts++ },
 		Terminal:       &TerminalApprover{Account: "_seamless", Seamlessd: "/opt/seamless/bin/seamlessd", Config: "/opt/seamless/etc/seamless.yaml"},
-	})
+	}
+	if mutate != nil {
+		mutate(&cfg)
+	}
+	cs, err := New(cfg)
 	require.NoError(t, err)
 	lc.cs, lc.rec = cs, rec
 	mux := http.NewServeMux()

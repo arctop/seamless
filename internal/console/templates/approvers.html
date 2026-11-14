@@ -30,6 +30,10 @@
   <h2 id="approvers-add-title">Add a passkey</h2>
   {{if not .PasskeysOn}}
   <p class="held-sub">Passkeys are not configured on this daemon.</p>
+  {{else if .AddPage}}
+  <p class="held-sub">Add a passkey from the device that will hold it: open <a href="{{.AddPage}}">{{if .Origin}}{{.Origin}}{{end}}{{.AddPage}}</a> there, or run <code>seamlessd approvers add</code> on the server, which prints that address. The page creates the passkey and shows a short code. Approve that code in your own terminal on the server, and the passkey both signs in to the console and approves:</p>
+  <pre>{{.AddCommand}}</pre>
+  <p class="held-sub">The address is not a secret: creating a passkey there adds nothing until you approve its code. Approve only the code your own device shows, never one you were handed. A synced passkey (iCloud Keychain, Google Password Manager, a password manager) is one passkey: add it once, and every device it syncs to can sign in.</p>
   {{else if not .OnOrigin}}
   <p class="held-sub">{{icon "triangle-alert"}} A passkey can only be created on <a href="{{.Origin}}/console/approvers">{{.Origin}}</a>. Browsers refuse passkeys on an IP address such as 127.0.0.1, so open this page there (you may need to sign in to the console again on that address).</p>
   {{else}}

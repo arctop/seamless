@@ -27,7 +27,26 @@ type RegistrationState struct {
 // with. exclude lists the credentials already registered, so an authenticator
 // that holds one of them declines to make a second.
 func (v *Verifier) BeginRegistration(user User, exclude []Credential) ([]byte, RegistrationState, error) {
-	const op = "passkey.BeginRegistration"
+	return v.beginRegistration("passkey.BeginRegistration", user, exclude, nil)
+}
+
+// BeginRegistrationWith is BeginRegistration over the caller's own challenge,
+// exactly ChallengeBytes, instead of a random one: for a caller that keeps no
+// state between the two requests and derives a challenge it can compute again
+// when the response comes back (a keyed hash over a nonce and a deadline). The
+// state it returns carries that challenge, as BeginRegistration's carries its
+// own. A challenge of any other size is ErrChallengeLength.
+func (v *Verifier) BeginRegistrationWith(user User, exclude []Credential, challenge []byte) ([]byte, RegistrationState, error) {
+	const op = "passkey.BeginRegistrationWith"
+	if err := checkChallenge(challenge); err != nil {
+		return nil, RegistrationState{}, fmt.Errorf("%s: %w", op, err)
+	}
+	return v.beginRegistration(op, user, exclude, challenge)
+}
+
+// beginRegistration is both begins: challenge nil takes the library's random
+// one.
+func (v *Verifier) beginRegistration(op string, user User, exclude []Credential, challenge []byte) ([]byte, RegistrationState, error) {
 	if err := user.validate(); err != nil {
 		return nil, RegistrationState{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -45,7 +64,10 @@ func (v *Verifier) BeginRegistration(user User, exclude []Credential) ([]byte, R
 	if err != nil {
 		return nil, RegistrationState{}, fmt.Errorf("%s: %w", op, err)
 	}
-	challenge := []byte(creation.Response.Challenge)
+	if challenge != nil {
+		creation.Response.Challenge = protocol.URLEncodedBase64(bytes.Clone(challenge))
+	}
+	challenge = []byte(creation.Response.Challenge)
 	if err := checkChallenge(challenge); err != nil {
 		return nil, RegistrationState{}, fmt.Errorf("%s: generated: %w", op, err)
 	}

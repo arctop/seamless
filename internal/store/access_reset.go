@@ -10,14 +10,20 @@ import (
 // RestoredAccess counts what ResetRestoredAccess ended.
 type RestoredAccess struct {
 	Leases, Unlocks, Grants int64
+	// SignIns are console sign-ins with a passkey, and Enrollments the
+	// passkeys that were waiting for the owner's approval (migration 041).
+	SignIns, Enrollments int64
 }
 
 // Total is how many permissions were ended in all.
-func (r RestoredAccess) Total() int64 { return r.Leases + r.Unlocks + r.Grants }
+func (r RestoredAccess) Total() int64 {
+	return r.Leases + r.Unlocks + r.Grants + r.SignIns + r.Enrollments
+}
 
 // ResetRestoredAccess ends every live permission a restored database brings
 // back: an agent tree's access leases, a browser's console unlocks (and every
-// pending unlock, passkey or terminal) and the read grants. A snapshot holds them
+// pending unlock, passkey or terminal), the read grants, a browser's console
+// sign-ins and the passkeys waiting for approval. A snapshot holds them
 // as they stood when it was taken, including ones revoked since, so a restore
 // that kept them would reopen what the owner had closed. It fails closed:
 // locked projects' agents and browsers ask again.
@@ -52,6 +58,12 @@ func ResetRestoredAccess(ctx context.Context, db *sql.DB, now time.Time) (Restor
 		}},
 		{"access_grants", &got.Grants, func() (int64, error) {
 			return RevokeAllAccessGrants(ctx, db, LeaseRevokedReset, now)
+		}},
+		{"console_signins", &got.SignIns, func() (int64, error) {
+			return EndAllConsoleSignIns(ctx, db, SignInEndReset, now)
+		}},
+		{"passkey_enrollments", &got.Enrollments, func() (int64, error) {
+			return EndAllPasskeyEnrollments(ctx, db, SignInEndReset, now)
 		}},
 	}
 	for _, s := range steps {

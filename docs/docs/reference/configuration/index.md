@@ -336,6 +336,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `commits.snapshot_interval` | duration | `5m` |
 | `commits.snapshot_window` | duration | `720h` |
 | `console.level` | string | `basic` |
+| `console.sign_in` | string | `key` |
 | `search.semantic_floor` | float64 | `0.3` |
 | `llm.provider` | string | `openai` |
 | `llm.openai.api_key` | string | - |
@@ -669,6 +670,21 @@ console:
   # one-time seeded choice), so an upgrade never hides a screen you were using.
   # env: SEAMLESS_CONSOLE_LEVEL
   level: basic
+  # How a browser signs in to the console. One of: key | passkey.
+  #   key     -- the default: the static bearer key (mcp.api_key), traded for a
+  #              cookie at /console/login. seamlessd console-open does it for you.
+  #   passkey -- a passkey you enrolled, in any browser, the server's included,
+  #              so no browser needs the key. The key then signs no browser in;
+  #              the seam CLI keeps sending it. The passkey belongs to the
+  #              relying party under peer_auth.passkeys (or the one derived from
+  #              a TLS server_url, else localhost), with or without peer_auth.
+  #              To add one, open the address `seamlessd approvers add` prints on
+  #              the device that will hold it, then approve the code that page
+  #              shows with `seamlessd approvers approve --code <code>` on this
+  #              machine (as the daemon's account under peer_auth).
+  # Releases up to v0.8.4 refuse the key, so setting it pins this file to a
+  # newer one. File only (no env).
+  # sign_in: key
 
 # Console search (the full page's fused semantic+lexical retrieval). Agent
 # recall is not affected by these knobs.

@@ -232,6 +232,10 @@ sets `server_url: unix:///path.sock` and needs no key.
 The `commits:` block (off by default; docs-src/guides/security-monitor.md) offers
 session_end and tasks_update a `commits` argument (`record`) and writes the
 commit-matching snapshot to `snapshot_file`.
+`console.sign_in: passkey` (off by default; file only) signs browsers in to the
+console with an enrolled passkey instead of the key; a device adds its passkey
+on `/console/passkeys/add` and the owner approves the code it shows with
+`seamlessd approvers approve` (as the daemon's account under peer_auth).
 
 ## Storage layout
 

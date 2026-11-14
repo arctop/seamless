@@ -59,6 +59,11 @@ import (
 //     and the flows its approvals cleared, bound to this machine's
 //     conversations, processes and approvals (none of which a merge carries);
 //     merging one would be a clearance nobody approved here.
+//   - console_signins, passkey_enrollments: the browsers signed in to the
+//     exporting machine's console, behind cookies and keys only those browsers
+//     hold, and the passkeys waiting for its owner's approval. Merging a
+//     sign-in would sign in a browser nobody signed in here, and a waiting
+//     passkey would be one this owner never saw created.
 //   - mcp_sessions: what this machine's own connections declared, keyed by
 //     connection ids that mean nothing anywhere else.
 //   - schema_migrations: the destination's own migration history.

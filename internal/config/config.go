@@ -404,6 +404,17 @@ type Console struct {
 	// recorded is seeded "advanced" by a one-time store migration, so an
 	// upgrade never hides a screen someone was using.
 	Level string `yaml:"level" json:"level"`
+	// SignIn is how a browser signs in to the console: "key" (the default: the
+	// static bearer key, traded for a cookie at /console/login) or "passkey"
+	// (an enrolled passkey of the relying party RelyingParty names, in any
+	// browser, the server's included). Under "passkey" the key signs no
+	// browser in, though the seam CLI keeps presenting it as a bearer token;
+	// a new device adds its passkey on the console's Add a passkey page and the
+	// owner approves the code that page shows on the server (seamlessd
+	// approvers approve), as the daemon's account under peer_auth. Empty means
+	// the default. File only (no env): serve and console-open read it from the
+	// same file. The key is new after v0.8.4, and releases up to it refuse it.
+	SignIn string `yaml:"sign_in" json:"-"`
 }
 
 // ConsoleLevels are the accepted console.level values, ordered from the fewest
@@ -412,12 +423,30 @@ type Console struct {
 // previous one does).
 var ConsoleLevels = []string{"basic", "standard", "advanced"}
 
-// Validate rejects a present-but-unrecognized console level. Absent (empty)
-// means the default, never a silent fallback for a typo.
+// The console.sign_in values.
+const (
+	// ConsoleSignInKey is the bearer key traded for a cookie: the default.
+	ConsoleSignInKey = "key"
+	// ConsoleSignInPasskey is an enrolled passkey, and no key-derived cookie.
+	ConsoleSignInPasskey = "passkey"
+)
+
+// ConsoleSignIns are the accepted console.sign_in values, the default first.
+var ConsoleSignIns = []string{ConsoleSignInKey, ConsoleSignInPasskey}
+
+// PasskeySignIn reports console.sign_in: passkey.
+func (c Console) PasskeySignIn() bool { return c.SignIn == ConsoleSignInPasskey }
+
+// Validate rejects a present-but-unrecognized console level or sign-in.
+// Absent (empty) means the default, never a silent fallback for a typo.
 func (c Console) Validate() error {
 	if c.Level != "" && !slices.Contains(ConsoleLevels, c.Level) {
 		return fmt.Errorf("config: console.level invalid %q: valid values are %s",
 			c.Level, strings.Join(ConsoleLevels, ", "))
+	}
+	if c.SignIn != "" && !slices.Contains(ConsoleSignIns, c.SignIn) {
+		return fmt.Errorf("config: console.sign_in invalid %q: valid values are %s",
+			c.SignIn, strings.Join(ConsoleSignIns, ", "))
 	}
 	return nil
 }
@@ -581,7 +610,7 @@ func Defaults() Config {
 		// A fresh installation starts at the fewest knobs. Existing
 		// installations are grandfathered to advanced by a one-time store
 		// migration, not by this default.
-		Console: Console{Level: "basic"},
+		Console: Console{Level: "basic", SignIn: ConsoleSignInKey},
 		Search:  Search{SemanticFloor: 0.3},
 		LLM: LLM{
 			Provider: ProviderOpenAI,
@@ -721,6 +750,10 @@ func LoadFrom(path string) (Config, error) {
 	// so it resolves to the default here and every consumer sees a real level.
 	if cfg.Console.Level == "" {
 		cfg.Console.Level = Defaults().Console.Level
+	}
+	// The same for sign_in: `sign_in: ""` is the key, as is no key at all.
+	if cfg.Console.SignIn == "" {
+		cfg.Console.SignIn = Defaults().Console.SignIn
 	}
 
 	expanded, err := expandHome(cfg.DataDir)

@@ -749,6 +749,8 @@ registers it.
 
 ```bash
 seamlessd approvers enroll-code <passkey|touchid> --key <fingerprint>
+seamlessd approvers add
+seamlessd approvers approve [--code CODE] [--yes]
 seamlessd approvers list [--json]
 seamlessd approvers remove <id>
 seamlessd approvers reset --yes
@@ -772,12 +774,20 @@ Touch ID key, which signs for it.
   command with the new key's fingerprint and takes the code. For a Touch ID key, the Seamless Approve window does the same. Every
   credential needs a code, however many are enrolled: an enrolled passkey never
   vouches for a new one.
+- `add` prints the no-secret Add a passkey address (`/console/passkeys/add`,
+  with `console.sign_in: passkey`), and at a terminal goes on to `approve`.
+- `approve` shows the waiting passkey's name, fingerprint and relying party,
+  asks `[y/N]`, and adds exactly that passkey. `--yes` is for scripts. A code
+  works once, for 10 minutes. Run it as the daemon's account under peer_auth,
+  else as yourself.
 - `list` prints the enrolled credentials: id, kind, name, how each was enrolled
-  and when it was last used. `--json` prints them as JSON.
-- `remove` deletes one credential. Leases it already approved are untouched.
-- `reset --yes` deletes every credential and every unused code, and revokes
-  every live lease, in one transaction: for when a credential may be in someone
-  else's hands.
+  and when it was last used. `--json` prints them as JSON. It also names waiting
+  passkeys (`pending` in JSON, only while one waits).
+- `remove` deletes one credential. Leases it already approved are untouched; the
+  browsers it had signed in are signed out.
+- `reset --yes` deletes every credential and every unused code, revokes every
+  live lease, signs out every signed-in browser and drops every waiting passkey,
+  in one transaction: for when a credential may be in someone else's hands.
 
 With no credential enrolled, `seamlessd doctor` warns while a project is
 locked: only the terminal path can approve then. Both doctor and `list` say how
@@ -855,6 +865,11 @@ error on other platforms rather than silently opening the default browser.
 
 It refuses to run when `mcp.api_key` is empty, or when the server does not
 answer `/healthz` within two seconds - the page has nowhere to POST otherwise.
+
+Under passkey sign-in (`console.sign_in: passkey`) it opens the console's
+sign-in page and writes nothing: no temp page, no key, no link that signs a
+browser in. There is no local shortcut around the passkey, since any such value
+is one every process of yours could read first.
 Any HTTP response counts as reachable, including a degraded 503.
 
 While `peer_auth` is on, it signs in on

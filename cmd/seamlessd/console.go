@@ -64,6 +64,11 @@ var consoleLoginTmpl = template.Must(template.New("console-login").Parse(`<!doct
 // Chrome", so an agent driving Chrome gets the auth cookie even when another
 // browser is the default). It refuses to run if the key is unset or the server
 // is unreachable, since the page POSTs to it.
+//
+// Under passkey sign-in (console.sign_in: passkey) the key signs no browser
+// in, so it opens the console's sign-in page instead and writes no page at
+// all (openSignInPage): there is no local path that signs a browser in
+// without the passkey, on the server or anywhere else.
 func runConsoleOpen(args []string) error {
 	fs := flag.NewFlagSet("console-open", flag.ContinueOnError)
 	browser := fs.String("browser", "", `browser application to open instead of the default (e.g. "Google Chrome"; macOS only; not with --unlock, which opens no browser)`)
@@ -88,6 +93,15 @@ func runConsoleOpen(args []string) error {
 	}
 	if cfg.SocketPath() != "" {
 		return fmt.Errorf("seamlessd.console-open: %w", socketConsoleRefusal(cfg))
+	}
+	// Passkey sign-in: the key signs no browser in, so there is no page to
+	// pre-sign. console-open opens the console's sign-in page and writes
+	// nothing anywhere.
+	if handled, err := openSignInPage(cfg, *browser, systemSignInOpen); handled {
+		if err != nil {
+			return fmt.Errorf("seamlessd.console-open: %w", err)
+		}
+		return nil
 	}
 	if strings.TrimSpace(cfg.MCP.APIKey) == "" {
 		return fmt.Errorf("seamlessd.console-open: mcp.api_key is empty; run `seamlessd serve` once to generate it, or set it in seamless.yaml")
@@ -133,6 +147,49 @@ func runConsoleOpen(args []string) error {
 	}
 	fmt.Printf("opened pre-authenticated console at %s/console/ in %s\n", base, where)
 	return nil
+}
+
+// signInOpen is what console-open's passkey path reads and does: whether the
+// daemon signs browsers in with a passkey, whether its console answers, and
+// how a browser is opened. Injected so a test opens no browser.
+type signInOpen struct {
+	signsIn   func(config.Config) bool
+	reachable func(host string) bool
+	open      func(target, app string) error
+	out       io.Writer
+}
+
+// systemSignInOpen is the real machine's.
+var systemSignInOpen = signInOpen{signsIn: daemonSignsInWithPasskey, reachable: serverReachable, open: openInBrowser, out: os.Stdout}
+
+// openSignInPage is console-open under passkey sign-in (console.sign_in:
+// passkey, in this config or in the daemon's answer): it opens the console's
+// own sign-in page in the browser and says so. Nothing it writes, opens or
+// prints is a credential -- no temp page, no key, no link that signs a
+// browser in -- since any process of the owner's could read one, and a page
+// that signs a browser in without the passkey would be one more way in
+// (constraint console-unlock-begun-by-the-browser-it-opens). handled is false
+// while the key signs browsers in: the pre-signed key page, as before.
+func openSignInPage(cfg config.Config, browser string, d signInOpen) (handled bool, err error) {
+	base := consoleOpenBase(cfg)
+	page, ok := consoleSignInPage(cfg, base, d.signsIn)
+	if !ok {
+		return false, nil
+	}
+	if !d.reachable(urlHostPort(base)) {
+		return true, fmt.Errorf("console not reachable at %s -- start it with `make run` or `make start`", base)
+	}
+	if err := d.open(page, browser); err != nil {
+		return true, fmt.Errorf("open browser: %w", err)
+	}
+	where := "the default browser"
+	if browser != "" {
+		where = browser
+	}
+	fmt.Fprintf(d.out, "opened the console's sign-in page at %s in %s: sign in there with your passkey.\n", page, where)
+	fmt.Fprintf(d.out, "A device with no passkey yet adds one at %s; approve the code it shows with `seamlessd approvers approve --code <code>` on the server.\n",
+		passkeyAddAddress(cfg))
+	return true, nil
 }
 
 // consoleLoginPattern names the temp login pages, and is also what the sweep

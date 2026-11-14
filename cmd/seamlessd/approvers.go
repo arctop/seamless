@@ -44,6 +44,12 @@ Run these as the daemon's own account.
   list [--json]                   list the enrolled credentials
   remove <id>                     remove one credential
   reset --yes                     remove every credential and revoke every live lease
+
+With console sign-in by passkey (console.sign_in: passkey):
+
+  add                             print the Add a passkey address to open on a new device,
+                                  then approve the code its page shows
+  approve [--code <code>] [--yes] add the passkey whose page shows that code (asks to confirm)
 `
 
 func runApprovers(args []string) error {
@@ -69,7 +75,7 @@ func runApprovers(args []string) error {
 		return fmt.Errorf("seamlessd.approvers: %w", err)
 	}
 	defer func() { _ = db.Close() }()
-	if err := cmd.run(context.Background(), db, cfg, os.Stdout, time.Now(), runtime.GOOS); err != nil {
+	if err := cmd.runWith(context.Background(), db, cfg, stdioUnlockTerminal(), time.Now(), runtime.GOOS); err != nil {
 		return fmt.Errorf("seamlessd.approvers: %w", err)
 	}
 	return nil
@@ -117,6 +123,8 @@ type approversCmd struct {
 	fingerprint string // enroll-code
 	asJSON      bool   // list
 	id          string // remove
+	code        string // approve: the code the device's page shows
+	yes         bool   // approve: no question asked
 }
 
 // parseApprovers checks a verb and its arguments and touches nothing, so a bad
@@ -167,15 +175,45 @@ func parseApprovers(args []string) (approversCmd, error) {
 		if !slices.Equal(rest, []string{"--yes"}) {
 			return cmd, errors.New("reset removes every credential and revokes every live lease: pass --yes to confirm")
 		}
+	case "add":
+		if len(rest) > 0 {
+			return cmd, fmt.Errorf("add takes no arguments, got %q: it prints the address a new device opens, and asks for the code that page shows", rest[0])
+		}
+	case "approve":
+		fs := flag.NewFlagSet("approvers approve", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		code := fs.String("code", "", "the code the device's Add a passkey page shows")
+		yes := fs.Bool("yes", false, "add it without asking")
+		if err := fs.Parse(rest); err != nil {
+			return cmd, fmt.Errorf("approve: %w", err)
+		}
+		if fs.NArg() > 0 {
+			return cmd, fmt.Errorf("approve takes --code and --yes, got %q", fs.Arg(0))
+		}
+		if *code != "" && store.FormatUnlockCode(*code) == "" {
+			return cmd, fmt.Errorf("invalid value %q for --code: the Add a passkey page shows a code as XXXX-XXXX, 8 letters and digits", *code)
+		}
+		cmd.code, cmd.yes = *code, *yes
 	default:
 		return cmd, fmt.Errorf("unknown verb %q\n\n%s", cmd.verb, approversUsage)
 	}
 	return cmd, nil
 }
 
-// run carries out a parsed verb against db on the platform goos.
+// run carries out a parsed verb against db on the platform goos, with no
+// terminal to ask at: what a script gets.
 func (cmd approversCmd) run(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writer, now time.Time, goos string) error {
+	return cmd.runWith(ctx, db, cfg, unlockTerminal{out: out}, now, goos)
+}
+
+// runWith is run with tty, where add and approve ask for a code and a yes.
+func (cmd approversCmd) runWith(ctx context.Context, db *sql.DB, cfg config.Config, tty unlockTerminal, now time.Time, goos string) error {
+	out := tty.out
 	switch cmd.verb {
+	case "add":
+		return approversAdd(ctx, db, cfg, tty, now)
+	case "approve":
+		return approveEnrollment(ctx, db, cfg, tty, cmd.code, cmd.yes, now)
 	case "enroll-code":
 		code, expires, err := store.MintEnrollCode(ctx, db, cmd.kind, cmd.fingerprint, now)
 		if err != nil {
@@ -201,11 +239,22 @@ func (cmd approversCmd) run(ctx context.Context, db *sql.DB, cfg config.Config, 
 		if err != nil {
 			return err
 		}
-		if cmd.asJSON {
-			return writeApproversJSON(out, creds)
+		pending, err := store.PendingPasskeyEnrollments(ctx, db, now)
+		if err != nil {
+			return err
 		}
+		if cmd.asJSON {
+			return writeApproversJSON(out, creds, pending)
+		}
+		defer writePendingEnrollments(out, pending)
 		if len(creds) == 0 {
-			fmt.Fprintf(out, "No approver credentials are enrolled. To enroll one, %s.\n", firstApproverAdvice(goos, cfg.PeerAuth.Enabled))
+			advice := firstApproverAdvice(goos, cfg.PeerAuth.Enabled)
+			if cfg.Console.PasskeySignIn() {
+				// Under passkey sign-in a passkey is added from its device.
+				advice = "run seamlessd approvers add, open the address it prints on the device that will hold the passkey, " +
+					"and approve the code that page shows"
+			}
+			fmt.Fprintf(out, "No approver credentials are enrolled. To enroll one, %s.\n", advice)
 			return nil
 		}
 		for _, c := range creds {
@@ -222,7 +271,8 @@ func (cmd approversCmd) run(ctx context.Context, db *sql.DB, cfg config.Config, 
 		}
 		return nil
 	case "remove":
-		if err := store.RemoveApprover(ctx, db, cmd.id); err != nil {
+		signedOut, err := store.RemoveApproverSigningOut(ctx, db, cmd.id, now)
+		if err != nil {
 			return err
 		}
 		n, err := store.CountApprovers(ctx, db)
@@ -230,16 +280,22 @@ func (cmd approversCmd) run(ctx context.Context, db *sql.DB, cfg config.Config, 
 			return err
 		}
 		fmt.Fprintf(out, "Removed %s. %d credential(s) remain.\n", cmd.id, n)
+		if signedOut > 0 {
+			fmt.Fprintf(out, "Signed out the %d browser(s) it had signed in to the console.\n", signedOut)
+		}
 		if n == 0 {
 			fmt.Fprintln(out, "Only the terminal approval path (seam approve) is left.")
 		}
 		return nil
 	default: // reset: parseApprovers admits no other verb
-		creds, leases, err := store.ResetApprovers(ctx, db, now)
+		r, err := store.ResetApproversAll(ctx, db, now)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "Removed %d credential(s) and revoked %d live lease(s).\n", creds, leases)
+		fmt.Fprintf(out, "Removed %d credential(s) and revoked %d live lease(s).\n", r.Credentials, r.Leases)
+		if r.SignIns > 0 || r.Enrollments > 0 {
+			fmt.Fprintf(out, "Signed out %d browser(s) and dropped %d passkey(s) waiting for approval.\n", r.SignIns, r.Enrollments)
+		}
 		return nil
 	}
 }
@@ -258,7 +314,16 @@ type approverJSON struct {
 	LastUsedAt   string   `json:"last_used_at,omitempty"`
 }
 
-func writeApproversJSON(out io.Writer, creds []store.ApproverCredential) error {
+// pendingJSON is a passkey a device added, waiting for the owner's approval.
+type pendingJSON struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Fingerprint  string `json:"fingerprint"`
+	CreatedAt    string `json:"created_at"`
+	PendingUntil string `json:"pending_until"`
+}
+
+func writeApproversJSON(out io.Writer, creds []store.ApproverCredential, pending []store.PasskeyEnrollment) error {
 	rows := make([]approverJSON, 0, len(creds))
 	for _, c := range creds {
 		r := approverJSON{
@@ -271,9 +336,20 @@ func writeApproversJSON(out io.Writer, creds []store.ApproverCredential) error {
 		}
 		rows = append(rows, r)
 	}
+	doc := map[string]any{"approvers": rows}
+	// Only while a passkey waits, so the answer is what it always was the
+	// rest of the time.
+	if len(pending) > 0 {
+		waiting := make([]pendingJSON, 0, len(pending))
+		for _, e := range pending {
+			waiting = append(waiting, pendingJSON{ID: e.ID, Name: e.Credential.Name, Fingerprint: e.Fingerprint(),
+				CreatedAt: core.FormatTime(e.CreatedAt), PendingUntil: core.FormatTime(e.PendingUntil)})
+		}
+		doc["pending"] = waiting
+	}
 	enc := json.NewEncoder(out)
 	enc.SetIndent("", "  ")
-	return enc.Encode(map[string]any{"approvers": rows})
+	return enc.Encode(doc)
 }
 
 // newApprovals builds the daemon's approval service over the main database

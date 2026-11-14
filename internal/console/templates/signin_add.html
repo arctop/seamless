@@ -1,0 +1,147 @@
+{{define "passkey-add"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Add a passkey &middot; Seamless</title>
+<link rel="icon" type="image/svg+xml" href="/console/static/favicon.svg">
+<link rel="stylesheet" href="/console/static/console.css">
+<script>
+/* The layout's rule: only an explicit Light or Dark sets data-theme; with no
+   choice the stylesheet follows the OS. */
+(function(){try{var t=localStorage.getItem('seamless-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+</head>
+<body class="login-body">
+<main class="login-wrap">
+  <div class="login-shell">
+    <section class="login-intro" aria-labelledby="add-title">
+      <a class="login-brand" href="/console/login">
+        <span class="live-dot"></span><strong>Seamless</strong><span>console</span>
+      </a>
+      <div class="login-hero-copy">
+        <div class="login-kicker">Console sign-in</div>
+        <h1 id="add-title">Add a passkey on this device.</h1>
+        <p>Create a passkey here, then approve the code this page shows in your own terminal on the server. Until you approve it, it signs nothing in. Once approved it signs in to the console, from this device and from every device it syncs to.</p>
+      </div>
+      <section class="login-guide" aria-labelledby="add-synced-title">
+        <div class="login-guide-icon">{{icon "key-round"}}</div>
+        <div class="login-guide-copy">
+          <span class="login-section-label">Synced passkeys</span>
+          <h2 id="add-synced-title">Add it once</h2>
+          <p>A passkey synced through iCloud Keychain, Google Password Manager or another password manager is one passkey: every device it syncs to signs in once it is approved, with nothing more to add. A device without it can sign in with your phone's passkey through the browser's QR prompt.</p>
+          <p>It works only for this server's name{{if .Origin}}, <code>{{.Origin}}</code>{{end}}. A passkey made for another site{{if not .Localhost}}, or for <code>localhost</code> on an install of its own,{{end}} does not work here, and renaming the server strands every passkey made for the old name.{{if .Localhost}} This console's passkeys belong to <code>localhost</code>, so only a browser on the server's own machine can make or use one.{{end}}</p>
+        </div>
+      </section>
+    </section>
+
+    <aside class="login-access" aria-label="Add a passkey">
+      <form class="login-card" id="passkey-add-form" autocomplete="off">
+        <div class="login-section-label">New passkey</div>
+        <h2>Create it here</h2>
+        {{if not .OnOrigin}}
+        <div class="login-err" role="alert">{{icon "triangle-alert"}}<span>A passkey can be made only on <a href="{{.Origin}}/console/passkeys/add">{{.Origin}}</a>: open this page there.</span></div>
+        {{end}}
+        <label for="passkey-name">Name</label>
+        <input id="passkey-name" name="name" maxlength="64" required placeholder="phone, laptop, security key">
+        <button class="btn primary" id="passkey-add-go" type="submit">{{icon "key-round"}} Create passkey</button>
+        <p class="login-config-note" id="passkey-add-status" role="status" aria-live="polite"></p>
+      </form>
+      <section class="login-config" id="passkey-add-wait" aria-labelledby="passkey-add-code-title" hidden>
+        <div class="login-config-head">
+          <span class="login-config-icon">{{icon "terminal"}}</span>
+          <div><span class="login-section-label">Waiting for the owner</span><h2 id="passkey-add-code-title">Code <code id="passkey-add-code"></code></h2></div>
+        </div>
+        <p>In your own terminal on the server, run this. It shows the passkey's name and key; check that they match this page, then approve. The code works for {{.Minutes}} minutes.</p>
+        <pre id="passkey-add-command"></pre>
+        <p>Key <code id="passkey-add-fingerprint"></code></p>
+        <p class="login-config-note">This page updates once the passkey is approved. Approve only the code this page shows, never one you were handed.</p>
+      </section>
+      {{if .SignedIn}}<p class="login-config-note"><a href="/console/approvers">Back to the console</a></p>{{end}}
+    </aside>
+  </div>
+</main>
+<script src="/console/static/passkey.js"></script>
+<script>
+/* Add a passkey (internal/console/signin.go): create the passkey, then wait
+   for the owner to approve the code it is shown with. The page is never
+   reloaded; it asks after its passkey every couple of seconds. */
+(function () {
+  'use strict';
+  var form = document.getElementById('passkey-add-form');
+  if (!form) return;
+  var status = document.getElementById('passkey-add-status');
+  var go = document.getElementById('passkey-add-go');
+  var waiting = null;
+  function say(msg) { status.textContent = msg; }
+  function stop() { if (waiting) clearTimeout(waiting.timer); waiting = null; }
+  function check(url) {
+    if (!waiting || waiting.url !== url) return;
+    fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(function (res) {
+      return res.json();
+    }).then(function (data) {
+      if (!waiting || waiting.url !== url) return;
+      switch (data.state) {
+        case 'pending':
+          waiting.timer = setTimeout(function () { check(url); }, 2000);
+          return;
+        case 'enrolled':
+          stop();
+          document.getElementById('passkey-add-wait').hidden = true;
+          status.textContent = '';
+          var done = document.createElement('a');
+          done.href = '/console/login';
+          done.textContent = 'Sign in now';
+          status.appendChild(document.createTextNode('Added "' + data.name + '". '));
+          status.appendChild(done);
+          return;
+        case 'ended':
+          stop();
+          say('Every passkey was reset on the server while this one waited. Nothing was added: create it again.');
+          return;
+        default:
+          stop();
+          say('The code expired before it was approved. Nothing was added: create the passkey again for a new code.');
+      }
+    }).catch(function () {
+      if (!waiting || waiting.url !== url) return;
+      say('Could not reach the console to check on the code; still waiting.');
+      waiting.timer = setTimeout(function () { check(url); }, 2000);
+    });
+  }
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (!window.SeamPasskey || !window.SeamPasskey.supported()) { say('This browser cannot make a passkey here.'); return; }
+    stop();
+    var name = document.getElementById('passkey-name').value;
+    var ticket = '';
+    document.getElementById('passkey-add-wait').hidden = true;
+    go.disabled = true;
+    say('Follow your browser\'s prompt to create the passkey.');
+    window.SeamPasskey.post('/console/passkeys/add/begin', { name: name }).then(function (begun) {
+      ticket = begun.ticket;
+      return window.SeamPasskey.create(begun);
+    }).then(function (cred) {
+      say('Checking the new passkey...');
+      return window.SeamPasskey.post('/console/passkeys/add/finish', { ticket: ticket, name: name, response: JSON.stringify(window.SeamPasskey.toJSON(cred)) });
+    }).then(function (added) {
+      document.getElementById('passkey-add-code').textContent = added.code;
+      document.getElementById('passkey-add-command').textContent = added.command;
+      document.getElementById('passkey-add-fingerprint').textContent = added.fingerprint;
+      document.getElementById('passkey-add-wait').hidden = false;
+      say('The passkey exists and waits for your approval on the server.');
+      var url = '/console/passkeys/add/status?id=' + encodeURIComponent(added.id);
+      waiting = { url: url, timer: null };
+      waiting.timer = setTimeout(function () { check(url); }, 2000);
+    }).catch(function (err) {
+      say(err && err.name === 'InvalidStateError' ?
+        'This device already holds a passkey added here, perhaps synced from another of your devices: it signs in as it is. Nothing was added.' :
+        window.SeamPasskey.refusal(err));
+    }).finally(function () { go.disabled = false; });
+  });
+})();
+</script>
+</body>
+</html>
+{{end}}

@@ -753,6 +753,20 @@ any of it.
   navigation: re-sent from the worker, a form posted from another site would
   pass `sameOriginRequest` as same-origin. A new grant of console access that
   lives in the browser binds the same key.
+- **A console sign-in is bound like an unlock, and the key signs no browser in
+  under it** (`console.sign_in: passkey`, off by default; console/signin.go,
+  approval/signin.go, store/signin.go, migration 041). `classify` counts the
+  cookie only when `store.HashConsoleSignIn(cookie, key)` names a live
+  `console_signins` row and the proof verifies under that key; a key-derived
+  cookie is nothing. The ceremonies are stateless until they succeed (an HMAC'd
+  ticket; a sign-in ticket works once; the challenge binds the browser key).
+  Sign-out needs the cookie alone and the origin check. A passkey is added only
+  through `store.ApprovePasskeyEnrollment`, which `seamlessd approvers approve`
+  runs as the daemon's account: the Add a passkey page is public and enrolls
+  nothing, its code names a waiting row and carries no key, and no route
+  approves. Every sign-in route is a 404 while the key signs browsers in, and
+  refuses a restricted account first. A restore ends every sign-in and waiting
+  passkey (`ResetRestoredAccess`); a merge carries neither.
 - **Events reach the console through the filtered handle.** The console's live
   feed re-reads each event through it (`liveEventVisible`) and the event log's
   reads go through `events.ReadingFrom`, so an event about a locked project

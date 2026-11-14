@@ -67,11 +67,32 @@ const (
 // bearer path: no browser can reach a Unix socket, so it carries no CSRF risk.
 // Whether that caller may use the console at all is auth's question
 // (access.OwnerOnly), not this one's.
+//
+// Under passkey sign-in (Config.SignIn) the cookie path is a sign-in, never
+// the key: a cookie counts only when it and the key the request's proof
+// verifies under name a live sign-in together (signin.go). A cookie derived
+// from the key, which anything that reads the key can forge, names none. The
+// key stays a bearer token for scripts.
+//
+// auth classifies once and keeps the answer in the request's context
+// (classified); a handler asking again gets that answer.
 func (s *Service) classify(r *http.Request) credential {
+	if c, ok := r.Context().Value(credKey{}).(credential); ok {
+		return c
+	}
 	if access.PeerAuthenticated(r.Context()) {
 		return credBearer
 	}
 	key := s.cfg.APIKey
+	if s.cfg.SignIn != nil {
+		if key != "" && bearerEquals(r, key) {
+			return credBearer
+		}
+		if s.signInOf(r).session != nil {
+			return credCookie
+		}
+		return credNone
+	}
 	if key == "" {
 		return credNone
 	}

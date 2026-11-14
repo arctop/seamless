@@ -629,3 +629,37 @@ func TestAssertionChallenge(t *testing.T) {
 		require.ErrorIs(t, err, passkey.ErrVerification, name)
 	}
 }
+
+// A caller that keeps no state between the two requests names the challenge
+// itself (BeginRegistrationWith): the options carry it, the state carries it,
+// and a response over any other challenge fails, as for the random one.
+func TestBeginRegistrationWith_TheCallersChallenge(t *testing.T) {
+	v := newVerifier(t)
+	user := newOwner(t)
+	challenge := newChallenge(t)
+	options, state, err := v.BeginRegistrationWith(user, nil, challenge)
+	require.NoError(t, err)
+	require.Equal(t, challenge, state.Challenge)
+	var o struct {
+		PublicKey struct {
+			Challenge string `json:"challenge"`
+		} `json:"publicKey"`
+	}
+	require.NoError(t, json.Unmarshal(options, &o))
+	require.NotEmpty(t, o.PublicKey.Challenge)
+
+	a := newAuthenticator(t, passkey.AlgES256, false)
+	cred, err := v.FinishRegistration(user, passkey.RegistrationState{Challenge: challenge, UserHandle: user.Handle}, a.create(t, options, testOrigin))
+	require.NoError(t, err, "a state rebuilt from the same challenge finishes")
+	require.NotEmpty(t, cred.ID)
+
+	other := newChallenge(t)
+	b := newAuthenticator(t, passkey.AlgES256, false)
+	_, err = v.FinishRegistration(user, passkey.RegistrationState{Challenge: other, UserHandle: user.Handle}, b.create(t, options, testOrigin))
+	require.ErrorIs(t, err, passkey.ErrVerification, "a response over another challenge fails")
+
+	for _, n := range []int{0, 16, 33} {
+		_, _, err := v.BeginRegistrationWith(user, nil, make([]byte, n))
+		require.ErrorIs(t, err, passkey.ErrChallengeLength, "%d bytes", n)
+	}
+}

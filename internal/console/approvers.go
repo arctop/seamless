@@ -108,6 +108,14 @@ type approversData struct {
 	// 127.0.0.1 cannot run one at all (an IP is not a valid RP ID).
 	Origin   string `json:"origin,omitempty"`
 	OnOrigin bool   `json:"on_origin"`
+	// AddPage is the Add a passkey page while passkey sign-in is on
+	// (signin.go): passkeys are added there, from the device that holds
+	// them, and approved on the server. Empty otherwise, and the page offers
+	// its own enrollment as before.
+	AddPage string `json:"add_page,omitempty"`
+	// AddCommand is the server's half of that: approving the code the page
+	// shows, with a placeholder for it.
+	AddCommand string `json:"-"`
 }
 
 func (s *Service) approversOff(w http.ResponseWriter, r *http.Request) bool {
@@ -142,6 +150,9 @@ func (s *Service) approversPage(w http.ResponseWriter, r *http.Request) {
 		d.Origin = origins[0]
 	}
 	d.OnOrigin = slices.Contains(origins, requestOrigin(r))
+	if s.cfg.SignIn != nil {
+		d.AddPage, d.AddCommand = passkeyAddPath, s.approveEnrollmentCommand(enrollmentCodeSlot)
+	}
 	for _, c := range creds {
 		d.Credentials = append(d.Credentials, approverRow{
 			ID: c.ID, Kind: c.Kind, Name: c.Name, Synced: c.BackupState, AddedAt: c.AddedAt,
@@ -237,7 +248,13 @@ func (s *Service) approversConfirm(w http.ResponseWriter, r *http.Request) {
 // enrollCodeCommand is the command that mints a kind's code for one key, as the
 // daemon's account when the daemon knows how that is reached.
 func (s *Service) enrollCodeCommand(kind, fingerprint string) string {
-	verb := "approvers enroll-code " + kind + " --key " + fingerprint
+	return s.daemonCommand("approvers enroll-code " + kind + " --key " + fingerprint)
+}
+
+// daemonCommand is seamlessd running verb on this daemon's database: as the
+// daemon's account, through sudo -k so it asks every time, when the daemon
+// knows how that account is reached (peer_auth), else as it is.
+func (s *Service) daemonCommand(verb string) string {
 	t := s.cfg.Terminal
 	if t == nil || t.Account == "" || t.Seamlessd == "" {
 		return "seamlessd " + verb

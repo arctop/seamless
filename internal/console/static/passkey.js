@@ -1,9 +1,11 @@
 /* The WebAuthn helpers the console's passkey ceremonies share
-   (window.SeamPasskey): the lock page's lock change and Settings > Backups'
-   restore. Each ceremony is two JSON POSTs around navigator.credentials.get --
-   begin answers {id, options}, the page asks the authenticator, finish sends
-   the assertion back -- and a change the daemon applies at startup waits for
-   the restart by watching /healthz name a new instance. */
+   (window.SeamPasskey): the lock page's lock change, Settings > Backups'
+   restore, and under passkey sign-in the login page and the Add a passkey
+   page. Each ceremony is two JSON POSTs around navigator.credentials.get (or
+   create, to add a passkey) -- begin answers the options, the page asks the
+   authenticator, finish sends its answer back -- and a change the daemon
+   applies at startup waits for the restart by watching /healthz name a new
+   instance. */
 (function () {
   'use strict';
 
@@ -28,18 +30,34 @@
     (pk.allowCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
     return pk;
   }
-  // toJSON encodes the browser's assertion the way the server reads it.
+  // creationOptions decodes the server's navigator.credentials.create options.
+  function creationOptions(pk) {
+    if (window.PublicKeyCredential && PublicKeyCredential.parseCreationOptionsFromJSON) {
+      return PublicKeyCredential.parseCreationOptionsFromJSON(pk);
+    }
+    pk.challenge = b64urlToBuf(pk.challenge);
+    pk.user.id = b64urlToBuf(pk.user.id);
+    (pk.excludeCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
+    return pk;
+  }
+  // toJSON encodes the browser's assertion, or a new passkey's attestation,
+  // the way the server reads it.
   function toJSON(cred) {
     if (cred.toJSON) return cred.toJSON();
     var r = cred.response;
     var out = {
       id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
       authenticatorAttachment: cred.authenticatorAttachment || null,
-      clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
-      response: {
-        clientDataJSON: bufToB64url(r.clientDataJSON), authenticatorData: bufToB64url(r.authenticatorData),
-        signature: bufToB64url(r.signature)
-      }
+      clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {}
+    };
+    if (r.attestationObject) {
+      out.response = { clientDataJSON: bufToB64url(r.clientDataJSON), attestationObject: bufToB64url(r.attestationObject) };
+      if (r.getTransports) out.response.transports = r.getTransports();
+      return out;
+    }
+    out.response = {
+      clientDataJSON: bufToB64url(r.clientDataJSON), authenticatorData: bufToB64url(r.authenticatorData),
+      signature: bufToB64url(r.signature)
     };
     if (r.userHandle) out.response.userHandle = bufToB64url(r.userHandle);
     return out;
@@ -47,6 +65,10 @@
   // assert runs the authenticator over a begin's options.
   function assert(begun) {
     return navigator.credentials.get({ publicKey: requestOptions(begun.options.publicKey) });
+  }
+  // create makes a new passkey over a begin's creation options.
+  function create(begun) {
+    return navigator.credentials.create({ publicKey: creationOptions(begun.options.publicKey) });
   }
   // post sends one ceremony step and resolves with its JSON answer, or
   // rejects with the server's own refusal.
@@ -84,7 +106,7 @@
   }
 
   window.SeamPasskey = {
-    assert: assert, instance: instance, post: post, refusal: refusal, requestOptions: requestOptions,
-    supported: supported, toJSON: toJSON, waitForRestart: waitForRestart
+    assert: assert, create: create, creationOptions: creationOptions, instance: instance, post: post, refusal: refusal,
+    requestOptions: requestOptions, supported: supported, toJSON: toJSON, waitForRestart: waitForRestart
   };
 })();

@@ -394,6 +394,21 @@ authenticator: the browser refuses one that already holds a passkey enrolled her
 and devices that share synced passkeys, such as a phone on the same iCloud
 Keychain, count as one.
 
+**With console sign-in by passkey** a passkey is added from the device that will
+hold it. `seamlessd approvers add`, run as the daemon's account, prints the plain
+address; the device creates the passkey and shows a code.
+`sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd approvers approve --code 7KQ2-M9XD`
+shows that passkey and asks before adding it.
+
+Only the code crosses, and it names a waiting passkey without carrying a key, so
+a code read off your screen cannot add another. Under peer_auth every new passkey
+needs this approval, because an approver passkey now also signs in to the
+console.
+
+A passkey added while peer_auth was off was approved as your own account, which
+every agent shares. When you turn peer_auth on, check `seamlessd approvers list`
+and remove what you do not recognize, or `reset --yes` and add them again.
+
 **Touch ID on a Mac** (optional) goes through Seamless Approve, a small macOS app
 that approves a request with Touch ID, an Apple Watch or the login password. A
 default install neither contains nor launches it, and Linux and Windows never
@@ -1128,6 +1143,12 @@ and console unlock the backup held.
 
 ## Limits
 
+- **A console sign-in is the owner's console for open projects** for 7 days or
+  until you sign out; locked projects still need an unlock or a lease. A program
+  running as you can still drive the signed-in browser. The Add a passkey page is
+  open to anyone who reaches the console: creating a passkey there adds nothing,
+  but at most 32 wait at once, so someone looping on it can hold yours off for up
+  to 10 minutes.
 - **The transcript holds what a session read.** Once you approve an agent, its
   project's content is in that session's transcript and any tool result it kept.
   A lease ending does not unread it.

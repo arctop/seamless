@@ -11,6 +11,12 @@ package store
 //     owner's terminal cannot enroll any other key. It is stored only as a hash
 //     that binds the fingerprint, lives EnrollCodeTTL, and is consumed in the
 //     same transaction as the credential it enrolls.
+//   - With console sign-in by passkey (console.sign_in: passkey) a passkey can
+//     also come the other way round: the device creates it first and shows a
+//     short code naming it, and `seamlessd approvers approve --code`, run as
+//     the daemon's own account, enrolls exactly that passkey
+//     (ApprovePasskeyEnrollment, signin.go). That code names a waiting row and
+//     carries no key, so it cannot enroll another one; no route approves.
 //   - An enrolled credential never vouches for a new one. An enrolled passkey
 //     can take a console lock off, so a single approval tricked out of the
 //     owner must not be enough to add a key someone else holds. (Rows an
@@ -317,7 +323,6 @@ func enrollApproverTx(ctx context.Context, db *sql.DB, cred ApproverCredential, 
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	addedBy := AddedByCode
 	res, err := tx.ExecContext(ctx, `UPDATE approver_enroll_codes SET used_at = ?, used_for = ?
 		WHERE hash = ? AND kind = ? AND used_at IS NULL AND expires_at > ?`,
 		core.FormatTime(now), id, enrollCodeHash(code, ApproverKeyFingerprint(cred.PublicKey)), cred.Kind, core.FormatTime(now))
@@ -332,21 +337,8 @@ func enrollApproverTx(ctx context.Context, db *sql.DB, cred ApproverCredential, 
 		return ApproverCredential{}, nil, ErrEnrollCode
 	}
 
-	var dup int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM approver_credentials WHERE kind = ? AND credential_id = ?`,
-		cred.Kind, cred.CredentialID).Scan(&dup); err != nil {
-		return ApproverCredential{}, nil, err
-	}
-	if dup > 0 {
-		return ApproverCredential{}, nil, ErrApproverExists
-	}
-	cred.ID, cred.AddedAt, cred.AddedBy, cred.LastUsedAt = id, now, addedBy, nil
-	if _, err := tx.ExecContext(ctx, `INSERT INTO approver_credentials (id, kind, credential_id, public_key, alg, sign_count,
-		backup_eligible, backup_state, aaguid, transports, attachment, attestation_format, user_handle, name, added_at, added_by, rp_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		cred.ID, cred.Kind, cred.CredentialID, cred.PublicKey, cred.Alg, int64(cred.SignCount),
-		boolInt(cred.BackupEligible), boolInt(cred.BackupState), cred.AAGUID, strings.Join(cred.Transports, ","),
-		cred.Attachment, cred.AttestationFormat, cred.UserHandle, cred.Name, core.FormatTime(now), addedBy, cred.RPID); err != nil {
+	cred.ID = id
+	if cred, err = insertApproverTx(ctx, tx, cred, AddedByCode, now); err != nil {
 		return ApproverCredential{}, nil, err
 	}
 	// Retire only after the new row is in, in the same transaction: an
@@ -370,6 +362,42 @@ func enrollApproverTx(ctx context.Context, db *sql.DB, cred ApproverCredential, 
 		return ApproverCredential{}, nil, err
 	}
 	return cred, retired, nil
+}
+
+// insertApproverTx stores cred inside tx as an enrolled credential added by
+// addedBy, under cred.ID or a fresh id when it has none. The caller has judged
+// the proof (a consumed enrollment code, an approved passkey enrollment); a
+// credential of that kind and id already enrolled is ErrApproverExists.
+func insertApproverTx(ctx context.Context, tx *sql.Tx, cred ApproverCredential, addedBy string, now time.Time) (ApproverCredential, error) {
+	cred.Name = strings.TrimSpace(cred.Name)
+	if err := validApproverCredential(cred); err != nil {
+		return ApproverCredential{}, err
+	}
+	if cred.ID == "" {
+		id, err := core.NewID()
+		if err != nil {
+			return ApproverCredential{}, err
+		}
+		cred.ID = id
+	}
+	var dup int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM approver_credentials WHERE kind = ? AND credential_id = ?`,
+		cred.Kind, cred.CredentialID).Scan(&dup); err != nil {
+		return ApproverCredential{}, err
+	}
+	if dup > 0 {
+		return ApproverCredential{}, ErrApproverExists
+	}
+	cred.AddedAt, cred.AddedBy, cred.LastUsedAt = now, addedBy, nil
+	if _, err := tx.ExecContext(ctx, `INSERT INTO approver_credentials (id, kind, credential_id, public_key, alg, sign_count,
+		backup_eligible, backup_state, aaguid, transports, attachment, attestation_format, user_handle, name, added_at, added_by, rp_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		cred.ID, cred.Kind, cred.CredentialID, cred.PublicKey, cred.Alg, int64(cred.SignCount),
+		boolInt(cred.BackupEligible), boolInt(cred.BackupState), cred.AAGUID, strings.Join(cred.Transports, ","),
+		cred.Attachment, cred.AttestationFormat, cred.UserHandle, cred.Name, core.FormatTime(now), addedBy, cred.RPID); err != nil {
+		return ApproverCredential{}, err
+	}
+	return cred, nil
 }
 
 func boolInt(b bool) int {
@@ -495,67 +523,114 @@ func RecordApproverUse(ctx context.Context, db *sql.DB, id string, verifiedAgain
 
 // RemoveApprover deletes one credential. Removing the last one leaves only
 // the terminal approval path; leases already granted are untouched (reset
-// revokes them).
+// revokes them). The browsers it signed in to the console are signed out
+// (RemoveApproverSigningOut).
 func RemoveApprover(ctx context.Context, db *sql.DB, id string) error {
-	res, err := db.ExecContext(ctx, `DELETE FROM approver_credentials WHERE id = ?`, id)
+	_, err := RemoveApproverSigningOut(ctx, db, id, time.Now())
+	return err
+}
+
+// RemoveApproverSigningOut is RemoveApprover at now, returning how many
+// console sign-ins the credential had made that it ended (reason removed), in
+// the same transaction as the delete: a passkey the owner removes, because it
+// may be in someone else's hands, keeps no browser signed in.
+func RemoveApproverSigningOut(ctx context.Context, db *sql.DB, id string, now time.Time) (int64, error) {
+	const op = "store.RemoveApprover"
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("store.RemoveApprover: %w", err)
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `DELETE FROM approver_credentials WHERE id = ?`, id)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("store.RemoveApprover: %w", err)
+		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("store.RemoveApprover: %w: %q", ErrApproverNotFound, id)
+		return 0, fmt.Errorf("%s: %w: %q", op, ErrApproverNotFound, id)
 	}
-	return nil
+	signedOut, err := endSignIns(ctx, tx, SignInEndRemoved, now, `credential = ?`, id)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+	return signedOut, nil
+}
+
+// ApproversReset counts what ResetApproversAll ended.
+type ApproversReset struct {
+	Credentials, Leases int64
+	// SignIns are the browsers signed out of the console; Enrollments the
+	// passkeys that were waiting for the owner's approval.
+	SignIns, Enrollments int64
 }
 
 // ResetApprovers deletes every credential and every unused enrollment code,
 // revokes every live lease and read grant (reason reset) and ends every
-// console unlock, in one transaction: what the
-// owner does when a credential may be in someone else's hands. It returns
-// how many credentials and leases it ended.
+// console unlock, every console sign-in and every passkey waiting for
+// approval, in one transaction: what the owner does when a credential may be
+// in someone else's hands. It returns how many credentials and leases it
+// ended (ResetApproversAll counts the rest).
 func ResetApprovers(ctx context.Context, db *sql.DB, now time.Time) (credentials, leases int64, err error) {
+	r, err := ResetApproversAll(ctx, db, now)
+	return r.Credentials, r.Leases, err
+}
+
+// ResetApproversAll is ResetApprovers, counting everything it ended.
+func ResetApproversAll(ctx context.Context, db *sql.DB, now time.Time) (ApproversReset, error) {
 	const op = "store.ResetApprovers"
+	var r ApproversReset
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, 0, fmt.Errorf("%s: %w", op, err)
+		return ApproversReset{}, fmt.Errorf("%s: %w", op, err)
 	}
 	defer func() { _ = tx.Rollback() }()
 	res, err := tx.ExecContext(ctx, `DELETE FROM approver_credentials`)
 	if err != nil {
-		return 0, 0, fmt.Errorf("%s: %w", op, err)
+		return ApproversReset{}, fmt.Errorf("%s: %w", op, err)
 	}
-	if credentials, err = res.RowsAffected(); err != nil {
-		return 0, 0, fmt.Errorf("%s: %w", op, err)
+	if r.Credentials, err = res.RowsAffected(); err != nil {
+		return ApproversReset{}, fmt.Errorf("%s: %w", op, err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM approver_enroll_codes WHERE used_at IS NULL`); err != nil {
-		return 0, 0, fmt.Errorf("%s: %w", op, err)
+		return ApproversReset{}, fmt.Errorf("%s: %w", op, err)
 	}
 	res, err = tx.ExecContext(ctx, `UPDATE access_leases SET revoked_at = ?, revoked_reason = ?
 		WHERE revoked_at IS NULL AND expires_at > ?`, core.FormatTime(now), LeaseRevokedReset, core.FormatTime(now))
 	if err != nil {
-		return 0, 0, fmt.Errorf("%s: %w", op, err)
+		return ApproversReset{}, fmt.Errorf("%s: %w", op, err)
 	}
-	if leases, err = res.RowsAffected(); err != nil {
-		return 0, 0, fmt.Errorf("%s: %w", op, err)
+	if r.Leases, err = res.RowsAffected(); err != nil {
+		return ApproversReset{}, fmt.Errorf("%s: %w", op, err)
 	}
 	// So was a read grant under peer_auth (isolation.requests): it ends with
 	// them too. Its holder stays confined, as after any revoke.
 	if _, err := tx.ExecContext(ctx, `UPDATE access_grants SET revoked_at = ?, revoked_reason = ?
 		WHERE revoked_at IS NULL AND expires_at > ?`, core.FormatTime(now), LeaseRevokedReset, core.FormatTime(now)); err != nil {
-		return 0, 0, fmt.Errorf("%s: %w", op, err)
+		return ApproversReset{}, fmt.Errorf("%s: %w", op, err)
 	}
 	// A console unlock was granted by a credential too: it ends with them.
 	if _, err := tx.ExecContext(ctx, `UPDATE console_unlocks SET status = 'ended', ended_at = ?, ended_reason = ?,
 		claim_hash = '', challenge = NULL WHERE status IN ('live', 'pending')`, core.FormatTime(now), ConsoleUnlockEndReset); err != nil {
-		return 0, 0, fmt.Errorf("%s: %w", op, err)
+		return ApproversReset{}, fmt.Errorf("%s: %w", op, err)
+	}
+	// So was every console sign-in, and a passkey still waiting would come
+	// in after the reset: both end with them.
+	if r.SignIns, err = endSignIns(ctx, tx, SignInEndReset, now, `1 = 1`); err != nil {
+		return ApproversReset{}, fmt.Errorf("%s: %w", op, err)
+	}
+	if r.Enrollments, err = endEnrollments(ctx, tx, SignInEndReset, now); err != nil {
+		return ApproversReset{}, fmt.Errorf("%s: %w", op, err)
 	}
 	if err := tx.Commit(); err != nil {
-		return 0, 0, fmt.Errorf("%s: %w", op, err)
+		return ApproversReset{}, fmt.Errorf("%s: %w", op, err)
 	}
-	return credentials, leases, nil
+	return r, nil
 }
 
 // ApproverUserHandle returns the owner's WebAuthn user handle: 32 random

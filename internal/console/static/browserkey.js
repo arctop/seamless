@@ -1,5 +1,8 @@
 /* The browser key: what makes a console unlock this browser's alone
-   (internal/console/browserproof).
+   (internal/console/browserproof), and under passkey sign-in the console
+   sign-in too (internal/console/signin.go): the login page sets the key and
+   the worker up before it signs in, so every console request after it
+   carries the proof.
 
    A browser sends its cookies to every port of the host that set them, so the
    unlock cookie alone could be read by any program that opens this browser on

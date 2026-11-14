@@ -1,5 +1,7 @@
 // Package browserproof is how a browser proves, on each console request, that
-// it is the browser a console unlock was given to.
+// it is the browser a console unlock was given to, and under passkey sign-in
+// (console.sign_in: passkey) the browser that signed in: a sign-in's stored
+// hash covers its cookie and this key the same way (store.HashConsoleSignIn).
 //
 // A browser sends its cookies to every port of the host that set them, so a
 // program running as the owner can listen on another local port, open the

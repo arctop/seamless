@@ -412,9 +412,10 @@ func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, choi
 		return fmt.Errorf("archive.Import: open restored database: %w", err)
 	}
 	defer func() { _ = db.Close() }()
-	// A restored database brings back the leases, console unlocks and read
-	// grants it held when the snapshot was taken, including ones revoked
-	// since: every live one ends here, and a locked project's agents ask again.
+	// A restored database brings back the leases, console unlocks, read
+	// grants and console sign-ins it held when the snapshot was taken,
+	// including ones revoked or signed out since: every live one ends here,
+	// and a locked project's agents ask again, and the owner signs in again.
 	if _, err := store.ResetRestoredAccess(ctx, db, time.Now()); err != nil {
 		return fmt.Errorf("archive.Import: %w", err)
 	}

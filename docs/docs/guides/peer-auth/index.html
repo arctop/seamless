@@ -649,6 +649,18 @@ page on <a href="#the-passkey-origin">the passkey origin</a>. Each passkey needs
 authenticator: the browser refuses one that already holds a passkey enrolled here,
 and devices that share synced passkeys, such as a phone on the same iCloud
 Keychain, count as one.</p>
+<p><strong>With console sign-in by passkey</strong> a passkey is added from the device that will
+hold it. <code>seamlessd approvers add</code>, run as the daemon's account, prints the plain
+address; the device creates the passkey and shows a code.
+<code>sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd approvers approve --code 7KQ2-M9XD</code>
+shows that passkey and asks before adding it.</p>
+<p>Only the code crosses, and it names a waiting passkey without carrying a key, so
+a code read off your screen cannot add another. Under peer_auth every new passkey
+needs this approval, because an approver passkey now also signs in to the
+console.</p>
+<p>A passkey added while peer_auth was off was approved as your own account, which
+every agent shares. When you turn peer_auth on, check <code>seamlessd approvers list</code>
+and remove what you do not recognize, or <code>reset --yes</code> and add them again.</p>
 <p><strong>Touch ID on a Mac</strong> (optional) goes through Seamless Approve, a small macOS app
 that approves a request with Touch ID, an Apple Watch or the login password. A
 default install neither contains nor launches it, and Linux and Windows never
@@ -1341,6 +1353,12 @@ approvers and fences, adds the backup's locks, and ends every lease, read grant
 and console unlock the backup held.</p>
 <h2 id="limits">Limits</h2>
 <ul>
+<li><strong>A console sign-in is the owner's console for open projects</strong> for 7 days or
+until you sign out; locked projects still need an unlock or a lease. A program
+running as you can still drive the signed-in browser. The Add a passkey page is
+open to anyone who reaches the console: creating a passkey there adds nothing,
+but at most 32 wait at once, so someone looping on it can hold yours off for up
+to 10 minutes.</li>
 <li><strong>The transcript holds what a session read.</strong> Once you approve an agent, its
 project's content is in that session's transcript and any tool result it kept.
 A lease ending does not unread it.</li>

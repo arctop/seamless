@@ -415,6 +415,8 @@ func restoredAccessWords(r store.RestoredAccess) string {
 		{r.Leases, "access lease"},
 		{r.Unlocks, "console unlock"},
 		{r.Grants, "read grant"},
+		{r.SignIns, "console sign-in"},
+		{r.Enrollments, "passkey waiting for approval"},
 	} {
 		if c.n > 0 {
 			parts = append(parts, update.Plural(c.n, c.noun))

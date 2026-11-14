@@ -444,6 +444,52 @@ console:
 	require.Error(t, err)
 }
 
+// console.sign_in is off -- the key -- unless the file says passkey. It is
+// file only: an environment variable of its name changes nothing, since serve
+// and console-open must read the same answer from the same file.
+func TestLoadFrom_ConsoleSignIn(t *testing.T) {
+	cfg, err := LoadFrom("")
+	require.NoError(t, err)
+	require.Equal(t, ConsoleSignInKey, cfg.Console.SignIn, "the key signs a browser in by default")
+	require.False(t, cfg.Console.PasskeySignIn())
+	require.Equal(t, ConsoleSignInKey, ConsoleSignIns[0], "the default is listed first")
+
+	path := writeConfig(t, `
+console:
+  sign_in: passkey
+`)
+	cfg, err = LoadFrom(path)
+	require.NoError(t, err)
+	require.Equal(t, ConsoleSignInPasskey, cfg.Console.SignIn)
+	require.True(t, cfg.Console.PasskeySignIn())
+
+	t.Setenv("SEAMLESS_CONSOLE_SIGN_IN", "key")
+	cfg, err = LoadFrom(path)
+	require.NoError(t, err)
+	require.True(t, cfg.Console.PasskeySignIn(), "file only: the environment does not turn it off")
+	t.Setenv("SEAMLESS_CONSOLE_SIGN_IN", "passkey")
+	cfg, err = LoadFrom("")
+	require.NoError(t, err)
+	require.False(t, cfg.Console.PasskeySignIn(), "file only: the environment does not turn it on")
+	require.NoError(t, os.Unsetenv("SEAMLESS_CONSOLE_SIGN_IN"))
+
+	empty := writeConfig(t, `
+console:
+  sign_in: ""
+`)
+	cfg, err = LoadFrom(empty)
+	require.NoError(t, err)
+	require.Equal(t, ConsoleSignInKey, cfg.Console.SignIn, "an empty value is absent")
+
+	bad := writeConfig(t, `
+console:
+  sign_in: password
+`)
+	_, err = LoadFrom(bad)
+	require.ErrorContains(t, err, `console.sign_in invalid "password"`)
+	require.ErrorContains(t, err, "valid values are key, passkey")
+}
+
 func TestLoadFrom_FeaturesStrictYAML(t *testing.T) {
 	path := writeConfig(t, `
 features:
@@ -563,6 +609,10 @@ func TestValidate(t *testing.T) {
 		{"advanced-console-level-ok", func(c *Config) { c.Console.Level = "advanced" }, false},
 		{"unknown-console-level", func(c *Config) { c.Console.Level = "expert" }, true},
 		{"console-level-case-is-not-normalized", func(c *Config) { c.Console.Level = "Basic" }, true},
+		{"empty-console-sign-in-ok", func(c *Config) { c.Console.SignIn = "" }, false},
+		{"passkey-console-sign-in-ok", func(c *Config) { c.Console.SignIn = ConsoleSignInPasskey }, false},
+		{"unknown-console-sign-in", func(c *Config) { c.Console.SignIn = "password" }, true},
+		{"console-sign-in-case-is-not-normalized", func(c *Config) { c.Console.SignIn = "Passkey" }, true},
 		{"zero-semantic-floor-ok", func(c *Config) { c.Search.SemanticFloor = 0 }, false},
 		{"one-semantic-floor-ok", func(c *Config) { c.Search.SemanticFloor = 1 }, false},
 		{"negative-semantic-floor", func(c *Config) { c.Search.SemanticFloor = -0.1 }, true},

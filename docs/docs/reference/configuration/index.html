@@ -744,6 +744,11 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <td><code>basic</code></td>
 </tr>
 <tr>
+<td><code>console.sign_in</code></td>
+<td>string</td>
+<td><code>key</code></td>
+</tr>
+<tr>
 <td><code>search.semantic_floor</code></td>
 <td>float64</td>
 <td><code>0.3</code></td>
@@ -1275,6 +1280,21 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># one-time seeded choice), so an upgrade never hides a screen you were using.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_CONSOLE_LEVEL</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">level</span><span class="p">:</span><span class="w"> </span><span class="l">basic</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># How a browser signs in to the console. One of: key | passkey.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c">#   key     -- the default: the static bearer key (mcp.api_key), traded for a</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c">#              cookie at /console/login. seamlessd console-open does it for you.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c">#   passkey -- a passkey you enrolled, in any browser, the server&#39;s included,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c">#              so no browser needs the key. The key then signs no browser in;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c">#              the seam CLI keeps sending it. The passkey belongs to the</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c">#              relying party under peer_auth.passkeys (or the one derived from</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c">#              a TLS server_url, else localhost), with or without peer_auth.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c">#              To add one, open the address `seamlessd approvers add` prints on</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c">#              the device that will hold it, then approve the code that page</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c">#              shows with `seamlessd approvers approve --code &lt;code&gt;` on this</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c">#              machine (as the daemon&#39;s account under peer_auth).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Releases up to v0.8.4 refuse the key, so setting it pins this file to a</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># newer one. File only (no env).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># sign_in: key</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># Console search (the full page&#39;s fused semantic+lexical retrieval). Agent</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># recall is not affected by these knobs.</span><span class="w">

@@ -647,6 +647,18 @@ func runServe(args []string) error {
 		approvals = approvalSvc
 		terminal = terminalApprover(cfg)
 	}
+	// Console sign-in with a passkey (console.sign_in: passkey). Off -- the
+	// default -- it is nil and the console signs browsers in with the key
+	// exactly as before.
+	signIn, err := newConsoleSignIn(cfg, db, logger)
+	if err != nil {
+		return fmt.Errorf("seamlessd.serve: %w", err)
+	}
+	if signIn != nil && approvalSvc == nil {
+		// Without peer_auth the passkeys sign in only, and their relying
+		// party is checked as peer_auth's start checks it.
+		warnPasskeyOrigin(ctx, cfg, bind, db, logger)
+	}
 	consoleSrv, err := console.New(console.Config{
 		DB: consoleDB, WriteDB: consoleWriteDB, Files: mgr, Gardener: garden, Events: consoleEvents, Retrieve: ret,
 		Screening: screen,
@@ -683,6 +695,7 @@ func runServe(args []string) error {
 		Grants:   consoleGrants,
 		Terminal: terminal,
 		Views:    consoleViews,
+		SignIn:   signIn,
 		// Restricted local accounts file proposals into the held queue, so the
 		// queue's list and Promote/Discard are served even with write screening
 		// off whenever peer_auth lists one.

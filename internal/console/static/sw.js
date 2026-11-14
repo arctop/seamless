@@ -1,8 +1,11 @@
 /* The console's service worker: it adds this browser's proof
    (browserkey.js, internal/console/browserproof) to the console's own
-   requests, so a console unlock works only in the browser that holds the key.
+   requests, so a console unlock, and under passkey sign-in the console
+   sign-in itself (internal/console/signin.go), works only in the browser that
+   holds the key.
 
-   It runs only in a browser that set a key up for an unlock, and it signs:
+   It runs in a browser that set a key up for an unlock or for signing in --
+   under passkey sign-in that is every signed-in browser -- and it signs:
      - every request a console page makes (fetch, the live feed), sent
        same-origin so a redirect never carries the proof off this origin;
      - a page load or a link followed (a GET or HEAD navigation), with redirects

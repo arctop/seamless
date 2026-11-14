@@ -130,6 +130,11 @@ var viewExempt = map[string]string{
 	// An MCP connection's declared capabilities, about no project: which
 	// dialog modes its client can show.
 	"mcp_sessions": "MCP connection ids and the elicitation modes their clients declared, about no project; no corpus content",
+	// Console sign-in with a passkey: which browsers are signed in, and the
+	// passkeys devices created that wait for the owner's approval. The console
+	// reads them before it knows which handle a request gets.
+	"console_signins":     "browsers signed in to the console: cookie and browser-key hashes, a credential id and times, about no project; no corpus content",
+	"passkey_enrollments": "passkeys waiting for the owner's approval: public keys, a label, a code hash and times, about no project; no corpus content",
 }
 
 const (

@@ -1276,6 +1276,8 @@ succeeds: the membership starts taking effect once an agent opens that repo and
 registers it.</p>
 <h2 id="seamlessd_approvers">seamlessd approvers</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd approvers enroll-code &lt;passkey<span class="p">|</span>touchid&gt; --key &lt;fingerprint&gt;
+</span></span><span class="line"><span class="cl">seamlessd approvers add
+</span></span><span class="line"><span class="cl">seamlessd approvers approve <span class="o">[</span>--code CODE<span class="o">]</span> <span class="o">[</span>--yes<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seamlessd approvers list <span class="o">[</span>--json<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seamlessd approvers remove &lt;id&gt;
 </span></span><span class="line"><span class="cl">seamlessd approvers reset --yes
@@ -1297,12 +1299,20 @@ passkey, create it on the console's Approvers page (<code>/console/approvers</co
 command with the new key's fingerprint and takes the code. For a Touch ID key, the Seamless Approve window does the same. Every
 credential needs a code, however many are enrolled: an enrolled passkey never
 vouches for a new one.</li>
+<li><code>add</code> prints the no-secret Add a passkey address (<code>/console/passkeys/add</code>,
+with <code>console.sign_in: passkey</code>), and at a terminal goes on to <code>approve</code>.</li>
+<li><code>approve</code> shows the waiting passkey's name, fingerprint and relying party,
+asks <code>[y/N]</code>, and adds exactly that passkey. <code>--yes</code> is for scripts. A code
+works once, for 10 minutes. Run it as the daemon's account under peer_auth,
+else as yourself.</li>
 <li><code>list</code> prints the enrolled credentials: id, kind, name, how each was enrolled
-and when it was last used. <code>--json</code> prints them as JSON.</li>
-<li><code>remove</code> deletes one credential. Leases it already approved are untouched.</li>
-<li><code>reset --yes</code> deletes every credential and every unused code, and revokes
-every live lease, in one transaction: for when a credential may be in someone
-else's hands.</li>
+and when it was last used. <code>--json</code> prints them as JSON. It also names waiting
+passkeys (<code>pending</code> in JSON, only while one waits).</li>
+<li><code>remove</code> deletes one credential. Leases it already approved are untouched; the
+browsers it had signed in are signed out.</li>
+<li><code>reset --yes</code> deletes every credential and every unused code, revokes every
+live lease, signs out every signed-in browser and drops every waiting passkey,
+in one transaction: for when a credential may be in someone else's hands.</li>
 </ul>
 <p>With no credential enrolled, <code>seamlessd doctor</code> warns while a project is
 locked: only the terminal path can approve then. Both doctor and <code>list</code> say how
@@ -1353,7 +1363,11 @@ pasting a key.</p>
 another browser is the default). It is <strong>macOS only</strong> and is rejected with an
 error on other platforms rather than silently opening the default browser.</p>
 <p>It refuses to run when <code>mcp.api_key</code> is empty, or when the server does not
-answer <code>/healthz</code> within two seconds - the page has nowhere to POST otherwise.
+answer <code>/healthz</code> within two seconds - the page has nowhere to POST otherwise.</p>
+<p>Under passkey sign-in (<code>console.sign_in: passkey</code>) it opens the console's
+sign-in page and writes nothing: no temp page, no key, no link that signs a
+browser in. There is no local shortcut around the passkey, since any such value
+is one every process of yours could read first.
 Any HTTP response counts as reachable, including a degraded 503.</p>
 <p>While <code>peer_auth</code> is on, it signs in on
 <a href="../../guides/peer-auth/#the-passkey-origin">the passkey origin</a> instead of the server URL: the
