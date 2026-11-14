@@ -304,7 +304,7 @@ func TestAdvisoryDialog_RefusalFiledGrantReadAndWrite(t *testing.T) {
 			o := newOwner(c.answer)
 			cli := advDial(t, r.url, o, nil)
 
-			text := r.refused(cli, "tasks_add", ask)
+			text, notices := r.refusedWith(cli, "tasks_add", ask)
 			a := r.advRequest(gFin)
 			short := approval.ShortID(a.ID)
 			require.Equal(t, store.AccessKindGrant, a.Kind)
@@ -358,6 +358,15 @@ func TestAdvisoryDialog_RefusalFiledGrantReadAndWrite(t *testing.T) {
 				if c.access == store.GrantAccessWrite {
 					how = "readable and writable from project " + gLegal
 				}
+				// The grant the dialog approved is announced on this same result,
+				// as it was approved (P13, 2026-11-14: a call late, and beside the
+				// grant it replaced).
+				news := "Read access to " + gFin + " was approved until " + access.Clock(live[0].ExpiresAt) + ", read-only. "
+				if c.access == store.GrantAccessWrite {
+					news = "Read and write access to " + gFin + " was approved until " + access.Clock(live[0].ExpiresAt) + ". "
+				}
+				require.Len(t, notices, 1, "%v", notices)
+				require.True(t, strings.HasPrefix(notices[0], news), notices[0])
 				if c.access == store.GrantAccessWrite {
 					require.Equal(t, "tasks_add: the owner approved read-and-write request "+short+": project "+gFin+" is "+how+
 						", nothing else until "+access.Clock(live[0].ExpiresAt)+".\nRemedy: this call ran before the approval and did "+
@@ -373,11 +382,16 @@ func TestAdvisoryDialog_RefusalFiledGrantReadAndWrite(t *testing.T) {
 				}
 				items, isErr := r.call(cli, "tasks_add", ask)
 				require.Equal(t, !c.writesAfterwards, isErr, "%v", items)
+				if c.writesAfterwards {
+					require.Len(t, items, 1, "announced once: %v", items)
+				}
 			case store.ApprovalDenied:
+				require.Empty(t, notices)
 				require.Equal(t, approval.DecidedByDialog, a.DecidedBy)
 				require.Contains(t, text, "\nRemedy: the owner denied read-and-write request "+short+"; keep to other projects")
 				require.Zero(t, r.count(`SELECT COUNT(*) FROM access_grants`))
 			default:
+				require.Empty(t, notices)
 				require.Empty(t, a.DecidedBy)
 				ls := lines(text)
 				require.Len(t, ls, 2, text)
@@ -548,7 +562,7 @@ func TestAdvisoryDialog_ASessionWithoutIdentity(t *testing.T) {
 	start := r.ok(plain, "session_start", map[string]any{"project": gHR, "name": "sess/plain"})
 	require.Equal(t, gHR, start["project"])
 
-	text := r.refused(plain, "notes_read", map[string]any{"id": r.finNote})
+	text, notices := r.refusedWith(plain, "notes_read", map[string]any{"id": r.finNote})
 	a := r.advRequest(gFin)
 	short := approval.ShortID(a.ID)
 	require.Equal(t, store.AccessKindGrant, a.Kind)
@@ -563,6 +577,9 @@ func TestAdvisoryDialog_ASessionWithoutIdentity(t *testing.T) {
 	require.Equal(t, "notes_read: the owner approved read request "+short+": project "+gFin+" is readable from project "+gHR+
 		", nothing else until "+access.Clock(live[0].ExpiresAt)+".\nRemedy: this call ran before the approval and did "+
 		"nothing -- retry it now.", text)
+	require.Equal(t, []string{"Read access to " + gFin + " was approved until " + access.Clock(live[0].ExpiresAt) +
+		", read-only. This session now writes only into " + gFin + ", for the rest of its life: a write to another " +
+		"project or the global scope is refused."}, notices, "announced on the result whose dialog approved it")
 
 	shown := o.dialogs()
 	require.Len(t, shown, 1)
@@ -577,6 +594,7 @@ func TestAdvisoryDialog_ASessionWithoutIdentity(t *testing.T) {
 	items, isErr := r.call(plain, "notes_read", map[string]any{"id": r.finNote})
 	require.False(t, isErr, "%v", items)
 	require.Contains(t, items[0], "quarterly ledger reconciliation notes")
+	require.Len(t, items, 1, "announced once: %v", items)
 }
 
 // D4's session_start into a fenced project files the request, and the dialog
@@ -610,18 +628,33 @@ func TestFenced_AdvisoryDialogMatrix(t *testing.T) {
 					owner := newOwner(advAnswer("approve", "", ""))
 					cli := advDial(t, r.url, owner, nil)
 					kind := kindOf(r.home, target)
+					// A grant the dialog approved is announced on the result of the
+					// call that asked, once; a move announces itself (moveNews).
+					var notices []string
 					switch action {
 					case "rebind":
-						text := r.refused(cli, "session_start", map[string]any{"project": target})
+						var text string
+						text, notices = r.refusedWith(cli, "session_start", map[string]any{"project": target})
 						require.True(t, strings.HasPrefix(text, "session_start: the owner approved "), text)
 					case "refusal":
-						text := r.refused(cli, "notes_read", map[string]any{"id": r.notes[target]})
+						var text string
+						text, notices = r.refusedWith(cli, "notes_read", map[string]any{"id": r.notes[target]})
 						require.True(t, strings.HasPrefix(text, "notes_read: the owner approved "), text)
 						require.NotContains(t, text, target+" planted notes", "the call that asked read nothing")
 					case "explicit request":
-						out := r.ok(cli, mcpserver.AccessRequestTool, map[string]any{"project": target})
+						items, isErr := r.call(cli, mcpserver.AccessRequestTool, map[string]any{"project": target})
+						require.False(t, isErr, "%v", items)
+						var out map[string]any
+						require.NoError(t, json.Unmarshal([]byte(items[0]), &out))
 						require.Equal(t, kind, out["kind"])
 						require.Equal(t, store.ApprovalApproved, out["status"])
+						notices = items[1:]
+					}
+					if kind == store.AccessKindGrant {
+						require.Len(t, notices, 1, "%v", notices)
+						require.True(t, strings.HasPrefix(notices[0], "Read access to "+target+" was approved until "), notices[0])
+					} else {
+						require.Empty(t, notices)
 					}
 					a := r.advRequest(target)
 					require.Equal(t, kind, a.Kind)
@@ -636,10 +669,47 @@ func TestFenced_AdvisoryDialogMatrix(t *testing.T) {
 						body = "quarterly ledger reconciliation notes"
 					}
 					require.Contains(t, items[0], body)
+					if kind == store.AccessKindGrant {
+						require.Len(t, items, 1, "announced once: %v", items)
+					}
 				})
 			}
 		}
 	}
+}
+
+// A grant a call's dialog replaces is never announced: a read grant approved
+// elsewhere and not yet announced, then replaced inside a call by the read
+// and write the call's dialog approved, would have been announced on that
+// call's result beside its answer naming the replacement, and the
+// replacement a call late (P13, 2026-11-14). The notices speak of the grants
+// as the call leaves them: the replacement, on that result, once.
+func TestAdvisoryDialog_AReplacedGrantIsNeverAnnounced(t *testing.T) {
+	r := newAdvRig(t, fsOrigins[1], dlgLong)
+	// Filed by a client without a dialog, approved as seam approve does.
+	quiet := advDial(t, r.url, nil, nil)
+	text := r.refused(quiet, "notes_read", map[string]any{"id": r.finNote})
+	read := r.approveKey(gShort.FindString(text), approval.For1h)
+	require.Equal(t, store.GrantAccessRead, read.Access)
+
+	o := newOwner(advAnswer("approve", "read-write", approval.For4h))
+	cli := advDial(t, r.url, o, nil)
+	items, isErr := r.call(cli, mcpserver.AccessRequestTool, map[string]any{"project": gFin, "write": true})
+	require.False(t, isErr, "%v", items)
+	require.Len(t, o.dialogs(), 1)
+	live, err := r.grants.Live(context.Background())
+	require.NoError(t, err)
+	require.Len(t, live, 1, "the read and write grant replaced the read grant")
+	require.NotEqual(t, read.ID, live[0].ID)
+	require.Equal(t, store.GrantAccessWrite, live[0].Access)
+	require.Len(t, items, 2, "%v", items)
+	require.True(t, strings.HasPrefix(items[1], "Read and write access to "+gFin+" was approved until "+
+		access.Clock(live[0].ExpiresAt)+". "), items[1])
+	require.NotContains(t, strings.Join(items, "\n"), "Read access to "+gFin, "the grant the call replaced is never announced")
+
+	items, isErr = r.call(cli, "notes_read", map[string]any{"id": r.finNote})
+	require.False(t, isErr, "%v", items)
+	require.Len(t, items, 1, "announced once: %v", items)
 }
 
 // Approve is over the facts the dialog showed: a request that changed while

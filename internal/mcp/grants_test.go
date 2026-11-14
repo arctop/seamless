@@ -172,6 +172,17 @@ func (r *grantRig) refused(cli *mcpclient.Client, name string, args map[string]a
 	return items[0]
 }
 
+// refusedWith is refused for a call whose result may carry notices after its
+// refusal (a grant its dialog approved announces itself there): the refusal,
+// then the notices.
+func (r *grantRig) refusedWith(cli *mcpclient.Client, name string, args map[string]any) (string, []string) {
+	r.t.Helper()
+	items, isErr := r.call(cli, name, args)
+	require.True(r.t, isErr, "%s: %v", name, items)
+	require.NotEmpty(r.t, items)
+	return items[0], items[1:]
+}
+
 func (r *grantRig) count(query string, args ...any) int {
 	r.t.Helper()
 	var n int

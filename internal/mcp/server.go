@@ -433,6 +433,10 @@ func New(cfg Config) *Server {
 		//   - the read grants (grants.go) innermost, after the session= handle:
 		//     the grants a call carries are its own binding's. Off
 		//     (isolation.requests unset) they add nothing.
+		//   - the grant notices (grants.go) outside the approval dialog, so they
+		//     speak of the grants as the call leaves them, a grant its dialog
+		//     approved or replaced included; inside the session= handle, for
+		//     the same binding. Off, as for the grants, they add nothing.
 		//   - the approval dialog (elicit.go) around the lock requester and the
 		//     grants, so it sees the request either filed during the call. Off
 		//     (no approval service, or not the peer_auth socket) it adds nothing.
@@ -446,6 +450,7 @@ func New(cfg Config) *Server {
 		mcpserver.WithToolHandlerMiddleware(s.validateMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.sessionHandleMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.clientCapsMiddleware),
+		mcpserver.WithToolHandlerMiddleware(s.grantNoticeMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.dialogMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.lockRequestMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.grantsMiddleware),

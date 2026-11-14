@@ -35,6 +35,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -57,10 +58,9 @@ type Grants interface {
 	Advisory() bool
 }
 
-// grantsMiddleware plants the call's judged grants and, after the call,
-// appends the grant notices. It runs innermost, after the session= handle
-// resolved, so the binding it reads is the call's own. The notices hold slugs
-// and times only, never a granted project's content.
+// grantsMiddleware plants the call's judged grants. It runs innermost, after
+// the session= handle resolved, so the binding it reads is the call's own. The
+// notices about them are grantNoticeMiddleware's, once the call has ended.
 func (s *Server) grantsMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		if s.cfg.Grants == nil {
@@ -84,7 +84,70 @@ func (s *Server) grantsMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.Tool
 				return errResult(req.Params.Name, err)
 			}
 		}
-		res, err := next(ctx, req)
+		noteGrantsRan(ctx, g)
+		return next(ctx, req)
+	}
+}
+
+// grantNoticeSlotKey keys the per-call slot grantNoticeMiddleware plants.
+type grantNoticeSlotKey struct{}
+
+// grantNoticeSlot carries out of a call what its grant notices are judged
+// from: the grants grantsMiddleware let it run with (ran is false when it
+// refused the call, or could not load them), and whether an approval dialog
+// inside the call ended approved (settle).
+type grantNoticeSlot struct {
+	mu       sync.Mutex
+	ran      bool
+	start    access.Grants
+	approved bool
+}
+
+// noteGrantsRan records g as the grants the call runs with. Outside
+// grantNoticeMiddleware (no slot) it does nothing.
+func noteGrantsRan(ctx context.Context, g access.Grants) {
+	if slot, ok := ctx.Value(grantNoticeSlotKey{}).(*grantNoticeSlot); ok {
+		slot.mu.Lock()
+		defer slot.mu.Unlock()
+		slot.ran, slot.start = true, g
+	}
+}
+
+// noteDialogApproved records that a dialog inside the call ended with its
+// request approved, which may have opened a grant or replaced one.
+func noteDialogApproved(ctx context.Context) {
+	if slot, ok := ctx.Value(grantNoticeSlotKey{}).(*grantNoticeSlot); ok {
+		slot.mu.Lock()
+		defer slot.mu.Unlock()
+		slot.approved = true
+	}
+}
+
+func (s *grantNoticeSlot) get() (start access.Grants, approved, ran bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.start, s.approved, s.ran
+}
+
+// grantNoticeMiddleware appends the grant notices to a call's result once the
+// call has ended, its approval dialog included: the first result to see a
+// grant announces it, and one ending soon is warned about. They are judged
+// from the grants as they stand when the call ends, never as it began: a call
+// whose dialog approves a grant, or replaces one (a refresh, or a read
+// approved again as read and write), would otherwise announce the grant it
+// had just replaced beside its own answer naming the new one, and the new one
+// a call late (P13, 2026-11-14). Only a call with something to say, or one
+// whose dialog approved, pays the second read. It runs outside the approval
+// dialog and inside the session= handle, so the binding it reads is the
+// call's own. The notices hold slugs and times only, never a granted
+// project's content.
+func (s *Server) grantNoticeMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if s.cfg.Grants == nil {
+			return next(ctx, req)
+		}
+		slot := &grantNoticeSlot{}
+		res, err := next(context.WithValue(ctx, grantNoticeSlotKey{}, slot), req)
 		if err != nil || res == nil {
 			return res, err
 		}
@@ -92,26 +155,63 @@ func (s *Server) grantsMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.Tool
 			// Its grants were just revoked: nothing to announce or warn about.
 			return res, err
 		}
+		start, approved, ran := slot.get()
 		now := s.now()
-		live := g.Live()
-		var notes []string
-		for _, l := range live {
-			if s.claimGrant(l, now) {
-				notes = append(notes, s.grantNews(ctx, l))
-			}
+		if !ran || (!approved && !s.grantNoticeDue(start, now)) {
+			return res, err
 		}
-		ending := make([]access.Lease, len(live))
-		for i, l := range live {
-			ending[i] = access.Lease{ID: l.ID, Project: l.Project, Expires: l.Expires}
+		g, _, lerr := s.loadGrants(ctx)
+		if lerr != nil {
+			// None sent: nothing was claimed, so the next result says it.
+			s.logger.Warn("mcp: grant notices", "tool", req.Params.Name, "error", lerr)
+			return res, err
 		}
-		if text := access.ExpiryNotice(ending, now); text != "" {
-			notes = append(notes, text)
-		}
-		for _, n := range notes {
+		for _, n := range s.grantNotices(ctx, g, now) {
 			res.Content = append(res.Content, mcp.NewTextContent(n))
 		}
 		return res, err
 	}
+}
+
+// grantNoticeDue reports whether g, as a call began, had a notice to send: a
+// live grant no result announced yet, or one ending within
+// access.ExpiryWarning.
+func (s *Server) grantNoticeDue(g access.Grants, now time.Time) bool {
+	live := g.Live()
+	s.grantMu.Lock()
+	for _, l := range live {
+		if _, seen := s.grantSeen[l.ID]; !seen {
+			s.grantMu.Unlock()
+			return true
+		}
+	}
+	s.grantMu.Unlock()
+	return access.ExpiryNotice(grantLeases(live), now) != ""
+}
+
+// grantNotices are the notices g's live grants call for: each one's news the
+// first time a result sees it (claimGrant), then the expiry warning.
+func (s *Server) grantNotices(ctx context.Context, g access.Grants, now time.Time) []string {
+	live := g.Live()
+	var notes []string
+	for _, l := range live {
+		if s.claimGrant(l, now) {
+			notes = append(notes, s.grantNews(ctx, g, l))
+		}
+	}
+	if text := access.ExpiryNotice(grantLeases(live), now); text != "" {
+		notes = append(notes, text)
+	}
+	return notes
+}
+
+// grantLeases is live as the leases access.ExpiryNotice words.
+func grantLeases(live []access.Grant) []access.Lease {
+	ending := make([]access.Lease, len(live))
+	for i, l := range live {
+		ending[i] = access.Lease{ID: l.ID, Project: l.Project, Expires: l.Expires}
+	}
+	return ending
 }
 
 // loadGrants judges the conversation this call speaks for
@@ -280,9 +380,8 @@ func (s *Server) holderWord() string {
 
 // grantNews is what a result says about a grant the first time this server
 // sees it: what was approved, until when, and where the conversation may now
-// write (the judged state ctx carries, which holds the grant).
-func (s *Server) grantNews(ctx context.Context, l access.Grant) string {
-	g, _ := access.GrantsFrom(ctx)
+// write (g, the judged state that holds the grant).
+func (s *Server) grantNews(ctx context.Context, g access.Grants, l access.Grant) string {
 	what := "Read access to %s was approved until %s, read-only."
 	if l.Write {
 		what = "Read and write access to %s was approved until %s."

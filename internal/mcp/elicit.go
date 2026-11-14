@@ -677,6 +677,7 @@ func (s *Server) settle(ctx, dctx context.Context, t dialogTarget, end dialogEnd
 	end.request, end.state = a, s.stateOf(a)
 	if end.state == stateApproved {
 		end.until, end.write = s.accessEnd(rctx, a)
+		noteDialogApproved(ctx)
 	}
 	return end
 }
