@@ -168,11 +168,14 @@ type accessOneData struct {
 	// For is the duration ?for= chose (one of approval.Durations; an invalid
 	// one is ignored, and the owner chooses on the page). PasskeyOptions are
 	// issued only with one: the assertion signs the duration.
-	For            string            `json:"for,omitempty"`
-	PasskeyOptions json.RawMessage   `json:"passkey_options,omitempty"`
-	Terminal       *TerminalApprover `json:"terminal,omitempty"`
-	Durations      []string          `json:"durations"`
-	MaxLease       string            `json:"max_lease"`
+	For            string          `json:"for,omitempty"`
+	PasskeyOptions json.RawMessage `json:"passkey_options,omitempty"`
+	// PreFor is the duration ?for= chose for a grant whose access is still to
+	// choose: the choose step preselects it rather than signing read-only.
+	PreFor    string            `json:"-"`
+	Terminal  *TerminalApprover `json:"terminal,omitempty"`
+	Durations []string          `json:"durations"`
+	MaxLease  string            `json:"max_lease"`
 	// Advisory marks a read grant request in the tier without peer_auth: seam
 	// approve commits it over this console with the bearer key (POST
 	// /console/access/{id}/approve without a passkey response), and the page
@@ -492,6 +495,14 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 		// the facts this page shows.
 		if d.For = chosenDuration(r); d.ForGood {
 			d.For = approval.ForSession
+		}
+		if d.For != "" && len(d.Accesses) > 1 && d.Access == "" {
+			// A grant offering read and write never skips its access step:
+			// the in-session dialog that sends the owner here with ?for=
+			// chose only how long, and signing that would approve read-only
+			// whatever the owner meant (P13, 2026-11-14). The choose step
+			// keeps the duration chosen.
+			d.PreFor, d.For = d.For, ""
 		}
 		if d.For != "" {
 			d.ForWords = durationWords(d.For, d.MaxLease)

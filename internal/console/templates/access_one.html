@@ -72,7 +72,7 @@
   </fieldset>
   {{end}}<fieldset>
     <legend>For how long</legend>
-    {{range $i, $c := .Choices}}<label><input type="radio" name="for" value="{{$c.Value}}"{{if eq $i 0}} checked{{end}}> {{$c.Words}}</label>
+    {{range $i, $c := .Choices}}<label><input type="radio" name="for" value="{{$c.Value}}"{{if $.Data.PreFor}}{{if eq $c.Value $.Data.PreFor}} checked{{end}}{{else if eq $i 0}} checked{{end}}> {{$c.Words}}</label>
     {{end}}
   </fieldset>
   <p class="held-sub">The passkey signs the {{if .Accesses}}access and the {{end}}duration you choose, with the facts above.</p>

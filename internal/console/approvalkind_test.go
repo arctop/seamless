@@ -199,6 +199,31 @@ func TestKindsConsole_PasskeyPageSignsTheAccess(t *testing.T) {
 	}())
 	require.Contains(t, choose.Body.String(), `name="access" value="read-write"`, "the choose step offers the access")
 
+	// The in-session dialog sends the owner here with only ?for= (it chose how
+	// long, never the access): the page keeps the access step, with that
+	// duration preselected, instead of offering a passkey that signs
+	// read-only (P13, 2026-11-14).
+	fromDialog := do(f.mux, func() *http.Request {
+		r := authedReq(httptest.NewRequest(http.MethodGet, "/console/access/"+id+"?for=1h", nil))
+		r.Host = "localhost:8081"
+		return r
+	}())
+	require.Equal(t, http.StatusOK, fromDialog.Code)
+	body := fromDialog.Body.String()
+	require.Contains(t, body, `id="access-choose"`)
+	require.Contains(t, body, `name="access" value="read-write"`)
+	require.Contains(t, body, `name="for" value="1h" checked`, "the dialog's duration stays chosen")
+	require.NotContains(t, body, `name="for" value="session" checked`)
+	require.NotContains(t, body, `data-options="{`, "no passkey before the access is chosen")
+	require.NotContains(t, body, "Access: <strong>read-only</strong>")
+	readOnly := do(f.mux, func() *http.Request {
+		r := authedReq(httptest.NewRequest(http.MethodGet, "/console/access/"+id+"?for=1h&access=read-only", nil))
+		r.Host = "localhost:8081"
+		return r
+	}())
+	require.Contains(t, readOnly.Body.String(), "Access: <strong>read-only</strong>", "read-only chosen on purpose signs it")
+	require.Contains(t, readOnly.Body.String(), `data-options="{`)
+
 	one, facts := f.page(t, "/console/access/"+id+"?for=1h&access=read-write")
 	require.JSONEq(t, `"read-write"`, string(one["access"]))
 	opts := one["passkey_options"]

@@ -614,8 +614,12 @@ the default browser - `open` on macOS, `xdg-open` on Linux, `rundll32` on
 Windows - or prints the address when no browser could be opened. With `--for`
 (a duration the daemon offers), the page opens with it chosen
 (`/console/access/<id>?for=1h`): it shows that duration read-only, with a link
-to choose another; without `--for`, the page asks. The passkey signs the
-duration with the facts shown, so its approval binds both. A daemon that offers
+to choose another; without `--for`, the page asks. A grant that offers read and
+write opens with its access chosen only with `--access`: without it the page
+asks the access, with the duration preselected, so no passkey ever signs
+read-only by default (the in-session dialog's passkey link works the same way).
+The passkey signs the duration, the access and the facts shown, so its approval
+binds all three. A daemon that offers
 no passkey approval names no page, and the command says so.
 
 `--watch` polls the pending list every 3 seconds, prints each new request once
