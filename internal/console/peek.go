@@ -103,7 +103,7 @@ func (s *Service) memoryDetailData(ctx context.Context, m core.Memory) (memoryDe
 		Level: s.consoleLevel(ctx).Level,
 		ID:    m.ID, Kind: string(m.Kind), Name: m.Name, Description: m.Description,
 		Project: m.Project, Status: status, Tags: m.Tags,
-		Created: m.Created, Updated: m.Updated, Source: m.SourceSession, Model: m.Model,
+		Created: m.Created, Updated: m.Updated, Model: m.Model,
 		Account: m.Account, Favorite: m.Favorite,
 		FilePath: m.FilePath, AbsPath: abs, EditURL: edit,
 		CanArchive: s.cfg.Files != nil && m.Active(),
@@ -145,6 +145,7 @@ func (s *Service) memoryDetailData(ctx context.Context, m core.Memory) (memoryDe
 	if sess := resolve(m.SourceSession); sess.ID != "" {
 		d.SourceID = sess.ID
 	}
+	d.Source = sourceSessionLabel(resolve, m.SourceSession)
 	d.Harness = harnessOfSource(resolve, m.SourceSession)
 
 	// Supersession, both directions.

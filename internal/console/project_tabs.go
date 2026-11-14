@@ -734,8 +734,9 @@ func (s *Service) fillMemoriesTab(ctx context.Context, data *projectWorkspaceDat
 	if err != nil {
 		return err
 	}
+	resolve := s.sourceSessionResolver(ctx)
 	for _, m := range strict {
-		data.Memories = append(data.Memories, s.projMemory(ctx, m))
+		data.Memories = append(data.Memories, s.projMemory(ctx, m, resolve))
 	}
 	active, err := store.ActiveMemories(ctx, s.db(ctx), slug)
 	if err != nil {
@@ -745,18 +746,18 @@ func (s *Service) fillMemoriesTab(ctx context.Context, data *projectWorkspaceDat
 		if m.Project == slug {
 			continue // strict rows already shown above
 		}
-		data.Inherited = append(data.Inherited, s.projMemory(ctx, m))
+		data.Inherited = append(data.Inherited, s.projMemory(ctx, m, resolve))
 	}
 	return nil
 }
 
 // projMemory projects a memory into a Memories-tab row, building its lineage
-// cell and joining its retrieval stats.
-func (s *Service) projMemory(ctx context.Context, m core.Memory) projMemoryVM {
+// cell (resolve names its source session) and joining its retrieval stats.
+func (s *Service) projMemory(ctx context.Context, m core.Memory, resolve func(string) core.Session) projMemoryVM {
 	vm := projMemoryVM{
 		ID: m.ID, Name: m.Name, Kind: string(m.Kind), Desc: m.Description,
 		Account: m.Account, Updated: m.Updated, Superseded: !m.Active(),
-		Lineage: s.memLineage(ctx, m),
+		Lineage: s.memLineage(ctx, m, resolve),
 	}
 	if stat, ok, err := store.GetRetrievalStat(ctx, s.db(ctx), m.ID); err == nil && ok {
 		vm.Injects, vm.Reads = stat.InjectCount, stat.ReadCount
@@ -765,8 +766,9 @@ func (s *Service) projMemory(ctx context.Context, m core.Memory) projMemoryVM {
 }
 
 // memLineage renders a memory's provenance cell: a supersession pointer when the
-// memory was replaced, else its source session, else nothing.
-func (s *Service) memLineage(ctx context.Context, m core.Memory) template.HTML {
+// memory was replaced, else its source session by name (sourceSessionLabel),
+// else nothing.
+func (s *Service) memLineage(ctx context.Context, m core.Memory, resolve func(string) core.Session) template.HTML {
 	if m.SupersededBy != "" {
 		name := m.SupersededBy
 		if by, ok, err := store.MemoryByID(ctx, s.db(ctx), m.SupersededBy); err == nil && ok {
@@ -777,7 +779,7 @@ func (s *Service) memLineage(ctx context.Context, m core.Memory) template.HTML {
 	}
 	if m.SourceSession != "" {
 		return template.HTML(`<span class="lineage">` + string(icon("git-commit-horizontal")) +
-			`from ` + template.HTMLEscapeString(m.SourceSession) + `</span>`)
+			`from ` + template.HTMLEscapeString(sourceSessionLabel(resolve, m.SourceSession)) + `</span>`)
 	}
 	return template.HTML(`<span class="lineage faint">&mdash;</span>`)
 }

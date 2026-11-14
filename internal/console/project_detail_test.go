@@ -159,3 +159,33 @@ func TestProjectDetail_PeekIsThinSummary(t *testing.T) {
 	require.Equal(t, "seamless", d.Slug)
 	require.Equal(t, 1, d.Sessions)
 }
+
+// A bound stamp is the session's ULID: the Memories tab's lineage cell and the
+// memory page name the session instead (P13, 2026-11-14: "from 01M7DHMQ..."
+// where cc/71e9c68f-... was meant), and a stamp whose session is gone reads as
+// stored.
+func TestProjectWorkspace_LineageNamesTheSourceSession(t *testing.T) {
+	db, mux := newConsole(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	require.NoError(t, store.CreateProject(ctx, db, core.Project{
+		ID: mustID(t), Slug: "seamless", Name: "Seamless", CreatedAt: now, UpdatedAt: now,
+	}))
+	sessID := mustID(t)
+	require.NoError(t, store.CreateSession(ctx, db, core.Session{
+		ID: sessID, Name: "cc/71e9c68f-bound", ProjectSlug: "seamless", Status: core.SessionActive,
+		CreatedAt: now, UpdatedAt: now,
+	}))
+	bound, gone, goneSess := mustID(t), mustID(t), mustID(t)
+	insertRawMemory(t, db, bound, "seamless", sessID, now)
+	insertRawMemory(t, db, gone, "seamless", goneSess, now)
+
+	body := getHTMLBody(t, mux, "/console/projects/seamless?tab=memories")
+	require.Contains(t, body, "from cc/71e9c68f-bound</span>")
+	require.NotContains(t, body, "from "+sessID)
+	require.Contains(t, body, "from "+goneSess+"</span>", "a session that is gone: the stamp as stored")
+
+	page := getHTMLBody(t, mux, "/console/memories/"+bound)
+	require.Contains(t, page, `<a href="/console/sessions/`+sessID+`">cc/71e9c68f-bound</a>`)
+	require.NotContains(t, page, ">"+sessID+"<", "the ULID is the link, never the label")
+}

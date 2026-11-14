@@ -85,6 +85,20 @@ func (s *Service) sourceSessionResolver(ctx context.Context) func(string) core.S
 	}
 }
 
+// sourceSessionLabel is how a provenance value reads on the console: the
+// session's name once the value resolves to a row that has one -- a bound
+// stamp is the session's ULID, which tells the owner nothing (P13,
+// 2026-11-14: "from 01M7DHMQ..." where cc/71e9c68f-... was meant) -- else the
+// value as stored. A ULID-shaped value resolves only by id
+// (sourceSessionResolver), so no session named after another's ULID can take
+// over the label.
+func sourceSessionLabel(resolve func(string) core.Session, src string) string {
+	if sess := resolve(src); sess.Name != "" {
+		return sess.Name
+	}
+	return src
+}
+
 // harnessOfSource derives the client for a provenance value: the resolved
 // session's identity when the row still exists, else the ambient name prefix.
 func harnessOfSource(resolve func(string) core.Session, src string) string {
