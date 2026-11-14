@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/update"
 )
 
@@ -42,7 +43,8 @@ func (r setupNoRead) Read([]byte) (int, error) {
 	return 0, io.EOF
 }
 
-// setupClientCall is one config write a Client answered at the terminal.
+// setupClientCall is one Client config setup wrote: the server it dials and
+// the key it holds ("" for a relay's socket config).
 type setupClientCall struct{ url, key string }
 
 // setupTestRun is a run over scripted answers. With input "" and interactive
@@ -58,10 +60,42 @@ func setupTestRun(t *testing.T, goos string, environ []string, facts setupFacts,
 	in := bufio.NewReader(src)
 	r := &setupRun{
 		goos: goos, environ: environ, facts: facts, interactive: interactive, in: in, out: out,
-		secret: func() (string, error) { return in.ReadString('\n') },
-		ensureClient: func(url, key string) (string, error) {
-			calls = append(calls, setupClientCall{url, key})
-			return "/h/.config/seamless/seamless.yaml", nil
+		// A Client's steps reach no server, read no account and run no
+		// check unless the test arranges them (clientArrange); the configs
+		// they write are recorded, never written.
+		client: clientHost{
+			serverCert: func(context.Context, string) (clientServerCert, error) {
+				t.Helper()
+				t.Fatal("setup read a server's certificate on a run whose test arranged no server")
+				return clientServerCert{}, nil
+			},
+			pair: func(context.Context, string, string, devices.PairRequest) (devices.Paired, error) {
+				t.Helper()
+				t.Fatal("setup paired on a run whose test arranged no server")
+				return devices.Paired{}, nil
+			},
+			configTarget: func() (string, string, error) { return "", "/h/.config/seamless/seamless.yaml", nil },
+			ensureDevice: func(url, key, _ string) (string, error) {
+				calls = append(calls, setupClientCall{url, key})
+				return "/h/.config/seamless/seamless.yaml", nil
+			},
+			ensureSocket: func() (string, error) {
+				calls = append(calls, setupClientCall{config.RelaySocketURL, ""})
+				return "/h/.config/seamless/seamless.yaml", nil
+			},
+			writeFile: func(string, []byte) error { return nil },
+			exe:       os.Executable,
+			owner:     func() string { return "example-owner" },
+			ownerUID:  func() int { return 501 },
+			accounts:  func() clientAccounts { return clientAccounts{uid: 480, gid: 479} },
+			check: func(context.Context, io.Writer, string) error {
+				t.Helper()
+				t.Fatal("setup ran the closing check on a run whose test arranged none")
+				return nil
+			},
+			// No test dials the machine's own socket path: a relay serves
+			// only where a test says so.
+			relayServing: func() bool { return false },
 		},
 		// A step no test arranged must never load the machine's config, whose
 		// data dir is the live one: this run's is a loopback install's, in a
@@ -105,6 +139,9 @@ var (
 		role: "client", serverURL: "https://box.example:8081/"}
 	setupFactsLocked = setupFacts{configPath: "/h/.config/seamless/seamless.yaml", configFound: true,
 		role: "client", serverURL: "unix:///opt/seamless/run/seamlessd.sock", systemService: true}
+	// setupFactsRelay is a relay Client's: the socket, and no daemon here.
+	setupFactsRelay = setupFacts{configPath: "/h/.config/seamless/seamless.yaml", configFound: true,
+		role: "client", serverURL: "unix:///opt/seamless/run/seamlessd.sock"}
 )
 
 func TestSetupDecide(t *testing.T) {
@@ -149,24 +186,20 @@ func TestSetupDecide(t *testing.T) {
 			out:  []string{"please enter a number from 1 to 2"}},
 		{name: "Networked has no default: end of input stops", facts: setupFactsFresh, interactive: true, input: "2\n\n",
 			err: "no answer: set SEAMLESS_SETUP=standalone|server|client"},
-		{name: "a terminal, Networked then Client", facts: setupFactsFresh, interactive: true,
-			input: "2\n2\nbox.example:8081\nhttps://box.example:8081/\n\nsecret-key\n",
+		{name: "a terminal, Networked then Client: the address, and nothing written yet", facts: setupFactsFresh, interactive: true,
+			input: "2\n2\nbox.example:8081\nhttps://box.example:8081/\n",
 			want:  want{kind: setupClient, role: client, serverURL: "https://box.example:8081", answer: setupAsked},
-			out:   []string{"run  seamlessd client-config  on the Server", "the address starts with https://", "wrote the client config"},
-			noOut: []string{"secret-key"},
-			wrote: []setupClientCall{{"https://box.example:8081", "secret-key"}}},
-		{name: "a Client over plain http is warned", facts: setupFactsFresh, interactive: true, input: "2\n2\nhttp://10.0.0.5:8081\nk\n",
-			want:  want{kind: setupClient, role: client, serverURL: "http://10.0.0.5:8081", answer: setupAsked},
-			out:   []string{"plain http"},
-			wrote: []setupClientCall{{"http://10.0.0.5:8081", "k"}}},
+			out:   []string{"its setup printed it, and so does seamlessd devices code there", "the address starts with https://"},
+			noOut: []string{"key (the input is hidden)"}},
+		{name: "a Client over plain http is taken: the pairing step warns", facts: setupFactsFresh, interactive: true, input: "2\n2\nhttp://10.0.0.5:8081\n",
+			want: want{kind: setupClient, role: client, serverURL: "http://10.0.0.5:8081", answer: setupAsked}},
 		{name: "a Client with no address stops", facts: setupFactsFresh, interactive: true, input: "2\n2\n",
 			err: "no Server address"},
 		{name: "Windows: Networked is the Client, never the Server", goos: "windows", facts: setupFactsFresh, interactive: true,
-			input: "2\nhttps://box.example:8081\nk\n",
+			input: "2\nhttps://box.example:8081\n",
 			want:  want{kind: setupClient, role: client, serverURL: "https://box.example:8081", answer: setupAsked},
 			out:   []string{"Windows has no peer_auth and no relay", "as its Client"},
-			noOut: []string{"Set up the Server first"},
-			wrote: []setupClientCall{{"https://box.example:8081", "k"}}},
+			noOut: []string{"Set up the Server first"}},
 
 		// The environment's answers.
 		{name: "SEAMLESS_SETUP=standalone", facts: setupFactsFresh, env: []string{"SEAMLESS_SETUP=standalone"},
@@ -176,7 +209,7 @@ func TestSetupDecide(t *testing.T) {
 		{name: "SEAMLESS_SETUP=server, even at a terminal, asks nothing", facts: setupFactsFresh, interactive: true,
 			env: []string{"SEAMLESS_SETUP=server"}, want: want{kind: setupServer, role: server, answer: setupFromEnv}},
 		{name: "SEAMLESS_SETUP=client alone stops: no question for a script", facts: setupFactsFresh, interactive: true,
-			env: []string{"SEAMLESS_SETUP=client"}, err: "SEAMLESS_SETUP=client needs the Server to connect to: set SEAMLESS_SERVER_URL and SEAMLESS_MCP_API_KEY"},
+			env: []string{"SEAMLESS_SETUP=client"}, err: "SEAMLESS_SETUP=client needs the Server to connect to: set SEAMLESS_SERVER_URL, and SEAMLESS_PAIR_CODE"},
 		{name: "SEAMLESS_SETUP=bogus", facts: setupFactsFresh, env: []string{"SEAMLESS_SETUP=bogus"},
 			err: `invalid SEAMLESS_SETUP="bogus": valid values are standalone, server, client`},
 		{name: "SEAMLESS_SETUP=server on Windows", goos: "windows", facts: setupFactsFresh, env: []string{"SEAMLESS_SETUP=server"},
@@ -234,9 +267,42 @@ func TestSetupDecide(t *testing.T) {
 			err: "SEAMLESS_IMPORT_LOCKS=keep says what an import does with a backup's locked projects, and SEAMLESS_IMPORT names no backup"},
 		{name: "SEAMLESS_IMPORT_LOCKS=maybe is refused", facts: setupFactsFresh, env: []string{"SEAMLESS_IMPORT=/b.tar.gz", "SEAMLESS_IMPORT_LOCKS=maybe"},
 			err: `invalid SEAMLESS_IMPORT_LOCKS="maybe": valid values are keep, remove`},
-		{name: "SEAMLESS_PAIR_CODE is not built", facts: setupFactsFresh,
-			env: []string{"SEAMLESS_SETUP=client", "SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_MCP_API_KEY=k", "SEAMLESS_PAIR_CODE=1234"},
-			err: "SEAMLESS_PAIR_CODE: pairing with a one-time code is not built into setup yet"},
+		// SEAMLESS_PAIR_CODE: a Client that pairs, with no key of the Server's.
+		{name: "SEAMLESS_SERVER_URL and SEAMLESS_PAIR_CODE: a Client that pairs", facts: setupFactsFresh,
+			env:  []string{"SEAMLESS_SETUP=client", "SEAMLESS_SERVER_URL=https://box.example:8081/", "SEAMLESS_PAIR_CODE=ABCD-EFGH-JKMN-PQRS"},
+			want: want{kind: setupClient, role: client, serverURL: "https://box.example:8081", answer: setupFromEnv}},
+		{name: "a pairing code needs no SEAMLESS_SETUP", facts: setupFactsFresh, interactive: true,
+			env:  []string{"SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_PAIR_CODE=ABCD", "SEAMLESS_PAIR_AS=key"},
+			want: want{kind: setupClient, role: client, serverURL: "https://box.example:8081", answer: setupFromEnv}},
+		{name: "a pairing code and the Server's key", facts: setupFactsFresh,
+			env: []string{"SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_MCP_API_KEY=k", "SEAMLESS_PAIR_CODE=1234"},
+			err: "SEAMLESS_PAIR_CODE and SEAMLESS_MCP_API_KEY are both set"},
+		{name: "a pairing code with no Server", facts: setupFactsFresh, env: []string{"SEAMLESS_PAIR_CODE=1234"},
+			err: "SEAMLESS_PAIR_CODE pairs this computer with a Server: set SEAMLESS_SERVER_URL to its address too"},
+		{name: "a pairing code for the Server", facts: setupFactsFresh,
+			env: []string{"SEAMLESS_SETUP=server", "SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_PAIR_CODE=1234"},
+			err: "SEAMLESS_SETUP=server and SEAMLESS_PAIR_CODE disagree"},
+		{name: "a fingerprint with no code", facts: setupFactsFresh, env: []string{"SEAMLESS_SERVER_FINGERPRINT=AB:CD"},
+			err: "SEAMLESS_SERVER_FINGERPRINT answers a pairing, and SEAMLESS_PAIR_CODE names no code"},
+		{name: "a fingerprint that is not one", facts: setupFactsFresh,
+			env: []string{"SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_PAIR_CODE=1234", "SEAMLESS_SERVER_FINGERPRINT=AB:CD"},
+			err: "SEAMLESS_SERVER_FINGERPRINT=AB:CD is not a certificate's SHA-256 fingerprint"},
+		{name: "SEAMLESS_PAIR_AS=bogus", facts: setupFactsFresh,
+			env: []string{"SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_PAIR_CODE=1234", "SEAMLESS_PAIR_AS=bogus"},
+			err: `invalid SEAMLESS_PAIR_AS="bogus": valid values are relay, key`},
+		{name: "SEAMLESS_PAIR_AS=relay on Windows", goos: "windows", facts: setupFactsFresh,
+			env: []string{"SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_PAIR_CODE=1234", "SEAMLESS_PAIR_AS=relay"},
+			err: "the relay runs on macOS and Linux only"},
+		{name: "a pairing code on a Standalone is refused: its daemon holds the socket", facts: setupFactsStandalone,
+			env: []string{"SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_PAIR_CODE=1234"},
+			err: "SEAMLESS_PAIR_CODE: this computer is set up as Standalone and keeps its own data; setup does not make it a Client"},
+		{name: "a pairing code on peer_auth's Standalone is refused", facts: setupFactsLocked,
+			env: []string{"SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_PAIR_CODE=1234"}, err: "setup does not make it a Client"},
+		{name: "a pairing code on a Client pairs it again", facts: setupFactsClient,
+			env:  []string{"SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_PAIR_CODE=1234"},
+			want: want{kind: setupClient, role: client, serverURL: "https://box.example:8081", answer: setupFromEnv}},
+		{name: "a relay Client's socket config, its root step not yet run: a Client", facts: setupFactsRelay,
+			want: want{kind: setupClient, role: client, serverURL: "unix:///opt/seamless/run/seamlessd.sock", answer: setupKept}},
 
 		// A re-run.
 		{name: "a re-run keeps what is installed", facts: setupFactsStandalone,
@@ -312,8 +378,11 @@ func TestSetupDecide_ScriptedRunsNeverRead(t *testing.T) {
 		{"SEAMLESS_IMPORT=/b.tar.gz"}, {"SEAMLESS_IMPORT=/b.tar.gz", "SEAMLESS_IMPORT_LOCKS=remove"},
 		{"SEAMLESS_SETUP=server", "SEAMLESS_SERVER_NAME=a.example"}, {"SEAMLESS_SERVER_NAME=a.example"},
 		{"SEAMLESS_SETUP=server", "SEAMLESS_SERVER_NAME=a.example", "SEAMLESS_TLS_CERT=/c.crt", "SEAMLESS_TLS_KEY=/c.key"},
+		{"SEAMLESS_SETUP=client", "SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_PAIR_CODE=ABCD"},
+		{"SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_PAIR_CODE=ABCD", "SEAMLESS_PAIR_AS=key"},
+		{"SEAMLESS_PAIR_CODE=ABCD"}, {"SEAMLESS_SERVER_FINGERPRINT=AB"},
 	}
-	for _, facts := range []setupFacts{setupFactsFresh, setupFactsStandalone, setupFactsServer, setupFactsClient, setupFactsLocked} {
+	for _, facts := range []setupFacts{setupFactsFresh, setupFactsStandalone, setupFactsServer, setupFactsClient, setupFactsLocked, setupFactsRelay} {
 		for _, env := range envs {
 			for _, interactive := range []bool{false, true} {
 				if interactive && len(env) == 0 {
@@ -323,7 +392,6 @@ func TestSetupDecide_ScriptedRunsNeverRead(t *testing.T) {
 				if interactive {
 					r.in = bufio.NewReader(setupNoRead{t})
 				}
-				r.secret = func() (string, error) { t.Fatal("setup asked for a key on a scripted run"); return "", nil }
 				_, err := setupDecide(r)
 				if err != nil {
 					require.ErrorIs(t, err, errSetupRefused)
@@ -345,7 +413,8 @@ func TestSetupDecide_UpdaterRunsAreScripted(t *testing.T) {
 	knobs := mergeKnobs(shape, map[string]string{"SEAMLESS_VERSION": "0.9.0"})
 	owner := []string{"PATH=/usr/bin", "HOME=/h", "SEAMLESS_SETUP=server", "SEAMLESS_IMPORT=/b", "SEAMLESS_IMPORT_LOCKS=remove", "SEAMLESS_PAIR_CODE=1",
 		"SEAMLESS_SERVER_NAME=a.example", "SEAMLESS_TLS_CERT=/c.crt", "SEAMLESS_TLS_KEY=/c.key"}
-	setupKnobs := []string{setupKnobKind, setupKnobImport, setupKnobImportLocks, setupKnobPairCode, setupKnobServerName, setupKnobTLSCert, setupKnobTLSKey}
+	setupKnobs := []string{setupKnobKind, setupKnobImport, setupKnobImportLocks, setupKnobPairCode, setupKnobFingerprint, setupKnobPairAs,
+		setupKnobServerName, setupKnobTLSCert, setupKnobTLSKey}
 
 	unattended, err := unattendedInstallerEnv("linux", owner, knobs)
 	require.NoError(t, err)
@@ -486,6 +555,32 @@ func TestSetupWords_OnePlace(t *testing.T) {
 		require.Contains(t, out.String(), "Start fresh, or from a backup?")
 		all.WriteString(out.String())
 	}
+	// A Client's pairing, both halves: the certificate, the questions, a key
+	// device's rows, the relay's root step and the closing check; and its
+	// refusals.
+	for _, c := range []struct {
+		goos  string
+		env   []string
+		input string
+	}{
+		{"linux", []string{"SEAMLESS_SETUP=spoke", "SEAMLESS_SERVER_URL=https://b.example:8081", "SEAMLESS_PAIR_CODE=ABCD"}, ""},
+		{"darwin", nil, "2\n2\nhttps://b.example:8081\ny\n2\nABCD\n"},
+		{"darwin", nil, "2\n2\nhttps://b.example:8081\nn\n"},
+	} {
+		r, out, _ := setupTestRun(t, c.goos, c.env, setupFactsFresh, c.input != "", c.input)
+		clientArrange(t, r, clientTrusted)
+		st, err := clientFirstHalf(t, r)
+		if err == nil {
+			err = setupHandOff(r, &st, setupStepsLeft(st, c.goos), true)
+		}
+		if err != nil {
+			all.WriteString(err.Error() + "\n")
+		}
+		all.WriteString(out.String())
+	}
+	run("linux", []string{"SEAMLESS_SERVER_URL=https://b", "SEAMLESS_PAIR_CODE=1", "SEAMLESS_MCP_API_KEY=k"}, setupFactsFresh, false, "")
+	run("linux", []string{"SEAMLESS_SERVER_URL=https://b", "SEAMLESS_PAIR_CODE=1"}, setupFactsStandalone, false, "")
+	run("linux", []string{"SEAMLESS_SETUP=hub", "SEAMLESS_SERVER_URL=https://b", "SEAMLESS_PAIR_CODE=1"}, setupFactsFresh, false, "")
 	setupUsage(&all, flagSetForSetupUsage(), "linux")
 
 	text := all.String()
@@ -555,8 +650,8 @@ func TestSetupHandOff_SaysWhatSetupDoesNotDoYet(t *testing.T) {
 			want: []string{"setup does not do this Standalone step yet:", "locked"}},
 		{name: "a first Standalone on Windows: no locked projects there, and the import is built", goos: "windows",
 			st: setupState{kind: setupStandalone, role: config.RoleServer, answer: setupAsked}, none: true},
-		{name: "a Client", st: setupState{kind: setupClient, role: config.RoleClient, serverURL: "https://b", answer: setupFromEnv},
-			want: []string{"pairing", "this Client uses its Server's key"}},
+		{name: "a Client of its Server's key: nothing by hand, nothing to pair", st: setupState{kind: setupClient, role: config.RoleClient,
+			serverURL: "https://b", answer: setupFromEnv}, none: true},
 		{name: "a change to the Server: no import on a re-run",
 			st:   setupState{kind: setupServer, role: config.RoleServer, installed: setupStandalone, answer: setupAsked, change: "server"},
 			want: []string{"locked", "This Server serves no other computer yet"}},
@@ -736,7 +831,7 @@ func TestSetupProtocol_TheInstallersSpeakIt(t *testing.T) {
 	require.Contains(t, string(ps), "$SetupHeader = '"+setupStateHeader+"'\n")
 	require.Contains(t, string(ps), "$line.StartsWith('role='")
 	require.Contains(t, string(ps), "$line.StartsWith('server_url='")
-	for _, knob := range []string{setupKnobKind, setupKnobPairCode, setupKnobImport, setupKnobImportLocks,
+	for _, knob := range []string{setupKnobKind, setupKnobPairCode, setupKnobFingerprint, setupKnobPairAs, setupKnobImport, setupKnobImportLocks,
 		setupKnobServerName, setupKnobTLSCert, setupKnobTLSKey} {
 		require.Contains(t, string(sh), "${"+knob+":-}", "docs/install looks for %s", knob)
 		// \b: $env:SEAMLESS_IMPORT must not pass on $env:SEAMLESS_IMPORT_LOCKS alone.

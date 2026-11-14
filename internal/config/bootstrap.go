@@ -179,7 +179,9 @@ func EnsureClientConfig(url, key string) (Config, string, error) {
 		"# env: SEAMLESS_SERVER_URL\n" +
 		"server_url: " + yamlString(serverURL) + "\n" +
 		"mcp:\n" +
-		"  # The server's static bearer key, copied from it verbatim.\n" +
+		"  # The key this machine dials the server with: a device key of its own\n" +
+		"  # from pairing (revoke it on the server's Devices page), or the server's\n" +
+		"  # shared mcp.api_key, copied from it verbatim.\n" +
 		"  # env: SEAMLESS_MCP_API_KEY\n" +
 		"  api_key: " + yamlString(apiKey) + "\n"
 	if _, err := f.WriteString(content); err != nil {

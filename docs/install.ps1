@@ -48,11 +48,11 @@
 #                                     running somewhere else: wire this
 #                                     machine's agent clients to that URL,
 #                                     install no service, and keep no data dir
-#                                     here. Requires SEAMLESS_MCP_API_KEY. Wins
-#                                     over the role and server_url an existing
-#                                     config names.
-#   $env:SEAMLESS_MCP_API_KEY         the server's bearer key. Required with
-#                                     SEAMLESS_SERVER_URL; `seamlessd
+#                                     here. Requires SEAMLESS_PAIR_CODE or
+#                                     SEAMLESS_MCP_API_KEY. Wins over the role
+#                                     and server_url an existing config names.
+#   $env:SEAMLESS_MCP_API_KEY         the server's bearer key, for a client of
+#                                     it paired by hand; `seamlessd
 #                                     client-config` on the server prints the
 #                                     whole command.
 #   $env:SEAMLESS_NO_HOOKS=1          skip agent hooks, MCP registration, and
@@ -79,10 +79,21 @@
 #   $env:SEAMLESS_TLS_KEY             answers for a server's setup, which is
 #                                     never this computer -- Windows is a
 #                                     client -- so setup refuses them, saying why
-#   $env:SEAMLESS_PAIR_CODE           a client's one-time pairing code: an
-#                                     answer `seamlessd setup` does not take
-#                                     yet, so it stops the install before
-#                                     anything is installed
+#   $env:SEAMLESS_PAIR_CODE           a client's pairing code, from the
+#                                     server's Devices page (or `seamlessd
+#                                     devices code` there): it pairs one
+#                                     computer, once, within 10 minutes. With
+#                                     SEAMLESS_SERVER_URL, setup pairs this
+#                                     computer as a key device of its own and
+#                                     writes its config before anything is
+#                                     installed. A Windows computer never runs
+#                                     the relay, so its agents never open a
+#                                     locked project.
+#   $env:SEAMLESS_SERVER_FINGERPRINT  the server certificate's SHA-256, as its
+#                                     setup printed it: compared before the
+#                                     code is sent
+#   $env:SEAMLESS_PAIR_AS             key, the one kind a Windows client pairs
+#                                     as (relay is macOS and Linux only)
 #
 # Any SEAMLESS_* set, or a session that is not interactive, means a script is
 # running this: nothing asks how this computer will be used, and a run without
@@ -649,8 +660,8 @@ function Install-Binaries {
 # SEAMLESS_SERVER_URL and SEAMLESS_MCP_API_KEY too, with the meaning this
 # script has always given them, but they alone never make it run.
 function Test-SetupKnobs {
-    return [bool]($env:SEAMLESS_SETUP -or $env:SEAMLESS_PAIR_CODE -or $env:SEAMLESS_IMPORT -or $env:SEAMLESS_IMPORT_LOCKS -or
-        $env:SEAMLESS_SERVER_NAME -or $env:SEAMLESS_TLS_CERT -or $env:SEAMLESS_TLS_KEY)
+    return [bool]($env:SEAMLESS_SETUP -or $env:SEAMLESS_PAIR_CODE -or $env:SEAMLESS_SERVER_FINGERPRINT -or $env:SEAMLESS_PAIR_AS -or
+        $env:SEAMLESS_IMPORT -or $env:SEAMLESS_IMPORT_LOCKS -or $env:SEAMLESS_SERVER_NAME -or $env:SEAMLESS_TLS_CERT -or $env:SEAMLESS_TLS_KEY)
 }
 
 # Resolve-ImportPath: SEAMLESS_IMPORT names the backup a first install starts
@@ -744,7 +755,7 @@ function Invoke-SetupFront {
     if (-not $probe.Contains($SetupProtocol)) {
         if ($knobs) {
             if (-not $probe.Trim()) { Die "could not run $fresh to ask seamlessd setup; nothing was installed" }
-            Die "seamless $Version predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_IMPORT, SEAMLESS_IMPORT_LOCKS, SEAMLESS_SERVER_NAME, SEAMLESS_TLS_CERT and SEAMLESS_TLS_KEY; unset them, or drop SEAMLESS_VERSION to get the latest"
+            Die "seamless $Version predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_SERVER_FINGERPRINT, SEAMLESS_PAIR_AS, SEAMLESS_IMPORT, SEAMLESS_IMPORT_LOCKS, SEAMLESS_SERVER_NAME, SEAMLESS_TLS_CERT and SEAMLESS_TLS_KEY; unset them, or drop SEAMLESS_VERSION to get the latest"
         }
         return
     }
@@ -1066,6 +1077,13 @@ function Main {
     # concerned -- a URL pasted out of a browser should still work.
     $serverUrl = if ($env:SEAMLESS_SERVER_URL) { ($env:SEAMLESS_SERVER_URL).TrimEnd('/') } else { '' }
     $apiKey = if ($env:SEAMLESS_MCP_API_KEY) { $env:SEAMLESS_MCP_API_KEY } else { '' }
+    # A pairing: setup pairs this computer and writes its config, and its
+    # answer names the server_url it dials, so $serverUrl waits for it.
+    $pairUrl = ''
+    if ($serverUrl -and $env:SEAMLESS_PAIR_CODE -and -not $apiKey) {
+        $pairUrl = $serverUrl
+        $serverUrl = ''
+    }
     if ($serverUrl -and -not $apiKey) {
         Die @'
 SEAMLESS_SERVER_URL is set but SEAMLESS_MCP_API_KEY is not: a client needs the
@@ -1081,7 +1099,7 @@ server and use the line it prints.
     # then refuses a config file that names a different server. The key pairs
     # only with SEAMLESS_SERVER_URL: a client config already holds its own, which
     # install-hooks reads there, so it never rides in argv.
-    if (-not $serverUrl) {
+    if (-not $serverUrl -and -not $pairUrl) {
         $apiKey = ''
         if ((Get-ConfigValue 'role') -ceq 'client') {
             $serverUrl = ([string](Get-ConfigValue 'server_url')).TrimEnd('/')
@@ -1112,7 +1130,14 @@ server and use the line it prints.
         # with no setup knob and no person to ask, it is skipped and everything
         # below runs as it always did.
         Invoke-SetupFront $tmp $version $serverUrl
-        if ($script:SetupServerUrl) { $serverUrl = $script:SetupServerUrl }
+        if ($pairUrl) {
+            # The config setup wrote is the client's whole answer: the server's
+            # address in the environment would stand in for its server_url at
+            # every load.
+            if (-not $script:SetupStatePath) { Die 'SEAMLESS_PAIR_CODE needs seamlessd setup, which did not run' }
+            $serverUrl = $script:SetupServerUrl
+            Remove-Item Env:SEAMLESS_SERVER_URL -ErrorAction SilentlyContinue
+        } elseif ($script:SetupServerUrl) { $serverUrl = $script:SetupServerUrl }
 
         # Best-effort: nothing is running on a first install.
         Stop-Daemon $InstallDir

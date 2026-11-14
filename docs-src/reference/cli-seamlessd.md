@@ -401,16 +401,18 @@ installer.
 | Variable | Answer |
 |---|---|
 | `SEAMLESS_SETUP=standalone\|server\|client` | the kind, for a script (`standalone\|client` on Windows). On a re-run, the installed kind keeps it as it is and `server` makes a Standalone install the Server; any other change is refused, naming why |
-| `SEAMLESS_SERVER_URL`, `SEAMLESS_MCP_API_KEY` | a Client's Server and its key, as the installers have always read them; `SEAMLESS_SETUP` may only agree |
-| `SEAMLESS_PAIR_CODE` | a Client's one-time pairing code. Not built yet: it stops the install and says how to pair with the Server's key instead |
+| `SEAMLESS_SERVER_URL`, `SEAMLESS_MCP_API_KEY` | a Client's Server and its key, as the installers have always read them (a Client of the Server's own key, which pairs nothing); `SEAMLESS_SETUP` may only agree |
+| `SEAMLESS_PAIR_CODE` | a Client's pairing code from the Server's Devices page (one computer, 10 minutes): with `SEAMLESS_SERVER_URL`, setup pairs this computer -- a relay on macOS and Linux, whose root step it prints, or a key device of its own |
+| `SEAMLESS_SERVER_FINGERPRINT` | the Server certificate's SHA-256 as its setup printed it: compared before the code is sent, and the certificate trusted alone when this computer's roots do not vouch for it |
+| `SEAMLESS_PAIR_AS=relay\|key` | what a macOS or Linux Client pairs as; `key` where you have no root (a container, CI). Windows is always `key` |
 | `SEAMLESS_IMPORT` | a backup a first Standalone or Server install starts from ([below](#seamlessd_setup_import)) |
 | `SEAMLESS_IMPORT_LOCKS=keep\|remove` | what that import does with the backup's locked projects when no passkey can open them, as `--keep-locks` and `--remove-locks` answer [`seamlessd import`](#seamlessd_import) |
 | `SEAMLESS_SERVER_NAME` | the name the other computers reach the Server at ([below](#seamlessd_setup_address)); with `SEAMLESS_SETUP=server` only |
 | `SEAMLESS_TLS_CERT`, `SEAMLESS_TLS_KEY` | that name's certificate and key, full paths; none for this computer's Tailscale name, whose certificate setup gets from the tailnet |
 
-A refusal stops the install before anything is installed. Locked projects and
-pairing with a code are not built into setup yet: the install ends by naming
-each with the guide that does it by hand. A Server's install ends with what
+A refusal stops the install before anything is installed. Locked projects are
+not built into setup yet: the install ends by naming the guide that sets them
+up by hand. A Server's install ends with what
 each Client needs - its address, its certificate's fingerprint, how to get a
 pairing code, and the one-liners - as `seamlessd devices code` prints them.
 
@@ -1047,16 +1049,20 @@ account, and any layout another account could change.
 
 - `serve`: the socket defaults to `/opt/seamless/run/seamlessd.sock`, mode
   0666. It refuses while unpaired, and answers 502 with the reason when the
-  server is unreachable or presents another certificate, never from memory. On
-  a server without peer_auth every caller is you, so on a computer with other
-  accounts use `--socket-mode 0660 --socket-group <a group only your account is in>`.
+  server is unreachable or presents another certificate, never from memory.
+  Under peer_auth the server judges each uid once you map this relay in
+  `peer_auth.relays`, and refuses it until then; without peer_auth every caller
+  is you. Restrict the socket: `--socket-mode 0660 --socket-group
+  _seamlessowner` (you and the relay's account), as `seamlessd setup` installs
+  it.
 - `pair`: the code comes from the server's Devices page or `seamlessd devices
   code` (`--code -` reads it from stdin). `--fingerprint` makes sure the code
   goes only to that certificate; `--ca-file` names the root the server's
   certificate chains to, copied into the data dir. Under peer_auth the pairing
   waits for your passkey on the Devices page, which shows the same key
   fingerprint. `--replace` pairs again after you revoked the old device;
-  `--json` prints the public facts.
+  `--json` prints the public facts. Run it by its root-owned path,
+  `/opt/seamless/bin/seamlessd`, with `--code -`, and paste the code.
 
 Its data dir is `/opt/seamless/relay` (the relay's account, 0700):
 `relay.json` (0600) holds the pairing and the relay's key. Doctor reports the

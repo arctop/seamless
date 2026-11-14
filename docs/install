@@ -44,11 +44,12 @@
 #                               somewhere else: wire this machine's agent
 #                               clients to that URL, install no service, and
 #                               keep no data dir here. Requires
-#                               SEAMLESS_MCP_API_KEY. Wins over the role and
-#                               server_url an existing config names.
-#   SEAMLESS_MCP_API_KEY        the server's bearer key. Required with
-#                               SEAMLESS_SERVER_URL; `seamlessd client-config`
-#                               on the server prints the whole command.
+#                               SEAMLESS_PAIR_CODE or SEAMLESS_MCP_API_KEY. Wins
+#                               over the role and server_url an existing config
+#                               names.
+#   SEAMLESS_MCP_API_KEY        the server's bearer key, for a client of it
+#                               paired by hand; `seamlessd client-config` on
+#                               the server prints the whole command.
 #   SEAMLESS_NO_HOOKS=1         skip agent hooks, MCP registration, and skills,
 #                               and the client detection that would pick them
 #   SEAMLESS_NO_ONBOARD_SKILL=1 skip the one-shot seam-onboard skill
@@ -73,9 +74,17 @@
 #   SEAMLESS_TLS_CERT           that name's certificate and key (full paths);
 #   SEAMLESS_TLS_KEY            none for this computer's Tailscale name, whose
 #                               certificate setup gets from the tailnet
-#   SEAMLESS_PAIR_CODE          a client's one-time pairing code: an answer
-#                               `seamlessd setup` does not take yet, so it stops
-#                               the install before anything is installed
+#   SEAMLESS_PAIR_CODE          a client's pairing code, from the server's
+#                               Devices page (or `seamlessd devices code`
+#                               there): it pairs one computer, once, within 10
+#                               minutes. With SEAMLESS_SERVER_URL, setup
+#                               pairs this computer -- a relay, whose one root
+#                               step it prints, or a key of its own -- and
+#                               writes its config before anything is installed
+#   SEAMLESS_SERVER_FINGERPRINT the server certificate's SHA-256, as its setup
+#                               printed it: compared before the code is sent
+#   SEAMLESS_PAIR_AS            relay|key: what the client pairs as (relay;
+#                               key on a computer where you have no root)
 #
 # Any SEAMLESS_* set, or no terminal, means a script is running this: nothing
 # asks how this computer will be used, and a run without the setup knobs does
@@ -122,6 +131,12 @@ AGENT_CLIENT=
 # be written back where it already is.
 SERVER_URL=
 SERVER_KEY=
+
+# PAIR_URL is SEAMLESS_SERVER_URL when SEAMLESS_PAIR_CODE pairs this computer
+# with that server: setup writes the config, and its answer names the
+# server_url this machine dials (the relay's socket, or the server itself), so
+# SERVER_URL waits for it.
+PAIR_URL=
 
 # The lower-cased SHA-256 that SEAMLESS_CHECKSUMS_SHA256 pins checksums.txt to;
 # empty when nothing is pinned. read_checksums_pin sets it before any download.
@@ -720,7 +735,7 @@ unpack() {
 # SEAMLESS_SERVER_URL and SEAMLESS_MCP_API_KEY too, with the meaning this
 # script has always given them, but they alone never make it run.
 setup_knobs() {
-	[ -n "${SEAMLESS_SETUP:-}${SEAMLESS_PAIR_CODE:-}${SEAMLESS_IMPORT:-}${SEAMLESS_IMPORT_LOCKS:-}${SEAMLESS_SERVER_NAME:-}${SEAMLESS_TLS_CERT:-}${SEAMLESS_TLS_KEY:-}" ]
+	[ -n "${SEAMLESS_SETUP:-}${SEAMLESS_PAIR_CODE:-}${SEAMLESS_SERVER_FINGERPRINT:-}${SEAMLESS_PAIR_AS:-}${SEAMLESS_IMPORT:-}${SEAMLESS_IMPORT_LOCKS:-}${SEAMLESS_SERVER_NAME:-}${SEAMLESS_TLS_CERT:-}${SEAMLESS_TLS_KEY:-}" ]
 }
 
 # import_path: SEAMLESS_IMPORT names the backup a first install starts from,
@@ -782,7 +797,7 @@ run_setup() {
 	if ! printf '%s\n' "$probe" | grep -qxF "$SETUP_PROTOCOL"; then
 		if setup_knobs; then
 			[ -n "$probe" ] || die "could not run $TMP/seamlessd to ask seamlessd setup; nothing was installed"
-			die "seamless $VERSION predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_IMPORT, SEAMLESS_IMPORT_LOCKS, SEAMLESS_SERVER_NAME, SEAMLESS_TLS_CERT and SEAMLESS_TLS_KEY; unset them, or drop SEAMLESS_VERSION to get the latest"
+			die "seamless $VERSION predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_SERVER_FINGERPRINT, SEAMLESS_PAIR_AS, SEAMLESS_IMPORT, SEAMLESS_IMPORT_LOCKS, SEAMLESS_SERVER_NAME, SEAMLESS_TLS_CERT and SEAMLESS_TLS_KEY; unset them, or drop SEAMLESS_VERSION to get the latest"
 		fi
 		return 0
 	fi
@@ -814,8 +829,8 @@ read_setup_state() {
 	done <"$SETUP_STATE"
 	case $rs_role in
 	server)
-		[ -z "$SERVER_URL" ] ||
-			die "seamlessd setup has this computer run the daemon, but it is a client of $SERVER_URL; please report this at https://github.com/$REPO/issues"
+		[ -z "$SERVER_URL${PAIR_URL:-}" ] ||
+			die "seamlessd setup has this computer run the daemon, but it is a client of $SERVER_URL${PAIR_URL:-}; please report this at https://github.com/$REPO/issues"
 		;;
 	client)
 		[ -n "$rs_url" ] || die "seamlessd setup made this computer a client of no server"
@@ -1243,7 +1258,12 @@ unset it to install, or set the daemon up by hand: $DOCS"'install/'
 	# config file that names a different server.
 	SERVER_URL=${SEAMLESS_SERVER_URL:-}
 	SERVER_URL=${SERVER_URL%/}
-	if [ -n "$SERVER_URL" ]; then
+	if [ -n "$SERVER_URL" ] && [ -n "${SEAMLESS_PAIR_CODE:-}" ] && [ -z "${SEAMLESS_MCP_API_KEY:-}" ]; then
+		# A pairing: setup writes the config, and names the server_url this
+		# machine dials in its answer (read_setup_state).
+		PAIR_URL=$SERVER_URL
+		SERVER_URL=
+	elif [ -n "$SERVER_URL" ]; then
 		SERVER_KEY=${SEAMLESS_MCP_API_KEY:-}
 		[ -n "$SERVER_KEY" ] ||
 			die "SEAMLESS_SERVER_URL is set but SEAMLESS_MCP_API_KEY is not: a client needs the
@@ -1272,6 +1292,13 @@ server and use the line it prints."
 	# empty data dir from a backup; with no setup knob and no person to ask, it
 	# is skipped and everything below runs as it always did.
 	run_setup
+	if [ -n "$PAIR_URL" ]; then
+		# The config setup wrote is the client's whole answer: the server's
+		# address in the environment would stand in for its server_url at every
+		# load, the relay's socket included.
+		[ -n "$SETUP_STATE" ] || die "SEAMLESS_PAIR_CODE needs seamlessd setup, which did not run"
+		unset SEAMLESS_SERVER_URL
+	fi
 	unpack
 
 	# Restart the service and wait for it to answer as the new build BEFORE

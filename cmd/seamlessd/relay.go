@@ -42,20 +42,22 @@ const relayUsage = `usage:
   seamlessd relay serve [--data-dir DIR] [--socket PATH] [--socket-mode MODE] [--socket-group GROUP]
       serve the socket agents dial (default %[2]s) and forward every request to the server this relay
       is paired with; run it as the relay's own account (a LaunchDaemon or systemd unit), never as root.
-      Every local account may connect (mode 0666) and the server judges each uid under peer_auth; a
-      server without it takes every caller for the owner, so restrict the socket (0660 and a group
-      of the owner's) on a computer with other accounts
+      By default every local account may connect (mode 0666). Under peer_auth the server judges each
+      uid once the owner maps this relay in peer_auth.relays, and refuses it until then; without
+      peer_auth every caller is the owner. So restrict the socket: --socket-mode 0660 and a
+      --socket-group holding the owner alone (and this account), as seamlessd setup installs it
   seamlessd relay pair --server URL --code CODE [--fingerprint SHA256] [--ca-file PEM] [--name NAME]
                        [--replace] [--json] [--data-dir DIR]
-      pair this relay with a server, as the relay's account: CODE comes from the server's Devices page or
-      seamlessd devices code (--code - reads it from stdin); --fingerprint is the server certificate's
-      SHA-256 as the server shows it, compared before the code is sent
+      pair this relay with a server, as the relay's account, running this binary by its root-owned path
+      (%[3]s): CODE comes from the server's Devices page or seamlessd devices code; give
+      --code - to paste it, so it stays out of the process list and your shell history; --fingerprint is
+      the server certificate's SHA-256 as the server shows it, compared before the code is sent
   The data directory defaults to %[1]s (0700, the relay's account's).
 `
 
 // relayUsageText is relayUsage with the defaults filled in.
 func relayUsageText() string {
-	return fmt.Sprintf(relayUsage, relay.DefaultDataDir, relay.DefaultSocketPath)
+	return fmt.Sprintf(relayUsage, relay.DefaultDataDir, relay.DefaultSocketPath, relay.DefaultBinary)
 }
 
 // runRelay is `seamlessd relay <command>`.
@@ -85,6 +87,10 @@ type relayServeOptions struct {
 	logger *slog.Logger
 	// ready, when set, is told the socket's address once it is bound.
 	ready func(net.Addr)
+	// self is the account the relay refuses as a caller
+	// (relay.Forwarder.RefusingAccount); nil is the account it runs as,
+	// env.EUID. Only a test whose relay and caller are one uid names another.
+	self *uint32
 }
 
 // runRelayServe parses `seamlessd relay serve` and serves until SIGINT or
@@ -183,7 +189,13 @@ func relayServe(ctx context.Context, o relayServeOptions) error {
 	var probe sync.WaitGroup
 	probe.Go(func() { relayStartupProbe(ctx, server.String(), rt, logger) })
 	defer probe.Wait()
-	return relay.Serve(ctx, ln, relay.NewForwarder(server, st.ServerFingerprint, rt, logger), logger)
+	self := uint32(o.env.EUID) // the preflight refused a negative one
+	if o.self != nil {
+		self = *o.self
+	}
+	// The relay's own account (the pinned one, which holds its key) is never a caller it vouches for.
+	fwd := relay.NewForwarder(server, st.ServerFingerprint, rt, logger).RefusingAccount(self)
+	return relay.Serve(ctx, ln, fwd, logger)
 }
 
 // relayStartupProbe tells the log whether the server answers the relay at
@@ -253,6 +265,45 @@ func runRelayPair(args []string) error {
 	return relayPair(ctx, o, os.Stdout, os.Stderr)
 }
 
+// relayBinaryProblem is serve's check of the binary it runs, made for pair
+// too: a pairing writes the relay's key, so the binary making it must be one
+// no account but root and the relay's can replace -- run by its root-owned
+// path, never one a PATH lookup under sudo -u finds in a person's home. The
+// binary and every directory above it belong to root or the relay's account
+// and are writable by no one else (a sticky directory aside). "" when it
+// passes, or when env names no binary to check (Exe nil).
+func relayBinaryProblem(env relay.Env) string {
+	if env.Exe == nil || env.Inspect == nil {
+		return ""
+	}
+	exe, err := env.Exe()
+	if err != nil {
+		return "cannot locate this binary to check who may replace it: " + err.Error()
+	}
+	real, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		return fmt.Sprintf("the seamlessd binary %s: %v", exe, err)
+	}
+	for path := real; ; path = filepath.Dir(path) {
+		f, err := env.Inspect(path)
+		if err != nil {
+			return fmt.Sprintf("the seamlessd binary: %s: %v", path, err)
+		}
+		sticky := f.IsDir && f.Mode&os.ModeSticky != 0
+		switch {
+		case f.UID != 0 && int(f.UID) != env.EUID:
+			return fmt.Sprintf("the seamlessd binary %s: %s is owned by uid %d, who could replace what runs as the relay's account -- "+
+				"pair with %s, root's copy", real, path, f.UID, relay.DefaultBinary)
+		case f.Mode.Perm()&0o022 != 0 && !sticky:
+			return fmt.Sprintf("the seamlessd binary %s: %s is mode %04o, writable by other accounts -- pair with %s, root's copy",
+				real, path, f.Mode.Perm(), relay.DefaultBinary)
+		}
+		if next := filepath.Dir(path); next == path {
+			return ""
+		}
+	}
+}
+
 // relayPairJSON is what --json prints: the pairing's public facts, never its
 // key.
 type relayPairJSON struct {
@@ -269,7 +320,11 @@ type relayPairJSON struct {
 // tells out what was pinned.
 func relayPair(ctx context.Context, o relayPairOptions, out, notes io.Writer) error {
 	const op = "seamlessd relay pair"
-	if problems := o.env.PairProblems(o.dataDir); len(problems) > 0 {
+	problems := o.env.PairProblems(o.dataDir)
+	if p := relayBinaryProblem(o.env); p != "" {
+		problems = append(problems, p)
+	}
+	if len(problems) > 0 {
 		return fmt.Errorf("%s: %w: %s", op, errRelayPreflight, strings.Join(problems, "; "))
 	}
 	waitOut := out

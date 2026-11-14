@@ -64,17 +64,31 @@ func relayCmdServerPEM(t *testing.T, base string, pool *x509.CertPool) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: conn.ConnectionState().PeerCertificates[0].Raw})
 }
 
+// relayCmdOtherUID is the account a test's relay refuses as a caller: not
+// the test's own, since here the relay and its callers run as one uid, where
+// a real relay runs as its own account.
+const relayCmdOtherUID = ^uint32(0) - 1
+
 // relayCmdStart runs `seamlessd relay serve` (relayServe) in the background
 // until the test ends, and returns a client of its socket built as seam
-// builds one, once the socket is bound.
+// builds one, once the socket is bound. The relay refuses relayCmdOtherUID as
+// its own account.
 func relayCmdStart(t *testing.T, l relay.Layout, env relay.Env) *http.Client {
+	t.Helper()
+	other := relayCmdOtherUID
+	return relayCmdStartAs(t, l, env, &other)
+}
+
+// relayCmdStartAs is relayCmdStart with the account the relay refuses as a
+// caller: self, or nil for the one it runs as (env.EUID), as serve does.
+func relayCmdStartAs(t *testing.T, l relay.Layout, env relay.Env, self *uint32) *http.Client {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	ready := make(chan net.Addr, 1)
 	done := make(chan error, 1)
 	go func() {
 		done <- relayServe(ctx, relayServeOptions{layout: l, env: env, logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-			ready: func(a net.Addr) { ready <- a }})
+			ready: func(a net.Addr) { ready <- a }, self: self})
 	}()
 	select {
 	case <-ready:
@@ -209,4 +223,54 @@ func TestRelayCmd_PairThenServe(t *testing.T) {
 		"This relay's key: ", "restart it"} {
 		require.Contains(t, out.String(), want)
 	}
+}
+
+// `relay pair` checks the binary it runs as serve does: a pairing writes the
+// relay's key, so a binary another account could have replaced -- one a PATH
+// lookup under sudo -u found in a person's home -- pairs nothing.
+func TestRelayCmd_PairRefusesABinaryOthersCanReplace(t *testing.T) {
+	l, env := relayCmdLayout(t)
+	exe, err := env.Exe()
+	require.NoError(t, err)
+	require.Empty(t, relayBinaryProblem(env), "the layout's own binary passes")
+
+	open := filepath.Join(filepath.Dir(filepath.Dir(exe)), "open")
+	require.NoError(t, os.Mkdir(open, 0o755))
+	require.NoError(t, os.Chmod(open, 0o777))
+	other := filepath.Join(open, "seamlessd")
+	require.NoError(t, os.WriteFile(other, []byte("#!/bin/sh\n"), 0o755))
+	env.Exe = func() (string, error) { return other, nil }
+	err = relayPair(context.Background(), relayPairOptions{dataDir: l.DataDir, env: env,
+		pair: relay.PairOptions{Server: "https://127.0.0.1:1", Code: "AAAA-BBBB-CCCC-DDDD"}}, io.Discard, io.Discard)
+	require.ErrorIs(t, err, errRelayPreflight)
+	require.ErrorContains(t, err, "writable by other accounts -- pair with "+relay.DefaultBinary)
+	_, serr := os.Stat(filepath.Join(l.DataDir, relay.StateName))
+	require.ErrorIs(t, serr, os.ErrNotExist, "nothing was paired")
+
+	require.NoError(t, os.Chmod(open, 0o755))
+	require.NoError(t, os.Chmod(other, 0o777))
+	require.Contains(t, relayBinaryProblem(env), "is mode 0777")
+}
+
+// `relay serve` refuses a caller that runs as its own account -- the pinned
+// one, which holds the relay's key -- before anything reaches the server: the
+// relay vouches for other accounts' processes, never its own. Here the test's
+// uid plays the relay's account and its caller both.
+func TestRelayCmd_ServeRefusesItsOwnAccount(t *testing.T) {
+	d := deviceNewDaemon(t, false)
+	l, env := relayCmdLayout(t)
+	code, err := d.pairing.MintCode(context.Background(), store.DeviceByConsole)
+	require.NoError(t, err)
+	require.NoError(t, relayPair(context.Background(), relayPairOptions{dataDir: l.DataDir, env: env,
+		pair: relay.PairOptions{Server: d.srv.URL, Code: code.Code, Name: "example-laptop", CA: relayCmdServerPEM(t, d.srv.URL, d.pool)}},
+		io.Discard, io.Discard))
+
+	client := relayCmdStartAs(t, l, env, nil)
+	status, body := relayCmdPost(t, client, "/api/hooks/session-start?client=claude-code&host=example-ci",
+		`{"session_id":"relay-cmd-self","cwd":"/tmp/relay-cmd","source":"startup"}`, http.Header{"Content-Type": {"application/json"}})
+	require.Equal(t, http.StatusForbidden, status, body)
+	require.Contains(t, body, "the caller runs as the relay's own account")
+	var n int
+	require.NoError(t, d.db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE claude_session_id = 'relay-cmd-self'`).Scan(&n))
+	require.Zero(t, n, "nothing reached the server")
 }

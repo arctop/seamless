@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -324,4 +325,35 @@ func TestValidCertFingerprint(t *testing.T) {
 	} {
 		require.Equal(t, ok, ValidCertFingerprint(s), s)
 	}
+}
+
+// clientNoDial is a transport no pairing may use.
+type clientNoDial struct{ t *testing.T }
+
+func (c clientNoDial) RoundTrip(*http.Request) (*http.Response, error) {
+	c.t.Helper()
+	c.t.Fatal("a refused pairing dialed the server")
+	return nil, errors.New("unreachable")
+}
+
+// Over plain http only loopback pairs: to another computer the code, and a key
+// device's key in the answer, would cross the network in the clear, so the
+// pairing is refused before anything is sent.
+func TestClientPair_PlainHTTPPairsOnlyOnLoopback(t *testing.T) {
+	noDial := &http.Client{Transport: clientNoDial{t}}
+	for _, server := range []string{"http://example-server:8081", "http://192.0.2.7:8081", "http://[2001:db8::7]:8081"} {
+		_, err := Pair(context.Background(), noDial, server, PairRequest{Code: "ABCD-EFGH-JKMN-PQRS", Name: "example-ci"})
+		require.ErrorIs(t, err, ErrPlainHTTP, server)
+	}
+	for _, host := range []string{"localhost", "127.0.0.1", "[::1]", "LOCALHOST.", "app.localhost"} {
+		require.True(t, loopbackHost(strings.Trim(host, "[]")), host)
+	}
+
+	f := pairNewFixture(t, false)
+	code := f.pairCode(t)
+	srv := httptest.NewServer(f.svc.Edge(http.NotFoundHandler()))
+	t.Cleanup(srv.Close)
+	paired, err := Pair(context.Background(), &http.Client{}, srv.URL, PairRequest{Code: code, Name: "example-ci"})
+	require.NoError(t, err, "loopback over http pairs as before")
+	require.True(t, IsKey(paired.Key))
 }

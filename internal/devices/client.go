@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -45,6 +46,10 @@ var (
 	// ErrKeyLost is a key device paired whose key never arrived: the answer
 	// that carried it was lost. The owner revokes it and pairs again.
 	ErrKeyLost = errors.New("the device paired, but its key was lost on the way: revoke it on the server's Devices page and pair again")
+	// ErrPlainHTTP is a pairing asked of a server on another computer over
+	// plain http: the code, and a key device's key in the answer, would cross
+	// the network in the clear. Only loopback may pair over http.
+	ErrPlainHTTP = errors.New("pairing with a server on another computer needs https: over plain http the code and this computer's key would cross the network in the clear")
 )
 
 // PairRequest is one pairing, as a device asks for it.
@@ -105,6 +110,9 @@ func Pair(ctx context.Context, client *http.Client, serverURL string, req PairRe
 	}
 	if req.Relay != nil && base.Scheme != "https" {
 		return Paired{}, fmt.Errorf("%s: %w: the server's address must be https", op, ErrRelayNeedsCertificate)
+	}
+	if base.Scheme == "http" && !loopbackHost(base.Hostname()) {
+		return Paired{}, fmt.Errorf("%s: %w", op, ErrPlainHTTP)
 	}
 	hc, err := pairingClient(client, req)
 	if err != nil {
@@ -177,6 +185,17 @@ func Pair(ctx context.Context, client *http.Client, serverURL string, req PairRe
 	}
 	return Paired{DeviceID: answer.Device.ID, Kind: answer.Device.Kind, Name: answer.Device.Name,
 		Fingerprint: answer.Device.Fingerprint, Key: answer.Key, ServerFingerprint: serverFP}, nil
+}
+
+// loopbackHost reports whether host names this computer's loopback alone:
+// localhost, or a loopback address.
+func loopbackHost(host string) bool {
+	h := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	if h == "localhost" || strings.HasSuffix(h, ".localhost") {
+		return true
+	}
+	ip, err := netip.ParseAddr(strings.Trim(h, "[]"))
+	return err == nil && ip.Unmap().IsLoopback()
 }
 
 // pairingClient is a copy of client for one pairing: no redirect followed,

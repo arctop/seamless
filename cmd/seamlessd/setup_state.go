@@ -42,7 +42,7 @@ func setupKindEnv(k setupKind) string {
 
 // marshalSetupState renders st: the header, then one key=value per line.
 func marshalSetupState(st setupState) ([]byte, error) {
-	for _, v := range []string{st.serverURL, st.change} {
+	for _, v := range []string{st.serverURL, st.change, st.device, st.pairServer, st.fingerprint, st.caFile, st.binarySHA} {
 		if strings.ContainsFunc(v, setupControl) {
 			return nil, fmt.Errorf("seamlessd.setup: state value %q holds a control character", v)
 		}
@@ -59,6 +59,16 @@ func marshalSetupState(st setupState) ([]byte, error) {
 	fmt.Fprintf(&b, "answer=%s\n", st.answer)
 	if st.change != "" {
 		fmt.Fprintf(&b, "change=%s\n", st.change)
+	}
+	// A pairing Client's (setup_client.go): none of it is a secret.
+	if st.pairing {
+		b.WriteString("pairing=true\n")
+	}
+	for _, kv := range [][2]string{{"device", st.device}, {"pair_server", st.pairServer}, {"fingerprint", st.fingerprint},
+		{"ca_file", st.caFile}, {"binary_sha256", st.binarySHA}} {
+		if kv[1] != "" {
+			fmt.Fprintf(&b, "%s=%s\n", kv[0], kv[1])
+		}
 	}
 	return b.Bytes(), nil
 }
@@ -131,6 +141,25 @@ func parseSetupState(data []byte) (setupState, error) {
 			}
 		case "change":
 			st.change = val
+		case "pairing":
+			b, perr := strconv.ParseBool(val)
+			if perr != nil {
+				return setupState{}, fmt.Errorf("seamlessd.setup: state pairing %q", val)
+			}
+			st.pairing = b
+		case "device":
+			if val != setupDeviceRelay && val != setupDeviceKey {
+				return setupState{}, fmt.Errorf("seamlessd.setup: state device %q", val)
+			}
+			st.device = val
+		case "pair_server":
+			st.pairServer = val
+		case "fingerprint":
+			st.fingerprint = val
+		case "ca_file":
+			st.caFile = val
+		case "binary_sha256":
+			st.binarySHA = val
 		default:
 			return setupState{}, fmt.Errorf("seamlessd.setup: state key %q", key)
 		}

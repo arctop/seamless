@@ -811,11 +811,19 @@ installer.</p>
 </tr>
 <tr>
 <td><code>SEAMLESS_SERVER_URL</code>, <code>SEAMLESS_MCP_API_KEY</code></td>
-<td>a Client's Server and its key, as the installers have always read them; <code>SEAMLESS_SETUP</code> may only agree</td>
+<td>a Client's Server and its key, as the installers have always read them (a Client of the Server's own key, which pairs nothing); <code>SEAMLESS_SETUP</code> may only agree</td>
 </tr>
 <tr>
 <td><code>SEAMLESS_PAIR_CODE</code></td>
-<td>a Client's one-time pairing code. Not built yet: it stops the install and says how to pair with the Server's key instead</td>
+<td>a Client's pairing code from the Server's Devices page (one computer, 10 minutes): with <code>SEAMLESS_SERVER_URL</code>, setup pairs this computer -- a relay on macOS and Linux, whose root step it prints, or a key device of its own</td>
+</tr>
+<tr>
+<td><code>SEAMLESS_SERVER_FINGERPRINT</code></td>
+<td>the Server certificate's SHA-256 as its setup printed it: compared before the code is sent, and the certificate trusted alone when this computer's roots do not vouch for it</td>
+</tr>
+<tr>
+<td><code>SEAMLESS_PAIR_AS=relay|key</code></td>
+<td>what a macOS or Linux Client pairs as; <code>key</code> where you have no root (a container, CI). Windows is always <code>key</code></td>
 </tr>
 <tr>
 <td><code>SEAMLESS_IMPORT</code></td>
@@ -836,9 +844,9 @@ installer.</p>
 </tbody>
 </table>
 </div>
-<p>A refusal stops the install before anything is installed. Locked projects and
-pairing with a code are not built into setup yet: the install ends by naming
-each with the guide that does it by hand. A Server's install ends with what
+<p>A refusal stops the install before anything is installed. Locked projects are
+not built into setup yet: the install ends by naming the guide that sets them
+up by hand. A Server's install ends with what
 each Client needs - its address, its certificate's fingerprint, how to get a
 pairing code, and the one-liners - as <code>seamlessd devices code</code> prints them.</p>
 <p><code>--state FILE</code> and <code>--finish</code> are the installers' hand-off, and
@@ -1565,15 +1573,18 @@ account, and any layout another account could change.</p>
 <ul>
 <li><code>serve</code>: the socket defaults to <code>/opt/seamless/run/seamlessd.sock</code>, mode
 0666. It refuses while unpaired, and answers 502 with the reason when the
-server is unreachable or presents another certificate, never from memory. On
-a server without peer_auth every caller is you, so on a computer with other
-accounts use <code>--socket-mode 0660 --socket-group &lt;a group only your account is in&gt;</code>.</li>
+server is unreachable or presents another certificate, never from memory.
+Under peer_auth the server judges each uid once you map this relay in
+<code>peer_auth.relays</code>, and refuses it until then; without peer_auth every caller
+is you. Restrict the socket: <code>--socket-mode 0660 --socket-group _seamlessowner</code> (you and the relay's account), as <code>seamlessd setup</code> installs
+it.</li>
 <li><code>pair</code>: the code comes from the server's Devices page or <code>seamlessd devices code</code> (<code>--code -</code> reads it from stdin). <code>--fingerprint</code> makes sure the code
 goes only to that certificate; <code>--ca-file</code> names the root the server's
 certificate chains to, copied into the data dir. Under peer_auth the pairing
 waits for your passkey on the Devices page, which shows the same key
 fingerprint. <code>--replace</code> pairs again after you revoked the old device;
-<code>--json</code> prints the public facts.</li>
+<code>--json</code> prints the public facts. Run it by its root-owned path,
+<code>/opt/seamless/bin/seamlessd</code>, with <code>--code -</code>, and paste the code.</li>
 </ul>
 <p>Its data dir is <code>/opt/seamless/relay</code> (the relay's account, 0700):
 <code>relay.json</code> (0600) holds the pairing and the relay's key. Doctor reports the

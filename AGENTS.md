@@ -1333,7 +1333,8 @@ health check stay theirs.
   no `SEAMLESS_*` set but `SEAMLESS_CONFIG` (`setupRun.asks`). The installers
   apply the same rule (`scripted_run`, `Test-ScriptedRun`) and do not even run
   setup unless a setup knob (`SEAMLESS_SETUP`, `SEAMLESS_PAIR_CODE`,
-  `SEAMLESS_IMPORT`, `SEAMLESS_IMPORT_LOCKS`, `SEAMLESS_SERVER_NAME`,
+  `SEAMLESS_SERVER_FINGERPRINT`, `SEAMLESS_PAIR_AS`, `SEAMLESS_IMPORT`,
+  `SEAMLESS_IMPORT_LOCKS`, `SEAMLESS_SERVER_NAME`,
   `SEAMLESS_TLS_CERT`, `SEAMLESS_TLS_KEY`) is set or that person is there.
   Every updater run sets
   `SEAMLESS_VERSION` and `SEAMLESS_INSTALL_DIR`, so no update starts it; never
@@ -1386,6 +1387,23 @@ health check stay theirs.
   `SEAMLESS_TLS_KEY` (not `SEAMLESS_TLS_*_FILE`, which the service never sees).
   Tests fake the resolver, interfaces and tailnet (`setupAddrArrange`): no test
   runs `tailscale` or resolves a name.
+- **A Client pairs, holds no server key, and setup runs nothing as root**
+  (`setup_client.go`, `relay_install.go`). Every Client gives the Server's
+  address, sees its certificate fingerprint (compared at the terminal or with
+  `SEAMLESS_SERVER_FINGERPRINT`; a certificate the system roots do not verify is
+  trusted only once compared, as that certificate alone) and pairs with a code.
+  macOS and Linux pair a relay (`SEAMLESS_PAIR_AS=key` opts out): setup writes
+  the owner's socket config with no key (`config.EnsureSocketClientConfig`) and
+  prints the relay's one root step (account, a socket group of the owner's and
+  the relay's alone, root's hash-checked copy of seamlessd, the pin, the pairing
+  as the relay's account with `--code -`, the service) and runs none of it;
+  doctor's relay rows check the result. Windows and no-root computers pair a key
+  device before anything is installed, its own key into a 0600 config
+  (`config.EnsureDeviceClientConfig`), never where a config exists. The code
+  never rides in a printed command or the state file; the installers drop
+  `SEAMLESS_SERVER_URL` after setup in a pairing. Tests arrange the server
+  (`clientArrange`) and never dial the machine's socket
+  (`clientHost.relayServing`).
 - **Retiring the key judges every step from what is there**
   (`setup_retire.go`, the `retire-key` change, offered on a Standalone install
   with locked projects). It reads the daemon over the owner's socket (`GET

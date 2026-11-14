@@ -50,6 +50,15 @@ func TestSetupHelperSeamlessd(t *testing.T) {
 		r.tailscale = setupAddrTailnet{err: errNoTailscale}
 		r.daemonAccount = func() string { return "_seamless" }
 		r.network = setupE2ENet(os.Getenv("SETUP_E2E_HOSTS"), os.Getenv("SETUP_E2E_IFACES"))
+		// A Client's: the name it pairs under (the machine's own is the test
+		// server's), the world's seam, no account of the machine's read and
+		// no socket of the machine's dialed.
+		if host := os.Getenv("SETUP_E2E_HOST"); host != "" {
+			r.host = host
+		}
+		r.client.check = clientClosingCheck(filepath.Join(r.home, ".local", "bin", "seam"))
+		r.client.accounts = func() clientAccounts { return clientAccounts{uid: 480, gid: 479} }
+		r.client.relayServing = func() bool { return false }
 		r.loadConfig = func() (config.Config, error) {
 			cfg, err := config.Load()
 			if err == nil && (r.home == "" || !strings.HasPrefix(cfg.DataDir, r.home+string(filepath.Separator))) {
@@ -156,7 +165,8 @@ func TestSetupInstaller_RealSetup(t *testing.T) {
 			require.NoError(t, err, out)
 			require.Contains(t, w.calls(t), w.hooksCall("claude", "--server-url", "https://box.example:8081", "--api-key", "k1"))
 			require.Contains(t, out, "skipped (client of https://box.example:8081)")
-			require.Contains(t, out, "this Client uses its Server's key")
+			require.NotContains(t, out, "by hand", "a Client of its Server's key pairs nothing, as before")
+			require.NotContains(t, out, "fingerprint")
 		})
 
 		for _, tt := range []struct {
@@ -167,7 +177,7 @@ func TestSetupInstaller_RealSetup(t *testing.T) {
 			{"SEAMLESS_IMPORT of no file", "SEAMLESS_IMPORT=/nonexistent-seamless-e2e/b.tar.gz",
 				"SEAMLESS_IMPORT=/nonexistent-seamless-e2e/b.tar.gz: there is no file at"},
 			{"SEAMLESS_IMPORT_LOCKS alone", "SEAMLESS_IMPORT_LOCKS=keep", "SEAMLESS_IMPORT names no backup"},
-			{"SEAMLESS_PAIR_CODE", "SEAMLESS_PAIR_CODE=1234", "SEAMLESS_PAIR_CODE: pairing with a one-time code is not built"},
+			{"SEAMLESS_PAIR_CODE alone", "SEAMLESS_PAIR_CODE=1234", "SEAMLESS_PAIR_CODE pairs this computer with a Server: set SEAMLESS_SERVER_URL"},
 		} {
 			t.Run(tt.name+" stops the install before anything is installed", func(t *testing.T) {
 				w := newSetupInstallerWorld(t, shell, installer)

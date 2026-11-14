@@ -136,9 +136,11 @@ type setupInstall struct {
 // setupInstalledOf classifies the facts:
 //
 //   - a role: client config is a Client of its server -- unless the server is
-//     a Unix socket: that is the owner's half of a peer_auth install, whose
-//     daemon runs on this computer under an account of its own (Standalone,
-//     with locked projects);
+//     a Unix socket beside a peer_auth system service: that is the owner's
+//     half of a peer_auth install, whose daemon runs on this computer under an
+//     account of its own (Standalone, with locked projects). A socket with no
+//     such service is a relay's: a Client whose relay serves its agents
+//     (setup_client.go), set up or waiting for its root step;
 //   - any other config runs the daemon here: the Server when it binds, or
 //     names itself at, an address other computers reach; else Standalone;
 //   - no config, and still a service or a database: Standalone, the config
@@ -153,7 +155,7 @@ func setupInstalledOf(f setupFacts) setupInstall {
 	case f.configFound && f.role == config.RoleClient:
 		in.role, in.serverURL = config.RoleClient, strings.TrimSuffix(f.serverURL, "/")
 		in.kind = setupClient
-		if strings.HasPrefix(strings.ToLower(in.serverURL), "unix:") {
+		if strings.HasPrefix(strings.ToLower(in.serverURL), "unix:") && f.systemService {
 			in.kind, in.locked = setupStandalone, true
 		}
 	case f.configFound:

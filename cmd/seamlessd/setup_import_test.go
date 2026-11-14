@@ -237,7 +237,8 @@ func TestSetupImport_Fresh(t *testing.T) {
 			t.Skip("Windows asks the Client branch without the Server question")
 		}
 		dest := filepath.Join(t.TempDir(), "data")
-		r, out := setupImportTestRun(t, nil, true, "2\n2\nhttps://box.example:8081\nk\n", dest)
+		r, out := setupImportTestRun(t, nil, true, "2\n2\nhttps://box.example:8081\ny\n1\n", dest)
+		clientArrange(t, r, clientTrusted)
 		st, err := setupImportFirstHalf(t, r)
 		require.NoError(t, err, out.String())
 		require.Equal(t, setupClient, st.kind)

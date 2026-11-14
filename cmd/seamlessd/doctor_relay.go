@@ -211,10 +211,10 @@ func relaySocketRow(ctx context.Context, e relayDoctorEnv, acct uint32, asRelay 
 }
 
 // relayAccessRow says who may connect to the relay's socket, and what that
-// means: a server under peer_auth judges each uid the relay reports (for a
-// relay peer_auth.relays maps), and one without it takes every caller for the
-// owner, so on a computer with other accounts the socket's mode and group are
-// the only thing between them and the owner's reach on the server.
+// means: a server under peer_auth refuses a relay peer_auth.relays does not
+// map and judges each uid a mapped one reports, and one without it takes every
+// caller for the owner, so on a computer with other accounts the socket's mode
+// and group are the only thing between them and the owner's reach there.
 func relayAccessRow(e relayDoctorEnv) (check, bool) {
 	const name = "relay.access"
 	f, err := e.env.Inspect(e.layout.Socket)
@@ -225,10 +225,10 @@ func relayAccessRow(e relayDoctorEnv) (check, bool) {
 		return check{statusInfo, name, fmt.Sprintf("only the relay's account and group %d may connect to %s (mode %04o)",
 			f.GID, e.layout.Socket, f.Mode.Perm())}, true
 	}
-	return check{statusInfo, name, fmt.Sprintf("every local account may connect to %s (mode %04o): a server under peer_auth judges "+
-		"each uid this relay reports (where peer_auth.relays maps it), and one without peer_auth takes every caller for the owner -- "+
-		"on a computer with other accounts, restrict the socket: seamlessd relay serve --socket-mode 0660 --socket-group <a group "+
-		"of the owner's alone>", e.layout.Socket, f.Mode.Perm())}, true
+	return check{statusWarn, name, fmt.Sprintf("every local account may connect to %s (mode %04o): a server without peer_auth takes "+
+		"every caller for the owner (one under peer_auth refuses this relay until it maps it in peer_auth.relays, then judges each "+
+		"uid) -- restrict the socket to a group holding the owner alone (and the relay's account): run the relay with --socket-mode "+
+		"0660 --socket-group %s, as seamlessd setup installs it, and restart it", e.layout.Socket, f.Mode.Perm(), clientRelayGroup)}, true
 }
 
 // relayServerRow sends /healthz to the server as the relay does: its

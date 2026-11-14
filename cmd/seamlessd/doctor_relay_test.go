@@ -185,16 +185,25 @@ func TestRelayDoctor_SaysWhoMayConnect(t *testing.T) {
 	e := relayDoctorEnv{layout: l, env: env, account: func(uint32) string { return "_example_relay" }, timeout: 5 * time.Second}
 	_, ok := relayAccessRow(e)
 	require.False(t, ok, "no socket, no row")
-	for mode, want := range map[os.FileMode]string{
-		0o666: "every local account may connect",
-		0o660: "only the relay's account and group",
+	for mode, want := range map[os.FileMode]struct {
+		status checkStatus
+		detail string
+	}{
+		// A socket every account reaches is every account as the owner,
+		// unless a peer_auth server maps the relay: a warning, with the fix.
+		0o666: {statusWarn, "every local account may connect"},
+		0o660: {statusInfo, "only the relay's account and group"},
 	} {
 		ln, err := env.ListenWith(l.Socket, relay.SocketAccess{Mode: mode})
 		require.NoError(t, err)
 		row, ok := relayAccessRow(e)
 		require.True(t, ok)
-		require.Equal(t, statusInfo, row.status)
-		require.Contains(t, row.detail, want)
+		require.Equal(t, want.status, row.status, "%04o", mode)
+		require.Contains(t, row.detail, want.detail)
+		if mode&0o006 != 0 {
+			require.Contains(t, row.detail, "--socket-mode 0660 --socket-group "+clientRelayGroup)
+			require.Contains(t, row.detail, "refuses this relay until it maps it in peer_auth.relays")
+		}
 		require.NoError(t, ln.Close())
 	}
 }
