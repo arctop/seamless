@@ -77,9 +77,9 @@ internal/commitfeed/ commit records' snapshot (the commits: option, off by
 # (the dependency-aware ready-queue + lease-based claiming live in
 #  internal/store/tasks*.go -- there is no internal/tasks package)
 internal/gardener/ the propose-only passes (dedup, staleness, stale-stage,
-                   dead-weight, digest, stale-plan, memory-wanted -- the
-                   canonical list is RunOnce), plus the request- and
-                   split-driven proposals                                  [P4]
+                   dead-weight, stale-copy, digest, stale-plan, memory-wanted,
+                   tool-error, copy-relocate -- the canonical list is
+                   RunOnce), plus the request- and split-driven proposals  [P4]
 internal/plans/    captured CC plan vocabulary: tags, statuses, tracking task
 internal/mcp/      MCP tools (streamable HTTP, static bearer key or the peer_auth
                    socket); see ToolCount [P2+]

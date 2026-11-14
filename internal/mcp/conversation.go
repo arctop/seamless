@@ -413,11 +413,14 @@ func (s *Server) sessionStartReach(ctx context.Context, c conversation, dest str
 			return nil
 		}
 		g, _ := access.GrantsFrom(ctx)
+		// The reference form is core's, the one the gardener reads back from a
+		// body (core.Citations): a copy citing its sources this way is one the
+		// gardener can flag when a source changes, or propose moving.
 		return fmt.Errorf("nothing was bound: this conversation holds content from %s, so it does not work in %s: a "+
 			"conversation holding a fenced project's content never goes back to an open project or the global scope"+
 			"\nRemedy: keep working in %s, your own session %s; record there what you meant to record in %s, citing other "+
-			"projects' items by reference (project slug plus the item's name or id)", strings.Join(g.Label(), ", "),
-			projectWords(dest), projectWords(c.home), c.homeSession.Name, projectWords(dest))
+			"projects' items by reference, each written %s with the item's full id", strings.Join(g.Label(), ", "),
+			projectWords(dest), projectWords(c.home), c.homeSession.Name, projectWords(dest), core.CitationForm("<project>"))
 	}
 	a, err := s.askFenced(ctx, c, dest, true, approval.ViaRefusal)
 	var live *approval.AccessLiveError

@@ -64,10 +64,13 @@ func CopyIntoLine(target, from string) string {
 // CiteByReferenceLine is the instruction a read grant's holder gets for
 // writing up its work in the project it asked from. CopyIntoLine stays the
 // owner's warning, because nothing inspects what the agent writes; this is
-// what the agent is asked to do.
+// what the agent is asked to do. The reference form is core.CitationForm's,
+// the one the gardener reads back from a stamped copy's body
+// (core.Citations) to flag the copy when a source changes.
 func CiteByReferenceLine(target, from string) string {
 	return "When you document this work in " + from + " (task details, memories, notes, findings), refer to " + target +
-		"'s items by reference -- project slug plus the item's name or id -- and leave out " + target + "'s confidential details."
+		"'s items by reference, each written " + core.CitationForm(target) + " with the item's full id, and leave out " +
+		target + "'s confidential details."
 }
 
 var (

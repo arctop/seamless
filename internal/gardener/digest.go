@@ -59,6 +59,18 @@ func (s *Service) proposeDigests(ctx context.Context, seen seenKeys) (int, error
 			"title": digestTitle(project, month), "body": body,
 			"model": s.chat.Model(),
 		}
+		// The digest folds its sessions' findings, so the note it writes may
+		// contain what they may contain: the union of their provenance stamps,
+		// recorded here beside the body it was written from. A digest of
+		// unstamped sessions (every one, with isolation.requests off) carries
+		// no key at all.
+		stamps, err := s.foldedStamps(ctx, core.ItemKindSession, sessionIDs(group), project)
+		if err != nil {
+			return created, err
+		}
+		if len(stamps) > 0 {
+			payload[payloadStampsKey] = stamps
+		}
 		if _, err := s.createProposal(ctx, store.ProposalDigest, key, payload, seen); err != nil {
 			return created, err
 		}
@@ -83,6 +95,15 @@ func digestUserPrompt(sessions []core.Session) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// sessionIDs lists the sessions' ids, in order.
+func sessionIDs(sessions []core.Session) []string {
+	out := make([]string, 0, len(sessions))
+	for _, s := range sessions {
+		out = append(out, s.ID)
+	}
+	return out
 }
 
 // digestTitle names a digest note for a project + month.

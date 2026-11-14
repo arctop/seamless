@@ -44,14 +44,22 @@ type reprojectView struct {
 // isolation. The move is a reproject's; the evidence is provenance, which is why
 // it renders on its own terms -- Session names the stamp that traced it, and
 // Isolation the fence it escaped.
+//
+// The copy-relocate pass files the same kind for a stamped memory whose
+// sources all lie in one other project (Basis gardener.BasisCitedSources):
+// From is then the project it is in, Cited the references its body makes, and
+// Isolation the destination's.
 type relocateView struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Kind        string `json:"kind,omitempty"`
-	Description string `json:"description,omitempty"`
-	To          string `json:"to"`
-	Session     string `json:"session,omitempty"`
-	Isolation   string `json:"isolation,omitempty"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Kind        string   `json:"kind,omitempty"`
+	Description string   `json:"description,omitempty"`
+	To          string   `json:"to"`
+	Session     string   `json:"session,omitempty"`
+	Isolation   string   `json:"isolation,omitempty"`
+	From        string   `json:"from,omitempty"`
+	Basis       string   `json:"basis,omitempty"`
+	Cited       []string `json:"cited,omitempty"`
 }
 
 // rekindView is the rekind-specific projection of a proposal card: a memory
@@ -175,6 +183,20 @@ type proposalCard struct {
 	// silent move across a fence raised after the fact. Agent callers are
 	// refused outright at the MCP surface (mcp.fenceProposal).
 	Fenced []store.ProjectIsolation `json:"-"`
+	// Basis is which pass filed a proposal of a kind several passes share:
+	// gardener.BasisSourceChanged on a stale copy's archive,
+	// gardener.BasisCitedSources on a stamped copy's relocate, "" otherwise.
+	Basis string `json:"-"`
+	// StaleSources are a stale copy's cited sources that changed after it was
+	// last written (Basis gardener.BasisSourceChanged).
+	StaleSources []staleSourceView `json:"-"`
+	// MoveWarning is set on a reproject or relocate of a stamped memory into
+	// a project less fenced than one it may hold content from: the apply
+	// step warns before the owner moves it (moveWarning). It marks only.
+	MoveWarning *moveWarningView `json:"-"`
+	// MayContain is a digest's provenance line: what the note it writes will
+	// record it may contain content from, "" for none.
+	MayContain string `json:"-"`
 }
 
 // queueSection is one taxonomy group in the review rail: the pending proposals
@@ -789,10 +811,14 @@ func rowSummary(kind string, c proposalCard) (title, detail string) {
 		}
 		return "Merge duplicates", ""
 	case store.ProposalArchive:
-		if c.Archive != nil {
-			return "Archive memory", c.Archive.Name + " · " + projectLabel(c.Archive.Project)
+		title := "Archive memory"
+		if c.Basis == gardener.BasisSourceChanged {
+			title = "Archive stale copy"
 		}
-		return "Archive memory", ""
+		if c.Archive != nil {
+			return title, c.Archive.Name + " · " + projectLabel(c.Archive.Project)
+		}
+		return title, ""
 	case store.ProposalDigest:
 		return "Publish digest", c.Title
 	case store.ProposalConsolidate:
@@ -804,6 +830,13 @@ func rowSummary(kind string, c proposalCard) (title, detail string) {
 		}
 		return "Move memory", ""
 	case store.ProposalRelocate:
+		if c.Basis == gardener.BasisCitedSources {
+			if c.Relocate != nil {
+				return "Relocate stamped copy", fmt.Sprintf("%s: %s → %s",
+					c.Relocate.Name, projectLabel(c.Relocate.From), c.Relocate.To)
+			}
+			return "Relocate stamped copy", ""
+		}
 		if c.Relocate != nil {
 			return "Relocate leaked memory", fmt.Sprintf("%s: global → %s", c.Relocate.Name, c.Relocate.To)
 		}
@@ -939,6 +972,7 @@ func (s *Service) toProposalCard(ctx context.Context, p store.Proposal) proposal
 		body := payloadStr(p.Payload, "body")
 		c.Preview = snippet(body, 600) // raw, for JSON
 		c.Body = s.renderBody(ctx, body, c.Project)
+		c.MayContain = digestMayContain(p.Payload, c.Project)
 	case store.ProposalConsolidate:
 		c.NewName = payloadStr(p.Payload, "name")
 		c.NewKind = payloadStr(p.Payload, "kind")
@@ -962,6 +996,8 @@ func (s *Service) toProposalCard(ctx context.Context, p store.Proposal) proposal
 			Kind: payloadStr(p.Payload, "kind"), Description: payloadStr(p.Payload, "description"),
 			To:      payloadStr(p.Payload, "to"),
 			Session: payloadStr(p.Payload, "session"), Isolation: payloadStr(p.Payload, "isolation"),
+			From: payloadStr(p.Payload, "from"), Basis: payloadStr(p.Payload, "basis"),
+			Cited: payloadStrList(p.Payload, "cited"),
 		}
 		c.Reason = payloadStr(p.Payload, "reason")
 	case store.ProposalRekind:
@@ -1039,10 +1075,12 @@ func (s *Service) toProposalCard(ctx context.Context, p store.Proposal) proposal
 		}
 		c.Split = sv
 	}
+	stampedCard(&c, p)
 	c.RowTitle, c.RowDetail = rowSummary(p.Kind, c)
 	c.CanUndoApply = gardener.CanUndoApply(p.Kind)
 	c.CanAct = s.cfg.Gardener != nil
 	c.Fenced = s.fencedTargets(ctx, p)
+	c.MoveWarning = s.moveWarning(ctx, p)
 	return c
 }
 
@@ -1058,9 +1096,25 @@ func (s *Service) toProposalCard(ctx context.Context, p store.Proposal) proposal
 // which is the only thing this mark exists to warn about. Marking it would also
 // be the majority of the queue right after a tighten (one row per leaked
 // memory), and a warning on every row is a warning on none.
+//
+// The stamped-copy passes' proposals are about fenced projects by
+// construction -- their stamps name only fenced ones -- so the mark would say
+// nothing about evidence predating a fence there either. A stamped copy's
+// relocate carries the move warning instead, read now (moveWarning); a stale
+// copy's archive is marked as any archive of its memory would be, by the
+// copy's own project alone, its sources' projects aside.
 func (s *Service) fencedTargets(ctx context.Context, p store.Proposal) []store.ProjectIsolation {
 	if p.Kind == store.ProposalRelocate {
 		return nil
+	}
+	if p.Kind == store.ProposalArchive && payloadStr(p.Payload, "basis") == gardener.BasisSourceChanged {
+		copyOnly := make(map[string]any, len(p.Payload))
+		for k, v := range p.Payload {
+			if k != "changed_sources" && k != "basis" {
+				copyOnly[k] = v
+			}
+		}
+		p.Payload = copyOnly
 	}
 	fenced, err := gardener.FencedProjects(ctx, s.db(ctx), p)
 	if err != nil {

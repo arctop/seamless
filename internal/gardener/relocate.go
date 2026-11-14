@@ -43,7 +43,9 @@ var ErrNotIsolated = errors.New("gardener: project is not isolated")
 //
 // Every proposal carries the key relocate:<project>:<memory id>, so a second
 // tighten (confidential -> sealed) never re-asks a question the owner already
-// applied or dismissed.
+// applied or dismissed. The copy-relocate pass (copies.go) files the same kind
+// under the same key for a memory carrying provenance stamps, so one move is
+// asked about once whichever of the two finds it.
 func (s *Service) ProposeIsolationRelocations(ctx context.Context, project string) (int, error) {
 	iso, err := store.IsolationOf(ctx, s.db, project)
 	if err != nil {

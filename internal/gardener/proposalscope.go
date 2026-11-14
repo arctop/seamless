@@ -58,6 +58,15 @@ func ResolveProposalScope(ctx context.Context, db *sql.DB, p store.Proposal) (Pr
 		if err := set.addAnchored(ctx, db, p.Payload, "id", "project", memoryAnchor); err != nil {
 			return ProposalScope{}, err
 		}
+		// A stale copy's archive also says when each cited source changed: a
+		// fact about the source's project, so the scope spans every one of
+		// them (stale-copy, copies.go). Each needs its project key.
+		for _, src := range payloadObjects(p.Payload, "changed_sources") {
+			set.addKey(src, "project")
+		}
+		if p.Payload["basis"] == BasisSourceChanged && len(payloadObjects(p.Payload, "changed_sources")) == 0 {
+			set.fail() // a stale copy that names no source names nothing knowable
+		}
 
 	case store.ProposalMerge:
 		// Two memories, each a brief object. Both sides count: the payload names

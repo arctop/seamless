@@ -725,7 +725,24 @@ any of it.
   trials and findings live in the index only. Every content write stamps before
   it writes; supersession unions through `lifecycle.UnionStamps` (memory_write,
   the gardener, screening release); flag flips stamp nothing; reads name only
-  `View.Listed` projects.
+  `View.Listed` projects; a gardener write that folds stamped items carries
+  their union (merge, consolidate with retired sources, and the digest, whose
+  proposal records its findings' stamps under `may_contain`).
+- **Source references are body text in one form, and the gardener reads them
+  only from stamped memories** (`isolation.requests`; `core.Citations`,
+  `gardener/copies.go`). An item names another project's item as
+  `<project>:<ULID>` (`core.CitationForm`, the form
+  `approval.CiteByReferenceLine` teaches); no tool takes an argument for it.
+  stale-copy files an `archive` proposal (`basis: source_changed`,
+  `changed_sources`) when a cited memory, note or task changed after the copy
+  was last written; copy-relocate files a `relocate` (`basis: cited_sources`)
+  for a copy whose stamps and citations all name one other project. Neither
+  reads a source's content. A stale copy's scope spans its sources' projects
+  (`ResolveProposalScope`). A reference that does not resolve in the project it
+  names, or points into a project the copy may not read
+  (`sourceJudge.readable`), is skipped without trace. The console warns before a
+  stamped memory moves into a less fenced project (`console.moveWarning`) and
+  blocks nothing.
 - **The identity comes from the transport, never the client.** A header, a
   `session=` handle, a body field or an agent-process identity can only ever
   narrow what the View allows. `getBinding` drops a binding to an unreachable

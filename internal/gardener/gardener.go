@@ -5,7 +5,9 @@
 // demand (dead-weight), captured plans that were never approved (stale-plan),
 // recall queries that keep missing because nobody wrote the memory
 // (memory-wanted), errors agents keep hitting on tool calls or hook stages
-// (tool-error), and rolls recent sessions into a monthly digest. Every pass
+// (tool-error), stamped copies whose cited source changed since (stale-copy)
+// or whose sources all lie in one other project (copy-relocate; both in
+// copies.go), and rolls recent sessions into a monthly digest. Every pass
 // only ever writes a gardener_proposals row for the owner to apply or dismiss
 // -- it never mutates a memory on its own. The passes run on a ticker and are
 // also invokable on demand (RunOnce).
@@ -135,6 +137,9 @@ type PassResult struct {
 	StalePlans   int `json:"stalePlans"`
 	MemoryWanted int `json:"memoryWanted"`
 	ToolError    int `json:"toolError"`
+	// Relocations counts the copy-relocate pass's relocate proposals (a stale
+	// copy's archive proposal counts under Archives).
+	Relocations int `json:"relocations"`
 	// Failed names the passes that errored, in run order. A failing pass leaves
 	// its count at 0, which is shaped exactly like "nothing to propose"; this is
 	// the only thing that tells the two apart. Read it before trusting a zero.
@@ -143,7 +148,7 @@ type PassResult struct {
 
 // Total is the number of proposals created across all passes.
 func (r PassResult) Total() int {
-	return r.Merges + r.Archives + r.Digests + r.StalePlans + r.MemoryWanted + r.ToolError
+	return r.Merges + r.Archives + r.Digests + r.StalePlans + r.MemoryWanted + r.ToolError + r.Relocations
 }
 
 // OK reports whether every pass ran to completion. A zero Total means "nothing
@@ -202,10 +207,16 @@ func (s *Service) RunOnce(ctx context.Context) (PassResult, error) {
 	// they fold into the Archives count and are told apart in Failed by name.
 	res.Archives += run("stale-stage", s.proposeStaleStages)
 	res.Archives += run("dead-weight", s.proposeDeadWeight)
+	// A stale copy's proposal is an archive proposal too, after the other
+	// archive passes so a memory they asked about this run is not asked about
+	// twice. It and copy-relocate read only memories that carry a provenance
+	// stamp (isolation.requests): with no stamps they find nothing.
+	res.Archives += run("stale-copy", s.proposeStaleCopies)
 	res.Digests = run("digest", s.proposeDigests)
 	res.StalePlans = run("stale-plan", s.proposeStalePlans)
 	res.MemoryWanted = run("memory-wanted", s.proposeMemoryWanted)
 	res.ToolError = run("tool-error", s.proposeToolError)
+	res.Relocations = run("copy-relocate", s.proposeSourceRelocations)
 
 	switch {
 	case !res.OK():
@@ -213,11 +224,11 @@ func (s *Service) RunOnce(ctx context.Context) (PassResult, error) {
 		// the run's output to trust, which no single pass warning can convey.
 		s.logger.Warn("gardener pass incomplete", "failed", res.Failed, "merges", res.Merges,
 			"archives", res.Archives, "digests", res.Digests, "stale_plans", res.StalePlans,
-			"memory_wanted", res.MemoryWanted, "tool_errors", res.ToolError)
+			"memory_wanted", res.MemoryWanted, "tool_errors", res.ToolError, "relocations", res.Relocations)
 	case res.Total() > 0:
 		s.logger.Info("gardener pass complete", "merges", res.Merges, "archives", res.Archives,
 			"digests", res.Digests, "stale_plans", res.StalePlans, "memory_wanted", res.MemoryWanted,
-			"tool_errors", res.ToolError)
+			"tool_errors", res.ToolError, "relocations", res.Relocations)
 	}
 	return res, nil
 }

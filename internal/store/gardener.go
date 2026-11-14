@@ -37,7 +37,11 @@ const (
 	// sessions wrote it, after that project tightened its isolation. Its effect
 	// is a reproject's, but the decision is not: the evidence is provenance (a
 	// leak that predates the fence), not scope tidying, so the inbox groups and
-	// explains it on its own terms.
+	// explains it on its own terms. The gardener's copy-relocate pass files it
+	// too (payload basis "cited_sources"), for a memory carrying provenance
+	// stamps whose sources all lie in one other project: the same move, and
+	// provenance evidence again -- the memory's stamps and the references its
+	// body makes.
 	ProposalRelocate = "relocate"
 	// ProposalMergePlans folds a never-approved captured plan into an existing
 	// composition that already carries the steps for the same work. It is the

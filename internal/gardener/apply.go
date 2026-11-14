@@ -242,11 +242,19 @@ func (s *Service) applyDigest(ctx context.Context, p store.Proposal, now time.Ti
 		return nil, err
 	}
 	project := payloadString(p.Payload, "project")
+	// The findings the body summarizes carried these stamps when it was
+	// written (proposeDigests), so the note carries them too.
+	folded, err := payloadStamps(p.Payload, payloadStampsKey)
+	if err != nil {
+		return nil, err
+	}
+	stamps, _ := core.MergeStamps(nil, folded, project)
 	note := core.Note{
 		ID: id, Title: title, Slug: core.Slugify(title), Description: "Monthly session digest",
 		Project: project, Body: body, Tags: []string{"created-by:gardener", "digest"},
-		Model:   payloadString(p.Payload, "model"),
-		Created: now, Updated: now,
+		Model:      payloadString(p.Payload, "model"),
+		MayContain: stamps,
+		Created:    now, Updated: now,
 	}
 	written, err := s.files.WriteNote(ctx, note)
 	if err != nil {
@@ -320,8 +328,18 @@ func (s *Service) applyConsolidate(ctx context.Context, p store.Proposal, now ti
 		if ierr != nil {
 			return nil, ierr
 		}
-		if !found || idx.InvalidAt != nil {
-			continue // already gone or already superseded
+		if !found {
+			continue // already gone
+		}
+		if idx.InvalidAt != nil {
+			// Already superseded (on a prior partial apply, or by another
+			// route) or archived: nothing to supersede, but the proposal's body
+			// was written from it, so the target still carries its stamps, as
+			// it carries its account (sourcesAccount).
+			if uerr := s.unionRetiredStamps(ctx, target, idx); uerr != nil {
+				return nil, uerr
+			}
+			continue
 		}
 		var updated core.Memory
 		if merr := s.files.Mutate(ctx, idx.FilePath, func(ctx context.Context) error {
@@ -354,6 +372,22 @@ func (s *Service) applyConsolidate(ctx context.Context, p store.Proposal, now ti
 		"created":    lifecycle.MemoryRef(target.Project, target.Name),
 		"superseded": superseded,
 	}, nil
+}
+
+// unionRetiredStamps gives target the stamps of a source that is already
+// inactive, read from its file (the stamps' source of truth). The read takes
+// no lock: nothing rewrites a retired memory's stamps but the owner's hand,
+// and stamps only ever grow under Seamless's own writes.
+func (s *Service) unionRetiredStamps(ctx context.Context, target, src core.Memory) error {
+	full, err := s.files.Store().ReadMemory(src.FilePath)
+	if err != nil {
+		return fmt.Errorf("read %s for its provenance stamps: %w", lifecycle.MemoryRef(src.Project, src.Name), err)
+	}
+	if _, err := lifecycle.UnionStamps(ctx, s.files, target, full.MayContain); err != nil {
+		return fmt.Errorf("the provenance stamps of %s were not carried to %s: %w",
+			lifecycle.MemoryRef(src.Project, src.Name), lifecycle.MemoryRef(target.Project, target.Name), err)
+	}
+	return nil
 }
 
 // sourcesAccount is the restricted account a consolidated memory is labeled

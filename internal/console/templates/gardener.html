@@ -238,6 +238,7 @@
   </span>
   <span class="gr-meta">
     {{if .Fenced}}<span class="gardener-fenced-chip" title="{{template "fencedTitle" .}}">{{icon "lock"}}</span>{{end}}
+    {{with .MoveWarning}}<span class="gardener-fenced-chip gardener-move-chip" title="{{template "moveWarningTitle" .}}">{{icon "triangle-alert"}}</span>{{end}}
     <span class="gardener-src-chip{{if eq .Source "request"}} you{{end}}">{{if eq .Source "request"}}you{{else}}auto{{end}}</span>
     <time title="{{ts .CreatedAt}}">{{ago .CreatedAt}}</time>
   </span>
@@ -247,6 +248,10 @@
 {{/* fencedTitle names the isolated projects a proposal touches, for the rail
      chip's tooltip. Slugs render verbatim -- they are identifiers, not prose. */}}
 {{define "fencedTitle"}}Touches {{range $i, $p := .Fenced}}{{if $i}}, {{end}}{{$p.Slug}} ({{$p.State}}){{end}}{{end}}
+
+{{/* moveWarningTitle is the rail chip's tooltip for a move of a stamped memory
+     into a less fenced project: the destination, then what it moves past. */}}
+{{define "moveWarningTitle"}}Moves a stamped memory into {{.To.Slug}} ({{.To.State}}), less fenced than {{range $i, $p := .Past}}{{if $i}}, {{end}}{{$p.Slug}} ({{$p.State}}){{end}}{{end}}
 
 {{/* gardener-reader is the review gate for one proposal: provenance, the
      concrete before/after evidence, then the Apply/Dismiss decision. It also
@@ -298,6 +303,19 @@
   </div>
   {{end}}
 
+  {{with .MoveWarning}}
+  {{/* A stamped memory moving into a project less fenced than one it may
+       hold content from, read now. It warns before the apply and blocks
+       nothing: the owner decides. */}}
+  <div class="gardener-fenced-note gardener-move-warning">
+    <span class="gfn-icon">{{icon "triangle-alert"}}</span>
+    <div>
+      <span>Moves a stamped memory into a less fenced project</span>
+      <p>This memory may contain content from {{range $i, $p := .Past}}{{if $i}}, {{end}}<a href="/console/projects/{{$p.Slug}}" data-peek>{{$p.Slug}}</a> ({{$p.State}}){{end}}. Applying moves it into <a href="/console/projects/{{.To.Slug}}" data-peek>{{.To.Slug}}</a>, which is {{.To.State}}: agents those fences keep out can read it there. Read what it says before applying.</p>
+    </div>
+  </div>
+  {{end}}
+
   {{if .CanAct}}
   <footer class="gardener-reader-actions">
     <span>{{icon "lock"}} Knowledge changes only if applied{{if .CanUndoApply}} &mdash; and undoable from Recently decided{{end}}</span>
@@ -338,7 +356,14 @@
   </div>
   {{end}}
   {{if .Reason}}<div class="proposal-reason"><span>Why it was flagged</span><p>{{.Reason}}</p></div>{{end}}
+  {{if .StaleSources}}
+  {{/* A stale copy's sources, by reference only: the gardener never reads
+       their content, and neither does this card. */}}
+  <div class="proposal-query-list"><span>Sources that changed</span><div>{{range .StaleSources}}<em><a href="/console/projects/{{.Project}}" data-peek>{{.Ref}}</a>{{if .Kind}} &middot; {{.Kind}}{{end}}{{if not .Changed.IsZero}} &middot; changed <time title="{{ts .Changed}}">{{ago .Changed}}</time>{{end}}</em>{{end}}</div></div>
+  <div class="proposal-assurance">{{icon "archive"}} History stays readable; active indexes and briefings stop surfacing the stale copy. Dismiss to keep it as it is.</div>
+  {{else}}
   <div class="proposal-assurance">{{icon "archive"}} History stays readable; active indexes and briefings stop surfacing it.</div>
+  {{end}}
 {{else if eq .Kind "merge"}}
   <div class="proposal-signal">{{if eq .Source "request"}}You chose which version should survive.{{else}}The background pass measured {{.ScorePercent}}% similarity between these memories.{{end}}</div>
   <div class="proposal-compare">
@@ -350,6 +375,7 @@
 {{else if eq .Kind "digest"}}
   <div class="proposal-document-head"><span class="proposal-object-icon ok">{{icon "file-text"}}</span><div><span>New note</span><strong>{{.Title}}</strong><small>{{.SessionCount}} session{{if ne .SessionCount 1}}s{{end}} &middot; {{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}} &middot; {{.Month}}</small></div></div>
   <div class="prose proposal-prose">{{.Body}}</div>
+  {{if .MayContain}}<div class="proposal-assurance">{{icon "lock"}} The note records that it {{.MayContain}}, as the findings it summarizes do.</div>{{end}}
   <div class="proposal-assurance">{{icon "check"}} Creates a digest note; the source sessions remain unchanged.</div>
 {{else if eq .Kind "consolidate"}}
   <div class="proposal-signal">Synthesize {{len .Sources}} memor{{if eq (len .Sources) 1}}y{{else}}ies{{end}} into one durable source of truth.</div>
@@ -370,6 +396,23 @@
   </div>
   {{if .Rationale}}<div class="proposal-reason"><span>Why this scope fits</span><p>{{.Rationale}}</p></div>{{end}}
   <div class="proposal-assurance">{{icon "folder-tree"}} The memory keeps its identity and history; only its project scope changes.</div>
+  {{end}}
+{{else if and (eq .Kind "relocate") .Relocate (eq .Relocate.Basis "cited_sources")}}
+  {{/* A stamped copy whose sources all lie in one other project: written where
+       its writer worked because that project was not cleared for it, citing
+       the sources by reference (placement rule 3). The evidence is its own:
+       its stamps and the references its body makes. */}}
+  {{with .Relocate}}
+  <div class="proposal-signal">This memory may contain content from {{.To}} and no other project, and every item it cites lies in {{.To}}.</div>
+  <div class="proposal-moving-memory">{{icon "brain"}} <a href="/console/memories/{{.ID}}" data-peek>{{.Name}}</a>{{if .Kind}} <small>{{.Kind}}</small>{{end}}</div>
+  {{if .Description}}<div class="proposal-reason"><span>What it says</span><p>{{.Description}}</p></div>{{end}}
+  <div class="proposal-move-map">
+    <div><span>From</span><strong>{{if .From}}<a href="/console/projects/{{.From}}" data-peek>{{.From}}</a>{{else}}global{{end}}</strong></div>
+    <span class="proposal-path">{{icon "arrow-right"}}</span>
+    <div class="destination"><span>To</span><strong><a href="/console/projects/{{.To}}" data-peek>{{.To}}</a></strong></div>
+  </div>
+  {{if .Cited}}<div class="proposal-query-list"><span>Items it cites</span><div>{{range .Cited}}<em>{{.}}</em>{{end}}</div></div>{{end}}
+  <div class="proposal-assurance">{{icon "folder-tree"}} The memory keeps its identity, history and provenance stamps; only its project changes. Dismiss to leave it {{if .From}}in {{.From}}{{else}}global{{end}}.</div>
   {{end}}
 {{else if eq .Kind "relocate"}}
   {{/* Same move map as a reproject, different question: the "From" side is

@@ -571,8 +571,8 @@ func TestGrants_HolderDocumentsItsWorkInTheAskingProject(t *testing.T) {
 	elsewhere := r.ok(hr, "tasks_add", map[string]any{"title": "an hr task"})["id"].(string)
 
 	const cite = "When you document this work in example-legal (task details, memories, notes, findings), refer to " +
-		"example-finance's items by reference -- project slug plus the item's name or id -- and leave out " +
-		"example-finance's confidential details."
+		"example-finance's items by reference, each written example-finance:<id> with the item's full id, and leave " +
+		"out example-finance's confidential details."
 	text := r.refused(legal, "recall", map[string]any{"query": "ledger reconciliation", "project": gFin})
 	require.Contains(t, text, cite, "the instruction arrives with the request")
 	r.approveKey(gShort.FindString(text), approval.For1h)

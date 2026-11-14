@@ -60,13 +60,13 @@ func TestClearance_ARebindDoesNotLiftTheLabel(t *testing.T) {
 		require.Equal(t, "session_start: nothing was bound: this conversation holds content from example-legal, so it does "+
 			"not work in project example-ops: a conversation holding a fenced project's content never goes back to an open "+
 			"project or the global scope\nRemedy: keep working in project example-legal, your own session cc/legal-agent; "+
-			"record there what you meant to record in project example-ops, citing other projects' items by reference "+
-			"(project slug plus the item's name or id)", r.refused(cli, "session_start", map[string]any{"project": gOps}))
+			"record there what you meant to record in project example-ops, citing other projects' items by reference, "+
+			"each written <project>:<id> with the item's full id", r.refused(cli, "session_start", map[string]any{"project": gOps}))
 		require.Equal(t, "session_start: nothing was bound: this conversation holds content from example-legal, so it does "+
 			"not work in the global scope: a conversation holding a fenced project's content never goes back to an open "+
 			"project or the global scope\nRemedy: keep working in project example-legal, your own session cc/legal-agent; "+
-			"record there what you meant to record in the global scope, citing other projects' items by reference "+
-			"(project slug plus the item's name or id)", r.refused(cli, "session_start", map[string]any{"project": "global"}))
+			"record there what you meant to record in the global scope, citing other projects' items by reference, "+
+			"each written <project>:<id> with the item's full id", r.refused(cli, "session_start", map[string]any{"project": "global"}))
 		// Resuming a session in the open project is the same rebind.
 		require.Contains(t, r.refused(cli, "session_start", map[string]any{"name": "cc/ops"}), "does not work in project example-ops")
 
@@ -127,8 +127,8 @@ func TestClearance_WriteGrantAtTheSurface(t *testing.T) {
 	require.Contains(t, items[0], "quarterly ledger reconciliation notes")
 	require.Equal(t, "Read and write access to example-finance was approved until "+access.Clock(g.ExpiresAt)+
 		". This session now writes only into example-finance, example-legal. When you document this work in example-legal "+
-		"(task details, memories, notes, findings), refer to example-finance's items by reference -- project slug plus "+
-		"the item's name or id -- and leave out example-finance's confidential details.", items[1])
+		"(task details, memories, notes, findings), refer to example-finance's items by reference, each written "+
+		"example-finance:<id> with the item's full id, and leave out example-finance's confidential details.", items[1])
 
 	r.ok(cli, "memory_write", map[string]any{"name": "into-fin", "kind": "reference", "description": "d", "body": "b\n",
 		"project": gFin})
