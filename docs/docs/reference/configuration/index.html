@@ -463,8 +463,9 @@ Refused while <code>enabled</code> is false, and for the owner. File-only.</li>
 <li><code>relays</code> maps paired relays (<a href="../../guides/peer-auth/#agents-on-another-computer-relays">the guide</a>):
 each relay's name as the Devices page shows it, to <code>owner_uid</code>, your uid on
 that computer. Through a mapped relay that uid is you, judged as the socket
-is; any other uid is refused. An unmapped relay is you over TCP and holds no
-lease. Refused while <code>enabled</code> is false. File-only.</li>
+is. An optional <code>restricted: {&lt;name&gt;: &lt;uid&gt;}</code> names that computer's restricted
+accounts, labeled <code>&lt;name&gt;@&lt;relay&gt;</code>. Any other uid is refused, and so is every
+request of an unmapped relay. Refused while <code>enabled</code> is false. File-only.</li>
 <li><code>passkeys.rp_id</code> and <code>passkeys.origins</code> name the WebAuthn relying party of
 the owner's approver passkeys (<a href="../../reference/cli-seamlessd/#seamlessd_approvers">seamlessd approvers</a>).
 Unset, a TLS install whose <code>server_url</code> names a host uses that exact host as
@@ -1032,7 +1033,7 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </tr>
 <tr>
 <td><code>peer_auth.relays</code></td>
-<td>map of string to {owner_uid uint32}</td>
+<td>map of string to {owner_uid uint32, restricted map of string to uint32}</td>
 <td>-</td>
 </tr>
 <tr>
@@ -1620,9 +1621,10 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c">#   restricted: []</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # Paired relays whose requests are judged as this socket&#39;s: each relay&#39;s</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # name (as the Devices page shows it) to your uid on that computer</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # (owner_uid, never 0). Any other uid there is refused; a relay not listed</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # stays you over TCP, holding no lease. Refused while peer_auth is</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#   # disabled. File only (no env).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # (owner_uid, never 0), and optionally its restricted accounts there</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # (restricted: {&lt;account name&gt;: &lt;uid there&gt;}, labeled &lt;name&gt;@&lt;relay&gt;).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # Any other uid there is refused, and so is every request of a relay not</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # listed. Refused while peer_auth is disabled. File only (no env).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   relays: {}</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # users is retired: a non-empty users map is refused at load, even while the</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # block is disabled. List those projects under locked and remove users (the</span><span class="w">

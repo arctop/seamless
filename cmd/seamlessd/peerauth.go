@@ -662,6 +662,9 @@ func (rt *peerAuthRuntime) logPolicy(logger *slog.Logger) {
 	}
 	for _, name := range slices.Sorted(maps.Keys(rt.cfg.Relays)) {
 		logger.Info("peer_auth relay mapped", "relay", name, "owner_uid", rt.cfg.Relays[name].OwnerUID)
+		for _, a := range rt.policy.RelayRestrictedAccounts(name) {
+			logger.Info("peer_auth relay restricted account", "relay", name, "user", a.Name, "uid", a.UID)
+		}
 	}
 	switch pin, pinned, err := rt.env.daemonPin(); {
 	case err != nil:

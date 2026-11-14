@@ -248,14 +248,17 @@ func (v View) Listed(project string) bool {
 
 // lockedRefusal is the refusal for a locked project when no request could be
 // filed for it: one line with the rule, one with the remedy, which differ
-// between the TCP key, a relay and this machine's socket.
+// between the TCP key, a relay that names no program (wire version 1) and a
+// socket -- this machine's, or a relay's that names its programs, through
+// which the agent asks as it would here.
 func (v View) lockedRefusal(project string) error {
-	if v.who.Relay != "" {
+	if v.who.Relay != "" && !v.who.Named() {
 		return &RefusalError{msg: fmt.Sprintf("project %s is locked: even the owner's own agents need the owner's approval, "+
-			"and this connection holds none. Seamless files no access request for an agent on another computer yet: "+
-			"its relay does not say which program is asking, and a request is filed only for an agent program.\n"+
-			"Remedy: work in %s from an agent session on the server's own computer, which asks for itself, and "+
-			"keep to other projects here.", project, project)}
+			"and this connection holds none. Seamless files no access request for this agent on another computer: "+
+			"its relay does not say which program is asking (it speaks wire version 1), and a request is filed only for an "+
+			"agent program.\n"+
+			"Remedy: update Seamless on that computer, so its relay names each program; until then work in %s from an "+
+			"agent session on the server's own computer, which asks for itself, and keep to other projects here.", project, project)}
 	}
 	if !v.who.Socket {
 		return &RefusalError{msg: fmt.Sprintf("project %s is locked: the TCP connection and its bearer key never reach a "+

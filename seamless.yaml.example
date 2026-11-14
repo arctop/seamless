@@ -573,9 +573,10 @@ update:
 #   restricted: []
 #   # Paired relays whose requests are judged as this socket's: each relay's
 #   # name (as the Devices page shows it) to your uid on that computer
-#   # (owner_uid, never 0). Any other uid there is refused; a relay not listed
-#   # stays you over TCP, holding no lease. Refused while peer_auth is
-#   # disabled. File only (no env).
+#   # (owner_uid, never 0), and optionally its restricted accounts there
+#   # (restricted: {<account name>: <uid there>}, labeled <name>@<relay>).
+#   # Any other uid there is refused, and so is every request of a relay not
+#   # listed. Refused while peer_auth is disabled. File only (no env).
 #   relays: {}
 #   # users is retired: a non-empty users map is refused at load, even while the
 #   # block is disabled. List those projects under locked and remove users (the

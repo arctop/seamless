@@ -57,16 +57,16 @@ func judgeServe(t *testing.T, p *access.Policy, cred *devices.Credential) (int, 
 	return rr.Code, reached, view
 }
 
-// The relay judge touches only a request a mapped relay made: the bearer key,
-// a key device and an unmapped relay keep the owner's TCP view, unread. A
-// mapped relay that forwards nothing is refused, never served as the owner,
-// and so is one paired with a code alone.
+// The relay judge touches only a relay's requests: the bearer key and a key
+// device keep the owner's TCP view, unread. A relay the policy does not map is
+// refused (review H1: its callers are every account on its computer). A mapped
+// relay that forwards nothing is refused, never served as the owner, and so is
+// one paired with a code alone.
 func TestRelayHandler_OnlyAMappedRelaysRequests(t *testing.T) {
 	p := judgePolicyWith(t, map[string]config.PeerRelay{relayvLaptop: {OwnerUID: relayvOwnerUID}})
 	for name, cred := range map[string]*devices.Credential{
-		"the bearer key":    nil,
-		"a key device":      {DeviceID: "01KEYDEVICE", Kind: devices.KindKey, Name: "example-ci", Approved: true},
-		"an unmapped relay": {DeviceID: "01STUDIORELAY", Kind: devices.KindRelay, Name: relayvStudio, Approved: true},
+		"the bearer key": nil,
+		"a key device":   {DeviceID: "01KEYDEVICE", Kind: devices.KindKey, Name: "example-ci", Approved: true},
 	} {
 		status, reached, view := judgeServe(t, p, cred)
 		require.Equal(t, http.StatusOK, status, name)
@@ -74,6 +74,12 @@ func TestRelayHandler_OnlyAMappedRelaysRequests(t *testing.T) {
 		require.False(t, view.Principal().Socket, "%s: the owner over TCP", name)
 		require.Empty(t, view.Principal().Relay, name)
 		require.True(t, view.Locked(relayvFin), "%s: holding no lease", name)
+	}
+	for _, approved := range []bool{true, false} {
+		status, reached, _ := judgeServe(t, p, &devices.Credential{DeviceID: "01STUDIORELAY", Kind: devices.KindRelay,
+			Name: relayvStudio, Approved: approved})
+		require.Equal(t, http.StatusForbidden, status, "an unmapped relay (approved %v) is never the owner over TCP", approved)
+		require.False(t, reached)
 	}
 
 	status, reached, _ := judgeServe(t, p, &devices.Credential{DeviceID: "01LAPTOPRELAY", Kind: devices.KindRelay,
@@ -160,4 +166,22 @@ func TestRelayNames_TheConfigAndTheStoreAgree(t *testing.T) {
 func judgeHash(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
+}
+
+// Doctor names a relay's restricted accounts beside its owner.
+func TestRelayMappingChecks_V2NameTheRestrictedAccounts(t *testing.T) {
+	ctx := context.Background()
+	cfg := config.Defaults()
+	cfg.Addr = "0.0.0.0:8081"
+	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", Socket: config.PeerSocket{Path: "/opt/seamless/run/s.sock"},
+		Relays: map[string]config.PeerRelay{relayvLaptop: {OwnerUID: 501, Restricted: map[string]uint32{"example-ci": 503, "_example_agent": 480}}}}
+	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	judgeStoreRelay(t, db, relayvLaptop, "01PASSKEYEXAMPLE")
+	rows := relayMappingChecks(ctx, cfg, db)
+	require.Len(t, rows, 1)
+	require.Equal(t, statusOK, rows[0].status)
+	require.Equal(t, "relay example-laptop: its requests are judged as this socket's, and uid 501 there is the owner; "+
+		"restricted there: _example_agent (uid 480), example-ci (uid 503)", rows[0].detail)
 }

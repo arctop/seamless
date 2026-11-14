@@ -375,10 +375,11 @@ func (s *Service) readGrants(ctx context.Context) ([]grantRow, error) {
 	}
 	rows := make([]grantRow, 0, len(live))
 	for _, g := range live {
+		host := approval.RelayName(ctx, s.writeDB(), g.RelayID)
 		row := grantRow{ID: g.ID, Project: g.Project, From: g.FromProject, PID: g.PeerPID, GrantedAt: g.GrantedAt, ExpiresAt: g.ExpiresAt,
-			Agent: approval.AgentLabel("", g.PeerPID), Access: g.Access, Dialog: g.DecidedBy == approval.DecidedByDialog}
+			Agent: approval.AgentLabelOn("", g.PeerPID, host), Access: g.Access, Dialog: g.DecidedBy == approval.DecidedByDialog}
 		if a, err := store.AccessApprovalByID(ctx, s.writeDB(), g.ApprovalID); err == nil {
-			row.Session, row.Agent = a.SessionName, approval.AgentLabel(a.Program, g.PeerPID)
+			row.Session, row.Agent = a.SessionName, approval.AgentLabelOn(a.Program, g.PeerPID, host)
 		}
 		rows = append(rows, row)
 	}
@@ -396,10 +397,11 @@ func (s *Service) accessGrants(ctx context.Context) ([]leaseRow, []unlockRow, er
 	}
 	lrows := make([]leaseRow, 0, len(leases))
 	for _, l := range leases {
+		host := approval.RelayName(ctx, s.writeDB(), l.RelayID)
 		row := leaseRow{ID: l.ID, Project: l.Project, PID: l.PeerPID, GrantedAt: l.GrantedAt, ExpiresAt: l.ExpiresAt,
-			Agent: approval.AgentLabel("", l.PeerPID)}
+			Agent: approval.AgentLabelOn("", l.PeerPID, host)}
 		if a, err := store.AccessApprovalByID(ctx, s.writeDB(), l.ApprovalID); err == nil {
-			row.Session, row.Agent = a.SessionName, approval.AgentLabel(a.Program, l.PeerPID)
+			row.Session, row.Agent = a.SessionName, approval.AgentLabelOn(a.Program, l.PeerPID, host)
 		}
 		lrows = append(lrows, row)
 	}

@@ -230,8 +230,10 @@ func TestRelayView_LockedRefusal(t *testing.T) {
 	err := v.Refusal(lockFin)
 	require.ErrorIs(t, err, ErrNotReachable)
 	require.Contains(t, err.Error(), "project example-finance is locked")
-	require.Contains(t, err.Error(), "an agent on another computer")
-	require.Contains(t, err.Error(), "\nRemedy: work in example-finance from an agent session on the server's own computer")
+	require.Contains(t, err.Error(), "this agent on another computer")
+	require.Contains(t, err.Error(), "wire version 1")
+	require.Contains(t, err.Error(), "\nRemedy: update Seamless on that computer, so its relay names each program; until then "+
+		"work in example-finance from an agent session on the server's own computer")
 	require.NotContains(t, err.Error(), "TCP connection", "a relay is no bearer request")
 
 	ctx := WithAgentChain(WithView(context.Background(), v), func() bool { return true })

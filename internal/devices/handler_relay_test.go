@@ -66,7 +66,8 @@ func TestParseRelayAttributes_TheWire(t *testing.T) {
 	extra.Set("X-Seamless-Relay-Name", "example-laptop")
 	for name, h := range map[string]http.Header{
 		"no version":                    {RelayUIDHeader: {"501"}, RelayChainHeader: {judgeChainHeader}},
-		"version 2":                     judgeHeaders("2", "501", judgeChainHeader),
+		"version 2 without programs":    judgeHeaders("2", "501", judgeChainHeader),
+		"version 3":                     judgeHeaders("3", "501", judgeChainHeader),
 		"version with space":            judgeHeaders("1 ", "501", judgeChainHeader),
 		"no uid":                        {RelayVersionHeader: {"1"}, RelayChainHeader: {judgeChainHeader}},
 		"uid not decimal":               judgeHeaders("1", "50a", judgeChainHeader),
@@ -219,4 +220,131 @@ func TestRevoke_EndsTheRelaysLeases(t *testing.T) {
 	require.NotNil(t, accessEnded, "access.revoked is recorded, as for any other early end")
 	require.Equal(t, store.LeaseRevokedDevice, accessEnded["reason"])
 	require.EqualValues(t, 1, accessEnded["leases"])
+}
+
+// relay2Headers is version 2's four headers: judgeHeaders with the version
+// and the programs.
+func relay2Headers(uid, chain, programs string) http.Header {
+	h := judgeHeaders(RelayWireVersion2, uid, chain)
+	h.Set(RelayProgramsHeader, programs)
+	return h
+}
+
+// The wire, version 2: version 1's headers and the programs, one entry per
+// process in the one encoding; an empty entry is a program nobody named.
+// Anything else is refused whole, and version 1 still reads, with no
+// programs.
+func TestParseRelayAttributes_V2(t *testing.T) {
+	claude := "/Users/owner/.local/share/claude/versions/2.1.319"
+	term := "/Applications/iTerm.app/Contents/MacOS/iTerm2"
+	_, present, err := ParseRelayAttributes(relay2Headers("501", judgeChainHeader,
+		"%2FUsers%2Fowner%2F.local%2Fbin%2Fseam,"+EncodeRelayProgram(claude)+","+EncodeRelayProgram(term)))
+	require.ErrorIs(t, err, ErrRelayAttributes, "an encoded byte that may stand plain is not the one form")
+	require.True(t, present)
+
+	programs := EncodeRelayPrograms([]string{"/Users/owner/.local/bin/seam", claude, term})
+	require.Equal(t, "/Users/owner/.local/bin/seam,"+claude+","+term, programs, "a plain path is written as it is")
+	got, present, err := ParseRelayAttributes(relay2Headers("501", judgeChainHeader, programs))
+	require.NoError(t, err)
+	require.True(t, present)
+	require.Equal(t, judgeAttrs.Chain, got.Chain)
+	require.Equal(t, []string{"/Users/owner/.local/bin/seam", claude, term}, got.Programs)
+	require.True(t, got.Named())
+
+	got, _, err = ParseRelayAttributes(relay2Headers("501", judgeTok(2210).Key(), ""))
+	require.NoError(t, err, "one process, its program unnamed")
+	require.Equal(t, []string{""}, got.Programs)
+	require.True(t, got.Named(), "named: and nobody named this one")
+	got, _, err = ParseRelayAttributes(relay2Headers("501", judgeChainHeader, ",,"))
+	require.NoError(t, err)
+	require.Equal(t, []string{"", "", ""}, got.Programs)
+
+	v1, _, err := ParseRelayAttributes(judgeHeaders("1", "501", judgeChainHeader))
+	require.NoError(t, err, "version 1 still reads")
+	require.Nil(t, v1.Programs)
+	require.False(t, v1.Named())
+
+	long := strings.Repeat("a", MaxRelayProgramBytes)
+	got, _, err = ParseRelayAttributes(relay2Headers("501", judgeTok(2210).Key(), long))
+	require.NoError(t, err, "the longest program")
+	require.Equal(t, []string{long}, got.Programs)
+
+	twice := relay2Headers("501", judgeChainHeader, programs)
+	twice.Add(RelayProgramsHeader, programs)
+	v1Programs := judgeHeaders("1", "501", judgeChainHeader)
+	v1Programs.Set(RelayProgramsHeader, programs)
+	for name, h := range map[string]http.Header{
+		"no programs":              judgeHeaders(RelayWireVersion2, "501", judgeChainHeader),
+		"one program too few":      relay2Headers("501", judgeChainHeader, "/a,/b"),
+		"one program too many":     relay2Headers("501", judgeChainHeader, "/a,/b,/c,/d"),
+		"lower-case hex":           relay2Headers("501", judgeChainHeader, "/a%2c,/b,/c"),
+		"a % at the end":           relay2Headers("501", judgeChainHeader, "/a%2,/b,/c"),
+		"a % with no digits":       relay2Headers("501", judgeChainHeader, "/a%,/b,/c"),
+		"a % with a non-hex digit": relay2Headers("501", judgeChainHeader, "/a%G1,/b,/c"),
+		"a plain byte encoded":     relay2Headers("501", judgeChainHeader, "%2F,/b,/c"),
+		"a space left plain":       relay2Headers("501", judgeChainHeader, "/a b,/b,/c"),
+		"a byte past ASCII plain":  relay2Headers("501", judgeChainHeader, "/a\xc3\xa9,/b,/c"),
+		"a NUL":                    relay2Headers("501", judgeChainHeader, "/a%00,/b,/c"),
+		"a program too long":       relay2Headers("501", judgeTok(2210).Key(), long+"a"),
+		"an encoded program too long": relay2Headers("501", judgeTok(2210).Key(),
+			strings.Repeat("%20", MaxRelayProgramBytes+1)),
+		"the programs header twice":    twice,
+		"programs in version 1":        v1Programs,
+		"a malformed chain, version 2": relay2Headers("501", "nope", "/a"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, present, err := ParseRelayAttributes(h)
+			require.True(t, present)
+			require.ErrorIs(t, err, ErrRelayAttributes)
+		})
+	}
+}
+
+// One program, one encoding: every byte a program can hold makes the round
+// trip, the encoding holds nothing a header or the list could misread, and a
+// program the wire cannot carry is sent as none.
+func TestEncodeRelayProgram_TheOneForm(t *testing.T) {
+	all := make([]byte, 0, 255)
+	for c := 1; c < 256; c++ {
+		all = append(all, byte(c))
+	}
+	for _, p := range []string{"", "/usr/bin/claude", "Code Helper (Plugin)", "tmux: server", "a,b", "/x/%41", string(all),
+		"/Users/owner/Library/Application Support/Claude/claude-code/2.1.319/claude.app/Contents/MacOS/claude"} {
+		enc := EncodeRelayProgram(p)
+		require.NotContains(t, enc, ",")
+		for i := 0; i < len(enc); i++ {
+			require.True(t, enc[i] > ' ' && enc[i] < 0x7f, "%q: printable ASCII only", enc)
+		}
+		back, err := DecodeRelayProgram(enc)
+		require.NoError(t, err, "%q", p)
+		require.Equal(t, p, back)
+	}
+	require.Empty(t, EncodeRelayProgram(strings.Repeat("a", MaxRelayProgramBytes+1)), "too long: sent as no program")
+	require.Empty(t, EncodeRelayProgram("a\x00b"), "a NUL: sent as no program")
+	require.Equal(t, "%2C,", EncodeRelayPrograms([]string{",", ""}))
+}
+
+// The edge reads version 2 under a relay's credential as it reads version 1:
+// well formed, the programs ride the context; malformed, nothing reaches a
+// route.
+func TestEdge_RelayAttributesV2(t *testing.T) {
+	f := pairNewFixture(t, false)
+	seen := make(chan deviceProbe, 4)
+	ts, pool, _ := f.deviceServer(t, seen, nil)
+	id := pairIdentity(t, "example-laptop")
+	f.pairRelayDevice(t, "example-laptop", id)
+	relay := deviceClient(pool, id)
+
+	programs := EncodeRelayPrograms([]string{"/usr/local/bin/seam", "/usr/local/bin/claude", ""})
+	status, _, p, reached := deviceGet(t, relay, ts.URL+"/api/mcp", relay2Headers("501", judgeChainHeader, programs), seen)
+	require.Equal(t, http.StatusOK, status)
+	require.True(t, reached)
+	require.True(t, p.forwarded)
+	require.Equal(t, []string{"/usr/local/bin/seam", "/usr/local/bin/claude", ""}, p.relay.Programs)
+	require.Empty(t, p.relayHdrs, "and never reach a route raw")
+
+	status, body, _, reached := deviceGet(t, relay, ts.URL+"/api/mcp", relay2Headers("501", judgeChainHeader, "/a,/b"), seen)
+	require.Equal(t, http.StatusBadRequest, status)
+	require.Contains(t, body, "2 programs for a process chain of 3")
+	require.False(t, reached)
 }

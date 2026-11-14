@@ -15,10 +15,11 @@
 //   - a request a paired relay forwarded from another computer (plan
 //     networked-relay) is judged as this machine's socket judges one, when
 //     peer_auth.relays maps that relay: the relay's own kernel named the
-//     caller's uid and process chain on the relay's socket, the relay's TLS
-//     certificate names the relay, and the mapping says which uid there is
-//     the owner (Policy.RelayChainView). An unmapped relay is the owner over
-//     TCP, as a bearer request is.
+//     caller's uid, process chain and (wire version 2) each process's
+//     program on the relay's socket, the relay's TLS certificate names the
+//     relay, and the mapping says which uid there is the owner and which are
+//     restricted accounts (Policy.RelayChainViewNamed). The transport refuses
+//     an unmapped relay's requests: no uid there is known to be the owner.
 //
 // The policy is two rules, and this file and restricted.go are the only places
 // they are written:
@@ -114,6 +115,36 @@ type Principal struct {
 	// and UID and Chain are its report, each process of the chain naming the
 	// relay (ProcessToken.Relay). "" for this machine's socket and for TCP.
 	Relay string
+	// Programs is, for a relay that names them (wire version 2), the program
+	// each process of Chain runs as that computer's kernel named it:
+	// Programs[i] for Chain[i], "" where it named none. Nil for a relay of
+	// wire version 1 and for this machine's socket, whose programs the
+	// daemon's own kernel names (ProgramOf). ReportedProgram reads it.
+	Programs []string
+}
+
+// Named reports whether the transport named the programs of p's chain: a
+// relay of wire version 2. This machine's socket is not "named" here: the
+// daemon asks its own kernel (ProgramOf).
+func (p Principal) Named() bool {
+	return len(p.Chain) > 0 && len(p.Programs) == len(p.Chain)
+}
+
+// ReportedProgram is the program the transport reported for t, a process of
+// p's chain (Named): its entry in Programs. ok is false when the transport
+// reported none for t: this machine's socket, a relay of wire version 1, or a
+// token that is not one of the chain's.
+func (p Principal) ReportedProgram(t ProcessToken) (string, bool) {
+	k := t.Key()
+	if k == "" || !p.Named() {
+		return "", false
+	}
+	for i, c := range p.Chain {
+		if c.Key() == k {
+			return p.Programs[i], true
+		}
+	}
+	return "", false
 }
 
 // View is one request's reach under the policy. The zero View (no policy, no

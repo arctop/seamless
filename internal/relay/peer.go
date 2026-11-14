@@ -50,11 +50,14 @@ func ConnContext(ctx context.Context, c net.Conn) context.Context {
 }
 
 // Attributes are what the relay tells the server about one request's local
-// caller, read from its own kernel: the uid, and the kernel-verified process
-// chain as access.ProcessToken keys, the peer first.
+// caller, read from its own kernel: the uid, the kernel-verified process
+// chain as access.ProcessToken keys, the peer first, and the program each of
+// those processes runs (Programs[i] for Chain[i]), as this kernel names it
+// (access.ProgramOf), "" where it names none.
 type Attributes struct {
-	UID   uint32
-	Chain []string
+	UID      uint32
+	Chain    []string
+	Programs []string
 }
 
 var (
@@ -66,10 +69,13 @@ var (
 )
 
 // attributesOf reads the request's local caller from ctx: the uid read at
-// accept, and the chain walked now. Every failure refuses the request: a
-// relay request without them is one the server refuses, and the relay never
-// sends one it knows to be incomplete.
-func attributesOf(ctx context.Context) (Attributes, error) {
+// accept, the chain walked now, and each process's program as name names it
+// (access.ProgramOf, which reads it only while the pid still names that
+// process). Every failure refuses the request: a relay request without them
+// is one the server refuses, and the relay never sends one it knows to be
+// incomplete. A program the kernel does not name is "": the server then files
+// no request anchored at that process.
+func attributesOf(ctx context.Context, name func(access.ProcessToken) string) (Attributes, error) {
 	p, ok := ctx.Value(peerKey{}).(peerConn)
 	switch {
 	case !ok:
@@ -93,12 +99,14 @@ func attributesOf(ctx context.Context) (Attributes, error) {
 		hops = hops[:access.MaxChainHops]
 	}
 	keys := make([]string, 0, len(hops))
+	programs := make([]string, 0, len(hops))
 	for _, h := range hops {
 		k := h.Token.Key()
 		if k == "" || strings.Contains(k, ",") {
 			return Attributes{}, fmt.Errorf("the kernel named a process with no valid token (pid %d)", h.Token.PID)
 		}
 		keys = append(keys, k)
+		programs = append(programs, name(h.Token))
 	}
-	return Attributes{UID: p.uid, Chain: keys}, nil
+	return Attributes{UID: p.uid, Chain: keys, Programs: programs}, nil
 }

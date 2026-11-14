@@ -336,6 +336,10 @@ const (
 	// WarnMove is a move request's line (MoveLine): what the move carries
 	// and where the agent can no longer write.
 	WarnMove = "move"
+	// WarnRelay names the computer a request's agent runs on when it is not
+	// this one: the relay that forwarded it (plan networked-relay), whose
+	// kernel, not this server's, reported the pid, the uid and the program.
+	WarnRelay = "relay"
 )
 
 // WarningOrder is the order the facts serve their warnings in, most serious
@@ -348,6 +352,9 @@ const (
 //   - anchor_is_runtime: the process is a JS runtime that only its own hook
 //     calls an agent, and an editor's server is one too, so one approval could
 //     cover everything that server started;
+//   - relay: the agent runs on another computer, named here, whose relay
+//     reported the process and its program: every other fact about the asker
+//     is that computer's;
 //   - move: an approved move takes the agent into the project for good, with
 //     everything it carries, and out of every place it could write before;
 //   - copy_into: an approved read lets the project's content leave, into
@@ -363,7 +370,8 @@ const (
 //   - refresh: the agent holds a lease on the project already; approving
 //     replaces it and adds no reach.
 var WarningOrder = []string{
-	WarnAnchorIsShell, WarnAnchorRuntime, WarnMove, WarnCopyInto, WarnTainted, WarnOtherPending, WarnCWDOutside, WarnNoSession, WarnRefreshOfLease,
+	WarnAnchorIsShell, WarnAnchorRuntime, WarnRelay, WarnMove, WarnCopyInto, WarnTainted, WarnOtherPending, WarnCWDOutside, WarnNoSession,
+	WarnRefreshOfLease,
 }
 
 // warningRank is a warning's place in WarningOrder; a code it does not list
@@ -439,7 +447,7 @@ func (s *Service) Request(ctx context.Context, in RequestInput) (store.AccessApp
 		// its end is not near: a refresh now would only ask the owner again.
 		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, s.liveLease(ctx, lease, now))
 	}
-	got, err := s.anchorFor(ctx, chain, in.SessionID, in.AgentProcess, in.Host)
+	got, err := s.anchorIn(ctx, in.View.Principal(), chain, in.SessionID, in.AgentProcess, in.Host)
 	if err != nil {
 		return store.AccessApproval{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -611,13 +619,24 @@ type resolvedAnchor struct {
 	program   string
 }
 
-// anchorFor resolves a request's anchor (resolveAnchor) and applies the
-// anchor rule to it (anchor.go): an anchor that is not an agent's is an
-// *AnchorError, and nothing is filed. A relay's chain is ErrRelayUnnamed: its
-// processes are another computer's, whose programs this daemon cannot name
-// (relay.go).
+// anchorFor is anchorIn for the principal of the View ctx carries, whose
+// chain chain is (a grant's or a move's asker: Grants.askerOf).
 func (s *Service) anchorFor(ctx context.Context, chain []access.ProcessToken, sessionID, agentProcess, host string) (resolvedAnchor, error) {
-	if relayUnnamed(chain) {
+	v, _ := access.FromContext(ctx)
+	return s.anchorIn(ctx, v.Principal(), chain, sessionID, agentProcess, host)
+}
+
+// anchorIn resolves a request's anchor (resolveAnchor) in chain, the chain of
+// the request's principal who, and applies the anchor rule to it (anchor.go)
+// with the programs the transport names (programNamer): this daemon's kernel
+// for its own socket, the relay's report for a relay's (wire version 2). An
+// anchor that is not an agent's is an *AnchorError, and nothing is filed. A
+// relay's chain no report names (wire version 1), and a relay's anchor whose
+// program its relay did not name, are ErrRelayUnnamed: the rule cannot judge
+// another computer's process nobody named (relay.go).
+func (s *Service) anchorIn(ctx context.Context, who access.Principal, chain []access.ProcessToken, sessionID, agentProcess, host string) (resolvedAnchor, error) {
+	name, named := s.programNamer(who, chain)
+	if !named {
 		return resolvedAnchor{}, ErrRelayUnnamed
 	}
 	i, sessionID, sess, err := s.resolveAnchor(ctx, chain, sessionID, agentProcess, host)
@@ -626,9 +645,12 @@ func (s *Service) anchorFor(ctx context.Context, chain []access.ProcessToken, se
 	}
 	tok := chain[i]
 	stamped := sess.AgentProcess != "" && sess.AgentProcess == tok.AgentID()
-	program, err := judgeAnchor(chain, i, s.cfg.Programs, stamped)
+	program, err := judgeAnchor(chain, i, name, stamped)
 	if err != nil {
 		return resolvedAnchor{}, err
+	}
+	if tok.Relay != "" && strings.TrimSpace(program) == "" {
+		return resolvedAnchor{}, ErrRelayUnnamed
 	}
 	return resolvedAnchor{token: tok, sessionID: sessionID, sess: sess, program: program}, nil
 }
@@ -785,11 +807,21 @@ func (s *Service) factsOf(ctx context.Context, a store.AccessApproval) (Facts, e
 		warn(WarnAnchorRuntime, "the process asking is "+base+", and only its own hook says it is an agent: every program it "+
 			"started would share this approval, so approve only if this is the agent you started")
 	}
+	// A relay's agent runs on another computer: the facts say which, and its
+	// session's cwd is a path there, judged against that computer's
+	// repositories (the relay's enrolled name is the host its requests speak
+	// for).
+	host := s.cfg.Host
+	if relay, name := s.relayOf(ctx, a); relay != "" {
+		host = name
+		warn(WarnRelay, "the agent runs on "+name+", another computer: its relay, not this server, reports the pid, the uid "+
+			"and the program")
+	}
 	if a.SessionID == "" {
 		warn(WarnNoSession, "no session named this agent; its cwd and model are unknown")
 	}
-	if a.CWD != "" && s.cfg.Host != "" && home != "" {
-		roots, err := store.RepoRootsForProject(ctx, s.cfg.DB, s.cfg.Host)
+	if a.CWD != "" && host != "" && home != "" {
+		roots, err := store.RepoRootsForProject(ctx, s.cfg.DB, host)
 		if err != nil {
 			return Facts{}, fmt.Errorf("%s: %w", op, err)
 		}
@@ -1037,8 +1069,12 @@ func (s *Service) Approve(ctx context.Context, d Decision) (store.AccessLease, e
 // digest) the owner was shown, for word, the access chosen (accessWord), and
 // returns who decided: the daemon's account, or the approver credential that
 // signed. It is the one proof check of the approve core, for a lock's lease, a
-// grant and a move alike.
+// grant and a move alike, so it also refuses, whatever the proof, a request
+// no proof can make safe: a relay's process nobody named (relay.go).
 func (s *Service) prove(ctx context.Context, a store.AccessApproval, facts Facts, d Decision, word string, now time.Time) (string, error) {
+	if err := storedRelayRefusal(a); err != nil {
+		return "", fmt.Errorf("%s: %w", ShortID(a.ID), err)
+	}
 	switch d.Proof.Kind {
 	case ProofDaemon:
 		return decidedByDaemon, nil

@@ -75,9 +75,32 @@ type Policy struct {
 	// restricted is peer_auth.restricted: the restricted local accounts, by
 	// uid (restricted.go).
 	restricted map[uint32]Account
-	// relays is peer_auth.relays: the owner's uid on each mapped relay's
-	// computer, by the relay's enrolled name (RelayChainView).
-	relays map[string]uint32
+	// relays is peer_auth.relays: each mapped relay's computer, by the relay's
+	// enrolled name (RelayChainView).
+	relays map[string]relayPolicy
+}
+
+// relayPolicy is one mapped relay's computer: the owner's uid there, and the
+// restricted accounts there (peer_auth.relays' restricted), by uid, each
+// labeled with its name and the relay's (RelayAccountLabel).
+type relayPolicy struct {
+	owner      uint32
+	restricted map[uint32]Account
+}
+
+// RelayAccountLabel is the label a restricted account on a relay's computer
+// carries -- on every write it makes, and as its session namespace -- "<its
+// name there>@<the relay's enrolled name>": the account and the host, so two
+// computers' accounts of one name never share a label, and none shares one
+// with an account on this machine.
+func RelayAccountLabel(account, relay string) string { return account + "@" + relay }
+
+// validRelayAccount accepts a restricted account's name on a relay's
+// computer, as config.validatePeerRelays does at load: an OS account name
+// with no space, ':', '/' or '@' (the label's separators), not starting with
+// '-'.
+func validRelayAccount(name string) bool {
+	return name != "" && len(name) <= 64 && !strings.HasPrefix(name, "-") && !strings.ContainsAny(name, " \t\r\n:/@")
 }
 
 // ErrInvalidPolicy marks a peer_auth block whose accounts do not resolve or
@@ -107,15 +130,32 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 		owner:       owner,
 		ownerLocked: map[string]bool{},
 		restricted:  map[uint32]Account{},
-		relays:      map[string]uint32{},
+		relays:      map[string]relayPolicy{},
 	}
 	for name, r := range cfg.Relays {
 		// The shape (a relay's name, an owner that is not root) was checked at
 		// load; a block that did not come through one is held to it here.
-		if name == "" || name != strings.ToLower(strings.TrimSpace(name)) || r.OwnerUID == 0 {
+		if name == "" || name != strings.ToLower(strings.TrimSpace(name)) || strings.ContainsAny(name, "@:") || r.OwnerUID == 0 {
 			return nil, fmt.Errorf("%w: peer_auth.relays %q: a relay's enrolled name, and the owner's uid there (never root)", ErrInvalidPolicy, name)
 		}
-		p.relays[name] = r.OwnerUID
+		rp := relayPolicy{owner: r.OwnerUID, restricted: map[uint32]Account{}}
+		for acct, uid := range r.Restricted {
+			switch prev, dup := rp.restricted[uid]; {
+			case !validRelayAccount(acct):
+				return nil, fmt.Errorf("%w: peer_auth.relays %q restricted %q is not an OS account name", ErrInvalidPolicy, name, acct)
+			case uid == 0:
+				return nil, fmt.Errorf("%w: peer_auth.relays %q restricted %s is uid 0, root, which reads the relay's key: "+
+					"root is never a restricted account", ErrInvalidPolicy, name, acct)
+			case uid == r.OwnerUID:
+				return nil, fmt.Errorf("%w: peer_auth.relays %q restricted %s is uid %d, the owner's there: the owner is never "+
+					"restricted", ErrInvalidPolicy, name, acct, uid)
+			case dup:
+				return nil, fmt.Errorf("%w: peer_auth.relays %q restricted lists uid %d twice (%s and %s): name each account once",
+					ErrInvalidPolicy, name, uid, prev.Name, RelayAccountLabel(acct, name))
+			}
+			rp.restricted[uid] = Account{UID: uid, Name: RelayAccountLabel(acct, name)}
+		}
+		p.relays[name] = rp
 	}
 	for _, slug := range cfg.ForceLocked {
 		slug = strings.TrimSpace(slug)
@@ -129,6 +169,18 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 	p.forceLocked = slices.Clone(p.ownerLockedList)
 	if err := p.resolveRestricted(cfg, resolve); err != nil {
 		return nil, err
+	}
+	// One label, one account: a restricted account here named like a relay's
+	// account label would share its sessions and its writes' label.
+	for _, local := range p.restricted {
+		for name, r := range p.relays {
+			for _, acct := range r.restricted {
+				if acct.Name == local.Name {
+					return nil, fmt.Errorf("%w: peer_auth.restricted %s and peer_auth.relays %q restricted %s carry one label: "+
+						"rename one", ErrInvalidPolicy, local.Name, name, acct.Name)
+				}
+			}
+		}
 	}
 	return p, nil
 }
@@ -201,31 +253,55 @@ func chainAttachable(chain []ProcessToken, relay string) bool {
 
 // RelayMapped reports whether peer_auth.relays maps the relay enrolled as
 // name: only then are its requests judged by what it forwards
-// (RelayChainView). Any other paired relay is the owner over TCP, as a bearer
-// request is, and holds no lease.
+// (RelayChainView). The transport refuses any other paired relay's requests
+// under peer_auth: every account on its computer reaches its socket, and none
+// is known to be the owner.
 func (p *Policy) RelayMapped(name string) bool {
 	_, ok := p.relays[name]
 	return ok
 }
 
-// RelayChainView is the view of a request a paired relay forwarded from
+// RelayChainView is RelayChainViewNamed for a relay that names no program
+// (wire version 1): the view's chain carries no program, so no request is
+// filed for its processes.
+func (p *Policy) RelayChainView(relay, name string, uid uint32, chain []ProcessToken) (View, bool) {
+	return p.RelayChainViewNamed(relay, name, uid, chain, nil)
+}
+
+// RelayChainViewNamed is the view of a request a paired relay forwarded from
 // another computer (plan networked-relay), as PeerChainView is this machine's
 // socket's: relay is the relay's device id and name its enrolled name, which
 // the server matched from the relay's TLS certificate; uid and chain are what
 // the relay's own kernel reported of the local caller on the relay's socket,
-// the peer first, as the relay forwarded them.
+// the peer first, as the relay forwarded them, and programs (wire version 2;
+// nil for version 1) the program each process of the chain runs, as that
+// kernel named it.
 //
 // The owner's uid on that computer (peer_auth.relays' owner_uid) is the owner,
-// on a socket (Principal.Socket) a relay authenticated (Principal.Relay). ok
-// is false for a relay the policy does not map and for any other uid: such a
-// request is refused before any route runs, never served as the owner. Every
-// token of the chain is the relay's (ProcessToken.Relay is set here), so a
-// lease, grant or request keyed on one of its processes names the relay too;
-// a chain that would not pass PeerChainView, or names another relay, is not
-// attached, and the view then holds no lease.
-func (p *Policy) RelayChainView(relay, name string, uid uint32, chain []ProcessToken) (View, bool) {
-	owner, mapped := p.relays[name]
-	if !mapped || relay == "" || uid != owner || !(ProcessToken{PID: 1, Boot: "b", Relay: relay}).Valid() {
+// on a socket (Principal.Socket) a relay authenticated (Principal.Relay). A
+// uid the relay's restricted list names is that restricted account, labeled
+// with its name and the relay's (RelayAccountLabel), with no reach until the
+// transport fills it per request (WithOpenProjects), and no chain: like a
+// restricted account on this machine's socket, it holds no lease, grant or
+// request. ok is false for a relay the policy does not map and for any other
+// uid: such a request is refused before any route runs, never served as the
+// owner.
+//
+// Every token of the owner's chain is the relay's (ProcessToken.Relay is set
+// here), so a lease, grant or request keyed on one of its processes names the
+// relay too; a chain that would not pass PeerChainView, or names another
+// relay, is not attached, and the view then holds no lease. programs ride the
+// chain (Principal.Programs) only when there is one per process.
+func (p *Policy) RelayChainViewNamed(relay, name string, uid uint32, chain []ProcessToken, programs []string) (View, bool) {
+	r, mapped := p.relays[name]
+	if !mapped || relay == "" || !(ProcessToken{PID: 1, Boot: "b", Relay: relay}).Valid() {
+		return View{}, false
+	}
+	if acct, ok := r.restricted[uid]; ok {
+		return View{policy: p, acct: acct, who: Principal{Kind: KindRestricted, UID: uid, HasUID: true, User: acct.Name,
+			Socket: true, Relay: relay}}, true
+	}
+	if uid != r.owner {
 		return View{}, false
 	}
 	v := View{policy: p, who: Principal{Kind: KindOwner, UID: uid, HasUID: true, User: p.owner.Name, Socket: true, Relay: relay}}
@@ -242,7 +318,23 @@ func (p *Policy) RelayChainView(relay, name string, uid uint32, chain []ProcessT
 	}
 	v.who.Process, v.who.HasProcess = tokens[0], true
 	v.who.Chain = tokens
+	if len(programs) == len(tokens) {
+		v.who.Programs = slices.Clone(programs)
+	}
 	return v, true
+}
+
+// RelayRestrictedAccounts returns the restricted accounts peer_auth.relays
+// maps on the relay enrolled as name, by uid there, for doctor and the
+// startup log; each Name is its label (RelayAccountLabel).
+func (p *Policy) RelayRestrictedAccounts(name string) []Account {
+	r := p.relays[name]
+	uids := slices.Sorted(maps.Keys(r.restricted))
+	out := make([]Account, 0, len(uids))
+	for _, uid := range uids {
+		out = append(out, r.restricted[uid])
+	}
+	return out
 }
 
 // HasLocked reports whether the policy locks any project: only then does a

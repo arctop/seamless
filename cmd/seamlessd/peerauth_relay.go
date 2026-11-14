@@ -16,6 +16,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -32,8 +33,8 @@ import (
 // forwarded. It runs inside the device edge, which matched the relay's
 // certificate (devices.CredentialOf) and read the relay's report of its local
 // caller (devices.RelayAttributesOf), and outside the routes. ownerHandler,
-// outside the edge, gave every TCP request the owner's view; that is what
-// every request but a mapped relay's keeps.
+// outside the edge, gave every TCP request the owner's view; that is what the
+// bearer key and a key device keep, and what no relay's request keeps.
 //
 // For a relay peer_auth.relays maps, by its enrolled name:
 //
@@ -43,24 +44,44 @@ import (
 //     vetted;
 //   - a request that forwards no attributes is refused (400), never served as
 //     the owner;
-//   - a uid other than the mapping's owner_uid is refused (403), as the socket
-//     refuses an account peer_auth does not know;
+//   - a uid that is neither the mapping's owner_uid nor one of its restricted
+//     accounts is refused (403), as the socket refuses an account peer_auth
+//     does not know;
 //   - the owner's uid there gets the owner's socket view through the relay
-//     (Policy.RelayChainView): the forwarded chain, every process the
-//     relay's, and the leases live on it at now, judged by the View
-//     (WithLeases). A relay names no program, so the chain counts as an
-//     agent's (access.FromAgent): the owner's own decisions are refused from
-//     it, as from a socket chain that cannot be walked.
+//     (Policy.RelayChainViewNamed): the forwarded chain, every process the
+//     relay's, the programs the relay named for them (wire version 2; none
+//     from version 1), and the leases live on it at now, judged by the View
+//     (WithLeases). The chain counts as an agent's (access.FromAgent): the
+//     owner's own decisions are refused through a relay, which names no
+//     program the server can see for itself;
+//   - a restricted account there (the mapping's restricted list) gets that
+//     account's view, labeled "<name>@<relay>", with its reach loaded per
+//     request as peerHandler loads a restricted account's on this socket: the
+//     open projects that are not locked (View.WithOpenProjects); a lookup that
+//     fails answers 503.
 //
-// Any other request -- the bearer key, a key device, a relay the policy does
-// not map -- passes as it came: the owner over TCP, holding no lease. So does
-// the health check, which reads no caller at all: a relay probing the server
-// for itself forwards no local caller, and is answered as anyone is.
+// A relay the policy does not map is refused (403), whatever it forwards: its
+// local callers are every account on its computer that reaches its socket,
+// and the server cannot tell which one is the owner until peer_auth.relays
+// says (review H1, wave nt1113e; it passed as the owner over TCP before).
+//
+// Any other request -- the bearer key, a key device -- passes as it came: the
+// owner over TCP, holding no lease. So does the health check, which reads no
+// caller at all: a relay probing the server for itself forwards no local
+// caller, and is answered as anyone is.
 func relayHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cred, ok := devices.CredentialOf(r.Context())
-		if !ok || cred.Kind != devices.KindRelay || !policy.RelayMapped(cred.Name) || r.URL.Path == healthzPath {
+		if !ok || cred.Kind != devices.KindRelay || r.URL.Path == healthzPath {
 			next.ServeHTTP(w, r)
+			return
+		}
+		if !policy.RelayMapped(cred.Name) {
+			logger.Warn("peer_auth: refused a relay peer_auth.relays does not map", "relay", cred.Name, "device", cred.DeviceID)
+			access.NoteRefusal(r.Context(), screening.RefusedPeerUnknown)
+			http.Error(w, fmt.Sprintf("forbidden: relay %s is paired, but peer_auth.relays does not map it, so this server cannot "+
+				"tell which account on that computer is asking: map it in the server's config (peer_auth.relays: {%s: {owner_uid: "+
+				"<your uid there>}}) and restart the server", cred.Name, cred.Name), http.StatusForbidden)
 			return
 		}
 		if !cred.Approved {
@@ -79,19 +100,38 @@ func relayHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger,
 				http.StatusBadRequest)
 			return
 		}
-		view, known := policy.RelayChainView(cred.DeviceID, cred.Name, attrs.UID, attrs.Chain)
+		view, known := policy.RelayChainViewNamed(cred.DeviceID, cred.Name, attrs.UID, attrs.Chain, attrs.Programs)
 		if !known {
 			logger.Warn("peer_auth: refused a relay's caller", "relay", cred.Name, "uid", attrs.UID)
 			access.NoteRefusal(r.Context(), screening.RefusedPeerUnknown)
-			http.Error(w, fmt.Sprintf("forbidden: uid %d on relay %s is not the owner peer_auth.relays maps there", attrs.UID, cred.Name),
-				http.StatusForbidden)
+			http.Error(w, fmt.Sprintf("forbidden: uid %d on relay %s is neither the owner nor a restricted account "+
+				"peer_auth.relays maps there", attrs.UID, cred.Name), http.StatusForbidden)
 			return
 		}
-		if policy.HasLocked() {
-			view = relayLeasedView(r.Context(), view, leases, logger)
+		ctx := r.Context()
+		switch view.Principal().Kind {
+		case access.KindRestricted:
+			// A restricted account's reach is the projects open right now,
+			// judged per request like a lease, as on this machine's socket. A
+			// lookup that fails refuses the request rather than serving it a
+			// reach it would misread as "no projects".
+			var open []string
+			if leases.open != nil {
+				var err error
+				if open, err = leases.open(ctx); err != nil {
+					logger.Warn("peer_auth: open projects unavailable; refusing a relay's restricted account", "relay", cred.Name,
+						"uid", attrs.UID, "error", err)
+					http.Error(w, "service unavailable: the project list could not be read", http.StatusServiceUnavailable)
+					return
+				}
+			}
+			ctx = access.WithView(ctx, view.WithOpenProjects(open))
+		default:
+			if policy.HasLocked() {
+				view = relayLeasedView(ctx, view, leases, logger)
+			}
+			ctx = access.WithAgentChain(access.WithView(ctx, view), func() bool { return true })
 		}
-		ctx := access.WithView(r.Context(), view)
-		ctx = access.WithAgentChain(ctx, func() bool { return true })
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -161,9 +201,23 @@ func relayMappingChecks(ctx context.Context, cfg config.Config, db *sql.DB) []ch
 			out = append(out, check{statusWarn, name, fmt.Sprintf("relay %s was paired with a one-time code alone, before "+
 				"peer_auth: its requests are refused until it pairs again and you approve it with a passkey", n)})
 		default:
-			out = append(out, check{statusOK, name, fmt.Sprintf("relay %s: its requests are judged as this socket's, and uid %d "+
-				"there is the owner", n, p.Relays[n].OwnerUID)})
+			line := fmt.Sprintf("relay %s: its requests are judged as this socket's, and uid %d there is the owner", n, p.Relays[n].OwnerUID)
+			if restricted := relayRestrictedWords(p.Relays[n]); restricted != "" {
+				line += "; restricted there: " + restricted
+			}
+			out = append(out, check{statusOK, name, line})
 		}
 	}
 	return out
+}
+
+// relayRestrictedWords lists a relay's restricted accounts for doctor: each
+// "<name> (uid N)", sorted by name; "" for none.
+func relayRestrictedWords(r config.PeerRelay) string {
+	names := slices.Sorted(maps.Keys(r.Restricted))
+	words := make([]string, 0, len(names))
+	for _, n := range names {
+		words = append(words, fmt.Sprintf("%s (uid %d)", n, r.Restricted[n]))
+	}
+	return strings.Join(words, ", ")
 }

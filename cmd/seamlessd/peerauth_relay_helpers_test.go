@@ -145,6 +145,39 @@ var (
 	relayvCallerB      = relayvCaller{uid: relayvOwnerUID, chain: []access.ProcessToken{relayvBridgeB, relayvAgentB, relayvTerm}}
 )
 
+// relay2Named is the client computer's kernel's name for each of its
+// processes, by pid, as a relay of wire version 2 forwards it.
+var relay2Named = map[int32]string{
+	relayvTerm.PID:    "/Applications/iTerm.app/Contents/MacOS/iTerm2",
+	relayvAgentA.PID:  relayvClaude,
+	relayvBridgeA.PID: relayvSeam,
+	relayvShellA.PID:  "/bin/zsh",
+	relayvScriptA.PID: "/usr/bin/python3",
+	relayvAgentB.PID:  relayvClaude,
+	relayvBridgeB.PID: relayvSeam,
+}
+
+// relay2Headers are the headers a relay of wire version 2 sets for c,
+// naming each process of its chain from names ("" for a pid names lacks), and
+// the agent-process identity c's seam sends.
+func (c relayvCaller) relay2Headers(names map[int32]string) map[string]string {
+	h := c.relayvHeaders()
+	h[devices.RelayVersionHeader] = devices.RelayWireVersion2
+	programs := make([]string, len(c.chain))
+	for i, t := range c.chain {
+		programs[i] = names[t.PID]
+	}
+	h[devices.RelayProgramsHeader] = devices.EncodeRelayPrograms(programs)
+	return h
+}
+
+// relay2RestrictedUID is the restricted account peer_auth.relays maps on
+// the laptop, example-agent; its label is relay2RestrictedLabel.
+const (
+	relay2RestrictedUID   = 502
+	relay2RestrictedLabel = "example-agent@" + relayvLaptop
+)
+
 // relayvPrograms names this machine's processes for the anchor rule. The
 // client computer's are never named here: no kernel of this machine could.
 func relayvPrograms(t access.ProcessToken) string {
@@ -195,8 +228,9 @@ func newRelayvDaemon(t *testing.T) *relayvDaemon {
 		Enabled: true, Owner: "owner",
 		Socket:      config.PeerSocket{Path: "/opt/seamless/run/seamlessd.sock"},
 		ForceLocked: []string{relayvFin},
-		Relays: map[string]config.PeerRelay{relayvLaptop: {OwnerUID: relayvOwnerUID}, relayvDesk: {OwnerUID: relayvOwnerUID},
-			relayvOld: {OwnerUID: relayvOwnerUID}},
+		Relays: map[string]config.PeerRelay{
+			relayvLaptop: {OwnerUID: relayvOwnerUID, Restricted: map[string]uint32{"example-agent": relay2RestrictedUID}},
+			relayvDesk:   {OwnerUID: relayvOwnerUID}, relayvOld: {OwnerUID: relayvOwnerUID}},
 	}
 	require.NoError(t, cfg.Validate())
 	policy, err := access.New(cfg.PeerAuth, func(name string) (access.Account, error) {

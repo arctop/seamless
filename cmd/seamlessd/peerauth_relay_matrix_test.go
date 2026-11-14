@@ -33,8 +33,9 @@ import (
 // holding no lease.
 const relayvTCPWords = "the TCP connection and its bearer key never reach a locked project"
 
-// relayvRelayWords is the locked refusal a mapped relay's caller gets.
-const relayvRelayWords = "Seamless files no access request for an agent on another computer yet"
+// relayvRelayWords is the locked refusal a mapped relay's caller gets from a
+// relay of wire version 1, which names no program.
+const relayvRelayWords = "Seamless files no access request for this agent on another computer"
 
 func TestPeerAuthRelayMatrix(t *testing.T) {
 	d := newRelayvDaemon(t)
@@ -135,19 +136,34 @@ func TestPeerAuthRelayMatrix(t *testing.T) {
 		require.Equal(t, http.StatusOK, status)
 	})
 
-	t.Run("a relay with no mapping stays a TCP caller", func(t *testing.T) {
-		studio := d.mcpVia(t, studioID, "", relayvCallerA.relayvHeaders())
-		text, refused := relayvRead(t, studio, relayvFin, d.finMem)
-		require.True(t, refused)
-		require.Contains(t, text, relayvTCPWords, "an unmapped relay is the owner over TCP, never upgraded")
-		require.NotContains(t, text, relayvSecret)
-		text, refused = relayvRead(t, studio, relayvOpen, d.openMem)
-		require.False(t, refused, text)
-		require.Contains(t, text, relayvOpenToken)
-		require.Equal(t, http.StatusOK, d.initStatus(t, d.httpClient(studioID), nil), "it needs no relay headers, as before")
+	t.Run("a relay with no mapping is refused for every uid", func(t *testing.T) {
+		// Review H1 (wave nt1113e): its callers are every account on its
+		// computer that reaches its socket, so none of them is the owner until
+		// peer_auth.relays says which uid is.
+		codes := func() int {
+			var n int
+			require.NoError(t, d.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM device_pairing_codes`).Scan(&n))
+			return n
+		}
+		before := codes()
+		for _, c := range []relayvCaller{relayvCallerA, {uid: 502, chain: relayvCallerA.chain}, {uid: 0, chain: relayvCallerA.chain},
+			{uid: 65534, chain: relayvCallerA.chain}} {
+			for _, h := range []map[string]string{c.relayvHeaders(), c.relay2Headers(relay2Named)} {
+				require.Equal(t, http.StatusForbidden, d.initStatus(t, d.httpClient(studioID), h), "uid %d", c.uid)
+			}
+			status, body := d.do(t, d.httpClient(studioID), http.MethodGet, "/console/?format=json", nil, c.relay2Headers(relay2Named))
+			require.Equal(t, http.StatusForbidden, status, "uid %d: %s", c.uid, body)
+			require.Contains(t, body, "peer_auth.relays does not map it")
+			status, _ = d.do(t, d.httpClient(studioID), http.MethodPost, "/console/devices/code", url.Values{}, c.relay2Headers(relay2Named))
+			require.Equal(t, http.StatusForbidden, status, "uid %d mints no pairing code through it", c.uid)
+		}
+		require.Equal(t, http.StatusForbidden, d.initStatus(t, d.httpClient(studioID), nil), "nor with no caller at all")
 		require.Equal(t, http.StatusBadRequest, d.initStatus(t, d.httpClient(studioID), map[string]string{
 			devices.RelayVersionHeader: "1", devices.RelayUIDHeader: "501", devices.RelayChainHeader: "nope"}),
 			"headers it does send must be well formed")
+		status, _ := d.do(t, d.httpClient(studioID), http.MethodGet, "/healthz", nil, nil)
+		require.Equal(t, http.StatusOK, status, "the health check reads no caller")
+		require.Equal(t, before, codes(), "no code was minted")
 	})
 
 	t.Run("malformed relay headers are refused 400", func(t *testing.T) {
@@ -201,10 +217,15 @@ func TestPeerAuthRelayMatrix(t *testing.T) {
 	})
 
 	t.Run("a uid the mapping does not name is refused", func(t *testing.T) {
-		for _, uid := range []uint32{502, 0} {
+		for _, uid := range []uint32{503, 0, 65534} {
 			c := relayvCaller{uid: uid, chain: relayvCallerA.chain}
 			require.Equal(t, http.StatusForbidden, d.initStatus(t, d.httpClient(laptopID), c.relayvHeaders()), "uid %d", uid)
+			require.Equal(t, http.StatusForbidden, d.initStatus(t, d.httpClient(laptopID), c.relay2Headers(relay2Named)), "uid %d", uid)
 		}
+		// The laptop's restricted account is another computer's account only:
+		// the desk maps none.
+		c := relayvCaller{uid: relay2RestrictedUID, chain: relayvCallerA.chain}
+		require.Equal(t, http.StatusForbidden, d.initStatus(t, d.httpClient(deskID), c.relay2Headers(relay2Named)))
 	})
 
 	t.Run("a relay paired with a code alone is refused until it pairs again", func(t *testing.T) {
@@ -220,7 +241,7 @@ func TestPeerAuthRelayMatrix(t *testing.T) {
 		b := d.mcpVia(t, laptopID, "", relayvCallerB.relayvHeaders())
 		text, refused := paCall(t, b, "access_request", map[string]any{"project": relayvFin, "reason": "reconcile the ledger"})
 		require.True(t, refused, text)
-		require.Contains(t, text, "no access request is filed for an agent on another computer")
+		require.Contains(t, text, "no access request is filed for this agent on another computer")
 		require.Equal(t, before, approvalsNow())
 	})
 

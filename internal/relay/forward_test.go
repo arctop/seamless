@@ -29,6 +29,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/devices"
 )
 
 // relaySeen is what the server got of one forwarded request.
@@ -59,10 +60,12 @@ func relayProbe(seen chan<- relaySeen, status int, answer string) http.Handler {
 var relayChainEntry = regexp.MustCompile(`^[A-Za-z0-9-]+:([1-9][0-9]*):[1-9][0-9]*$`)
 
 // relayRequireWire checks the relay headers the server got: the contract's
-// three, naming this test process as the caller, and no other.
+// four (version 2), naming this test process as the caller and its program
+// as this kernel names it, and no other.
 func relayRequireWire(t *testing.T, h http.Header) {
 	t.Helper()
 	require.Equal(t, WireVersion, h.Get(HeaderVersion))
+	require.Equal(t, "2", WireVersion, "a relay of this release names programs")
 	require.Equal(t, strconv.Itoa(os.Geteuid()), h.Get(HeaderUID), "the uid the relay's kernel reports for its caller")
 	chain := strings.Split(h.Get(HeaderChain), ",")
 	require.NotEmpty(t, chain)
@@ -71,15 +74,29 @@ func relayRequireWire(t *testing.T, h http.Header) {
 		require.Regexp(t, relayChainEntry, k, "each entry is a ProcessToken key")
 	}
 	require.Equal(t, strconv.Itoa(os.Getpid()), relayChainEntry.FindStringSubmatch(chain[0])[1], "the peer first: this process dialed the socket")
+	programs := strings.Split(h.Get(HeaderPrograms), ",")
+	require.Len(t, programs, len(chain), "one program per process of the chain")
+	peer, err := access.ParseProcessKey(chain[0])
+	require.NoError(t, err)
+	got, err := devices.DecodeRelayProgram(programs[0])
+	require.NoError(t, err, "every entry is in the one encoding")
+	require.NotEmpty(t, got, "this live process has a program")
+	require.Equal(t, access.ProgramOf(peer), got, "the peer's program, as this kernel names it")
+	for _, p := range programs[1:] {
+		_, err := devices.DecodeRelayProgram(p)
+		require.NoError(t, err)
+	}
 	var names []string
 	for name := range h {
 		if strings.HasPrefix(strings.ToLower(name), "x-seamless-relay-") {
 			names = append(names, name)
 		}
 	}
-	require.ElementsMatch(t, []string{HeaderVersion, HeaderUID, HeaderChain}, names, "the contract's three, and nothing a local client sent")
+	require.ElementsMatch(t, []string{HeaderVersion, HeaderUID, HeaderChain, HeaderPrograms}, names,
+		"the contract's four, and nothing a local client sent")
 	require.Len(t, h.Values(HeaderUID), 1)
 	require.Len(t, h.Values(HeaderChain), 1)
+	require.Len(t, h.Values(HeaderPrograms), 1)
 }
 
 // The relay forwards a local request as it came, but for the wire contract:

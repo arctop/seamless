@@ -27,17 +27,18 @@
 // the shared key alone.
 //
 // A relay forwards, with every request, what its own kernel reported of the
-// local caller on the relay's Unix socket: the uid and the process chain
-// (RelayAttributes, the wire's version 1). The edge reads those headers only
+// local caller on the relay's Unix socket: the uid, the process chain and,
+// from the wire's version 2, the program each process of the chain runs
+// (RelayAttributes). The edge reads those headers only
 // under an active relay's Credential, and never passes them on raw: a route
 // sees what the edge read (RelayAttributesOf), and every other request has
 // them stripped, so a bearer request or a key device carrying them is judged
 // as the bearer request it is. They count only under peer_auth, for a relay
 // peer_auth.relays maps (the daemon's relay judge, cmd/seamlessd): such a
 // request is judged as the daemon's own socket judges one, its leases keyed
-// on the relay and the process. Any other paired device is no more than a
-// bearer request: the owner over TCP, holding no lease, so it never opens a
-// locked project.
+// on the relay and the process. Under peer_auth the judge refuses a relay the
+// mapping does not name; a key device is no more than a bearer request: the
+// owner over TCP, holding no lease, so it never opens a locked project.
 package devices
 
 import (
@@ -89,20 +90,37 @@ const RelayALPN = "seamless-relay/1"
 // any route runs (package doc).
 const RelayAttributePrefix = "X-Seamless-Relay-"
 
-// The headers a relay sets on every request it forwards (wire version 1),
-// once each: the version, the local peer's uid as the relay's kernel reported
-// it (decimal), and the peer's kernel-verified process chain, the peer first,
-// each process its access.ProcessToken.Key ("<boot>:<pid>:<version>") joined
-// by "," with no spaces. The relay removes every header under
+// The headers a relay sets on every request it forwards, once each: the
+// version, the local peer's uid as the relay's kernel reported it (decimal),
+// the peer's kernel-verified process chain, the peer first, each process its
+// access.ProcessToken.Key ("<boot>:<pid>:<version>") joined by "," with no
+// spaces, and -- from version 2 -- the program each process of the chain runs
+// (RelayProgramsHeader). The relay removes every header under
 // RelayAttributePrefix a local client sent before it sets these, so a local
 // process never supplies one.
 const (
 	RelayVersionHeader = "X-Seamless-Relay-Version"
 	RelayUIDHeader     = "X-Seamless-Relay-Uid"
 	RelayChainHeader   = "X-Seamless-Relay-Chain"
-	// RelayWireVersion is the one version of the headers this server reads.
+	// RelayProgramsHeader (version 2) names the program of every process of
+	// the chain, in the chain's order, as the relay's kernel names it
+	// (access.ProgramOf on the relay's computer): one entry per process, each
+	// EncodeRelayProgram's form, joined by "," with no spaces. An empty entry
+	// is a process whose program the kernel did not name.
+	RelayProgramsHeader = "X-Seamless-Relay-Programs"
+	// RelayWireVersion is version 1: the uid and the chain, no programs. A
+	// server still reads it, and files no access request for such a relay's
+	// processes (the anchor rule cannot judge a process nobody named).
 	RelayWireVersion = "1"
+	// RelayWireVersion2 is the version a relay of this release sends: version
+	// 1's three headers and RelayProgramsHeader.
+	RelayWireVersion2 = "2"
 )
+
+// MaxRelayProgramBytes bounds one program a relay names: no kernel names a
+// longer one (macOS's proc_pidpath and Linux's /proc/<pid>/exe both stop at
+// 4096 bytes), and a relay sends an empty entry rather than a longer one.
+const MaxRelayProgramBytes = 4096
 
 // ErrRelayAttributes is a relay request whose forwarded attributes are
 // missing or malformed: the request is refused (400), never served as the
@@ -115,17 +133,36 @@ var ErrRelayAttributes = errors.New("malformed relay attributes")
 // it (ProcessToken.Relay unset): which relay it belongs to is the server's to
 // say (access.Policy.RelayChainView), from the certificate the relay
 // presented.
+//
+// Programs (wire version 2) names the program each process of Chain runs, as
+// the relay's kernel named it, entry i for Chain[i]; "" where it named none.
+// It is nil for a version 1 relay, which names no program.
 type RelayAttributes struct {
-	UID   uint32
-	Chain []access.ProcessToken
+	UID      uint32
+	Chain    []access.ProcessToken
+	Programs []string
 }
 
-// ParseRelayAttributes reads the relay attribute headers of h, strictly (wire
-// version 1). present is false when h carries no header under
-// RelayAttributePrefix at all. Present, they must be exactly the three a
-// relay sets, each once: version 1, a decimal uid of at most 2^32-1, and a
-// chain of one to access.MaxChainHops processes, each a valid process key of
-// the relay's computer (access.ParseProcessKey). Anything else is
+// Named reports whether the relay named the chain's programs (wire version
+// 2): only then can the anchor rule judge one of its processes.
+func (a RelayAttributes) Named() bool {
+	return len(a.Chain) > 0 && len(a.Programs) == len(a.Chain)
+}
+
+// ParseRelayAttributes reads the relay attribute headers of h, strictly.
+// present is false when h carries no header under RelayAttributePrefix at
+// all. Present, they must be exactly the headers the version they name sets,
+// each once:
+//
+//   - version 1: the version, a decimal uid of at most 2^32-1, and a chain of
+//     one to access.MaxChainHops processes, each a valid process key of the
+//     relay's computer (access.ParseProcessKey);
+//   - version 2: those three, and the programs (RelayProgramsHeader): exactly
+//     one entry per process of the chain, each in EncodeRelayProgram's one
+//     form, decoding to at most MaxRelayProgramBytes and no NUL.
+//
+// Anything else -- another version, a header the version lacks, a count of
+// programs other than the chain's, an entry not in the one form -- is
 // ErrRelayAttributes.
 func ParseRelayAttributes(h http.Header) (attrs RelayAttributes, present bool, err error) {
 	for name := range h {
@@ -134,7 +171,7 @@ func ParseRelayAttributes(h http.Header) (attrs RelayAttributes, present bool, e
 		}
 		present = true
 		switch http.CanonicalHeaderKey(name) {
-		case RelayVersionHeader, RelayUIDHeader, RelayChainHeader:
+		case RelayVersionHeader, RelayUIDHeader, RelayChainHeader, RelayProgramsHeader:
 		default:
 			return RelayAttributes{}, true, fmt.Errorf("%w: %s is not a relay header", ErrRelayAttributes, name)
 		}
@@ -156,8 +193,16 @@ func ParseRelayAttributes(h http.Header) (attrs RelayAttributes, present bool, e
 	if err != nil {
 		return RelayAttributes{}, true, err
 	}
-	if version != RelayWireVersion {
-		return RelayAttributes{}, true, fmt.Errorf("%w: version %q: this server reads version %s", ErrRelayAttributes, version, RelayWireVersion)
+	switch version {
+	case RelayWireVersion:
+		if len(h.Values(RelayProgramsHeader)) > 0 {
+			return RelayAttributes{}, true, fmt.Errorf("%w: %s is not a version %s header", ErrRelayAttributes,
+				RelayProgramsHeader, RelayWireVersion)
+		}
+	case RelayWireVersion2:
+	default:
+		return RelayAttributes{}, true, fmt.Errorf("%w: version %q: this server reads versions %s and %s", ErrRelayAttributes,
+			version, RelayWireVersion, RelayWireVersion2)
 	}
 	uidText, err := one(RelayUIDHeader)
 	if err != nil {
@@ -186,7 +231,125 @@ func ParseRelayAttributes(h http.Header) (attrs RelayAttributes, present bool, e
 		}
 		chain = append(chain, t)
 	}
-	return RelayAttributes{UID: uint32(uid), Chain: chain}, true, nil
+	attrs = RelayAttributes{UID: uint32(uid), Chain: chain}
+	if version == RelayWireVersion {
+		return attrs, true, nil
+	}
+	programsText, err := one(RelayProgramsHeader)
+	if err != nil {
+		return RelayAttributes{}, true, err
+	}
+	entries := strings.Split(programsText, ",")
+	if len(entries) != len(chain) {
+		return RelayAttributes{}, true, fmt.Errorf("%w: %d programs for a process chain of %d", ErrRelayAttributes, len(entries), len(chain))
+	}
+	attrs.Programs = make([]string, len(entries))
+	for i, e := range entries {
+		p, err := DecodeRelayProgram(e)
+		if err != nil {
+			return RelayAttributes{}, true, fmt.Errorf("%w: program %d: %w", ErrRelayAttributes, i+1, err)
+		}
+		attrs.Programs[i] = p
+	}
+	return attrs, true, nil
+}
+
+// errRelayProgram is a program entry that is not EncodeRelayProgram's form.
+var errRelayProgram = errors.New("not a relay program entry")
+
+// relayProgramPlain reports whether EncodeRelayProgram writes c as it is:
+// RFC 3986's unreserved bytes and "/".
+func relayProgramPlain(c byte) bool {
+	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || '0' <= c && c <= '9' ||
+		c == '-' || c == '.' || c == '_' || c == '~' || c == '/'
+}
+
+// EncodeRelayProgram is one program as the wire carries it (version 2): every
+// byte in A-Z a-z 0-9 - . _ ~ / as it is, every other byte as %XX with two
+// upper-case hex digits. So an entry holds no "," and nothing outside
+// printable ASCII, and one program has exactly one encoding. A program the
+// wire cannot carry -- longer than MaxRelayProgramBytes, or holding a NUL,
+// which no kernel names -- is sent as no program at all (""), as a relay
+// sends one its kernel did not name.
+func EncodeRelayProgram(program string) string {
+	if len(program) > MaxRelayProgramBytes || strings.IndexByte(program, 0) >= 0 {
+		return ""
+	}
+	const hexDigits = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := 0; i < len(program); i++ {
+		c := program[i]
+		if relayProgramPlain(c) {
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(hexDigits[c>>4])
+		b.WriteByte(hexDigits[c&0x0f])
+	}
+	return b.String()
+}
+
+// EncodeRelayPrograms is the programs header's value for programs, entry i
+// for the chain's process i.
+func EncodeRelayPrograms(programs []string) string {
+	out := make([]string, len(programs))
+	for i, p := range programs {
+		out[i] = EncodeRelayProgram(p)
+	}
+	return strings.Join(out, ",")
+}
+
+// DecodeRelayProgram reads one program entry back, strictly: it must be
+// exactly EncodeRelayProgram's rendering of what it decodes to -- every "%"
+// followed by two upper-case hex digits, no byte left plain that must be
+// encoded, none encoded that may stand plain -- and decode to at most
+// MaxRelayProgramBytes with no NUL. "" is a program nobody named.
+func DecodeRelayProgram(entry string) (string, error) {
+	if len(entry) > 3*MaxRelayProgramBytes {
+		return "", fmt.Errorf("%w: longer than %d bytes", errRelayProgram, MaxRelayProgramBytes)
+	}
+	hexVal := func(c byte) (byte, bool) {
+		switch {
+		case '0' <= c && c <= '9':
+			return c - '0', true
+		case 'A' <= c && c <= 'F':
+			return c - 'A' + 10, true
+		}
+		return 0, false
+	}
+	out := make([]byte, 0, len(entry))
+	for i := 0; i < len(entry); i++ {
+		c := entry[i]
+		switch {
+		case relayProgramPlain(c):
+			out = append(out, c)
+		case c == '%':
+			if i+2 >= len(entry) {
+				return "", fmt.Errorf("%w: a %% without two hex digits", errRelayProgram)
+			}
+			hi, ok1 := hexVal(entry[i+1])
+			lo, ok2 := hexVal(entry[i+2])
+			if !ok1 || !ok2 {
+				return "", fmt.Errorf("%w: a %% without two upper-case hex digits", errRelayProgram)
+			}
+			v := hi<<4 | lo
+			if relayProgramPlain(v) {
+				return "", fmt.Errorf("%w: %q is encoded and stands plain", errRelayProgram, string(rune(v)))
+			}
+			if v == 0 {
+				return "", fmt.Errorf("%w: a NUL", errRelayProgram)
+			}
+			out = append(out, v)
+			i += 2
+		default:
+			return "", fmt.Errorf("%w: byte 0x%02x is not encoded", errRelayProgram, c)
+		}
+	}
+	if len(out) > MaxRelayProgramBytes {
+		return "", fmt.Errorf("%w: longer than %d bytes", errRelayProgram, MaxRelayProgramBytes)
+	}
+	return string(out), nil
 }
 
 // hasRelayPrefix reports whether a header name is under RelayAttributePrefix,

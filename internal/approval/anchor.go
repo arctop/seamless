@@ -280,18 +280,28 @@ func agentName(p string) string {
 // program's base name and pid for any other program, "pid 4242" when the
 // program is not known, and "" with no pid at all (no process: the tier
 // without peer_auth).
-func AgentLabel(program string, pid int32) string {
+func AgentLabel(program string, pid int32) string { return AgentLabelOn(program, pid, "") }
+
+// AgentLabelOn is AgentLabel for a process that may run on another computer:
+// host is the relay's enrolled name (RelayName), and the label then says
+// which computer -- "Claude Code 2.1.319 (pid 4242 on example-laptop)" -- as
+// the pid is that computer's. With host "" it is AgentLabel's.
+func AgentLabelOn(program string, pid int32, host string) string {
 	if pid <= 0 {
 		return ""
+	}
+	where := fmt.Sprintf("pid %d", pid)
+	if host != "" {
+		where += " on " + host
 	}
 	name := agentName(program)
 	if name == "" {
 		name = classify(program).base
 	}
 	if name == "" {
-		return fmt.Sprintf("pid %d", pid)
+		return where
 	}
-	return fmt.Sprintf("%s (pid %d)", name, pid)
+	return name + " (" + where + ")"
 }
 
 // judgeAnchor applies the anchor rule to anchor, the i-th process of chain

@@ -893,7 +893,32 @@ any of it.
   (`devices.WithCredential`) and makes it speak for the enrolled name (the host
   header and a hook's `host`); every bearer check asks `devices.Bearer`, so a
   new surface never compares the key by hand. A device key never signs a browser
-  in. Under peer_auth a key device, and a relay `peer_auth.relays` does not map, is a TCP caller: the owner's view, no lease, so it never opens a locked project. The `X-Seamless-Relay-*` headers (wire v1: version, uid, chain) are read only under an active relay `Credential` (`devices.ParseRelayAttributes`; present but malformed is 400) and never reach a route raw (routes read `devices.RelayAttributesOf`); every other request has them stripped unread. A mapped relay (its enrolled name to the owner's uid there, file only) is judged as the socket is (`relayHandler`, `Policy.RelayChainView`): owner_uid is the owner on a socket (`Principal.Relay`), any other uid 403, nothing forwarded 400, a relay no passkey approved 403 until it pairs again; `/healthz` is not judged. Every token of a relay's chain names the relay (`ProcessToken.Relay`, key `relay/<id>/<boot>:<pid>:<version>`), so leases, grants and requests match on (relay, process) wherever keys are compared, and `access_leases`/`access_grants.relay_id` (migration 043) record it, written from the key by their one writer each. No request is filed for a relay's process (`approval.ErrRelayUnnamed`: the wire names no program, so the anchor rule cannot judge one), and the approve core refuses a stored relay row with no program. A relay's chain counts as an agent's (`FromAgent`).
+  in. Under peer_auth a key device is a TCP caller, and a relay
+  `peer_auth.relays` does not map is refused (403, review H1): the owner's view,
+  no lease, so it never opens a locked project. The `X-Seamless-Relay-*` headers
+  (wire v1: version, uid, chain; v2 adds programs, one canonical percent-encoded
+  entry per hop, `devices.EncodeRelayProgram`) are read only under an active
+  relay
+  `Credential` (`devices.ParseRelayAttributes`; present but malformed is 400)
+  and never reach a route raw (routes read `devices.RelayAttributesOf`); every
+  other request has them stripped unread. A mapped relay (its enrolled name to
+  the owner's uid there, file only) is judged as the socket is (`relayHandler`,
+  `Policy.RelayChainView`): owner_uid is the owner on a socket
+  (`Principal.Relay`), any other uid 403, nothing forwarded 400, a relay no
+  passkey approved 403 until it pairs again; `/healthz` is not judged. Every
+  token of a relay's chain names the relay (`ProcessToken.Relay`, key
+  `relay/<id>/<boot>:<pid>:<version>`), so leases, grants and requests match on
+  (relay, process) wherever keys are compared, and
+  `access_leases`/`access_grants.relay_id` (migration 043) record it, written
+  from the key by their one writer each. A v2 relay's programs
+  (`Principal.Programs`) name its processes for the anchor rule and `JudgeStart`
+  (`approval.programNamer`); no request is filed for a v1 relay's process or an
+  anchor its relay did not name (`approval.ErrRelayUnnamed`). The approve core
+  refuses a stored relay row with no program in `prove`, so grants and moves are
+  covered too. A relay's restricted map (`PeerRelay.Restricted`) makes a uid
+  there `KindRestricted`, labeled `access.RelayAccountLabel`, and the approve
+  core refuses a stored relay row with
+  no program. A relay's chain counts as an agent's (`FromAgent`).
   Revoking refuses the credential from its next request, ends the requests it is making and, in the same transaction, a relay's live leases, grants and waiting requests (`store.RevokeDeviceEndingAccess`). A merge carries no device, a fresh import revokes the snapshot's,
   and a backup restore keeps today's (`keptTables`).
 - **The relay forwards and judges nothing** (plan networked-relay;
@@ -906,10 +931,13 @@ any of it.
   data dir for an account that fails them. Per connection it reads the caller's
   uid and process from its own kernel (`relay.ConnContext`; the chain walked per
   request), removes every `X-Seamless-Relay-*` and `Authorization` header a
-  local client sent, sets the wire contract's three, and forwards over its
+  local client sent, sets the wire contract's four (version 2), and forwards
+  over its
   client certificate (`devices.RelayTransport`: `config.HTTPClient`'s trust, the
   server's certificate pinned on top). It interprets and caches nothing: an
-  unnamed caller is 403, an unreachable or re-certified server 502 with the
+  unnamed caller is 403, a protocol switch is refused (400) and a server's 101
+  is a 502 (review L2), and with `RefusingAccount` its own account is no caller,
+  an unreachable or re-certified server 502 with the
   reason, and the server's answer goes back as it came. Without peer_auth on the
   server a relayed request is the owner's whatever uid it names, so the socket's
   mode and group (`--socket-mode`, `--socket-group`) keep other accounts out;

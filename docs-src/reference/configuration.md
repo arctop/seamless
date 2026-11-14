@@ -221,8 +221,9 @@ behavior of every earlier release. The guide is
 - `relays` maps paired relays ([the guide](/guides/peer-auth/#agents-on-another-computer-relays)):
   each relay's name as the Devices page shows it, to `owner_uid`, your uid on
   that computer. Through a mapped relay that uid is you, judged as the socket
-  is; any other uid is refused. An unmapped relay is you over TCP and holds no
-  lease. Refused while `enabled` is false. File-only.
+  is. An optional `restricted: {<name>: <uid>}` names that computer's restricted
+  accounts, labeled `<name>@<relay>`. Any other uid is refused, and so is every
+  request of an unmapped relay. Refused while `enabled` is false. File-only.
 - `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
   the owner's approver passkeys ([seamlessd approvers](/reference/cli-seamlessd/#seamlessd_approvers)).
   Unset, a TLS install whose `server_url` names a host uses that exact host as

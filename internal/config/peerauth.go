@@ -95,12 +95,12 @@ type PeerAuth struct {
 	// A request through a relay named here carries the uid and the process
 	// chain the relay's own kernel reported for the local caller: the owner's
 	// uid there is the owner, holding the leases that process chain holds; any
-	// other uid is refused. A relay a passkey never approved (paired while
+	// other uid is refused, but those the entry's restricted map names
+	// (PeerRelay.Restricted). A relay a passkey never approved (paired while
 	// peer_auth was off, with the code alone) is refused until it pairs again.
-	// A relay not named here stays what every paired device is under
-	// peer_auth: the owner over TCP, holding no lease, so it never opens a
-	// locked project. Refused at load while peer_auth is disabled. File only
-	// (no env).
+	// A relay not named here is refused too: every account on its computer
+	// reaches its socket, and none is known to be the owner. Refused at load
+	// while peer_auth is disabled. File only (no env).
 	Relays map[string]PeerRelay `yaml:"relays"`
 }
 
@@ -109,6 +109,17 @@ type PeerRelay struct {
 	// OwnerUID is the owner's numeric uid on the relay's computer (`id -u`
 	// there). Required; 0 (root) is never the owner.
 	OwnerUID uint32 `yaml:"owner_uid"`
+	// Restricted maps the restricted accounts on the relay's computer, each
+	// by its OS account name there to its uid there (`id -u <name>` there):
+	// a second account on that computer whose agents work beside the
+	// owner's, judged as peer_auth.restricted judges one on this machine --
+	// the open projects that are not locked, reading and writing, the global
+	// scope read-only, every write labeled, a binding rule a proposal. Its
+	// label is "<name>@<relay>", the account and the host. The server cannot
+	// read another computer's account names, so each is named here; a uid
+	// listed nowhere is refused. Optional; never root (0), never owner_uid,
+	// no uid twice, no name with '@'. File only (no env).
+	Restricted map[string]uint32 `yaml:"restricted"`
 }
 
 // PeerPasskeys is the WebAuthn relying party of the approver passkeys. A
@@ -542,10 +553,44 @@ func validatePeerRelays(p PeerAuth) error {
 		if err := validRelayName(name); err != nil {
 			return fmt.Errorf("config: peer_auth.relays %q: %w", name, err)
 		}
-		if p.Relays[name].OwnerUID == 0 {
+		r := p.Relays[name]
+		if r.OwnerUID == 0 {
 			return fmt.Errorf("config: peer_auth.relays %q: owner_uid is required: the owner's uid on that computer (id -u there); "+
 				"0 is root, which is never the owner", name)
 		}
+		if err := validateRelayRestricted(name, r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateRelayRestricted is one relay's restricted map's shape: every name an
+// OS account name with no '@' (its label is "<name>@<relay>"), every uid
+// neither root's -- root on that computer reads the relay's key, so it could
+// forward any uid -- nor the owner's there, and no uid twice. Whether the
+// account exists there is that computer's to know.
+func validateRelayRestricted(relay string, r PeerRelay) error {
+	seen := map[uint32]string{}
+	for _, name := range slices.Sorted(maps.Keys(r.Restricted)) {
+		uid := r.Restricted[name]
+		if err := validateAccount(fmt.Sprintf("peer_auth.relays %q restricted entry", relay), name); err != nil {
+			return err
+		}
+		switch prev, dup := seen[uid]; {
+		case strings.Contains(name, "@"):
+			return fmt.Errorf("config: peer_auth.relays %q restricted %q: an account name holds no '@' (its label is <name>@%s)", relay, name, relay)
+		case uid == 0:
+			return fmt.Errorf("config: peer_auth.relays %q restricted %q: uid 0 is root, which reads the relay's key and could "+
+				"forward any uid: root is never a restricted account", relay, name)
+		case uid == r.OwnerUID:
+			return fmt.Errorf("config: peer_auth.relays %q restricted %q: uid %d is owner_uid, the owner's: the owner is never "+
+				"restricted -- remove it", relay, name, uid)
+		case dup:
+			return fmt.Errorf("config: peer_auth.relays %q restricted lists uid %d twice (%s and %s): name each account once",
+				relay, uid, prev, name)
+		}
+		seen[uid] = name
 	}
 	return nil
 }

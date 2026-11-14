@@ -288,8 +288,8 @@ func TestGrantApprove_RefusesAStoredBroadAnchor(t *testing.T) {
 // The facts serve their warnings most serious first (WarningOrder), whatever
 // order they were found in.
 func TestFacts_WarningOrder(t *testing.T) {
-	require.Equal(t, []string{"anchor_is_shell", "anchor_is_runtime", "move", "copy_into", "session_tainted", "other_pending", "cwd_outside_repo",
-		"no_session", "refresh"}, WarningOrder, "the order is a contract: the Touch ID prompt shows the first three")
+	require.Equal(t, []string{"anchor_is_shell", "anchor_is_runtime", "relay", "move", "copy_into", "session_tainted", "other_pending",
+		"cwd_outside_repo", "no_session", "refresh"}, WarningOrder, "the order is a contract: the Touch ID prompt shows the first three")
 
 	f := newReqFixture(t)
 	ctx := context.Background()

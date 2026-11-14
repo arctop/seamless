@@ -12,17 +12,23 @@ import "github.com/arctop/seamless/internal/access"
 //
 // The process is judged as filing judges it once the session is stamped
 // with it (judgeAnchor, stamped): Claude Code installed with npm, which runs
-// as node, passes exactly as it does at filing. Only an *AnchorError is an
-// answer. nil covers everything else -- no claim, no chain, a claim outside
-// the chain -- which the hook leaves to the filing, as before.
+// as node, passes exactly as it does at filing, and a relay's process is
+// named by its relay's report (wire version 2) as filing names it
+// (programNamer). Only an *AnchorError is an answer. nil covers everything
+// else -- no claim, no chain, a claim outside the chain, a relay's chain no
+// report names -- which the hook leaves to the filing, as before.
 func (s *Service) JudgeStart(v access.View, agentProcess string) error {
 	who := v.Principal()
 	if agentProcess == "" || !who.Socket || len(who.Chain) == 0 {
 		return nil
 	}
+	name, named := s.programNamer(who, who.Chain)
+	if !named {
+		return nil
+	}
 	for i, t := range who.Chain {
 		if t.AgentID() == agentProcess {
-			_, err := judgeAnchor(who.Chain, i, s.cfg.Programs, true)
+			_, err := judgeAnchor(who.Chain, i, name, true)
 			return err
 		}
 	}

@@ -239,13 +239,16 @@ func TestRelayJudge_MalformedRelayHeadersAreRefusedAtTheEdge(t *testing.T) {
 	rt, err := p.state.Transport(p.layout.DataDir)
 	require.NoError(t, err)
 	direct := &http.Client{Transport: rt, CheckRedirect: config.RefuseRedirect, Timeout: 20 * time.Second}
-	good := http.Header{relay.HeaderVersion: {relay.WireVersion}, relay.HeaderUID: {"501"}, relay.HeaderChain: {"example-boot:4242:7"}}
+	good := http.Header{relay.HeaderVersion: {relay.WireVersion}, relay.HeaderUID: {"501"}, relay.HeaderChain: {"example-boot:4242:7"},
+		relay.HeaderPrograms: {"/usr/local/bin/claude"}}
 	for name, edit := range map[string]func(http.Header){
-		"another version":    func(h http.Header) { h.Set(relay.HeaderVersion, "2") },
-		"a uid not decimal":  func(h http.Header) { h.Set(relay.HeaderUID, "-1") },
-		"a uid past 2^32-1":  func(h http.Header) { h.Set(relay.HeaderUID, "4294967296") },
-		"an empty chain":     func(h http.Header) { h.Set(relay.HeaderChain, "") },
-		"an entry not a key": func(h http.Header) { h.Set(relay.HeaderChain, "example-boot:4242") },
+		"another version":         func(h http.Header) { h.Set(relay.HeaderVersion, "3") },
+		"version 1 with programs": func(h http.Header) { h.Set(relay.HeaderVersion, "1") },
+		"a program count off":     func(h http.Header) { h.Set(relay.HeaderPrograms, "/a,/b") },
+		"a uid not decimal":       func(h http.Header) { h.Set(relay.HeaderUID, "-1") },
+		"a uid past 2^32-1":       func(h http.Header) { h.Set(relay.HeaderUID, "4294967296") },
+		"an empty chain":          func(h http.Header) { h.Set(relay.HeaderChain, "") },
+		"an entry not a key":      func(h http.Header) { h.Set(relay.HeaderChain, "example-boot:4242") },
 		"too many hops": func(h http.Header) {
 			h.Set(relay.HeaderChain, strings.Repeat("example-boot:4242:7,", 32)+"example-boot:4242:7")
 		},

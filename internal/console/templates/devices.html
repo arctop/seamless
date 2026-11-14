@@ -84,7 +84,7 @@
     </li>
     {{end}}
   </ul>
-  {{if $.Data.PeerAuth}}<p class="held-sub">A paired device is you, as the bearer key is: it never holds a lease, so it never opens a locked project.</p>{{end}}
+  {{if $.Data.PeerAuth}}<p class="held-sub">A key device is you, as the bearer key is: it never holds a lease, so it never opens a locked project. A relay is refused until you map it in <code>peer_auth.relays</code>; through a mapped relay its agents are judged as this computer's socket judges them.</p>{{end}}
   {{else}}
   <p class="held-sub">No computer is paired yet.</p>
   {{end}}

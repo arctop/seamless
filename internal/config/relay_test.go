@@ -70,3 +70,42 @@ func TestPeerAuth_RelaysAreFileOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, cfg.PeerAuth.Relays)
 }
+
+// peer_auth.relays' restricted accounts (wave nt1113e): each relay's map of
+// its computer's account names to their uids there; never root, never the
+// owner there, no uid twice, no '@' in a name (the label is <name>@<relay>).
+func TestPeerAuth_RelayRestricted(t *testing.T) {
+	cfg, err := loadYAML(t, peerBase+`  relays:
+    example-laptop:
+      owner_uid: 501
+      restricted:
+        _example_agent: 480
+        example-ci: 502
+`)
+	require.NoError(t, err)
+	require.Equal(t, map[string]uint32{"_example_agent": 480, "example-ci": 502}, cfg.PeerAuth.Relays["example-laptop"].Restricted)
+
+	cfg, err = loadYAML(t, peerBase+"  relays:\n    example-laptop: {owner_uid: 501}\n")
+	require.NoError(t, err)
+	require.Nil(t, cfg.PeerAuth.Relays["example-laptop"].Restricted, "absent, the relay maps the owner alone")
+
+	for _, tc := range []struct {
+		name, yaml, want string
+	}{
+		{"root", "{owner_uid: 501, restricted: {agent: 0}}", "uid 0 is root"},
+		{"no uid", "{owner_uid: 501, restricted: {agent: }}", "must not be null"},
+		{"the owner", "{owner_uid: 501, restricted: {agent: 501}}", "uid 501 is owner_uid"},
+		{"one uid twice", "{owner_uid: 501, restricted: {agent: 502, other: 502}}", "lists uid 502 twice"},
+		{"a name with @", "{owner_uid: 501, restricted: {\"agent@x\": 502}}", "holds no '@'"},
+		{"a name with :", "{owner_uid: 501, restricted: {\"agent:x\": 502}}", "not an OS account name"},
+		{"a name with a space", "{owner_uid: 501, restricted: {\"agent x\": 502}}", "not an OS account name"},
+		{"a negative uid", "{owner_uid: 501, restricted: {agent: -1}}", "cannot unmarshal"},
+		{"a list", "{owner_uid: 501, restricted: [agent]}", "cannot unmarshal"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := loadYAML(t, peerBase+"  relays:\n    example-laptop: "+tc.yaml+"\n")
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.want)
+		})
+	}
+}

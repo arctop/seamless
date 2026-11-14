@@ -21,6 +21,13 @@ import (
 // not reach and a slug nobody registered. Such a project is not listed for it
 // either.
 //
+// A restricted account on a relay's computer (peer_auth.relays' restricted,
+// plan networked-relay) is the same principal: the relay's kernel names its
+// uid on the relay's socket, the mapping names the account, and its label --
+// on every write, and as its session namespace -- is "<name>@<relay>"
+// (RelayAccountLabel), the account and the host, so no two computers'
+// accounts share one.
+//
 // It files no access requests (View.Locked is the owner's alone), gets no read
 // grants (JudgeGrants keeps owner grants only) and holds no leases
 // (WithLeases), so nothing it does can open a project for it. Its writes are
@@ -151,6 +158,15 @@ func ReservedSessionName(ctx context.Context, name string) (account string, rese
 			return acct.Name, true
 		}
 	}
+	// A restricted account on a relay's computer (peer_auth.relays'
+	// restricted) holds the namespace of its label, "<name>@<relay>:".
+	for _, r := range v.policy.relays {
+		for _, acct := range r.restricted {
+			if strings.HasPrefix(name, acct.Name+sessionNamespaceSep) {
+				return acct.Name, true
+			}
+		}
+	}
 	return "", false
 }
 
@@ -183,10 +199,21 @@ func restrictedRefusal(account, project string) error {
 		"owner creates and maps them", project, account)}
 }
 
-// HasRestricted reports whether the policy lists any restricted account: only
+// HasRestricted reports whether the policy lists any restricted account, on
+// this machine or on a relay's computer (peer_auth.relays' restricted): only
 // then does a socket request need the open projects looked up, and only then
 // does the owner's console offer the proposals restricted accounts file.
-func (p *Policy) HasRestricted() bool { return len(p.restricted) > 0 }
+func (p *Policy) HasRestricted() bool {
+	if len(p.restricted) > 0 {
+		return true
+	}
+	for _, r := range p.relays {
+		if len(r.restricted) > 0 {
+			return true
+		}
+	}
+	return false
+}
 
 // RestrictedAccounts returns the restricted accounts, by uid, for doctor and
 // the startup log.
