@@ -425,6 +425,18 @@ update:
   # Installing by hand (seamlessd update) does not wait.
   # env: SEAMLESS_UPDATE_MIN_AGE
   min_age: 24h
+  # Pin the keys a release must be signed with: the path of an OpenSSH
+  # allowed_signers file, such as a copy of the repository's release_signers.
+  # With it set, the updater installs a release -- by itself or by hand, and
+  # the release it would roll back to -- only when the release's
+  # checksums.txt.sshsig verifies against a key the file lists, in the
+  # namespace seamless-release; otherwise it refuses and says why. Unset (the
+  # default) pins nothing. An absolute path (a leading ~ expands). Under
+  # peer_auth the file must be root's, through directories only root can
+  # write, so that not even the daemon's account can change it. Releases up to
+  # v0.8.3 reject the key, so setting it pins this file to a newer one.
+  # env: SEAMLESS_UPDATE_RELEASE_SIGNERS
+  # release_signers: /opt/seamless/etc/release_signers
 
 # Scheduled backups. On a schedule, the daemon archives the whole instance --
 # the database, every memory and note, and a list of what each project holds

@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/releasesig"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/update"
 )
@@ -888,6 +889,9 @@ func gone(path, note string) string {
 // something to say.
 func updateConfirmChecks(cfg config.Config) []check {
 	var out []check
+	if c, ok := releaseSignersCheck(cfg, hostSignersFS()); ok {
+		out = append(out, c)
+	}
 	if c, ok := updateDrillCheck(cfg); ok {
 		out = append(out, c)
 	}
@@ -895,6 +899,33 @@ func updateConfirmChecks(cfg config.Config) []check {
 		out = append(out, c)
 	}
 	return out
+}
+
+// releaseSignersCheck is doctor's row for update.release_signers, only
+// while the config sets it: the keys a release must be signed with, or why
+// the file cannot be used -- which refuses every update, by itself or by
+// hand -- and the last release it refused, from the daemon's record. Under
+// peer_auth the file is held to serve's rule (root's, through root's
+// directories), so run doctor as the daemon's account to see what serve sees.
+func releaseSignersCheck(cfg config.Config, fsys signersFS) (check, bool) {
+	const name = "update.release_signers"
+	path := cfg.Update.ReleaseSigners
+	if path == "" {
+		return check{}, false
+	}
+	signers, err := loadReleaseSigners(path, cfg.PeerAuth.Enabled, fsys)
+	if err != nil {
+		return check{statusFail, name, err.Error() + " -- every update is refused until the file is fixed (or the key removed from the config)"}, true
+	}
+	detail := fmt.Sprintf("%s: a release installs only once its checksums.txt.sshsig verifies against %s",
+		path, strings.Join(releasesig.OwnerKeys(signers), "; "))
+	if !cfg.IsClient() {
+		if st, err := update.ReadState(cfg.DataDir); err == nil && st.SignatureRefusal != nil {
+			r := st.SignatureRefusal
+			detail += fmt.Sprintf("; last refused v%s on %s: %s", r.Version, r.At.Local().Format(timeLayout), update.SignatureWords(r.Signature))
+		}
+	}
+	return check{statusOK, name, detail}, true
 }
 
 // updateDrillCheck warns while the rollback drill's switch,

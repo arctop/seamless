@@ -746,6 +746,7 @@ func LoadFrom(path string) (Config, error) {
 		{"screening.feed_spool", &cfg.Screening.FeedSpool},
 		{"commits.snapshot_file", &cfg.Commits.SnapshotFile},
 		{"backup.dir", &cfg.Backup.Dir},
+		{"update.release_signers", &cfg.Update.ReleaseSigners},
 	} {
 		v, perr := expandHome(*p.dst)
 		if perr != nil {
@@ -1093,6 +1094,7 @@ func (c *Config) applyEnv() error {
 	if err := envDuration("SEAMLESS_UPDATE_MIN_AGE", &c.Update.MinAge); err != nil {
 		return err
 	}
+	envStr("SEAMLESS_UPDATE_RELEASE_SIGNERS", &c.Update.ReleaseSigners)
 	if err := envBoolPtr("SEAMLESS_BACKUP_AUTO", &c.Backup.Auto); err != nil {
 		return err
 	}

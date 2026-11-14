@@ -94,6 +94,23 @@ type State struct {
 	// saw (Deps.CodexHooksHash), at its start and before each spawn; "" is
 	// unknown. The next daemon compares it on a version change.
 	CodexHooks string `json:"codex_hooks,omitempty"`
+	// SignatureRefusal is the last release update.release_signers refused,
+	// from any attempt -- automatic, Update now or a manual `seamlessd
+	// update` -- for Settings > Updates to name. Like LastAttempt it is
+	// shown, never acted on: the block on the release is what keeps
+	// automatic updates off it.
+	SignatureRefusal *SignatureRefusal `json:"signature_refusal,omitempty"`
+}
+
+// SignatureRefusal is one release update.release_signers refused: the
+// attempt's versions and id, its Signature* word, and when the checker
+// folded it.
+type SignatureRefusal struct {
+	Version   Version   `json:"version"`
+	From      Version   `json:"from"`
+	Signature string    `json:"signature"`
+	Attempt   string    `json:"attempt,omitempty"`
+	At        time.Time `json:"at"`
 }
 
 // Pending anchors the max_defer deadline. It is tied to the running version,
@@ -147,7 +164,10 @@ type AttemptResult struct {
 	// Refusal is the record's Refusal, kept as is: a word this release does
 	// not know is a newer updater's. Read it through Refused.
 	Refusal string `json:"refusal,omitempty"`
-	LogPath string `json:"log_path,omitempty"`
+	// Signature is the record's Signature, kept as is: a word this release
+	// does not know is a newer updater's. Read it through SignatureRefused.
+	Signature string `json:"signature,omitempty"`
+	LogPath   string `json:"log_path,omitempty"`
 	// SpawnedAt is when this daemon spawned it (zero for one it did not),
 	// StartedAt and FinishedAt what the record says, FoldedAt when the
 	// checker settled it.

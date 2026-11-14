@@ -108,16 +108,49 @@ type updatesPanel struct {
 	// and LastAttempt show whatever the mode: an update run by hand is shown
 	// too.
 	SelfUpdating bool
-	Auto         updatesAutoRow
-	Next         *updatesNext
-	Applying     *updatesApplying
-	LastAttempt  *updatesAttempt
-	Paused       *updatesPaused
-	Hold         *updatesHold
-	Blocked      []updatesBlock
-	Backoff      *updatesBackoff
-	UpdateNow    updatesAction
-	Resume       updatesAction
+	// Signers is update.release_signers, nil while nothing is pinned: the
+	// row names the file and the last release it refused.
+	Signers     *updatesSigners
+	Auto        updatesAutoRow
+	Next        *updatesNext
+	Applying    *updatesApplying
+	LastAttempt *updatesAttempt
+	Paused      *updatesPaused
+	Hold        *updatesHold
+	Blocked     []updatesBlock
+	Backoff     *updatesBackoff
+	UpdateNow   updatesAction
+	Resume      updatesAction
+}
+
+// updatesSigners is the Owner-signed releases row: the pin's file, and the
+// last release it refused (nil when none has been).
+type updatesSigners struct {
+	Path    string
+	Refused *updatesSignatureRefusal
+}
+
+// updatesSignatureRefusal is one release the pin refused, in update's fixed
+// words (update.SignatureWords) and a parsed version.
+type updatesSignatureRefusal struct {
+	Version string
+	Words   string
+	At      time.Time
+}
+
+// signersRow is the Owner-signed releases row for st, nil without a pin.
+func signersRow(st update.Status) *updatesSigners {
+	path := st.Settings.ReleaseSigners
+	if path == "" {
+		return nil
+	}
+	row := &updatesSigners{Path: path}
+	if r := st.SignatureRefusal; r != nil {
+		if words := update.SignatureWords(r.Signature); words != "" {
+			row.Refused = &updatesSignatureRefusal{Version: "v" + r.Version.String(), Words: words, At: r.At}
+		}
+	}
+	return row
 }
 
 // updatesError is a streak of failed checks, in words.
@@ -204,6 +237,7 @@ func (s *Service) updatesPanelAt(now time.Time) updatesPanel {
 	if p.Locked {
 		p.LockedNote = updatesLockedText
 	}
+	p.Signers = signersRow(st)
 	autoRows(&p, st, now)
 	return p
 }

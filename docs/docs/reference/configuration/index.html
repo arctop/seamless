@@ -369,17 +369,27 @@ whatever is in flight (<a href="../../updating/#when-it-installs">when it instal
 been published before an automatic update takes it, measured on GitHub's
 clock. A Go duration from <code>0</code> (no wait) to <code>720h</code>, default <code>24h</code>. Installing by
 hand ignores it.</li>
+<li><code>release_signers</code> (<code>SEAMLESS_UPDATE_RELEASE_SIGNERS</code>) is optional and unset by
+default: the absolute path (or <code>~/...</code>) of an OpenSSH allowed_signers file of
+the owner's release keys. With it set, every update installs only a release
+whose <code>checksums.txt.sshsig</code> verifies against a key the file lists
+(<a href="../../updating/#owner-signed-releases">owner-signed releases</a>). The console can
+neither set nor clear it. Under peer_auth the file must be root's, through
+directories only root can write, or <code>serve</code> refuses to start. New after
+v0.8.3, and left commented out in the example file.</li>
 </ul>
-<p>Set <code>auto</code>, <code>max_defer</code> and <code>min_age</code> in the file, not in the daemon's
-environment. Any <code>SEAMLESS_*</code> variable besides <code>SEAMLESS_CONFIG</code> in the
-daemon's environment makes the install notify-only - the installer rewrites
-the service without it - so <code>SEAMLESS_UPDATE_AUTO=true</code> can never turn
-automatic updates on, and the two durations set there switch them off rather
-than tune them.</p>
-<p>All five keys are new in v0.7.0. seamlessd releases before it refuse config
-keys they do not know, so a file that sets one runs only with v0.7.0 or newer.
-The example file spells out the keys whose default has a value and leaves
-<code>check</code> and <code>auto</code>, whose default is unset, commented out.</p>
+<p>Set <code>auto</code>, <code>max_defer</code>, <code>min_age</code> and <code>release_signers</code> in the file, not in
+the daemon's environment. Any <code>SEAMLESS_*</code> variable besides <code>SEAMLESS_CONFIG</code>
+in the daemon's environment makes the install notify-only - the installer
+rewrites the service without it - so <code>SEAMLESS_UPDATE_AUTO=true</code> can never
+turn automatic updates on, the two durations set there switch them off rather
+than tune them, and <code>SEAMLESS_UPDATE_RELEASE_SIGNERS</code> there pins only what you
+install by hand.</p>
+<p>The first five keys are new in v0.7.0, and <code>release_signers</code> after v0.8.3.
+seamlessd releases before a key refuse config keys they do not know, so a file
+that sets one runs only with a release that knows it. The example file spells
+out the keys whose default has a value and leaves <code>check</code>, <code>auto</code> and
+<code>release_signers</code>, whose default is unset, commented out.</p>
 <h3 id="backups">Scheduled backups</h3>
 <p>The <code>backup:</code> block drives <a href="../../guides/data/#backups-in-the-console">scheduled backups</a>:</p>
 <ul>
@@ -892,6 +902,11 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <td><code>update.min_age</code></td>
 <td>duration</td>
 <td><code>24h</code></td>
+</tr>
+<tr>
+<td><code>update.release_signers</code></td>
+<td>string</td>
+<td>-</td>
 </tr>
 <tr>
 <td><code>backup.auto</code></td>
@@ -1410,6 +1425,18 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Installing by hand (seamlessd update) does not wait.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_UPDATE_MIN_AGE</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">min_age</span><span class="p">:</span><span class="w"> </span><span class="l">24h</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Pin the keys a release must be signed with: the path of an OpenSSH</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># allowed_signers file, such as a copy of the repository&#39;s release_signers.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># With it set, the updater installs a release -- by itself or by hand, and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># the release it would roll back to -- only when the release&#39;s</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># checksums.txt.sshsig verifies against a key the file lists, in the</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># namespace seamless-release; otherwise it refuses and says why. Unset (the</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># default) pins nothing. An absolute path (a leading ~ expands). Under</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># peer_auth the file must be root&#39;s, through directories only root can</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># write, so that not even the daemon&#39;s account can change it. Releases up to</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># v0.8.3 reject the key, so setting it pins this file to a newer one.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_UPDATE_RELEASE_SIGNERS</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># release_signers: /opt/seamless/etc/release_signers</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># Scheduled backups. On a schedule, the daemon archives the whole instance --</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># the database, every memory and note, and a list of what each project holds</span><span class="w">

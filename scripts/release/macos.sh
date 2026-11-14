@@ -16,11 +16,12 @@
 #   2. the owner pushes the tag: git push origin vX.Y.Z
 #   3. release.yml, once the owner approves its `release` environment: holds
 #      the draft's macOS assets to the tag's manifest, builds linux and
-#      windows, signs checksums.txt (Sigstore) and publishes the draft
-#      (step D will add the owner's hardware-key signature over checksums.txt
-#      here, between CI's draft and the publish)
-#   4. scripts/release/cask.sh vX.Y.Z: the Homebrew cask
-#   5. make changelog, then a site-* tag publishes the refreshed site
+#      windows, and signs checksums.txt (Sigstore) into the draft
+#   4. scripts/release/sign.sh vX.Y.Z: the owner signs checksums.txt with a
+#      hardware key and uploads checksums.txt.sshsig; then approves the
+#      publish job, which verifies it against release_signers and publishes
+#   5. scripts/release/cask.sh vX.Y.Z: the Homebrew cask
+#   6. make changelog, then a site-* tag publishes the refreshed site
 #
 # One-time setup of the Mac that releases is in scripts/release/README.md.
 #
@@ -280,6 +281,8 @@ cat >&2 <<EOF
 release: next, push the tag on its own (never together with main):
   git push origin $TAG
 then approve the release environment in the run: https://github.com/$REPO/actions/workflows/release.yml
-and once it has published:
+once its goreleaser job has filled the draft, sign it with your hardware key:
+  SEAMLESS_RELEASE_KEY=<key handle> scripts/release/sign.sh $TAG
+then approve the run's publish job, and once it has published:
   scripts/release/cask.sh $TAG
 EOF

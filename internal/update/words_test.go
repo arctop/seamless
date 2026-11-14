@@ -15,6 +15,7 @@ func TestBlockWords(t *testing.T) {
 		BlockVerify:     "it did not pass verification",
 		BlockInstall:    "its installer failed 3 times in a row",
 		BlockBroken:     "the update to it could not be rolled back cleanly",
+		BlockSignature:  "it is not signed by a key update.release_signers lists",
 		"a_newer_word":  "an update to it failed",
 		"":              "an update to it failed",
 	} {
@@ -147,4 +148,23 @@ func TestBlockWords_InstallCountsInstallerFailuresOnly(t *testing.T) {
 	require.Len(t, st.Blocks, 1)
 	require.Equal(t, BlockInstall, st.Blocks[0].Reason, "five tries, two of them never reached the installer")
 	require.Equal(t, "its installer failed 3 times in a row", BlockWords(st.Blocks[0].Reason))
+}
+
+// The release-signers words reach the console, doctor and (through a
+// blocked release) the briefing: fixed, and none the briefing's sanitizer
+// would cut.
+func TestSignatureWords(t *testing.T) {
+	for w, want := range map[string]string{
+		SignatureMissing:  "it carries no owner's signature (checksums.txt.sshsig)",
+		SignatureUnlisted: "its checksums.txt.sshsig was made by a key update.release_signers does not list",
+		SignatureInvalid:  "its checksums.txt.sshsig does not verify",
+		"expired":         "",
+		"":                "",
+	} {
+		require.Equal(t, want, SignatureWords(w), w)
+		require.False(t, injectionScrub.MatchString(want), w)
+	}
+	for _, w := range []string{BlockWords(BlockSignature), RefusalWords(RefusalReleaseSigners), RefusalAction(RefusalReleaseSigners)} {
+		require.False(t, injectionScrub.MatchString(w), w)
+	}
 }

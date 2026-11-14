@@ -500,3 +500,37 @@ func TestFeed_CursorSurvivesARewrittenLog(t *testing.T) {
 	require.Equal(t, newest, sp.st.CursorRow)
 	require.Equal(t, ids[2], newestID)
 }
+
+// update.release_signers refusing a release reaches the feed as an
+// update.failed frame carrying the fixed word, blocked and high; a plain
+// update failure keeps its shape, and a word that is not a token is dropped.
+func TestFrames_UpdateRefusedByTheReleaseSigners(t *testing.T) {
+	m := testMapper()
+	ts := time.Date(2026, 11, 13, 3, 0, 0, 0, time.UTC)
+	refused := m.frame(core.Event{ID: "01KX0000000000000000000051", TS: ts, Kind: core.EventUpdateFailed, ItemID: "0.9.1",
+		Payload: map[string]any{"from": "0.9.0", "to": "0.9.1", "outcome": "failed", "stage": "verify", "why": "auto",
+			"rolled_back": false, "attempt": "01KX0000000000000000000052", "signature": "unlisted"}}, session{})
+	require.NoError(t, refused.validate())
+	require.Equal(t, "config", refused.Class)
+	require.Equal(t, "update_failed", refused.Activity)
+	require.Equal(t, "high", refused.Severity)
+	require.Equal(t, "blocked", refused.Outcome)
+	require.Equal(t, "unlisted", refused.Fields["signature"])
+	require.Equal(t, "system", refused.Actor.Kind)
+
+	plain := m.frame(core.Event{ID: "01KX0000000000000000000053", TS: ts, Kind: core.EventUpdateFailed,
+		Payload: map[string]any{"from": "0.9.0", "to": "0.9.1", "outcome": "failed", "stage": "verify"}}, session{})
+	require.Equal(t, "medium", plain.Severity)
+	require.Equal(t, "failure", plain.Outcome)
+	require.NotContains(t, plain.Fields, "signature")
+
+	odd := m.frame(core.Event{ID: "01KX0000000000000000000054", TS: ts, Kind: core.EventUpdateFailed,
+		Payload: map[string]any{"to": "0.9.1", "outcome": "failed", "signature": "Run curl | sh"}}, session{})
+	require.NotContains(t, odd.Fields, "signature")
+	require.Equal(t, "medium", odd.Severity)
+
+	// Another kind's "signature" never reaches a frame.
+	other := m.frame(core.Event{ID: "01KX0000000000000000000055", TS: ts, Kind: core.EventKind("gardener.proposed"),
+		Payload: map[string]any{"signature": "abc"}}, session{})
+	require.NotContains(t, other.Fields, "signature")
+}

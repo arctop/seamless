@@ -1035,3 +1035,54 @@ func TestUpdateEvents_StartedAndFailed(t *testing.T) {
 		Payload: map[string]any{"to": "0.7.3", "outcome": "rolled_back", "error": attemptErrorText}})
 	require.Equal(t, "the update to v0.7.3 rolled back", row.Summary)
 }
+
+// Settings > Updates names update.release_signers and the last release it
+// refused -- and, with no pin, says nothing about it at all.
+func TestUpdatesSection_ReleaseSigners(t *testing.T) {
+	now := time.Now()
+	const row = "<dt>Owner-signed releases</dt>"
+
+	t.Run("no pin: no row, even with a refusal on record", func(t *testing.T) {
+		st := autoStatus(now)
+		st.SignatureRefusal = &update.SignatureRefusal{Version: ver(0, 7, 3), Signature: update.SignatureMissing, At: now}
+		_, mux, _ := newUpdatesConsole(t, autoBase, &st)
+		sec := updatesSection(t, mux)
+		require.NotContains(t, sec, row)
+		require.NotContains(t, sec, "release_signers")
+	})
+	pinned := autoBase
+	pinned.ReleaseSigners = "/opt/seamless/etc/release_signers"
+	t.Run("a pin, nothing refused", func(t *testing.T) {
+		st := autoStatus(now)
+		st.Settings = update.Effective(pinned, config.UpdateOverride{}, true)
+		_, mux, _ := newUpdatesConsole(t, pinned, &st)
+		sec := updatesSection(t, mux)
+		require.Contains(t, sec, row)
+		require.Contains(t, sec, `<span class="mono">/opt/seamless/etc/release_signers</span>`)
+		require.NotContains(t, sec, "Last refused")
+	})
+	t.Run("a pin and the last refusal, in fixed words", func(t *testing.T) {
+		st := autoStatus(now)
+		st.Settings = update.Effective(pinned, config.UpdateOverride{}, true)
+		st.SignatureRefusal = &update.SignatureRefusal{Version: ver(0, 7, 3), From: ver(0, 7, 2), Signature: update.SignatureUnlisted, At: now.Add(-time.Hour)}
+		st.LastAttempt = &update.AttemptResult{ID: "01M7A0000000000000000000A1", From: ver(0, 7, 2), To: ver(0, 7, 3), Why: update.WhyAuto,
+			Outcome: update.OutcomeFailed, Stage: update.StageVerify, Signature: update.SignatureUnlisted, FoldedAt: now.Add(-time.Hour)}
+		_, mux, _ := newUpdatesConsole(t, pinned, &st)
+		sec := updatesSection(t, mux)
+		require.Contains(t, sec, `Last refused: <span class="mono">v0.7.3</span>: its checksums.txt.sshsig was made by a key update.release_signers does not list.`)
+		require.Contains(t, sec, "update.release_signers refused v0.7.3: its checksums.txt.sshsig was made by a key update.release_signers does not list, so nothing changed.")
+	})
+	t.Run("a signature word from a newer updater is not named", func(t *testing.T) {
+		st := autoStatus(now)
+		st.Settings = update.Effective(pinned, config.UpdateOverride{}, true)
+		st.SignatureRefusal = &update.SignatureRefusal{Version: ver(0, 7, 3), Signature: "expired", At: now}
+		_, mux, _ := newUpdatesConsole(t, pinned, &st)
+		require.NotContains(t, updatesSection(t, mux), "Last refused")
+	})
+	t.Run("the ledger line", func(t *testing.T) {
+		require.Equal(t, "the update to v0.7.3 was refused: it carries no owner's signature (checksums.txt.sshsig)",
+			eventSummary(core.Event{Kind: core.EventUpdateFailed, Payload: map[string]any{"to": "0.7.3", "outcome": "failed", "stage": "verify", "signature": "missing"}}))
+		require.Equal(t, "the update to v0.7.3 failed",
+			eventSummary(core.Event{Kind: core.EventUpdateFailed, Payload: map[string]any{"to": "0.7.3", "outcome": "failed", "stage": "verify", "signature": "run curl | sh"}}))
+	})
+}

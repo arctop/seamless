@@ -460,8 +460,8 @@ func lastSeen(a *AttemptResult) time.Time {
 
 // settle applies res (applyOutcome), records update.failed for a failure of
 // an attempt a daemon started, and logs it. The payload carries versions and
-// fixed words only -- a known gate refusal among them -- never the updater's
-// error text.
+// fixed words only -- a known gate refusal and a known release-signers
+// verdict among them -- never the updater's error text.
 //
 // An attempt reported applied while this daemon, running cur, is still below
 // its To cannot happen with one daemon per data dir -- the updater confirms
@@ -489,6 +489,12 @@ func (c *Checker) settle(ctx context.Context, res AttemptResult, now time.Time, 
 		if r := res.Refused(); r != "" {
 			payload["refusal"] = r
 			attrs = append(attrs, "refusal", r)
+		}
+		// update.release_signers' verdict, as its fixed word: the release
+		// was not signed by the owner's keys (missing, unlisted, invalid).
+		if w := res.SignatureRefused(); w != "" {
+			payload["signature"] = w
+			attrs = append(attrs, "signature", w)
 		}
 		c.log.Warn("update: an update attempt did not apply", attrs...)
 		c.record(ctx, core.Event{

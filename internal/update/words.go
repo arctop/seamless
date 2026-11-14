@@ -31,6 +31,8 @@ func BlockWords(reason string) string {
 		return fmt.Sprintf("its installer failed %d times in a row", installFailuresToBlock)
 	case BlockBroken:
 		return "the update to it could not be rolled back cleanly"
+	case BlockSignature:
+		return "it is not signed by a key update.release_signers lists"
 	default:
 		return "an update to it failed"
 	}
@@ -61,6 +63,25 @@ func RefusalWords(refusal string) string {
 		return "automatic updates were turned off before it began"
 	case RefusalRestorePending:
 		return "a restore was waiting to finish"
+	case RefusalReleaseSigners:
+		return "the file update.release_signers names could not be used"
+	default:
+		return ""
+	}
+}
+
+// SignatureWords says why update.release_signers refused a release
+// (AttemptResult.SignatureRefused, SignatureRefusal.Signature), in words
+// that read after "v0.9.1: ". A word this release does not know, and none,
+// read "".
+func SignatureWords(w string) string {
+	switch w {
+	case SignatureMissing:
+		return "it carries no owner's signature (" + OwnerSignatureAsset + ")"
+	case SignatureUnlisted:
+		return "its " + OwnerSignatureAsset + " was made by a key update.release_signers does not list"
+	case SignatureInvalid:
+		return "its " + OwnerSignatureAsset + " does not verify"
 	default:
 		return ""
 	}
@@ -80,6 +101,8 @@ func RefusalAction(refusal string) string {
 		return "restart the service so it runs the installed release: seamlessd restart"
 	case RefusalSelfCheck:
 		return "update by hand from a terminal: seamlessd update"
+	case RefusalReleaseSigners:
+		return "fix the file update.release_signers names (seamlessd doctor says what is wrong), or remove the key to stop pinning"
 	default:
 		return ""
 	}

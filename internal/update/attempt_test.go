@@ -723,3 +723,29 @@ func TestSpawner_Contract(t *testing.T) {
 	f.err = errors.New("launchctl: service not found")
 	require.EqualError(t, s.Spawn(context.Background(), req), "launchctl: service not found")
 }
+
+func TestAttempt_SignatureIsAKnownWordAtVerify(t *testing.T) {
+	base := Attempt{
+		ID: "01K7A0000000000000000000A1", From: ver("0.7.2"), To: ver("0.7.3"), Why: WhyManual,
+		StartedAt: attemptNow, HeartbeatAt: attemptNow, FinishedAt: attemptNow, Stage: StageVerify,
+	}
+	for _, w := range []string{SignatureMissing, SignatureUnlisted, SignatureInvalid} {
+		a := base
+		a.Signature = w
+		require.NoError(t, a.check(), w)
+		a.Why = WhyAuto
+		require.NoError(t, a.check(), "attended or not")
+	}
+	for name, edit := range map[string]func(*Attempt){
+		"an unknown word":      func(a *Attempt) { a.Signature = "expired" },
+		"at another stage":     func(a *Attempt) { a.Signature, a.Stage = SignatureMissing, StageFetch },
+		"on an unfinished one": func(a *Attempt) { a.Signature, a.FinishedAt = SignatureMissing, time.Time{} },
+	} {
+		a := base
+		edit(&a)
+		require.ErrorIs(t, a.check(), ErrInvalidAttempt, name)
+	}
+	require.True(t, KnownRefusal(RefusalReleaseSigners))
+	require.NotEmpty(t, RefusalWords(RefusalReleaseSigners))
+	require.NotEmpty(t, RefusalAction(RefusalReleaseSigners))
+}

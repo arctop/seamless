@@ -185,11 +185,12 @@ A layout that satisfies all of it:
 |---|---|---|---|
 | `/opt/seamless` | root | `0755` | |
 | `/opt/seamless/bin` | `_seamless` | `0755` | `seamlessd`, `seam` (both `0755`, `_seamless`'s) |
-| `/opt/seamless/etc` | root | `0755` | `seamless.yaml` (`root:_seamless`, `0640`), `daemon-account` (root's, `0644`) |
+| `/opt/seamless/etc` | root | `0755` | `seamless.yaml` (`root:_seamless`, `0640`), `daemon-account` (root's, `0644`), optionally `release_signers` (root's, `0644`; [owner-signed releases](#owner-signed-releases)) |
 | `/opt/seamless/etc/tls` | `root:_seamless` | `0750` | with TLS on: the certificate (`0644`) and its key (`root:_seamless`, `0640`) |
 | `/opt/seamless/data` | `_seamless` | `0700` | the database and corpus |
 | `/opt/seamless/run` | `_seamless` | `0755` | the socket |
 | `/opt/seamless/home` | `_seamless` | `0700` | the account's home (caches, nothing else) |
+| `/opt/seamless/client` | root | `0755` | optionally, root's own `seam` (`0755`) for your hooks ([why](#client-copy)) |
 
 The daemon's account holds `/opt/seamless/bin` so that the daemon can
 [update itself](#updates); your account can write neither binary. Keep the
@@ -321,7 +322,9 @@ Code's own http hook cannot dial a socket), and the MCP registration is the
 `seam mcp-proxy` stdio bridge. They run the `seam` beside the `seamlessd` that
 installed them, a copy of your own; add `--seam /opt/seamless/bin/seam` to run
 the daemon's instead, which no process of yours can replace and which moves
-with the daemon when it [updates itself](#updates). Under peer_auth the
+with the daemon when it [updates itself](#updates), or `--seam
+/opt/seamless/client/seam` for [root's copy](#client-copy), which the daemon's
+account cannot replace either. Under peer_auth the
 [daemon reads no agent files](#what-changes-with-peer-auth-on), so `seam hook`
 reads them and sends what it found.
 
@@ -977,10 +980,111 @@ The trade-off: the daemon's account can rewrite its own binaries, so a
 compromised daemon could keep itself in place across restarts, and could replace
 the `seam` that hooks installed with `--seam /opt/seamless/bin/seam` run. It
 already holds every project's data, and your account still cannot write either
-binary, so the boundary against your agents is unchanged. To keep both binaries
-out of the daemon's reach as well, leave `/opt/seamless/bin` root's
-(`sudo chown -R root /opt/seamless/bin`): the daemon then only tells you about a
-new release, and you replace the binaries with `sudo` and restart it.
+binary, so the boundary against your agents is unchanged. To keep the hooks'
+`seam` out of its reach while it still updates `seamlessd`, give your hooks
+[root's copy](#client-copy). To keep both binaries out of the daemon's reach,
+leave `/opt/seamless/bin` root's (`sudo chown -R root /opt/seamless/bin`): the
+daemon then only tells you about a new release, and you replace the binaries
+with `sudo` and restart it.
+
+#### Owner-signed releases {#owner-signed-releases}
+
+A daemon that updates itself installs whatever release GitHub serves that
+passes its Sigstore check, and whoever can push a release tag can produce one
+of those. Pin the owner's release keys and it installs only a release the
+owner signed with a hardware key ([how that works](https://thereisnospoon.org/docs/updating/#owner-signed-releases)).
+As root, put the keys where neither your account nor the daemon's can change
+them, and name the file in the daemon's config:
+
+```bash
+curl -fsSLo /tmp/release_signers https://raw.githubusercontent.com/arctop/seamless/main/release_signers
+ssh-keygen -l -f /tmp/release_signers    # check each fingerprint against the owner's keys
+sudo install -o root -g wheel -m 0644 /tmp/release_signers /opt/seamless/etc/release_signers
+```
+
+```yaml
+# /opt/seamless/etc/seamless.yaml
+update:
+  release_signers: /opt/seamless/etc/release_signers
+```
+
+(`root`'s group is `root` on Linux.) Then restart the daemon. Under peer_auth
+`serve` refuses to start when the file is not root's, when a directory above it
+is writable by any account but root - the daemon's included, since the pin binds
+its own updater - or when it names no key for `seamless-release`; `seamlessd
+doctor`, run as the daemon's account, says which. Every update after that, by
+itself or by `sudo -u _seamless ... seamlessd update`, verifies
+`checksums.txt.sshsig` before it swaps anything, and so does the rollback to the
+release it replaced. The pin does not stop a compromised daemon from rewriting
+its own binaries; it stops a release the owner did not sign from reaching this
+machine through the update path at all.
+
+#### Keep the hooks' seam out of the daemon's reach {#client-copy}
+
+Your hooks run `seam` as you, beside every agent, so whoever can rewrite that
+file runs code as you at the next hook. There are three places it can be:
+
+| Hooks installed with | Who can replace it | It follows updates |
+|---|---|---|
+| no `--seam` (the copy beside your `seamlessd`) | your account, and so every agent you run | when you update it |
+| `--seam /opt/seamless/bin/seam` | the daemon's account | at once: the daemon updates it |
+| `--seam /opt/seamless/client/seam` | root only | when an administrator refreshes it |
+
+The last keeps it out of both your agents' and the daemon's reach. Make the
+directory root's, put a release's `seam` there from a verified download - never
+a copy of `/opt/seamless/bin/seam`, which the daemon's account could have
+replaced - and point the hooks at it:
+
+```bash
+sudo install -d -o root -g wheel -m 0755 /opt/seamless/client
+seamlessd install-hooks --client claude --seam /opt/seamless/client/seam    # or codex, or all
+```
+
+To refresh it after each update the daemon installs, an administrator runs
+this for the release the daemon now runs (`seam version`, or Settings ->
+Updates), with the system's own tools, none of them the daemon's. It stops at
+the first check that fails:
+
+```bash
+sudo sh -eu <<'END'
+v=0.9.1        # the daemon's release
+os=darwin      # or linux
+arch=arm64     # or amd64
+d=$(mktemp -d); cd "$d"
+base=https://github.com/arctop/seamless/releases/download/v$v
+tarball=seamless_${v}_${os}_${arch}.tar.gz
+curl -fsSLO "$base/checksums.txt" -O "$base/checksums.txt.sshsig" -O "$base/$tarball"
+ok=
+for p in $(awk '!/^#/ && NF { print $1 }' /opt/seamless/etc/release_signers); do
+  if ssh-keygen -Y verify -f /opt/seamless/etc/release_signers -I "$p" -n seamless-release \
+    -s checksums.txt.sshsig <checksums.txt; then ok=1; break; fi
+done
+[ -n "$ok" ] || { echo "checksums.txt is not signed by the owner's keys" >&2; exit 1; }
+want=$(awk -v f="$tarball" '$2 == f { print $1 }' checksums.txt)
+got=$(shasum -a 256 "$tarball" 2>/dev/null || sha256sum "$tarball")
+[ -n "$want" ] && [ "${got%% *}" = "$want" ] || { echo "$tarball does not match checksums.txt" >&2; exit 1; }
+tar -xzf "$tarball" seam
+install -o root -m 0755 seam /opt/seamless/client/seam
+echo "/opt/seamless/client/seam is v$v's"
+END
+```
+
+It checks the release against the [pinned keys](#owner-signed-releases), so
+the copy is the owner's release. `ssh-keygen` checks the signature, the
+namespace and the key, but not whether the hardware key was unlocked with its
+PIN (it reads the flags without requiring them); the daemon's pinned updater
+checked that too when it installed the release. `seamlessd doctor`, run as you,
+has a `hooks' seam` row: who can replace the `seam` your hooks run, and, for
+root's copy, whether it is the daemon's release.
+
+**While the client copy is a release behind**, everything keeps working: a
+daemon accepts what the previous release's `seam` sends - hooks, the MCP
+bridge, `seam` commands - as it does for the [network clients](https://thereisnospoon.org/docs/guides/network-install/)
+that run their own release. What waits for the refresh is whatever the new
+release changed in `seam` itself: a fix in `seam hook` or `seam mcp-proxy`, a
+capture a hook newly reads and sends, a new `seam` subcommand or flag. Refresh
+the copy before you run the new release's `install-hooks`: its definitions may
+pass the hooks an argument the old `seam` does not know.
 
 ### Backups and restore {#restore}
 

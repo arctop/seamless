@@ -119,18 +119,28 @@ The `update:` block drives the daemon's
   been published before an automatic update takes it, measured on GitHub's
   clock. A Go duration from `0` (no wait) to `720h`, default `24h`. Installing by
   hand ignores it.
+- `release_signers` (`SEAMLESS_UPDATE_RELEASE_SIGNERS`) is optional and unset by
+  default: the absolute path (or `~/...`) of an OpenSSH allowed_signers file of
+  the owner's release keys. With it set, every update installs only a release
+  whose `checksums.txt.sshsig` verifies against a key the file lists
+  ([owner-signed releases](https://thereisnospoon.org/docs/updating/#owner-signed-releases)). The console can
+  neither set nor clear it. Under peer_auth the file must be root's, through
+  directories only root can write, or `serve` refuses to start. New after
+  v0.8.3, and left commented out in the example file.
 
-Set `auto`, `max_defer` and `min_age` in the file, not in the daemon's
-environment. Any `SEAMLESS_*` variable besides `SEAMLESS_CONFIG` in the
-daemon's environment makes the install notify-only - the installer rewrites
-the service without it - so `SEAMLESS_UPDATE_AUTO=true` can never turn
-automatic updates on, and the two durations set there switch them off rather
-than tune them.
+Set `auto`, `max_defer`, `min_age` and `release_signers` in the file, not in
+the daemon's environment. Any `SEAMLESS_*` variable besides `SEAMLESS_CONFIG`
+in the daemon's environment makes the install notify-only - the installer
+rewrites the service without it - so `SEAMLESS_UPDATE_AUTO=true` can never
+turn automatic updates on, the two durations set there switch them off rather
+than tune them, and `SEAMLESS_UPDATE_RELEASE_SIGNERS` there pins only what you
+install by hand.
 
-All five keys are new in v0.7.0. seamlessd releases before it refuse config
-keys they do not know, so a file that sets one runs only with v0.7.0 or newer.
-The example file spells out the keys whose default has a value and leaves
-`check` and `auto`, whose default is unset, commented out.
+The first five keys are new in v0.7.0, and `release_signers` after v0.8.3.
+seamlessd releases before a key refuse config keys they do not know, so a file
+that sets one runs only with a release that knows it. The example file spells
+out the keys whose default has a value and leaves `check`, `auto` and
+`release_signers`, whose default is unset, commented out.
 
 ### Scheduled backups {#backups}
 
@@ -358,6 +368,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `update.auto` | bool, optional | unset |
 | `update.max_defer` | duration | `24h` |
 | `update.min_age` | duration | `24h` |
+| `update.release_signers` | string | - |
 | `backup.auto` | bool, optional | unset |
 | `backup.every` | duration | `24h` |
 | `backup.keep` | int | `7` |
@@ -808,6 +819,18 @@ update:
   # Installing by hand (seamlessd update) does not wait.
   # env: SEAMLESS_UPDATE_MIN_AGE
   min_age: 24h
+  # Pin the keys a release must be signed with: the path of an OpenSSH
+  # allowed_signers file, such as a copy of the repository's release_signers.
+  # With it set, the updater installs a release -- by itself or by hand, and
+  # the release it would roll back to -- only when the release's
+  # checksums.txt.sshsig verifies against a key the file lists, in the
+  # namespace seamless-release; otherwise it refuses and says why. Unset (the
+  # default) pins nothing. An absolute path (a leading ~ expands). Under
+  # peer_auth the file must be root's, through directories only root can
+  # write, so that not even the daemon's account can change it. Releases up to
+  # v0.8.3 reject the key, so setting it pins this file to a newer one.
+  # env: SEAMLESS_UPDATE_RELEASE_SIGNERS
+  # release_signers: /opt/seamless/etc/release_signers
 
 # Scheduled backups. On a schedule, the daemon archives the whole instance --
 # the database, every memory and note, and a list of what each project holds

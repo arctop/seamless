@@ -48,6 +48,11 @@ type Settings struct {
 	// MinAge is the soak: how long a release must have been published before
 	// an automatic update takes it. Zero is no soak.
 	MinAge time.Duration
+	// ReleaseSigners is update.release_signers, the file that pins which
+	// keys must have signed a release for the updater to install it; "" when
+	// nothing is pinned. It comes from the file or the environment only: the
+	// console can neither set nor clear it.
+	ReleaseSigners string `json:"ReleaseSigners,omitempty"`
 }
 
 // Effective merges the file/env update config with the console's override.
@@ -77,9 +82,10 @@ type Settings struct {
 // release is IsReleaseBuild for the running binary.
 func Effective(base config.Update, override config.UpdateOverride, release bool) Settings {
 	s := Settings{
-		CheckInterval: base.CheckInterval.Std(),
-		MaxDefer:      base.MaxDefer.Std(),
-		MinAge:        base.MinAge.Std(),
+		CheckInterval:  base.CheckInterval.Std(),
+		MaxDefer:       base.MaxDefer.Std(),
+		MinAge:         base.MinAge.Std(),
+		ReleaseSigners: base.ReleaseSigners,
 	}
 	if s.CheckInterval <= 0 {
 		s.CheckInterval = config.DefaultUpdateCheckInterval

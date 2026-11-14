@@ -960,8 +960,12 @@ attempt files. Every other install only notifies. Owner decisions: memory
   implement, so a config change cannot make darwin differ silently). They
   reach the release as the tag's draft; release.yml holds every draft asset
   to the sha256 manifest in the signed tag (`releasekit check-darwin`) before
-  `checksum.extra_files` lists it, behind the owner's approval of the
-  `release` environment. CI holds no secret, and the Homebrew cask is pushed
+  `checksum.extra_files` lists it, behind the owner's approval of the `release`
+  environment. goreleaser leaves the release a draft; the owner signs its
+  `checksums.txt` with a hardware key (`scripts/release/sign.sh`,
+  `checksums.txt.sshsig`), and release.yml's publish job, behind a second
+  approval, publishes only once `releasekit verify-owner -require` accepts it.
+  CI holds no secret, and the Homebrew cask is pushed
   by the owner (`scripts/release/cask.sh`). The site is published from a tag
   too (`pages.yml`: the release's own, or an admin-only `site-*` tag), never
   from a main push, so main alone cannot change the installers it serves.
@@ -969,6 +973,30 @@ attempt files. Every other install only notifies. Owner decisions: memory
   updater and `seam touchid enroll` read them
   (`TestDarwinArchive_IsLaidOutAsV082`, `TestRenderCask_IsGoreleasersCask`).
   Steps: `scripts/release/README.md`.
+- **Owner-signed releases (`checksums.txt.sshsig`, `internal/sshsig`).** The
+  owner's SSHSIG over `checksums.txt` (namespace `seamless-release`), which
+  lists every archive, the macOS assets and both installer scripts. Which keys
+  may sign is `release_signers` at the repository root: the publish job, cask.sh
+  and `releasekit owner-keys` require a key listed at both the previous
+  release's tag (the newest plain `vX.Y.Z` below this one) and this tag, so a
+  key added in a release signs from the next one on and a removed key stops at
+  once; the bootstrap (no file at the previous tag) is decided by this tag's
+  file alone, loudly. `docs/install` and `docs/install.ps1` carry a copy, which
+  `site-check` assertion 14 and
+  `TestInstallers_CarryTheRepositorysReleaseSigners` hold to the file, and
+  require the signature for every release after `OWNER_SIGNED_AFTER`; an
+  ssh-keygen that fails the embedded self-test only warns. On the client the pin
+  is opt-in: `update.release_signers` makes every update verify it in-process
+  (`releasesig.VerifyOwner`) -- automatic, Update now, `seamlessd update`, the
+  rollback target and the system updater -- and the installer it runs must be
+  one `checksums.txt` lists. Verification is `internal/sshsig`, Go only: never
+  shell out, never honor or require `verify-required` on a line (ssh-keygen
+  rejects it), refuse `cert-authority`, `valid-*` and unknown options, and
+  require sk flags 0x05 from the signature, which ssh-keygen does not (it
+  accepts flags 00). Under peer_auth the pin file must be root's through root's
+  directories (`filesystemProblems`). The workflow is read from the tag it
+  releases, so the release-side gate keeps the path honest; the guarantees
+  against a hostile tag pusher are the pin and the installers.
 - **Text from parsed versions only.** Every notice, banner, row and event
   payload is built from `update.Version` values, `update.ReleaseURL` and the
   fixed `update.Hint` for the install kind -- never from the release API's
@@ -1021,7 +1049,12 @@ attempt files. Every other install only notifies. Owner decisions: memory
   refusal is `Attempt.Refusal`, a fixed word `gates()` sets through
   `refusalError`; surfaces read it with `AttemptResult.Refused()` and render
   `update.RefusalWords`/`update.RefusalAction`, which return "" for a word this
-  release does not know (a plain failure).
+  release does not know (a plain failure). A release-signers refusal is
+  `Attempt.Signature` (`update.Signature*`, set only at StageVerify, attended
+  runs too): surfaces read it with `AttemptResult.SignatureRefused()` and render
+  `update.SignatureWords`; the fold blocks the release as `BlockSignature` and
+  keeps `State.SignatureRefusal`, and `update.failed` carries it as `signature`.
+  An unusable pin file is the gate refusal `release_signers`.
 - **The updater runs outside the service, per OS.** The daemon starts
   `seamlessd update --auto` only through its `update.Spawner`
   (`update_spawn_<os>.go`): a Setsid child on darwin, a `systemd-run --user`

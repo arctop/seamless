@@ -111,7 +111,7 @@ func resultOf(a Attempt, outcome string, now time.Time) AttemptResult {
 		ID: a.ID, From: a.From, To: a.To, Why: a.Why,
 		Outcome: outcome, Stage: a.Stage, RolledBack: a.RolledBack,
 		Warnings: outcome == OutcomeApplied && a.Error != "",
-		Error:    a.Error, Refusal: a.Refusal, LogPath: a.LogPath,
+		Error:    a.Error, Refusal: a.Refusal, Signature: a.Signature, LogPath: a.LogPath,
 		StartedAt: a.StartedAt, FinishedAt: a.FinishedAt, FoldedAt: now,
 	}
 }
@@ -129,6 +129,16 @@ func (r AttemptResult) Refused() string {
 	return r.Refusal
 }
 
+// SignatureRefused is the Signature* word behind a failed attempt that
+// update.release_signers refused, or "" when there is none this release
+// knows: no word, an outcome other than failed, or a newer updater's word.
+func (r AttemptResult) SignatureRefused() string {
+	if r.Outcome != OutcomeFailed || r.Stage != StageVerify || !KnownSignature(r.Signature) {
+		return ""
+	}
+	return r.Signature
+}
+
 // applyOutcome records res as the last attempt and applies what follows from
 // it to st, returning whether it is a failure worth an update.failed event.
 // Only an attempt a daemon started (WhyAuto, WhyNow) has consequences; a
@@ -142,7 +152,9 @@ func (r AttemptResult) Refused() string {
 //     now is attended: the owner sees its failure and does not need auto
 //     turned off for it.)
 //   - failed in StageVerify: To is blocked -- a bad signature, identity,
-//     checksum or pin, or a release pulled since, is not retried.
+//     checksum or pin, or a release pulled since, is not retried; one
+//     update.release_signers refused (SignatureRefused) is blocked as
+//     BlockSignature.
 //   - failed in StageInstall: backoff, and installFailuresToBlock in a row on
 //     the same To block it.
 //   - failed before anything changed, or never started: backoff, no block.
@@ -156,6 +168,9 @@ func (r AttemptResult) Refused() string {
 // outcome adds beyond it.
 func applyOutcome(st *State, res AttemptResult, now time.Time, recount bool) (failed bool) {
 	st.LastAttempt = &res
+	if w := res.SignatureRefused(); w != "" {
+		st.SignatureRefusal = &SignatureRefusal{Version: res.To, From: res.From, Signature: w, Attempt: res.ID, At: now}
+	}
 	if !spawnedByDaemon(res.Why) {
 		return false
 	}
@@ -179,7 +194,11 @@ func applyOutcome(st *State, res AttemptResult, now time.Time, recount bool) (fa
 	case OutcomeFailed:
 		switch res.Stage {
 		case StageVerify:
-			st.block(res.To, BlockVerify, res.ID, now)
+			reason := BlockVerify
+			if res.SignatureRefused() != "" {
+				reason = BlockSignature
+			}
+			st.block(res.To, reason, res.ID, now)
 		case StageInstall:
 			if recount {
 				st.backoff(res.To, res.Outcome, now)

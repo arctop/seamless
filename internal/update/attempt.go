@@ -155,10 +155,40 @@ const (
 	// (<data_dir>/restore/pending.json), and an update must not replace the
 	// binary or back up the data under it.
 	RefusalRestorePending = "restore_pending"
+	// RefusalReleaseSigners: update.release_signers names a file the updater
+	// cannot use -- missing, unreadable, open to another account's writes,
+	// or naming no key for the release namespace -- so no release could be
+	// held to the owner's keys. Nothing is fetched; the release is not
+	// blocked, since the fault is the file's.
+	RefusalReleaseSigners = "release_signers"
 )
 
 // refusals lists every refusal this release writes.
-var refusals = []string{RefusalNotInstaller, RefusalStaleBinary, RefusalSelfCheck, RefusalAutoOff, RefusalRestorePending}
+var refusals = []string{RefusalNotInstaller, RefusalStaleBinary, RefusalSelfCheck, RefusalAutoOff, RefusalRestorePending,
+	RefusalReleaseSigners}
+
+// Why update.release_signers -- the opt-in pin to the owner's release keys
+// -- refused a release (Attempt.Signature): a fixed word, like a refusal,
+// for an event payload and the surfaces' own words (SignatureWords). It is
+// set on a finished attempt that stopped at StageVerify, attended or not.
+const (
+	// SignatureMissing: the release carries no checksums.txt.sshsig
+	// (OwnerSignatureAsset), so the owner never signed it.
+	SignatureMissing = "missing"
+	// SignatureUnlisted: its checksums.txt.sshsig was made by a key the pin
+	// does not list.
+	SignatureUnlisted = "unlisted"
+	// SignatureInvalid: its checksums.txt.sshsig does not verify -- not a
+	// signature, made for another namespace or another file, or by a
+	// security key that was not touched or did not verify its owner.
+	SignatureInvalid = "invalid"
+)
+
+// signatureWords lists every Signature word this release writes.
+var signatureWords = []string{SignatureMissing, SignatureUnlisted, SignatureInvalid}
+
+// KnownSignature reports whether this release knows the Signature word w.
+func KnownSignature(w string) bool { return slices.Contains(signatureWords, w) }
 
 // KnownRefusal reports whether this release knows refusal.
 func KnownRefusal(refusal string) bool { return slices.Contains(refusals, refusal) }
@@ -228,6 +258,11 @@ type Attempt struct {
 	// started. Empty for every other outcome, and in every record a release
 	// before it wrote.
 	Refusal string `json:"refusal,omitempty"`
+	// Signature is set when update.release_signers refused the release: a
+	// Signature* word, on a finished record that stopped at StageVerify.
+	// Empty for every other outcome, on an install with no pin, and in
+	// every record a release before it wrote.
+	Signature string `json:"signature,omitempty"`
 	// LogPath is the updater's log of this attempt, and BackupPath where
 	// StageBackup put the install it replaces: absolute paths the updater
 	// chose, empty until it has them.
@@ -392,6 +427,10 @@ func (a Attempt) check() error {
 		problem = "refusal is set only on a finished attempt that stopped at the gates"
 	case a.Refusal != "" && !spawnedByDaemon(a.Why):
 		problem = "refusal is set only on an attempt the daemon started: an attended update runs no gates"
+	case a.Signature != "" && !KnownSignature(a.Signature):
+		problem = fmt.Sprintf("signature %q: valid values are %s", a.Signature, strings.Join(signatureWords, ", "))
+	case a.Signature != "" && (a.Stage != StageVerify || !a.Finished()):
+		problem = "signature is set only on a finished attempt that stopped at verify"
 	default:
 		return nil
 	}

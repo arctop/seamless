@@ -33,6 +33,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/releasesig"
+	"github.com/arctop/seamless/internal/sshsig/sshsigtest"
 	"github.com/arctop/seamless/internal/store/storetest"
 	"github.com/arctop/seamless/internal/update"
 )
@@ -317,6 +318,20 @@ type releaseOpts struct {
 	checksums       string // checksums.txt content ("" = generated)
 	script          string // the install script ("" = a comment naming the release)
 	archive         []byte // this platform's archive (nil = a stand-in's bytes)
+
+	// The owner's signature (checksums.txt.sshsig). ownerKey signs the
+	// release's checksums.txt, which then lists the installer too, as every
+	// owner-signed release's does; ownerSig replaces what it signs with
+	// these bytes; ownerSigns signs another message instead; ownerNamespace
+	// overrides the namespace; ownerOpts shapes the signature (its flags).
+	ownerKey       *sshsigtest.Key
+	ownerSig       []byte
+	ownerSigns     []byte
+	ownerNamespace string
+	ownerOpts      sshsigtest.Options
+	// unlistInstaller leaves the installer out of an owner-signed
+	// checksums.txt.
+	unlistInstaller bool
 }
 
 // publish puts release v on the release server, every asset signed for its
@@ -340,6 +355,13 @@ func (w *world) publish(v string, opts releaseOpts) {
 		sum := sha256.Sum256(archiveBytes)
 		checksums = hex.EncodeToString(sum[:]) + "  " + archiveName + "\n" +
 			strings.Repeat("a", 64) + "  seamless_" + v + "_plan9_amd64.tar.gz\n"
+		if opts.ownerKey != nil && !opts.unlistInstaller {
+			// An owner-signed release lists its installers in checksums.txt
+			// (.goreleaser.yaml checksum.extra_files), so the owner's
+			// signature covers the script the updater runs.
+			isum := sha256.Sum256(script)
+			checksums += hex.EncodeToString(isum[:]) + "  " + inst + "\n"
+		}
 	}
 	instSigner, sumSigner := signedFor(v), signedFor(v)
 	if opts.installerSigner != "" {
@@ -357,6 +379,22 @@ func (w *world) publish(v string, opts releaseOpts) {
 	}
 	if !opts.noChecksumsSign {
 		files[checksumsAsset+bundleSuffix] = w.sign(sumSigner, []byte(checksums))
+	}
+	switch {
+	case opts.ownerSig != nil:
+		files[update.OwnerSignatureAsset] = opts.ownerSig
+	case opts.ownerKey != nil:
+		msg := []byte(checksums)
+		if opts.ownerSigns != nil {
+			msg = opts.ownerSigns
+		}
+		ns := releasesig.OwnerNamespace
+		if opts.ownerNamespace != "" {
+			ns = opts.ownerNamespace
+		}
+		sig, err := opts.ownerKey.Sign(ns, msg, opts.ownerOpts)
+		require.NoError(w.t, err)
+		files[update.OwnerSignatureAsset] = sig
 	}
 	published := time.Now().Add(-48 * time.Hour).UTC()
 	rel := update.APIRelease{TagName: "v" + v, Prerelease: opts.prerelease, PublishedAt: &published}

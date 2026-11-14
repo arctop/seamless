@@ -1,21 +1,34 @@
 name: Release
 
-# Cut a release in two halves. On the owner's Mac, scripts/release/macos.sh
+# Cut a release in three steps. On the owner's Mac, scripts/release/macos.sh
 # builds the darwin binaries and the Touch ID approver, signs them with the
 # project's Developer ID Application certificate, has Apple notarize them,
 # uploads them to the tag's draft release, and writes the SSH-signed tag whose
 # message carries their sha256 manifest; the owner pushes the tag. This
-# workflow then waits for the owner's approval of its `release` environment,
-# holds the draft's darwin assets to the tag's manifest, cross-compiles
-# linux and windows (.goreleaser.yaml), and publishes the draft with the
-# signed checksums, installer bundles and changelog; the last step
-# re-verifies the published checksums signatures against this tag's exact
-# signing identity. Once that passes, the mcp-registry job publishes
-# server.json to the MCP registry (mcp-registry.yml), and the pages job
-# publishes the site, installers included, from this tag (pages.yml). The
-# Homebrew cask is pushed by the owner afterwards (scripts/release/cask.sh).
-# No step reads a secret but the GITHUB_TOKEN; scripts/release/README.md has
-# the steps.
+# workflow's goreleaser job then waits for the owner's approval of its
+# `release` environment, holds the draft's darwin assets to the tag's
+# manifest, cross-compiles linux and windows (.goreleaser.yaml), and fills the
+# draft with the Sigstore-signed checksums, installer bundles and changelog --
+# leaving it a draft. The owner then signs the draft's checksums.txt with a
+# hardware key (scripts/release/sign.sh, which uploads checksums.txt.sshsig)
+# and approves the publish job, which publishes the draft only once that
+# signature verifies against the repository's release_signers (releasekit
+# verify-owner: a key at both the previous release's tag and this one), then
+# re-verifies the published signatures against this tag's exact identity.
+# Once that passes, the mcp-registry job publishes server.json to the MCP
+# registry (mcp-registry.yml), and the pages job publishes the site,
+# installers included, from this tag (pages.yml). The Homebrew cask is pushed
+# by the owner afterwards (scripts/release/cask.sh). No step reads a secret
+# but the GITHUB_TOKEN; scripts/release/README.md has the steps.
+#
+# What the publish job's check is worth: this file is read from the tag being
+# released, so whoever can push a v* tag can push a commit whose release.yml
+# skips the check. The gate keeps the release path honest -- no release
+# publishes without the owner's signature, and a key added in a release cannot
+# sign it -- but the guarantees against a hostile tag pusher are the clients':
+# an updater pinned with update.release_signers, and the installers' embedded
+# keys, verify checksums.txt.sshsig themselves.
+
 on:
   push:
     tags: ["v*"]
@@ -40,10 +53,11 @@ jobs:
     # agent-accounts-and-releases): the environment's required reviewer is
     # the owner, it admits only v* tags, and admins cannot bypass it. It holds
     # no secret; what it guards is this job's GITHUB_TOKEN and its OIDC
-    # identity, which sign checksums.txt and publish. An environment changes
-    # neither the Sigstore certificate's identity
+    # identity, which sign checksums.txt and fill the draft. An environment
+    # changes neither the Sigstore certificate's identity
     # (release.yml@refs/tags/vX.Y.Z, its job_workflow_ref) nor anything a
-    # verifier pins. A fork's release creates its own, unprotected one.
+    # verifier pins. A fork's release creates its own, unprotected one. The
+    # publish job below waits for a second approval, after the owner signs.
     environment: release
     timeout-minutes: 30
     steps:
@@ -144,8 +158,9 @@ jobs:
               "docs/${script}"
           done
 
-      # Publishes the draft macos.sh made (release.use_existing_draft), which
-      # it finds by its title, the tag. A tag pushed with no draft fails the
+      # Fills the draft macos.sh made (release.use_existing_draft), which it
+      # finds by its title, the tag, and leaves it a draft (release.draft): the
+      # publish job below publishes it. A tag pushed with no draft fails the
       # check above first.
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
@@ -154,30 +169,112 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Publish the draft once the owner has signed it (plan
+  # agent-accounts-and-releases, step D). This job waits for the owner's
+  # approval of the `release` environment a second time: while it waits, the
+  # owner runs scripts/release/sign.sh vX.Y.Z on their own machine, which
+  # holds the draft's checksums.txt to its Sigstore bundle for this tag and
+  # its darwin lines to the tag's manifest, signs it with a hardware key
+  # (ssh-keygen -Y sign -n seamless-release), and uploads checksums.txt.sshsig
+  # to the draft. Approved, the job holds that signature to release_signers
+  # as the previous release's tag and this tag both list it (releasekit
+  # verify-owner), and only then publishes. Approved before the signature is
+  # there, it fails, the draft stays a draft, and "Re-run failed jobs" asks for
+  # the approval again.
+  #
+  # A fork's release is not held to the owner's signature (its keys are not
+  # the owner's): with CANONICAL false the job publishes at once, and the
+  # fork's own release environment, created unprotected, does not wait.
+  publish:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      # Full history and every tag: release_signers is read at the previous
+      # release's tag as well as this one.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # The same cosign as the goreleaser job, for the post-publish verify.
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: "v2.6.4"
+
+      # The draft's checksums.txt and the owner's signature over it, held to
+      # release_signers at the previous release's tag and at this one: a key
+      # must be in both, so a key added in this release cannot sign it. The
+      # first signed release (the previous tag has no release_signers) is the
+      # bootstrap, which this tag's file alone decides, loudly (see
+      # scripts/release/README.md). -require refuses a tag with no
+      # release_signers at either: on this repository every release is signed.
+      - name: Check the owner's signature
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # The ref reaches the script through env:, never as an expression
+          # inside run:, so no tag text is spliced into shell source.
+          TAG_REF: ${{ github.ref }}
+          CANONICAL: ${{ github.repository == 'arctop/seamless' }}
+        run: |
+          set -eu
+          case "$TAG_REF" in
+            refs/tags/v*) ;;
+            *) echo "::error::the release needs a v* tag ref, got $TAG_REF"; exit 1 ;;
+          esac
+          tag=${TAG_REF#refs/tags/}
+          if [ "$CANONICAL" != true ]; then
+            echo "::notice::a fork's release is not held to the owner's signature; publishing"
+            exit 0
+          fi
+          scripts/release/fetch-draft.sh "$tag" "$RUNNER_TEMP/owner" "$GITHUB_REPOSITORY" checksums.txt checksums.txt.sshsig
+          go run ./cmd/releasekit verify-owner -require -tag "$tag" \
+            -checksums "$RUNNER_TEMP/owner/checksums.txt" -sig "$RUNNER_TEMP/owner/checksums.txt.sshsig"
+
+      - name: Publish the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_REF: ${{ github.ref }}
+        run: |
+          set -eu
+          tag=${TAG_REF#refs/tags/}
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false
+
       # Post-release verify. goreleaser signed checksums.txt twice (the two
-      # `signs:` entries in .goreleaser.yaml); fetch it and both signatures
-      # back from the published release, by the URLs and names verifiers
-      # download, and check each against THIS tag's exact signing identity
-      # (repository, workflow file and ref compared whole, unlike the v*
-      # pattern above), so a signed checksums.txt from any other release
-      # fails. It also fails on a signature missing from the release, or one
-      # over the wrong bytes: the two entries run concurrently, and each
-      # rewrites checksums.txt (same bytes) just before it signs.
+      # `signs:` entries in .goreleaser.yaml), and the owner once; fetch it
+      # and every signature back from the published release, by the URLs and
+      # names verifiers download. Each Sigstore signature is checked against
+      # THIS tag's exact signing identity (repository, workflow file and ref
+      # compared whole, unlike the v* pattern above), so a signed
+      # checksums.txt from any other release fails. It also fails on a
+      # signature missing from the release, or one over the wrong bytes: the
+      # two entries run concurrently, and each rewrites checksums.txt (same
+      # bytes) just before it signs. The owner's signature is checked again on
+      # the published bytes, as the updater and the installers will read them.
       #
-      # This runs after goreleaser has published the release, so a red result
-      # cannot stop the release. Rule out a network failure first -- the same
-      # two cosign commands give the same verdict from any machine -- then
-      # pull the release: mark it prerelease, which is the yank (the update
-      # check and /releases/latest both skip prereleases), and do not push
-      # its cask (scripts/release/cask.sh refuses a prerelease; revert the
-      # tap's commit if it was already pushed), then fix the cause and cut a
-      # new patch tag.
+      # This runs after the release is published, so a red result cannot stop
+      # the release. Rule out a network failure first -- the same commands
+      # give the same verdict from any machine -- then pull the release: mark
+      # it prerelease, which is the yank (the update check and /releases/latest
+      # both skip prereleases), and do not push its cask (scripts/release/
+      # cask.sh refuses a prerelease; revert the tap's commit if it was already
+      # pushed), then fix the cause and cut a new patch tag.
       - name: Verify published checksums signatures (exact tag identity)
         env:
           # The ref reaches the script through env:, never as an expression
           # inside run:, so no tag text is spliced into shell source.
           TAG_REF: ${{ github.ref }}
+          CANONICAL: ${{ github.repository == 'arctop/seamless' }}
         run: |
+          set -eu
           case "$TAG_REF" in
             refs/tags/v*) ;;
             *) echo "::error::release verify needs a v* tag ref, got $TAG_REF"; exit 1 ;;
@@ -190,7 +287,11 @@ jobs:
           base="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/${TAG_REF#refs/tags/}"
           dir="$RUNNER_TEMP/published"
           mkdir -p "$dir"
-          for asset in checksums.txt checksums.txt.sigstore.json checksums.txt.sig checksums.txt.pem; do
+          assets="checksums.txt checksums.txt.sigstore.json checksums.txt.sig checksums.txt.pem"
+          if [ "$CANONICAL" = true ]; then
+            assets="$assets checksums.txt.sshsig"
+          fi
+          for asset in $assets; do
             curl -fsSL --retry 5 --retry-all-errors -o "$dir/$asset" "$base/$asset"
           done
           cosign verify-blob \
@@ -204,16 +305,20 @@ jobs:
             --certificate-identity "$identity" \
             --certificate-oidc-issuer "$issuer" \
             "$dir/checksums.txt"
+          if [ "$CANONICAL" = true ]; then
+            go run ./cmd/releasekit verify-owner -require -tag "${TAG_REF#refs/tags/}" \
+              -checksums "$dir/checksums.txt" -sig "$dir/checksums.txt.sshsig"
+          fi
 
-  # Publish this version to the MCP registry, only after the release above is
-  # published and its signatures verified: a release that fails that verify is
-  # being yanked and must not be listed. It holds only the OIDC token the
-  # registry login needs, not this workflow's contents: write. A failure here
-  # leaves the release itself intact; fix the cause and run
+  # Publish this version to the MCP registry, only after the publish job has
+  # published the release and verified its signatures: a release that fails
+  # that verify is being yanked and must not be listed. It holds only the OIDC
+  # token the registry login needs, not this workflow's contents: write. A
+  # failure here leaves the release itself intact; fix the cause and run
   # `gh workflow run mcp-registry.yml -f tag=<tag>`.
   mcp-registry:
-    needs: goreleaser
-    if: ${{ !cancelled() && needs.goreleaser.result == 'success' }}
+    needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     permissions:
       contents: read
       id-token: write
@@ -228,8 +333,8 @@ jobs:
   # failure leaves the release intact; the next site-* tag or release
   # publishes the site.
   pages:
-    needs: goreleaser
-    if: ${{ !cancelled() && needs.goreleaser.result == 'success' && !contains(github.ref_name, '-') }}
+    needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' && !contains(github.ref_name, '-') }}
     permissions:
       contents: read
       pages: write

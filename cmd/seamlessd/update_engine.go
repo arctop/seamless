@@ -29,6 +29,7 @@ import (
 	"github.com/arctop/seamless/internal/backup"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/releasesig"
+	"github.com/arctop/seamless/internal/sshsig"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/update"
 )
@@ -83,6 +84,9 @@ type updaterDeps struct {
 	// verify checks an asset against its Sigstore bundle with the exact
 	// identity of release v's tag (releasesig.VerifyAsset).
 	verify func(bundle, artifact []byte, v update.Version) error
+	// signers reads update.release_signers for cfg (releaseSignersFor): nil
+	// and no error when cfg pins nothing. nil reads it from this machine.
+	signers func(cfg config.Config) ([]sshsig.Signer, error)
 
 	// probe gathers update.Detect's probe for the config ic describes
 	// (probeInstall).
@@ -326,6 +330,9 @@ type outcome struct {
 	err        string
 	// refusal is the gates' refusal word (refusalError), "" for anything else.
 	refusal string
+	// signature is update.release_signers' verdict on the release
+	// (ownerSignatureError), set only at StageVerify.
+	signature string
 }
 
 // updater is one engine run.
@@ -343,9 +350,76 @@ type updater struct {
 	// binaries while it replaces them.
 	system bool
 	swap   binarySwap
+	// signers are the keys update.release_signers allows to sign a release,
+	// read at the gates; nil while nothing is pinned.
+	signers []sshsig.Signer
 }
 
 func (u *updater) dataDir() string { return u.job.cfg.DataDir }
+
+// pinned reports whether update.release_signers holds this update to the
+// owner's signature.
+func (u *updater) pinned() bool { return u.job.cfg.Update.ReleaseSigners != "" }
+
+// pinPath is the pin's file, for what the updater says.
+func (u *updater) pinPath() string { return u.job.cfg.Update.ReleaseSigners }
+
+// loadPin reads update.release_signers when the config sets it. A pin that
+// is set but cannot be used is an error: nothing may be installed then.
+func (u *updater) loadPin() error {
+	if !u.pinned() {
+		return nil
+	}
+	read := u.d.signers
+	if read == nil {
+		read = func(cfg config.Config) ([]sshsig.Signer, error) { return releaseSignersFor(cfg, hostSignersFS()) }
+	}
+	signers, err := read(u.job.cfg)
+	if err != nil {
+		return err
+	}
+	if len(signers) == 0 {
+		return fmt.Errorf("%w: %s lists no key", errReleaseSigners, u.pinPath())
+	}
+	u.signers = signers
+	u.logf("pin: %s allows %s", u.pinPath(), strings.Join(releasesig.OwnerKeys(signers), "; "))
+	return nil
+}
+
+// ownerSignatureListed holds the re-read release v to carrying the owner's
+// signature when the pin asks for it: none listed is the release's own
+// refusal (SignatureMissing); one listed but still uploading is
+// errReleaseInFlight.
+func (u *updater) ownerSignatureListed(rel update.APIRelease, v update.Version) error {
+	switch listed, uploaded := listedAsset(rel, update.OwnerSignatureAsset); {
+	case !listed:
+		return ownerSignatureMissing(v, u.pinPath())
+	case !uploaded:
+		return fmt.Errorf("%w: v%s is still uploading %s", errReleaseInFlight, v, update.OwnerSignatureAsset)
+	}
+	return nil
+}
+
+// verifyPinned holds a verified download of release v to the pin: the owner's
+// signature over its checksums.txt, and -- when the updater runs the release's
+// installer -- the installer's own line in that checksums.txt, so the script
+// it pipes to a shell is one the owner's signature covers too. It notes who
+// signed. A failure is an ownerSignatureError.
+func (u *updater) verifyPinned(v update.Version, checksums, ownerSig []byte, installer []byte) error {
+	who, err := verifyOwnerSignature(u.signers, u.pinPath(), v, checksums, ownerSig)
+	if err != nil {
+		return err
+	}
+	if installer != nil {
+		inst := installerAsset(u.d.goos)
+		if err := update.VerifyChecksum(checksums, inst, installer); err != nil {
+			return &ownerSignatureError{word: update.SignatureInvalid,
+				err: fmt.Errorf("the checksums.txt of v%s that the owner signed does not vouch for its %s: %w", v, inst, err)}
+		}
+	}
+	u.note("owner", "%s", green("signature verified")+dim(fmt.Sprintf(" -- v%s's checksums.txt signed by %s, a key %s lists", v, who, tildePath(u.pinPath()))))
+	return nil
+}
 
 // logf writes one line to the attempt log.
 func (u *updater) logf(format string, args ...any) {
@@ -373,7 +447,12 @@ func (u *updater) stage(s update.Stage) {
 // fail ends the attempt at stage s.
 func (u *updater) fail(s update.Stage, err error) outcome {
 	u.logf("failed at %s: %v", s, err)
-	return outcome{stage: s, err: fmt.Sprintf("%s: %v", s, err)}
+	o := outcome{stage: s, err: fmt.Sprintf("%s: %v", s, err)}
+	var se *ownerSignatureError
+	if s == update.StageVerify && errors.As(err, &se) {
+		o.signature = se.word
+	}
+	return o
 }
 
 // The update lock is taken with a short wait rather than a single try,
@@ -468,6 +547,11 @@ func (u *updater) run(ctx context.Context) outcome {
 	if err != nil {
 		return u.fail(update.StageVerify, err)
 	}
+	if u.pinned() {
+		if err := u.verifyPinned(dl.version, dl.checksums, dl.ownerSig, dl.installer); err != nil {
+			return u.fail(update.StageVerify, err)
+		}
+	}
 	if floor {
 		target.version = u.job.req.To
 		u.note("verify", "%s", green("signature verified")+dim(fmt.Sprintf(" -- the v%s installer, which installs v%s and checks its archive itself", target.signedFor, target.version)))
@@ -523,6 +607,14 @@ func fetchFailureStage(err error) update.Stage {
 // a client's hooks -- and no one fixed action resolves it; the record's Error
 // names it).
 func (u *updater) gates(ctx context.Context) error {
+	// update.release_signers first: with a pin that cannot be used, nothing
+	// may be fetched as if it could.
+	if err := u.loadPin(); err != nil {
+		if u.job.attended {
+			return err
+		}
+		return refused(update.RefusalReleaseSigners, err)
+	}
 	if u.job.attended {
 		u.shape = installShape{dir: u.job.installDir}
 		u.system = u.job.system
@@ -594,14 +686,22 @@ func (u *updater) fetchTarget(ctx context.Context) (releaseDownload, bool, error
 	}
 	archiveName := platformArchive(to, u.d.goos, u.d.goarch)
 	err = checkPublished(rel, to, releaseAssetNames(to, u.d.goos, u.d.goarch))
+	if err == nil && u.pinned() {
+		err = u.ownerSignatureListed(rel, to)
+	}
 	if err == nil {
 		dl, err := u.d.releases.downloadRelease(ctx, to, u.d.goos, true)
+		if err == nil && u.pinned() {
+			dl.ownerSig, err = u.d.releases.fetchAsset(ctx, to, update.OwnerSignatureAsset)
+		}
 		if err != nil {
 			return releaseDownload{}, false, fmt.Errorf("download v%s: %w", to, listedAssetGone(err))
 		}
 		return dl, false, nil
 	}
-	if !u.job.attended || !errors.Is(err, errReleaseIncomplete) || checkPublished(rel, to, []string{archiveName}) != nil {
+	// The floor fallback installs a release whose checksums nobody signed,
+	// which a pin cannot allow.
+	if u.pinned() || !u.job.attended || !errors.Is(err, errReleaseIncomplete) || checkPublished(rel, to, []string{archiveName}) != nil {
 		return releaseDownload{}, false, err
 	}
 	newest := u.job.newest
@@ -650,6 +750,21 @@ func (u *updater) preflight(ctx context.Context) (releaseAssets, error) {
 	back, err := verifyDownload(dl, u.d.goos, u.d.goarch, u.d.verify)
 	if err != nil {
 		return releaseAssets{}, fmt.Errorf("verify v%s, the rollback target: %w", from, err)
+	}
+	// A pin holds the way back to the owner's signature too: a rollback runs
+	// the release's installer like an update does.
+	if u.pinned() {
+		sig, err := u.d.releases.fetchAsset(ctx, from, update.OwnerSignatureAsset)
+		if errors.Is(err, errFetchMissing) {
+			return releaseAssets{}, fmt.Errorf("v%s, the rollback target, carries no %s, so %s cannot vouch for a rollback to it: %w",
+				from, update.OwnerSignatureAsset, releaseSignersWhat, err)
+		}
+		if err != nil {
+			return releaseAssets{}, fmt.Errorf("download v%s's %s, the rollback target's: %w", from, update.OwnerSignatureAsset, err)
+		}
+		if err := u.verifyPinned(from, dl.checksums, sig, dl.installer); err != nil {
+			return releaseAssets{}, fmt.Errorf("v%s, the rollback target: %w", from, err)
+		}
 	}
 	if err := u.d.releases.headAsset(ctx, from, back.archive); err != nil {
 		return releaseAssets{}, fmt.Errorf("v%s's archive, for the rollback: %w", from, err)
@@ -1077,7 +1192,7 @@ func (r *attemptRecorder) finish(o outcome, timing updaterTiming) (update.Attemp
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	t := r.now().UTC()
-	r.a.Stage, r.a.OK, r.a.RolledBack, r.a.Error, r.a.Refusal = o.stage, o.ok, o.rolledBack, o.err, o.refusal
+	r.a.Stage, r.a.OK, r.a.RolledBack, r.a.Error, r.a.Refusal, r.a.Signature = o.stage, o.ok, o.rolledBack, o.err, o.refusal, o.signature
 	r.a.FinishedAt, r.a.HeartbeatAt = t, t
 	var werr error
 	for try := range max(timing.finalTries, 1) {

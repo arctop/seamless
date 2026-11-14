@@ -1,9 +1,11 @@
 #!/bin/sh
-# Phase 2 of a release, on the owner's Mac once release.yml has published it:
+# Phase 3 of a release, on the owner's Mac once release.yml has published it:
 # render the Homebrew cask (`brew install arctop/tap/seamless`) from the
 # release's checksums.txt, checked against its Sigstore bundle for this exact
-# tag, and push it to arctop/homebrew-tap with the owner's own GitHub login.
-# CI holds no token for the tap.
+# tag and against the owner's signature (checksums.txt.sshsig, held to
+# release_signers as the publish job holds it), and push it to
+# arctop/homebrew-tap with the owner's own GitHub login. CI holds no token
+# for the tap.
 #
 #   scripts/release/cask.sh vX.Y.Z            push the cask
 #   scripts/release/cask.sh vX.Y.Z --dry-run  show the change, push nothing
@@ -64,8 +66,15 @@ base=https://github.com/$REPO/releases/download/$TAG
 for asset in checksums.txt checksums.txt.sigstore.json; do
 	curl -fsSL --proto '=https' --retry 3 -o "$WORK/$asset" "$base/$asset"
 done
+# The owner's signature: releasekit requires it once release_signers exists
+# at the tag, and a release from before that has none to fetch.
+git fetch --quiet --tags origin
+owner=
+if curl -fsSL --proto '=https' --retry 3 -o "$WORK/checksums.txt.sshsig" "$base/checksums.txt.sshsig" 2>/dev/null; then
+	owner=$WORK/checksums.txt.sshsig
+fi
 go run ./cmd/releasekit cask -tag "$TAG" -checksums "$WORK/checksums.txt" \
-	-bundle "$WORK/checksums.txt.sigstore.json" >"$WORK/seamless.rb"
+	-bundle "$WORK/checksums.txt.sigstore.json" ${owner:+-owner-sig "$owner"} >"$WORK/seamless.rb"
 
 gh repo clone "$TAP" "$WORK/tap" -- --quiet --depth 1
 cask=$WORK/tap/Casks/seamless.rb

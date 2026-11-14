@@ -294,6 +294,26 @@ What you are accepting when you run this:
   before executing anything, and pins the installer to that `checksums.txt`. `curl | sh` still means trusting the bytes served by the
   site, so read the script first if that boundary is not acceptable;
   `go install` lands in the same place.
+- **The owner signs every release after v0.8.3** with a hardware key:
+  `checksums.txt.sshsig`, an OpenSSH signature over `checksums.txt`, which lists
+  every archive and both installer scripts
+  ([owner-signed releases](https://thereisnospoon.org/docs/updating/#owner-signed-releases)). Both installers
+  carry the owner's keys (the repository's `release_signers`) and check it with
+  `ssh-keygen`: a release after v0.8.3 without the signature, or with one that
+  does not verify against those keys, is refused. An `ssh-keygen` that cannot
+  verify a hardware key's signature (OpenSSH before 8.2, which includes the
+  OpenSSH some Windows 10 builds ship) - or none at all - warns and goes on,
+  as a missing cosign does. A `SEAMLESS_VERSION` at or below v0.8.3 predates
+  the owner's signatures and installs as before.
+- **The trust root of a fresh install is the site.** The installer you pipe to
+  a shell is served from thereisnospoon.org, which publishes only from release
+  tags, and the keys it checks the owner's signature against are the ones it
+  carries. So a fresh install trusts whoever can publish the site - TLS
+  authenticates the host, nothing authenticates the script before it runs.
+  What the installer's checks then add is that a release whose assets the
+  owner did not sign is refused while the site still serves the owner's
+  script. To pin the owner's keys on an install from then on, set
+  [`update.release_signers`](https://thereisnospoon.org/docs/updating/#owner-signed-releases).
 
 ### Going beyond loopback, deliberately
 

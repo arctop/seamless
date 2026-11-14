@@ -139,6 +139,7 @@ func doctor(args []string) error {
 	checks = append(checks, mcpToolsCheck(ctx, cfg, d.current))
 	checks = append(checks, claudeRuntimeChecks()...)
 	checks = append(checks, hooksCheck(cfg))
+	checks = append(checks, clientSeamChecks(cfg)...)
 	checks = append(checks, claudeDesktopChecks(resolveSeamBin(""), absConfigPath(cfg.SourcePath()))...)
 	// The events table and the settings row these two read date from migration
 	// 001, so an older schema answers them; with no database codexChecks drops
@@ -249,6 +250,7 @@ func clientChecks(cfg config.Config) []check {
 	checks = append(checks, apiKeyCheck(cfg), clientMCPToolsCheck(cfg))
 	checks = append(checks, claudeRuntimeChecks()...)
 	checks = append(checks, hooksCheck(cfg))
+	checks = append(checks, clientSeamChecks(cfg)...)
 	checks = append(checks, claudeDesktopChecks(resolveSeamBin(""), absConfigPath(cfg.SourcePath()))...)
 	// A nil db skips the Codex hook-activity line, which reads the event log:
 	// hooks on a client record their observations on the server, not here.

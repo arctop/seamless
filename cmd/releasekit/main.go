@@ -11,11 +11,23 @@
 //	releasekit manifest       FILE...                        print the sha256 lines for the tag's message
 //	releasekit check-darwin   -tag vX.Y.Z -tag-object FILE -assets DIR
 //	                                                         hold the draft's darwin assets to the tag's manifest
-//	releasekit cask           -tag vX.Y.Z -checksums FILE -bundle FILE
+//	releasekit check-draft    -tag vX.Y.Z -tag-object FILE -checksums FILE -bundle FILE
+//	                                                         hold a draft's checksums.txt to its Sigstore bundle and the tag's manifest
+//	releasekit owner-keys     -tag vX.Y.Z [-require]         print the keys that may sign the release (release_signers)
+//	releasekit verify-owner   -tag vX.Y.Z -checksums FILE -sig FILE [-require]
+//	                                                         check the owner's checksums.txt.sshsig against them
+//	releasekit cask           -tag vX.Y.Z -checksums FILE -bundle FILE [-owner-sig FILE]
 //	                                                         print the Homebrew cask of a published release
+//
+// The owner's signature (check-draft, owner-keys, verify-owner) is step D of
+// plan agent-accounts-and-releases: CI leaves the release a draft, the owner
+// signs its checksums.txt with a hardware key (scripts/release/sign.sh), and
+// the publish job publishes only once verify-owner accepts it (owner.go).
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -33,7 +45,7 @@ func main() {
 	}
 }
 
-const usage = "usage: releasekit darwin-build|darwin-archive|manifest|check-darwin|cask [flags]"
+const usage = "usage: releasekit darwin-build|darwin-archive|manifest|check-darwin|check-draft|owner-keys|verify-owner|cask [flags]"
 
 func run(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
@@ -120,9 +132,82 @@ func run(args []string, stdout io.Writer) error {
 		}
 		return nil
 
+	case "check-draft":
+		tagObject := fs.String("tag-object", "", "the tag object, as `git cat-file tag <tag>` prints it")
+		checksums := fs.String("checksums", "", "the draft's checksums.txt")
+		bundle := fs.String("bundle", "", "the draft's checksums.txt.sigstore.json")
+		if err := parse(fs, args, false, "tag", "tag-object", "checksums", "bundle"); err != nil {
+			return err
+		}
+		cfg, err := loadGoreleaser(*root)
+		if err != nil {
+			return err
+		}
+		files, err := readFiles(*tagObject, *checksums, *bundle)
+		if err != nil {
+			return err
+		}
+		names, err := checkDraft(cfg, *tag, files[0], files[1], files[2], releasesig.VerifyAssetForTag)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "releasekit: checksums.txt (sha256 %s) is %s's, Sigstore-signed by its release workflow, and its macOS lines are the tag's manifest\n",
+			sha256Hex(files[1]), *tag)
+		for _, n := range names {
+			if _, err := fmt.Fprintln(stdout, n); err != nil {
+				return err
+			}
+		}
+		return nil
+
+	case "owner-keys":
+		require := fs.Bool("require", false, "refuse a release with no release_signers at this tag or the previous release's")
+		if err := parse(fs, args, false, "tag"); err != nil {
+			return err
+		}
+		g, err := loadOwnerGate(repoGit(*root), *tag, *require)
+		if err != nil {
+			return err
+		}
+		for _, n := range g.notes() {
+			if _, err := fmt.Fprintln(stdout, n); err != nil {
+				return err
+			}
+		}
+		return nil
+
+	case "verify-owner":
+		checksums := fs.String("checksums", "", "the release's checksums.txt")
+		sig := fs.String("sig", "", "the owner's signature over it, checksums.txt.sshsig")
+		require := fs.Bool("require", false, "refuse a release with no release_signers at this tag or the previous release's")
+		if err := parse(fs, args, false, "tag", "checksums", "sig"); err != nil {
+			return err
+		}
+		g, err := loadOwnerGate(repoGit(*root), *tag, *require)
+		if err != nil {
+			return err
+		}
+		for _, n := range g.notes() {
+			fmt.Fprintln(os.Stderr, "releasekit: "+n)
+		}
+		if !g.required {
+			return nil
+		}
+		files, err := readFiles(*checksums, *sig)
+		if err != nil {
+			return err
+		}
+		v, err := g.verify(files[0], files[1])
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(stdout, "checksums.txt (sha256 %s) is signed by %s\n", sha256Hex(files[0]), releasesig.Describe(v))
+		return err
+
 	case "cask":
 		checksums := fs.String("checksums", "", "the release's checksums.txt")
 		bundle := fs.String("bundle", "", "the release's checksums.txt.sigstore.json")
+		ownerSig := fs.String("owner-sig", "", "the release's checksums.txt.sshsig; required once release_signers exists at the tag")
 		if err := parse(fs, args, false, "tag", "checksums", "bundle"); err != nil {
 			return err
 		}
@@ -147,6 +232,28 @@ func run(args []string, stdout io.Writer) error {
 		}
 		if err := releasesig.Embedded()(b, sums, v); err != nil {
 			return fmt.Errorf("checksums.txt is not %s's: %w", *tag, err)
+		}
+		// And the owner's, once the repository names the owner's keys: the
+		// same gate the publish job holds the release to.
+		g, err := loadOwnerGate(repoGit(*root), *tag, false)
+		if err != nil {
+			return err
+		}
+		if g.required {
+			if *ownerSig == "" {
+				return fmt.Errorf("%s has %s, so the cask needs the release's %s (-owner-sig)", *tag, releaseSignersFile, update.OwnerSignatureAsset)
+			}
+			sig, err := os.ReadFile(*ownerSig)
+			if err != nil {
+				return err
+			}
+			ov, err := g.verify(sums, sig)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stderr, "releasekit: checksums.txt is signed by %s\n", releasesig.Describe(ov))
+		} else {
+			fmt.Fprintf(os.Stderr, "releasekit: %s predates the owner's signature (no %s); Sigstore alone vouches for it\n", *tag, releaseSignersFile)
 		}
 		cask, err := renderCask(cfg, *tag, sums)
 		if err != nil {
@@ -177,6 +284,25 @@ func parse(fs *flag.FlagSet, args []string, positional bool, required ...string)
 		return fmt.Errorf("%s needs %s", fs.Name(), strings.Join(missing, " "))
 	}
 	return nil
+}
+
+// readFiles reads each path, in order.
+func readFiles(paths ...string) ([][]byte, error) {
+	out := make([][]byte, len(paths))
+	for i, p := range paths {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = b
+	}
+	return out, nil
+}
+
+// sha256Hex is the lowercase hex SHA-256 of b.
+func sha256Hex(b []byte) string {
+	s := sha256.Sum256(b)
+	return hex.EncodeToString(s[:])
 }
 
 func load(root, tag string) (grConfig, release, error) {

@@ -304,6 +304,9 @@ type releaseDownload struct {
 	installerBundle []byte
 	checksums       []byte // nil when not fetched (the floor fallback)
 	checksumsBundle []byte
+	// ownerSig is the owner's checksums.txt.sshsig, fetched only while
+	// update.release_signers pins the owner's keys.
+	ownerSig []byte
 }
 
 // downloadRelease fetches release v's installer for goos, checksums.txt and

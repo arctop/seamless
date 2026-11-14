@@ -546,6 +546,26 @@ against their Sigstore bundles, in-process and by that release's exact tag,
 before executing anything, and pins the installer to that <code>checksums.txt</code>. <code>curl | sh</code> still means trusting the bytes served by the
 site, so read the script first if that boundary is not acceptable;
 <code>go install</code> lands in the same place.</li>
+<li><strong>The owner signs every release after v0.8.3</strong> with a hardware key:
+<code>checksums.txt.sshsig</code>, an OpenSSH signature over <code>checksums.txt</code>, which lists
+every archive and both installer scripts
+(<a href="../updating/#owner-signed-releases">owner-signed releases</a>). Both installers
+carry the owner's keys (the repository's <code>release_signers</code>) and check it with
+<code>ssh-keygen</code>: a release after v0.8.3 without the signature, or with one that
+does not verify against those keys, is refused. An <code>ssh-keygen</code> that cannot
+verify a hardware key's signature (OpenSSH before 8.2, which includes the
+OpenSSH some Windows 10 builds ship) - or none at all - warns and goes on,
+as a missing cosign does. A <code>SEAMLESS_VERSION</code> at or below v0.8.3 predates
+the owner's signatures and installs as before.</li>
+<li><strong>The trust root of a fresh install is the site.</strong> The installer you pipe to
+a shell is served from thereisnospoon.org, which publishes only from release
+tags, and the keys it checks the owner's signature against are the ones it
+carries. So a fresh install trusts whoever can publish the site - TLS
+authenticates the host, nothing authenticates the script before it runs.
+What the installer's checks then add is that a release whose assets the
+owner did not sign is refused while the site still serves the owner's
+script. To pin the owner's keys on an install from then on, set
+<a href="../updating/#owner-signed-releases"><code>update.release_signers</code></a>.</li>
 </ul>
 <h3 id="going-beyond-loopback-deliberately">Going beyond loopback, deliberately</h3>
 <p>A static bearer key is adequate <em>because</em> the listener is on loopback; the two

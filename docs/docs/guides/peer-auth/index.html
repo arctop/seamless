@@ -463,7 +463,7 @@ certificate, on another port or address.</li>
 <td><code>/opt/seamless/etc</code></td>
 <td>root</td>
 <td><code>0755</code></td>
-<td><code>seamless.yaml</code> (<code>root:_seamless</code>, <code>0640</code>), <code>daemon-account</code> (root's, <code>0644</code>)</td>
+<td><code>seamless.yaml</code> (<code>root:_seamless</code>, <code>0640</code>), <code>daemon-account</code> (root's, <code>0644</code>), optionally <code>release_signers</code> (root's, <code>0644</code>; <a href="#owner-signed-releases">owner-signed releases</a>)</td>
 </tr>
 <tr>
 <td><code>/opt/seamless/etc/tls</code></td>
@@ -488,6 +488,12 @@ certificate, on another port or address.</li>
 <td><code>_seamless</code></td>
 <td><code>0700</code></td>
 <td>the account's home (caches, nothing else)</td>
+</tr>
+<tr>
+<td><code>/opt/seamless/client</code></td>
+<td>root</td>
+<td><code>0755</code></td>
+<td>optionally, root's own <code>seam</code> (<code>0755</code>) for your hooks (<a href="#client-copy">why</a>)</td>
 </tr>
 </tbody>
 </table>
@@ -588,7 +594,8 @@ Code's own http hook cannot dial a socket), and the MCP registration is the
 <code>seam mcp-proxy</code> stdio bridge. They run the <code>seam</code> beside the <code>seamlessd</code> that
 installed them, a copy of your own; add <code>--seam /opt/seamless/bin/seam</code> to run
 the daemon's instead, which no process of yours can replace and which moves
-with the daemon when it <a href="#updates">updates itself</a>. Under peer_auth the
+with the daemon when it <a href="#updates">updates itself</a>, or <code>--seam /opt/seamless/client/seam</code> for <a href="#client-copy">root's copy</a>, which the daemon's
+account cannot replace either. Under peer_auth the
 <a href="#what-changes-with-peer-auth-on">daemon reads no agent files</a>, so <code>seam hook</code>
 reads them and sends what it found.</p>
 <p>The console still needs TCP and the bearer key: a browser cannot dial a socket,
@@ -1191,10 +1198,115 @@ with the daemon. To update by hand:</p>
 compromised daemon could keep itself in place across restarts, and could replace
 the <code>seam</code> that hooks installed with <code>--seam /opt/seamless/bin/seam</code> run. It
 already holds every project's data, and your account still cannot write either
-binary, so the boundary against your agents is unchanged. To keep both binaries
-out of the daemon's reach as well, leave <code>/opt/seamless/bin</code> root's
-(<code>sudo chown -R root /opt/seamless/bin</code>): the daemon then only tells you about a
-new release, and you replace the binaries with <code>sudo</code> and restart it.</p>
+binary, so the boundary against your agents is unchanged. To keep the hooks'
+<code>seam</code> out of its reach while it still updates <code>seamlessd</code>, give your hooks
+<a href="#client-copy">root's copy</a>. To keep both binaries out of the daemon's reach,
+leave <code>/opt/seamless/bin</code> root's (<code>sudo chown -R root /opt/seamless/bin</code>): the
+daemon then only tells you about a new release, and you replace the binaries
+with <code>sudo</code> and restart it.</p>
+<h4 id="owner-signed-releases">Owner-signed releases</h4>
+<p>A daemon that updates itself installs whatever release GitHub serves that
+passes its Sigstore check, and whoever can push a release tag can produce one
+of those. Pin the owner's release keys and it installs only a release the
+owner signed with a hardware key (<a href="../../updating/#owner-signed-releases">how that works</a>).
+As root, put the keys where neither your account nor the daemon's can change
+them, and name the file in the daemon's config:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">curl -fsSLo /tmp/release_signers https://raw.githubusercontent.com/arctop/seamless/main/release_signers
+</span></span><span class="line"><span class="cl">ssh-keygen -l -f /tmp/release_signers    <span class="c1"># check each fingerprint against the owner&#39;s keys</span>
+</span></span><span class="line"><span class="cl">sudo install -o root -g wheel -m <span class="m">0644</span> /tmp/release_signers /opt/seamless/etc/release_signers
+</span></span></code></pre></div>
+<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="c"># /opt/seamless/etc/seamless.yaml</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">update</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">release_signers</span><span class="p">:</span><span class="w"> </span><span class="l">/opt/seamless/etc/release_signers</span><span class="w">
+</span></span></span></code></pre></div>
+<p>(<code>root</code>'s group is <code>root</code> on Linux.) Then restart the daemon. Under peer_auth
+<code>serve</code> refuses to start when the file is not root's, when a directory above it
+is writable by any account but root - the daemon's included, since the pin binds
+its own updater - or when it names no key for <code>seamless-release</code>; <code>seamlessd doctor</code>, run as the daemon's account, says which. Every update after that, by
+itself or by <code>sudo -u _seamless ... seamlessd update</code>, verifies
+<code>checksums.txt.sshsig</code> before it swaps anything, and so does the rollback to the
+release it replaced. The pin does not stop a compromised daemon from rewriting
+its own binaries; it stops a release the owner did not sign from reaching this
+machine through the update path at all.</p>
+<h4 id="client-copy">Keep the hooks' seam out of the daemon's reach</h4>
+<p>Your hooks run <code>seam</code> as you, beside every agent, so whoever can rewrite that
+file runs code as you at the next hook. There are three places it can be:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Hooks installed with</th>
+<th>Who can replace it</th>
+<th>It follows updates</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>no <code>--seam</code> (the copy beside your <code>seamlessd</code>)</td>
+<td>your account, and so every agent you run</td>
+<td>when you update it</td>
+</tr>
+<tr>
+<td><code>--seam /opt/seamless/bin/seam</code></td>
+<td>the daemon's account</td>
+<td>at once: the daemon updates it</td>
+</tr>
+<tr>
+<td><code>--seam /opt/seamless/client/seam</code></td>
+<td>root only</td>
+<td>when an administrator refreshes it</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The last keeps it out of both your agents' and the daemon's reach. Make the
+directory root's, put a release's <code>seam</code> there from a verified download - never
+a copy of <code>/opt/seamless/bin/seam</code>, which the daemon's account could have
+replaced - and point the hooks at it:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo install -d -o root -g wheel -m <span class="m">0755</span> /opt/seamless/client
+</span></span><span class="line"><span class="cl">seamlessd install-hooks --client claude --seam /opt/seamless/client/seam    <span class="c1"># or codex, or all</span>
+</span></span></code></pre></div>
+<p>To refresh it after each update the daemon installs, an administrator runs
+this for the release the daemon now runs (<code>seam version</code>, or Settings -&gt;
+Updates), with the system's own tools, none of them the daemon's. It stops at
+the first check that fails:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo sh -eu <span class="s">&lt;&lt;&#39;END&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s">v=0.9.1        # the daemon&#39;s release
+</span></span></span><span class="line"><span class="cl"><span class="s">os=darwin      # or linux
+</span></span></span><span class="line"><span class="cl"><span class="s">arch=arm64     # or amd64
+</span></span></span><span class="line"><span class="cl"><span class="s">d=$(mktemp -d); cd &#34;$d&#34;
+</span></span></span><span class="line"><span class="cl"><span class="s">base=https://github.com/arctop/seamless/releases/download/v$v
+</span></span></span><span class="line"><span class="cl"><span class="s">tarball=seamless_${v}_${os}_${arch}.tar.gz
+</span></span></span><span class="line"><span class="cl"><span class="s">curl -fsSLO &#34;$base/checksums.txt&#34; -O &#34;$base/checksums.txt.sshsig&#34; -O &#34;$base/$tarball&#34;
+</span></span></span><span class="line"><span class="cl"><span class="s">ok=
+</span></span></span><span class="line"><span class="cl"><span class="s">for p in $(awk &#39;!/^#/ &amp;&amp; NF { print $1 }&#39; /opt/seamless/etc/release_signers); do
+</span></span></span><span class="line"><span class="cl"><span class="s">  if ssh-keygen -Y verify -f /opt/seamless/etc/release_signers -I &#34;$p&#34; -n seamless-release \
+</span></span></span><span class="line"><span class="cl"><span class="s">    -s checksums.txt.sshsig &lt;checksums.txt; then ok=1; break; fi
+</span></span></span><span class="line"><span class="cl"><span class="s">done
+</span></span></span><span class="line"><span class="cl"><span class="s">[ -n &#34;$ok&#34; ] || { echo &#34;checksums.txt is not signed by the owner&#39;s keys&#34; &gt;&amp;2; exit 1; }
+</span></span></span><span class="line"><span class="cl"><span class="s">want=$(awk -v f=&#34;$tarball&#34; &#39;$2 == f { print $1 }&#39; checksums.txt)
+</span></span></span><span class="line"><span class="cl"><span class="s">got=$(shasum -a 256 &#34;$tarball&#34; 2&gt;/dev/null || sha256sum &#34;$tarball&#34;)
+</span></span></span><span class="line"><span class="cl"><span class="s">[ -n &#34;$want&#34; ] &amp;&amp; [ &#34;${got%% *}&#34; = &#34;$want&#34; ] || { echo &#34;$tarball does not match checksums.txt&#34; &gt;&amp;2; exit 1; }
+</span></span></span><span class="line"><span class="cl"><span class="s">tar -xzf &#34;$tarball&#34; seam
+</span></span></span><span class="line"><span class="cl"><span class="s">install -o root -m 0755 seam /opt/seamless/client/seam
+</span></span></span><span class="line"><span class="cl"><span class="s">echo &#34;/opt/seamless/client/seam is v$v&#39;s&#34;
+</span></span></span><span class="line"><span class="cl"><span class="s">END</span>
+</span></span></code></pre></div>
+<p>It checks the release against the <a href="#owner-signed-releases">pinned keys</a>, so
+the copy is the owner's release. <code>ssh-keygen</code> checks the signature, the
+namespace and the key, but not whether the hardware key was unlocked with its
+PIN (it reads the flags without requiring them); the daemon's pinned updater
+checked that too when it installed the release. <code>seamlessd doctor</code>, run as you,
+has a <code>hooks' seam</code> row: who can replace the <code>seam</code> your hooks run, and, for
+root's copy, whether it is the daemon's release.</p>
+<p><strong>While the client copy is a release behind</strong>, everything keeps working: a
+daemon accepts what the previous release's <code>seam</code> sends - hooks, the MCP
+bridge, <code>seam</code> commands - as it does for the <a href="../../guides/network-install/">network clients</a>
+that run their own release. What waits for the refresh is whatever the new
+release changed in <code>seam</code> itself: a fix in <code>seam hook</code> or <code>seam mcp-proxy</code>, a
+capture a hook newly reads and sends, a new <code>seam</code> subcommand or flag. Refresh
+the copy before you run the new release's <code>install-hooks</code>: its definitions may
+pass the hooks an argument the old <code>seam</code> does not know.</p>
 <h3 id="restore">Backups and restore</h3>
 <p><a href="../../guides/data/#backups-in-the-console">Scheduled backups</a> run as the daemon's
 account, like everything else it does, so the folder rules are stricter here:</p>

@@ -1,7 +1,8 @@
 # goreleaser config: cross-compiled release binaries for tagged versions.
-# Triggered by .github/workflows/release.yml on a v* tag; dry-run locally with
-# `make release-snapshot`. The version comes from the git tag (leading v
-# stripped), injected as main.version -- see cmd/seamlessd/main.go.
+# Triggered by .github/workflows/release.yml on a v* tag, which leaves the
+# release a draft until the owner has signed it (release.draft); dry-run
+# locally with `make release-snapshot`. The version comes from the git tag
+# (leading v stripped), injected as main.version -- see cmd/seamlessd/main.go.
 #
 # goreleaser builds linux and windows. The darwin binaries are built, signed
 # with the project's Developer ID Application certificate and notarized on the
@@ -119,6 +120,16 @@ checksum:
   # that release has no darwin archives.
   extra_files:
     - glob: '{{ envOrDefault "DARWIN_ASSETS" "" }}'
+    # The installer scripts, by the names they are released under
+    # (release.extra_files below): the owner signs checksums.txt
+    # (checksums.txt.sshsig, scripts/release/sign.sh), and an updater that
+    # holds releases to the owner's keys (update.release_signers) runs a
+    # release's installer only when these lines vouch for it, so the script
+    # it pipes to a shell is covered by the owner's signature too.
+    - glob: docs/install
+      name_template: install
+    - glob: docs/install.ps1
+      name_template: install.ps1
 
 # Sign checksums.txt so it proves AUTHENTICITY, not just integrity.
 #
@@ -201,11 +212,17 @@ release:
     - glob: sigs/install.sigstore.json
     - glob: sigs/install.ps1.sigstore.json
   # The release is the draft scripts/release/macos.sh created for the tag,
-  # holding the macOS assets; goreleaser finds it by its title (the tag),
-  # uploads the rest, and publishes it. The draft's placeholder notes are
-  # replaced with the changelog. A fork with no draft gets a new release.
+  # holding the macOS assets; goreleaser finds it by its title (the tag) and
+  # uploads the rest. The draft's placeholder notes are replaced with the
+  # changelog. A fork with no draft gets a new one.
   use_existing_draft: true
   mode: replace
+  # goreleaser leaves the release a draft. The owner then signs its
+  # checksums.txt with a hardware key (scripts/release/sign.sh uploads
+  # checksums.txt.sshsig), and release.yml's publish job publishes the draft
+  # only once that signature verifies against release_signers (releasekit
+  # verify-owner). A fork's publish job publishes it at once.
+  draft: true
   # A tag with a semver prerelease suffix (v0.7.0-rc.1) publishes as a GitHub
   # prerelease; a plain vX.Y.Z publishes as a normal release. The update check
   # skips prereleases, and GitHub's /releases/latest (what both installers

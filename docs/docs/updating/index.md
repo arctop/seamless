@@ -282,7 +282,9 @@ it, and that updater:
    fix ([the updater refused](https://thereisnospoon.org/docs/guides/troubleshooting/#an-automatic-update-failed));
 3. re-reads the release by its tag and downloads its installer and
    `checksums.txt` with their Sigstore bundles from GitHub, then verifies both
-   against the release workflow's identity on that exact tag;
+   against the release workflow's identity on that exact tag - and, with
+   [`update.release_signers`](#owner-signed-releases) set, `checksums.txt`
+   against the owner's signature too;
 4. proves the way back before changing anything: the release you run now must
    still download and verify the same way, or there is no update;
 5. backs the instance up - the database, your memories and your notes - to
@@ -355,6 +357,65 @@ its log. New sessions' briefings mention a pause, or a release that is now
 skipped, as your action, not theirs. `seamlessd doctor` reports the same on its
 `updates` row. [An automatic update failed](https://thereisnospoon.org/docs/guides/troubleshooting/#an-automatic-update-failed)
 says how to read it and recover.
+
+### Owner-signed releases {#owner-signed-releases}
+
+Every release after v0.8.3 carries a second signature over `checksums.txt`
+besides the Sigstore one: `checksums.txt.sshsig`, made by the project's owner
+with a hardware security key, in an attended session, after the release
+workflow built the release and before it was published. The Sigstore signature
+says the release workflow built it; this one says the owner released it.
+Whoever holds a token that can push tags and approve the release workflow can
+produce the first, but not the second. `checksums.txt` lists every archive and
+both installer scripts, so the one signature covers everything an update runs.
+
+The [installers](https://thereisnospoon.org/docs/install/#security-posture) check it on every install of such
+a release. The updater checks it only when you pin the owner's keys, by
+pointing `update.release_signers` at an OpenSSH allowed_signers file that lists
+them - the repository's [`release_signers`](https://github.com/arctop/seamless/blob/main/release_signers),
+or your own copy of it:
+
+```yaml
+update:
+  release_signers: ~/.config/seamless/release_signers
+```
+
+With the pin set, an update - automatic, **Update now** or `seamlessd update` -
+installs a release only when its `checksums.txt.sshsig` verifies in the
+namespace `seamless-release` against a key the file lists, made by a security
+key that was touched and unlocked with its PIN. The release it would roll back
+to must verify the same way, and the installer it runs must be one
+`checksums.txt` lists. Anything else is refused at the verify step, nothing is
+installed, and the release is skipped:
+
+- **missing:** the release carries no `checksums.txt.sshsig`;
+- **unlisted:** it was signed by a key the file does not list;
+- **invalid:** the signature does not verify - another file, another
+  namespace, a key that was not unlocked, or not a signature at all.
+
+**Settings -> Updates** names the pin and the last release it refused, the
+`update.failed` event carries the word (and the security feed with it), and
+`seamlessd doctor` has an `update.release_signers` row. A file that cannot be
+used - missing, unreadable, writable by another account, or naming no key for
+`seamless-release` - refuses every update until you fix it; doctor says what is
+wrong. `seamlessd update --url` is refused while the pin is set, and so is a
+release from before signed checksums.
+
+What the pin guards against is a release the owner did not sign, whatever
+GitHub's settings allowed. On an install that runs as your own account it does
+not guard against that account: anything that can edit your config can remove
+the key. Keep the file writable by you (or root) and no one else; under
+[peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/#owner-signed-releases) it must be root's.
+
+The key is new after v0.8.3, and releases up to v0.8.3 refuse config keys they
+do not know, so set it only once the install runs a newer release. Every
+release the pinned updater installs or rolls back to is signed, so each of
+them knows the key.
+
+When the owner replaces a key, the repository's `release_signers` adds the new
+one a release before releases are signed with it. Copy the file again then: a
+pin that lists only the old key refuses the releases the new one signs (and
+says **unlisted**).
 
 ### Going back to an older release {#going-back}
 

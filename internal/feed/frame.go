@@ -329,6 +329,16 @@ func (m *mapper) frame(e core.Event, sess session) Frame {
 		if isErr, _ := f.Fields["is_error"].(bool); isErr {
 			f.Outcome = "failure"
 		}
+	case core.EventUpdateFailed:
+		// update.release_signers refused a release the owner did not sign
+		// (missing, unlisted, invalid): a release that reached this install
+		// without the owner's key is the case the pin exists for, so it reads
+		// as blocked, high. Only this kind's "signature" is carried; other
+		// kinds use the key for other things.
+		if w, ok := fieldValue(p["signature"], tToken); ok {
+			f.Fields["signature"] = w
+			f.Severity, f.Outcome = "high", "blocked"
+		}
 	}
 	// Who acted: an agent's session, a restricted account's request with no
 	// session, the owner at the console, or the daemon. A restricted account is

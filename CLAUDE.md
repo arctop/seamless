@@ -34,7 +34,9 @@ cmd/seambench/     agent-scenario benchmark: `run` (headless scenario x conditio
 cmd/releasekit/    the release's macOS half: builds and packs the darwin binaries
                    from .goreleaser.yaml's builds and archive, the tag's sha256
                    manifest and release.yml's check of the draft against it,
-                   and the Homebrew cask. Driven by scripts/release/
+                   the owner's-signature gate (check-draft, owner-keys,
+                   verify-owner over release_signers at two tags), and the
+                   Homebrew cask. Driven by scripts/release/
 docs-src/          docs site markdown + nav.yaml (source; docs/docs/ is output)
 internal/core/     domain types: Project, Memory, Session, Task, Trial, Event
 internal/config/   single YAML + env config (static key, budgets, briefing tunables, llm,
@@ -94,7 +96,12 @@ internal/update/   update check + automatic updates: GitHub release list,
 internal/releasesig/ Sigstore check that a release asset came from this repo's
                    release workflow on its exact tag (pinned trusted root,
                    offline): the updater's, and the macOS seam's for the Touch
-                   ID approver download (linked there from a darwin-only file)
+                   ID approver download (linked there from a darwin-only file);
+                   the owner's-signature policy (OwnerNamespace, VerifyOwner)
+internal/sshsig/   OpenSSH SSHSIG + allowed_signers verification in pure Go
+                   (sk-ssh-ed25519, sk-ecdsa with flags and counter, ed25519,
+                   ecdsa): the owner's release signature; sshsigtest signs with
+                   software keys for tests. Imports nothing internal
 internal/archive/  instance archives: VACUUM INTO snapshot + corpus + manifest
                    out; guarded tar extract and restore-or-merge back in.
                    Never imports config
@@ -117,7 +124,9 @@ scripts/branding/  GH-Pages surface: record.sh, distill.py (verbatim-audited
                    scene data), console-shots.js -- see its README.md
 scripts/release/   cutting a release on the owner's Mac: macos.sh (darwin build,
                    Developer ID signing, notarization, draft, signed tag),
-                   cask.sh (the Homebrew cask), fetch-draft.sh -- see README.md
+                   sign.sh (the owner's hardware-key signature over
+                   checksums.txt), cask.sh (the Homebrew cask), fetch-draft.sh
+                   -- see README.md
 macos/SeamApprove/ the optional macOS Touch ID approver app (Swift/SwiftPM, not
                    part of the Go build): SeamApproveCore + the AppKit
                    executable; scripts/approver/ builds (make approver) and
@@ -209,8 +218,10 @@ automatic updates' idle gate. The `update:` block (check, check_interval, auto,
 max_defer, min_age) drives the update check and automatic updates; its console
 override (Settings -> Updates) merges the other way round: `check: false` or
 `auto: false` in the file/env is final and locks its toggle (false check means
-no update traffic at all). The `backup:` block (auto, every, keep, dir) drives
-scheduled backups; unset auto is on for release builds and off for source
+no update traffic at all). `update.release_signers` (off by default) pins the
+owner's release keys: every update then installs only a release whose
+`checksums.txt.sshsig` verifies against them (file/env only, no console
+override). The `backup:` block (auto, every, keep, dir) drives scheduled backups; unset auto is on for release builds and off for source
 builds, and its console override (Settings -> Backups) simply wins until reset.
 Durations are `config.Duration` ("6h"; a bare
 number other than 0 is refused). The `peer_auth:` block (off by default; see

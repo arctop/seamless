@@ -230,6 +230,9 @@ func attemptRow(a update.AttemptResult) *updatesAttempt {
 		if words := update.RefusalWords(a.Refused()); words != "" {
 			r.Detail = "It stopped while " + stageWords(update.StageGates) + ": " + words + ", so nothing changed."
 		}
+		if words := update.SignatureWords(a.SignatureRefused()); words != "" {
+			r.Detail = "update.release_signers refused " + to + ": " + words + ", so nothing changed."
+		}
 	case update.OutcomeBroken:
 		r.Outcome, r.Tone = "not rolled back", "danger"
 		r.Detail = "It failed after installing, and " + from + " could not be restored cleanly, so automatic updates paused themselves."
@@ -457,6 +460,9 @@ func updateAlertFor(st update.Status, now time.Time) *updateAlert {
 				alert.Line += "; " + act
 			}
 			alert.Line += "."
+		}
+		if words := update.SignatureWords(a.SignatureRefused()); words != "" {
+			alert.Line += " The release is not the owner's: " + words + "."
 		}
 	case update.OutcomeInterrupted:
 		alert.Head = "The update to " + to + " did not finish."

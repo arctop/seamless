@@ -14,8 +14,10 @@ package releasesig
 import (
 	"bytes"
 	_ "embed"
+	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/sigstore/sigstore-go/pkg/bundle"
@@ -74,6 +76,52 @@ func IdentityRegexp(v update.Version) string {
 	return "^" + regexp.QuoteMeta(releaseWorkflowTagIdentity+v.String()) + "$"
 }
 
+// releaseTagRe is a release tag, a prerelease's included: vX.Y.Z, or
+// vX.Y.Z-<suffix> (the tags release.yml runs on, and macos.sh accepts).
+var releaseTagRe = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`)
+
+// ErrTag is a string that is not a release tag.
+var ErrTag = errors.New("releasesig: not a release tag (vX.Y.Z or vX.Y.Z-pre)")
+
+// TagIdentityRegexp is IdentityRegexp for a tag that may be a prerelease's,
+// which update.Version cannot name: the release workflow on exactly that
+// tag. The release tooling checks a draft with it before the owner signs.
+func TagIdentityRegexp(tag string) (string, error) {
+	if !releaseTagRe.MatchString(tag) {
+		return "", fmt.Errorf("%w: %q", ErrTag, tag)
+	}
+	return "^" + regexp.QuoteMeta(releaseWorkflowTagIdentity+strings.TrimPrefix(tag, "v")) + "$", nil
+}
+
+// VerifyAssetForTag is VerifyAsset for a tag string (TagIdentityRegexp),
+// over the embedded trusted root.
+func VerifyAssetForTag(bundleJSON, artifact []byte, tag string) error {
+	if _, err := TagIdentityRegexp(tag); err != nil {
+		return err
+	}
+	trusted, err := TrustedRoot()
+	if err != nil {
+		return err
+	}
+	var b bundle.Bundle
+	if err := b.UnmarshalJSON(bundleJSON); err != nil {
+		return fmt.Errorf("parse sigstore bundle: %w", err)
+	}
+	return VerifyEntityForTag(trusted, &b, artifact, tag)
+}
+
+// VerifyEntityForTag is VerifyEntity for a tag string (TagIdentityRegexp).
+func VerifyEntityForTag(trusted root.TrustedMaterial, entity verify.SignedEntity, artifact []byte, tag string) error {
+	identityRe, err := TagIdentityRegexp(tag)
+	if err != nil {
+		return err
+	}
+	if err := verifyIdentity(trusted, entity, artifact, identityRe); err != nil {
+		return fmt.Errorf("sigstore verification for %s: %w", tag, err)
+	}
+	return nil
+}
+
 // TrustedRoot parses the embedded trusted-root snapshot.
 func TrustedRoot() (*root.TrustedRoot, error) {
 	tr, err := root.NewTrustedRootFromJSON(trustedRootJSON)
@@ -126,20 +174,30 @@ func VerifyAsset(trusted root.TrustedMaterial, bundleJSON, artifact []byte, v up
 // requiring SCTs would put the production path beyond what the virtual test CA
 // can exercise.
 func VerifyEntity(trusted root.TrustedMaterial, entity verify.SignedEntity, artifact []byte, v update.Version) error {
+	if err := verifyIdentity(trusted, entity, artifact, IdentityRegexp(v)); err != nil {
+		return fmt.Errorf("sigstore verification for v%s: %w", v, err)
+	}
+	return nil
+}
+
+// verifyIdentity is the one verifier configuration: a transparency-log entry
+// and an observed timestamp required, and the certificate's identity held to
+// identityRe from SigningIssuer.
+func verifyIdentity(trusted root.TrustedMaterial, entity verify.SignedEntity, artifact []byte, identityRe string) error {
 	verifier, err := verify.NewVerifier(trusted,
 		verify.WithTransparencyLog(1),
 		verify.WithObserverTimestamps(1))
 	if err != nil {
 		return fmt.Errorf("build sigstore verifier: %w", err)
 	}
-	identity, err := verify.NewShortCertificateIdentity(SigningIssuer, "", "", IdentityRegexp(v))
+	identity, err := verify.NewShortCertificateIdentity(SigningIssuer, "", "", identityRe)
 	if err != nil {
 		return fmt.Errorf("build signing identity policy: %w", err)
 	}
 	if _, err := verifier.Verify(entity, verify.NewPolicy(
 		verify.WithArtifact(bytes.NewReader(artifact)),
 		verify.WithCertificateIdentity(identity))); err != nil {
-		return fmt.Errorf("sigstore verification for v%s: %w", v, err)
+		return err
 	}
 	return nil
 }

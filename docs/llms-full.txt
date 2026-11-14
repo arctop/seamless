@@ -1476,6 +1476,26 @@ What you are accepting when you run this:
   before executing anything, and pins the installer to that `checksums.txt`. `curl | sh` still means trusting the bytes served by the
   site, so read the script first if that boundary is not acceptable;
   `go install` lands in the same place.
+- **The owner signs every release after v0.8.3** with a hardware key:
+  `checksums.txt.sshsig`, an OpenSSH signature over `checksums.txt`, which lists
+  every archive and both installer scripts
+  ([owner-signed releases](/updating/#owner-signed-releases)). Both installers
+  carry the owner's keys (the repository's `release_signers`) and check it with
+  `ssh-keygen`: a release after v0.8.3 without the signature, or with one that
+  does not verify against those keys, is refused. An `ssh-keygen` that cannot
+  verify a hardware key's signature (OpenSSH before 8.2, which includes the
+  OpenSSH some Windows 10 builds ship) - or none at all - warns and goes on,
+  as a missing cosign does. A `SEAMLESS_VERSION` at or below v0.8.3 predates
+  the owner's signatures and installs as before.
+- **The trust root of a fresh install is the site.** The installer you pipe to
+  a shell is served from thereisnospoon.org, which publishes only from release
+  tags, and the keys it checks the owner's signature against are the ones it
+  carries. So a fresh install trusts whoever can publish the site - TLS
+  authenticates the host, nothing authenticates the script before it runs.
+  What the installer's checks then add is that a release whose assets the
+  owner did not sign is refused while the site still serves the owner's
+  script. To pin the owner's keys on an install from then on, set
+  [`update.release_signers`](/updating/#owner-signed-releases).
 
 ### Going beyond loopback, deliberately
 
@@ -1790,7 +1810,9 @@ it, and that updater:
    fix ([the updater refused](/guides/troubleshooting/#an-automatic-update-failed));
 3. re-reads the release by its tag and downloads its installer and
    `checksums.txt` with their Sigstore bundles from GitHub, then verifies both
-   against the release workflow's identity on that exact tag;
+   against the release workflow's identity on that exact tag - and, with
+   [`update.release_signers`](#owner-signed-releases) set, `checksums.txt`
+   against the owner's signature too;
 4. proves the way back before changing anything: the release you run now must
    still download and verify the same way, or there is no update;
 5. backs the instance up - the database, your memories and your notes - to
@@ -1863,6 +1885,65 @@ its log. New sessions' briefings mention a pause, or a release that is now
 skipped, as your action, not theirs. `seamlessd doctor` reports the same on its
 `updates` row. [An automatic update failed](/guides/troubleshooting/#an-automatic-update-failed)
 says how to read it and recover.
+
+### Owner-signed releases {#owner-signed-releases}
+
+Every release after v0.8.3 carries a second signature over `checksums.txt`
+besides the Sigstore one: `checksums.txt.sshsig`, made by the project's owner
+with a hardware security key, in an attended session, after the release
+workflow built the release and before it was published. The Sigstore signature
+says the release workflow built it; this one says the owner released it.
+Whoever holds a token that can push tags and approve the release workflow can
+produce the first, but not the second. `checksums.txt` lists every archive and
+both installer scripts, so the one signature covers everything an update runs.
+
+The [installers](/install/#security-posture) check it on every install of such
+a release. The updater checks it only when you pin the owner's keys, by
+pointing `update.release_signers` at an OpenSSH allowed_signers file that lists
+them - the repository's [`release_signers`](https://github.com/arctop/seamless/blob/main/release_signers),
+or your own copy of it:
+
+```yaml
+update:
+  release_signers: ~/.config/seamless/release_signers
+```
+
+With the pin set, an update - automatic, **Update now** or `seamlessd update` -
+installs a release only when its `checksums.txt.sshsig` verifies in the
+namespace `seamless-release` against a key the file lists, made by a security
+key that was touched and unlocked with its PIN. The release it would roll back
+to must verify the same way, and the installer it runs must be one
+`checksums.txt` lists. Anything else is refused at the verify step, nothing is
+installed, and the release is skipped:
+
+- **missing:** the release carries no `checksums.txt.sshsig`;
+- **unlisted:** it was signed by a key the file does not list;
+- **invalid:** the signature does not verify - another file, another
+  namespace, a key that was not unlocked, or not a signature at all.
+
+**Settings -> Updates** names the pin and the last release it refused, the
+`update.failed` event carries the word (and the security feed with it), and
+`seamlessd doctor` has an `update.release_signers` row. A file that cannot be
+used - missing, unreadable, writable by another account, or naming no key for
+`seamless-release` - refuses every update until you fix it; doctor says what is
+wrong. `seamlessd update --url` is refused while the pin is set, and so is a
+release from before signed checksums.
+
+What the pin guards against is a release the owner did not sign, whatever
+GitHub's settings allowed. On an install that runs as your own account it does
+not guard against that account: anything that can edit your config can remove
+the key. Keep the file writable by you (or root) and no one else; under
+[peer_auth](/guides/peer-auth/#owner-signed-releases) it must be root's.
+
+The key is new after v0.8.3, and releases up to v0.8.3 refuse config keys they
+do not know, so set it only once the install runs a newer release. Every
+release the pinned updater installs or rolls back to is signed, so each of
+them knows the key.
+
+When the owner replaces a key, the repository's `release_signers` adds the new
+one a release before releases are signed with it. Copy the file again then: a
+pin that lists only the old key refuses the releases the new one signs (and
+says **unlisted**).
 
 ### Going back to an older release {#going-back}
 
@@ -6827,11 +6908,12 @@ A layout that satisfies all of it:
 |---|---|---|---|
 | `/opt/seamless` | root | `0755` | |
 | `/opt/seamless/bin` | `_seamless` | `0755` | `seamlessd`, `seam` (both `0755`, `_seamless`'s) |
-| `/opt/seamless/etc` | root | `0755` | `seamless.yaml` (`root:_seamless`, `0640`), `daemon-account` (root's, `0644`) |
+| `/opt/seamless/etc` | root | `0755` | `seamless.yaml` (`root:_seamless`, `0640`), `daemon-account` (root's, `0644`), optionally `release_signers` (root's, `0644`; [owner-signed releases](#owner-signed-releases)) |
 | `/opt/seamless/etc/tls` | `root:_seamless` | `0750` | with TLS on: the certificate (`0644`) and its key (`root:_seamless`, `0640`) |
 | `/opt/seamless/data` | `_seamless` | `0700` | the database and corpus |
 | `/opt/seamless/run` | `_seamless` | `0755` | the socket |
 | `/opt/seamless/home` | `_seamless` | `0700` | the account's home (caches, nothing else) |
+| `/opt/seamless/client` | root | `0755` | optionally, root's own `seam` (`0755`) for your hooks ([why](#client-copy)) |
 
 The daemon's account holds `/opt/seamless/bin` so that the daemon can
 [update itself](#updates); your account can write neither binary. Keep the
@@ -6963,7 +7045,9 @@ Code's own http hook cannot dial a socket), and the MCP registration is the
 `seam mcp-proxy` stdio bridge. They run the `seam` beside the `seamlessd` that
 installed them, a copy of your own; add `--seam /opt/seamless/bin/seam` to run
 the daemon's instead, which no process of yours can replace and which moves
-with the daemon when it [updates itself](#updates). Under peer_auth the
+with the daemon when it [updates itself](#updates), or `--seam
+/opt/seamless/client/seam` for [root's copy](#client-copy), which the daemon's
+account cannot replace either. Under peer_auth the
 [daemon reads no agent files](#what-changes-with-peer-auth-on), so `seam hook`
 reads them and sends what it found.
 
@@ -7619,10 +7703,111 @@ The trade-off: the daemon's account can rewrite its own binaries, so a
 compromised daemon could keep itself in place across restarts, and could replace
 the `seam` that hooks installed with `--seam /opt/seamless/bin/seam` run. It
 already holds every project's data, and your account still cannot write either
-binary, so the boundary against your agents is unchanged. To keep both binaries
-out of the daemon's reach as well, leave `/opt/seamless/bin` root's
-(`sudo chown -R root /opt/seamless/bin`): the daemon then only tells you about a
-new release, and you replace the binaries with `sudo` and restart it.
+binary, so the boundary against your agents is unchanged. To keep the hooks'
+`seam` out of its reach while it still updates `seamlessd`, give your hooks
+[root's copy](#client-copy). To keep both binaries out of the daemon's reach,
+leave `/opt/seamless/bin` root's (`sudo chown -R root /opt/seamless/bin`): the
+daemon then only tells you about a new release, and you replace the binaries
+with `sudo` and restart it.
+
+#### Owner-signed releases {#owner-signed-releases}
+
+A daemon that updates itself installs whatever release GitHub serves that
+passes its Sigstore check, and whoever can push a release tag can produce one
+of those. Pin the owner's release keys and it installs only a release the
+owner signed with a hardware key ([how that works](/updating/#owner-signed-releases)).
+As root, put the keys where neither your account nor the daemon's can change
+them, and name the file in the daemon's config:
+
+```bash
+curl -fsSLo /tmp/release_signers https://raw.githubusercontent.com/arctop/seamless/main/release_signers
+ssh-keygen -l -f /tmp/release_signers    # check each fingerprint against the owner's keys
+sudo install -o root -g wheel -m 0644 /tmp/release_signers /opt/seamless/etc/release_signers
+```
+
+```yaml
+# /opt/seamless/etc/seamless.yaml
+update:
+  release_signers: /opt/seamless/etc/release_signers
+```
+
+(`root`'s group is `root` on Linux.) Then restart the daemon. Under peer_auth
+`serve` refuses to start when the file is not root's, when a directory above it
+is writable by any account but root - the daemon's included, since the pin binds
+its own updater - or when it names no key for `seamless-release`; `seamlessd
+doctor`, run as the daemon's account, says which. Every update after that, by
+itself or by `sudo -u _seamless ... seamlessd update`, verifies
+`checksums.txt.sshsig` before it swaps anything, and so does the rollback to the
+release it replaced. The pin does not stop a compromised daemon from rewriting
+its own binaries; it stops a release the owner did not sign from reaching this
+machine through the update path at all.
+
+#### Keep the hooks' seam out of the daemon's reach {#client-copy}
+
+Your hooks run `seam` as you, beside every agent, so whoever can rewrite that
+file runs code as you at the next hook. There are three places it can be:
+
+| Hooks installed with | Who can replace it | It follows updates |
+|---|---|---|
+| no `--seam` (the copy beside your `seamlessd`) | your account, and so every agent you run | when you update it |
+| `--seam /opt/seamless/bin/seam` | the daemon's account | at once: the daemon updates it |
+| `--seam /opt/seamless/client/seam` | root only | when an administrator refreshes it |
+
+The last keeps it out of both your agents' and the daemon's reach. Make the
+directory root's, put a release's `seam` there from a verified download - never
+a copy of `/opt/seamless/bin/seam`, which the daemon's account could have
+replaced - and point the hooks at it:
+
+```bash
+sudo install -d -o root -g wheel -m 0755 /opt/seamless/client
+seamlessd install-hooks --client claude --seam /opt/seamless/client/seam    # or codex, or all
+```
+
+To refresh it after each update the daemon installs, an administrator runs
+this for the release the daemon now runs (`seam version`, or Settings ->
+Updates), with the system's own tools, none of them the daemon's. It stops at
+the first check that fails:
+
+```bash
+sudo sh -eu <<'END'
+v=0.9.1        # the daemon's release
+os=darwin      # or linux
+arch=arm64     # or amd64
+d=$(mktemp -d); cd "$d"
+base=https://github.com/arctop/seamless/releases/download/v$v
+tarball=seamless_${v}_${os}_${arch}.tar.gz
+curl -fsSLO "$base/checksums.txt" -O "$base/checksums.txt.sshsig" -O "$base/$tarball"
+ok=
+for p in $(awk '!/^#/ && NF { print $1 }' /opt/seamless/etc/release_signers); do
+  if ssh-keygen -Y verify -f /opt/seamless/etc/release_signers -I "$p" -n seamless-release \
+    -s checksums.txt.sshsig <checksums.txt; then ok=1; break; fi
+done
+[ -n "$ok" ] || { echo "checksums.txt is not signed by the owner's keys" >&2; exit 1; }
+want=$(awk -v f="$tarball" '$2 == f { print $1 }' checksums.txt)
+got=$(shasum -a 256 "$tarball" 2>/dev/null || sha256sum "$tarball")
+[ -n "$want" ] && [ "${got%% *}" = "$want" ] || { echo "$tarball does not match checksums.txt" >&2; exit 1; }
+tar -xzf "$tarball" seam
+install -o root -m 0755 seam /opt/seamless/client/seam
+echo "/opt/seamless/client/seam is v$v's"
+END
+```
+
+It checks the release against the [pinned keys](#owner-signed-releases), so
+the copy is the owner's release. `ssh-keygen` checks the signature, the
+namespace and the key, but not whether the hardware key was unlocked with its
+PIN (it reads the flags without requiring them); the daemon's pinned updater
+checked that too when it installed the release. `seamlessd doctor`, run as you,
+has a `hooks' seam` row: who can replace the `seam` your hooks run, and, for
+root's copy, whether it is the daemon's release.
+
+**While the client copy is a release behind**, everything keeps working: a
+daemon accepts what the previous release's `seam` sends - hooks, the MCP
+bridge, `seam` commands - as it does for the [network clients](/guides/network-install/)
+that run their own release. What waits for the refresh is whatever the new
+release changed in `seam` itself: a fix in `seam hook` or `seam mcp-proxy`, a
+capture a hook newly reads and sends, a new `seam` subcommand or flag. Refresh
+the copy before you run the new release's `install-hooks`: its definitions may
+pass the hooks an argument the old `seam` does not know.
 
 ### Backups and restore {#restore}
 
@@ -11528,6 +11713,8 @@ Checks stop early if config or the database cannot be loaded at all.
 | `gardener` | The ticker configuration, or a warning that it is disabled. |
 | `backups` | [Scheduled backups](/guides/data/#backups-in-the-console) and restores, from the records in `~/.seamless/backups/` and `~/.seamless/restore/`. A restore in flight comes first: one staged (**info**: it applies when Seamless restarts, and expires an hour after it was staged), one stopped part way through its swap or its merge (**warn**: the next start undoes the swap, or runs the merge again), or one applied with its bookkeeping left for the next start (**info**). Then a **warn** for replaced data still waiting to be saved as a backup, a `restore/<id>/previous` folder no record accounts for, or a last restore that did not finish. Otherwise the schedule: **info** when automatic backups are off, a **warn** when the last two or more automatic backups failed (the first failure's time and the last error) or nothing has confirmed the backups current for three intervals, **info** when none has been made yet, and **ok** with when they were last confirmed. Absent under `role: client`. |
 | `updates` | The [automatic update check](/updating/#automatic-update-checks) and [automatic updates](/updating/#automatic-updates), read from the daemon's and the updater's own records (`~/.seamless/update/state.json`, `attempt.json`) without asking GitHub or the daemon. One line, the most urgent thing first. An update that could not be rolled back cleanly, and that the daemon has not settled, is a **warn** carrying the updater's recovery steps and its log. An update under way is **info**. Automatic updates that paused themselves are a **warn** naming why, with the way out: resume them in the console under **Settings > Updates**. A daemon that updates itself says, as **info**, what it installs next and when: once its soak (`update.min_age`) is over, then when no agent session is live, or at a lull in requests after its deadline (`update.max_defer`). A newer release that automatic updates skip (blocked after a failed attempt, or published without a signed checksums bundle) is a **warn** with the command to install it by hand; a hold after a deliberate downgrade is **info**. A daemon that only notifies is **ok** when up to date and a **warn** naming the newer release and the command for this install. The last attempt is added while it concerns the running release, with the updater's own error; one that applied with warnings names `seamlessd install-hooks`. One the updater's gates refused is a **warn** ending in the owner's action for that refusal: `seamlessd restart` when the installed seamlessd is not the version the daemon runs (a release installed without a restart) or the install no longer looks installer-made, and `seamlessd update`, run by hand, when the updater could not make sure it runs outside the service. Automatic updates turned off before it began need no action. **info** when checks are off (and why) or have not run yet. A check failing for a week is a **warn** - usually a proxy the service's environment does not know about. |
+| `update.release_signers` | Only while the config sets [`update.release_signers`](/updating/#owner-signed-releases): **ok** naming the keys a release must be signed with (principal and SHA256 fingerprint), and the last release the pin refused, from the daemon's record; **fail** when the file cannot be used - missing, unreadable, writable by another account, or naming no key for `seamless-release` - since every update is then refused. Under peer_auth the file is held to serve's rule (root's, through root's directories), so run doctor as the daemon's account to see what serve sees. |
+| `hooks' seam` | Only on a client of a [peer_auth](/guides/peer-auth/) socket: who can replace the `seam` the Claude Code hooks run. **info** when it is your own copy (every agent you run could rewrite it) or the daemon's (`/opt/seamless/bin/seam`, which the daemon's account could); **ok** for a copy only root can replace, naming whether it is the daemon's release; **warn** when root's copy was built from another commit than the daemon runs - refresh it ([how](/guides/peer-auth/#client-copy)) - or when another account can replace it. |
 | `update drill` | Only while `~/.seamless/update/test-fail-confirm` exists: a **warn**, because the rollback drill's switch makes every update fail its confirmation and roll back. Delete the file to end the drill. |
 | `tls trust` | Whether this machine's own client verifies the certificate the daemon serves for `server_url`. That client is the one its hooks dial with, and the one an update confirms the new daemon through. The answer comes from the config (the system roots plus `tls.ca_file`) without a dial, so it answers while the daemon is down. **ok** when the client verifies it; otherwise a **warn** naming the repair, since every update would fail its confirmation, and so would its rollback's: the attempt ends not rolled back and automatic updates pause. A `tls.ca_file` that cannot be loaded warns on any install. Absent when TLS is off and the client is usable. |
 
@@ -12490,18 +12677,28 @@ The `update:` block drives the daemon's
   been published before an automatic update takes it, measured on GitHub's
   clock. A Go duration from `0` (no wait) to `720h`, default `24h`. Installing by
   hand ignores it.
+- `release_signers` (`SEAMLESS_UPDATE_RELEASE_SIGNERS`) is optional and unset by
+  default: the absolute path (or `~/...`) of an OpenSSH allowed_signers file of
+  the owner's release keys. With it set, every update installs only a release
+  whose `checksums.txt.sshsig` verifies against a key the file lists
+  ([owner-signed releases](/updating/#owner-signed-releases)). The console can
+  neither set nor clear it. Under peer_auth the file must be root's, through
+  directories only root can write, or `serve` refuses to start. New after
+  v0.8.3, and left commented out in the example file.
 
-Set `auto`, `max_defer` and `min_age` in the file, not in the daemon's
-environment. Any `SEAMLESS_*` variable besides `SEAMLESS_CONFIG` in the
-daemon's environment makes the install notify-only - the installer rewrites
-the service without it - so `SEAMLESS_UPDATE_AUTO=true` can never turn
-automatic updates on, and the two durations set there switch them off rather
-than tune them.
+Set `auto`, `max_defer`, `min_age` and `release_signers` in the file, not in
+the daemon's environment. Any `SEAMLESS_*` variable besides `SEAMLESS_CONFIG`
+in the daemon's environment makes the install notify-only - the installer
+rewrites the service without it - so `SEAMLESS_UPDATE_AUTO=true` can never
+turn automatic updates on, the two durations set there switch them off rather
+than tune them, and `SEAMLESS_UPDATE_RELEASE_SIGNERS` there pins only what you
+install by hand.
 
-All five keys are new in v0.7.0. seamlessd releases before it refuse config
-keys they do not know, so a file that sets one runs only with v0.7.0 or newer.
-The example file spells out the keys whose default has a value and leaves
-`check` and `auto`, whose default is unset, commented out.
+The first five keys are new in v0.7.0, and `release_signers` after v0.8.3.
+seamlessd releases before a key refuse config keys they do not know, so a file
+that sets one runs only with a release that knows it. The example file spells
+out the keys whose default has a value and leaves `check`, `auto` and
+`release_signers`, whose default is unset, commented out.
 
 ### Scheduled backups {#backups}
 
@@ -12729,6 +12926,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `update.auto` | bool, optional | unset |
 | `update.max_defer` | duration | `24h` |
 | `update.min_age` | duration | `24h` |
+| `update.release_signers` | string | - |
 | `backup.auto` | bool, optional | unset |
 | `backup.every` | duration | `24h` |
 | `backup.keep` | int | `7` |
@@ -13179,6 +13377,18 @@ update:
   # Installing by hand (seamlessd update) does not wait.
   # env: SEAMLESS_UPDATE_MIN_AGE
   min_age: 24h
+  # Pin the keys a release must be signed with: the path of an OpenSSH
+  # allowed_signers file, such as a copy of the repository's release_signers.
+  # With it set, the updater installs a release -- by itself or by hand, and
+  # the release it would roll back to -- only when the release's
+  # checksums.txt.sshsig verifies against a key the file lists, in the
+  # namespace seamless-release; otherwise it refuses and says why. Unset (the
+  # default) pins nothing. An absolute path (a leading ~ expands). Under
+  # peer_auth the file must be root's, through directories only root can
+  # write, so that not even the daemon's account can change it. Releases up to
+  # v0.8.3 reject the key, so setting it pins this file to a newer one.
+  # env: SEAMLESS_UPDATE_RELEASE_SIGNERS
+  # release_signers: /opt/seamless/etc/release_signers
 
 # Scheduled backups. On a schedule, the daemon archives the whole instance --
 # the database, every memory and note, and a list of what each project holds
@@ -15592,6 +15802,13 @@ console either appears - and, when the updater refused to start, the fix.
 skipping the soak, the idle wait, skipped releases and the backoff - and the
 daemon restarts to finish. **Resume automatic updates** appears while they are
 paused or holding releases back.
+
+With [`update.release_signers`](/updating/#owner-signed-releases) set in the
+config file or environment, an **Owner-signed releases** row names the file
+the updater holds every release to, and the last release it refused and why:
+it carried no owner's signature, was signed by a key the file does not list,
+or its signature did not verify. Without the key the row is not there. The
+console can neither set nor clear it.
 
 When a newer release is out, the Home health strip's version fact turns into
 `v0.7.2 -- v0.7.3 available` and links here - its hover says whether it installs

@@ -1213,6 +1213,13 @@ skipping the soak, the idle wait, skipped releases and the backoff - and the
 daemon restarts to finish. **Resume automatic updates** appears while they are
 paused or holding releases back.
 
+With [`update.release_signers`](https://thereisnospoon.org/docs/updating/#owner-signed-releases) set in the
+config file or environment, an **Owner-signed releases** row names the file
+the updater holds every release to, and the last release it refused and why:
+it carried no owner's signature, was signed by a key the file does not list,
+or its signature did not verify. Without the key the row is not there. The
+console can neither set nor clear it.
+
 When a newer release is out, the Home health strip's version fact turns into
 `v0.7.2 -- v0.7.3 available` and links here - its hover says whether it installs
 by itself, and when - and a toast announces it if the console is open when the

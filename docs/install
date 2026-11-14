@@ -98,6 +98,31 @@ SERVER_KEY=
 # empty when nothing is pinned. read_checksums_pin sets it before any download.
 CHECKSUMS_PIN=
 
+# The owner's signature over checksums.txt (verify_owner_signature). Every
+# release after OWNER_SIGNED_AFTER carries checksums.txt.sshsig, made by the
+# owner with one of these keys, on a hardware key, in the namespace
+# seamless-release: the repository's release_signers file, copied here when
+# this script was released (scripts/site-check.sh holds the copy to the file).
+# A fork that does not sign its releases empties OWNER_SIGNERS.
+OWNER_SIGNED_AFTER=0.8.3
+OWNER_NAMESPACE=seamless-release
+# BEGIN release_signers
+OWNER_SIGNERS='owner-yk1 namespaces="seamless-release" sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAINd9uqZ0YLBjsCnvfvpExpYZXXWNQpK+afg2GUxlh9aUAAAAEnNzaDphcmN0b3AtcmVsZWFzZQ==
+owner-yk2 namespaces="seamless-release" sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIHaqnbLidFoOJONHvetlWqfvIF2xvMVWfWjWHyv9LFszAAAAEnNzaDphcmN0b3AtcmVsZWFzZQ=='
+# END release_signers
+# A signature ssh-keygen must accept before its verdict on the owner's counts:
+# "seamless-release self-test" plus a newline, signed with a throwaway
+# hardware-key-type key (sk-ssh-ed25519, flags 0x05) that signs nothing else.
+# internal/sshsig's tests rebuild both from their fixed seed.
+SELFTEST_SIGNER='selftest namespaces="seamless-release" sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIKDAzRR54Ql19nfoFNO76tflVFVH/ww293fhTDSilc6AAAAABHNzaDo='
+SELFTEST_SIG='-----BEGIN SSH SIGNATURE-----
+U1NIU0lHAAAAAQAAAEoAAAAac2stc3NoLWVkMjU1MTlAb3BlbnNzaC5jb20AAAAgoMDNFH
+nhCXX2d+gU07vq1+VUVUf/DDb3d+FMNKKVzoAAAAAEc3NoOgAAABBzZWFtbGVzcy1yZWxl
+YXNlAAAAAAAAAAZzaGE1MTIAAABnAAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAA
+AAQKjplAWUdUiLpqz80MVuspayV8I1Ren6WyQFPX1VSd88KTUNvL+2gufMejbAPxpgazjE
+Ch5rFPci7MLq8DZr6w4FAAAAAQ==
+-----END SSH SIGNATURE-----'
+
 say()  { printf '  %s\n' "$*"; }
 step() { printf '  %-12s %s\n' "$1" "$2"; }
 warn() { printf '  warning: %s\n' "$*" >&2; }
@@ -449,6 +474,7 @@ this is not the release manifest the caller verified; do not install"
 	fi
 
 	verify_signature "$base"
+	verify_owner_signature "$base"
 }
 
 # A matching checksum proves the archive is the one checksums.txt describes. It
@@ -504,6 +530,123 @@ verify_signature() {
   Do not install. Please report this at https://github.com/$REPO/security"
 	step signature "ok (sigstore)"
 }
+
+# BEGIN owner signature
+# The Sigstore signature says the release workflow built a release; the
+# owner's signature says the owner released it. Every release after
+# OWNER_SIGNED_AFTER carries checksums.txt.sshsig: the owner's signature over
+# checksums.txt, made with a key from OWNER_SIGNERS on a hardware key that the
+# owner touched and unlocked (flags 0x05). An admin token can push a tag and
+# approve a release; it cannot make that key sign.
+#
+# The trust root is this script itself: it is served from the site, which is
+# published from a release tag, and the keys it checks against are the ones
+# it carries. So this check catches a release whose assets did not come from
+# the owner while the site still serves the owner's script.
+#
+#   - The release carries no checksums.txt.sshsig: fatal. Every release since
+#     OWNER_SIGNED_AFTER has one, so its absence is positive evidence.
+#   - ssh-keygen is missing, or too old to verify a hardware key's signature
+#     (it must accept SELFTEST_SIG, which OpenSSH 8.2 and newer do): warn and
+#     go on, as a missing cosign does.
+#   - ssh-keygen verifies and refuses it, or the key was not both touched and
+#     unlocked (ssh-keygen reads the flags but does not require them): fatal.
+#   - A pinned SEAMLESS_VERSION at or below OWNER_SIGNED_AFTER predates the
+#     owner's signatures and is installed as before.
+
+# version_after A B: A's X.Y.Z (a -suffix dropped) is above B's. A version
+# that is not X.Y.Z counts as above, so it is held to the signature.
+version_after() {
+	case ${1%%-*} in
+	*[!0-9.]* | '') return 0 ;;
+	esac
+	awk -v a="${1%%-*}" -v b="$2" 'BEGIN {
+		split(a, x, "."); split(b, y, ".")
+		for (i = 1; i <= 3; i++) { if (x[i] + 0 > y[i] + 0) exit 0; if (x[i] + 0 < y[i] + 0) exit 1 }
+		exit 1
+	}'
+}
+
+# keygen_verifies: this ssh-keygen can verify a hardware key's signature: it
+# accepts the embedded self-test signature, made with a key of the owner's
+# key type. One that cannot (no -Y, or no security-key support) cannot tell a
+# good release from a bad one, so its verdict is not taken.
+keygen_verifies() {
+	have ssh-keygen || return 1
+	printf '%s\n' "$SELFTEST_SIGNER" >"$TMP/selftest.signers"
+	printf '%s\n' "$SELFTEST_SIG" >"$TMP/selftest.sig"
+	printf 'seamless-release self-test\n' >"$TMP/selftest.msg"
+	ssh-keygen -Y verify -f "$TMP/selftest.signers" -I selftest -n "$OWNER_NAMESPACE" \
+		-s "$TMP/selftest.sig" <"$TMP/selftest.msg" >/dev/null 2>&1
+}
+
+# b64_decode: base64 from stdin to stdout, with whichever decoder exists.
+b64_decode() {
+	if printf 'QQ==' | base64 -d >/dev/null 2>&1; then
+		base64 -d
+	elif printf 'QQ==' | base64 -D >/dev/null 2>&1; then
+		base64 -D
+	elif have openssl; then
+		openssl base64 -d -A
+	else
+		return 1
+	fi
+}
+
+# sk_flags FILE: the flags byte of the hardware key's armored signature in
+# FILE. The signature is the blob's last field, and a security key's ends in
+# its flags byte and a 4-byte counter, so the flags are the fifth byte from
+# the end.
+sk_flags() {
+	sed '/^-----/d' "$1" | tr -d ' \r\n' | b64_decode | od -An -v -tu1 |
+		awk '{ for (i = 1; i <= NF; i++) b[n++] = $i } END { if (n >= 5) print b[n - 5] }'
+}
+
+verify_owner_signature() {
+	base=$1
+	[ -n "$OWNER_SIGNERS" ] || return 0
+	if ! version_after "$VERSION" "$OWNER_SIGNED_AFTER"; then
+		step owner "none (v$VERSION predates the owner's signatures)"
+		return 0
+	fi
+	fetch_to "$base/checksums.txt.sshsig" "$TMP/checksums.txt.sshsig" 2>/dev/null ||
+		die "NO OWNER SIGNATURE for checksums.txt.
+  Every release after v$OWNER_SIGNED_AFTER carries checksums.txt.sshsig, the owner's
+  signature over checksums.txt, and v$VERSION does not.
+  Do not install. Please report this at https://github.com/$REPO/security"
+	if ! keygen_verifies; then
+		warn "ssh-keygen here cannot verify a hardware key's signature (it needs OpenSSH 8.2 or newer) --
+    the owner's signature (checksums.txt.sshsig) was not checked"
+		return 0
+	fi
+	printf '%s\n' "$OWNER_SIGNERS" >"$TMP/release_signers"
+	# Each listed signer in turn, by its first principal: -Y find-principals
+	# would name it in one call, but OpenSSH added it only in 8.6.
+	verdict=
+	for signer in $(printf '%s\n' "$OWNER_SIGNERS" | awk '{ split($1, p, ","); print p[1] }'); do
+		verdict=$(ssh-keygen -Y verify -f "$TMP/release_signers" -I "$signer" -n "$OWNER_NAMESPACE" \
+			-s "$TMP/checksums.txt.sshsig" <"$TMP/checksums.txt" 2>&1) && break
+		verdict=
+	done
+	[ -n "$verdict" ] ||
+		die "OWNER SIGNATURE VERIFICATION FAILED for checksums.txt.
+  checksums.txt.sshsig is not the owner's signature over it, by a key this
+  installer carries. Do not install. Please report this at https://github.com/$REPO/security"
+	case $verdict in
+	*-SK\ key*)
+		flags=$(sk_flags "$TMP/checksums.txt.sshsig") || flags=
+		case $flags in
+		'' | *[!0-9]*) die "cannot read the hardware key's flags from checksums.txt.sshsig; do not install" ;;
+		esac
+		[ $((flags & 5)) -eq 5 ] ||
+			die "OWNER SIGNATURE VERIFICATION FAILED for checksums.txt.
+  The owner's hardware key signed it without being both touched and unlocked
+  (flags $flags, want 5). Do not install. Please report this at https://github.com/$REPO/security"
+		;;
+	esac
+	step owner "ok ($signer)"
+}
+# END owner signature
 
 # Install via a temp name + rename: a plain copy over the live seamlessd fails
 # with ETXTBSY while the service is running, and re-running this script over a

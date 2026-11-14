@@ -18,6 +18,7 @@ import (
 	"github.com/arctop/seamless/internal/backup"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/sshsig"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/update"
 )
@@ -33,7 +34,10 @@ import (
 // it names the release (never GitHub's "latest"), pins the installer to the
 // checksums.txt it verified (SEAMLESS_CHECKSUMS_SHA256), backs the instance
 // up, confirms the new release serving by observation, and rolls back when it
-// does not (update_engine.go).
+// does not (update_engine.go). With update.release_signers set, every release
+// it acts on -- the target, the rollback target, an unrecorded install's --
+// must also carry the owner's signature over that checksums.txt, which must
+// list the installer it runs (release_signers.go), and --url is refused.
 //
 // Two ways in:
 //
@@ -274,11 +278,15 @@ type attendedPlan struct {
 func runAttendedUpdate(ctx context.Context, f updateFlags, d updaterDeps) error {
 	w := d.stdout
 	fmt.Fprintf(w, "\n%s %s\n", bold("Seamless"), dim("update"+dryRunTag(f.dryRun)))
+	cfg, configPath, cfgErr := loadAttendedConfig(f.config)
 	if u := strings.TrimSpace(f.url); u != "" {
+		if cfgErr == nil && cfg.Update.ReleaseSigners != "" {
+			return fmt.Errorf("seamlessd.update: update.release_signers (%s) installs only a release the owner signed, and --url runs an installer nobody signed; "+
+				"remove the key from the config to run it", cfg.Update.ReleaseSigners)
+		}
 		return runCustomInstaller(w, d, u, f.dryRun)
 	}
 
-	cfg, configPath, cfgErr := loadAttendedConfig(f.config)
 	if errors.Is(cfgErr, fs.ErrPermission) {
 		// A config this account may not read is most likely a peer_auth
 		// daemon's (root:<account> 0640), and the installer must never run
@@ -323,13 +331,24 @@ func runAttendedUpdate(ctx context.Context, f updateFlags, d updaterDeps) error 
 			return nil
 		}
 	}
+	var signers []sshsig.Signer
+	if cfgErr == nil && cfg.Update.ReleaseSigners != "" {
+		// The pin holds every install this command makes, recorded or not.
+		if signers, err = attendedSigners(d, cfg); err != nil {
+			return fmt.Errorf("seamlessd.update: %w; nothing is installed while the pin cannot be read", err)
+		}
+		if plan.floor {
+			return fmt.Errorf("seamlessd.update: %s predates signed checksums, so update.release_signers (%s) cannot vouch for it",
+				plan.describePin(), cfg.Update.ReleaseSigners)
+		}
+	}
 	plan.printRows(w, d, cfg)
 	if f.dryRun {
 		fmt.Fprintf(w, "%s%s\n", fieldCont, dim("no changes made -- re-run without --dry-run to update"))
 		return nil
 	}
 	if !plan.managed {
-		return runUnrecorded(ctx, d, plan)
+		return runUnrecorded(ctx, d, plan, signers, cfg.Update.ReleaseSigners)
 	}
 
 	id, err := core.NewID()
@@ -354,6 +373,19 @@ func runAttendedUpdate(ctx context.Context, f updateFlags, d updaterDeps) error 
 	}
 	fieldRowTo(w, "update", green(fmt.Sprintf("v%s installed and serving", final.To)))
 	return err
+}
+
+// attendedSigners reads update.release_signers for an attended run.
+func attendedSigners(d updaterDeps, cfg config.Config) ([]sshsig.Signer, error) {
+	read := d.signers
+	if read == nil {
+		read = func(cfg config.Config) ([]sshsig.Signer, error) { return releaseSignersFor(cfg, hostSignersFS()) }
+	}
+	signers, err := read(cfg)
+	if err == nil && len(signers) == 0 {
+		err = fmt.Errorf("%w: %s lists no key", errReleaseSigners, cfg.Update.ReleaseSigners)
+	}
+	return signers, err
 }
 
 // loadAttendedConfig loads the config an attended update works with: --config
@@ -476,6 +508,9 @@ func (p attendedPlan) printRows(w io.Writer, d updaterDeps, cfg config.Config) {
 	if p.system {
 		fieldRowTo(w, "source", d.releases.assetURL(p.target, platformArchive(p.target, d.goos, d.goarch)))
 		fieldRowTo(w, "signature", dim(fmt.Sprintf("sigstore bundle for checksums.txt, signed by this repo's release workflow on v%s, which pins the archive", p.target)))
+		if cfg.Update.ReleaseSigners != "" {
+			fieldRowTo(w, "owner", dim(fmt.Sprintf("checksums.txt.sshsig, by a key %s lists", tildePath(cfg.Update.ReleaseSigners))))
+		}
 		fieldRowTo(w, "install", tildePath(p.dir)+dim(" (seamlessd and seam swapped in place; the service starts the daemon again)"))
 		fieldRowTo(w, "backup", dim(tildePath(filepath.Join(backupDir(cfg.DataDir), backupName(p.from, d.now())))))
 		fieldRowTo(w, "confirm", dim(fmt.Sprintf("v%s must then serve, or v%s's binaries go back", p.target, p.from)))
@@ -487,6 +522,9 @@ func (p attendedPlan) printRows(w io.Writer, d updaterDeps, cfg config.Config) {
 		fieldRowTo(w, "signature", dim(fmt.Sprintf("sigstore bundle, signed by this repo's release workflow on v%s; that installer checks the archive it downloads", p.installer)))
 	} else {
 		fieldRowTo(w, "signature", dim(fmt.Sprintf("sigstore bundles for the installer and checksums.txt, signed by this repo's release workflow on v%s", p.installer)))
+	}
+	if cfg.Update.ReleaseSigners != "" {
+		fieldRowTo(w, "owner", dim(fmt.Sprintf("checksums.txt.sshsig, by a key %s lists; checksums.txt must vouch for the installer too", tildePath(cfg.Update.ReleaseSigners))))
 	}
 	pinText := p.pin
 	if !p.target.IsZero() {
@@ -506,7 +544,7 @@ func (p attendedPlan) printRows(w io.Writer, d updaterDeps, cfg config.Config) {
 // runUnrecorded runs a verified installer for an install the engine does not
 // manage: download and verify the installer (and the target's checksums.txt,
 // which then pins it), run it attended, and report its exit.
-func runUnrecorded(ctx context.Context, d updaterDeps, p attendedPlan) error {
+func runUnrecorded(ctx context.Context, d updaterDeps, p attendedPlan, signers []sshsig.Signer, pinPath string) error {
 	w := d.stdout
 	dl, err := d.releases.downloadRelease(ctx, p.installer, d.goos, !p.floor)
 	if err != nil {
@@ -517,6 +555,23 @@ func runUnrecorded(ctx context.Context, d updaterDeps, p attendedPlan) error {
 		return fmt.Errorf("seamlessd.update: refusing to run the v%s installer: %w", p.installer, err)
 	}
 	fmt.Fprintf(w, "%s%s\n", fieldCont, green("signature verified")+dim(fmt.Sprintf(" -- release workflow identity on tag v%s", p.installer)))
+	if signers != nil {
+		sig, err := d.releases.fetchAsset(ctx, p.installer, update.OwnerSignatureAsset)
+		if errors.Is(err, errFetchMissing) {
+			err = ownerSignatureMissing(p.installer, pinPath)
+		}
+		if err != nil {
+			return fmt.Errorf("seamlessd.update: refusing to run the v%s installer: %w", p.installer, err)
+		}
+		who, err := verifyOwnerSignature(signers, pinPath, p.installer, dl.checksums, sig)
+		if err == nil {
+			err = update.VerifyChecksum(dl.checksums, installerAsset(d.goos), dl.installer)
+		}
+		if err != nil {
+			return fmt.Errorf("seamlessd.update: refusing to run the v%s installer: %w", p.installer, err)
+		}
+		fmt.Fprintf(w, "%s%s\n", fieldCont, green("owner's signature verified")+dim(" -- checksums.txt signed by "+who))
+	}
 	knobs := map[string]string{}
 	if !p.target.IsZero() {
 		r.version = p.target

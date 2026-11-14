@@ -1144,3 +1144,74 @@ func TestAuto_ReleasesFromAnotherFilterAreReadWhole(t *testing.T) {
 	require.True(t, a.state().Releases[0].ChecksumsBundle)
 	require.Equal(t, "0.7.3", st.Target.Version.String())
 }
+
+// update.release_signers refusing a release reaches the last attempt, the
+// block, the signature refusal Settings > Updates names, and the
+// update.failed payload as its fixed word. A newer updater's word is kept on
+// the last attempt but left out of the payload and the block: a plain
+// verification failure.
+func TestAuto_AReleaseSignersRefusalIsAFixedWord(t *testing.T) {
+	for _, tc := range []struct {
+		word  string
+		known bool
+	}{
+		{SignatureMissing, true},
+		{SignatureUnlisted, true},
+		{SignatureInvalid, true},
+		{"expired", false},
+	} {
+		t.Run(tc.word, func(t *testing.T) {
+			a := newAutoHarness(t)
+			a.soakedList()
+			a.start()
+			a.firstCheck()
+			req := a.m.spawned()[0]
+
+			a.clock.Add(time.Minute)
+			rec := a.finish(a.recordFor(req, StageVerify), StageVerify, false, false)
+			rec.Signature = tc.word
+			raw, err := json.Marshal(rec)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(AttemptPath(a.dir), raw, 0o600))
+			st := a.tick()
+
+			require.Equal(t, OutcomeFailed, st.LastAttempt.Outcome)
+			require.Equal(t, tc.word, st.LastAttempt.Signature, "kept as is")
+			require.Len(t, st.Blocked, 1, "a release that fails verification is not retried")
+			failed := a.rec.of(core.EventUpdateFailed)
+			require.Len(t, failed, 1)
+			want := map[string]any{
+				"from": "0.7.2", "to": "0.7.3", "outcome": "failed", "stage": "verify", "why": "auto",
+				"rolled_back": false, "attempt": req.AttemptID,
+			}
+			if tc.known {
+				want["signature"] = tc.word
+				require.Equal(t, BlockSignature, st.Blocked[0].Reason)
+				require.Equal(t, "it is not signed by a key update.release_signers lists", BlockWords(st.Blocked[0].Reason))
+				require.NotNil(t, st.SignatureRefusal)
+				require.Equal(t, SignatureRefusal{Version: ver("0.7.3"), From: ver("0.7.2"), Signature: tc.word, Attempt: req.AttemptID,
+					At: st.SignatureRefusal.At}, *st.SignatureRefusal)
+				require.NotEmpty(t, SignatureWords(tc.word))
+			} else {
+				require.Equal(t, BlockVerify, st.Blocked[0].Reason)
+				require.Nil(t, st.SignatureRefusal)
+				require.Empty(t, SignatureWords(tc.word))
+			}
+			require.Equal(t, want, failed[0].Payload, "versions and fixed words only")
+		})
+	}
+}
+
+// A manual `seamlessd update` the pin refused is only shown: the refusal is
+// named, nothing is blocked and no event is recorded.
+func TestFold_AManualSignatureRefusalIsOnlyShown(t *testing.T) {
+	var st State
+	res := AttemptResult{ID: "01K7A0000000000000000000A1", From: ver("0.7.2"), To: ver("0.7.3"), Why: WhyManual,
+		Outcome: OutcomeFailed, Stage: StageVerify, Signature: SignatureUnlisted}
+	require.False(t, applyOutcome(&st, res, attemptNow, true))
+	require.NotNil(t, st.SignatureRefusal)
+	require.Equal(t, SignatureUnlisted, st.SignatureRefusal.Signature)
+	require.Empty(t, st.Blocks)
+	require.Equal(t, "", AttemptResult{Outcome: OutcomeFailed, Stage: StageGates, Signature: SignatureUnlisted}.SignatureRefused(),
+		"a signature word is read only at verify")
+}

@@ -741,6 +741,7 @@ func (c *Checker) snapshot(s Settings) Status {
 	// way) comes from the view.
 	st.CanApply = c.d.Spawner != nil
 	st.LastAttempt = c.state.LastAttempt
+	st.SignatureRefusal = c.state.SignatureRefusal
 	st.Hold = c.state.Hold
 	st.Paused = c.state.Paused
 	if cur, ok := Parse(c.d.Version); ok {
@@ -773,6 +774,7 @@ func (s Status) clone() Status {
 	out.Target = clonePtr(s.Target)
 	out.Applying = clonePtr(s.Applying)
 	out.LastAttempt = clonePtr(s.LastAttempt)
+	out.SignatureRefusal = clonePtr(s.SignatureRefusal)
 	out.Hold = clonePtr(s.Hold)
 	out.Backoff = clonePtr(s.Backoff)
 	out.Blocked = slices.Clone(s.Blocked)

@@ -235,7 +235,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#update">Update</a></li><li class="lvl-3"><a href="#automatic-update-checks">Automatic update checks</a></li><li class="lvl-2"><a href="#automatic-updates">Automatic updates</a></li><li class="lvl-3"><a href="#who-updates-itself">Who updates itself</a></li><li class="lvl-3"><a href="#when-it-installs">When it installs</a></li><li class="lvl-3"><a href="#during-an-update">What happens during an update</a></li><li class="lvl-3"><a href="#when-an-update-fails">When an update fails</a></li><li class="lvl-3"><a href="#going-back">Going back to an older release</a></li><li class="lvl-3"><a href="#update-now">Update now</a></li><li class="lvl-3"><a href="#turning-automatic-updates-off">Turning automatic updates off</a></li><li class="lvl-3"><a href="#codex-hooks-after-an-update">Codex hooks after an update</a></li><li class="lvl-3"><a href="#macos-background-items">macOS: the background-items notice</a></li><li class="lvl-2"><a href="#uninstall">Uninstall</a></li><li class="lvl-2"><a href="#add-or-remove-one-client">Add or remove one client</a></li>
+      <li class="lvl-2"><a href="#update">Update</a></li><li class="lvl-3"><a href="#automatic-update-checks">Automatic update checks</a></li><li class="lvl-2"><a href="#automatic-updates">Automatic updates</a></li><li class="lvl-3"><a href="#who-updates-itself">Who updates itself</a></li><li class="lvl-3"><a href="#when-it-installs">When it installs</a></li><li class="lvl-3"><a href="#during-an-update">What happens during an update</a></li><li class="lvl-3"><a href="#when-an-update-fails">When an update fails</a></li><li class="lvl-3"><a href="#owner-signed-releases">Owner-signed releases</a></li><li class="lvl-3"><a href="#going-back">Going back to an older release</a></li><li class="lvl-3"><a href="#update-now">Update now</a></li><li class="lvl-3"><a href="#turning-automatic-updates-off">Turning automatic updates off</a></li><li class="lvl-3"><a href="#codex-hooks-after-an-update">Codex hooks after an update</a></li><li class="lvl-3"><a href="#macos-background-items">macOS: the background-items notice</a></li><li class="lvl-2"><a href="#uninstall">Uninstall</a></li><li class="lvl-2"><a href="#add-or-remove-one-client">Add or remove one client</a></li>
     </ul>
   </details>
   <p>The install is one command, and so is everything after it. <code>seamlessd</code>
@@ -505,7 +505,9 @@ updates off in the meantime. A refusal here changes nothing, and names its
 fix (<a href="../guides/troubleshooting/#an-automatic-update-failed">the updater refused</a>);</li>
 <li>re-reads the release by its tag and downloads its installer and
 <code>checksums.txt</code> with their Sigstore bundles from GitHub, then verifies both
-against the release workflow's identity on that exact tag;</li>
+against the release workflow's identity on that exact tag - and, with
+<a href="#owner-signed-releases"><code>update.release_signers</code></a> set, <code>checksums.txt</code>
+against the owner's signature too;</li>
 <li>proves the way back before changing anything: the release you run now must
 still download and verify the same way, or there is no update;</li>
 <li>backs the instance up - the database, your memories and your notes - to
@@ -606,6 +608,56 @@ its log. New sessions' briefings mention a pause, or a release that is now
 skipped, as your action, not theirs. <code>seamlessd doctor</code> reports the same on its
 <code>updates</code> row. <a href="../guides/troubleshooting/#an-automatic-update-failed">An automatic update failed</a>
 says how to read it and recover.</p>
+<h3 id="owner-signed-releases">Owner-signed releases</h3>
+<p>Every release after v0.8.3 carries a second signature over <code>checksums.txt</code>
+besides the Sigstore one: <code>checksums.txt.sshsig</code>, made by the project's owner
+with a hardware security key, in an attended session, after the release
+workflow built the release and before it was published. The Sigstore signature
+says the release workflow built it; this one says the owner released it.
+Whoever holds a token that can push tags and approve the release workflow can
+produce the first, but not the second. <code>checksums.txt</code> lists every archive and
+both installer scripts, so the one signature covers everything an update runs.</p>
+<p>The <a href="../install/#security-posture">installers</a> check it on every install of such
+a release. The updater checks it only when you pin the owner's keys, by
+pointing <code>update.release_signers</code> at an OpenSSH allowed_signers file that lists
+them - the repository's <a href="https://github.com/arctop/seamless/blob/main/release_signers"><code>release_signers</code></a>,
+or your own copy of it:</p>
+<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">update</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">release_signers</span><span class="p">:</span><span class="w"> </span><span class="l">~/.config/seamless/release_signers</span><span class="w">
+</span></span></span></code></pre></div>
+<p>With the pin set, an update - automatic, <strong>Update now</strong> or <code>seamlessd update</code> -
+installs a release only when its <code>checksums.txt.sshsig</code> verifies in the
+namespace <code>seamless-release</code> against a key the file lists, made by a security
+key that was touched and unlocked with its PIN. The release it would roll back
+to must verify the same way, and the installer it runs must be one
+<code>checksums.txt</code> lists. Anything else is refused at the verify step, nothing is
+installed, and the release is skipped:</p>
+<ul>
+<li><strong>missing:</strong> the release carries no <code>checksums.txt.sshsig</code>;</li>
+<li><strong>unlisted:</strong> it was signed by a key the file does not list;</li>
+<li><strong>invalid:</strong> the signature does not verify - another file, another
+namespace, a key that was not unlocked, or not a signature at all.</li>
+</ul>
+<p><strong>Settings -&gt; Updates</strong> names the pin and the last release it refused, the
+<code>update.failed</code> event carries the word (and the security feed with it), and
+<code>seamlessd doctor</code> has an <code>update.release_signers</code> row. A file that cannot be
+used - missing, unreadable, writable by another account, or naming no key for
+<code>seamless-release</code> - refuses every update until you fix it; doctor says what is
+wrong. <code>seamlessd update --url</code> is refused while the pin is set, and so is a
+release from before signed checksums.</p>
+<p>What the pin guards against is a release the owner did not sign, whatever
+GitHub's settings allowed. On an install that runs as your own account it does
+not guard against that account: anything that can edit your config can remove
+the key. Keep the file writable by you (or root) and no one else; under
+<a href="../guides/peer-auth/#owner-signed-releases">peer_auth</a> it must be root's.</p>
+<p>The key is new after v0.8.3, and releases up to v0.8.3 refuse config keys they
+do not know, so set it only once the install runs a newer release. Every
+release the pinned updater installs or rolls back to is signed, so each of
+them knows the key.</p>
+<p>When the owner replaces a key, the repository's <code>release_signers</code> adds the new
+one a release before releases are signed with it. Copy the file again then: a
+pin that lists only the old key refuses the releases the new one signs (and
+says <strong>unlisted</strong>).</p>
 <h3 id="going-back">Going back to an older release</h3>
 <p>Installing an older release on purpose - <code>SEAMLESS_VERSION=0.7.1 seamlessd update</code>, or the installer with that knob - sets a hold, so automatic updates do
 not undo your choice: they skip every release up to the one you left, or the
@@ -723,7 +775,7 @@ uninstall - the service and binaries come out regardless.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#update">Update</a></li><li class="lvl-3"><a href="#automatic-update-checks">Automatic update checks</a></li><li class="lvl-2"><a href="#automatic-updates">Automatic updates</a></li><li class="lvl-3"><a href="#who-updates-itself">Who updates itself</a></li><li class="lvl-3"><a href="#when-it-installs">When it installs</a></li><li class="lvl-3"><a href="#during-an-update">What happens during an update</a></li><li class="lvl-3"><a href="#when-an-update-fails">When an update fails</a></li><li class="lvl-3"><a href="#going-back">Going back to an older release</a></li><li class="lvl-3"><a href="#update-now">Update now</a></li><li class="lvl-3"><a href="#turning-automatic-updates-off">Turning automatic updates off</a></li><li class="lvl-3"><a href="#codex-hooks-after-an-update">Codex hooks after an update</a></li><li class="lvl-3"><a href="#macos-background-items">macOS: the background-items notice</a></li><li class="lvl-2"><a href="#uninstall">Uninstall</a></li><li class="lvl-2"><a href="#add-or-remove-one-client">Add or remove one client</a></li>
+      <li class="lvl-2"><a href="#update">Update</a></li><li class="lvl-3"><a href="#automatic-update-checks">Automatic update checks</a></li><li class="lvl-2"><a href="#automatic-updates">Automatic updates</a></li><li class="lvl-3"><a href="#who-updates-itself">Who updates itself</a></li><li class="lvl-3"><a href="#when-it-installs">When it installs</a></li><li class="lvl-3"><a href="#during-an-update">What happens during an update</a></li><li class="lvl-3"><a href="#when-an-update-fails">When an update fails</a></li><li class="lvl-3"><a href="#owner-signed-releases">Owner-signed releases</a></li><li class="lvl-3"><a href="#going-back">Going back to an older release</a></li><li class="lvl-3"><a href="#update-now">Update now</a></li><li class="lvl-3"><a href="#turning-automatic-updates-off">Turning automatic updates off</a></li><li class="lvl-3"><a href="#codex-hooks-after-an-update">Codex hooks after an update</a></li><li class="lvl-3"><a href="#macos-background-items">macOS: the background-items notice</a></li><li class="lvl-2"><a href="#uninstall">Uninstall</a></li><li class="lvl-2"><a href="#add-or-remove-one-client">Add or remove one client</a></li>
     </ul>
   </aside>
   

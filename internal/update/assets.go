@@ -28,6 +28,16 @@ const ChecksumsAsset = "checksums.txt"
 // re-verifies it against the tag's exact identity).
 const ChecksumsBundleAsset = ChecksumsAsset + ".sigstore.json"
 
+// OwnerSignatureAsset is the owner's own signature over checksums.txt: an
+// OpenSSH SSHSIG (`ssh-keygen -Y sign -n seamless-release`), made with one of
+// the keys in the repository's release_signers file on a hardware security
+// key, in an attended session, after CI built the release and before it was
+// published (scripts/release/sign.sh). Not ".sig": checksums.txt.sig is the
+// Sigstore detached signature the installers hand to cosign. An install
+// whose update.release_signers pins the owner's keys installs only a release
+// whose checksums.txt this verifies against them.
+const OwnerSignatureAsset = ChecksumsAsset + ".sshsig"
+
 // AssetURL is where release v's asset name downloads from under base
 // (ReleaseDownloadBase in production). It is built from a parsed version and
 // a name this binary chose, never from API text.

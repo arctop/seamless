@@ -53,6 +53,11 @@ func TestRenderCask_Refuses(t *testing.T) {
 // The cask command pins only a checksums.txt signed for exactly that tag by
 // this repository's release workflow: the updater's check, offline.
 func TestCaskCommand_ChecksTheReleaseSignature(t *testing.T) {
+	// The cask reads release_signers at the tag (the owner's signature
+	// gate), so it needs v0.8.2 in this clone, which a tagless one lacks.
+	if _, err := gitOut(repoRoot, "rev-parse", "--verify", "-q", "v0.8.2^{commit}"); err != nil {
+		t.Skip("this clone has no v0.8.2 tag (git fetch --tags)")
+	}
 	args := func(tag string) []string {
 		return []string{"cask", "-root", repoRoot, "-tag", tag,
 			"-checksums", filepath.Join(v082, "checksums.txt"),

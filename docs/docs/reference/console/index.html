@@ -1942,6 +1942,12 @@ console either appears - and, when the updater refused to start, the fix.
 skipping the soak, the idle wait, skipped releases and the backoff - and the
 daemon restarts to finish. <strong>Resume automatic updates</strong> appears while they are
 paused or holding releases back.</p>
+<p>With <a href="../../updating/#owner-signed-releases"><code>update.release_signers</code></a> set in the
+config file or environment, an <strong>Owner-signed releases</strong> row names the file
+the updater holds every release to, and the last release it refused and why:
+it carried no owner's signature, was signed by a key the file does not list,
+or its signature did not verify. Without the key the row is not there. The
+console can neither set nor clear it.</p>
 <p>When a newer release is out, the Home health strip's version fact turns into
 <code>v0.7.2 -- v0.7.3 available</code> and links here - its hover says whether it installs
 by itself, and when - and a toast announces it if the console is open when the

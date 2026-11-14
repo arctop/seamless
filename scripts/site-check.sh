@@ -10,7 +10,7 @@
 # run `go install github.com/arctop/seamless/cmd/...@latest`. The front door
 # advertised the old front door for a day.
 #
-# Thirteen assertions, each one a thing a machine can actually verify:
+# Fourteen assertions, each one a thing a machine can actually verify:
 #
 #   1. the hero pills run $INSTALL_CMD and $WIN_INSTALL_CMD, not other routes
 #   2. every surface that teaches installing teaches the SAME two commands
@@ -29,6 +29,7 @@
 #      to its coarse unix|windows pair
 #  13. the landing OS switch stores the UA-refined canonical value (macos or
 #      linux, never the coarse unix) so the docs honor the pick
+#  14. the installers carry the repository's release_signers, line for line
 #
 # Deliberately not a prose linter: claims like "one binary, no ceremony" are the
 # author's problem. Commands are checkable, so these are checked.
@@ -302,6 +303,23 @@ grep -qF '/Mac/i.test(navigator.userAgent) ? "macos" : "linux"' "$SITEJS" ||
 if grep -qF 'setItem("os", btn.dataset.osPick)' "$SITEJS"; then
 	err "$SITEJS stores the coarse os pick verbatim; store the UA-refined canonical value instead"
 fi
+
+# 14. The installers carry the repository's release_signers: the keys whose
+#     signature over checksums.txt (checksums.txt.sshsig) every release after
+#     the first signed one must carry. The site publishes from a release tag,
+#     so the copies must be the file's at that tag, line for line (comments
+#     and blank lines aside), or a fresh install would check a release
+#     against keys the release workflow does not hold it to.
+signers_want=$(grep -v '^[[:space:]]*#' release_signers | sed '/^[[:space:]]*$/d')
+[ -n "$signers_want" ] || err "release_signers lists no key"
+signers_sh=$(sed -n '/^# BEGIN release_signers$/,/^# END release_signers$/p' docs/install |
+	sed '1d;$d' | sed "s/^OWNER_SIGNERS='//; s/'\$//")
+[ "$signers_sh" = "$signers_want" ] ||
+	err "docs/install's OWNER_SIGNERS (between # BEGIN/END release_signers) is not release_signers' key lines"
+signers_ps=$(sed -n '/^# BEGIN release_signers$/,/^# END release_signers$/p' docs/install.ps1 |
+	sed '1d;$d' | sed "/^\$OwnerSigners = @'$/d; /^'@$/d")
+[ "$signers_ps" = "$signers_want" ] ||
+	err "docs/install.ps1's \$OwnerSigners (between # BEGIN/END release_signers) is not release_signers' key lines"
 
 [ "$fail" -eq 0 ] || exit 1
 echo "site-check: $PAGE agrees with the installer, the CLI, and its own structured data"

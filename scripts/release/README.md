@@ -6,12 +6,20 @@ A release is built in two places from one config, `.goreleaser.yaml`:
   signs them with the project's Developer ID Application certificate, and has
   Apple notarize them (`macos.sh`).
 - **GitHub Actions** (`.github/workflows/release.yml`) builds linux and
-  windows, signs `checksums.txt` with Sigstore, and publishes.
+  windows and signs `checksums.txt` with Sigstore, into the draft.
+- **The owner's hardware key** signs the draft's `checksums.txt`
+  (`sign.sh`), and only then does the workflow publish.
 
 The macOS assets reach CI as the tag's draft release. CI accepts them only if
 each one matches the sha256 manifest in the owner's signed tag. CI holds no
 secret: the `release` environment makes every release wait for the owner's
-approval, and the owner pushes the Homebrew cask.
+approval, twice, and the owner pushes the Homebrew cask.
+
+`checksums.txt` lists every archive, the macOS assets and both installer
+scripts, so the owner's signature over it (`checksums.txt.sshsig`) covers
+every byte a user runs. The keys allowed to make it are `release_signers` at
+the repository root, an OpenSSH allowed_signers file in the namespace
+`seamless-release`.
 
 ## One-time setup of the Mac that releases
 
@@ -48,6 +56,15 @@ approval, and the owner pushes the Homebrew cask.
 4. **The tools.** Xcode (for notarytool and stapler), go, gh (logged in as
    an admin of the repository), and git set up to sign tags (`gpg.format ssh`)
    and to verify them (`gpg.ssh.allowedSignersFile`, so `git tag -v` works).
+5. **The release key.** A hardware security key enrolled as an OpenSSH
+   `sk-ssh-ed25519` (or `sk-ecdsa`) key that asks for its PIN (`ssh-keygen -t
+   ed25519-sk -O verify-required`, for example), its line in `release_signers`, and an
+   `ssh-keygen` that can sign with it:
+   - `SEAMLESS_RELEASE_KEY` names the key handle file `sign.sh` signs with.
+   - `SEAMLESS_SSH_KEYGEN` names that `ssh-keygen` when it is not the one on
+     PATH (macOS's own cannot use a FIDO key without a middleware).
+   - Check a key's fingerprint against `release_signers`:
+     `ssh-keygen -l -f <key>.pub`.
 
 ## The release, in order
 
@@ -75,24 +92,43 @@ approval, and the owner pushes the Homebrew cask.
    minutes.
 3. **Push the tag on its own:** `git push origin vX.Y.Z`. Never push it in the
    same command as main.
-4. **Approve.** The run waits for the owner to approve its `release`
-   environment.
+4. **Approve the build.** The run waits for the owner to approve its
+   `release` environment (the goreleaser job).
    - Once approved, it holds the draft's macOS assets to the tag's manifest
      and stops on any difference.
-   - Then it builds linux and windows, signs `checksums.txt`, and publishes
-     the draft.
-   - Then it re-verifies the signatures, publishes to the MCP registry, and
-     publishes the site from the tag (`pages.yml`).
-   - (Step D will add the owner's hardware-key signature over `checksums.txt`
-     between CI's draft and the publish.)
-5. **The cask:** `scripts/release/cask.sh vX.Y.Z`. Add `--dry-run` first to
+   - Then it builds linux and windows, signs `checksums.txt` with Sigstore,
+     and fills the draft. The release stays a draft.
+5. **Sign:** `SEAMLESS_RELEASE_KEY=<key handle> scripts/release/sign.sh
+   vX.Y.Z`, in an attended session, while the run's publish job waits.
+   `--dry-run` signs and checks but uploads nothing. It:
+   - verifies your signed tag (`git tag -v`);
+   - holds the draft's `checksums.txt` to its Sigstore bundle for this exact
+     tag, and its macOS lines to the tag's manifest (`releasekit
+     check-draft`);
+   - prints `checksums.txt`, the keys that may sign this release, and any
+     key this tag adds or removes, and asks you to type the tag;
+   - runs `ssh-keygen -Y sign -n seamless-release -f <key handle>
+     checksums.txt` (touch the key, enter its PIN);
+   - checks the signature as the publish job will (`releasekit
+     verify-owner`), uploads it as `checksums.txt.sshsig`, and reads it back.
+6. **Approve the publish.** The publish job waits for a second approval of the
+   `release` environment.
+   - It holds `checksums.txt.sshsig` to `release_signers` (below) and stops on
+     any failure, the release still a draft. Approved before the signature is
+     uploaded, it fails: upload it, then "Re-run failed jobs".
+   - Then it publishes the draft, re-verifies every signature on the
+     published bytes (the Sigstore pair and bundle against the exact tag
+     identity, and the owner's), publishes to the MCP registry, and publishes
+     the site from the tag (`pages.yml`).
+7. **The cask:** `scripts/release/cask.sh vX.Y.Z`. Add `--dry-run` first to
    see the change.
    - It checks the release's `checksums.txt` against its Sigstore bundle for
-     this exact tag.
+     this exact tag, and against the owner's signature as the publish job
+     does.
    - It renders the cask as goreleaser did, and pushes it to
      `arctop/homebrew-tap` with your login.
    - A prerelease gets no cask.
-6. **The changelog:** `make changelog`, then commit and push.
+8. **The changelog:** `make changelog`, then commit and push.
    - A main push no longer reaches the site, so publish the refreshed site
      with a `site-*` tag:
 
@@ -101,6 +137,54 @@ approval, and the owner pushes the Homebrew cask.
      ```
 
    - Then `make indexnow`.
+
+## Which keys may sign: `release_signers`
+
+The publish job (`releasekit verify-owner -require`) reads `release_signers`
+from git at two tags: **the previous release's** (the newest `vX.Y.Z` tag below
+this one; prerelease tags never count) and **this one's**. The signing key must
+be listed, for `seamless-release`, in both.
+
+- **A key added in a release signs from the next release on.** Whoever can push
+  a commit to main can add a line, but the release that carries the line
+  cannot be signed by its key: the previous tag does not list it. `sign.sh`
+  and the publish job print every added key as `ADDED`, so the owner sees it
+  before signing with another key.
+- **A key removed in a release stops signing at once**, because this tag no
+  longer lists it. To replace a key: add the new one in one release (signed
+  with the old one), then remove the old one in the next (signed with the new
+  one).
+- **Two files with no key in common are refused**, and so is a release that
+  deletes `release_signers`: a release cannot turn the check off.
+- Never put `verify-required` on a line: `ssh-keygen` refuses the line. The
+  verifiers require user verification (flags `0x05`, touched and unlocked)
+  from the signature itself.
+
+**The bootstrap.** The first release that carries `release_signers` has no
+previous tag holding the file (v0.8.3 has none), so the publish job holds it
+to **that release's own file**, and says `BOOTSTRAP` in the job log, in
+`sign.sh` and in `releasekit owner-keys`. During the bootstrap, whoever could
+push the commit that adds `release_signers` decides which keys sign that one
+release; the owner checks each fingerprint in the job log against the keys
+themselves (`ssh-keygen -l -f <key>.pub`) before approving. From the next
+release on, the keys come from a tag the owner signed and published.
+
+**What the release-side check is worth.** The workflow runs from the tag being
+released, so whoever can push a `v*` tag (an admin, or a token that can) can
+push a commit whose `release.yml` skips the check, and approve the
+environment too. The check keeps the normal path honest: no release publishes
+without the owner's hardware-key signature, and a key slipped into main cannot
+sign the release that carries it. Against a hostile tag pusher, the guarantees
+are the clients':
+
+- an updater pinned with `update.release_signers` installs nothing the
+  owner's keys did not sign ([the guide](https://thereisnospoon.org/docs/updating/#owner-signed-releases));
+- `docs/install` and `docs/install.ps1` verify `checksums.txt.sshsig` against
+  the keys they carry, for every release after v0.8.3 (`scripts/site-check.sh`
+  holds those copies to `release_signers`). Their trust root is the site
+  that serves them, which also publishes from release tags;
+- `cask.sh` runs on the owner's machine and checks the signature before it
+  renders the cask.
 
 **Dry runs.**
 - `scripts/release/macos.sh vX.Y.Z --dry-run` does everything up to the
@@ -118,6 +202,13 @@ approval, and the owner pushes the Homebrew cask.
 - A tag already on origin is final.
 
 ## Forks
+
+A fork's release is not held to the owner's signature: on any repository but
+arctop/seamless the publish job publishes the draft as soon as the goreleaser
+job has filled it (the fork's `release` environment is unprotected unless the
+fork protects it). The installers carry this repository's keys, so a fork that
+serves its own installers replaces their `release_signers` block (and the
+repository's `release_signers`) with its own keys, or empties it.
 
 A fork's tag with no manifest in its message releases linux and windows only,
 with no darwin archives. To ship macOS archives too, run

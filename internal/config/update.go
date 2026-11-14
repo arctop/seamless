@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 )
 
@@ -74,6 +75,18 @@ type Update struct {
 	// an automatic update takes it, within [0, MaxUpdateMinAge]. Zero is no
 	// soak. Installing by hand ignores it.
 	MinAge Duration `yaml:"min_age"`
+	// ReleaseSigners pins the keys a release must be signed with: the path
+	// of an OpenSSH allowed_signers file (the repository's release_signers,
+	// or a copy of it). With it set, the updater installs a release -- by
+	// itself or by hand, and the release it would roll back to -- only when
+	// the release's checksums.txt.sshsig verifies, in the namespace
+	// seamless-release, against a key the file lists; otherwise it refuses
+	// and says why. Empty (the default) pins nothing: a release is verified
+	// against its Sigstore signature alone, as before. An absolute path (or
+	// ~/...). Under peer_auth the file must be root's, through directories
+	// only root can write, so that not even the daemon's account can change
+	// it; serve refuses to start otherwise.
+	ReleaseSigners string `yaml:"release_signers"`
 }
 
 // Validate rejects an update block the daemon cannot honor. Every state of
@@ -82,8 +95,11 @@ type Update struct {
 // [MinUpdateMaxDefer, MaxUpdateMaxDefer], min_age [0, MaxUpdateMinAge]. A zero
 // check_interval or max_defer is out of range, never "use the default": a
 // default applies only when its key is absent. A zero min_age is in range: no
-// soak.
+// soak. A release_signers path must be absolute; empty pins nothing.
 func (u Update) Validate() error {
+	if u.ReleaseSigners != "" && !filepath.IsAbs(u.ReleaseSigners) {
+		return fmt.Errorf("config: update.release_signers must be an absolute path (or start with ~/), got %q", u.ReleaseSigners)
+	}
 	for _, r := range []struct {
 		key    string
 		v      Duration

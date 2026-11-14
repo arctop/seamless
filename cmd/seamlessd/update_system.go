@@ -5,7 +5,9 @@ package main
 // the installer's per-user service cannot host, so no installer runs here:
 // the updater -- running as the daemon's account, outside the service
 // (outsideServiceCheck) -- verifies the release's checksums.txt against its
-// Sigstore bundle for the exact tag, checks the platform archive against it,
+// Sigstore bundle for the exact tag (and, with update.release_signers set,
+// against the owner's own signature, checksums.txt.sshsig), checks the
+// platform archive against it,
 // keeps the binaries it replaces beside them, renames the release's seamlessd
 // and seam into place, and ends the daemon with SIGTERM: launchd's KeepAlive
 // or systemd's Restart=always then starts the binary on disk. The account
@@ -68,6 +70,9 @@ type systemDownload struct {
 	checksumsBundle []byte
 	archiveName     string
 	archive         []byte
+	// ownerSig is the owner's checksums.txt.sshsig, fetched only while
+	// update.release_signers pins the owner's keys.
+	ownerSig []byte
 }
 
 // fetchArchive downloads release v's archive name: up to maxArchiveBytes,
@@ -110,6 +115,11 @@ func (u *updater) fetchSystemTarget(ctx context.Context) (systemDownload, error)
 	if err := checkPublished(rel, to, systemAssetNames(to, u.d.goos, u.d.goarch)); err != nil {
 		return systemDownload{}, err
 	}
+	if u.pinned() {
+		if err := u.ownerSignatureListed(rel, to); err != nil {
+			return systemDownload{}, err
+		}
+	}
 	dl := systemDownload{version: to, archiveName: platformArchive(to, u.d.goos, u.d.goarch)}
 	for _, a := range []struct {
 		name string
@@ -120,6 +130,11 @@ func (u *updater) fetchSystemTarget(ctx context.Context) (systemDownload, error)
 			return systemDownload{}, fmt.Errorf("download v%s: %w", to, listedAssetGone(err))
 		}
 		*a.dst = body
+	}
+	if u.pinned() {
+		if dl.ownerSig, err = u.d.releases.fetchAsset(ctx, to, update.OwnerSignatureAsset); err != nil {
+			return systemDownload{}, fmt.Errorf("download v%s: %w", to, listedAssetGone(err))
+		}
 	}
 	if dl.archive, err = u.d.releases.fetchArchive(ctx, to, dl.archiveName); err != nil {
 		return systemDownload{}, fmt.Errorf("download v%s: %w", to, listedAssetGone(err))
@@ -373,6 +388,13 @@ func (u *updater) runSystem(ctx context.Context) outcome {
 	u.stage(update.StageVerify)
 	if err := verifySystemDownload(dl, u.d.verify); err != nil {
 		return u.fail(update.StageVerify, err)
+	}
+	if u.pinned() {
+		// No installer runs here: the archive is checked against the
+		// checksums.txt the owner signed.
+		if err := u.verifyPinned(dl.version, dl.checksums, dl.ownerSig, nil); err != nil {
+			return u.fail(update.StageVerify, err)
+		}
 	}
 	u.note("verify", "%s", green("signature verified")+dim(fmt.Sprintf(" -- checksums.txt signed by the release workflow on v%s; %s matches it", dl.version, dl.archiveName)))
 

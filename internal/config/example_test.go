@@ -50,6 +50,7 @@ func TestExampleConfigLoads(t *testing.T) {
 		"  # check: false\n", "  check_interval: 6h\n", "  # auto: false\n", "  max_defer: 24h\n", "  min_age: 24h\n",
 		"  # env: SEAMLESS_UPDATE_CHECK\n", "  # env: SEAMLESS_UPDATE_CHECK_INTERVAL\n", "  # env: SEAMLESS_UPDATE_AUTO\n",
 		"  # env: SEAMLESS_UPDATE_MAX_DEFER\n", "  # env: SEAMLESS_UPDATE_MIN_AGE\n",
+		"  # env: SEAMLESS_UPDATE_RELEASE_SIGNERS\n", "  # release_signers: /opt/seamless/etc/release_signers\n",
 	} {
 		require.Contains(t, text, line)
 	}

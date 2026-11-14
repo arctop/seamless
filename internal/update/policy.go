@@ -120,6 +120,10 @@ const (
 	BlockInstall = "install"
 	// BlockBroken: an update to it could not be rolled back cleanly.
 	BlockBroken = "broken"
+	// BlockSignature: update.release_signers refused it -- no owner's
+	// signature, or one that does not verify against the pinned keys. A
+	// release before it reads the word as a plain failure.
+	BlockSignature = "signature"
 )
 
 // Pause reasons (Pause.Reason): why automatic updates turned themselves off.

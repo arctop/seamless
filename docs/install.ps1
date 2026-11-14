@@ -107,6 +107,34 @@ $LogFile = Join-Path $DataDir 'seamlessd.log'
 # Pre-config fallback for the health poll only; mirrors config.Defaults().
 $DefaultAddr = '127.0.0.1:8081'
 
+# The owner's signature over checksums.txt (Test-OwnerSignature). Every
+# release after $OwnerSignedAfter carries checksums.txt.sshsig, made by the
+# owner with one of these keys, on a hardware key, in the namespace
+# seamless-release: the repository's release_signers file, copied here when
+# this script was released (scripts/site-check.sh holds the copy to the file).
+# A fork that does not sign its releases empties $OwnerSigners.
+$OwnerSignedAfter = '0.8.3'
+$OwnerNamespace = 'seamless-release'
+# BEGIN release_signers
+$OwnerSigners = @'
+owner-yk1 namespaces="seamless-release" sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAINd9uqZ0YLBjsCnvfvpExpYZXXWNQpK+afg2GUxlh9aUAAAAEnNzaDphcmN0b3AtcmVsZWFzZQ==
+owner-yk2 namespaces="seamless-release" sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIHaqnbLidFoOJONHvetlWqfvIF2xvMVWfWjWHyv9LFszAAAAEnNzaDphcmN0b3AtcmVsZWFzZQ==
+'@
+# END release_signers
+# A signature ssh-keygen must accept before its verdict on the owner's counts,
+# the same as docs/install's: "seamless-release self-test" plus a newline,
+# signed with a throwaway hardware-key-type key (sk-ssh-ed25519, flags 0x05).
+$SelftestSigner = 'selftest namespaces="seamless-release" sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIKDAzRR54Ql19nfoFNO76tflVFVH/ww293fhTDSilc6AAAAABHNzaDo='
+$SelftestSig = @'
+-----BEGIN SSH SIGNATURE-----
+U1NIU0lHAAAAAQAAAEoAAAAac2stc3NoLWVkMjU1MTlAb3BlbnNzaC5jb20AAAAgoMDNFH
+nhCXX2d+gU07vq1+VUVUf/DDb3d+FMNKKVzoAAAAAEc3NoOgAAABBzZWFtbGVzcy1yZWxl
+YXNlAAAAAAAAAAZzaGE1MTIAAABnAAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAA
+AAQKjplAWUdUiLpqz80MVuspayV8I1Ren6WyQFPX1VSd88KTUNvL+2gufMejbAPxpgazjE
+Ch5rFPci7MLq8DZr6w4FAAAAAQ==
+-----END SSH SIGNATURE-----
+'@
+
 function Say { param([string]$Message) Write-Host "  $Message" }
 function Step { param([string]$Key, [string]$Message) Write-Host ('  {0,-12} {1}' -f $Key, $Message) }
 function Warn { param([string]$Message) Write-Warning $Message }
@@ -340,6 +368,7 @@ function Get-Release {
     Step 'checksum' $sumNote
 
     Test-Signature -Base $base -Tmp $Tmp -SumPath $sumPath -ChecksumsPin $ChecksumsPin
+    Test-OwnerSignature -Base $base -Tmp $Tmp -SumPath $sumPath -Version $Version
     return $zipPath
 }
 
@@ -392,6 +421,95 @@ function Test-Signature {
         Die "SIGNATURE VERIFICATION FAILED for checksums.txt.`n  The release artifacts are not signed by the $Repo release workflow.`n  Do not install. Please report this at https://github.com/$Repo/security"
     }
     Step 'signature' 'ok (sigstore)'
+}
+
+# The owner's signature over checksums.txt; mirrors verify_owner_signature in
+# docs/install, which says why. The trust root is this script: served from the
+# site, published from a release tag, carrying the keys it checks against.
+#   - No checksums.txt.sshsig on a release after $OwnerSignedAfter: fatal.
+#   - ssh-keygen missing, or unable to verify a hardware key's signature (it
+#     must accept $SelftestSig; Windows' bundled OpenSSH before 8.2 cannot):
+#     warn and go on, as a missing cosign does.
+#   - ssh-keygen refuses it, or the key was not both touched and unlocked
+#     (flags 0x05, which ssh-keygen reads but does not require): fatal.
+#   - A pinned SEAMLESS_VERSION at or below $OwnerSignedAfter predates the
+#     owner's signatures and is installed as before.
+function Test-VersionAfter {
+    param([string]$Version, [string]$Floor)
+    $base = ($Version -split '-', 2)[0]
+    if ($base -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { return $true }
+    return ([version]$base) -gt ([version]$Floor)
+}
+
+# Invoke-SshKeygen runs ssh-keygen with stdin from a file, byte for byte (a
+# pipe would re-encode it), and returns its exit code and output.
+function Invoke-SshKeygen {
+    param([string]$Exe, [string[]]$Arguments, [string]$InputFile, [string]$Tmp)
+    $out = Join-Path $Tmp 'ssh-keygen.out'
+    $err = Join-Path $Tmp 'ssh-keygen.err'
+    $quoted = $Arguments | ForEach-Object { '"' + $_ + '"' }
+    $p = Start-Process -FilePath $Exe -ArgumentList $quoted -RedirectStandardInput $InputFile `
+        -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -Wait -PassThru
+    $text = ((Get-Content -Raw $out -ErrorAction SilentlyContinue), (Get-Content -Raw $err -ErrorAction SilentlyContinue)) -join "`n"
+    return @{ Code = $p.ExitCode; Text = $text }
+}
+
+# Write-Ascii writes text with LF line endings and no BOM, the bytes
+# ssh-keygen reads.
+function Write-Ascii {
+    param([string]$Path, [string]$Text)
+    [IO.File]::WriteAllText($Path, ($Text -replace "`r`n", "`n"), (New-Object System.Text.UTF8Encoding $false))
+}
+
+function Test-OwnerSignature {
+    param([string]$Base, [string]$Tmp, [string]$SumPath, [string]$Version)
+    if (-not $OwnerSigners.Trim()) { return }
+    if (-not (Test-VersionAfter $Version $OwnerSignedAfter)) {
+        Step 'owner' "none (v$Version predates the owner's signatures)"
+        return
+    }
+    $sig = Join-Path $Tmp 'checksums.txt.sshsig'
+    try { Invoke-WebRequest -UseBasicParsing "$Base/checksums.txt.sshsig" -OutFile $sig }
+    catch {
+        Die "NO OWNER SIGNATURE for checksums.txt.`n  Every release after v$OwnerSignedAfter carries checksums.txt.sshsig, the owner's`n  signature over checksums.txt, and v$Version does not.`n  Do not install. Please report this at https://github.com/$Repo/security"
+    }
+    $keygen = Get-Command ssh-keygen -ErrorAction SilentlyContinue
+    $capable = $false
+    if ($keygen) {
+        Write-Ascii (Join-Path $Tmp 'selftest.signers') ($SelftestSigner + "`n")
+        Write-Ascii (Join-Path $Tmp 'selftest.sig') ($SelftestSig.Trim() + "`n")
+        Write-Ascii (Join-Path $Tmp 'selftest.msg') "seamless-release self-test`n"
+        $r = Invoke-SshKeygen $keygen.Path @('-Y', 'verify', '-f', (Join-Path $Tmp 'selftest.signers'), '-I', 'selftest',
+            '-n', $OwnerNamespace, '-s', (Join-Path $Tmp 'selftest.sig')) (Join-Path $Tmp 'selftest.msg') $Tmp
+        $capable = ($r.Code -eq 0)
+    }
+    if (-not $capable) {
+        Warn "ssh-keygen here cannot verify a hardware key's signature (it needs OpenSSH 8.2 or newer) --`n    the owner's signature (checksums.txt.sshsig) was not checked"
+        return
+    }
+    $signers = Join-Path $Tmp 'release_signers'
+    Write-Ascii $signers ($OwnerSigners.Trim() + "`n")
+    $failed = "OWNER SIGNATURE VERIFICATION FAILED for checksums.txt.`n  checksums.txt.sshsig is not the owner's signature over it, by a key this`n  installer carries. Do not install. Please report this at https://github.com/$Repo/security"
+    # Each listed signer in turn, by its first principal: -Y find-principals
+    # would name it in one call, but OpenSSH added it only in 8.6.
+    $verdict = $null
+    $signer = $null
+    foreach ($line in ($OwnerSigners.Trim() -split "`n")) {
+        $name = (($line.Trim() -split '\s+')[0] -split ',')[0]
+        if (-not $name) { continue }
+        $r = Invoke-SshKeygen $keygen.Path @('-Y', 'verify', '-f', $signers, '-I', $name, '-n', $OwnerNamespace, '-s', $sig) $SumPath $Tmp
+        if ($r.Code -eq 0) { $verdict = $r; $signer = $name; break }
+    }
+    if (-not $verdict) { Die $failed }
+    if ($verdict.Text -match '-SK key') {
+        $b64 = ((Get-Content $sig) | Where-Object { $_ -notmatch '^-----' }) -join ''
+        $blob = [Convert]::FromBase64String($b64)
+        $flags = $blob[$blob.Length - 5]
+        if (($flags -band 5) -ne 5) {
+            Die "OWNER SIGNATURE VERIFICATION FAILED for checksums.txt.`n  The owner's hardware key signed it without being both touched and unlocked`n  (flags $flags, want 5). Do not install. Please report this at https://github.com/$Repo/security"
+        }
+    }
+    Step 'owner' "ok ($signer)"
 }
 
 # Test-CurrentUser: whether a Scheduled Task principal's UserId names the account

@@ -271,6 +271,9 @@ func updateFailedSummary(p map[string]any) string {
 		if r := payloadStr(p, "refusal"); update.KnownRefusal(r) {
 			return line + " failed: " + update.RefusalWords(r)
 		}
+		if w := payloadStr(p, "signature"); update.KnownSignature(w) {
+			return line + " was refused: " + update.SignatureWords(w)
+		}
 		return line + " failed"
 	case update.OutcomeBroken:
 		return line + " could not be rolled back cleanly"

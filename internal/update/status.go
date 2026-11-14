@@ -86,6 +86,10 @@ type Status struct {
 	// LastAttempt is the newest attempt the daemon folded, automatic or
 	// manual. Its Error is for the owner's eyes; no notice uses it.
 	LastAttempt *AttemptResult `json:"last_attempt,omitempty"`
+	// SignatureRefusal is the last release update.release_signers refused
+	// (State.SignatureRefusal). A surface names it only while a pin is set
+	// (Settings.ReleaseSigners).
+	SignatureRefusal *SignatureRefusal `json:"signature_refusal,omitempty"`
 	// Hold is the skip-through a deliberate downgrade set; Resume or Update
 	// now lifts it.
 	Hold *Hold `json:"hold,omitempty"`

@@ -2,6 +2,8 @@ package config
 
 import (
 	"os"
+	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -425,4 +427,43 @@ func TestLoadFrom_UpdateDeferAndSoakFile(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, DefaultUpdateMaxDefer, cfg.Update.MaxDefer.Std())
 	require.Equal(t, DefaultUpdateMinAge, cfg.Update.MinAge.Std())
+}
+
+func TestLoadFrom_UpdateReleaseSigners(t *testing.T) {
+	isolateUpdateEnv(t)
+	abs := filepath.Join(t.TempDir(), "release_signers")
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	t.Run("unset by default: nothing is pinned", func(t *testing.T) {
+		require.Empty(t, Defaults().Update.ReleaseSigners)
+		cfg, err := LoadFrom(writeConfig(t, "update:\n  min_age: 1h\n"))
+		require.NoError(t, err)
+		require.Empty(t, cfg.Update.ReleaseSigners)
+	})
+	t.Run("an absolute path", func(t *testing.T) {
+		cfg, err := LoadFrom(writeConfig(t, "update:\n  release_signers: "+strconv.Quote(abs)+"\n"))
+		require.NoError(t, err)
+		require.Equal(t, abs, cfg.Update.ReleaseSigners)
+	})
+	t.Run("a leading ~ expands", func(t *testing.T) {
+		cfg, err := LoadFrom(writeConfig(t, "update:\n  release_signers: ~/signers\n"))
+		require.NoError(t, err)
+		require.Equal(t, filepath.Join(home, "signers"), cfg.Update.ReleaseSigners)
+	})
+	t.Run("a relative path is refused, never resolved against the working directory", func(t *testing.T) {
+		_, err := LoadFrom(writeConfig(t, "update:\n  release_signers: release_signers\n"))
+		require.ErrorContains(t, err, "update.release_signers must be an absolute path")
+	})
+	t.Run("the environment wins over the file", func(t *testing.T) {
+		t.Setenv("SEAMLESS_UPDATE_RELEASE_SIGNERS", abs)
+		cfg, err := LoadFrom(writeConfig(t, "update:\n  release_signers: /elsewhere/signers\n"))
+		require.NoError(t, err)
+		require.Equal(t, abs, cfg.Update.ReleaseSigners)
+	})
+	t.Run("a relative path in the environment is refused too", func(t *testing.T) {
+		t.Setenv("SEAMLESS_UPDATE_RELEASE_SIGNERS", "signers")
+		_, err := LoadFrom("")
+		require.ErrorContains(t, err, "update.release_signers must be an absolute path")
+	})
 }

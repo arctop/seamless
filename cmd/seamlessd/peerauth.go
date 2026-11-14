@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -206,6 +207,15 @@ func (rt *peerAuthRuntime) filesystemProblems(cfg config.Config, create bool) []
 		problems = append(problems, "cannot locate this binary to check who may replace it: "+err.Error())
 	} else if p := rt.trustedFileProblem("seamlessd binary", exe); p != "" {
 		problems = append(problems, p)
+	}
+	// update.release_signers decides which releases the daemon's own updater
+	// installs, so not even the daemon's account may change it: root's file,
+	// through root's directories, and keys serve can read.
+	if path := cfg.Update.ReleaseSigners; path != "" {
+		fsys := signersFS{euid: rt.env.euid, inspect: rt.env.inspect, open: func(p string) (io.ReadCloser, error) { return os.Open(p) }}
+		if _, err := loadReleaseSigners(path, true, fsys); err != nil {
+			problems = append(problems, err.Error()+" -- have root install it: sudo install -o root -m 0644 <release_signers> "+path)
+		}
 	}
 	// The TLS pair: whoever can read the key serves the console's own name with
 	// the real certificate, on another port or address, and whoever can rewrite
