@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/hooks"
 )
 
@@ -97,6 +98,11 @@ func claudeManagedSettingsFiles(dir string) ([]string, error) {
 type managedHookSource struct {
 	path   string
 	status hooks.InstallStatus
+	// sharedConfig is the --config the file's hooks name instead of this
+	// install's own, when it counted (sharedHookConfig); configNote says why
+	// it did not.
+	sharedConfig string
+	configNote   string
 }
 
 // claudeManagedHooks is what Claude Code's managed settings hold of the Seamless
@@ -110,7 +116,7 @@ type claudeManagedHooks struct {
 // against the definitions opts describes (its SettingsPath is ignored).
 // Ownership is the same classifier install and uninstall use, so a managed hook
 // running some other seam executable still counts as Seamless's, just not
-// current.
+// current. A stale file gets a second look in sharedHookConfig.
 func inspectClaudeManagedHooks(dir string, opts hooks.InstallOptions) claudeManagedHooks {
 	var out claudeManagedHooks
 	files, err := claudeManagedSettingsFiles(dir)
@@ -124,11 +130,90 @@ func inspectClaudeManagedHooks(dir string, opts hooks.InstallOptions) claudeMana
 			out.errs = append(out.errs, fmt.Sprintf("cannot inspect managed settings %s: %v", path, err))
 			continue
 		}
-		if len(status.Owned) > 0 {
-			out.sources = append(out.sources, managedHookSource{path: path, status: status})
+		if len(status.Owned) == 0 {
+			continue
 		}
+		src := managedHookSource{path: path, status: status}
+		if len(status.Stale) > 0 {
+			src = sharedHookConfig(opts, src)
+		}
+		out.sources = append(out.sources, src)
 	}
 	return out
+}
+
+// sharedHookConfig re-judges a managed file whose hooks name another config
+// file than this install's own. The managed hooks every account runs name one
+// root-owned client config no account can rewrite (docs-src/guides/peer-auth.md),
+// not the config of whoever runs doctor or install-hooks, so comparing them
+// with that one calls every event stale while every hook works.
+//
+// An event the file's recorded config makes exactly current counts as current
+// when that config loads and reaches the server opts describes (its
+// HookBaseURL, the base URL the desired definitions are built for), with this
+// install's key when that server is not a socket; the seam
+// executable and every other field must still match exactly. The recorded path
+// is not taken on trust -- doctorInstallOptions' rule against judging a hook by
+// paths read from itself -- because the file it names must independently reach
+// the same daemon. Otherwise the events stay stale and configNote says why.
+// Only the first seam command hook's --config is read (RecordedCommandPaths),
+// so an event naming yet another file stays stale.
+func sharedHookConfig(opts hooks.InstallOptions, src managedHookSource) managedHookSource {
+	_, recorded, ok := hooks.RecordedCommandPaths(opts.Client, opts.SettingsPath)
+	if !ok || recorded == "" || recorded == opts.ConfigPath {
+		return src
+	}
+	if !filepath.IsAbs(recorded) {
+		src.configNote = fmt.Sprintf("hook config %q is not an absolute path", recorded)
+		return src
+	}
+	cfg, err := config.LoadFrom(recorded)
+	if err != nil {
+		var pathErr *fs.PathError
+		if errors.As(err, &pathErr) {
+			src.configNote = fmt.Sprintf("hook config %s cannot be read: %v", recorded, pathErr.Err)
+			return src
+		}
+		// A parse error names the path again and can span lines; the row is one.
+		cause := err
+		if inner := errors.Unwrap(err); inner != nil {
+			cause = inner
+		}
+		src.configNote = fmt.Sprintf("hook config %s does not load: %s", recorded, strings.Join(strings.Fields(cause.Error()), " "))
+		return src
+	}
+	theirs, ours := strings.TrimRight(cfg.HookBaseURL(), "/"), strings.TrimRight(opts.BaseURL, "/")
+	if theirs != ours {
+		src.configNote = fmt.Sprintf("hook config %s reaches %s, not %s",
+			recorded, config.RedactedURL(theirs), config.RedactedURL(ours))
+		return src
+	}
+	// Over TCP the seam a hook runs authenticates with the key in the config
+	// it names: the right server with another key fails every hook. A socket
+	// takes no key (the kernel names the caller), so there it is not compared.
+	if cfg.SocketPath() == "" && cfg.MCP.APIKey != opts.APIKey {
+		src.configNote = fmt.Sprintf("hook config %s reaches the same server with another key", recorded)
+		return src
+	}
+	opts.ConfigPath = recorded
+	shared, err := hooks.InstalledStatus(opts)
+	if err != nil {
+		src.configNote = fmt.Sprintf("hook config %s: %v", recorded, err)
+		return src
+	}
+	merged := hooks.InstallStatus{Owned: src.status.Owned}
+	for _, event := range src.status.Owned {
+		if slices.Contains(src.status.Current, event) || slices.Contains(shared.Current, event) {
+			merged.Current = append(merged.Current, event)
+		} else {
+			merged.Stale = append(merged.Stale, event)
+		}
+	}
+	if len(shared.Current) > 0 {
+		src.sharedConfig = recorded
+	}
+	src.status = merged
+	return src
 }
 
 // covered is the profile events any managed file carries, in profile order.
@@ -162,8 +247,11 @@ func printManagedCoverage(m claudeManagedHooks) {
 		fieldRow("managed", dim(fmt.Sprintf("%s run from %s; not written here",
 			hookEventNames(src.status.Owned), tildePath(src.path))))
 		if len(src.status.Stale) > 0 {
-			fmt.Printf("%s%s\n", fieldCont, yellow("differ from this install: "+hookEventNames(src.status.Stale)+
-				"; the file is not yours to edit, so an administrator must update it"))
+			differ := "differ from this install: " + hookEventNames(src.status.Stale)
+			if src.configNote != "" {
+				differ += " (" + src.configNote + ")"
+			}
+			fmt.Printf("%s%s\n", fieldCont, yellow(differ+"; the file is not yours to edit, so an administrator must update it"))
 		}
 	}
 	for _, msg := range m.errs {

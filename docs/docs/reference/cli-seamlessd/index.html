@@ -412,7 +412,7 @@ Checks stop early if config or the database cannot be loaded at all.</p>
 </tr>
 <tr>
 <td><code>hooks</code></td>
-<td>Claude Code definitions compared with today's desired profile, in <code>~/.claude/settings.json</code>, <code>./.claude/settings.json</code>, and <a href="#seamlessd_install_hooks_managed">Claude Code's managed settings</a>. An event the managed settings carry counts as installed there: a stale definition or a missing <code>seam</code> executable in them is a <strong>warn</strong> naming the file, which an administrator must update, and a copy of that event in a user or project file is a <strong>warn</strong> because it runs twice.</td>
+<td>Claude Code definitions compared with today's desired profile, in <code>~/.claude/settings.json</code>, <code>./.claude/settings.json</code>, and <a href="#seamlessd_install_hooks_managed">Claude Code's managed settings</a>. An event the managed settings carry counts as installed there: a stale definition or a missing <code>seam</code> executable in them is a <strong>warn</strong> naming the file, which an administrator must update, and a copy of that event in a user or project file is a <strong>warn</strong> because it runs twice. A managed hook whose <code>--config</code> names another config file, such as the shared client config of <a href="../../guides/peer-auth/#restricted-local-accounts">restricted local accounts</a>, is current when that file loads and reaches the same server (with the same key, unless the server is a socket), and the row names it; one that does not load, names another server or holds another key stays stale, and the row says why.</td>
 </tr>
 <tr>
 <td><code>claude desktop mcp</code></td>
@@ -1137,7 +1137,9 @@ managed hooks there is installing them, so that file is not counted as
 carrying them, and a second run keeps its hooks. A <code>managed</code> row names
 the file the events run from. If a managed definition differs from what this
 install would write - another <code>seam</code> path, an older shape - the row says so
-instead of changing it, since the file belongs to whoever deployed it. The
+instead of changing it, since the file belongs to whoever deployed it. A
+<code>--config</code> naming another config file is no difference when that file loads
+and reaches the same server, with the same key unless that server is a socket. The
 other managed sources (the claude.ai admin console, MDM profiles, the Windows
 registry) are not files Seamless can read, so they are not consulted.</p>
 <p>For Claude Code, seven events are installed together: <code>SessionStart</code>,

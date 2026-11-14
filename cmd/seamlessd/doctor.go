@@ -837,17 +837,26 @@ func settingsHooksCheck(cfg config.Config, installed, candidates []string) check
 // the question is per event: exactly one current definition, wherever it lives.
 //   - A managed event must be current there and its seam executable present.
 //     The file is not the user's, so drift names it rather than a command.
+//     Its hooks may name a shared config of the same server instead of this
+//     one (sharedHookConfig).
 //   - A managed event that a user or project file also carries runs twice;
 //     install-hooks removes that copy.
 //   - Every other event must be current in a user or project file, as before.
 func managedHooksCheck(cfg config.Config, want, candidates []string, managed claudeManagedHooks) check {
 	var parts, problems []string
 	for _, src := range managed.sources {
-		parts = append(parts, fmt.Sprintf("managed settings %s (current: %s; stale: %s)",
-			src.path, hookEventNames(src.status.Current), hookEventNames(src.status.Stale)))
+		part := fmt.Sprintf("managed settings %s (current: %s; stale: %s",
+			src.path, hookEventNames(src.status.Current), hookEventNames(src.status.Stale))
+		if src.sharedConfig != "" {
+			part += "; hook config " + src.sharedConfig + " reaches the same server"
+		}
+		parts = append(parts, part+")")
 		if len(src.status.Stale) > 0 {
-			problems = append(problems, fmt.Sprintf("stale in %s: %s (not a file install-hooks writes: an administrator must update it)",
-				src.path, hookEventNames(src.status.Stale)))
+			why := "not a file install-hooks writes: an administrator must update it"
+			if src.configNote != "" {
+				why = src.configNote + "; " + why
+			}
+			problems = append(problems, fmt.Sprintf("stale in %s: %s (%s)", src.path, hookEventNames(src.status.Stale), why))
 		}
 		if pathProblems := recordedHookPathProblems(hooks.ClientClaudeCode, src.path); len(pathProblems) > 0 {
 			problems = append(problems, fmt.Sprintf("not runnable from %s: %s", src.path, strings.Join(pathProblems, ", ")))

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"testing"
 
@@ -95,11 +96,18 @@ func newManagedHooksWorld(t *testing.T) managedHooksWorld {
 // marker, beside a foreign hook, keeping only the given events (all when none).
 func (w managedHooksWorld) writeManaged(t *testing.T, name, seamBin string, keep ...string) string {
 	t.Helper()
+	return w.writeManagedNaming(t, name, seamBin, w.cfg.SourcePath(), keep...)
+}
+
+// writeManagedNaming is writeManaged with every hook's --config naming
+// configPath rather than the config doctor runs with.
+func (w managedHooksWorld) writeManagedNaming(t *testing.T, name, seamBin, configPath string, keep ...string) string {
+	t.Helper()
 	path := filepath.Join(w.managedDir, name)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	_, err := hooks.Install(hooks.InstallOptions{
 		Client: hooks.ClientClaudeCode, SettingsPath: path, BaseURL: w.cfg.HookBaseURL(),
-		APIKey: w.cfg.MCP.APIKey, SeamBin: seamBin, ConfigPath: w.cfg.SourcePath(),
+		APIKey: w.cfg.MCP.APIKey, SeamBin: seamBin, ConfigPath: configPath,
 	})
 	require.NoError(t, err)
 	settings := readDoctorHookSettings(t, path)
@@ -295,4 +303,171 @@ func TestUninstallClientHooksNamesManagedHooksLeftBehind(t *testing.T) {
 	raw, err := os.ReadFile(managed)
 	require.NoError(t, err)
 	require.Contains(t, string(raw), "session-start", "the managed file is never touched")
+}
+
+// The daemons the shared-config tests name.
+const (
+	managedDaemonSocket = "unix:///opt/seamless/run/seamlessd.sock"
+	otherDaemonSocket   = "unix:///opt/other/run/seamlessd.sock"
+)
+
+// socketClientConfigFile writes a client config of serverURL in a fresh directory.
+func socketClientConfigFile(t *testing.T, serverURL string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "client.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("role: client\nserver_url: \""+serverURL+"\"\n"), 0o644))
+	return path
+}
+
+// newSharedConfigWorld is the peer_auth layout of docs-src/guides/peer-auth.md:
+// doctor runs with the owner's own client config, while the managed hooks name
+// the one client config an administrator wrote for every account. Both reach
+// the daemon's socket. It returns the world and the shared config's path.
+func newSharedConfigWorld(t *testing.T) (managedHooksWorld, string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("a socket server_url names a Unix path")
+	}
+	w := newManagedHooksWorld(t)
+	own, err := config.LoadFrom(socketClientConfigFile(t, managedDaemonSocket))
+	require.NoError(t, err)
+	w.cfg = own
+	return w, socketClientConfigFile(t, managedDaemonSocket)
+}
+
+// The incident that found this: the managed hooks name the administrator's
+// shared client config, doctor runs with the owner's own, and both reach the
+// same daemon. Doctor called every event stale although every hook worked.
+func TestHooksCheckManagedHooksNamingASharedConfigOfTheSameServer(t *testing.T) {
+	w, shared := newSharedConfigWorld(t)
+	managed := w.writeManagedNaming(t, claudeManagedSettingsFile, w.seamBin, shared)
+
+	chk := hooksCheck(w.cfg)
+	require.Equal(t, statusOK, chk.status, chk.detail)
+	require.Equal(t, "definitions in managed settings "+managed+" (current: "+allClaudeEvents+
+		"; stale: none; hook config "+shared+" reaches the same server)", chk.detail)
+}
+
+// A config the managed hooks name counts only when it loads and reaches
+// doctor's server: anything else stays stale, and the row says why.
+func TestHooksCheckManagedHooksNamingAConfigThatDoesNotCount(t *testing.T) {
+	for name, tc := range map[string]struct {
+		spoil  func(t *testing.T, shared string)
+		reason string // after "hook config <shared> "
+	}{
+		"another server": {
+			spoil: func(t *testing.T, shared string) {
+				require.NoError(t, os.WriteFile(shared, []byte("role: client\nserver_url: \""+otherDaemonSocket+"\"\n"), 0o644))
+			},
+			reason: "reaches " + otherDaemonSocket + ", not " + managedDaemonSocket,
+		},
+		"another server, naming a user": {
+			spoil: func(t *testing.T, shared string) {
+				require.NoError(t, os.WriteFile(shared, []byte("role: client\nserver_url: \"https://agent:hunter2@seamless.example:8081\"\n"), 0o644))
+			},
+			reason: "reaches https://seamless.example:8081, not " + managedDaemonSocket,
+		},
+		"missing": {
+			spoil:  func(t *testing.T, shared string) { require.NoError(t, os.Remove(shared)) },
+			reason: "cannot be read: no such file or directory",
+		},
+		"does not load": {
+			spoil: func(t *testing.T, shared string) {
+				require.NoError(t, os.WriteFile(shared, []byte("role: client\nserver_urll: \""+managedDaemonSocket+"\"\n"), 0o644))
+			},
+			reason: "does not load: yaml: unmarshal errors: line 2: field server_urll not found",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w, shared := newSharedConfigWorld(t)
+			managed := w.writeManagedNaming(t, claudeManagedSettingsFile, w.seamBin, shared)
+			tc.spoil(t, shared)
+
+			chk := hooksCheck(w.cfg)
+			require.Equal(t, statusWarn, chk.status)
+			require.Contains(t, chk.detail, "managed settings "+managed+" (current: none; stale: "+allClaudeEvents+")")
+			require.Contains(t, chk.detail, "stale in "+managed+": "+allClaudeEvents+
+				" (hook config "+shared+" "+tc.reason)
+			require.Contains(t, chk.detail, "an administrator must update it")
+			require.NotContains(t, chk.detail, "\n", "the row is one line")
+			require.NotContains(t, chk.detail, "hunter2")
+		})
+	}
+}
+
+// The same over TCP, where doctor runs with the daemon's own server config and
+// the managed hooks name a client config of its address. (This one runs on
+// Windows too.)
+func TestHooksCheckManagedHooksNamingAClientConfigOfThisServer(t *testing.T) {
+	w := newManagedHooksWorld(t)
+	shared := filepath.Join(t.TempDir(), "client.yaml")
+	require.NoError(t, os.WriteFile(shared, []byte("role: client\nserver_url: \""+w.cfg.ServerURL()+
+		"\"\nmcp:\n  api_key: "+w.cfg.MCP.APIKey+"\n"), 0o600))
+	managed := w.writeManagedNaming(t, claudeManagedSettingsFile, w.seamBin, shared)
+
+	chk := hooksCheck(w.cfg)
+	require.Equal(t, statusOK, chk.status, chk.detail)
+	require.Equal(t, "definitions in managed settings "+managed+" (current: "+allClaudeEvents+
+		"; stale: none; hook config "+shared+" reaches the same server)", chk.detail)
+}
+
+// Over TCP the key counts too: the shared config's seam authenticates with its
+// own key, so the right address with another key fails every hook. The key is
+// never printed.
+func TestHooksCheckManagedHooksNamingAClientConfigOfThisServerWithAnotherKey(t *testing.T) {
+	w := newManagedHooksWorld(t)
+	shared := filepath.Join(t.TempDir(), "client.yaml")
+	const otherKey = "sk-another-key-0123456789abcdef"
+	require.NoError(t, os.WriteFile(shared, []byte("role: client\nserver_url: \""+w.cfg.ServerURL()+
+		"\"\nmcp:\n  api_key: "+otherKey+"\n"), 0o600))
+	managed := w.writeManagedNaming(t, claudeManagedSettingsFile, w.seamBin, shared)
+
+	chk := hooksCheck(w.cfg)
+	require.Equal(t, statusWarn, chk.status, chk.detail)
+	// UserPromptSubmit is an http hook over TCP, built from this install's own
+	// key and naming no config: current either way. Every command hook is not.
+	require.Contains(t, chk.detail, "(current: UserPromptSubmit; stale: SessionStart, SessionEnd, PostToolUse, "+
+		"SubagentStart, SubagentStop, PermissionRequest)")
+	require.Contains(t, chk.detail, "stale in "+managed+": SessionStart, SessionEnd, PostToolUse, SubagentStart, "+
+		"SubagentStop, PermissionRequest (hook config "+shared+" reaches the same server with another key; "+
+		"not a file install-hooks writes")
+	require.NotContains(t, chk.detail, otherKey)
+	require.NotContains(t, chk.detail, w.cfg.MCP.APIKey)
+}
+
+// The rule is about the config alone: managed hooks running another seam
+// executable stay stale even when their config reaches the same server.
+func TestHooksCheckManagedHooksNamingASharedConfigButAnotherSeam(t *testing.T) {
+	w, shared := newSharedConfigWorld(t)
+	other := filepath.Join(t.TempDir(), seamBinName())
+	writeTestExecutable(t, other)
+	managed := w.writeManagedNaming(t, claudeManagedSettingsFile, other, shared)
+
+	chk := hooksCheck(w.cfg)
+	require.Equal(t, statusWarn, chk.status)
+	require.Contains(t, chk.detail, "managed settings "+managed+" (current: none; stale: "+allClaudeEvents+")")
+	require.Contains(t, chk.detail, "stale in "+managed+": "+allClaudeEvents+
+		" (not a file install-hooks writes: an administrator must update it)")
+}
+
+// install-hooks judges the managed settings the same way: hooks naming a
+// shared config of the same server do not differ from this install, and ones
+// naming another server do, with the reason.
+func TestInstallClaudeHooksJudgesManagedHooksNamingASharedConfig(t *testing.T) {
+	w, shared := newSharedConfigWorld(t)
+	w.writeManagedNaming(t, claudeManagedSettingsFile, w.seamBin, shared)
+	install := func() string {
+		return captureStdout(t, func() error {
+			return installClaudeHooks(w.cfg, w.userPath, w.cfg.HookBaseURL(), w.seamBin, w.cfg.SourcePath(), false)
+		})
+	}
+
+	out := install()
+	require.Contains(t, out, "7 managed")
+	require.NotContains(t, out, "differ from this install")
+
+	require.NoError(t, os.WriteFile(shared, []byte("role: client\nserver_url: \""+otherDaemonSocket+"\"\n"), 0o644))
+	out = install()
+	require.Contains(t, out, "differ from this install: "+allClaudeEvents+
+		" (hook config "+shared+" reaches "+otherDaemonSocket+", not "+managedDaemonSocket+")")
 }
