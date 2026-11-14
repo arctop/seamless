@@ -122,6 +122,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../concepts/project-isolation/">Project isolation</a></li>
         
+        <li><a href="../../concepts/networked/">Networked Seamless</a></li>
+        
         <li><a href="../../concepts/gardener/">The gardener</a></li>
         
         <li><a href="../../concepts/memory-supersession/">Memory supersession</a></li>
@@ -154,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/data/">Import, back up &amp; restore</a></li>
         
-        <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
+        <li><a href="../../guides/network-install/">Share one daemon across your computers</a></li>
         
         <li><a href="../../guides/peer-auth/">Lock projects behind your approval</a></li>
         
@@ -236,7 +238,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#start-here-always">Start here, always</a></li><li class="lvl-2"><a href="#no-seam-briefing-appears-at-session-start">No &lt;seam-briefing&gt; appears at session start</a></li><li class="lvl-2"><a href="#codex-hooks-are-current-but-doctor-says-trust-unverified">Codex hooks are current, but doctor says trust unverified</a></li><li class="lvl-2"><a href="#codex-mcp-is-stale-or-incompatible">Codex MCP is stale or incompatible</a></li><li class="lvl-2"><a href="#the-briefing-appears-twice">The briefing appears twice</a></li><li class="lvl-2"><a href="#a-briefing-appears-but-it-is-nearly-empty-or-names-the-wrong-project">A briefing appears, but it is nearly empty or names the wrong project</a></li><li class="lvl-2"><a href="#a-call-is-rejected-as-ambiguous-scope-session-or-agent">A call is rejected as ambiguous scope, session, or agent</a></li><li class="lvl-2"><a href="#recall-returns-junk-or-misses-what-you-just-wrote">Recall returns junk, or misses what you just wrote</a></li><li class="lvl-2"><a href="#a-task-is-stuck-in-progress-and-nobody-is-working-it">A task is stuck in_progress and nobody is working it</a></li><li class="lvl-2"><a href="#tasks-update-says-the-task-is-already-claimed---by-my-own-session">tasks_update says the task is already claimed - by my own session</a></li><li class="lvl-2"><a href="#a-seam-flag-did-nothing">A seam flag did nothing</a></li><li class="lvl-2"><a href="#a-briefing-setting-in-the-yaml-is-ignored">A briefing setting in the YAML is ignored</a></li><li class="lvl-2"><a href="#a-tool-is-missing-or-a-console-screen-says-it-is-switched-off">A tool is missing, or a console screen says it is switched off</a></li><li class="lvl-2"><a href="#a-console-screen-is-not-in-the-sidebar">A console screen is not in the sidebar</a></li><li class="lvl-2"><a href="#two-daemons-the-wrong-port-or-code-changes-that-never-land">Two daemons, the wrong port, or code changes that never land</a></li><li class="lvl-2"><a href="#seamlessd-update-refuses-the-release-with-a-signature-error">seamlessd update refuses the release with a signature error</a></li><li class="lvl-2"><a href="#the-update-check-keeps-failing">The update check keeps failing</a></li><li class="lvl-2"><a href="#the-update-notice-will-not-go-away">The update notice will not go away</a></li><li class="lvl-2"><a href="#an-automatic-update-is-waiting">An automatic update is waiting</a></li><li class="lvl-2"><a href="#an-automatic-update-failed">An automatic update failed</a></li><li class="lvl-2"><a href="#automatic-backups-are-failing">Automatic backups are failing or overdue</a></li><li class="lvl-2"><a href="#a-restore-did-not-finish">A restore did not finish</a></li><li class="lvl-2"><a href="#seamlessd-update-refuses-a-restore-is-waiting-to-finish">seamlessd update refuses: a restore is waiting to finish</a></li><li class="lvl-2"><a href="#memory-write-says-the-name-is-held-by-a-superseded-memory">memory_write says the name is held by a superseded memory</a></li><li class="lvl-2"><a href="#a-supersedes-failed-but-the-memory-was-written">A supersedes failed but the memory was written</a></li>
+      <li class="lvl-2"><a href="#start-here-always">Start here, always</a></li><li class="lvl-2"><a href="#no-seam-briefing-appears-at-session-start">No &lt;seam-briefing&gt; appears at session start</a></li><li class="lvl-2"><a href="#codex-hooks-are-current-but-doctor-says-trust-unverified">Codex hooks are current, but doctor says trust unverified</a></li><li class="lvl-2"><a href="#codex-mcp-is-stale-or-incompatible">Codex MCP is stale or incompatible</a></li><li class="lvl-2"><a href="#the-briefing-appears-twice">The briefing appears twice</a></li><li class="lvl-2"><a href="#a-briefing-appears-but-it-is-nearly-empty-or-names-the-wrong-project">A briefing appears, but it is nearly empty or names the wrong project</a></li><li class="lvl-2"><a href="#a-call-is-rejected-as-ambiguous-scope-session-or-agent">A call is rejected as ambiguous scope, session, or agent</a></li><li class="lvl-2"><a href="#recall-returns-junk-or-misses-what-you-just-wrote">Recall returns junk, or misses what you just wrote</a></li><li class="lvl-2"><a href="#a-task-is-stuck-in-progress-and-nobody-is-working-it">A task is stuck in_progress and nobody is working it</a></li><li class="lvl-2"><a href="#tasks-update-says-the-task-is-already-claimed---by-my-own-session">tasks_update says the task is already claimed - by my own session</a></li><li class="lvl-2"><a href="#a-seam-flag-did-nothing">A seam flag did nothing</a></li><li class="lvl-2"><a href="#a-briefing-setting-in-the-yaml-is-ignored">A briefing setting in the YAML is ignored</a></li><li class="lvl-2"><a href="#a-tool-is-missing-or-a-console-screen-says-it-is-switched-off">A tool is missing, or a console screen says it is switched off</a></li><li class="lvl-2"><a href="#a-console-screen-is-not-in-the-sidebar">A console screen is not in the sidebar</a></li><li class="lvl-2"><a href="#two-daemons-the-wrong-port-or-code-changes-that-never-land">Two daemons, the wrong port, or code changes that never land</a></li><li class="lvl-2"><a href="#an-agent-on-another-computer-gets-no-briefing">An agent on another computer gets no briefing</a></li><li class="lvl-2"><a href="#pairing-a-computer-fails">Pairing a computer fails</a></li><li class="lvl-2"><a href="#an-agent-on-another-computer-cannot-open-a-locked-project">An agent on another computer cannot open a locked project</a></li><li class="lvl-2"><a href="#seamlessd-update-refuses-the-release-with-a-signature-error">seamlessd update refuses the release with a signature error</a></li><li class="lvl-2"><a href="#the-update-check-keeps-failing">The update check keeps failing</a></li><li class="lvl-2"><a href="#the-update-notice-will-not-go-away">The update notice will not go away</a></li><li class="lvl-2"><a href="#an-automatic-update-is-waiting">An automatic update is waiting</a></li><li class="lvl-2"><a href="#an-automatic-update-failed">An automatic update failed</a></li><li class="lvl-2"><a href="#automatic-backups-are-failing">Automatic backups are failing or overdue</a></li><li class="lvl-2"><a href="#a-restore-did-not-finish">A restore did not finish</a></li><li class="lvl-2"><a href="#seamlessd-update-refuses-a-restore-is-waiting-to-finish">seamlessd update refuses: a restore is waiting to finish</a></li><li class="lvl-2"><a href="#memory-write-says-the-name-is-held-by-a-superseded-memory">memory_write says the name is held by a superseded memory</a></li><li class="lvl-2"><a href="#a-supersedes-failed-but-the-memory-was-written">A supersedes failed but the memory was written</a></li>
     </ul>
   </details>
   <p>Seamless has one property that makes troubleshooting unlike most software:
@@ -577,7 +579,7 @@ reset it there.</p>
 (8081), one data directory (<code>~/.seamless</code>). The dev and release install layouts
 drive that same instance, so installing one replaces the other. (A <code>role: client</code>
 install has neither a port nor a data directory, so it cannot collide this way -
-see <a href="../../guides/network-install/">Share one daemon across a LAN</a>.) Most confusion here is
+see <a href="../../guides/network-install/">Share one daemon across your computers</a>.) Most confusion here is
 someone accidentally interacting with a second copy, or with the same copy running
 older code.</p>
 <p><strong>Fix.</strong></p>
@@ -605,6 +607,172 @@ from. Register with <code>--scope user</code>.</li>
 bridge; a disabled entry, stale binary/config path, or project override is a
 client-configuration problem even while <code>/healthz</code> is green.</li>
 </ul>
+<h2 id="an-agent-on-another-computer-gets-no-briefing">An agent on another computer gets no briefing</h2>
+<p><strong>What is happening.</strong> A <a href="../../concepts/networked/">Client</a> keeps no data and
+answers nothing from memory. When the Server, or the relay in front of it, does
+not answer, every hook fails open and every tool call fails, so the session
+looks like one without Seamless.</p>
+<p><strong>Fix.</strong> On the Client, run <code>seam doctor</code>, then <code>seamlessd doctor</code>. On a key
+client, the <code>server_url</code> row is a <strong>fail</strong> until the Server answers. On a
+computer with a relay, the rows that start with <code>relay</code> name what is wrong; run
+doctor as the relay's account to see its pairing too
+(<a href="../../guides/network-install/#install-a-relay">how</a>). Through a relay, the failing
+call or <code>seam</code> command carries the reason:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>The answer</th>
+<th>What it means</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>seamless relay: the server at &lt;address&gt; could not be reached (...)</code></td>
+<td>the relay runs, and the Server does not answer it</td>
+<td>start the Server, or mend the route to it: the relay forwards again as soon as it answers</td>
+</tr>
+<tr>
+<td><code>seamless relay: the server at &lt;address&gt; presented a certificate other than the one this relay pinned at pairing</code></td>
+<td>the Server's certificate changed, most often at a renewal</td>
+<td><a href="../../guides/network-install/#revoke-a-computer">pair the relay again</a>: revoke it on the Devices page, get a new code, run <code>sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --replace --server &lt;address&gt; --fingerprint &lt;the new fingerprint&gt; --code -</code>, and restart the relay</td>
+</tr>
+<tr>
+<td><code>seamless relay: the server at &lt;address&gt; presented a certificate that does not verify</code></td>
+<td>the relay does not trust the certificate's issuer</td>
+<td>pair again with <code>--ca-file</code> naming its root</td>
+</tr>
+<tr>
+<td><code>unauthorized: this relay's pairing was revoked: pair it again</code></td>
+<td>you revoked it</td>
+<td>pair it again, with a new code</td>
+</tr>
+<tr>
+<td><code>forbidden: relay &lt;name&gt; is paired, but peer_auth.relays does not map it</code></td>
+<td>the Server runs peer_auth and refuses a relay you have not mapped</td>
+<td>map it in the daemon's config, by the name the Devices page shows, then restart the daemon (<a href="../../guides/peer-auth/#agents-on-another-computer-relays">how</a>)</td>
+</tr>
+<tr>
+<td><code>forbidden: relay &lt;name&gt; was paired with a one-time code alone, before peer_auth</code></td>
+<td>the Server maps it in <code>peer_auth.relays</code>, and no passkey ever approved it</td>
+<td>revoke it, pair it again, and approve it with your passkey</td>
+</tr>
+<tr>
+<td><code>forbidden: uid &lt;n&gt; on relay &lt;name&gt; is neither the owner nor a restricted account peer_auth.relays maps there</code></td>
+<td>another account on that computer, through a relay the Server maps</td>
+<td>run the agent as your own account there, or list that account under the relay's <code>restricted</code></td>
+</tr>
+<tr>
+<td><code>seamless relay: the caller runs as the relay's own account</code></td>
+<td>an agent runs as <code>_seamless</code>, the account that holds the relay's key</td>
+<td>run agents as your own account</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>With no answer at all, nothing serves the socket: <code>relay.socket</code> says the relay
+is not running. Start its service.</p>
+<h2 id="pairing-a-computer-fails">Pairing a computer fails</h2>
+<p><strong>What is happening.</strong> Setup, or <code>seamlessd relay pair</code> in the relay's root
+step, stops with the reason, and nothing is saved until the Server has paired
+the computer.</p>
+<p><strong>Fix.</strong> Setup's own refusals come first:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Setup says</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;address&gt; presents &lt;fingerprint&gt;, not the SEAMLESS_SERVER_FINGERPRINT you gave: nothing was sent to it</code></td>
+<td>the address reaches a computer whose certificate is not the one the Server printed: check the address, and the fingerprint <code>seamlessd devices code</code> prints on the Server</td>
+</tr>
+<tr>
+<td><code>this computer does not trust &lt;address&gt;'s certificate (...), and nothing compared it</code></td>
+<td>add <code>SEAMLESS_SERVER_FINGERPRINT=&lt;the fingerprint the Server printed&gt;</code> to the one-liner, or run the installer at a terminal and compare it there</td>
+</tr>
+<tr>
+<td><code>&lt;address&gt; is plain http, and a pairing crosses the network</code></td>
+<td>give the Server TLS (<a href="../../guides/network-install/#set-up-the-server">setup's address step</a>), then pair with its https address</td>
+</tr>
+<tr>
+<td><code>&lt;config&gt; is here already, and setup never edits a config</code></td>
+<td>a key device's key goes into a config of its own: move the old one aside, or keep it</td>
+</tr>
+<tr>
+<td><code>SEAMLESS_PAIR_CODE and SEAMLESS_MCP_API_KEY are both set</code></td>
+<td>a code gives the computer a key of its own: drop the key</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Then the Server's, from either:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>The error</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>the server refused the pairing code: it may be mistyped, expired or already used</code></td>
+<td>get a new code: each works once, for 10 minutes</td>
+</tr>
+<tr>
+<td><code>the server already pairs a device of this name</code></td>
+<td>revoke the old device of that name on the Devices page, or pair with <code>--name</code></td>
+</tr>
+<tr>
+<td><code>the server's certificate does not have the fingerprint you compared; nothing was sent</code></td>
+<td>the address reaches a computer whose certificate is not the one the Server shows: check the address, and the fingerprint <code>seamlessd devices code</code> prints on the Server</td>
+</tr>
+<tr>
+<td><code>a relay pairs over TLS with its client certificate: the server's address must be https</code></td>
+<td>a relay needs TLS on the daemon's own listener: give the Server a certificate (<a href="../../guides/network-install/#set-up-the-server">setup's address step</a>)</td>
+</tr>
+<tr>
+<td><code>the owner denied this pairing on the server</code>, <code>this pairing was not approved in time: get a new code and pair again</code></td>
+<td>under peer_auth the pairing waits 10 minutes for your passkey on the Devices page: pair again with a new code, and approve it there</td>
+</tr>
+<tr>
+<td><code>this relay is already paired with &lt;address&gt; as &lt;name&gt; (device &lt;id&gt;)</code></td>
+<td>revoke that device on the Devices page, then pair with <code>--replace</code></td>
+</tr>
+<tr>
+<td><code>the relay runs as root</code>, <code>the relay runs as uid &lt;n&gt;, which is not a system account</code></td>
+<td>run it as its own account, created and pinned as <a href="../../guides/peer-auth/#deploy-it-the-daemon-runs-as-its-own-account">Deploy it</a> does</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>On the Server, <code>seamlessd devices</code> refusing with <code>this install serves no other computers, so it pairs none</code> means pairing is off: it is on only on a Server
+with TLS, a bind beyond loopback, or a <code>server_url</code> naming another host.</p>
+<h2 id="an-agent-on-another-computer-cannot-open-a-locked-project">An agent on another computer cannot open a locked project</h2>
+<p><strong>What is happening.</strong> A locked project opens only to an agent whose process
+tree holds a lease, and the Server can name that tree only for its own socket
+and for a relay <code>peer_auth.relays</code> maps. So it depends on how the agent's
+computer reaches the Server:</p>
+<ul>
+<li><strong>A key device, a client of the Server's own key, or a Windows computer</strong>
+never holds a lease: a key cannot be tied to one process.</li>
+<li><strong>A relay the Server does not map</strong> is refused outright.</li>
+<li><strong>A mapped relay of an older release</strong> files nothing: a call refused at the
+lock asks for nothing, and <code>access_request</code> or <code>seam access request</code> answers
+<code>no access request is filed for this agent on another computer: its relay did not say which program is asking (a relay of wire version 1 never does)</code>.</li>
+<li><strong>A process that is not an agent's</strong> - <code>seam</code> run by hand in a shell there -
+is refused as it is on the Server (<a href="../../guides/peer-auth/#requests">requests name agents</a>).</li>
+</ul>
+<p><strong>Fix.</strong> Pair the computer as a relay and map it on the Server
+(<a href="../../guides/network-install/#locked-projects-and-agents-on-other-computers">how</a>),
+update Seamless on a relay's computer whose relay is older than the Server's,
+and ask from an agent session there. Otherwise run the agent on the Server's
+computer, on its socket: a terminal there, or SSH to it.</p>
 <h2 id="seamlessd-update-refuses-the-release-with-a-signature-error"><code>seamlessd update</code> refuses the release with a signature error</h2>
 <p><strong>What is happening.</strong> In v0.6.0 Seamless moved from github.com/0spoon/seamless
 to github.com/arctop/seamless, and every release since is signed by the new
@@ -986,7 +1154,7 @@ name is a lossless in-place update, so retrying is safe.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#start-here-always">Start here, always</a></li><li class="lvl-2"><a href="#no-seam-briefing-appears-at-session-start">No &lt;seam-briefing&gt; appears at session start</a></li><li class="lvl-2"><a href="#codex-hooks-are-current-but-doctor-says-trust-unverified">Codex hooks are current, but doctor says trust unverified</a></li><li class="lvl-2"><a href="#codex-mcp-is-stale-or-incompatible">Codex MCP is stale or incompatible</a></li><li class="lvl-2"><a href="#the-briefing-appears-twice">The briefing appears twice</a></li><li class="lvl-2"><a href="#a-briefing-appears-but-it-is-nearly-empty-or-names-the-wrong-project">A briefing appears, but it is nearly empty or names the wrong project</a></li><li class="lvl-2"><a href="#a-call-is-rejected-as-ambiguous-scope-session-or-agent">A call is rejected as ambiguous scope, session, or agent</a></li><li class="lvl-2"><a href="#recall-returns-junk-or-misses-what-you-just-wrote">Recall returns junk, or misses what you just wrote</a></li><li class="lvl-2"><a href="#a-task-is-stuck-in-progress-and-nobody-is-working-it">A task is stuck in_progress and nobody is working it</a></li><li class="lvl-2"><a href="#tasks-update-says-the-task-is-already-claimed---by-my-own-session">tasks_update says the task is already claimed - by my own session</a></li><li class="lvl-2"><a href="#a-seam-flag-did-nothing">A seam flag did nothing</a></li><li class="lvl-2"><a href="#a-briefing-setting-in-the-yaml-is-ignored">A briefing setting in the YAML is ignored</a></li><li class="lvl-2"><a href="#a-tool-is-missing-or-a-console-screen-says-it-is-switched-off">A tool is missing, or a console screen says it is switched off</a></li><li class="lvl-2"><a href="#a-console-screen-is-not-in-the-sidebar">A console screen is not in the sidebar</a></li><li class="lvl-2"><a href="#two-daemons-the-wrong-port-or-code-changes-that-never-land">Two daemons, the wrong port, or code changes that never land</a></li><li class="lvl-2"><a href="#seamlessd-update-refuses-the-release-with-a-signature-error">seamlessd update refuses the release with a signature error</a></li><li class="lvl-2"><a href="#the-update-check-keeps-failing">The update check keeps failing</a></li><li class="lvl-2"><a href="#the-update-notice-will-not-go-away">The update notice will not go away</a></li><li class="lvl-2"><a href="#an-automatic-update-is-waiting">An automatic update is waiting</a></li><li class="lvl-2"><a href="#an-automatic-update-failed">An automatic update failed</a></li><li class="lvl-2"><a href="#automatic-backups-are-failing">Automatic backups are failing or overdue</a></li><li class="lvl-2"><a href="#a-restore-did-not-finish">A restore did not finish</a></li><li class="lvl-2"><a href="#seamlessd-update-refuses-a-restore-is-waiting-to-finish">seamlessd update refuses: a restore is waiting to finish</a></li><li class="lvl-2"><a href="#memory-write-says-the-name-is-held-by-a-superseded-memory">memory_write says the name is held by a superseded memory</a></li><li class="lvl-2"><a href="#a-supersedes-failed-but-the-memory-was-written">A supersedes failed but the memory was written</a></li>
+      <li class="lvl-2"><a href="#start-here-always">Start here, always</a></li><li class="lvl-2"><a href="#no-seam-briefing-appears-at-session-start">No &lt;seam-briefing&gt; appears at session start</a></li><li class="lvl-2"><a href="#codex-hooks-are-current-but-doctor-says-trust-unverified">Codex hooks are current, but doctor says trust unverified</a></li><li class="lvl-2"><a href="#codex-mcp-is-stale-or-incompatible">Codex MCP is stale or incompatible</a></li><li class="lvl-2"><a href="#the-briefing-appears-twice">The briefing appears twice</a></li><li class="lvl-2"><a href="#a-briefing-appears-but-it-is-nearly-empty-or-names-the-wrong-project">A briefing appears, but it is nearly empty or names the wrong project</a></li><li class="lvl-2"><a href="#a-call-is-rejected-as-ambiguous-scope-session-or-agent">A call is rejected as ambiguous scope, session, or agent</a></li><li class="lvl-2"><a href="#recall-returns-junk-or-misses-what-you-just-wrote">Recall returns junk, or misses what you just wrote</a></li><li class="lvl-2"><a href="#a-task-is-stuck-in-progress-and-nobody-is-working-it">A task is stuck in_progress and nobody is working it</a></li><li class="lvl-2"><a href="#tasks-update-says-the-task-is-already-claimed---by-my-own-session">tasks_update says the task is already claimed - by my own session</a></li><li class="lvl-2"><a href="#a-seam-flag-did-nothing">A seam flag did nothing</a></li><li class="lvl-2"><a href="#a-briefing-setting-in-the-yaml-is-ignored">A briefing setting in the YAML is ignored</a></li><li class="lvl-2"><a href="#a-tool-is-missing-or-a-console-screen-says-it-is-switched-off">A tool is missing, or a console screen says it is switched off</a></li><li class="lvl-2"><a href="#a-console-screen-is-not-in-the-sidebar">A console screen is not in the sidebar</a></li><li class="lvl-2"><a href="#two-daemons-the-wrong-port-or-code-changes-that-never-land">Two daemons, the wrong port, or code changes that never land</a></li><li class="lvl-2"><a href="#an-agent-on-another-computer-gets-no-briefing">An agent on another computer gets no briefing</a></li><li class="lvl-2"><a href="#pairing-a-computer-fails">Pairing a computer fails</a></li><li class="lvl-2"><a href="#an-agent-on-another-computer-cannot-open-a-locked-project">An agent on another computer cannot open a locked project</a></li><li class="lvl-2"><a href="#seamlessd-update-refuses-the-release-with-a-signature-error">seamlessd update refuses the release with a signature error</a></li><li class="lvl-2"><a href="#the-update-check-keeps-failing">The update check keeps failing</a></li><li class="lvl-2"><a href="#the-update-notice-will-not-go-away">The update notice will not go away</a></li><li class="lvl-2"><a href="#an-automatic-update-is-waiting">An automatic update is waiting</a></li><li class="lvl-2"><a href="#an-automatic-update-failed">An automatic update failed</a></li><li class="lvl-2"><a href="#automatic-backups-are-failing">Automatic backups are failing or overdue</a></li><li class="lvl-2"><a href="#a-restore-did-not-finish">A restore did not finish</a></li><li class="lvl-2"><a href="#seamlessd-update-refuses-a-restore-is-waiting-to-finish">seamlessd update refuses: a restore is waiting to finish</a></li><li class="lvl-2"><a href="#memory-write-says-the-name-is-held-by-a-superseded-memory">memory_write says the name is held by a superseded memory</a></li><li class="lvl-2"><a href="#a-supersedes-failed-but-the-memory-was-written">A supersedes failed but the memory was written</a></li>
     </ul>
   </aside>
   

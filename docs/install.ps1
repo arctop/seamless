@@ -1203,6 +1203,7 @@ server and use the line it prints.
     elseif ($hasClaude) { Say '  open any git repo in Claude Code -- Seamless maps it to a project on its own' }
     elseif ($hasCodex) { Say '  open any git repo in the Codex app, CLI, or IDE -- Seamless maps it to a project on its own' }
     if ($hasDesktop) { Say '  chat in the Claude app -- the seamless MCP tools load after an app restart' }
+    if ($serverUrl) { Say "  this computer is a key client of $serverUrl -- Windows never runs the relay, so its agents never open a locked project; run those on the server" }
     Say "  & `"$InstallDir\seamlessd.exe`" console-open   # open the console, already logged in"
     Write-Host ''
     if ($hasClaude -and $hasCodex) {

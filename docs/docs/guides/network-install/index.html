@@ -4,21 +4,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Share one daemon across a LAN - Seamless docs</title>
-<meta name="description" content="Run one seamlessd for several devices - the server config, TLS with mkcert or openssl, the client-config pairing command, and the captures a remote device honestly does not get.">
+<title>Share one daemon across your computers - Seamless docs</title>
+<meta name="description" content="Networked Seamless step by step - set up the Server with seamlessd setup, connect each Client, pair computers on the Devices page, sign in and approve from any browser, and every step by hand.">
 <link rel="canonical" href="https://thereisnospoon.org/docs/guides/network-install/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://thereisnospoon.org/docs/guides/network-install/">
-<meta property="og:title" content="Share one daemon across a LAN - Seamless docs">
-<meta property="og:description" content="Run one seamlessd for several devices - the server config, TLS with mkcert or openssl, the client-config pairing command, and the captures a remote device honestly does not get.">
+<meta property="og:title" content="Share one daemon across your computers - Seamless docs">
+<meta property="og:description" content="Networked Seamless step by step - set up the Server with seamlessd setup, connect each Client, pair computers on the Devices page, sign in and approve from any browser, and every step by hand.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Share one daemon across a LAN","item":"https://thereisnospoon.org/docs/guides/network-install/"}]},{"@type":"TechArticle","headline":"Share one daemon across a LAN - Seamless docs","description":"Run one seamlessd for several devices - the server config, TLS with mkcert or openssl, the client-config pairing command, and the captures a remote device honestly does not get.","url":"https://thereisnospoon.org/docs/guides/network-install/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Share one daemon across your computers","item":"https://thereisnospoon.org/docs/guides/network-install/"}]},{"@type":"TechArticle","headline":"Share one daemon across your computers - Seamless docs","description":"Networked Seamless step by step - set up the Server with seamlessd setup, connect each Client, pair computers on the Devices page, sign in and approve from any browser, and every step by hand.","url":"https://thereisnospoon.org/docs/guides/network-install/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
 <link rel="icon" type="image/svg+xml" href="../../../static/favicon.svg">
@@ -122,6 +122,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../concepts/project-isolation/">Project isolation</a></li>
         
+        <li><a href="../../concepts/networked/">Networked Seamless</a></li>
+        
         <li><a href="../../concepts/gardener/">The gardener</a></li>
         
         <li><a href="../../concepts/memory-supersession/">Memory supersession</a></li>
@@ -154,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/data/">Import, back up &amp; restore</a></li>
         
-        <li><a href="../../guides/network-install/" class="current" aria-current="page">Share one daemon across a LAN</a></li>
+        <li><a href="../../guides/network-install/" class="current" aria-current="page">Share one daemon across your computers</a></li>
         
         <li><a href="../../guides/peer-auth/">Lock projects behind your approval</a></li>
         
@@ -227,34 +229,54 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   <ol>
     <li><a href="../../">Docs</a></li>
     <li><a href="../../guides/">Guides</a></li>
-    <li aria-current="page">Share one daemon across a LAN</li>
+    <li aria-current="page">Share one daemon across your computers</li>
   </ol>
 </nav>
 
-  <h1>Share one daemon across a LAN</h1>
-  <p class="lede">Run one seamlessd for several devices - the server config, TLS with mkcert or openssl, the client-config pairing command, and the captures a remote device honestly does not get.</p>
-  
+  <h1>Share one daemon across your computers</h1>
+  <p class="lede">Networked Seamless step by step - set up the Server with seamlessd setup, connect each Client, pair computers on the Devices page, sign in and approve from any browser, and every step by hand.</p>
+  <div class="ctx-bar">
+  <span class="ctx-bar-label">Steps for</span>
+  <div class="ctx-seg" role="group" aria-label="Operating system">
+    <button type="button" data-ctx-os-pick="macos" aria-pressed="false">macOS</button>
+    <button type="button" data-ctx-os-pick="linux" aria-pressed="false">Linux</button>
+    <button type="button" data-ctx-os-pick="windows" aria-pressed="false">Windows</button>
+    <button type="button" data-ctx-os-pick="all" aria-pressed="false">All</button>
+  </div>
+  <div class="ctx-seg" role="group" aria-label="Client">
+    <button type="button" data-ctx-client-pick="claude" aria-pressed="false">Claude Code</button>
+    <button type="button" data-ctx-client-pick="claude-desktop" aria-pressed="false">Claude app chat</button>
+    <button type="button" data-ctx-client-pick="codex" aria-pressed="false">Codex</button>
+    <button type="button" data-ctx-client-pick="all" aria-pressed="false">All</button>
+  </div>
+  <span class="ctx-bar-summary"></span>
+  <button class="ctx-bar-open" type="button">Change</button>
+  <button class="ctx-hidden-note" type="button" hidden></button>
+  <p class="ctx-status" aria-live="polite"></p>
+</div>
+
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-topology">The topology</a></li><li class="lvl-2"><a href="#step-1-widen-the-server">Step 1: widen the server</a></li><li class="lvl-2"><a href="#step-2-tls">Step 2: TLS</a></li><li class="lvl-3"><a href="#mkcert-the-friction-free-path">mkcert (the friction-free path)</a></li><li class="lvl-3"><a href="#openssl-no-extra-tool">openssl (no extra tool)</a></li><li class="lvl-3"><a href="#why-https-changes-the-claude-code-wiring">Why https changes the Claude Code wiring</a></li><li class="lvl-2"><a href="#step-3-pair-a-client">Step 3: pair a client</a></li><li class="lvl-2"><a href="#what-a-remote-device-does-not-get">What a remote device does not get</a></li><li class="lvl-3"><a href="#how-doctor-reports-it">How doctor reports it</a></li><li class="lvl-2"><a href="#updates-on-a-shared-daemon">Updates on a shared daemon</a></li><li class="lvl-2"><a href="#windows-a-second-user-on-one-box">Windows: a second user on one box</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-topology">The topology</a></li><li class="lvl-2"><a href="#set-up-the-server">Set up the Server</a></li><li class="lvl-3"><a href="#a-new-computer">A new computer</a></li><li class="lvl-3"><a href="#a-computer-already-running-seamless">A computer already running Seamless</a></li><li class="lvl-3"><a href="#check-the-server">Check the Server</a></li><li class="lvl-2"><a href="#step-3-pair-a-client">Connect each Client</a></li><li class="lvl-3"><a href="#the-relays-root-step">The relay&#39;s root step</a></li><li class="lvl-3"><a href="#windows-is-always-a-key-client">Windows is always a key client</a></li><li class="lvl-3"><a href="#check-a-client">Check a Client</a></li><li class="lvl-2"><a href="#devices">Pair computers on the Devices page</a></li><li class="lvl-3"><a href="#revoke-a-computer">Revoke a computer</a></li><li class="lvl-2"><a href="#console-sign-in">Sign in to the console from another computer</a></li><li class="lvl-2"><a href="#approve-from-another-computer">Approve from another computer</a></li><li class="lvl-2"><a href="#locked-projects-and-agents-on-other-computers">Locked projects and agents on other computers</a></li><li class="lvl-2"><a href="#when-the-server-is-out-of-reach">When the Server is out of reach</a></li><li class="lvl-2"><a href="#what-a-remote-device-does-not-get">What a remote device does not get</a></li><li class="lvl-3"><a href="#how-doctor-reports-it">How doctor reports it</a></li><li class="lvl-2"><a href="#updates-on-a-shared-daemon">Updates on a shared daemon</a></li><li class="lvl-2"><a href="#windows-a-second-user-on-one-box">Windows: a second user on one box</a></li><li class="lvl-2"><a href="#step-1-widen-the-server">By hand: widen the Server</a></li><li class="lvl-2"><a href="#step-2-tls">By hand: TLS</a></li><li class="lvl-3"><a href="#mkcert-the-friction-free-path">mkcert (the friction-free path)</a></li><li class="lvl-3"><a href="#openssl-no-extra-tool">openssl (no extra tool)</a></li><li class="lvl-3"><a href="#why-https-changes-the-claude-code-wiring">Why https changes the Claude Code wiring</a></li><li class="lvl-2"><a href="#pair-with-the-servers-key">By hand: connect a Client with the Server&#39;s key</a></li><li class="lvl-2"><a href="#install-a-relay">By hand: install a relay</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </details>
-  <p>The default install is one daemon per machine, bound to loopback. This guide is
-the other shape: <strong>one daemon, several devices</strong>, so a laptop, a desktop, and a
-build box share a single corpus instead of three that drift apart.</p>
-<p>It is an opt-in with real tradeoffs. The bearer key is still the only
-authentication and there is still no per-client authorization, so the supported
-boundary is a trusted LAN - see
-<a href="../../install/#going-beyond-loopback-deliberately">the security posture</a>. Some
-daemon-side captures stop working for remote devices, deliberately and visibly;
-<a href="#what-a-remote-device-does-not-get">what a remote device does not get</a> is the
-honest list, and it is worth reading before you start.</p>
+  <p>The default install is <strong>Standalone</strong>: one daemon per computer, bound to
+loopback. This guide is the other shape, <strong>Networked</strong>: one computer, the
+<strong>Server</strong>, runs the daemon and keeps the data, and every other computer is a
+<strong>Client</strong> of it, so a laptop, a desktop and a build box share a single corpus
+instead of three that drift apart. <a href="../../concepts/networked/">Networked Seamless</a>
+explains the model - the relay, pairing, and what stops when the Server is out
+of reach. This page is the steps.</p>
+<p>It is an opt-in with real tradeoffs. The bearer key is you, and so is a
+computer paired with the Server: either reaches every project but the locked
+ones, except that under peer_auth a relay reaches only what the account it
+names may. So the supported boundary is computers you trust on a network you
+trust - see <a href="../../install/#going-beyond-loopback-deliberately">the security posture</a>. Some
+daemon-side captures stop working for agents on another computer, deliberately
+and visibly; <a href="#what-a-remote-device-does-not-get">what a remote device does not get</a>
+is the honest list, and it is worth reading before you start.</p>
+<p>Set up the Server first: every Client needs its address.</p>
 <h2 id="the-topology">The topology</h2>
-<p>One machine is the <strong>server</strong>: it runs <code>seamlessd</code>, owns <code>~/.seamless</code> (the
-SQLite database and the markdown corpus), and is the only machine that needs a
-service. Every other machine is a <strong>client</strong>: it installs the two binaries and
-wires its agent clients' hooks and MCP registrations at the server's URL, and
-it runs no daemon of its own.</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -278,7 +300,7 @@ it runs no daemon of its own.</p>
 <tr>
 <td>Service (launchd / systemd / Scheduled Task)</td>
 <td>installed</td>
-<td>none</td>
+<td>none (a relay, if you install one, runs as a service of its own)</td>
 </tr>
 <tr>
 <td>Data dir, database, corpus</td>
@@ -288,55 +310,160 @@ it runs no daemon of its own.</p>
 <tr>
 <td>Config keys that matter</td>
 <td><code>addr</code>, <code>server_url</code>, <code>allowed_hosts</code>, <code>tls.cert_file</code>, <code>tls.key_file</code>, <code>mcp.api_key</code></td>
-<td><code>role</code>, <code>server_url</code>, <code>mcp.api_key</code>, <code>tls.ca_file</code></td>
+<td><code>role</code>, <code>server_url</code>; a key device adds its own <code>mcp.api_key</code>, and <code>tls.ca_file</code> for a certificate it compared</td>
 </tr>
 <tr>
 <td>Console, gardener, embeddings</td>
 <td>here</td>
-<td>the server's</td>
+<td>the Server's</td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>A client's config is deliberately tiny. <code>role: client</code> requires <code>server_url</code> -
-a client that dials nowhere is a contradiction, and loading one is an error -
-and <code>tls.cert_file</code> on a client is refused too: a client holds no server
-certificate, it trusts one with <code>tls.ca_file</code>.</p>
-<h2 id="step-1-widen-the-server">Step 1: widen the server</h2>
-<p>Edit the server's <code>~/.config/seamless/seamless.yaml</code>:</p>
-<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">addr</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;0.0.0.0:8081&#34;</span><span class="w">                       </span><span class="c"># listen on every interface</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;http://studio.local:8081&#34;</span><span class="w">     </span><span class="c"># what clients dial</span><span class="w">
-</span></span></span></code></pre></div>
-<p>Both keys, not one. <code>addr</code> answers &quot;where do I listen&quot;; <code>server_url</code> answers
-&quot;where do clients reach me&quot;, and they stop having the same answer the moment
-the bind is a wildcard. Leaving <code>server_url</code> unset on a wildcard bind derives
-<code>http://127.0.0.1:8081</code> - an address that means &quot;your own machine&quot; on every
-client that receives it - and the daemon warns about exactly that combination
-at startup. Putting the wildcard in <code>server_url</code> instead is refused outright at
-config load, in any spelling of the unspecified address: <code>http://0.0.0.0:8081</code>
-reaches, at most, the machine doing the dialing, so it can never be the right
-answer to &quot;where do clients reach me&quot;.</p>
-<p>A concrete IPv4 <code>addr</code> (one LAN or tailnet address instead of the wildcard)
-also listens on its interface's IPv6 addresses that reach no further, so a
-dual-stack name reaches the daemon over either family. Beside a private or
-tailnet address that means only unique local addresses (<code>fd…</code>), never a global
-IPv6 address the internet may reach. Doctor's <code>bind</code> row lists them.</p>
-<p>Naming <code>server_url</code> also arms the <strong>Host-header allowlist</strong>: the daemon then
-answers the loopback names, a concrete bind host, and the host of <code>server_url</code>,
-and refuses everything else with <code>421 Misdirected Request</code>. Add any further
-name the daemon is reached by - a short hostname, a raw IP - to
-<code>allowed_hosts</code>. (A wildcard bind has no concrete host of its own, which is why
-naming one somewhere is what turns the guard on there.)</p>
-<p>Restart the daemon and check it:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd restart
-</span></span><span class="line"><span class="cl">seamlessd doctor
+<p>A Client's config is deliberately tiny. <code>role: client</code> requires <code>server_url</code> - a
+client that dials nowhere is a contradiction, and loading one is an error - and
+<code>tls.cert_file</code> on a client is refused too: a client holds no server
+certificate, it trusts one with <code>tls.ca_file</code>. Through a relay, <code>server_url</code>
+names the relay's socket, <code>unix:///opt/seamless/run/seamlessd.sock</code>, and the
+config holds no key at all.</p>
+<h2 id="set-up-the-server">Set up the Server</h2>
+<h3 id="a-new-computer">A new computer</h3>
+<p>On the computer that will keep the data, run the installer in a terminal:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">curl -fsSL https://thereisnospoon.org/install <span class="p">|</span> sh
 </span></span></code></pre></div>
-<p>Doctor's transport lines are the ones to read:</p>
+<p>Once it has downloaded and verified the release, and before it installs
+anything, it asks <a href="../../reference/cli-seamlessd/#seamlessd_setup"><code>seamlessd setup</code></a>
+how this computer will be used:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">How will you use Seamless?
+</span></span><span class="line"><span class="cl">  [1] Standalone  everything on this computer: the daemon, the data, and the agents that use them
+</span></span><span class="line"><span class="cl">  [2] Networked   one computer keeps the data, and the others connect to it
+</span></span><span class="line"><span class="cl">Enter 1 or 2 [1]: 2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Set up the Server first: each Client needs its address and a pairing code.
+</span></span><span class="line"><span class="cl">  [1] Server      this computer keeps the data, and the other computers connect to it
+</span></span><span class="line"><span class="cl">  [2] Client      this computer connects to the Server and keeps no data of its own
+</span></span><span class="line"><span class="cl">Enter 1 or 2: 1
+</span></span></code></pre></div>
+<p>Then it decides where the other computers reach this one:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">Where will the other computers reach this one?
+</span></span><span class="line"><span class="cl">  [1] Tailscale   &lt;server name&gt;: this computer&#39;s name on your tailnet, with a certificate from the tailnet
+</span></span><span class="line"><span class="cl">  [2] Domain      a name of yours, with its certificate and key
+</span></span><span class="line"><span class="cl">  [3] LAN         a name on your local network: setup shows how to make its certificate
+</span></span><span class="line"><span class="cl">Enter 1-3 [1]:
+</span></span></code></pre></div>
+<ul>
+<li><strong>Tailscale</strong> is offered, and is the default, when Tailscale runs here and the
+tailnet issues certificates for this computer's MagicDNS name. Setup gets the
+certificate with <code>tailscale cert</code>, into <code>~/.config/seamless/tls</code>. Otherwise a
+line says why Tailscale is not offered, and the choices are the other two.</li>
+<li><strong>Domain</strong> is a name of yours with a certificate and key you already have:
+setup asks for the name, then the <code>Certificate file</code> and the <code>Key file</code>.</li>
+<li><strong>LAN</strong> is a name on your local network; setup offers this computer's own,
+with <code>.local</code> added when it has no domain. It prints an <code>mkcert</code> and an
+<code>openssl</code> command that make the name's certificate in <code>~/.config/seamless/tls</code>,
+to run in another terminal, and then asks for the files. The other computers trust mkcert's <code>rootCA.pem</code>,
+or the openssl certificate itself (<a href="#step-2-tls">how</a>).</li>
+</ul>
+<p>Setup takes a name only when it resolves on this computer, A and AAAA, to
+addresses this computer holds and none of them loopback. It takes a certificate
+only when it loads as a pair with its key, names the host and is valid now, and
+the key is readable by your account alone (<code>chmod 600</code>). It then binds the
+narrowest address that holds every address of the name - one IPv4 address of
+it, with the IPv6 addresses <code>serve</code> listens on beside it (a tailnet name's two),
+else the wildcard - and says each choice in one line:</p>
 <div class="table-wrap">
 <table>
 <thead>
 <tr>
-<th>Line</th>
+<th>Row</th>
+<th>What it says</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>address</code></td>
+<td>the <code>server_url</code> the other computers dial</td>
+</tr>
+<tr>
+<td><code>certificate</code></td>
+<td>the file, until when it is valid, and how to renew it</td>
+</tr>
+<tr>
+<td><code>bind</code></td>
+<td>the <code>addr</code>, and why it holds every address of the name</td>
+</tr>
+<tr>
+<td><code>passkeys</code></td>
+<td>the <a href="../../guides/peer-auth/#the-passkey-origin">passkey origin</a>, derived from <code>server_url</code></td>
+</tr>
+<tr>
+<td><code>allowed</code></td>
+<td>no other name: the daemon refuses (<code>421</code>) a request that names another host</td>
+</tr>
+<tr>
+<td><code>key</code></td>
+<td>who can read the TLS key, and what that means for the console's origin</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Next, <strong>Start fresh, or from a backup?</strong> Enter starts fresh. A backup - a
+<code>seamlessd export</code> archive or one from Settings &gt; Backups - is restored into the
+empty data directory before anything is installed
+(<a href="../../reference/cli-seamlessd/#seamlessd_setup_import">details</a>). Only then does
+setup write <code>~/.config/seamless/seamless.yaml</code>: <code>addr</code>, <code>server_url</code>,
+<code>allowed_hosts</code> and <code>tls</code>, with the bearer key. The installer installs the
+binaries, wires this computer's agents for https, starts the service and waits
+for it to answer.</p>
+<p>The install ends with what each Client needs, as <code>seamlessd devices code</code>
+prints it:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">To connect another computer to this server:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Address:                 https://&lt;server name&gt;:8081
+</span></span><span class="line"><span class="cl">  Certificate fingerprint: &lt;SHA-256 of the certificate&gt;
+</span></span><span class="line"><span class="cl">    (the other computer shows it before it pairs: they must match)
+</span></span><span class="line"><span class="cl">  Pairing code:            get one on the console&#39;s Devices page, or run `seamlessd devices code` here
+</span></span><span class="line"><span class="cl">    The code is the approval: whoever enters it first pairs as you.
+</span></span></code></pre></div>
+<p>It is followed by the one-liners for macOS and Linux and for Windows, and by
+locked projects as a step setup does not do yet, with the
+<a href="../../guides/peer-auth/#move-an-existing-install-over">guide that does it by hand</a>.
+Run a one-liner on each Client, with a code of its own
+(<a href="#step-3-pair-a-client">below</a>).</p>
+<p>A script answers the same questions in the environment: <code>SEAMLESS_SETUP=server</code>
+with <code>SEAMLESS_SERVER_NAME</code>, plus <code>SEAMLESS_TLS_CERT</code> and <code>SEAMLESS_TLS_KEY</code>
+unless the name is this computer's Tailscale name, whose certificate setup gets
+from the tailnet:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">curl -fsSL https://thereisnospoon.org/install <span class="p">|</span> <span class="nv">SEAMLESS_SETUP</span><span class="o">=</span>server <span class="nv">SEAMLESS_SERVER_NAME</span><span class="o">=</span>&lt;this computer<span class="err">&#39;</span>s tailnet name&gt; sh
+</span></span></code></pre></div>
+<p>Every knob is in <a href="../../reference/cli-seamlessd/#seamlessd_setup">the CLI reference</a>.</p>
+<h3 id="a-computer-already-running-seamless">A computer already running Seamless</h3>
+<p>Run <code>seamlessd setup</code> on it. It says how the computer is set up and offers the
+changes it can make:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">This computer is set up as Standalone.
+</span></span><span class="line"><span class="cl">  [1] Keep it as it is
+</span></span><span class="line"><span class="cl">  [2] Make it the Server, so other computers connect to it
+</span></span><span class="line"><span class="cl">  [3] Turn on locked projects (peer_auth)
+</span></span><span class="line"><span class="cl">Enter 1-3 [1]:
+</span></span></code></pre></div>
+<p>Choose <strong>Make it the Server</strong>. Setup asks the same address questions, but it
+never edits a config that exists: it prints the lines to put in
+<code>~/.config/seamless/seamless.yaml</code>, replacing any it has, and the installer
+command to run again, which restarts the daemon and wires the hooks for https.
+With locked projects on, the daemon's config and TLS pair are its own
+account's, so setup prints the root steps that put them in place instead
+(<a href="../../reference/cli-seamlessd/#seamlessd_setup_address">the Server's address</a>).
+Setup does not change the address of a computer that is the Server already:
+that is <a href="#step-1-widen-the-server">by hand</a>.</p>
+<h3 id="check-the-server">Check the Server</h3>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd doctor
+</span></span></code></pre></div>
+<p>Its transport rows are the ones to read:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Row</th>
 <th>What it tells you</th>
 </tr>
 </thead>
@@ -353,119 +480,174 @@ naming one somewhere is what turns the guard on there.)</p>
 <td><code>tls</code></td>
 <td>Off, or the certificate's expiry and whether its SANs cover the advertised host.</td>
 </tr>
-</tbody>
-</table>
-</div>
-<h2 id="step-2-tls">Step 2: TLS</h2>
-<p>Plain http over a LAN is a legitimate choice and Seamless will not stop you -
-<code>seamlessd client-config</code> prints a warning and continues. But the bearer key
-and every memory it fetches cross the network unencrypted, so prefer https.</p>
-<p>Both <code>tls.cert_file</code> and <code>tls.key_file</code> must be set; one without the other is
-refused at load, because it cannot serve TLS. With both set the listener is
-https (TLS 1.2 floor), the console session cookie is marked <code>Secure</code>, and
-<code>server_url</code> derives an <code>https://</code> scheme.</p>
-<p>The certificate must cover <strong>the host of <code>server_url</code></strong> - bare host, no scheme,
-no port, lower-cased. That is the name clients verify and the name doctor
-checks the SANs against.</p>
-<h3 id="mkcert-the-friction-free-path">mkcert (the friction-free path)</h3>
-<p><a href="https://github.com/FiloSottile/mkcert">mkcert</a> installs a local CA into your
-system trust store and issues certificates from it:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">mkcert -install                                       <span class="c1"># once per machine</span>
-</span></span><span class="line"><span class="cl">mkcert -cert-file ~/.config/seamless/seamless.crt <span class="se">\
-</span></span></span><span class="line"><span class="cl">       -key-file  ~/.config/seamless/seamless.key  studio.local
-</span></span><span class="line"><span class="cl">mkcert -CAROOT                                        <span class="c1"># prints the CA directory</span>
-</span></span></code></pre></div>
-<p>Server config:</p>
-<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">addr</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;0.0.0.0:8081&#34;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;https://studio.local:8081&#34;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">tls</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">cert_file</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;~/.config/seamless/seamless.crt&#34;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">key_file</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;~/.config/seamless/seamless.key&#34;</span><span class="w">
-</span></span></span></code></pre></div>
-<p>Copy <code>rootCA.pem</code> from the <code>mkcert -CAROOT</code> directory to each client and point
-<code>tls.ca_file</code> at it there. That one file is what makes the <code>seam</code> CLI trust the
-server; it is the only TLS key a client has.</p>
-<h3 id="openssl-no-extra-tool">openssl (no extra tool)</h3>
-<p>A self-signed certificate works just as well as long as it carries the SAN and
-is usable as its own root - <code>CA:TRUE</code>, which is why the second <code>-addext</code> is not
-optional. Needs OpenSSL 1.1.1 or newer for <code>-addext</code>:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">openssl req -x509 -newkey rsa:2048 -sha256 -days <span class="m">825</span> -nodes <span class="se">\
-</span></span></span><span class="line"><span class="cl">  -keyout ~/.config/seamless/seamless.key <span class="se">\
-</span></span></span><span class="line"><span class="cl">  -out    ~/.config/seamless/seamless.crt <span class="se">\
-</span></span></span><span class="line"><span class="cl">  -subj   <span class="s2">&#34;/CN=studio.local&#34;</span> <span class="se">\
-</span></span></span><span class="line"><span class="cl">  -addext <span class="s2">&#34;subjectAltName=DNS:studio.local,IP:192.168.1.10&#34;</span> <span class="se">\
-</span></span></span><span class="line"><span class="cl">  -addext <span class="s2">&#34;basicConstraints=critical,CA:TRUE&#34;</span>
-</span></span></code></pre></div>
-<p>Include every name and address clients dial in <code>subjectAltName</code>; a client that
-dials an IP the certificate does not list fails in the TLS handshake. Then copy
-<code>seamless.crt</code> - the certificate, never the key - to each client as
-<code>~/.config/seamless/server-ca.crt</code>, and write that client's whole config:</p>
-<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;client&#34;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;https://studio.local:8081&#34;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">tls</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">ca_file</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;~/.config/seamless/server-ca.crt&#34;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">mcp</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;&lt;the server&#39;s key&gt;&#34;</span><span class="w">
-</span></span></span></code></pre></div>
-<p>Renewal is manual on both paths - nothing auto-renews - which is why doctor's
-<code>tls</code> line warns from 30 days out.</p>
-<h3 id="why-https-changes-the-claude-code-wiring">Why https changes the Claude Code wiring</h3>
-<p>Under an <code>https://</code> base URL, <code>install-hooks</code> writes a different shape on
-purpose: <strong>every</strong> Claude Code hook becomes a command hook (including
-<code>UserPromptSubmit</code>, normally the one http hook), and the MCP registration
-becomes the <code>seam mcp-proxy</code> stdio bridge instead of a direct URL. Claude Code
-performs http hooks and http MCP connections with its own client, which has
-nowhere to be told about <code>tls.ca_file</code>; against a private CA that request dies
-in the TLS handshake. Routing both through <code>seam</code> puts them on the CLI's trust
-store, which does read <code>tls.ca_file</code>. Under plain http the shapes are
-unchanged.</p>
-<h2 id="step-3-pair-a-client">Step 3: pair a client</h2>
-<p>On the <strong>server</strong>, ask for the pairing block:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd client-config            <span class="c1"># add --redact to paste it into a ticket</span>
-</span></span></code></pre></div>
-<p>It prints the server URL, the key, the minimum client version, and three
-paste-able commands: the macOS/Linux installer one-liner, the PowerShell one,
-and the manual form for a machine that already has the binaries:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd install-hooks --server-url https://studio.local:8081 --api-key &lt;key&gt;
-</span></span></code></pre></div>
-<p>That command writes <code>role: client</code>, <code>server_url</code>, and <code>mcp.api_key</code> into
-<code>~/.config/seamless/seamless.yaml</code> on first run and wires the detected agent
-clients against the server's URL. Like every other config bootstrap it never
-edits a config file that already exists: it errors and names the exact lines to
-add by hand. The one existing file that is not an error is one that already
-says exactly this, so re-running the installer is safe.</p>
-<p>The installer one-liners are the same thing with the binaries and the download
-included - <code>SEAMLESS_SERVER_URL</code> plus <code>SEAMLESS_MCP_API_KEY</code>, which is a pair:
-the URL without the key is a hard error. A client install skips the service
-branch entirely - the run prints the service step as skipped, naming the server
-it is a client of - and polls the <em>server's</em> <code>/healthz</code> instead of a local one.</p>
-<p><code>client-config</code> refuses rather than printing a command that cannot work:</p>
-<div class="table-wrap">
-<table>
-<thead>
 <tr>
-<th>Refusal</th>
-<th>Why</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>this install is <code>role: client</code></td>
-<td>it has no clients of its own to pair; run it on the server</td>
+<td><code>tls.key_file</code></td>
+<td>Who can read the TLS key: your account alone is <strong>info</strong>, group or world a <strong>warn</strong>.</td>
 </tr>
 <tr>
-<td><code>mcp.api_key</code> is empty</td>
-<td>a client would have nothing to authenticate with</td>
+<td><code>server_url.addresses</code></td>
+<td>Every address the <code>server_url</code> host resolves to, against what the daemon listens on. One the daemon does not hold is a <strong>warn</strong>.</td>
 </tr>
 <tr>
-<td><code>server_url</code> is loopback</td>
-<td>pasted on another machine it dials <em>that</em> machine's port 8081. It names the fix: <code>server_url</code> plus <code>addr: 0.0.0.0:8081</code>, then restart</td>
+<td><code>tailscale</code></td>
+<td><strong>info</strong> when the tailnet issues certificates for the host: then the bind holding every address of the name, not the TLS key, keeps another page off the console's origin.</td>
+</tr>
+<tr>
+<td><code>device pairing</code></td>
+<td>How a computer pairs here, and how many are paired or waiting. No TLS is a <strong>warn</strong>: a relay cannot pair.</td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>On the client, confirm:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam doctor          <span class="c1"># resolved URL, server reachable, key accepted, tools/list count</span>
+<p>Every row is in <a href="../../reference/cli-seamlessd/#seamlessd_doctor">the doctor reference</a>.</p>
+<h2 id="step-3-pair-a-client">Connect each Client</h2>
+<p>On the Server, get a pairing code: <strong>Get a pairing code</strong> on the console's
+<a href="#devices">Devices page</a>, or <code>seamlessd devices code</code> in the Server's terminal.
+Either shows the code once, valid for 10 minutes and for one computer, with a
+one-liner for each kind of Client. On the Client, run its one-liner:</p>
+<div class="ctx-variant" data-ctx-os="macos linux">
+<p class="ctx-label"><span class="ctx-chip">macOS</span><span class="ctx-chip">Linux</span></p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">curl -fsSL https://thereisnospoon.org/install <span class="p">|</span> <span class="nv">SEAMLESS_SETUP</span><span class="o">=</span>client <span class="nv">SEAMLESS_SERVER_URL</span><span class="o">=</span>https://&lt;server name&gt;:8081 <span class="nv">SEAMLESS_PAIR_CODE</span><span class="o">=</span>&lt;code&gt; sh
+</span></span></code></pre></div>
+</div>
+<div class="ctx-variant" data-ctx-os="windows">
+<p class="ctx-label"><span class="ctx-chip">Windows</span></p>
+<div class="code-block" data-lang="powershell"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nv">$env:SEAMLESS_SETUP</span><span class="p">=</span><span class="s1">&#39;client&#39;</span><span class="p">;</span> <span class="nv">$env:SEAMLESS_SERVER_URL</span><span class="p">=</span><span class="s1">&#39;https://&lt;server name&gt;:8081&#39;</span><span class="p">;</span> <span class="nv">$env:SEAMLESS_PAIR_CODE</span><span class="p">=</span><span class="s1">&#39;&lt;code&gt;&#39;</span><span class="p">;</span> <span class="nb">irm </span><span class="n">https</span><span class="err">:</span><span class="p">//</span><span class="n">thereisnospoon</span><span class="p">.</span><span class="n">org</span><span class="p">/</span><span class="n">install</span><span class="p">.</span><span class="py">ps1</span> <span class="p">|</span> <span class="nb">iex
+</span></span></span></code></pre></div>
+</div>
+<p>Setup then pairs the computer before anything is installed, and finishes once
+the install is done:</p>
+<ol>
+<li><strong>It shows the Server's certificate.</strong> It reads the certificate in a
+handshake that sends nothing, and shows its SHA-256 fingerprint: compare it
+with the <code>Certificate fingerprint</code> the Server printed. Add
+<code>SEAMLESS_SERVER_FINGERPRINT=&lt;that fingerprint&gt;</code> to the line to have setup
+compare it; on a mismatch nothing is sent. A certificate this computer's own
+roots do not trust - one made with mkcert or openssl - is trusted only once
+it was compared, and then as that certificate alone, kept in
+<code>~/.config/seamless/server-ca.crt</code>. Without the knob, such a run stops and
+names it. A plain <code>http://</code> address is refused unless it is this computer's
+own loopback: the code, and a key of this computer's, would cross the
+network in the clear.</li>
+<li><strong>It pairs as a relay or a key device.</strong> On macOS and Linux it pairs a
+<a href="../../concepts/networked/#the-relay">relay</a>, unless <code>SEAMLESS_PAIR_AS=key</code> makes
+it a key device, for a computer where you have no root (a container, CI).
+<a href="#windows-is-always-a-key-client">Windows</a> always pairs a key device.</li>
+<li><strong>A key device pairs at once.</strong> Its key, the pairing's answer, goes into a
+new <code>~/.config/seamless/seamless.yaml</code> (<code>0600</code>) with <code>role: client</code>, the
+Server's address and, for a certificate it had to compare, <code>tls.ca_file</code>.
+The key is never printed. Setup pairs one only where no config exists yet:
+move an existing one aside first. Under peer_auth it waits for your approval
+on the Devices page.</li>
+<li><strong>A relay gets its config now and its root step at the end.</strong> Setup writes a
+config of <code>role: client</code> and <code>server_url: unix:///opt/seamless/run/seamlessd.sock</code>,
+with no key, and the installer wires your agents to that socket. Once the
+install is done, setup prints the relay's one root step
+(<a href="#the-relays-root-step">below</a>), with the pairing code on a row of its own.
+It never runs a command as root.</li>
+<li><strong>It checks.</strong> For a key device, <code>seam doctor</code>, then a session called
+<code>seamless-setup-check</code>, whose host the Server reports back: the name the
+Server records this computer's work under. For a relay that does not serve
+yet, it says to run <code>seam doctor</code> once it does.</li>
+</ol>
+<p>A relay Client pairs again the same way, with a new code; a key device first
+needs its config moved aside, since setup never edits one. A computer that runs
+a daemon of its own (Standalone, or the Server) is refused: its data would have
+to move first. Every knob is in
+<a href="../../reference/cli-seamlessd/#seamlessd_setup">the CLI reference</a>.</p>
+<p><strong>At the terminal</strong>, with no variable set, the installer asks instead. Choose
+<strong>Networked</strong>, then <strong>Client</strong>:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">The Server&#39;s address: its setup printed it, and so does seamlessd devices code there.
+</span></span><span class="line"><span class="cl">Server address (https://host:8081): https://&lt;server name&gt;:8081
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  fingerprint  &lt;SHA-256 of the certificate&gt;
+</span></span><span class="line"><span class="cl">               the Server&#39;s certificate, SHA-256: its setup printed it (Certificate fingerprint), and so does seamlessd devices code there
+</span></span><span class="line"><span class="cl">Does it match what the Server printed? [y/N]: y
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">How will this computer reach the Server?
+</span></span><span class="line"><span class="cl">  [1] Relay       a small service of its own account: your agents need no key, and locked projects can open to them (one root step)
+</span></span><span class="line"><span class="cl">  [2] Key         a key of this computer&#39;s own, for a computer where you have no root (a container, CI); it never opens a locked project
+</span></span><span class="line"><span class="cl">Enter 1 or 2 [1]:
+</span></span></code></pre></div>
+<p>Enter at the fingerprint question is no, and no sends nothing. Windows skips
+the last question. Setup then asks for the pairing code: a key device at once,
+a relay just before its root step.</p>
+<p><strong>With the Server's own key</strong>, <code>SEAMLESS_SERVER_URL</code> with <code>SEAMLESS_MCP_API_KEY</code>
+installs a key client of the Server's shared key, as before: it pairs nothing,
+and the Devices page does not list it (<a href="#pair-with-the-servers-key">by hand</a>).</p>
+<h3 id="the-relays-root-step">The relay's root step</h3>
+<p>The relay names each of your agents to the Server by the uid this computer's
+kernel reports, so it runs as an account of its own, where no process of yours
+can change what it says, and making that account takes root once. Setup prints
+the commands with this computer's values, to read and then run as an
+administrator, in four blocks:</p>
+<ol>
+<li>
+<p><strong>Its account and a group.</strong> A system account, <code>_seamless</code> (on macOS made
+with <code>dscl</code>, on Linux with <code>useradd --system</code>), and a group,
+<code>_seamlessowner</code>, holding you and it alone: the socket's.</p>
+</li>
+<li>
+<p><strong>The layout, root's copy of <code>seamlessd</code>, and the pin.</strong> Root's
+<code>/opt/seamless</code>, <code>/opt/seamless/bin</code> and <code>/opt/seamless/etc</code>; the relay's
+<code>/opt/seamless/run</code>, its home, and <code>/opt/seamless/relay</code> (<code>0700</code>) for its
+key. Root's own copy of the <code>seamlessd</code> the installer just put in your
+<code>~/.local/bin</code> goes to <code>/opt/seamless/bin/seamlessd</code>, and a
+<code>shasum -a 256 -c</code> (Linux: <code>sha256sum -c</code>) line checks it is the binary
+setup ran as. A certificate you compared is copied to
+<code>/opt/seamless/etc/server-ca.crt</code>. Then the account is pinned in
+<code>/opt/seamless/etc/daemon-account</code>, as
+<a href="../../guides/peer-auth/#deploy-it-the-daemon-runs-as-its-own-account">Deploy it</a>
+pins the daemon's.</p>
+</li>
+<li>
+<p><strong>The pairing, as its account:</strong></p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --server https://&lt;server name&gt;:8081 --fingerprint &lt;fingerprint&gt; --code -
+</span></span></code></pre></div>
+<p>with <code>--ca-file /opt/seamless/etc/server-ca.crt</code> for a certificate you
+compared. It waits for you to paste the code, which setup shows on its own
+row and never puts in a command line, where other accounts and your shell
+history would keep it. The key it makes stays in <code>/opt/seamless/relay</code>.
+Under peer_auth it waits again, until you approve it on the Devices page.</p>
+</li>
+<li>
+<p><strong>Its service</strong>: on macOS the LaunchDaemon <code>com.arctop.seamless.relay</code>, on
+Linux the system unit <code>seamless-relay.service</code>, each running
+<code>/opt/seamless/bin/seamlessd relay serve --socket-mode 0660 --socket-group _seamlessowner</code>
+as <code>_seamless</code>. Only you, and the relay, reach its socket.</p>
+</li>
+</ol>
+<p>After the blocks, setup prints what the Server needs: under peer_auth it judges
+each caller this relay names once you map it, and refuses it until then. Add
+the line it prints to the daemon's config, <code>/opt/seamless/etc/seamless.yaml</code>,
+and restart the daemon (<a href="../../guides/peer-auth/#agents-on-another-computer-relays">what it does</a>):</p>
+<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">peer_auth</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">relays</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">&lt;this computer&#39;s name&gt;</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">owner_uid</span><span class="p">:</span><span class="w"> </span><span class="m">501</span><span class="w">    </span><span class="c"># your uid on this computer</span><span class="w">
+</span></span></span></code></pre></div>
+<p>On Linux, log out and back in once: your agents join <code>_seamlessowner</code> at your
+next login. Approvals then happen in the Server's console, with a passkey, from
+any browser (<a href="#approve-from-another-computer">below</a>).</p>
+<h3 id="windows-is-always-a-key-client">Windows is always a key client</h3>
+<p>Setup offers a Windows computer Standalone and Client only:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">How will you use Seamless?
+</span></span><span class="line"><span class="cl">  [1] Standalone  everything on this computer: the daemon, the data, and the agents that use them
+</span></span><span class="line"><span class="cl">  [2] Networked   connect to a Server on another computer, as its Client
+</span></span><span class="line"><span class="cl">      Windows has no peer_auth and no relay, so a Windows computer can be a Client but not the Server.
+</span></span><span class="line"><span class="cl">Enter 1 or 2 [1]:
+</span></span></code></pre></div>
+<p>A Windows Client is a key device, always: <code>SEAMLESS_PAIR_AS=relay</code> is refused
+there, and <code>seamlessd relay</code> refuses to run. Its pairing gives it a key of its
+own, which the Server's Devices page lists and revokes, and setup says what
+that means: a key device never opens a locked project, since the Server cannot
+tell its agents apart, so they never hold a lease. Run agents that need a
+locked project on the Server's computer, or on a macOS or Linux computer behind
+a relay the Server maps (<a href="#locked-projects-and-agents-on-other-computers">below</a>).
+The same holds for a macOS or Linux computer paired as a key device.</p>
+<h3 id="check-a-client">Check a Client</h3>
+<p>On the Client, any time:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam doctor          <span class="c1"># the server answers, and tools/list works</span>
 </span></span><span class="line"><span class="cl">seamlessd doctor     <span class="c1"># the client report: role, server_url, key, hooks, MCP</span>
 </span></span></code></pre></div>
 <p>A client's <code>seamlessd doctor</code> is a deliberately short list: role and
@@ -476,6 +658,134 @@ because every one of them describes a machine that is somewhere else. The
 <code>server_url</code> probe is a <strong>fail</strong> on a client rather than the server's info
 line: until the server answers there are no briefings, no memories, and no
 tools on this machine.</p>
+<p>On a computer with a relay, it adds the relay's rows: the account the relay
+runs as, its layout, its pairing, its socket, who may connect to it
+(<code>relay.access</code>, a <strong>warn</strong> when every local account can), and whether the
+Server answers it. The pairing is readable by the relay's account alone, so
+run doctor as that account to see it
+(<code>sudo -u _seamless -H /opt/seamless/bin/seamlessd doctor</code>).</p>
+<h2 id="devices">Pair computers on the Devices page</h2>
+<p>A Server that serves other computers - TLS, a bind beyond loopback, or a
+<code>server_url</code> naming another host - has a <strong>Devices</strong> page in its console,
+<code>/console/devices</code>, and <code>seamlessd devices</code> does the same in the Server's
+terminal (<a href="../../reference/cli-seamlessd/#seamlessd_devices">reference</a>). Elsewhere
+neither exists.</p>
+<ul>
+<li>
+<p><strong>Pair a computer.</strong> The page shows the Server's address and its certificate
+fingerprint. <strong>Get a pairing code</strong> mints a code, shown once, valid for 10
+minutes and for one computer, with the one-liners. <code>seamlessd devices code</code>
+prints the same with a new code; under peer_auth, run it as the daemon's
+account:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd devices code
+</span></span></code></pre></div>
+</li>
+<li>
+<p><strong>Waiting for your approval</strong>, under peer_auth only: each computer that used a
+code, with its fingerprint and until when it waits. <strong>Approve with a passkey</strong>
+only a computer whose fingerprint is the one its own screen shows; <strong>Deny</strong>
+one you do not recognize. Approving needs a signed-in browser on the
+<a href="../../guides/peer-auth/#the-passkey-origin">passkey origin</a> and a passkey
+<a href="../../guides/peer-auth/#enroll-an-approver">enrolled</a> there; the page says which
+is missing. Without peer_auth nothing waits: the code is the approval.</p>
+</li>
+<li>
+<p><strong>Paired</strong>: each relay with its key's fingerprint and each key device with the
+start of its key, when it paired and whether your passkey or its one-time
+code approved it, and when it was last seen.</p>
+</li>
+<li>
+<p><strong>Revoked and expired</strong>: what ended, and how.</p>
+</li>
+</ul>
+<p><code>seamlessd devices list</code> prints the same list in the terminal. Without TLS on
+the daemon's own listener only a key device can pair, and its key crosses the
+network unencrypted; a relay cannot pair at all.</p>
+<h3 id="revoke-a-computer">Revoke a computer</h3>
+<p><strong>Revoke</strong> on the Devices page, or in the Server's terminal (as the daemon's
+account under peer_auth, like <code>devices code</code>):</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd devices revoke &lt;id or name&gt;
+</span></span></code></pre></div>
+<p>The computer's credential is refused from its next request, and the requests
+it is making end: at once from the page, within 30 seconds from the terminal. A
+relay's leases, read grants and waiting access requests end with it. A pairing
+that waits is denied instead.</p>
+<p>To pair it again, get a new code. A relay pairs again with the root step's
+pairing line plus <code>--replace</code>, once its old pairing is revoked (the Server
+refuses a second live device of the same name), and then restarts:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --replace --server https://&lt;server name&gt;:8081 --fingerprint &lt;fingerprint&gt; --code -
+</span></span></code></pre></div>
+<p>The same goes for a renewed certificate: a relay pins the exact certificate it
+paired with, so a new one refuses it until it pairs again.</p>
+<h2 id="console-sign-in">Sign in to the console from another computer</h2>
+<p>The console is the Server's: open <code>https://&lt;server name&gt;:8081/console/</code> in a
+browser on any computer. It signs in one of two ways.</p>
+<ul>
+<li><strong>With the key</strong>, the default: the login page takes the Server's bearer key,
+once per browser. A Client with a relay holds no key, so it comes from the
+Server's config.</li>
+<li><strong>With a passkey</strong>, once <code>console.sign_in: passkey</code> is set in the Server's
+config (file only) and the daemon restarted. No browser needs the key then,
+the Server's included. Add each device's passkey from the device:
+<code>seamlessd approvers add</code>, on the Server, prints the Add a passkey address
+(<code>/console/passkeys/add</code> on the passkey origin), which is not a secret. Open it
+on the device and create the passkey there; the page shows a short code. On
+the Server, <code>seamlessd approvers approve --code &lt;code&gt;</code> - as the daemon's
+account under peer_auth - shows that passkey and asks before it adds it.
+Approve only a code your own device shows.</li>
+</ul>
+<p>A passkey works only for the name it was made for, and needs that name over
+https: the <a href="../../guides/peer-auth/#the-passkey-origin">passkey origin</a> is the host
+of the Server's TLS <code>server_url</code>. One synced through iCloud Keychain, Google
+Password Manager or another password manager is added once for every device it
+syncs to, and a device without one can use your phone's through the browser's
+QR prompt. A <code>localhost</code> passkey works only in a browser on the Server itself.
+The rest is in <a href="../../reference/console/#sign-in-with-a-passkey">the console reference</a>.</p>
+<p>On a Client whose <code>server_url</code> is a relay's socket, <code>seamlessd console-open</code>
+opens nothing - a browser cannot dial a socket - and names the console's address
+instead.</p>
+<h2 id="approve-from-another-computer">Approve from another computer</h2>
+<p>A browser on any computer approves with a passkey in the Server's console, and
+the Server verifies the ceremony: an agent's access request (<code>/console/access</code>),
+a console unlock on the project's unlock page, a lock change on the project's
+Overview, a pairing on the Devices page under peer_auth, and a restore while a
+project is locked. The browser must be signed in, on the passkey origin, with a
+passkey <a href="../../guides/peer-auth/#enroll-an-approver">enrolled</a> for the Server's name.</p>
+<p>Under peer_auth, terminal approvals run only on the Server's computer:
+<code>seam approve</code>, the command a console unlock's <strong>Approve from a terminal</strong>
+shows (<code>seamlessd console-open --unlock</code>), and <code>seamlessd approvers</code>. Each proves
+itself by becoming the daemon's account, which exists only there, so a relay
+never vouches that you said yes. A terminal on the Server counts wherever you
+sit: SSH to it.</p>
+<h2 id="locked-projects-and-agents-on-other-computers">Locked projects and agents on other computers</h2>
+<p>Run agents that need a locked project on the Server's computer, on its
+peer_auth socket (a terminal there, or SSH to it), or on a macOS or Linux
+computer behind a relay the Server maps:</p>
+<ul>
+<li><strong>Behind a relay the Server maps</strong> in <code>peer_auth.relays</code>, an agent is judged
+as the Server's socket judges one: your uid on that computer is you, the
+relay names the program of every process it forwards, and an agent asks for
+access as it would on the Server. Your approval names that computer, and its
+lease is keyed on the relay and the process, so it opens the project to that
+agent's process tree there and nothing else. A relay from before program
+names files nothing: update Seamless on that computer.</li>
+<li><strong>Behind a relay the Server does not map</strong>, every request is refused.</li>
+<li><strong>On a key device, or a key client of the Server's own key</strong>, an agent never
+holds a lease, so it never opens a locked project. A Windows computer is
+always this case.</li>
+</ul>
+<p>Mapping a relay, its restricted accounts, and what the Server then does with
+their requests are in
+<a href="../../guides/peer-auth/#agents-on-another-computer-relays">Agents on another computer: relays</a>.</p>
+<h2 id="when-the-server-is-out-of-reach">When the Server is out of reach</h2>
+<p>A Client keeps no data and answers nothing from memory, so its agents lose
+Seamless until the Server answers again: a session starts with no briefing,
+tools and <code>seam</code> commands fail with the reason, and what the hooks would have
+sent is lost. A relay refuses every call at once, with <code>502</code> and the reason.
+<a href="../../concepts/networked/#when-the-server-is-out-of-reach">Networked Seamless</a>
+has what each path does, and
+<a href="../../guides/troubleshooting/#an-agent-on-another-computer-gets-no-briefing">Troubleshooting</a>
+the fixes.</p>
 <h2 id="what-a-remote-device-does-not-get">What a remote device does not get</h2>
 <p>Sessions, projects, memories, notes, tasks, trials and recall all work over the
 network. What does not is every capture where the <strong>daemon</strong> reads the
@@ -520,7 +830,15 @@ daemon's to read:</p>
 <p>This is a <strong>host</strong> check, not a &quot;does the file exist&quot; check, and that is the
 point: two devices with the same username and home layout produce the same
 transcript and plan-file paths, so a missing-file test would sometimes find a
-real file - the wrong one - and capture another machine's session as this one's.</p>
+real file - the wrong one - and capture another machine's session as this one's.
+A paired computer's host is the name it paired with: the Server records every
+request of it under that name, whatever the request says.</p>
+<p>Under peer_auth on the Server, a Client with a relay gets these captures back,
+except the gardener's ship evidence. Its <code>seam hook</code> reads the transcript, the
+plan file and the subagent transcript itself, beside the agent, and sends what
+it found, as hooks on the Server's own socket do
+(<a href="../../guides/peer-auth/#what-changes-with-peer-auth-on">what changes with peer_auth on</a>).
+A key client, and a relay to a Server without peer_auth, get the table above.</p>
 <p>The same host scoping protects project mapping. The repo map is keyed by
 <code>(host, path)</code>, and the moved-repo heal that re-points a project when its
 mapped path has vanished only ever stats <strong>this</strong> daemon's rows. A remote
@@ -558,6 +876,11 @@ clients: each paired machine keeps its own <code>seam</code> binary (the hooks a
 bridge), and updates it by re-running the pairing commands
 <code>seamlessd client-config</code> prints on the server. A client runs no daemon, so it
 has no update check of its own and never updates itself.</p>
+<p>A relay runs root's own copy of <code>seamlessd</code>, <code>/opt/seamless/bin/seamlessd</code>,
+which nothing updates by itself yet: updating a Client leaves its relay on the
+old binary. Update the relay's copy with the root step again: the second
+block's <code>sudo install</code> line copies the <code>seamlessd</code> the installer just updated
+in <code>~/.local/bin</code> into place. Then restart the relay's service.</p>
 <h2 id="windows-a-second-user-on-one-box">Windows: a second user on one box</h2>
 <p>The Windows install is per-user in where it writes (<code>%USERPROFILE%</code>) but <strong>not</strong>
 isolated in what it registers: the Scheduled Task name (<code>Seamless</code>) is global
@@ -566,21 +889,258 @@ to another account cannot be replaced without admin.</p>
 <p>The client role is the clean way out of that collision, because <strong>a client
 install registers no Scheduled Task at all</strong>. The first user runs the server;
 every other user on the box pairs as a client against it. They do not even need
-the LAN setup above - <code>client-config</code> says so in its own loopback refusal - a
+the steps above - <code>client-config</code> says so in its own loopback refusal - a
 second user on the same machine can pair directly:</p>
 <div class="code-block" data-lang="powershell"><pre class="chroma"><code><span class="line"><span class="cl"><span class="n">seamlessd</span> <span class="nb">install-hooks</span> <span class="p">-</span><span class="n">-server-url</span> <span class="n">http</span><span class="err">:</span><span class="p">//</span><span class="mf">127.0</span><span class="p">.</span><span class="py">0</span><span class="p">.</span><span class="mf">1</span><span class="err">:</span><span class="mf">8081</span> <span class="p">-</span><span class="n">-api-key</span> <span class="p">&lt;</span><span class="n">key</span><span class="p">&gt;</span>
 </span></span></code></pre></div>
 <p><code>seamlessd uninstall</code> on such a client reports the service as <code>not installed</code>
 and leaves the running daemon alone, and <code>--purge</code> removes only the config
 directory - never the data dir, which belongs to the server.</p>
+<h2 id="step-1-widen-the-server">By hand: widen the Server</h2>
+<p>Setup's address step writes these keys on a first install. By hand - on a
+Server set up before setup existed, to change its address, or with a config
+you keep yourself - edit the server's <code>~/.config/seamless/seamless.yaml</code>:</p>
+<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">addr</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;0.0.0.0:8081&#34;</span><span class="w">                       </span><span class="c"># listen on every interface</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;http://studio.local:8081&#34;</span><span class="w">     </span><span class="c"># what clients dial</span><span class="w">
+</span></span></span></code></pre></div>
+<p>Both keys, not one. <code>addr</code> answers &quot;where do I listen&quot;; <code>server_url</code> answers
+&quot;where do clients reach me&quot;, and they stop having the same answer the moment
+the bind is a wildcard. Leaving <code>server_url</code> unset on a wildcard bind derives
+<code>http://127.0.0.1:8081</code> - an address that means &quot;your own machine&quot; on every
+client that receives it - and the daemon warns about exactly that combination
+at startup. Putting the wildcard in <code>server_url</code> instead is refused outright at
+config load, in any spelling of the unspecified address: <code>http://0.0.0.0:8081</code>
+reaches, at most, the machine doing the dialing, so it can never be the right
+answer to &quot;where do clients reach me&quot;.</p>
+<p>A concrete IPv4 <code>addr</code> (one LAN or tailnet address instead of the wildcard)
+also listens on its interface's IPv6 addresses that reach no further, so a
+dual-stack name reaches the daemon over either family. Beside a private or
+tailnet address that means only unique local addresses (<code>fd…</code>), never a global
+IPv6 address the internet may reach. Doctor's <code>bind</code> row lists them.</p>
+<p>Naming <code>server_url</code> also arms the <strong>Host-header allowlist</strong>: the daemon then
+answers the loopback names, a concrete bind host, and the host of <code>server_url</code>,
+and refuses everything else with <code>421 Misdirected Request</code>. Add any further
+name the daemon is reached by - a short hostname, a raw IP - to
+<code>allowed_hosts</code>. (A wildcard bind has no concrete host of its own, which is why
+naming one somewhere is what turns the guard on there.)</p>
+<p>Restart the daemon and check it:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd restart
+</span></span><span class="line"><span class="cl">seamlessd doctor
+</span></span></code></pre></div>
+<p>Doctor's transport rows are the ones <a href="#check-the-server">above</a>.</p>
+<h2 id="step-2-tls">By hand: TLS</h2>
+<p>Plain http over a LAN is a legitimate choice for a key client and Seamless will
+not stop you - <code>seamlessd client-config</code> prints a warning and continues. But
+the bearer key and every memory it fetches cross the network unencrypted, so
+prefer https. A relay needs it: it cannot pair over plain http.</p>
+<p>Both <code>tls.cert_file</code> and <code>tls.key_file</code> must be set; one without the other is
+refused at load, because it cannot serve TLS. With both set the listener is
+https (TLS 1.2 floor), the console session cookie is marked <code>Secure</code>, and
+<code>server_url</code> derives an <code>https://</code> scheme.</p>
+<p>The certificate must cover <strong>the host of <code>server_url</code></strong> - bare host, no scheme,
+no port, lower-cased. That is the name clients verify and the name doctor
+checks the SANs against.</p>
+<h3 id="mkcert-the-friction-free-path">mkcert (the friction-free path)</h3>
+<p><a href="https://github.com/FiloSottile/mkcert">mkcert</a> installs a local CA into your
+system trust store and issues certificates from it:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">mkcert -install                                       <span class="c1"># once per machine</span>
+</span></span><span class="line"><span class="cl">mkcert -cert-file ~/.config/seamless/seamless.crt <span class="se">\
+</span></span></span><span class="line"><span class="cl">       -key-file  ~/.config/seamless/seamless.key  studio.local
+</span></span><span class="line"><span class="cl">mkcert -CAROOT                                        <span class="c1"># prints the CA directory</span>
+</span></span></code></pre></div>
+<p>Server config:</p>
+<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">addr</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;0.0.0.0:8081&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;https://studio.local:8081&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">tls</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">cert_file</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;~/.config/seamless/seamless.crt&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">key_file</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;~/.config/seamless/seamless.key&#34;</span><span class="w">
+</span></span></span></code></pre></div>
+<p>Copy <code>rootCA.pem</code> from the <code>mkcert -CAROOT</code> directory to each client and point
+<code>tls.ca_file</code> at it there. That one file is what makes the <code>seam</code> CLI trust the
+server; it is the only TLS key a client has. A relay takes the same file at
+pairing (<code>--ca-file</code>).</p>
+<h3 id="openssl-no-extra-tool">openssl (no extra tool)</h3>
+<p>A self-signed certificate works just as well as long as it carries the SAN and
+is usable as its own root - <code>CA:TRUE</code>, which is why the second <code>-addext</code> is not
+optional. Needs OpenSSL 1.1.1 or newer for <code>-addext</code>:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">openssl req -x509 -newkey rsa:2048 -sha256 -days <span class="m">825</span> -nodes <span class="se">\
+</span></span></span><span class="line"><span class="cl">  -keyout ~/.config/seamless/seamless.key <span class="se">\
+</span></span></span><span class="line"><span class="cl">  -out    ~/.config/seamless/seamless.crt <span class="se">\
+</span></span></span><span class="line"><span class="cl">  -subj   <span class="s2">&#34;/CN=studio.local&#34;</span> <span class="se">\
+</span></span></span><span class="line"><span class="cl">  -addext <span class="s2">&#34;subjectAltName=DNS:studio.local,IP:192.168.1.10&#34;</span> <span class="se">\
+</span></span></span><span class="line"><span class="cl">  -addext <span class="s2">&#34;basicConstraints=critical,CA:TRUE&#34;</span>
+</span></span></code></pre></div>
+<p>Include every name and address clients dial in <code>subjectAltName</code>; a client that
+dials an IP the certificate does not list fails in the TLS handshake. Then copy
+<code>seamless.crt</code> - the certificate, never the key - to each client as
+<code>~/.config/seamless/server-ca.crt</code>, and write that client's whole config:</p>
+<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;client&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;https://studio.local:8081&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">tls</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">ca_file</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;~/.config/seamless/server-ca.crt&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">mcp</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;&lt;the server&#39;s key&gt;&#34;</span><span class="w">
+</span></span></span></code></pre></div>
+<p>Renewal is manual on both paths - nothing auto-renews - which is why doctor's
+<code>tls</code> line warns from 30 days out. A renewed certificate is a new one to every
+relay, which pins the exact certificate it paired with: pair each relay again
+(<a href="#revoke-a-computer">how</a>).</p>
+<h3 id="why-https-changes-the-claude-code-wiring">Why https changes the Claude Code wiring</h3>
+<p>Under an <code>https://</code> base URL, <code>install-hooks</code> writes a different shape on
+purpose: <strong>every</strong> Claude Code hook becomes a command hook (including
+<code>UserPromptSubmit</code>, normally the one http hook), and the MCP registration
+becomes the <code>seam mcp-proxy</code> stdio bridge instead of a direct URL. Claude Code
+performs http hooks and http MCP connections with its own client, which has
+nowhere to be told about <code>tls.ca_file</code>; against a private CA that request dies
+in the TLS handshake. Routing both through <code>seam</code> puts them on the CLI's trust
+store, which does read <code>tls.ca_file</code>. Under plain http the shapes are
+unchanged.</p>
+<h2 id="pair-with-the-servers-key">By hand: connect a Client with the Server's key</h2>
+<p>On the <strong>server</strong>, ask for the pairing block:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd client-config            <span class="c1"># add --redact to paste it into a ticket</span>
+</span></span></code></pre></div>
+<p>It prints the server URL, the key, the minimum client version, and three
+paste-able commands: the macOS/Linux installer one-liner, the PowerShell one,
+and the manual form for a machine that already has the binaries:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd install-hooks --server-url https://studio.local:8081 --api-key &lt;key&gt;
+</span></span></code></pre></div>
+<p>That command writes <code>role: client</code>, <code>server_url</code>, and <code>mcp.api_key</code> into
+<code>~/.config/seamless/seamless.yaml</code> on first run and wires the detected agent
+clients against the server's URL. Like every other config bootstrap it never
+edits a config file that already exists: it errors and names the exact lines to
+add by hand. The one existing file that is not an error is one that already
+says exactly this, so re-running the installer is safe.</p>
+<p>The installer one-liners are the same thing with the binaries and the download
+included - <code>SEAMLESS_SERVER_URL</code> plus <code>SEAMLESS_MCP_API_KEY</code>, which is a pair:
+the URL without the key is a hard error. A client install skips the service
+branch entirely - the run prints the service step as skipped, naming the server
+it is a client of - and polls the <em>server's</em> <code>/healthz</code> instead of a local one.</p>
+<p><code>client-config</code> refuses rather than printing a command that cannot work:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Refusal</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>this install is <code>role: client</code></td>
+<td>it has no clients of its own to pair; run it on the server</td>
+</tr>
+<tr>
+<td><code>mcp.api_key</code> is empty</td>
+<td>a client would have nothing to authenticate with</td>
+</tr>
+<tr>
+<td><code>server_url</code> is loopback</td>
+<td>pasted on another machine it dials <em>that</em> machine's port 8081. It names the fix: <code>server_url</code> plus <code>addr: 0.0.0.0:8081</code>, then restart</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Check the Client as <a href="#check-a-client">above</a>.</p>
+<h2 id="install-a-relay">By hand: install a relay</h2>
+<p><a href="#the-relays-root-step">The relay's root step</a>, as setup prints it, is the
+reference: the same commands with this computer's values filled in. These are
+they with placeholders, for a Client set up another way (one paired with the
+Server's key, say). The Server needs TLS on the daemon's own listener; on the
+Client you need an administrator. <code>root</code>'s group is <code>wheel</code> on macOS, <code>root</code> on
+Linux.</p>
+<ol>
+<li>
+<p><strong>On the Server, get a pairing code</strong> on the Devices page, or with
+<code>seamlessd devices code</code>, and note the certificate fingerprint it shows.</p>
+</li>
+<li>
+<p><strong>The account and the socket's group.</strong> On macOS, make <code>_seamless</code> with the
+<code>dscl</code> lines in
+<a href="../../guides/peer-auth/#deploy-it-the-daemon-runs-as-its-own-account">Deploy it</a>,
+then the group, with another unused id below 500, and its two members:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo dscl . -create /Groups/_seamlessowner PrimaryGroupID &lt;unused id&gt;
+</span></span><span class="line"><span class="cl">sudo dscl . -append /Groups/_seamlessowner GroupMembership &lt;you&gt; _seamless
+</span></span></code></pre></div>
+<p>On Linux:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo useradd --system --user-group --shell /usr/sbin/nologin --home-dir /opt/seamless/home _seamless
+</span></span><span class="line"><span class="cl">sudo groupadd --system _seamlessowner
+</span></span><span class="line"><span class="cl">sudo usermod -aG _seamlessowner &lt;you&gt;
+</span></span><span class="line"><span class="cl">sudo usermod -aG _seamlessowner _seamless
+</span></span></code></pre></div>
+</li>
+<li>
+<p><strong>The layout, root's copy of <code>seamlessd</code>, and the pin:</strong></p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo install -d -o root -g wheel -m <span class="m">0755</span> /opt/seamless /opt/seamless/bin /opt/seamless/etc
+</span></span><span class="line"><span class="cl">sudo install -d -o _seamless -g _seamless -m <span class="m">0755</span> /opt/seamless/run
+</span></span><span class="line"><span class="cl">sudo install -d -o _seamless -g _seamless -m <span class="m">0700</span> /opt/seamless/home /opt/seamless/relay
+</span></span><span class="line"><span class="cl">sudo install -o root -g wheel -m <span class="m">0755</span> ~/.local/bin/seamlessd /opt/seamless/bin/seamlessd
+</span></span><span class="line"><span class="cl"><span class="nb">echo</span> <span class="s2">&#34;_seamless </span><span class="k">$(</span>id -u _seamless<span class="k">)</span><span class="s2">&#34;</span> <span class="p">|</span> sudo tee /opt/seamless/etc/daemon-account &gt;/dev/null
+</span></span><span class="line"><span class="cl">sudo chmod <span class="m">0644</span> /opt/seamless/etc/daemon-account
+</span></span></code></pre></div>
+<p>A certificate made with mkcert or openssl also goes in, for the pairing to
+trust: its root (mkcert's <code>rootCA.pem</code>, or the openssl certificate itself)
+as <code>/opt/seamless/etc/server-ca.crt</code>, root's, mode <code>0644</code>. The relay refuses
+to run with any part of this that another account could rewrite, and says
+which.</p>
+</li>
+<li>
+<p><strong>Pair it, as its account</strong>, pasting the code when it waits (<code>--code -</code>
+keeps it out of the process list and your shell history), and adding
+<code>--ca-file /opt/seamless/etc/server-ca.crt</code> for the certificate above:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --server https://&lt;server name&gt;:8081 --fingerprint &lt;fingerprint&gt; --code -
+</span></span></code></pre></div>
+<p><code>--fingerprint</code> makes sure the code goes only to that certificate. Under
+peer_auth the command waits until you approve the relay on the Devices page,
+and prints the key fingerprint the page shows for it. Once paired, it prints
+the certificate it pinned and the name it speaks for.</p>
+</li>
+<li>
+<p><strong>Run it as a service</strong>, as its account, never as root:
+<code>/opt/seamless/bin/seamlessd relay serve --socket-mode 0660 --socket-group _seamlessowner</code>,
+from the LaunchDaemon or the systemd unit in
+<a href="../../reference/service/#relay">the service reference</a>. Without the socket flags
+every local account may connect, and a Server without peer_auth takes each
+one for you.</p>
+</li>
+<li>
+<p><strong>Point your agents at it.</strong> Your config on the Client names the socket and
+holds no key:</p>
+<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">client</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;unix:///opt/seamless/run/seamlessd.sock&#34;</span><span class="w">
+</span></span></span></code></pre></div>
+<p>Then install the hooks and MCP registration against it:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd install-hooks --client claude    <span class="c1"># or codex, or all</span>
+</span></span></code></pre></div>
+</li>
+<li>
+<p><strong>Under peer_auth, map it on the Server</strong> in <code>peer_auth.relays</code>, by the name
+the Devices page shows, to your uid on the Client, and restart the daemon
+(<a href="../../guides/peer-auth/#agents-on-another-computer-relays">how</a>). Until then
+the daemon refuses it.</p>
+</li>
+<li>
+<p><strong>Check it.</strong> <code>seam doctor</code> on the Client reaches the Server through the
+relay. <code>seamlessd doctor</code> adds the relay's rows (<code>relay.account</code>,
+<code>relay.pairing</code>, <code>relay.socket</code> and the rest): run as you, they cover the
+account, the layout and the socket; run as the relay's account
+(<code>sudo -u _seamless -H /opt/seamless/bin/seamlessd doctor</code>), its pairing and
+whether the Server accepts it too.</p>
+</li>
+</ol>
 <h2 id="related">Related</h2>
 <ul>
+<li><a href="../../concepts/networked/">Networked Seamless</a> - the model: the relay, pairing,
+approvals, and what stops when the Server is out of reach.</li>
 <li><a href="../../install/#going-beyond-loopback-deliberately">Install &amp; deploy</a> - the
 security posture you are accepting, and the installer overrides.</li>
 <li><a href="../../reference/configuration/">Configuration</a> - <code>role</code>, <code>server_url</code>,
 <code>allowed_hosts</code>, and the <code>tls:</code> block with every default.</li>
-<li><a href="../../reference/cli-seamlessd/#seamlessd_client_config">seamlessd CLI</a> -
-<code>client-config</code>, <code>install-hooks --server-url</code>, and <code>serve</code> under TLS.</li>
+<li><a href="../../reference/cli-seamlessd/#seamlessd_setup">seamlessd CLI</a> - <code>setup</code>,
+<a href="../../reference/cli-seamlessd/#seamlessd_client_config"><code>client-config</code></a>,
+<a href="../../reference/cli-seamlessd/#seamlessd_devices"><code>devices</code></a>,
+<a href="../../reference/cli-seamlessd/#seamlessd_relay"><code>relay</code></a>, <code>install-hooks --server-url</code>, and <code>serve</code> under TLS.</li>
+<li><a href="../../guides/peer-auth/">Lock projects behind your approval</a> - peer_auth on the
+Server, and the relays it maps.</li>
 <li><a href="../../guides/data/">Import, back up &amp; restore</a> - <code>seamlessd export</code> and a merge
 import, which is how you fold each device's existing local instance into the
 shared one before switching it to a client.</li>
@@ -604,7 +1164,7 @@ daemon does with it.</li>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-topology">The topology</a></li><li class="lvl-2"><a href="#step-1-widen-the-server">Step 1: widen the server</a></li><li class="lvl-2"><a href="#step-2-tls">Step 2: TLS</a></li><li class="lvl-3"><a href="#mkcert-the-friction-free-path">mkcert (the friction-free path)</a></li><li class="lvl-3"><a href="#openssl-no-extra-tool">openssl (no extra tool)</a></li><li class="lvl-3"><a href="#why-https-changes-the-claude-code-wiring">Why https changes the Claude Code wiring</a></li><li class="lvl-2"><a href="#step-3-pair-a-client">Step 3: pair a client</a></li><li class="lvl-2"><a href="#what-a-remote-device-does-not-get">What a remote device does not get</a></li><li class="lvl-3"><a href="#how-doctor-reports-it">How doctor reports it</a></li><li class="lvl-2"><a href="#updates-on-a-shared-daemon">Updates on a shared daemon</a></li><li class="lvl-2"><a href="#windows-a-second-user-on-one-box">Windows: a second user on one box</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-topology">The topology</a></li><li class="lvl-2"><a href="#set-up-the-server">Set up the Server</a></li><li class="lvl-3"><a href="#a-new-computer">A new computer</a></li><li class="lvl-3"><a href="#a-computer-already-running-seamless">A computer already running Seamless</a></li><li class="lvl-3"><a href="#check-the-server">Check the Server</a></li><li class="lvl-2"><a href="#step-3-pair-a-client">Connect each Client</a></li><li class="lvl-3"><a href="#the-relays-root-step">The relay&#39;s root step</a></li><li class="lvl-3"><a href="#windows-is-always-a-key-client">Windows is always a key client</a></li><li class="lvl-3"><a href="#check-a-client">Check a Client</a></li><li class="lvl-2"><a href="#devices">Pair computers on the Devices page</a></li><li class="lvl-3"><a href="#revoke-a-computer">Revoke a computer</a></li><li class="lvl-2"><a href="#console-sign-in">Sign in to the console from another computer</a></li><li class="lvl-2"><a href="#approve-from-another-computer">Approve from another computer</a></li><li class="lvl-2"><a href="#locked-projects-and-agents-on-other-computers">Locked projects and agents on other computers</a></li><li class="lvl-2"><a href="#when-the-server-is-out-of-reach">When the Server is out of reach</a></li><li class="lvl-2"><a href="#what-a-remote-device-does-not-get">What a remote device does not get</a></li><li class="lvl-3"><a href="#how-doctor-reports-it">How doctor reports it</a></li><li class="lvl-2"><a href="#updates-on-a-shared-daemon">Updates on a shared daemon</a></li><li class="lvl-2"><a href="#windows-a-second-user-on-one-box">Windows: a second user on one box</a></li><li class="lvl-2"><a href="#step-1-widen-the-server">By hand: widen the Server</a></li><li class="lvl-2"><a href="#step-2-tls">By hand: TLS</a></li><li class="lvl-3"><a href="#mkcert-the-friction-free-path">mkcert (the friction-free path)</a></li><li class="lvl-3"><a href="#openssl-no-extra-tool">openssl (no extra tool)</a></li><li class="lvl-3"><a href="#why-https-changes-the-claude-code-wiring">Why https changes the Claude Code wiring</a></li><li class="lvl-2"><a href="#pair-with-the-servers-key">By hand: connect a Client with the Server&#39;s key</a></li><li class="lvl-2"><a href="#install-a-relay">By hand: install a relay</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </aside>
   

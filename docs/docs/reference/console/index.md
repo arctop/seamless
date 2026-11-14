@@ -1069,6 +1069,32 @@ compromised, and where each project's knowledge may go.
 It reads; it changes nothing. It is a Standard screen: Basic installs reach it
 by URL.
 
+## Devices {#devices}
+
+`/console/devices`
+
+Only on a server that serves other computers (TLS, a bind beyond loopback, or a
+`server_url` naming another host); elsewhere the page and its routes do not
+exist. The computers paired with this server, and how to pair another
+([the guide](https://thereisnospoon.org/docs/guides/network-install/#devices)):
+
+- **Pair a computer** - this server's address and its certificate's
+  fingerprint, and **Get a pairing code**: a code shown once, valid for 10
+  minutes and for one computer, with the client one-liners. Without peer_auth
+  the page says the code is the approval.
+- **Waiting for your approval** - under peer_auth only: each computer that used
+  a code, its fingerprint and until when it waits, with **Approve with a
+  passkey** and **Deny**. Approving needs a signed-in browser on the
+  [passkey origin](https://thereisnospoon.org/docs/guides/peer-auth/#the-passkey-origin) and an enrolled
+  passkey; the page says which is missing.
+- **Paired** - each relay and key device: its key's fingerprint or the start
+  of its key, when it paired, whether your passkey or its one-time code
+  approved it, when it was last seen, and **Revoke**.
+- **Revoked and expired** - what ended, when, and from where.
+
+It shows at every [level](#choose-how-much-you-see), in the sidebar's Server
+group; `g` then `d` opens it.
+
 ## Settings
 
 `/console/settings?s=<section>`

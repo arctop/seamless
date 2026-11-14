@@ -43,15 +43,24 @@ itself. No Go toolchain is involved. In order, it:
    how this computer will be used, before anything is installed:
    **Standalone** (everything on this computer, the default) or **Networked** -
    the **Server**, which the other computers connect to, or a **Client** of
-   one. A first Server install sets up
+   one ([the model](https://thereisnospoon.org/docs/concepts/networked/)). A first Server install sets up
    [its address](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_setup_address) - the name
    the other computers reach it at, its certificate, and a bind holding every
-   address of the name. A first Standalone or Server install then starts fresh or
+   address of the name - and ends with what each Client needs. A first
+   Standalone or Server install then starts fresh or
    [from a backup](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_setup_import), which
-   setup restores into the still-empty data directory. Only a person at a
-   terminal who set no `SEAMLESS_*` variable is asked; a script answers with
-   `SEAMLESS_SETUP`, `SEAMLESS_SERVER_NAME` and `SEAMLESS_IMPORT`, and without them installs exactly as
-   before. A re-run offers only the changes setup can make;
+   setup restores into the still-empty data directory. A Client gives its
+   Server's address and a pairing code, compares the Server's certificate
+   fingerprint, and pairs - a relay on macOS and Linux, a key of its own on
+   Windows - keeping no data of its own. Windows is offered Standalone and
+   Client only: a Windows computer is never the Server, and as a Client it is
+   always a key device, whose agents never open a locked project. Only a
+   person at a terminal who set no `SEAMLESS_*` variable is asked; a script
+   answers with `SEAMLESS_SETUP`, `SEAMLESS_SERVER_NAME`, `SEAMLESS_IMPORT` and
+   `SEAMLESS_PAIR_CODE`, and without them installs exactly as before. A re-run
+   offers only the changes setup can make
+   ([Share one daemon across your computers](https://thereisnospoon.org/docs/guides/network-install/) has
+   the whole story);
 3. installs `seamlessd` and `seam` into `~/.local/bin`;
 4. runs `seamlessd install-hooks`, which generates the bearer key into
    `~/.config/seamless/seamless.yaml` on first run, detects Claude Code, the
@@ -118,14 +127,16 @@ script](https://thereisnospoon.org/install) with no dependencies to audit.
 | `SEAMLESS_INSTALL_DIR=~/bin` | put the binaries somewhere else |
 | `SEAMLESS_CHECKSUMS_SHA256=<sha256>` | pin the release's `checksums.txt` to this SHA-256 (64 hex digits, either case): any other manifest is refused before anything is unpacked. Meant for a caller that has verified the manifest's signature itself (seamlessd's updater), so without `cosign` the run reports the signature as verified by seamlessd instead of warning |
 | `SEAMLESS_CLIENT=claude\|claude-desktop\|codex\|all` | choose which target(s) to wire instead of auto-detection; comma lists work (`claude,claude-desktop`) |
-| `SEAMLESS_SERVER_URL=http://studio.local:8081` | install as a **client** of a Seamless daemon running elsewhere: wire this machine's agent clients to that URL, install no service, and keep no data dir here. Requires `SEAMLESS_MCP_API_KEY`, and wins over the `role` and `server_url` an existing config names. See [Share one daemon across a LAN](https://thereisnospoon.org/docs/guides/network-install/) |
-| `SEAMLESS_MCP_API_KEY=<key>` | the server's bearer key, required alongside `SEAMLESS_SERVER_URL` - `SEAMLESS_SERVER_URL` without it is a hard error, because a client needs both. `seamlessd client-config` on the server prints the whole command |
-| `SEAMLESS_SETUP=standalone\|server\|client` | answer [`seamlessd setup`](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_setup)'s question - how this computer will be used - without being asked; `client` needs `SEAMLESS_SERVER_URL` and `SEAMLESS_MCP_API_KEY` too, and Windows takes `standalone` or `client` |
+| `SEAMLESS_SERVER_URL=https://studio.local:8081` | install as a **client** of a Seamless daemon running elsewhere: install no service, and keep no data dir here. Requires `SEAMLESS_PAIR_CODE` or `SEAMLESS_MCP_API_KEY`, and wins over the `role` and `server_url` an existing config names. See [Share one daemon across your computers](https://thereisnospoon.org/docs/guides/network-install/) |
+| `SEAMLESS_MCP_API_KEY=<key>` | the server's bearer key, for a client of it paired by hand: with `SEAMLESS_SERVER_URL`, a client of the server's own key, which pairs nothing. `SEAMLESS_SERVER_URL` with neither this nor `SEAMLESS_PAIR_CODE` is a hard error. `seamlessd client-config` on the server prints the whole command |
+| `SEAMLESS_SETUP=standalone\|server\|client` | answer [`seamlessd setup`](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_setup)'s question - how this computer will be used - without being asked; `client` needs `SEAMLESS_SERVER_URL` and `SEAMLESS_PAIR_CODE` (or the key) too, and Windows takes `standalone` or `client` |
 | `SEAMLESS_IMPORT=~/seamless-old-mac.tar.gz` | start a first install from this backup - a `seamlessd export` archive or one from Settings > Backups - restored into the empty data directory before anything is installed, as `seamlessd import` restores one ([details](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_setup_import)). A relative path is the directory you ran the installer in. Refused on a computer already set up (`seamlessd restore` is for that) and on a client, whose data is its server's |
 | `SEAMLESS_IMPORT_LOCKS=keep\|remove` | what that import does with the backup's [locked projects](https://thereisnospoon.org/docs/guides/data/#locked-projects) when no passkey can open them here, as `--keep-locks` and `--remove-locks` answer `seamlessd import`; without it such a backup stops the install with nothing changed |
 | `SEAMLESS_SERVER_NAME` | the name the other computers reach a Server at ([setup's address step](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_setup_address)); with `SEAMLESS_SETUP=server` only |
 | `SEAMLESS_TLS_CERT`, `SEAMLESS_TLS_KEY` | that name's certificate and key, full paths; none for this computer's Tailscale name |
-| `SEAMLESS_PAIR_CODE` | a client's one-time pairing code: setup does not take it yet, so it stops the install before anything is installed and says how to pair with the server's key instead |
+| `SEAMLESS_PAIR_CODE` | a client's pairing code, from the server's Devices page or `seamlessd devices code` there (one computer, 10 minutes): with `SEAMLESS_SERVER_URL`, setup pairs this computer before anything is installed - a relay, whose root step it prints, or a key of its own. See [Share one daemon across your computers](https://thereisnospoon.org/docs/guides/network-install/#step-3-pair-a-client) |
+| `SEAMLESS_SERVER_FINGERPRINT` | the server certificate's SHA-256, as its setup printed it: setup compares it before the code is sent, and sends nothing on a mismatch. Without it, a script pairs only with a certificate this computer already trusts |
+| `SEAMLESS_PAIR_AS=relay\|key` | what a client pairs as: `relay`, the default on macOS and Linux, or `key`, for a computer where you have no root (a container, CI). Windows is always `key` |
 | `SEAMLESS_NO_HOOKS=1` | skip agent hooks, MCP registration, and skills, and the client detection that would choose them |
 | `SEAMLESS_NO_ONBOARD_SKILL=1` | skip the selected client(s)' one-shot onboarding skill |
 | `SEAMLESS_NO_RESEARCH_SKILL=1` | skip the selected client(s)' recurring research skill |
@@ -281,6 +292,11 @@ What you are accepting when you run this:
 - **Loopback bind** by default (`127.0.0.1:8081`). Nothing off your machine can
   reach it. Widening it is an explicit opt-in, and the daemon logs a `SECURITY`
   warning every time it starts on a non-loopback address.
+- **A paired computer is you.** On a networked Server, a computer paired with a
+  one-time code holds a credential of its own, revocable on the console's
+  Devices page, and reaches what the bearer key reaches - no more
+  ([pairing](https://thereisnospoon.org/docs/concepts/networked/#pairing)). A client set up with the
+  Server's own key holds that key itself.
 - **A Host-header allowlist** guards against DNS rebinding: the daemon answers
   the loopback names, a concrete bind host, the host of `server_url`, and
   anything in `allowed_hosts`. Every other `Host` gets `421 Misdirected
@@ -339,7 +355,9 @@ What you are accepting when you run this:
 A static bearer key is adequate *because* the listener is on loopback; the two
 are a matched pair. Widen `addr` and that key becomes the only thing between a
 network peer and your entire knowledge store - so widening it is three
-deliberate steps, not one:
+deliberate steps, not one. A Server's first install takes the first two with
+[`seamlessd setup`](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_setup_address): a
+name, its certificate, and a bind that holds every address of the name.
 
 1. **Bind wide and say what you are called.** `addr: 0.0.0.0:8081` plus
    `server_url: https://studio.local:8081`. The second key is what clients
@@ -349,11 +367,14 @@ deliberate steps, not one:
    the bearer key, every hook payload, and the whole console travel in the
    clear; `seamlessd doctor` reports that as a warning on the `bind` line.
 3. **Keep the blast radius small.** There is still no rate limiting, no user
-   accounts, and no per-client authorization: one key admits the whole corpus.
-   A trusted LAN is the supported boundary. The public internet is not.
+   accounts, and no per-client authorization: one key admits the whole corpus,
+   and so does every computer paired with the Server. Only
+   [locked projects](https://thereisnospoon.org/docs/guides/peer-auth/) close a project to them. A network you
+   trust - your LAN, your tailnet - is the supported boundary. The public
+   internet is not.
 
-[Share one daemon across a LAN](https://thereisnospoon.org/docs/guides/network-install/) is the walkthrough -
-certificates, the `seamlessd client-config` pairing command, and what a remote
+[Share one daemon across your computers](https://thereisnospoon.org/docs/guides/network-install/) is the
+walkthrough - the Server's setup, each Client, pairing, and what a remote
 device does *not* get. If you only need to reach your own daemon from
 elsewhere, a tunnel (Tailscale, SSH forwarding, Cloudflare Tunnel) over a
 loopback bind is still the smaller change and the safer one.

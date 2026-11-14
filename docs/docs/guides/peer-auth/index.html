@@ -122,6 +122,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../concepts/project-isolation/">Project isolation</a></li>
         
+        <li><a href="../../concepts/networked/">Networked Seamless</a></li>
+        
         <li><a href="../../concepts/gardener/">The gardener</a></li>
         
         <li><a href="../../concepts/memory-supersession/">Memory supersession</a></li>
@@ -154,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/data/">Import, back up &amp; restore</a></li>
         
-        <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
+        <li><a href="../../guides/network-install/">Share one daemon across your computers</a></li>
         
         <li><a href="../../guides/peer-auth/" class="current" aria-current="page">Lock projects behind your approval</a></li>
         
@@ -255,7 +257,10 @@ The approval covers that agent and the programs it started, and nothing else.</p
 <p>It is off by default, and off means exactly the behavior every release before
 it had. It asks for a different deployment (the daemon needs an account of its
 own, or the files would not hold), and it runs on macOS and Linux only: Windows
-has no Unix-socket peer credentials Seamless can read.</p>
+has no Unix-socket peer credentials Seamless can read. A Windows computer can
+still be a Client of a daemon with peer_auth on, as a key client: it never runs
+the relay, and its agents never open a locked project
+(<a href="../../guides/network-install/#windows-is-always-a-key-client">Windows</a>).</p>
 <h2 id="two-settings-isolation-and-the-lock">Two settings: isolation and the lock</h2>
 <p>Isolation says what flows in and out of a project. The lock says whether even
 its own agents need a fresh approval from you before reaching it. They are two
@@ -364,11 +369,19 @@ runs:</p>
 <td>the owner, with the process chain the relay's kernel reported (<a href="#agents-on-another-computer-relays">relays</a>)</td>
 </tr>
 <tr>
+<td>TCP through such a relay, from a uid its <code>restricted</code> map names</td>
+<td>that restricted account, labeled <code>&lt;name&gt;@&lt;relay&gt;</code></td>
+</tr>
+<tr>
 <td>TCP through such a relay, from any other uid</td>
 <td>refused with <code>403</code> before any route runs</td>
 </tr>
 <tr>
-<td>TCP through any other paired device</td>
+<td>TCP through a paired relay <code>peer_auth.relays</code> does not map</td>
+<td>refused with <code>403</code> before any route runs (map it, then restart)</td>
+</tr>
+<tr>
+<td>TCP through a key device</td>
 <td>the owner, as the bearer key is</td>
 </tr>
 </tbody>
@@ -380,7 +393,8 @@ project is closed to every owner request: its name, description, isolation and
 item counts show, nothing inside it does, and writes into it are refused,
 unless the request rides a socket connection whose process holds a live
 <a href="#leases-and-the-process-tree">lease</a>. A TCP request never holds one, because a
-shared key cannot be tied to one process.</p>
+shared key cannot be tied to one process; a relay you map is judged as this
+socket is (<a href="#agents-on-another-computer-relays">relays</a>).</p>
 <p>&quot;Closed&quot; means every surface: recall, briefings, the prompt matcher, every MCP
 tool by name or by id, tasks, trials, sessions, the gardener's proposals, the
 hooks, A2A, the console and its live feed. A call that names a locked project is
@@ -426,6 +440,11 @@ It is gone. List those projects under <code>peer_auth.force_locked</code>, keep 
 listed there is then refused at the socket unless you list it under
 <code>peer_auth.restricted</code>, which reaches only open projects that are not locked.</p>
 <h2 id="deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</h2>
+<p><a href="../../reference/cli-seamlessd/#seamlessd_setup"><code>seamlessd setup</code></a> does not turn
+locked projects on yet: on a computer that runs the daemon it offers <strong>Turn on
+locked projects (peer_auth)</strong> and points to
+<a href="#move-an-existing-install-over">the move below</a>, which uses this section.
+These are the steps, by hand.</p>
 <p>The data directory holds every project's memory in plain files and a SQLite
 database. If the daemon runs as you, every process of yours reads them. So with
 <code>peer_auth</code> on, <code>serve</code> refuses to start unless:</p>
@@ -610,10 +629,15 @@ with the daemon when it <a href="#updates">updates itself</a>, or <code>--seam /
 account cannot replace either. Under peer_auth the
 <a href="#what-changes-with-peer-auth-on">daemon reads no agent files</a>, so <code>seam hook</code>
 reads them and sends what it found.</p>
-<p>The console still needs TCP and the bearer key: a browser cannot dial a socket,
-and <code>seamlessd console-open</code> refuses a socket <code>server_url</code> with instructions.
-Keep the daemon's key in a second config of your own, used only for the console,
-and name it when you open the console:</p>
+<p>An agent on another computer connects the same way, through the socket of that
+computer's relay, at the same path
+(<a href="../../guides/network-install/#step-3-pair-a-client">how a Client pairs</a>). A
+Windows computer, or one without a relay, is a key client and never opens a
+locked project (<a href="#agents-on-another-computer-relays">relays</a>).</p>
+<p>The console still needs TCP: a browser cannot dial a socket, and
+<code>seamlessd console-open</code> refuses a socket <code>server_url</code> with instructions. Keep
+a second config of your own, used only for the console, that names the
+daemon's TCP address and holds its key, and name it when you open the console:</p>
 <div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="c"># ~/.config/seamless/console.yaml, mode 0600</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">client</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;http://127.0.0.1:8081&#34;</span><span class="w">
@@ -627,6 +651,17 @@ the daemon names (<a href="#the-passkey-origin">which one</a>) instead of <code>
 the console's cookie belongs to one host, and browsers refuse passkeys on an IP
 address. On a TLS install, <code>server_url</code> in <code>console.yaml</code> is the daemon's https
 address, as your other clients use it.</p>
+<p>With <code>console.sign_in: passkey</code> in the daemon's config, a browser signs in with
+a passkey instead, on this computer or any other, and the key signs no browser
+in: <code>console-open</code> opens the sign-in page and writes nothing
+(<a href="../../reference/console/#sign-in-with-a-passkey">sign in with a passkey</a>).</p>
+<p>The key in <code>console.yaml</code> is readable by every process of yours. To retire it,
+run <code>seamlessd setup</code> and choose <strong>Sign in with passkeys and retire the key</strong>
+(<a href="../../reference/cli-seamlessd/#seamlessd_setup_retire">the steps</a>): the console
+then takes only passkeys, TCP serves the console's sign-in, its pages and
+<code>/healthz</code>, and MCP is the socket's alone. With every passkey lost, the sign-in
+page's <strong>Show a code</strong> and <code>console-open --sign-in --code</code>, run as the daemon's
+account, sign that one browser in.</p>
 <p>If your agents would write scripts over the data directory, tell them to use the
 tools or <code>seam ... --json | jq</code> instead:
 <a href="../../guides/integrate-your-agent/#optional-tell-your-agent-where-to-read-from">integrate your agent</a>
@@ -816,6 +851,9 @@ approval will be refused);</li>
 <li>the asking process is a JavaScript runtime (Claude Code installed with npm
 runs as <code>node</code>) that only its own hook calls an agent, so everything it
 started would share the approval;</li>
+<li>the agent runs on another computer, named, whose
+<a href="#agents-on-another-computer-relays">relay</a>, not this daemon, reports the
+pid, the uid and the program;</li>
 <li>for a move, that the agent works in the project from now on, what it may
 write there, and that it can no longer write where it worked before;</li>
 <li>for a grant, where the project's content may be copied: the asking project
@@ -854,16 +892,21 @@ process of your account, or a client hook, could answer one.</p>
 <tr>
 <td><code>seam approve</code></td>
 <td><code>sudo -k</code> to the daemon's account, every time</td>
-<td>your own terminal</td>
+<td>your own terminal, on the daemon's computer</td>
 </tr>
 <tr>
 <td>The passkey page</td>
 <td>a passkey</td>
-<td>the request's console page, in your browser</td>
+<td>the request's console page, in your browser on any computer</td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>The passkey page works from a browser on any computer that reaches the console
+on <a href="#the-passkey-origin">the passkey origin</a>, and the daemon verifies the
+ceremony wherever it ran. <code>seam approve</code> runs only on the daemon's own computer,
+in a terminal there or over SSH to it: becoming the daemon's account is its
+proof, and that account exists only there.</p>
 <p><strong>The dialog.</strong> When the agent's client declared MCP elicitation on the socket
 and a proof can finish in the dialog, a refused call (or <code>access_request</code>) shows
 you the request's facts, warnings first, in the client itself: Claude Code shows
@@ -877,7 +920,7 @@ is that page. A move's dialog never offers Touch ID, and a grant's approves it
 read-only (<a href="#read-grants-and-the-advisory-tier">below</a>).</p>
 <p>The call waits up to 110 seconds from its start, then answers with the request
 still pending for the paths below. Declining or dismissing denies nothing, and an
-agent's connection cannot deny at all: the request waits for you. Cancelling the
+agent's connection cannot deny at all: the request waits for you. Canceling the
 Touch ID prompt, or the helper closing or being killed after it was seen, ends the
 wait at once, the request still pending. There is at most one dialog per request
 per connection, and it survives a daemon restart: the daemon keeps a connection's
@@ -972,17 +1015,24 @@ covers some private windows, and any page that is neither https nor localhost.
 A locked plan or session page in the console takes you to that unlock page.</p>
 <h3 id="agents-on-another-computer-relays">Agents on another computer: relays</h3>
 <p>On a server that serves other computers, a macOS or Linux client reaches the
-daemon through its relay, <code>seamlessd relay</code>. It runs as its own system account
-on that computer and serves the socket path agents use here. It reads each
-caller's uid and process chain from its own kernel and forwards the request
-over TLS with its client certificate.</p>
+daemon through its relay, <code>seamlessd relay</code>
+(<a href="../../concepts/networked/#the-relay">what it is</a>,
+<a href="../../guides/network-install/#install-a-relay">how to install one</a>). It runs as its
+own system account on that computer and serves the socket path agents use
+here. It reads each caller's uid and process chain from its own kernel and
+forwards the request over TLS with its client certificate.</p>
 <p>The server trusts what a relay forwards only under peer_auth, and only for a
-relay you map:</p>
+relay you map, in the daemon's config, followed by a restart:</p>
 <div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">peer_auth</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">relays</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">example-laptop</span><span class="p">:</span><span class="w">     </span><span class="c"># the relay&#39;s name, as the Devices page shows it</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">owner_uid</span><span class="p">:</span><span class="w"> </span><span class="m">501</span><span class="w">    </span><span class="c"># your uid on that computer (id -u there)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">example-laptop</span><span class="p">:</span><span class="w">       </span><span class="c"># the relay&#39;s name, as the Devices page shows it</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">owner_uid</span><span class="p">:</span><span class="w"> </span><span class="m">501</span><span class="w">      </span><span class="c"># your uid on that computer (id -u there)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">restricted</span><span class="p">:</span><span class="w">         </span><span class="c"># optional: restricted accounts there, name to uid</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nt">_example_agent</span><span class="p">:</span><span class="w"> </span><span class="m">502</span><span class="w">
 </span></span></span></code></pre></div>
+<p><code>seamlessd doctor</code>, run as the daemon's account, checks each mapping: a name no
+paired relay holds, or a relay no passkey approved, is a <strong>warn</strong>, and a
+mapping that holds names the restricted accounts there.</p>
 <p>Through a mapped relay, your uid there is you, judged as this socket judges
 you: with the chain the relay reported, and the leases that chain holds. A
 lease is keyed on the relay and the process. It opens the project to that
@@ -990,15 +1040,31 @@ agent's tree on that computer and to nothing else: not a sibling agent there,
 not the same pid here, not another relay.</p>
 <p>Any other uid gets 403, and a request forwarding no caller gets 400. A relay
 paired with the code alone, while peer_auth was off, is refused until it pairs
-again and you approve it with a passkey. A relay you do not map is you over
-TCP, as the bearer key is, and never holds a lease.</p>
-<p>Seamless files no access request for an agent on another computer yet. The
-relay does not say which program is asking, and a request is filed only for an
-agent program. Until it does, work in a locked project from an agent session
-on the server's own computer.</p>
+again and you approve it with a passkey. A relay you do not map is refused,
+whatever uid it forwards: every account on that computer can reach its socket,
+and none is known to be you until you map it. A key client is you over TCP, as
+the bearer key is, and never holds a lease, and a Windows computer is always
+one: it never runs the relay, and its agents never open a locked project.</p>
+<p>A second account on that computer can be a
+<a href="#restricted-local-accounts">restricted account</a>, as on this one: map it under
+the relay, by its name and uid there (<code>restricted</code> above). It reaches the open
+projects that are not locked, reads the global scope, and files no requests.
+Its writes carry the label <code>_example_agent@example-laptop</code>, the account and the
+host, and its constraints, conventions, protocols and stages wait on the Held
+screen for you. Root and your own uid there are never restricted, and the relay
+never forwards its own account.</p>
+<p>A relay also names the program of every process it forwards, so the server
+files an agent's request through it as it would here: never for a shell,
+terminal or multiplexer, only for an agent program or a process an agent
+started. Every approval path - your terminal, a passkey, Touch ID - shows a
+<code>relay</code> warning naming the computer whose pid, uid and program they are. A
+relay from before program names files nothing: update Seamless on that
+computer.</p>
 <p>Passkeys approve from any browser. The Touch ID helper on a client Mac enrolls
 and approves through its relay, and the server verifies its signature.
-<code>seamlessd approve</code> stays a server command. Your own decisions (revoking,
+<code>seamlessd approve</code> stays a server command, as does every terminal path:
+<code>seam approve</code>, a console unlock's code and <code>seamlessd approvers</code> run on this
+computer, in a terminal here or over SSH. Your own decisions (revoking,
 denying, Settings) are refused through a relay: make them in the console.</p>
 <p>Revoking a relay ends its leases, read grants and waiting requests at once. A
 console lock turned back on, and a restore, end a relay's leases as they end
@@ -1054,7 +1120,7 @@ the form says so, and the record names the dialog (<code>in-session-dialog</code
 form shows the facts, warnings first, what the request carries, and what
 read-only and read and write each let happen; a grant asks for the access
 (read-only by default) and how long, and a move only for the decision.
-Declining, cancelling, or no answer within 110 seconds decides nothing: the
+Declining, canceling, or no answer within 110 seconds decides nothing: the
 request stays pending for your terminal, the console, or the next dialog. The
 daemon keeps the client's declared dialog modes across a restart.</p>
 <p>The holder of an advisory grant or move is the conversation the agent's process
@@ -1268,8 +1334,9 @@ you approve a lease for that agent. Until then the hook says in one line on
 stderr (and, for a plan, in the agent's context) that the capture was not
 recorded; nothing is retried, and the next capture after the approval
 carries the current state. Agents on the TCP key make none of these
-captures; point their <code>server_url</code> at the socket. Agents can still record
-findings with <code>session_end</code>.</li>
+captures; point their <code>server_url</code> at the socket. On another computer, an
+agent whose <code>server_url</code> names its relay's socket makes them the same way.
+Agents can still record findings with <code>session_end</code>.</li>
 <li><strong>It updates itself, as its own account.</strong> The installer's per-user service
 cannot host peer_auth, so neither the installer nor a <code>seamlessd update</code> run
 as you touches this install. The daemon installs new releases by itself
@@ -1469,14 +1536,30 @@ running as you can still drive the signed-in browser. The Add a passkey page is
 open to anyone who reaches the console: creating a passkey there adds nothing,
 but at most 32 wait at once, so someone looping on it can hold yours off for up
 to 10 minutes.</li>
-<li><strong>A paired device is a TCP caller.</strong> A computer paired with a networked server
-(the console's Devices page) is you, as the bearer key is, but the daemon reads
-no process chain behind it, so it never holds a lease and never opens a locked
-project: a key device always, and a relay unless <code>peer_auth.relays</code> maps it (<a href="#agents-on-another-computer-relays">relays</a>). Pairing under peer_auth needs your passkey on the Devices
-page: the code alone pairs nothing.</li>
+<li><strong>A key device is a TCP caller.</strong> A computer paired with a key of its own
+(the console's Devices page) is you, as the bearer key is, but the daemon
+reads no process chain behind it, so it never holds a lease and never opens a
+locked project. A relay is judged only where <code>peer_auth.relays</code> maps it, and
+refused anywhere else (<a href="#agents-on-another-computer-relays">relays</a>). Pairing
+under peer_auth needs your passkey on the Devices page: the code alone pairs
+nothing.</li>
+<li><strong>A Windows computer is always a key client.</strong> Windows has no Unix-socket peer
+credentials, so it never runs the relay: its agents reach the daemon as a TCP
+caller, never hold a lease, and never open a locked project. Run agents that
+need one on the daemon's own computer.</li>
 <li><strong>A relay is trusted for its computer.</strong> Root or the relay's account there
 can report any uid and chain. Every lease is keyed on the relay, so a forged
 report reaches only what that relay's agents were approved.</li>
+<li><strong>A relay's socket reaches every local account by default (mode <code>0666</code>).</strong>
+The daemon refuses a relay you have not mapped. Through a mapped one, only
+your uid there and the restricted accounts you listed get anything. Setup's
+<a href="../../guides/network-install/#the-relays-root-step">root step</a> restricts the
+socket anyway, to a group of you and the relay alone
+(<code>--socket-mode 0660 --socket-group _seamlessowner</code>); a relay you run by hand
+on a computer with other accounts needs the same.</li>
+<li><strong>A relay pins the daemon's exact certificate.</strong> Renewing the certificate (a
+tailnet certificate lasts 90 days) refuses every relay until it pairs again.
+It fails closed: no relay forwards to a certificate it did not pin.</li>
 <li><strong>The transcript holds what a session read.</strong> Once you approve an agent, its
 project's content is in that session's transcript and any tool result it kept.
 A lease ending does not unread it.</li>
@@ -1526,9 +1609,32 @@ account cannot write, by its full path if you doubt yours.</li>
 releasing or discarding a held write, clearing a session's mark, and changing
 which features are on. Make them in your own terminal or the console. This stops
 an agent's ordinary tool calls, not one that detaches a process from its tree or
-reads the key in your <code>console.yaml</code>.</li>
+reads the key in your <code>console.yaml</code>, until you
+<a href="../../reference/cli-seamlessd/#seamlessd_setup_retire">retire the key</a>.</li>
+<li><strong>A terminal sign-in's code queue is open to anyone who reaches the console.</strong>
+At most 32 terminal sign-ins wait at once, so someone looping on <strong>Show a
+code</strong> can hold yours off for up to 10 minutes; the code itself signs in only
+the browser that showed it.</li>
 </ul>
 <h2 id="move-an-existing-install-over">Move an existing install over</h2>
+<p>This is where <code>seamlessd setup</code> sends you for locked projects: it does not turn
+them on itself yet. A first Standalone or Server install lists them as a step to
+do by hand, and a re-run offers <strong>Turn on locked projects (peer_auth)</strong> on a
+computer that runs the daemon, naming this section. Two of setup's steps come
+first:</p>
+<ul>
+<li><strong>A Server's address.</strong> Set it up first, with setup
+(<a href="../../reference/cli-seamlessd/#seamlessd_setup_address">the Server's address</a>):
+step 4 below then moves its TLS pair out of your home.</li>
+<li><strong>A backup to start from.</strong> A new computer imports it with setup
+(<a href="../../reference/cli-seamlessd/#seamlessd_setup_import">starting from a backup</a>).
+Installed with <code>SEAMLESS_IMPORT_LOCKS=keep</code> and <code>SEAMLESS_NO_SERVICE=1</code>, no
+daemon serves the backup's locked projects before the move, which carries
+them whole, with their locks, fences and passkeys. Then follow the steps
+below from step 3. The backup's locks come back as console locks
+(<a href="../../guides/data/#locked-projects">how</a>), so they need no <code>force_locked</code>
+entry, and step 5 has no service to stop.</li>
+</ul>
 <p>The data directory moves as a whole; the database stores paths relative to it,
 so nothing inside needs rewriting. On one volume the move is a rename.</p>
 <ol>
@@ -1620,7 +1726,7 @@ wherever step 10 put it, is the fallback if anything in the move went wrong.</p>
 
     
     <nav class="page-nav" aria-label="Pagination">
-      <a class="prev" href="../../guides/network-install/"><span class="dir">Previous</span><span class="t">Share one daemon across a LAN</span></a>
+      <a class="prev" href="../../guides/network-install/"><span class="dir">Previous</span><span class="t">Share one daemon across your computers</span></a>
       <a class="next" href="../../guides/write-screening/"><span class="dir">Next</span><span class="t">Screen writes and hold the suspicious ones</span></a>
     </nav>
     

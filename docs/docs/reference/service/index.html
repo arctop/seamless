@@ -122,6 +122,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../concepts/project-isolation/">Project isolation</a></li>
         
+        <li><a href="../../concepts/networked/">Networked Seamless</a></li>
+        
         <li><a href="../../concepts/gardener/">The gardener</a></li>
         
         <li><a href="../../concepts/memory-supersession/">Memory supersession</a></li>
@@ -154,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/data/">Import, back up &amp; restore</a></li>
         
-        <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
+        <li><a href="../../guides/network-install/">Share one daemon across your computers</a></li>
         
         <li><a href="../../guides/peer-auth/">Lock projects behind your approval</a></li>
         
@@ -255,7 +257,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#control-it-from-anywhere">Control it from anywhere</a></li><li class="lvl-2"><a href="#the-service-on-your-os">The service on your OS</a></li><li class="lvl-2"><a href="#the-updater">The updater on your OS</a></li><li class="lvl-3"><a href="#updater-recovery">When an update goes wrong</a></li><li class="lvl-2"><a href="#peer-auth-daemon">A system service for peer_auth</a></li><li class="lvl-2"><a href="#where-things-live">Where things live</a></li><li class="lvl-2"><a href="#removing-the-service-by-hand">Removing the service by hand</a></li>
+      <li class="lvl-2"><a href="#control-it-from-anywhere">Control it from anywhere</a></li><li class="lvl-2"><a href="#the-service-on-your-os">The service on your OS</a></li><li class="lvl-2"><a href="#the-updater">The updater on your OS</a></li><li class="lvl-3"><a href="#updater-recovery">When an update goes wrong</a></li><li class="lvl-2"><a href="#peer-auth-daemon">A system service for peer_auth</a></li><li class="lvl-2"><a href="#relay">The relay&#39;s service on a Client</a></li><li class="lvl-2"><a href="#where-things-live">Where things live</a></li><li class="lvl-2"><a href="#removing-the-service-by-hand">Removing the service by hand</a></li>
     </ul>
   </details>
   <p>The installer registers <code>seamlessd</code> as a per-user service, so the daemon
@@ -276,7 +278,7 @@ itself.</p>
 every other machine installs with <code>role: client</code> plus <code>server_url</code>, which runs
 no daemon and registers no service at all (<code>seamlessd serve</code> refuses on a
 client outright). Everything below describes the server's install;
-<a href="../../guides/network-install/">Share one daemon across a LAN</a> is the setup, and
+<a href="../../guides/network-install/">Share one daemon across your computers</a> is the setup, and
 the tradeoffs.</p>
 <h2 id="control-it-from-anywhere">Control it from anywhere</h2>
 <p>Whatever the platform, one set of verbs controls the service - they resolve
@@ -549,6 +551,75 @@ update waits for the new release. On macOS the updater is a <code>setsid</code> 
 per-user service. On Linux it is a transient unit of the account's own user
 manager (<code>sudo systemctl --user -M _seamless@ list-units 'seamless-update-*'</code>
 shows one in progress), which needs that account to linger.</p>
+<h2 id="relay">The relay's service on a Client</h2>
+<p>A macOS or Linux Client paired as a relay runs <code>seamlessd relay serve</code> as the
+relay's own account, <code>_seamless</code>, from root's copy of the binary, with its
+socket handed to <code>_seamlessowner</code>, a group of you and the relay alone
+(<a href="../../guides/network-install/#the-relays-root-step">the root step</a> that installs
+it). On macOS it is the LaunchDaemon
+<code>/Library/LaunchDaemons/com.arctop.seamless.relay.plist</code> (<code>root:wheel</code>,
+<code>0644</code>):</p>
+<div class="code-block" data-lang="xml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="cp">&lt;?xml version=&#34;1.0&#34; encoding=&#34;UTF-8&#34;?&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="cp">&lt;!DOCTYPE plist PUBLIC &#34;-//Apple//DTD PLIST 1.0//EN&#34; &#34;http://www.apple.com/DTDs/PropertyList-1.0.dtd&#34;&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="nt">&lt;plist</span> <span class="na">version=</span><span class="s">&#34;1.0&#34;</span><span class="nt">&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="nt">&lt;dict&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>Label<span class="nt">&lt;/key&gt;</span>             <span class="nt">&lt;string&gt;</span>com.arctop.seamless.relay<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>UserName<span class="nt">&lt;/key&gt;</span>          <span class="nt">&lt;string&gt;</span>_seamless<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>GroupName<span class="nt">&lt;/key&gt;</span>         <span class="nt">&lt;string&gt;</span>_seamless<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>InitGroups<span class="nt">&lt;/key&gt;</span>        <span class="nt">&lt;true/&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>ProgramArguments<span class="nt">&lt;/key&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;array&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;string&gt;</span>/opt/seamless/bin/seamlessd<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;string&gt;</span>relay<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;string&gt;</span>serve<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;string&gt;</span>--socket-mode<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;string&gt;</span>0660<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;string&gt;</span>--socket-group<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;string&gt;</span>_seamlessowner<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;/array&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>EnvironmentVariables<span class="nt">&lt;/key&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;dict&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&lt;key&gt;</span>HOME<span class="nt">&lt;/key&gt;</span>            <span class="nt">&lt;string&gt;</span>/opt/seamless/home<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;/dict&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>Umask<span class="nt">&lt;/key&gt;</span>             <span class="nt">&lt;integer&gt;</span>63<span class="nt">&lt;/integer&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>RunAtLoad<span class="nt">&lt;/key&gt;</span>         <span class="nt">&lt;true/&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>KeepAlive<span class="nt">&lt;/key&gt;</span>         <span class="nt">&lt;true/&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>ThrottleInterval<span class="nt">&lt;/key&gt;</span>  <span class="nt">&lt;integer&gt;</span>10<span class="nt">&lt;/integer&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>StandardOutPath<span class="nt">&lt;/key&gt;</span>   <span class="nt">&lt;string&gt;</span>/opt/seamless/home/relay.log<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&lt;key&gt;</span>StandardErrorPath<span class="nt">&lt;/key&gt;</span> <span class="nt">&lt;string&gt;</span>/opt/seamless/home/relay.log<span class="nt">&lt;/string&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="nt">&lt;/dict&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="nt">&lt;/plist&gt;</span>
+</span></span></code></pre></div>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo launchctl bootstrap system /Library/LaunchDaemons/com.arctop.seamless.relay.plist
+</span></span><span class="line"><span class="cl">sudo launchctl kickstart -k system/com.arctop.seamless.relay   <span class="c1"># restart</span>
+</span></span><span class="line"><span class="cl">sudo launchctl print system/com.arctop.seamless.relay          <span class="c1"># state, pid, last exit</span>
+</span></span><span class="line"><span class="cl">sudo launchctl bootout system/com.arctop.seamless.relay        <span class="c1"># stop and unload</span>
+</span></span></code></pre></div>
+<p>On Linux it is the system unit <code>/etc/systemd/system/seamless-relay.service</code>,
+whose log is the journal's:</p>
+<div class="code-block" data-lang="ini"><pre class="chroma"><code><span class="line"><span class="cl"><span class="k">[Unit]</span>
+</span></span><span class="line"><span class="cl"><span class="na">Description</span><span class="o">=</span><span class="s">Seamless relay</span>
+</span></span><span class="line"><span class="cl"><span class="na">After</span><span class="o">=</span><span class="s">network-online.target</span>
+</span></span><span class="line"><span class="cl"><span class="na">Wants</span><span class="o">=</span><span class="s">network-online.target</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">[Service]</span>
+</span></span><span class="line"><span class="cl"><span class="na">User</span><span class="o">=</span><span class="s">_seamless</span>
+</span></span><span class="line"><span class="cl"><span class="na">Group</span><span class="o">=</span><span class="s">_seamless</span>
+</span></span><span class="line"><span class="cl"><span class="na">UMask</span><span class="o">=</span><span class="s">0077</span>
+</span></span><span class="line"><span class="cl"><span class="na">Environment</span><span class="o">=</span><span class="s">HOME=/opt/seamless/home</span>
+</span></span><span class="line"><span class="cl"><span class="na">ExecStart</span><span class="o">=</span><span class="s">/opt/seamless/bin/seamlessd relay serve --socket-mode 0660 --socket-group _seamlessowner</span>
+</span></span><span class="line"><span class="cl"><span class="na">Restart</span><span class="o">=</span><span class="s">always</span>
+</span></span><span class="line"><span class="cl"><span class="na">RestartSec</span><span class="o">=</span><span class="s">10</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">[Install]</span>
+</span></span><span class="line"><span class="cl"><span class="na">WantedBy</span><span class="o">=</span><span class="s">multi-user.target</span>
+</span></span></code></pre></div>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo systemctl daemon-reload
+</span></span><span class="line"><span class="cl">sudo systemctl <span class="nb">enable</span> --now seamless-relay
+</span></span><span class="line"><span class="cl">sudo systemctl restart seamless-relay
+</span></span></code></pre></div>
+<p>Nothing updates the relay's binary by itself yet: replace root's copy and
+restart the service (<a href="../../guides/network-install/#updates-on-a-shared-daemon">how</a>).</p>
 <h2 id="where-things-live">Where things live</h2>
 <p>Every <code>~</code> path resolves under <code>%USERPROFILE%</code> on Windows - the daemon searches
 the same relative locations on every OS.</p>
@@ -643,7 +714,7 @@ you are cleaning by hand, the native teardown is:</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#control-it-from-anywhere">Control it from anywhere</a></li><li class="lvl-2"><a href="#the-service-on-your-os">The service on your OS</a></li><li class="lvl-2"><a href="#the-updater">The updater on your OS</a></li><li class="lvl-3"><a href="#updater-recovery">When an update goes wrong</a></li><li class="lvl-2"><a href="#peer-auth-daemon">A system service for peer_auth</a></li><li class="lvl-2"><a href="#where-things-live">Where things live</a></li><li class="lvl-2"><a href="#removing-the-service-by-hand">Removing the service by hand</a></li>
+      <li class="lvl-2"><a href="#control-it-from-anywhere">Control it from anywhere</a></li><li class="lvl-2"><a href="#the-service-on-your-os">The service on your OS</a></li><li class="lvl-2"><a href="#the-updater">The updater on your OS</a></li><li class="lvl-3"><a href="#updater-recovery">When an update goes wrong</a></li><li class="lvl-2"><a href="#peer-auth-daemon">A system service for peer_auth</a></li><li class="lvl-2"><a href="#relay">The relay&#39;s service on a Client</a></li><li class="lvl-2"><a href="#where-things-live">Where things live</a></li><li class="lvl-2"><a href="#removing-the-service-by-hand">Removing the service by hand</a></li>
     </ul>
   </aside>
   

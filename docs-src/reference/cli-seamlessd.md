@@ -52,7 +52,7 @@ Misdirected Request`. A wildcard bind with no host named anywhere is the single
 unguarded case - naming one arms the guard there too. Binding beyond loopback
 logs a `SECURITY` warning at startup whose text differs with TLS on or off, and
 a second warning when the bind is wide while `server_url` still names loopback.
-[Share one daemon across a LAN](/guides/network-install/) is the setup guide.
+[Share one daemon across your computers](/guides/network-install/) is the setup guide.
 
 On a true first run - no config file anywhere in the search order and no
 `SEAMLESS_MCP_API_KEY` in the environment - it generates the bearer key and
@@ -379,7 +379,9 @@ computer, the default install - or **Networked**: the **Server**, which keeps
 the data for the other computers, or a **Client** of one, which keeps none of
 its own. Set up the Server first: each Client needs its address and key.
 Windows is offered Standalone and Client only: it has no peer_auth and no
-relay, so a Windows computer can be a Client but not the Server.
+relay, so a Windows computer can be a Client but not the Server, and as a
+Client it is always a key client, whose agents never open a locked project
+([Networked Seamless](/concepts/networked/)).
 
 The installers ask through it. Once they have downloaded and verified a
 release, they run its `seamlessd setup` before anything is installed and act
@@ -697,7 +699,7 @@ trusted LAN, and the operator already had to widen the bind and name
 `server_url` to get here. What it must not be is silent: the key in those
 commands, and every memory fetched with it, cross the network in the clear.
 
-See [Share one daemon across a LAN](/guides/network-install/) for the whole
+See [Share one daemon across your computers](/guides/network-install/) for the whole
 procedure.
 
 ## seamlessd uninstall {#seamlessd_uninstall}
@@ -1033,13 +1035,13 @@ The computers paired with this server: relays (macOS and Linux clients) and key 
 
 - `code` mints a one-time pairing code (10 minutes, one computer; only its hash is stored) and prints what the other computer needs: this server's address, its certificate's SHA-256 fingerprint (as `openssl x509 -noout -fingerprint -sha256` prints it), the code and the client one-liners. Without peer_auth the code is the approval; under it the pairing waits for your passkey on the console's Devices page.
 - `list` prints every device: id, name, kind, status, fingerprint or key prefix, last seen.
-- `revoke` revokes a paired device (refused from its next request; the daemon ends its running requests within 30 seconds) or denies a pairing that waits, named by its id or by a live device's name.
+- `revoke` revokes a paired device (refused from its next request; the daemon ends its running requests within 30 seconds, and a relay's leases, read grants and waiting access requests at once) or denies a pairing that waits, named by its id or by a live device's name. [The Devices page](/guides/network-install/#devices) does the same in the console.
 
 ## seamlessd relay {#seamlessd_relay}
 
 ```bash
-seamlessd relay serve [--socket PATH] [--socket-mode MODE] [--socket-group GROUP]
-seamlessd relay pair --server URL --code CODE [--fingerprint SHA256] [--ca-file FILE] [--replace] [--json]
+seamlessd relay serve [--data-dir DIR] [--socket PATH] [--socket-mode MODE] [--socket-group GROUP]
+seamlessd relay pair --server URL --code CODE [--fingerprint SHA256] [--ca-file FILE] [--name NAME] [--replace] [--json] [--data-dir DIR]
 ```
 
 The relay serves the socket agents dial beside a peer_auth daemon and forwards
@@ -1060,13 +1062,17 @@ account, and any layout another account could change.
   goes only to that certificate; `--ca-file` names the root the server's
   certificate chains to, copied into the data dir. Under peer_auth the pairing
   waits for your passkey on the Devices page, which shows the same key
-  fingerprint. `--replace` pairs again after you revoked the old device;
+  fingerprint. `--name` is the name the relay speaks for, which the Devices page
+  shows and `peer_auth.relays` maps (this computer's host name by default).
+  `--replace` pairs again after you revoked the old device;
   `--json` prints the public facts. Run it by its root-owned path,
   `/opt/seamless/bin/seamlessd`, with `--code -`, and paste the code.
 
-Its data dir is `/opt/seamless/relay` (the relay's account, 0700):
-`relay.json` (0600) holds the pairing and the relay's key. Doctor reports the
-relay; run it as the relay's account to see the pairing too.
+Its data dir is `/opt/seamless/relay` (the relay's account, 0700; `--data-dir`
+names another): `relay.json` (0600) holds the pairing and the relay's key.
+Doctor reports the relay; run it as the relay's account to see the pairing
+too. [The relay's root step](/guides/network-install/#the-relays-root-step)
+has the account, the layout and every step.
 
 ## seamlessd console-open {#seamlessd_console_open}
 

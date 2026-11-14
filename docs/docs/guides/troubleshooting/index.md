@@ -336,7 +336,7 @@ reset it there.
 (8081), one data directory (`~/.seamless`). The dev and release install layouts
 drive that same instance, so installing one replaces the other. (A `role: client`
 install has neither a port nor a data directory, so it cannot collide this way -
-see [Share one daemon across a LAN](https://thereisnospoon.org/docs/guides/network-install/).) Most confusion here is
+see [Share one daemon across your computers](https://thereisnospoon.org/docs/guides/network-install/).) Most confusion here is
 someone accidentally interacting with a second copy, or with the same copy running
 older code.
 
@@ -364,6 +364,89 @@ older code.
   `seamlessd doctor`. The maintained registration is an enabled user-level stdio
   bridge; a disabled entry, stale binary/config path, or project override is a
   client-configuration problem even while `/healthz` is green.
+
+## An agent on another computer gets no briefing {#an-agent-on-another-computer-gets-no-briefing}
+
+**What is happening.** A [Client](https://thereisnospoon.org/docs/concepts/networked/) keeps no data and
+answers nothing from memory. When the Server, or the relay in front of it, does
+not answer, every hook fails open and every tool call fails, so the session
+looks like one without Seamless.
+
+**Fix.** On the Client, run `seam doctor`, then `seamlessd doctor`. On a key
+client, the `server_url` row is a **fail** until the Server answers. On a
+computer with a relay, the rows that start with `relay` name what is wrong; run
+doctor as the relay's account to see its pairing too
+([how](https://thereisnospoon.org/docs/guides/network-install/#install-a-relay)). Through a relay, the failing
+call or `seam` command carries the reason:
+
+| The answer | What it means | Fix |
+|---|---|---|
+| `seamless relay: the server at <address> could not be reached (...)` | the relay runs, and the Server does not answer it | start the Server, or mend the route to it: the relay forwards again as soon as it answers |
+| `seamless relay: the server at <address> presented a certificate other than the one this relay pinned at pairing` | the Server's certificate changed, most often at a renewal | [pair the relay again](https://thereisnospoon.org/docs/guides/network-install/#revoke-a-computer): revoke it on the Devices page, get a new code, run `sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --replace --server <address> --fingerprint <the new fingerprint> --code -`, and restart the relay |
+| `seamless relay: the server at <address> presented a certificate that does not verify` | the relay does not trust the certificate's issuer | pair again with `--ca-file` naming its root |
+| `unauthorized: this relay's pairing was revoked: pair it again` | you revoked it | pair it again, with a new code |
+| `forbidden: relay <name> is paired, but peer_auth.relays does not map it` | the Server runs peer_auth and refuses a relay you have not mapped | map it in the daemon's config, by the name the Devices page shows, then restart the daemon ([how](https://thereisnospoon.org/docs/guides/peer-auth/#agents-on-another-computer-relays)) |
+| `forbidden: relay <name> was paired with a one-time code alone, before peer_auth` | the Server maps it in `peer_auth.relays`, and no passkey ever approved it | revoke it, pair it again, and approve it with your passkey |
+| `forbidden: uid <n> on relay <name> is neither the owner nor a restricted account peer_auth.relays maps there` | another account on that computer, through a relay the Server maps | run the agent as your own account there, or list that account under the relay's `restricted` |
+| `seamless relay: the caller runs as the relay's own account` | an agent runs as `_seamless`, the account that holds the relay's key | run agents as your own account |
+
+With no answer at all, nothing serves the socket: `relay.socket` says the relay
+is not running. Start its service.
+
+## Pairing a computer fails
+
+**What is happening.** Setup, or `seamlessd relay pair` in the relay's root
+step, stops with the reason, and nothing is saved until the Server has paired
+the computer.
+
+**Fix.** Setup's own refusals come first:
+
+| Setup says | Fix |
+|---|---|
+| `<address> presents <fingerprint>, not the SEAMLESS_SERVER_FINGERPRINT you gave: nothing was sent to it` | the address reaches a computer whose certificate is not the one the Server printed: check the address, and the fingerprint `seamlessd devices code` prints on the Server |
+| `this computer does not trust <address>'s certificate (...), and nothing compared it` | add `SEAMLESS_SERVER_FINGERPRINT=<the fingerprint the Server printed>` to the one-liner, or run the installer at a terminal and compare it there |
+| `<address> is plain http, and a pairing crosses the network` | give the Server TLS ([setup's address step](https://thereisnospoon.org/docs/guides/network-install/#set-up-the-server)), then pair with its https address |
+| `<config> is here already, and setup never edits a config` | a key device's key goes into a config of its own: move the old one aside, or keep it |
+| `SEAMLESS_PAIR_CODE and SEAMLESS_MCP_API_KEY are both set` | a code gives the computer a key of its own: drop the key |
+
+Then the Server's, from either:
+
+| The error | Fix |
+|---|---|
+| `the server refused the pairing code: it may be mistyped, expired or already used` | get a new code: each works once, for 10 minutes |
+| `the server already pairs a device of this name` | revoke the old device of that name on the Devices page, or pair with `--name` |
+| `the server's certificate does not have the fingerprint you compared; nothing was sent` | the address reaches a computer whose certificate is not the one the Server shows: check the address, and the fingerprint `seamlessd devices code` prints on the Server |
+| `a relay pairs over TLS with its client certificate: the server's address must be https` | a relay needs TLS on the daemon's own listener: give the Server a certificate ([setup's address step](https://thereisnospoon.org/docs/guides/network-install/#set-up-the-server)) |
+| `the owner denied this pairing on the server`, `this pairing was not approved in time: get a new code and pair again` | under peer_auth the pairing waits 10 minutes for your passkey on the Devices page: pair again with a new code, and approve it there |
+| `this relay is already paired with <address> as <name> (device <id>)` | revoke that device on the Devices page, then pair with `--replace` |
+| `the relay runs as root`, `the relay runs as uid <n>, which is not a system account` | run it as its own account, created and pinned as [Deploy it](https://thereisnospoon.org/docs/guides/peer-auth/#deploy-it-the-daemon-runs-as-its-own-account) does |
+
+On the Server, `seamlessd devices` refusing with `this install serves no other
+computers, so it pairs none` means pairing is off: it is on only on a Server
+with TLS, a bind beyond loopback, or a `server_url` naming another host.
+
+## An agent on another computer cannot open a locked project
+
+**What is happening.** A locked project opens only to an agent whose process
+tree holds a lease, and the Server can name that tree only for its own socket
+and for a relay `peer_auth.relays` maps. So it depends on how the agent's
+computer reaches the Server:
+
+- **A key device, a client of the Server's own key, or a Windows computer**
+  never holds a lease: a key cannot be tied to one process.
+- **A relay the Server does not map** is refused outright.
+- **A mapped relay of an older release** files nothing: a call refused at the
+  lock asks for nothing, and `access_request` or `seam access request` answers
+  `no access request is filed for this agent on another computer: its relay
+  did not say which program is asking (a relay of wire version 1 never does)`.
+- **A process that is not an agent's** - `seam` run by hand in a shell there -
+  is refused as it is on the Server ([requests name agents](https://thereisnospoon.org/docs/guides/peer-auth/#requests)).
+
+**Fix.** Pair the computer as a relay and map it on the Server
+([how](https://thereisnospoon.org/docs/guides/network-install/#locked-projects-and-agents-on-other-computers)),
+update Seamless on a relay's computer whose relay is older than the Server's,
+and ask from an agent session there. Otherwise run the agent on the Server's
+computer, on its socket: a terminal there, or SSH to it.
 
 ## `seamlessd update` refuses the release with a signature error
 

@@ -278,7 +278,7 @@ filesystem is skipped rather than attempted, and the skip is recorded as a
 "does the file exist" check on purpose: two devices with the same username and
 home layout produce the same transcript and plan-file paths, so a missing-file
 test would sometimes find a real file - the wrong one. See
-[Share one daemon across a LAN](https://thereisnospoon.org/docs/guides/network-install/#what-a-remote-device-does-not-get)
+[Share one daemon across your computers](https://thereisnospoon.org/docs/guides/network-install/#what-a-remote-device-does-not-get)
 for the full list of what that covers.
 
 ### The ambient session line {#the-ambient-session-line}

@@ -122,6 +122,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../concepts/project-isolation/">Project isolation</a></li>
         
+        <li><a href="../../concepts/networked/">Networked Seamless</a></li>
+        
         <li><a href="../../concepts/gardener/">The gardener</a></li>
         
         <li><a href="../../concepts/memory-supersession/">Memory supersession</a></li>
@@ -154,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../guides/data/">Import, back up &amp; restore</a></li>
         
-        <li><a href="../../guides/network-install/">Share one daemon across a LAN</a></li>
+        <li><a href="../../guides/network-install/">Share one daemon across your computers</a></li>
         
         <li><a href="../../guides/peer-auth/">Lock projects behind your approval</a></li>
         
@@ -278,7 +280,7 @@ the host of <code>server_url</code>, and <code>allowed_hosts</code>. Anything el
 unguarded case - naming one arms the guard there too. Binding beyond loopback
 logs a <code>SECURITY</code> warning at startup whose text differs with TLS on or off, and
 a second warning when the bind is wide while <code>server_url</code> still names loopback.
-<a href="../../guides/network-install/">Share one daemon across a LAN</a> is the setup guide.</p>
+<a href="../../guides/network-install/">Share one daemon across your computers</a> is the setup guide.</p>
 <p>On a true first run - no config file anywhere in the search order and no
 <code>SEAMLESS_MCP_API_KEY</code> in the environment - it generates the bearer key and
 writes it to <code>~/.config/seamless/seamless.yaml</code> before starting. An existing
@@ -780,7 +782,9 @@ computer, the default install - or <strong>Networked</strong>: the <strong>Serve
 the data for the other computers, or a <strong>Client</strong> of one, which keeps none of
 its own. Set up the Server first: each Client needs its address and key.
 Windows is offered Standalone and Client only: it has no peer_auth and no
-relay, so a Windows computer can be a Client but not the Server.</p>
+relay, so a Windows computer can be a Client but not the Server, and as a
+Client it is always a key client, whose agents never open a locked project
+(<a href="../../concepts/networked/">Networked Seamless</a>).</p>
 <p>The installers ask through it. Once they have downloaded and verified a
 release, they run its <code>seamlessd setup</code> before anything is installed and act
 on the answer. It asks only a person at a terminal who set no <code>SEAMLESS_*</code>
@@ -1168,7 +1172,7 @@ cannot work:</p>
 trusted LAN, and the operator already had to widen the bind and name
 <code>server_url</code> to get here. What it must not be is silent: the key in those
 commands, and every memory fetched with it, cross the network in the clear.</p>
-<p>See <a href="../../guides/network-install/">Share one daemon across a LAN</a> for the whole
+<p>See <a href="../../guides/network-install/">Share one daemon across your computers</a> for the whole
 procedure.</p>
 <h2 id="seamlessd_uninstall">seamlessd uninstall</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd uninstall <span class="o">[</span>--client claude<span class="p">|</span>claude-desktop<span class="p">|</span>codex<span class="p">|</span>all<span class="p">|</span>detect<span class="o">]</span> <span class="o">[</span>--dry-run<span class="o">]</span> <span class="o">[</span>--yes<span class="o">]</span> <span class="o">[</span>--purge<span class="o">]</span>
@@ -1560,11 +1564,11 @@ denied move answers <code>Denied R-7F3K: the agent stays in example-ops, and exa
 <ul>
 <li><code>code</code> mints a one-time pairing code (10 minutes, one computer; only its hash is stored) and prints what the other computer needs: this server's address, its certificate's SHA-256 fingerprint (as <code>openssl x509 -noout -fingerprint -sha256</code> prints it), the code and the client one-liners. Without peer_auth the code is the approval; under it the pairing waits for your passkey on the console's Devices page.</li>
 <li><code>list</code> prints every device: id, name, kind, status, fingerprint or key prefix, last seen.</li>
-<li><code>revoke</code> revokes a paired device (refused from its next request; the daemon ends its running requests within 30 seconds) or denies a pairing that waits, named by its id or by a live device's name.</li>
+<li><code>revoke</code> revokes a paired device (refused from its next request; the daemon ends its running requests within 30 seconds, and a relay's leases, read grants and waiting access requests at once) or denies a pairing that waits, named by its id or by a live device's name. <a href="../../guides/network-install/#devices">The Devices page</a> does the same in the console.</li>
 </ul>
 <h2 id="seamlessd_relay">seamlessd relay</h2>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd relay serve <span class="o">[</span>--socket PATH<span class="o">]</span> <span class="o">[</span>--socket-mode MODE<span class="o">]</span> <span class="o">[</span>--socket-group GROUP<span class="o">]</span>
-</span></span><span class="line"><span class="cl">seamlessd relay pair --server URL --code CODE <span class="o">[</span>--fingerprint SHA256<span class="o">]</span> <span class="o">[</span>--ca-file FILE<span class="o">]</span> <span class="o">[</span>--replace<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd relay serve <span class="o">[</span>--data-dir DIR<span class="o">]</span> <span class="o">[</span>--socket PATH<span class="o">]</span> <span class="o">[</span>--socket-mode MODE<span class="o">]</span> <span class="o">[</span>--socket-group GROUP<span class="o">]</span>
+</span></span><span class="line"><span class="cl">seamlessd relay pair --server URL --code CODE <span class="o">[</span>--fingerprint SHA256<span class="o">]</span> <span class="o">[</span>--ca-file FILE<span class="o">]</span> <span class="o">[</span>--name NAME<span class="o">]</span> <span class="o">[</span>--replace<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>--data-dir DIR<span class="o">]</span>
 </span></span></code></pre></div>
 <p>The relay serves the socket agents dial beside a peer_auth daemon and forwards
 each request to the paired server, so the computer holds no key. macOS and
@@ -1582,13 +1586,17 @@ it.</li>
 goes only to that certificate; <code>--ca-file</code> names the root the server's
 certificate chains to, copied into the data dir. Under peer_auth the pairing
 waits for your passkey on the Devices page, which shows the same key
-fingerprint. <code>--replace</code> pairs again after you revoked the old device;
+fingerprint. <code>--name</code> is the name the relay speaks for, which the Devices page
+shows and <code>peer_auth.relays</code> maps (this computer's host name by default).
+<code>--replace</code> pairs again after you revoked the old device;
 <code>--json</code> prints the public facts. Run it by its root-owned path,
 <code>/opt/seamless/bin/seamlessd</code>, with <code>--code -</code>, and paste the code.</li>
 </ul>
-<p>Its data dir is <code>/opt/seamless/relay</code> (the relay's account, 0700):
-<code>relay.json</code> (0600) holds the pairing and the relay's key. Doctor reports the
-relay; run it as the relay's account to see the pairing too.</p>
+<p>Its data dir is <code>/opt/seamless/relay</code> (the relay's account, 0700; <code>--data-dir</code>
+names another): <code>relay.json</code> (0600) holds the pairing and the relay's key.
+Doctor reports the relay; run it as the relay's account to see the pairing
+too. <a href="../../guides/network-install/#the-relays-root-step">The relay's root step</a>
+has the account, the layout and every step.</p>
 <h2 id="seamlessd_console_open">seamlessd console-open</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd console-open <span class="o">[</span>--browser APP<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seamlessd console-open --unlock PROJECT <span class="o">[</span>--code CODE<span class="o">]</span> <span class="o">[</span>--for DURATION<span class="o">]</span>

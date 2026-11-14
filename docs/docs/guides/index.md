@@ -40,9 +40,10 @@ commits no tracked work accounts for.
 The last three are operational. [Import, back up & restore](https://thereisnospoon.org/docs/guides/data/) covers
 putting `~/.seamless` in git, what deleting `seam.db` actually costs (an index
 rebuild, not data loss), and moving to a new machine.
-[Share one daemon across a LAN](https://thereisnospoon.org/docs/guides/network-install/) is the opt-in
-multi-device shape: the server config, TLS, the pairing command, and the
-daemon-side captures a remote device honestly does not get.
+[Share one daemon across your computers](https://thereisnospoon.org/docs/guides/network-install/) is the
+opt-in multi-computer shape: the Server's setup, each Client, pairing on the
+Devices page, approvals from any browser, and the daemon-side captures a
+remote device honestly does not get.
 [Troubleshooting](https://thereisnospoon.org/docs/guides/troubleshooting/) is symptom-first, written for a
 system whose hooks deliberately fail open - where a broken install looks like
 silence, not an error message.
@@ -54,7 +55,7 @@ silence, not an error message.
 - [Capture Claude Code plans](https://thereisnospoon.org/docs/guides/plan-mode/): How plan mode is captured automatically - which hook does what, a plan's life from draft to approved, and the escape hatches.
 - [Run research trials](https://thereisnospoon.org/docs/guides/research-trials/): The lab loop for systematic debugging - recording what was tried, letting parallel agents share dead ends, and distilling the result into memory.
 - [Import, back up & restore](https://thereisnospoon.org/docs/guides/data/): Scheduled backups and two-click restores in the console, one archive with seamlessd export, seamlessd restore and import, putting ~/.seamless in git, what deleting seam.db actually costs, and moving to a new machine.
-- [Share one daemon across a LAN](https://thereisnospoon.org/docs/guides/network-install/): Run one seamlessd for several devices - the server config, TLS with mkcert or openssl, the client-config pairing command, and the captures a remote device honestly does not get.
+- [Share one daemon across your computers](https://thereisnospoon.org/docs/guides/network-install/): Networked Seamless step by step - set up the Server with seamlessd setup, connect each Client, pair computers on the Devices page, sign in and approve from any browser, and every step by hand.
 - [Lock projects behind your approval](https://thereisnospoon.org/docs/guides/peer-auth/): peer_auth - the daemon in its own OS account, a Unix socket that names each caller by its uid, and locked projects your own agents reach only with an approval you prove.
 - [Screen writes and hold the suspicious ones](https://thereisnospoon.org/docs/guides/write-screening/): Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.
 - [Feeding a security monitor](https://thereisnospoon.org/docs/guides/security-monitor/): Tell a security monitor what your agents did - a metadata feed of events over a Unix socket and a commit-matching snapshot file, each a small versioned contract, both off by default.

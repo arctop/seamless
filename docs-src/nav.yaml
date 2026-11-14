@@ -35,6 +35,7 @@ sections:
       - tasks-and-plans.md
       - projects.md
       - project-isolation.md
+      - networked.md
       - gardener.md
       - memory-supersession.md
       - lease-based-task-claiming.md

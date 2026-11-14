@@ -33,3 +33,7 @@ colliding, and plans as compositions of notes and tasks rather than a separate
 primitive. [The gardener](/concepts/gardener/) is the background pass that
 finds duplicates, staleness, and drift - and only ever proposes, because
 nothing in Seamless rewrites your knowledge behind your back.
+
+[Networked Seamless](/concepts/networked/) is the shape for more than one
+computer: one Server keeps the data, and the others connect to it as Clients,
+through a relay or with a key.

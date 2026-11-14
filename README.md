@@ -107,7 +107,11 @@ archive for your platform (macOS, Linux, and Windows; amd64 and arm64), installs
 `seamlessd` and `seam` into `~/.local/bin`, generates the bearer key, installs
 hooks, MCP, and skills for the detected Claude Code/Codex local hosts, and runs
 the daemon as a per-user service -- launchd on macOS, systemd `--user` on Linux, an
-at-logon Scheduled Task on Windows. It keeps itself up to date: from v0.7.0 it
+at-logon Scheduled Task on Windows. At a terminal it first asks how you will use
+Seamless: Standalone, everything on this computer (the default), or Networked,
+one computer keeping the data for the others
+([Share one daemon across your computers](https://thereisnospoon.org/docs/guides/network-install/)).
+It keeps itself up to date: from v0.7.0 it
 installs each new release by itself, a day after it is published and at a moment
 no agent is using it -- backed up, and rolled back if the new release does not
 come up. To update right now, run `seamlessd update` (`--check` reports

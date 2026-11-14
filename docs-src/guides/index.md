@@ -41,9 +41,10 @@ commits no tracked work accounts for.
 The last three are operational. [Import, back up & restore](/guides/data/) covers
 putting `~/.seamless` in git, what deleting `seam.db` actually costs (an index
 rebuild, not data loss), and moving to a new machine.
-[Share one daemon across a LAN](/guides/network-install/) is the opt-in
-multi-device shape: the server config, TLS, the pairing command, and the
-daemon-side captures a remote device honestly does not get.
+[Share one daemon across your computers](/guides/network-install/) is the
+opt-in multi-computer shape: the Server's setup, each Client, pairing on the
+Devices page, approvals from any browser, and the daemon-side captures a
+remote device honestly does not get.
 [Troubleshooting](/guides/troubleshooting/) is symptom-first, written for a
 system whose hooks deliberately fail open - where a broken install looks like
 silence, not an error message.

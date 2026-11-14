@@ -23,7 +23,7 @@ One instance per machine is the default, not a law. Several devices can share
 every other machine installs with `role: client` plus `server_url`, which runs
 no daemon and registers no service at all (`seamlessd serve` refuses on a
 client outright). Everything below describes the server's install;
-[Share one daemon across a LAN](/guides/network-install/) is the setup, and
+[Share one daemon across your computers](/guides/network-install/) is the setup, and
 the tradeoffs.
 
 ## Control it from anywhere
@@ -353,6 +353,87 @@ update waits for the new release. On macOS the updater is a `setsid` child, as f
 per-user service. On Linux it is a transient unit of the account's own user
 manager (`sudo systemctl --user -M _seamless@ list-units 'seamless-update-*'`
 shows one in progress), which needs that account to linger.
+
+## The relay's service on a Client {#relay}
+
+A macOS or Linux Client paired as a relay runs `seamlessd relay serve` as the
+relay's own account, `_seamless`, from root's copy of the binary, with its
+socket handed to `_seamlessowner`, a group of you and the relay alone
+([the root step](/guides/network-install/#the-relays-root-step) that installs
+it). On macOS it is the LaunchDaemon
+`/Library/LaunchDaemons/com.arctop.seamless.relay.plist` (`root:wheel`,
+`0644`):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>             <string>com.arctop.seamless.relay</string>
+  <key>UserName</key>          <string>_seamless</string>
+  <key>GroupName</key>         <string>_seamless</string>
+  <key>InitGroups</key>        <true/>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/seamless/bin/seamlessd</string>
+    <string>relay</string>
+    <string>serve</string>
+    <string>--socket-mode</string>
+    <string>0660</string>
+    <string>--socket-group</string>
+    <string>_seamlessowner</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>            <string>/opt/seamless/home</string>
+  </dict>
+  <key>Umask</key>             <integer>63</integer>
+  <key>RunAtLoad</key>         <true/>
+  <key>KeepAlive</key>         <true/>
+  <key>ThrottleInterval</key>  <integer>10</integer>
+  <key>StandardOutPath</key>   <string>/opt/seamless/home/relay.log</string>
+  <key>StandardErrorPath</key> <string>/opt/seamless/home/relay.log</string>
+</dict>
+</plist>
+```
+
+```bash
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.arctop.seamless.relay.plist
+sudo launchctl kickstart -k system/com.arctop.seamless.relay   # restart
+sudo launchctl print system/com.arctop.seamless.relay          # state, pid, last exit
+sudo launchctl bootout system/com.arctop.seamless.relay        # stop and unload
+```
+
+On Linux it is the system unit `/etc/systemd/system/seamless-relay.service`,
+whose log is the journal's:
+
+```ini
+[Unit]
+Description=Seamless relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=_seamless
+Group=_seamless
+UMask=0077
+Environment=HOME=/opt/seamless/home
+ExecStart=/opt/seamless/bin/seamlessd relay serve --socket-mode 0660 --socket-group _seamlessowner
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now seamless-relay
+sudo systemctl restart seamless-relay
+```
+
+Nothing updates the relay's binary by itself yet: replace root's copy and
+restart the service ([how](/guides/network-install/#updates-on-a-shared-daemon)).
 
 ## Where things live {#where-things-live}
 

@@ -122,6 +122,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../concepts/project-isolation/">Project isolation</a></li>
         
+        <li><a href="../concepts/networked/">Networked Seamless</a></li>
+        
         <li><a href="../concepts/gardener/">The gardener</a></li>
         
         <li><a href="../concepts/memory-supersession/">Memory supersession</a></li>
@@ -154,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../guides/data/">Import, back up &amp; restore</a></li>
         
-        <li><a href="../guides/network-install/">Share one daemon across a LAN</a></li>
+        <li><a href="../guides/network-install/">Share one daemon across your computers</a></li>
         
         <li><a href="../guides/peer-auth/">Lock projects behind your approval</a></li>
         
@@ -291,15 +293,24 @@ against this repository's release workflow identity;</li>
 how this computer will be used, before anything is installed:
 <strong>Standalone</strong> (everything on this computer, the default) or <strong>Networked</strong> -
 the <strong>Server</strong>, which the other computers connect to, or a <strong>Client</strong> of
-one. A first Server install sets up
+one (<a href="../concepts/networked/">the model</a>). A first Server install sets up
 <a href="../reference/cli-seamlessd/#seamlessd_setup_address">its address</a> - the name
 the other computers reach it at, its certificate, and a bind holding every
-address of the name. A first Standalone or Server install then starts fresh or
+address of the name - and ends with what each Client needs. A first
+Standalone or Server install then starts fresh or
 <a href="../reference/cli-seamlessd/#seamlessd_setup_import">from a backup</a>, which
-setup restores into the still-empty data directory. Only a person at a
-terminal who set no <code>SEAMLESS_*</code> variable is asked; a script answers with
-<code>SEAMLESS_SETUP</code>, <code>SEAMLESS_SERVER_NAME</code> and <code>SEAMLESS_IMPORT</code>, and without them installs exactly as
-before. A re-run offers only the changes setup can make;</li>
+setup restores into the still-empty data directory. A Client gives its
+Server's address and a pairing code, compares the Server's certificate
+fingerprint, and pairs - a relay on macOS and Linux, a key of its own on
+Windows - keeping no data of its own. Windows is offered Standalone and
+Client only: a Windows computer is never the Server, and as a Client it is
+always a key device, whose agents never open a locked project. Only a
+person at a terminal who set no <code>SEAMLESS_*</code> variable is asked; a script
+answers with <code>SEAMLESS_SETUP</code>, <code>SEAMLESS_SERVER_NAME</code>, <code>SEAMLESS_IMPORT</code> and
+<code>SEAMLESS_PAIR_CODE</code>, and without them installs exactly as before. A re-run
+offers only the changes setup can make
+(<a href="../guides/network-install/">Share one daemon across your computers</a> has
+the whole story);</li>
 <li>installs <code>seamlessd</code> and <code>seam</code> into <code>~/.local/bin</code>;</li>
 <li>runs <code>seamlessd install-hooks</code>, which generates the bearer key into
 <code>~/.config/seamless/seamless.yaml</code> on first run, detects Claude Code, the
@@ -381,16 +392,16 @@ script</a> with no dependencies to audit.</p>
 <td>choose which target(s) to wire instead of auto-detection; comma lists work (<code>claude,claude-desktop</code>)</td>
 </tr>
 <tr>
-<td><code>SEAMLESS_SERVER_URL=http://studio.local:8081</code></td>
-<td>install as a <strong>client</strong> of a Seamless daemon running elsewhere: wire this machine's agent clients to that URL, install no service, and keep no data dir here. Requires <code>SEAMLESS_MCP_API_KEY</code>, and wins over the <code>role</code> and <code>server_url</code> an existing config names. See <a href="../guides/network-install/">Share one daemon across a LAN</a></td>
+<td><code>SEAMLESS_SERVER_URL=https://studio.local:8081</code></td>
+<td>install as a <strong>client</strong> of a Seamless daemon running elsewhere: install no service, and keep no data dir here. Requires <code>SEAMLESS_PAIR_CODE</code> or <code>SEAMLESS_MCP_API_KEY</code>, and wins over the <code>role</code> and <code>server_url</code> an existing config names. See <a href="../guides/network-install/">Share one daemon across your computers</a></td>
 </tr>
 <tr>
 <td><code>SEAMLESS_MCP_API_KEY=&lt;key&gt;</code></td>
-<td>the server's bearer key, required alongside <code>SEAMLESS_SERVER_URL</code> - <code>SEAMLESS_SERVER_URL</code> without it is a hard error, because a client needs both. <code>seamlessd client-config</code> on the server prints the whole command</td>
+<td>the server's bearer key, for a client of it paired by hand: with <code>SEAMLESS_SERVER_URL</code>, a client of the server's own key, which pairs nothing. <code>SEAMLESS_SERVER_URL</code> with neither this nor <code>SEAMLESS_PAIR_CODE</code> is a hard error. <code>seamlessd client-config</code> on the server prints the whole command</td>
 </tr>
 <tr>
 <td><code>SEAMLESS_SETUP=standalone|server|client</code></td>
-<td>answer <a href="../reference/cli-seamlessd/#seamlessd_setup"><code>seamlessd setup</code></a>'s question - how this computer will be used - without being asked; <code>client</code> needs <code>SEAMLESS_SERVER_URL</code> and <code>SEAMLESS_MCP_API_KEY</code> too, and Windows takes <code>standalone</code> or <code>client</code></td>
+<td>answer <a href="../reference/cli-seamlessd/#seamlessd_setup"><code>seamlessd setup</code></a>'s question - how this computer will be used - without being asked; <code>client</code> needs <code>SEAMLESS_SERVER_URL</code> and <code>SEAMLESS_PAIR_CODE</code> (or the key) too, and Windows takes <code>standalone</code> or <code>client</code></td>
 </tr>
 <tr>
 <td><code>SEAMLESS_IMPORT=~/seamless-old-mac.tar.gz</code></td>
@@ -410,7 +421,15 @@ script</a> with no dependencies to audit.</p>
 </tr>
 <tr>
 <td><code>SEAMLESS_PAIR_CODE</code></td>
-<td>a client's one-time pairing code: setup does not take it yet, so it stops the install before anything is installed and says how to pair with the server's key instead</td>
+<td>a client's pairing code, from the server's Devices page or <code>seamlessd devices code</code> there (one computer, 10 minutes): with <code>SEAMLESS_SERVER_URL</code>, setup pairs this computer before anything is installed - a relay, whose root step it prints, or a key of its own. See <a href="../guides/network-install/#step-3-pair-a-client">Share one daemon across your computers</a></td>
+</tr>
+<tr>
+<td><code>SEAMLESS_SERVER_FINGERPRINT</code></td>
+<td>the server certificate's SHA-256, as its setup printed it: setup compares it before the code is sent, and sends nothing on a mismatch. Without it, a script pairs only with a certificate this computer already trusts</td>
+</tr>
+<tr>
+<td><code>SEAMLESS_PAIR_AS=relay|key</code></td>
+<td>what a client pairs as: <code>relay</code>, the default on macOS and Linux, or <code>key</code>, for a computer where you have no root (a container, CI). Windows is always <code>key</code></td>
 </tr>
 <tr>
 <td><code>SEAMLESS_NO_HOOKS=1</code></td>
@@ -552,6 +571,11 @@ tradeoff deliberately.</li>
 <li><strong>Loopback bind</strong> by default (<code>127.0.0.1:8081</code>). Nothing off your machine can
 reach it. Widening it is an explicit opt-in, and the daemon logs a <code>SECURITY</code>
 warning every time it starts on a non-loopback address.</li>
+<li><strong>A paired computer is you.</strong> On a networked Server, a computer paired with a
+one-time code holds a credential of its own, revocable on the console's
+Devices page, and reaches what the bearer key reaches - no more
+(<a href="../concepts/networked/#pairing">pairing</a>). A client set up with the
+Server's own key holds that key itself.</li>
 <li><strong>A Host-header allowlist</strong> guards against DNS rebinding: the daemon answers
 the loopback names, a concrete bind host, the host of <code>server_url</code>, and
 anything in <code>allowed_hosts</code>. Every other <code>Host</code> gets <code>421 Misdirected Request</code>. A wildcard bind (<code>0.0.0.0</code>) with no host named anywhere is the one
@@ -608,7 +632,9 @@ script. To pin the owner's keys on an install from then on, set
 <p>A static bearer key is adequate <em>because</em> the listener is on loopback; the two
 are a matched pair. Widen <code>addr</code> and that key becomes the only thing between a
 network peer and your entire knowledge store - so widening it is three
-deliberate steps, not one:</p>
+deliberate steps, not one. A Server's first install takes the first two with
+<a href="../reference/cli-seamlessd/#seamlessd_setup_address"><code>seamlessd setup</code></a>: a
+name, its certificate, and a bind that holds every address of the name.</p>
 <ol>
 <li><strong>Bind wide and say what you are called.</strong> <code>addr: 0.0.0.0:8081</code> plus
 <code>server_url: https://studio.local:8081</code>. The second key is what clients
@@ -618,11 +644,14 @@ dial, and its host joins the allowlist, so the guard stays on.</li>
 the bearer key, every hook payload, and the whole console travel in the
 clear; <code>seamlessd doctor</code> reports that as a warning on the <code>bind</code> line.</li>
 <li><strong>Keep the blast radius small.</strong> There is still no rate limiting, no user
-accounts, and no per-client authorization: one key admits the whole corpus.
-A trusted LAN is the supported boundary. The public internet is not.</li>
+accounts, and no per-client authorization: one key admits the whole corpus,
+and so does every computer paired with the Server. Only
+<a href="../guides/peer-auth/">locked projects</a> close a project to them. A network you
+trust - your LAN, your tailnet - is the supported boundary. The public
+internet is not.</li>
 </ol>
-<p><a href="../guides/network-install/">Share one daemon across a LAN</a> is the walkthrough -
-certificates, the <code>seamlessd client-config</code> pairing command, and what a remote
+<p><a href="../guides/network-install/">Share one daemon across your computers</a> is the
+walkthrough - the Server's setup, each Client, pairing, and what a remote
 device does <em>not</em> get. If you only need to reach your own daemon from
 elsewhere, a tunnel (Tailscale, SSH forwarding, Cloudflare Tunnel) over a
 loopback bind is still the smaller change and the safer one.</p>

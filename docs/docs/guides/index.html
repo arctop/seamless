@@ -122,6 +122,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../concepts/project-isolation/">Project isolation</a></li>
         
+        <li><a href="../concepts/networked/">Networked Seamless</a></li>
+        
         <li><a href="../concepts/gardener/">The gardener</a></li>
         
         <li><a href="../concepts/memory-supersession/">Memory supersession</a></li>
@@ -154,7 +156,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../guides/data/">Import, back up &amp; restore</a></li>
         
-        <li><a href="../guides/network-install/">Share one daemon across a LAN</a></li>
+        <li><a href="../guides/network-install/">Share one daemon across your computers</a></li>
         
         <li><a href="../guides/peer-auth/">Lock projects behind your approval</a></li>
         
@@ -268,9 +270,10 @@ commits no tracked work accounts for.</p>
 <p>The last three are operational. <a href="../guides/data/">Import, back up &amp; restore</a> covers
 putting <code>~/.seamless</code> in git, what deleting <code>seam.db</code> actually costs (an index
 rebuild, not data loss), and moving to a new machine.
-<a href="../guides/network-install/">Share one daemon across a LAN</a> is the opt-in
-multi-device shape: the server config, TLS, the pairing command, and the
-daemon-side captures a remote device honestly does not get.
+<a href="../guides/network-install/">Share one daemon across your computers</a> is the
+opt-in multi-computer shape: the Server's setup, each Client, pairing on the
+Devices page, approvals from any browser, and the daemon-side captures a
+remote device honestly does not get.
 <a href="../guides/troubleshooting/">Troubleshooting</a> is symptom-first, written for a
 system whose hooks deliberately fail open - where a broken install looks like
 silence, not an error message.</p>
@@ -316,8 +319,8 @@ silence, not an error message.</p>
   </a>
   
   <a class="doc-card" href="../guides/network-install/">
-    <h2>Share one daemon across a LAN</h2>
-    <p>Run one seamlessd for several devices - the server config, TLS with mkcert or openssl, the client-config pairing command, and the captures a remote device honestly does not get.</p>
+    <h2>Share one daemon across your computers</h2>
+    <p>Networked Seamless step by step - set up the Server with seamlessd setup, connect each Client, pair computers on the Devices page, sign in and approve from any browser, and every step by hand.</p>
   </a>
   
   <a class="doc-card" href="../guides/peer-auth/">
