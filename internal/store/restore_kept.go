@@ -3,11 +3,12 @@ package store
 // What a restore keeps of today. A restore puts a backup's knowledge and work
 // record back, but not the state that says how this install runs and who may
 // approve: those stay as they are now, so a restore can never bring back a
-// passkey the owner removed, reset an override the owner chose, drop a lock, or
-// loosen a fence (owner decisions of 2026-11-10 and 2026-11-11). ReadKeptState
-// reads that state from today's database before the restore moves anything;
-// ApplyKeptState writes it into the restored database before it is put in
-// place.
+// passkey the owner removed, reset an override the owner chose, drop a lock,
+// forget the grants, moves and flows a fenced-session conversation was given
+// since the backup, or loosen a fence (owner decisions of 2026-11-10 and
+// 2026-11-11). ReadKeptState reads that state from today's database before the
+// restore moves anything; ApplyKeptState writes it into the restored database
+// before it is put in place.
 
 import (
 	"context"
@@ -62,6 +63,21 @@ var restoredSettings = []string{
 // which project an agent working in a repository belongs to.
 var keptTables = []string{"approver_credentials", "approver_enroll_codes", "repo_map"}
 
+// keptAccessHistory are the tables of the access record that say what a
+// conversation holds: the read and write grants it was given, the moves it
+// made into fenced projects and the flows its approvals cleared (store.Holder
+// rows, migrations 034 and 039). Revocation and expiry never delete one, so
+// today's rows are the backup's plus everything recorded since. A restore takes
+// the union: the restored database's rows stay, and today's are added, so a
+// conversation that moved or was granted after the backup keeps that part of
+// its label instead of being cleared again for open projects and the global
+// scope. The access_approvals rows they name come too, today's version winning
+// (a request the backup holds as pending may have been decided since), and
+// every grant ends with the restore, as the backup's own already have
+// (ResetRestoredAccess): what a grant implied stays in the label; its access
+// does not.
+var keptAccessHistory = []string{"access_grants", "access_moves", "access_flows"}
+
 // tableRows is a table's rows as read, column by column.
 type tableRows struct {
 	cols []string
@@ -73,6 +89,10 @@ type KeptState struct {
 	settings map[string]string
 	tables   map[string]tableRows
 	locks    tableRows
+	// history is today's keptAccessHistory, table by table, and approvals
+	// the access_approvals rows it names.
+	history   map[string]tableRows
+	approvals tableRows
 	// projects are today's projects: name, isolation and nothing else.
 	projects map[string]keptProject
 	// lockSlugs are today's console locks, sorted.
@@ -115,7 +135,8 @@ func (k KeptState) Locked(forceLocked []string) []LockedProject {
 // is written.
 func ReadKeptState(ctx context.Context, db *sql.DB) (KeptState, error) {
 	const op = "store.ReadKeptState"
-	k := KeptState{settings: map[string]string{}, tables: map[string]tableRows{}, projects: map[string]keptProject{}}
+	k := KeptState{settings: map[string]string{}, tables: map[string]tableRows{}, history: map[string]tableRows{},
+		projects: map[string]keptProject{}}
 	for _, key := range RestoreKeptSettings {
 		v, found, err := GetSetting(ctx, db, key)
 		if err != nil {
@@ -132,6 +153,20 @@ func ReadKeptState(ctx context.Context, db *sql.DB) (KeptState, error) {
 		}
 		k.tables[table] = t
 	}
+	for _, table := range keptAccessHistory {
+		t, err := readTableRows(ctx, db, table)
+		if err != nil {
+			return KeptState{}, fmt.Errorf("%s: %s: %w", op, table, err)
+		}
+		k.history[table] = t
+	}
+	approvals, err := readRows(ctx, db, `SELECT * FROM access_approvals WHERE id IN (
+		SELECT approval_id FROM access_grants UNION SELECT approval_id FROM access_moves
+		UNION SELECT approval_id FROM access_flows)`)
+	if err != nil {
+		return KeptState{}, fmt.Errorf("%s: access_approvals: %w", op, err)
+	}
+	k.approvals = approvals
 	locks, err := readTableRows(ctx, db, "console_locks")
 	if err != nil {
 		return KeptState{}, fmt.Errorf("%s: console_locks: %w", op, err)
@@ -183,6 +218,10 @@ type ApplyKeptOptions struct {
 //   - the RestoreKeptSettings rows and the keptTables become exactly today's:
 //     the restored rows are deleted first, so nothing the owner removed since
 //     the backup comes back;
+//   - today's access history (keptAccessHistory) is added to the restored
+//     one, so no grant, move or flow recorded since the backup is lost, and
+//     then every live permission ends (ResetRestoredAccess), as the import
+//     already ended the backup's;
 //   - today's console locks are written over the restored ones verbatim (who
 //     set each, and when), and a restored lock today lacks stays: a restore
 //     never reduces the set of locked projects;
@@ -201,6 +240,11 @@ func ApplyKeptState(ctx context.Context, db *sql.DB, kept KeptState, opts ApplyK
 		opts.Now = time.Now()
 	}
 	if err := applyKeptRows(ctx, db, kept); err != nil {
+		return rep, fmt.Errorf("%s: %w", op, err)
+	}
+	// Today's grants came in with the history, some of them live: a restore
+	// ends every live permission, and the agents ask again.
+	if _, err := ResetRestoredAccess(ctx, db, opts.Now); err != nil {
 		return rep, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -295,6 +339,17 @@ func applyKeptRows(ctx context.Context, db *sql.DB, kept KeptState) error {
 			return fmt.Errorf("%s: %w", table, err)
 		}
 	}
+	// The access history: today's approvals they name first (the rows the
+	// others' foreign keys point at), then the history itself, never replacing
+	// a restored row.
+	if err := upsertTableRows(ctx, tx, "access_approvals", kept.approvals); err != nil {
+		return fmt.Errorf("access_approvals: %w", err)
+	}
+	for _, table := range keptAccessHistory {
+		if err := insertTableRows(ctx, tx, table, kept.history[table], "INSERT OR IGNORE"); err != nil {
+			return fmt.Errorf("%s: %w", table, err)
+		}
+	}
 	if err := insertTableRows(ctx, tx, "console_locks", kept.locks, "INSERT OR REPLACE"); err != nil {
 		return fmt.Errorf("console_locks: %w", err)
 	}
@@ -349,7 +404,13 @@ func sortedKeys(m map[string]bool) []string {
 // readTableRows reads every row of table, keeping each value as the driver
 // returned it.
 func readTableRows(ctx context.Context, db *sql.DB, table string) (tableRows, error) {
-	rows, err := db.QueryContext(ctx, `SELECT * FROM "`+table+`"`)
+	return readRows(ctx, db, `SELECT * FROM "`+table+`"`)
+}
+
+// readRows reads every row query returns, keeping each value as the driver
+// returned it.
+func readRows(ctx context.Context, db *sql.DB, query string) (tableRows, error) {
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return tableRows{}, err
 	}
@@ -399,6 +460,46 @@ func insertTableRows(ctx context.Context, tx *sql.Tx, table string, t tableRows,
 		return fmt.Errorf("no column in common")
 	}
 	q := verb + ` INTO "` + table + `" (` + strings.Join(names, ", ") + `) VALUES (?` + strings.Repeat(", ?", len(idx)-1) + `)`
+	for _, row := range t.rows {
+		args := make([]any, len(idx))
+		for j, i := range idx {
+			args[j] = row[i]
+		}
+		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// upsertTableRows writes t's rows into table, keyed on its id column: a row
+// the table lacks is inserted, and one it has is updated in place to t's
+// values, never deleted and reinserted, so the rows whose foreign keys name it
+// stay valid. Columns are matched as insertTableRows matches them.
+func upsertTableRows(ctx context.Context, tx *sql.Tx, table string, t tableRows) error {
+	if len(t.rows) == 0 {
+		return nil
+	}
+	dest, err := tableColumnsTx(ctx, tx, table)
+	if err != nil {
+		return err
+	}
+	var idx []int
+	var names, sets []string
+	for i, c := range t.cols {
+		if slices.Contains(dest, c) {
+			idx = append(idx, i)
+			names = append(names, `"`+c+`"`)
+			if c != "id" {
+				sets = append(sets, `"`+c+`" = excluded."`+c+`"`)
+			}
+		}
+	}
+	if !slices.Contains(names, `"id"`) || len(sets) == 0 {
+		return fmt.Errorf("no id, or no other column, in common")
+	}
+	q := `INSERT INTO "` + table + `" (` + strings.Join(names, ", ") + `) VALUES (?` + strings.Repeat(", ?", len(idx)-1) +
+		`) ON CONFLICT (id) DO UPDATE SET ` + strings.Join(sets, ", ")
 	for _, row := range t.rows {
 		args := make([]any, len(idx))
 		for j, i := range idx {

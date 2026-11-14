@@ -6018,7 +6018,11 @@ console settings stay as they are now:
 - the repo routes, the briefing, features, level, embeddings, update and backup
   settings stay this machine's;
 - every agent lease, console unlock and read grant the backup held is ended,
-  so each agent and browser asks again.
+  so each agent and browser asks again;
+- with [isolation requests](/reference/configuration/#isolation-requests) on,
+  the grants, moves and flows a conversation was given since the backup are
+  kept (ended, like every grant), so a restore never shrinks what a
+  conversation holds.
 
 Under [peer_auth](/guides/peer-auth/#restore) with a project locked, a console
 restore needs a passkey, and without one the card shows the terminal command

@@ -677,7 +677,9 @@ any of it.
   (`moveNoticeMiddleware`, `access_moves.briefed_at`, migration 040); into a
   locked project it is the lease's briefing too, sent once. A `session_end`
   refused only by the clearance rule still ends the conversation's own session,
-  its findings not recorded (`unrecordedEnd`).
+  its findings not recorded (`unrecordedEnd`). A restore adds today's grants,
+  moves and flows to the backup's (`store.ApplyKeptState`), so it never shrinks
+  a label.
 - **The identity comes from the transport, never the client.** A header, a
   `session=` handle, a body field or an agent-process identity can only ever
   narrow what the View allows. `getBinding` drops a binding to an unreachable
