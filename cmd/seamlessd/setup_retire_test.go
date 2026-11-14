@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -173,7 +174,9 @@ func TestRetire_TheWholeWay(t *testing.T) {
 	require.Equal(t, "advanced", cfg.Console.Level)
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	if runtime.GOOS != "windows" { // Windows keeps no Unix mode bits
+		require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
 }
 
 // Every refusal stops before anything is removed: the daemon keeps its key

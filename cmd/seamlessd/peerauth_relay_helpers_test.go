@@ -1,3 +1,5 @@
+//go:build darwin || linux
+
 package main
 
 // Helpers for the relay matrix (peerauth_relay_matrix_test.go): serve's TCP

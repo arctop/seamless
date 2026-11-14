@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -260,8 +261,9 @@ func TestSetupClient_UntrustedCertificateNeedsTheComparison(t *testing.T) {
 	}
 	st, err := clientFirstHalf(t, r)
 	require.NoError(t, err, out.String())
-	require.Equal(t, []string{"/h/.config/seamless/server-ca.crt"}, w.cas)
-	require.Equal(t, "/h/.config/seamless/server-ca.crt", ca)
+	wantCA := filepath.Join("/h", ".config", "seamless", "server-ca.crt")
+	require.Equal(t, []string{wantCA}, w.cas)
+	require.Equal(t, wantCA, ca)
 	require.Equal(t, ca, st.caFile)
 	require.Contains(t, out.String(), "trust        this certificate alone")
 }

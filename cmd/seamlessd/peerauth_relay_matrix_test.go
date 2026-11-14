@@ -1,3 +1,5 @@
+//go:build darwin || linux
+
 package main
 
 // The relay rows of the peer_auth matrix (plan networked-relay): serve's TCP

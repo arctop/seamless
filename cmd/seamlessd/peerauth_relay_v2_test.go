@@ -1,3 +1,5 @@
+//go:build darwin || linux
+
 package main
 
 // The relay matrix's wire version 2 and restricted-account rows (wave
