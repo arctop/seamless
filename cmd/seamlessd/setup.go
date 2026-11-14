@@ -15,16 +15,17 @@ package main
 // setupSteps entries (a run func), and the question tree, the state file and
 // the installers' hand-off stay as they are when one lands. Until then a step
 // says in one line that setup does not do it yet, and how to do it by hand.
+// The import step is built (setup_import.go).
 //
 // Unattended means unchanged. Setup asks only a person at a terminal who set
 // no SEAMLESS_* variable at all (setupRun.asks); with any knob set, or no
 // terminal, the environment is the whole answer and an absent one is today's
 // install. The installers apply the same rule before they run it: a run with
-// no setup knob (SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_IMPORT) that a
-// script drives or that has no terminal never starts setup at all. Every run
-// the updater makes is one: it always sets SEAMLESS_VERSION and
-// SEAMLESS_INSTALL_DIR, and an unattended one carries no SEAMLESS_* but the
-// installerKnobs, which list no setup knob.
+// no setup knob (SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_IMPORT,
+// SEAMLESS_IMPORT_LOCKS) that a script drives or that has no terminal never
+// starts setup at all. Every run the updater makes is one: it always sets
+// SEAMLESS_VERSION and SEAMLESS_INSTALL_DIR, and an unattended one carries no
+// SEAMLESS_* but the installerKnobs, which list no setup knob.
 
 import (
 	"bufio"
@@ -133,12 +134,15 @@ func setupDescribe(k setupKind, serverURL string, locked bool) string {
 // The setup knobs: the environment's answers to the setup questions, for a
 // run a script drives. SEAMLESS_SERVER_URL and SEAMLESS_MCP_API_KEY are the
 // installers' own client knobs, with the meaning they always had.
+// SEAMLESS_IMPORT_LOCKS answers the import's lock question (keep or remove),
+// as --keep-locks and --remove-locks answer seamlessd import's.
 const (
-	setupKnobKind     = "SEAMLESS_SETUP"
-	setupKnobServer   = "SEAMLESS_SERVER_URL"
-	setupKnobKey      = "SEAMLESS_MCP_API_KEY"
-	setupKnobPairCode = "SEAMLESS_PAIR_CODE"
-	setupKnobImport   = "SEAMLESS_IMPORT"
+	setupKnobKind        = "SEAMLESS_SETUP"
+	setupKnobServer      = "SEAMLESS_SERVER_URL"
+	setupKnobKey         = "SEAMLESS_MCP_API_KEY"
+	setupKnobPairCode    = "SEAMLESS_PAIR_CODE"
+	setupKnobImport      = "SEAMLESS_IMPORT"
+	setupKnobImportLocks = "SEAMLESS_IMPORT_LOCKS"
 )
 
 // setupDocs is the docs site every by-hand pointer links into.
@@ -219,8 +223,8 @@ var setupSteps = map[string]setupStep{
 		what:   "the address the other computers reach this one at, and its TLS certificate",
 		manual: setupDocs + "guides/network-install/#step-1-widen-the-server"},
 	"import": {id: "import", label: "import", knob: setupKnobImport, fresh: true,
-		what:   "start from a backup instead of empty",
-		manual: "seamlessd restore <backup>, once the install is up (" + setupDocs + "guides/data/#moving-machines)"},
+		what: "start from a backup instead of empty",
+		run:  setupImportStep},
 	"locked-projects": {id: "locked-projects", label: "locked", peerAuth: true, after: true,
 		what:   "locked projects (peer_auth): a project only the agents you approve can open",
 		manual: setupDocs + "guides/peer-auth/#move-an-existing-install-over"},
@@ -328,10 +332,24 @@ type setupRun struct {
 	// --server-url does (config.EnsureClientConfig), and returns the path it
 	// wrote ("" when the same config was already there).
 	ensureClient func(serverURL, key string) (string, error)
+
+	// The import step's view of the machine (setup_import.go): home is where
+	// a backup path's ~ points ("" when unknown), loadConfig the config
+	// seamlessd import would load (config.Load), daemonUp whether a daemon
+	// answers where that config's would, and host this computer's name, which
+	// decides whether a backup's device-bound passkeys came from here.
+	home       string
+	loadConfig func() (config.Config, error)
+	daemonUp   func(config.Config) bool
+	host       string
 }
 
 // realSetupRun is a run on this process's terminal and machine.
 func realSetupRun() *setupRun {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "" // a ~ in a backup path is then refused, not guessed at
+	}
 	r := &setupRun{
 		goos:        runtime.GOOS,
 		environ:     os.Environ(),
@@ -343,6 +361,10 @@ func realSetupRun() *setupRun {
 			_, wrote, err := config.EnsureClientConfig(serverURL, key)
 			return wrote, err
 		},
+		home:       home,
+		loadConfig: config.Load,
+		daemonUp:   func(cfg config.Config) bool { return serverReachable(urlHostPort(cfg.ServerURL())) },
+		host:       config.Hostname(),
 	}
 	r.secret = func() (string, error) {
 		raw, err := term.ReadPassword(int(os.Stdin.Fd()))
@@ -407,6 +429,9 @@ func setupDecide(r *setupRun) (setupState, error) {
 		return st, err
 	}
 	if err := setupUnbuiltKnobs(r); err != nil {
+		return st, err
+	}
+	if err := setupImportKnobs(r, in, want); err != nil {
 		return st, err
 	}
 	if url := r.serverKnob(); url != "" {
@@ -531,7 +556,9 @@ func setupCannotChange(in setupInstall, want setupKind) string {
 }
 
 // setupOnFresh is a first install: SEAMLESS_SETUP's answer, else the
-// questions for a person at the terminal, else today's default install.
+// questions for a person at the terminal, else today's default install --
+// which SEAMLESS_IMPORT alone makes an answer from the environment, so its
+// steps (the import among them) run.
 func setupOnFresh(r *setupRun, st setupState, want setupKind) (setupState, error) {
 	switch want {
 	case setupStandalone, setupServer:
@@ -543,6 +570,9 @@ func setupOnFresh(r *setupRun, st setupState, want setupKind) (setupState, error
 	}
 	if !r.asks() {
 		st.kind, st.answer = setupStandalone, setupDefault
+		if r.env(setupKnobImport) != "" {
+			st.answer = setupFromEnv
+		}
 		return st, nil
 	}
 	kind, err := setupAskKind(r)
@@ -757,8 +787,12 @@ func setupSummary(r *setupRun, st setupState) {
 		desc += dim(", as installed")
 	case st.answer == setupFromEnv:
 		knob := setupKnobKind
-		if st.kind == setupClient && r.env(setupKnobKind) == "" {
+		switch {
+		case r.env(setupKnobKind) != "":
+		case st.kind == setupClient:
 			knob = setupKnobServer
+		case r.env(setupKnobImport) != "":
+			knob = setupKnobImport
 		}
 		desc += dim(" (" + knob + ")")
 	}
@@ -857,18 +891,24 @@ func runSetupWith(args []string, newRun func() *setupRun) error {
 // setupUsage is `seamlessd setup -h`. Its last line is setupProtocolLine,
 // which the installers look for.
 func setupUsage(w io.Writer, fs *flag.FlagSet, goos string) {
-	fmt.Fprint(w, setupTextf(`usage: seamlessd setup
+	fmt.Fprint(w, setupText(`usage: seamlessd setup
 
 How this computer uses Seamless: {standalone}, or {networked} -- the {server},
 or a {client} of it. Run by itself, setup says how this computer is set up and
 offers the changes it can make. The installers run it to ask how a new install
 will be used, and a script answers it in the environment:
 
-  %s=%s
-  %s, %s   a {client}'s {server}, and its key
-  %s, %s     not built into setup yet
-
-`, setupKnobKind, setupEnvValues(goos, "|"), setupKnobServer, setupKnobKey, setupKnobPairCode, setupKnobImport))
+`))
+	fmt.Fprintf(w, "  %s=%s\n", setupKnobKind, setupEnvValues(goos, "|"))
+	for _, row := range [][2]string{
+		{setupKnobServer + ", " + setupKnobKey, "a {client}'s {server}, and its key"},
+		{setupKnobImport, "a backup a first install starts from, instead of empty"},
+		{setupKnobImportLocks + "=keep|remove", "what that import does with the backup's locked projects"},
+		{setupKnobPairCode, "not built into setup yet"},
+	} {
+		fmt.Fprintf(w, "  %-42s %s\n", row[0], setupText(row[1]))
+	}
+	fmt.Fprintln(w)
 	fs.PrintDefaults()
 	fmt.Fprintf(w, "\n%s\n", setupProtocolLine)
 }
@@ -902,11 +942,15 @@ func setupFinish(r *setupRun, path string) error {
 // up, and the changes setup offers, which it hands off at once. A computer
 // with nothing installed is the installer's to set up.
 func setupDirect(r *setupRun) error {
-	if setupInstalledOf(r.facts).kind == setupNone {
-		if _, err := setupKindKnob(r); err != nil {
+	if in := setupInstalledOf(r.facts); in.kind == setupNone {
+		want, err := setupKindKnob(r)
+		if err != nil {
 			return err
 		}
 		if err := setupUnbuiltKnobs(r); err != nil {
+			return err
+		}
+		if err := setupImportKnobs(r, in, want); err != nil {
 			return err
 		}
 		setupRow(r.out, "setup", "nothing is set up on this computer yet")

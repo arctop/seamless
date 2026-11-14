@@ -399,17 +399,53 @@ installer.
 | `SEAMLESS_SETUP=standalone\|server\|client` | the kind, for a script (`standalone\|client` on Windows). On a re-run, the installed kind keeps it as it is and `server` makes a Standalone install the Server; any other change is refused, naming why |
 | `SEAMLESS_SERVER_URL`, `SEAMLESS_MCP_API_KEY` | a Client's Server and its key, as the installers have always read them; `SEAMLESS_SETUP` may only agree |
 | `SEAMLESS_PAIR_CODE` | a Client's one-time pairing code. Not built yet: it stops the install and says how to pair with the Server's key instead |
-| `SEAMLESS_IMPORT` | a backup to start from. Not built yet: it stops the install and says to restore the backup once the install is up |
+| `SEAMLESS_IMPORT` | a backup a first Standalone or Server install starts from ([below](#seamlessd_setup_import)) |
+| `SEAMLESS_IMPORT_LOCKS=keep\|remove` | what that import does with the backup's locked projects when no passkey can open them, as `--keep-locks` and `--remove-locks` answer [`seamlessd import`](#seamlessd_import) |
 
 A refusal stops the install before anything is installed. What each kind needs
-beyond today's install - the Server's address and TLS, importing a backup,
-locked projects, pairing with a code - is not built into setup yet; the install
-ends by naming each step with the guide that does it by hand.
+beyond today's install - the Server's address and TLS, locked projects, pairing
+with a code - is not built into setup yet; the install ends by naming each step
+with the guide that does it by hand.
 
 `--state FILE` and `--finish` are the installers' hand-off, and
 `seamlessd setup -h` ends with `installer protocol: 1` for them to find: the
 first writes the answer to `FILE`, the second finishes setup's part once the
 installer's own steps are done.
+
+### Starting from a backup {#seamlessd_setup_import}
+
+A first install of a Standalone computer or of the Server asks whether to
+start fresh or from a backup: the `.tar.gz` that `seamlessd export` writes, or
+one from Settings > Backups. Setup reads the whole file through the import's
+checks first, then restores it into the empty data directory exactly as
+`seamlessd import --from <backup>` does - every memory and note byte for byte,
+and the database with its sessions, tasks, passkeys and console settings -
+before the installer installs anything or starts the daemon. A script names
+the backup with `SEAMLESS_IMPORT`; a relative path is the directory the
+installer ran in.
+
+Setup imports only where that restore is safe, and otherwise refuses with the
+reason before anything is installed: on a computer already set up (use
+[`seamlessd restore`](#seamlessd_restore) there), on a Client (its data is its
+Server's), into a data directory that holds a database or any memory or note
+file, while a daemon answers at the address the new one will use, and with
+`SEAMLESS_DATA_DIR` set (the service the installer starts reads its config,
+not that variable).
+
+A backup with [locked projects](/guides/data/#locked-projects) goes through
+the import's own check. On a first install peer_auth is not on yet, so no
+passkey can open them: at a terminal setup asks whether to stop, keep the
+locks or remove them, and a script answers with `SEAMLESS_IMPORT_LOCKS=keep`
+or `remove`. With neither, the install stops with nothing changed, as
+`seamlessd import` does with no terminal. A kept lock is not enforced until
+locked projects are on - the step the install names last - so until then
+every agent on the computer can read those projects; on Windows, which has no
+peer_auth, it never is. To keep them closed from the first moment a daemon
+serves them, install with `SEAMLESS_IMPORT_LOCKS=keep` and
+`SEAMLESS_NO_SERVICE=1`, then
+[move the install to peer_auth](/guides/peer-auth/#move-an-existing-install-over)
+before you start the daemon: the move takes the data directory whole, with
+the backup's locks, fences and passkeys.
 
 ## seamlessd install-hooks {#seamlessd_install_hooks}
 

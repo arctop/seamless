@@ -26,7 +26,9 @@ import (
 // seamlessd runs this binary with SETUP_E2E_HELPER_RUN=1 for every setup call,
 // and this is that setup. It sees only $HOME: every path outside it reads as
 // absent, so a peer_auth daemon or a LaunchDaemon on the machine running the
-// tests is not one of the world's.
+// tests is not one of the world's; and it dials no daemon, since one listening
+// on the machine running the tests is not the world's either. Its import loads
+// the config as seamlessd import does, which in the world resolves under $HOME.
 func TestSetupHelperSeamlessd(t *testing.T) {
 	if os.Getenv("SETUP_E2E_HELPER_RUN") != "1" {
 		t.Skip("the stand-in seamlessd setup of the installer tests; not a test of its own")
@@ -39,6 +41,14 @@ func TestSetupHelperSeamlessd(t *testing.T) {
 	err := runSetupWith(args[1:], func() *setupRun {
 		r := realSetupRun()
 		r.facts = setupFactsOf(setupHomeOnly(realSetupHost()))
+		r.daemonUp = func(config.Config) bool { return false }
+		r.loadConfig = func() (config.Config, error) {
+			cfg, err := config.Load()
+			if err == nil && (r.home == "" || !strings.HasPrefix(cfg.DataDir, r.home+string(filepath.Separator))) {
+				return cfg, fmt.Errorf("the setup helper's data dir %s is outside the world's home %s", cfg.DataDir, r.home)
+			}
+			return cfg, err
+		}
 		return r
 	})
 	if err != nil {
@@ -101,7 +111,9 @@ func TestSetupInstaller_RealSetup(t *testing.T) {
 		}{
 			{"SEAMLESS_SETUP=client alone", "SEAMLESS_SETUP=client", "needs the Server to connect to"},
 			{"SEAMLESS_SETUP=bogus", "SEAMLESS_SETUP=bogus", `invalid SEAMLESS_SETUP="bogus"`},
-			{"SEAMLESS_IMPORT", "SEAMLESS_IMPORT=/tmp/b.tar.gz", "SEAMLESS_IMPORT: setup cannot start from a backup"},
+			{"SEAMLESS_IMPORT of no file", "SEAMLESS_IMPORT=/nonexistent-seamless-e2e/b.tar.gz",
+				"SEAMLESS_IMPORT=/nonexistent-seamless-e2e/b.tar.gz: there is no file at"},
+			{"SEAMLESS_IMPORT_LOCKS alone", "SEAMLESS_IMPORT_LOCKS=keep", "SEAMLESS_IMPORT names no backup"},
 			{"SEAMLESS_PAIR_CODE", "SEAMLESS_PAIR_CODE=1234", "SEAMLESS_PAIR_CODE: pairing with a one-time code is not built"},
 		} {
 			t.Run(tt.name+" stops the install before anything is installed", func(t *testing.T) {
@@ -134,6 +146,90 @@ func TestSetupInstaller_RealSetup(t *testing.T) {
 			require.Error(t, err, out)
 			require.Contains(t, out, "setup does not change a Client into Standalone")
 			require.NoFileExists(t, filepath.Join(w.installDir, "seamlessd"))
+		})
+	})
+}
+
+// TestSetupInstaller_Import runs docs/install for real with SEAMLESS_IMPORT:
+// the backup lands in the world's empty data dir before anything is
+// installed, and a run with no one to ask decides its locked projects as
+// seamlessd import does without a terminal.
+func TestSetupInstaller_Import(t *testing.T) {
+	plain, locked := impBackup(t, impSpec{}), impBackup(t, impSpec{locked: true})
+	setupEachShell(t, func(t *testing.T, shell string) {
+		installer := filepath.Join("..", "..", "docs", "install")
+		scripted := []string{"SETUP_E2E_SETUP=real", "SEAMLESS_VERSION=" + setupE2EVersion, "SEAMLESS_CLIENT=claude", "SEAMLESS_NO_SERVICE=1"}
+
+		t.Run("a plain backup is restored before anything is installed", func(t *testing.T) {
+			w := newSetupInstallerWorld(t, shell, installer)
+			out, err := w.run(t, append(scripted, "SEAMLESS_IMPORT="+plain)...)
+			require.NoError(t, err, out)
+			impRestored(t, filepath.Join(w.home, ".seamless"))
+			require.Contains(t, out, "setup        Standalone (SEAMLESS_IMPORT)")
+			require.Contains(t, out, "imported     1 memory, 1 note")
+			require.Less(t, strings.Index(out, "imported "), strings.Index(out, "installed "), "the backup is in place before anything is installed")
+			require.Contains(t, w.calls(t), w.hooksCall("claude"))
+			require.Contains(t, out, "setup does not do this Standalone step yet:", "locked projects close the install, by hand")
+			require.NotContains(t, out, "seamlessd restore")
+		})
+
+		t.Run("a relative SEAMLESS_IMPORT is the directory the installer started in", func(t *testing.T) {
+			w := newSetupInstallerWorld(t, shell, installer)
+			impCopy(t, plain, filepath.Join(w.tmp, "backup.tar.gz"))
+			out, err := w.run(t, append(scripted, "SEAMLESS_IMPORT=backup.tar.gz")...)
+			require.NoError(t, err, out)
+			impRestored(t, filepath.Join(w.home, ".seamless"))
+		})
+
+		t.Run("a locked backup and no answer: nothing is installed or imported, as seamlessd import stops", func(t *testing.T) {
+			w := newSetupInstallerWorld(t, shell, installer)
+			out, err := w.run(t, append(scripted, "SEAMLESS_IMPORT="+locked)...)
+			require.Error(t, err, out)
+			require.Contains(t, out, "this backup holds 2 locked projects (example-legal, example-sealed) and no passkey can open them here")
+			require.Contains(t, out, "Nothing was changed. Set SEAMLESS_IMPORT_LOCKS=keep to import them locked, or SEAMLESS_IMPORT_LOCKS=remove")
+			require.Contains(t, out, "seamlessd setup stopped the install; nothing was installed")
+			require.NoFileExists(t, filepath.Join(w.installDir, "seamlessd"))
+			require.NoDirExists(t, filepath.Join(w.home, ".seamless"))
+		})
+
+		for _, answer := range []string{"keep", "remove"} {
+			t.Run("a locked backup with SEAMLESS_IMPORT_LOCKS="+answer, func(t *testing.T) {
+				w := newSetupInstallerWorld(t, shell, installer)
+				out, err := w.run(t, append(scripted, "SEAMLESS_IMPORT="+locked, "SEAMLESS_IMPORT_LOCKS="+answer)...)
+				require.NoError(t, err, out)
+				data := filepath.Join(w.home, ".seamless")
+				impRestored(t, data)
+				st := impStateOf(t, data)
+				require.Equal(t, []string{"laptop", "yubikey"}, st.passkeys, "a restore brings the backup's passkeys")
+				if answer == "keep" {
+					require.Equal(t, impLocked, st.locks)
+					require.Contains(t, out, "nothing enforces a lock until locked projects (peer_auth) are on")
+				} else {
+					require.Empty(t, st.locks)
+					require.Contains(t, out, "locks removed: example-legal, example-sealed")
+				}
+				require.Contains(t, out, "peer-auth/#move-an-existing-install-over", "locked projects, the next step, close the install")
+			})
+		}
+
+		t.Run("a re-run refuses SEAMLESS_IMPORT before anything is installed", func(t *testing.T) {
+			w := newSetupInstallerWorld(t, shell, installer)
+			w.config(t, "mcp:\n  api_key: \"k\"\n")
+			out, err := w.run(t, append(scripted, "SEAMLESS_IMPORT="+plain)...)
+			require.Error(t, err, out)
+			require.Contains(t, out, "setup starts from a backup only on a first install")
+			require.NoFileExists(t, filepath.Join(w.installDir, "seamlessd"))
+			require.NoDirExists(t, filepath.Join(w.home, ".seamless"))
+		})
+
+		t.Run("a Client refuses SEAMLESS_IMPORT before anything is installed", func(t *testing.T) {
+			w := newSetupInstallerWorld(t, shell, installer)
+			out, err := w.run(t, append(scripted, "SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_MCP_API_KEY=k1",
+				"SEAMLESS_IMPORT="+plain)...)
+			require.Error(t, err, out)
+			require.Contains(t, out, "a Client keeps no data of its own")
+			require.NoFileExists(t, filepath.Join(w.installDir, "seamlessd"))
+			require.NoDirExists(t, filepath.Join(w.home, ".seamless"))
 		})
 	})
 }

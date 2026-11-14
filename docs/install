@@ -59,10 +59,16 @@
 #                               this computer uses Seamless, for a script
 #                               (`seamlessd setup -h` lists the values); with
 #                               SEAMLESS_SERVER_URL set it may only agree
-#   SEAMLESS_PAIR_CODE          a client's one-time pairing code, and
-#   SEAMLESS_IMPORT             a backup to start from: answers `seamlessd setup`
-#                               does not take yet, so either stops the install
-#                               before anything is installed and says why
+#   SEAMLESS_IMPORT             a backup a first install starts from (its path;
+#                               a relative one is this directory's): setup
+#                               restores it into the empty data dir before
+#                               anything is installed
+#   SEAMLESS_IMPORT_LOCKS       keep|remove: what that import does with the
+#                               backup's locked projects when no passkey can
+#                               open them here (without it, it stops and says why)
+#   SEAMLESS_PAIR_CODE          a client's one-time pairing code: an answer
+#                               `seamlessd setup` does not take yet, so it stops
+#                               the install before anything is installed
 #
 # Any SEAMLESS_* set, or no terminal, means a script is running this: nothing
 # asks how this computer will be used, and a run without the setup knobs does
@@ -707,7 +713,21 @@ unpack() {
 # SEAMLESS_SERVER_URL and SEAMLESS_MCP_API_KEY too, with the meaning this
 # script has always given them, but they alone never make it run.
 setup_knobs() {
-	[ -n "${SEAMLESS_SETUP:-}${SEAMLESS_PAIR_CODE:-}${SEAMLESS_IMPORT:-}" ]
+	[ -n "${SEAMLESS_SETUP:-}${SEAMLESS_PAIR_CODE:-}${SEAMLESS_IMPORT:-}${SEAMLESS_IMPORT_LOCKS:-}" ]
+}
+
+# import_path: SEAMLESS_IMPORT names the backup a first install starts from,
+# and setup runs from $TMP, so a relative path is made absolute here, against
+# the directory this installer was started in. A leading ~ is setup's to
+# expand, and - setup's to refuse.
+import_path() {
+	case ${SEAMLESS_IMPORT:-} in
+	'' | - | /* | '~' | '~/'*) ;;
+	*)
+		SEAMLESS_IMPORT=$PWD/$SEAMLESS_IMPORT
+		export SEAMLESS_IMPORT
+		;;
+	esac
 }
 
 # scripted_run: a SEAMLESS_* variable other than SEAMLESS_CONFIG (which the
@@ -755,10 +775,11 @@ run_setup() {
 	if ! printf '%s\n' "$probe" | grep -qxF "$SETUP_PROTOCOL"; then
 		if setup_knobs; then
 			[ -n "$probe" ] || die "could not run $TMP/seamlessd to ask seamlessd setup; nothing was installed"
-			die "seamless $VERSION predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE and SEAMLESS_IMPORT; unset them, or drop SEAMLESS_VERSION to get the latest"
+			die "seamless $VERSION predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_IMPORT and SEAMLESS_IMPORT_LOCKS; unset them, or drop SEAMLESS_VERSION to get the latest"
 		fi
 		return 0
 	fi
+	import_path
 	SETUP_STATE=$TMP/setup.state
 	call_setup "$TMP/seamlessd" --state "$SETUP_STATE" ||
 		die "seamlessd setup stopped the install; nothing was installed"
@@ -1228,8 +1249,9 @@ server and use the line it prints."
 	extract
 	# How this computer uses Seamless: seamlessd setup's question, asked of the
 	# verified binary before anything is installed. It may make this a client
-	# (SERVER_URL) a person set up at the terminal; with no setup knob and no
-	# person to ask, it is skipped and everything below runs as it always did.
+	# (SERVER_URL) a person set up at the terminal, or start a first install's
+	# empty data dir from a backup; with no setup knob and no person to ask, it
+	# is skipped and everything below runs as it always did.
 	run_setup
 	unpack
 

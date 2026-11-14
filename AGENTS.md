@@ -1226,7 +1226,8 @@ health check stay theirs.
   no `SEAMLESS_*` set but `SEAMLESS_CONFIG` (`setupRun.asks`). The installers
   apply the same rule (`scripted_run`, `Test-ScriptedRun`) and do not even run
   setup unless a setup knob (`SEAMLESS_SETUP`, `SEAMLESS_PAIR_CODE`,
-  `SEAMLESS_IMPORT`) is set or that person is there. Every updater run sets
+  `SEAMLESS_IMPORT`, `SEAMLESS_IMPORT_LOCKS`) is set or that person is there.
+  Every updater run sets
   `SEAMLESS_VERSION` and `SEAMLESS_INSTALL_DIR`, so no update starts it; never
   add a setup knob to `installerKnobs`. `TestSetupInstaller_UnattendedRunsAreUnchanged`
   runs docs/install for real and holds its `seamlessd` calls to the old ones.
@@ -1247,6 +1248,20 @@ health check stay theirs.
   unbuilt step's knob refuses the run. A built step that changes the daemon's
   config must not run inside `seamlessd update`, whose confirmation dials the
   config it loaded before the install.
+- **The import step restores only into an empty data dir, and first**
+  (`setup_import.go`). It is a first install's before step, Standalone and
+  Server only: the backup `SEAMLESS_IMPORT` names, or the one a person at the
+  terminal picks, is read whole by `archive.Verify`, then imported with
+  `seamlessd import`'s own options (`archiveImportOptions`) and lock gate,
+  which asks only the person setup may ask; with no one to ask, locks no
+  passkey can open stop the run until `SEAMLESS_IMPORT_LOCKS` answers, as the
+  flags answer the command. It refuses a re-run, a Client, a data dir
+  `archive.DetectMode` does not call fresh, a daemon answering where the new
+  one will, and `SEAMLESS_DATA_DIR`. With peer_auth the import comes first and
+  locked projects after: the engine's (or the guide's) data-dir move carries
+  what it restored. Its tests inject the config (`setupRun.loadConfig`) and
+  never dial (`setupRun.daemonUp`); the installer helper refuses a data dir
+  outside the world's home.
 - **dash.** Debian's and Ubuntu's `/bin/sh` is dash, where a failed
   redirection on a special built-in (`: </dev/tty`) ends the script: probe in
   a subshell (`tty_available`). The installer tests run every scenario under

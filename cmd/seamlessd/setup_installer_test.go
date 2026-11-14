@@ -502,6 +502,9 @@ func TestSetupInstaller_DispatchRule(t *testing.T) {
 		{name: "no terminal, SEAMLESS_SETUP", tty: false, env: []string{"SEAMLESS_SETUP=server"}, stdin: "/dev/null"},
 		{name: "a terminal, SEAMLESS_SETUP", tty: true, env: []string{"SEAMLESS_SETUP=server"}, stdin: "/dev/null"},
 		{name: "no terminal, SEAMLESS_IMPORT", tty: false, env: []string{"SEAMLESS_IMPORT=/b.tar.gz"}, stdin: "/dev/null"},
+		{name: "a terminal, SEAMLESS_IMPORT: a knob asks nothing", tty: true, env: []string{"SEAMLESS_IMPORT=/b.tar.gz"}, stdin: "/dev/null"},
+		{name: "no terminal, SEAMLESS_IMPORT_LOCKS alone: setup runs, to refuse it", tty: false,
+			env: []string{"SEAMLESS_IMPORT_LOCKS=keep"}, stdin: "/dev/null"},
 		{name: "no terminal, SEAMLESS_PAIR_CODE", tty: false, env: []string{"SEAMLESS_PAIR_CODE=1"}, stdin: "/dev/null"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -542,6 +545,54 @@ printf 'state %s\n' "${SETUP_STATE:-none}" >>"$LOG"
 				require.Equal(t, "setup reads "+tt.stdin+"\nstate "+filepath.Join(dir, "setup.state")+"\n", string(got), shell)
 			}
 		})
+	}
+}
+
+// TestSetupInstaller_ImportPathIsTheStartDirectorys runs docs/install's
+// import_path in every shell: setup runs from the installer's $TMP, so a
+// relative SEAMLESS_IMPORT is made absolute against the directory the
+// installer was started in, and an absolute one, a ~ one and none are left
+// for setup as they are.
+func TestSetupInstaller_ImportPathIsTheStartDirectorys(t *testing.T) {
+	setupE2ESupported(t)
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "install"))
+	require.NoError(t, err)
+	fn := regexp.MustCompile(`(?ms)^import_path\(\) \{\n.*?^\}\n`).Find(raw)
+	require.NotEmpty(t, fn, "docs/install defines import_path")
+	start := t.TempDir()
+	for value, want := range map[string]string{
+		"backup.tar.gz":         start + "/backup.tar.gz",
+		"backups/b.tar.gz":      start + "/backups/b.tar.gz",
+		"../b.tar.gz":           start + "/../b.tar.gz",
+		"/abs/b.tar.gz":         "/abs/b.tar.gz",
+		"~/b.tar.gz":            "~/b.tar.gz",
+		"~":                     "~",
+		"my backups/b c.tar.gz": start + "/my backups/b c.tar.gz",
+		"":                      "[unset]",
+		"~other/b.tar.gz":       start + "/~other/b.tar.gz",
+		"-":                     "-",
+		"./b.tar.gz":            start + "/./b.tar.gz",
+	} {
+		for _, shell := range setupInstallerShells() {
+			script := "set -eu\n" + string(fn) + "import_path\n" +
+				`if [ -n "${SEAMLESS_IMPORT+x}" ]; then printf '%s' "$SEAMLESS_IMPORT"; else printf '[unset]'; fi` + "\n" +
+				`env | grep -q '^SEAMLESS_IMPORT=' || [ -z "${SEAMLESS_IMPORT:-}" ] || printf ' [not exported]'` + "\n"
+			cmd := exec.Command(shell, "-c", script)
+			cmd.Dir = start
+			cmd.Env = []string{"PATH=/usr/bin:/bin"}
+			if value != "" {
+				cmd.Env = append(cmd.Env, "SEAMLESS_IMPORT="+value)
+			}
+			out, err := cmd.CombinedOutput()
+			require.NoError(t, err, "%s %q: %s", shell, value, out)
+			got := string(out)
+			// The start directory as the shell spells it: macOS's temp dirs sit
+			// behind a symlink, and $PWD may name either side of it.
+			if real, rerr := filepath.EvalSymlinks(start); rerr == nil && real != start {
+				got = strings.Replace(got, real, start, 1)
+			}
+			require.Equal(t, want, got, "%s %q", shell, value)
+		}
 	}
 }
 

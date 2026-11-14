@@ -391,6 +391,14 @@ seamlessd export -o seamless.tar.gz
 seamlessd restore ~/seamless.tar.gz
 ```
 
+Or let the new machine's install start from it: at a terminal the installer
+asks whether to start fresh or from a backup, and a script names the file
+(`curl -fsSL https://thereisnospoon.org/install | SEAMLESS_IMPORT=~/seamless.tar.gz sh`).
+That restores the backup as `seamlessd import` does, into the still-empty data
+directory before the daemon first starts, so the old machine's passkeys and
+console settings come across too
+([Starting from a backup](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_setup_import)).
+
 Every memory and note comes back byte-for-byte, with the sessions, tasks,
 trials, and events. Backups in a synced folder work the same way: point the new
 machine's backup folder at it, and its backups are in the console's list, marked

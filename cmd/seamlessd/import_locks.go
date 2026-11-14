@@ -34,12 +34,26 @@ type lockGate struct {
 	daemonUp    func() bool
 	// local reads the passkeys enrolled in the destination, for a merge.
 	local func(context.Context) ([]store.PasskeyFact, error)
+	// answers names the two answers the refusal offers when the gate cannot
+	// ask; the zero value is seamlessd import's flags (importLockAnswers).
+	answers lockAnswers
 
 	// What the decision was, for advise.
 	asked   bool
 	keeping bool
 	usable  []string
 	first   string // a locked project, for the advice's link
+}
+
+// lockAnswers is how a caller of the gate takes its two answers without a
+// terminal: keep and remove, each the clause the refusal ends with.
+type lockAnswers struct{ keep, remove string }
+
+// importLockAnswers are seamlessd import's: its --keep-locks and
+// --remove-locks flags.
+var importLockAnswers = lockAnswers{
+	keep:   "Pass --keep-locks to import them locked and add a passkey right after",
+	remove: "--remove-locks to import them without their locks",
 }
 
 // lockAct is one answer to the gate's question.
@@ -122,9 +136,12 @@ func (g *lockGate) answer(mode archive.Mode, slugs []string, reason string) (loc
 		g.usable = nil // the closing advice must not send them to a passkey they lack
 	}
 	if !g.interactive {
-		return lockActStop, fmt.Errorf("%s (%s) and no passkey can open them here: %s. "+
-			"Nothing was changed. Pass --keep-locks to import them locked and add a passkey right after, or --remove-locks to import them without their locks",
-			"this backup holds "+projectCount(len(slugs)), strings.Join(slugs, ", "), reason)
+		answers := g.answers
+		if answers == (lockAnswers{}) {
+			answers = importLockAnswers
+		}
+		return lockActStop, fmt.Errorf("%s (%s) and no passkey can open them here: %s. Nothing was changed. %s, or %s",
+			"this backup holds "+projectCount(len(slugs)), strings.Join(slugs, ", "), reason, answers.keep, answers.remove)
 	}
 	return g.choose(g.options(mode))
 }

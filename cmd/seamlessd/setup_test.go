@@ -60,6 +60,15 @@ func setupTestRun(t *testing.T, goos string, environ []string, facts setupFacts,
 			calls = append(calls, setupClientCall{url, key})
 			return "/h/.config/seamless/seamless.yaml", nil
 		},
+		// An import no test arranged (setupImportTestRun does) must never load
+		// the machine's config, whose data dir is the live one.
+		home: "/h", host: "here",
+		loadConfig: func() (config.Config, error) {
+			t.Helper()
+			t.Fatal("setup loaded a config on a run whose test arranged no import")
+			return config.Config{}, nil
+		},
+		daemonUp: func(config.Config) bool { return false },
 	}
 	return r, out, &calls
 }
@@ -171,8 +180,38 @@ func TestSetupDecide(t *testing.T) {
 		{name: "SEAMLESS_SETUP and SEAMLESS_SERVER_URL disagree", facts: setupFactsFresh,
 			env: []string{"SEAMLESS_SETUP=server", "SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_MCP_API_KEY=k"},
 			err: "SEAMLESS_SETUP=server and SEAMLESS_SERVER_URL disagree"},
-		{name: "SEAMLESS_IMPORT is not built", facts: setupFactsFresh, env: []string{"SEAMLESS_IMPORT=/b.tar.gz"},
-			err: "SEAMLESS_IMPORT: setup cannot start from a backup instead of empty yet; install without it, then by hand: seamlessd restore <backup>"},
+		// SEAMLESS_IMPORT: a first install's answer, and nobody else's.
+		{name: "SEAMLESS_IMPORT alone: Standalone, answered by the environment", facts: setupFactsFresh, interactive: true,
+			env: []string{"SEAMLESS_IMPORT=/b.tar.gz"}, want: want{kind: setupStandalone, role: server, answer: setupFromEnv}},
+		{name: "SEAMLESS_IMPORT and SEAMLESS_SETUP=server: the Server", facts: setupFactsFresh,
+			env: []string{"SEAMLESS_SETUP=server", "SEAMLESS_IMPORT=/b.tar.gz"}, want: want{kind: setupServer, role: server, answer: setupFromEnv}},
+		{name: "SEAMLESS_IMPORT and SEAMLESS_IMPORT_LOCKS, case aside", facts: setupFactsFresh,
+			env: []string{"SEAMLESS_IMPORT=/b.tar.gz", "SEAMLESS_IMPORT_LOCKS= Keep "}, want: want{kind: setupStandalone, role: server, answer: setupFromEnv}},
+		{name: "SEAMLESS_IMPORT on Windows", goos: "windows", facts: setupFactsFresh,
+			env: []string{`SEAMLESS_IMPORT=C:\Users\me\b.tar.gz`}, want: want{kind: setupStandalone, role: server, answer: setupFromEnv}},
+		{name: "SEAMLESS_IMPORT for a Client by SEAMLESS_SERVER_URL is refused", facts: setupFactsFresh,
+			env: []string{"SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_MCP_API_KEY=k", "SEAMLESS_IMPORT=/b.tar.gz"},
+			err: "SEAMLESS_IMPORT: a Client keeps no data of its own -- its data is its Server's -- so setup imports no backup on it"},
+		{name: "SEAMLESS_IMPORT with SEAMLESS_SETUP=client is refused", facts: setupFactsFresh,
+			env: []string{"SEAMLESS_SETUP=client", "SEAMLESS_IMPORT=/b.tar.gz"}, err: "a Client keeps no data of its own"},
+		{name: "SEAMLESS_IMPORT on an installed Client is refused", facts: setupFactsClient,
+			env: []string{"SEAMLESS_IMPORT=/b.tar.gz"}, err: "a Client keeps no data of its own"},
+		{name: "SEAMLESS_IMPORT on a re-run is refused: the data is there", facts: setupFactsStandalone,
+			env: []string{"SEAMLESS_IMPORT=/b.tar.gz"},
+			err: "SEAMLESS_IMPORT: this computer is set up as Standalone already and has its data, and setup starts from a backup only on a first install"},
+		{name: "SEAMLESS_IMPORT on a re-run names the restore instead", facts: setupFactsServer,
+			env: []string{"SEAMLESS_SETUP=server", "SEAMLESS_IMPORT=/b.tar.gz"},
+			err: "seamlessd restore /b.tar.gz (today's data is saved first), or seamlessd restore --merge /b.tar.gz"},
+		{name: "SEAMLESS_IMPORT on peer_auth's Standalone is refused", facts: setupFactsLocked,
+			env: []string{"SEAMLESS_IMPORT=/b.tar.gz"}, err: "set up as Standalone, with locked projects already"},
+		{name: "SEAMLESS_IMPORT=- is refused", facts: setupFactsFresh, env: []string{"SEAMLESS_IMPORT=-"},
+			err: "SEAMLESS_IMPORT=-: - would read the backup from stdin, which setup does not"},
+		{name: "a relative SEAMLESS_IMPORT is refused", facts: setupFactsFresh, env: []string{"SEAMLESS_IMPORT=b.tar.gz"},
+			err: "SEAMLESS_IMPORT=b.tar.gz: not a full path"},
+		{name: "SEAMLESS_IMPORT_LOCKS alone is refused", facts: setupFactsFresh, env: []string{"SEAMLESS_IMPORT_LOCKS=keep"},
+			err: "SEAMLESS_IMPORT_LOCKS=keep says what an import does with a backup's locked projects, and SEAMLESS_IMPORT names no backup"},
+		{name: "SEAMLESS_IMPORT_LOCKS=maybe is refused", facts: setupFactsFresh, env: []string{"SEAMLESS_IMPORT=/b.tar.gz", "SEAMLESS_IMPORT_LOCKS=maybe"},
+			err: `invalid SEAMLESS_IMPORT_LOCKS="maybe": valid values are keep, remove`},
 		{name: "SEAMLESS_PAIR_CODE is not built", facts: setupFactsFresh,
 			env: []string{"SEAMLESS_SETUP=client", "SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_MCP_API_KEY=k", "SEAMLESS_PAIR_CODE=1234"},
 			err: "SEAMLESS_PAIR_CODE: pairing with a one-time code is not built into setup yet"},
@@ -248,6 +287,7 @@ func TestSetupDecide_ScriptedRunsNeverRead(t *testing.T) {
 		{"SEAMLESS_VERSION=0.9.0", "SEAMLESS_INSTALL_DIR=/h/.local/bin"},
 		{"SEAMLESS_SERVER_URL=https://box.example:8081", "SEAMLESS_MCP_API_KEY=k"},
 		{"SEAMLESS_NO_SERVICE=1"}, {"SEAMLESS_CLIENT=claude"},
+		{"SEAMLESS_IMPORT=/b.tar.gz"}, {"SEAMLESS_IMPORT=/b.tar.gz", "SEAMLESS_IMPORT_LOCKS=remove"},
 	}
 	for _, facts := range []setupFacts{setupFactsFresh, setupFactsStandalone, setupFactsServer, setupFactsClient, setupFactsLocked} {
 		for _, env := range envs {
@@ -279,12 +319,12 @@ func TestSetupDecide_UpdaterRunsAreScripted(t *testing.T) {
 	shape, err := installShape{dir: "/h/.local/bin", clients: []string{"claude"}}.knobs()
 	require.NoError(t, err)
 	knobs := mergeKnobs(shape, map[string]string{"SEAMLESS_VERSION": "0.9.0"})
-	owner := []string{"PATH=/usr/bin", "HOME=/h", "SEAMLESS_SETUP=server", "SEAMLESS_IMPORT=/b", "SEAMLESS_PAIR_CODE=1"}
+	owner := []string{"PATH=/usr/bin", "HOME=/h", "SEAMLESS_SETUP=server", "SEAMLESS_IMPORT=/b", "SEAMLESS_IMPORT_LOCKS=remove", "SEAMLESS_PAIR_CODE=1"}
 
 	unattended, err := unattendedInstallerEnv("linux", owner, knobs)
 	require.NoError(t, err)
 	for _, kv := range unattended {
-		for _, knob := range []string{setupKnobKind, setupKnobImport, setupKnobPairCode} {
+		for _, knob := range []string{setupKnobKind, setupKnobImport, setupKnobImportLocks, setupKnobPairCode} {
 			require.False(t, strings.HasPrefix(kv, knob+"="), "an unattended update passes no setup knob: %s", kv)
 		}
 	}
@@ -299,9 +339,23 @@ func TestSetupDecide_UpdaterRunsAreScripted(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, setupKept, st.answer)
 	}
-	for _, knob := range []string{setupKnobKind, setupKnobImport, setupKnobPairCode} {
+	for _, knob := range []string{setupKnobKind, setupKnobImport, setupKnobImportLocks, setupKnobPairCode} {
 		require.NotContains(t, installerKnobs, knob, "the updater must never be able to pass a setup knob")
 	}
+
+	// An attended update keeps what the owner exported, a SEAMLESS_IMPORT
+	// included; on a computer already set up, setup refuses it before the
+	// installer installs anything, as it refused it before the import step
+	// was built.
+	exported, err := attendedInstallerEnv("linux", []string{"PATH=/usr/bin", "HOME=/h", "SEAMLESS_IMPORT=/b.tar.gz"}, mergeKnobs(
+		map[string]string{"SEAMLESS_INSTALL_DIR": "/h/.local/bin"}, releaseKnobs(releaseAssets{version: setupTestVersion(t, "0.9.0")})))
+	require.NoError(t, err)
+	require.Contains(t, exported, "SEAMLESS_IMPORT=/b.tar.gz")
+	r, _, _ := setupTestRun(t, "linux", exported, setupFactsStandalone, true, "")
+	r.in = bufio.NewReader(setupNoRead{t})
+	_, err = setupDecide(r)
+	require.ErrorIs(t, err, errSetupRefused)
+	require.ErrorContains(t, err, "setup starts from a backup only on a first install")
 }
 
 // TestSetupWords_OnePlace renames every kind in setupWords and runs the
@@ -345,8 +399,21 @@ func TestSetupWords_OnePlace(t *testing.T) {
 	run("linux", []string{"SEAMLESS_SETUP=solo"}, setupFactsServer, false, "")
 	run("linux", []string{"SEAMLESS_SERVER_URL=https://b", "SEAMLESS_MCP_API_KEY=k", "SEAMLESS_SETUP=hub"}, setupFactsFresh, false, "")
 	run("linux", []string{"SEAMLESS_IMPORT=/b"}, setupFactsFresh, false, "")
+	run("linux", []string{"SEAMLESS_SERVER_URL=https://b", "SEAMLESS_MCP_API_KEY=k", "SEAMLESS_IMPORT=/b"}, setupFactsFresh, false, "")
+	run("linux", []string{"SEAMLESS_IMPORT=/b"}, setupFactsStandalone, false, "")
+	run("linux", []string{"SEAMLESS_IMPORT=/b"}, setupFactsLocked, false, "")
+	run("linux", []string{"SEAMLESS_IMPORT_LOCKS=keep"}, setupFactsFresh, false, "")
 	run("linux", []string{"SEAMLESS_PAIR_CODE=1"}, setupFactsFresh, false, "")
 	run("linux", nil, setupFactsFresh, true, "2\n")
+	// The import step's question, asked in setup's first half.
+	for _, goos := range []string{"linux", "windows"} {
+		r, out, _ := setupTestRun(t, goos, nil, setupFactsFresh, true, "1\n\n")
+		st, err := setupDecide(r)
+		require.NoError(t, err)
+		require.NoError(t, setupHandOff(r, &st, setupStepsLeft(st, goos), false))
+		require.Contains(t, out.String(), "Start fresh, or from a backup?")
+		all.WriteString(out.String())
+	}
 	setupUsage(&all, flagSetForSetupUsage(), "linux")
 
 	text := all.String()
@@ -409,14 +476,13 @@ func TestSetupHandOff_SaysWhatSetupDoesNotDoYet(t *testing.T) {
 		want []string
 		none bool
 	}{
-		{name: "a first Server", st: setupState{kind: setupServer, role: config.RoleServer, answer: setupAsked},
+		{name: "a first Server: the import is setup's own now", st: setupState{kind: setupServer, role: config.RoleServer, answer: setupAsked},
 			want: []string{"by hand", "setup does not do these Server steps yet:", "network-install/#step-1-widen-the-server",
-				"peer-auth/#move-an-existing-install-over", "seamlessd restore <backup>", "seamlessd client-config"}},
-		{name: "a first Standalone", st: setupState{kind: setupStandalone, role: config.RoleServer, answer: setupFromEnv},
-			want: []string{"import", "locked"}},
-		{name: "a first Standalone on Windows: no locked projects there", goos: "windows",
-			st:   setupState{kind: setupStandalone, role: config.RoleServer, answer: setupAsked},
-			want: []string{"this Standalone step"}},
+				"peer-auth/#move-an-existing-install-over", "seamlessd client-config"}},
+		{name: "a first Standalone: locked projects", st: setupState{kind: setupStandalone, role: config.RoleServer, answer: setupFromEnv},
+			want: []string{"setup does not do this Standalone step yet:", "locked"}},
+		{name: "a first Standalone on Windows: no locked projects there, and the import is built", goos: "windows",
+			st: setupState{kind: setupStandalone, role: config.RoleServer, answer: setupAsked}, none: true},
 		{name: "a Client", st: setupState{kind: setupClient, role: config.RoleClient, serverURL: "https://b", answer: setupFromEnv},
 			want: []string{"pairing", "this Client uses its Server's key"}},
 		{name: "a change to the Server: no import on a re-run",
@@ -439,9 +505,8 @@ func TestSetupHandOff_SaysWhatSetupDoesNotDoYet(t *testing.T) {
 			for _, s := range tt.want {
 				require.Contains(t, out.String(), s)
 			}
-			if tt.st.change != "" {
-				require.NotContains(t, out.String(), "seamlessd restore")
-			}
+			require.NotContains(t, out.String(), "seamlessd restore", "the import is not a step by hand")
+			require.NotContains(t, out.String(), "start from a backup")
 			if goos == "windows" {
 				require.NotContains(t, out.String(), "peer_auth")
 			}
@@ -502,6 +567,27 @@ func TestSetupDirect(t *testing.T) {
 	r, _, _ = setupTestRun(t, "linux", []string{"SEAMLESS_SETUP=bogus"}, setupFactsFresh, false, "")
 	require.ErrorIs(t, setupDirect(r), errSetupRefused)
 
+	// The import is the installer's, on a first install; run by itself, setup
+	// refuses what it could never do and imports nothing.
+	r, out, _ = setupTestRun(t, "linux", []string{"SEAMLESS_IMPORT=/b.tar.gz"}, setupFactsFresh, false, "")
+	require.NoError(t, setupDirect(r))
+	require.Contains(t, out.String(), "nothing is set up on this computer yet")
+	for _, tt := range []struct {
+		env   []string
+		facts setupFacts
+		want  string
+	}{
+		{[]string{"SEAMLESS_IMPORT_LOCKS=keep"}, setupFactsFresh, "SEAMLESS_IMPORT names no backup"},
+		{[]string{"SEAMLESS_IMPORT=b.tar.gz"}, setupFactsFresh, "not a full path"},
+		{[]string{"SEAMLESS_IMPORT=/b.tar.gz"}, setupFactsStandalone, "setup starts from a backup only on a first install"},
+		{[]string{"SEAMLESS_IMPORT=/b.tar.gz"}, setupFactsClient, "keeps no data of its own"},
+	} {
+		r, _, _ = setupTestRun(t, "linux", tt.env, tt.facts, false, "")
+		err := setupDirect(r)
+		require.ErrorIs(t, err, errSetupRefused, "%v", tt.env)
+		require.ErrorContains(t, err, tt.want)
+	}
+
 	// Installed, no terminal: the summary, and where the changes are.
 	r, out, _ = setupTestRun(t, "linux", nil, setupFactsStandalone, false, "")
 	require.NoError(t, setupDirect(r))
@@ -548,9 +634,10 @@ func TestSetupProtocol_TheInstallersSpeakIt(t *testing.T) {
 	require.Contains(t, string(ps), "$SetupHeader = '"+setupStateHeader+"'\n")
 	require.Contains(t, string(ps), "$line.StartsWith('role='")
 	require.Contains(t, string(ps), "$line.StartsWith('server_url='")
-	for _, knob := range []string{setupKnobKind, setupKnobPairCode, setupKnobImport} {
+	for _, knob := range []string{setupKnobKind, setupKnobPairCode, setupKnobImport, setupKnobImportLocks} {
 		require.Contains(t, string(sh), "${"+knob+":-}", "docs/install looks for %s", knob)
-		require.Contains(t, string(ps), "$env:"+knob, "docs/install.ps1 looks for %s", knob)
+		// \b: $env:SEAMLESS_IMPORT must not pass on $env:SEAMLESS_IMPORT_LOCKS alone.
+		require.Regexp(t, `\$env:`+knob+`\b`, string(ps), "docs/install.ps1 looks for %s", knob)
 	}
 	// Neither installer spells a kind: setup's words are setup's.
 	for _, script := range [][]byte{sh, ps} {

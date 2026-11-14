@@ -238,16 +238,8 @@ func importArchive(ctx context.Context, cfg config.Config, src string, f *import
 		daemonUp:    func() bool { return serverReachable(urlHostPort(cfg.ServerURL())) },
 		local:       func(ctx context.Context) ([]store.PasskeyFact, error) { return localPasskeys(ctx, cfg) },
 	}
-	opts := archive.ImportOptions{
-		DataDir: cfg.DataDir,
-		Src:     r,
-		DryRun:  f.dryRun,
-		Logger:  slog.Default(),
-		OnLocks: gate.decide,
-	}
-	if cfg.PeerAuth.Enabled {
-		opts.ForceLocked = cfg.PeerAuth.ForceLocked
-	}
+	opts := archiveImportOptions(cfg, r, gate)
+	opts.DryRun = f.dryRun
 	if f.embed {
 		opts.Embedder = newImportEmbedder(cfg)
 	}
@@ -262,6 +254,23 @@ func importArchive(ctx context.Context, cfg config.Config, src string, f *import
 	}
 	gate.advise(os.Stdout, rep)
 	return nil
+}
+
+// archiveImportOptions is the import of the archive in src into cfg's data
+// dir, its locked projects decided by gate: seamlessd import's, and setup's
+// import step's (setup_import.go), so a backup setup starts from is imported
+// exactly as the command imports one.
+func archiveImportOptions(cfg config.Config, src io.Reader, gate *lockGate) archive.ImportOptions {
+	opts := archive.ImportOptions{
+		DataDir: cfg.DataDir,
+		Src:     src,
+		Logger:  slog.Default(),
+		OnLocks: gate.decide,
+	}
+	if cfg.PeerAuth.Enabled {
+		opts.ForceLocked = cfg.PeerAuth.ForceLocked
+	}
+	return opts
 }
 
 // sourceLabel names the archive for the progress line: "-" reads as a path.

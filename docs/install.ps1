@@ -66,11 +66,18 @@
 #                                     script (`seamlessd setup -h` lists the
 #                                     values); with SEAMLESS_SERVER_URL set it
 #                                     may only agree
-#   $env:SEAMLESS_PAIR_CODE           a client's one-time pairing code, and
-#   $env:SEAMLESS_IMPORT              a backup to start from: answers `seamlessd
-#                                     setup` does not take yet, so either stops
-#                                     the install before anything is installed
-#                                     and says why
+#   $env:SEAMLESS_IMPORT              a backup a first install starts from (its
+#                                     path; a relative one is this directory's):
+#                                     setup restores it into the empty data dir
+#                                     before anything is installed
+#   $env:SEAMLESS_IMPORT_LOCKS        keep|remove: what that import does with
+#                                     the backup's locked projects when no
+#                                     passkey can open them here (without it, it
+#                                     stops and says why)
+#   $env:SEAMLESS_PAIR_CODE           a client's one-time pairing code: an
+#                                     answer `seamlessd setup` does not take
+#                                     yet, so it stops the install before
+#                                     anything is installed
 #
 # Any SEAMLESS_* set, or a session that is not interactive, means a script is
 # running this: nothing asks how this computer will be used, and a run without
@@ -637,7 +644,17 @@ function Install-Binaries {
 # SEAMLESS_SERVER_URL and SEAMLESS_MCP_API_KEY too, with the meaning this
 # script has always given them, but they alone never make it run.
 function Test-SetupKnobs {
-    return [bool]($env:SEAMLESS_SETUP -or $env:SEAMLESS_PAIR_CODE -or $env:SEAMLESS_IMPORT)
+    return [bool]($env:SEAMLESS_SETUP -or $env:SEAMLESS_PAIR_CODE -or $env:SEAMLESS_IMPORT -or $env:SEAMLESS_IMPORT_LOCKS)
+}
+
+# Resolve-ImportPath: SEAMLESS_IMPORT names the backup a first install starts
+# from, and setup runs from $Tmp, so a relative path is made absolute here,
+# against the directory this installer was started in. A leading ~ is setup's
+# to expand.
+function Resolve-ImportPath {
+    $path = $env:SEAMLESS_IMPORT
+    if (-not $path -or $path.StartsWith('~', [StringComparison]::Ordinal) -or [IO.Path]::IsPathRooted($path)) { return }
+    $env:SEAMLESS_IMPORT = Join-Path (Get-Location).ProviderPath $path
 }
 
 # Test-ScriptedRun: a SEAMLESS_* variable other than SEAMLESS_CONFIG (which the
@@ -721,10 +738,11 @@ function Invoke-SetupFront {
     if (-not $probe.Contains($SetupProtocol)) {
         if ($knobs) {
             if (-not $probe.Trim()) { Die "could not run $fresh to ask seamlessd setup; nothing was installed" }
-            Die "seamless $Version predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE and SEAMLESS_IMPORT; unset them, or drop SEAMLESS_VERSION to get the latest"
+            Die "seamless $Version predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_IMPORT and SEAMLESS_IMPORT_LOCKS; unset them, or drop SEAMLESS_VERSION to get the latest"
         }
         return
     }
+    Resolve-ImportPath
     $statePath = Join-Path $Tmp 'setup.state'
     Invoke-Setup $fresh $Tmp @('--state', $statePath) 'seamlessd setup stopped the install; nothing was installed'
     $answer = Read-SetupState $statePath

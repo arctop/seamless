@@ -291,8 +291,11 @@ against this repository's release workflow identity;</li>
 how this computer will be used, before anything is installed:
 <strong>Standalone</strong> (everything on this computer, the default) or <strong>Networked</strong> -
 the <strong>Server</strong>, which the other computers connect to, or a <strong>Client</strong> of
-one. Only a person at a terminal who set no <code>SEAMLESS_*</code> variable is asked;
-a script answers with <code>SEAMLESS_SETUP</code>, and without it installs exactly as
+one. A first Standalone or Server install then starts fresh or
+<a href="../reference/cli-seamlessd/#seamlessd_setup_import">from a backup</a>, which
+setup restores into the still-empty data directory. Only a person at a
+terminal who set no <code>SEAMLESS_*</code> variable is asked; a script answers with
+<code>SEAMLESS_SETUP</code> and <code>SEAMLESS_IMPORT</code>, and without them installs exactly as
 before. A re-run offers only the changes setup can make;</li>
 <li>installs <code>seamlessd</code> and <code>seam</code> into <code>~/.local/bin</code>;</li>
 <li>runs <code>seamlessd install-hooks</code>, which generates the bearer key into
@@ -387,8 +390,16 @@ script</a> with no dependencies to audit.</p>
 <td>answer <a href="../reference/cli-seamlessd/#seamlessd_setup"><code>seamlessd setup</code></a>'s question - how this computer will be used - without being asked; <code>client</code> needs <code>SEAMLESS_SERVER_URL</code> and <code>SEAMLESS_MCP_API_KEY</code> too, and Windows takes <code>standalone</code> or <code>client</code></td>
 </tr>
 <tr>
-<td><code>SEAMLESS_PAIR_CODE</code>, <code>SEAMLESS_IMPORT</code></td>
-<td>a client's one-time pairing code, and a backup to start from: setup does not take them yet, so either stops the install before anything is installed and says what to do instead</td>
+<td><code>SEAMLESS_IMPORT=~/seamless-old-mac.tar.gz</code></td>
+<td>start a first install from this backup - a <code>seamlessd export</code> archive or one from Settings &gt; Backups - restored into the empty data directory before anything is installed, as <code>seamlessd import</code> restores one (<a href="../reference/cli-seamlessd/#seamlessd_setup_import">details</a>). A relative path is the directory you ran the installer in. Refused on a computer already set up (<code>seamlessd restore</code> is for that) and on a client, whose data is its server's</td>
+</tr>
+<tr>
+<td><code>SEAMLESS_IMPORT_LOCKS=keep|remove</code></td>
+<td>what that import does with the backup's <a href="../guides/data/#locked-projects">locked projects</a> when no passkey can open them here, as <code>--keep-locks</code> and <code>--remove-locks</code> answer <code>seamlessd import</code>; without it such a backup stops the install with nothing changed</td>
+</tr>
+<tr>
+<td><code>SEAMLESS_PAIR_CODE</code></td>
+<td>a client's one-time pairing code: setup does not take it yet, so it stops the install before anything is installed and says how to pair with the server's key instead</td>
 </tr>
 <tr>
 <td><code>SEAMLESS_NO_HOOKS=1</code></td>
