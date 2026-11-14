@@ -2135,6 +2135,48 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.8.5 {#v0-8-5}
+
+Released 2026-11-14 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.8.5)
+
+### Features
+
+- feat(doctor): warn when the relay runs a seamlessd other than the one you run; serve test harnesses reserve both loopbacks
+- feat(install): a Client pairs with a code: a relay on macOS and Linux, a key device of its own on Windows
+- feat(console): retire the bearer key for passkey sign-in, with a terminal sign-in as the way back in
+- feat(relay): wire v2 names each forwarded process's program; restricted accounts on client computers; an unmapped relay is refused
+- feat(relay): `seamlessd relay` on a client computer serves the agents' socket and forwards to the paired server
+- feat(peer_auth): requests through a mapped relay are judged like the socket's; leases keyed by (relay, process)
+- feat(install): a Server's setup decides its address and TLS, and binds every address of its name
+- feat(devices): pair other computers with a networked server: one-time codes, relay certificates, per-device keys
+- feat(install): a first Standalone or Server install can start from a backup
+- feat(console): a conversation is one page, and project pages filter by where content came from
+- feat(gardener): source references, stale copies and their relocation
+- feat(isolation): receipts let a moved conversation close the steps it claimed before moving
+- feat(isolation): provenance stamps on what a conversation holding fenced content writes
+- feat(hooks): with isolation.requests on, everything the hooks record follows the conversation's home
+- feat(isolation): without peer_auth, the in-session dialog decides a move or grant request
+- feat(install): `seamlessd setup` asks how the computer will be used; the installers hand it the questions
+- feat(console): sign in with a passkey, and the key no longer signs a browser in
+- feat(release): the release tag and checksums.txt are signed by the release signing helper
+
+### Fixes
+
+- fix(config): a user and password in server_url is never printed, logged or shown, and a Server whose server_url names one mints no pairing code
+- fix(console): hosts that fill the terminal sign-in cap never hold off a browser on the server; a User-Agent prints on one line
+- fix(setup): the address step's root step copies the TLS pair as the relay's does: root opens no file of the owner's, and the key is never readable by another account
+- fix(devices): say when pairing one-liners carry this computer's loopback; a user in server_url is warned about and never published
+- fix(console): one address holds at most 4 waiting terminal sign-ins; a refused access request names what the store refused
+- fix(setup): the relay's root step never has root open a file the owner can write; every value is quoted and every tool named by its path
+- fix(console): console-open --sign-in shows which browser a code would sign in, and asks
+- fix(devices): pairing never crosses the network in the clear; revocation closes its window; one-liners carry the fingerprint
+- fix(serve): a paired address another process holds stops the start; doctor dials what it used to infer
+- fix(console): a paired device is never the owner's hands
+
+### Other
+
+- build(approver): the Touch ID approver is built for Apple silicon only
+
 ## v0.8.4 {#v0-8-4}
 
 Released 2026-11-14 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.8.4)
