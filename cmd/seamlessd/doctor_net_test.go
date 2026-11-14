@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/netip"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -157,6 +158,9 @@ func TestDoctorNet_BindAddresses(t *testing.T) {
 // relay's service when it is installed, its root step when not, and the
 // daemon beside a peer_auth system service.
 func TestDoctorNet_ClientSocketNamesTheRelay(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a relay's socket is macOS and Linux only")
+	}
 	cfg := config.Defaults()
 	cfg.Role = config.RoleClient
 	cfg.AdvertisedURL = "unix://" + filepath.Join(t.TempDir(), "seamlessd.sock")

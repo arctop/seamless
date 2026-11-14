@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -70,7 +71,12 @@ func clientFirstHalf(t *testing.T, r *setupRun) (setupState, error) {
 	if err := setupHandOff(r, &st, setupStepsLeft(st, r.goos), false); err != nil {
 		return st, err
 	}
-	// The state file carries it to --finish.
+	// The state file carries it to --finish. A relay Client (macOS and Linux
+	// only) keeps a unix:// server_url, which this OS's config rules judge: on
+	// Windows the socket path is not absolute, so its runs end here.
+	if runtime.GOOS == "windows" && strings.HasPrefix(st.serverURL, "unix://") {
+		t.Skip("a relay Client is macOS and Linux only")
+	}
 	raw, err := marshalSetupState(st)
 	require.NoError(t, err)
 	back, err := parseSetupState(raw)

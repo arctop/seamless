@@ -15,6 +15,7 @@ import (
 	"encoding/pem"
 	"math/big"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -65,6 +66,9 @@ func TestRootStepReview_TheServerAddressIsAHostNameOrAnIPAddress(t *testing.T) {
 // L1: every value the state file hands from setup's first half to --finish is
 // checked against its format again, since the relay's root step prints them.
 func TestRootStepReview_TheStateFileIsCheckedAgain(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a relay Client's state (a unix:// server_url) is macOS and Linux only")
+	}
 	const relay = setupStateHeader + "\nrole=client\nserver_url=" + config.RelaySocketURL +
 		"\nkind=client\ninstalled=none\nlocked=false\nanswer=env\npairing=true\ndevice=relay\n"
 	good := map[string]string{

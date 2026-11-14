@@ -619,6 +619,9 @@ func TestSetupState_RoundTrip(t *testing.T) {
 		{kind: setupServer, role: config.RoleServer, installed: setupStandalone, locked: true, answer: setupAsked, change: "server"},
 		{kind: setupStandalone, role: config.RoleClient, serverURL: "unix:///opt/seamless/run/seamlessd.sock", installed: setupStandalone, locked: true, answer: setupKept},
 	} {
+		if runtime.GOOS == "windows" && strings.HasPrefix(st.serverURL, "unix://") {
+			continue // a socket server_url is a macOS or Linux state
+		}
 		path := filepath.Join(t.TempDir(), "setup.state")
 		require.NoError(t, writeSetupState(path, st))
 		info, err := os.Stat(path)
