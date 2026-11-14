@@ -42,6 +42,9 @@ func TestDialogLead_CountFirstThenWhatIsAsked(t *testing.T) {
 		}, "2 warnings. node asks for read-write access to demo-vault." + untilEnd},
 		{"no name at all: the pid", func(f *approval.Facts) { f.Agent, f.Program = "", "" },
 			"2 warnings. pid 4242 asks for read-write access to demo-vault." + untilEnd},
+		{"a move", func(f *approval.Facts) { f.Kind, f.From, f.Warnings = store.AccessKindMove, "example-ops", two[:1] },
+			"1 warning. Claude Code 2.1.319 asks to move into demo-vault.\nFor good; the duration below bounds only the " +
+				"approval, unless you pick less below."},
 		{"a value that tries to break the line", func(f *approval.Facts) { f.Project = "demo\nvault\u202e" },
 			"2 warnings. Claude Code 2.1.319 asks for read-write access to demo vault." + untilEnd},
 	} {
@@ -130,4 +133,37 @@ func TestDialogDurations_FollowTheLeaseCap(t *testing.T) {
 	require.Equal(t, "for 1 hour", durationPhrase("1h", time.Hour), "the cap itself is not cut short")
 	require.Equal(t, "until its session ends", durationPhrase("session", 20*time.Minute))
 	require.Empty(t, durationPhrase("", 20*time.Minute))
+}
+
+// The passkey page's dialog leads as the form does: a move asks to move, never
+// for an access level (it read "asks for read-write access to" on the first
+// released move, 2026-11-14), a refresh asks again, a grant names where from.
+func TestPasskeyMessage_SaysWhatIsAsked(t *testing.T) {
+	base := approval.Facts{
+		Short: "R-QBC0", Project: "example-finance", Access: "read-write", Kind: store.AccessKindMove,
+		From: "example-ops", Agent: "Claude Code 2.1.325",
+		Warnings: []approval.Warning{{Code: "move", Text: "This agent has worked in example-ops."}},
+	}
+	for _, c := range []struct {
+		name string
+		edit func(*approval.Facts)
+		want string
+	}{
+		{"a move", func(*approval.Facts) {}, "1 warning. Claude Code 2.1.325 asks to move into example-finance.\n"},
+		{"a refresh", func(f *approval.Facts) { f.Kind, f.From = store.AccessKindRefresh, "" },
+			"1 warning. Claude Code 2.1.325 asks again for read-write access to example-finance.\n"},
+		{"a read grant", func(f *approval.Facts) { f.Kind, f.Access = store.AccessKindGrant, "read-only" },
+			"1 warning. Claude Code 2.1.325 asks for read-only access to example-finance from project example-ops.\n"},
+		{"a lock's request", func(f *approval.Facts) { f.Kind, f.From = store.AccessKindRequest, "" },
+			"1 warning. Claude Code 2.1.325 asks for read-write access to example-finance.\n"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := base
+			c.edit(&f)
+			msg := passkeyMessage(f, "Approve it")
+			require.True(t, strings.HasPrefix(msg, c.want), msg)
+			require.True(t, strings.HasSuffix(msg, ".\nApprove it with your passkey, or deny it, on the page this opens, "+
+				"which shows the request (R-QBC0) in full. Opening it grants nothing by itself."), msg)
+		})
+	}
 }

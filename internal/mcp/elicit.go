@@ -509,9 +509,7 @@ func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSess
 		// The warning count and what is asked first, as in the form
 		// (dialogLead); the page shows every fact, and asks how long unless
 		// the form did.
-		msg = warningCount(len(f.Warnings)) + ". " + plain(askerName(f)) + " asks for " + plain(accessPhrase(f)) +
-			".\n" + decide + " with your passkey, or deny it, on the page this opens, which shows the request (" +
-			plain(f.Short) + ") in full. Opening it grants nothing by itself."
+		msg = passkeyMessage(f, decide)
 	}
 	res, err := s.mcp.RequestURLElicitation(ctx, session, elicitID, page, msg)
 	if err != nil {
@@ -989,19 +987,41 @@ func dialogLead(f approval.Facts, capped time.Duration) string {
 		if f.Locked {
 			long = "For good, and its lock opens until its session ends (" + spanWords(capped) + " at most)"
 		}
-		return warningCount(len(f.Warnings)) + ". " + plain(askerName(f)) + " asks to move into " + plain(f.Project) + ".\n" +
+		return warningCount(len(f.Warnings)) + ". " + plain(askerName(f)) + " " + askedWhat(f) + ".\n" +
 			long + ", unless you pick less below."
-	}
-	asks := "asks for"
-	if f.Kind == store.AccessKindRefresh {
-		asks = "asks again for"
 	}
 	long := "Until its session ends (" + spanWords(capped) + " at most)"
 	if f.SessionID == "" {
 		long = "For " + spanWords(capped)
 	}
-	return warningCount(len(f.Warnings)) + ". " + plain(askerName(f)) + " " + asks + " " + plain(accessPhrase(f)) + ".\n" +
+	return warningCount(len(f.Warnings)) + ". " + plain(askerName(f)) + " " + askedWhat(f) + ".\n" +
 		long + ", unless you pick less below."
+}
+
+// passkeyMessage is the passkey page dialog's text: the warning count and what
+// is asked first, as in the form (dialogLead), then where it is decided. The
+// page shows every fact, and asks how long unless the form did (decide carries
+// the form's choice).
+func passkeyMessage(f approval.Facts, decide string) string {
+	return warningCount(len(f.Warnings)) + ". " + plain(askerName(f)) + " " + askedWhat(f) +
+		".\n" + decide + " with your passkey, or deny it, on the page this opens, which shows the request (" +
+		plain(f.Short) + ") in full. Opening it grants nothing by itself."
+}
+
+// askedWhat is what a request asks, after the asker's name, in the form's lead
+// and in the passkey page's dialog alike: "asks to move into example-finance",
+// "asks again for read-write access to demo-vault", "asks for read-only access
+// to example-legal from project example-ops". A move is never worded as an
+// access level: what the owner approves is where the conversation works from
+// now on.
+func askedWhat(f approval.Facts) string {
+	switch f.Kind {
+	case store.AccessKindMove:
+		return "asks to move into " + plain(f.Project)
+	case store.AccessKindRefresh:
+		return "asks again for " + plain(accessPhrase(f))
+	}
+	return "asks for " + plain(accessPhrase(f))
 }
 
 // accessPhrase is the access a request asks for, and where: "read-write
