@@ -155,19 +155,19 @@ func TestPinnedUpdate_APinThatCannotBeUsedRefusesAtTheGates(t *testing.T) {
 	owner := pinKey(t, sshsig.KeySKEd25519)
 	for _, tt := range []struct {
 		name  string
-		setup func(w *world)
+		setup func(t *testing.T, w *world)
 		want  string
 	}{
-		{"missing", func(w *world) { w.pinPath(filepath.Join(w.home, "etc", "nope")) }, filepath.Join("etc", "nope")},
-		{"no key for the release namespace", func(w *world) {
+		{"missing", func(_ *testing.T, w *world) { w.pinPath(filepath.Join(w.home, "etc", "nope")) }, filepath.Join("etc", "nope")},
+		{"no key for the release namespace", func(t *testing.T, w *world) {
 			path := w.pinSigners(owner)
 			require.NoError(t, os.WriteFile(path, []byte(owner.SignersLine("owner-a", "git")+"\n"), 0o644))
 		}, "no key for namespace seamless-release"},
-		{"an option the pin refuses", func(w *world) {
+		{"an option the pin refuses", func(t *testing.T, w *world) {
 			path := w.pinSigners(owner)
 			require.NoError(t, os.WriteFile(path, []byte("owner-a verify-required "+owner.AuthorizedKey()+"\n"), 0o644))
 		}, "verify-required"},
-		{"writable by every account", func(w *world) {
+		{"writable by every account", func(t *testing.T, w *world) {
 			if runtime.GOOS == "windows" {
 				t.Skip("no POSIX modes on Windows")
 			}
@@ -179,7 +179,7 @@ func TestPinnedUpdate_APinThatCannotBeUsedRefusesAtTheGates(t *testing.T) {
 			w := newWorld(t, "linux", "amd64", "0.7.2")
 			w.publish("0.7.2", releaseOpts{ownerKey: owner})
 			w.publish("0.7.3", releaseOpts{ownerKey: owner})
-			tt.setup(w)
+			tt.setup(t, w)
 			a, err := w.runAuto("0.7.3")
 			require.Error(t, err)
 			requireRecorded(t, w, a, update.StageGates, false)

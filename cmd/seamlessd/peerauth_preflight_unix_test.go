@@ -81,6 +81,13 @@ func TestFilesystemProblems_ReleaseSigners(t *testing.T) {
 
 	const daemon = 480
 	inspect := func(p string) (fileFacts, error) {
+		// The directories above the test's own are the machine's, and a CI
+		// runner's /tmp is world-writable (sticky), which the pin refuses under
+		// peer_auth: stand in root's 0755 for them, so the test judges only
+		// the files it made.
+		if rel, err := filepath.Rel(root, p); err != nil || strings.HasPrefix(rel, "..") {
+			return fileFacts{uid: 0, mode: os.ModeDir | 0o755, isDir: true}, nil
+		}
 		info, err := os.Lstat(p)
 		if err != nil {
 			return fileFacts{}, err
