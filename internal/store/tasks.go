@@ -19,7 +19,8 @@ import (
 // taskCols is the SELECT list for the tasks table, matching scanTask.
 const taskCols = `id, project_slug, title, body, status, created_by,
 	plan_slug, claimed_by, lease_expires_at, favorite, created_at, updated_at, closed_at,
-	account, updated_account`
+	account, updated_account,
+	kind, gate_who, gate_what, gate_decision, gate_ready_when, gate_cleared_at, gate_cleared_by, gate_note`
 
 // ErrTaskNotFound is returned when a task id does not exist (e.g. a dangling
 // depends_on reference).
@@ -55,6 +56,10 @@ type rowQuerier interface {
 // inside the update's transaction; otherwise the update is refused with
 // ErrTaskClaimConflict and writes nothing. A receipt's write (SendReceipt)
 // sets it to the pre-move session whose claim JudgeReceipt judged.
+//
+// Kind turns a step into a gate or back. Gate edits the task's gate and
+// ClearGate clears it (TaskGatePatch, TaskGateClear: one patch may not carry
+// both); the task must satisfy the gate rules afterwards (ErrTaskGate).
 type TaskPatch struct {
 	Status          *core.TaskStatus
 	Title           *string
@@ -64,13 +69,17 @@ type TaskPatch struct {
 	RemoveDependsOn []string
 	AddCommits      []string
 	IfClaimedBy     *string
+	Kind            *core.TaskKind
+	Gate            *TaskGatePatch
+	ClearGate       *TaskGateClear
 }
 
 // onlyRemovals reports whether the patch asks for nothing but blocker
 // removals, so a patch whose every removal names a non-blocker changes nothing.
 func (p TaskPatch) onlyRemovals() bool {
 	return len(p.RemoveDependsOn) > 0 && p.Status == nil && p.Title == nil && p.Body == nil &&
-		p.ProjectSlug == nil && len(p.AddDependsOn) == 0 && len(p.AddCommits) == 0
+		p.ProjectSlug == nil && len(p.AddDependsOn) == 0 && len(p.AddCommits) == 0 &&
+		p.Kind == nil && p.Gate == nil && p.ClearGate == nil
 }
 
 // ErrTaskDepConflict is returned when one patch both adds and removes the same
@@ -104,9 +113,22 @@ type TaskUpdateResult struct {
 // (access.AccountOf) unless the caller set one, so a plan step a restricted
 // account created says so whichever tool created it. updated_account is the
 // text's label after that, and only UpdateTask moves it (taskTextAccount).
+//
+// Kind "" is a step. A gate is checked against the gate rules (ErrTaskGate),
+// and a gate already cleared is refused: a task starts with its gate open.
 func CreateTask(ctx context.Context, db *sql.DB, t core.Task) error {
 	if t.Account == "" {
 		t.Account = access.AccountOf(ctx)
+	}
+	if t.Kind == "" {
+		t.Kind = core.TaskKindStep
+	}
+	t.Gate = normalizeGate(t.Gate)
+	if t.Gate.ClearedAt != nil || t.Gate.ClearedBy != "" || t.Gate.Note != "" {
+		return fmt.Errorf("store.CreateTask: %w: a new task's gate starts open", ErrTaskGate)
+	}
+	if err := checkTaskGate(t); err != nil {
+		return fmt.Errorf("store.CreateTask: %w", err)
 	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -125,11 +147,13 @@ func CreateTask(ctx context.Context, db *sql.DB, t core.Task) error {
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO tasks (id, project_slug, title, body, status, created_by,
 		                   plan_slug, claimed_by, lease_expires_at,
-		                   created_at, updated_at, closed_at, account)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                   created_at, updated_at, closed_at, account,
+		                   kind, gate_who, gate_what, gate_decision, gate_ready_when)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.ID, t.ProjectSlug, t.Title, t.Body, string(t.Status), t.CreatedBy,
 		t.PlanSlug, t.ClaimedBy, leaseAt,
-		core.FormatTime(t.CreatedAt), core.FormatTime(t.UpdatedAt), closedAt, t.Account); err != nil {
+		core.FormatTime(t.CreatedAt), core.FormatTime(t.UpdatedAt), closedAt, t.Account,
+		string(t.Kind), t.Gate.Who, t.Gate.What, t.Gate.Decision, t.Gate.ReadyWhen); err != nil {
 		return fmt.Errorf("store.CreateTask: insert: %w", err)
 	}
 	if err := addDeps(ctx, tx, t.ID, t.DependsOn); err != nil {
@@ -147,7 +171,9 @@ func CreateTask(ctx context.Context, db *sql.DB, t core.Task) error {
 // UpdateTask applies patch to the task and returns the updated task (with deps).
 // Moving to a terminal status stamps closed_at; reopening clears it. Added deps
 // are validated for existence and cycles like CreateTask; removed ones need no
-// check (dropping an edge cannot close a cycle).
+// check (dropping an edge cannot close a cycle). A kind or gate change is
+// applied by applyGatePatch and checked against the gate rules; clearing a
+// gate-kind task closes it as done, through the same status move as any other.
 //
 // actor is the caller's session id (empty for callers with no session). A task
 // with a live claim (see core.Task.ClaimLive) is locked to its holder: any
@@ -157,8 +183,9 @@ func CreateTask(ctx context.Context, db *sql.DB, t core.Task) error {
 // only ways past the lock. The lock is judged before anything else, a removal
 // that would be a no-op included.
 //
-// updated_account moves only when the title or body actually changes
-// (taskTextAccount); a status, project, dependency or commit change keeps it.
+// updated_account moves only when the title, the body or the gate's words
+// actually change (taskTextAccount, gateTextAccount); a status, project,
+// dependency or commit change keeps it.
 //
 // A task moved to another project takes its provenance stamps along
 // (item_provenance, ProvenanceRelocate) once the move commits, whichever
@@ -186,6 +213,9 @@ func UpdateTaskDetailed(ctx context.Context, db *sql.DB, id string, patch TaskPa
 		if slices.Contains(remove, dep) {
 			return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w: %q", ErrTaskDepConflict, dep)
 		}
+	}
+	if err := patch.checkGate(); err != nil {
+		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w", err)
 	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -227,20 +257,25 @@ func UpdateTaskDetailed(ctx context.Context, db *sql.DB, id string, patch TaskPa
 		return res, nil
 	}
 
-	prevTitle, prevBody := t.Title, t.Body
+	prevTitle, prevBody, prevGate := t.Title, t.Body, t.Gate
 	if patch.Title != nil {
 		t.Title = *patch.Title
 	}
 	if patch.Body != nil {
 		t.Body = *patch.Body
 	}
-	t.UpdatedAccount = taskTextAccount(t.UpdatedAccount, access.AccountOf(ctx),
-		t.Title != prevTitle, t.Body != prevBody, t.Body)
 	if patch.ProjectSlug != nil {
 		t.ProjectSlug = *patch.ProjectSlug
 	}
-	if patch.Status != nil && *patch.Status != t.Status {
-		t.Status = *patch.Status
+	status, err := applyGatePatch(&t, patch, now)
+	if err != nil {
+		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: task %q: %w", id, err)
+	}
+	t.UpdatedAccount = gateTextAccount(t.UpdatedAccount,
+		taskTextAccount(t.UpdatedAccount, access.AccountOf(ctx), t.Title != prevTitle, t.Body != prevBody, t.Body),
+		access.AccountOf(ctx), prevGate, t.Gate)
+	if status != nil && *status != t.Status {
+		t.Status = *status
 		if t.Status.Closed() {
 			at := now.UTC()
 			t.ClosedAt = &at
@@ -271,12 +306,20 @@ func UpdateTaskDetailed(ctx context.Context, db *sql.DB, id string, patch TaskPa
 	if t.LeaseExpiresAt != nil {
 		leaseAt = core.FormatTime(*t.LeaseExpiresAt)
 	}
+	var gateAt any
+	if t.Gate.ClearedAt != nil {
+		gateAt = core.FormatTime(*t.Gate.ClearedAt)
+	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE tasks SET title = ?, body = ?, project_slug = ?, status = ?, updated_at = ?, closed_at = ?,
-		                 claimed_by = ?, lease_expires_at = ?, updated_account = ?
+		                 claimed_by = ?, lease_expires_at = ?, updated_account = ?,
+		                 kind = ?, gate_who = ?, gate_what = ?, gate_decision = ?, gate_ready_when = ?,
+		                 gate_cleared_at = ?, gate_cleared_by = ?, gate_note = ?
 		 WHERE id = ?`,
 		t.Title, t.Body, t.ProjectSlug, string(t.Status), core.FormatTime(t.UpdatedAt), closedAt,
-		t.ClaimedBy, leaseAt, t.UpdatedAccount, t.ID); err != nil {
+		t.ClaimedBy, leaseAt, t.UpdatedAccount,
+		string(t.Kind), t.Gate.Who, t.Gate.What, t.Gate.Decision, t.Gate.ReadyWhen,
+		gateAt, t.Gate.ClearedBy, t.Gate.Note, t.ID); err != nil {
 		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: update: %w", err)
 	}
 	if err := addDeps(ctx, tx, t.ID, patch.AddDependsOn); err != nil {

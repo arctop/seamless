@@ -78,6 +78,11 @@ Seamless recall.
 and drift and **proposes** fixes; it never acts on its own. See [The
 gardener](/concepts/gardener/).
 
+**Gate** - what a Seamless task waits on outside Seamless: who must act and
+what must happen. A step whose own gate is open, or that a gate task (`kind:
+gate`) blocks, is not ready; a person's action clears it. See [Tasks &
+plans](/concepts/tasks-and-plans/#gates).
+
 **Global** - the Seamless scope with no project, visible to every agent in
 every repo; reached only by passing `project: global` deliberately.
 
@@ -112,8 +117,8 @@ review, applied only with `gardener_apply`.
 **Provenance** - the Seamless record of where knowledge came from and what
 replaced it: `source_session`, `superseded_by`, `invalid_at`.
 
-**Ready** - a Seamless task with no unfinished blocker; `tasks_ready` returns
-exactly those.
+**Ready** - a Seamless task with no unfinished blocker and no open gate;
+`tasks_ready` returns exactly those.
 
 **Recall** - Seamless's single search entry point, fusing FTS5 keyword matching
 and vector similarity with RRF. Also, loosely, the `<seam-recall>` block

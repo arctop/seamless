@@ -137,7 +137,8 @@ func TestTasksUpdate_RemovingANonBlockerIsANoOpThatSaysSo(t *testing.T) {
 
 	isErr, txt := callErr(t, ctx, cli, "tasks_update", map[string]any{"id": waits})
 	require.True(t, isErr)
-	require.Equal(t, "tasks_update: nothing to update: pass status, title, body, project, add_depends_on, or remove_depends_on", txt)
+	require.Equal(t, "tasks_update: nothing to update: pass status, title, body, project, add_depends_on, "+
+		"remove_depends_on, kind, gate_who, gate_what, gate_decision, gate_ready_when, or gate_clear", txt)
 
 	isErr, txt = callErr(t, ctx, cli, "tasks_update", map[string]any{"id": waits,
 		"add_depends_on": []string{stranger}, "remove_depends_on": []string{stranger}})

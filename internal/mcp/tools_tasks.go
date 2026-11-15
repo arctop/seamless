@@ -35,14 +35,15 @@ const actorSessionArgDesc = "the acting agent's session: the cc/<id> or cx/<id> 
 const actorSessionIDArgDesc = "the acting agent's session ULID; takes precedence over session and the bound session"
 
 func tasksAddTool() mcp.Tool {
-	return mcp.NewTool("tasks_add", hintAdd(),
-		mcp.WithDescription("Add a task to the dependency-aware ready queue. depends_on lists task ids that must finish first (done or dropped unblocks); each must exist and must not create a cycle. The task is 'ready' once it has no open/in_progress blocker."),
+	opts := []mcp.ToolOption{hintAdd(),
+		mcp.WithDescription("Add a task to the dependency-aware ready queue. depends_on lists task ids that must finish first (done or dropped unblocks); each must exist and must not create a cycle. The task is 'ready' once it has no open/in_progress blocker and no open gate. A task that waits on a person or an event outside Seamless carries a gate: gate_who and gate_what on the step itself, or a task of kind gate that the waiting steps depend on, so one gate holds many steps and clearing it frees them all."),
 		mcp.WithString("title", mcp.Required(), mcp.Description("short task title")),
 		mcp.WithString("body", mcp.Description("optional details / acceptance criteria (aliases: content, text)")),
 		mcp.WithString("project", mcp.Description(writeProjectArgDesc)),
 		mcp.WithArray("depends_on", mcp.WithStringItems(), mcp.Description("task ids this task is blocked by (a comma-separated string is also accepted)")),
 		mcp.WithString("plan", mcp.Description("optional plan slug (plan:<slug> convention) that composes this task as a step of a plan. Plan steps are excluded from the default ready-queue and surfaced under the plan filter.")),
-	)
+	}
+	return mcp.NewTool("tasks_add", append(opts, gateArgOptions()...)...)
 }
 
 func (s *Server) handleTasksAdd(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -62,11 +63,13 @@ func (s *Server) handleTasksAdd(ctx context.Context, req mcp.CallToolRequest) (*
 		return errResult("tasks_add", err)
 	}
 	now := time.Now().UTC()
+	kind, gate := tasksAddGateArgs(req)
 	task := core.Task{
 		ID: id, ProjectSlug: project, Title: title, Body: argRaw(req, "body"),
 		Status: core.TaskOpen, CreatedBy: s.boundSessionName(ctx),
 		PlanSlug:  argString(req, "plan"),
 		DependsOn: argStrings(req, "depends_on"),
+		Kind:      kind, Gate: gate,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := store.CreateTask(ctx, s.cfg.DB, task); err != nil {
@@ -80,16 +83,22 @@ func (s *Server) handleTasksAdd(ctx context.Context, req mcp.CallToolRequest) (*
 	if err != nil {
 		return errResult("tasks_add", err)
 	}
-	s.record(ctx, core.EventTaskTransition, s.boundSession(ctx), project, id,
-		map[string]any{"to": string(core.TaskOpen), "created": true})
+	record := map[string]any{"to": string(core.TaskOpen), "created": true}
+	if created.IsGate() {
+		record[taskKindParam] = string(core.TaskKindGate)
+	}
+	if created.Gate.Set() {
+		record[gateTransitionKey] = gateTransitionSet
+	}
+	s.record(ctx, core.EventTaskTransition, s.boundSession(ctx), project, id, record)
 	out := taskJSON(created)
 	s.fenceWrittenTaskDeps(ctx, created, out)
 	return jsonResult(out)
 }
 
 func tasksUpdateTool() mcp.Tool {
-	return mcp.NewTool("tasks_update", hintSet(),
-		mcp.WithDescription("Update a task: change status (open|in_progress|done|dropped), edit title/body, or add or remove dependencies. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it."),
+	opts := []mcp.ToolOption{hintSet(),
+		mcp.WithDescription("Update a task: change status (open|in_progress|done|dropped), edit title/body, add or remove dependencies, or set, edit or clear its gate. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. Setting any gate_* field (re)opens the gate as it then reads; gate_clear=true clears an open gate once the person has acted, recording when, by this session, and gate_note: a step keeps its status and becomes ready once nothing else holds it, and a task of kind gate closes as done, which unblocks every task that depends on it. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it."),
 		mcp.WithString("id", mcp.Required(), mcp.Description("task id")),
 		mcp.WithString("status", enumOf(core.TaskStatuses), mcp.Description("new status")),
 		mcp.WithString("title", mcp.Description("new title")),
@@ -97,11 +106,17 @@ func tasksUpdateTool() mcp.Tool {
 		mcp.WithString("project", mcp.Description("reassign the task to another project slug (used when a split moves a project's open work to a child)")),
 		mcp.WithArray("add_depends_on", mcp.WithStringItems(), mcp.Description("task ids to add as blockers (a comma-separated string is also accepted)")),
 		mcp.WithArray(removeDependsOnParam, mcp.WithStringItems(), mcp.Description("task ids to remove as blockers (a comma-separated string is also accepted); an id that is not a blocker of this task is a no-op, named back in not_depends_on")),
+	}
+	opts = append(opts, gateArgOptions()...)
+	opts = append(opts,
+		mcp.WithBoolean(gateClearParam, mcp.Description("true: clear the task's open gate now that the person has acted (not with the gate_* edits)")),
+		mcp.WithString(gateNoteParam, mcp.Description("optional, with gate_clear: what the person decided or did, kept with the cleared gate")),
 		mcp.WithString("session", mcp.Description("the acting agent's session (the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session name); needed only to mutate a task you hold a live claim on when several agents are active")),
 		mcp.WithString("session_id", mcp.Description(actorSessionIDArgDesc)),
 		mcp.WithArray(commitsParam, mcp.WithStringItems(), mcp.Description(taskCommitsArgDesc)),
 		mcp.WithString(receiptRefParam, mcp.Description(receiptRefArgDesc)),
 	)
+	return mcp.NewTool("tasks_update", opts...)
 }
 
 func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -148,6 +163,9 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 		return errResult("tasks_update", err)
 	}
 	patch.AddCommits = commits
+	if err := tasksUpdateGateArgs(req, &patch); err != nil {
+		return errResult("tasks_update", err)
+	}
 	// A receipt's reference (isolation.requests): a call that names one is a
 	// receipt, judged as one below even if it sets nothing else.
 	ref, err := s.receiptRefArg(req)
@@ -156,11 +174,9 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 	}
 
 	if patch.Status == nil && patch.Title == nil && patch.Body == nil && patch.ProjectSlug == nil &&
-		len(patch.AddDependsOn) == 0 && len(patch.RemoveDependsOn) == 0 && len(patch.AddCommits) == 0 && ref.IsZero() {
-		if s.cfg.RecordCommits {
-			return errResult("tasks_update", errors.New("nothing to update: pass status, title, body, project, add_depends_on, remove_depends_on, or commits"))
-		}
-		return errResult("tasks_update", errors.New("nothing to update: pass status, title, body, project, add_depends_on, or remove_depends_on"))
+		len(patch.AddDependsOn) == 0 && len(patch.RemoveDependsOn) == 0 && len(patch.AddCommits) == 0 &&
+		patch.Kind == nil && patch.Gate == nil && patch.ClearGate == nil && ref.IsZero() {
+		return errResult("tasks_update", nothingToUpdate(s.cfg.RecordCommits))
 	}
 	// A task id is globally unique, so nothing above resolved a write scope. The
 	// row is loaded first purely to learn the project the fence judges against;
@@ -202,6 +218,9 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 	if err != nil && !errors.Is(err, errAmbiguousActor) {
 		return errResult("tasks_update", err)
 	}
+	if patch.ClearGate != nil {
+		patch.ClearGate.By = s.clearedBy(ctx, actor)
+	}
 	// The commits and the removals ride in the patch: UpdateTask applies them
 	// in the same transaction and behind the same holder lock as every other
 	// change, so whoever may update the task may record its commits or drop
@@ -227,6 +246,12 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 		}
 		if len(res.RemovedDependsOn) > 0 {
 			transition[removedDependsOnKey] = res.RemovedDependsOn
+		}
+		if patch.Kind != nil && *patch.Kind != current.Kind {
+			transition[taskKindParam] = string(updated.Kind)
+		}
+		if g := gateTransition(patch, updated); g != "" {
+			transition[gateTransitionKey] = g
 		}
 		s.record(ctx, core.EventTaskTransition, actor, updated.ProjectSlug, id, transition)
 	}
@@ -278,9 +303,11 @@ const (
 
 func tasksReadyTool() mcp.Tool {
 	return mcp.NewTool("tasks_ready", hintRead(),
-		mcp.WithDescription("List the actionable (ready) tasks for a project -- open tasks with no unfinished blocker -- oldest first, plus the blocked tasks with their still-open blockers. By default plan-step tasks are excluded; pass plan=<slug> to list that plan's steps instead."),
+		mcp.WithDescription("List the actionable (ready) tasks for a project -- open tasks with no unfinished blocker and no open gate -- oldest first, plus the blocked tasks with their still-open blockers. Work that waits on people is listed apart, without bodies (tasks_list id=<id> loads one), and only when there is some: gated holds the steps whose own gate is open or that an open gate blocks, and gates the tasks of kind gate, ordered by who must act -- the people's queue. agent=true answers ready alone, with the other groups' sizes under omitted; who=<who> answers only the gates and gated tasks waiting on that person. By default plan-step tasks are excluded; pass plan=<slug> to list that plan's steps instead."),
 		mcp.WithString("project", mcp.Description("project slug; defaults to the bound session's project")),
 		mcp.WithString("plan", mcp.Description("optional plan slug: return that plan's ready/blocked step tasks instead of the default (non-plan) queue")),
+		mcp.WithString(readyWhoParam, mcp.Description("optional: only the gates and gated tasks waiting on this person, e.g. owner; a class before a colon matches every name in it (founder matches founder:dana)")),
+		mcp.WithBoolean(readyAgentParam, mcp.Description("optional: true answers only the tasks an agent can work now (ready), with the sizes of the groups left out")),
 	)
 }
 
@@ -289,63 +316,24 @@ func (s *Server) handleTasksReady(ctx context.Context, req mcp.CallToolRequest) 
 	if err != nil {
 		return errResult("tasks_ready", err)
 	}
-	plan := argString(req, "plan")
-	var ready []core.Task
-	var blocked []store.BlockedTask
-	if plan != "" {
-		ready, err = store.ReadyTasksForPlan(ctx, s.cfg.DB, project, plan)
-		if err != nil {
-			return errResult("tasks_ready", err)
-		}
-		blocked, err = store.BlockedTasksForPlan(ctx, s.cfg.DB, project, plan)
-	} else {
-		ready, err = store.ReadyTasks(ctx, s.cfg.DB, project)
-		if err != nil {
-			return errResult("tasks_ready", err)
-		}
-		blocked, err = store.BlockedTasks(ctx, s.cfg.DB, project)
-	}
+	filter, err := readyFilterArgs(req)
 	if err != nil {
 		return errResult("tasks_ready", err)
 	}
-	readable := s.taskReader(ctx)
-	readyJSON, err := s.tasksJSON(ctx, readable, ready)
+	q, err := s.loadReadyQueue(ctx, project, argString(req, "plan"))
 	if err != nil {
 		return errResult("tasks_ready", err)
 	}
-	blockedTasks := make([]core.Task, len(blocked))
-	for i, b := range blocked {
-		blockedTasks[i] = b.Task
-	}
-	blockedJSON, err := s.tasksJSON(ctx, readable, blockedTasks)
+	out, err := s.readyAnswer(ctx, project, q, filter)
 	if err != nil {
 		return errResult("tasks_ready", err)
 	}
-	for i, b := range blocked {
-		blockers := make([]map[string]any, 0, len(b.Blockers))
-		for _, bl := range b.Blockers {
-			// A blocker from a project the caller may not read is withheld --
-			// its title is that project's content, and its id the handle to it
-			// -- while the entry itself stays, so the count is true. Only the
-			// owner, kept out by a lock alone, is told which locked project.
-			ok, err := readable(bl.ProjectSlug)
-			if err != nil {
-				return errResult("tasks_ready", err)
-			}
-			if !ok {
-				blockers = append(blockers, map[string]any{withheldKey: withheldBlocker(ctx, lockedBlockerProject(ctx, bl.ProjectSlug))})
-				continue
-			}
-			blockers = append(blockers, map[string]any{"id": bl.ID, "title": bl.Title, "status": string(bl.Status)})
-		}
-		blockedJSON[i]["blockers"] = blockers
-	}
-	return jsonResult(map[string]any{"project": project, "ready": readyJSON, "blocked": blockedJSON})
+	return jsonResult(out)
 }
 
 func tasksListTool() mcp.Tool {
 	return mcp.NewTool("tasks_list", hintRead(),
-		mcp.WithDescription("List a project's tasks, optionally filtered by status, newest first. By default plan-step tasks are excluded; pass plan=<slug> to list that plan's steps instead. Pass id=<task id> to load a single task by its globally-unique id (a direct lookup that ignores project/status/plan and needs no session scope)."),
+		mcp.WithDescription("List a project's tasks, optionally filtered by status, newest first. A task that waits on people carries its gate (who, what, and whether it is still open), and a task of kind gate says so. By default plan-step tasks are excluded; pass plan=<slug> to list that plan's steps instead. Pass id=<task id> to load a single task by its globally-unique id (a direct lookup that ignores project/status/plan and needs no session scope)."),
 		mcp.WithString("id", mcp.Description("load exactly one task by its globally-unique id; when set, project/status/plan are ignored and the response's tasks array holds just that task")),
 		mcp.WithString("project", mcp.Description("project slug; defaults to the bound session's project")),
 		mcp.WithString("status", enumOf(core.TaskStatuses), mcp.Description("optional status filter")),
@@ -401,7 +389,7 @@ func (s *Server) handleTasksList(ctx context.Context, req mcp.CallToolRequest) (
 
 func tasksClaimTool() mcp.Tool {
 	return mcp.NewTool("tasks_claim", hintAdd(),
-		mcp.WithDescription("Atomically claim a task for the current session, moving it to in_progress with a lease. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims."),
+		mcp.WithDescription("Atomically claim a task for the current session, moving it to in_progress with a lease. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), waiting on people ('task gated': a task of kind gate is never claimed, and a step whose own gate is open waits until it is cleared), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims."),
 		mcp.WithString("id", mcp.Required(), mcp.Description("task id to claim")),
 		// No Min/Max: the handler owns this parameter's range, because its upper
 		// bound is an int64-overflow hazard in the seconds->Duration conversion
@@ -452,7 +440,7 @@ func (s *Server) handleTasksClaim(ctx context.Context, req mcp.CallToolRequest) 
 	}
 	res, err := store.ClaimTask(ctx, s.cfg.DB, id, sessionID, lease, time.Now().UTC())
 	if err != nil {
-		return errResult("tasks_claim", s.fenceBlockedClaim(ctx, err))
+		return errResult("tasks_claim", s.fenceGatedClaim(ctx, target.ProjectSlug, s.fenceBlockedClaim(ctx, err)))
 	}
 	payload := map[string]any{"to": string(res.Task.Status), "claimed_by": sessionID}
 	if res.Reclaimed {
@@ -548,6 +536,7 @@ func taskJSON(t core.Task) map[string]any {
 	if t.UpdatedAccount != "" {
 		j["updated_account"] = t.UpdatedAccount
 	}
+	putGate(j, t)
 	return j
 }
 
@@ -565,6 +554,9 @@ func (s *Server) withholdTask(ctx context.Context, project string, t core.Task) 
 	out := s.withholdContent(ctx, project, taskJSON(t), taskContentFields)
 	if _, withheld := out[withheldKey]; withheld {
 		for _, f := range taskAccountFields {
+			delete(out, f)
+		}
+		for _, f := range taskGateFields {
 			delete(out, f)
 		}
 		return out

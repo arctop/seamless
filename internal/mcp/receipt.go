@@ -149,7 +149,10 @@ func (s *Server) handleReceipt(ctx context.Context, req mcp.CallToolRequest, c c
 // carries none of, in the order the schema lists them.
 func receiptOther(req mcp.CallToolRequest) []string {
 	var out []string
-	for _, name := range []string{"title", "body", "project", "add_depends_on", removeDependsOnParam, commitsParam} {
+	names := []string{"title", "body", "project", "add_depends_on", removeDependsOnParam, taskKindParam}
+	names = append(names, gateTextParams...)
+	names = append(names, gateClearParam, gateNoteParam, commitsParam)
+	for _, name := range names {
 		if argPresent(req, name) {
 			out = append(out, name)
 		}

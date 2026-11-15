@@ -1,0 +1,20 @@
+{{/* Shared by the tasks page (tasks.html) and the task peek fragment
+     (peek_task.html), which parse it beside them (render.go). */}}
+{{/* task-gate renders a task's gate (a *taskGateView, nil for none): who and
+     what, the optional lines, and its clearance once cleared. */}}
+{{define "task-gate"}}{{with .}}
+  <section class="reader-links" data-gate="{{if .Open}}open{{else}}cleared{{end}}">
+    <h3>{{if .Open}}Waits on {{.Who}}{{else}}Gate cleared{{end}}</h3>
+    <dl class="peek-kv">
+      <dt>Who</dt><dd>{{.Who}}</dd>
+      <dt>What</dt><dd>{{.What}}</dd>
+      {{with .Decision}}<dt>Decision</dt><dd>{{.}}</dd>{{end}}
+      {{with .ReadyWhen}}<dt>Ready when</dt><dd>{{.}}</dd>{{end}}
+      {{if .ClearedAt}}<dt>Cleared</dt><dd title="{{ts .ClearedAt}}">{{ago .ClearedAt}}{{with .ClearedBy}} by <span class="mono">{{.}}</span>{{end}}</dd>{{end}}
+      {{with .Note}}<dt>Note</dt><dd>{{.}}</dd>{{end}}
+    </dl>
+  </section>
+{{end}}{{end}}
+
+{{/* task-ref-gate follows a dependency that is a gate with what it waits on. */}}
+{{define "task-ref-gate"}}{{if and .Kind .Gate}}{{if .Gate.Open}} <span class="muted" data-gate-who="{{.Gate.Who}}">gate &middot; waits on {{.Gate.Who}}: {{.Gate.What}}</span>{{end}}{{end}}{{end}}

@@ -297,6 +297,9 @@ Seamless recall.</p>
 <p><strong>Gardener</strong> - the Seamless background pass that finds duplicates, staleness,
 and drift and <strong>proposes</strong> fixes; it never acts on its own. See <a href="../../concepts/gardener/">The
 gardener</a>.</p>
+<p><strong>Gate</strong> - what a Seamless task waits on outside Seamless: who must act and
+what must happen. A step whose own gate is open, or that a gate task (<code>kind: gate</code>) blocks, is not ready; a person's action clears it. See <a href="../../concepts/tasks-and-plans/#gates">Tasks &amp;
+plans</a>.</p>
 <p><strong>Global</strong> - the Seamless scope with no project, visible to every agent in
 every repo; reached only by passing <code>project: global</code> deliberately.</p>
 <p><strong>Kind</strong> - a Seamless memory's type: <code>constraint</code>, <code>convention</code>, <code>runbook</code>,
@@ -321,8 +324,8 @@ resolved from an explicit argument, a bound session, or the agent's cwd.</p>
 review, applied only with <code>gardener_apply</code>.</p>
 <p><strong>Provenance</strong> - the Seamless record of where knowledge came from and what
 replaced it: <code>source_session</code>, <code>superseded_by</code>, <code>invalid_at</code>.</p>
-<p><strong>Ready</strong> - a Seamless task with no unfinished blocker; <code>tasks_ready</code> returns
-exactly those.</p>
+<p><strong>Ready</strong> - a Seamless task with no unfinished blocker and no open gate;
+<code>tasks_ready</code> returns exactly those.</p>
 <p><strong>Recall</strong> - Seamless's single search entry point, fusing FTS5 keyword matching
 and vector similarity with RRF. Also, loosely, the <code>&lt;seam-recall&gt;</code> block
 injected on prompt match - see the disambiguation below.</p>

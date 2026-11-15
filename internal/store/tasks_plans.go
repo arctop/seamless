@@ -12,6 +12,8 @@ import (
 
 // PlanRollup is the per-plan aggregate the briefing surfaces: Total step tasks,
 // how many are Done (closed), InFlight (in_progress), and Claimable (ready).
+// GatesOpen counts the gates still waiting on people: the plan's gate-kind
+// tasks open or in progress, and its unfinished steps whose own gate is open.
 // LastActivity is the newest updated_at across the plan's steps.
 type PlanRollup struct {
 	Slug         string    `json:"slug"`
@@ -19,6 +21,7 @@ type PlanRollup struct {
 	Done         int       `json:"done"`
 	InFlight     int       `json:"inFlight"`
 	Claimable    int       `json:"claimable"`
+	GatesOpen    int       `json:"gatesOpen,omitempty"`
 	LastActivity time.Time `json:"lastActivity"`
 }
 
@@ -49,7 +52,8 @@ func (p PlanRollup) FinishLinePhrase() string {
 
 // ActivePlans returns a rollup for each not-yet-complete plan in a project
 // (plans whose every step is closed are omitted, like a done stage). Claimable
-// counts ready open steps (same readiness rule as ReadyTasksForPlan); the
+// counts ready open steps (same readiness rule as ReadyTasksForPlan, sqlReady)
+// and GatesOpen the gates waiting on people (sqlGatesOpen); the
 // plan's status is derived, never stored. One grouped query covers every plan.
 // Ordered most-recently-active first (newest step updated_at), ties broken by
 // slug, so the briefing and the console lead with what just moved.
@@ -86,11 +90,8 @@ func planRollups(ctx context.Context, db *sql.DB, project string) ([]PlanRollup,
 		       COUNT(*),
 		       SUM(CASE WHEN status IN ('done','dropped') THEN 1 ELSE 0 END),
 		       SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END),
-		       SUM(CASE WHEN status = 'open' AND NOT EXISTS (
-		             SELECT 1 FROM task_deps d
-		             JOIN tasks b ON b.id = d.depends_on
-		             WHERE d.task_id = tasks.id AND b.status IN ('open','in_progress'))
-		           THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN `+sqlReady("tasks")+` THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN `+sqlGatesOpen("tasks")+` THEN 1 ELSE 0 END),
 		       MAX(updated_at)
 		  FROM tasks
 		 WHERE project_slug = ? AND plan_slug <> ''
@@ -104,7 +105,7 @@ func planRollups(ctx context.Context, db *sql.DB, project string) ([]PlanRollup,
 	for rows.Next() {
 		var p PlanRollup
 		var last string
-		if err := rows.Scan(&p.Slug, &p.Total, &p.Done, &p.InFlight, &p.Claimable, &last); err != nil {
+		if err := rows.Scan(&p.Slug, &p.Total, &p.Done, &p.InFlight, &p.Claimable, &p.GatesOpen, &last); err != nil {
 			return nil, fmt.Errorf("store.planRollups: scan: %w", err)
 		}
 		if p.LastActivity, err = core.ParseTime(last); err != nil {
@@ -141,11 +142,8 @@ func allPlanRollups(ctx context.Context, db *sql.DB) ([]ProjectPlan, error) {
 		       COUNT(*),
 		       SUM(CASE WHEN status IN ('done','dropped') THEN 1 ELSE 0 END),
 		       SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END),
-		       SUM(CASE WHEN status = 'open' AND NOT EXISTS (
-		             SELECT 1 FROM task_deps d
-		             JOIN tasks b ON b.id = d.depends_on
-		             WHERE d.task_id = tasks.id AND b.status IN ('open','in_progress'))
-		           THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN `+sqlReady("tasks")+` THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN `+sqlGatesOpen("tasks")+` THEN 1 ELSE 0 END),
 		       MAX(updated_at)
 		  FROM tasks
 		 WHERE plan_slug <> ''
@@ -159,7 +157,7 @@ func allPlanRollups(ctx context.Context, db *sql.DB) ([]ProjectPlan, error) {
 	for rows.Next() {
 		var p ProjectPlan
 		var last string
-		if err := rows.Scan(&p.Project, &p.Slug, &p.Total, &p.Done, &p.InFlight, &p.Claimable, &last); err != nil {
+		if err := rows.Scan(&p.Project, &p.Slug, &p.Total, &p.Done, &p.InFlight, &p.Claimable, &p.GatesOpen, &last); err != nil {
 			return nil, fmt.Errorf("store.allPlanRollups: scan: %w", err)
 		}
 		if p.LastActivity, err = core.ParseTime(last); err != nil {

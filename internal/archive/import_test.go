@@ -654,6 +654,11 @@ func TestImport_MergeAnArchiveFromBefore039(t *testing.T) {
 		// What 043 added (a relay's leases and grants).
 		`DROP INDEX idx_access_leases_relay`, `ALTER TABLE access_leases DROP COLUMN relay_id`,
 		`DROP INDEX idx_access_grants_relay`, `ALTER TABLE access_grants DROP COLUMN relay_id`,
+		// What 045 added (task gates).
+		`ALTER TABLE tasks DROP COLUMN kind`, `ALTER TABLE tasks DROP COLUMN gate_who`,
+		`ALTER TABLE tasks DROP COLUMN gate_what`, `ALTER TABLE tasks DROP COLUMN gate_decision`,
+		`ALTER TABLE tasks DROP COLUMN gate_ready_when`, `ALTER TABLE tasks DROP COLUMN gate_cleared_at`,
+		`ALTER TABLE tasks DROP COLUMN gate_cleared_by`, `ALTER TABLE tasks DROP COLUMN gate_note`,
 		`DELETE FROM schema_migrations WHERE version >= 39`,
 	} {
 		_, err := db.ExecContext(ctx, q)

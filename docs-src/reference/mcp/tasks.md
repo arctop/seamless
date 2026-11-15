@@ -12,8 +12,9 @@ tools:
 ---
 
 Tasks are how agents hand work to each other. A task is **ready** when it has no
-unfinished blocker; `tasks_ready` returns exactly those, so an agent asking "what
-can I do now?" never has to reason about the dependency graph itself.
+unfinished blocker and no open gate; `tasks_ready` returns exactly those, so an
+agent asking "what can I do now?" never has to reason about the dependency graph
+itself.
 
 ## How claiming works
 
@@ -42,6 +43,42 @@ A task created with `plan=<slug>` is a **step of a plan**, and is excluded from
 the default `tasks_ready` and `tasks_list`. That keeps a twelve-step plan from
 burying the handful of tasks that are actually loose work. Pass `plan=<slug>` to
 either tool to see that plan's steps instead.
+
+## Gates
+
+A task that waits on a person, or on an event outside Seamless, carries a gate
+([Tasks & plans](/concepts/tasks-and-plans/#gates) explains the two forms):
+
+- `tasks_add` and `tasks_update` take `gate_who` and `gate_what` (both, one line
+  each; `gate_who` at most 100 characters, the others 500), plus the optional
+  `gate_decision` and `gate_ready_when`, and `kind`: `step` (the default) or
+  `gate`. A task of kind `gate` must carry a gate. On `tasks_update`, setting any
+  `gate_*` field (re)opens the gate as it then reads, keeping the fields the
+  call does not name; setting `gate_who` and `gate_what` to empty strings
+  removes a step's gate without clearing it.
+- `tasks_update gate_clear=true` clears an open gate, with an optional
+  `gate_note`. It records when, the acting session (`cleared_by`) and the note.
+  A step keeps its status; a task of kind `gate` closes as `done` (a
+  `gate_clear` that also asks for another status is refused). Reopening a
+  cleared gate task opens its gate again.
+- Every task answer carries the gate as `gate` - `who`, `what`, `open`, the
+  optional lines, and once cleared `cleared_at`, `cleared_by` and `note` - and
+  a gate task says `"kind": "gate"`. A task without a gate carries neither key.
+- `tasks_ready` adds `gated` (steps whose own gate is open, or that an open
+  gate blocks) and `gates` (gate tasks open or in progress, ordered by who) to
+  its answer when either holds anything. Their entries come without `body`, and
+  each lists its unfinished blockers; a blocker that is a gate carries its
+  `kind` and `gate`. `agent=true` answers `ready` alone with `omitted: {blocked,
+  gated, gates}` counts; `who=<who>` answers only the `gates` and `gated` tasks
+  waiting on that person (case-insensitive; `founder` matches `founder:dana`).
+  The two filters cannot be combined, and a blank `who` is refused.
+- The `task.transition` record of a call that set, cleared or removed a gate
+  carries `gate: set|cleared|removed`, and of one that changed the kind,
+  `kind`.
+
+A caller outside a confidential project that writes one of its tasks gets no
+gate back, like the rest of the task's content, and a `task gated` claim
+refusal names no one.
 
 ## Changing a task's blockers
 
@@ -91,9 +128,9 @@ withholds, gets the generic words.
 
 | Call | Refuses when |
 |---|---|
-| `tasks_add` | A blocker is missing or the new dependency would create a cycle |
-| `tasks_update` | Nothing was supplied to change, a new dependency is invalid, one id is both added and removed, a `commits` entry is not a full commit id, or another live session holds the task; with `isolation.requests` on, a [receipt](#receipts) that breaks its rule |
-| `tasks_claim` | The task is blocked, closed, or held by another live claimant; each error names the actual cause |
+| `tasks_add` | A blocker is missing, the new dependency would create a cycle, or the gate breaks the [gate rules](#gates) |
+| `tasks_update` | Nothing was supplied to change, a new dependency is invalid, one id is both added and removed, a `commits` entry is not a full commit id, the gate would break the [gate rules](#gates), one call both edits and clears the gate, `gate_clear` finds no open gate, `gate_note` comes without `gate_clear`, or another live session holds the task; with `isolation.requests` on, a [receipt](#receipts) that breaks its rule |
+| `tasks_claim` | The task is blocked, gated (a gate task, or a step whose own gate is open: `task gated`, naming who and what), closed, or held by another live claimant; each error names the actual cause |
 | `tasks_release` | The acting session is not the holder; force release exists only on the owner console/CLI surface |
 
 An expired claim is not reported as live. Claiming that task by id succeeds at
@@ -116,8 +153,8 @@ would stay in progress for good. A **receipt** closes it: `tasks_update` with
 `status` `done` or `dropped` on a task whose claim, live or lapsed, that
 pre-move session still holds. It may name one `reference`, an item in the new
 home written `<project>:<id>` (a memory, note, task, trial or session there),
-and nothing else: a title, body, project, dependency or commit is refused with
-the rule, and so is a reference that names no item in the home. It sets the
+and nothing else: a title, body, project, dependency, kind, gate or commit is
+refused with the rule, and so is a reference that names no item in the home. It sets the
 status alone, as that pre-move session, and releases the claim. The task's
 `task.transition` record carries `receipt` and `reference` beside `to` and
 `from`, and the answer carries `receipt: true`. A conversation whose home is

@@ -830,6 +830,15 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 		for _, p := range sec.plans {
 			fmt.Fprintf(&rollups, "- %s -- %d/%d done, %d claimable, %d in flight",
 				sanitizeName(p.Slug, 80), p.Done, p.Total, p.Claimable, p.InFlight)
+			// The gates still waiting on people (store.PlanRollup.GatesOpen):
+			// steps no agent can claim until a person acts, named only when
+			// there are some, so a plan without gates reads as it always has.
+			switch {
+			case p.GatesOpen == 1:
+				rollups.WriteString(", 1 gate waiting on people")
+			case p.GatesOpen > 1:
+				fmt.Fprintf(&rollups, ", %d gates waiting on people", p.GatesOpen)
+			}
 			// Momentum's finish-line emphasis: the same qualification and phrase
 			// the Overview card derives (store.PlanRollup), gated by the same
 			// effective feature state, so an agent and the owner read one story.

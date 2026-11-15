@@ -324,9 +324,11 @@ func (s *Service) noteDetail(w http.ResponseWriter, r *http.Request) {
 
 // taskRef is a compact pointer to a related task (a dependency or a dependent).
 type taskRef struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
+	ID     string        `json:"id"`
+	Title  string        `json:"title"`
+	Status string        `json:"status"`
+	Kind   string        `json:"kind,omitempty"` // "gate" for a gate, "" for a step
+	Gate   *taskGateView `json:"gate,omitempty"`
 }
 
 // taskDetail is the payload for a single task's peek/detail. Unlike the Tasks
@@ -364,6 +366,10 @@ type taskDetail struct {
 	// MayContain is the task's provenance stamps, from the index (console
 	// stamp.go).
 	MayContain []core.Stamp `json:"mayContain,omitempty"`
+	// Kind is "gate" for a gate-kind task, "" for a step; Gate is what the
+	// task waits on outside Seamless, open or cleared, nil when nothing.
+	Kind string        `json:"kind,omitempty"`
+	Gate *taskGateView `json:"gate,omitempty"`
 	// Next is where this fragment's owner actions (star, release) return to,
 	// when the surface that fetched it asked for one. Empty leaves each action
 	// on its own default -- the task page or the tasks library.
@@ -388,6 +394,7 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 		Account: t.Account, UpdatedAccount: t.UpdatedAccount,
 		ClaimLive: t.ClaimLive(time.Now().UTC()),
 		Created:   t.CreatedAt, Updated: t.UpdatedAt, Closed: t.ClosedAt,
+		Kind: taskKind(t), Gate: gateView(t),
 	}
 	// Task bodies get the same markdown + wiki-link treatment as memory/note
 	// bodies, scoped to the task's project.
@@ -401,7 +408,8 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 			}
 			return taskDetail{}, derr
 		}
-		d.Deps = append(d.Deps, taskRef{ID: dep.ID, Title: dep.Title, Status: string(dep.Status)})
+		d.Deps = append(d.Deps, taskRef{ID: dep.ID, Title: dep.Title, Status: string(dep.Status),
+			Kind: taskKind(dep), Gate: gateView(dep)})
 	}
 	// A blocker in a locked project this request does not read: the main
 	// handle names its project, never its content (markLockedBlockers).

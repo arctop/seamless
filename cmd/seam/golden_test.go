@@ -38,6 +38,18 @@ const (
 		`{"withheld":"a task in a project this connection may not reach blocks this one"}]}` +
 		`]}`
 	fxReadyEmpty = `{"ready":[],"blocked":[]}`
+	// fxReadyGated is a queue with work waiting on people: a gate and the step
+	// it holds, and a step with an open gate of its own.
+	fxReadyGated = `{"ready":[],"blocked":[],"gated":[` +
+		`{"id":"01KJJJJJJJJJJJJJJJJJJJJJJJ","title":"ship the release","status":"open","blockers":[` +
+		`{"id":"01KKKKKKKKKKKKKKKKKKKKKKKK","title":"GATE sign-off","status":"open","kind":"gate","gate":{"who":"owner","what":"sign the release","open":true}}]},` +
+		`{"id":"01KLLLLLLLLLLLLLLLLLLLLLLL","title":"run the drill","status":"open","gate":{"who":"sitting:security","what":"the sitting runs it","decision":"which week?","open":true}}` +
+		`],"gates":[` +
+		`{"id":"01KKKKKKKKKKKKKKKKKKKKKKKK","title":"GATE sign-off","status":"open","kind":"gate","gate":{"who":"owner","what":"sign the release","open":true}}` +
+		`]}`
+	fxReadyOwner = `{"who":"owner","gates":[` +
+		`{"id":"01KKKKKKKKKKKKKKKKKKKKKKKK","title":"GATE sign-off","status":"open","kind":"gate","gate":{"who":"owner","what":"sign the release","open":true}}` +
+		`],"gated":[]}`
 
 	fxTasks = `{"tasks":[` +
 		`{"id":"01KDDDDDDDDDDDDDDDDDDDDDDD","title":"write the migration","status":"in_progress","body":"details"},` +
@@ -119,8 +131,13 @@ func goldenTools() map[string]toolFunc {
 			return toolReply{text: "tasks_release: task 01KDDDDD is not claimed by this session", isError: true}
 		},
 		"tasks_ready": func(a map[string]any) toolReply {
-			if str(a["plan"]) == "empty-plan" {
+			switch {
+			case str(a["who"]) == "owner":
+				return toolReply{text: fxReadyOwner}
+			case str(a["plan"]) == "empty-plan":
 				return toolReply{text: fxReadyEmpty}
+			case str(a["plan"]) == "gated-plan":
+				return toolReply{text: fxReadyGated}
 			}
 			return toolReply{text: fxReady}
 		},
@@ -189,6 +206,26 @@ var goldenCases = []struct {
 			"      a task in a project this connection may not reach blocks this one\n"},
 	{"ready empty", []string{"ready", "--plan", "empty-plan"}, 0,
 		"ready: (nothing actionable)\n"},
+	{"ready gated", []string{"ready", "--plan", "gated-plan"}, 0,
+		"ready: (nothing actionable)\n" +
+			"waiting on people: 2 gated, 1 gates (--blocked lists them, --who WHO filters)\n"},
+	{"ready gated blocked", []string{"ready", "--plan", "gated-plan", "--blocked"}, 0,
+		"ready: (nothing actionable)\n" +
+			"blocked (0):\n" +
+			"gated (2):\n" +
+			"  01KJJJJJ  ship the release\n" +
+			"      blocked by gate GATE sign-off (owner: sign the release)\n" +
+			"  01KLLLLL  run the drill\n" +
+			"      waits on sitting:security: the sitting runs it\n" +
+			"      decision: which week?\n" +
+			"gates (1):\n" +
+			"  01KKKKKK  GATE sign-off\n" +
+			"      waits on owner: sign the release\n"},
+	{"ready who", []string{"ready", "--who", "owner"}, 0,
+		"gates (1):\n" +
+			"  01KKKKKK  GATE sign-off\n" +
+			"      waits on owner: sign the release\n" +
+			"gated (0):\n"},
 	{"task list", []string{"task", "list"}, 0,
 		"  01KDDDDD  [in_progress] write the migration\n" +
 			"  01KGGGGG  [dropped    ] old idea\n"},

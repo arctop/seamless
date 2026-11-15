@@ -304,7 +304,8 @@ cannot be combined with <code>--json</code> (which prints the console's answer
 untouched). The pair is refused with the equivalent filter:
 <code>seam plan list --json | jq '.rows[] | select(.project == &quot;SLUG&quot;)'</code>.</li>
 <li><code>seam ready --json</code> prints <code>tasks_ready</code>'s answer, which always carries both
-the <code>ready</code> and the <code>blocked</code> lists; <code>--blocked</code> adds nothing to it.</li>
+the <code>ready</code> and the <code>blocked</code> lists, plus <code>gated</code> and <code>gates</code> whenever some
+work waits on people; <code>--blocked</code> adds nothing to it.</li>
 </ul>
 <h2 id="which-session">Which session a command acts in</h2>
 <p>Every MCP request <code>seam</code> makes names the machine it runs on and the agent process
@@ -422,7 +423,7 @@ description. Nothing found prints <code>(no notes)</code>. The limits are recall
 <p>The queue side of the CLI. See <a href="../../reference/mcp/tasks/">Tasks</a> for what ready,
 blocked, and claimed mean.</p>
 <h3 id="seam_ready">seam ready</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam ready <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--blocked<span class="o">]</span> <span class="o">[</span>--plan S<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam ready <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--blocked<span class="o">]</span> <span class="o">[</span>--plan S<span class="o">]</span> <span class="o">[</span>--who WHO <span class="p">|</span> --agent<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span>
 </span></span></code></pre></div>
 <p>Calls <code>tasks_ready</code> and lists the actionable queue by short id and title.
 <code>--blocked</code> additionally lists blocked tasks, each followed by its blockers and
@@ -433,6 +434,13 @@ the remedy is an agent session on the <code>peer_auth</code> socket). <code>--pl
 that plan's step tasks instead of the default queue - plan steps are excluded
 from the default view. Prints <code>ready: (nothing actionable)</code> when the queue is
 empty.</p>
+<p>Work that waits on people (<a href="../../concepts/tasks-and-plans/#gates">gates</a>) is never
+in the ready list. Without <code>--blocked</code>, one line counts it (<code>waiting on people: 2 gated, 1 gates</code>); <code>--blocked</code> lists the gated steps and the gates, each with
+what it waits on (<code>waits on owner: sign the release</code>, or <code>blocked by gate ...</code>
+for a step behind a gate task). <code>--who owner</code> lists only the gates and gated
+steps waiting on the owner (<code>--who founder</code> matches every <code>founder:&lt;name&gt;</code>),
+and <code>--agent</code> only the tasks an agent can work now; neither combines with
+<code>--blocked</code> or the other.</p>
 <h3 id="seam_task_list">seam task list</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam task list <span class="o">[</span>--id ID<span class="o">]</span> <span class="o">[</span>--project P<span class="o">]</span> <span class="o">[</span>--status S<span class="o">]</span> <span class="o">[</span>--plan S<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span>
 </span></span></code></pre></div>

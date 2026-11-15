@@ -17,18 +17,58 @@ Not everything that blocks work belongs in the queue. A task is work someone
 here can claim and finish; a state of the world you wait on - a PR awaiting
 maintainer review, hardware in the mail - is a [`stage` memory](/concepts/memory/)
 instead, which pins into the briefing while it gates rather than sitting in the
-ready queue as forever-claimable work.
+ready queue as forever-claimable work. When the wait holds back particular
+steps, give those steps a [gate](#gates) instead: they then leave the ready
+queue until a person clears it.
 
 ## The ready queue
 
-A task is **ready** when it has no unfinished blocker. `tasks_ready` returns
-exactly those, so an agent asking "what can I do now?" never reasons about the
-dependency graph itself - it asks, and gets an actionable list.
+A task is **ready** when it has no unfinished blocker and no open
+[gate](#gates). `tasks_ready` returns exactly those, so an agent asking "what
+can I do now?" never reasons about the dependency graph itself - it asks, and
+gets an actionable list.
 
 `depends_on` names the tasks that must finish first. Either `done` or `dropped`
 unblocks a dependent: work that was abandoned deliberately should not wedge the
 queue forever. Cycles are rejected at creation, not discovered at scheduling
 time.
+
+## Gates: work that waits on people {#gates}
+
+Some steps cannot go ahead until a person acts, or something happens outside
+Seamless: the owner signs off, a founder picks a name, a security sitting runs
+a drill, hardware arrives. Agents cannot clear those, so a step that waits on
+one should not read as ready. A **gate** says so, in two forms:
+
+- **A step's own gate.** `gate_who` names who must act (`owner`,
+  `founder:<name>`, `sitting:<name>`, `hardware`, `sealed:<project>`, or free
+  text) and `gate_what` what must happen, each one line; `gate_decision` (the
+  open question the person answers) and `gate_ready_when` are optional. While the
+  gate is open the step is not ready and cannot be claimed.
+- **A gate task** (`kind: gate`). One gate that holds many steps: the steps
+  that wait on it depend on it through `depends_on`, as on any blocker. A gate
+  task is never ready and never claimed; its `gate_who` and `gate_what` describe
+  the gate.
+
+When the person has acted, an agent clears the gate with `tasks_update
+gate_clear=true`, optionally with `gate_note` (what they decided). The gate
+keeps who, what and the clearance - when, by which session, the note. A step
+keeps its status, so an open step becomes ready the moment nothing else holds
+it; a gate task closes as `done`, which unblocks every step behind it.
+
+`tasks_ready` lists the work that waits on people apart from the ready queue,
+and only when there is some: `gated` holds the steps whose own gate is open or
+that an open gate blocks, and `gates` the gate tasks, ordered by who must act -
+the people's queue, which an orchestrator can show the owner as one list. Both
+come without bodies; `tasks_list id=<id>` loads one. Two filters narrow the
+answer:
+
+| Call | Answers |
+|---|---|
+| `tasks_ready agent=true` | Only `ready`, with the other groups' sizes under `omitted` - the queue a fan-out dispatches from |
+| `tasks_ready who=owner` | Only the `gates` and `gated` tasks waiting on the owner; `who=founder` matches every `founder:<name>` |
+
+A task without a gate reads and behaves exactly as before.
 
 ## Claiming: the part that makes parallelism safe
 
@@ -132,7 +172,9 @@ Plans:
 ```
 
 That is enough for an agent to decide whether to pick something up, without
-spending briefing budget listing every step.
+spending briefing budget listing every step. A plan with open [gates](#gates)
+says how many wait on people - `- launch -- 3/9 done, 1 claimable, 0 in flight,
+2 gates waiting on people` - and `claimable` never counts a gated step.
 
 ## Claude Code plan mode feeds this automatically
 

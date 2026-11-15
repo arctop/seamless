@@ -238,7 +238,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-ready-queue">The ready queue</a></li><li class="lvl-2"><a href="#claiming-the-part-that-makes-parallelism-safe">Claiming: the part that makes parallelism safe</a></li><li class="lvl-3"><a href="#the-two-clocks">The two clocks</a></li><li class="lvl-2"><a href="#plans-are-a-composition-not-a-primitive">Plans are a composition, not a primitive</a></li><li class="lvl-2"><a href="#claude-code-plan-mode-feeds-this-automatically">Claude Code plan mode feeds this automatically</a></li>
+      <li class="lvl-2"><a href="#the-ready-queue">The ready queue</a></li><li class="lvl-2"><a href="#gates">Gates: work that waits on people</a></li><li class="lvl-2"><a href="#claiming-the-part-that-makes-parallelism-safe">Claiming: the part that makes parallelism safe</a></li><li class="lvl-3"><a href="#the-two-clocks">The two clocks</a></li><li class="lvl-2"><a href="#plans-are-a-composition-not-a-primitive">Plans are a composition, not a primitive</a></li><li class="lvl-2"><a href="#claude-code-plan-mode-feeds-this-automatically">Claude Code plan mode feeds this automatically</a></li>
     </ul>
   </details>
   <p>Seamless gives coding agents a shared task queue that is dependency-aware and
@@ -253,15 +253,65 @@ agent that wrote it.</p>
 here can claim and finish; a state of the world you wait on - a PR awaiting
 maintainer review, hardware in the mail - is a <a href="../../concepts/memory/"><code>stage</code> memory</a>
 instead, which pins into the briefing while it gates rather than sitting in the
-ready queue as forever-claimable work.</p>
+ready queue as forever-claimable work. When the wait holds back particular
+steps, give those steps a <a href="#gates">gate</a> instead: they then leave the ready
+queue until a person clears it.</p>
 <h2 id="the-ready-queue">The ready queue</h2>
-<p>A task is <strong>ready</strong> when it has no unfinished blocker. <code>tasks_ready</code> returns
-exactly those, so an agent asking &quot;what can I do now?&quot; never reasons about the
-dependency graph itself - it asks, and gets an actionable list.</p>
+<p>A task is <strong>ready</strong> when it has no unfinished blocker and no open
+<a href="#gates">gate</a>. <code>tasks_ready</code> returns exactly those, so an agent asking &quot;what
+can I do now?&quot; never reasons about the dependency graph itself - it asks, and
+gets an actionable list.</p>
 <p><code>depends_on</code> names the tasks that must finish first. Either <code>done</code> or <code>dropped</code>
 unblocks a dependent: work that was abandoned deliberately should not wedge the
 queue forever. Cycles are rejected at creation, not discovered at scheduling
 time.</p>
+<h2 id="gates">Gates: work that waits on people</h2>
+<p>Some steps cannot go ahead until a person acts, or something happens outside
+Seamless: the owner signs off, a founder picks a name, a security sitting runs
+a drill, hardware arrives. Agents cannot clear those, so a step that waits on
+one should not read as ready. A <strong>gate</strong> says so, in two forms:</p>
+<ul>
+<li><strong>A step's own gate.</strong> <code>gate_who</code> names who must act (<code>owner</code>,
+<code>founder:&lt;name&gt;</code>, <code>sitting:&lt;name&gt;</code>, <code>hardware</code>, <code>sealed:&lt;project&gt;</code>, or free
+text) and <code>gate_what</code> what must happen, each one line; <code>gate_decision</code> (the
+open question the person answers) and <code>gate_ready_when</code> are optional. While the
+gate is open the step is not ready and cannot be claimed.</li>
+<li><strong>A gate task</strong> (<code>kind: gate</code>). One gate that holds many steps: the steps
+that wait on it depend on it through <code>depends_on</code>, as on any blocker. A gate
+task is never ready and never claimed; its <code>gate_who</code> and <code>gate_what</code> describe
+the gate.</li>
+</ul>
+<p>When the person has acted, an agent clears the gate with <code>tasks_update gate_clear=true</code>, optionally with <code>gate_note</code> (what they decided). The gate
+keeps who, what and the clearance - when, by which session, the note. A step
+keeps its status, so an open step becomes ready the moment nothing else holds
+it; a gate task closes as <code>done</code>, which unblocks every step behind it.</p>
+<p><code>tasks_ready</code> lists the work that waits on people apart from the ready queue,
+and only when there is some: <code>gated</code> holds the steps whose own gate is open or
+that an open gate blocks, and <code>gates</code> the gate tasks, ordered by who must act -
+the people's queue, which an orchestrator can show the owner as one list. Both
+come without bodies; <code>tasks_list id=&lt;id&gt;</code> loads one. Two filters narrow the
+answer:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Answers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tasks_ready agent=true</code></td>
+<td>Only <code>ready</code>, with the other groups' sizes under <code>omitted</code> - the queue a fan-out dispatches from</td>
+</tr>
+<tr>
+<td><code>tasks_ready who=owner</code></td>
+<td>Only the <code>gates</code> and <code>gated</code> tasks waiting on the owner; <code>who=founder</code> matches every <code>founder:&lt;name&gt;</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A task without a gate reads and behaves exactly as before.</p>
 <h2 id="claiming-the-part-that-makes-parallelism-safe">Claiming: the part that makes parallelism safe</h2>
 <p>Two agents that both call <code>tasks_ready</code> see the same task. Both will try to take
 it. Exactly one wins:</p>
@@ -400,7 +450,8 @@ section:</p>
 </span></span><span class="line"><span class="cl">(steps: tasks_ready plan=&lt;slug&gt;; claim: tasks_claim id=&lt;task id&gt;; attach work via the plan:&lt;slug&gt; tag)
 </span></span></code></pre></div>
 <p>That is enough for an agent to decide whether to pick something up, without
-spending briefing budget listing every step.</p>
+spending briefing budget listing every step. A plan with open <a href="#gates">gates</a>
+says how many wait on people - <code>- launch -- 3/9 done, 1 claimable, 0 in flight, 2 gates waiting on people</code> - and <code>claimable</code> never counts a gated step.</p>
 <h2 id="claude-code-plan-mode-feeds-this-automatically">Claude Code plan mode feeds this automatically</h2>
 <p>You do not have to build the composition by hand. Claude Code's plan mode is
 captured:</p>
@@ -431,7 +482,7 @@ visible rather than lost.</li>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-ready-queue">The ready queue</a></li><li class="lvl-2"><a href="#claiming-the-part-that-makes-parallelism-safe">Claiming: the part that makes parallelism safe</a></li><li class="lvl-3"><a href="#the-two-clocks">The two clocks</a></li><li class="lvl-2"><a href="#plans-are-a-composition-not-a-primitive">Plans are a composition, not a primitive</a></li><li class="lvl-2"><a href="#claude-code-plan-mode-feeds-this-automatically">Claude Code plan mode feeds this automatically</a></li>
+      <li class="lvl-2"><a href="#the-ready-queue">The ready queue</a></li><li class="lvl-2"><a href="#gates">Gates: work that waits on people</a></li><li class="lvl-2"><a href="#claiming-the-part-that-makes-parallelism-safe">Claiming: the part that makes parallelism safe</a></li><li class="lvl-3"><a href="#the-two-clocks">The two clocks</a></li><li class="lvl-2"><a href="#plans-are-a-composition-not-a-primitive">Plans are a composition, not a primitive</a></li><li class="lvl-2"><a href="#claude-code-plan-mode-feeds-this-automatically">Claude Code plan mode feeds this automatically</a></li>
     </ul>
   </aside>
   

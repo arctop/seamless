@@ -565,6 +565,9 @@ func parseTemplates() (pages, fragments map[string]*template.Template, err error
 		if name == "settings" {
 			files = append(files, "templates/settings_backups.html")
 		}
+		if name == "tasks" {
+			files = append(files, "templates/task_shared.html")
+		}
 		if entityPeekPages[name] {
 			files = append(files, "templates/peek_"+name+".html")
 		}
@@ -578,7 +581,11 @@ func parseTemplates() (pages, fragments map[string]*template.Template, err error
 	fragments = make(map[string]*template.Template, len(peekNames))
 	for _, name := range peekNames {
 		t := template.New("peek_" + name).Funcs(funcs)
-		t, perr := t.ParseFS(templateFS, "templates/peek_"+name+".html")
+		files := []string{"templates/peek_" + name + ".html"}
+		if name == "task" {
+			files = append(files, "templates/task_shared.html")
+		}
+		t, perr := t.ParseFS(templateFS, files...)
 		if perr != nil {
 			return nil, nil, fmt.Errorf("console: parse peek fragment %s: %w", name, perr)
 		}

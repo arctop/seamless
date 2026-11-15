@@ -94,8 +94,11 @@ type ClaimResult struct {
 // Otherwise it returns an error naming the actual refusal: ErrTaskClaimConflict
 // when another live lease holds the task, ErrTaskBlocked when the task is open
 // with an unfinished dependency (a *TaskBlockedError naming the blockers),
-// ErrTaskClosed when it is done/dropped. Lease expiry is enforced lazily here
-// -- there is no background sweeper. sessionID must be non-empty.
+// ErrTaskClosed when it is done/dropped, ErrTaskGated (a *TaskGatedError) when
+// it waits on people: a gate is never claimed, in any branch, and an open step
+// whose own gate is open is not ready (branch (a) is sqlReady, the queue's own
+// rule). Lease expiry is enforced lazily here -- there is no background
+// sweeper. sessionID must be non-empty.
 //
 // core.Task.ClaimLive is the single authority on whether a task is held, and
 // branches (b)+(c) are exactly its negation for an in_progress row: an empty
@@ -130,12 +133,9 @@ func ClaimTask(ctx context.Context, db *sql.DB, id, sessionID string, lease time
 	res, err := db.ExecContext(ctx, `
 		UPDATE tasks
 		   SET status = 'in_progress', claimed_by = ?, lease_expires_at = ?, updated_at = ?
-		 WHERE id = ?
+		 WHERE id = ? AND kind <> 'gate'
 		   AND (
-		         (status = 'open' AND NOT EXISTS (
-		             SELECT 1 FROM task_deps d
-		             JOIN tasks b ON b.id = d.depends_on
-		             WHERE d.task_id = tasks.id AND b.status IN ('open','in_progress')))
+		         (`+sqlReady("tasks")+`)
 		      OR (status = 'in_progress' AND (
 		             claimed_by = ?
 		          OR claimed_by = ''
@@ -176,11 +176,13 @@ func ClaimTask(ctx context.Context, db *sql.DB, id, sessionID string, lease time
 }
 
 // claimRefusal diagnoses a claim whose compare-and-set missed. The WHERE can
-// miss for three unrelated reasons -- held by a live lease, open but blocked by
-// an unfinished dependency, or already closed -- and the caller's next move is
-// different for each (wait for or steal the lease; finish the blockers; walk
-// away). It re-reads the row rather than trusting the pre-CAS snapshot: on the
-// contended path the snapshot is exactly what a racing winner just invalidated.
+// miss for four unrelated reasons -- held by a live lease, open but blocked by
+// an unfinished dependency, waiting on people (a gate, or an open gate of its
+// own), or already closed -- and the caller's next move is different for each
+// (wait for or steal the lease; finish the blockers; have the person clear the
+// gate; walk away). It re-reads the row rather than trusting the pre-CAS
+// snapshot: on the contended path the snapshot is exactly what a racing winner
+// just invalidated.
 // The diagnosis is advisory, not part of the CAS -- the claim itself already
 // failed atomically, and core.Task.ClaimLive stays the single held/not-held
 // authority here too.
@@ -199,6 +201,10 @@ func claimRefusal(ctx context.Context, db *sql.DB, id string, now time.Time) (co
 	case cur.Status.Closed():
 		return cur, fmt.Errorf("store.ClaimTask: %w: task %q is %s",
 			ErrTaskClosed, id, cur.Status)
+	case cur.IsGate():
+		return cur, &TaskGatedError{TaskID: id, IsGate: true, Gate: cur.Gate}
+	case cur.Status == core.TaskOpen && cur.Gate.Open():
+		return cur, &TaskGatedError{TaskID: id, Gate: cur.Gate}
 	case cur.Status == core.TaskOpen:
 		blockers, err := openBlockersForTasks(ctx, db, []string{id})
 		if err != nil {

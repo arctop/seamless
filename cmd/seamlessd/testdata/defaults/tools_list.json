@@ -998,7 +998,7 @@
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Add a task to the dependency-aware ready queue. depends_on lists task ids that must finish first (done or dropped unblocks); each must exist and must not create a cycle. The task is 'ready' once it has no open/in_progress blocker.",
+      "description": "Add a task to the dependency-aware ready queue. depends_on lists task ids that must finish first (done or dropped unblocks); each must exist and must not create a cycle. The task is 'ready' once it has no open/in_progress blocker and no open gate. A task that waits on a person or an event outside Seamless carries a gate: gate_who and gate_what on the step itself, or a task of kind gate that the waiting steps depend on, so one gate holds many steps and clearing it frees them all.",
       "inputSchema": {
         "properties": {
           "body": {
@@ -1011,6 +1011,30 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "gate_decision": {
+            "description": "optional: the open question the person answers, one line",
+            "type": "string"
+          },
+          "gate_ready_when": {
+            "description": "optional: when the task is ready, one line",
+            "type": "string"
+          },
+          "gate_what": {
+            "description": "what must happen, one line (with gate_who)",
+            "type": "string"
+          },
+          "gate_who": {
+            "description": "who must act before this task can go ahead: owner, founder:<name>, sitting:<name>, hardware, sealed:<project>, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated",
+            "type": "string"
+          },
+          "kind": {
+            "description": "step (the default: work an agent claims and finishes) or gate (a person's action, or an event outside Seamless, that the tasks depending on it wait for: never ready and never claimed; gate_who and gate_what describe it, and clearing it closes it and unblocks its dependents)",
+            "enum": [
+              "step",
+              "gate"
+            ],
+            "type": "string"
           },
           "plan": {
             "description": "optional plan slug (plan:<slug> convention) that composes this task as a step of a plan. Plan steps are excluded from the default ready-queue and surfaced under the plan filter.",
@@ -1043,7 +1067,7 @@
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Atomically claim a task for the current session, moving it to in_progress with a lease. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims.",
+      "description": "Atomically claim a task for the current session, moving it to in_progress with a lease. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), waiting on people ('task gated': a task of kind gate is never claimed, and a step whose own gate is open waits until it is cleared), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims.",
       "inputSchema": {
         "properties": {
           "id": {
@@ -1077,7 +1101,7 @@
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "List a project's tasks, optionally filtered by status, newest first. By default plan-step tasks are excluded; pass plan=<slug> to list that plan's steps instead. Pass id=<task id> to load a single task by its globally-unique id (a direct lookup that ignores project/status/plan and needs no session scope).",
+      "description": "List a project's tasks, optionally filtered by status, newest first. A task that waits on people carries its gate (who, what, and whether it is still open), and a task of kind gate says so. By default plan-step tasks are excluded; pass plan=<slug> to list that plan's steps instead. Pass id=<task id> to load a single task by its globally-unique id (a direct lookup that ignores project/status/plan and needs no session scope).",
       "inputSchema": {
         "properties": {
           "id": {
@@ -1119,9 +1143,13 @@
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "List the actionable (ready) tasks for a project -- open tasks with no unfinished blocker -- oldest first, plus the blocked tasks with their still-open blockers. By default plan-step tasks are excluded; pass plan=<slug> to list that plan's steps instead.",
+      "description": "List the actionable (ready) tasks for a project -- open tasks with no unfinished blocker and no open gate -- oldest first, plus the blocked tasks with their still-open blockers. Work that waits on people is listed apart, without bodies (tasks_list id=<id> loads one), and only when there is some: gated holds the steps whose own gate is open or that an open gate blocks, and gates the tasks of kind gate, ordered by who must act -- the people's queue. agent=true answers ready alone, with the other groups' sizes under omitted; who=<who> answers only the gates and gated tasks waiting on that person. By default plan-step tasks are excluded; pass plan=<slug> to list that plan's steps instead.",
       "inputSchema": {
         "properties": {
+          "agent": {
+            "description": "optional: true answers only the tasks an agent can work now (ready), with the sizes of the groups left out",
+            "type": "boolean"
+          },
           "plan": {
             "description": "optional plan slug: return that plan's ready/blocked step tasks instead of the default (non-plan) queue",
             "type": "string"
@@ -1132,6 +1160,10 @@
           },
           "session": {
             "description": "the session to act as: the name session_start returned, the cc/<id> or cx/<id> on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless",
+            "type": "string"
+          },
+          "who": {
+            "description": "optional: only the gates and gated tasks waiting on this person, e.g. owner; a class before a colon matches every name in it (founder matches founder:dana)",
             "type": "string"
           }
         },
@@ -1177,7 +1209,7 @@
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Update a task: change status (open|in_progress|done|dropped), edit title/body, or add or remove dependencies. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.",
+      "description": "Update a task: change status (open|in_progress|done|dropped), edit title/body, add or remove dependencies, or set, edit or clear its gate. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. Setting any gate_* field (re)opens the gate as it then reads; gate_clear=true clears an open gate once the person has acted, recording when, by this session, and gate_note: a step keeps its status and becomes ready once nothing else holds it, and a task of kind gate closes as done, which unblocks every task that depends on it. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.",
       "inputSchema": {
         "properties": {
           "add_depends_on": {
@@ -1191,8 +1223,40 @@
             "description": "new body (aliases: content, text)",
             "type": "string"
           },
+          "gate_clear": {
+            "description": "true: clear the task's open gate now that the person has acted (not with the gate_* edits)",
+            "type": "boolean"
+          },
+          "gate_decision": {
+            "description": "optional: the open question the person answers, one line",
+            "type": "string"
+          },
+          "gate_note": {
+            "description": "optional, with gate_clear: what the person decided or did, kept with the cleared gate",
+            "type": "string"
+          },
+          "gate_ready_when": {
+            "description": "optional: when the task is ready, one line",
+            "type": "string"
+          },
+          "gate_what": {
+            "description": "what must happen, one line (with gate_who)",
+            "type": "string"
+          },
+          "gate_who": {
+            "description": "who must act before this task can go ahead: owner, founder:<name>, sitting:<name>, hardware, sealed:<project>, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated",
+            "type": "string"
+          },
           "id": {
             "description": "task id",
+            "type": "string"
+          },
+          "kind": {
+            "description": "step (the default: work an agent claims and finishes) or gate (a person's action, or an event outside Seamless, that the tasks depending on it wait for: never ready and never claimed; gate_who and gate_what describe it, and clearing it closes it and unblocks its dependents)",
+            "enum": [
+              "step",
+              "gate"
+            ],
             "type": "string"
           },
           "project": {

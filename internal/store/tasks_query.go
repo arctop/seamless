@@ -1,7 +1,7 @@
 // The task read surface: the ready queue, the blocked list with each task's
 // blockers, and the plain per-project/per-plan listings. "Ready" means open with
-// no blocker still open or in_progress -- one rule, repeated as a NOT EXISTS in
-// each query here and mirrored by ClaimTask's branch (a) and ActivePlans.
+// no blocker still open or in_progress and no open gate -- one rule, sqlReady in
+// tasks_gates.go, which ClaimTask's branch (a) and the plan rollups build on too.
 package store
 
 import (
@@ -13,18 +13,13 @@ import (
 )
 
 // ReadyTasks returns the actionable tasks for a project: open tasks with no
-// blocking dependency still open or in_progress (done/dropped deps do not block).
-// in_progress tasks are excluded (already claimed) but still block their
-// dependents. Ordered oldest-created first, ties broken by id (ULID-monotonic),
-// so the queue is stable and agent-predictable.
+// blocking dependency still open or in_progress (done/dropped deps do not block)
+// and no open gate (a gate-kind task is never ready, and a step whose own gate
+// is open waits for it to clear). in_progress tasks are excluded (already
+// claimed) but still block their dependents. Ordered oldest-created first, ties
+// broken by id (ULID-monotonic), so the queue is stable and agent-predictable.
 func ReadyTasks(ctx context.Context, db *sql.DB, project string) ([]core.Task, error) {
-	rows, err := db.QueryContext(ctx, `SELECT `+taskCols+` FROM tasks t
-		WHERE t.status = 'open' AND t.project_slug = ? AND t.plan_slug = ''
-		  AND NOT EXISTS (
-		      SELECT 1 FROM task_deps d
-		      JOIN tasks b ON b.id = d.depends_on
-		      WHERE d.task_id = t.id AND b.status IN ('open','in_progress'))
-		ORDER BY t.created_at ASC, t.id ASC`, project)
+	rows, err := queueTasks(ctx, db, sqlReady("t"), oldestFirst, queueScope{project: project})
 	if err != nil {
 		return nil, fmt.Errorf("store.ReadyTasks: %w", err)
 	}
@@ -32,16 +27,11 @@ func ReadyTasks(ctx context.Context, db *sql.DB, project string) ([]core.Task, e
 }
 
 // ReadyTasksForPlan returns the ready (claimable) step tasks of one plan in a
-// project: open, unclaimed, with no unfinished blocker. Same readiness rule as
-// ReadyTasks, scoped to plan_slug instead of excluding plan tasks.
+// project: open, unclaimed, with no unfinished blocker and no open gate. Same
+// readiness rule as ReadyTasks, scoped to plan_slug instead of excluding plan
+// tasks.
 func ReadyTasksForPlan(ctx context.Context, db *sql.DB, project, plan string) ([]core.Task, error) {
-	rows, err := db.QueryContext(ctx, `SELECT `+taskCols+` FROM tasks t
-		WHERE t.status = 'open' AND t.project_slug = ? AND t.plan_slug = ?
-		  AND NOT EXISTS (
-		      SELECT 1 FROM task_deps d
-		      JOIN tasks b ON b.id = d.depends_on
-		      WHERE d.task_id = t.id AND b.status IN ('open','in_progress'))
-		ORDER BY t.created_at ASC, t.id ASC`, project, plan)
+	rows, err := queueTasks(ctx, db, sqlReady("t"), oldestFirst, queueScope{project: project, plan: plan})
 	if err != nil {
 		return nil, fmt.Errorf("store.ReadyTasksForPlan: %w", err)
 	}
@@ -51,13 +41,7 @@ func ReadyTasksForPlan(ctx context.Context, db *sql.DB, project, plan string) ([
 // AllReadyTasks returns the ready tasks across every project (see ReadyTasks for
 // the readiness rule), oldest-created first. It backs the console Tasks page.
 func AllReadyTasks(ctx context.Context, db *sql.DB) ([]core.Task, error) {
-	rows, err := db.QueryContext(ctx, `SELECT `+taskCols+` FROM tasks t
-		WHERE t.status = 'open'
-		  AND NOT EXISTS (
-		      SELECT 1 FROM task_deps d
-		      JOIN tasks b ON b.id = d.depends_on
-		      WHERE d.task_id = t.id AND b.status IN ('open','in_progress'))
-		ORDER BY t.created_at ASC, t.id ASC`)
+	rows, err := queueTasks(ctx, db, sqlReady("t"), oldestFirst, queueScope{all: true})
 	if err != nil {
 		return nil, fmt.Errorf("store.AllReadyTasks: %w", err)
 	}
@@ -65,19 +49,10 @@ func AllReadyTasks(ctx context.Context, db *sql.DB) ([]core.Task, error) {
 }
 
 // AllBlockedTasks returns open-but-not-ready tasks across every project, each
-// with its still-open blockers.
+// with its still-open blockers. A task that waits on people is not among them
+// (AllGatedTasks, AllGateTasks).
 func AllBlockedTasks(ctx context.Context, db *sql.DB) ([]BlockedTask, error) {
-	rows, err := db.QueryContext(ctx, `SELECT `+taskCols+` FROM tasks t
-		WHERE t.status = 'open'
-		  AND EXISTS (
-		      SELECT 1 FROM task_deps d
-		      JOIN tasks b ON b.id = d.depends_on
-		      WHERE d.task_id = t.id AND b.status IN ('open','in_progress'))
-		ORDER BY t.created_at ASC, t.id ASC`)
-	if err != nil {
-		return nil, fmt.Errorf("store.AllBlockedTasks: %w", err)
-	}
-	return attachBlockers(ctx, db, rows)
+	return blockedTasks(ctx, db, queueScope{all: true})
 }
 
 // AllTasksByStatus returns every task with the given status across all projects,
@@ -133,33 +108,22 @@ type BlockedTask struct {
 }
 
 // BlockedTasks returns a project's open-but-not-ready tasks, each with its
-// still-open blockers, so a caller can render the dependency chain legibly.
+// still-open blockers, so a caller can render the dependency chain legibly. A
+// task that waits on people -- a gate, a step whose own gate is open, or one
+// an open gate blocks -- is listed by GatedTasks or GateTasks instead.
 func BlockedTasks(ctx context.Context, db *sql.DB, project string) ([]BlockedTask, error) {
-	return blockedTasks(ctx, db, project, false, "")
+	return blockedTasks(ctx, db, queueScope{project: project})
 }
 
 // BlockedTasksForPlan returns a plan's open-but-not-ready step tasks, each with
-// its still-open blockers.
+// its still-open blockers (BlockedTasks' rule).
 func BlockedTasksForPlan(ctx context.Context, db *sql.DB, project, plan string) ([]BlockedTask, error) {
-	return blockedTasks(ctx, db, project, true, plan)
+	return blockedTasks(ctx, db, queueScope{project: project, plan: plan})
 }
 
-// blockedTasks backs BlockedTasks (byPlan=false, non-plan tasks only) and
-// BlockedTasksForPlan (byPlan=true, only the given plan's tasks).
-func blockedTasks(ctx context.Context, db *sql.DB, project string, byPlan bool, plan string) ([]BlockedTask, error) {
-	planClause := ` AND t.plan_slug = ''`
-	args := []any{project}
-	if byPlan {
-		planClause = ` AND t.plan_slug = ?`
-		args = append(args, plan)
-	}
-	rows, err := db.QueryContext(ctx, `SELECT `+taskCols+` FROM tasks t
-		WHERE t.status = 'open' AND t.project_slug = ?`+planClause+`
-		  AND EXISTS (
-		      SELECT 1 FROM task_deps d
-		      JOIN tasks b ON b.id = d.depends_on
-		      WHERE d.task_id = t.id AND b.status IN ('open','in_progress'))
-		ORDER BY t.created_at ASC, t.id ASC`, args...)
+// blockedTasks backs BlockedTasks, BlockedTasksForPlan and AllBlockedTasks.
+func blockedTasks(ctx context.Context, db *sql.DB, scope queueScope) ([]BlockedTask, error) {
+	rows, err := queueTasks(ctx, db, sqlBlocked("t"), oldestFirst, scope)
 	if err != nil {
 		return nil, fmt.Errorf("store.BlockedTasks: %w", err)
 	}

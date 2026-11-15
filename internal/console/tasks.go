@@ -34,6 +34,43 @@ type taskRow struct {
 	// MayContain is the task's provenance stamps, set only where a list shows
 	// them (a project page's came-from filter, camefrom.go).
 	MayContain []core.Stamp `json:"mayContain,omitempty"`
+	// Kind is "gate" for a gate-kind task and "" for a step; Gate is what the
+	// task waits on outside Seamless, nil when nothing.
+	Kind string        `json:"kind,omitempty"`
+	Gate *taskGateView `json:"gate,omitempty"`
+}
+
+// taskGateView is a task's gate as the console shows it (core.TaskGate).
+type taskGateView struct {
+	Who       string     `json:"who"`
+	What      string     `json:"what"`
+	Decision  string     `json:"decision,omitempty"`
+	ReadyWhen string     `json:"readyWhen,omitempty"`
+	Open      bool       `json:"open"`
+	ClearedAt *time.Time `json:"clearedAt,omitempty"`
+	ClearedBy string     `json:"clearedBy,omitempty"`
+	Note      string     `json:"note,omitempty"`
+}
+
+// gateView projects a task's gate, nil when it has none.
+func gateView(t core.Task) *taskGateView {
+	if !t.Gate.Set() {
+		return nil
+	}
+	g := t.Gate
+	return &taskGateView{
+		Who: g.Who, What: g.What, Decision: g.Decision, ReadyWhen: g.ReadyWhen, Open: g.Open(),
+		ClearedAt: g.ClearedAt, ClearedBy: g.ClearedBy, Note: g.Note,
+	}
+}
+
+// taskKind is a task's kind as the console carries it: "gate", or "" for a
+// step (a step reads as every task always has).
+func taskKind(t core.Task) string {
+	if t.IsGate() {
+		return string(core.TaskKindGate)
+	}
+	return ""
 }
 
 // BlockedBy counts every unfinished blocker of the row: the ones it names and
@@ -44,17 +81,38 @@ func (r taskRow) BlockedBy() int { return len(r.Blockers) + len(r.LockedBlockers
 func (r taskRow) LockedIn() []string { return slices.Compact(slices.Clone(r.LockedBlockers)) }
 
 type blocker struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
+	ID     string        `json:"id"`
+	Title  string        `json:"title"`
+	Status string        `json:"status"`
+	Kind   string        `json:"kind,omitempty"`
+	Gate   *taskGateView `json:"gate,omitempty"`
+}
+
+// WaitsOn is who an entry of the people's rails waits on: its own open
+// gate's who, else the who of each open gate blocking it, once each.
+func (r taskRow) WaitsOn() []string {
+	var who []string
+	if r.Gate != nil && r.Gate.Open {
+		who = append(who, r.Gate.Who)
+	}
+	for _, b := range r.Blockers {
+		if b.Kind == string(core.TaskKindGate) && b.Gate != nil && !slices.Contains(who, b.Gate.Who) {
+			who = append(who, b.Gate.Who)
+		}
+	}
+	return who
 }
 
 // tasksData is the payload for the Tasks library screen. Selected drives the
 // HTML reader pane only; JSON callers get the same lean payload as before.
+// Gates (gate-kind tasks, open or in progress: the people's queue) and Gated
+// (steps waiting on people) are present only when they hold something.
 type tasksData struct {
 	Ready      []taskRow `json:"ready"`
 	InProgress []taskRow `json:"inProgress"`
 	Blocked    []taskRow `json:"blocked"`
+	Gates      []taskRow `json:"gates,omitempty"`
+	Gated      []taskRow `json:"gated,omitempty"`
 	Closed     []taskRow `json:"closed"`
 	ClosedMore int       `json:"closedMore"`
 	// Selected is the task open in the reader: the requested one on a
@@ -80,6 +138,16 @@ func (s *Service) tasksPage(ctx context.Context) (tasksData, error) {
 	if err != nil {
 		return tasksData{}, err
 	}
+	gated, err := store.AllGatedTasks(ctx, s.db(ctx))
+	if err != nil {
+		return tasksData{}, err
+	}
+	gates, err := store.AllGateTasks(ctx, s.db(ctx))
+	if err != nil {
+		return tasksData{}, err
+	}
+	// A gate someone marked in progress stays in the people's queue, once.
+	inProgress = slices.DeleteFunc(inProgress, core.Task.IsGate)
 	done, err := store.AllTasksByStatus(ctx, s.db(ctx), core.TaskDone)
 	if err != nil {
 		return tasksData{}, err
@@ -107,6 +175,8 @@ func (s *Service) tasksPage(ctx context.Context) (tasksData, error) {
 		Ready:      taskRows(ready),
 		InProgress: taskRows(inProgress),
 		Blocked:    blockedRows(blocked),
+		Gates:      blockedRows(gates),
+		Gated:      blockedRows(gated),
 		Closed:     taskRows(closed),
 		ClosedMore: closedMore,
 	}
@@ -116,7 +186,8 @@ func (s *Service) tasksPage(ctx context.Context) (tasksData, error) {
 	// The agent-facing ready/blocked queries are deliberately oldest-first for
 	// fair claiming. The console is a review surface: within each open-state rail
 	// group, match the timestamp shown on the row and present newest-created first.
-	for _, bucket := range [][]taskRow{data.Ready, data.InProgress, data.Blocked} {
+	// The people's queue keeps its order: by who must act.
+	for _, bucket := range [][]taskRow{data.Ready, data.InProgress, data.Blocked, data.Gated} {
 		sortTaskRowsNewest(bucket)
 	}
 	return data, nil
@@ -136,19 +207,20 @@ func (s *Service) markLockedBlockers(ctx context.Context, data *tasksData) error
 	if len(locked) == 0 {
 		return nil
 	}
-	ids := make([]string, 0, len(data.Ready)+len(data.Blocked))
-	for _, row := range data.Ready {
-		ids = append(ids, row.ID)
-	}
-	for _, row := range data.Blocked {
-		ids = append(ids, row.ID)
+	ids := make([]string, 0, len(data.Ready)+len(data.Blocked)+len(data.Gated)+len(data.Gates))
+	for _, bucket := range [][]taskRow{data.Ready, data.Blocked, data.Gated, data.Gates} {
+		for _, row := range bucket {
+			ids = append(ids, row.ID)
+		}
 	}
 	by, err := store.OpenBlockerProjects(ctx, s.writeDB(), ids, locked)
 	if err != nil || len(by) == 0 {
 		return err
 	}
-	for i := range data.Blocked {
-		data.Blocked[i].LockedBlockers = by[data.Blocked[i].ID]
+	for _, bucket := range [][]taskRow{data.Blocked, data.Gated, data.Gates} {
+		for i := range bucket {
+			bucket[i].LockedBlockers = by[bucket[i].ID]
+		}
 	}
 	ready := data.Ready[:0]
 	for _, row := range data.Ready {
@@ -188,10 +260,11 @@ func (s *Service) tasks(w http.ResponseWriter, r *http.Request) {
 }
 
 // defaultTaskID picks the reader's default selection on the list URL: the work
-// happening now first, then the ready queue, then blocked, then the newest
-// closed ("" when there are no tasks at all).
+// happening now first, then the ready queue, then blocked, then the work
+// waiting on people, then the newest closed ("" when there are no tasks at
+// all).
 func defaultTaskID(data tasksData) string {
-	for _, bucket := range [][]taskRow{data.InProgress, data.Ready, data.Blocked, data.Closed} {
+	for _, bucket := range [][]taskRow{data.InProgress, data.Ready, data.Blocked, data.Gates, data.Gated, data.Closed} {
 		if len(bucket) > 0 {
 			return bucket[0].ID
 		}
@@ -298,6 +371,7 @@ func taskRows(tasks []core.Task) []taskRow {
 		out = append(out, taskRow{
 			ID: t.ID, Title: t.Title, Project: t.ProjectSlug, Status: string(t.Status),
 			Favorite: t.Favorite, Deps: len(t.DependsOn), Account: t.Account, Created: t.CreatedAt, Closed: t.ClosedAt,
+			Kind: taskKind(t), Gate: gateView(t),
 		})
 	}
 	return out
@@ -310,9 +384,11 @@ func blockedRows(blocked []store.BlockedTask) []taskRow {
 			ID: b.Task.ID, Title: b.Task.Title, Project: b.Task.ProjectSlug,
 			Status: string(b.Task.Status), Favorite: b.Task.Favorite,
 			Deps: len(b.Task.DependsOn), Account: b.Task.Account, Created: b.Task.CreatedAt,
+			Kind: taskKind(b.Task), Gate: gateView(b.Task),
 		}
 		for _, bl := range b.Blockers {
-			row.Blockers = append(row.Blockers, blocker{ID: bl.ID, Title: bl.Title, Status: string(bl.Status)})
+			row.Blockers = append(row.Blockers, blocker{ID: bl.ID, Title: bl.Title, Status: string(bl.Status),
+				Kind: taskKind(bl), Gate: gateView(bl)})
 		}
 		out = append(out, row)
 	}

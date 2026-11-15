@@ -49,20 +49,22 @@ func scanTasksWithDeps(ctx context.Context, db *sql.DB, rows *sql.Rows) ([]core.
 // select only taskCols pass none.
 func scanTask(rows *sql.Rows, lead ...any) (core.Task, error) {
 	var (
-		t                core.Task
-		status           string
-		created, updated string
-		lease, closed    sql.NullString
+		t                     core.Task
+		status, kind          string
+		created, updated      string
+		lease, closed, gateAt sql.NullString
 	)
-	dest := make([]any, 0, len(lead)+15)
+	dest := make([]any, 0, len(lead)+23)
 	dest = append(dest, lead...)
 	dest = append(dest, &t.ID, &t.ProjectSlug, &t.Title, &t.Body, &status,
 		&t.CreatedBy, &t.PlanSlug, &t.ClaimedBy, &lease, &t.Favorite, &created, &updated, &closed,
-		&t.Account, &t.UpdatedAccount)
+		&t.Account, &t.UpdatedAccount,
+		&kind, &t.Gate.Who, &t.Gate.What, &t.Gate.Decision, &t.Gate.ReadyWhen, &gateAt, &t.Gate.ClearedBy, &t.Gate.Note)
 	if err := rows.Scan(dest...); err != nil {
 		return core.Task{}, err
 	}
 	t.Status = core.TaskStatus(status)
+	t.Kind = core.TaskKind(kind)
 	var err error
 	if t.CreatedAt, err = core.ParseTime(created); err != nil {
 		return core.Task{}, fmt.Errorf("created_at: %w", err)
@@ -75,6 +77,9 @@ func scanTask(rows *sql.Rows, lead ...any) (core.Task, error) {
 	}
 	if t.ClosedAt, err = nullTimePtr(closed); err != nil {
 		return core.Task{}, fmt.Errorf("closed_at: %w", err)
+	}
+	if t.Gate.ClearedAt, err = nullTimePtr(gateAt); err != nil {
+		return core.Task{}, fmt.Errorf("gate_cleared_at: %w", err)
 	}
 	return t, nil
 }

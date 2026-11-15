@@ -211,6 +211,41 @@ func TestBriefingPlanFinishLineEmphasis(t *testing.T) {
 		"a plan under the line keeps the plain rollup even with the feature on")
 }
 
+// TestBriefingPlanGatesWaitingOnPeople: a plan's gated steps are not
+// claimable, and the rollup line says how many gates wait on people -- only
+// when there are some, so a plan without gates reads as it always has.
+func TestBriefingPlanGatesWaitingOnPeople(t *testing.T) {
+	db := setupDB(t)
+	ctx := context.Background()
+	require.NoError(t, store.SetSetting(ctx, db, store.SettingRepoProjectMap, `{"/work/seam":"seam"}`))
+	insMem(t, db, "01A", "gotcha", "some-memory", "keeps the briefing non-empty", "seam")
+
+	now := time.Now().UTC()
+	seed := func(plan, title string, kind core.TaskKind, gate core.TaskGate, deps ...string) string {
+		t.Helper()
+		id, err := core.NewID()
+		require.NoError(t, err)
+		require.NoError(t, store.CreateTask(ctx, db, core.Task{
+			ID: id, ProjectSlug: "seam", Title: title, Status: core.TaskOpen,
+			PlanSlug: plan, Kind: kind, Gate: gate, DependsOn: deps, CreatedAt: now, UpdatedAt: now,
+		}))
+		return id
+	}
+	gate := seed("gated", "GATE sign-off", core.TaskKindGate, core.TaskGate{Who: "owner", What: "sign"})
+	seed("gated", "behind the gate", "", core.TaskGate{}, gate)
+	seed("gated", "own gate", "", core.TaskGate{Who: "hardware", What: "the board arrives"})
+	seed("gated", "free", "", core.TaskGate{})
+	seed("single", "own gate", "", core.TaskGate{Who: "owner", What: "approve"})
+	seed("plain", "free", "", core.TaskGate{})
+
+	svc := New(db, nil, budgets(), nil)
+	b, _, err := svc.Briefing(ctx, BriefingInput{CWD: "/work/seam", Source: "startup"})
+	require.NoError(t, err)
+	require.Contains(t, b, "- gated -- 0/4 done, 1 claimable, 0 in flight, 2 gates waiting on people\n")
+	require.Contains(t, b, "- single -- 0/1 done, 0 claimable, 0 in flight, 1 gate waiting on people\n")
+	require.Contains(t, b, "- plain -- 0/1 done, 1 claimable, 0 in flight\n")
+}
+
 func TestBriefingSiblingProjects(t *testing.T) {
 	db := setupDB(t)
 	ctx := context.Background()

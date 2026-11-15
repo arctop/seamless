@@ -82,7 +82,8 @@ Three commands assemble or filter their answer, and say so:
   untouched). The pair is refused with the equivalent filter:
   `seam plan list --json | jq '.rows[] | select(.project == "SLUG")'`.
 - `seam ready --json` prints `tasks_ready`'s answer, which always carries both
-  the `ready` and the `blocked` lists; `--blocked` adds nothing to it.
+  the `ready` and the `blocked` lists, plus `gated` and `gates` whenever some
+  work waits on people; `--blocked` adds nothing to it.
 
 ## Which session a command acts in {#which-session}
 
@@ -247,7 +248,7 @@ blocked, and claimed mean.
 ### seam ready {#seam_ready}
 
 ```bash
-seam ready [--project P] [--blocked] [--plan S] [--json]
+seam ready [--project P] [--blocked] [--plan S] [--who WHO | --agent] [--json]
 ```
 
 Calls `tasks_ready` and lists the actionable queue by short id and title.
@@ -260,6 +261,15 @@ the remedy is an agent session on the `peer_auth` socket). `--plan S` shows
 that plan's step tasks instead of the default queue - plan steps are excluded
 from the default view. Prints `ready: (nothing actionable)` when the queue is
 empty.
+
+Work that waits on people ([gates](/concepts/tasks-and-plans/#gates)) is never
+in the ready list. Without `--blocked`, one line counts it (`waiting on people:
+2 gated, 1 gates`); `--blocked` lists the gated steps and the gates, each with
+what it waits on (`waits on owner: sign the release`, or `blocked by gate ...`
+for a step behind a gate task). `--who owner` lists only the gates and gated
+steps waiting on the owner (`--who founder` matches every `founder:<name>`),
+and `--agent` only the tasks an agent can work now; neither combines with
+`--blocked` or the other.
 
 ### seam task list {#seam_task_list}
 

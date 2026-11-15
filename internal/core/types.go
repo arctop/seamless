@@ -2,6 +2,7 @@ package core
 
 import (
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -373,6 +374,60 @@ func (s TaskStatus) Valid() bool { return slices.Contains(TaskStatuses, s) }
 // Closed reports whether the status is terminal (done or dropped).
 func (s TaskStatus) Closed() bool { return s == TaskDone || s == TaskDropped }
 
+// TaskKind says what a task is: a step (work an agent claims and finishes) or
+// a gate (a person's action, or an event outside Seamless, that the steps
+// depending on it wait for). A gate is never ready and never claimed; a person
+// clears it, which closes it and unblocks its dependents.
+type TaskKind string
+
+const (
+	TaskKindStep TaskKind = "step"
+	TaskKindGate TaskKind = "gate"
+)
+
+// TaskKinds lists every valid task kind.
+var TaskKinds = []TaskKind{TaskKindStep, TaskKindGate}
+
+// Valid reports whether k is a recognized task kind.
+func (k TaskKind) Valid() bool { return slices.Contains(TaskKinds, k) }
+
+// TaskGate is what a task waits on outside Seamless: who must act (the owner,
+// founder:<name>, sitting:<name>, hardware, sealed:<project>, or free text)
+// and what must happen, optionally the open question the person answers and
+// when the task is ready. A task carries one gate at most. The gate is open
+// while Who is set and ClearedAt is nil; clearing it records when, by whom and
+// a note, and leaves the task's status alone (a gate-kind task closes).
+type TaskGate struct {
+	Who       string     `json:"who"`
+	What      string     `json:"what"`
+	Decision  string     `json:"decision,omitempty"`
+	ReadyWhen string     `json:"readyWhen,omitempty"`
+	ClearedAt *time.Time `json:"clearedAt,omitempty"`
+	ClearedBy string     `json:"clearedBy,omitempty"`
+	Note      string     `json:"note,omitempty"`
+}
+
+// Set reports whether the task carries a gate, open or cleared.
+func (g TaskGate) Set() bool { return g.Who != "" }
+
+// Open reports whether the gate still holds the task: set and not cleared.
+func (g TaskGate) Open() bool { return g.Who != "" && g.ClearedAt == nil }
+
+// GateWhoMatches reports whether a gate's who answers a who filter: equal
+// ignoring case, or the filter names the class before a colon ("founder"
+// matches "founder:dana"). An empty filter matches nothing.
+func GateWhoMatches(who, filter string) bool {
+	who, filter = strings.TrimSpace(who), strings.TrimSpace(filter)
+	if filter == "" || who == "" {
+		return false
+	}
+	if strings.EqualFold(who, filter) {
+		return true
+	}
+	class, _, found := strings.Cut(who, ":")
+	return found && !strings.Contains(filter, ":") && strings.EqualFold(strings.TrimSpace(class), filter)
+}
+
 // Task is a unit of work with optional dependency edges. It is "ready" when all
 // of its dependencies are closed.
 //
@@ -394,6 +449,12 @@ type Task struct {
 	LeaseExpiresAt *time.Time `json:"leaseExpiresAt,omitempty"`
 	Favorite       bool       `json:"favorite,omitempty"` // owner/agent star; never bumps UpdatedAt
 	DependsOn      []string   `json:"dependsOn,omitempty"`
+	// Kind is a step or a gate (TaskKind); a row read from the store always
+	// carries one, and "" is a step to every writer. Gate is what the task
+	// waits on outside Seamless, zero when nothing (a gate-kind task always
+	// carries one: it describes the gate).
+	Kind TaskKind `json:"kind,omitempty"`
+	Gate TaskGate `json:"gate,omitzero"`
 	// Account is the restricted local account (peer_auth.restricted) that
 	// created the task, and UpdatedAccount the one whose rewrite of the title
 	// or body the text may still carry (a status flip, a claim or a release
@@ -405,6 +466,15 @@ type Task struct {
 	UpdatedAt      time.Time  `json:"updatedAt"`
 	ClosedAt       *time.Time `json:"closedAt,omitempty"`
 }
+
+// IsGate reports whether the task is a gate rather than a step.
+func (t Task) IsGate() bool { return t.Kind == TaskKindGate }
+
+// HeldByGate reports whether the task itself waits on people: a gate, or a
+// step whose own gate is still open. Neither is ever ready or claimable.
+// (A step can also wait on a gate it depends on; that is its blockers'
+// business, store.GatedTasks.)
+func (t Task) HeldByGate() bool { return t.IsGate() || t.Gate.Open() }
 
 // ClaimLive reports whether the task is actively claimed as of now: in_progress,
 // a non-empty holder, and an unexpired lease. An expired lease is not live (the
@@ -473,7 +543,7 @@ const (
 	EventMemoryFirstReuse EventKind = "memory.first_reuse"         // momentum: a memory's first read by a session other than its writer (payload: name, kind, writer, reader); latched once per memory ever
 	EventProjectStage     EventKind = "project.stage_reached"      // momentum: a project's latched maturity stage advanced (payload: stage, from); minted once per stage per project
 	EventRecordBroken     EventKind = "gamification.record_broken" // gamification: a latched personal record advanced (payload: record, label, n, prev); minted at most once per record per local day
-	EventTaskTransition   EventKind = "task.transition"            // a task changed (payload: to; from, the status before, on every tasks_update; plus created, claimed_by/reclaimed/prior_holder, released, commits_recorded or removed_depends_on as the call set them; receipt and reference for a moved conversation's receipt (isolation.requests))
+	EventTaskTransition   EventKind = "task.transition"            // a task changed (payload: to; from, the status before, on every tasks_update; plus created, claimed_by/reclaimed/prior_holder, released, commits_recorded, removed_depends_on, kind (a task made a gate or a step) or gate (set, cleared or removed) as the call set them; receipt and reference for a moved conversation's receipt (isolation.requests))
 	EventInjected         EventKind = "retrieval.injected"
 	EventGardenerAction   EventKind = "gardener.action"
 	EventToolCall         EventKind = "tool.call"    // MCP tool invocation, logged live by the middleware (also the shape used by import)

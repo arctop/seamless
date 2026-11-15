@@ -238,12 +238,13 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#how-claiming-works">How claiming works</a></li><li class="lvl-2"><a href="#plan-steps-are-not-queue-items">Plan steps are not queue items</a></li><li class="lvl-2"><a href="#changing-a-tasks-blockers">Changing a task&#39;s blockers</a></li><li class="lvl-2"><a href="#results-and-refusal-modes">Results and refusal modes</a></li><li class="lvl-2"><a href="#commit-records">Commit records</a></li><li class="lvl-2"><a href="#receipts">Receipts</a></li><li class="lvl-2"><a href="#tasks_add">tasks_add</a></li><li class="lvl-2"><a href="#tasks_update">tasks_update</a></li><li class="lvl-2"><a href="#tasks_ready">tasks_ready</a></li><li class="lvl-2"><a href="#tasks_list">tasks_list</a></li><li class="lvl-2"><a href="#tasks_claim">tasks_claim</a></li><li class="lvl-2"><a href="#tasks_release">tasks_release</a></li>
+      <li class="lvl-2"><a href="#how-claiming-works">How claiming works</a></li><li class="lvl-2"><a href="#plan-steps-are-not-queue-items">Plan steps are not queue items</a></li><li class="lvl-2"><a href="#gates">Gates</a></li><li class="lvl-2"><a href="#changing-a-tasks-blockers">Changing a task&#39;s blockers</a></li><li class="lvl-2"><a href="#results-and-refusal-modes">Results and refusal modes</a></li><li class="lvl-2"><a href="#commit-records">Commit records</a></li><li class="lvl-2"><a href="#receipts">Receipts</a></li><li class="lvl-2"><a href="#tasks_add">tasks_add</a></li><li class="lvl-2"><a href="#tasks_update">tasks_update</a></li><li class="lvl-2"><a href="#tasks_ready">tasks_ready</a></li><li class="lvl-2"><a href="#tasks_list">tasks_list</a></li><li class="lvl-2"><a href="#tasks_claim">tasks_claim</a></li><li class="lvl-2"><a href="#tasks_release">tasks_release</a></li>
     </ul>
   </details>
   <p>Tasks are how agents hand work to each other. A task is <strong>ready</strong> when it has no
-unfinished blocker; <code>tasks_ready</code> returns exactly those, so an agent asking &quot;what
-can I do now?&quot; never has to reason about the dependency graph itself.</p>
+unfinished blocker and no open gate; <code>tasks_ready</code> returns exactly those, so an
+agent asking &quot;what can I do now?&quot; never has to reason about the dependency graph
+itself.</p>
 <h2 id="how-claiming-works">How claiming works</h2>
 <p>Claiming is the concurrency control. Two agents that both see the same ready task
 will both try to take it, and exactly one wins:</p>
@@ -268,6 +269,39 @@ did not claim; the point is that well-behaved agents do not collide.</p>
 the default <code>tasks_ready</code> and <code>tasks_list</code>. That keeps a twelve-step plan from
 burying the handful of tasks that are actually loose work. Pass <code>plan=&lt;slug&gt;</code> to
 either tool to see that plan's steps instead.</p>
+<h2 id="gates">Gates</h2>
+<p>A task that waits on a person, or on an event outside Seamless, carries a gate
+(<a href="../../../concepts/tasks-and-plans/#gates">Tasks &amp; plans</a> explains the two forms):</p>
+<ul>
+<li><code>tasks_add</code> and <code>tasks_update</code> take <code>gate_who</code> and <code>gate_what</code> (both, one line
+each; <code>gate_who</code> at most 100 characters, the others 500), plus the optional
+<code>gate_decision</code> and <code>gate_ready_when</code>, and <code>kind</code>: <code>step</code> (the default) or
+<code>gate</code>. A task of kind <code>gate</code> must carry a gate. On <code>tasks_update</code>, setting any
+<code>gate_*</code> field (re)opens the gate as it then reads, keeping the fields the
+call does not name; setting <code>gate_who</code> and <code>gate_what</code> to empty strings
+removes a step's gate without clearing it.</li>
+<li><code>tasks_update gate_clear=true</code> clears an open gate, with an optional
+<code>gate_note</code>. It records when, the acting session (<code>cleared_by</code>) and the note.
+A step keeps its status; a task of kind <code>gate</code> closes as <code>done</code> (a
+<code>gate_clear</code> that also asks for another status is refused). Reopening a
+cleared gate task opens its gate again.</li>
+<li>Every task answer carries the gate as <code>gate</code> - <code>who</code>, <code>what</code>, <code>open</code>, the
+optional lines, and once cleared <code>cleared_at</code>, <code>cleared_by</code> and <code>note</code> - and
+a gate task says <code>&quot;kind&quot;: &quot;gate&quot;</code>. A task without a gate carries neither key.</li>
+<li><code>tasks_ready</code> adds <code>gated</code> (steps whose own gate is open, or that an open
+gate blocks) and <code>gates</code> (gate tasks open or in progress, ordered by who) to
+its answer when either holds anything. Their entries come without <code>body</code>, and
+each lists its unfinished blockers; a blocker that is a gate carries its
+<code>kind</code> and <code>gate</code>. <code>agent=true</code> answers <code>ready</code> alone with <code>omitted: {blocked, gated, gates}</code> counts; <code>who=&lt;who&gt;</code> answers only the <code>gates</code> and <code>gated</code> tasks
+waiting on that person (case-insensitive; <code>founder</code> matches <code>founder:dana</code>).
+The two filters cannot be combined, and a blank <code>who</code> is refused.</li>
+<li>The <code>task.transition</code> record of a call that set, cleared or removed a gate
+carries <code>gate: set|cleared|removed</code>, and of one that changed the kind,
+<code>kind</code>.</li>
+</ul>
+<p>A caller outside a confidential project that writes one of its tasks gets no
+gate back, like the rest of the task's content, and a <code>task gated</code> claim
+refusal names no one.</p>
 <h2 id="changing-a-tasks-blockers">Changing a task's blockers</h2>
 <p><code>tasks_update</code> edits an existing task's schedule: <code>add_depends_on</code> adds blockers
 (each must exist and must not create a cycle) and <code>remove_depends_on</code> removes
@@ -316,15 +350,15 @@ withholds, gets the generic words.</p>
 <tbody>
 <tr>
 <td><code>tasks_add</code></td>
-<td>A blocker is missing or the new dependency would create a cycle</td>
+<td>A blocker is missing, the new dependency would create a cycle, or the gate breaks the <a href="#gates">gate rules</a></td>
 </tr>
 <tr>
 <td><code>tasks_update</code></td>
-<td>Nothing was supplied to change, a new dependency is invalid, one id is both added and removed, a <code>commits</code> entry is not a full commit id, or another live session holds the task; with <code>isolation.requests</code> on, a <a href="#receipts">receipt</a> that breaks its rule</td>
+<td>Nothing was supplied to change, a new dependency is invalid, one id is both added and removed, a <code>commits</code> entry is not a full commit id, the gate would break the <a href="#gates">gate rules</a>, one call both edits and clears the gate, <code>gate_clear</code> finds no open gate, <code>gate_note</code> comes without <code>gate_clear</code>, or another live session holds the task; with <code>isolation.requests</code> on, a <a href="#receipts">receipt</a> that breaks its rule</td>
 </tr>
 <tr>
 <td><code>tasks_claim</code></td>
-<td>The task is blocked, closed, or held by another live claimant; each error names the actual cause</td>
+<td>The task is blocked, gated (a gate task, or a step whose own gate is open: <code>task gated</code>, naming who and what), closed, or held by another live claimant; each error names the actual cause</td>
 </tr>
 <tr>
 <td><code>tasks_release</code></td>
@@ -349,15 +383,15 @@ would stay in progress for good. A <strong>receipt</strong> closes it: <code>tas
 <code>status</code> <code>done</code> or <code>dropped</code> on a task whose claim, live or lapsed, that
 pre-move session still holds. It may name one <code>reference</code>, an item in the new
 home written <code>&lt;project&gt;:&lt;id&gt;</code> (a memory, note, task, trial or session there),
-and nothing else: a title, body, project, dependency or commit is refused with
-the rule, and so is a reference that names no item in the home. It sets the
+and nothing else: a title, body, project, dependency, kind, gate or commit is
+refused with the rule, and so is a reference that names no item in the home. It sets the
 status alone, as that pre-move session, and releases the claim. The task's
 <code>task.transition</code> record carries <code>receipt</code> and <code>reference</code> beside <code>to</code> and
 <code>from</code>, and the answer carries <code>receipt: true</code>. A conversation whose home is
 sealed sends none. Off, the argument does not exist. See
 <a href="../../../concepts/project-isolation/#receipts">Project isolation</a>.</p>
 <h2 id="tasks_add">tasks_add</h2>
-<p>Add a task to the dependency-aware ready queue. depends_on lists task ids that must finish first (done or dropped unblocks); each must exist and must not create a cycle. The task is 'ready' once it has no open/in_progress blocker.</p>
+<p>Add a task to the dependency-aware ready queue. depends_on lists task ids that must finish first (done or dropped unblocks); each must exist and must not create a cycle. The task is 'ready' once it has no open/in_progress blocker and no open gate. A task that waits on a person or an event outside Seamless carries a gate: gate_who and gate_what on the step itself, or a task of kind gate that the waiting steps depend on, so one gate holds many steps and clearing it frees them all.</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -388,6 +422,36 @@ sealed sends none. Off, the argument does not exist. See
 <td>task ids this task is blocked by (a comma-separated string is also accepted)</td>
 </tr>
 <tr>
+<td><code>gate_decision</code></td>
+<td>string</td>
+<td>no</td>
+<td>optional: the open question the person answers, one line</td>
+</tr>
+<tr>
+<td><code>gate_ready_when</code></td>
+<td>string</td>
+<td>no</td>
+<td>optional: when the task is ready, one line</td>
+</tr>
+<tr>
+<td><code>gate_what</code></td>
+<td>string</td>
+<td>no</td>
+<td>what must happen, one line (with gate_who)</td>
+</tr>
+<tr>
+<td><code>gate_who</code></td>
+<td>string</td>
+<td>no</td>
+<td>who must act before this task can go ahead: owner, founder:&lt;name&gt;, sitting:&lt;name&gt;, hardware, sealed:&lt;project&gt;, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated</td>
+</tr>
+<tr>
+<td><code>kind</code></td>
+<td>string</td>
+<td>no</td>
+<td>step (the default: work an agent claims and finishes) or gate (a person's action, or an event outside Seamless, that the tasks depending on it wait for: never ready and never claimed; gate_who and gate_what describe it, and clearing it closes it and unblocks its dependents). One of: <code>step</code>, <code>gate</code>.</td>
+</tr>
+<tr>
 <td><code>plan</code></td>
 <td>string</td>
 <td>no</td>
@@ -409,7 +473,7 @@ sealed sends none. Off, the argument does not exist. See
 </table>
 </div>
 <h2 id="tasks_update">tasks_update</h2>
-<p>Update a task: change status (open|in_progress|done|dropped), edit title/body, or add or remove dependencies. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.</p>
+<p>Update a task: change status (open|in_progress|done|dropped), edit title/body, add or remove dependencies, or set, edit or clear its gate. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. Setting any gate_* field (re)opens the gate as it then reads; gate_clear=true clears an open gate once the person has acted, recording when, by this session, and gate_note: a step keeps its status and becomes ready once nothing else holds it, and a task of kind gate closes as done, which unblocks every task that depends on it. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -444,6 +508,48 @@ sealed sends none. Off, the argument does not exist. See
 <td>array</td>
 <td>no</td>
 <td>Full ids of the commits that did this task's work, recorded on the task for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints (git rev-parse HEAD), never an abbreviation. Recording them is an update like any other: a task another session holds refuses it. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record)</td>
+</tr>
+<tr>
+<td><code>gate_clear</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>true: clear the task's open gate now that the person has acted (not with the gate_* edits)</td>
+</tr>
+<tr>
+<td><code>gate_decision</code></td>
+<td>string</td>
+<td>no</td>
+<td>optional: the open question the person answers, one line</td>
+</tr>
+<tr>
+<td><code>gate_note</code></td>
+<td>string</td>
+<td>no</td>
+<td>optional, with gate_clear: what the person decided or did, kept with the cleared gate</td>
+</tr>
+<tr>
+<td><code>gate_ready_when</code></td>
+<td>string</td>
+<td>no</td>
+<td>optional: when the task is ready, one line</td>
+</tr>
+<tr>
+<td><code>gate_what</code></td>
+<td>string</td>
+<td>no</td>
+<td>what must happen, one line (with gate_who)</td>
+</tr>
+<tr>
+<td><code>gate_who</code></td>
+<td>string</td>
+<td>no</td>
+<td>who must act before this task can go ahead: owner, founder:&lt;name&gt;, sitting:&lt;name&gt;, hardware, sealed:&lt;project&gt;, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated</td>
+</tr>
+<tr>
+<td><code>kind</code></td>
+<td>string</td>
+<td>no</td>
+<td>step (the default: work an agent claims and finishes) or gate (a person's action, or an event outside Seamless, that the tasks depending on it wait for: never ready and never claimed; gate_who and gate_what describe it, and clearing it closes it and unblocks its dependents). One of: <code>step</code>, <code>gate</code>.</td>
 </tr>
 <tr>
 <td><code>project</code></td>
@@ -491,7 +597,7 @@ sealed sends none. Off, the argument does not exist. See
 </table>
 </div>
 <h2 id="tasks_ready">tasks_ready</h2>
-<p>List the actionable (ready) tasks for a project -- open tasks with no unfinished blocker -- oldest first, plus the blocked tasks with their still-open blockers. By default plan-step tasks are excluded; pass plan=&lt;slug&gt; to list that plan's steps instead.</p>
+<p>List the actionable (ready) tasks for a project -- open tasks with no unfinished blocker and no open gate -- oldest first, plus the blocked tasks with their still-open blockers. Work that waits on people is listed apart, without bodies (tasks_list id=&lt;id&gt; loads one), and only when there is some: gated holds the steps whose own gate is open or that an open gate blocks, and gates the tasks of kind gate, ordered by who must act -- the people's queue. agent=true answers ready alone, with the other groups' sizes under omitted; who=&lt;who&gt; answers only the gates and gated tasks waiting on that person. By default plan-step tasks are excluded; pass plan=&lt;slug&gt; to list that plan's steps instead.</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -503,6 +609,12 @@ sealed sends none. Off, the argument does not exist. See
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>agent</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>optional: true answers only the tasks an agent can work now (ready), with the sizes of the groups left out</td>
+</tr>
 <tr>
 <td><code>plan</code></td>
 <td>string</td>
@@ -521,11 +633,17 @@ sealed sends none. Off, the argument does not exist. See
 <td>no</td>
 <td>the session to act as: the name session_start returned, the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless</td>
 </tr>
+<tr>
+<td><code>who</code></td>
+<td>string</td>
+<td>no</td>
+<td>optional: only the gates and gated tasks waiting on this person, e.g. owner; a class before a colon matches every name in it (founder matches founder:dana)</td>
+</tr>
 </tbody>
 </table>
 </div>
 <h2 id="tasks_list">tasks_list</h2>
-<p>List a project's tasks, optionally filtered by status, newest first. By default plan-step tasks are excluded; pass plan=&lt;slug&gt; to list that plan's steps instead. Pass id=&lt;task id&gt; to load a single task by its globally-unique id (a direct lookup that ignores project/status/plan and needs no session scope).</p>
+<p>List a project's tasks, optionally filtered by status, newest first. A task that waits on people carries its gate (who, what, and whether it is still open), and a task of kind gate says so. By default plan-step tasks are excluded; pass plan=&lt;slug&gt; to list that plan's steps instead. Pass id=&lt;task id&gt; to load a single task by its globally-unique id (a direct lookup that ignores project/status/plan and needs no session scope).</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -571,7 +689,7 @@ sealed sends none. Off, the argument does not exist. See
 </table>
 </div>
 <h2 id="tasks_claim">tasks_claim</h2>
-<p>Atomically claim a task for the current session, moving it to in_progress with a lease. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims.</p>
+<p>Atomically claim a task for the current session, moving it to in_progress with a lease. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), waiting on people ('task gated': a task of kind gate is never claimed, and a step whose own gate is open waits until it is cleared), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims.</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -661,7 +779,7 @@ sealed sends none. Off, the argument does not exist. See
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#how-claiming-works">How claiming works</a></li><li class="lvl-2"><a href="#plan-steps-are-not-queue-items">Plan steps are not queue items</a></li><li class="lvl-2"><a href="#changing-a-tasks-blockers">Changing a task&#39;s blockers</a></li><li class="lvl-2"><a href="#results-and-refusal-modes">Results and refusal modes</a></li><li class="lvl-2"><a href="#commit-records">Commit records</a></li><li class="lvl-2"><a href="#receipts">Receipts</a></li><li class="lvl-2"><a href="#tasks_add">tasks_add</a></li><li class="lvl-2"><a href="#tasks_update">tasks_update</a></li><li class="lvl-2"><a href="#tasks_ready">tasks_ready</a></li><li class="lvl-2"><a href="#tasks_list">tasks_list</a></li><li class="lvl-2"><a href="#tasks_claim">tasks_claim</a></li><li class="lvl-2"><a href="#tasks_release">tasks_release</a></li>
+      <li class="lvl-2"><a href="#how-claiming-works">How claiming works</a></li><li class="lvl-2"><a href="#plan-steps-are-not-queue-items">Plan steps are not queue items</a></li><li class="lvl-2"><a href="#gates">Gates</a></li><li class="lvl-2"><a href="#changing-a-tasks-blockers">Changing a task&#39;s blockers</a></li><li class="lvl-2"><a href="#results-and-refusal-modes">Results and refusal modes</a></li><li class="lvl-2"><a href="#commit-records">Commit records</a></li><li class="lvl-2"><a href="#receipts">Receipts</a></li><li class="lvl-2"><a href="#tasks_add">tasks_add</a></li><li class="lvl-2"><a href="#tasks_update">tasks_update</a></li><li class="lvl-2"><a href="#tasks_ready">tasks_ready</a></li><li class="lvl-2"><a href="#tasks_list">tasks_list</a></li><li class="lvl-2"><a href="#tasks_claim">tasks_claim</a></li><li class="lvl-2"><a href="#tasks_release">tasks_release</a></li>
     </ul>
   </aside>
   

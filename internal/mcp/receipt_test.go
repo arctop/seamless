@@ -305,7 +305,8 @@ func TestReceipt_OffIsThePreviousBehavior(t *testing.T) {
 	step := r.receiptStep(gOps, "build step")
 	text := r.refused(r.cli, "tasks_update", map[string]any{"id": step, "status": "done", "reference": gOps + ":" + step})
 	require.Equal(t, `tasks_update: unknown parameter "reference": valid parameters are: `+
-		"add_depends_on, body, content, id, project, remove_depends_on, session, session_id, status, text, title", text)
+		"add_depends_on, body, content, gate_clear, gate_decision, gate_note, gate_ready_when, gate_what, gate_who, "+
+		"id, kind, project, remove_depends_on, session, session_id, status, text, title", text)
 	out := r.ok(r.cli, "tasks_update", map[string]any{"id": step, "status": "done"})
 	require.Equal(t, "done", out["status"])
 	require.NotContains(t, out, "receipt")

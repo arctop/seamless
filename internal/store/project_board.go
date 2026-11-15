@@ -29,7 +29,7 @@ type ProjectBoardRow struct {
 	Sessions     int       `json:"sessions"`     // all sessions project_slug = slug (matches GetProjectCounts.Sessions)
 	LiveSessions int       `json:"liveSessions"` // live sessions: active AND updated within core.SessionIdleTTL (matches the Sessions screen)
 	OpenTasks    int       `json:"openTasks"`    // status IN ('open','in_progress') (matches GetProjectCounts.OpenTasks)
-	Blocked      int       `json:"blocked"`      // open tasks with >=1 open/in_progress blocker (== len(BlockedTasks))
+	Blocked      int       `json:"blocked"`      // open tasks that are not ready: an open/in_progress blocker, or waiting on people (a gate, an open gate of its own)
 	Notes        int       `json:"notes"`        // notes project = slug (matches GetProjectCounts.Notes)
 	LastActive   time.Time `json:"lastActive"`   // MAX(sessions.updated_at) for the project; zero when none
 	TokensTotal  int       `json:"tokensTotal"`  // SUM(sessions.total_tokens): real model token burn harvested from transcripts
@@ -124,15 +124,13 @@ func ProjectsWithCounts(ctx context.Context, db *sql.DB, window RetrievalWindow,
 		return nil, fmt.Errorf("store.ProjectsWithCounts: open tasks: %w", err)
 	}
 
-	// Blocked tasks per project: open tasks with >=1 open/in_progress blocker
-	// (same readiness rule as BlockedTasks/AllBlockedTasks).
+	// Blocked tasks per project: open tasks that are not ready -- an
+	// open/in_progress blocker, or waiting on people -- the open tasks the
+	// readiness rule (sqlReady) leaves out: BlockedTasks, GatedTasks and the
+	// open GateTasks together.
 	if err := scanGroupCount(ctx, db, `
 		SELECT t.project_slug, COUNT(*) FROM tasks t
-		WHERE t.status = 'open'
-		  AND EXISTS (
-		      SELECT 1 FROM task_deps d
-		      JOIN tasks b ON b.id = d.depends_on
-		      WHERE d.task_id = t.id AND b.status IN ('open','in_progress'))
+		WHERE t.status = 'open' AND NOT (`+sqlReady("t")+`)
 		GROUP BY t.project_slug`,
 		func(slug string, n int) { row(slug).Blocked = n }); err != nil {
 		return nil, fmt.Errorf("store.ProjectsWithCounts: blocked tasks: %w", err)

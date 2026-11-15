@@ -106,10 +106,12 @@ func TestCommits_OffIsExactlyThePreviousBehavior(t *testing.T) {
 	isErr, txt := callErr(t, ctx, cli, "tasks_update", map[string]any{"id": task, "commits": []any{commitOne}})
 	require.True(t, isErr)
 	require.Contains(t, txt, `tasks_update: unknown parameter "commits": valid parameters are: `+
-		"add_depends_on, body, content, id, project, remove_depends_on, session, session_id, status, text, title")
+		"add_depends_on, body, content, gate_clear, gate_decision, gate_note, gate_ready_when, gate_what, gate_who, "+
+		"id, kind, project, remove_depends_on, session, session_id, status, text, title")
 	isErr, txt = callErr(t, ctx, cli, "tasks_update", map[string]any{"id": task})
 	require.True(t, isErr)
-	require.Contains(t, txt, "nothing to update: pass status, title, body, project, add_depends_on, or remove_depends_on")
+	require.Contains(t, txt, "nothing to update: pass status, title, body, project, add_depends_on, "+
+		"remove_depends_on, kind, gate_who, gate_what, gate_decision, gate_ready_when, or gate_clear")
 	require.NotContains(t, txt, "commits")
 
 	isErr, txt = callErr(t, ctx, cli, "session_end", map[string]any{"findings": "done", "commits": []any{commitOne}})
@@ -151,7 +153,8 @@ func TestCommits_RecordedOnTheSessionAndTheTask(t *testing.T) {
 
 	isErr, txt := callErr(t, ctx, cli, "tasks_update", map[string]any{"id": task})
 	require.True(t, isErr)
-	require.Contains(t, txt, "nothing to update: pass status, title, body, project, add_depends_on, remove_depends_on, or commits")
+	require.Contains(t, txt, "nothing to update: pass status, title, body, project, add_depends_on, "+
+		"remove_depends_on, kind, gate_who, gate_what, gate_decision, gate_ready_when, gate_clear, or commits")
 
 	isErr, txt = callErr(t, ctx, cli, "tasks_update", map[string]any{"id": task, "status": "done", "commits": []any{commitThree, "abc1234"}})
 	require.True(t, isErr)

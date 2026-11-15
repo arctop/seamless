@@ -184,6 +184,8 @@ func TestArgsEnumsDeriveFromCanonicalSets(t *testing.T) {
 		{"project_create.isolation", projectCreateTool, "isolation", asStrings(core.Isolations)},
 		{"tasks_update.status", tasksUpdateTool, "status", asStrings(core.TaskStatuses)},
 		{"tasks_list.status", tasksListTool, "status", asStrings(core.TaskStatuses)},
+		{"tasks_add.kind", tasksAddTool, "kind", asStrings(core.TaskKinds)},
+		{"tasks_update.kind", tasksUpdateTool, "kind", asStrings(core.TaskKinds)},
 		{"gardener_proposals.kind", gardenerProposalsTool, "kind", store.ProposalKinds},
 		{"gardener_apply.action", gardenerApplyTool, "action", gardener.Decisions},
 		{"recall.scope", recallTool, "scope", retrieve.RecallScopes},
