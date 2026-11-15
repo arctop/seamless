@@ -15592,7 +15592,7 @@ update:
 #   # listed. Refused while peer_auth is disabled. File only (no env).
 #   relays: {}
 #   # users is retired: a non-empty users map is refused at load, even while the
-#   # block is disabled. List those projects under locked and remove users (the
+#   # block is disabled. List those projects under force_locked and remove users (the
 #   # peer_auth guide has the steps).
 
 # Project isolation beyond each project's own state (open, confidential or
