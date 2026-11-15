@@ -15,6 +15,28 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.9.0 {#v0-9-0}
+
+Released 2026-11-15 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.9.0)
+
+### Features
+
+- feat(peer_auth): a restricted account's entry may exclude projects, or reach only named ones -- open projects, or one confidential or sealed project alone
+- feat(tasks): task gates, so a step that waits on a person or an event outside Seamless is never listed as ready
+
+### Fixes
+
+- fix(console): a locked hop's unlock link names part of the conversation, not the session page the owner is reading
+- fix(console): a memory's lineage cell and page name its source session, not the session's ULID a bound stamp stores
+- fix(access): every remedy and in-session dialog that names seam approve says a terminal of the owner's own, not `!` in an agent's session, and seam approve run through `!` says why it cannot work there
+- fix(mcp): a grant's notice speaks of the grants as the call leaves them, so a call that replaces a grant never announces the one it replaced, and a grant its dialog approved is announced on that same result
+- fix(mcp): access_request says what an approved grant opened (granted), and a write approved read-only is not told to retry
+- fix(console): a project link naming only the came-from filter opens Memories, where its bar is, not an Overview whose counts it narrows unseen
+- fix(console): a grant's passkey page opened with only a duration still asks read-only or read and write, so the dialog's passkey link never signs read-only by default
+- fix(mcp): a write's grant dialog leads with read-write and says accepting it approves read-only; approved read-only, the write is not told to retry
+- fix(doctor): managed hooks naming a shared client config of the same server (and key, over TCP) are current, and a stale one says why
+- fix(mcp): the passkey page's dialog asks to move into a project for a move, as the form does, never for an access level
+
 ## v0.8.5 {#v0-8-5}
 
 Released 2026-11-14 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.8.5)
