@@ -72,14 +72,27 @@ type unlockData struct {
 	// its approval.
 	TerminalMinutes int `json:"-"`
 	// Item is the kind of item a locked page sent the owner here for (a plan
-	// or a session: lockedItem), Next its page, to open once unlocked; both
-	// empty otherwise.
+	// or a session: lockedItem; a conversation: convUnlock), Next its page,
+	// to open once unlocked; both empty otherwise.
 	Item string `json:"-"`
 	Next string `json:"-"`
 	// ForceLocked says the config file holds this lock; ConsoleLocked says a
 	// lock set from the console does, and the page links to its removal.
 	ForceLocked   bool `json:"force_locked"`
 	ConsoleLocked bool `json:"console_locked"`
+}
+
+// ItemLine says what the owner opened that this project holds. A plan or a
+// session lives in it whole. A conversation does not: its page is a session
+// in a project this browser reads, and only a hop into this project and what
+// the conversation wrote there are in it (P13 follow-up, 2026-11-14: the
+// line read "The session you opened is in this locked project" on a session
+// page the owner had just read).
+func (d unlockData) ItemLine() string {
+	if d.Item == lockedItemConversation {
+		return "Part of the conversation you opened is in this locked project."
+	}
+	return "The " + d.Item + " you opened is in this locked project."
 }
 
 // unlockProject answers the routes that name a project: it must be one
@@ -144,7 +157,7 @@ func (s *Service) unlockPage(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	if item := r.URL.Query().Get("item"); item == lockedItemPlan || item == lockedItemSession {
+	if item := r.URL.Query().Get("item"); item == lockedItemPlan || item == lockedItemSession || item == lockedItemConversation {
 		d.Item = item
 		if next := safeNext(r.URL.Query().Get("next")); next != "/console/" {
 			d.Next = next
@@ -591,9 +604,12 @@ func (s *Service) unlockError(w http.ResponseWriter, r *http.Request, err error)
 }
 
 // The kinds of item a locked page names (lockedItem, the unlock page's item=).
+// A conversation is the conversation card's: a hop into the project, or what
+// the conversation wrote there (convUnlock).
 const (
-	lockedItemPlan    = "plan"
-	lockedItemSession = "session"
+	lockedItemPlan         = "plan"
+	lockedItemSession      = "session"
+	lockedItemConversation = "conversation"
 )
 
 // lockedItem answers a browser page for an item -- a plan, a session -- that

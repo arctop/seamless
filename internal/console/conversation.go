@@ -269,9 +269,11 @@ func convReached(rec store.ConversationRecord) bool {
 }
 
 // convUnlock is the unlock page for a locked project, naming the session page
-// it came from (back) as the way back once this browser unlocks it.
+// it came from (back) as the way back once this browser unlocks it. The item
+// is the conversation, not the session: the page it came from is a session
+// this browser reads, and only part of the conversation is in the project.
 func convUnlock(project, back string) string {
-	return "/console/unlock/" + url.PathEscape(project) + "?item=" + lockedItemSession + "&next=" + url.QueryEscape(back)
+	return "/console/unlock/" + url.PathEscape(project) + "?item=" + lockedItemConversation + "&next=" + url.QueryEscape(back)
 }
 
 // convHops builds the home chain: the moves between the conversation's

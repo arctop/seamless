@@ -341,10 +341,23 @@ func TestConversationPage_LockedHopShowsItsNameAndNothingInside(t *testing.T) {
 	require.Contains(t, hop, approval.ShortID(move.ID), "the move that reached it is named")
 	require.Contains(t, hop, "decided by the terminal (seamlessd approve)")
 	require.Contains(t, hop, `href="/console/access/`+move.ID+`"`, "with its request's page, served under peer_auth")
-	require.Contains(t, hop, `href="/console/unlock/`+lockedSlug+`?item=session&amp;next=%2Fconsole%2Fsessions%2F`+home.ID+`"`)
+	unlockHref := `href="/console/unlock/` + lockedSlug + `?item=conversation&amp;next=%2Fconsole%2Fsessions%2F` + home.ID + `"`
+	require.Contains(t, hop, unlockHref)
 	require.NotContains(t, hop, "conv-session", "no session from inside")
 	require.Contains(t, card, `data-locked-reach="`+lockedSlug+`"`)
 	require.Contains(t, card, `data-locked-out="`+lockedSlug+`"`)
+	require.Contains(t, between(t, card, `data-locked-out="`+lockedSlug+`"`, `<p class="conv-locked-out"`, "</p>"), unlockHref)
+
+	// The page both links open says what is in the project: part of this
+	// conversation, not the session page the owner is reading (P13
+	// follow-up, 2026-11-14: it said "The session you opened is in this
+	// locked project" about a session in an open project).
+	unlockURL := "/console/unlock/" + lockedSlug + "?item=conversation&next=%2Fconsole%2Fsessions%2F" + home.ID
+	status, unlockPage := lc.get(t, unlockURL, "")
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, unlockPage, `data-locked-item="conversation"`)
+	require.Contains(t, unlockPage, "Part of the conversation you opened is in this locked project. Unlock the project in this browser to read it.")
+	require.NotContains(t, unlockPage, "The session you opened")
 	require.NotContains(t, card, `id="conv-w-`+lockedSlug+`"`, "no group of items from inside")
 	require.Contains(t, card, "ops note before the move", "the open side is shown")
 	require.Contains(t, card, "findings of "+home.Name, "and the pre-move session's own findings, in the open project")
@@ -395,6 +408,9 @@ func TestConversationPage_LockedHopShowsItsNameAndNothingInside(t *testing.T) {
 	require.Contains(t, open, "may contain content from example-legal")
 	require.NotContains(t, open, `data-locked-hop=`)
 	require.NotContains(t, open, `data-locked-out=`)
+	// Its unlock page, reached again, links back to the conversation.
+	_, back := lc.get(t, unlockURL, cookie)
+	require.Contains(t, back, `Part of the conversation you opened is in this locked project. <a href="/console/sessions/`+home.ID+`">Open it</a>.`)
 }
 
 // A conversation that never moved, asked for nothing and wrote nothing
