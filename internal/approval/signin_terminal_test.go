@@ -54,7 +54,7 @@ func TestTerminalSignIn_BoundToTheBrowserThatBegan(t *testing.T) {
 func TestTerminalSignIn_RefusesARestrictedAccount(t *testing.T) {
 	_, svc, _ := signinService(t)
 	accounts := map[string]access.Account{"owner": {UID: 501, Name: "owner"}, "example-helper": {UID: 502, Name: "example-helper"}}
-	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"example-helper"}},
+	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted("example-helper")},
 		func(n string) (access.Account, error) { return accounts[n], nil })
 	require.NoError(t, err)
 	v, ok := p.PeerView(502)

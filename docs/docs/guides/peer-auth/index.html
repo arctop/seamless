@@ -238,7 +238,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-3"><a href="#agents-on-another-computer-relays">Agents on another computer: relays</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-3"><a href="#under-peer-auth">Under peer_auth</a></li><li class="lvl-3"><a href="#without-peer-auth-the-advisory-tier">Without peer_auth: the advisory tier</a></li><li class="lvl-3"><a href="#what-the-switch-changes-about-the-binding-limit">What the switch changes about the binding limit</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#restore">Backups and restore</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-3"><a href="#agents-on-another-computer-relays">Agents on another computer: relays</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-3"><a href="#under-peer-auth">Under peer_auth</a></li><li class="lvl-3"><a href="#without-peer-auth-the-advisory-tier">Without peer_auth: the advisory tier</a></li><li class="lvl-3"><a href="#what-the-switch-changes-about-the-binding-limit">What the switch changes about the binding limit</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-3"><a href="#shaping-an-accounts-reach">Shaping an account&#39;s reach</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#restore">Backups and restore</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </details>
   <p><a href="../../concepts/project-isolation/">Project isolation</a> keeps agents working on one
@@ -415,7 +415,9 @@ way in.</p>
 <p>Every key is in <a href="../../reference/configuration/#peer-auth">the configuration reference</a>.</p>
 <p>Checked when the file loads, whether or not <code>enabled</code> is set: <code>force_locked</code> names
 real projects, never the global scope, and none twice; <code>restricted</code> is listed
-only with <code>enabled</code> set, and never names the owner or the same account twice;
+only with <code>enabled</code> set, and never names the owner or the same account twice,
+and an entry's <code>exclude</code> or <code>only</code> (never both) names real projects, never the
+global scope, and none twice, with no key the entry does not have;
 <code>max_lease</code> and <code>passkeys</code> are well formed. With <code>enabled</code> set, also: the owner
 is named, the socket path is absolute and outside <code>data_dir</code>, and the mode is
 octal and keeps owner read and write. <code>relays</code> is listed only with <code>enabled</code> set; each key is a relay's name as the Devices page shows it, and each <code>owner_uid</code> is a uid other than 0.</p>
@@ -423,8 +425,10 @@ octal and keeps owner read and write. <code>relays</code> is listed only with <c
 <ul>
 <li>every account resolves on this machine (macOS role accounts live in the
 directory service, and are found there), and no two entries share a uid;</li>
-<li>every project the block names exists - a misspelled lock would leave the
-project it meant open, which is exactly what this feature exists to prevent;</li>
+<li>every project <code>force_locked</code> names exists - a misspelled lock would leave the
+project it meant open, which is exactly what this feature exists to prevent
+(a misspelled <code>exclude</code> disables that one restricted entry instead, so <code>serve</code>
+still starts: <a href="#shaping-an-accounts-reach">Shaping an account's reach</a>);</li>
 <li>every locked project is <code>confidential</code> or <code>sealed</code>;</li>
 <li>the files would hold too (the next section).</li>
 </ul>
@@ -438,7 +442,9 @@ refused when it loads, even while peer_auth is disabled, with:</p>
 It is gone. List those projects under <code>peer_auth.force_locked</code>, keep each one
 <code>confidential</code> or <code>sealed</code>, delete <code>users</code>, and restart. An account that was
 listed there is then refused at the socket unless you list it under
-<code>peer_auth.restricted</code>, which reaches only open projects that are not locked.</p>
+<code>peer_auth.restricted</code>, which reaches only open projects that are not locked,
+or the narrower set its entry names. A shaped entry narrows that account's
+reach, or gives it one confidential project, and never takes a project from you.</p>
 <h2 id="deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</h2>
 <p><a href="../../reference/cli-seamlessd/#seamlessd_setup"><code>seamlessd setup</code></a> does not turn
 locked projects on yet: on a computer that runs the daemon it offers <strong>Turn on
@@ -1180,7 +1186,8 @@ name or numeric uid:</p>
 <p>What such an account reaches:</p>
 <ul>
 <li>
-<p><strong>Every open project that is not locked</strong>, reading and writing. A project
+<p><strong>Every open project that is not locked</strong>, reading and writing, unless its
+entry shapes that (<a href="#shaping-an-accounts-reach">below</a>). A project
 whose isolation is <code>confidential</code> or <code>sealed</code>, and every locked
 project, is out of its reach and is not listed for it. Its refusal
 reads the same for those projects and for a slug nobody registered, so it
@@ -1318,6 +1325,59 @@ reaches, its refusal at the console's door included - carries <code>actor.accoun
 lists its sessions by that name with <code>account</code>, and gives <code>account</code> to the tasks it
 filed, rewrote or recorded a commit on. Your own frames and entries carry no <code>account</code>
 and look exactly as before.</p>
+<h3 id="shaping-an-accounts-reach">Shaping an account's reach</h3>
+<p>An entry under <code>restricted</code> may be a mapping instead of a name, to keep one
+account out of some open projects, or to give it one confidential project of
+its own and nothing else closed:</p>
+<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">peer_auth</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">restricted</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span>- <span class="l">_example_helper                           </span><span class="w"> </span><span class="c"># every open, unlocked project</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span>- <span class="nt">account</span><span class="p">:</span><span class="w"> </span><span class="l">_example_agent</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">exclude</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">example-pipeline, example-vault]</span><span class="w"> </span><span class="c"># all of those but these two</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span>- <span class="nt">account</span><span class="p">:</span><span class="w"> </span><span class="l">_example_desk</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">only</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">example-desk]                      </span><span class="w"> </span><span class="c"># this one project, read and write</span><span class="w">
+</span></span></span></code></pre></div>
+<ul>
+<li><strong><code>exclude</code></strong> leaves the projects it names out of the plain reach, whatever
+their isolation becomes. Everything else is as above, so a project you create
+or open later is reached at once: <code>exclude</code> fails open for new projects.</li>
+<li><strong><code>only</code></strong> reaches the projects it names and nothing else, so a project you
+create later stays out until you name it: it fails closed, and suits an
+unattended account best. It names either <strong>open projects</strong>, any number, of
+which the account reaches those that are open and not locked; or <strong>one
+confidential or sealed project on its own</strong>, which the account then reads and
+writes while it is not locked, as that project's own sessions do. A reach that
+holds a fenced project holds nothing else, so there is nowhere the account
+could carry its content: a confidential or sealed project listed beside others
+is not reached, and doctor warns. A sealed project's fence also closes the
+global scope to the sessions there, the account's included.</li>
+<li>One entry never sets both, and a key an entry does not have is refused when
+the file loads, with its name and line, so a typo can never widen an account.</li>
+<li>The reach is judged on every request, from the projects' isolation and locks
+at that moment. A lock closes even an <code>only</code> project to the account, since a
+restricted account holds no leases.</li>
+<li>An <code>exclude</code> that names a project that does not exist disables that entry:
+<code>serve</code> logs an error, refuses that account at the socket (403), and serves
+everyone else, and <code>seamlessd doctor</code> fails the row. Correct the slug and
+restart. An <code>only</code> that names a project that does not exist is a warning: the
+account reaches nothing there until you create it.</li>
+<li>Two accounts may name the same project. Naming a project never takes it from
+you: your own agents reach it exactly as before, and you can still lock it
+(which, in this release, also closes it to the account).</li>
+<li>The desk's work lands in its project as an owner session's does: map its clone
+with <code>seamlessd map-repo</code>, as above, and a session it starts there is recorded
+in that project, its writes labeled and its binding rules waiting for you.</li>
+<li>A shaped account reads texts that point it at &quot;the projects project_list
+shows&quot; instead of naming open projects, and its refusals still read the same
+for an excluded, closed or unregistered project. A plain entry's texts are
+unchanged.</li>
+<li>The restricted accounts a relay maps (<code>peer_auth.relays.&lt;relay&gt;.restricted</code>)
+keep the plain reach: shapes are entries under <code>peer_auth.restricted</code> only.</li>
+</ul>
+<p>Doctor prints each shaped entry with what it reaches now, for example
+<code>_example_desk (uid 502): restricted, only [example-desk] -- ... (now example-desk (confidential))</code>. The mapping form is new after v0.8.5: an
+earlier release refuses it when the config loads, so update the daemon before
+you write one.</p>
 <h2 id="verify">Verify</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="c1"># As root or the daemon&#39;s account: the policy, and nothing serve would refuse.</span>
 </span></span><span class="line"><span class="cl">sudo -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd doctor
@@ -1760,7 +1820,7 @@ wherever step 10 put it, is the fallback if anything in the move went wrong.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-3"><a href="#agents-on-another-computer-relays">Agents on another computer: relays</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-3"><a href="#under-peer-auth">Under peer_auth</a></li><li class="lvl-3"><a href="#without-peer-auth-the-advisory-tier">Without peer_auth: the advisory tier</a></li><li class="lvl-3"><a href="#what-the-switch-changes-about-the-binding-limit">What the switch changes about the binding limit</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#restore">Backups and restore</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
+      <li class="lvl-2"><a href="#two-settings-isolation-and-the-lock">Two settings: isolation and the lock</a></li><li class="lvl-3"><a href="#lock-from-the-console-or-force-lock-in-the-file">Lock from the console, or force lock in the file</a></li><li class="lvl-2"><a href="#how-it-decides">How it decides</a></li><li class="lvl-2"><a href="#configure-it">Configure it</a></li><li class="lvl-2"><a href="#deploy-it-the-daemon-runs-as-its-own-account">Deploy it: the daemon runs as its own account</a></li><li class="lvl-2"><a href="#connect-the-owner">Connect the owner</a></li><li class="lvl-2"><a href="#enroll-an-approver">Enroll an approver</a></li><li class="lvl-3"><a href="#the-passkey-origin">The passkey origin</a></li><li class="lvl-2"><a href="#requests">Requests</a></li><li class="lvl-2"><a href="#approve-three-paths-one-core">Approve: three paths, one core</a></li><li class="lvl-2"><a href="#leases-and-the-process-tree">Leases and the process tree</a></li><li class="lvl-3"><a href="#agents-on-another-computer-relays">Agents on another computer: relays</a></li><li class="lvl-2"><a href="#read-grants-and-the-advisory-tier">Read grants and the advisory tier</a></li><li class="lvl-3"><a href="#under-peer-auth">Under peer_auth</a></li><li class="lvl-3"><a href="#without-peer-auth-the-advisory-tier">Without peer_auth: the advisory tier</a></li><li class="lvl-3"><a href="#what-the-switch-changes-about-the-binding-limit">What the switch changes about the binding limit</a></li><li class="lvl-2"><a href="#restricted-local-accounts">Restricted local accounts</a></li><li class="lvl-3"><a href="#shaping-an-accounts-reach">Shaping an account&#39;s reach</a></li><li class="lvl-2"><a href="#verify">Verify</a></li><li class="lvl-2"><a href="#what-changes-with-peer-auth-on">What changes with peer_auth on</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#restore">Backups and restore</a></li><li class="lvl-2"><a href="#limits">Limits</a></li><li class="lvl-2"><a href="#move-an-existing-install-over">Move an existing install over</a></li><li class="lvl-3"><a href="#roll-back">Roll back</a></li>
     </ul>
   </aside>
   

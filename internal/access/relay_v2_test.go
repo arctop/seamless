@@ -19,7 +19,7 @@ import (
 func relay2Policy(t *testing.T) *Policy {
 	t.Helper()
 	p, err := New(config.PeerAuth{
-		Enabled: true, Owner: "owner", ForceLocked: []string{lockFin}, Restricted: []string{"_example_agent"},
+		Enabled: true, Owner: "owner", ForceLocked: []string{lockFin}, Restricted: config.BareRestricted("_example_agent"),
 		Relays: map[string]config.PeerRelay{
 			"example-laptop": {OwnerUID: judgeRelayUID, Restricted: map[string]uint32{"example-agent": 502}},
 			"example-desk":   {OwnerUID: judgeRelayUID},
@@ -173,7 +173,7 @@ func TestRelayV2_RestrictedShape(t *testing.T) {
 			}
 			return restrictedResolve(n)
 		}
-		_, err := New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: tc.restricted, Relays: tc.relays}, resolve)
+		_, err := New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted(tc.restricted...), Relays: tc.relays}, resolve)
 		require.ErrorIs(t, err, ErrInvalidPolicy, name)
 	}
 }

@@ -195,7 +195,7 @@ func (s *Service) refusedNotOwner(w http.ResponseWriter, r *http.Request) bool {
 	// shell), so a restricted account hears access_request's answer there,
 	// not the console's.
 	if acct := access.AccountOf(r.Context()); acct != "" && r.URL.Path == "/console/access/request" {
-		msg = access.RestrictedNoRequests(acct)
+		msg = access.RestrictedNoRequestsFor(r.Context(), acct)
 	}
 	if wantsJSON(r) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": msg})

@@ -37,7 +37,7 @@ func TestPeerAuth_HooksReadNoAgentFiles(t *testing.T) {
 	require.NoError(t, store.AddRepoMapping(ctx, db, "/work/ops", "example-ops"))
 	const agentAccount = "_example_agent"
 	accounts := map[string]access.Account{"owner": {UID: 501, Name: "owner"}, agentAccount: {UID: 470, Name: agentAccount}}
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Restricted: []string{agentAccount}},
+	policy, err := access.New(config.PeerAuth{Owner: "owner", Restricted: config.BareRestricted(agentAccount)},
 		func(n string) (access.Account, error) {
 			if a, ok := accounts[n]; ok {
 				return a, nil

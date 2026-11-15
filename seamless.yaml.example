@@ -507,8 +507,8 @@ update:
 #     connection whose process holds a lease the owner approved; the TCP bearer
 #     key never holds one;
 #   - an account under restricted reaches the open projects that are not locked
-#     and reads -- never writes -- the global scope; any other uid on the socket
-#     is refused (403);
+#     (or the narrower set its entry names) and reads -- never writes -- the
+#     global scope; any other uid on the socket is refused (403);
 #   - the console is the owner's alone, and shows a locked project by name and
 #     counts only until it is unlocked in that browser;
 #   - the daemon reads no agent files (transcripts, plan files): seam hook reads
@@ -575,6 +575,15 @@ update:
 #   # Its writes are labeled with its name, and a constraint, convention,
 #   # protocol or stage it writes is a proposal until you promote it. Refused
 #   # while peer_auth is disabled, and for the owner. File only (no env).
+#   # An entry may instead shape the account's reach (an earlier release than
+#   # the one that added this refuses the form at load):
+#   #   - account: _example_agent
+#   #     exclude: [example-vault]   # every open, unlocked project but these
+#   #   - account: _example_desk
+#   #     only: [example-desk]       # only these: open projects, or one
+#   #                                # confidential or sealed project alone
+#   # exclude and only never appear together. An exclude naming a project that
+#   # does not exist disables that entry (serve still starts; doctor names it).
 #   restricted: []
 #   # Paired relays whose requests are judged as this socket's: each relay's
 #   # name (as the Devices page shows it) to your uid on that computer

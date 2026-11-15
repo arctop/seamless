@@ -31,7 +31,7 @@ func consoleDeployment(cfg config.Config, bind string, tools int, chat bool) con
 		if cfg.PeerAuth.Owner != "" {
 			d.Owner = cfg.PeerAuth.Owner
 		}
-		d.Restricted = slices.Clone(cfg.PeerAuth.Restricted)
+		d.Restricted = config.RestrictedNames(cfg.PeerAuth.Restricted)
 		for _, relay := range slices.Sorted(maps.Keys(cfg.PeerAuth.Relays)) {
 			for _, name := range slices.Sorted(maps.Keys(cfg.PeerAuth.Relays[relay].Restricted)) {
 				d.Restricted = append(d.Restricted, access.RelayAccountLabel(name, relay))

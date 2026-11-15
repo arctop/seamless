@@ -16,7 +16,7 @@ import (
 
 // Restricted local accounts at the knowledge tools (peer_auth.restricted).
 //
-// A restricted account writes the open projects it reaches, and every memory
+// A restricted account writes the projects it reaches, and every memory
 // or note it writes carries its account name (core.Memory.Account,
 // core.Note.Account) for as long as the content may still carry its words
 // (accountAfter). What it cannot do is change what binds every session: a write that

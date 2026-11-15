@@ -524,11 +524,12 @@ type peerLeases struct {
 	// chains walks the owner's process chain even while nothing is locked:
 	// read grants (isolation.requests) under peer_auth are keyed on it.
 	chains bool
-	// open loads every project whose isolation is open (store.OpenProjectSlugs):
-	// a restricted account's reach for one request, from which the View drops
-	// the locked ones. Nil loads none, so such an account reaches only the
-	// global scope, read-only.
-	open func(ctx context.Context) ([]string, error)
+	// reach loads the projects a restricted account's reach is drawn from for
+	// one request (store.ReachProjects): the open ones, and the confidential
+	// or sealed ones a single-project only entry may name. The View applies
+	// the account's rule and drops the locked ones. Nil loads none, so such an
+	// account reaches only the global scope, read-only.
+	reach func(ctx context.Context) (store.RestrictedReachStates, error)
 }
 
 // storeLeases is the daemon's peerLeases: rows from the database, judged
@@ -543,8 +544,8 @@ func storeLeases(db *sql.DB) peerLeases {
 			return store.AccessLeases(rows), nil
 		},
 		now: time.Now,
-		open: func(ctx context.Context) ([]string, error) {
-			return store.OpenProjectSlugs(ctx, db)
+		reach: func(ctx context.Context) (store.RestrictedReachStates, error) {
+			return store.ReachProjects(ctx, db)
 		},
 	}
 }
@@ -564,6 +565,14 @@ func peerHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger, 
 			return
 		}
 		view, known := policy.PeerView(cred.uid)
+		if !known && policy.RestrictedDisabled(cred.uid) {
+			logger.Error("peer_auth: refused a restricted account whose entry is disabled: its exclude names a project "+
+				"that does not exist (seamlessd doctor names it)", "uid", cred.uid)
+			access.NoteRefusal(r.Context(), screening.RefusedPeerUnknown)
+			http.Error(w, fmt.Sprintf("forbidden: uid %d's peer_auth.restricted entry is disabled until the owner corrects it "+
+				"(seamlessd doctor names the cause)", cred.uid), http.StatusForbidden)
+			return
+		}
 		if !known {
 			logger.Warn("peer_auth: refused socket peer", "uid", cred.uid)
 			access.NoteRefusal(r.Context(), screening.RefusedPeerUnknown)
@@ -574,19 +583,20 @@ func peerHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger, 
 			view = leasedView(r.Context(), policy, cred, leases, logger, view)
 		}
 		if view.Principal().Kind == access.KindRestricted {
-			// A restricted account's reach is the projects open right now, judged
-			// per request like a lease. A lookup that fails refuses the request
-			// rather than serving it a reach it would misread as "no projects".
-			var open []string
-			if leases.open != nil {
+			// A restricted account's reach is drawn from the projects' states
+			// right now, judged per request like a lease. A lookup that fails
+			// refuses the request rather than serving it a reach it would
+			// misread as "no projects".
+			var states store.RestrictedReachStates
+			if leases.reach != nil {
 				var err error
-				if open, err = leases.open(r.Context()); err != nil {
+				if states, err = leases.reach(r.Context()); err != nil {
 					logger.Warn("peer_auth: open projects unavailable; refusing a restricted account's request", "uid", cred.uid, "error", err)
 					http.Error(w, "service unavailable: the project list could not be read", http.StatusServiceUnavailable)
 					return
 				}
 			}
-			view = view.WithOpenProjects(open)
+			view = view.WithReach(states.Open, states.Fenced)
 		}
 		ctx := access.WithView(r.Context(), view)
 		if view.Principal().Kind == access.KindOwner {
@@ -657,8 +667,20 @@ func (rt *peerAuthRuntime) logPolicy(logger *slog.Logger) {
 	owner := rt.policy.Owner()
 	logger.Info("peer_auth enabled", "socket", rt.cfg.Socket.Path, "owner", owner.Name, "owner_uid", owner.UID,
 		"locked", strings.Join(rt.policy.OwnerLocked(), ","))
-	for _, a := range rt.policy.RestrictedAccounts() {
-		logger.Info("peer_auth restricted account", "user", a.Name, "uid", a.UID)
+	for _, e := range rt.policy.RestrictedEntries() {
+		attrs := []any{"user", e.Account.Name, "uid", e.Account.UID}
+		if len(e.Exclude) > 0 {
+			attrs = append(attrs, "exclude", strings.Join(e.Exclude, ","))
+		}
+		if len(e.Only) > 0 {
+			attrs = append(attrs, "only", strings.Join(e.Only, ","))
+		}
+		if e.Disabled {
+			logger.Error("peer_auth restricted account disabled: its exclude names a project that does not exist, so serve "+
+				"refuses it until the entry is corrected (seamlessd doctor names it)", attrs...)
+			continue
+		}
+		logger.Info("peer_auth restricted account", attrs...)
 	}
 	for _, name := range slices.Sorted(maps.Keys(rt.cfg.Relays)) {
 		logger.Info("peer_auth relay mapped", "relay", name, "owner_uid", rt.cfg.Relays[name].OwnerUID)

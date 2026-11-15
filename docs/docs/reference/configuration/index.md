@@ -216,6 +216,18 @@ behavior of every earlier release. The guide is
   writes waits for you to promote it
   ([Restricted local accounts](https://thereisnospoon.org/docs/guides/peer-auth/#restricted-local-accounts)).
   Refused while `enabled` is false, and for the owner. File-only.
+
+  An entry may instead be a mapping that shapes the account's reach
+  ([Shaping an account's reach](https://thereisnospoon.org/docs/guides/peer-auth/#shaping-an-accounts-reach)):
+  `{account: <name>, exclude: [<slug>, ...]}` reaches every open, unlocked
+  project but those, and `{account: <name>, only: [<slug>, ...]}` reaches only
+  those - any number of open projects, or one confidential or sealed project on
+  its own, which the account then reads and writes. `exclude` and `only` never
+  appear together, and an unknown key is refused with its name and line. An
+  `exclude` that names a project that does not exist disables that entry alone
+  (serve starts, refuses that account, and doctor fails the row). New after
+  v0.8.5: an earlier release refuses the mapping form when it loads. The
+  restricted accounts a relay maps keep the plain reach.
 - `relays` maps paired relays ([the guide](https://thereisnospoon.org/docs/guides/peer-auth/#agents-on-another-computer-relays)):
   each relay's name as the Devices page shows it, to `owner_uid`, your uid on
   that computer. Through a mapped relay that uid is you, judged as the socket
@@ -420,7 +432,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `peer_auth.passkeys.rp_id` | string | - |
 | `peer_auth.passkeys.origins` | []string | - |
 | `peer_auth.users` | map of string to any | - |
-| `peer_auth.restricted` | []string | - |
+| `peer_auth.restricted` | []config.RestrictedAccount | - |
 | `peer_auth.relays` | map of string to {owner_uid uint32, restricted map of string to uint32} | - |
 | `isolation.requests` | bool | - |
 
@@ -938,8 +950,8 @@ update:
 #     connection whose process holds a lease the owner approved; the TCP bearer
 #     key never holds one;
 #   - an account under restricted reaches the open projects that are not locked
-#     and reads -- never writes -- the global scope; any other uid on the socket
-#     is refused (403);
+#     (or the narrower set its entry names) and reads -- never writes -- the
+#     global scope; any other uid on the socket is refused (403);
 #   - the console is the owner's alone, and shows a locked project by name and
 #     counts only until it is unlocked in that browser;
 #   - the daemon reads no agent files (transcripts, plan files): seam hook reads
@@ -1006,6 +1018,15 @@ update:
 #   # Its writes are labeled with its name, and a constraint, convention,
 #   # protocol or stage it writes is a proposal until you promote it. Refused
 #   # while peer_auth is disabled, and for the owner. File only (no env).
+#   # An entry may instead shape the account's reach (an earlier release than
+#   # the one that added this refuses the form at load):
+#   #   - account: _example_agent
+#   #     exclude: [example-vault]   # every open, unlocked project but these
+#   #   - account: _example_desk
+#   #     only: [example-desk]       # only these: open projects, or one
+#   #                                # confidential or sealed project alone
+#   # exclude and only never appear together. An exclude naming a project that
+#   # does not exist disables that entry (serve still starts; doctor names it).
 #   restricted: []
 #   # Paired relays whose requests are judged as this socket's: each relay's
 #   # name (as the Devices page shows it) to your uid on that computer

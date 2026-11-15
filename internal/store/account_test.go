@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 // account's, as the peer_auth transport builds it.
 func restrictedCtx(t *testing.T, open ...string) context.Context {
 	t.Helper()
-	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"_example_agent"}},
+	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted("_example_agent")},
 		func(name string) (access.Account, error) {
 			if name == "owner" {
 				return access.Account{UID: 501, Name: "owner"}, nil
@@ -170,4 +171,26 @@ func TestOpenProjectSlugs(t *testing.T) {
 	require.Contains(t, got, "example-b")
 	require.NotContains(t, got, "example-conf")
 	require.NotContains(t, got, "example-sealed")
+}
+
+// ReachProjects splits the registered projects into open and fenced, each
+// sorted; a state this build does not know is in neither.
+func TestReachProjects(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	for _, slug := range []string{"example-open", "example-conf", "example-sealed", "example-b", "example-odd"} {
+		_, err := EnsureProject(ctx, db, slug, slug)
+		require.NoError(t, err)
+	}
+	require.NoError(t, SetProjectIsolation(ctx, db, "example-conf", core.IsolationConfidential))
+	require.NoError(t, SetProjectIsolation(ctx, db, "example-sealed", core.IsolationSealed))
+	_, err := db.ExecContext(ctx, `UPDATE projects SET isolation = 'quarantined' WHERE slug = 'example-odd'`)
+	require.NoError(t, err)
+	got, err := ReachProjects(ctx, db)
+	require.NoError(t, err)
+	require.Contains(t, got.Open, "example-open")
+	require.Contains(t, got.Open, "example-b")
+	require.Equal(t, []string{"example-conf", "example-sealed"}, got.Fenced)
+	require.NotContains(t, got.Open, "example-odd")
+	require.True(t, slices.IsSorted(got.Open))
 }

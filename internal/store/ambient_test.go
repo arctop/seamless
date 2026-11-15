@@ -195,7 +195,7 @@ func reviveCallers(t *testing.T) map[string]context.Context {
 	t.Helper()
 	uids := map[string]uint32{"owner": 501, "_example_agent": 502, "_example_peer": 503}
 	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner",
-		ForceLocked: []string{"example-locked"}, Restricted: []string{"_example_agent", "_example_peer"}},
+		ForceLocked: []string{"example-locked"}, Restricted: config.BareRestricted("_example_agent", "_example_peer")},
 		func(name string) (access.Account, error) {
 			uid, ok := uids[name]
 			if !ok {

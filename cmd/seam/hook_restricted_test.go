@@ -27,7 +27,7 @@ func TestRunHook_RestrictedAccountOnTheSocketNeedsNoKey(t *testing.T) {
 	const acct = "_example_agent"
 	f := newCaptureFixture(t)
 	d := captureDaemon(t, f)
-	policy, err := access.New(config.PeerAuth{Owner: "owner", Restricted: []string{acct}},
+	policy, err := access.New(config.PeerAuth{Owner: "owner", Restricted: config.BareRestricted(acct)},
 		func(n string) (access.Account, error) {
 			switch n {
 			case "owner":

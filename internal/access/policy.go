@@ -75,6 +75,13 @@ type Policy struct {
 	// restricted is peer_auth.restricted: the restricted local accounts, by
 	// uid (restricted.go).
 	restricted map[uint32]Account
+	// rules is the shape of each restricted account's reach that has one (an
+	// exclude or only list), by uid; an account with no entry here has the
+	// plain reach. A relay's accounts never have one (RelayChainViewNamed).
+	rules map[uint32]reachRule
+	// disabled is the restricted accounts serve refuses at the door: an entry
+	// whose exclude names a project that does not exist (WithDisabled).
+	disabled map[uint32]bool
 	// relays is peer_auth.relays: each mapped relay's computer, by the relay's
 	// enrolled name (RelayChainView).
 	relays map[string]relayPolicy
@@ -130,6 +137,7 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 		owner:       owner,
 		ownerLocked: map[string]bool{},
 		restricted:  map[uint32]Account{},
+		rules:       map[uint32]reachRule{},
 		relays:      map[string]relayPolicy{},
 	}
 	for name, r := range cfg.Relays {
@@ -187,9 +195,17 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 
 // resolveRestricted resolves peer_auth.restricted. Every entry must resolve, and
 // none may be the owner's uid or a uid listed twice (a numeric entry and a name
-// can name one account): one uid carries one reach.
+// can name one account): one uid carries one reach. An entry's shape was
+// checked at load; a block that did not come through one is held to the two
+// rules whose breach would widen the account: never exclude and only together,
+// and never an only that names nothing.
 func (p *Policy) resolveRestricted(cfg config.PeerAuth, resolve Resolver) error {
-	for _, name := range cfg.Restricted {
+	for _, e := range cfg.Restricted {
+		name := e.Account
+		if len(e.Exclude) > 0 && len(e.Only) > 0 || e.Only != nil && len(e.Only) == 0 {
+			return fmt.Errorf("%w: peer_auth.restricted %s: an entry sets exclude or only, never both, and an only list names a project",
+				ErrInvalidPolicy, name)
+		}
 		acct, err := resolve(strings.TrimSpace(name))
 		if err != nil {
 			return fmt.Errorf("%w: peer_auth.restricted %s: %w", ErrInvalidPolicy, name, err)
@@ -201,6 +217,9 @@ func (p *Policy) resolveRestricted(cfg config.PeerAuth, resolve Resolver) error 
 			return fmt.Errorf("%w: peer_auth.restricted lists uid %d twice (%s and %s): name each account once", ErrInvalidPolicy, acct.UID, prev.Name, name)
 		}
 		p.restricted[acct.UID] = acct
+		if e.Shaped() {
+			p.rules[acct.UID] = newReachRule(e)
+		}
 	}
 	return nil
 }
@@ -281,7 +300,7 @@ func (p *Policy) RelayChainView(relay, name string, uid uint32, chain []ProcessT
 // on a socket (Principal.Socket) a relay authenticated (Principal.Relay). A
 // uid the relay's restricted list names is that restricted account, labeled
 // with its name and the relay's (RelayAccountLabel), with no reach until the
-// transport fills it per request (WithOpenProjects), and no chain: like a
+// transport fills it per request (WithReach), and no chain: like a
 // restricted account on this machine's socket, it holds no lease, grant or
 // request. ok is false for a relay the policy does not map and for any other
 // uid: such a request is refused before any route runs, never served as the
@@ -348,8 +367,8 @@ func (p *Policy) PeerView(uid uint32) (View, bool) {
 	if uid == p.owner.UID {
 		return View{policy: p, who: Principal{Kind: KindOwner, UID: uid, HasUID: true, User: p.owner.Name, Socket: true}}, true
 	}
-	if acct, ok := p.restricted[uid]; ok {
-		// No reach yet: the transport fills it per request (WithOpenProjects).
+	if acct, ok := p.restricted[uid]; ok && !p.disabled[uid] {
+		// No reach yet: the transport fills it per request (WithReach).
 		return View{policy: p, acct: acct, who: Principal{Kind: KindRestricted, UID: uid, HasUID: true, User: acct.Name, Socket: true}}, true
 	}
 	return View{}, false

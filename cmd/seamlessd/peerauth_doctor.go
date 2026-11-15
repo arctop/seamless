@@ -56,10 +56,22 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 			"that holds no lease the owner approved (the TCP bearer key never holds one)", strings.Join(locked, ", "), strings.Join(policy.ForceLocked(), ", "))})
 		out = append(out, approverCheck(ctx, db, runtime.GOOS))
 	}
-	for _, a := range policy.RestrictedAccounts() {
-		out = append(out, check{statusOK, "peer_auth.restricted", fmt.Sprintf("%s (uid %d): restricted -- the socket only; "+
-			"reads and writes every open project that is not locked, reads global; its writes are labeled with its name, "+
-			"and its constraints, conventions, protocols and stages wait for the owner's promotion", a.Name, a.UID)})
+	for _, e := range policy.RestrictedEntries() {
+		row, rerr := restrictedRow(ctx, db, policy, e)
+		if rerr != nil {
+			out = append(out, check{statusFail, "peer_auth.restricted", "projects: " + rerr.Error()})
+			continue
+		}
+		out = append(out, row)
+	}
+	if db != nil {
+		findings, ferr := restrictedReachFindings(ctx, db, policy)
+		if ferr != nil {
+			out = append(out, check{statusFail, "peer_auth.restricted", "projects: " + ferr.Error()})
+		}
+		for _, f := range findings {
+			out = append(out, check{f.status, "peer_auth.restricted", f.text})
+		}
 	}
 	rt := &peerAuthRuntime{policy: policy, cfg: pa, env: env}
 	for _, w := range rt.restrictedReachWarnings() {

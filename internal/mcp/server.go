@@ -177,10 +177,21 @@ const restrictedWriteScopeHelp = "this connection is restricted account %s: it w
 	"that already exist -- an unknown slug is refused, never created -- and the global scope is read-only for it, " +
 	"so name one of the projects below with project=<slug>"
 
+// shapedWriteScopeHelp is restrictedWriteScopeHelp for a restricted account
+// whose entry shapes its reach (access.ReachShaped): it names no isolation
+// state, as every text such an account reads (decision B-D9).
+const shapedWriteScopeHelp = "this connection is restricted account %s: it writes only into the projects " +
+	"project_list shows -- an unknown slug is refused, never created -- and never into the global scope, " +
+	"so name one of the projects below with project=<slug>"
+
 // writeScopeHelpFor is the scope-error help for the caller in ctx:
-// writeScopeHelp, or restrictedWriteScopeHelp for a restricted account.
+// writeScopeHelp, or restrictedWriteScopeHelp (shapedWriteScopeHelp) for a
+// restricted account.
 func writeScopeHelpFor(ctx context.Context) string {
 	if account := access.AccountOf(ctx); account != "" {
+		if access.ReachShaped(ctx) {
+			return fmt.Sprintf(shapedWriteScopeHelp, account)
+		}
 		return fmt.Sprintf(restrictedWriteScopeHelp, account)
 	}
 	return writeScopeHelp

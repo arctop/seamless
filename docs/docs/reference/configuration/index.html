@@ -426,17 +426,26 @@ you approve an agent's access. It is off by default, and off is exactly the
 behavior of every earlier release. The guide is
 <a href="../../guides/peer-auth/">Lock projects behind your approval</a>; in short:</p>
 <ul>
-<li><code>enabled</code> (<code>SEAMLESS_PEER_AUTH_ENABLED</code>) switches it on.</li>
-<li><code>owner</code> (<code>SEAMLESS_PEER_AUTH_OWNER</code>) is the OS account - a user name or a
+<li>
+<p><code>enabled</code> (<code>SEAMLESS_PEER_AUTH_ENABLED</code>) switches it on.</p>
+</li>
+<li>
+<p><code>owner</code> (<code>SEAMLESS_PEER_AUTH_OWNER</code>) is the OS account - a user name or a
 numeric uid - the TCP bearer key stands for, and whose socket connections act
-as the owner. Required when enabled.</li>
-<li><code>socket.path</code> (<code>SEAMLESS_PEER_AUTH_SOCKET_PATH</code>) is the socket's absolute path,
-outside <code>data_dir</code>. Required when enabled.</li>
-<li><code>socket.mode</code> (<code>SEAMLESS_PEER_AUTH_SOCKET_MODE</code>) is its permission bits in
+as the owner. Required when enabled.</p>
+</li>
+<li>
+<p><code>socket.path</code> (<code>SEAMLESS_PEER_AUTH_SOCKET_PATH</code>) is the socket's absolute path,
+outside <code>data_dir</code>. Required when enabled.</p>
+</li>
+<li>
+<p><code>socket.mode</code> (<code>SEAMLESS_PEER_AUTH_SOCKET_MODE</code>) is its permission bits in
 octal, default <code>0666</code>: every local account may knock, and the kernel still
 names each one. <code>socket.group</code> (<code>SEAMLESS_PEER_AUTH_SOCKET_GROUP</code>) hands the
-socket to a group, for a mode such as <code>0660</code>.</li>
-<li><code>force_locked</code> lists force-locked projects: locks only this file can remove.
+socket to a group, for a mode such as <code>0660</code>.</p>
+</li>
+<li>
+<p><code>force_locked</code> lists force-locked projects: locks only this file can remove.
 The console can set and remove locks of its own with a passkey, but it can
 never change one listed here. Each locked project is closed to every owner
 request - its name shows, its content does not, writes are refused - unless the
@@ -445,14 +454,20 @@ approved. The TCP bearer key never holds one. The lock is not the <code>sealed</
 isolation state (which says what flows in and out of a project): a locked
 project is normally <code>confidential</code>, and <code>serve</code> refuses a force-locked one that
 is <code>open</code>. File-only. <code>locked</code>, this key's earlier name, still loads, and
-<code>seamlessd doctor</code> warns until it is renamed.</li>
-<li><code>users</code> is a retired key. A config that sets it to a non-empty map is refused
+<code>seamlessd doctor</code> warns until it is renamed.</p>
+</li>
+<li>
+<p><code>users</code> is a retired key. A config that sets it to a non-empty map is refused
 when it loads, even while the block is disabled, with a message that says
 to list the projects under <code>force_locked</code> and remove <code>users</code>
-(<a href="../../guides/peer-auth/#configure-it">the guide</a> has it word for word).</li>
-<li><code>max_lease</code> caps every lease the owner approves on a locked project, &quot;until
-this session ends&quot; included: at most <code>24h</code>, unset <code>8h</code>. File-only.</li>
-<li><code>restricted</code> lists restricted local accounts, each an OS user name or a
+(<a href="../../guides/peer-auth/#configure-it">the guide</a> has it word for word).</p>
+</li>
+<li>
+<p><code>max_lease</code> caps every lease the owner approves on a locked project, &quot;until
+this session ends&quot; included: at most <code>24h</code>, unset <code>8h</code>. File-only.</p>
+</li>
+<li>
+<p><code>restricted</code> lists restricted local accounts, each an OS user name or a
 numeric uid: a second account on the machine whose agents work beside
 yours. It connects over the socket only - the kernel names it, and it never
 holds the bearer key - and reaches every project that is <code>open</code> and not
@@ -461,14 +476,29 @@ create a project, files no access requests and holds no leases. Its writes
 are labeled with its name, and a constraint, convention, protocol or stage it
 writes waits for you to promote it
 (<a href="../../guides/peer-auth/#restricted-local-accounts">Restricted local accounts</a>).
-Refused while <code>enabled</code> is false, and for the owner. File-only.</li>
-<li><code>relays</code> maps paired relays (<a href="../../guides/peer-auth/#agents-on-another-computer-relays">the guide</a>):
+Refused while <code>enabled</code> is false, and for the owner. File-only.</p>
+<p>An entry may instead be a mapping that shapes the account's reach
+(<a href="../../guides/peer-auth/#shaping-an-accounts-reach">Shaping an account's reach</a>):
+<code>{account: &lt;name&gt;, exclude: [&lt;slug&gt;, ...]}</code> reaches every open, unlocked
+project but those, and <code>{account: &lt;name&gt;, only: [&lt;slug&gt;, ...]}</code> reaches only
+those - any number of open projects, or one confidential or sealed project on
+its own, which the account then reads and writes. <code>exclude</code> and <code>only</code> never
+appear together, and an unknown key is refused with its name and line. An
+<code>exclude</code> that names a project that does not exist disables that entry alone
+(serve starts, refuses that account, and doctor fails the row). New after
+v0.8.5: an earlier release refuses the mapping form when it loads. The
+restricted accounts a relay maps keep the plain reach.</p>
+</li>
+<li>
+<p><code>relays</code> maps paired relays (<a href="../../guides/peer-auth/#agents-on-another-computer-relays">the guide</a>):
 each relay's name as the Devices page shows it, to <code>owner_uid</code>, your uid on
 that computer. Through a mapped relay that uid is you, judged as the socket
 is. An optional <code>restricted: {&lt;name&gt;: &lt;uid&gt;}</code> names that computer's restricted
 accounts, labeled <code>&lt;name&gt;@&lt;relay&gt;</code>. Any other uid is refused, and so is every
-request of an unmapped relay. Refused while <code>enabled</code> is false. File-only.</li>
-<li><code>passkeys.rp_id</code> and <code>passkeys.origins</code> name the WebAuthn relying party of
+request of an unmapped relay. Refused while <code>enabled</code> is false. File-only.</p>
+</li>
+<li>
+<p><code>passkeys.rp_id</code> and <code>passkeys.origins</code> name the WebAuthn relying party of
 the owner's approver passkeys (<a href="../../reference/cli-seamlessd/#seamlessd_approvers">seamlessd approvers</a>).
 Unset, a TLS install whose <code>server_url</code> names a host uses that exact host as
 <code>rp_id</code> and its https address as the origin; any other install uses
@@ -477,7 +507,8 @@ name, never an IP address; each origin is https, or http on localhost, on
 <code>rp_id</code> or a subdomain of it. A passkey is bound to its <code>rp_id</code> for life:
 changing it, or the <code>server_url</code> it was derived from, strands every passkey
 enrolled under the old one, and <code>seamlessd doctor</code> and the daemon's log name
-the ones it strands. File-only.</li>
+the ones it strands. File-only.</p>
+</li>
 </ul>
 <p>A client of such a daemon names the socket as its <code>server_url</code>:
 <code>unix:///absolute/path.sock</code>. It needs no <code>mcp.api_key</code>, and its hooks and MCP
@@ -1030,7 +1061,7 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </tr>
 <tr>
 <td><code>peer_auth.restricted</code></td>
-<td>[]string</td>
+<td>[]config.RestrictedAccount</td>
 <td>-</td>
 </tr>
 <tr>
@@ -1557,8 +1588,8 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c">#     connection whose process holds a lease the owner approved; the TCP bearer</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#     key never holds one;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   - an account under restricted reaches the open projects that are not locked</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#     and reads -- never writes -- the global scope; any other uid on the socket</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="c">#     is refused (403);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     (or the narrower set its entry names) and reads -- never writes -- the</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#     global scope; any other uid on the socket is refused (403);</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   - the console is the owner&#39;s alone, and shows a locked project by name and</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#     counts only until it is unlocked in that browser;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   - the daemon reads no agent files (transcripts, plan files): seam hook reads</span><span class="w">
@@ -1625,6 +1656,15 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # Its writes are labeled with its name, and a constraint, convention,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # protocol or stage it writes is a proposal until you promote it. Refused</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # while peer_auth is disabled, and for the owner. File only (no env).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # An entry may instead shape the account&#39;s reach (an earlier release than</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # the one that added this refuses the form at load):</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   #   - account: _example_agent</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   #     exclude: [example-vault]   # every open, unlocked project but these</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   #   - account: _example_desk</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   #     only: [example-desk]       # only these: open projects, or one</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   #                                # confidential or sealed project alone</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # exclude and only never appear together. An exclude naming a project that</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # does not exist disables that entry (serve still starts; doctor names it).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   restricted: []</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # Paired relays whose requests are judged as this socket&#39;s: each relay&#39;s</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # name (as the Devices page shows it) to your uid on that computer</span><span class="w">

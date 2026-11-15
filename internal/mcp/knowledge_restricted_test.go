@@ -108,7 +108,7 @@ func newKARig(t *testing.T, o kaOpts) *kaRig {
 	}
 	require.NoError(t, store.SetProjectIsolation(ctx, db, kaConf, core.IsolationConfidential))
 
-	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{kaAccount}},
+	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted(kaAccount)},
 		func(name string) (access.Account, error) {
 			switch name {
 			case "owner":

@@ -3,8 +3,11 @@ package access
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
+
+	"github.com/arctop/seamless/internal/config"
 )
 
 // Restricted local accounts (peer_auth.restricted, 2026-11-07).
@@ -12,14 +15,29 @@ import (
 // A restricted account is a second OS account on the machine whose agents work
 // beside the owner's. The kernel names it on the Unix socket, as it names the
 // owner; it never holds the bearer key, so a TCP request is never one. Its
-// reach is read from the projects table for every request, not written in the
-// config: every project that is open (the isolation state) and not locked,
-// reading and writing, plus the global scope read-only. A confidential,
-// isolation-sealed or locked project is outside it, and so is a project that
-// does not exist yet: the account cannot create one (the owner creates and maps
-// projects), which is what lets its refusal read the same for a project it may
-// not reach and a slug nobody registered. Such a project is not listed for it
-// either.
+// reach is read from the projects table for every request: every project that
+// is open (the isolation state) and not locked, reading and writing, plus the
+// global scope read-only. A confidential, isolation-sealed or locked project is
+// outside it, and so is a project that does not exist yet: the account cannot
+// create one (the owner creates and maps projects), which is what lets its
+// refusal read the same for a project it may not reach and a slug nobody
+// registered. Such a project is not listed for it either.
+//
+// The config may shape an account's reach (plan agent-accounts-and-releases,
+// step B, 2026-11-14; memory restricted-account-reach-decisions), and the
+// shape is applied to the same per-request states (WithReach):
+//
+//   - exclude X: the plain reach without X, whatever X's state;
+//   - only O, two or more projects: the projects of O that are open and not
+//     locked;
+//   - only {d}: d alone, while it is registered, open, confidential or sealed,
+//     and not locked.
+//
+// So a reach that holds a confidential or sealed project holds nothing else:
+// the account can carry nothing out of it, which is why clearance
+// (clearance.go) never has to judge a restricted account. A shaped account
+// reads texts that point at project_list instead of saying "open" (ReachShaped),
+// and its refusals still read the same for every project outside its reach.
 //
 // A restricted account on a relay's computer (peer_auth.relays' restricted,
 // plan networked-relay) is the same principal: the relay's kernel names its
@@ -35,25 +53,93 @@ import (
 // stage it writes waits for the owner's promotion (the MCP write tools hold it
 // as a proposal).
 
-// WithOpenProjects returns a restricted account's view with its reach for this
-// request: the projects among open that peer_auth does not lock. The transport
-// passes every project whose isolation is open; the policy, not the caller,
-// decides what of it the account may reach. Every
-// other view comes back unchanged. A restricted view never given its projects
-// reaches none of them.
-func (v View) WithOpenProjects(open []string) View {
+// reachRule is a shaped restricted entry: the projects it excludes, or the
+// projects it names (only, sorted). The zero rule is the plain reach.
+type reachRule struct {
+	exclude map[string]bool
+	only    []string
+}
+
+func newReachRule(e config.RestrictedAccount) reachRule {
+	r := reachRule{}
+	if len(e.Exclude) > 0 {
+		r.exclude = make(map[string]bool, len(e.Exclude))
+		for _, slug := range e.Exclude {
+			r.exclude[strings.TrimSpace(slug)] = true
+		}
+	}
+	for _, slug := range e.Only {
+		if s := strings.TrimSpace(slug); !slices.Contains(r.only, s) {
+			r.only = append(r.only, s)
+		}
+	}
+	slices.Sort(r.only)
+	return r
+}
+
+// shaped reports whether the rule is an exclude or only rule.
+func (r reachRule) shaped() bool { return len(r.exclude) > 0 || len(r.only) > 0 }
+
+// rule is the reach rule of the restricted account v speaks for. A restricted
+// account on a relay's computer has none (decision B-D11): its uid is that
+// computer's, and may equal one this machine's config shapes.
+func (v View) rule() reachRule {
+	if v.policy == nil || v.who.Kind != KindRestricted || v.who.Relay != "" {
+		return reachRule{}
+	}
+	return v.policy.rules[v.who.UID]
+}
+
+// WithOpenProjects is WithReach with no fenced project: the reach of a view
+// whose transport loaded only the open projects.
+func (v View) WithOpenProjects(open []string) View { return v.WithReach(open, nil) }
+
+// WithReach returns a restricted account's view with its reach for this
+// request, drawn from the registered projects whose isolation is open (open)
+// or confidential or sealed (fenced), as the transport loaded them; a project
+// in neither list -- unregistered, or in a state this build does not know --
+// is never reached. The policy, not the caller, decides what of them the
+// account may reach (the rules in this file's comment); a locked project is
+// never reached. Every other view comes back unchanged. A restricted view
+// never given its projects reaches none of them.
+func (v View) WithReach(open, fenced []string) View {
 	if v.who.Kind != KindRestricted {
 		return v
 	}
-	reach := make(map[string]bool, len(open))
-	for _, slug := range open {
-		if slug == "" || v.policy == nil || v.policy.ownerLocked[slug] {
-			continue
+	reach := map[string]bool{}
+	keep := func(slug string) bool { return slug != "" && v.policy != nil && !v.policy.ownerLocked[slug] }
+	switch rule := v.rule(); {
+	case len(rule.only) == 1:
+		if d := rule.only[0]; keep(d) && (slices.Contains(open, d) || slices.Contains(fenced, d)) {
+			reach[d] = true
 		}
-		reach[slug] = true
+	case len(rule.only) > 1:
+		for _, slug := range open {
+			if keep(slug) && slices.Contains(rule.only, slug) {
+				reach[slug] = true
+			}
+		}
+	default:
+		for _, slug := range open {
+			if keep(slug) && !rule.exclude[slug] {
+				reach[slug] = true
+			}
+		}
 	}
-	v.open = reach
+	v.reach = reach
 	return v
+}
+
+// ReachShaped reports whether v is a restricted account whose entry shapes its
+// reach (exclude or only): its texts then name the projects project_list
+// shows, never "open projects" (decision B-D9). A plain entry's texts are
+// today's, word for word.
+func (v View) ReachShaped() bool { return v.rule().shaped() }
+
+// ReachShaped is View.ReachShaped for the View in ctx.
+func ReachShaped(ctx context.Context) bool {
+	v, _ := FromContext(ctx)
+	return v.ReachShaped()
 }
 
 // Account returns the restricted account this view speaks for -- the name every
@@ -186,10 +272,32 @@ func RestrictedNoRequests(account string) string {
 		"there is nothing to request -- keep to the projects project_list shows", account)
 }
 
+// RestrictedNoRequestsFor is RestrictedNoRequests for the caller in ctx, in
+// the shaped wording when its entry shapes its reach (ReachShaped).
+func RestrictedNoRequestsFor(ctx context.Context, account string) string {
+	if ReachShaped(ctx) {
+		return fmt.Sprintf("account %s files no access requests: the owner gives this account only the projects "+
+			"project_list shows, and the owner's approval never opens anything else to it, so there is nothing to "+
+			"request -- keep to those projects", account)
+	}
+	return RestrictedNoRequests(account)
+}
+
 // restrictedRefusal is a restricted account's refusal. It reads the same for a
 // confidential, sealed or locked project and for a slug nobody registered, so a
-// refusal never tells the account which projects exist beyond its reach.
-func restrictedRefusal(account, project string) error {
+// refusal never tells the account which projects exist beyond its reach. A
+// shaped account's (ReachShaped) reads the same for an excluded project too,
+// and names no isolation state at all.
+func restrictedRefusal(account, project string, shaped bool) error {
+	if shaped {
+		if project == "" {
+			return &RefusalError{msg: fmt.Sprintf("account %s does not write the global scope: it writes only into the "+
+				"projects project_list shows -- name one with project=<slug>", account)}
+		}
+		return &RefusalError{msg: fmt.Sprintf("project %s is not reachable from account %s: the owner gives this "+
+			"account only the projects project_list shows; it cannot create a project either -- the owner creates "+
+			"and maps them", project, account)}
+	}
 	if project == "" {
 		return &RefusalError{msg: fmt.Sprintf("the global scope is read-only for account %s: a restricted account reads "+
 			"it and writes only into open projects -- name one with project=<slug>", account)}
@@ -214,6 +322,69 @@ func (p *Policy) HasRestricted() bool {
 	}
 	return false
 }
+
+// RestrictedEntry is one restricted account on this machine as the policy
+// holds it, for doctor and the startup log: the account, its entry's shape,
+// and whether serve refuses it (WithDisabled).
+type RestrictedEntry struct {
+	Account  Account
+	Exclude  []string // sorted
+	Only     []string // sorted
+	Disabled bool
+}
+
+// Shaped reports whether the entry narrows or names its reach.
+func (e RestrictedEntry) Shaped() bool { return len(e.Exclude) > 0 || len(e.Only) > 0 }
+
+// RestrictedEntries returns peer_auth.restricted's accounts, by uid, each with
+// its shape.
+func (p *Policy) RestrictedEntries() []RestrictedEntry {
+	accts := p.RestrictedAccounts()
+	out := make([]RestrictedEntry, 0, len(accts))
+	for _, a := range accts {
+		rule := p.rules[a.UID]
+		e := RestrictedEntry{Account: a, Only: slices.Clone(rule.only), Disabled: p.disabled[a.UID]}
+		if len(rule.exclude) > 0 {
+			e.Exclude = slices.Sorted(maps.Keys(rule.exclude))
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// ReachOf is the reach a restricted account on this machine would have, as
+// WithReach draws it from open and fenced: the projects, sorted. Doctor
+// reports it; a request's own reach is its View's (Allowed).
+func (p *Policy) ReachOf(uid uint32, open, fenced []string) []string {
+	acct, ok := p.restricted[uid]
+	if !ok {
+		return nil
+	}
+	v := View{policy: p, acct: acct, who: Principal{Kind: KindRestricted, UID: uid, HasUID: true, User: acct.Name, Socket: true}}
+	reach, _ := v.WithReach(open, fenced).Allowed()
+	return reach
+}
+
+// WithDisabled returns a copy of p that refuses the restricted accounts uids
+// names at the door (PeerView), as serve does for an entry whose exclude names
+// a project that does not exist (decision B-D7): a typo there would leave the
+// project it meant reachable, so that one account fails closed while every
+// other caller is served. serve calls it once, before any request.
+func (p *Policy) WithDisabled(uids []uint32) *Policy {
+	out := *p
+	out.disabled = make(map[uint32]bool, len(p.disabled)+len(uids))
+	maps.Copy(out.disabled, p.disabled)
+	for _, uid := range uids {
+		if _, ok := p.restricted[uid]; ok {
+			out.disabled[uid] = true
+		}
+	}
+	return &out
+}
+
+// RestrictedDisabled reports whether serve refuses the restricted account uid
+// at the door (WithDisabled).
+func (p *Policy) RestrictedDisabled(uid uint32) bool { return p.disabled[uid] }
 
 // RestrictedAccounts returns the restricted accounts, by uid, for doctor and
 // the startup log.

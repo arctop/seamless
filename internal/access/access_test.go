@@ -30,7 +30,7 @@ func testPolicy(t *testing.T) *Policy {
 		Enabled:     true,
 		Owner:       "owner",
 		ForceLocked: []string{"example-finance", "example-legal"},
-		Restricted:  []string{"_example_agent"},
+		Restricted:  config.BareRestricted("_example_agent"),
 	}, testResolve)
 	require.NoError(t, err)
 	return p
@@ -157,7 +157,7 @@ func TestNew_ResolutionRefusals(t *testing.T) {
 			"peer_auth.users was the 2026-10-31 design"},
 		{"users beside locked", config.PeerAuth{Owner: "owner", ForceLocked: []string{"x"}, Users: map[string]any{"_a": "x"}},
 			"peer_auth.users was the 2026-10-31 design"},
-		{"users beside restricted", config.PeerAuth{Owner: "owner", Restricted: []string{"_example_agent"}, Users: map[string]any{"_a": "x"}},
+		{"users beside restricted", config.PeerAuth{Owner: "owner", Restricted: config.BareRestricted("_example_agent"), Users: map[string]any{"_a": "x"}},
 			"peer_auth.users was the 2026-10-31 design"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

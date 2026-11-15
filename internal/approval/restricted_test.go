@@ -26,7 +26,7 @@ const restrictedUID = 502
 func restrictedView(t *testing.T, f *reqFixture, chain ...access.ProcessToken) access.View {
 	t.Helper()
 	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{lockFin, lockLeg},
-		Restricted: []string{"_example_agent"}}, func(n string) (access.Account, error) {
+		Restricted: config.BareRestricted("_example_agent")}, func(n string) (access.Account, error) {
 		switch n {
 		case "owner":
 			return access.Account{UID: 501, Name: "owner"}, nil

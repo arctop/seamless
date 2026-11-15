@@ -18,7 +18,7 @@ import (
 // ownerCtx one of the owner, under one peer_auth policy.
 func restrictedCtx(t *testing.T) (restricted, owner context.Context) {
 	t.Helper()
-	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"_example_agent"}},
+	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted("_example_agent")},
 		func(n string) (access.Account, error) {
 			switch n {
 			case "owner":

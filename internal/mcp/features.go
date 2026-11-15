@@ -69,7 +69,7 @@ func (s *Server) researchEnabled(ctx context.Context) bool {
 // and Catalog() stays full; only the live list shrinks.
 func (s *Server) exposedTools(ctx context.Context, tools []mcp.Tool) []mcp.Tool {
 	if access.AccountOf(ctx) != "" {
-		tools = restrictedToolText(tools)
+		tools = restrictedToolText(tools, access.ReachShaped(ctx))
 	}
 	hidden := features.HiddenTools(s.effectiveFeatures(ctx))
 	if len(hidden) == 0 {

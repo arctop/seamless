@@ -238,7 +238,10 @@ func TestRelayHandler_V2RestrictedReachFailsClosed(t *testing.T) {
 	})
 	serve := func(open func(context.Context) ([]string, error)) *httptest.Server {
 		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-		h := ownerHandler(d.policy, d.pairing.Edge(relayHandler(d.policy, peerLeases{open: open}, logger, probe)))
+		h := ownerHandler(d.policy, d.pairing.Edge(relayHandler(d.policy, peerLeases{reach: func(ctx context.Context) (store.RestrictedReachStates, error) {
+			slugs, err := open(ctx)
+			return store.RestrictedReachStates{Open: slugs}, err
+		}}, logger, probe)))
 		cert, pool := deviceServerCert(t)
 		ts := httptest.NewUnstartedServer(h)
 		ts.TLS = devices.WithRelayClientAuth(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}})

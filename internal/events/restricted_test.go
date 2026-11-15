@@ -17,7 +17,7 @@ import (
 // recorded with -- the global scope included.
 func TestRecord_LeavesARestrictedAccountsEventsAlone(t *testing.T) {
 	r := newRecorder(t)
-	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"_example_agent"}},
+	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted("_example_agent")},
 		func(name string) (access.Account, error) {
 			switch name {
 			case "owner":

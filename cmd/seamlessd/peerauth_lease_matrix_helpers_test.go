@@ -249,7 +249,7 @@ func newLMDaemon(t *testing.T) *lmDaemon {
 		Enabled: true, Owner: "owner",
 		Socket:      config.PeerSocket{Path: "/opt/seamless/run/seamlessd.sock"},
 		ForceLocked: []string{lmFin, lmLegal},
-		Restricted:  []string{lmAccount},
+		Restricted:  config.BareRestricted(lmAccount),
 	}
 	policy, err := access.New(cfg.PeerAuth, lmResolve)
 	require.NoError(t, err)

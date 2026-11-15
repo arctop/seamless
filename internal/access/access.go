@@ -36,10 +36,11 @@
 //     the owner's, reaches every project that is open (isolation) and not
 //     locked, reading and writing, and the global scope read-only: a global
 //     item is injected into every project's briefing, the owner's included. Its
-//     reach is loaded from the projects table for every request
-//     (View.WithOpenProjects). It files no access requests, gets no read grants
-//     and holds no leases, and every write it makes is labeled with its name
-//     (View.Account).
+//     config entry may narrow that (exclude) or name it (only: open projects,
+//     or one confidential or sealed project alone; restricted.go). Its reach is
+//     loaded from the projects table for every request (View.WithReach). It
+//     files no access requests, gets no read grants and holds no leases, and
+//     every write it makes is labeled with its name (View.Account).
 //
 // Everything else -- the store's isolation fence (store.CanRead/CanWrite), the
 // MCP scope funnels, the hooks, the retrieval surfaces, the console's filtered
@@ -72,7 +73,8 @@ const (
 	// the socket.
 	KindOwner
 	// KindRestricted is a restricted local account (peer_auth.restricted), on
-	// the socket: open projects read-write, global read-only, writes labeled.
+	// the socket: the open projects (or the ones its entry names) read-write,
+	// global read-only, writes labeled.
 	KindRestricted
 )
 
@@ -156,12 +158,13 @@ type View struct {
 	// WithLeases judged them. Nil for every other view.
 	leases map[string]Lease
 	// acct is a restricted account's own account (KindRestricted only), and
-	// open its reach: the projects that were open and not locked when the
-	// transport built this request's view (WithOpenProjects). Nil open reaches
-	// no project at all -- a restricted view the transport never filled fails
-	// closed to the global scope, read-only.
-	acct Account
-	open map[string]bool
+	// reach its reach: the projects its rule kept of those open (or, for a
+	// single only project, fenced) and not locked when the transport built
+	// this request's view (WithReach). Nil reach holds no project at all -- a
+	// restricted view the transport never filled fails closed to the global
+	// scope, read-only.
+	acct  Account
+	reach map[string]bool
 }
 
 // Principal returns who the view speaks for.
@@ -194,18 +197,18 @@ func (v View) Visible(project string) bool {
 		// Locked: readable only under a lease.
 		return !v.policy.ownerLocked[project] || v.leased(project)
 	case KindRestricted:
-		return v.open[project]
+		return v.reach[project]
 	default:
 		return true
 	}
 }
 
 // Writable reports whether this view may write into project. The owner writes
-// wherever it reads; a restricted account writes only the open projects it
-// reaches, never the global scope (see the package comment, rule 2).
+// wherever it reads; a restricted account writes only the projects it reaches,
+// never the global scope (see the package comment, rule 2).
 func (v View) Writable(project string) bool {
 	if v.who.Kind == KindRestricted {
-		return project != "" && v.open[project]
+		return project != "" && v.reach[project]
 	}
 	return v.Visible(project)
 }
@@ -228,15 +231,15 @@ func (v View) Hidden() []string {
 	return out
 }
 
-// Allowed returns a restricted account's reach (the open projects
-// WithOpenProjects kept), sorted, and true. Any other view returns false: it is
-// not bounded by an allow-list.
+// Allowed returns a restricted account's reach (the projects WithReach kept),
+// sorted, and true. Any other view returns false: it is not bounded by an
+// allow-list.
 func (v View) Allowed() ([]string, bool) {
 	if v.who.Kind != KindRestricted {
 		return nil, false
 	}
-	out := make([]string, 0, len(v.open))
-	for p := range v.open {
+	out := make([]string, 0, len(v.reach))
+	for p := range v.reach {
 		out = append(out, p)
 	}
 	slices.Sort(out)
@@ -262,7 +265,7 @@ func (v View) SessionScope(project string) (string, error) {
 // built gets, failing closed.
 func (v View) Refusal(project string) error {
 	if v.who.Kind == KindRestricted {
-		return restrictedRefusal(v.who.User, project)
+		return restrictedRefusal(v.who.User, project, v.ReachShaped())
 	}
 	if v.Locked(project) {
 		return v.lockedRefusal(project)

@@ -294,8 +294,19 @@ any of it.
   on the branch.
 - **A restricted local account (`peer_auth.restricted`, `access.KindRestricted`)
   reaches the open projects that exist, per request** (`internal/access/restricted.go`).
-  `peerHandler` loads `store.OpenProjectSlugs` for every request and
-  `View.WithOpenProjects` drops the locked ones; a failed load answers 503. It
+  `peerHandler` loads `store.ReachProjects` (open and fenced slugs) for every
+  request and `View.WithReach` applies the entry's rule and drops the locked
+  ones; a failed load answers 503. An entry may shape the reach
+  (`config.RestrictedAccount`; memory restricted-account-reach-decisions):
+  `exclude` subtracts, `only` names open projects or ONE confidential or sealed
+  project alone. KEEP THE INVARIANT: a reach holding a fenced project holds
+  nothing else -- that is why clearance never judges a restricted account, and
+  a mixed reach needs clearance first. The rule lives in `WithReach` only, keyed
+  on this socket's uid (a relay's account never has a rule); an `exclude` slug
+  that names no project disables that entry at serve start
+  (`applyRestrictedReach`, `Policy.WithDisabled`), never the daemon. Shaped
+  entries read the neutral texts (`access.ReachShaped`), bare ones today's
+  word for word. It
   reads and writes those, reads global, and nothing else: one refusal text for
   a confidential, sealed, locked or unregistered slug, none listed, and it
   CANNOT CREATE a project (every creation path -- write scope, session_start,
@@ -804,7 +815,7 @@ any of it.
   sessions the caller may not reach; hooks blank a session id that names one
   (`foreignSession`).
 - **A restricted account never writes the global scope** and has no home
-  project: a write or session nothing places in an open project it reaches is
+  project: a write or session nothing places in a project it reaches is
   refused (`View.SessionScope`), never landed somewhere else. It never grows
   the repo map (`cwdProject`).
 - **Lists filter.** Anything that enumerates projects or sessions applies

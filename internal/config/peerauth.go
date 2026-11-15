@@ -88,7 +88,12 @@ type PeerAuth struct {
 	// (internal/access, KindRestricted). It files no access requests, gets no
 	// read grants and holds no leases. Refused at load while peer_auth is
 	// disabled and for the owner. File only (no env).
-	Restricted []string `yaml:"restricted"`
+	//
+	// An entry may also be a mapping that shapes the account's reach:
+	// {account, exclude: [...]} leaves those projects out, and {account,
+	// only: [...]} reaches only those -- any number of open projects, or one
+	// confidential or sealed project on its own (RestrictedAccount).
+	Restricted []RestrictedAccount `yaml:"restricted"`
 	// Relays maps the paired relays (plan networked-relay) whose requests the
 	// daemon judges as it judges its own socket's, each by its enrolled name
 	// (the name the Devices page shows) to the owner's uid on that computer.
@@ -199,14 +204,22 @@ func (s PeerSocket) SocketFileMode() (uint32, error) {
 	return uint32(n), nil
 }
 
-// ReferencedProjects returns every project slug the block names, sorted and
-// de-duplicated: what serve and doctor check against the projects table.
+// ReferencedProjects returns every project slug the block names -- the
+// force-locked projects and every restricted entry's exclude and only --
+// sorted and de-duplicated.
 func (p PeerAuth) ReferencedProjects() []string {
 	var out []string
-	for _, slug := range p.ForceLocked {
-		if s := strings.TrimSpace(slug); s != "" && !slices.Contains(out, s) {
-			out = append(out, s)
+	add := func(slugs []string) {
+		for _, slug := range slugs {
+			if s := strings.TrimSpace(slug); s != "" && !slices.Contains(out, s) {
+				out = append(out, s)
+			}
 		}
+	}
+	add(p.ForceLocked)
+	for _, e := range p.Restricted {
+		add(e.Exclude)
+		add(e.Only)
 	}
 	slices.Sort(out)
 	return out
@@ -504,7 +517,8 @@ func validatePeerLocked(p PeerAuth) error {
 }
 
 // validatePeerRestricted is the restricted list's shape: every entry an OS
-// account name or numeric uid, none twice, none the owner's, and none at all
+// account name or numeric uid, none twice (in either form), none the owner's,
+// each exclude or only list valid (validateRestrictedShape), and none at all
 // while peer_auth is disabled. A restricted account is known only through the
 // socket's kernel credential, so a list that no listener could ever serve is a
 // mistake to say out loud, not a setting to keep. Whether an
@@ -520,7 +534,8 @@ func validatePeerRestricted(p PeerAuth) error {
 	}
 	owner := strings.TrimSpace(p.Owner)
 	seen := map[string]bool{}
-	for _, raw := range p.Restricted {
+	for _, e := range p.Restricted {
+		raw := e.Account
 		if err := validateAccount("peer_auth.restricted entry", raw); err != nil {
 			return err
 		}
@@ -531,6 +546,9 @@ func validatePeerRestricted(p PeerAuth) error {
 			return fmt.Errorf("config: peer_auth.restricted lists %q twice: name each account once", raw)
 		}
 		seen[raw] = true
+		if err := validateRestrictedShape(e); err != nil {
+			return err
+		}
 	}
 	return nil
 }

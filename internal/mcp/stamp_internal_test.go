@@ -18,7 +18,7 @@ import (
 // it may not be told about, never their names. The owner, and every install
 // without peer_auth, sees them all.
 func TestShownStamps_RestrictedAccountsAreNeverToldAnotherProjectsName(t *testing.T) {
-	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"_example_agent"}},
+	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted("_example_agent")},
 		func(name string) (access.Account, error) {
 			switch name {
 			case "owner":

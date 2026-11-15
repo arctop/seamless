@@ -71,7 +71,7 @@ func newFeedAccountRig(t *testing.T) (*wkRig, *events.Recorder, http.Handler) {
 	require.NoError(t, store.SetProjectIsolation(ctx, db, wkSealed, core.IsolationSealed))
 	require.NoError(t, store.SetSetting(ctx, db, store.SettingRepoProjectMap, `{"/work/open":"`+wkOpen+`"}`))
 	require.NoError(t, store.AdoptLocalHost(ctx, db, wkHost))
-	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{wkAcct}},
+	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted(wkAcct)},
 		func(n string) (access.Account, error) {
 			switch n {
 			case "owner":

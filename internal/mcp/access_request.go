@@ -249,7 +249,7 @@ func (s *Server) handleAccessRequest(ctx context.Context, req mcp.CallToolReques
 	// open projects -- to such an account. Refused before the project is even
 	// read, so the answer is the same whatever it names.
 	if account := access.AccountOf(ctx); account != "" {
-		return errResult(AccessRequestTool, restrictedAccessRequestRefusal(account))
+		return errResult(AccessRequestTool, restrictedAccessRequestRefusal(ctx, account))
 	}
 	// Resolving the session may meet a refusal at the lock: it must not file
 	// a second request, nor offer a dialog of its own.
@@ -517,8 +517,8 @@ func (s *Server) answerOut(ctx context.Context, start time.Time, t dialogTarget,
 
 // restrictedAccessRequestRefusal is access_request's answer to a restricted
 // account: nothing is filed, and nothing it could file would open a project.
-func restrictedAccessRequestRefusal(account string) error {
-	return errors.New(access.RestrictedNoRequests(account))
+func restrictedAccessRequestRefusal(ctx context.Context, account string) error {
+	return errors.New(access.RestrictedNoRequestsFor(ctx, account))
 }
 
 // accessRequestNext says what the agent does once the request is where end

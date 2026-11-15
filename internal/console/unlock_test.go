@@ -663,7 +663,7 @@ func TestLockedConsole_TerminalBeginGates(t *testing.T) {
 	require.True(t, ok)
 	sock := post(httptest.NewRequest(http.MethodPost, target, strings.NewReader("")))
 	sock = sock.WithContext(access.WithView(sock.Context(), sockView))
-	restrictedPolicy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{lockedSlug}, Restricted: []string{"_helper"}},
+	restrictedPolicy, err := access.New(config.PeerAuth{Owner: "owner", ForceLocked: []string{lockedSlug}, Restricted: config.BareRestricted("_helper")},
 		func(n string) (access.Account, error) {
 			switch n {
 			case "owner":

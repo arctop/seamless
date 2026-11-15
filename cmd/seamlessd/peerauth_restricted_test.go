@@ -86,7 +86,7 @@ func raPolicy() config.PeerAuth {
 		Enabled: true, Owner: "_example_owner",
 		Socket:      config.PeerSocket{Path: "/opt/seamless/run/seamlessd.sock"},
 		ForceLocked: []string{raLocked, raLockedOpen},
-		Restricted:  []string{raAccount},
+		Restricted:  config.BareRestricted(raAccount),
 	}
 }
 
@@ -479,7 +479,7 @@ func TestPeerAuthMatrix_Restricted(t *testing.T) {
 // agent's does: from its SessionStart hook, on its own transport.
 func raRevivalRows(t *testing.T) {
 	cfg := raPolicy()
-	cfg.Restricted = []string{raAccount, raPeerAccount}
+	cfg.Restricted = config.BareRestricted(raAccount, raPeerAccount)
 	rv := newRADaemonFor(t, cfg)
 	ctx := context.Background()
 	require.NoError(t, store.AddRepoMapping(ctx, rv.db, "/work/docs", raDocs))

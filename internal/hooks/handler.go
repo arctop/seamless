@@ -339,14 +339,14 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// A restricted local account works only in the open projects it reaches.
+	// A restricted local account works only in the projects it reaches.
 	// Anywhere else -- an unmapped directory, the global scope, a closed
 	// project's repository -- the session is not recorded and the notice says
 	// so in words that never name the project, so a closed project reads
 	// exactly like a directory nothing maps.
 	if acct := access.AccountOf(ctx); acct != "" && !h.restrictedReaches(ctx, host, p.CWD) {
 		h.writeContextResponse(ctx, w, "SessionStart", "session-start", client,
-			p.SessionID, "", restrictedNotice(acct), false, nil)
+			p.SessionID, "", restrictedNoticeFor(acct, access.ReachShaped(ctx)), false, nil)
 		return
 	}
 
@@ -1253,6 +1253,21 @@ func restrictedNotice(account string) string {
 		"read-only for this account. " +
 		"A restricted account works only in the owner's open projects: to work here with Seamless, the owner maps " +
 		"this clone of an open project with `seamlessd map-repo --path <repo> --project <slug>`, and the next " +
+		"session started in it is recorded.\n</seam-briefing>"
+}
+
+// restrictedNoticeFor is restrictedNotice, or for an account whose entry
+// shapes its reach (access.ReachShaped) the wording that names no isolation
+// state: it works only in the projects the owner gives it.
+func restrictedNoticeFor(account string, shaped bool) string {
+	if !shaped {
+		return restrictedNotice(account)
+	}
+	return "<seam-briefing>\nSeamless: this directory maps to no project account " + account + " may reach, " +
+		"so this session is not recorded and Seamless refuses the writes it would place here; this account does not " +
+		"write the global scope. " +
+		"It works only in the projects the owner gives it (project_list shows them): to work here with Seamless, the " +
+		"owner maps this clone of one of them with `seamlessd map-repo --path <repo> --project <slug>`, and the next " +
 		"session started in it is recorded.\n</seam-briefing>"
 }
 

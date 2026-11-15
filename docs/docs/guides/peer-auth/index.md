@@ -135,7 +135,9 @@ Every key is in [the configuration reference](https://thereisnospoon.org/docs/re
 
 Checked when the file loads, whether or not `enabled` is set: `force_locked` names
 real projects, never the global scope, and none twice; `restricted` is listed
-only with `enabled` set, and never names the owner or the same account twice;
+only with `enabled` set, and never names the owner or the same account twice,
+and an entry's `exclude` or `only` (never both) names real projects, never the
+global scope, and none twice, with no key the entry does not have;
 `max_lease` and `passkeys` are well formed. With `enabled` set, also: the owner
 is named, the socket path is absolute and outside `data_dir`, and the mode is
 octal and keeps owner read and write. `relays` is listed only with `enabled` set; each key is a relay's name as the Devices page shows it, and each `owner_uid` is a uid other than 0.
@@ -144,8 +146,10 @@ Checked when `serve` starts, and refused if any fails:
 
 - every account resolves on this machine (macOS role accounts live in the
   directory service, and are found there), and no two entries share a uid;
-- every project the block names exists - a misspelled lock would leave the
-  project it meant open, which is exactly what this feature exists to prevent;
+- every project `force_locked` names exists - a misspelled lock would leave the
+  project it meant open, which is exactly what this feature exists to prevent
+  (a misspelled `exclude` disables that one restricted entry instead, so `serve`
+  still starts: [Shaping an account's reach](#shaping-an-accounts-reach));
 - every locked project is `confidential` or `sealed`;
 - the files would hold too (the next section).
 
@@ -163,7 +167,9 @@ That map reserved projects for other OS accounts, and you could never reach them
 It is gone. List those projects under `peer_auth.force_locked`, keep each one
 `confidential` or `sealed`, delete `users`, and restart. An account that was
 listed there is then refused at the socket unless you list it under
-`peer_auth.restricted`, which reaches only open projects that are not locked.
+`peer_auth.restricted`, which reaches only open projects that are not locked,
+or the narrower set its entry names. A shaped entry narrows that account's
+reach, or gives it one confidential project, and never takes a project from you.
 
 ## Deploy it: the daemon runs as its own account
 
@@ -937,7 +943,8 @@ peer_auth:
 
 What such an account reaches:
 
-- **Every open project that is not locked**, reading and writing. A project
+- **Every open project that is not locked**, reading and writing, unless its
+  entry shapes that ([below](#shaping-an-accounts-reach)). A project
   whose isolation is `confidential` or `sealed`, and every locked
   project, is out of its reach and is not listed for it. Its refusal
   reads the same for those projects and for a slug nobody registered, so it
@@ -1099,6 +1106,64 @@ reaches, its refusal at the console's door included - carries `actor.account`
 lists its sessions by that name with `account`, and gives `account` to the tasks it
 filed, rewrote or recorded a commit on. Your own frames and entries carry no `account`
 and look exactly as before.
+
+### Shaping an account's reach {#shaping-an-accounts-reach}
+
+An entry under `restricted` may be a mapping instead of a name, to keep one
+account out of some open projects, or to give it one confidential project of
+its own and nothing else closed:
+
+```yaml
+peer_auth:
+  restricted:
+    - _example_helper                            # every open, unlocked project
+    - account: _example_agent
+      exclude: [example-pipeline, example-vault] # all of those but these two
+    - account: _example_desk
+      only: [example-desk]                       # this one project, read and write
+```
+
+- **`exclude`** leaves the projects it names out of the plain reach, whatever
+  their isolation becomes. Everything else is as above, so a project you create
+  or open later is reached at once: `exclude` fails open for new projects.
+- **`only`** reaches the projects it names and nothing else, so a project you
+  create later stays out until you name it: it fails closed, and suits an
+  unattended account best. It names either **open projects**, any number, of
+  which the account reaches those that are open and not locked; or **one
+  confidential or sealed project on its own**, which the account then reads and
+  writes while it is not locked, as that project's own sessions do. A reach that
+  holds a fenced project holds nothing else, so there is nowhere the account
+  could carry its content: a confidential or sealed project listed beside others
+  is not reached, and doctor warns. A sealed project's fence also closes the
+  global scope to the sessions there, the account's included.
+- One entry never sets both, and a key an entry does not have is refused when
+  the file loads, with its name and line, so a typo can never widen an account.
+- The reach is judged on every request, from the projects' isolation and locks
+  at that moment. A lock closes even an `only` project to the account, since a
+  restricted account holds no leases.
+- An `exclude` that names a project that does not exist disables that entry:
+  `serve` logs an error, refuses that account at the socket (403), and serves
+  everyone else, and `seamlessd doctor` fails the row. Correct the slug and
+  restart. An `only` that names a project that does not exist is a warning: the
+  account reaches nothing there until you create it.
+- Two accounts may name the same project. Naming a project never takes it from
+  you: your own agents reach it exactly as before, and you can still lock it
+  (which, in this release, also closes it to the account).
+- The desk's work lands in its project as an owner session's does: map its clone
+  with `seamlessd map-repo`, as above, and a session it starts there is recorded
+  in that project, its writes labeled and its binding rules waiting for you.
+- A shaped account reads texts that point it at "the projects project_list
+  shows" instead of naming open projects, and its refusals still read the same
+  for an excluded, closed or unregistered project. A plain entry's texts are
+  unchanged.
+- The restricted accounts a relay maps (`peer_auth.relays.<relay>.restricted`)
+  keep the plain reach: shapes are entries under `peer_auth.restricted` only.
+
+Doctor prints each shaped entry with what it reaches now, for example
+`_example_desk (uid 502): restricted, only [example-desk] -- ... (now
+example-desk (confidential))`. The mapping form is new after v0.8.5: an
+earlier release refuses it when the config loads, so update the daemon before
+you write one.
 
 ## Verify
 

@@ -380,7 +380,7 @@ func restrictedConsoleView(t *testing.T) access.View {
 		"owner":        {UID: 501, Name: "owner"},
 		exampleAccount: {UID: 502, Name: exampleAccount},
 	}
-	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{exampleAccount}},
+	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted(exampleAccount)},
 		func(n string) (access.Account, error) {
 			if a, ok := accounts[n]; ok {
 				return a, nil

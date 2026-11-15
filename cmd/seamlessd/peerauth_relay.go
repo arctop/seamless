@@ -113,19 +113,20 @@ func relayHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger,
 		case access.KindRestricted:
 			// A restricted account's reach is the projects open right now,
 			// judged per request like a lease, as on this machine's socket. A
-			// lookup that fails refuses the request rather than serving it a
-			// reach it would misread as "no projects".
-			var open []string
-			if leases.open != nil {
+			// relay's account has no shape (decision B-D11), so only the open
+			// projects count. A lookup that fails refuses the request rather
+			// than serving it a reach it would misread as "no projects".
+			var states store.RestrictedReachStates
+			if leases.reach != nil {
 				var err error
-				if open, err = leases.open(ctx); err != nil {
+				if states, err = leases.reach(ctx); err != nil {
 					logger.Warn("peer_auth: open projects unavailable; refusing a relay's restricted account", "relay", cred.Name,
 						"uid", attrs.UID, "error", err)
 					http.Error(w, "service unavailable: the project list could not be read", http.StatusServiceUnavailable)
 					return
 				}
 			}
-			ctx = access.WithView(ctx, view.WithOpenProjects(open))
+			ctx = access.WithView(ctx, view.WithOpenProjects(states.Open))
 		default:
 			if policy.HasLocked() {
 				view = relayLeasedView(ctx, view, leases, logger)

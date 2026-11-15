@@ -150,7 +150,7 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 		if account == "" || how == scopeFromArg {
 			return errResult("session_start", perr)
 		}
-		unplaced = restrictedPlacementRefusal(account, cwd)
+		unplaced = restrictedPlacementRefusal(account, cwd, access.ReachShaped(ctx))
 		project, warning = "", ""
 	}
 	// Whether the caller chose a scope at all. A cwd outside any repository chose
@@ -336,9 +336,13 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 // mapped, or in one mapped to a project the account does not reach. It reads
 // the same for all three, so it never tells the account which repositories are
 // mapped to projects beyond its reach.
-func restrictedPlacementRefusal(account, cwd string) error {
+func restrictedPlacementRefusal(account, cwd string, shaped bool) error {
 	rule := "the global scope is read-only for account " + account + ": a restricted account works only in " +
 		"open projects that already exist -- name one with project=<slug> (project_list lists the ones it reaches)"
+	if shaped {
+		rule = "account " + account + " does not write the global scope: it works only in the projects project_list " +
+			"shows -- name one with project=<slug>"
+	}
 	if cwd == "" {
 		return errors.New("no cwd or project was given, and " + rule)
 	}

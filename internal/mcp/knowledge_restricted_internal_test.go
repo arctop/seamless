@@ -23,7 +23,7 @@ import (
 // project) and the owner's, over one peer_auth policy.
 func kaViews(t *testing.T) (agent, owner context.Context) {
 	t.Helper()
-	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"_example_agent"}},
+	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted("_example_agent")},
 		func(name string) (access.Account, error) {
 			switch name {
 			case "owner":

@@ -35,7 +35,7 @@ func restrictedPolicy(t *testing.T) *Policy {
 		Enabled:     true,
 		Owner:       "owner",
 		ForceLocked: []string{lockFin},
-		Restricted:  []string{"_example_agent"},
+		Restricted:  config.BareRestricted("_example_agent"),
 	}, restrictedResolve)
 	require.NoError(t, err)
 	return p
@@ -51,9 +51,9 @@ func TestRestricted_PolicyResolves(t *testing.T) {
 		cfg  config.PeerAuth
 		want string
 	}{
-		{"the owner by uid", config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"501"}}, "the owner's"},
-		{"one account twice", config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"_example_agent", "502"}}, "twice"},
-		{"unknown", config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"_nobody"}}, "unknown account"},
+		{"the owner by uid", config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted("501")}, "the owner's"},
+		{"one account twice", config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted("_example_agent", "502")}, "twice"},
+		{"unknown", config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted("_nobody")}, "unknown account"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := New(tc.cfg, restrictedResolve)

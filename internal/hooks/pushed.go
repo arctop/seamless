@@ -25,7 +25,7 @@ package hooks
 //     state.
 //   - A plan or subagent note lands in the project its cwd resolves to, placed
 //     the way a session is (View.SessionScope): the owner's only where it may
-//     write, a restricted account's only in an open project it
+//     write, a restricted account's only in a project it
 //     reaches (anywhere else it is dropped without a word, as a closed
 //     project must read like a missing one), labeled with its account. Its
 //     events are filed under the session's project, so a note in a leased

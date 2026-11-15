@@ -69,7 +69,7 @@ func acctPolicy(t *testing.T) *access.Policy {
 		Enabled:     true,
 		Owner:       "owner",
 		ForceLocked: []string{acctLocked},
-		Restricted:  []string{acctName},
+		Restricted:  config.BareRestricted(acctName),
 	}, acctResolve)
 	require.NoError(t, err)
 	return p

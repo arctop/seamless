@@ -178,7 +178,7 @@ func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account)
 	}
 	if restricted != nil {
 		accounts[restricted.Name] = *restricted
-		pa.Restricted = []string{restricted.Name}
+		pa.Restricted = config.BareRestricted(restricted.Name)
 	}
 	policy, err := access.New(pa, func(name string) (access.Account, error) {
 		if a, ok := accounts[name]; ok {

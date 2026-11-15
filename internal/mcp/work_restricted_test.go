@@ -92,7 +92,7 @@ func newWkRig(t *testing.T) *wkRig {
 	require.NoError(t, store.AdoptLocalHost(ctx, db, wkHost))
 
 	policy, err := access.New(config.PeerAuth{
-		Enabled: true, Owner: "owner", ForceLocked: []string{wkLocked}, Restricted: []string{wkAcct, wkPeer},
+		Enabled: true, Owner: "owner", ForceLocked: []string{wkLocked}, Restricted: config.BareRestricted(wkAcct, wkPeer),
 	}, func(n string) (access.Account, error) {
 		switch n {
 		case "owner":

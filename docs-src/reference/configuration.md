@@ -218,6 +218,18 @@ behavior of every earlier release. The guide is
   writes waits for you to promote it
   ([Restricted local accounts](/guides/peer-auth/#restricted-local-accounts)).
   Refused while `enabled` is false, and for the owner. File-only.
+
+  An entry may instead be a mapping that shapes the account's reach
+  ([Shaping an account's reach](/guides/peer-auth/#shaping-an-accounts-reach)):
+  `{account: <name>, exclude: [<slug>, ...]}` reaches every open, unlocked
+  project but those, and `{account: <name>, only: [<slug>, ...]}` reaches only
+  those - any number of open projects, or one confidential or sealed project on
+  its own, which the account then reads and writes. `exclude` and `only` never
+  appear together, and an unknown key is refused with its name and line. An
+  `exclude` that names a project that does not exist disables that entry alone
+  (serve starts, refuses that account, and doctor fails the row). New after
+  v0.8.5: an earlier release refuses the mapping form when it loads. The
+  restricted accounts a relay maps keep the plain reach.
 - `relays` maps paired relays ([the guide](/guides/peer-auth/#agents-on-another-computer-relays)):
   each relay's name as the Devices page shows it, to `owner_uid`, your uid on
   that computer. Through a mapped relay that uid is you, judged as the socket

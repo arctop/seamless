@@ -148,7 +148,7 @@ func TestPeerAuth_LockedList(t *testing.T) {
 func TestPeerAuth_RestrictedAccounts(t *testing.T) {
 	cfg, err := loadYAML(t, peerBase+"  locked: [example-finance]\n  restricted: [_example_agent, \"502\"]\n")
 	require.NoError(t, err)
-	require.Equal(t, []string{"_example_agent", "502"}, cfg.PeerAuth.Restricted)
+	require.Equal(t, BareRestricted("_example_agent", "502"), cfg.PeerAuth.Restricted)
 	require.Equal(t, []string{"example-finance"}, cfg.PeerAuth.ReferencedProjects(),
 		"a restricted account names no project: its reach is every open one")
 
@@ -165,7 +165,7 @@ func TestPeerAuth_RestrictedAccounts(t *testing.T) {
 		{"padded", peerBase + "  restricted: [\" _example_agent\"]\n", "not an OS account name"},
 		{"empty", peerBase + "  restricted: [\"\"]\n", "not an OS account name"},
 		{"an unknown field", peerBase + "  restricted_accounts: [_example_agent]\n", "restricted_accounts"},
-		{"an entry with fields", peerBase + "  restricted:\n    - name: _example_agent\n", "cannot unmarshal !!map into string"},
+		{"an entry with a key it does not have", peerBase + "  restricted:\n    - name: _example_agent\n", `unknown key "name"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := loadYAML(t, tc.yaml)

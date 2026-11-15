@@ -58,7 +58,7 @@ func TestMessageSend_RestrictedAccountRecallsTheGlobalScope(t *testing.T) {
 	insertRecallMemory(t, db, "01O", "ops-ledger-note", "ledger reconcile ops note", "example-ops", "_example_agent")
 	insertRecallMemory(t, db, "01F", "finance-ledger-secret", "ledger reconcile finance secret", "example-finance", "")
 
-	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: []string{"_example_agent"}},
+	policy, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", Restricted: config.BareRestricted("_example_agent")},
 		func(n string) (access.Account, error) {
 			switch n {
 			case "owner":

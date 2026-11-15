@@ -383,6 +383,11 @@ func runServe(args []string) error {
 		if len(problems) > 0 {
 			return fmt.Errorf("seamlessd.serve: %w: %s", errPeerAuthPreflight, strings.Join(problems, "; "))
 		}
+		// A restricted entry's exclude or only against the projects table: a
+		// typo in an exclude disables that entry alone, never the daemon.
+		if peer.policy, perr = applyRestrictedReach(ctx, db, peer.policy, logger); perr != nil {
+			return fmt.Errorf("seamlessd.serve: peer_auth restricted reach: %w", perr)
+		}
 		peer.logPolicy(logger)
 	}
 
