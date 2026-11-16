@@ -443,6 +443,10 @@ Checks stop early if config or the database cannot be loaded at all.</p>
 <td>An <strong>info</strong> line when a client's skill home still holds a skill for an <a href="../../reference/console/#optional-features">optional feature</a> you switched off - the daemon never deletes there on a toggle. Re-run <code>install-hooks</code> to remove it, or re-enable the feature.</td>
 </tr>
 <tr>
+<td><code>client setup</code></td>
+<td>Only with a <a href="../../guides/peer-auth/">peer_auth</a> daemon's own config, as the <a href="../../guides/peer-auth/#verify">guide's Verify</a> runs it as the daemon's account: an <strong>info</strong> line in place of the agent client rows above (the Claude Code and Codex runtimes, <code>hooks</code>, <code>claude desktop mcp</code>, <code>hooks' seam</code>, the <code>codex</code> rows and <code>feature skills</code>). They describe the account doctor runs as, and the hooks the loaded config would install, and with the daemon's config neither is yours: <code>seamlessd doctor</code> run as you, with your client config, checks your hooks and MCP registrations.</td>
+</tr>
+<tr>
 <td><code>gardener</code></td>
 <td>The ticker configuration, or a warning that it is disabled.</td>
 </tr>
@@ -1099,12 +1103,19 @@ client, which has nowhere to be told about <code>tls.ca_file</code>; routing bot
 <code>seam</code> puts them on the CLI's trust store. Under http the shapes are unchanged.</p>
 <p>The hook file is written before MCP registration. Claude Code registration stays
 best-effort because its current CLI exposes no machine-readable state: a missing
-CLI or failed <code>mcp add-json</code> prints the exact command to run yourself. Codex is
-stricter. It decodes <code>codex mcp get seamless --json</code>, leaves an exact enabled
-stdio bridge unchanged, repairs an owned disabled/stale bridge with <code>mcp add</code>,
-and re-reads it before reporting success. A direct-HTTP or other incompatible
-entry under <code>seamless</code> is not overwritten; remove it explicitly or rerun with
-<code>--mcp=false</code> to keep that manual transport.</p>
+CLI or failed <code>mcp add-json</code> prints the exact command to run yourself. An existing
+registration is left as it is, except two kinds, which are removed and added
+again once <code>claude mcp get</code> answers: one that stores the bearer key as a literal
+header, and a <code>seam mcp-proxy</code> stdio bridge whose command or arguments differ
+from the ones this run registers (another <code>--seam</code>, another <code>--config</code>). The
+bridge is judged on the user-scope <code>seamless</code> entry in <code>~/.claude.json</code>
+(<code>$CLAUDE_CONFIG_DIR/.claude.json</code> when that is set), which is read again before
+the run reports it repaired. Codex is stricter. It decodes
+<code>codex mcp get seamless --json</code>, leaves an exact enabled stdio bridge unchanged,
+repairs an owned disabled/stale bridge with <code>mcp add</code>, and re-reads it before
+reporting success. A direct-HTTP or other incompatible entry under <code>seamless</code> is
+not overwritten; remove it explicitly or rerun with <code>--mcp=false</code> to keep that
+manual transport.</p>
 <p>The <code>claude-desktop</code> target has no management CLI at all, so its registration
 is a merge-preserving edit of <code>claude_desktop_config.json</code>: the reserved
 <code>seamless</code> entry is set to the <code>seam mcp-proxy</code> stdio bridge (absolute paths,

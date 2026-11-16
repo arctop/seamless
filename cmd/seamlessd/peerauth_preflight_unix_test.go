@@ -62,6 +62,61 @@ func TestTrustedFileProblem_ConfigReadabilityAndSymlink(t *testing.T) {
 	require.Contains(t, rt.trustedFileProblem(configFileWhat, link), ownerDir)
 }
 
+// A config or TLS key every account can read is told to take the daemon's
+// group before it is made 0640: root's file left in another group would be
+// closed to the daemon at 0640, and the daemon's own file open to that group.
+func TestTrustedFileProblem_WorldReadableAdviceKeepsTheFileReadable(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	etc := filepath.Join(root, "etc")
+	require.NoError(t, os.MkdirAll(etc, 0o755))
+	file := filepath.Join(etc, "file")
+	require.NoError(t, os.WriteFile(file, []byte("x"), 0o640))
+	bin := filepath.Join(etc, "seamlessd")
+	require.NoError(t, os.WriteFile(bin, []byte("x"), 0o755))
+
+	const daemonUID, daemonGID = 480, 480
+	cfg := config.Defaults()
+	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{"p"}}
+	policy, err := access.New(cfg.PeerAuth, lockOwnerResolve)
+	require.NoError(t, err)
+	for _, what := range []string{configFileWhat, tlsKeyWhat} {
+		for _, tc := range []struct {
+			name      string
+			uid, gid  uint32
+			wantChgrp bool
+		}{
+			{"root's, in another group", 0, 0, true},
+			{"the daemon's own, in another group", daemonUID, 20, true},
+			{"root's, in the daemon's group", 0, daemonGID, false},
+		} {
+			t.Run(what+"/"+tc.name, func(t *testing.T) {
+				inspect := func(p string) (fileFacts, error) {
+					info, err := os.Lstat(p)
+					if err != nil {
+						return fileFacts{}, err
+					}
+					f := fileFacts{uid: 0, mode: info.Mode(), isDir: info.IsDir(), symlink: info.Mode()&os.ModeSymlink != 0}
+					if p == file {
+						f.uid, f.gid, f.mode = tc.uid, tc.gid, 0o644
+					}
+					return f, nil
+				}
+				rt := &peerAuthRuntime{policy: policy, cfg: cfg.PeerAuth,
+					env: peerAuthEnv{euid: daemonUID, egid: daemonGID, inspect: inspect, exe: func() (string, error) { return bin, nil }, resolve: lockOwnerResolve}}
+				got := rt.trustedFileProblem(what, file)
+				require.Contains(t, got, "every account can read")
+				if tc.wantChgrp {
+					require.Contains(t, got, "chgrp it to the daemon's group (480) and make it 0640")
+				} else {
+					require.Contains(t, got, "make it 0640, readable by the daemon's group only")
+					require.NotContains(t, got, "chgrp")
+				}
+			})
+		}
+	}
+}
+
 // update.release_signers under peer_auth: serve refuses to start unless the
 // file is root's -- not the daemon's account's, whose own updater it binds --
 // through root's directories, and lists a key for the release namespace.

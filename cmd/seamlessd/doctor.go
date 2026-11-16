@@ -78,6 +78,27 @@ type check struct {
 // P0 grows this: config loading and database reachability are added in later
 // steps so the phase-0 acceptance ("doctor reports config + DB ok") is met.
 func doctor(args []string) error {
+	return doctorOn(args, hostDoctorMachine())
+}
+
+// doctorMachine is what doctor's file and account rows read of this machine:
+// the platform, who owns each path, root's pin of the daemon's account, the
+// account doctor runs as, and where a relay keeps its files. A test plays a
+// root-owned layout and the daemon's account through it, without being root.
+type doctorMachine struct {
+	goos         string
+	sharedConfig sharedConfigEnv
+	relay        relayDoctorEnv
+	peerAuth     peerAuthEnv
+}
+
+// hostDoctorMachine is this machine.
+func hostDoctorMachine() doctorMachine {
+	return doctorMachine{goos: runtime.GOOS, sharedConfig: defaultSharedConfigEnv(), relay: defaultRelayDoctorEnv(), peerAuth: defaultPeerAuthEnv()}
+}
+
+// doctorOn is doctor reading the machine through m.
+func doctorOn(args []string, m doctorMachine) error {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -94,10 +115,10 @@ func doctor(args []string) error {
 	}
 	checks = append(checks,
 		configSourceCheck(cfg),
-		configFileCheck(cfg, runtime.GOOS, defaultSharedConfigEnv()),
+		configFileCheck(cfg, m.goos, m.sharedConfig),
 	)
 	// A relay on this computer (its data directory exists): no rows anywhere else.
-	checks = append(checks, relayDoctorChecks(context.Background(), defaultRelayDoctorEnv())...)
+	checks = append(checks, relayDoctorChecks(context.Background(), m.relay)...)
 
 	// The role branch, and it is placed here because everything below it reads
 	// LOCAL server state a client does not have: the report would describe a
@@ -126,39 +147,25 @@ func doctor(args []string) error {
 	if d.handle != nil {
 		defer func() { _ = d.handle.Close() }()
 	}
-	// needsCurrent runs a check whose queries are written against the current
-	// schema, or says it did not.
-	needsCurrent := func(name string, run func(*sql.DB) check) check {
-		if d.current == nil {
-			return check{statusInfo, name, "skipped: " + d.why}
-		}
-		return run(d.current)
-	}
 
 	checks = append(checks, schemaVersionCheck(d.handle))
-	checks = append(checks, doctorPeerAuthChecks(ctx, cfg, d, defaultPeerAuthEnv())...)
+	checks = append(checks, doctorPeerAuthChecks(ctx, cfg, d, m.peerAuth)...)
 	// Console sign-in with a passkey: no rows while the key signs browsers in.
 	checks = append(checks, consoleSignInChecks(ctx, cfg, d.current, systemNet)...)
 	// Device pairing: no rows on a server that serves no other computers.
 	checks = append(checks, devicePairingChecks(ctx, cfg, d.current)...)
 	checks = append(checks, relayMappingChecks(ctx, cfg, d.current)...)
 	checks = append(checks, codeOnlyDeviceChecks(ctx, cfg, d.current)...)
-	checks = append(checks, needsCurrent("repo map", repoMapCheck))
-	checks = append(checks, needsCurrent("remote sessions", remoteSessionsCheck))
+	checks = append(checks, d.needsCurrent("repo map", repoMapCheck))
+	checks = append(checks, d.needsCurrent("remote sessions", remoteSessionsCheck))
 	// mcp_tools compares a count with itself under either answer to "does it lock
 	// a project", so it needs no current schema; nil reads the file's locks only.
 	checks = append(checks, mcpToolsCheck(ctx, cfg, d.current))
-	checks = append(checks, claudeRuntimeChecks()...)
-	checks = append(checks, hooksCheck(cfg))
-	checks = append(checks, clientSeamChecks(cfg)...)
-	checks = append(checks, claudeDesktopChecks(resolveSeamBin(""), absConfigPath(cfg.SourcePath()))...)
-	// The events table and the settings row these two read date from migration
-	// 001, so an older schema answers them; with no database codexChecks drops
-	// its activity line and loadUpdateView applies no console override.
-	checks = append(checks, codexChecks(cfg, d.handle)...)
-	checks = append(checks, needsCurrent("feature skills", func(db *sql.DB) check { return featureSkillsCheck(db, cfg) }))
+	checks = append(checks, agentClientChecks(cfg, d)...)
 	checks = append(checks, gardenerCheck(cfg))
-	checks = append(checks, launchdChecks(runtime.GOOS, homeDir(), os.Getuid())...)
+	checks = append(checks, launchdChecks(m.goos, homeDir(), os.Getuid())...)
+	// The settings row loadUpdateView reads dates from migration 001, so an
+	// older schema answers it; with no database it applies no console override.
 	checks = append(checks, updatesCheck(ctx, cfg, d.handle, time.Now()))
 	if !cfg.IsClient() {
 		checks = append(checks, backupsCheck(ctx, cfg, d.handle, time.Now()))
@@ -177,6 +184,15 @@ type doctorDB struct {
 	current *sql.DB
 	// why says why current is nil, in the words of those checks' skipped rows.
 	why string
+}
+
+// needsCurrent runs a check whose queries are written against the current
+// schema, or says it did not.
+func (d doctorDB) needsCurrent(name string, run func(*sql.DB) check) check {
+	if d.current == nil {
+		return check{statusInfo, name, "skipped: " + d.why}
+	}
+	return run(d.current)
 }
 
 // openDoctorDB opens what exists at the configured path and never creates or

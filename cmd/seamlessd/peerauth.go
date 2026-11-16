@@ -344,13 +344,31 @@ func (rt *peerAuthRuntime) trustedFileProblem(what, path string) string {
 	case facts.mode.Perm()&0o022 != 0:
 		return fmt.Sprintf("%s %s is mode %04o: it must not be group- or world-writable", what, real, facts.mode.Perm())
 	case what == configFileWhat && facts.mode.Perm()&0o004 != 0:
-		return fmt.Sprintf("%s %s is mode %04o: every account can read it, and it holds the bearer key; make it 0640, readable by the daemon's group only", what, real, facts.mode.Perm())
+		return fmt.Sprintf("%s %s is mode %04o: every account can read it, and it holds the bearer key; %s", what, real, facts.mode.Perm(), rt.groupOnlyFix(facts))
 	case what == tlsKeyWhat && facts.mode.Perm()&0o004 != 0:
-		return fmt.Sprintf("%s %s is mode %04o: every account can read the TLS private key, and with it serve this daemon's name; make it 0640, readable by the daemon's group only", what, real, facts.mode.Perm())
+		return fmt.Sprintf("%s %s is mode %04o: every account can read the TLS private key, and with it serve this daemon's name; %s", what, real, facts.mode.Perm(), rt.groupOnlyFix(facts))
 	case what == tlsKeyWhat && facts.mode.Perm()&0o040 != 0 && int(facts.gid) != rt.env.egid:
-		return fmt.Sprintf("%s %s is mode %04o with group %d, not the daemon's group (%d): that group's members can read the TLS private key; chgrp it to the daemon's group, or make it 0600", what, real, facts.mode.Perm(), facts.gid, rt.env.egid)
+		// 0600 keeps a key the daemon's account owns readable by it; a key root
+		// owns would then be root's alone, and the daemon could not load it.
+		fix := "chgrp it to the daemon's group"
+		if int(facts.uid) == rt.env.euid {
+			fix += ", or make it 0600"
+		}
+		return fmt.Sprintf("%s %s is mode %04o with group %d, not the daemon's group (%d): that group's members can read the TLS private key; %s", what, real, facts.mode.Perm(), facts.gid, rt.env.egid, fix)
 	}
 	return ""
+}
+
+// groupOnlyFix is the advice for a file every account can read: 0640, with
+// the daemon's group as its group. A file in another group would be closed
+// to the daemon at 0640 when root owns it, and open to that group's members
+// when the daemon's account does, so it is told to take the daemon's group
+// first.
+func (rt *peerAuthRuntime) groupOnlyFix(facts fileFacts) string {
+	if int(facts.gid) == rt.env.egid {
+		return "make it 0640, readable by the daemon's group only"
+	}
+	return fmt.Sprintf("chgrp it to the daemon's group (%d) and make it 0640, readable by that group only", rt.env.egid)
 }
 
 // ancestorProblem walks every directory above path (symlinks resolved first)

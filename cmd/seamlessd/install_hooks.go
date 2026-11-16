@@ -1017,40 +1017,72 @@ func claudeMCPAddArgs(baseURL, seamBin, configPath string) []string {
 // installed at this point, so a missing or failing claude CLI degrades to
 // printing the manual command rather than failing the install.
 func registerClaudeMCP(baseURL, seamBin, configPath string) {
-	args := claudeMCPAddArgs(baseURL, seamBin, configPath)
-	manual := "claude " + strings.Join(args, " ")
 	claude, err := exec.LookPath("claude")
 	if err != nil {
 		fieldRow("mcp", yellow("claude CLI not found"))
-		fmt.Printf("%s%s\n", fieldCont, dim(manual))
+		fmt.Printf("%s%s\n", fieldCont, dim(mcpManualCommand("claude", claudeMCPAddArgs(baseURL, seamBin, configPath))))
 		return
 	}
-	runner := execMCPCommandRunner{client: "claude", path: claude, timeout: mcpCommandTimeout}
-	ctx := context.Background()
+	// No known config file judges no bridge: the registration is then left as
+	// it is, as before the file was read.
+	userConfig, cerr := defaultClaudeCodeConfigPath()
+	if cerr != nil {
+		userConfig = ""
+	}
+	registerClaudeMCPWith(context.Background(), execMCPCommandRunner{client: "claude", path: claude, timeout: mcpCommandTimeout},
+		userConfig, baseURL, seamBin, configPath)
+}
 
-	// Claude Code 2.1.215 exposes no JSON flag for mcp get/list. Do not turn its
-	// human health report into a second brittle state parser: retain the narrow
-	// stored-Authorization migration below, then verify existence after add.
-	// Codex's machine-readable surface is reconciled exactly in
-	// reconcileCodexMCP.
-	// An existing registration is normally left alone -- except the one shape
-	// this change exists to retire. Installs predating the headersHelper switch
-	// stored the bearer key as a literal header in ~/.claude.json, and a plain
-	// "already registered" would leave it there forever, so the fix would only
-	// ever reach new users. Re-register those in place.
+// claudeMCPRemoveArgs is the claude CLI argv that removes the user-scope
+// registration, the first half of every re-registration (add-json refuses an
+// existing name).
+var claudeMCPRemoveArgs = []string{"mcp", "remove", "--scope", "user", seamlessMCPName}
+
+// registerClaudeMCPWith is registerClaudeMCP over runner, judging the
+// user-scope entry in the Claude Code config file at userConfig ("" judges
+// none).
+//
+// Claude Code exposes no JSON flag for mcp get/list, and its get prints a human
+// health report that is not parsed for state: the one exception is the narrow
+// stored-Authorization migration below, kept as it was. Codex's machine-readable
+// surface is reconciled exactly in reconcileCodexMCP.
+//
+// An existing registration is left alone, except two shapes:
+//   - Installs predating the headersHelper switch stored the bearer key as a
+//     literal header in ~/.claude.json, and a plain "already registered" would
+//     leave it there forever, so the fix would only ever reach new users.
+//   - A seam mcp-proxy stdio bridge whose command or arguments are not the
+//     desired ones (another seam, after --seam names a new one; an old --config),
+//     judged on the entry the config file holds (claudeCodeUserBridgeRepair), as
+//     the Codex and Claude app registrations are judged on theirs. Left alone,
+//     the agents would keep running the old seam.
+//
+// Both are re-registered in place: remove, then add-json. That is attempted only
+// once `mcp get` has answered (the claude CLI is known to work), and if the add
+// then fails the manual command is printed.
+func registerClaudeMCPWith(ctx context.Context, runner mcpCommandRunner, userConfig, baseURL, seamBin, configPath string) {
+	args := claudeMCPAddArgs(baseURL, seamBin, configPath)
+	manual := mcpManualCommand("claude", args)
+
 	upgrade := false
+	var repair []string
 	if out, gerr := runner.Run(ctx, "mcp", "get", seamlessMCPName); gerr == nil {
-		if !strings.Contains(string(out), "Authorization") {
+		replacing := "the stored-key registration"
+		if strings.Contains(string(out), "Authorization") {
+			upgrade = true
+		} else if repair = claudeCodeUserBridgeRepair(userConfig, baseURL, seamBin, configPath); len(repair) > 0 {
+			replacing = "the stale bridge registration"
+		} else {
 			fieldRow("mcp", dim("already registered"))
 			return
 		}
-		upgrade = true
 		// add-json refuses an existing name, so the old entry goes first. If the
 		// add below then fails, the manual command is printed -- which is why
 		// this is not attempted unless the claude CLI is known to work.
-		if out, rerr := runner.Run(ctx, "mcp", "remove", "--scope", "user", seamlessMCPName); rerr != nil {
-			fieldRow("mcp", yellow("could not replace the stored-key registration"))
+		if out, rerr := runner.Run(ctx, claudeMCPRemoveArgs...); rerr != nil {
+			fieldRow("mcp", yellow("could not replace "+replacing))
 			fmt.Printf("%s%s\n", fieldCont, dim(strings.TrimSpace(string(out))))
+			fmt.Printf("%s%s\n", fieldCont, dim(mcpManualCommand("claude", claudeMCPRemoveArgs)))
 			fmt.Printf("%s%s\n", fieldCont, dim(manual))
 			return
 		}
@@ -1073,11 +1105,25 @@ func registerClaudeMCP(baseURL, seamBin, configPath string) {
 		fmt.Printf("%s%s\n", fieldCont, dim(manual))
 		return
 	}
-	if upgrade {
+	switch {
+	case upgrade:
 		fieldRow("mcp", green("re-registered")+dim(" (--scope user; bearer key moved out of ~/.claude.json)"))
-		return
+	case len(repair) > 0:
+		// Judged on the config file's entry, so verified on it too. The add
+		// answered, so the name is taken again: the way out is both commands.
+		if verr := verifyClaudeCodeUserBridge(userConfig, baseURL, seamBin, configPath); verr != nil {
+			fieldRow("mcp", yellow("registration could not be verified"))
+			fmt.Printf("%s%s\n", fieldCont, dim(verr.Error()))
+			fmt.Printf("%s%s\n", fieldCont, dim(mcpManualCommand("claude", claudeMCPRemoveArgs)))
+			fmt.Printf("%s%s\n", fieldCont, dim(manual))
+			return
+		}
+		fieldRow("mcp", green("repaired")+dim(" ("+strings.Join(repair, ", ")+"; --scope user)"))
+	case hooks.CommandOnlyBaseURL(baseURL):
+		fieldRow("mcp", green("registered")+dim(" (--scope user, stdio bridge: seam mcp-proxy)"))
+	default:
+		fieldRow("mcp", green("registered")+dim(" (--scope user, key via headersHelper)"))
 	}
-	fieldRow("mcp", green("registered")+dim(" (--scope user, key via headersHelper)"))
 }
 
 // codexMCPAddArgs builds the codex CLI argv that registers the Seamless MCP

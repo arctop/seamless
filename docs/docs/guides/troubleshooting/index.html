@@ -444,7 +444,10 @@ get worse ranking, not a failure, because a partial answer beats no answer durin
 a network incident. That is correct in the moment and terrible for three weeks.
 Run <code>seamlessd doctor</code> and read the <code>embedder</code> line: it probes with a real call.
 Note that provider <code>anthropic</code> has no embeddings API at all, so selecting it means
-permanently lexical recall.</p>
+permanently lexical recall. A <code>context deadline exceeded</code> there right after the
+daemon <a href="../../guides/peer-auth/#move-an-existing-install-over">moved to its own account</a>
+can be an outbound firewall (LuLu, Little Snitch) holding <code>seamlessd</code> at its new
+path: allow it.</p>
 <p><strong>The memory is not written to be findable.</strong> The <code>description</code> is the retrieval
 surface - the only text indexes show, and the <em>only</em> text the prompt-injection
 matcher scores (name and description; never the body). A description like &quot;notes
@@ -821,10 +824,12 @@ per address, shared by everything behind your router) is waited out.</p>
 <p><strong>Fix.</strong> Usually the network: the daemon reaches <code>api.github.com</code> directly
 unless its own environment carries <code>HTTPS_PROXY</code>. A proxy exported in your shell
 does not reach a daemon the service manager starts; see
-<a href="../../reference/service/">The service &amp; where things live</a>. If the machine should
-not talk to GitHub at all, set <code>update.check: false</code> - then nothing is sent and
-nothing is reported. <code>seamlessd update --check</code> asks directly, so it shows the
-same error with its cause.</p>
+<a href="../../reference/service/">The service &amp; where things live</a>. An outbound firewall
+that has not allowed <code>seamlessd</code> at its path fails the check too, as after a
+<a href="../../guides/peer-auth/#move-an-existing-install-over">move to the daemon's own account</a>.
+If the machine should not talk to GitHub at all, set <code>update.check: false</code> -
+then nothing is sent and nothing is reported. <code>seamlessd update --check</code> asks
+directly, so it shows the same error with its cause.</p>
 <h2 id="the-update-notice-will-not-go-away">The update notice will not go away</h2>
 <p><strong>What is happening.</strong> A newer release is out that this install will not install
 by itself, and the daemon says so in new sessions' briefings for a week after it

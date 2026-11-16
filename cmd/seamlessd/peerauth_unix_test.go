@@ -270,6 +270,48 @@ func TestPreparePeerAuth_TLSPair(t *testing.T) {
 	}
 }
 
+// A TLS key another group can read is told to take the daemon's group. Only
+// a key the daemon's account owns may be made 0600 instead: root's key at
+// 0600 would be root's alone, and the daemon could not load it.
+func TestPreparePeerAuth_TLSKeyGroupAdviceKeepsTheKeyReadable(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		daemons  bool // the daemon's account owns the key, else root
+		offers06 bool
+	}{
+		{"root's key", false, false},
+		{"the daemon's own key", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l, cfg := newPALayout(t, paLockedAndRestricted)
+			tls := filepath.Join(l.base, "etc", "tls")
+			require.NoError(t, os.Mkdir(tls, 0o750))
+			require.NoError(t, os.Chmod(tls, 0o750))
+			key := filepath.Join(tls, "key.pem")
+			require.NoError(t, os.WriteFile(filepath.Join(tls, "cert.pem"), []byte("cert"), 0o644))
+			require.NoError(t, os.Chmod(filepath.Join(tls, "cert.pem"), 0o644))
+			require.NoError(t, os.WriteFile(key, []byte("key"), 0o600))
+			cfg.TLS.CertFile, cfg.TLS.KeyFile = filepath.Join(tls, "cert.pem"), key
+			env := paTestEnv(l, 4242)
+			env.inspect = overrideFacts(key, func(f *fileFacts) {
+				f.uid, f.gid, f.mode = 0, uint32(env.egid)+1, 0o640
+				if tc.daemons {
+					f.uid = uint32(env.euid)
+				}
+			})
+			_, err := preparePeerAuth(cfg, env)
+			require.ErrorIs(t, err, errPeerAuthPreflight)
+			require.Contains(t, err.Error(), "not the daemon's group")
+			require.Contains(t, err.Error(), "chgrp it to the daemon's group")
+			if tc.offers06 {
+				require.Contains(t, err.Error(), "or make it 0600")
+			} else {
+				require.NotContains(t, err.Error(), "make it 0600")
+			}
+		})
+	}
+}
+
 // overrideFacts is inspectPath with path's facts changed by edit.
 func overrideFacts(path string, edit func(*fileFacts)) func(string) (fileFacts, error) {
 	return func(p string) (fileFacts, error) {

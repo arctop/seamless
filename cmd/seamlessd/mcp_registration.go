@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	pathpkg "path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -483,9 +484,23 @@ func commandOutputSuffix(out []byte) string {
 	return ": " + detail
 }
 
+// mcpManualCommand is the client CLI command line a person pastes to do what
+// the installer could not, each argument quoted for this computer's shell
+// (shellQuoter): the Claude Code registration's JSON holds quotes and spaces,
+// and a path may. A word every shell reads literally stays bare.
+func mcpManualCommand(client string, args []string) string {
+	quote := shellQuoter(runtime.GOOS)
+	words := make([]string, 0, len(args)+1)
+	words = append(words, client)
+	for _, arg := range args {
+		words = append(words, quote(arg))
+	}
+	return strings.Join(words, " ")
+}
+
 func registerCodexMCP(seamBin, configPath string) error {
 	args := codexMCPAddArgs(seamBin, configPath)
-	manual := "codex " + strings.Join(args, " ")
+	manual := mcpManualCommand("codex", args)
 	codex, err := exec.LookPath("codex")
 	if err != nil {
 		fieldRow("mcp", yellow("incomplete (management CLI not found)"))

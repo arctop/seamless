@@ -193,7 +193,10 @@ get worse ranking, not a failure, because a partial answer beats no answer durin
 a network incident. That is correct in the moment and terrible for three weeks.
 Run `seamlessd doctor` and read the `embedder` line: it probes with a real call.
 Note that provider `anthropic` has no embeddings API at all, so selecting it means
-permanently lexical recall.
+permanently lexical recall. A `context deadline exceeded` there right after the
+daemon [moved to its own account](/guides/peer-auth/#move-an-existing-install-over)
+can be an outbound firewall (LuLu, Little Snitch) holding `seamlessd` at its new
+path: allow it.
 
 **The memory is not written to be findable.** The `description` is the retrieval
 surface - the only text indexes show, and the *only* text the prompt-injection
@@ -507,10 +510,12 @@ per address, shared by everything behind your router) is waited out.
 **Fix.** Usually the network: the daemon reaches `api.github.com` directly
 unless its own environment carries `HTTPS_PROXY`. A proxy exported in your shell
 does not reach a daemon the service manager starts; see
-[The service & where things live](/reference/service/). If the machine should
-not talk to GitHub at all, set `update.check: false` - then nothing is sent and
-nothing is reported. `seamlessd update --check` asks directly, so it shows the
-same error with its cause.
+[The service & where things live](/reference/service/). An outbound firewall
+that has not allowed `seamlessd` at its path fails the check too, as after a
+[move to the daemon's own account](/guides/peer-auth/#move-an-existing-install-over).
+If the machine should not talk to GitHub at all, set `update.check: false` -
+then nothing is sent and nothing is reported. `seamlessd update --check` asks
+directly, so it shows the same error with its cause.
 
 ## The update notice will not go away
 

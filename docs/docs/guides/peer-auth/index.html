@@ -1379,16 +1379,20 @@ keep the plain reach: shapes are entries under <code>peer_auth.restricted</code>
 earlier release refuses it when the config loads, so update the daemon before
 you write one.</p>
 <h2 id="verify">Verify</h2>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="c1"># As root or the daemon&#39;s account: the policy, and nothing serve would refuse.</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="c1"># As the daemon&#39;s account: the policy, and nothing serve would refuse.</span>
 </span></span><span class="line"><span class="cl">sudo -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd doctor
 </span></span><span class="line"><span class="cl">
 </span></span><span class="line"><span class="cl"><span class="c1"># As the owner: the files are out of reach, and the lock holds.</span>
 </span></span><span class="line"><span class="cl">ls /opt/seamless/data                               <span class="c1"># Permission denied</span>
 </span></span><span class="line"><span class="cl">seam recall something --project example-finance     <span class="c1"># refused at the lock</span>
+</span></span><span class="line"><span class="cl">seamlessd doctor                                    <span class="c1"># your hooks and MCP registrations</span>
 </span></span><span class="line"><span class="cl">
 </span></span><span class="line"><span class="cl"><span class="c1"># As any other account: refused at the door.</span>
 </span></span><span class="line"><span class="cl">curl --unix-socket /opt/seamless/run/seamlessd.sock http://localhost/healthz   <span class="c1"># 403</span>
 </span></span></code></pre></div>
+<p>Run with the daemon's config, doctor judges the daemon, its files and its
+accounts, and leaves your agents' hooks and MCP registrations to the run with
+your own client config: its <code>client setup</code> row says so.</p>
 <p>Then start an agent in the locked project's repository: its session starts with
 the locked notice, and <code>seam approve</code> in your own terminal shows its request.</p>
 <h2 id="what-changes-with-peer-auth-on">What changes with peer_auth on</h2>
@@ -1793,6 +1797,14 @@ clones with <code>seamlessd map-repo --path &lt;its clone&gt; --project &lt;slug
 daemon's account (<a href="#restricted-local-accounts">details</a>).</p>
 </li>
 </ol>
+<p><strong>An outbound firewall</strong> on this computer, such as LuLu or Little Snitch, treats
+the binaries at their new paths as new programs, and holds or blocks their
+connections until you allow them. Allow <code>/opt/seamless/bin/seamlessd</code> to reach
+your LLM provider (<code>api.openai.com</code> by default), GitHub (the update check and
+the releases it installs), and the pages your agents ask <code>capture_url</code> to fetch.
+<code>seam touchid enroll</code> downloads the Touch ID approver from GitHub, so allow the
+<code>seam</code> you run it with as well. Until you do, those calls fail: <code>seamlessd doctor</code>'s <code>embedder</code> row says the provider is unreachable (<code>context deadline exceeded</code> while the firewall holds the connection), recall falls back to keyword
+search, and the update check fails.</p>
 <h3 id="roll-back">Roll back</h3>
 <p>Unload the LaunchDaemon or disable the system unit
 (<a href="../../reference/service/#peer-auth-daemon">how</a>), move the data back

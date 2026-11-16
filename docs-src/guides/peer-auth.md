@@ -1169,16 +1169,21 @@ you write one.
 ## Verify
 
 ```bash
-# As root or the daemon's account: the policy, and nothing serve would refuse.
+# As the daemon's account: the policy, and nothing serve would refuse.
 sudo -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd doctor
 
 # As the owner: the files are out of reach, and the lock holds.
 ls /opt/seamless/data                               # Permission denied
 seam recall something --project example-finance     # refused at the lock
+seamlessd doctor                                    # your hooks and MCP registrations
 
 # As any other account: refused at the door.
 curl --unix-socket /opt/seamless/run/seamlessd.sock http://localhost/healthz   # 403
 ```
+
+Run with the daemon's config, doctor judges the daemon, its files and its
+accounts, and leaves your agents' hooks and MCP registrations to the run with
+your own client config: its `client setup` row says so.
 
 Then start an agent in the locked project's repository: its session starts with
 the locked notice, and `seam approve` in your own terminal shows its request.
@@ -1573,6 +1578,17 @@ so nothing inside needs rewriting. On one volume the move is a rename.
     `server_url`, no key), run `install-hooks` as the account, and map each of its
     clones with `seamlessd map-repo --path <its clone> --project <slug>` as the
     daemon's account ([details](#restricted-local-accounts)).
+
+**An outbound firewall** on this computer, such as LuLu or Little Snitch, treats
+the binaries at their new paths as new programs, and holds or blocks their
+connections until you allow them. Allow `/opt/seamless/bin/seamlessd` to reach
+your LLM provider (`api.openai.com` by default), GitHub (the update check and
+the releases it installs), and the pages your agents ask `capture_url` to fetch.
+`seam touchid enroll` downloads the Touch ID approver from GitHub, so allow the
+`seam` you run it with as well. Until you do, those calls fail: `seamlessd
+doctor`'s `embedder` row says the provider is unreachable (`context deadline
+exceeded` while the firewall holds the connection), recall falls back to keyword
+search, and the update check fails.
 
 ### Roll back
 

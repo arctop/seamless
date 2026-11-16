@@ -131,6 +131,7 @@ Checks stop early if config or the database cannot be loaded at all.
 | `codex hook activity` | Last observed SessionStart/UserPromptSubmit event, if any; evidence only, not proof of current trust. |
 | `codex mcp` | Exact enabled stdio bridge state from `codex mcp get seamless --json`, plus executable/config target existence. |
 | `feature skills` | An **info** line when a client's skill home still holds a skill for an [optional feature](https://thereisnospoon.org/docs/reference/console/#optional-features) you switched off - the daemon never deletes there on a toggle. Re-run `install-hooks` to remove it, or re-enable the feature. |
+| `client setup` | Only with a [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) daemon's own config, as the [guide's Verify](https://thereisnospoon.org/docs/guides/peer-auth/#verify) runs it as the daemon's account: an **info** line in place of the agent client rows above (the Claude Code and Codex runtimes, `hooks`, `claude desktop mcp`, `hooks' seam`, the `codex` rows and `feature skills`). They describe the account doctor runs as, and the hooks the loaded config would install, and with the daemon's config neither is yours: `seamlessd doctor` run as you, with your client config, checks your hooks and MCP registrations. |
 | `gardener` | The ticker configuration, or a warning that it is disabled. |
 | `backups` | [Scheduled backups](https://thereisnospoon.org/docs/guides/data/#backups-in-the-console) and restores, from the records in `~/.seamless/backups/` and `~/.seamless/restore/`. A restore in flight comes first: one staged (**info**: it applies when Seamless restarts, and expires an hour after it was staged), one stopped part way through its swap or its merge (**warn**: the next start undoes the swap, or runs the merge again), or one applied with its bookkeeping left for the next start (**info**). Then a **warn** for replaced data still waiting to be saved as a backup, a `restore/<id>/previous` folder no record accounts for, or a last restore that did not finish. Otherwise the schedule: **info** when automatic backups are off, a **warn** when the last two or more automatic backups failed (the first failure's time and the last error) or nothing has confirmed the backups current for three intervals, **info** when none has been made yet, and **ok** with when they were last confirmed. Absent under `role: client`. |
 | `updates` | The [automatic update check](https://thereisnospoon.org/docs/updating/#automatic-update-checks) and [automatic updates](https://thereisnospoon.org/docs/updating/#automatic-updates), read from the daemon's and the updater's own records (`~/.seamless/update/state.json`, `attempt.json`) without asking GitHub or the daemon. One line, the most urgent thing first. An update that could not be rolled back cleanly, and that the daemon has not settled, is a **warn** carrying the updater's recovery steps and its log. An update under way is **info**. Automatic updates that paused themselves are a **warn** naming why, with the way out: resume them in the console under **Settings > Updates**. A daemon that updates itself says, as **info**, what it installs next and when: once its soak (`update.min_age`) is over, then when no agent session is live, or at a lull in requests after its deadline (`update.max_defer`). A newer release that automatic updates skip (blocked after a failed attempt, or published without a signed checksums bundle) is a **warn** with the command to install it by hand; a hold after a deliberate downgrade is **info**. A daemon that only notifies is **ok** when up to date and a **warn** naming the newer release and the command for this install. The last attempt is added while it concerns the running release, with the updater's own error; one that applied with warnings names `seamlessd install-hooks`. One the updater's gates refused is a **warn** ending in the owner's action for that refusal: `seamlessd restart` when the installed seamlessd is not the version the daemon runs (a release installed without a restart) or the install no longer looks installer-made, and `seamlessd update`, run by hand, when the updater could not make sure it runs outside the service. Automatic updates turned off before it began need no action. **info** when checks are off (and why) or have not run yet. A check failing for a week is a **warn** - usually a proxy the service's environment does not know about. |
@@ -624,12 +625,19 @@ client, which has nowhere to be told about `tls.ca_file`; routing both through
 
 The hook file is written before MCP registration. Claude Code registration stays
 best-effort because its current CLI exposes no machine-readable state: a missing
-CLI or failed `mcp add-json` prints the exact command to run yourself. Codex is
-stricter. It decodes `codex mcp get seamless --json`, leaves an exact enabled
-stdio bridge unchanged, repairs an owned disabled/stale bridge with `mcp add`,
-and re-reads it before reporting success. A direct-HTTP or other incompatible
-entry under `seamless` is not overwritten; remove it explicitly or rerun with
-`--mcp=false` to keep that manual transport.
+CLI or failed `mcp add-json` prints the exact command to run yourself. An existing
+registration is left as it is, except two kinds, which are removed and added
+again once `claude mcp get` answers: one that stores the bearer key as a literal
+header, and a `seam mcp-proxy` stdio bridge whose command or arguments differ
+from the ones this run registers (another `--seam`, another `--config`). The
+bridge is judged on the user-scope `seamless` entry in `~/.claude.json`
+(`$CLAUDE_CONFIG_DIR/.claude.json` when that is set), which is read again before
+the run reports it repaired. Codex is stricter. It decodes
+`codex mcp get seamless --json`, leaves an exact enabled stdio bridge unchanged,
+repairs an owned disabled/stale bridge with `mcp add`, and re-reads it before
+reporting success. A direct-HTTP or other incompatible entry under `seamless` is
+not overwritten; remove it explicitly or rerun with `--mcp=false` to keep that
+manual transport.
 
 The `claude-desktop` target has no management CLI at all, so its registration
 is a merge-preserving edit of `claude_desktop_config.json`: the reserved
