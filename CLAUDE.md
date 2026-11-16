@@ -323,7 +323,9 @@ tasks (`tasks_add/update/ready/list` -- `tasks_list id=<id>` loads a single task
 by its globally-unique id, and `tasks_update` adds and removes blockers with
 `add_depends_on`/`remove_depends_on` -- plus `tasks_claim`/`tasks_release` for
 atomic lease-based claiming), research lab (`lab_open`, `trial_record`,
-`trial_query`), gardener (`gardener_proposals`, `gardener_apply`, plus the
+`trial_query`), repo locks (`locks_list/declare/acquire/release` -- an optional
+feature, off by default: a lock on a repository's refs, keyed by its origin URL,
+held with a lease as a claim is), gardener (`gardener_proposals`, `gardener_apply`, plus the
 natural-language `gardener_request` and the project-split planner
 `gardener_split` -- both LLM-backed, and both only ever propose), utility
 (`capture_url`, `usage_summary`, `favorite_set` -- star/unstar any entity;
@@ -344,8 +346,10 @@ A "plan" is not a primitive -- it is a composition keyed by `plan:<slug>`:
   tasks are excluded from the default `tasks_ready`/`tasks_list` (no queue
   pollution) and surfaced with `plan=<slug>`.
 - **Claiming**: `tasks_claim` atomically moves a ready task to `in_progress` with
-  a lease (default 900s); re-claiming refreshes the lease (heartbeat); an expired
-  lease is reclaimable. `tasks_release` (or closing the task, or `session_end`)
+  a lease (default 900s, at most 4 hours); while the lease is live the claim keeps
+  its session live, so the idle reaper leaves a quiet holder alone; re-claiming
+  refreshes the lease (heartbeat); an expired lease is reclaimable, and a holder
+  whose claim is taken over, force-released or reaped is told once. `tasks_release` (or closing the task, or `session_end`)
   frees it. The briefing surfaces each active plan as a `PLAN: <slug> -- ...` line.
 
 Claude Code plan mode feeds this automatically (`internal/hooks` capture +
