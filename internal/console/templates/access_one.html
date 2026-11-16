@@ -13,7 +13,7 @@
 {{end}}
 
 <dl class="access-facts">
-  <dt>Project</dt><dd>{{.Project}} ({{.Isolation}}{{if .Locked}}, locked{{end}}), {{.Access}}</dd>{{if eq .Kind "move"}}<dt>Leaves</dt><dd>{{if .From}}{{.From}}{{else}}the global scope{{end}}</dd>{{else if .From}}<dt>For</dt><dd>sessions working in {{.From}}</dd>{{end}}{{with .Carry}}<dt>Holds</dt><dd>{{joinAnd .Holds}} <span class="faint">(once approved)</span></dd><dt>May write to</dt><dd>{{if .WriteTo}}{{joinAnd .WriteTo}}{{else}}nowhere{{end}} <span class="faint">(once approved{{if $.Data.Request.AccessChoices}}, read-only{{end}})</span></dd>{{end}}{{if eq .AskedAccess "read-write"}}<dt>It asks for</dt><dd>read and write</dd>{{end}}{{if .Locked}}<dt>Lock</dt><dd>approving also opens the lock to this agent's process tree, for the duration chosen</dd>{{end}}{{if .Agent}}<dt>Agent</dt><dd>{{.Agent}}</dd>{{end}}
+  <dt>Project</dt><dd>{{.Project}} ({{.Isolation}}{{if .Locked}}, locked{{end}}), {{with $.Data.Granted}}{{.Words}} <span class="faint">(approved)</span>{{else}}{{.Access}}{{end}}</dd>{{if eq .Kind "move"}}<dt>Leaves</dt><dd>{{if .From}}{{.From}}{{else}}the global scope{{end}}</dd>{{else if .From}}<dt>For</dt><dd>sessions working in {{.From}}</dd>{{end}}{{with .Carry}}<dt>Holds</dt><dd>{{joinAnd .Holds}} <span class="faint">(once approved)</span></dd><dt>May write to</dt><dd>{{if .WriteTo}}{{joinAnd .WriteTo}}{{else}}nowhere{{end}} <span class="faint">(once approved{{if $.Data.Request.AccessChoices}}, read-only{{end}})</span></dd>{{end}}{{if eq .AskedAccess "read-write"}}<dt>It asks for</dt><dd>read and write</dd>{{end}}{{if .Locked}}<dt>Lock</dt><dd>approving also opens the lock to this agent's process tree, for the duration chosen</dd>{{end}}{{if .Agent}}<dt>Agent</dt><dd>{{.Agent}}</dd>{{end}}
   <dt>Asking</dt><dd>{{if not .PID}}a session (without peer_auth the daemon knows no process){{else}}{{if .Program}}<code>{{.Program}}</code>{{else}}a process{{end}}, pid {{.PID}}, uid {{.UID}}{{end}}</dd>
   <dt>Session</dt><dd>{{if .Session}}{{.Session}}{{else}}none{{end}}{{if .Model}} &middot; {{.Model}}{{end}}</dd>
   <dt>Working in</dt><dd>{{if .CWD}}<code>{{.CWD}}</code>{{else}}unknown{{end}} <span class="faint">The working directory, repository and model are what the agent reported. The daemon cannot check them.</span></dd>
@@ -90,6 +90,7 @@
 <p class="held-sub" id="access-status" role="status" aria-live="polite"></p>
 {{else}}
 <p class="held-sub">This request is <strong>{{.Status}}</strong>{{if .InDialog}}: decided in the agent's approval dialog, which without peer_auth is advisory{{end}}.</p>
+{{with .Granted}}<p class="held-sub" data-granted="{{.Access}}">{{.Line}}</p>{{end}}
 {{end}}
 {{end}}
 {{end}}

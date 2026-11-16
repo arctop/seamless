@@ -213,6 +213,41 @@ type accessOneData struct {
 	// InDialog marks a request decided in the agent's in-session dialog (the
 	// advisory tier's Approve or Deny there, approval.DecidedByDialog).
 	InDialog bool `json:"-"`
+	// Granted is what an approved grant request opened (nil for every other
+	// request): the facts above are the request as asked, whose access is the
+	// default, read-only, even when the owner approved read and write.
+	Granted *grantedView `json:"granted,omitempty"`
+}
+
+// grantedView is the grant an approved request opened: its access, when it
+// ends or ended, and the page's line about it.
+type grantedView struct {
+	Access    string     `json:"access"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+	// Words is Access as the facts word it; Line says what the approval
+	// opened and until when.
+	Words string `json:"-"`
+	Line  string `json:"-"`
+}
+
+// grantedOf is the view of grant g, which request a opened, at now.
+func grantedOf(a store.AccessApproval, g store.AccessGrant, now time.Time) *grantedView {
+	v := &grantedView{Access: g.Access, ExpiresAt: g.ExpiresAt, RevokedAt: g.RevokedAt, Words: "read-only"}
+	if g.Access == store.GrantAccessWrite {
+		v.Words = "read and write"
+	}
+	end := g.ExpiresAt
+	if g.RevokedAt != nil && g.RevokedAt.Before(end) {
+		end = *g.RevokedAt
+	}
+	if now.Before(end) {
+		v.Line = grantNotice(a, g)
+		return v
+	}
+	v.Line = "Approved " + approval.ShortID(a.ID) + " as " + v.Words + " for " + a.FromProject +
+		"; the grant ended at " + end.Local().Format("15:04") + "."
+	return v
 }
 
 // accessChoice is one access radio: its value and its words.
@@ -476,6 +511,16 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 	}
 	if status == store.ApprovalPending && access.PeerAuthenticated(r.Context()) && wantsJSON(r) {
 		d.Challenge = base64.StdEncoding.EncodeToString(a.Challenge)
+	}
+	if status == store.ApprovalApproved && a.Kind == store.AccessKindGrant {
+		g, ok, err := store.AccessGrantForApproval(r.Context(), s.db(r.Context()), a.ID)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		if ok {
+			d.Granted = grantedOf(a, g, time.Now())
+		}
 	}
 	if s.cfg.Approvals == nil {
 		// The advisory tier: no passkeys, no terminal commit through sudo.

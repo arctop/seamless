@@ -638,6 +638,21 @@ func AccessGrantByID(ctx context.Context, db *sql.DB, id string) (AccessGrant, e
 	return g, nil
 }
 
+// AccessGrantForApproval loads the grant approving request approvalID opened,
+// live or ended; ok is false when it opened none (a request still pending,
+// denied, expired, or of another kind).
+func AccessGrantForApproval(ctx context.Context, db *sql.DB, approvalID string) (g AccessGrant, ok bool, err error) {
+	g, err = scanGrant(db.QueryRowContext(ctx, `SELECT `+grantCols+` FROM access_grants WHERE approval_id = ?
+		ORDER BY granted_at DESC, id DESC LIMIT 1`, approvalID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return AccessGrant{}, false, nil
+	}
+	if err != nil {
+		return AccessGrant{}, false, fmt.Errorf("store.AccessGrantForApproval: %w", err)
+	}
+	return g, true, nil
+}
+
 // RevokeAccessGrant ends one live grant at now. A grant that already ended --
 // revoked, expired, or never approved -- is ErrGrantNotLive. Its holder stays
 // confined: ending a grant does not unread what it read.
