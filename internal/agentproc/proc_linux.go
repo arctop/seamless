@@ -27,7 +27,31 @@ func lookupLinux(pid int) (procInfo, error) {
 	if err != nil {
 		return procInfo{}, err
 	}
-	return parseStat(string(b))
+	info, err := parseStat(string(b))
+	if err != nil {
+		return procInfo{}, err
+	}
+	if exe := ExeName(pid); exe != "" {
+		info.name = exe
+	}
+	return info, nil
+}
+
+// ExeName is the path of the program pid runs, read from /proc/<pid>/exe, or
+// "" where it cannot be read (another account's process, a kernel thread). A
+// walk names a process by it, and by stat's comm only where it is "": comm is
+// the base name of the file the process exec'd, so a script -- a git hook's
+// #!/bin/sh -- is named after itself ("reference-trans") although a shell runs
+// it, and a walk that took comm stopped at the hook instead of passing over it
+// to the git and the agent above. macOS names the shell already: its /bin/sh
+// execs the shell it selects. A program replaced since it started reads with
+// a " (deleted)" suffix, which is dropped.
+func ExeName(pid int) string {
+	p, err := os.Readlink(filepath.Join("/proc", strconv.Itoa(pid), "exe"))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSuffix(p, " (deleted)")
 }
 
 // parseStat reads the fields the walk needs from a /proc/<pid>/stat line:

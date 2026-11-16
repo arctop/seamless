@@ -3,6 +3,10 @@
 package agentproc
 
 import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -32,4 +36,31 @@ func TestParseStat(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// TestAnchor_PassesOverAHookScript runs this test binary again under a
+// #!/bin/sh script named like a git hook, and the child must name this process:
+// the walk takes the script for the shell running it. stat's comm names such a
+// script after itself ("reference-trans"), and a walk that read only comm
+// stopped at the hook (ExeName).
+func TestAnchor_PassesOverAHookScript(t *testing.T) {
+	if os.Getenv("AGENTPROC_ANCHOR_HELPER") == "1" {
+		anchor, ok := Anchor()
+		fmt.Printf("anchor=%s ok=%v\n", anchor, ok)
+		return
+	}
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	script := filepath.Join(t.TempDir(), "reference-transaction")
+	// The exit after "$@" keeps the shell from exec'ing the helper in its place.
+	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\n\"$@\"\nexit $?\n"), 0o755))
+	cmd := exec.Command(script, exe, "-test.run=^TestAnchor_PassesOverAHookScript$")
+	cmd.Env = append(os.Environ(), "AGENTPROC_ANCHOR_HELPER=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+
+	self, err := lookupLinux(os.Getpid())
+	require.NoError(t, err)
+	require.Contains(t, string(out), "anchor="+format(os.Getpid(), self.start)+" ok=true",
+		"the anchor passes over the hook script to this process")
 }

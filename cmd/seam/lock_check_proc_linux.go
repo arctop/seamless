@@ -8,19 +8,31 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/arctop/seamless/internal/agentproc"
 )
 
 // errLcProcStat is a /proc/<pid>/stat of another shape.
 var errLcProcStat = errors.New("unreadable /proc stat")
 
-// lcProcLookup reads a process's parent and executable name from
-// /proc/<pid>/stat.
+// lcProcLookup reads a process's parent from /proc/<pid>/stat and its
+// executable from /proc/<pid>/exe (agentproc.ExeName), or from stat's comm
+// where exe cannot be read. comm alone names a hook script after itself
+// ("reference-trans"), so the walk never saw the shell running it and stopped
+// short of git.
 func lcProcLookup(pid int) (int, string, error) {
 	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
 	if err != nil {
 		return 0, "", err
 	}
-	return lcParseProcStat(b)
+	ppid, name, err := lcParseProcStat(b)
+	if err != nil {
+		return 0, "", err
+	}
+	if exe := agentproc.ExeName(pid); exe != "" {
+		name = exe
+	}
+	return ppid, name, nil
 }
 
 // lcParseProcStat decodes "<pid> (<comm>) <state> <ppid> ...": comm sits in
