@@ -28,7 +28,7 @@ func TestToolCountVerdict_DefaultOffPassesAndNamesTheFeature(t *testing.T) {
 	ok, detail := ToolCountVerdict(registeredForTest, registeredForTest-optionalTools(), &off, "")
 	require.True(t, ok, "a default daemon must pass doctor: %s", detail)
 	require.Equal(t,
-		fmt.Sprintf("%d registered, %d exposed (research disabled)",
+		fmt.Sprintf("%d registered, %d exposed (research, repo_locks disabled)",
 			registeredForTest, registeredForTest-optionalTools()),
 		detail)
 }
@@ -57,7 +57,7 @@ func TestToolCountVerdict_FeatureOffButToolsExposedFails(t *testing.T) {
 	ok, detail := ToolCountVerdict(registeredForTest, registeredForTest, &off, "")
 	require.False(t, ok)
 	require.Equal(t,
-		fmt.Sprintf("%d registered, %d exposed, expected %d with research disabled",
+		fmt.Sprintf("%d registered, %d exposed, expected %d with research, repo_locks disabled",
 			registeredForTest, registeredForTest, registeredForTest-optionalTools()),
 		detail)
 }

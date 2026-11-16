@@ -3702,15 +3702,17 @@ abandoned is caught by an idle reaper and marked `expired`. One rule says which
 is which: a session is **live** while it is active and either Seamless saw it
 within `gardener.session_idle_minutes` (a Seamless tool call, a prompt, a
 session start; never a shell command, nor an edit outside the plans directory)
-or it holds a live [task claim](/concepts/lease-based-task-claiming/). The
+or it holds a live [task claim](/concepts/lease-based-task-claiming/) or
+[repo lock](/concepts/repo-locks/). The
 reaper ends exactly the active sessions that are neither, and the console's
 live counts and the automatic-update idle gate count exactly the ones that are.
 The rule only matters when there was no end signal at all - a crashed agent's
-session does not sit "live" forever (at most until its last claim's lease
+session does not sit "live" forever (at most until its last lease
 lapses, four hours at the longest), and a slow one is not reaped out from under
 itself: an agent running a long test run or waiting on CI keeps its session by
-holding the claim for that work. A claim the reaper releases once its lease
-lapsed is news to its holder, which is told once on its next call or prompt.
+holding the claim or lock for that work. A claim or lock the reaper releases
+once its lease lapsed is news to its holder, which is told once on its next
+call or prompt.
 An agent that was only idle gets its session
 back: the next Seamless tool call from the same live agent process reactivates
 the expired ambient session (recorded as a `session.started` event marked
@@ -5288,6 +5290,100 @@ See it happen: [two agents race for the same plan step](/scenarios/task-collisio
 with the winning claim, the bounce, and the pivot, in two live recorded
 sessions. The full model - the ready queue, plans as compositions - is in
 [tasks & plans](/concepts/tasks-and-plans/).
+
+---
+
+# Repo locks
+
+URL: https://thereisnospoon.org/docs/concepts/repo-locks/
+
+
+A repo lock guards a repository's refs - its main branch, or a pattern such
+as every release tag - so that agents working on several machines land their
+changes one at a time. An agent declares a repository's lock once, takes it
+before it lands, and lets it go when the refs have landed. While one agent
+holds the lock, another agent's attempt to take it is refused, naming the
+holder (when the asker may see that session), since when it has held it and
+until when.
+
+Repo locks are an [optional feature](/reference/console/#optional-features),
+off by default. Turn them on in the console under **Settings → Features**
+(**Repo locks**), or in the configuration file with `features.repo_locks:
+true`, or with `SEAMLESS_FEATURES_REPO_LOCKS=true`. While the feature is off,
+the four `locks_*` tools are neither listed nor callable, the Locks screen is
+gone, and `seam lock` says the feature is off. Turning it off deletes no lock.
+
+## A lock belongs to a repository
+
+A lock is never a project's. Project mappings are path prefixes, not
+repositories: one mapping can cover many repositories, a repository can be
+carved out of it for another project, and sessions of two projects work in one
+repository by design. A lock owned by a project could not be unique, and two
+projects could each lock the same repository and split the mutex. So a lock
+has no project, and every surface shows it with its repository and its name:
+`LOCK seamless main`.
+
+A lock carries no free text either. Its state is the resource (its guarded
+refs), the holder (a session), since and until.
+
+## Declared once, keyed by the origin
+
+`seam lock declare` (or the `locks_declare` tool) declares a lock from inside
+the repository's checkout. The repository is named by its git identity, which
+`seam lock` reads on its own machine:
+
+- **The origin URL is the key.** It is normalized, so the ssh and https forms
+  of one repository (`git@host:owner/repo.git`, `https://host/owner/repo`) are
+  one lock, from every machine.
+- **Host and path are the fallback.** A repository with no origin is locked by
+  its machine and its main checkout root. Every checkout seen is recorded the
+  same way, so a repository that gains or changes its origin keeps its lock.
+- **A side clone is its origin's repository.** A clone whose origin is a local
+  path is a checkout of the repository at that path.
+
+A second declaration of the same repository and name, from any project or any
+machine, returns the first lock unchanged and only records the new checkout's
+identity on it. Two locks on one repository and name cannot exist.
+
+A lock's name is a token (`main` by default, or `release`), and it guards
+`refs/heads/<name>` unless the declaration names other refs: full ref names
+under `refs/`, or patterns with one `*`, such as `refs/tags/v*`. A declaration
+also lists the projects whose restricted accounts may hold the lock (by
+default the project the checkout maps to).
+
+A declaration from a [restricted account](/guides/peer-auth/) waits for the
+owner: it is stored as requested, nobody can hold it, and the owner approves
+or discards it on the console's Locks page. Everyone else declares directly.
+
+## Holding a lock
+
+Holding a lock works the way [claiming a task](/concepts/lease-based-task-claiming/)
+does, with the same compare-and-set:
+
+- **Acquire** takes a free lock for the current session, with a lease (900
+  seconds by default, at most 4 hours).
+- **Heartbeat** is acquiring again: the holder's lease is refreshed, and the
+  hold keeps the time it began.
+- **A lapsed lease is free.** A hold is live only while its lease has not run
+  out; at the moment it expires, another session may take the lock, and the
+  answer says it took over a lapsed hold.
+- **Release** lets the lock go; only the holder may.
+- **Force-release** is the owner's override, on the console's Locks page (or
+  `seam lock release --force`): it ends any hold, live or lapsed.
+- **A hold keeps its session live.** While its lease is live, the idle reaper
+  does not end the session holding it, however quiet its landing goes, as with
+  a live [task claim](/concepts/sessions/#liveness).
+- **A session's holds end with it.** `session_end` and the SessionEnd hook
+  free every lock the session holds; the reaper frees the lapsed holds of a
+  session it ends.
+- **A lost hold is news to its holder.** A holder whose lapsed hold another
+  session took, whose hold the owner force-released, or whose lapsed hold the
+  reaper freed is told once, as for a [lost claim](/reference/hooks/#claim-notices):
+  a `Lock lost: ...` line naming the lock by id and name.
+
+A lock is a coordination signal between cooperating agents: holding one tells
+every other agent that the refs it guards are being landed. It does not, by
+itself, stop anyone from pushing.
 
 ---
 
@@ -11483,7 +11579,7 @@ whatever the call is bound to ([home versus binding](/concepts/sessions/#home)).
 
 ## The tool surface
 
-Seamless registers **33 tools**, and a 34th, `access_request`, on a daemon whose
+Seamless registers **37 tools**, and a 38th, `access_request`, on a daemon whose
 `peer_auth` locks a project, or whose access requests (`isolation.requests`) are
 on without `peer_auth`. They are documented in groups:
 
@@ -11493,13 +11589,14 @@ on without `peer_auth`. They are documented in groups:
 | Notes, projects, and capture | `notes_create`, `notes_read`, `notes_update`, `notes_edit`, `notes_append`, `notes_delete`, `project_list`, `project_create`, `capture_url`, `access_request` (locked projects, or access requests without `peer_auth`) |
 | [Tasks](/reference/mcp/tasks/) | `tasks_add`, `tasks_update`, `tasks_ready`, `tasks_list`, `tasks_claim`, `tasks_release` |
 | Lab, gardener, and usage | `lab_open`, `trial_record`, `trial_query`, `gardener_proposals`, `gardener_request`, `gardener_split`, `gardener_apply`, `usage_summary`, `favorite_set` |
+| [Repo locks](/reference/mcp/locks/) | `locks_list`, `locks_declare`, `locks_acquire`, `locks_release` (an optional feature) |
 
 That is the count the server **registers**; what a client is offered can be
 smaller. Tools belonging to an
 [optional feature](/reference/console/#optional-features) are hidden from
 `tools/list` while that feature is off, and a call to one is refused as an
 unknown tool. Optional features ship off, so a fresh install advertises fewer
-than 33 until you turn one on - each affected tool says so on its own reference
+than 37 until you turn one on - each affected tool says so on its own reference
 page. Nothing about registration changes: the catalog these pages are generated
 from, and the registered-tool count `seamlessd doctor` asserts, stay the full
 set either way.
@@ -12332,6 +12429,109 @@ Release a task the current session holds, reopening it (status back to open, cla
 
 ---
 
+# Repo locks
+
+URL: https://thereisnospoon.org/docs/reference/mcp/locks/
+
+
+A repo lock guards a repository's refs, so agents on several machines land
+changes one at a time ([how repo locks work](/concepts/repo-locks/)). These
+tools belong to the **Repo locks** optional feature, off by default: while it
+is off they are neither listed nor callable.
+
+## Naming the repository
+
+A lock has no project, so these tools take none. They name the repository by
+its checkout, with the arguments `session_start` takes: `cwd`, `host`,
+`repo_root`, `main_worktree_root` and `repo_origin`. The daemon reads the
+checkout's git identity from `cwd` only on its own machine with peer_auth off;
+from anywhere else, send `repo_root` (and `main_worktree_root`, `repo_origin`)
+resolved on the checkout's own machine. `seam lock` always does.
+
+`locks_acquire` and `locks_release` also take a lock's `id` (from `locks_list`
+or `locks_declare`) in place of the checkout and the name.
+
+## What an answer shows
+
+A lock answers with its `label` (the repository and the name), its `refs`, its
+`state` (`active`, or `requested` for a declaration waiting for the owner),
+whether it is `held`, `since` and `until` for a hold, its `aliases` and its
+`projects`. A holder is named (`holder`, `holder_session`) only to a caller who
+may read that session; a project is listed only where the caller may list it.
+
+## locks_list {#locks_list}
+
+List repo locks: each lock's repository and name, the refs it guards, whether it is held, by which session (when you may see that session), since and until when, the repository identities that resolve to it, and the projects whose restricted accounts the declaration lists. Pass a checkout's identity (cwd, or repo_root and repo_origin) to list only that repository's locks. A declaration waiting for the owner's approval is listed with state requested. Read-only.
+
+**Optional** - part of *Repo locks*, hidden when the `repo_locks` feature is disabled: the tool leaves `tools/list` and a call to it is refused as an unknown tool, while its stored data stays exactly where it was. See [Optional features](/reference/console/#optional-features).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `cwd` | string | no | Absolute working directory inside the repository's checkout. The daemon reads the checkout's git identity from it only on its own machine with peer_auth off; otherwise pass repo_root (and main_worktree_root, repo_origin) resolved on your machine. `seam lock` sends all of them |
+| `host` | string | no | Machine the checkout is on (hostname). Defaults to the X-Seamless-Host header, then to the daemon's own host |
+| `main_worktree_root` | string | no | Absolute root of the repository's MAIN checkout when repo_root is a linked worktree; defaults to repo_root |
+| `repo_origin` | string | no | The repository's origin remote URL: the key a lock is found by from every machine, so the ssh and https forms of one repository are one lock. A side clone whose origin is a local path is the repository at that path |
+| `repo_root` | string | no | Absolute root of the checkout, resolved on its own machine |
+| `session` | string | no | the session to act as: the name session_start returned, the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless |
+
+## locks_declare {#locks_declare}
+
+Declare a lock on a repository's refs, once per repository and name: the lock agents hold while they land changes, so landings happen one at a time across machines. Name the repository by its checkout (cwd, or repo_root, main_worktree_root and repo_origin): its origin URL is the key, so the ssh and https forms of one repository are one lock, and a repository with no origin is locked by host and path. Declaring again, from any project or machine, returns the existing lock unchanged and records this checkout's identity on it, so a repository that gains or changes its origin keeps its lock. A restricted account's declaration waits for the owner's approval on the console. refs defaults to refs/heads/&lt;name&gt;; projects, the projects whose restricted accounts may hold the lock, defaults to the project the checkout maps to.
+
+**Optional** - part of *Repo locks*, hidden when the `repo_locks` feature is disabled: the tool leaves `tools/list` and a call to it is refused as an unknown tool, while its stored data stays exactly where it was. See [Optional features](/reference/console/#optional-features).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `cwd` | string | no | Absolute working directory inside the repository's checkout. The daemon reads the checkout's git identity from it only on its own machine with peer_auth off; otherwise pass repo_root (and main_worktree_root, repo_origin) resolved on your machine. `seam lock` sends all of them |
+| `host` | string | no | Machine the checkout is on (hostname). Defaults to the X-Seamless-Host header, then to the daemon's own host |
+| `main_worktree_root` | string | no | Absolute root of the repository's MAIN checkout when repo_root is a linked worktree; defaults to repo_root |
+| `name` | string | no | The lock's name on its repository, a token: main (the default), release. A line naming a lock shows its repository and its name: LOCK seamless main |
+| `projects` | array | no | Project slugs whose restricted accounts may hold the lock (a comma-separated string is also accepted). Defaults to the project the checkout maps to |
+| `refs` | array | no | The guarded refs: full ref names (refs/heads/main) or patterns with one '*' (refs/tags/v*), at most 16 (a comma-separated string is also accepted). Defaults to refs/heads/&lt;name&gt; |
+| `repo_origin` | string | no | The repository's origin remote URL: the key a lock is found by from every machine, so the ssh and https forms of one repository are one lock. A side clone whose origin is a local path is the repository at that path |
+| `repo_root` | string | no | Absolute root of the checkout, resolved on its own machine |
+| `session` | string | no | the acting agent's session: the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, another session name, or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- then a sole active ambient. Pass it when a call reports the agent as ambiguous: the bare call then fails rather than guesses. |
+| `session_id` | string | no | the acting agent's session ULID; takes precedence over session and the bound session |
+
+## locks_acquire {#locks_acquire}
+
+Take a repo lock for the current session, with a lease, before landing changes on the refs it guards. Re-acquiring a lock you hold refreshes the lease: the heartbeat for a long landing. A lock another session holds under a live lease is refused, naming the holder when you may see that session, since and until; a lapsed lease is taken over. A declaration still waiting for the owner cannot be held. Name the lock by id, or by the checkout and name (default main). Release it with locks_release once the refs have landed; a hold also lapses at the end of its lease.
+
+**Optional** - part of *Repo locks*, hidden when the `repo_locks` feature is disabled: the tool leaves `tools/list` and a call to it is refused as an unknown tool, while its stored data stays exactly where it was. See [Optional features](/reference/console/#optional-features).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `cwd` | string | no | Absolute working directory inside the repository's checkout. The daemon reads the checkout's git identity from it only on its own machine with peer_auth off; otherwise pass repo_root (and main_worktree_root, repo_origin) resolved on your machine. `seam lock` sends all of them |
+| `host` | string | no | Machine the checkout is on (hostname). Defaults to the X-Seamless-Host header, then to the daemon's own host |
+| `id` | string | no | lock id (from locks_list or locks_declare); or name the checkout instead |
+| `lease_seconds` | number | no | lease duration in seconds before the hold lapses (default 900, at most 14400) |
+| `main_worktree_root` | string | no | Absolute root of the repository's MAIN checkout when repo_root is a linked worktree; defaults to repo_root |
+| `name` | string | no | The lock's name on its repository, a token: main (the default), release. A line naming a lock shows its repository and its name: LOCK seamless main |
+| `repo_origin` | string | no | The repository's origin remote URL: the key a lock is found by from every machine, so the ssh and https forms of one repository are one lock. A side clone whose origin is a local path is the repository at that path |
+| `repo_root` | string | no | Absolute root of the checkout, resolved on its own machine |
+| `session` | string | no | the acting agent's session: the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, another session name, or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- then a sole active ambient. Pass it when a call reports the agent as ambiguous: the bare call then fails rather than guesses. |
+| `session_id` | string | no | the acting agent's session ULID; takes precedence over session and the bound session |
+
+## locks_release {#locks_release}
+
+Release a repo lock the current session holds, live or lapsed, so another session can take it. Only the holder may release; the owner can force-release any hold from the console. Name the lock by id, or by the checkout and name (default main).
+
+**Optional** - part of *Repo locks*, hidden when the `repo_locks` feature is disabled: the tool leaves `tools/list` and a call to it is refused as an unknown tool, while its stored data stays exactly where it was. See [Optional features](/reference/console/#optional-features).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `cwd` | string | no | Absolute working directory inside the repository's checkout. The daemon reads the checkout's git identity from it only on its own machine with peer_auth off; otherwise pass repo_root (and main_worktree_root, repo_origin) resolved on your machine. `seam lock` sends all of them |
+| `host` | string | no | Machine the checkout is on (hostname). Defaults to the X-Seamless-Host header, then to the daemon's own host |
+| `id` | string | no | lock id (from locks_list or locks_acquire); or name the checkout instead |
+| `main_worktree_root` | string | no | Absolute root of the repository's MAIN checkout when repo_root is a linked worktree; defaults to repo_root |
+| `name` | string | no | The lock's name on its repository, a token: main (the default), release. A line naming a lock shows its repository and its name: LOCK seamless main |
+| `repo_origin` | string | no | The repository's origin remote URL: the key a lock is found by from every machine, so the ssh and https forms of one repository are one lock. A side clone whose origin is a local path is the repository at that path |
+| `repo_root` | string | no | Absolute root of the checkout, resolved on its own machine |
+| `session` | string | no | the acting agent's session: the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, another session name, or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- then a sole active ambient. Pass it when a call reports the agent as ambiguous: the bare call then fails rather than guesses. |
+| `session_id` | string | no | the acting agent's session ULID; takes precedence over session and the bound session |
+
+---
+
 # Lab, gardener & usage
 
 URL: https://thereisnospoon.org/docs/reference/mcp/lab-gardener-usage/
@@ -12909,6 +13109,64 @@ Without `--force`, calls `tasks_release`, which only releases a claim you hold.
 `--force` is the owner override and takes a different route entirely: it POSTs
 to the console's release endpoint, which is bearer-authenticated and force-releases
 any holder's claim. Agents on the MCP surface cannot reach that path.
+
+## Repo locks
+
+A [repo lock](/concepts/repo-locks/) guards a repository's refs while an agent
+lands changes. These commands call the `locks_*` tools and name the repository
+by the checkout they run in (or `--cwd`): `seam` resolves its root, its main
+checkout and its origin on this machine, following a side clone's local-path
+origin to the repository it was cloned from, so the daemon never reads this
+machine's disk. Repo locks are an optional feature, off by default: while it is
+off on the server, each command says so and exits 1. Bare `seam lock` names its
+subcommands and exits 2.
+
+### seam lock list {#seam_lock_list}
+
+```bash
+seam lock list [--cwd DIR] [--here] [--json]
+```
+
+Calls `locks_list` and prints one line per lock: `LOCK <repo> <name>`, whether
+it is free, held (by which session, when you may see it, and until when) or
+waiting for the owner's approval, and its guarded refs. `--here` (or `--cwd`)
+lists only the locks of the repository the directory is in.
+
+### seam lock declare {#seam_lock_declare}
+
+```bash
+seam lock declare [--cwd DIR] [--json] [--name NAME] [--projects SLUGS] [--refs REFS] [--session NAME]
+```
+
+Calls `locks_declare` for this repository: once per repository and name. A
+second declaration from any project or machine reports the existing lock, its
+refs unchanged. `--name` defaults to `main`, `--refs` (comma-separated full ref
+names or one-`*` patterns) to `refs/heads/<name>`, and `--projects` to the
+project the checkout maps to. A restricted account's declaration waits for the
+owner's approval on the console's Locks page.
+
+### seam lock acquire {#seam_lock_acquire}
+
+```bash
+seam lock acquire [--cwd DIR] [--id ID] [--json] [--lease SECONDS] [--name NAME] [--session NAME]
+```
+
+Calls `locks_acquire` and prints the lease's end. Acquiring a lock you already
+hold refreshes its lease: that is the heartbeat for a long landing. A lock
+another session holds is refused, naming the holder where you may see it.
+`--lease` overrides the server's default (900 seconds) and is only sent when
+greater than zero; `--id` names the lock instead of the checkout.
+
+### seam lock release {#seam_lock_release}
+
+```bash
+seam lock release [--cwd DIR] [--force] [--id ID] [--json] [--name NAME] [--session NAME]
+```
+
+Without `--force`, calls `locks_release`, which only releases a hold you have.
+`--force` is the owner override: it POSTs to the console's force-release route,
+which ends any hold, live or lapsed, and is refused from an agent's process on
+the peer_auth socket.
 
 ## Captured plans
 
@@ -15238,6 +15496,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `features.momentum` | bool | - |
 | `features.gamification` | bool | - |
 | `features.screening` | bool | - |
+| `features.repo_locks` | bool | - |
 | `screening.url_allowlist` | []string | - |
 | `screening.blob_min_length` | int | `200` |
 | `screening.drift_interval` | duration | `5m` |
@@ -15519,6 +15778,13 @@ features:
   # The Home welcome card offers it too. Tunables: the screening block below.
   # env: SEAMLESS_FEATURES_SCREENING
   screening: false
+  # Repo locks: locks on a repository's refs (its main branch, or a tag
+  # pattern) that agents declare once and hold while they land changes, so
+  # landings happen one at a time across machines. The Locks console screen,
+  # the locks_list, locks_declare, locks_acquire and locks_release MCP tools,
+  # and seam lock. Off, no lock is deleted.
+  # env: SEAMLESS_FEATURES_REPO_LOCKS
+  repo_locks: false
 
 # The write screens behind features.screening (inert while it is off).
 screening:
@@ -16171,10 +16437,12 @@ on the console's Held screen.
 
 A session that loses a task claim it held - another session claims the task
 after its lease lapsed, the owner releases the claim, or the idle reaper
-releases a lapsed one - is told once. The next `SessionStart` (not a
-subagent's) or `UserPromptSubmit` of its conversation leads its injection with
-a `Seamless: Claim lost: ...` line naming the task, when, the session that took
-it when this one may see it, and what to do; a Seamless tool result may carry
+releases a lapsed one - is told once, and so is one that loses a
+[repo lock](/concepts/repo-locks/) it held the same three ways. The next
+`SessionStart` (not a subagent's) or `UserPromptSubmit` of its conversation
+leads its injection with a `Seamless: Claim lost: ...` line (`Lock lost: ...`
+for a lock) naming the task or lock, when, the session that took it when this
+one may see it, and what to do; a Seamless tool result may carry
 it first instead, and whichever does carries it alone. The conversation's
 sessions are its ambient session and every explicit session `session_start`
 linked to it. See [lease-based task claiming](/concepts/lease-based-task-claiming/).
@@ -17106,6 +17374,9 @@ nothing, and their rows say so.
 |---|---|---|
 | Archive a memory | `POST /console/memories/{id}/archive` | Routes through `lifecycle.Archive`: the memory is stamped invalid and leaves every index, its file stays on disk with a tombstone. |
 | Force-release a task claim | `POST /console/tasks/{id}/release` | The owner override: releases a claimed task's lock regardless of who holds it, reopening it for any agent. Not reachable from the agent MCP tools. |
+| Force-release a repo lock | `POST /console/locks/{id}/release` | [Repo locks](#locks): ends the hold a lock carries, live or lapsed, whoever holds it; the lock stays declared. What `seam lock release --force` sends. Refused when nobody holds it (409), from an agent's process on the peer_auth socket, and from a paired device. |
+| Approve a lock declaration | `POST /console/locks/{id}/approve` | Makes a restricted account's waiting declaration an active lock, which agents may then hold. Refused for a lock already active (409), from an agent's process on the peer_auth socket, and from a paired device. |
+| Discard a lock declaration | `POST /console/locks/{id}/discard` | Deletes a restricted account's waiting declaration with its repository identities, so the repository may be declared again. An active lock is refused (409): no route removes one. Refused from an agent's process on the peer_auth socket, and from a paired device. |
 | Approve a captured plan | `POST /console/plans/{slug}/approve` | The escape hatch for a Claude Code approval whose `PostToolUse` never fired: flips the `cc-plan` note to `plan-status:approved` and creates the tracking task, exactly as the hook would have. Only applies to a CC capture. |
 | Star / unstar an entity | `POST /console/favorites/{kind}/{id}` | Toggles the same starred flag the `favorite_set` MCP tool sets: a starred memory pins into briefings and gets a post-fusion recall boost. For memories and notes the star lives in frontmatter; it never bumps `updated`. |
 | Ask the gardener for proposals | `POST /console/gardener/request` | Interprets a natural-language maintenance request into **pending proposals**. It never mutates a memory. |
@@ -17339,7 +17610,7 @@ The sidebar groups the screens by the job they serve rather than by table:
 |---|---|
 | **Live** | Overview, Now, Interactions |
 | **Knowledge** | Memories, Notes, Retrieval, Gardener |
-| **Work** | Projects, Plans, Tasks, Sessions |
+| **Work** | Projects, Plans, Tasks, Sessions, Locks (only while that [optional feature](#optional-features) is on) |
 | **Research** | Labs, Trials (only while that [optional feature](#optional-features) is on) |
 
 That is the full list, at the Advanced [level](#choose-how-much-you-see); a
@@ -17476,6 +17747,7 @@ What each level shows, generated from the console's own registries:
 | **Plans** | - | shown | shown |
 | **Tasks** | - | shown | shown |
 | **Sessions** | shown | shown | shown |
+| **Locks** - while the repo_locks feature is on | - | shown | shown |
 | **Labs** - while the research feature is on | - | shown | shown |
 | **Trials** - while the research feature is on | - | shown | shown |
 | **System** | - | shown | shown |
@@ -17876,6 +18148,29 @@ blocked and leaves them out of the ready queue. Opening a plan or a session
 that lives in a locked project takes you to that project's unlock page, which
 says the item is there and links back once you unlock it.
 
+## Locks {#locks}
+
+`/console/locks`, `/console/locks/{id}`
+
+Only while the **Repo locks** [optional feature](#optional-features) is on; a
+Standard screen. Every [repo lock](/concepts/repo-locks/), shown with its
+repository and its name (**LOCK seamless main**): the refs it guards, whether it
+is free, held or lapsed, the session that holds it with since and until, the
+repository identities that resolve to it, and the projects whose restricted
+accounts may hold it. A lock belongs to no project, so the page lists every
+one; a holder in a project this browser has not unlocked reads "a session this
+console does not show", and such a listed project is left out.
+
+- **Waiting for your approval** - the declarations restricted accounts filed:
+  nobody can hold one until you **Approve** it, and **Discard** leaves the
+  repository free to be declared again. The sidebar badge counts them.
+- **Force release** - on a held or lapsed lock: ends the hold whoever holds it.
+  The agent that held it is not told, so release a lock only when its holder is
+  gone or stuck.
+
+`/console/locks/{id}` is the same page with that lock marked; with
+`?format=json`, the lock alone.
+
 ## Plans
 
 `/console/plans`, `/console/plans/{slug}`
@@ -18255,7 +18550,7 @@ feature is, a generated line naming exactly what switching it off hides, and a
 live count of the data it holds either way ("Data kept: 12 trials across 3
 labs").
 
-There are four today:
+There are five today:
 
 **Research labs & trials** owns the [Labs](#labs) and [Trials](#trials)
 screens, the trials search scope, and the `lab_open`, `trial_record`, and
@@ -18361,6 +18656,12 @@ none of them. With restricted local accounts configured, the card says the
 Held screen stays for their proposals and only its screening parts go. The
 [write screening guide](/guides/write-screening/) has the screens, the reasons
 and the events.
+
+**Repo locks** owns the [Locks](#locks) screen, the `locks_list`,
+`locks_declare`, `locks_acquire` and `locks_release` MCP tools, and `seam
+lock`: [locks on a repository's refs](/concepts/repo-locks/) that agents
+declare once and hold while they land changes. Turning it off deletes no lock
+and no declaration.
 
 **Nothing is ever deleted.** Switching a feature off gates exposure and nothing
 else: the trials stay in the database, its screens answer with a short "switched
@@ -18856,6 +19157,13 @@ so losing `seam.db` loses them:
   agent process that owns an ambient session (what binds the agent's tool calls
   to it).
 - `tasks` and `task_deps` - the ready-queue, plan slugs, claims, and leases.
+- `repo_locks`, `repo_lock_aliases` and `repo_lock_projects` - the
+  [repo locks](/concepts/repo-locks/): each lock's name, guarded refs, state,
+  holder, since and until; the repository identities that resolve to it (a
+  normalized origin URL, or a host and a checkout root); and the projects whose
+  restricted accounts may hold it. An archive carries them, but a merge into
+  another instance does not: a lock is that server's declaration, and its
+  holder that server's session.
 - `trials` - research lab records with queryable JSON metrics.
 - `events` - the append-only log behind telemetry, the console feed, and
   retrieval stats.
@@ -19144,6 +19452,12 @@ replaced it: `source_session`, `superseded_by`, `invalid_at`.
 **Recall** - Seamless's single search entry point, fusing FTS5 keyword matching
 and vector similarity with RRF. Also, loosely, the `<seam-recall>` block
 injected on prompt match - see the disambiguation below.
+
+**Repo lock** - a Seamless lock on a repository's refs (its main branch, or a
+tag pattern), declared once per repository and name and held with a lease by
+one session while it lands changes. It belongs to the repository, never to a
+project, and is always named with it: `LOCK seamless main`. An optional
+feature, off by default.
 
 **Reproject** - moving a Seamless memory to a different project that **already
 exists**; moving it to one that does not is a *split*.
@@ -19748,8 +20062,9 @@ Two places outside `internal/mcp` also track the surface:
   doctor` reports registered against exposed: it reads the effective feature
   state from `GET /console/settings?format=json` and subtracts the tools of the
   features that are off, derived from the registry rather than from a second
-  number to keep current (`33 registered, 30 exposed (research disabled)`; `33
-  tools (expected 33)` when everything is on). With that state unreadable - an
+  number to keep current (`37 registered, 30 exposed (research, repo_locks
+  disabled)`; `37 tools (expected 37)` when everything is on). With that state
+  unreadable - an
   unreachable endpoint, or a pre-features daemon whose settings JSON carries no
   `featuresConfig` - it judges a **range** instead of a number and says why,
   rather than failing a healthy daemon over a fact it could not read.

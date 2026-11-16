@@ -99,6 +99,11 @@ var screens = []screen{
 		Min: levelStandard, NavRow: true, Badge: "tasks", BadgeTitle: "Open tasks", Scope: "tasks"},
 	{ID: "sessions", Label: "Sessions", Icon: "terminal", Href: "/console/sessions", Group: groupWork, Key: "s",
 		Min: levelBasic, NavRow: true, Badge: "sessions", Scope: "sessions"},
+	// The repo locks (locks.go): every lock on a repository's refs, and the
+	// declarations waiting for the owner.
+	{ID: "locks", Label: "Locks", Icon: "git-branch", Href: "/console/locks", Group: groupWork, Key: "b",
+		Min: levelStandard, Feature: features.RepoLocks, NavRow: true, Badge: "locks",
+		BadgeTitle: "Lock declarations waiting for you", BadgeZero: true},
 	{ID: "labs", Label: "Labs", Icon: "flask-conical", Href: "/console/labs", Group: groupResearch, Key: "l",
 		Min: levelStandard, Feature: features.Research, NavRow: true, Badge: "labs"},
 	{ID: "trials", Label: "Trials", Icon: "test-tube", Href: "/console/trials", Group: groupResearch, Key: "x",
@@ -290,6 +295,8 @@ func (n navCounts) count(badge string) (int, bool) {
 		return n.Held, true
 	case "access":
 		return n.Access, true
+	case "locks":
+		return n.Locks, true
 	default:
 		return 0, false
 	}

@@ -333,9 +333,9 @@ type Session struct {
 	Metadata  map[string]any `json:"metadata"`
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
-	// HeldUntil is when the furthest of the claims the session holds lapses:
-	// the latest lease among the in_progress tasks it claimed, lapsed or not;
-	// nil when it holds none. Every store read of a session fills it in the
+	// HeldUntil is when the furthest of the holds the session has lapses: the
+	// latest lease among the in_progress tasks it claimed and the repo locks
+	// it holds, lapsed or not; nil when it holds none. Every store read of a session fills it in the
 	// same statement as the row, and LiveAsOf reads it. It is derived, never
 	// written, and stays out of every JSON surface.
 	HeldUntil *time.Time `json:"-"`

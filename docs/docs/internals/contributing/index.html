@@ -130,6 +130,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../concepts/lease-based-task-claiming/">Lease-based task claiming</a></li>
         
+        <li><a href="../../concepts/repo-locks/">Repo locks</a></li>
+        
         <li><a href="../../concepts/reciprocal-rank-fusion/">Reciprocal rank fusion for agent recall</a></li>
         
         <li><a href="../../concepts/coordination-substrate/">What is a coordination substrate?</a></li>
@@ -181,6 +183,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         <li><a href="../../reference/mcp/notes-projects-capture/">Notes, projects &amp; capture</a></li>
         
         <li><a href="../../reference/mcp/tasks/">Tasks</a></li>
+        
+        <li><a href="../../reference/mcp/locks/">Repo locks</a></li>
         
         <li><a href="../../reference/mcp/lab-gardener-usage/">Lab, gardener &amp; usage</a></li>
         
@@ -616,7 +620,8 @@ would collide on the page anchor.</p>
 dependency tree into the CLI). It is the <strong>registered</strong> count, and <code>seam doctor</code> reports registered against exposed: it reads the effective feature
 state from <code>GET /console/settings?format=json</code> and subtracts the tools of the
 features that are off, derived from the registry rather than from a second
-number to keep current (<code>33 registered, 30 exposed (research disabled)</code>; <code>33 tools (expected 33)</code> when everything is on). With that state unreadable - an
+number to keep current (<code>37 registered, 30 exposed (research, repo_locks disabled)</code>; <code>37 tools (expected 37)</code> when everything is on). With that state
+unreadable - an
 unreachable endpoint, or a pre-features daemon whose settings JSON carries no
 <code>featuresConfig</code> - it judges a <strong>range</strong> instead of a number and says why,
 rather than failing a healthy daemon over a fact it could not read.

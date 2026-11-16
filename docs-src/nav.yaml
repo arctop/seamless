@@ -39,6 +39,7 @@ sections:
       - gardener.md
       - memory-supersession.md
       - lease-based-task-claiming.md
+      - repo-locks.md
       - reciprocal-rank-fusion.md
       - coordination-substrate.md
 
@@ -69,6 +70,7 @@ sections:
       - mcp/sessions-memory-recall.md
       - mcp/notes-projects-capture.md
       - mcp/tasks.md
+      - mcp/locks.md
       - mcp/lab-gardener-usage.md
       - cli-seam.md
       - cli-seamlessd.md

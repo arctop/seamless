@@ -130,6 +130,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../concepts/lease-based-task-claiming/">Lease-based task claiming</a></li>
         
+        <li><a href="../concepts/repo-locks/">Repo locks</a></li>
+        
         <li><a href="../concepts/reciprocal-rank-fusion/">Reciprocal rank fusion for agent recall</a></li>
         
         <li><a href="../concepts/coordination-substrate/">What is a coordination substrate?</a></li>
@@ -181,6 +183,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         <li><a href="../reference/mcp/notes-projects-capture/">Notes, projects &amp; capture</a></li>
         
         <li><a href="../reference/mcp/tasks/">Tasks</a></li>
+        
+        <li><a href="../reference/mcp/locks/">Repo locks</a></li>
         
         <li><a href="../reference/mcp/lab-gardener-usage/">Lab, gardener &amp; usage</a></li>
         
@@ -325,6 +329,11 @@ through a relay or with a key.</p>
   <a class="doc-card" href="../concepts/lease-based-task-claiming/">
     <h2>Lease-based task claiming</h2>
     <p>The coordination primitive that lets parallel AI agents share one task queue - an atomic claim with an expiry, so two agents never work the same task and a crashed agent never strands one.</p>
+  </a>
+  
+  <a class="doc-card" href="../concepts/repo-locks/">
+    <h2>Repo locks</h2>
+    <p>A lock on a repository&#39;s refs - its main branch, or a tag pattern - that agents on several machines declare once and hold while they land changes, so landings happen one at a time.</p>
   </a>
   
   <a class="doc-card" href="../concepts/reciprocal-rank-fusion/">

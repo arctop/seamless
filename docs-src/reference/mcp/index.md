@@ -78,7 +78,7 @@ whatever the call is bound to ([home versus binding](/concepts/sessions/#home)).
 
 ## The tool surface
 
-Seamless registers **33 tools**, and a 34th, `access_request`, on a daemon whose
+Seamless registers **37 tools**, and a 38th, `access_request`, on a daemon whose
 `peer_auth` locks a project, or whose access requests (`isolation.requests`) are
 on without `peer_auth`. They are documented in groups:
 
@@ -88,13 +88,14 @@ on without `peer_auth`. They are documented in groups:
 | Notes, projects, and capture | `notes_create`, `notes_read`, `notes_update`, `notes_edit`, `notes_append`, `notes_delete`, `project_list`, `project_create`, `capture_url`, `access_request` (locked projects, or access requests without `peer_auth`) |
 | [Tasks](/reference/mcp/tasks/) | `tasks_add`, `tasks_update`, `tasks_ready`, `tasks_list`, `tasks_claim`, `tasks_release` |
 | Lab, gardener, and usage | `lab_open`, `trial_record`, `trial_query`, `gardener_proposals`, `gardener_request`, `gardener_split`, `gardener_apply`, `usage_summary`, `favorite_set` |
+| [Repo locks](/reference/mcp/locks/) | `locks_list`, `locks_declare`, `locks_acquire`, `locks_release` (an optional feature) |
 
 That is the count the server **registers**; what a client is offered can be
 smaller. Tools belonging to an
 [optional feature](/reference/console/#optional-features) are hidden from
 `tools/list` while that feature is off, and a call to one is refused as an
 unknown tool. Optional features ship off, so a fresh install advertises fewer
-than 33 until you turn one on - each affected tool says so on its own reference
+than 37 until you turn one on - each affected tool says so on its own reference
 page. Nothing about registration changes: the catalog these pages are generated
 from, and the registered-tool count `seamlessd doctor` asserts, stay the full
 set either way.

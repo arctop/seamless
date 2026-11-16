@@ -63,10 +63,11 @@ func Catalog() []mcp.Tool {
 		usageSummaryTool(),
 
 		favoriteSetTool(),
-
-		// LockedOnlyTools, registered only while peer_auth locks a project.
-		accessRequestTool(),
 	}
+	// The repo locks, from their one table (tools_locks.go).
+	tools = append(tools, lkCatalog()...)
+	// LockedOnlyTools, registered only while peer_auth locks a project.
+	tools = append(tools, accessRequestTool())
 	// addTool declares the session= handle on every tool it registers; the docs
 	// must show the same schema.
 	for i, t := range tools {

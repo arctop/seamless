@@ -51,14 +51,14 @@ func TestToolsCheck_DefaultOffPassesAndNamesTheFeature(t *testing.T) {
 	ok, detail := toolsCheck(cfg, expectedTools-optionalTools(), false)
 	require.True(t, ok, "a default daemon must pass doctor: %s", detail)
 	require.Equal(t,
-		fmt.Sprintf("%d registered, %d exposed (research disabled)", expectedTools, expectedTools-optionalTools()),
+		fmt.Sprintf("%d registered, %d exposed (research, repo_locks disabled)", expectedTools, expectedTools-optionalTools()),
 		detail)
 }
 
 // The other half: with the feature on, the full surface is expected and the line
 // stays the single-number form it has always been.
 func TestToolsCheck_ResearchOnExpectsTheFullSurface(t *testing.T) {
-	cfg := settingsServer(t, http.StatusOK, `{"featuresConfig":{"research":true}}`)
+	cfg := settingsServer(t, http.StatusOK, `{"featuresConfig":{"research":true,"repo_locks":true}}`)
 
 	ok, detail := toolsCheck(cfg, expectedTools, false)
 	require.True(t, ok, detail)
@@ -74,7 +74,7 @@ func TestToolsCheck_ResearchOnExpectsTheFullSurface(t *testing.T) {
 // A daemon that locks a project also serves access_request: its list is judged
 // against one more registered tool, and the plain count is then one short.
 func TestToolsCheck_ALockingDaemonServesAccessRequestToo(t *testing.T) {
-	cfg := settingsServer(t, http.StatusOK, `{"featuresConfig":{"research":true}}`)
+	cfg := settingsServer(t, http.StatusOK, `{"featuresConfig":{"research":true,"repo_locks":true}}`)
 
 	ok, detail := toolsCheck(cfg, expectedTools+1, true)
 	require.True(t, ok, detail)
@@ -92,7 +92,7 @@ func TestToolsCheck_FeatureOffButToolsExposedFails(t *testing.T) {
 	ok, detail := toolsCheck(cfg, expectedTools, false)
 	require.False(t, ok)
 	require.Equal(t,
-		fmt.Sprintf("%d registered, %d exposed, expected %d with research disabled",
+		fmt.Sprintf("%d registered, %d exposed, expected %d with research, repo_locks disabled",
 			expectedTools, expectedTools, expectedTools-optionalTools()),
 		detail)
 }

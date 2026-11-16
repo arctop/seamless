@@ -18,6 +18,7 @@ const (
 	groupKnowledge     = "memories and notes"
 	groupTasks         = "tasks"
 	groupPlans         = "captured plans (Claude Code plan mode)"
+	groupLocks         = "repo locks"
 	groupAccess        = "locked projects (peer_auth)"
 	groupRestricted    = "restricted accounts (peer_auth)"
 	groupObservability = "observability"
@@ -30,7 +31,7 @@ const (
 // command renders nothing; help_test pins the converse, that every group a
 // command names is listed here, since a spec in an unlisted group renders
 // nowhere at all.
-var groupOrder = []string{groupAgentLoop, groupKnowledge, groupTasks, groupPlans, groupAccess, groupRestricted, groupObservability, groupCall, groupHooks, groupBridge}
+var groupOrder = []string{groupAgentLoop, groupKnowledge, groupTasks, groupPlans, groupLocks, groupAccess, groupRestricted, groupObservability, groupCall, groupHooks, groupBridge}
 
 // commands returns the migrated command table, in help order.
 //
@@ -66,6 +67,11 @@ func commands() []cmd {
 		planShowCmd,
 		planCheckCmd,
 		planApproveCmd,
+
+		lockListCmd,
+		lockDeclareCmd,
+		lockAcquireCmd,
+		lockReleaseCmd,
 
 		accessRequestCmd,
 		approveCmd,

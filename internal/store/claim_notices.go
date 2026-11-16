@@ -8,8 +8,10 @@ package store
 // session claims the task after its lease lapsed (ClaimTask's reclaim), the
 // owner releases it (ForceReleaseTask), or the reaper releases it from a
 // session that went idle once the lease had lapsed (ReleaseReapedClaims). A
-// holder that releases or closes its own task, or ends its own session, loses
-// nothing it does not know about, and is told nothing.
+// repo lock's hold is lost the same three ways (AcquireRepoLock's take of a
+// lapsed hold, ForceReleaseRepoLock, ReleaseReapedRepoLocks). A holder that
+// releases or closes its own task, releases its own lock, or ends its own
+// session, loses nothing it does not know about, and is told nothing.
 //
 // Delivery claims the rows before anything renders (DeliverClaimNotices): the
 // row's delivered_at is the claim, as access_moves.briefed_at is for a move's
@@ -33,6 +35,11 @@ import (
 // resource id is the task's (ClaimNotice.Kind).
 const ClaimResourceTask = "task"
 
+// ClaimResourceLock is the kind of a repo lock's hold (locks_acquire): its
+// notice's resource id is the lock's, its label the lock's name, and it has no
+// project.
+const ClaimResourceLock = "lock"
+
 // How a claim was lost (ClaimNotice.Reason).
 const (
 	// ClaimLostReclaimed: another session claimed it after its lease lapsed.
@@ -48,7 +55,7 @@ const (
 // claimResourceKinds and claimLostReasons are the kinds and reasons
 // RecordClaimNotice accepts.
 var (
-	claimResourceKinds = []string{ClaimResourceTask}
+	claimResourceKinds = []string{ClaimResourceTask, ClaimResourceLock}
 	claimLostReasons   = []string{ClaimLostReclaimed, ClaimLostReleased, ClaimLostReaped}
 )
 
@@ -285,24 +292,26 @@ func claimNoticeHolderName(ctx context.Context, db *sql.DB, id string) string {
 // (ClaimNoticeTexts decides which this reader may see). It carries identifiers
 // and times only: no text from the resource itself.
 func (n ClaimNotice) Text(newHolder string) string {
+	w := n.words()
 	what := n.Kind + " " + n.ResourceID
+	if n.Kind == ClaimResourceLock {
+		what = "repo lock " + n.ResourceID
+	}
 	if n.Label != "" {
 		what += " (" + n.Label + ")"
 	}
-	if n.Project != "" {
+	switch {
+	case n.Kind == ClaimResourceLock:
+		// A repo lock is no project's: it guards a repository's refs.
+	case n.Project != "":
 		what += " in project " + n.Project
-	} else {
+	default:
 		what += " in the global scope"
 	}
 	lapsed := "had no lease"
 	if n.LeaseExpiresAt != nil {
 		lapsed = "lapsed at " + access.Clock(*n.LeaseExpiresAt)
 	}
-	how := ""
-	if n.Kind == ClaimResourceTask {
-		how = " with tasks_claim"
-	}
-	const keep = " To keep a claim through long work, re-claim it before its lease lapses."
 	at := access.Clock(n.LostAt)
 	switch n.Reason {
 	case ClaimLostReclaimed:
@@ -310,14 +319,34 @@ func (n ClaimNotice) Text(newHolder string) string {
 		if newHolder != "" {
 			who = "session " + newHolder
 		}
-		return "Claim lost: your claim on " + what + " " + lapsed + ", and " + who + " claimed it at " + at +
-			". Pick other work, or claim it again" + how + " once it is free." + keep
+		return w.title + ": your " + w.hold + " on " + what + " " + lapsed + ", and " + who + " " + w.took + " it at " + at +
+			". Pick other work, or " + w.take + " it again" + w.how + " once it is free." + w.keep
 	case ClaimLostReleased:
-		return "Claim lost: the owner released your claim on " + what + " at " + at +
-			". Claim it again" + how + " if it is still free, or pick other work."
+		return w.title + ": the owner released your " + w.hold + " on " + what + " at " + at +
+			". " + w.Take + " it again" + w.how + " if it is still free, or pick other work."
 	case ClaimLostReaped:
-		return "Claim lost: your claim on " + what + " " + lapsed + ", and it was released at " + at +
-			", when this session had gone idle. Claim it again" + how + " if it is still free, or pick other work." + keep
+		return w.title + ": your " + w.hold + " on " + what + " " + lapsed + ", and it was released at " + at +
+			", when this session had gone idle. " + w.Take + " it again" + w.how + " if it is still free, or pick other work." + w.keep
 	}
-	return "Claim lost: your claim on " + what + " ended at " + at + "."
+	return w.title + ": your " + w.hold + " on " + what + " ended at " + at + "."
+}
+
+// claimNoticeWords are the words a notice uses for its kind of hold.
+type claimNoticeWords struct {
+	title, hold, took, take, Take, how, keep string
+}
+
+// words picks a notice's words: a repo lock is held and acquired, a task
+// claimed.
+func (n ClaimNotice) words() claimNoticeWords {
+	if n.Kind == ClaimResourceLock {
+		return claimNoticeWords{title: "Lock lost", hold: "hold", took: "acquired", take: "acquire", Take: "Acquire",
+			how: " with locks_acquire", keep: " To keep a lock through a long landing, acquire it again before its lease lapses."}
+	}
+	w := claimNoticeWords{title: "Claim lost", hold: "claim", took: "claimed", take: "claim", Take: "Claim",
+		keep: " To keep a claim through long work, re-claim it before its lease lapses."}
+	if n.Kind == ClaimResourceTask {
+		w.how = " with tasks_claim"
+	}
+	return w
 }

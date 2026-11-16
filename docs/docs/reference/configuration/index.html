@@ -130,6 +130,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../concepts/lease-based-task-claiming/">Lease-based task claiming</a></li>
         
+        <li><a href="../../concepts/repo-locks/">Repo locks</a></li>
+        
         <li><a href="../../concepts/reciprocal-rank-fusion/">Reciprocal rank fusion for agent recall</a></li>
         
         <li><a href="../../concepts/coordination-substrate/">What is a coordination substrate?</a></li>
@@ -181,6 +183,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         <li><a href="../../reference/mcp/notes-projects-capture/">Notes, projects &amp; capture</a></li>
         
         <li><a href="../../reference/mcp/tasks/">Tasks</a></li>
+        
+        <li><a href="../../reference/mcp/locks/">Repo locks</a></li>
         
         <li><a href="../../reference/mcp/lab-gardener-usage/">Lab, gardener &amp; usage</a></li>
         
@@ -760,6 +764,11 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <td>-</td>
 </tr>
 <tr>
+<td><code>features.repo_locks</code></td>
+<td>bool</td>
+<td>-</td>
+</tr>
+<tr>
 <td><code>screening.url_allowlist</code></td>
 <td>[]string</td>
 <td>-</td>
@@ -1291,6 +1300,13 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># The Home welcome card offers it too. Tunables: the screening block below.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_FEATURES_SCREENING</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">screening</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Repo locks: locks on a repository&#39;s refs (its main branch, or a tag</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># pattern) that agents declare once and hold while they land changes, so</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># landings happen one at a time across machines. The Locks console screen,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># the locks_list, locks_declare, locks_acquire and locks_release MCP tools,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># and seam lock. Off, no lock is deleted.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_FEATURES_REPO_LOCKS</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">repo_locks</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># The write screens behind features.screening (inert while it is off).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">screening</span><span class="p">:</span><span class="w">

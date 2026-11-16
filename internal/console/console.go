@@ -248,6 +248,12 @@ func New(cfg Config) (*Service, error) {
 		return nil, fmt.Errorf("console: parse devices: %w", err)
 	}
 	pages["devices"] = devicesPage
+	// The Locks page likewise (locks.go).
+	locksPage, err := template.New("layout").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", "templates/locks.html")
+	if err != nil {
+		return nil, fmt.Errorf("console: parse locks: %w", err)
+	}
+	pages["locks"] = locksPage
 	host, hostName := "server", ""
 	if name, herr := os.Hostname(); herr == nil && strings.TrimSpace(name) != "" {
 		host = "server " + strings.TrimSpace(name)
@@ -332,6 +338,13 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/plans", s.auth(s.plansList))
 	handle("GET /console/plans/{slug}", s.auth(s.planDetail))
 	post("POST /console/plans/{slug}/approve", formBodySmall, s.planApprove)
+	// The repo locks (locks.go), behind their optional feature: every
+	// decision on one is the owner's.
+	handle("GET /console/locks", s.auth(gated(features.RepoLocks, s.locksPage)))
+	handle("GET /console/locks/{id}", s.auth(gated(features.RepoLocks, s.lockDetail)))
+	post("POST /console/locks/{id}/release", formBodySmall, ownerHands(gated(features.RepoLocks, s.lockRelease)))
+	post("POST /console/locks/{id}/approve", formBodySmall, ownerHands(gated(features.RepoLocks, s.lockApprove)))
+	post("POST /console/locks/{id}/discard", formBodySmall, ownerHands(gated(features.RepoLocks, s.lockDiscard)))
 	handle("GET /console/labs", s.auth(gated(features.Research, s.labsList)))
 	handle("GET /console/labs/{name...}", s.auth(gated(features.Research, s.labDetail)))
 	handle("GET /console/trials", s.auth(gated(features.Research, s.trialsList)))
@@ -1579,6 +1592,15 @@ func (s *Service) navCounts(ctx context.Context, feats config.Features) navCount
 			counts.Projects += n
 		}
 	}
+	// The Locks badge counts the declarations waiting for the owner's
+	// approval, only while its screen is offered.
+	if features.Enabled(feats, features.RepoLocks) {
+		if _, waiting, lerr := store.CountRepoLocks(ctx, s.db(ctx)); lerr != nil {
+			s.logger.Warn("console: nav lock declarations", "error", lerr)
+		} else {
+			counts.Locks = waiting
+		}
+	}
 	// The Now badge is the live agent count -- the one sidebar number that is a
 	// pulse rather than an inventory. Same best-effort rule as the rest.
 	ttl := s.cfg.SessionIdleTTL
@@ -1607,4 +1629,5 @@ type navCounts struct {
 	Trials    int
 	Held      int // writes held for the owner (write screening)
 	Access    int // access requests waiting (only while a project is locked)
+	Locks     int // repo lock declarations waiting for the owner
 }

@@ -81,7 +81,7 @@ func newDialogRig(t *testing.T, o dialogOpts) *dialogRig {
 	}
 	cfg := mcpserver.Config{
 		DB: r.db, Files: r.mgr, Retrieve: r.ret, Events: r.rec, APIKey: testKey, LocalHost: lkHost,
-		Features: config.Features{Research: true}, Now: r.clock, Approvals: d.svc, OfferAccessRequest: true,
+		Features: config.Features{Research: true, RepoLocks: true}, Now: r.clock, Approvals: d.svc, OfferAccessRequest: true,
 		DialogWait: o.wait, DialogPoll: 5 * time.Millisecond,
 	}
 	if o.grants {

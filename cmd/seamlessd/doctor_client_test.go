@@ -173,7 +173,7 @@ func TestClientMCPToolsCheck_CountsWhatTheServerExposes(t *testing.T) {
 	require.Equal(t, statusOK, got.status, got.detail)
 	require.Equal(t, "mcp_tools", got.name)
 	require.Equal(t,
-		fmt.Sprintf("%d registered, %d exposed (research disabled)", mcp.ToolCount, exposed),
+		fmt.Sprintf("%d registered, %d exposed (research, repo_locks disabled)", mcp.ToolCount, exposed),
 		got.detail)
 	require.NotContains(t, got.detail, "tools registered",
 		"the registration-count line is the SERVER role's; a client must report the live one")
@@ -192,7 +192,7 @@ func TestClientMCPToolsCheck_AllFeaturesOnExpectsTheFullSurface(t *testing.T) {
 	}
 	mux.Handle("/api/mcp", mcp.New(mcp.Config{APIKey: "k", Features: on}).Handler())
 	mux.HandleFunc("/console/settings", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"featuresConfig":{"research":true,"momentum":true,"gamification":true}}`))
+		_, _ = w.Write([]byte(`{"featuresConfig":{"research":true,"momentum":true,"gamification":true,"repo_locks":true}}`))
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -251,7 +251,7 @@ func TestClientMCPToolsCheck_UnreadableFeatureStateFallsBackToTheRange(t *testin
 func TestClientMCPToolsCheck_UnexplainableGapFailsAndNamesVersionSkew(t *testing.T) {
 	// The server hides the research tools; the console claims research is ON, so
 	// the expected count is the full surface and the live one is short of it.
-	cfg := serverFor(t, "k", `{"featuresConfig":{"research":true}}`)
+	cfg := serverFor(t, "k", `{"featuresConfig":{"research":true,"repo_locks":true}}`)
 
 	got := clientMCPToolsCheck(cfg)
 	require.Equal(t, statusFail, got.status)

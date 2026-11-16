@@ -13,6 +13,7 @@ import (
 // it reads, so it is a setter that happens to return history.
 var readOnlyTools = []string{
 	"gardener_proposals",
+	"locks_list",
 	"memory_read",
 	"notes_read",
 	"project_list",

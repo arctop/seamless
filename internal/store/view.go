@@ -91,10 +91,15 @@ var viewTables = []struct {
 	// and with the project it is in. The project whose content it may hold is
 	// named, never hidden: a slug is no content.
 	{"item_provenance", "project_slug NOT IN %[1]s AND item_id NOT IN %[3]s"},
-	// A claim notice names the task (an item of one project) a session lost,
-	// the session that held it and the one that took it: hidden with the
-	// project, either session, or the item.
+	// A claim notice names the task (an item of one project) or the repo lock
+	// (no project's; its row carries '') a session lost, the session that held
+	// it and the one that took it: hidden with the project, either session, or
+	// the item.
 	{"claim_notices", "project_slug NOT IN %[1]s AND session_id NOT IN %[2]s AND new_holder NOT IN %[2]s AND resource_id NOT IN %[3]s"},
+	// A repo lock's listed projects (migration 047): a hidden project's row is
+	// hidden with it, as repo_map's are. The lock itself is no project's
+	// (viewExempt).
+	{"repo_lock_projects", "project_slug NOT IN %[1]s"},
 }
 
 // payloadVisible keeps a row whose JSON payload mentions no hidden slug and no
@@ -144,6 +149,13 @@ var viewExempt = map[string]string{
 	// before a request reaches any route, and they are about no project.
 	"devices":              "computers paired with this server (relays and key devices): a host name, a public key, key and secret hashes, an approver credential id and times, about no project; no corpus content",
 	"device_pairing_codes": "one-time pairing code hashes and their expiry and use, about no project; no corpus content",
+	// Repo locks (migration 047): a lock guards a repository's refs and
+	// belongs to no project, so the owner sees and force-releases every one
+	// whatever this request's handle hides. A holder in a hidden project is a
+	// session id the console resolves through the filtered sessions view, which
+	// names no hidden session.
+	"repo_locks":        "repo locks: a token name, guarded ref names and patterns, a state, the holding and declaring sessions' ids, an account label and times; no project column and no free text, about no project",
+	"repo_lock_aliases": "the repository identities a repo lock answers to: normalized origin URLs and host plus checkout-root pairs, and the lock's name; about no project, no corpus content",
 }
 
 const (

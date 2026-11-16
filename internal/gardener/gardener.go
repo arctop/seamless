@@ -256,12 +256,13 @@ func (s *Service) pruneToolEvents(ctx context.Context) {
 
 // reapStaleSessions closes the sessions that are no longer live
 // (core.Session.LiveAsOf): quiet past the configured SessionIdle threshold
-// (gardener.session_idle_minutes) and holding no live claim. A session idle
-// past the threshold while it holds a live claim is left alone; the first pass
-// after its last lease lapses reaps it. It flips each to expired, returns the
-// lapsed task claims it still held to the queue with a notice to the session
-// for each (store.ReleaseReapedClaims), and records a session.ended event
-// stamped reason=expired. Best-effort: a failure is logged, not returned, so a
+// (gardener.session_idle_minutes) and holding no live claim or repo lock. A
+// session idle past the threshold while it holds a live one is left alone; the
+// first pass after its last lease lapses reaps it. It flips each to expired,
+// returns the lapsed task claims it still held to the queue and frees the
+// repo locks it still held, with a notice to the session for each
+// (store.ReleaseReapedClaims, store.ReleaseReapedRepoLocks), and records a
+// session.ended event stamped reason=expired. Best-effort: a failure is logged, not returned, so a
 // reap problem never aborts the pass. This is the backstop for the fact that an
 // active session is only otherwise cleared by an explicit session_end or the
 // SessionEnd hook, neither of which fires on a crash/kill.
@@ -280,10 +281,18 @@ func (s *Service) reapStaleSessions(ctx context.Context) {
 		if rerr != nil {
 			s.logger.Warn("gardener: reap release claims", "session", sess.ID, "error", rerr)
 		}
+		locks, lerr := store.ReleaseReapedRepoLocks(ctx, s.db, sess.ID, now)
+		if lerr != nil {
+			s.logger.Warn("gardener: reap release repo locks", "session", sess.ID, "error", lerr)
+		}
+		payload := map[string]any{"reason": "expired", "reaped": true, "claims_released": released}
+		if locks > 0 {
+			payload["locks_released"] = locks
+		}
 		if s.events != nil {
 			if _, eerr := s.events.Record(ctx, core.Event{
 				Kind: core.EventSessionEnded, SessionID: sess.ID, ProjectSlug: sess.ProjectSlug,
-				Payload: map[string]any{"reason": "expired", "reaped": true, "claims_released": released},
+				Payload: payload,
 			}); eerr != nil {
 				s.logger.Warn("gardener: reap record event", "session", sess.ID, "error", eerr)
 			}

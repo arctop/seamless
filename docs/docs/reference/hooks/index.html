@@ -130,6 +130,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../concepts/lease-based-task-claiming/">Lease-based task claiming</a></li>
         
+        <li><a href="../../concepts/repo-locks/">Repo locks</a></li>
+        
         <li><a href="../../concepts/reciprocal-rank-fusion/">Reciprocal rank fusion for agent recall</a></li>
         
         <li><a href="../../concepts/coordination-substrate/">What is a coordination substrate?</a></li>
@@ -181,6 +183,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         <li><a href="../../reference/mcp/notes-projects-capture/">Notes, projects &amp; capture</a></li>
         
         <li><a href="../../reference/mcp/tasks/">Tasks</a></li>
+        
+        <li><a href="../../reference/mcp/locks/">Repo locks</a></li>
         
         <li><a href="../../reference/mcp/lab-gardener-usage/">Lab, gardener &amp; usage</a></li>
         
@@ -579,10 +583,12 @@ on the console's Held screen.</p>
 <h2 id="claim-notices">Claim notices</h2>
 <p>A session that loses a task claim it held - another session claims the task
 after its lease lapsed, the owner releases the claim, or the idle reaper
-releases a lapsed one - is told once. The next <code>SessionStart</code> (not a
-subagent's) or <code>UserPromptSubmit</code> of its conversation leads its injection with
-a <code>Seamless: Claim lost: ...</code> line naming the task, when, the session that took
-it when this one may see it, and what to do; a Seamless tool result may carry
+releases a lapsed one - is told once, and so is one that loses a
+<a href="../../concepts/repo-locks/">repo lock</a> it held the same three ways. The next
+<code>SessionStart</code> (not a subagent's) or <code>UserPromptSubmit</code> of its conversation
+leads its injection with a <code>Seamless: Claim lost: ...</code> line (<code>Lock lost: ...</code>
+for a lock) naming the task or lock, when, the session that took it when this
+one may see it, and what to do; a Seamless tool result may carry
 it first instead, and whichever does carries it alone. The conversation's
 sessions are its ambient session and every explicit session <code>session_start</code>
 linked to it. See <a href="../../concepts/lease-based-task-claiming/">lease-based task claiming</a>.</p>

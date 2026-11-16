@@ -20,6 +20,9 @@ nothing, and their rows say so.
 |---|---|---|
 | Archive a memory | `POST /console/memories/{id}/archive` | Routes through `lifecycle.Archive`: the memory is stamped invalid and leaves every index, its file stays on disk with a tombstone. |
 | Force-release a task claim | `POST /console/tasks/{id}/release` | The owner override: releases a claimed task's lock regardless of who holds it, reopening it for any agent. Not reachable from the agent MCP tools. |
+| Force-release a repo lock | `POST /console/locks/{id}/release` | [Repo locks](#locks): ends the hold a lock carries, live or lapsed, whoever holds it; the lock stays declared. What `seam lock release --force` sends. Refused when nobody holds it (409), from an agent's process on the peer_auth socket, and from a paired device. |
+| Approve a lock declaration | `POST /console/locks/{id}/approve` | Makes a restricted account's waiting declaration an active lock, which agents may then hold. Refused for a lock already active (409), from an agent's process on the peer_auth socket, and from a paired device. |
+| Discard a lock declaration | `POST /console/locks/{id}/discard` | Deletes a restricted account's waiting declaration with its repository identities, so the repository may be declared again. An active lock is refused (409): no route removes one. Refused from an agent's process on the peer_auth socket, and from a paired device. |
 | Approve a captured plan | `POST /console/plans/{slug}/approve` | The escape hatch for a Claude Code approval whose `PostToolUse` never fired: flips the `cc-plan` note to `plan-status:approved` and creates the tracking task, exactly as the hook would have. Only applies to a CC capture. |
 | Star / unstar an entity | `POST /console/favorites/{kind}/{id}` | Toggles the same starred flag the `favorite_set` MCP tool sets: a starred memory pins into briefings and gets a post-fusion recall boost. For memories and notes the star lives in frontmatter; it never bumps `updated`. |
 | Ask the gardener for proposals | `POST /console/gardener/request` | Interprets a natural-language maintenance request into **pending proposals**. It never mutates a memory. |
@@ -253,7 +256,7 @@ The sidebar groups the screens by the job they serve rather than by table:
 |---|---|
 | **Live** | Overview, Now, Interactions |
 | **Knowledge** | Memories, Notes, Retrieval, Gardener |
-| **Work** | Projects, Plans, Tasks, Sessions |
+| **Work** | Projects, Plans, Tasks, Sessions, Locks (only while that [optional feature](#optional-features) is on) |
 | **Research** | Labs, Trials (only while that [optional feature](#optional-features) is on) |
 
 That is the full list, at the Advanced [level](#choose-how-much-you-see); a
@@ -728,6 +731,29 @@ blocked and leaves them out of the ready queue. Opening a plan or a session
 that lives in a locked project takes you to that project's unlock page, which
 says the item is there and links back once you unlock it.
 
+## Locks {#locks}
+
+`/console/locks`, `/console/locks/{id}`
+
+Only while the **Repo locks** [optional feature](#optional-features) is on; a
+Standard screen. Every [repo lock](/concepts/repo-locks/), shown with its
+repository and its name (**LOCK seamless main**): the refs it guards, whether it
+is free, held or lapsed, the session that holds it with since and until, the
+repository identities that resolve to it, and the projects whose restricted
+accounts may hold it. A lock belongs to no project, so the page lists every
+one; a holder in a project this browser has not unlocked reads "a session this
+console does not show", and such a listed project is left out.
+
+- **Waiting for your approval** - the declarations restricted accounts filed:
+  nobody can hold one until you **Approve** it, and **Discard** leaves the
+  repository free to be declared again. The sidebar badge counts them.
+- **Force release** - on a held or lapsed lock: ends the hold whoever holds it.
+  The agent that held it is not told, so release a lock only when its holder is
+  gone or stuck.
+
+`/console/locks/{id}` is the same page with that lock marked; with
+`?format=json`, the lock alone.
+
 ## Plans
 
 `/console/plans`, `/console/plans/{slug}`
@@ -1107,7 +1133,7 @@ feature is, a generated line naming exactly what switching it off hides, and a
 live count of the data it holds either way ("Data kept: 12 trials across 3
 labs").
 
-There are four today:
+There are five today:
 
 **Research labs & trials** owns the [Labs](#labs) and [Trials](#trials)
 screens, the trials search scope, and the `lab_open`, `trial_record`, and
@@ -1213,6 +1239,12 @@ none of them. With restricted local accounts configured, the card says the
 Held screen stays for their proposals and only its screening parts go. The
 [write screening guide](/guides/write-screening/) has the screens, the reasons
 and the events.
+
+**Repo locks** owns the [Locks](#locks) screen, the `locks_list`,
+`locks_declare`, `locks_acquire` and `locks_release` MCP tools, and `seam
+lock`: [locks on a repository's refs](/concepts/repo-locks/) that agents
+declare once and hold while they land changes. Turning it off deletes no lock
+and no declaration.
 
 **Nothing is ever deleted.** Switching a feature off gates exposure and nothing
 else: the trials stay in the database, its screens answer with a short "switched

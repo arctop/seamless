@@ -26,14 +26,18 @@ const sessionCols = `id, name, project_slug, status, findings, claude_session_id
 //
 // sessionHolds lists the holds of the sessions row a statement reads, one row
 // per hold with the instant it lapses (expires_at, a core.TimeFormat string, so
-// text order is time order and equality is exact). Today a hold is a task
-// claim, read as core.Task.ClaimLive reads one: an in_progress task the
-// session claimed, with a lease. It is the one place the holds are listed: a
-// second kind of hold joins here as a UNION ALL arm, and every reader follows
-// -- the held-until column each session read fills core.Session.HeldUntil
-// from (sessionHeldUntil), and the rule itself (sessionLive).
+// text order is time order and equality is exact). A hold is a task claim,
+// read as core.Task.ClaimLive reads one (an in_progress task the session
+// claimed, with a lease), or a repo lock, read as core.RepoLock.HoldLive reads
+// one (an active lock the session holds, with a lease). It is the one place
+// the holds are listed: another kind of hold joins here as a UNION ALL arm,
+// and every reader follows -- the held-until column each session read fills
+// core.Session.HeldUntil from (sessionHeldUntil), and the rule itself
+// (sessionLive).
 const sessionHolds = `SELECT lease_expires_at AS expires_at FROM tasks
-	WHERE claimed_by = sessions.id AND status = 'in_progress' AND lease_expires_at IS NOT NULL`
+	WHERE claimed_by = sessions.id AND status = 'in_progress' AND lease_expires_at IS NOT NULL
+	UNION ALL SELECT lease_expires_at FROM repo_locks
+	WHERE holder = sessions.id AND state = 'active' AND lease_expires_at IS NOT NULL`
 
 // sessionHeldUntil is the column core.Session.HeldUntil is read from: the
 // latest expiry among the session's holds, lapsed or not; NULL when it holds

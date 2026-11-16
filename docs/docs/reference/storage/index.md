@@ -167,6 +167,13 @@ so losing `seam.db` loses them:
   agent process that owns an ambient session (what binds the agent's tool calls
   to it).
 - `tasks` and `task_deps` - the ready-queue, plan slugs, claims, and leases.
+- `repo_locks`, `repo_lock_aliases` and `repo_lock_projects` - the
+  [repo locks](https://thereisnospoon.org/docs/concepts/repo-locks/): each lock's name, guarded refs, state,
+  holder, since and until; the repository identities that resolve to it (a
+  normalized origin URL, or a host and a checkout root); and the projects whose
+  restricted accounts may hold it. An archive carries them, but a merge into
+  another instance does not: a lock is that server's declaration, and its
+  holder that server's session.
 - `trials` - research lab records with queryable JSON metrics.
 - `events` - the append-only log behind telemetry, the console feed, and
   retrieval stats.

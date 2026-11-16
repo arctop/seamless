@@ -300,8 +300,9 @@ Two places outside `internal/mcp` also track the surface:
   doctor` reports registered against exposed: it reads the effective feature
   state from `GET /console/settings?format=json` and subtracts the tools of the
   features that are off, derived from the registry rather than from a second
-  number to keep current (`33 registered, 30 exposed (research disabled)`; `33
-  tools (expected 33)` when everything is on). With that state unreadable - an
+  number to keep current (`37 registered, 30 exposed (research, repo_locks
+  disabled)`; `37 tools (expected 37)` when everything is on). With that state
+  unreadable - an
   unreachable endpoint, or a pre-features daemon whose settings JSON carries no
   `featuresConfig` - it judges a **range** instead of a number and says why,
   rather than failing a healthy daemon over a fact it could not read.

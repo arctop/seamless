@@ -43,6 +43,7 @@ var callTools = []string{
 	"gardener_proposals", "gardener_request", "gardener_split", "gardener_apply",
 	"capture_url", "usage_summary",
 	"favorite_set",
+	"locks_list", "locks_declare", "locks_acquire", "locks_release",
 	"access_request",
 }
 

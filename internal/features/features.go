@@ -76,6 +76,14 @@ const Gamification Key = "gamification"
 // corpus -- until the feature is back on and the owner decides.
 const Screening Key = "screening"
 
+// RepoLocks covers the repo locks: locks on a repository's refs (its main
+// branch, a tag pattern) that agents declare once and hold while they land
+// changes, so landings happen one at a time across machines -- the Locks
+// console screen, the four locks_* MCP tools, and `seam lock`. They are one
+// feature because a lock nobody can see or hold means nothing, and a screen
+// with no tools to fill it would stay empty. Turning it off deletes no lock.
+const RepoLocks Key = "repo_locks"
+
 // Feature describes one optional feature and every surface it owns.
 type Feature struct {
 	// Key is the stable identifier (also the settings anchor and form field).
@@ -192,6 +200,17 @@ var registry = []Feature{
 		Default: false,
 		get:     func(c config.Features) bool { return c.Screening },
 		set:     func(c *config.Features, on bool) { c.Screening = on },
+	},
+	{
+		Key:           RepoLocks,
+		Label:         "Repo locks",
+		Blurb:         "Locks on a repository's refs -- its main branch, or a tag pattern -- that agents declare once and hold while they land changes, so landings happen one at a time across machines.",
+		Tools:         []string{"locks_list", "locks_declare", "locks_acquire", "locks_release"},
+		NavIDs:        []string{"locks"},
+		RoutePrefixes: []string{"/console/locks"},
+		Default:       false,
+		get:           func(c config.Features) bool { return c.RepoLocks },
+		set:           func(c *config.Features, on bool) { c.RepoLocks = on },
 	},
 }
 

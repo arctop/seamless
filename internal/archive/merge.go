@@ -75,6 +75,13 @@ import (
 //     claims they lost here, each read once by its session's next hook or
 //     tool result. Merged, a notice would tell a session of a claim it never
 //     held on the destination.
+//   - repo_locks, repo_lock_aliases, repo_lock_projects: the repo locks declared on the
+//     exporting server. A declaration is that server's owner's decision
+//     (declared once per repository, from its own machines), a path alias
+//     names one of its machines' checkouts, and a holder is one of its
+//     sessions, which a merge does not carry. Merging one would be a lock
+//     nobody declared here, and a waiting declaration one this owner never
+//     saw filed; the owner declares again here, with seam lock declare.
 //   - schema_migrations: the destination's own migration history.
 //
 // A host-local table (one keyed by which machine a row came from) does not

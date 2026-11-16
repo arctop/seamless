@@ -33,7 +33,7 @@ import (
 // stays a bare equality; on a CLIENT install it asks the same live question this
 // command does, through the same features.ToolCountVerdict. The two checks
 // measure different things on purpose.
-const expectedTools = 33
+const expectedTools = 37
 
 // lockedOnlyTool is the one tool a daemon registers only while peer_auth locks
 // a project (mcp.LockedOnlyTools): a live tools/list that carries it is judged

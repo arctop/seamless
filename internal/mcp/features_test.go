@@ -77,7 +77,7 @@ func TestFeatureGate_DefaultConfigHidesResearchTools(t *testing.T) {
 	cli := dialClient(t, ctx, url, testKey)
 
 	gated := researchTools(t)
-	require.Len(t, listedTools(t, ctx, cli), mcpserver.ToolCount-len(gated))
+	require.Len(t, listedTools(t, ctx, cli), mcpserver.ToolCount-len(features.HiddenTools(config.Features{})))
 	requireGated(t, ctx, cli, gated)
 }
 
@@ -85,7 +85,7 @@ func TestFeatureGate_DefaultConfigHidesResearchTools(t *testing.T) {
 // work end to end.
 func TestFeatureGate_EnabledExposesFullSurface(t *testing.T) {
 	ctx := context.Background()
-	url, _ := newServerCfg(t, func(c *mcpserver.Config) { c.Features = config.Features{Research: true} })
+	url, _ := newServerCfg(t, func(c *mcpserver.Config) { c.Features = config.Features{Research: true, RepoLocks: true} })
 	cli := dialClient(t, ctx, url, testKey)
 
 	require.Len(t, listedTools(t, ctx, cli), mcpserver.ToolCount)
@@ -115,7 +115,7 @@ func TestFeatureGate_StoreOverrideAppliesLiveInBothDirections(t *testing.T) {
 		cli := dialClient(t, ctx, url, testKey)
 		requireGated(t, ctx, cli, gated)
 
-		require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Research: true}))
+		require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Research: true, RepoLocks: true}))
 		require.Len(t, listedTools(t, ctx, cli), mcpserver.ToolCount)
 		requireExposed(t, ctx, cli, gated)
 		callJSON(t, ctx, cli, "lab_open", map[string]any{"lab": "live-lab"})
@@ -130,7 +130,7 @@ func TestFeatureGate_StoreOverrideAppliesLiveInBothDirections(t *testing.T) {
 	})
 
 	t.Run("base on, override off", func(t *testing.T) {
-		url, db := newServerCfg(t, func(c *mcpserver.Config) { c.Features = config.Features{Research: true} })
+		url, db := newServerCfg(t, func(c *mcpserver.Config) { c.Features = config.Features{Research: true, RepoLocks: true} })
 		cli := dialClient(t, ctx, url, testKey)
 		requireExposed(t, ctx, cli, gated)
 
@@ -148,7 +148,7 @@ func TestFeatureGate_StoreOverrideAppliesLiveInBothDirections(t *testing.T) {
 // and falls back to the file/env base.
 func TestFeatureGate_CorruptOverrideFallsBackToBase(t *testing.T) {
 	ctx := context.Background()
-	url, db := newServerCfg(t, func(c *mcpserver.Config) { c.Features = config.Features{Research: true} })
+	url, db := newServerCfg(t, func(c *mcpserver.Config) { c.Features = config.Features{Research: true, RepoLocks: true} })
 	cli := dialClient(t, ctx, url, testKey)
 
 	require.NoError(t, store.SetSetting(ctx, db, store.SettingFeaturesConfig, `{not json`))

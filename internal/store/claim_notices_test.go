@@ -175,10 +175,13 @@ func TestClaimNoticeText(t *testing.T) {
 		"tasks_claim if it is still free, or pick other work. To keep a claim through long work, re-claim it before "+
 		"its lease lapses.", reaped.Text(""))
 
+	// A repo lock's hold has its own words, its name as its label, and no
+	// project, whatever the row carries.
 	labeled := base
-	labeled.Reason, labeled.Kind, labeled.Label = ClaimLostReleased, "lock", "example-label"
-	require.Contains(t, labeled.Text(""), "your claim on lock 01TASKAAAAAAAAAAAAAAAAAAAA (example-label) in project example-ops")
-	require.Contains(t, labeled.Text(""), "Claim it again if it is still free", "only a task names tasks_claim")
+	labeled.Reason, labeled.Kind, labeled.Label = ClaimLostReleased, ClaimResourceLock, "main"
+	require.Equal(t, "Lock lost: the owner released your hold on repo lock 01TASKAAAAAAAAAAAAAAAAAAAA (main) at "+
+		access.Clock(lost)+". Acquire it again with locks_acquire if it is still free, or pick other work.",
+		labeled.Text(""))
 }
 
 // The new holder is named only to a request that may see its session: one its

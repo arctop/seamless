@@ -1024,25 +1024,33 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 }
 
 // endedSession closes out one session a SessionEnd completed: its task claims
-// are released, its leases on locked projects end, and its session.ended event
-// is recorded under its own project. took is whether it took the
-// conversation's harvest; the event carries the findings it ended with, so a
-// row the harvest skipped never carries the harvest's text.
+// and repo locks are released, its leases on locked projects end, and its
+// session.ended event is recorded under its own project. took is whether it
+// took the conversation's harvest; the event carries the findings it ended
+// with, so a row the harvest skipped never carries the harvest's text.
 func (h *Handler) endedSession(ctx context.Context, client Client, sess core.Session, reason string, took bool, now time.Time) {
 	released, rerr := store.ReleaseClaimsForSession(ctx, h.db, sess.ID, now)
 	if rerr != nil {
 		h.recordHookError(ctx, "session-end-release-claims", client, rerr, "session", sess.ID)
+	}
+	locksReleased, kerr := store.ReleaseRepoLocksForSession(ctx, h.db, sess.ID, now)
+	if kerr != nil {
+		h.recordHookError(ctx, "session-end-release-locks", client, kerr, "session", sess.ID)
 	}
 	if h.revokeLeases != nil {
 		if _, lerr := h.revokeLeases(ctx, sess.ID); lerr != nil {
 			h.recordHookError(ctx, "session-end-revoke-leases", client, lerr, "session", sess.ID)
 		}
 	}
-	h.recordSession(ctx, core.EventSessionEnded, sess, map[string]any{
+	payload := map[string]any{
 		"ambient": sess.Ambient, "harvested": took, "linked": !sess.Ambient,
 		"reason": reason, "claims_released": released,
 		"findings": events.Truncate(sess.Findings, h.maxEventChars),
-	})
+	}
+	if locksReleased > 0 {
+		payload["locks_released"] = locksReleased
+	}
+	h.recordSession(ctx, core.EventSessionEnded, sess, payload)
 }
 
 // harvestEndedLink gives the conversation's harvest to the isolated session

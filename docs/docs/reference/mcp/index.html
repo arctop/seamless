@@ -130,6 +130,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../concepts/lease-based-task-claiming/">Lease-based task claiming</a></li>
         
+        <li><a href="../../concepts/repo-locks/">Repo locks</a></li>
+        
         <li><a href="../../concepts/reciprocal-rank-fusion/">Reciprocal rank fusion for agent recall</a></li>
         
         <li><a href="../../concepts/coordination-substrate/">What is a coordination substrate?</a></li>
@@ -181,6 +183,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         <li><a href="../../reference/mcp/notes-projects-capture/">Notes, projects &amp; capture</a></li>
         
         <li><a href="../../reference/mcp/tasks/">Tasks</a></li>
+        
+        <li><a href="../../reference/mcp/locks/">Repo locks</a></li>
         
         <li><a href="../../reference/mcp/lab-gardener-usage/">Lab, gardener &amp; usage</a></li>
         
@@ -304,7 +308,7 @@ session ULID.</li>
 transport failures.</li>
 </ul>
 <h2 id="the-tool-surface">The tool surface</h2>
-<p>Seamless registers <strong>33 tools</strong>, and a 34th, <code>access_request</code>, on a daemon whose
+<p>Seamless registers <strong>37 tools</strong>, and a 38th, <code>access_request</code>, on a daemon whose
 <code>peer_auth</code> locks a project, or whose access requests (<code>isolation.requests</code>) are
 on without <code>peer_auth</code>. They are documented in groups:</p>
 <div class="table-wrap">
@@ -332,6 +336,10 @@ on without <code>peer_auth</code>. They are documented in groups:</p>
 <td>Lab, gardener, and usage</td>
 <td><code>lab_open</code>, <code>trial_record</code>, <code>trial_query</code>, <code>gardener_proposals</code>, <code>gardener_request</code>, <code>gardener_split</code>, <code>gardener_apply</code>, <code>usage_summary</code>, <code>favorite_set</code></td>
 </tr>
+<tr>
+<td><a href="../../reference/mcp/locks/">Repo locks</a></td>
+<td><code>locks_list</code>, <code>locks_declare</code>, <code>locks_acquire</code>, <code>locks_release</code> (an optional feature)</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -340,7 +348,7 @@ smaller. Tools belonging to an
 <a href="../../reference/console/#optional-features">optional feature</a> are hidden from
 <code>tools/list</code> while that feature is off, and a call to one is refused as an
 unknown tool. Optional features ship off, so a fresh install advertises fewer
-than 33 until you turn one on - each affected tool says so on its own reference
+than 37 until you turn one on - each affected tool says so on its own reference
 page. Nothing about registration changes: the catalog these pages are generated
 from, and the registered-tool count <code>seamlessd doctor</code> asserts, stay the full
 set either way.</p>

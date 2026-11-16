@@ -130,6 +130,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../concepts/lease-based-task-claiming/">Lease-based task claiming</a></li>
         
+        <li><a href="../../concepts/repo-locks/">Repo locks</a></li>
+        
         <li><a href="../../concepts/reciprocal-rank-fusion/">Reciprocal rank fusion for agent recall</a></li>
         
         <li><a href="../../concepts/coordination-substrate/">What is a coordination substrate?</a></li>
@@ -181,6 +183,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         <li><a href="../../reference/mcp/notes-projects-capture/">Notes, projects &amp; capture</a></li>
         
         <li><a href="../../reference/mcp/tasks/">Tasks</a></li>
+        
+        <li><a href="../../reference/mcp/locks/">Repo locks</a></li>
         
         <li><a href="../../reference/mcp/lab-gardener-usage/">Lab, gardener &amp; usage</a></li>
         
@@ -329,6 +333,11 @@ replaced it: <code>source_session</code>, <code>superseded_by</code>, <code>inva
 <p><strong>Recall</strong> - Seamless's single search entry point, fusing FTS5 keyword matching
 and vector similarity with RRF. Also, loosely, the <code>&lt;seam-recall&gt;</code> block
 injected on prompt match - see the disambiguation below.</p>
+<p><strong>Repo lock</strong> - a Seamless lock on a repository's refs (its main branch, or a
+tag pattern), declared once per repository and name and held with a lease by
+one session while it lands changes. It belongs to the repository, never to a
+project, and is always named with it: <code>LOCK seamless main</code>. An optional
+feature, off by default.</p>
 <p><strong>Reproject</strong> - moving a Seamless memory to a different project that <strong>already
 exists</strong>; moving it to one that does not is a <em>split</em>.</p>
 <p><strong>RRF (reciprocal rank fusion)</strong> - the method Seamless recall uses to combine

@@ -289,5 +289,5 @@ func TestUsageSummaryDescriptionRecordsTotalsDecision(t *testing.T) {
 func TestToolCountMatchesRegistered(t *testing.T) {
 	srv := mcpserver.New(mcpserver.Config{})
 	require.Equal(t, mcpserver.ToolCount, srv.NumTools())
-	require.Equal(t, 33, mcpserver.ToolCount)
+	require.Equal(t, 37, mcpserver.ToolCount)
 }

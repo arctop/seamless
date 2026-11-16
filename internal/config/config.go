@@ -345,6 +345,12 @@ type Features struct {
 	// memories carry an owner-confirmed or agent-written mark. The screens'
 	// tunables live in the screening: block.
 	Screening bool `yaml:"screening" json:"screening"`
+	// RepoLocks enables repo locks: a lock on a repository's refs (its main
+	// branch, a tag pattern) that agents declare once and hold while they land
+	// changes, so landings happen one at a time across machines. It owns the
+	// Locks console screen, the locks_list, locks_declare, locks_acquire and
+	// locks_release MCP tools, and `seam lock`.
+	RepoLocks bool `yaml:"repo_locks" json:"repo_locks"`
 }
 
 // Screening tunes the write screens behind the screening optional feature
@@ -604,7 +610,7 @@ func Defaults() Config {
 		// Optional features ship off: a fresh installation exposes none until the
 		// owner enables it. Existing installations holding research data are
 		// grandfathered on by a one-time store migration, not by this default.
-		Features:  Features{Research: false, Momentum: false, Gamification: false, Screening: false},
+		Features:  Features{Research: false, Momentum: false, Gamification: false, Screening: false, RepoLocks: false},
 		Screening: Screening{BlobMinLength: DefaultScreeningBlobMinLength, DriftInterval: DefaultScreeningDriftInterval},
 		// Commit records ship off: nothing is recorded and no snapshot written.
 		Commits: Commits{SnapshotInterval: DefaultCommitsSnapshotInterval, SnapshotWindow: DefaultCommitsSnapshotWindow},
@@ -1026,6 +1032,9 @@ func (c *Config) applyEnv() error {
 		return err
 	}
 	if err := envBool("SEAMLESS_FEATURES_SCREENING", &c.Features.Screening); err != nil {
+		return err
+	}
+	if err := envBool("SEAMLESS_FEATURES_REPO_LOCKS", &c.Features.RepoLocks); err != nil {
 		return err
 	}
 	envStrSlice("SEAMLESS_SCREENING_URL_ALLOWLIST", &c.Screening.URLAllowlist)

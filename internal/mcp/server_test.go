@@ -69,12 +69,12 @@ func newServerFiles(t *testing.T, tune func(*mcpserver.Config)) (string, *sql.DB
 	cfg := mcpserver.Config{
 		DB: db, Files: mgr, Retrieve: ret, Events: rec, Gardener: garden, APIKey: testKey,
 		// The shared fixture stands in for an instance with every optional feature
-		// ON, so the whole tool surface is exercised: research is off by default,
-		// and without this the research tools would vanish from every test that
-		// uses this helper. The feature-gate tests construct their own servers
-		// (tune can set Features back to the default) precisely so the two
-		// concerns stay separable.
-		Features: config.Features{Research: true},
+		// ON, so the whole tool surface is exercised: research and repo locks are
+		// off by default, and without this their tools would vanish from every
+		// test that uses this helper. The feature-gate tests construct their own
+		// servers (tune can set Features back to the default) precisely so the
+		// two concerns stay separable.
+		Features: config.Features{Research: true, RepoLocks: true},
 	}
 	if tune != nil {
 		tune(&cfg)

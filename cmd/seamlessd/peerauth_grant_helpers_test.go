@@ -227,7 +227,7 @@ func newGMRig(t *testing.T, peer, requests bool) *gmRig {
 	garden := gardener.New(db, mgr, nil, nil, r.rec, gardener.Config{}, nil)
 	// Research on, so the trial tools are registered and probed; screening
 	// built and off, as serve builds it.
-	feats := config.Features{Research: true}
+	feats := config.Features{Research: true, RepoLocks: true}
 	ret.SetFeaturesConfig(feats)
 	screen := screening.New(screening.Config{DB: db, Files: mgr, Events: r.rec, Gardener: garden,
 		Enabled: func(context.Context) bool { return false }})
@@ -692,6 +692,8 @@ func gmReadProbes(it gmItems) map[string][]gmProbe {
 		"gardener_proposals": {{map[string]any{}, true}},
 		"project_list":       {{map[string]any{}, false}},
 		"usage_summary":      {{map[string]any{}, false}},
+		// A repo lock is no project's: the list carries no project's content.
+		"locks_list": {{map[string]any{}, false}},
 	}
 }
 
@@ -739,6 +741,11 @@ func gmWriteProbes(it gmItems) map[string][]map[string]any {
 		"gardener_apply":   {{"id": it.proposalID}, {"id": it.proposalID, "action": "dismiss"}, {"id": it.proposalID, "action": "hide"}},
 		"capture_url":      {{"url": "https://example.invalid/x", "project": p}},
 		"access_request":   {{"project": p}, {"project": p, "reason": "asks to write"}},
+		// The repo locks take no project: aimed at the target through its
+		// session, which the conversation may not act as (speakAs).
+		"locks_declare": {{"repo_root": "/work/" + p, "session": it.sessName}},
+		"locks_acquire": {{"repo_root": "/work/" + p, "session": it.sessName}},
+		"locks_release": {{"repo_root": "/work/" + p, "session": it.sessName}},
 		"favorite_set": {
 			{"kind": "memory", "id": it.memID, "favorite": true}, {"kind": "note", "id": it.noteID, "favorite": true},
 			{"kind": "task", "id": it.taskID, "favorite": true}, {"kind": "trial", "id": it.trialID, "favorite": true},

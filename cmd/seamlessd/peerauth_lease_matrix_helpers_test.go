@@ -273,7 +273,7 @@ func newLMDaemon(t *testing.T) *lmDaemon {
 	// Write screening OFF: the lease rows are about reach; the screens have
 	// their own matrix rows, and a restricted account's binding rules are
 	// held whether or not screening is on.
-	feats := config.Features{Research: true, Momentum: true, Gamification: true}
+	feats := config.Features{Research: true, Momentum: true, Gamification: true, RepoLocks: true}
 	ret.SetFeaturesConfig(feats)
 	screen := screening.New(screening.Config{DB: db, Files: mgr, Events: rec, Gardener: garden,
 		Enabled: func(context.Context) bool { return false }})
@@ -617,6 +617,13 @@ func lmToolProbes(it lmItems) map[string][]map[string]any {
 		"capture_url":        {{"url": "https://example.invalid/x", "project": it.project}},
 		"usage_summary":      {{}, {"session": it.sessName}},
 		"access_request":     {{"project": it.project}, {"project": it.project, "reason": "outsider asks"}},
+		// The repo locks take no project: the target's repository, and a lock
+		// nobody declared there, so every closed project answers as a missing
+		// one does.
+		"locks_list":    {{}, {"repo_root": it.repo}},
+		"locks_declare": {{"repo_root": it.repo}},
+		"locks_acquire": {{"repo_root": it.repo, "name": "lm-none"}},
+		"locks_release": {{"repo_root": it.repo, "name": "lm-none"}},
 		"favorite_set": {
 			{"kind": "memory", "id": it.memID, "favorite": true}, {"kind": "memory", "id": it.memName, "favorite": true},
 			{"kind": "memory", "id": it.memName, "project": it.project, "favorite": true},

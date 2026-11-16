@@ -130,6 +130,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         
         <li><a href="../../concepts/lease-based-task-claiming/">Lease-based task claiming</a></li>
         
+        <li><a href="../../concepts/repo-locks/">Repo locks</a></li>
+        
         <li><a href="../../concepts/reciprocal-rank-fusion/">Reciprocal rank fusion for agent recall</a></li>
         
         <li><a href="../../concepts/coordination-substrate/">What is a coordination substrate?</a></li>
@@ -181,6 +183,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
         <li><a href="../../reference/mcp/notes-projects-capture/">Notes, projects &amp; capture</a></li>
         
         <li><a href="../../reference/mcp/tasks/">Tasks</a></li>
+        
+        <li><a href="../../reference/mcp/locks/">Repo locks</a></li>
         
         <li><a href="../../reference/mcp/lab-gardener-usage/">Lab, gardener &amp; usage</a></li>
         
@@ -238,7 +242,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#what-the-console-can-change">What the console can change</a></li><li class="lvl-2"><a href="#signing-in">Signing in</a></li><li class="lvl-3"><a href="#sign-in-with-a-passkey">Sign in with a passkey</a></li><li class="lvl-3"><a href="#make-console">make console</a></li><li class="lvl-2"><a href="#getting-around">Getting around</a></li><li class="lvl-3"><a href="#the-command-palette">The command palette</a></li><li class="lvl-3"><a href="#keyboard">Keyboard</a></li><li class="lvl-3"><a href="#ambient-signals">Ambient signals</a></li><li class="lvl-2"><a href="#choose-how-much-you-see">Choose how much you see</a></li><li class="lvl-3"><a href="#screens">Screens</a></li><li class="lvl-3"><a href="#settings-sections">Settings sections</a></li><li class="lvl-3"><a href="#within-screens">Within screens</a></li><li class="lvl-2"><a href="#three-ways-to-render-a-page">Three ways to render a page</a></li><li class="lvl-2"><a href="#overview">Overview</a></li><li class="lvl-3"><a href="#since-you-were-last-here">Since you were last here</a></li><li class="lvl-2"><a href="#now">Now</a></li><li class="lvl-2"><a href="#interactions">Interactions</a></li><li class="lvl-2"><a href="#search">Search</a></li><li class="lvl-2"><a href="#projects">Projects</a></li><li class="lvl-2"><a href="#sessions">Sessions</a></li><li class="lvl-3"><a href="#conversation">The conversation</a></li><li class="lvl-2"><a href="#memories">Memories</a></li><li class="lvl-2"><a href="#notes">Notes</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-2"><a href="#plans">Plans</a></li><li class="lvl-2"><a href="#labs">Labs</a></li><li class="lvl-2"><a href="#trials">Trials</a></li><li class="lvl-2"><a href="#context">Context</a></li><li class="lvl-2"><a href="#retrieval">Retrieval</a></li><li class="lvl-2"><a href="#gardener">Gardener</a></li><li class="lvl-2"><a href="#held">Held</a></li><li class="lvl-2"><a href="#system">System</a></li><li class="lvl-2"><a href="#privacy">Privacy</a></li><li class="lvl-2"><a href="#devices">Devices</a></li><li class="lvl-2"><a href="#settings">Settings</a></li><li class="lvl-3"><a href="#experience">Experience</a></li><li class="lvl-3"><a href="#optional-features">Optional features</a></li><li class="lvl-3"><a href="#your-setup">Your setup</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#backups">Backups</a></li><li class="lvl-3"><a href="#briefing">Briefing</a></li><li class="lvl-3"><a href="#workspaces">Workspaces</a></li><li class="lvl-3"><a href="#knowledge-engine">Knowledge engine</a></li><li class="lvl-2"><a href="#event-detail">Event detail</a></li><li class="lvl-2"><a href="#errors">Errors</a></li>
+      <li class="lvl-2"><a href="#what-the-console-can-change">What the console can change</a></li><li class="lvl-2"><a href="#signing-in">Signing in</a></li><li class="lvl-3"><a href="#sign-in-with-a-passkey">Sign in with a passkey</a></li><li class="lvl-3"><a href="#make-console">make console</a></li><li class="lvl-2"><a href="#getting-around">Getting around</a></li><li class="lvl-3"><a href="#the-command-palette">The command palette</a></li><li class="lvl-3"><a href="#keyboard">Keyboard</a></li><li class="lvl-3"><a href="#ambient-signals">Ambient signals</a></li><li class="lvl-2"><a href="#choose-how-much-you-see">Choose how much you see</a></li><li class="lvl-3"><a href="#screens">Screens</a></li><li class="lvl-3"><a href="#settings-sections">Settings sections</a></li><li class="lvl-3"><a href="#within-screens">Within screens</a></li><li class="lvl-2"><a href="#three-ways-to-render-a-page">Three ways to render a page</a></li><li class="lvl-2"><a href="#overview">Overview</a></li><li class="lvl-3"><a href="#since-you-were-last-here">Since you were last here</a></li><li class="lvl-2"><a href="#now">Now</a></li><li class="lvl-2"><a href="#interactions">Interactions</a></li><li class="lvl-2"><a href="#search">Search</a></li><li class="lvl-2"><a href="#projects">Projects</a></li><li class="lvl-2"><a href="#sessions">Sessions</a></li><li class="lvl-3"><a href="#conversation">The conversation</a></li><li class="lvl-2"><a href="#memories">Memories</a></li><li class="lvl-2"><a href="#notes">Notes</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-2"><a href="#locks">Locks</a></li><li class="lvl-2"><a href="#plans">Plans</a></li><li class="lvl-2"><a href="#labs">Labs</a></li><li class="lvl-2"><a href="#trials">Trials</a></li><li class="lvl-2"><a href="#context">Context</a></li><li class="lvl-2"><a href="#retrieval">Retrieval</a></li><li class="lvl-2"><a href="#gardener">Gardener</a></li><li class="lvl-2"><a href="#held">Held</a></li><li class="lvl-2"><a href="#system">System</a></li><li class="lvl-2"><a href="#privacy">Privacy</a></li><li class="lvl-2"><a href="#devices">Devices</a></li><li class="lvl-2"><a href="#settings">Settings</a></li><li class="lvl-3"><a href="#experience">Experience</a></li><li class="lvl-3"><a href="#optional-features">Optional features</a></li><li class="lvl-3"><a href="#your-setup">Your setup</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#backups">Backups</a></li><li class="lvl-3"><a href="#briefing">Briefing</a></li><li class="lvl-3"><a href="#workspaces">Workspaces</a></li><li class="lvl-3"><a href="#knowledge-engine">Knowledge engine</a></li><li class="lvl-2"><a href="#event-detail">Event detail</a></li><li class="lvl-2"><a href="#errors">Errors</a></li>
     </ul>
   </details>
   <p>The console is the owner's window onto a system whose actual clients are agents.
@@ -269,6 +273,21 @@ nothing, and their rows say so.</p>
 <td>Force-release a task claim</td>
 <td><code>POST /console/tasks/{id}/release</code></td>
 <td>The owner override: releases a claimed task's lock regardless of who holds it, reopening it for any agent. Not reachable from the agent MCP tools.</td>
+</tr>
+<tr>
+<td>Force-release a repo lock</td>
+<td><code>POST /console/locks/{id}/release</code></td>
+<td><a href="#locks">Repo locks</a>: ends the hold a lock carries, live or lapsed, whoever holds it; the lock stays declared. What <code>seam lock release --force</code> sends. Refused when nobody holds it (409), from an agent's process on the peer_auth socket, and from a paired device.</td>
+</tr>
+<tr>
+<td>Approve a lock declaration</td>
+<td><code>POST /console/locks/{id}/approve</code></td>
+<td>Makes a restricted account's waiting declaration an active lock, which agents may then hold. Refused for a lock already active (409), from an agent's process on the peer_auth socket, and from a paired device.</td>
+</tr>
+<tr>
+<td>Discard a lock declaration</td>
+<td><code>POST /console/locks/{id}/discard</code></td>
+<td>Deletes a restricted account's waiting declaration with its repository identities, so the repository may be declared again. An active lock is refused (409): no route removes one. Refused from an agent's process on the peer_auth socket, and from a paired device.</td>
 </tr>
 <tr>
 <td>Approve a captured plan</td>
@@ -790,7 +809,7 @@ cookie to the browser they can actually see. (<code>--browser</code> is macOS-on
 </tr>
 <tr>
 <td><strong>Work</strong></td>
-<td>Projects, Plans, Tasks, Sessions</td>
+<td>Projects, Plans, Tasks, Sessions, Locks (only while that <a href="#optional-features">optional feature</a> is on)</td>
 </tr>
 <tr>
 <td><strong>Research</strong></td>
@@ -1008,6 +1027,12 @@ there. See <a href="../../reference/configuration/">Configuration</a>.</p>
 <tr>
 <td><strong>Sessions</strong></td>
 <td>shown</td>
+<td>shown</td>
+<td>shown</td>
+</tr>
+<tr>
+<td><strong>Locks</strong> - while the repo_locks feature is on</td>
+<td>-</td>
 <td>shown</td>
 <td>shown</td>
 </tr>
@@ -1595,6 +1620,26 @@ the same way. The project workspace's Plans &amp; tasks tab marks such steps
 blocked and leaves them out of the ready queue. Opening a plan or a session
 that lives in a locked project takes you to that project's unlock page, which
 says the item is there and links back once you unlock it.</p>
+<h2 id="locks">Locks</h2>
+<p><code>/console/locks</code>, <code>/console/locks/{id}</code></p>
+<p>Only while the <strong>Repo locks</strong> <a href="#optional-features">optional feature</a> is on; a
+Standard screen. Every <a href="../../concepts/repo-locks/">repo lock</a>, shown with its
+repository and its name (<strong>LOCK seamless main</strong>): the refs it guards, whether it
+is free, held or lapsed, the session that holds it with since and until, the
+repository identities that resolve to it, and the projects whose restricted
+accounts may hold it. A lock belongs to no project, so the page lists every
+one; a holder in a project this browser has not unlocked reads &quot;a session this
+console does not show&quot;, and such a listed project is left out.</p>
+<ul>
+<li><strong>Waiting for your approval</strong> - the declarations restricted accounts filed:
+nobody can hold one until you <strong>Approve</strong> it, and <strong>Discard</strong> leaves the
+repository free to be declared again. The sidebar badge counts them.</li>
+<li><strong>Force release</strong> - on a held or lapsed lock: ends the hold whoever holds it.
+The agent that held it is not told, so release a lock only when its holder is
+gone or stuck.</li>
+</ul>
+<p><code>/console/locks/{id}</code> is the same page with that lock marked; with
+<code>?format=json</code>, the lock alone.</p>
 <h2 id="plans">Plans</h2>
 <p><code>/console/plans</code>, <code>/console/plans/{slug}</code></p>
 <p>The same library shape, with the rail grouped by phase (<strong>in progress</strong>,
@@ -1919,7 +1964,7 @@ section renders one card per feature - a toggle, an Enabled/Disabled pill, what 
 feature is, a generated line naming exactly what switching it off hides, and a
 live count of the data it holds either way (&quot;Data kept: 12 trials across 3
 labs&quot;).</p>
-<p>There are four today:</p>
+<p>There are five today:</p>
 <p><strong>Research labs &amp; trials</strong> owns the <a href="#labs">Labs</a> and <a href="#trials">Trials</a>
 screens, the trials search scope, and the <code>lab_open</code>, <code>trial_record</code>, and
 <code>trial_query</code> MCP tools. Screens and tools move together on purpose, so an
@@ -2020,6 +2065,10 @@ none of them. With restricted local accounts configured, the card says the
 Held screen stays for their proposals and only its screening parts go. The
 <a href="../../guides/write-screening/">write screening guide</a> has the screens, the reasons
 and the events.</p>
+<p><strong>Repo locks</strong> owns the <a href="#locks">Locks</a> screen, the <code>locks_list</code>,
+<code>locks_declare</code>, <code>locks_acquire</code> and <code>locks_release</code> MCP tools, and <code>seam lock</code>: <a href="../../concepts/repo-locks/">locks on a repository's refs</a> that agents
+declare once and hold while they land changes. Turning it off deletes no lock
+and no declaration.</p>
 <p><strong>Nothing is ever deleted.</strong> Switching a feature off gates exposure and nothing
 else: the trials stay in the database, its screens answer with a short &quot;switched
 off&quot; page that links back here (a JSON caller gets a 403), and switching it back
@@ -2341,7 +2390,7 @@ the detail pane would nest the whole console inside itself.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#what-the-console-can-change">What the console can change</a></li><li class="lvl-2"><a href="#signing-in">Signing in</a></li><li class="lvl-3"><a href="#sign-in-with-a-passkey">Sign in with a passkey</a></li><li class="lvl-3"><a href="#make-console">make console</a></li><li class="lvl-2"><a href="#getting-around">Getting around</a></li><li class="lvl-3"><a href="#the-command-palette">The command palette</a></li><li class="lvl-3"><a href="#keyboard">Keyboard</a></li><li class="lvl-3"><a href="#ambient-signals">Ambient signals</a></li><li class="lvl-2"><a href="#choose-how-much-you-see">Choose how much you see</a></li><li class="lvl-3"><a href="#screens">Screens</a></li><li class="lvl-3"><a href="#settings-sections">Settings sections</a></li><li class="lvl-3"><a href="#within-screens">Within screens</a></li><li class="lvl-2"><a href="#three-ways-to-render-a-page">Three ways to render a page</a></li><li class="lvl-2"><a href="#overview">Overview</a></li><li class="lvl-3"><a href="#since-you-were-last-here">Since you were last here</a></li><li class="lvl-2"><a href="#now">Now</a></li><li class="lvl-2"><a href="#interactions">Interactions</a></li><li class="lvl-2"><a href="#search">Search</a></li><li class="lvl-2"><a href="#projects">Projects</a></li><li class="lvl-2"><a href="#sessions">Sessions</a></li><li class="lvl-3"><a href="#conversation">The conversation</a></li><li class="lvl-2"><a href="#memories">Memories</a></li><li class="lvl-2"><a href="#notes">Notes</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-2"><a href="#plans">Plans</a></li><li class="lvl-2"><a href="#labs">Labs</a></li><li class="lvl-2"><a href="#trials">Trials</a></li><li class="lvl-2"><a href="#context">Context</a></li><li class="lvl-2"><a href="#retrieval">Retrieval</a></li><li class="lvl-2"><a href="#gardener">Gardener</a></li><li class="lvl-2"><a href="#held">Held</a></li><li class="lvl-2"><a href="#system">System</a></li><li class="lvl-2"><a href="#privacy">Privacy</a></li><li class="lvl-2"><a href="#devices">Devices</a></li><li class="lvl-2"><a href="#settings">Settings</a></li><li class="lvl-3"><a href="#experience">Experience</a></li><li class="lvl-3"><a href="#optional-features">Optional features</a></li><li class="lvl-3"><a href="#your-setup">Your setup</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#backups">Backups</a></li><li class="lvl-3"><a href="#briefing">Briefing</a></li><li class="lvl-3"><a href="#workspaces">Workspaces</a></li><li class="lvl-3"><a href="#knowledge-engine">Knowledge engine</a></li><li class="lvl-2"><a href="#event-detail">Event detail</a></li><li class="lvl-2"><a href="#errors">Errors</a></li>
+      <li class="lvl-2"><a href="#what-the-console-can-change">What the console can change</a></li><li class="lvl-2"><a href="#signing-in">Signing in</a></li><li class="lvl-3"><a href="#sign-in-with-a-passkey">Sign in with a passkey</a></li><li class="lvl-3"><a href="#make-console">make console</a></li><li class="lvl-2"><a href="#getting-around">Getting around</a></li><li class="lvl-3"><a href="#the-command-palette">The command palette</a></li><li class="lvl-3"><a href="#keyboard">Keyboard</a></li><li class="lvl-3"><a href="#ambient-signals">Ambient signals</a></li><li class="lvl-2"><a href="#choose-how-much-you-see">Choose how much you see</a></li><li class="lvl-3"><a href="#screens">Screens</a></li><li class="lvl-3"><a href="#settings-sections">Settings sections</a></li><li class="lvl-3"><a href="#within-screens">Within screens</a></li><li class="lvl-2"><a href="#three-ways-to-render-a-page">Three ways to render a page</a></li><li class="lvl-2"><a href="#overview">Overview</a></li><li class="lvl-3"><a href="#since-you-were-last-here">Since you were last here</a></li><li class="lvl-2"><a href="#now">Now</a></li><li class="lvl-2"><a href="#interactions">Interactions</a></li><li class="lvl-2"><a href="#search">Search</a></li><li class="lvl-2"><a href="#projects">Projects</a></li><li class="lvl-2"><a href="#sessions">Sessions</a></li><li class="lvl-3"><a href="#conversation">The conversation</a></li><li class="lvl-2"><a href="#memories">Memories</a></li><li class="lvl-2"><a href="#notes">Notes</a></li><li class="lvl-2"><a href="#tasks">Tasks</a></li><li class="lvl-2"><a href="#locks">Locks</a></li><li class="lvl-2"><a href="#plans">Plans</a></li><li class="lvl-2"><a href="#labs">Labs</a></li><li class="lvl-2"><a href="#trials">Trials</a></li><li class="lvl-2"><a href="#context">Context</a></li><li class="lvl-2"><a href="#retrieval">Retrieval</a></li><li class="lvl-2"><a href="#gardener">Gardener</a></li><li class="lvl-2"><a href="#held">Held</a></li><li class="lvl-2"><a href="#system">System</a></li><li class="lvl-2"><a href="#privacy">Privacy</a></li><li class="lvl-2"><a href="#devices">Devices</a></li><li class="lvl-2"><a href="#settings">Settings</a></li><li class="lvl-3"><a href="#experience">Experience</a></li><li class="lvl-3"><a href="#optional-features">Optional features</a></li><li class="lvl-3"><a href="#your-setup">Your setup</a></li><li class="lvl-3"><a href="#updates">Updates</a></li><li class="lvl-3"><a href="#backups">Backups</a></li><li class="lvl-3"><a href="#briefing">Briefing</a></li><li class="lvl-3"><a href="#workspaces">Workspaces</a></li><li class="lvl-3"><a href="#knowledge-engine">Knowledge engine</a></li><li class="lvl-2"><a href="#event-detail">Event detail</a></li><li class="lvl-2"><a href="#errors">Errors</a></li>
     </ul>
   </aside>
   

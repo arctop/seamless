@@ -674,6 +674,11 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 	if err != nil {
 		return errResult("session_end", err)
 	}
+	// Its repo locks return with its claims, live or lapsed.
+	locksReleased, err := store.ReleaseRepoLocksForSession(ctx, s.cfg.DB, sess.ID, now)
+	if err != nil {
+		return errResult("session_end", err)
+	}
 	// The session's leases on locked projects end with it, and its read
 	// grants.
 	s.revokeSessionLeases(ctx, sess.ID)
@@ -697,6 +702,10 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 	ended := map[string]any{"claims_released": released, "findings": events.Truncate(findings, s.cfg.ToolEventMaxChars)}
 	out := withAccount(map[string]any{"status": "completed", "session_id": sess.ID, "claims_released": released,
 		"mishaps_recorded": len(mishaps)}, sess.Account)
+	if locksReleased > 0 {
+		ended["locks_released"] = locksReleased
+		out["locks_released"] = locksReleased
+	}
 	if len(commits) > 0 {
 		ended["commits_recorded"] = len(commits)
 		out["commits_recorded"] = len(commits)

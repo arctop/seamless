@@ -62,13 +62,27 @@ func TestRegistry_ScreeningEntry(t *testing.T) {
 	require.False(t, f.Default, "optional features ship off")
 }
 
-func TestRegistry_OrderIsResearchThenMomentumThenGamificationThenScreening(t *testing.T) {
+func TestRegistry_RepoLocksEntry(t *testing.T) {
+	f, ok := Get(RepoLocks)
+	require.True(t, ok)
+	require.Equal(t, Key("repo_locks"), f.Key)
+	require.Equal(t, "Repo locks", f.Label)
+	require.NotEmpty(t, f.Blurb)
+	require.Equal(t, []string{"locks_list", "locks_declare", "locks_acquire", "locks_release"}, f.Tools)
+	require.Equal(t, []string{"locks"}, f.NavIDs)
+	require.Equal(t, []string{"/console/locks"}, f.RoutePrefixes)
+	require.Empty(t, f.Skill)
+	require.False(t, f.Default, "optional features ship off")
+}
+
+func TestRegistry_OrderIsResearchThenMomentumThenGamificationThenScreeningThenRepoLocks(t *testing.T) {
 	reg := Registry()
-	require.Len(t, reg, 4)
+	require.Len(t, reg, 5)
 	require.Equal(t, Research, reg[0].Key, "registry order is the Settings card order")
 	require.Equal(t, Momentum, reg[1].Key)
 	require.Equal(t, Gamification, reg[2].Key)
 	require.Equal(t, Screening, reg[3].Key)
+	require.Equal(t, RepoLocks, reg[4].Key)
 }
 
 func TestRegistry_WellFormed(t *testing.T) {
@@ -115,14 +129,18 @@ func TestDefaults_MatchConfigDefaults(t *testing.T) {
 
 func TestHiddenTools(t *testing.T) {
 	hidden := HiddenTools(config.Features{Research: false})
-	require.Equal(t, map[string]bool{"lab_open": true, "trial_record": true, "trial_query": true}, hidden)
+	require.Equal(t, map[string]bool{"lab_open": true, "trial_record": true, "trial_query": true,
+		"locks_list": true, "locks_declare": true, "locks_acquire": true, "locks_release": true}, hidden)
+	require.Equal(t, map[string]bool{"locks_list": true, "locks_declare": true, "locks_acquire": true, "locks_release": true},
+		HiddenTools(config.Features{Research: true}), "repo locks stay hidden until they are on")
 
-	require.Empty(t, HiddenTools(config.Features{Research: true}),
+	require.Empty(t, HiddenTools(config.Features{Research: true, RepoLocks: true}),
 		"with every feature on, nothing is hidden")
 }
 
 func TestToolOwners(t *testing.T) {
 	owners := ToolOwners()
 	require.Equal(t, Research, owners["trial_record"])
-	require.Len(t, owners, 3)
+	require.Equal(t, RepoLocks, owners["locks_acquire"])
+	require.Len(t, owners, 7)
 }

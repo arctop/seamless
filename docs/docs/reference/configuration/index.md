@@ -372,6 +372,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `features.momentum` | bool | - |
 | `features.gamification` | bool | - |
 | `features.screening` | bool | - |
+| `features.repo_locks` | bool | - |
 | `screening.url_allowlist` | []string | - |
 | `screening.blob_min_length` | int | `200` |
 | `screening.drift_interval` | duration | `5m` |
@@ -653,6 +654,13 @@ features:
   # The Home welcome card offers it too. Tunables: the screening block below.
   # env: SEAMLESS_FEATURES_SCREENING
   screening: false
+  # Repo locks: locks on a repository's refs (its main branch, or a tag
+  # pattern) that agents declare once and hold while they land changes, so
+  # landings happen one at a time across machines. The Locks console screen,
+  # the locks_list, locks_declare, locks_acquire and locks_release MCP tools,
+  # and seam lock. Off, no lock is deleted.
+  # env: SEAMLESS_FEATURES_REPO_LOCKS
+  repo_locks: false
 
 # The write screens behind features.screening (inert while it is off).
 screening:

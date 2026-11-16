@@ -49,12 +49,13 @@ const (
 	// tasks (4) + trials (3) = 22; P4 adds gardener (2) + capture_url +
 	// usage_summary = 26; plans-as-composition adds tasks_claim + tasks_release = 28;
 	// gardener_request = 29; gardener_split = 30; favorite_set = 31;
-	// memory_edit + notes_edit = 33.
+	// memory_edit + notes_edit = 33; the repo locks' locks_list, locks_declare,
+	// locks_acquire and locks_release (tools_locks.go) = 37.
 	//
 	// It is the count of every install that does not lock a project, which is
 	// every default one. A server that does (Config.OfferAccessRequest) also
 	// registers the tools in LockedOnlyTools: LockedToolCount.
-	ToolCount = 33
+	ToolCount = 37
 
 	// LockedToolCount is the number of MCP tools a server registers while
 	// peer_auth locks a project (Config.OfferAccessRequest): ToolCount plus
@@ -596,6 +597,9 @@ func (s *Server) registerTools() {
 	s.addTool(usageSummaryTool(), s.handleUsageSummary)
 
 	s.addTool(favoriteSetTool(), s.handleFavoriteSet)
+
+	// The repo locks, from their one table (tools_locks.go).
+	s.lkRegister()
 
 	// Registered last, and only while a project is locked or the advisory
 	// tier's read grants are on (OffersAccessRequest), so a default server's

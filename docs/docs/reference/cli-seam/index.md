@@ -375,6 +375,64 @@ Without `--force`, calls `tasks_release`, which only releases a claim you hold.
 to the console's release endpoint, which is bearer-authenticated and force-releases
 any holder's claim. Agents on the MCP surface cannot reach that path.
 
+## Repo locks
+
+A [repo lock](https://thereisnospoon.org/docs/concepts/repo-locks/) guards a repository's refs while an agent
+lands changes. These commands call the `locks_*` tools and name the repository
+by the checkout they run in (or `--cwd`): `seam` resolves its root, its main
+checkout and its origin on this machine, following a side clone's local-path
+origin to the repository it was cloned from, so the daemon never reads this
+machine's disk. Repo locks are an optional feature, off by default: while it is
+off on the server, each command says so and exits 1. Bare `seam lock` names its
+subcommands and exits 2.
+
+### seam lock list {#seam_lock_list}
+
+```bash
+seam lock list [--cwd DIR] [--here] [--json]
+```
+
+Calls `locks_list` and prints one line per lock: `LOCK <repo> <name>`, whether
+it is free, held (by which session, when you may see it, and until when) or
+waiting for the owner's approval, and its guarded refs. `--here` (or `--cwd`)
+lists only the locks of the repository the directory is in.
+
+### seam lock declare {#seam_lock_declare}
+
+```bash
+seam lock declare [--cwd DIR] [--json] [--name NAME] [--projects SLUGS] [--refs REFS] [--session NAME]
+```
+
+Calls `locks_declare` for this repository: once per repository and name. A
+second declaration from any project or machine reports the existing lock, its
+refs unchanged. `--name` defaults to `main`, `--refs` (comma-separated full ref
+names or one-`*` patterns) to `refs/heads/<name>`, and `--projects` to the
+project the checkout maps to. A restricted account's declaration waits for the
+owner's approval on the console's Locks page.
+
+### seam lock acquire {#seam_lock_acquire}
+
+```bash
+seam lock acquire [--cwd DIR] [--id ID] [--json] [--lease SECONDS] [--name NAME] [--session NAME]
+```
+
+Calls `locks_acquire` and prints the lease's end. Acquiring a lock you already
+hold refreshes its lease: that is the heartbeat for a long landing. A lock
+another session holds is refused, naming the holder where you may see it.
+`--lease` overrides the server's default (900 seconds) and is only sent when
+greater than zero; `--id` names the lock instead of the checkout.
+
+### seam lock release {#seam_lock_release}
+
+```bash
+seam lock release [--cwd DIR] [--force] [--id ID] [--json] [--name NAME] [--session NAME]
+```
+
+Without `--force`, calls `locks_release`, which only releases a hold you have.
+`--force` is the owner override: it POSTs to the console's force-release route,
+which ends any hold, live or lapsed, and is refused from an agent's process on
+the peer_auth socket.
+
 ## Captured plans
 
 Owner surface over the plans Claude Code plan mode captures. `list`, `show`, and

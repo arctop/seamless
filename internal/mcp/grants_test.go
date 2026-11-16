@@ -98,7 +98,7 @@ func newGrantRig(t *testing.T, on bool) *grantRig {
 	ret := retrieve.New(db, nil, config.Budgets{MaxBriefingTokens: 1500, RecallBudgetTokens: 1000}, nil)
 	ret.SetBodyReader(mgr.Store())
 	cfg := mcpserver.Config{DB: db, Files: mgr, Retrieve: ret, Events: r.rec, APIKey: testKey,
-		Features: config.Features{Research: true}, Now: r.clock}
+		Features: config.Features{Research: true, RepoLocks: true}, Now: r.clock}
 	if on {
 		r.grants = approval.NewGrants(approval.GrantsConfig{DB: db, Events: r.rec, LeaseCap: 8 * time.Hour, Now: r.clock})
 		cfg.Grants = r.grants

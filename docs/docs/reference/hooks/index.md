@@ -236,10 +236,12 @@ on the console's Held screen.
 
 A session that loses a task claim it held - another session claims the task
 after its lease lapsed, the owner releases the claim, or the idle reaper
-releases a lapsed one - is told once. The next `SessionStart` (not a
-subagent's) or `UserPromptSubmit` of its conversation leads its injection with
-a `Seamless: Claim lost: ...` line naming the task, when, the session that took
-it when this one may see it, and what to do; a Seamless tool result may carry
+releases a lapsed one - is told once, and so is one that loses a
+[repo lock](https://thereisnospoon.org/docs/concepts/repo-locks/) it held the same three ways. The next
+`SessionStart` (not a subagent's) or `UserPromptSubmit` of its conversation
+leads its injection with a `Seamless: Claim lost: ...` line (`Lock lost: ...`
+for a lock) naming the task or lock, when, the session that took it when this
+one may see it, and what to do; a Seamless tool result may carry
 it first instead, and whichever does carries it alone. The conversation's
 sessions are its ambient session and every explicit session `session_start`
 linked to it. See [lease-based task claiming](https://thereisnospoon.org/docs/concepts/lease-based-task-claiming/).

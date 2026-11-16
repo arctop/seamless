@@ -1,0 +1,61 @@
+{{define "content"}}
+{{with .Data}}
+<div class="access-page" data-locks>
+<header class="mv2-bar">
+  <h1>{{icon "git-branch"}}Locks</h1>{{about "A repo lock guards a repository's refs, such as its main branch, so agents on several machines land changes one at a time. Agents declare a repository's lock once and hold it while they land; a hold lapses at the end of its lease. A lock belongs to its repository, never to a project."}}
+  <span class="mv2-count" aria-label="{{len .Locks}} locks"><strong>{{len .Locks}}</strong>{{if eq (len .Locks) 1}}lock{{else}}locks{{end}}</span>
+</header>
+
+{{if .Requested}}
+<section aria-labelledby="locks-requested-title">
+  <h2 id="locks-requested-title">Waiting for your approval</h2>
+  <p class="held-sub">A restricted account declared these. Nobody can hold one until you approve it; a discarded declaration leaves the repository free to be declared again.</p>
+  <ul class="access-list">
+    {{range .Requested}}
+    <li class="access-item" id="lock-{{.ID}}" data-lock="{{.ID}}"{{if eq .ID $.Data.Focus}} aria-current="true"{{end}}>
+      <span class="badge">requested</span>
+      <strong>LOCK {{.Label}}</strong>
+      <small>guards <code>{{range $i, $r := .Refs}}{{if $i}}, {{end}}{{$r}}{{end}}</code>{{with .Account}} &middot; declared by account {{.}}{{end}}{{with .CreatedByName}} in session {{.}}{{end}} &middot; {{clockDate .CreatedAt}}</small>
+      {{template "lock-identity" .}}
+      <form method="post" action="/console/locks/{{.ID}}/approve">
+        <button class="btn primary" type="submit">Approve</button>
+      </form>
+      <form method="post" action="/console/locks/{{.ID}}/discard">
+        <button class="btn" type="submit">Discard</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
+<section aria-labelledby="locks-declared-title">
+  <h2 id="locks-declared-title">Declared</h2>
+  {{if .Locks}}
+  <ul class="access-list">
+    {{range .Locks}}
+    <li class="access-item" id="lock-{{.ID}}" data-lock="{{.ID}}"{{if eq .ID $.Data.Focus}} aria-current="true"{{end}}>
+      {{if .Held}}<span class="badge">held</span>{{else if .Lapsed}}<span class="badge">lapsed</span>{{else}}<span class="badge">free</span>{{end}}
+      <strong>LOCK {{.Label}}</strong>
+      <small>guards <code>{{range $i, $r := .Refs}}{{if $i}}, {{end}}{{$r}}{{end}}</code>{{if .Holder}} &middot; {{if .Held}}held{{else}}last held{{end}} by {{if .HolderHidden}}a session this console does not show{{else}}<a href="/console/sessions/{{.Holder}}">{{.HolderName}}</a>{{end}}{{with .Since}} since {{clockDate .}}{{end}}{{with .Until}}, until {{clock .}}{{end}}{{end}}</small>
+      {{template "lock-identity" .}}
+      {{if .Holder}}
+      <form method="post" action="/console/locks/{{.ID}}/release">
+        <button class="btn" type="submit">Force release</button>
+      </form>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+  <p class="held-sub">Force release ends a hold whoever holds it, live or lapsed. The agent that held it is not told: release a lock only when its holder is gone or stuck.</p>
+  {{else}}
+  <p class="held-sub">No lock is declared yet. From inside a repository, an agent runs <code>seam lock declare</code> (or calls <code>locks_declare</code>), and then holds the lock with <code>seam lock acquire</code> while it lands.</p>
+  {{end}}
+</section>
+</div>
+{{end}}
+{{end}}
+
+{{define "lock-identity"}}
+<small class="lock-identity">answers to {{range $i, $a := .Aliases}}{{if $i}}, {{end}}<code>{{$a.Alias}}</code>{{else}}no repository identity{{end}}{{if .Projects}} &middot; restricted accounts of {{range $i, $p := .Projects}}{{if $i}}, {{end}}<a href="/console/projects/{{$p}}">{{$p}}</a>{{end}} may hold it{{end}}</small>
+{{end}}

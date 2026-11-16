@@ -28,6 +28,7 @@
   <url><loc>https://thereisnospoon.org/docs/concepts/gardener/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/concepts/memory-supersession/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/concepts/lease-based-task-claiming/</loc></url>
+  <url><loc>https://thereisnospoon.org/docs/concepts/repo-locks/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/concepts/reciprocal-rank-fusion/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/concepts/coordination-substrate/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/guides/</loc></url>
@@ -48,6 +49,7 @@
   <url><loc>https://thereisnospoon.org/docs/reference/mcp/sessions-memory-recall/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/reference/mcp/notes-projects-capture/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/reference/mcp/tasks/</loc></url>
+  <url><loc>https://thereisnospoon.org/docs/reference/mcp/locks/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/reference/mcp/lab-gardener-usage/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/reference/cli-seam/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/reference/cli-seamlessd/</loc></url>

@@ -81,6 +81,11 @@ func seedViewFixture(t *testing.T, db *sql.DB) (hiddenMem, shownMem, hiddenTask,
 		VALUES ('m-hidden','memory','m',1,x'00000000',?), ('m-shown','memory','m',1,x'00000000',?)`, ts, ts)
 	ins(`INSERT INTO retrieval_stats (item_id, inject_count) VALUES ('m-hidden', 3), ('m-shown', 2)`)
 	ins(`INSERT INTO repo_map (host, path, slug, created_at) VALUES ('example-host','/work/fin','example-finance',?), ('example-host','/work/ops','example-ops',?)`, ts, ts)
+	// A repo lock belongs to no project: the lock and its aliases stay; only
+	// the listing of the hidden project goes.
+	ins(`INSERT INTO repo_locks (id, name, refs, state, holder, created_at, updated_at) VALUES ('lk-1','main','["refs/heads/main"]','active','s-hidden',?,?)`, ts, ts)
+	ins(`INSERT INTO repo_lock_aliases (lock_id, name, kind, alias, created_at) VALUES ('lk-1','main','origin','example.com/acme/app',?), ('lk-1','main','path','example-host:/work/fin',?)`, ts, ts)
+	ins(`INSERT INTO repo_lock_projects (lock_id, project_slug) VALUES ('lk-1','example-finance'), ('lk-1','example-ops')`)
 	ph, err := CreateProposal(ctx, db, ProposalArchive, map[string]any{"id": "m-hidden", "project": "example-finance"})
 	require.NoError(t, err)
 	_, err = CreateProposal(ctx, db, ProposalMerge, map[string]any{"keep": map[string]any{"id": "m-shown"}, "drop": map[string]any{"id": "m-hidden"}})
@@ -128,6 +133,10 @@ func TestOpenView_HidesTheSealedProjectEverywhere(t *testing.T) {
 		{`SELECT COUNT(*) FROM retrieval_stats`, 1},
 		{`SELECT COUNT(*) FROM repo_map`, 1},
 		{`SELECT COUNT(*) FROM gardener_proposals`, 1}, // the merge naming a hidden memory is hidden too
+		{`SELECT COUNT(*) FROM repo_locks`, 1},         // a repo lock is no project's
+		{`SELECT COUNT(*) FROM repo_lock_aliases`, 2},
+		{`SELECT COUNT(*) FROM repo_lock_projects`, 1}, // the hidden project's listing is hidden
+		{`SELECT COUNT(*) FROM repo_lock_projects WHERE project_slug = 'example-finance'`, 0},
 	} {
 		require.Equal(t, c.want, count(c.q), c.q)
 	}
