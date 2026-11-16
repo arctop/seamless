@@ -364,8 +364,11 @@ func (s *Server) receiptAfterMove(ctx context.Context, from, target string) stri
 	if from == "" || !s.sendsReceipts(ctx, target) {
 		return ""
 	}
-	return " After the move it can still close a task it claimed there, with a receipt: tasks_update with status done " +
-		"or dropped, and no text."
+	// The home is named, never "there": after "works in <target> for good" an
+	// agent read "a task it claimed there" as the target (fenced owner check,
+	// 2026-11-15).
+	return " After the move it can still close a task it claimed in " + from + ", with a receipt: tasks_update with " +
+		"status done or dropped, and no text."
 }
 
 // sendsReceipts reports whether a conversation homed in home may send

@@ -58,7 +58,7 @@ func TestFenced_P11MoveWordsPromiseAReceiptThatWorks(t *testing.T) {
 	require.Equal(t, "in_progress", claimed["status"])
 
 	text := r.refused(r.cli, "notes_read", map[string]any{"id": r.finNote})
-	require.Contains(t, text, "until the conversation ends. After the move it can still close a task it claimed there, with "+
+	require.Contains(t, text, "until the conversation ends. After the move it can still close a task it claimed in example-ops, with "+
 		"a receipt: tasks_update with status done or dropped, and no text. Its first result after the approval")
 	r.approveMove(gShort.FindString(text))
 

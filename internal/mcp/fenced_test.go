@@ -233,7 +233,7 @@ func TestFenced_MoveNoticeOnce(t *testing.T) {
 	require.Contains(t, text, "\nRemedy: move request R-")
 	require.Contains(t, text, "Record what belongs in example-ops now: once the owner approves the move, this conversation "+
 		"works in example-finance for good, and it can no longer write to example-ops or the global scope until the "+
-		"conversation ends. After the move it can still close a task it claimed there, with a receipt: tasks_update with "+
+		"conversation ends. After the move it can still close a task it claimed in example-ops, with a receipt: tasks_update with "+
 		"status done or dropped, and no text. Its first result after the approval says so and carries example-finance's "+
 		"briefing.")
 	done := r.approveMove(gShort.FindString(text))
