@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -153,44 +155,107 @@ func TestConsoleUnlock_PasskeyCeremony(t *testing.T) {
 	require.Empty(t, expired, "an unlock ends at its expiry")
 }
 
-// Each kind of pending unlock has its own cap: a holder of the console's key
-// filling the terminal unlocks' (no passkey needed) leaves a passkey ceremony
-// free to begin, and the reverse. Past their deadline both are purged.
-func TestConsoleUnlock_PendingCapAndPurge(t *testing.T) {
+// A begin never waits for room. Past a project's cap its own oldest goes;
+// past a kind's cap the oldest of the project holding the most goes. So a
+// holder of the console's key looping on begin crowds out only the project it
+// loops on: the owner's unlock of another project begins, and survives the
+// loop. Each kind has its own caps, and past their deadline both are purged.
+func TestConsoleUnlock_PendingCapsAndPurge(t *testing.T) {
 	ctx := context.Background()
 	browser := HashConsoleToken("browser-a")
-	passkey := func(db *sql.DB, at time.Time) error {
-		_, err := BeginConsoleUnlock(ctx, db, "example-finance", browser, time.Hour, 5*time.Minute, at)
-		return err
+	type beginFunc func(db *sql.DB, project string, at time.Time) string
+	passkey := func(db *sql.DB, project string, at time.Time) string {
+		u, err := BeginConsoleUnlock(ctx, db, project, browser, time.Hour, 5*time.Minute, at)
+		require.NoError(t, err)
+		return u.ID
 	}
-	terminal := func(db *sql.DB, at time.Time) error {
-		_, _, err := BeginTerminalUnlock(ctx, db, "example-finance", browser, time.Hour, 5*time.Minute, at)
-		return err
+	terminal := func(db *sql.DB, project string, at time.Time) string {
+		u, _, err := BeginTerminalUnlock(ctx, db, project, browser, time.Hour, 5*time.Minute, at)
+		require.NoError(t, err)
+		return u.ID
 	}
-	for name, c := range map[string]struct {
-		fill, other func(*sql.DB, time.Time) error
-	}{
-		"terminal unlocks full":   {terminal, passkey},
-		"passkey ceremonies full": {passkey, terminal},
+	pending := func(db *sql.DB) map[string]int {
+		rows, err := db.QueryContext(ctx, `SELECT project_slug, COUNT(*) FROM console_unlocks WHERE status = ? GROUP BY project_slug`,
+			ConsoleUnlockPending)
+		require.NoError(t, err)
+		defer func() { _ = rows.Close() }()
+		out := map[string]int{}
+		for rows.Next() {
+			var p string
+			var n int
+			require.NoError(t, rows.Scan(&p, &n))
+			out[p] = n
+		}
+		require.NoError(t, rows.Err())
+		return out
+	}
+	exists := func(db *sql.DB, id string) bool {
+		_, err := consoleUnlockByID(ctx, db, id)
+		if errors.Is(err, ErrConsoleUnlockNotFound) {
+			return false
+		}
+		require.NoError(t, err)
+		return true
+	}
+	total := func(m map[string]int) int {
+		n := 0
+		for _, v := range m {
+			n += v
+		}
+		return n
+	}
+	for name, c := range map[string]struct{ loop, other beginFunc }{
+		"terminal unlocks":   {terminal, passkey},
+		"passkey ceremonies": {passkey, terminal},
 	} {
 		t.Run(name, func(t *testing.T) {
 			db := leaseDB(t)
-			for range maxPendingConsoleUnlocks {
-				require.NoError(t, c.fill(db, unlockT0))
+			at := unlockT0
+			tick := func() time.Time { at = at.Add(time.Second); return at }
+
+			// One project: its fifth begin displaces its first.
+			first := c.loop(db, "example-a", tick())
+			for range maxPendingConsoleUnlocksPerProject {
+				c.loop(db, "example-a", tick())
 			}
-			require.ErrorIs(t, c.fill(db, unlockT0), ErrConsoleUnlockBusy, "this kind's cap is full")
-			for range maxPendingConsoleUnlocks {
-				require.NoError(t, c.other(db, unlockT0), "the other kind has its own cap")
+			require.False(t, exists(db, first), "the project's oldest went")
+			require.Equal(t, map[string]int{"example-a": maxPendingConsoleUnlocksPerProject}, pending(db))
+
+			// Fill the kind's cap across projects, then the owner begins on a
+			// project of their own: it fits, and a fullest project's oldest goes.
+			projects := maxPendingConsoleUnlocks / maxPendingConsoleUnlocksPerProject
+			for i := 1; i < projects; i++ {
+				for range maxPendingConsoleUnlocksPerProject {
+					c.loop(db, fmt.Sprintf("example-%c", 'a'+i), tick())
+				}
 			}
-			require.ErrorIs(t, c.other(db, unlockT0), ErrConsoleUnlockBusy, "and it is capped too")
-			// Past their deadline every pending unlock is purged, and a new
-			// one of either kind fits.
-			later := unlockT0.Add(6 * time.Minute)
-			require.NoError(t, c.fill(db, later))
-			require.NoError(t, c.other(db, later))
-			var n int
-			require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM console_unlocks`).Scan(&n))
-			require.Equal(t, 2, n)
+			require.Equal(t, maxPendingConsoleUnlocks, total(pending(db)))
+			owners := c.loop(db, "example-owner", tick())
+			require.True(t, exists(db, owners))
+			require.Equal(t, maxPendingConsoleUnlocks, total(pending(db)), "the kind's cap holds")
+			require.Equal(t, maxPendingConsoleUnlocksPerProject-1, pending(db)["example-a"], "the fullest project with the oldest unlock gave one up")
+
+			// Looping on every other project never displaces the owner's (three
+			// rounds, well inside the ceremonies' five minutes).
+			for range 3 {
+				for i := range projects {
+					c.loop(db, fmt.Sprintf("example-%c", 'a'+i), tick())
+				}
+			}
+			require.True(t, exists(db, owners), "a loop on other projects never reaches the owner's")
+			require.Equal(t, maxPendingConsoleUnlocks, total(pending(db)))
+
+			// The other kind has caps of its own: a full one leaves it alone.
+			for range maxPendingConsoleUnlocks {
+				c.other(db, "example-owner", tick())
+			}
+			require.True(t, exists(db, owners), "the other kind never displaces this one")
+
+			// Past their deadline every pending unlock is purged.
+			later := at.Add(11 * time.Minute)
+			c.loop(db, "example-a", later)
+			c.other(db, "example-a", later)
+			require.Equal(t, map[string]int{"example-a": 2}, pending(db))
 		})
 	}
 }

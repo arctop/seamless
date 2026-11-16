@@ -589,8 +589,6 @@ func (s *Service) unlockError(w http.ResponseWriter, r *http.Request, err error)
 	switch {
 	case errors.Is(err, store.ErrConsoleUnlockNotFound):
 		msg = "this unlock expired, or it was begun in another browser; start again"
-	case errors.Is(err, store.ErrConsoleUnlockBusy):
-		msg = "too many unlocks are in progress; try again in a few minutes"
 	case errors.Is(err, approval.ErrNoPasskey):
 		msg = "no passkey is enrolled: enroll one on the Approvers page, or approve this unlock from a terminal"
 	case errors.Is(err, passkey.ErrUnknownCredential):

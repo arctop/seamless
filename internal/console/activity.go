@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/features"
 	"github.com/arctop/seamless/internal/store"
@@ -181,6 +182,12 @@ func eventSummary(e core.Event) string {
 			return "lockdown on (" + payloadStr(p, "source") + ")"
 		}
 		return "lockdown off (" + payloadStr(p, "source") + ")"
+	case core.EventConsoleLockChanged:
+		return lockChangedSummary(p)
+	case core.EventConsoleLockFailed:
+		return lockFailedSummary(p)
+	case core.EventAccessRevoked:
+		return accessRevokedSummary(p)
 	case core.EventProjectIsolationChanged:
 		line := "isolation " + payloadStr(p, "from") + " -> " + payloadStr(p, "to")
 		if parent := payloadStr(p, "parent"); parent != "" {
@@ -308,6 +315,94 @@ func eventSummary(e core.Event) string {
 	default:
 		return string(e.Kind)
 	}
+}
+
+// lockChangedSummary is a console lock change's line: which way it went, how
+// it was proven, and the access a new lock ended.
+func lockChangedSummary(p map[string]any) string {
+	line := "project locked"
+	if payloadStr(p, "action") == string(approval.LockActionRemove) {
+		line = "console lock removed"
+	}
+	switch payloadStr(p, "proof") {
+	case approval.ProofPasskey:
+		line += " with a passkey"
+	case lockProofImport:
+		line += " by an import"
+	}
+	if ended := endedAccess(p); ended != "" {
+		line += "; ended " + ended
+	}
+	return line
+}
+
+// lockProofImport is the proof an archive import records for a lock it
+// carried in or took out (internal/archive).
+const lockProofImport = "import"
+
+// lockFailReasons say why a console lock change failed, by the reason it
+// records (approval.FinishLockChange).
+var lockFailReasons = map[string]string{
+	approval.LockFailMismatch:   "its approval was sent for another project or direction",
+	approval.LockFailAssertion:  "the passkey's answer did not verify",
+	approval.LockFailCredential: "a passkey that is not enrolled answered",
+	approval.LockFailCounter:    "the passkey's counter did not move on, as a cloned key's does not",
+	approval.LockFailRace:       "another use of the same passkey was recorded first",
+	approval.LockFailState:      "the project changed after it began",
+	approval.LockFailError:      "the daemon could not finish it",
+}
+
+// lockFailedSummary is a failed console lock change's line.
+func lockFailedSummary(p map[string]any) string {
+	what := "lock"
+	if payloadStr(p, "action") == string(approval.LockActionRemove) {
+		what = "lock removal"
+	}
+	reason := payloadStr(p, "reason")
+	why, ok := lockFailReasons[reason]
+	if !ok {
+		why = reason
+	}
+	return "console " + what + " failed: " + why
+}
+
+// accessRevokedSummary is the line for agents' or browsers' access ended
+// early, and why.
+func accessRevokedSummary(p map[string]any) string {
+	ended := endedAccess(p)
+	if ended == "" {
+		ended = "access"
+	}
+	line := "ended " + ended + " early"
+	switch reason := payloadStr(p, "reason"); reason {
+	case store.LeaseRevokedLocked:
+		line += ": the project was locked"
+	case store.LeaseRevokedSessionEnded:
+		line += ": its session ended"
+	case store.LeaseRevokedOwner:
+		line += ": the owner revoked it"
+	case store.LeaseRevokedDevice:
+		line += ": its device was revoked"
+	case "":
+	default:
+		line += " (" + reason + ")"
+	}
+	return line
+}
+
+// endedAccess lists the access counts a payload carries, as words.
+func endedAccess(p map[string]any) string {
+	var parts []string
+	for _, c := range []struct{ key, one, many string }{
+		{"leases", "agent lease", "agent leases"},
+		{"grants", "read grant", "read grants"},
+		{"unlocks", "browser unlock", "browser unlocks"},
+	} {
+		if n := payloadInt(p, c.key); n > 0 {
+			parts = append(parts, plural(n, c.one, c.many))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 func payloadStr(p map[string]any, key string) string {

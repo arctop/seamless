@@ -590,7 +590,8 @@ const (
 	EventAccessRevoked      EventKind = "access.revoked"              // leases ended early (payload: reason, leases; session_id for a session end)
 	EventAccessGranted      EventKind = "access.granted"              // the owner approved a read grant of a confidential project (isolation.requests; item_id: the request; session_id; project: the target; payload: grant, from_project, proof, seconds, duration)
 	EventAccessConfined     EventKind = "access.confined"             // a session in an open project was write-confined by its read grant (item_id: the request; session_id; project: the confined project; payload: grant, target_project)
-	EventConsoleLockChanged EventKind = "access.console_lock_changed" // a lock turned on or off, from the console or by an archive import (item_id: the proving credential, empty for an import; project: the project; payload: proof, action)
+	EventConsoleLockChanged EventKind = "access.console_lock_changed" // a lock turned on or off, from the console or by an archive import (item_id: the proving credential, empty for an import; project: the project; payload: proof, action, by -- console -- for a passkey's, and leases, grants, unlocks: the access a lock ended)
+	EventConsoleLockFailed  EventKind = "access.console_lock_failed"  // a console lock change failed after its ceremony began (item_id: the passkey, when an enrolled one answered; project: the ceremony's; payload: action, reason -- mismatch, assertion, credential, counter, race, state, error)
 	// Device pairing (internal/devices): the computers a networked server
 	// pairs. Payloads carry ids, kinds, a host name and fixed words -- never a
 	// code, a key or a secret.

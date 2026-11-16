@@ -709,11 +709,12 @@ func TestLockedConsole_TerminalBeginGates(t *testing.T) {
 	require.Zero(t, n, "no refused begin wrote a row")
 }
 
-// A key holder looping on one begin route fills that kind's pending cap and
-// is then refused, while the other way in stays open: a full terminal cap
-// still lets the owner's passkey ceremony through, and a full passkey cap the
-// owner's terminal unlock.
-func TestLockedConsole_TerminalBeginCapped(t *testing.T) {
+// A key holder looping on one begin route is never answered "too many": a
+// begin never waits for room, and the project keeps only its newest four of
+// that kind waiting (store.makeRoomForUnlock). The other way in is untouched:
+// a loop on terminal begins still lets the owner's passkey ceremony through,
+// and a loop on passkey begins the owner's terminal unlock.
+func TestLockedConsole_BeginLoopCapped(t *testing.T) {
 	const (
 		terminal = "/terminal"
 		passkey  = "/begin"
@@ -735,8 +736,11 @@ func TestLockedConsole_TerminalBeginCapped(t *testing.T) {
 				require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 			}
 			rr := begin(lc, c.fill)
-			require.Equal(t, http.StatusConflict, rr.Code)
-			require.Contains(t, rr.Body.String(), "too many unlocks are in progress")
+			require.Equal(t, http.StatusOK, rr.Code, "a begin never waits for room: %s", rr.Body.String())
+			var waiting int
+			require.NoError(t, lc.db.QueryRow(`SELECT COUNT(*) FROM console_unlocks WHERE status = 'pending' AND project_slug = ?`,
+				lockedSlug).Scan(&waiting))
+			require.Equal(t, 4, waiting, "the project keeps its newest four of the kind waiting")
 
 			rr = begin(lc, c.other)
 			require.Equal(t, http.StatusOK, rr.Code, "the other way in has its own cap: %s", rr.Body.String())

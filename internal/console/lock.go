@@ -176,8 +176,6 @@ func (s *Service) lockError(w http.ResponseWriter, r *http.Request, err error) {
 		msg = "this change expired or was already used; start again"
 	case errors.Is(err, approval.ErrNoPasskey):
 		msg = "no passkey is enrolled: add one on the Approvers page first"
-	case errors.Is(err, approval.ErrTooManyLockChanges):
-		msg, status = "too many lock changes are waiting; try again in a few minutes", http.StatusTooManyRequests
 	case errors.Is(err, store.ErrConsoleLockExists):
 		msg = "this project is already locked from the console"
 	case errors.Is(err, store.ErrConsoleLockNotFound):

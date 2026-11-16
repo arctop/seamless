@@ -36,8 +36,34 @@ const (
 // EventConsoleLockChanged records a lock turned on or off from the console.
 const EventConsoleLockChanged = core.EventConsoleLockChanged
 
+// EventConsoleLockFailed records a ceremony that began and then failed: the
+// finish that ends it names the wrong project or direction, its passkey does
+// not verify, or the change cannot be applied. A finish naming no ceremony
+// records nothing, since its id is all it has and that is the caller's text.
+const EventConsoleLockFailed = core.EventConsoleLockFailed
+
+// The reasons a failed lock change records.
+const (
+	LockFailMismatch   = "mismatch"   // the finish named another project or direction than its ceremony's
+	LockFailAssertion  = "assertion"  // the passkey's answer did not verify
+	LockFailCredential = "credential" // the passkey that answered is not enrolled
+	LockFailCounter    = "counter"    // the passkey's signature counter did not increase, as a cloned key's does not (passkey.ErrSignCount)
+	LockFailRace       = "race"       // another use of the same passkey was recorded first (store.ErrApproverCounter)
+	LockFailState      = "state"      // the project changed between begin and finish
+	LockFailError      = "error"      // the daemon could not read or write what it needed
+)
+
 // lockChangeTTL is how long a begun ceremony waits for its assertion.
 const lockChangeTTL = ConsoleUnlockTTL
+
+// maxPendingPerProject caps the ceremonies one project and direction keep
+// waiting at once. A begin never waits for room: past this cap the oldest of
+// its project and direction goes, and past maxPending in all the oldest of the
+// fullest project and direction goes. So a caller looping on begin crowds out
+// only the project and direction it loops on, and only while it keeps
+// looping: no burst can hold every lock change off until its ceremonies
+// expire.
+const maxPendingPerProject = 4
 
 var (
 	// ErrForceLocked is a console change to a lock the config file holds.
@@ -47,8 +73,6 @@ var (
 	ErrNoLockChange = errors.New("no lock change is in progress for this project")
 	// ErrInvalidLockAction is an action other than lock or remove.
 	ErrInvalidLockAction = errors.New("invalid lock action: valid values are lock, remove")
-	// ErrTooManyLockChanges is a begin refused because maxPending wait already.
-	ErrTooManyLockChanges = errors.New("too many lock changes are in progress")
 )
 
 // ParseLockAction reads a lock action from a request.
@@ -121,11 +145,50 @@ func (s *Service) BeginLockChange(ctx context.Context, project string, action Lo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.gc(now)
-	if len(s.lockChanges) >= maxPending {
-		return Begun{}, fmt.Errorf("%s: %w", op, ErrTooManyLockChanges)
-	}
+	s.makeRoomForLockChange(project, action)
 	s.lockChanges[id] = &pendingLockChange{project: project, action: action, challenge: challenge, expires: now.Add(lockChangeTTL)}
 	return Begun{ID: id, Options: opts}, nil
+}
+
+// makeRoomForLockChange drops, under s.mu, the ceremony a new one for project
+// and action displaces (maxPendingPerProject): the oldest of its own project
+// and direction when they hold the cap, else, when maxPending wait in all, the
+// oldest of the fullest project and direction, the one with the oldest
+// ceremony on a tie.
+func (s *Service) makeRoomForLockChange(project string, action LockAction) {
+	type bucket struct {
+		project string
+		action  LockAction
+	}
+	older := func(a, b string) bool {
+		pa, pb := s.lockChanges[a], s.lockChanges[b]
+		return pa.expires.Before(pb.expires) || (pa.expires.Equal(pb.expires) && a < b)
+	}
+	sizes := map[bucket]int{}
+	oldest := map[bucket]string{}
+	for id, p := range s.lockChanges {
+		b := bucket{p.project, p.action}
+		sizes[b]++
+		if o, ok := oldest[b]; !ok || older(id, o) {
+			oldest[b] = id
+		}
+	}
+	own := bucket{project, action}
+	if sizes[own] >= maxPendingPerProject {
+		delete(s.lockChanges, oldest[own])
+		return
+	}
+	if len(s.lockChanges) < maxPending {
+		return
+	}
+	var victim bucket
+	found := false
+	for b, n := range sizes {
+		if !found || n > sizes[victim] || (n == sizes[victim] && older(oldest[b], oldest[victim])) {
+			victim, found = b, true
+		}
+	}
+	delete(s.lockChanges, oldest[victim])
 }
 
 // lockChangeAllowed refuses a change the current state rules out. The store
@@ -178,12 +241,22 @@ func (s *Service) FinishLockChange(ctx context.Context, id, project string, acti
 		delete(s.lockChanges, id)
 	}
 	s.mu.Unlock()
-	if !ok || p.project != project || p.action != action {
+	if !ok {
 		return store.ApproverCredential{}, fmt.Errorf("%s: %w", op, ErrNoLockChange)
+	}
+	failed := func(credential, reason string, err error) (store.ApproverCredential, error) {
+		s.record(ctx, core.Event{Kind: EventConsoleLockFailed, ItemID: credential, ProjectSlug: p.project,
+			Payload: map[string]any{"action": string(p.action), "reason": reason}})
+		return store.ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+	}
+	if p.project != project || p.action != action {
+		// A ceremony's approval lifted onto another project or direction: the
+		// challenge names its own, so the passkey could not approve this one.
+		return failed("", LockFailMismatch, ErrNoLockChange)
 	}
 	rows, err := store.ApproverCredentials(ctx, s.cfg.DB, store.ApproverPasskey)
 	if err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+		return failed("", LockFailError, err)
 	}
 	allowed := make([]passkey.Credential, len(rows))
 	for i, r := range rows {
@@ -191,14 +264,23 @@ func (s *Service) FinishLockChange(ctx context.Context, id, project string, acti
 	}
 	used, err := s.cfg.Passkeys.FinishAssertion(p.challenge, allowed, response)
 	if err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+		switch {
+		case errors.Is(err, passkey.ErrUnknownCredential):
+			return failed("", LockFailCredential, err)
+		case errors.Is(err, passkey.ErrSignCount):
+			return failed("", LockFailCounter, err)
+		}
+		return failed("", LockFailAssertion, err)
 	}
 	row, ok := rowFor(rows, used.ID)
 	if !ok {
-		return store.ApproverCredential{}, fmt.Errorf("%s: %w", op, passkey.ErrUnknownCredential)
+		return failed("", LockFailCredential, passkey.ErrUnknownCredential)
 	}
 	if err := store.RecordApproverUse(ctx, s.cfg.DB, row.ID, row.SignCount, used.SignCount, used.BackupState, now); err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+		if errors.Is(err, store.ErrApproverCounter) {
+			return failed(row.ID, LockFailRace, err)
+		}
+		return failed(row.ID, LockFailError, err)
 	}
 	var ended store.EndedAccess
 	if action == LockActionAdd {
@@ -207,10 +289,15 @@ func (s *Service) FinishLockChange(ctx context.Context, id, project string, acti
 		err = store.RemoveConsoleLock(ctx, s.cfg.DB, project)
 	}
 	if err != nil {
-		return store.ApproverCredential{}, fmt.Errorf("%s: %w", op, err)
+		reason := LockFailError
+		if errors.Is(err, store.ErrConsoleLockExists) || errors.Is(err, store.ErrConsoleLockNotFound) ||
+			errors.Is(err, store.ErrConsoleLockUnfenced) || errors.Is(err, store.ErrProjectNotFound) {
+			reason = LockFailState
+		}
+		return failed(row.ID, reason, err)
 	}
 	s.record(ctx, core.Event{Kind: EventConsoleLockChanged, ItemID: row.ID, ProjectSlug: project,
-		Payload: ended.AddTo(map[string]any{"proof": ProofPasskey, "action": string(action)})})
+		Payload: ended.AddTo(map[string]any{"proof": ProofPasskey, "action": string(action), "by": "console"})})
 	if ended.Leases+ended.Grants > 0 {
 		// Said the way every other early end of agents' access is said, so the
 		// access page and the feed see it without knowing about locks.

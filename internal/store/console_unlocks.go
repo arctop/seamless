@@ -65,13 +65,21 @@ const ConsoleTokenBytes = 32
 
 // maxPendingConsoleUnlocks caps the unlocks of each kind waiting at once
 // (pendingKind), so a caller looping on a begin route cannot grow the table
-// without bound.
-const maxPendingConsoleUnlocks = 32
+// without bound, and maxPendingConsoleUnlocksPerProject caps one project's.
+// A begin never waits for room: past a project's cap its oldest of the kind
+// goes, and past the kind's cap the oldest of the project holding the most of
+// it goes. So a holder of the console's key looping on begin crowds out only
+// the project it loops on, and only while it keeps looping: no burst can hold
+// every unlock off until its rows expire.
+const (
+	maxPendingConsoleUnlocks           = 32
+	maxPendingConsoleUnlocksPerProject = 4
+)
 
-// pendingKind is a kind of pending unlock the cap counts on its own, as the
-// predicate that picks its rows. Each kind has its own cap, so a holder of the
-// console's key who fills one -- terminal begins need no passkey and wait
-// twice as long -- still leaves the other free for the owner.
+// pendingKind is a kind of pending unlock the caps count on its own, as the
+// predicate that picks its rows. Each kind has its own caps, so a holder of
+// the console's key who loops on one -- terminal begins need no passkey and
+// wait twice as long -- never crowds out the other.
 type pendingKind string
 
 const (
@@ -102,8 +110,6 @@ var (
 	ErrConsoleUnlockNotLive = errors.New("console unlock is not live")
 	// ErrInvalidConsoleUnlock is a malformed argument.
 	ErrInvalidConsoleUnlock = errors.New("invalid console unlock")
-	// ErrConsoleUnlockBusy is a ceremony begun while too many wait already.
-	ErrConsoleUnlockBusy = errors.New("too many console unlocks in progress")
 )
 
 // ConsoleUnlock is one row of console_unlocks.
@@ -238,24 +244,45 @@ func consoleUnlockByID(ctx context.Context, q interface {
 	return u, err
 }
 
-// makeRoomForUnlock is the first step of every begin, inside its transaction:
-// it purges the pending unlocks past their deadline, of every kind, then
-// refuses when maxPendingConsoleUnlocks of kind still wait. The kinds are
-// capped apart (pendingKind), so terminal begins never block a passkey
+// makeRoomForUnlock is the first step of every begin of kind for project,
+// inside its transaction: it purges the pending unlocks past their deadline,
+// of every kind, then drops the pending unlock of kind the new one displaces
+// (maxPendingConsoleUnlocksPerProject): project's oldest when project holds
+// its cap, else, when the kind holds its cap, the oldest of the project
+// holding the most, the one with the oldest unlock on a tie. The kinds are
+// capped apart (pendingKind), so terminal begins never displace a passkey
 // ceremony, nor the reverse.
-func makeRoomForUnlock(ctx context.Context, tx *sql.Tx, kind pendingKind, now time.Time) error {
+func makeRoomForUnlock(ctx context.Context, tx *sql.Tx, kind pendingKind, project string, now time.Time) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM console_unlocks WHERE status = ? AND pending_until <= ?`,
 		ConsoleUnlockPending, core.FormatTime(now)); err != nil {
 		return fmt.Errorf("purge: %w", err)
 	}
-	var waiting int
 	// kind is one of the pendingKind constants, never caller text.
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM console_unlocks WHERE status = ? AND `+string(kind),
-		ConsoleUnlockPending).Scan(&waiting); err != nil {
+	where := `status = ? AND ` + string(kind)
+	var own, waiting int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM console_unlocks WHERE `+where+` AND project_slug = ?`,
+		ConsoleUnlockPending, project).Scan(&own); err != nil {
 		return err
 	}
-	if waiting >= maxPendingConsoleUnlocks {
-		return ErrConsoleUnlockBusy
+	victim := project
+	if own < maxPendingConsoleUnlocksPerProject {
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM console_unlocks WHERE `+where,
+			ConsoleUnlockPending).Scan(&waiting); err != nil {
+			return err
+		}
+		if waiting < maxPendingConsoleUnlocks {
+			return nil
+		}
+		// created_at is fixed width (core.TimeFormat), so it sorts as text.
+		if err := tx.QueryRowContext(ctx, `SELECT project_slug FROM console_unlocks WHERE `+where+
+			` GROUP BY project_slug ORDER BY COUNT(*) DESC, MIN(created_at), project_slug LIMIT 1`,
+			ConsoleUnlockPending).Scan(&victim); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM console_unlocks WHERE id = (SELECT id FROM console_unlocks WHERE `+where+
+		` AND project_slug = ? ORDER BY created_at, id LIMIT 1)`, ConsoleUnlockPending, victim); err != nil {
+		return fmt.Errorf("make room: %w", err)
 	}
 	return nil
 }
@@ -287,7 +314,7 @@ func BeginConsoleUnlock(ctx context.Context, db *sql.DB, project, tokenHash stri
 		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := makeRoomForUnlock(ctx, tx, pendingPasskey, now); err != nil {
+	if err := makeRoomForUnlock(ctx, tx, pendingPasskey, project, now); err != nil {
 		return ConsoleUnlock{}, fmt.Errorf("%s: %w", op, err)
 	}
 	challenge := ConsoleUnlockChallenge(id, project, tokenHash, nonce)
@@ -451,7 +478,7 @@ func BeginTerminalUnlock(ctx context.Context, db *sql.DB, project, tokenHash str
 		return ConsoleUnlock{}, "", fmt.Errorf("%s: %w", op, err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := makeRoomForUnlock(ctx, tx, pendingTerminal, now); err != nil {
+	if err := makeRoomForUnlock(ctx, tx, pendingTerminal, project, now); err != nil {
 		return ConsoleUnlock{}, "", fmt.Errorf("%s: %w", op, err)
 	}
 	code := ""

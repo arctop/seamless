@@ -382,8 +382,8 @@ must fit:</p>
 <code>reason</code>, <code>surface</code>, <code>change</code>, <code>by</code>, <code>action</code>, <code>status</code>, <code>from</code>, <code>to</code>,
 <code>where</code>, <code>mode</code>, <code>step</code>, <code>outcome</code>, <code>proof</code>.</li>
 <li><strong>Numbers:</strong> <code>size</code>, <code>bytes</code>, <code>memories</code>, <code>notes</code>, <code>projects</code>, <code>added</code>,
-<code>failures</code>, <code>duration_ms</code>, <code>items</code>, <code>safe</code>, <code>flagged</code>, <code>suppressed</code>,
-<code>item_count</code>, <code>emitted_tokens</code>.</li>
+<code>failures</code>, <code>leases</code>, <code>grants</code>, <code>unlocks</code>, <code>duration_ms</code>, <code>items</code>, <code>safe</code>,
+<code>flagged</code>, <code>suppressed</code>, <code>item_count</code>, <code>emitted_tokens</code>.</li>
 <li><strong>Flags:</strong> <code>held</code>, <code>quarantined</code>, <code>baseline</code>, <code>on</code>, <code>updated</code>, <code>truncated</code>,
 <code>is_error</code>, <code>ambient</code>, <code>favorite</code>, <code>matched</code>.</li>
 <li><strong>Ids:</strong> <code>hold_id</code>, <code>released_hold_id</code>, <code>superseded_by</code>, <code>credential_id</code>, and
@@ -457,6 +457,18 @@ not:</p>
 <td><code>config</code></td>
 <td><code>high</code> going on, <code>medium</code> going off</td>
 <td><code>success</code></td>
+</tr>
+<tr>
+<td><code>access.console_lock_changed</code></td>
+<td><code>config</code></td>
+<td><code>high</code></td>
+<td><code>success</code></td>
+</tr>
+<tr>
+<td><code>access.console_lock_failed</code></td>
+<td><code>auth</code></td>
+<td><code>high</code> when the ceremony's approval was sent for another project or direction (<code>reason</code> <code>mismatch</code>), or its passkey's counter did not increase (<code>counter</code>); <code>medium</code> otherwise</td>
+<td><code>failure</code></td>
 </tr>
 <tr>
 <td><code>access.refused</code></td>
@@ -583,6 +595,28 @@ frame names the file. What the frames carry:</p>
 <tr>
 <td><code>backup.restore_failed</code></td>
 <td><code>mode</code>, <code>reason</code> (a fixed word), and <code>outcome</code> (<code>failed</code>, <code>expired</code>, <code>partial</code>) with <code>step</code> <code>apply</code>, or <code>step</code> <code>stage</code> when the restore could not be prepared</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A console lock change names its project as a keyed hash, as a locked
+project's always is. What its frames carry:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Fields</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>access.console_lock_changed</code></td>
+<td><code>action</code> (<code>lock</code> or <code>remove</code>), <code>proof</code> (<code>passkey</code>, or <code>import</code> for an archive import), <code>by</code> <code>console</code> for a passkey's change, whose actor is then the owner, the approving passkey's id as <code>item_id</code>, and the <code>leases</code>, <code>grants</code> and <code>unlocks</code> a new lock ended</td>
+</tr>
+<tr>
+<td><code>access.console_lock_failed</code></td>
+<td><code>action</code> and <code>reason</code>: <code>mismatch</code> (the finish named another project or direction than its ceremony's), <code>assertion</code>, <code>credential</code> (a passkey that is not enrolled), <code>counter</code>, <code>race</code> (another use of the passkey came first), <code>state</code> (the project changed since the ceremony began) or <code>error</code>. Only a ceremony that began records one</td>
 </tr>
 </tbody>
 </table>

@@ -373,17 +373,17 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Begin a lock change</td>
 <td><code>POST /console/lock/{project}/begin</code></td>
-<td>Only under <a href="../../guides/peer-auth/#lock-from-the-console-or-force-lock-in-the-file">peer_auth</a>, and only from a signed-in browser. <code>action=lock</code> or <code>remove</code>. Refuses first a change that could not apply - a force-locked project, a lock already on, no console lock to remove, a project that is not confidential or sealed, no passkey enrolled - then returns a WebAuthn challenge naming this ceremony, the project and the direction. Writes nothing.</td>
+<td>Only under <a href="../../guides/peer-auth/#lock-from-the-console-or-force-lock-in-the-file">peer_auth</a>, and only from a signed-in browser. <code>action=lock</code> or <code>remove</code>. Refuses first a change that could not apply - a force-locked project, a lock already on, no console lock to remove, a project that is not confidential or sealed, no passkey enrolled - then returns a WebAuthn challenge naming this ceremony, the project and the direction. Writes nothing. A begin never waits for room: at most 4 ceremonies wait at once for one project and direction, and 32 in all, so a begin past 4 displaces the oldest of its project and direction, and one past 32 the oldest of the project and direction holding the most. A displaced ceremony's finish says it expired.</td>
 </tr>
 <tr>
 <td>Lock a project, or remove its lock</td>
 <td><code>POST /console/lock/{project}/finish</code></td>
-<td>Verifies the passkey assertion for that ceremony, then stores the lock or removes it. Turning a lock on ends, in the same transaction, the project's agent leases, read grants and console unlocks, so every agent and browser asks again. It removes only a lock the console set: one <code>peer_auth.force_locked</code> holds stays. Seamless then restarts to apply the change.</td>
+<td>Verifies the passkey assertion for that ceremony, then stores the lock or removes it. Turning a lock on ends, in the same transaction, the project's agent leases, read grants and console unlocks, so every agent and browser asks again. It removes only a lock the console set: one <code>peer_auth.force_locked</code> holds stays. Seamless then restarts to apply the change. A finish for a ceremony that began and then failed records <code>access.console_lock_failed</code> under the ceremony's own project and direction, with why: the finish named another project or direction, the passkey's answer did not verify, the passkey is not enrolled, its counter did not increase, another use of it was recorded first, or the project changed since. A finish naming no waiting ceremony records nothing.</td>
 </tr>
 <tr>
 <td>Begin a passkey unlock</td>
 <td><code>POST /console/unlock/{project}/begin</code></td>
-<td>Only for a project peer_auth locks, and only from the signed-in browser that proves its unlock key. Records a waiting <a href="../../guides/peer-auth/#leases-and-the-process-tree">console unlock</a> bound to this browser's cookie and key, sets the <code>seamless_unlock</code> cookie when the browser holds no live unlock yet, and returns the passkey challenge. Refused while no passkey is enrolled; the terminal path still works. Opens nothing yet.</td>
+<td>Only for a project peer_auth locks, and only from the signed-in browser that proves its unlock key. Records a waiting <a href="../../guides/peer-auth/#leases-and-the-process-tree">console unlock</a> bound to this browser's cookie and key, sets the <code>seamless_unlock</code> cookie when the browser holds no live unlock yet, and returns the passkey challenge. Refused while no passkey is enrolled; the terminal path still works. Opens nothing yet. A begin never waits for room: at most 4 passkey unlocks wait at once for one project, and 32 in all, so a begin past 4 displaces the project's oldest, and one past 32 the oldest of the project holding the most. Terminal unlocks are counted apart.</td>
 </tr>
 <tr>
 <td>Unlock a project in this browser</td>
@@ -393,7 +393,7 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Begin a terminal unlock</td>
 <td><code>POST /console/unlock/{project}/terminal</code></td>
-<td><strong>Approve from a terminal</strong>: the passkey begin's gates, without needing a passkey. Records a waiting unlock bound to this browser and returns a pairing code with the <code>seamlessd console-open --unlock</code> command that approves it, run as the daemon's account within ten minutes. The code only names that unlock, so it is not a secret. Opens nothing until the command runs.</td>
+<td><strong>Approve from a terminal</strong>: the passkey begin's gates, without needing a passkey. Records a waiting unlock bound to this browser and returns a pairing code with the <code>seamlessd console-open --unlock</code> command that approves it, run as the daemon's account within ten minutes. The code only names that unlock, so it is not a secret. Opens nothing until the command runs. Capped as the passkey begin is, apart from it: at most 4 wait for one project, and 32 in all.</td>
 </tr>
 <tr>
 <td>Ask for access</td>

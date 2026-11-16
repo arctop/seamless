@@ -170,6 +170,9 @@ var frameFields = []struct {
 	{"projects", "projects", tNumber},
 	{"added", "added", tNumber},
 	{"failures", "failures", tNumber},
+	{"leases", "leases", tNumber},
+	{"grants", "grants", tNumber},
+	{"unlocks", "unlocks", tNumber},
 	{"duration_ms", "duration_ms", tNumber},
 	{"items", "items", tNumber},
 	{"safe", "safe", tNumber},
@@ -218,6 +221,8 @@ var shapes = map[core.EventKind]eventShape{
 	core.EventCorpusReviewed:          {"finding", "info", "success"},
 	core.EventCorpusConfirmed:         {"agent", "low", "success"},
 	core.EventLockdownChanged:         {"config", "high", "success"},
+	core.EventConsoleLockChanged:      {"config", "high", "success"},
+	core.EventConsoleLockFailed:       {"auth", "medium", "failure"},
 	core.EventMemoryHeld:              {"agent", "medium", "blocked"},
 	core.EventMemoryReleased:          {"agent", "low", "success"},
 	core.EventMemoryDiscarded:         {"agent", "low", "success"},
@@ -321,6 +326,13 @@ func (m *mapper) frame(e core.Event, sess session) Frame {
 	case core.EventLockdownChanged:
 		if on, _ := p["on"].(bool); !on {
 			f.Severity = "medium"
+		}
+	case core.EventConsoleLockFailed:
+		// A ceremony's approval aimed at another project or direction, or a
+		// passkey whose counter did not move on (a cloned key), is no slip of
+		// the owner's: the reasons approval.FinishLockChange records.
+		if r, _ := f.Fields["reason"].(string); r == "mismatch" || r == "counter" {
+			f.Severity = "high"
 		}
 	case core.EventMemoryScreened:
 		if codes, _ := f.Fields["verdicts"].(string); codes != "" {

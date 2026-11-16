@@ -80,8 +80,8 @@ must fit:
   `reason`, `surface`, `change`, `by`, `action`, `status`, `from`, `to`,
   `where`, `mode`, `step`, `outcome`, `proof`.
 - **Numbers:** `size`, `bytes`, `memories`, `notes`, `projects`, `added`,
-  `failures`, `duration_ms`, `items`, `safe`, `flagged`, `suppressed`,
-  `item_count`, `emitted_tokens`.
+  `failures`, `leases`, `grants`, `unlocks`, `duration_ms`, `items`, `safe`,
+  `flagged`, `suppressed`, `item_count`, `emitted_tokens`.
 - **Flags:** `held`, `quarantined`, `baseline`, `on`, `updated`, `truncated`,
   `is_error`, `ambient`, `favorite`, `matched`.
 - **Ids:** `hold_id`, `released_hold_id`, `superseded_by`, `credential_id`, and
@@ -146,6 +146,8 @@ not:
 |---|---|---|---|
 | `corpus.drift` | `file` | `high`; `medium` for a missing file | `blocked`; `unknown` for a missing file |
 | `lockdown.changed` | `config` | `high` going on, `medium` going off | `success` |
+| `access.console_lock_changed` | `config` | `high` | `success` |
+| `access.console_lock_failed` | `auth` | `high` when the ceremony's approval was sent for another project or direction (`reason` `mismatch`), or its passkey's counter did not increase (`counter`); `medium` otherwise | `failure` |
 | `access.refused` | `auth` | `medium` | `blocked` |
 | `memory.held` | `agent` | `medium` | `blocked` |
 | `settings.features_changed`, `project.isolation.changed` | `config` | `medium` | `success` |
@@ -175,6 +177,14 @@ frame names the file. What the frames carry:
 | `backup.deleted` | `kind`, `where`, `by` (`owner`, or `prune` for an old automatic backup) |
 | `backup.restored` | `mode` (`replace` or `merge`), `kind`, `memories`, `notes`, `added` for a merge that added something, `by` (`console` or `cli`), `proof` (`owner`, `passkey` or `account`), and `credential_id`, the id of the approver passkey that approved it |
 | `backup.restore_failed` | `mode`, `reason` (a fixed word), and `outcome` (`failed`, `expired`, `partial`) with `step` `apply`, or `step` `stage` when the restore could not be prepared |
+
+A console lock change names its project as a keyed hash, as a locked
+project's always is. What its frames carry:
+
+| Event | Fields |
+|---|---|
+| `access.console_lock_changed` | `action` (`lock` or `remove`), `proof` (`passkey`, or `import` for an archive import), `by` `console` for a passkey's change, whose actor is then the owner, the approving passkey's id as `item_id`, and the `leases`, `grants` and `unlocks` a new lock ended |
+| `access.console_lock_failed` | `action` and `reason`: `mismatch` (the finish named another project or direction than its ceremony's), `assertion`, `credential` (a passkey that is not enrolled), `counter`, `race` (another use of the passkey came first), `state` (the project changed since the ceremony began) or `error`. Only a ceremony that began records one |
 
 ### The two requests
 
