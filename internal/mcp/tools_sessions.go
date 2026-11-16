@@ -226,7 +226,7 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 			return jsonResult(s.withStatelessHint(ctx, withWarning(withAccount(map[string]any{
 				"session_id": existing.ID, "name": existing.Name,
 				"project": project, "resumed": true, "scope": scopeNote(project, how),
-				"briefing": s.briefing(ctx, host, project, "resume"),
+				"briefing": s.briefing(ctx, req, host, project, "resume", existing.ID),
 			}, existing.Account), warning), existing.Name, project, existing.ProjectSlug))
 		}
 	}
@@ -251,7 +251,7 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 		return jsonResult(withWarning(withAccount(map[string]any{
 			"session_id": own.ID, "name": own.Name,
 			"project": own.ProjectSlug, "resumed": true, "scope": scopeNote(own.ProjectSlug, scopeFromOwn),
-			"briefing": s.briefing(ctx, host, own.ProjectSlug, "explicit"),
+			"briefing": s.briefing(ctx, req, host, own.ProjectSlug, "explicit", own.ID),
 		}, own.Account), warning))
 	}
 
@@ -283,7 +283,7 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 			return jsonResult(s.withStatelessHint(ctx, withWarning(withAccount(map[string]any{
 				"session_id": ambient.ID, "name": ambient.Name,
 				"project": project, "resumed": true, "scope": scopeNote(project, how),
-				"briefing": s.briefing(ctx, host, project, "explicit"),
+				"briefing": s.briefing(ctx, req, host, project, "explicit", ambient.ID),
 			}, ambient.Account), warning), ambient.Name, project, ambient.ProjectSlug))
 		}
 	}
@@ -326,7 +326,7 @@ func (s *Server) handleSessionStart(ctx context.Context, req mcp.CallToolRequest
 	s.record(ctx, core.EventSessionStarted, id, project, "", nil)
 	return jsonResult(s.withStatelessHint(ctx, withWarning(withAccount(map[string]any{
 		"session_id": id, "name": name, "project": project, "scope": scopeNote(project, how),
-		"briefing": s.briefing(ctx, host, project, "explicit"),
+		"briefing": s.briefing(ctx, req, host, project, "explicit", id),
 	}, sess.Account), warning), name, project, project))
 }
 
@@ -464,13 +464,54 @@ func scopeNote(project string, how scopeSource) string {
 // agent's own session all bind projects the cwd does not name. The failure is
 // logged (it was previously discarded silently): a broken briefing should never
 // fail a session_start, but it must not vanish without a trace.
-func (s *Server) briefing(ctx context.Context, host, project, source string) string {
-	briefing, _, err := s.cfg.Retrieve.ProjectBriefing(ctx, project, retrieve.BriefingInput{Host: host, Source: source})
+//
+// With repo locks on, it carries the lock lines and live peers of the checkout
+// the call names, as a SessionStart hook's briefing does, and records what it
+// showed on the session (sessionRepoLocks), so a client without hooks is told
+// about the lock and counts as a peer of the repository too.
+func (s *Server) briefing(ctx context.Context, req mcp.CallToolRequest, host, project, source, sessionID string) string {
+	locks := s.sessionRepoLocks(ctx, req, sessionID)
+	briefing, _, err := s.cfg.Retrieve.ProjectBriefing(ctx, project,
+		retrieve.BriefingInput{Host: host, Source: source, RepoLocks: locks})
 	if err != nil {
 		s.logger.Warn("session_start: briefing", "error", err)
 		return ""
 	}
+	if locks != nil && locks.Result.On {
+		if err := store.RecordSessionRepoLocks(ctx, s.cfg.DB, sessionID, locks.Result.Aliases, locks.Result.Seen); err != nil {
+			s.logger.Warn("session_start: record repo locks", "session_id", sessionID, "error", err)
+		}
+	}
 	return briefing
+}
+
+// sessionRepoLocks is a session_start briefing's request for the repo locks of
+// the checkout the call names: its cwd, or repo_root, main_worktree_root and
+// repo_origin, read as the lock tools read them (lkAliases), so the daemon
+// reads a checkout from its own disk only where lkLocalDisk allows. The
+// reader's own sessions are the one started or resumed here and, for an
+// agent's connection, the agent's own. nil with no session or database; the
+// briefing calls its functions only while repo locks are on.
+func (s *Server) sessionRepoLocks(ctx context.Context, req mcp.CallToolRequest, sessionID string) *retrieve.RepoLockInput {
+	if sessionID == "" || s.cfg.DB == nil {
+		return nil
+	}
+	return &retrieve.RepoLockInput{
+		Aliases: func() []core.RepoLockAlias {
+			aliases, _, named, err := s.lkAliases(ctx, req)
+			if err != nil || !named {
+				return nil
+			}
+			return aliases
+		},
+		Self: func() []string {
+			self := []string{sessionID}
+			if own, ok := s.processSession(ctx); ok && own.ID != sessionID {
+				self = append(self, own.ID)
+			}
+			return self
+		},
+	}
 }
 
 // linkedExternalIdentity resolves the client/id pair to stamp on a freshly

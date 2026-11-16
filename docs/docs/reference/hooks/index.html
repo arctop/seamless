@@ -625,6 +625,10 @@ owner get no line at all. The lock lines are pinned like the constraints and
 are never dropped for budget; the presence line is the first line the budget
 drops. Without a declared lock, and with repo locks off, the briefing is
 exactly as before and no presence line appears.</p>
+<p>A <code>session_start</code> briefing carries the same lines for the checkout the call
+names (its <code>cwd</code>, or <code>repo_root</code> and <code>repo_origin</code>), and records the session
+the same way, so a client without hooks is told about the lock and counts as
+a peer too. It shows no <code>hooks off</code> line: only <code>seam hook</code> reports that.</p>
 <p><strong>The prompt says when a holder changes.</strong> The session records its checkout's
 lock aliases and the holder of each lock it was shown, in its own metadata.
 The next <code>UserPromptSubmit</code> after a lock's holder changes leads its injection

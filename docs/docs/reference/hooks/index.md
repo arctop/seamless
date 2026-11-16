@@ -283,6 +283,11 @@ are never dropped for budget; the presence line is the first line the budget
 drops. Without a declared lock, and with repo locks off, the briefing is
 exactly as before and no presence line appears.
 
+A `session_start` briefing carries the same lines for the checkout the call
+names (its `cwd`, or `repo_root` and `repo_origin`), and records the session
+the same way, so a client without hooks is told about the lock and counts as
+a peer too. It shows no `hooks off` line: only `seam hook` reports that.
+
 **The prompt says when a holder changes.** The session records its checkout's
 lock aliases and the holder of each lock it was shown, in its own metadata.
 The next `UserPromptSubmit` after a lock's holder changes leads its injection
