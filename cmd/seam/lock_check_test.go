@@ -196,6 +196,127 @@ func TestLockCheck_TheRule(t *testing.T) {
 	}
 }
 
+// lcStubChain stands in for the process table: the processes the check may
+// ask as, nearest first (agentproc.Chain).
+func lcStubChain(t *testing.T, chain ...string) {
+	t.Helper()
+	prev := lcAgentChain
+	lcAgentChain = func() []string { return chain }
+	t.Cleanup(func() { lcAgentChain = prev })
+}
+
+// An agent that runs git through a program of its own (fanout-land's node,
+// make) is not the nearest process above git that is not a shell: the wrapper
+// is, and it binds no session. The check asks again as each process further
+// up and keeps the first answer that binds (lcList), so the agent's own hold
+// lets it through and a lock it does not hold refuses it, as when it runs git
+// itself. A chain that binds nowhere keeps the terminal rule.
+func TestLockCheck_AnAgentBehindAWrapper(t *testing.T) {
+	lcStubGit(t, "update-ref", true)
+	repo := lcFakeRepo(t, lcOrigin)
+	const wrapper, agent, tmux = "270.27", "200.20", "50.5"
+	const login, terminal = "60.6", "55.5"
+
+	// A stand-in daemon that binds agent alone, the process a session-start
+	// hook stamped, and answers the lock as the daemon would for each asker.
+	type holder int
+	const (
+		free holder = iota
+		heldByAgent
+		heldByAnother
+	)
+	world := func(t *testing.T, h holder, older bool) (*daemonFixture, *[]string) {
+		var fx *daemonFixture
+		asked := []string{}
+		fx = newDaemonFixture(t, map[string]toolFunc{
+			"locks_list": func(map[string]any) toolReply {
+				proc := fx.lastHeader("locks_list").Get(agentProcessHeader)
+				asked = append(asked, proc)
+				bound := proc == agent
+				var lock lcLockOpts
+				switch h {
+				case heldByAgent:
+					lock = lcLockOpts{held: true, mine: bound, holder: "cc/lc-agent"}
+				case heldByAnother:
+					lock = lcLockOpts{held: true, holder: "cc/lc-holder"}
+				}
+				if older {
+					return toolReply{text: lcAnswer(nil, lcLock(lock))}
+				}
+				return toolReply{text: lcAnswer(&bound, lcLock(lock))}
+			},
+		}, nil, "")
+		return fx, &asked
+	}
+
+	for _, tc := range []struct {
+		name    string
+		chain   []string
+		holder  holder
+		older   bool
+		refused string // in the refusal; "" passes
+		asked   []string
+	}{
+		{name: "the agent holds the lock", chain: []string{wrapper, agent, tmux}, holder: heldByAgent,
+			asked: []string{wrapper, agent}},
+		{name: "the lock is free", chain: []string{wrapper, agent, tmux}, holder: free,
+			refused: "this session does not hold it", asked: []string{wrapper, agent}},
+		{name: "another session holds the lock", chain: []string{wrapper, agent, tmux}, holder: heldByAnother,
+			refused: "session cc/lc-holder holds the lock", asked: []string{wrapper, agent}},
+		{name: "the agent runs git itself", chain: []string{agent, tmux}, holder: heldByAgent,
+			asked: []string{agent}},
+		// The control: a check that stopped at the wrapper read the agent's own
+		// hold as another session's.
+		{name: "a chain that ends at the wrapper", chain: []string{wrapper}, holder: heldByAgent,
+			refused: "session cc/lc-agent holds the lock", asked: []string{wrapper}},
+		{name: "a terminal, the lock free", chain: []string{login, terminal}, holder: free,
+			asked: []string{login, terminal}},
+		{name: "a terminal, the lock held", chain: []string{login, terminal}, holder: heldByAnother,
+			refused: "session cc/lc-holder holds the lock", asked: []string{login, terminal}},
+		{name: "a server that names no caller_bound is asked once", chain: []string{wrapper, agent}, holder: free,
+			older: true, asked: []string{wrapper}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lcStubChain(t, tc.chain...)
+			fx, asked := world(t, tc.holder, tc.older)
+			stderr, err := lcRun(t, fx, lcCommitMain, lcRefTx(repo)...)
+			require.Empty(t, stderr)
+			require.Equal(t, tc.asked, *asked, "who the check asked as, in order")
+			if tc.refused == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			require.Equal(t, lcExitRefused, lcRefusedCode(err))
+			require.Contains(t, err.Error(), tc.refused)
+		})
+	}
+
+	t.Run("no chain asks once as the connection", func(t *testing.T) {
+		lcStubChain(t)
+		fx, asked := world(t, free, false)
+		_, err := lcRun(t, fx, lcCommitMain, lcRefTx(repo)...)
+		require.NoError(t, err, "nothing binds, so the terminal rule lets a free lock through")
+		require.Len(t, *asked, 1)
+	})
+
+	t.Run("a failure partway warns and allows", func(t *testing.T) {
+		lcStubChain(t, wrapper, agent)
+		var fx *daemonFixture
+		fx = newDaemonFixture(t, map[string]toolFunc{
+			"locks_list": func(map[string]any) toolReply {
+				if fx.lastHeader("locks_list").Get(agentProcessHeader) == agent {
+					return toolReply{text: "the store is busy", isError: true}
+				}
+				return toolReply{text: lcAnswer(lcTerminal, lcLock(lcLockOpts{held: true, holder: "cc/lc-agent"}))}
+			},
+		}, nil, "")
+		stderr, err := lcRun(t, fx, lcCommitMain, lcRefTx(repo)...)
+		require.NoError(t, err)
+		require.Contains(t, stderr, "locks_list failed (the store is busy)")
+	})
+}
+
 // The negative control the acceptance asks for: a refusal that says only
 // "refused" is not enough. Every refusal names the lock, the holder, since and
 // until, and the remedy, and an assertion on those words fails on a bare one.

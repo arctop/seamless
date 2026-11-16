@@ -222,7 +222,12 @@ An agent session is one the daemon can name. `seam` sends the agent process
 that ran git, as every `seam` call does ([process
 binding](https://thereisnospoon.org/docs/concepts/sessions/#process-binding)), and the daemon answers whether
 that process belongs to a live session and whether that session holds the
-lock. A caller it binds to no session is treated as anyone else.
+lock. An agent may run git through a program of its own, such as a landing
+script under node or a make target. That program is then the nearest process
+above git, and no session belongs to it, so `seam lock check` asks again as
+each process further up and uses the first answer that names a session. A
+caller the daemon binds to no session all the way up is treated as anyone
+else.
 
 The lock is found the way `seam lock` finds it: by the checkout's origin first,
 then its host and path. A second clone of the repository, on another machine,

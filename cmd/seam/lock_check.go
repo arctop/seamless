@@ -9,7 +9,8 @@ package main
 // caller may move it:
 //
 //   - an agent session (one the daemon binds this connection to through the
-//     agent process that ran git) only while it holds the lock;
+//     agent process that ran git, directly or through a program of its own
+//     such as node or make: lcList) only while it holds the lock;
 //   - any other caller, such as the owner at a terminal, unless another session
 //     holds the lock.
 //
@@ -35,6 +36,9 @@ import (
 	"strings"
 	"time"
 
+	mcpclient "github.com/mark3labs/mcp-go/client"
+
+	"github.com/arctop/seamless/internal/agentproc"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/gitread"
 )
@@ -112,6 +116,10 @@ var _ = lcExitCoder((*lcRefusedError)(nil))
 // lcHookGit names the git subcommand of the git process that ran this hook;
 // a variable so a test can stand in for the process table.
 var lcHookGit = lcGitCommand
+
+// lcAgentChain names the processes this check may ask as, nearest first
+// (agentproc.Chain); a variable so a test can stand in for the process table.
+var lcAgentChain = agentproc.Chain
 
 func runLockCheck(ctx context.Context, e *env, o *lockCheckOpts, pos []string) error {
 	hook := *o.hook
@@ -281,7 +289,7 @@ func lcCheck(ctx context.Context, e *env, hook, remote, dir string, candidates [
 		return nil
 	}
 	defer func() { _ = cli.Close() }()
-	out, _, err := lkCall(ctx, cli, "locks_list", checkout)
+	out, err := lcList(ctx, cli, checkout, lcAgentChain())
 	switch {
 	case errors.Is(err, errLkNotServed):
 		return nil // repo locks are off on this server: nothing to check
@@ -311,6 +319,41 @@ func lcCheck(ctx context.Context, e *env, hook, remote, dir string, candidates [
 		return nil
 	}
 	return &lcRefusedError{msg: strings.Join(refusals, "\n"+hintIndent) + "\n" + hintIndent + lcOverride}
+}
+
+// lcList asks for the checkout's locks as the agent that ran git. The nearest
+// process above git that is not a shell is that agent when it ran git itself,
+// but a program of its own when it ran git through one -- fanout-land's node,
+// make, python -- and such a program binds no session: the answer would call
+// the caller unbound, so the agent's own hold would read as another session's
+// and refuse it, while a free lock let it through. So while an answer says the
+// caller is bound to no session, lcList asks again as the next process up the
+// chain, and keeps the first answer that binds. The daemon binds only a
+// process a session-start hook stamped, so the walk can reach only an agent
+// git runs under. A chain that binds nowhere (a terminal) keeps the nearest's
+// answer, as does a server too old to say (no caller_bound).
+//
+// chain is agentproc.Chain's answer; with none, the connection's own identity
+// (mcpHeaders) asks once.
+func lcList(ctx context.Context, cli *mcpclient.Client, checkout map[string]any, chain []string) (map[string]any, error) {
+	if len(chain) == 0 {
+		out, _, err := lkCall(ctx, cli, "locks_list", checkout)
+		return out, err
+	}
+	var nearest map[string]any
+	for _, proc := range chain {
+		out, _, err := lkCall(withAgentProcess(ctx, proc), cli, "locks_list", checkout)
+		if err != nil {
+			return nil, err
+		}
+		if bound, said := out["caller_bound"]; bound == true || !said {
+			return out, nil
+		}
+		if nearest == nil {
+			nearest = out
+		}
+	}
+	return nearest, nil
 }
 
 // lcOverride closes every refusal: what does not skip the check, and the

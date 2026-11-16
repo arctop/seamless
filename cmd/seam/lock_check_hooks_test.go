@@ -29,6 +29,42 @@ import (
 	"github.com/arctop/seamless/internal/gitread"
 )
 
+// lcWrapEnv makes this test binary a wrapper instead of a test run (TestMain):
+// it runs its arguments as a child and exits with the child's code, standing
+// between the agent (the test process) and git as fanout-land's node or make
+// does.
+const lcWrapEnv = "SEAM_TEST_LC_WRAP"
+
+func TestMain(m *testing.M) {
+	if os.Getenv(lcWrapEnv) == "1" {
+		os.Exit(lcWrap(os.Args[1:]))
+	}
+	os.Exit(m.Run())
+}
+
+// lcWrap runs argv with this process's stdio and returns its exit code.
+func lcWrap(argv []string) int {
+	if len(argv) == 0 {
+		return 2
+	}
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, lcWrapEnv+"=") {
+			cmd.Env = append(cmd.Env, kv)
+		}
+	}
+	err := cmd.Run()
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return exit.ExitCode()
+	}
+	if err != nil {
+		return 127
+	}
+	return 0
+}
+
 // lcHarness is one end-to-end world: the binaries, the daemon, the remote.
 type lcHarness struct {
 	base    string // the test's folder
@@ -44,6 +80,10 @@ type lcHarness struct {
 	mu       sync.Mutex
 	answer   string // locks_list's reply for the checkout with lcOrigin
 	lastArgs map[string]any
+	// answerAs, when set, replies for the checkout with lcOrigin in place of
+	// answer, from the agent process the call named; asked records each one.
+	answerAs func(proc string) string
+	asked    []string
 }
 
 // lcGitAtLeast228 skips the test without a git that runs reference-transaction.
@@ -88,6 +128,11 @@ func lcNewHarness(t *testing.T) *lcHarness {
 			h.lastArgs = args
 			if args["repo_origin"] != lcOrigin {
 				return toolReply{text: lcAnswer(lcTerminal)}
+			}
+			if h.answerAs != nil {
+				proc := h.fx.lastHeader("locks_list").Get(agentProcessHeader)
+				h.asked = append(h.asked, proc)
+				return toolReply{text: h.answerAs(proc)}
 			}
 			return toolReply{text: h.answer}
 		},
@@ -178,8 +223,35 @@ func (h *lcHarness) lastArg(key string) any {
 func (h *lcHarness) git(t *testing.T, dir string, args ...string) (int, string) {
 	t.Helper()
 	cmd := exec.Command(filepath.Join(h.gitDir, "git"), args...)
-	cmd.Dir = dir
 	cmd.Env = h.env
+	return h.run(t, cmd, dir)
+}
+
+// wrappedGit runs git in dir through a wrapper process (lcWrap): this test
+// binary again, below the test process and above git. It returns git's exit
+// code and combined output, and the wrapper's pid.
+func (h *lcHarness) wrappedGit(t *testing.T, dir string, args ...string) (int, string, int) {
+	t.Helper()
+	self, err := os.Executable()
+	require.NoError(t, err)
+	cmd := exec.Command(self, append([]string{filepath.Join(h.gitDir, "git")}, args...)...)
+	cmd.Env = append(append([]string{}, h.env...), lcWrapEnv+"=1")
+	var out strings.Builder
+	cmd.Dir, cmd.Stdout, cmd.Stderr = dir, &out, &out
+	require.NoError(t, cmd.Start())
+	err = cmd.Wait()
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return exit.ExitCode(), out.String(), cmd.Process.Pid
+	}
+	require.NoError(t, err)
+	return 0, out.String(), cmd.Process.Pid
+}
+
+// run runs cmd in dir and returns its exit code and combined output.
+func (h *lcHarness) run(t *testing.T, cmd *exec.Cmd, dir string) (int, string) {
+	t.Helper()
+	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
@@ -432,4 +504,91 @@ func TestLockCheckHooks_TheHookNamesTheProcessThatRanGit(t *testing.T) {
 	got := h.fx.lastCall(t).header.Get(agentProcessHeader)
 	require.True(t, strings.HasPrefix(got, strconv.Itoa(os.Getpid())+"."),
 		"the anchor is the test process that ran git (%d), not git: got %q", os.Getpid(), got)
+}
+
+// An agent that runs git through a program of its own -- fanout-land's node,
+// make -- is not the nearest process above git that is not a shell: the
+// wrapper is, and no session is stamped with it. The hook's check asks again as
+// the processes above the wrapper and binds the agent (the test process), so
+// the agent's own hold lets its landing through and a free lock refuses it;
+// with no agent stamped anywhere up the chain, the terminal rule holds.
+func TestLockCheckHooks_AnAgentsGitThroughAWrapper(t *testing.T) {
+	h := lcNewHarness(t)
+	main := h.clone(t, "main")
+	h.mustGit(t, main, "checkout", "-q", "-b", "topic")
+	h.mustGit(t, main, "commit", "-q", "--allow-empty", "-m", "topic work")
+	h.mustGit(t, main, "checkout", "-q", "main")
+	remote := filepath.Join(h.base, "remotes", "example-app.git")
+
+	agent := strconv.Itoa(os.Getpid()) + "."
+	// answer sets the daemon's reply: the lock as each asker sees it, bound
+	// only when stamped says the asker is the stamped agent.
+	answer := func(lock lcLockOpts, stamped func(proc string) bool) {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		h.asked = nil
+		h.answerAs = func(proc string) string {
+			bound := stamped(proc)
+			l := lock
+			l.mine = l.mine && bound
+			return lcAnswer(&bound, lcLock(l))
+		}
+	}
+	isAgent := func(proc string) bool { return strings.HasPrefix(proc, agent) }
+	asked := func() []string {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		return append([]string(nil), h.asked...)
+	}
+	refs := []string{"refs/heads/main", "refs/tags/v*"}
+
+	t.Run("the agent holds the lock", func(t *testing.T) {
+		answer(lcLockOpts{held: true, mine: true, holder: "cc/lc-agent", refs: refs}, isAgent)
+
+		code, out, wrapper := h.wrappedGit(t, main, "update-ref", "refs/heads/main", "topic")
+		require.Equal(t, 0, code, "the holder's landing through a wrapper passes: %s", out)
+		require.Equal(t, h.rev(t, main, "topic"), h.rev(t, main, "refs/heads/main"))
+		got := asked()
+		require.GreaterOrEqual(t, len(got), 2, "asked as %v", got)
+		require.True(t, strings.HasPrefix(got[0], strconv.Itoa(wrapper)+"."),
+			"the nearest anchor is the wrapper (%d): asked as %v", wrapper, got)
+		require.True(t, isAgent(got[len(got)-1]), "the last ask is the agent's: %v", got)
+
+		code, out, _ = h.wrappedGit(t, main, "commit", "--allow-empty", "-m", "on main")
+		require.Equal(t, 0, code, out)
+		code, out, _ = h.wrappedGit(t, main, "tag", "v1.0")
+		require.Equal(t, 0, code, out)
+		code, out, _ = h.wrappedGit(t, main, "push", "-q", "origin", "main", "v1.0")
+		require.Equal(t, 0, code, out)
+		require.Equal(t, h.rev(t, main, "refs/heads/main"), h.rev(t, remote, "refs/heads/main"))
+	})
+
+	t.Run("the lock is free", func(t *testing.T) {
+		answer(lcLockOpts{refs: refs}, isAgent)
+		at := h.rev(t, main, "refs/heads/main")
+		code, out, _ := h.wrappedGit(t, main, "commit", "--allow-empty", "-m", "an agent, unlocked")
+		require.NotEqual(t, 0, code, out)
+		require.Contains(t, out, "this session does not hold it")
+		require.Equal(t, at, h.rev(t, main, "refs/heads/main"), "main did not move")
+	})
+
+	t.Run("another session holds the lock", func(t *testing.T) {
+		answer(lcLockOpts{held: true, holder: "cc/lc-holder", refs: refs}, isAgent)
+		code, out, _ := h.wrappedGit(t, main, "commit", "--allow-empty", "-m", "on main")
+		lcRequireRefused(t, code, out)
+	})
+
+	// The terminal rows: no process up the chain is stamped, so nothing binds.
+	nobody := func(string) bool { return false }
+	t.Run("no agent anywhere, the lock free", func(t *testing.T) {
+		answer(lcLockOpts{refs: refs}, nobody)
+		code, out, _ := h.wrappedGit(t, main, "commit", "--allow-empty", "-m", "the owner, through a wrapper")
+		require.Equal(t, 0, code, out)
+		require.GreaterOrEqual(t, len(asked()), 2, "the whole chain was asked")
+	})
+	t.Run("no agent anywhere, the lock held", func(t *testing.T) {
+		answer(lcLockOpts{held: true, holder: "cc/lc-holder", refs: refs}, nobody)
+		code, out, _ := h.wrappedGit(t, main, "commit", "--allow-empty", "-m", "the owner, through a wrapper")
+		lcRequireRefused(t, code, out)
+	})
 }

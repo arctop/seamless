@@ -20,6 +20,10 @@
 // name carries the process's start time as well as its pid, so a reused pid can
 // never be mistaken for the agent that used to own it.
 //
+// Chain goes on past that nearest ancestor, for the one caller that may: the
+// repo-lock check, whose git an agent may have run through a program of its own
+// (node, make, python), which is then the nearest ancestor and names no agent.
+//
 // Every failure reports false and the caller sends nothing: the daemon then
 // resolves the call exactly as it did before this package existed.
 package agentproc
@@ -36,6 +40,13 @@ import (
 // itself and a helper it runs; a walk that climbs further has left the client and
 // is reading the user's terminal, which no hook shares.
 const maxDepth = 6
+
+// chainDepth bounds Chain's walk, which climbs on past the first non-shell
+// ancestor: an agent that runs git through a wrapper puts the wrapper and its
+// own shells between itself and git (make runs a recipe through sh, a script
+// runs node), so the agent can sit further up than maxDepth reaches. Past the
+// agent the walk soon reaches the terminal's owner and then pid 1.
+const chainDepth = 16
 
 // errNoStart is a process whose start time could not be read. Without it the
 // identity could outlive the process and be inherited by an unrelated one that
@@ -63,30 +74,71 @@ func Anchor() (string, bool) {
 	return anchorFrom(os.Getpid(), look)
 }
 
-// anchorFrom walks up from self to the nearest ancestor that is neither a shell
-// nor git (isShell, isGit).
-//
-// Each step checks that the parent started no later than its child. On Unix that
-// always holds and costs nothing; on Windows the recorded parent id outlives the
-// parent, so a parent that exited and had its pid reused would otherwise send the
-// walk into an unrelated process.
+// anchorFrom names the nearest ancestor of self that is neither a shell nor
+// git (isShell, isGit), within maxDepth.
 func anchorFrom(self int, look func(int) (procInfo, error)) (string, bool) {
-	cur, err := look(self)
-	if err != nil {
+	ids := walk(self, look, maxDepth, 1)
+	if len(ids) == 0 {
 		return "", false
 	}
+	return ids[0], true
+}
+
+// Chain returns the identities of self's ancestors that are neither a shell nor
+// git, nearest first, within chainDepth: Anchor's answer first, whenever it has
+// one, then each such process above it. nil when the process table cannot be
+// read.
+//
+// It serves `seam lock check` alone. An agent may run git through a program of
+// its own -- node, make, python -- and that program is then the nearest anchor,
+// which no session-start hook stamped, so the check's connection binds nothing
+// and the agent's own lock reads as someone else's. The check asks again as
+// each process further up and keeps the first the daemon binds. That is sound
+// for a check: the daemon binds only a process a session-start hook stamped, so
+// the walk can reach only an agent that git runs under, never a sibling. It is
+// not sound for a connection that lives on (an MCP server, a hook's session):
+// that is why Anchor stops at the first wrapper (see shells).
+func Chain() []string {
+	look, err := newLookup()
+	if err != nil {
+		return nil
+	}
+	return walk(os.Getpid(), look, chainDepth, 0)
+}
+
+// walk climbs from self through at most depth ancestors and collects, nearest
+// first, the identity of each that is neither a shell nor git, stopping once it
+// holds limit of them (0: no limit). A process it cannot read ends the walk with
+// what it has, as does a parent that started after its child.
+//
+// That start-time check costs nothing on Unix, where it always holds; on
+// Windows the recorded parent id outlives the parent, so a parent that exited
+// and had its pid reused would otherwise send the walk into an unrelated
+// process.
+func walk(self int, look func(int) (procInfo, error), depth, limit int) []string {
+	cur, err := look(self)
+	if err != nil {
+		return nil
+	}
+	var ids []string
 	pid := cur.ppid
-	for depth := 0; depth < maxDepth && pid > 1; depth++ {
+	for range depth {
+		if pid <= 1 {
+			break
+		}
 		info, err := look(pid)
 		if err != nil || info.start > cur.start {
-			return "", false
+			break
 		}
 		if !isShell(info.name) && !isGit(info.name) {
-			return format(pid, info.start), true
+			ids = append(ids, format(pid, info.start))
+			if len(ids) == limit {
+				break
+			}
 		}
 		cur, pid = info, info.ppid
 	}
-	return "", false
+	return ids
 }
 
 // shells are the interpreters a client may put between itself and a helper.

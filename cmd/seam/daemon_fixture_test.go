@@ -170,6 +170,19 @@ func (fx *daemonFixture) lastCall(t *testing.T) recordedCall {
 	return fx.calls[len(fx.calls)-1]
 }
 
+// lastHeader returns the request header of the most recent tools/call named
+// name: inside that tool's toolFunc, the call it is answering. nil for none.
+func (fx *daemonFixture) lastHeader(name string) http.Header {
+	fx.mu.Lock()
+	defer fx.mu.Unlock()
+	for i := len(fx.calls) - 1; i >= 0; i-- {
+		if fx.calls[i].name == name {
+			return fx.calls[i].header
+		}
+	}
+	return nil
+}
+
 // callCount reports how many tools/call requests reached the fixture.
 func (fx *daemonFixture) callCount() int {
 	fx.mu.Lock()

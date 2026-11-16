@@ -173,6 +173,123 @@ func TestAnchorFrom_LookupErrorStops(t *testing.T) {
 	require.False(t, ok)
 }
 
+// Chain climbs on past the first anchor: every ancestor that is neither a shell
+// nor git, nearest first, so a git an agent ran through a wrapper of its own
+// still reaches the agent.
+func TestChainFrom(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		table table
+		want  []string
+	}{
+		{
+			// fanout-land: the agent runs node from its shell, node runs git, git
+			// runs the hook. The wrapper is Anchor's answer; the agent is next.
+			name: "git run by node under the agent",
+			table: table{
+				300: {ppid: 290, name: "seam", start: 30},
+				290: {ppid: 280, name: "sh", start: 29},
+				280: {ppid: 270, name: "git", start: 28},
+				270: {ppid: 250, name: "node", start: 27},
+				250: {ppid: 200, name: "zsh", start: 25},
+				200: {ppid: 100, name: "claude", start: 20},
+				100: {ppid: 50, name: "-zsh", start: 10},
+				50:  {ppid: 1, name: "tmux", start: 5},
+			},
+			want: []string{"270.27", "200.20", "50.5"},
+		},
+		{
+			// `make land` running a script that runs node that runs git: the agent
+			// sits 8 processes up, past maxDepth, where Anchor alone stops.
+			name: "make, a script and node between the agent and git",
+			table: table{
+				300: {ppid: 290, name: "seam", start: 30},
+				290: {ppid: 285, name: "sh", start: 29},
+				285: {ppid: 280, name: "git", start: 28},
+				280: {ppid: 275, name: "node", start: 27},
+				275: {ppid: 270, name: "bash", start: 26},
+				270: {ppid: 265, name: "sh", start: 25},
+				265: {ppid: 260, name: "make", start: 24},
+				260: {ppid: 200, name: "zsh", start: 23},
+				200: {ppid: 1, name: "claude", start: 20},
+			},
+			want: []string{"280.27", "265.24", "200.20"},
+		},
+		{
+			// The owner at a terminal: the chain is the terminal's owners alone,
+			// none of which a session is stamped with.
+			name: "a git hook at the owner's terminal",
+			table: table{
+				300: {ppid: 290, name: "seam", start: 30},
+				290: {ppid: 280, name: "sh", start: 29},
+				280: {ppid: 100, name: "git", start: 28},
+				100: {ppid: 60, name: "-zsh", start: 10},
+				60:  {ppid: 50, name: "login", start: 6},
+				50:  {ppid: 1, name: "Terminal", start: 5},
+			},
+			want: []string{"60.6", "50.5"},
+		},
+		{
+			// A process the walk cannot read ends it, keeping what it found.
+			name: "an unreadable ancestor ends the chain",
+			table: table{
+				300: {ppid: 280, name: "seam", start: 30},
+				280: {ppid: 270, name: "git", start: 28},
+				270: {ppid: 250, name: "node", start: 27},
+				250: {ppid: 200, name: "zsh", start: 25},
+			},
+			want: []string{"270.27"},
+		},
+		{
+			// So does a reused pid: a recorded parent younger than its child.
+			name: "a reused parent pid ends the chain",
+			table: table{
+				300: {ppid: 280, name: "seam", start: 30},
+				280: {ppid: 270, name: "git", start: 28},
+				270: {ppid: 200, name: "node", start: 27},
+				200: {ppid: 1, name: "claude", start: 40},
+			},
+			want: []string{"270.27"},
+		},
+		{
+			name: "only shells up to init",
+			table: table{
+				300: {ppid: 100, name: "seam", start: 30},
+				100: {ppid: 1, name: "bash", start: 10},
+			},
+		},
+		{
+			name:  "self unreadable",
+			table: table{},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := walk(300, tc.table.look, chainDepth, 0)
+			require.Equal(t, tc.want, got)
+			for _, id := range got {
+				require.True(t, Valid(id), "walk must emit what Valid accepts: %q", id)
+			}
+			anchor, ok := anchorFrom(300, tc.table.look)
+			if len(got) > 0 && got[0] == anchor {
+				return
+			}
+			// Anchor and the chain's head differ only where the head lies past
+			// maxDepth, where Anchor finds nothing.
+			require.False(t, ok, "Anchor named %q, the chain starts %v", anchor, got)
+		})
+	}
+}
+
+func TestChainFrom_DepthIsBounded(t *testing.T) {
+	tb := table{300: {ppid: 299, name: "seam", start: 300}}
+	for pid := 299; pid > 1; pid-- {
+		tb[pid] = procInfo{ppid: pid - 1, name: "node", start: uint64(pid)}
+	}
+	got := walk(300, tb.look, chainDepth, 0)
+	require.Len(t, got, chainDepth, "the walk reads at most chainDepth ancestors")
+	require.Equal(t, "299.299", got[0])
+}
+
 func TestIsShell(t *testing.T) {
 	for name, want := range map[string]bool{
 		"sh": true, "bash": true, "zsh": true, "-zsh": true, "/bin/sh": true,
@@ -237,4 +354,8 @@ func TestAnchor_Live(t *testing.T) {
 	again, ok := Anchor()
 	require.True(t, ok)
 	require.Equal(t, got, again, "the identity is stable for the life of the process")
+
+	chain := Chain()
+	require.NotEmpty(t, chain)
+	require.Equal(t, got, chain[0], "the chain starts at Anchor's answer")
 }

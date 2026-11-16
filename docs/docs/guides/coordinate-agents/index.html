@@ -476,7 +476,12 @@ may move it:</p>
 that ran git, as every <code>seam</code> call does (<a href="../../concepts/sessions/#process-binding">process
 binding</a>), and the daemon answers whether
 that process belongs to a live session and whether that session holds the
-lock. A caller it binds to no session is treated as anyone else.</p>
+lock. An agent may run git through a program of its own, such as a landing
+script under node or a make target. That program is then the nearest process
+above git, and no session belongs to it, so <code>seam lock check</code> asks again as
+each process further up and uses the first answer that names a session. A
+caller the daemon binds to no session all the way up is treated as anyone
+else.</p>
 <p>The lock is found the way <code>seam lock</code> finds it: by the checkout's origin first,
 then its host and path. A second clone of the repository, on another machine,
 is checked against the same lock. A push is checked against the lock of the

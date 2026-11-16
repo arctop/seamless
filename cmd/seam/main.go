@@ -122,6 +122,27 @@ func mcpHeaders(cfg config.Config) map[string]string {
 	return h
 }
 
+// agentProcessCallKey carries, on one call's context, an agent process
+// identity that call names in place of the connection's own (withAgentProcess).
+type agentProcessCallKey struct{}
+
+// withAgentProcess returns ctx for a call that names proc as the agent process
+// instead of the one mcpHeaders named for the connection. The daemon reads the
+// header on every request, so one connection can ask as several processes;
+// only `seam lock check` does, walking up agentproc.Chain (lcList).
+func withAgentProcess(ctx context.Context, proc string) context.Context {
+	return context.WithValue(ctx, agentProcessCallKey{}, proc)
+}
+
+// callAgentProcess is the transport's per-request header hook: the identity
+// withAgentProcess put on the request's context, if any.
+func callAgentProcess(ctx context.Context) map[string]string {
+	if proc, _ := ctx.Value(agentProcessCallKey{}).(string); proc != "" {
+		return map[string]string{agentProcessHeader: proc}
+	}
+	return nil
+}
+
 // dial loads config (config.LoadClient, never ./seamless.yaml) and returns an
 // initialized MCP client plus the base URL.
 func dial(ctx context.Context) (*mcpclient.Client, config.Config, error) {
@@ -148,6 +169,7 @@ func dialWith(ctx context.Context, cfg config.Config) (*mcpclient.Client, config
 	hc.CheckRedirect = config.RefuseRedirect
 	cli, err := mcpclient.NewStreamableHttpClient(cfg.ServerURL()+"/api/mcp",
 		transport.WithHTTPHeaders(mcpHeaders(cfg)),
+		transport.WithHTTPHeaderFunc(callAgentProcess),
 		transport.WithHTTPBasicClient(hc))
 	if err != nil {
 		return nil, cfg, err
