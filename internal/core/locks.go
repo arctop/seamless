@@ -81,6 +81,11 @@ type RepoLock struct {
 	Holder         string     `json:"holder,omitempty"`
 	HeldSince      *time.Time `json:"heldSince,omitempty"`
 	LeaseExpiresAt *time.Time `json:"leaseExpiresAt,omitempty"`
+	// Waiters are the sessions queued for the lock, as session ULIDs in
+	// arrival order with the head first; empty when nobody waits. A surface
+	// shows len(Waiters) as the queue's length and Waiters[0] as the next
+	// waiter, naming a waiter only where it may name a holder.
+	Waiters []string `json:"waiters,omitempty"`
 	// CreatedBy is the declaring session's ULID, "" when the declaration named
 	// no session; Account is the restricted account that declared it, "" for
 	// the owner principal.
