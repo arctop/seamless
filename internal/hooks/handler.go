@@ -382,6 +382,10 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 	// always, or -- isolation.requests on -- the home a resumed conversation
 	// stays in (startHome).
 	in := retrieve.BriefingInput{CWD: p.CWD, Host: host, Source: p.Source, AgentType: p.AgentType}
+	// Repo locks (features.RepoLocks): a main session's briefing shows its
+	// checkout's locks and live peers; the session then records what it was
+	// shown (recordRepoLocks, below). Off, the briefing asks nothing of it.
+	in.RepoLocks = h.repoLockInput(ctx, client, host, p)
 	var (
 		briefing    string
 		injectedIDs []string
@@ -407,6 +411,7 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 			sessionID = id
 			briefing = injectAmbientLine(briefing, name, p.Identity.AgentProcess != "")
 			h.setAmbientModel(ctx, client, host, p.SessionID, pushedModel(p.Model, p.Capture), p.TranscriptPath)
+			h.recordRepoLocks(ctx, client, sessionID, in.RepoLocks)
 		}
 	} else {
 		sessionID = h.ambientSessionID(ctx, client, p.SessionID)
@@ -1409,7 +1414,8 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 	// SessionStart hook already created carries the host, and that is the only
 	// honest source here -- guessing "local" would read a remote agent's
 	// transcript path off this machine.
-	p.Host = h.ambientHost(ctx, client, p.SessionID)
+	amb, ambFound := h.ambientRow(ctx, client, p.SessionID)
+	p.Host = amb.Host
 
 	h.touchAmbient(ctx, client, p.SessionID)
 	h.setAmbientModel(ctx, client, p.Host, p.SessionID, pushedModel(p.Model, p.Capture), p.TranscriptPath)
@@ -1438,10 +1444,12 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	recalled := out != ""
 	// A claim the conversation lost since it was last told (claimNotice, once),
-	// and a lease of this session's ending within access.ExpiryWarning: the
-	// injection leads with them -- what was lost, or when access ends and how
-	// to ask again.
+	// a repo lock whose holder changed since it was last told (repoLockNotice,
+	// once per change), and a lease of this session's ending within
+	// access.ExpiryWarning: the injection leads with them -- what was lost,
+	// who holds the lock now, or when access ends and how to ask again.
 	notice := joinNotices(h.claimNotice(ctx, client, p.SessionID, reach),
+		h.repoLockNotice(ctx, client, p.SessionID, amb, ambFound, reach),
 		h.expiryNotice(ctx, h.ambientSessionID(ctx, client, p.SessionID)))
 	if notice != "" {
 		block := injectNotice("", notice)
@@ -1766,24 +1774,27 @@ func (h *Handler) gitHead(ctx context.Context, id hookIdentity, cwd string, push
 	return gitread.Head(cwd)
 }
 
-// ambientHost returns the machine recorded on the client's ambient session, for
-// the hooks that carry no identity of their own (UserPromptSubmit is an http
-// hook, so no seam process computes one). "" when there is no such session --
-// which hostOf/sameHost read as local, the same as an older client.
-func (h *Handler) ambientHost(ctx context.Context, client Client, claudeSessionID string) string {
+// ambientRow returns the client's ambient session, for the hooks that carry no
+// identity of their own (UserPromptSubmit is an http hook, so no seam process
+// computes one): its Host is the machine the hook speaks for -- "" when there
+// is no such session, which hostOf/sameHost read as local, the same as an
+// older client -- and its metadata the repo-lock record (repoLockNotice).
+// found is false with no database or id, no such session, or a failed lookup
+// (recorded).
+func (h *Handler) ambientRow(ctx context.Context, client Client, claudeSessionID string) (core.Session, bool) {
 	if h.db == nil || claudeSessionID == "" {
-		return ""
+		return core.Session{}, false
 	}
 	sess, ok, err := store.AmbientSessionByExternalIdentity(
 		ctx, h.db, client.externalIdentity(), claudeSessionID)
 	if err != nil {
 		h.recordHookError(ctx, "ambient-host-lookup", client, err)
-		return ""
+		return core.Session{}, false
 	}
 	if !ok {
-		return ""
+		return core.Session{}, false
 	}
-	return sess.Host
+	return sess, true
 }
 
 // recordHookError logs a swallowed hook-stage failure (the package's fail-open

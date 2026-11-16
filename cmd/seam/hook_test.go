@@ -692,3 +692,29 @@ func TestHookEvents_MatchTheInstaller(t *testing.T) {
 func TestHookClients_MatchTheServerCanonicalSet(t *testing.T) {
 	require.Equal(t, enumOf(hooks.HookClients), hookClients)
 }
+
+// The repo-lock pair rides with session-start's roots: whether the checkout
+// runs the lock hook, always, and the origin a lock keys the checkout on, only
+// where following a side clone's local-path origin changes it. The origin
+// param itself stays the raw remote, which project placement reads.
+func TestIdentityParams_RepoLockPair(t *testing.T) {
+	upstream := mkRepo(t, "myapp", "https://github.com/acme/myapp.git")
+	got := identityParams("session-start", []byte(`{"cwd":`+quote(upstream)+`}`))
+	require.Equal(t, "off", got["lock_hooks"], "a fresh checkout runs no lock hook")
+	_, has := got["lock_origin"]
+	require.False(t, has, "a remote origin is the lock's key as it is")
+
+	side := mkRepo(t, "myapp-side", upstream)
+	got = identityParams("session-start", []byte(`{"cwd":`+quote(side)+`}`))
+	require.Equal(t, upstream, got["origin"], "placement still sees the raw origin")
+	require.Equal(t, "https://github.com/acme/myapp.git", got["lock_origin"], "the side clone is its origin's repository")
+	require.Equal(t, "off", got["lock_hooks"])
+
+	got = identityParams("session-start", []byte(`{"cwd":`+quote(t.TempDir())+`}`))
+	require.NotContains(t, got, "lock_hooks", "outside a repository there is no checkout to report on")
+	require.NotContains(t, got, "lock_origin")
+
+	got = identityParams("user-prompt-submit", []byte(`{"cwd":`+quote(side)+`}`))
+	require.NotContains(t, got, "lock_hooks", "only session-start carries the checkout")
+	require.NotContains(t, got, "lock_origin")
+}

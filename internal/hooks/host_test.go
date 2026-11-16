@@ -155,6 +155,12 @@ func TestIdentityFromRequest(t *testing.T) {
 		// Anything that is not an identity is dropped rather than stored: it
 		// could only ever fail to match, and the hook must not fail over it.
 		{"malformed agent process", "agent_process=claude-code", hookIdentity{}},
+		{"repo-lock pair", "lock_origin=https%3A%2F%2Fgithub.com%2Facme%2Fapp.git&lock_hooks=off",
+			hookIdentity{LockOrigin: "https://github.com/acme/app.git", LockHooks: lockHooksOff}},
+		{"lock hooks on", "lock_hooks=on", hookIdentity{LockHooks: lockHooksOn}},
+		// A value that is neither on nor off shows no "hooks off", as an
+		// older client's absent one does.
+		{"malformed lock hooks", "lock_hooks=maybe", hookIdentity{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/api/hooks/session-start?"+tc.raw, nil)
@@ -166,7 +172,8 @@ func TestIdentityFromRequest(t *testing.T) {
 // The CLI's copy of the identity keys must be the daemon's, or the params are
 // appended under names nothing reads -- a silent no-op, because hooks fail open.
 func TestIdentityQueryParams_AreStable(t *testing.T) {
-	require.Equal(t, []string{"host", "repo_root", "main_root", "origin", "agent_process"}, IdentityQueryParams())
+	require.Equal(t, []string{"host", "repo_root", "main_root", "origin", "agent_process", "lock_origin", "lock_hooks"},
+		IdentityQueryParams())
 }
 
 // A hook that sends no host is an older `seam`, which can only be talking to a

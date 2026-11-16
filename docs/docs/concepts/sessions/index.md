@@ -343,6 +343,15 @@ Line by line:
   hook that could not name the agent process prints
   [the line's other form](https://thereisnospoon.org/docs/reference/hooks/#the-ambient-session-line) instead.
 
+With [repo locks](https://thereisnospoon.org/docs/concepts/repo-locks/) on, a session that starts in a
+checkout of a repository with a declared lock also gets, right under the
+header, one `LOCK` line per lock (free, or who holds it, for how long and
+until when), a `LOCK hooks off` line when its checkout runs no lock hook, and
+one line naming the other live sessions in a checkout of that repository,
+counting those it may not see. Its prompts repeat a lock's line once when the
+lock's holder changes. The lines and their rules are in
+[the hooks reference](https://thereisnospoon.org/docs/reference/hooks/#repo-locks).
+
 ## The budget, and what survives it
 
 Sections are packed against `budgets.max_briefing_tokens` (default 1500), then
@@ -350,13 +359,14 @@ the whole thing is hard-capped at `briefing.hard_cap_multiplier` times that
 (default 2x).
 
 The **never-drop invariant**: constraints (both the full tier and the compact
-`+N more, equally binding` line), pinned stages, and active-plan rollups are
-counted first and are exempt from budget dropping - every constraint name
-appears in every briefing. Starred memories keep the same exemption inside
+`+N more, equally binding` line), pinned stages, active-plan rollups and the
+repo `LOCK` lines (at most four, plus one line counting the rest) are counted
+first and are exempt from budget dropping - every constraint name appears in
+every briefing. Starred memories keep the same exemption inside
 their sections: a starred convention or index memory renders no matter how
-starved the budget. Everything else packs in render order - pending
-plans, conventions, recent findings, ready tasks, the memory index, sibling
-findings, sibling memories - so budget priority and render priority agree: the sections
+starved the budget. Everything else packs in render order - the repo-lock
+presence line, pending plans, conventions, recent findings, ready tasks, the
+memory index, sibling findings, sibling memories - so budget priority and render priority agree: the sections
 that say what is happening now pack before the memory library, a fat index can
 no longer evict the findings that render above it, and the sibling sections
 are the first to go when the budget runs out. The header counts only the

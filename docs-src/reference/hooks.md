@@ -42,8 +42,8 @@ install order:
 
 | Event | Matcher | Transport | Timeout | Endpoint | Effect |
 |---|---|---|---|---|---|
-| `SessionStart` | `startup\|resume\|clear\|compact` | command (`seam hook session-start`) | 10s | `/api/hooks/session-start` | Registers the agent's cwd in the repo→project map, assembles the `<seam-briefing>`, and creates or resumes an opaque `cc/<prefix>-<digest>` ambient handle keyed by the full external ID, stamped with the [agent process](#what-rides-on-the-query-string) that ran the hook. A [claim the conversation lost](#claim-notices) leads the briefing. |
-| `UserPromptSubmit` | none | http | 5s | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) when there is one. A miss is logged as a `hook.prompt` event. |
+| `SessionStart` | `startup\|resume\|clear\|compact` | command (`seam hook session-start`) | 10s | `/api/hooks/session-start` | Registers the agent's cwd in the repo→project map, assembles the `<seam-briefing>`, and creates or resumes an opaque `cc/<prefix>-<digest>` ambient handle keyed by the full external ID, stamped with the [agent process](#what-rides-on-the-query-string) that ran the hook. A [claim the conversation lost](#claim-notices) leads the briefing. With repo locks on, the briefing shows the checkout's [locks and live peers](#repo-locks). |
+| `UserPromptSubmit` | none | http | 5s | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) or a [repo lock whose holder changed](#repo-locks) when there is one. A miss is logged as a `hook.prompt` event. |
 | `SessionEnd` | none | command (`seam hook session-end`) | 10s | `/api/hooks/session-end` | Harvests findings and completes the agent's sessions. Bare ack - Claude Code's schema has no `hookSpecificOutput` for `SessionEnd`. |
 | `PostToolUse` | `Write\|Edit\|MultiEdit\|ExitPlanMode` | command (`seam hook post-tool-use`) | 10s | `/api/hooks/post-tool-use` | Captures plan-file iterations (`Write`/`Edit`/`MultiEdit` under the plans dir) and plan approvals (`ExitPlanMode`), and heartbeats the ambient session for those calls only: `seam hook` drops every other file's write before it leaves the machine, so ordinary edits and shell commands heartbeat nothing. |
 | `SubagentStart` | none | command (`seam hook subagent-start`) | 10s | `/api/hooks/subagent-start` | Injects the child briefing - pinned constraints, up to three `RELEVANT:` memories matched from the child's spawn prompt, and a recall/memory_read footer - into every Task subagent and heartbeats the parent. It never creates, reactivates, or re-scopes an ambient session. |
@@ -119,8 +119,8 @@ lifecycle.
 
 | Event | Transport | Endpoint | Effect |
 |---|---|---|---|
-| `SessionStart` | command (`seam hook session-start --client codex`) | `/api/hooks/session-start` | Registers the cwd's project, assembles the `<seam-briefing>`, and creates or resumes an opaque `cx/<prefix>-<digest>` ambient handle keyed by the full external ID, stamped with the [agent process](#what-rides-on-the-query-string) that ran the hook. A [claim the conversation lost](#claim-notices) leads the briefing. |
-| `UserPromptSubmit` | command (`seam hook user-prompt-submit --client codex`) | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) when there is one. |
+| `SessionStart` | command (`seam hook session-start --client codex`) | `/api/hooks/session-start` | Registers the cwd's project, assembles the `<seam-briefing>`, and creates or resumes an opaque `cx/<prefix>-<digest>` ambient handle keyed by the full external ID, stamped with the [agent process](#what-rides-on-the-query-string) that ran the hook. A [claim the conversation lost](#claim-notices) leads the briefing. With repo locks on, the briefing shows the checkout's [locks and live peers](#repo-locks). |
+| `UserPromptSubmit` | command (`seam hook user-prompt-submit --client codex`) | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) or a [repo lock whose holder changed](#repo-locks) when there is one. |
 | `Stop` | command (`seam hook stop --client codex`) | `/api/hooks/stop` | Heartbeats and harvests findings from the turn's final assistant message. No injection - Codex's `Stop` has no `hookSpecificOutput`. Fires at every turn end. |
 | `SubagentStart` | command (`seam hook subagent-start --client codex`) | `/api/hooks/subagent-start` | Injects the child briefing (constraints, spawn-prompt-matched `RELEVANT:` memories, recall footer) under the Codex output cap and heartbeats the parent. It never creates, reactivates, or re-scopes an ambient session. |
 | `SubagentStop` | command (`seam hook subagent-stop --client codex`) | `/api/hooks/subagent-stop` | Heartbeats the parent only. It does not apply the child's model/final message to parent state or create Claude-style plan notes. |
@@ -247,6 +247,54 @@ it first instead, and whichever does carries it alone. The conversation's
 sessions are its ambient session and every explicit session `session_start`
 linked to it. See [lease-based task claiming](/concepts/lease-based-task-claiming/).
 
+## Repo locks in the briefing {#repo-locks}
+
+With [repo locks](/concepts/repo-locks/) on, a main session's `SessionStart`
+in a checkout of a repository with a declared lock - any checkout of it, or
+any of its worktrees, on any machine - briefs it on the repository's locks,
+under the header line:
+
+```text
+LOCK seamless main: held by cc/1fa4b02d-55d96b8d15ff0104 for 12 min, until 11:02 (2 waiting)
+LOCK seamless release: free
+LOCK hooks off: this checkout runs no lock hook, so git will not check the lock before it moves a guarded ref
+Also live in this repository: cc/8dd2fd5b-0a1b2c3d4e5f6a7b (idle 3 min), and 2 other sessions
+```
+
+- **One `LOCK` line per lock**: `free`, or `held by` the holding session, for
+  how long, and until when its lease runs (the machine's local time). A hold
+  whose lease ran out reads `free (the hold by ... lapsed at 11:02)`, and
+  `(N waiting)` counts the queue while anyone is in it. Past four locks the
+  rest are counted on one line that points at `seam lock list --here`.
+- **`LOCK hooks off`** appears when the session's `seam hook` reported that the
+  checkout runs no lock hook (`lock_hooks=off`). An older `seam`, which
+  reports nothing, shows nothing.
+- **One presence line**: the other live sessions in a checkout of the same
+  repository, by name with their idle minutes. A session the reader may not
+  see - another account's under [peer_auth](/guides/peer-auth/), or one in a
+  project the reader cannot read - is counted, not named. With no other live
+  session there is no line.
+- **The holder is named by the same rule**: `you` for one of the
+  conversation's own sessions, the session's name where the reader may see
+  it, and `another session` otherwise.
+
+A lock outside the reader's reach and a declaration still waiting for the
+owner get no line at all. The lock lines are pinned like the constraints and
+are never dropped for budget; the presence line is the first line the budget
+drops. Without a declared lock, and with repo locks off, the briefing is
+exactly as before and no presence line appears.
+
+**The prompt says when a holder changes.** The session records its checkout's
+lock aliases and the holder of each lock it was shown, in its own metadata.
+The next `UserPromptSubmit` after a lock's holder changes leads its injection
+with that lock's line, once - `Seamless: LOCK seamless main: free` tells a
+waiting session the lock is free. A lock declared since is news once too. A
+lock the conversation just took itself, and its own hold ending with no
+holder at all (its release, or the owner's force-release, which the
+[`Lock lost` notice](#claim-notices) carries), say nothing. A session that
+started before repo locks were on records nothing and hears nothing until
+its next start.
+
 ## What rides on the query string
 
 A hook body is the agent client's schema, not Seamless's, so everything
@@ -262,13 +310,18 @@ identity and its agent process are the rest.
 | `main_root` | `session-start` only | the main checkout, when `repo_root` is a linked worktree |
 | `origin` | `session-start` only | the `origin` remote URL, when there is one |
 | `agent_process` | `session-start` only | the agent process that ran the hook - its nearest ancestor that is not a shell, as `<pid>.<start time>` |
+| `lock_origin` | `session-start` only | the origin a [repo lock](#repo-locks) keys the checkout on, when it differs from `origin`: a side clone's local-path origin followed to the repository it was cloned from |
+| `lock_hooks` | `session-start` only | `on` or `off`: whether the checkout runs the repo-lock git hook |
 
 `seam hook` resolves the identity locally - it is the only process that can -
 and every value is best-effort: an unreadable hostname, an unparseable body, or
 a cwd outside any repository simply omits that param. The host goes on every
 hook because it is what tells the daemon whether the paths in this payload are
 on its own disk; the roots go on session start only, because that is the single
-hook that places a working directory in a project.
+hook that places a working directory in a project. The repo-lock pair
+(`lock_origin`, `lock_hooks`) rides with them: `seam hook` sends it whatever
+the daemon's features are, and the daemon reads it only while
+[repo locks](#repo-locks) are on.
 
 **An absent `host` means the local machine.** That is what keeps an older
 `seam` binary - which only ever talked to a daemon on its own machine - working

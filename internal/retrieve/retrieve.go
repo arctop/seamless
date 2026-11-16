@@ -39,6 +39,10 @@ type Service struct {
 	// lockdown reports whether write screening's lockdown is on (SetLockdown);
 	// nil, the default, is never.
 	lockdown func(context.Context) bool
+
+	// sessionIdle is the liveness threshold the repo-lock presence line
+	// counts a session live by (SetSessionIdle); <= 0 is core.SessionIdleTTL.
+	sessionIdle time.Duration
 }
 
 // UpdateNoticeFunc returns the one-line Seamless update notice for a briefing

@@ -21,12 +21,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/arctop/seamless/internal/agentproc"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/gitread"
 	"github.com/arctop/seamless/internal/harvest"
 )
@@ -159,7 +161,14 @@ var hookClients = []string{hookClientClaudeCode, hookClientCodex}
 // absent value makes it fall back to treating the hook as local, which is
 // exactly right for the single-machine install every one of these was written
 // for.
-var hookIdentityParams = []string{"host", "repo_root", "main_root", "origin", "agent_process"}
+//
+// lock_origin and lock_hooks are for repo locks: the origin a lock keys this
+// checkout on (a side clone's local-path origin followed to the repository it
+// was cloned from, as `seam lock` follows it), sent only where it differs from
+// origin, and whether this checkout runs the lock hook ("on" or "off"). Both
+// are sent whether or not the daemon has repo locks on, which this process
+// cannot know; the daemon reads them only while they are.
+var hookIdentityParams = []string{"host", "repo_root", "main_root", "origin", "agent_process", "lock_origin", "lock_hooks"}
 
 // The deadlines: how long a hook may take in all, whatever the network does,
 // before it gives up and fails open. A client kills a hook that outlives the
@@ -489,6 +498,8 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 // project; every other hook resolves through the map that placement already
 // grew. Resolving them is a handful of Lstats plus one config read, and a hook
 // fires on every turn -- so the cheap half runs always and the rest runs once.
+// The repo-lock pair (lock_origin, lock_hooks) rides with the roots: a session
+// start is where the briefing shows the checkout's locks.
 //
 // Every value is best-effort: an unreadable hostname, an unparseable body, or a
 // cwd outside any repo simply omits the param, and the daemon reads the absence
@@ -527,6 +538,27 @@ func identityParams(event string, payload []byte) map[string]string {
 	out["main_root"] = main
 	if origin := gitread.OriginURL(main); origin != "" {
 		out["origin"] = origin
+		// A repo lock keys a side clone on the repository it was cloned
+		// from. Following reads the disk only for an origin that is a local
+		// path, so a checkout with a remote origin pays nothing here.
+		if lock := core.FollowLocalOrigin(origin, main, hookReadLocalRepo); lock != "" && lock != origin {
+			out["lock_origin"] = lock
+		}
+	}
+	out["lock_hooks"] = "off"
+	if gitread.LockHooksActive(root) {
+		out["lock_hooks"] = "on"
 	}
 	return out
+}
+
+// hookReadLocalRepo reports the main checkout root and the origin of the
+// repository at path, or "" and "" when path is no checkout:
+// core.FollowLocalOrigin's reader, on this machine's disk.
+func hookReadLocalRepo(path string) (string, string) {
+	if _, err := os.Lstat(filepath.Join(path, ".git")); err != nil {
+		return "", ""
+	}
+	main := gitread.MainWorktreeRoot(path)
+	return main, gitread.OriginURL(main)
 }

@@ -242,7 +242,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </details>
   <p>Seamless installs hooks for two clients: seven for Claude Code (including
@@ -336,7 +336,7 @@ install order:</p>
 <td>command (<code>seam hook session-start</code>)</td>
 <td>10s</td>
 <td><code>/api/hooks/session-start</code></td>
-<td>Registers the agent's cwd in the repo→project map, assembles the <code>&lt;seam-briefing&gt;</code>, and creates or resumes an opaque <code>cc/&lt;prefix&gt;-&lt;digest&gt;</code> ambient handle keyed by the full external ID, stamped with the <a href="#what-rides-on-the-query-string">agent process</a> that ran the hook. A <a href="#claim-notices">claim the conversation lost</a> leads the briefing.</td>
+<td>Registers the agent's cwd in the repo→project map, assembles the <code>&lt;seam-briefing&gt;</code>, and creates or resumes an opaque <code>cc/&lt;prefix&gt;-&lt;digest&gt;</code> ambient handle keyed by the full external ID, stamped with the <a href="#what-rides-on-the-query-string">agent process</a> that ran the hook. A <a href="#claim-notices">claim the conversation lost</a> leads the briefing. With repo locks on, the briefing shows the checkout's <a href="#repo-locks">locks and live peers</a>.</td>
 </tr>
 <tr>
 <td><code>UserPromptSubmit</code></td>
@@ -344,7 +344,7 @@ install order:</p>
 <td>http</td>
 <td>5s</td>
 <td><code>/api/hooks/user-prompt-submit</code></td>
-<td>Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a <a href="#claim-notices">claim the conversation lost</a> when there is one. A miss is logged as a <code>hook.prompt</code> event.</td>
+<td>Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a <a href="#claim-notices">claim the conversation lost</a> or a <a href="#repo-locks">repo lock whose holder changed</a> when there is one. A miss is logged as a <code>hook.prompt</code> event.</td>
 </tr>
 <tr>
 <td><code>SessionEnd</code></td>
@@ -462,13 +462,13 @@ lifecycle.</p>
 <td><code>SessionStart</code></td>
 <td>command (<code>seam hook session-start --client codex</code>)</td>
 <td><code>/api/hooks/session-start</code></td>
-<td>Registers the cwd's project, assembles the <code>&lt;seam-briefing&gt;</code>, and creates or resumes an opaque <code>cx/&lt;prefix&gt;-&lt;digest&gt;</code> ambient handle keyed by the full external ID, stamped with the <a href="#what-rides-on-the-query-string">agent process</a> that ran the hook. A <a href="#claim-notices">claim the conversation lost</a> leads the briefing.</td>
+<td>Registers the cwd's project, assembles the <code>&lt;seam-briefing&gt;</code>, and creates or resumes an opaque <code>cx/&lt;prefix&gt;-&lt;digest&gt;</code> ambient handle keyed by the full external ID, stamped with the <a href="#what-rides-on-the-query-string">agent process</a> that ran the hook. A <a href="#claim-notices">claim the conversation lost</a> leads the briefing. With repo locks on, the briefing shows the checkout's <a href="#repo-locks">locks and live peers</a>.</td>
 </tr>
 <tr>
 <td><code>UserPromptSubmit</code></td>
 <td>command (<code>seam hook user-prompt-submit --client codex</code>)</td>
 <td><code>/api/hooks/user-prompt-submit</code></td>
-<td>Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a <a href="#claim-notices">claim the conversation lost</a> when there is one.</td>
+<td>Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a <a href="#claim-notices">claim the conversation lost</a> or a <a href="#repo-locks">repo lock whose holder changed</a> when there is one.</td>
 </tr>
 <tr>
 <td><code>Stop</code></td>
@@ -592,6 +592,49 @@ one may see it, and what to do; a Seamless tool result may carry
 it first instead, and whichever does carries it alone. The conversation's
 sessions are its ambient session and every explicit session <code>session_start</code>
 linked to it. See <a href="../../concepts/lease-based-task-claiming/">lease-based task claiming</a>.</p>
+<h2 id="repo-locks">Repo locks in the briefing</h2>
+<p>With <a href="../../concepts/repo-locks/">repo locks</a> on, a main session's <code>SessionStart</code>
+in a checkout of a repository with a declared lock - any checkout of it, or
+any of its worktrees, on any machine - briefs it on the repository's locks,
+under the header line:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">LOCK seamless main: held by cc/1fa4b02d-55d96b8d15ff0104 for 12 min, until 11:02 (2 waiting)
+</span></span><span class="line"><span class="cl">LOCK seamless release: free
+</span></span><span class="line"><span class="cl">LOCK hooks off: this checkout runs no lock hook, so git will not check the lock before it moves a guarded ref
+</span></span><span class="line"><span class="cl">Also live in this repository: cc/8dd2fd5b-0a1b2c3d4e5f6a7b (idle 3 min), and 2 other sessions
+</span></span></code></pre></div>
+<ul>
+<li><strong>One <code>LOCK</code> line per lock</strong>: <code>free</code>, or <code>held by</code> the holding session, for
+how long, and until when its lease runs (the machine's local time). A hold
+whose lease ran out reads <code>free (the hold by ... lapsed at 11:02)</code>, and
+<code>(N waiting)</code> counts the queue while anyone is in it. Past four locks the
+rest are counted on one line that points at <code>seam lock list --here</code>.</li>
+<li><strong><code>LOCK hooks off</code></strong> appears when the session's <code>seam hook</code> reported that the
+checkout runs no lock hook (<code>lock_hooks=off</code>). An older <code>seam</code>, which
+reports nothing, shows nothing.</li>
+<li><strong>One presence line</strong>: the other live sessions in a checkout of the same
+repository, by name with their idle minutes. A session the reader may not
+see - another account's under <a href="../../guides/peer-auth/">peer_auth</a>, or one in a
+project the reader cannot read - is counted, not named. With no other live
+session there is no line.</li>
+<li><strong>The holder is named by the same rule</strong>: <code>you</code> for one of the
+conversation's own sessions, the session's name where the reader may see
+it, and <code>another session</code> otherwise.</li>
+</ul>
+<p>A lock outside the reader's reach and a declaration still waiting for the
+owner get no line at all. The lock lines are pinned like the constraints and
+are never dropped for budget; the presence line is the first line the budget
+drops. Without a declared lock, and with repo locks off, the briefing is
+exactly as before and no presence line appears.</p>
+<p><strong>The prompt says when a holder changes.</strong> The session records its checkout's
+lock aliases and the holder of each lock it was shown, in its own metadata.
+The next <code>UserPromptSubmit</code> after a lock's holder changes leads its injection
+with that lock's line, once - <code>Seamless: LOCK seamless main: free</code> tells a
+waiting session the lock is free. A lock declared since is news once too. A
+lock the conversation just took itself, and its own hold ending with no
+holder at all (its release, or the owner's force-release, which the
+<a href="#claim-notices"><code>Lock lost</code> notice</a> carries), say nothing. A session that
+started before repo locks were on records nothing and hears nothing until
+its next start.</p>
 <h2 id="what-rides-on-the-query-string">What rides on the query string</h2>
 <p>A hook body is the agent client's schema, not Seamless's, so everything
 Seamless needs <em>about</em> the call travels beside it as query parameters on the
@@ -637,6 +680,16 @@ identity and its agent process are the rest.</p>
 <td><code>session-start</code> only</td>
 <td>the agent process that ran the hook - its nearest ancestor that is not a shell, as <code>&lt;pid&gt;.&lt;start time&gt;</code></td>
 </tr>
+<tr>
+<td><code>lock_origin</code></td>
+<td><code>session-start</code> only</td>
+<td>the origin a <a href="#repo-locks">repo lock</a> keys the checkout on, when it differs from <code>origin</code>: a side clone's local-path origin followed to the repository it was cloned from</td>
+</tr>
+<tr>
+<td><code>lock_hooks</code></td>
+<td><code>session-start</code> only</td>
+<td><code>on</code> or <code>off</code>: whether the checkout runs the repo-lock git hook</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -645,7 +698,10 @@ and every value is best-effort: an unreadable hostname, an unparseable body, or
 a cwd outside any repository simply omits that param. The host goes on every
 hook because it is what tells the daemon whether the paths in this payload are
 on its own disk; the roots go on session start only, because that is the single
-hook that places a working directory in a project.</p>
+hook that places a working directory in a project. The repo-lock pair
+(<code>lock_origin</code>, <code>lock_hooks</code>) rides with them: <code>seam hook</code> sends it whatever
+the daemon's features are, and the daemon reads it only while
+<a href="#repo-locks">repo locks</a> are on.</p>
 <p><strong>An absent <code>host</code> means the local machine.</strong> That is what keeps an older
 <code>seam</code> binary - which only ever talked to a daemon on its own machine - working
 byte-for-byte.</p>
@@ -887,7 +943,7 @@ live/schema evidence and the recapture procedure.</li>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </aside>
   

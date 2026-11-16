@@ -43,6 +43,11 @@ type BriefingInput struct {
 	// as recall's Also is. nil is the project's own scope, as before; the
 	// main-session path never reads it.
 	Also []string
+	// RepoLocks asks a main session's briefing for its checkout's repo locks
+	// and live peers (features.RepoLocks); the briefing fills its Result. nil
+	// -- the subagent path, session_start, the console preview -- asks for
+	// nothing, and the briefing reads and renders exactly as before.
+	RepoLocks *RepoLockInput
 }
 
 // Briefing assembles the SessionStart briefing for an agent: constraints (always
@@ -255,10 +260,21 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 	}
 	pending = reachable(ctx, pending, noteProject)
 	stages := s.pinnedStages(stageMems, cfg.StageUnknownMaxAgeDays, time.Now())
+	// The effective features, read once for the whole assembly and only when
+	// asked: without RepoLocks the first ask is momentum's, below, exactly where
+	// the read always happened.
+	feats := s.featuresOnce(ctx)
+	// Repo locks (features.RepoLocks): the checkout's lock lines and its live
+	// peers. They are news in themselves, so a declared lock makes an
+	// otherwise empty briefing non-empty.
+	var locks repoLockView
+	if in.RepoLocks != nil && repoLocksOn(feats) {
+		locks = s.briefingRepoLocks(ctx, project, in.RepoLocks, time.Now())
+	}
 	if len(constraints) == 0 && len(favorites) == 0 && len(conventions) == 0 &&
 		len(index) == 0 && omitted == 0 &&
 		len(findings) == 0 && len(ready) == 0 && len(siblings) == 0 && len(siblingMems) == 0 &&
-		len(stages) == 0 && len(rollups) == 0 && len(pending) == 0 {
+		len(stages) == 0 && len(rollups) == 0 && len(pending) == 0 && locks.empty() {
 		return "", nil, nil
 	}
 	// Provenance marks (screening on) for every memory a line may name. A
@@ -275,8 +291,9 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 		pendingPlans: pending, isolation: iso,
 		// Asked for only past the nothing-to-inject return above: the notice
 		// rides on a briefing, it never makes an empty one non-empty.
-		notice:   s.updateNoticeLine(ctx, in.Host) + hold.line(),
-		momentum: features.Enabled(s.effectiveFeatures(ctx), features.Momentum),
+		notice:    s.updateNoticeLine(ctx, in.Host) + hold.line(),
+		momentum:  features.Enabled(feats(), features.Momentum),
+		repoLocks: locks,
 	}, cfg)
 	return text, ids, nil
 }
@@ -740,6 +757,7 @@ type briefingSections struct {
 	notice       string             // sanitized update-notice line ("" = none), pinned under the isolation line
 	momentum     bool               // momentum feature on: near-done plan lines carry the finish-line emphasis
 	provenance   map[string]string  // memory id -> provenance mark (screening on); nil renders no marks
+	repoLocks    repoLockView       // repo locks on: the lock lines (pinned) and the presence line (first to pack)
 }
 
 // mark is a memory line's provenance suffix: "" while provenance is off. The
@@ -749,11 +767,12 @@ func (sec briefingSections) mark(id string) string { return sec.provenance[id] }
 
 // assembleBriefing packs the grouped sections against the token budget. The
 // pinned content -- the header line, the isolation line, the update notice,
-// the Constraints section (both tiers), the Stages section, the active-plan
-// rollups with their trailer, and the footer -- is counted first and never
-// dropped.
+// the repo lock lines, the Constraints section (both tiers), the Stages
+// section, the active-plan rollups with their trailer, and the footer -- is
+// counted first and never dropped.
 // Budget-competing rows then pack in render order -- situation before library:
-// pending plan lines > conventions > recent findings > ready tasks > memory
+// the repo-lock presence line > pending plan lines > conventions > recent
+// findings > ready tasks > memory
 // index > sibling findings > sibling memories -- so budget priority and render
 // priority agree: a fat memory index can no longer evict the findings that
 // render above it, and the sibling sections, last, are dropped first. Starred
@@ -870,13 +889,27 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 	// sitting at the head keeps it inside the prefix both hardTruncate and the
 	// Codex hook cap preserve. No provider, or nothing to say, renders nothing
 	// and pays nothing (estTokens("") is 0).
+	// The repo lock lines (repo locks on, a lock declared for the checkout)
+	// follow, pinned on a fixed allowance: at most repoLockMaxLines LOCK lines
+	// plus one counting the rest, and the hooks line. A lock's state is what
+	// the session must not miss before it lands anything, and at the head the
+	// lines stay inside the prefix hardTruncate and the Codex cap preserve.
+	lockHead := sec.repoLocks.pinned()
 	used := estTokens(headLine(len(findings))) + estTokens(isoLine) + estTokens(sec.notice) +
-		estTokens(constraintsSec.String()) +
+		estTokens(lockHead) + estTokens(constraintsSec.String()) +
 		estTokens(stagesSec) + estTokens(pinnedPlans) + estTokens(tail.String())
 
 	var body strings.Builder
 	body.WriteString(isoLine)
 	body.WriteString(sec.notice)
+	body.WriteString(lockHead)
+	// The presence line renders under the lock lines but is not pinned: it is
+	// the first budget-competing row to pack, ahead of every section below, so
+	// a short budget drops it before anything else -- and never a lock line.
+	if p := sec.repoLocks.presence; p != "" && used+estTokens(p) <= budget {
+		body.WriteString(p)
+		used += estTokens(p)
+	}
 	body.WriteString(constraintsSec.String())
 	body.WriteString(stagesSec)
 

@@ -442,6 +442,9 @@ func runServe(args []string) error {
 	ret.SetBriefingConfig(cfg.Briefing)
 	ret.SetSearchConfig(cfg.Search)
 	ret.SetFeaturesConfig(cfg.Features)
+	// The repo-lock presence line counts a session live by the same threshold
+	// as the reaper and the console (gardener.session_idle_minutes).
+	ret.SetSessionIdle(time.Duration(cfg.Gardener.SessionIdleMinutes) * time.Minute)
 	rec := events.NewRecorder(db)
 	rec.SetFeatures(cfg.Features) // arms the momentum milestone layer
 

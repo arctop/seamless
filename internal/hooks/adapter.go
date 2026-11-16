@@ -167,12 +167,20 @@ func decodeSubagentStop(_ Client, body []byte) subagentPayload {
 // only, where the ambient session is created, and is what lets that agent's MCP
 // connection -- which names the same process on every request -- bind to the
 // session without a session_start call.
+//
+// lock_origin and lock_hooks ride on session-start too, for repo locks
+// (features.RepoLocks): the origin a lock keys the checkout on, where following
+// a side clone's local-path origin changes it, and whether the checkout runs
+// the lock hook. The client sends them whether or not the feature is on (it
+// cannot know); the daemon reads them only while it is.
 const (
 	hostQueryParam         = "host"
 	repoRootQueryParam     = "repo_root"
 	mainRootQueryParam     = "main_root"
 	originQueryParam       = "origin"
 	agentProcessQueryParam = "agent_process"
+	lockOriginQueryParam   = "lock_origin"
+	lockHooksQueryParam    = "lock_hooks"
 )
 
 // IdentityQueryParams lists the identity query keys in a stable order. cmd/seam
@@ -181,7 +189,8 @@ const (
 // test-pinned, exactly as clientQueryParam is, so a rename cannot silently strip
 // the identity off every hook.
 func IdentityQueryParams() []string {
-	return []string{hostQueryParam, repoRootQueryParam, mainRootQueryParam, originQueryParam, agentProcessQueryParam}
+	return []string{hostQueryParam, repoRootQueryParam, mainRootQueryParam, originQueryParam, agentProcessQueryParam,
+		lockOriginQueryParam, lockHooksQueryParam}
 }
 
 // hookIdentity is the agent machine's self-reported identity for one hook call.
@@ -191,7 +200,22 @@ type hookIdentity struct {
 	MainRoot     string // main checkout root when RepoRoot is a linked worktree
 	Origin       string // origin remote URL; "" = unknown
 	AgentProcess string // agentproc identity of the agent that ran the hook; "" = not sent or malformed
+	// LockOrigin is the origin a repo lock keys the checkout on, sent only
+	// when it differs from Origin: a side clone's local-path origin followed to
+	// the repository it was cloned from (core.FollowLocalOrigin, as `seam
+	// lock` resolves it). "" = not sent: Origin stands.
+	LockOrigin string
+	// LockHooks is lockHooksOn or lockHooksOff: whether the checkout runs the
+	// repo-lock git hook (gitread.LockHooksActive). "" = not sent (an older
+	// seam, a cwd outside any repository) or malformed.
+	LockHooks string
 }
+
+// The LockHooks values.
+const (
+	lockHooksOn  = "on"
+	lockHooksOff = "off"
+)
 
 // identityFromRequest reads the machine identity off the hook request. Every
 // field is optional: a missing one is "not sent", never an error, because the
@@ -206,6 +230,19 @@ func identityFromRequest(r *http.Request) hookIdentity {
 		MainRoot:     strings.TrimSpace(q.Get(mainRootQueryParam)),
 		Origin:       strings.TrimSpace(q.Get(originQueryParam)),
 		AgentProcess: agentProcessFrom(q.Get(agentProcessQueryParam)),
+		LockOrigin:   strings.TrimSpace(q.Get(lockOriginQueryParam)),
+		LockHooks:    lockHooksFrom(q.Get(lockHooksQueryParam)),
+	}
+}
+
+// lockHooksFrom keeps "on" or "off" and drops anything else: an unknown value
+// shows no "hooks off", as an older client's absent one does.
+func lockHooksFrom(raw string) string {
+	switch v := strings.TrimSpace(raw); v {
+	case lockHooksOn, lockHooksOff:
+		return v
+	default:
+		return ""
 	}
 }
 
