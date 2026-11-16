@@ -51,8 +51,19 @@ type Limits struct {
 // DefaultLimits are the contract's defaults.
 var DefaultLimits = Limits{FrameBytes: 16384, BatchFrames: 500, BatchBytes: 1 << 20, HeartbeatS: 300}
 
-// parseLimits reads a GET /v1/limits answer. A value missing or out of range
-// keeps its default: limits only ever narrow what is sent.
+// The smallest frame and batch limits the feed honors. A consumer that asks
+// for less gets these: below them a heartbeat would not fit in a frame, nor a
+// frame beside the header in a batch, and the feed would send nothing at all.
+const (
+	minFrameBytes = 1024
+	minBatchBytes = 4096
+)
+
+// parseLimits reads a GET /v1/limits answer. A value missing, zero or
+// negative keeps its default. frame_bytes, batch_frames and batch_bytes only
+// ever narrow what is sent: a value above its default is the default, and a
+// frame or batch limit below its floor is the floor. heartbeat_s may be any
+// positive number of seconds.
 func parseLimits(body []byte) (Limits, error) {
 	var raw struct {
 		V           int `json:"v"`
@@ -69,13 +80,13 @@ func parseLimits(body []byte) (Limits, error) {
 	}
 	l := DefaultLimits
 	if raw.FrameBytes > 0 {
-		l.FrameBytes = raw.FrameBytes
+		l.FrameBytes = min(max(raw.FrameBytes, minFrameBytes), DefaultLimits.FrameBytes)
 	}
 	if raw.BatchFrames > 0 {
-		l.BatchFrames = raw.BatchFrames
+		l.BatchFrames = min(raw.BatchFrames, DefaultLimits.BatchFrames)
 	}
 	if raw.BatchBytes > 0 {
-		l.BatchBytes = raw.BatchBytes
+		l.BatchBytes = min(max(raw.BatchBytes, minBatchBytes), DefaultLimits.BatchBytes)
 	}
 	if raw.HeartbeatS > 0 {
 		l.HeartbeatS = raw.HeartbeatS

@@ -314,21 +314,32 @@ func TestReadReceipt(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // consumer is a minimal consumer: it answers the limits and settles every
-// batch, keeping each frame line it received.
+// batch, keeping each frame line it received and each batch's size.
 type consumer struct {
-	mu     sync.Mutex
-	lines  []string
-	ids    map[string]bool
-	down   atomic.Bool
-	server *http.Server
+	mu      sync.Mutex
+	lines   []string
+	batches []sentBatch
+	ids     map[string]bool
+	down    atomic.Bool
+	server  *http.Server
 }
 
+// sentBatch is one batch the consumer took: its frames and its body's bytes.
+type sentBatch struct{ frames, bytes int }
+
 func startConsumer(t *testing.T, sock string) *consumer {
+	t.Helper()
+	return startConsumerWithLimits(t, sock, `{"v":1,"frame_bytes":16384,"batch_frames":500,"batch_bytes":1048576,"heartbeat_s":60}`)
+}
+
+// startConsumerWithLimits is startConsumer answering GET /v1/limits with
+// limits.
+func startConsumerWithLimits(t *testing.T, sock, limits string) *consumer {
 	t.Helper()
 	c := &consumer{ids: map[string]bool{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/limits", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, `{"v":1,"frame_bytes":16384,"batch_frames":500,"batch_bytes":1048576,"heartbeat_s":60}`)
+		_, _ = io.WriteString(w, limits)
 	})
 	mux.HandleFunc("POST /v1/batch", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -357,6 +368,7 @@ func startConsumer(t *testing.T, sock string) *consumer {
 		if !c.ids[header.Batch] {
 			c.ids[header.Batch] = true
 			c.lines = append(c.lines, frames...)
+			c.batches = append(c.batches, sentBatch{frames: len(frames), bytes: len(body)})
 		}
 		c.mu.Unlock()
 		_, _ = fmt.Fprintf(w, `{"v":1,"action":"settle","status":"stored","batch":%q,"frames":%d,"accepted":%d,"refused_count":0,"refused":[],"dropped":0}`,
@@ -374,6 +386,12 @@ func (c *consumer) received() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return append([]string(nil), c.lines...)
+}
+
+func (c *consumer) sentBatches() []sentBatch {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]sentBatch(nil), c.batches...)
 }
 
 // countActivities counts the frames that are not heartbeats.

@@ -213,6 +213,7 @@ func (f *Feed) loop(ctx context.Context, sp *spool) {
 		if active {
 			if !now.Before(nextLimits) {
 				f.readLimits(ctx)
+				sp.setLimits(f.limits)
 				nextLimits = now.Add(limitsEvery)
 			}
 			if err := f.pull(ctx, sp); err != nil {
@@ -455,8 +456,12 @@ func (f *Feed) readLimits(ctx context.Context) {
 	}
 	l, err := parseLimits(raw)
 	if err != nil {
-		f.cfg.Logger.Warn("feed: consumer limits unreadable; keeping the defaults", "error", err)
+		f.cfg.Logger.Warn("feed: consumer limits unreadable; keeping the ones in force", "error", err)
 		return
+	}
+	if l != f.limits {
+		f.cfg.Logger.Info("feed: the consumer's limits", "frame_bytes", l.FrameBytes, "batch_frames", l.BatchFrames,
+			"batch_bytes", l.BatchBytes, "heartbeat_s", l.HeartbeatS)
 	}
 	f.limits = l
 }

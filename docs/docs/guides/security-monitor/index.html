@@ -596,10 +596,21 @@ hourly after:</p>
 </span></span></code></pre></div>
 <p>Those values are also the defaults, used until a consumer says otherwise. A
 value that is missing, zero or negative keeps its default, and an answer that is
-not status 200 or not version 1 changes nothing. Only <code>heartbeat_s</code> changes what
-the feed does today. The other three are read but do not narrow what is sent: a
-batch never exceeds 500 frames or 1 MiB, and a frame never exceeds 16,384 bytes,
-so a consumer must accept at least the defaults.</p>
+not status 200 or not version 1 changes nothing.</p>
+<ul>
+<li><strong><code>frame_bytes</code>, <code>batch_frames</code> and <code>batch_bytes</code> only narrow what is sent.</strong> A
+value above its default is the default. A <code>frame_bytes</code> below 1,024 is 1,024,
+and a <code>batch_bytes</code> below 4,096 is 4,096: below those a heartbeat would not
+fit in a frame, or a frame beside the header in a batch.</li>
+<li><strong>Each batch the feed starts keeps to them.</strong> It holds at most <code>batch_frames</code>
+frames and <code>batch_bytes</code> bytes, header included. A frame longer than
+<code>frame_bytes</code>, or than one batch can carry, is never spooled and counts as
+dropped.</li>
+<li><strong>A batch spooled before the limits narrowed is sent as it is.</strong> A batch is
+never rebuilt (see <a href="#how-delivery-behaves">How delivery behaves</a>). A consumer
+that refuses it as too large discards it, and its frames count as dropped.</li>
+<li><strong><code>heartbeat_s</code> may be any positive number of seconds.</strong></li>
+</ul>
 <p><strong><code>POST /v1/batch</code></strong>, with <code>Content-Type: application/x-ndjson</code>, sends a header
 line and one frame per line, each ending in a newline:</p>
 <div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">{&#34;v&#34;:1,&#34;batch&#34;:&#34;&lt;id&gt;&#34;,&#34;frames&#34;:&lt;n&gt;,&#34;dropped&#34;:&lt;n&gt;}

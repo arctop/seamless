@@ -189,10 +189,20 @@ hourly after:
 
 Those values are also the defaults, used until a consumer says otherwise. A
 value that is missing, zero or negative keeps its default, and an answer that is
-not status 200 or not version 1 changes nothing. Only `heartbeat_s` changes what
-the feed does today. The other three are read but do not narrow what is sent: a
-batch never exceeds 500 frames or 1 MiB, and a frame never exceeds 16,384 bytes,
-so a consumer must accept at least the defaults.
+not status 200 or not version 1 changes nothing.
+
+- **`frame_bytes`, `batch_frames` and `batch_bytes` only narrow what is sent.** A
+  value above its default is the default. A `frame_bytes` below 1,024 is 1,024,
+  and a `batch_bytes` below 4,096 is 4,096: below those a heartbeat would not
+  fit in a frame, or a frame beside the header in a batch.
+- **Each batch the feed starts keeps to them.** It holds at most `batch_frames`
+  frames and `batch_bytes` bytes, header included. A frame longer than
+  `frame_bytes`, or than one batch can carry, is never spooled and counts as
+  dropped.
+- **A batch spooled before the limits narrowed is sent as it is.** A batch is
+  never rebuilt (see [How delivery behaves](#how-delivery-behaves)). A consumer
+  that refuses it as too large discards it, and its frames count as dropped.
+- **`heartbeat_s` may be any positive number of seconds.**
 
 **`POST /v1/batch`**, with `Content-Type: application/x-ndjson`, sends a header
 line and one frame per line, each ending in a newline:

@@ -26,7 +26,12 @@ import (
 //
 //   - Bounded: past maxEvents frames or maxBytes bytes the oldest segment not
 //     in flight is dropped whole, and the drop counter grows by its frames. A
-//     frame longer than frameBytes is never spooled and counts as dropped.
+//     frame longer than the bounds allow is never spooled and counts as
+//     dropped.
+//   - Within the consumer's limits: a segment is started and filled within the
+//     bounds in force (spoolBounds, from GET /v1/limits). A segment already
+//     filled when the limits narrow is sent as it is, since a batch is never
+//     rebuilt.
 //   - One batch in flight, oldest first, resent unchanged under its id until
 //     a receipt settles or discards it -- across restarts too: the in-flight
 //     batch's id and drop count live in state.json.
@@ -52,6 +57,27 @@ const (
 	spoolFrameBytes    = 16384
 	spoolMaxFields     = 32
 )
+
+// spoolBounds are the consumer's limits as the spool applies them: a frame
+// longer than frameBytes is never spooled, and a segment holds at most frames
+// frames and bytes bytes, which leaves a batch's limit room for its header.
+type spoolBounds struct {
+	frameBytes int
+	frames     int
+	bytes      int
+}
+
+// boundsFor is the spool's bounds under the consumer's limits l, never wider
+// than the defaults: a segment's bytes are the batch's less the header's room,
+// and a frame must fit in a segment with its newline.
+func boundsFor(l Limits) spoolBounds {
+	segBytes := min(max(l.BatchBytes, minBatchBytes)-spoolHeaderRoom, spoolSegmentBytes)
+	return spoolBounds{
+		frameBytes: min(max(l.FrameBytes, minFrameBytes), spoolFrameBytes, segBytes-1),
+		frames:     min(max(l.BatchFrames, 1), spoolSegmentFrames),
+		bytes:      segBytes,
+	}
+}
 
 var segmentRe = regexp.MustCompile(`^seg-(\d{12})\.ndjson$`)
 
@@ -93,6 +119,7 @@ type spool struct {
 	segs     []spoolSegment
 	events   int
 	bytes    int
+	bounds   spoolBounds
 	closed   bool
 	mu       sync.Mutex // guards stats() against the loop
 }
@@ -112,7 +139,7 @@ func openSpool(dir string) (*spool, error) {
 	if err != nil {
 		return nil, err
 	}
-	sp := &spool{dir: dir, lockPath: lockPath}
+	sp := &spool{dir: dir, lockPath: lockPath, bounds: boundsFor(DefaultLimits)}
 	if err := sp.load(); err != nil {
 		_ = os.Remove(lockPath) //nolint:errcheck // best effort: the open already failed
 		return nil, err
@@ -316,9 +343,17 @@ func (sp *spool) persist() error {
 	return nil
 }
 
+// setLimits makes the consumer's limits l the bounds of every segment from
+// now on, the one being filled included.
+func (sp *spool) setLimits(l Limits) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	sp.bounds = boundsFor(l)
+}
+
 // add spools one frame, stamping fields.source_seq (unless the frame has 32
-// fields already). It reports false for a frame longer than frameBytes, which
-// is counted as dropped instead.
+// fields already). It reports false for a frame longer than the bounds allow,
+// which is counted as dropped instead.
 func (sp *spool) add(f Frame) (bool, error) {
 	if sp.closed {
 		return false, errors.New("feed: spool closed")
@@ -337,7 +372,7 @@ func (sp *spool) add(f Frame) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("feed: frame: %w", err)
 	}
-	if len(raw) > spoolFrameBytes {
+	if len(raw) > sp.bounds.frameBytes {
 		sp.st.Dropped++
 		return false, sp.persist()
 	}
@@ -350,7 +385,7 @@ func (sp *spool) add(f Frame) (bool, error) {
 		cur = &sp.segs[n-1]
 	}
 	if cur == nil || (sp.st.Inflight != nil && cur.n == sp.st.Inflight.Segment) ||
-		cur.events >= spoolSegmentFrames || cur.bytes+len(line) > spoolSegmentBytes {
+		cur.events >= sp.bounds.frames || cur.bytes+len(line) > sp.bounds.bytes {
 		sp.segs = append(sp.segs, spoolSegment{n: sp.st.NextSegment})
 		sp.st.NextSegment++
 		if err := sp.persist(); err != nil {
