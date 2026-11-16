@@ -10,6 +10,29 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](https://thereisnospoon.org/docs/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.10.0 {#v0-10-0}
+
+Released 2026-11-16 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.0)
+
+### Features
+
+- feat(briefing): a session_start briefing shows the checkout's repo locks and live peers too
+- feat(locks): git refuses to move or push a guarded ref unless the caller may, checked by `seam lock check` from two hooks
+- feat(locks): who may see and hold a lock, and a first-come queue with `seam lock acquire --wait`
+- feat(briefing): a session in a locked repository is told the lock's state and its live peers, and hears when the holder changes
+- feat(locks): repo locks, an optional feature off by default: declared once per repository, held with the claim machinery
+- feat(tasks): a live claim keeps its session live, and a holder that loses a claim is told once
+
+### Fixes
+
+- fix(locks): on Linux the lock hooks pass over the hook script to git and to the agent that ran it
+- fix(harvest): a subagent report that lands during the first read is no longer missed
+- fix(console): lock changes reach the feed as config/high, failed ones are recorded, and a begin loop never shuts the owner out
+- fix(feed): a consumer's limits narrow every batch the feed starts, not only its heartbeat
+- fix(doctor): a peer_auth daemon's config gets no client rows, and install-hooks repoints a stale Claude Code bridge
+- fix(console): an approved grant request's page says what the approval opened -- read-only or read and write, and until when
+- fix(mcp): a move request's remedy names the home a receipt may still close a task in, not "there"
+
 ## v0.9.0 {#v0-9-0}
 
 Released 2026-11-15 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.9.0)
