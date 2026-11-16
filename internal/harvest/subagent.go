@@ -65,15 +65,23 @@ func SubagentTranscriptPath(agentTranscriptPath, transcriptPath, agentID string)
 // unfinished (the capture may hold narration); a cancelled ctx or a blank or
 // absent path returns at once with unsettled false.
 func AwaitSubagentReport(ctx context.Context, path string) (prompt, report string, unsettled bool) {
+	// The size is taken before the first parse, never after it: a report
+	// appended between the parse and a later stat would be counted in the
+	// size already, so the poll below would never see the file grow, and the
+	// capture would wait out the whole budget and keep the narration.
+	fi, statErr := os.Stat(path)
 	prompt, report, complete := SubagentTranscript(path)
 	if complete {
 		return prompt, report, false
 	}
-	fi, err := os.Stat(path)
-	if err != nil {
+	var size int64
+	if statErr == nil {
+		size = fi.Size()
+	} else if _, err := os.Stat(path); err != nil {
 		return prompt, report, false // blank or absent path: nothing to wait for
 	}
-	size := fi.Size()
+	// A transcript that appeared only after the first stat counts from empty,
+	// so everything in it is growth the poll reads.
 
 	settled := time.NewTimer(SubagentReportSettle)
 	defer settled.Stop()
