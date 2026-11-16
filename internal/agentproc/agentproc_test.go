@@ -73,6 +73,48 @@ func TestAnchorFrom(t *testing.T) {
 			want: "50.5", wantOK: true,
 		},
 		{
+			// A git hook runs `seam lock check` below git itself: the walk passes
+			// over the hook's shell and git to the agent that ran git.
+			name: "a git hook under the agent",
+			table: table{
+				300: {ppid: 290, name: "seam", start: 30},
+				290: {ppid: 280, name: "sh", start: 29},
+				280: {ppid: 250, name: "git", start: 28},
+				250: {ppid: 200, name: "zsh", start: 25},
+				200: {ppid: 100, name: "claude", start: 20},
+				100: {ppid: 1, name: "-zsh", start: 10},
+			},
+			want: "200.20", wantOK: true,
+		},
+		{
+			// `git pull` runs `git merge`, whose hook sits below two gits.
+			name: "a hook below git pull's merge",
+			table: table{
+				300: {ppid: 290, name: "seam", start: 30},
+				290: {ppid: 285, name: "sh", start: 29},
+				285: {ppid: 280, name: "git", start: 28},
+				280: {ppid: 250, name: "/usr/bin/git", start: 27},
+				250: {ppid: 200, name: "bash", start: 25},
+				200: {ppid: 100, name: "codex", start: 20},
+				100: {ppid: 1, name: "-zsh", start: 10},
+			},
+			want: "200.20", wantOK: true,
+		},
+		{
+			// The owner committing at a terminal: past git, the anchor is what
+			// owns the terminal, which no session is stamped with, so the hook's
+			// connection binds nothing.
+			name: "a git hook at the owner's terminal",
+			table: table{
+				300: {ppid: 290, name: "seam", start: 30},
+				290: {ppid: 280, name: "sh", start: 29},
+				280: {ppid: 100, name: "git", start: 28},
+				100: {ppid: 50, name: "-zsh", start: 10},
+				50:  {ppid: 1, name: "tmux", start: 5},
+			},
+			want: "50.5", wantOK: true,
+		},
+		{
 			name: "only shells up to init",
 			table: table{
 				300: {ppid: 100, name: "seam", start: 30},
@@ -140,6 +182,16 @@ func TestIsShell(t *testing.T) {
 		"disclaimer": false, "tmux": false, "": false, "shell": false,
 	} {
 		require.Equal(t, want, isShell(name), "isShell(%q)", name)
+	}
+}
+
+func TestIsGit(t *testing.T) {
+	for name, want := range map[string]bool{
+		"git": true, "/usr/bin/git": true, "GIT.EXE": true, `C:\Program Files\Git\cmd\git.exe`: true,
+		"git-receive-pack": true, "git-receive-pac": true,
+		"gitk": false, "github": false, "legit": false, "claude": false, "sh": false, "": false,
+	} {
+		require.Equal(t, want, isGit(name), "isGit(%q)", name)
 	}
 }
 

@@ -1,6 +1,6 @@
 # Coordinate multiple agents
 
-> Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, and what happens when a claim holder dies.
+> Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, what happens when a claim holder dies, and the git hooks that check a repo lock.
 
 Coordinating multiple coding agents with Seamless means pointing N workers -
 Claude Code, Codex, or any MCP client - at one shared, dependency-aware task
@@ -197,6 +197,167 @@ override - the console's **release lock** button, or `seam task release --force
 <id>`. It force-releases any holder's claim regardless of the lease, and it is
 deliberately **not on the MCP surface**: agents get the cooperative protocol, you
 get the override.
+
+## Commit-time lock checks {#commit-time-lock-checks}
+
+A [repo lock](https://thereisnospoon.org/docs/concepts/repo-locks/) tells cooperating agents that a
+repository's main branch, or its release tags, are being landed. Two git hooks
+make git itself check the lock where a guarded ref moves:
+
+- **reference-transaction** runs for every ref update in the checkout: a
+  commit, a cherry-pick, `git merge --ff-only`, a rebase, a reset, a tag, and
+  `git update-ref`.
+- **pre-push** runs for the refs a push updates on the remote.
+
+Both run `seam lock check`. It reads the updates git hands the hook and refuses
+one that moves a ref one of the repository's locks guards, unless the caller
+may move it:
+
+| Caller | Lock held by the caller | Held by another session | Free |
+|---|---|---|---|
+| An agent session | moves the ref | refused | refused: take the lock first |
+| Anyone else, such as the owner at a terminal | - | refused | moves the ref |
+
+An agent session is one the daemon can name. `seam` sends the agent process
+that ran git, as every `seam` call does ([process
+binding](https://thereisnospoon.org/docs/concepts/sessions/#process-binding)), and the daemon answers whether
+that process belongs to a live session and whether that session holds the
+lock. A caller it binds to no session is treated as anyone else.
+
+The lock is found the way `seam lock` finds it: by the checkout's origin first,
+then its host and path. A second clone of the repository, on another machine,
+is checked against the same lock. A push is checked against the lock of the
+checkout it is pushed from, whatever URL it goes to.
+
+The hooks need git 2.28 or later, `seam` on the PATH git runs them with, and
+repo locks turned on in the server.
+
+### Add the hooks to a repository
+
+The reference-transaction hook (the Seamless repository commits this one as
+`.githooks/reference-transaction`):
+
+```sh
+#!/bin/sh
+
+[ "$1" = prepared ] || exit 0
+
+updates=$(cat)
+case $updates in
+*" refs/"*) ;;
+*) exit 0 ;;
+esac
+
+if ! command -v seam >/dev/null 2>&1; then
+	echo "reference-transaction: seam is not on PATH, so the repository's locks were not checked" >&2
+	exit 0
+fi
+if ! seam lock check --help >/dev/null 2>&1; then
+	echo "reference-transaction: this seam has no lock check (it predates repo locks), so the repository's locks were not checked" >&2
+	exit 0
+fi
+
+printf '%s\n' "$updates" | seam lock check --hook reference-transaction -- "$@"
+status=$?
+case $status in
+0) exit 0 ;;
+77) exit 1 ;;
+esac
+echo "reference-transaction: seam lock check exited $status, so the repository's locks were not checked" >&2
+exit 0
+```
+
+The pre-push hook is the same script without the first line (git passes it no
+state), with `--hook pre-push` and its own name in the messages. Make both
+executable, then either:
+
+- commit them under `.githooks/` and run `git config core.hooksPath .githooks`
+  once per clone. git reads a relative path against each worktree's root, so
+  every worktree runs its own checkout's copy; or
+- copy them into `.git/hooks/`, which every worktree of the repository shares
+  and which is never committed.
+
+In the Seamless repository, `make install-git-hooks` sets `core.hooksPath` to
+`.githooks`, which also runs the pre-commit check.
+
+The script refuses only when `seam lock check` exits 77. Every other outcome
+lets the update through, so a broken check never wedges git:
+
+- with no `seam` on the PATH, or a `seam` that predates `lock check`, the hook
+  prints a warning;
+- with the daemon down, or silent for 10 seconds, `seam lock check` prints a
+  warning and exits 0;
+- with repo locks turned off in the server, or no lock declared for the
+  repository, it exits 0 and prints nothing.
+
+### What a refusal means
+
+```text
+error: refused: this update moves refs/heads/main, which LOCK example-app main guards, and session cc/1a2b3c holds the lock (since 2026-11-15T18:00:00Z, until 2026-11-15T18:15:00Z).
+       Wait for its release, or queue for the lock: seam lock acquire --wait
+       --no-verify does not skip the reference-transaction hook, which runs this check on every ref update. The owner's override is a force-release: seam lock release --force, or the console's Locks page.
+fatal: in 'prepared' phase, update aborted by the reference-transaction hook
+```
+
+- **Held by another session.** Wait for its release, or queue behind the
+  holder with `seam lock acquire --wait`. The holder is named only where you
+  may see that session; otherwise the line says "another session".
+- **Free, and this session does not hold it.** An agent session lands only
+  while it holds the lock: run `seam lock acquire`, then land.
+- **A lapsed hold.** The holder's lease ran out, so the lock is free again:
+  acquire it before you land.
+- **A refused push** prints the same, then `error: failed to push some refs`.
+- **After a refused `git merge --ff-only`**, or the merge step of `git pull`,
+  git has already updated the index and the working tree but leaves the branch
+  where it was. `git reset --merge` puts the files back.
+
+`--no-verify` does not skip reference-transaction. The owner's override is a
+force-release, on the console's Locks page or with `seam lock release --force`.
+Like the lock itself, the hooks keep cooperating agents in step; they are not
+access control.
+
+### What is never checked
+
+- **A ref outside `refs/`:** HEAD, ORIG_HEAD, AUTO_MERGE, FETCH_HEAD and a
+  worktree's own HEAD. A commit on a detached HEAD in your own worktree never
+  calls `seam lock check`, let alone the daemon.
+- **git's own namespaces:** `refs/remotes/`, `refs/bisect/`, `refs/rewritten/`,
+  `refs/worktree/`, `refs/prefetch/` and `refs/stash`. A lock may name a ref
+  there, but no hook checks it.
+- **An update that leaves a ref where it is.**
+- **What a fetch brings:** its remote-tracking refs and its tags, which the
+  remote already has. A fetch that moves a local branch with an explicit
+  refspec (`git fetch origin main:main`) is checked. `seam lock check` reads
+  which git command ran the hook from the process table on macOS and Linux;
+  elsewhere, a transaction that updates a remote-tracking ref is taken for a
+  fetch.
+- **clone, pack-refs, gc and maintenance:** they bring refs here or rewrite how
+  refs are stored, without moving one.
+- **A declaration still waiting for the owner's approval.**
+- **The other states of a transaction.** git runs reference-transaction as a
+  transaction is preparing, once it is prepared, and once it is committed or
+  aborted. Only the prepared state checks.
+
+### Hooks off
+
+`seam doctor` adds a `repo_lock_hooks` line when repo locks are on and the
+working directory's repository declares a lock. The line says `ok` when the
+checkout runs the hook, and is a `note` saying **hooks off** when it does not. A
+session that starts in that checkout sees the same thing at the head of its
+briefing, as a `LOCK hooks off` line (see
+[repo locks in the briefing](https://thereisnospoon.org/docs/reference/hooks/#repo-locks)).
+
+It finds the hooks folder as git does. `core.hooksPath` is read from your
+global git config, the repository's config and, with `extensions.worktreeConfig`
+on, the worktree's `config.worktree`; the last one to set it wins. Otherwise the
+folder is the repository's own `.git/hooks`. The `reference-transaction` file
+there must be executable, with a line, not a comment, that runs `seam lock
+check`.
+
+It does not follow the system git config, `include` and `includeIf`, a `-c`
+on one git command, or the config-defined hooks (`hook.<name>.command`) that
+newer gits also run. A checkout set up through one of those shows hooks off
+even when git runs the check.
 
 ## What you see while it runs
 

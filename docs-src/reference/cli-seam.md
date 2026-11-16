@@ -448,6 +448,23 @@ gives up your place in the lock's queue when you wait for it and hold nothing.
 which ends any hold, live or lapsed, and is refused from an agent's process on
 the peer_auth socket.
 
+### seam lock check {#seam_lock_check}
+
+```bash
+seam lock check [--cwd DIR] [--hook HOOK] [<hook-arg>] [<hook-arg>]
+```
+
+Run by the repo-lock git hooks, not by hand: see [commit-time lock
+checks](/guides/coordinate-agents/#commit-time-lock-checks). `--hook` names the
+hook, `reference-transaction` or `pre-push`, and the arguments after `--` are
+the ones git passed it: the transaction's state (only `prepared` checks), or the
+remote's name and URL. It reads the ref updates on stdin as git sends them, and
+exits 77 to refuse one that moves a ref this repository's locks guard unless
+the caller may move it: an agent session only while it holds the lock, any
+other caller unless another session holds it. Every other outcome exits 0: no
+update a lock could guard, repo locks off on the server, no lock declared, and,
+with a warning, a daemon it cannot reach.
+
 ## Captured plans
 
 Owner surface over the plans Claude Code plan mode captures. `list`, `show`, and
@@ -978,6 +995,11 @@ Client-side checks, each reported `ok` or `FAIL`, exiting non-zero if any failed
    plausible range instead and names the reason rather than failing a healthy
    daemon.
 4. **projects** - `project_list` answers.
+5. **repo_lock_hooks** - only while repo locks are on and the working
+   directory's repository declares a lock: `ok` when the checkout runs the
+   repo-lock reference-transaction hook, else a `note` saying **hooks off**,
+   with the guide that has the hook lines. A note, not a failure: the hooks are
+   opt-in.
 
 This is the client-side view. `seamlessd doctor` checks config, database, and
 credentials on the server side; they are different commands answering different

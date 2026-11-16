@@ -1,0 +1,45 @@
+#!/bin/sh
+# Repo-lock check at commit time: refuses a ref update that moves a ref one of
+# this repository's locks guards (refs/heads/main, a release tag) unless the
+# caller may move it -- an agent session only while it holds the lock, anyone
+# else unless another session holds it. See the coordinate-agents guide.
+#
+# git runs this hook for every ref transaction, in up to four states; only
+# "prepared" checks, once git has locked the refs. `seam lock check` reads the
+# updates and asks the daemon only when one could move a guarded ref, so a
+# commit on a detached HEAD or a fetch never reaches it.
+#
+# seam lock check exits 77 to refuse, and only 77 refuses. Anything else -- no
+# seam on PATH, a seam too old to have `lock check`, a failure -- warns and lets
+# the update through, so a broken check never wedges git.
+#
+# --no-verify does not skip this hook. The owner's override is a force-release
+# of the lock: seam lock release --force.
+
+[ "$1" = prepared ] || exit 0
+
+# Only a ref under refs/ can be guarded: a transaction that moves HEAD,
+# ORIG_HEAD or AUTO_MERGE alone runs nothing more.
+updates=$(cat)
+case $updates in
+*" refs/"*) ;;
+*) exit 0 ;;
+esac
+
+if ! command -v seam >/dev/null 2>&1; then
+	echo "reference-transaction: seam is not on PATH, so the repository's locks were not checked" >&2
+	exit 0
+fi
+if ! seam lock check --help >/dev/null 2>&1; then
+	echo "reference-transaction: this seam has no lock check (it predates repo locks), so the repository's locks were not checked" >&2
+	exit 0
+fi
+
+printf '%s\n' "$updates" | seam lock check --hook reference-transaction -- "$@"
+status=$?
+case $status in
+0) exit 0 ;;
+77) exit 1 ;;
+esac
+echo "reference-transaction: seam lock check exited $status, so the repository's locks were not checked" >&2
+exit 0

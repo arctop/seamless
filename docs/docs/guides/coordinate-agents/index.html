@@ -5,20 +5,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Coordinate multiple agents - Seamless docs</title>
-<meta name="description" content="Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, and what happens when a claim holder dies.">
+<meta name="description" content="Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, what happens when a claim holder dies, and the git hooks that check a repo lock.">
 <link rel="canonical" href="https://thereisnospoon.org/docs/guides/coordinate-agents/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://thereisnospoon.org/docs/guides/coordinate-agents/">
 <meta property="og:title" content="Coordinate multiple agents - Seamless docs">
-<meta property="og:description" content="Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, and what happens when a claim holder dies.">
+<meta property="og:description" content="Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, what happens when a claim holder dies, and the git hooks that check a repo lock.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Coordinate multiple agents","item":"https://thereisnospoon.org/docs/guides/coordinate-agents/"}]},{"@type":"TechArticle","headline":"Coordinate multiple agents - Seamless docs","description":"Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, and what happens when a claim holder dies.","url":"https://thereisnospoon.org/docs/guides/coordinate-agents/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Coordinate multiple agents","item":"https://thereisnospoon.org/docs/guides/coordinate-agents/"}]},{"@type":"TechArticle","headline":"Coordinate multiple agents - Seamless docs","description":"Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, what happens when a claim holder dies, and the git hooks that check a repo lock.","url":"https://thereisnospoon.org/docs/guides/coordinate-agents/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
 <link rel="icon" type="image/svg+xml" href="../../../static/favicon.svg">
@@ -238,11 +238,11 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 </nav>
 
   <h1>Coordinate multiple agents</h1>
-  <p class="lede">Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, and what happens when a claim holder dies.</p>
+  <p class="lede">Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, what happens when a claim holder dies, and the git hooks that check a repo lock.</p>
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#fan-out-over-the-ready-queue">Fan-out over the ready queue</a></li><li class="lvl-3"><a href="#what-the-loser-of-a-race-sees">What the loser of a race sees</a></li><li class="lvl-2"><a href="#planner-and-executor-split-by-plan-composition">Planner and executor, split by plan composition</a></li><li class="lvl-2"><a href="#shared-lab-investigation">Shared-lab investigation</a></li><li class="lvl-2"><a href="#leases-crashes-and-reclaiming">Leases, crashes, and reclaiming</a></li><li class="lvl-2"><a href="#what-you-see-while-it-runs">What you see while it runs</a></li><li class="lvl-2"><a href="#one-more-collision-to-know-about">One more collision to know about</a></li>
+      <li class="lvl-2"><a href="#fan-out-over-the-ready-queue">Fan-out over the ready queue</a></li><li class="lvl-3"><a href="#what-the-loser-of-a-race-sees">What the loser of a race sees</a></li><li class="lvl-2"><a href="#planner-and-executor-split-by-plan-composition">Planner and executor, split by plan composition</a></li><li class="lvl-2"><a href="#shared-lab-investigation">Shared-lab investigation</a></li><li class="lvl-2"><a href="#leases-crashes-and-reclaiming">Leases, crashes, and reclaiming</a></li><li class="lvl-2"><a href="#commit-time-lock-checks">Commit-time lock checks</a></li><li class="lvl-3"><a href="#add-the-hooks-to-a-repository">Add the hooks to a repository</a></li><li class="lvl-3"><a href="#what-a-refusal-means">What a refusal means</a></li><li class="lvl-3"><a href="#what-is-never-checked">What is never checked</a></li><li class="lvl-3"><a href="#hooks-off">Hooks off</a></li><li class="lvl-2"><a href="#what-you-see-while-it-runs">What you see while it runs</a></li><li class="lvl-2"><a href="#one-more-collision-to-know-about">One more collision to know about</a></li>
     </ul>
   </details>
   <p>Coordinating multiple coding agents with Seamless means pointing N workers -
@@ -433,6 +433,170 @@ sessions and nothing returns a dead agent's claims. See
 override - the console's <strong>release lock</strong> button, or <code>seam task release --force &lt;id&gt;</code>. It force-releases any holder's claim regardless of the lease, and it is
 deliberately <strong>not on the MCP surface</strong>: agents get the cooperative protocol, you
 get the override.</p>
+<h2 id="commit-time-lock-checks">Commit-time lock checks</h2>
+<p>A <a href="../../concepts/repo-locks/">repo lock</a> tells cooperating agents that a
+repository's main branch, or its release tags, are being landed. Two git hooks
+make git itself check the lock where a guarded ref moves:</p>
+<ul>
+<li><strong>reference-transaction</strong> runs for every ref update in the checkout: a
+commit, a cherry-pick, <code>git merge --ff-only</code>, a rebase, a reset, a tag, and
+<code>git update-ref</code>.</li>
+<li><strong>pre-push</strong> runs for the refs a push updates on the remote.</li>
+</ul>
+<p>Both run <code>seam lock check</code>. It reads the updates git hands the hook and refuses
+one that moves a ref one of the repository's locks guards, unless the caller
+may move it:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Caller</th>
+<th>Lock held by the caller</th>
+<th>Held by another session</th>
+<th>Free</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>An agent session</td>
+<td>moves the ref</td>
+<td>refused</td>
+<td>refused: take the lock first</td>
+</tr>
+<tr>
+<td>Anyone else, such as the owner at a terminal</td>
+<td>-</td>
+<td>refused</td>
+<td>moves the ref</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>An agent session is one the daemon can name. <code>seam</code> sends the agent process
+that ran git, as every <code>seam</code> call does (<a href="../../concepts/sessions/#process-binding">process
+binding</a>), and the daemon answers whether
+that process belongs to a live session and whether that session holds the
+lock. A caller it binds to no session is treated as anyone else.</p>
+<p>The lock is found the way <code>seam lock</code> finds it: by the checkout's origin first,
+then its host and path. A second clone of the repository, on another machine,
+is checked against the same lock. A push is checked against the lock of the
+checkout it is pushed from, whatever URL it goes to.</p>
+<p>The hooks need git 2.28 or later, <code>seam</code> on the PATH git runs them with, and
+repo locks turned on in the server.</p>
+<h3 id="add-the-hooks-to-a-repository">Add the hooks to a repository</h3>
+<p>The reference-transaction hook (the Seamless repository commits this one as
+<code>.githooks/reference-transaction</code>):</p>
+<div class="code-block" data-lang="sh"><pre class="chroma"><code><span class="line"><span class="cl"><span class="cp">#!/bin/sh
+</span></span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">[</span> <span class="s2">&#34;</span><span class="nv">$1</span><span class="s2">&#34;</span> <span class="o">=</span> prepared <span class="o">]</span> <span class="o">||</span> <span class="nb">exit</span> <span class="m">0</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="nv">updates</span><span class="o">=</span><span class="k">$(</span>cat<span class="k">)</span>
+</span></span><span class="line"><span class="cl"><span class="k">case</span> <span class="nv">$updates</span> in
+</span></span><span class="line"><span class="cl">*<span class="s2">&#34; refs/&#34;</span>*<span class="o">)</span> <span class="p">;;</span>
+</span></span><span class="line"><span class="cl">*<span class="o">)</span> <span class="nb">exit</span> <span class="m">0</span> <span class="p">;;</span>
+</span></span><span class="line"><span class="cl"><span class="k">esac</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">if</span> ! <span class="nb">command</span> -v seam &gt;/dev/null 2&gt;<span class="p">&amp;</span>1<span class="p">;</span> <span class="k">then</span>
+</span></span><span class="line"><span class="cl">	<span class="nb">echo</span> <span class="s2">&#34;reference-transaction: seam is not on PATH, so the repository&#39;s locks were not checked&#34;</span> &gt;<span class="p">&amp;</span><span class="m">2</span>
+</span></span><span class="line"><span class="cl">	<span class="nb">exit</span> <span class="m">0</span>
+</span></span><span class="line"><span class="cl"><span class="k">fi</span>
+</span></span><span class="line"><span class="cl"><span class="k">if</span> ! seam lock check --help &gt;/dev/null 2&gt;<span class="p">&amp;</span>1<span class="p">;</span> <span class="k">then</span>
+</span></span><span class="line"><span class="cl">	<span class="nb">echo</span> <span class="s2">&#34;reference-transaction: this seam has no lock check (it predates repo locks), so the repository&#39;s locks were not checked&#34;</span> &gt;<span class="p">&amp;</span><span class="m">2</span>
+</span></span><span class="line"><span class="cl">	<span class="nb">exit</span> <span class="m">0</span>
+</span></span><span class="line"><span class="cl"><span class="k">fi</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="nb">printf</span> <span class="s1">&#39;%s\n&#39;</span> <span class="s2">&#34;</span><span class="nv">$updates</span><span class="s2">&#34;</span> <span class="p">|</span> seam lock check --hook reference-transaction -- <span class="s2">&#34;</span><span class="nv">$@</span><span class="s2">&#34;</span>
+</span></span><span class="line"><span class="cl"><span class="nv">status</span><span class="o">=</span><span class="nv">$?</span>
+</span></span><span class="line"><span class="cl"><span class="k">case</span> <span class="nv">$status</span> in
+</span></span><span class="line"><span class="cl">0<span class="o">)</span> <span class="nb">exit</span> <span class="m">0</span> <span class="p">;;</span>
+</span></span><span class="line"><span class="cl">77<span class="o">)</span> <span class="nb">exit</span> <span class="m">1</span> <span class="p">;;</span>
+</span></span><span class="line"><span class="cl"><span class="k">esac</span>
+</span></span><span class="line"><span class="cl"><span class="nb">echo</span> <span class="s2">&#34;reference-transaction: seam lock check exited </span><span class="nv">$status</span><span class="s2">, so the repository&#39;s locks were not checked&#34;</span> &gt;<span class="p">&amp;</span><span class="m">2</span>
+</span></span><span class="line"><span class="cl"><span class="nb">exit</span> <span class="m">0</span>
+</span></span></code></pre></div>
+<p>The pre-push hook is the same script without the first line (git passes it no
+state), with <code>--hook pre-push</code> and its own name in the messages. Make both
+executable, then either:</p>
+<ul>
+<li>commit them under <code>.githooks/</code> and run <code>git config core.hooksPath .githooks</code>
+once per clone. git reads a relative path against each worktree's root, so
+every worktree runs its own checkout's copy; or</li>
+<li>copy them into <code>.git/hooks/</code>, which every worktree of the repository shares
+and which is never committed.</li>
+</ul>
+<p>In the Seamless repository, <code>make install-git-hooks</code> sets <code>core.hooksPath</code> to
+<code>.githooks</code>, which also runs the pre-commit check.</p>
+<p>The script refuses only when <code>seam lock check</code> exits 77. Every other outcome
+lets the update through, so a broken check never wedges git:</p>
+<ul>
+<li>with no <code>seam</code> on the PATH, or a <code>seam</code> that predates <code>lock check</code>, the hook
+prints a warning;</li>
+<li>with the daemon down, or silent for 10 seconds, <code>seam lock check</code> prints a
+warning and exits 0;</li>
+<li>with repo locks turned off in the server, or no lock declared for the
+repository, it exits 0 and prints nothing.</li>
+</ul>
+<h3 id="what-a-refusal-means">What a refusal means</h3>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">error: refused: this update moves refs/heads/main, which LOCK example-app main guards, and session cc/1a2b3c holds the lock (since 2026-11-15T18:00:00Z, until 2026-11-15T18:15:00Z).
+</span></span><span class="line"><span class="cl">       Wait for its release, or queue for the lock: seam lock acquire --wait
+</span></span><span class="line"><span class="cl">       --no-verify does not skip the reference-transaction hook, which runs this check on every ref update. The owner&#39;s override is a force-release: seam lock release --force, or the console&#39;s Locks page.
+</span></span><span class="line"><span class="cl">fatal: in &#39;prepared&#39; phase, update aborted by the reference-transaction hook
+</span></span></code></pre></div>
+<ul>
+<li><strong>Held by another session.</strong> Wait for its release, or queue behind the
+holder with <code>seam lock acquire --wait</code>. The holder is named only where you
+may see that session; otherwise the line says &quot;another session&quot;.</li>
+<li><strong>Free, and this session does not hold it.</strong> An agent session lands only
+while it holds the lock: run <code>seam lock acquire</code>, then land.</li>
+<li><strong>A lapsed hold.</strong> The holder's lease ran out, so the lock is free again:
+acquire it before you land.</li>
+<li><strong>A refused push</strong> prints the same, then <code>error: failed to push some refs</code>.</li>
+<li><strong>After a refused <code>git merge --ff-only</code></strong>, or the merge step of <code>git pull</code>,
+git has already updated the index and the working tree but leaves the branch
+where it was. <code>git reset --merge</code> puts the files back.</li>
+</ul>
+<p><code>--no-verify</code> does not skip reference-transaction. The owner's override is a
+force-release, on the console's Locks page or with <code>seam lock release --force</code>.
+Like the lock itself, the hooks keep cooperating agents in step; they are not
+access control.</p>
+<h3 id="what-is-never-checked">What is never checked</h3>
+<ul>
+<li><strong>A ref outside <code>refs/</code>:</strong> HEAD, ORIG_HEAD, AUTO_MERGE, FETCH_HEAD and a
+worktree's own HEAD. A commit on a detached HEAD in your own worktree never
+calls <code>seam lock check</code>, let alone the daemon.</li>
+<li><strong>git's own namespaces:</strong> <code>refs/remotes/</code>, <code>refs/bisect/</code>, <code>refs/rewritten/</code>,
+<code>refs/worktree/</code>, <code>refs/prefetch/</code> and <code>refs/stash</code>. A lock may name a ref
+there, but no hook checks it.</li>
+<li><strong>An update that leaves a ref where it is.</strong></li>
+<li><strong>What a fetch brings:</strong> its remote-tracking refs and its tags, which the
+remote already has. A fetch that moves a local branch with an explicit
+refspec (<code>git fetch origin main:main</code>) is checked. <code>seam lock check</code> reads
+which git command ran the hook from the process table on macOS and Linux;
+elsewhere, a transaction that updates a remote-tracking ref is taken for a
+fetch.</li>
+<li><strong>clone, pack-refs, gc and maintenance:</strong> they bring refs here or rewrite how
+refs are stored, without moving one.</li>
+<li><strong>A declaration still waiting for the owner's approval.</strong></li>
+<li><strong>The other states of a transaction.</strong> git runs reference-transaction as a
+transaction is preparing, once it is prepared, and once it is committed or
+aborted. Only the prepared state checks.</li>
+</ul>
+<h3 id="hooks-off">Hooks off</h3>
+<p><code>seam doctor</code> adds a <code>repo_lock_hooks</code> line when repo locks are on and the
+working directory's repository declares a lock. The line says <code>ok</code> when the
+checkout runs the hook, and is a <code>note</code> saying <strong>hooks off</strong> when it does not. A
+session that starts in that checkout sees the same thing at the head of its
+briefing, as a <code>LOCK hooks off</code> line (see
+<a href="../../reference/hooks/#repo-locks">repo locks in the briefing</a>).</p>
+<p>It finds the hooks folder as git does. <code>core.hooksPath</code> is read from your
+global git config, the repository's config and, with <code>extensions.worktreeConfig</code>
+on, the worktree's <code>config.worktree</code>; the last one to set it wins. Otherwise the
+folder is the repository's own <code>.git/hooks</code>. The <code>reference-transaction</code> file
+there must be executable, with a line, not a comment, that runs <code>seam lock check</code>.</p>
+<p>It does not follow the system git config, <code>include</code> and <code>includeIf</code>, a <code>-c</code>
+on one git command, or the config-defined hooks (<code>hook.&lt;name&gt;.command</code>) that
+newer gits also run. A checkout set up through one of those shows hooks off
+even when git runs the check.</p>
 <h2 id="what-you-see-while-it-runs">What you see while it runs</h2>
 <p>The console is read-mostly and live over SSE - it is how you watch a fleet without
 being in its loop.</p>
@@ -504,7 +668,7 @@ explicitly. See <a href="../../concepts/projects/">Projects &amp; scope</a>.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#fan-out-over-the-ready-queue">Fan-out over the ready queue</a></li><li class="lvl-3"><a href="#what-the-loser-of-a-race-sees">What the loser of a race sees</a></li><li class="lvl-2"><a href="#planner-and-executor-split-by-plan-composition">Planner and executor, split by plan composition</a></li><li class="lvl-2"><a href="#shared-lab-investigation">Shared-lab investigation</a></li><li class="lvl-2"><a href="#leases-crashes-and-reclaiming">Leases, crashes, and reclaiming</a></li><li class="lvl-2"><a href="#what-you-see-while-it-runs">What you see while it runs</a></li><li class="lvl-2"><a href="#one-more-collision-to-know-about">One more collision to know about</a></li>
+      <li class="lvl-2"><a href="#fan-out-over-the-ready-queue">Fan-out over the ready queue</a></li><li class="lvl-3"><a href="#what-the-loser-of-a-race-sees">What the loser of a race sees</a></li><li class="lvl-2"><a href="#planner-and-executor-split-by-plan-composition">Planner and executor, split by plan composition</a></li><li class="lvl-2"><a href="#shared-lab-investigation">Shared-lab investigation</a></li><li class="lvl-2"><a href="#leases-crashes-and-reclaiming">Leases, crashes, and reclaiming</a></li><li class="lvl-2"><a href="#commit-time-lock-checks">Commit-time lock checks</a></li><li class="lvl-3"><a href="#add-the-hooks-to-a-repository">Add the hooks to a repository</a></li><li class="lvl-3"><a href="#what-a-refusal-means">What a refusal means</a></li><li class="lvl-3"><a href="#what-is-never-checked">What is never checked</a></li><li class="lvl-3"><a href="#hooks-off">Hooks off</a></li><li class="lvl-2"><a href="#what-you-see-while-it-runs">What you see while it runs</a></li><li class="lvl-2"><a href="#one-more-collision-to-know-about">One more collision to know about</a></li>
     </ul>
   </aside>
   

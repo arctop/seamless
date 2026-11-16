@@ -242,7 +242,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#a-lock-belongs-to-a-repository">A lock belongs to a repository</a></li><li class="lvl-2"><a href="#declared-once-keyed-by-the-origin">Declared once, keyed by the origin</a></li><li class="lvl-2"><a href="#holding-a-lock">Holding a lock</a></li><li class="lvl-2"><a href="#waiting-for-a-lock">Waiting for a lock</a></li><li class="lvl-2"><a href="#what-a-session-is-told">What a session is told</a></li><li class="lvl-2"><a href="#who-may-see-and-hold-a-lock">Who may see and hold a lock</a></li>
+      <li class="lvl-2"><a href="#a-lock-belongs-to-a-repository">A lock belongs to a repository</a></li><li class="lvl-2"><a href="#declared-once-keyed-by-the-origin">Declared once, keyed by the origin</a></li><li class="lvl-2"><a href="#holding-a-lock">Holding a lock</a></li><li class="lvl-2"><a href="#waiting-for-a-lock">Waiting for a lock</a></li><li class="lvl-2"><a href="#what-a-session-is-told">What a session is told</a></li><li class="lvl-2"><a href="#who-may-see-and-hold-a-lock">Who may see and hold a lock</a></li><li class="lvl-2"><a href="#checked-at-commit-time">Checked at commit time</a></li>
     </ul>
   </details>
   <p>A repo lock guards a repository's refs - its main branch, or a pattern such
@@ -384,8 +384,20 @@ identity at all, and no agent sees the identities of a lock a restricted
 account declared; the console shows them to the owner.</li>
 </ul>
 <p>A lock is a coordination signal between cooperating agents: holding one tells
-every other agent that the refs it guards are being landed. It does not, by
-itself, stop anyone from pushing.</p>
+every other agent that the refs it guards are being landed. On its own it does
+not stop anyone from pushing; the hooks below do.</p>
+<h2 id="checked-at-commit-time">Checked at commit time</h2>
+<p>Two git hooks a repository can add make git check the lock where a guarded ref
+moves: reference-transaction, for every ref update in the checkout (a commit, a
+merge, a rebase, a reset, a tag), and pre-push, for the refs a push updates on
+the remote. Each runs <code>seam lock check</code>, which refuses an update that moves a
+guarded ref unless the caller may move it: an agent session only while it holds
+the lock, anyone else, such as the owner at a terminal, unless another session
+holds it. The refusal names the lock, the holder, since and until. A missing
+<code>seam</code> or an unreachable daemon warns and lets the update through. See
+<a href="../../guides/coordinate-agents/#commit-time-lock-checks">commit-time lock checks</a>
+for the hook lines and what each refusal means, and <code>seam doctor</code> for a
+checkout whose repository declares a lock but runs no hook.</p>
 
 </article>
 
@@ -403,7 +415,7 @@ itself, stop anyone from pushing.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#a-lock-belongs-to-a-repository">A lock belongs to a repository</a></li><li class="lvl-2"><a href="#declared-once-keyed-by-the-origin">Declared once, keyed by the origin</a></li><li class="lvl-2"><a href="#holding-a-lock">Holding a lock</a></li><li class="lvl-2"><a href="#waiting-for-a-lock">Waiting for a lock</a></li><li class="lvl-2"><a href="#what-a-session-is-told">What a session is told</a></li><li class="lvl-2"><a href="#who-may-see-and-hold-a-lock">Who may see and hold a lock</a></li>
+      <li class="lvl-2"><a href="#a-lock-belongs-to-a-repository">A lock belongs to a repository</a></li><li class="lvl-2"><a href="#declared-once-keyed-by-the-origin">Declared once, keyed by the origin</a></li><li class="lvl-2"><a href="#holding-a-lock">Holding a lock</a></li><li class="lvl-2"><a href="#waiting-for-a-lock">Waiting for a lock</a></li><li class="lvl-2"><a href="#what-a-session-is-told">What a session is told</a></li><li class="lvl-2"><a href="#who-may-see-and-hold-a-lock">Who may see and hold a lock</a></li><li class="lvl-2"><a href="#checked-at-commit-time">Checked at commit time</a></li>
     </ul>
   </aside>
   

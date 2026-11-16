@@ -158,5 +158,19 @@ A lock has no project, so no project fence judges it:
   account declared; the console shows them to the owner.
 
 A lock is a coordination signal between cooperating agents: holding one tells
-every other agent that the refs it guards are being landed. It does not, by
-itself, stop anyone from pushing.
+every other agent that the refs it guards are being landed. On its own it does
+not stop anyone from pushing; the hooks below do.
+
+## Checked at commit time
+
+Two git hooks a repository can add make git check the lock where a guarded ref
+moves: reference-transaction, for every ref update in the checkout (a commit, a
+merge, a rebase, a reset, a tag), and pre-push, for the refs a push updates on
+the remote. Each runs `seam lock check`, which refuses an update that moves a
+guarded ref unless the caller may move it: an agent session only while it holds
+the lock, anyone else, such as the owner at a terminal, unless another session
+holds it. The refusal names the lock, the holder, since and until. A missing
+`seam` or an unreachable daemon warns and lets the update through. See
+[commit-time lock checks](https://thereisnospoon.org/docs/guides/coordinate-agents/#commit-time-lock-checks)
+for the hook lines and what each refusal means, and `seam doctor` for a
+checkout whose repository declares a lock but runs no hook.

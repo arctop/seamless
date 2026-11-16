@@ -72,6 +72,7 @@ func commands() []cmd {
 		lockDeclareCmd,
 		lockAcquireCmd,
 		lockReleaseCmd,
+		lockCheckCmd,
 
 		accessRequestCmd,
 		approveCmd,

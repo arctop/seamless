@@ -1,0 +1,35 @@
+#!/bin/sh
+# Repo-lock check at push time: refuses a push that moves a ref one of this
+# repository's locks guards on the remote (refs/heads/main, a release tag)
+# unless the caller may move it -- an agent session only while it holds the
+# lock, anyone else unless another session holds it. The lock is the one this
+# checkout's repository declares, whatever URL the push goes to. See the
+# coordinate-agents guide.
+#
+# seam lock check exits 77 to refuse, and only 77 refuses. Anything else -- no
+# seam on PATH, a seam too old to have `lock check`, a failure -- warns and lets
+# the push through, so a broken check never wedges git.
+
+updates=$(cat)
+case $updates in
+*" refs/"*) ;;
+*) exit 0 ;;
+esac
+
+if ! command -v seam >/dev/null 2>&1; then
+	echo "pre-push: seam is not on PATH, so the repository's locks were not checked" >&2
+	exit 0
+fi
+if ! seam lock check --help >/dev/null 2>&1; then
+	echo "pre-push: this seam has no lock check (it predates repo locks), so the repository's locks were not checked" >&2
+	exit 0
+fi
+
+printf '%s\n' "$updates" | seam lock check --hook pre-push -- "$@"
+status=$?
+case $status in
+0) exit 0 ;;
+77) exit 1 ;;
+esac
+echo "pre-push: seam lock check exited $status, so the repository's locks were not checked" >&2
+exit 0

@@ -15,9 +15,10 @@
 //
 // The name is the nearest ancestor that is not a shell, because a client may run
 // its helpers through one: Claude Code runs headersHelper with `sh -c`, while its
-// exec-form hooks and stdio servers are its direct children. The name carries the
-// process's start time as well as its pid, so a reused pid can never be mistaken
-// for the agent that used to own it.
+// exec-form hooks and stdio servers are its direct children. git is passed over
+// too, since it runs `seam lock check` from its hooks on the agent's behalf. The
+// name carries the process's start time as well as its pid, so a reused pid can
+// never be mistaken for the agent that used to own it.
 //
 // Every failure reports false and the caller sends nothing: the daemon then
 // resolves the call exactly as it did before this package existed.
@@ -62,7 +63,8 @@ func Anchor() (string, bool) {
 	return anchorFrom(os.Getpid(), look)
 }
 
-// anchorFrom walks up from self to the nearest ancestor that is not a shell.
+// anchorFrom walks up from self to the nearest ancestor that is neither a shell
+// nor git (isShell, isGit).
 //
 // Each step checks that the parent started no later than its child. On Unix that
 // always holds and costs nothing; on Windows the recorded parent id outlives the
@@ -79,7 +81,7 @@ func anchorFrom(self int, look func(int) (procInfo, error)) (string, bool) {
 		if err != nil || info.start > cur.start {
 			return "", false
 		}
-		if !isShell(info.name) {
+		if !isShell(info.name) && !isGit(info.name) {
 			return format(pid, info.start), true
 		}
 		cur, pid = info, info.ppid
@@ -88,10 +90,12 @@ func anchorFrom(self int, look func(int) (procInfo, error)) (string, bool) {
 }
 
 // shells are the interpreters a client may put between itself and a helper.
-// Nothing else is skipped: a wrapper that is not a shell (the Claude desktop
-// app's `disclaimer`, say) is an anchor of its own, which can only ever fail to
-// match -- skipping it would pin every MCP server that app spawns to the app
-// itself, and one session's hook would then claim all of them.
+// Nothing else is skipped but git (isGit), which runs the repo-lock hooks: a
+// wrapper that is not a shell (the Claude desktop app's `disclaimer`, say) is
+// an anchor of its own, which can only ever fail to match -- skipping it would
+// pin every MCP server that app spawns to the app itself, and one session's
+// hook would then claim all of them. git is different because it never sits
+// above an agent, only below one.
 var shells = map[string]bool{
 	"sh": true, "bash": true, "zsh": true, "dash": true, "ksh": true, "mksh": true,
 	"ash": true, "fish": true, "csh": true, "tcsh": true, "busybox": true, "nu": true,
@@ -102,13 +106,34 @@ var shells = map[string]bool{
 // the platforms report: a path, a login shell's leading dash, Windows' .exe
 // suffix, and any letter case.
 func isShell(name string) bool {
+	return shells[baseName(name)]
+}
+
+// isGit reports whether an executable name is git, or one of its dashed
+// programs (git-receive-pack; Linux truncates a name to 15 bytes, which keeps
+// the prefix). The walk passes over git as it passes over a shell: git runs
+// its hooks -- and its aliases, `rebase --exec` and `bisect run` -- as its own
+// children, so `seam lock check` in a reference-transaction hook sits below
+// git (seam <- sh <- git <- zsh <- claude) and must name the agent above it,
+// the one the session-start hook stamped. Skipping git cannot pin anything to
+// the wrong agent: git never hosts an agent session, so the walk can only
+// reach the agent that ran git, or, at a terminal, whatever owns the terminal
+// (tmux, login), which no session is stamped with and which binds nothing.
+func isGit(name string) bool {
+	n := baseName(name)
+	return n == "git" || strings.HasPrefix(n, "git-")
+}
+
+// baseName is an executable name in the one form isShell and isGit compare:
+// its last path element, lowercased, without a login shell's leading dash or
+// Windows' .exe suffix.
+func baseName(name string) string {
 	n := strings.ToLower(strings.TrimSpace(name))
 	if i := strings.LastIndexAny(n, `/\`); i >= 0 {
 		n = n[i+1:]
 	}
 	n = strings.TrimPrefix(n, "-")
-	n = strings.TrimSuffix(n, ".exe")
-	return shells[n]
+	return strings.TrimSuffix(n, ".exe")
 }
 
 // format renders an identity as "<pid>.<start>".

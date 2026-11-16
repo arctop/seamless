@@ -35,8 +35,13 @@ func main() {
 //
 //	--help, -h, help, <cmd> --help   0, to stdout
 //	success                          0
-//	handler error                    1
+//	handler error                    1, or the error's own seamExitCode()
 //	unparseable command line         c.usageExit() -- 2, except hook (see spec.go)
+//
+// A handler error carries its own code only through the unexported
+// seamExitCode method, so only an error type in this package can: an
+// *exec.ExitError a handler wraps keeps exit 1. seam lock check's refusal is
+// one (77, the only code its git hooks refuse on).
 //
 // --help reaching stdout at 0 is itself a fix: flag.ErrHelp used to fall through
 // the same funnel as a real failure, so `seam capture --help` printed
@@ -80,6 +85,10 @@ func dispatch(ctx context.Context, e *env, argv []string) int {
 	}
 	if err := p.cmd.run(ctx, e, p.opts, p.pos); err != nil {
 		fmt.Fprintln(e.stderr, "error:", err)
+		var coded interface{ seamExitCode() int }
+		if errors.As(err, &coded) {
+			return coded.seamExitCode()
+		}
 		return 1
 	}
 	return 0

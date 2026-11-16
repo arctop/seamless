@@ -1689,6 +1689,14 @@ the index, so under partial staging it describes the tree you are in and not the
 commit you are making. It catches gofmt/docs/lint drift early; `make check` and
 CI still decide whether the work is done. Bypass with `git commit --no-verify`.
 
+The same target enables `.githooks/reference-transaction` and
+`.githooks/pre-push`, which run `seam lock check` (repo locks, plan
+repo-locks): with repo locks on and a lock declared for the repository, a
+commit, merge, reset, tag or push that moves a guarded ref is refused unless
+the calling agent session holds the lock. `--no-verify` does not skip
+reference-transaction. The scripts refuse only on exit 77, so a `seam` without
+`lock check`, or none on PATH, warns and lets git through.
+
 `make lint` catches `ulid.MustNew`, `time.Sleep`, missing `rows.Err()`,
 `err ==` sentinel comparisons, and -- via `errcheck` with `check-blank` --
 errors discarded into `_`. That last one is the guardrail for the meta-rule

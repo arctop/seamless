@@ -10,11 +10,15 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
+	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/features"
+	"github.com/arctop/seamless/internal/gitread"
 )
 
 // expectedTools mirrors mcp.ToolCount without importing the mcp server package
@@ -101,10 +105,12 @@ func runDoctor(ctx context.Context, e *env, _ *noOpts, _ []string) error {
 	defer func() { _ = cli.Close() }()
 
 	tools, terr := cli.ListTools(ctx, mcp.ListToolsRequest{})
+	lockTools := false
 	if terr != nil {
 		report(false, "mcp_tools", "tools/list failed (bad key?): "+terr.Error())
 	} else {
 		locked := slices.ContainsFunc(tools.Tools, func(t mcp.Tool) bool { return t.Name == lockedOnlyTool })
+		lockTools = slices.ContainsFunc(tools.Tools, func(t mcp.Tool) bool { return t.Name == "locks_list" })
 		ok, detail := toolsCheck(cfg, len(tools.Tools), locked)
 		report(ok, "mcp_tools", detail)
 	}
@@ -115,6 +121,14 @@ func runDoctor(ctx context.Context, e *env, _ *noOpts, _ []string) error {
 	} else {
 		ps, _ := out["projects"].([]any)
 		report(true, "projects", fmt.Sprintf("%d registered", len(ps)))
+	}
+
+	// Repo locks on: a lock declared for the working directory's repository is
+	// checked at commit time only where the checkout runs the hooks.
+	if lockTools {
+		if label, detail := lockHooksCheck(ctx, cli, ""); label != "" {
+			fmt.Fprintf(e.stdout, "  [%-4s] %s: %s\n", label, "repo_lock_hooks", detail)
+		}
 	}
 
 	if failed > 0 {
@@ -198,4 +212,41 @@ func consoleFeatures(cfg config.Config) (*config.Features, error) {
 		return nil, errors.New("settings JSON carries no featuresConfig")
 	}
 	return data.FeaturesConfig, nil
+}
+
+// lockHooksDocs is where the hook lines any repository can add are.
+const lockHooksDocs = "https://thereisnospoon.org/docs/guides/coordinate-agents/#commit-time-lock-checks"
+
+// lockHooksCheck is seam doctor's repo_lock_hooks row for the checkout at dir
+// ("" = the working directory): "ok" when its repository declares a lock and
+// the checkout runs the repo-lock hooks (gitread.LockHooksActive), a "note"
+// saying "hooks off" with the remedy when it does not, and no row ("") when
+// dir is no checkout, the repository declares no active lock, or the locks
+// cannot be read. A note and not a failure: the hooks are opt-in.
+func lockHooksCheck(ctx context.Context, cli *mcpclient.Client, dir string) (label, detail string) {
+	checkout, err := lkCheckout(dir)
+	if err != nil {
+		return "", ""
+	}
+	out, _, err := lkCall(ctx, cli, "locks_list", checkout)
+	if err != nil {
+		return "", ""
+	}
+	var labels []string
+	locks, _ := out["locks"].([]any)
+	for _, item := range locks {
+		if l, _ := item.(map[string]any); l != nil && str(l["state"]) == string(core.RepoLockActive) {
+			labels = append(labels, "LOCK "+str(l["label"]))
+		}
+	}
+	if len(labels) == 0 {
+		return "", ""
+	}
+	root := str(checkout["repo_root"])
+	if gitread.LockHooksActive(root) {
+		return "ok", fmt.Sprintf("%s: checked at commit and push time in %s", strings.Join(labels, ", "), root)
+	}
+	return "note", fmt.Sprintf("hooks off: %s is declared for this repository, but %s runs no reference-transaction "+
+		"hook that calls seam lock check, so a commit that moves a guarded ref here is not checked; "+
+		"add the hooks (%s)", strings.Join(labels, ", "), root, lockHooksDocs)
 }

@@ -185,7 +185,8 @@ help:
 	@echo "    restart            restart the installed service in place"
 	@echo "    status             print the installed service's state"
 	@echo "    logs               follow the service log ($(SVC_LOG))"
-	@echo "  install-git-hooks        enable .githooks/ (pre-commit runs check-fast)"
+	@echo "  install-git-hooks        enable .githooks/ (pre-commit runs check-fast; reference-transaction"
+	@echo "                           and pre-push check the repo locks with seam lock check)"
 	@echo "  uninstall-git-hooks      disable .githooks/"
 	@echo "  install-onboard-skill    install seam-onboard from the checkout (CLIENT=claude|codex|all|detect;"
 	@echo "                           'make install' already installs the embedded copy)"
@@ -458,10 +459,14 @@ metrics:
 # them is a per-clone opt-in rather than something a checkout imposes on you.
 # The path stays relative: git resolves it against each worktree's top level, so
 # linked worktrees under .claude/worktrees/ run their own checkout's copy.
+# reference-transaction and pre-push run `seam lock check` (the repo locks:
+# docs-src/guides/coordinate-agents.md); they only ever refuse on its exit 77,
+# so a seam without `lock check`, or none on PATH, warns and lets git through.
 # (Distinct from `install-hooks`, which installs agent-client hooks.)
 install-git-hooks:
 	@git config core.hooksPath .githooks
-	@echo "git hooks enabled: pre-commit runs 'make check-fast' (bypass: git commit --no-verify)"
+	@echo "git hooks enabled: pre-commit runs 'make check-fast' (bypass: git commit --no-verify);"
+	@echo "  reference-transaction and pre-push check the repo locks (seam lock check; the owner's override: seam lock release --force)"
 
 uninstall-git-hooks:
 	@git config --unset core.hooksPath 2>/dev/null || true
