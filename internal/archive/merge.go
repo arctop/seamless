@@ -82,6 +82,10 @@ import (
 //     sessions, which a merge does not carry. Merging one would be a lock
 //     nobody declared here, and a waiting declaration one this owner never
 //     saw filed; the owner declares again here, with seam lock declare.
+//   - repo_lock_waiters: the sessions queued for those locks, each a place
+//     that lapses within minutes unless its session keeps asking. A merge
+//     carries neither the locks nor the sessions, so a place would be a
+//     wait for a lock that is not here.
 //   - schema_migrations: the destination's own migration history.
 //
 // A host-local table (one keyed by which machine a row came from) does not

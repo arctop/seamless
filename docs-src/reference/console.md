@@ -738,11 +738,14 @@ says the item is there and links back once you unlock it.
 Only while the **Repo locks** [optional feature](#optional-features) is on; a
 Standard screen. Every [repo lock](/concepts/repo-locks/), shown with its
 repository and its name (**LOCK seamless main**): the refs it guards, whether it
-is free, held or lapsed, the session that holds it with since and until, the
-repository identities that resolve to it, and the projects whose restricted
-accounts may hold it. A lock belongs to no project, so the page lists every
-one; a holder in a project this browser has not unlocked reads "a session this
-console does not show", and such a listed project is left out.
+is free, held or lapsed, the session that holds it with since and until (and
+the restricted account that session belongs to, when it is one), the lock's
+queue while sessions wait for it (how many, and the next one, with its account
+when it is a restricted account's), the repository identities that resolve to
+it, and the projects whose restricted accounts may hold it. A lock belongs to
+no project, so the page lists every one; a holder or a next waiter in a project
+this browser has not unlocked reads "a session this console does not show",
+and such a listed project is left out.
 
 - **Waiting for your approval** - the declarations restricted accounts filed:
   nobody can hold one until you **Approve** it, and **Discard** leaves the

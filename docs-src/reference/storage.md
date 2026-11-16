@@ -170,13 +170,15 @@ so losing `seam.db` loses them:
   agent process that owns an ambient session (what binds the agent's tool calls
   to it).
 - `tasks` and `task_deps` - the ready-queue, plan slugs, claims, and leases.
-- `repo_locks`, `repo_lock_aliases` and `repo_lock_projects` - the
-  [repo locks](/concepts/repo-locks/): each lock's name, guarded refs, state,
-  holder, since and until; the repository identities that resolve to it (a
-  normalized origin URL, or a host and a checkout root); and the projects whose
-  restricted accounts may hold it. An archive carries them, but a merge into
+- `repo_locks`, `repo_lock_aliases`, `repo_lock_projects` and
+  `repo_lock_waiters` - the [repo locks](/concepts/repo-locks/): each lock's
+  name, guarded refs, state, holder, since and until; the repository
+  identities that resolve to it (a normalized origin URL, or a host and a
+  checkout root); the projects whose restricted accounts may hold it; and its
+  queue, one row per waiting session with when it joined and when its place
+  lapses unless it asks again. An archive carries them, but a merge into
   another instance does not: a lock is that server's declaration, and its
-  holder that server's session.
+  holder and its waiters that server's sessions.
 - `trials` - research lab records with queryable JSON metrics.
 - `events` - the append-only log behind telemetry, the console feed, and
   retrieval stats.

@@ -5363,7 +5363,16 @@ default the project the checkout maps to).
 
 A declaration from a [restricted account](/guides/peer-auth/) waits for the
 owner: it is stored as requested, nobody can hold it, and the owner approves
-or discards it on the console's Locks page. Everyone else declares directly.
+or discards it on the console's Locks page. It must list a project the account
+may write, or the account could not see its own lock. Everyone else declares
+directly.
+
+A declaration writes its refs and the checkout's identity where every caller
+reads them, so it is a write into the global scope: a conversation that may not
+write there (one bound to a confidential project, or confined by
+`isolation.requests`) is refused a declaration, and records no new identity of
+a checkout when it acquires a lock. It still lists, acquires, heartbeats and
+releases locks.
 
 ## Holding a lock
 
@@ -5390,6 +5399,69 @@ does, with the same compare-and-set:
   session took, whose hold the owner force-released, or whose lapsed hold the
   reaper freed is told once, as for a [lost claim](/reference/hooks/#claim-notices):
   a `Lock lost: ...` line naming the lock by id and name.
+
+## Waiting for a lock
+
+A busy lock is taken first come, first served. `seam lock acquire --wait` (or
+`locks_acquire` with `wait`) joins the lock's queue instead of being refused,
+and asks again every few seconds until the lock is the session's:
+
+- **No barging.** While anyone waits, only the head of the queue may take the
+  lock, the moment it is free or its hold lapses. Anyone else is refused with
+  the next waiter and their own place in the queue (or that they are not in
+  it). The holder's own heartbeat is never refused.
+- **A place lasts while its waiter keeps asking.** A waiter that has not asked
+  again within two minutes loses its place, and so does one whose session ended
+  or is no longer live, so a killed or interrupted wait never blocks the
+  sessions behind it. A waiter that asks again after losing its place joins at
+  the back.
+- **The grant is an ordinary hold.** The head takes the lock with its next
+  attempt, with a lease of its own, and leaves the queue; every other surface
+  sees an ordinary holder.
+- **Leaving.** `locks_release` from a session that waits and does not hold the
+  lock leaves the queue. `seam lock acquire --wait --timeout 10m` gives up after
+  ten minutes: it leaves the queue and exits 1. Interrupting it leaves the queue
+  too. A session's places end with the session, as its holds do.
+
+`seam lock acquire --wait` is made for an agent harness's background mode: it
+prints its place on stderr when the place changes, and exits 0 once the
+session holds the lock, so the agent is re-invoked then. `seam lock list` and
+the console's Locks page show each lock's queue: how many sessions wait, and
+which is next (named where the reader may see that session).
+
+## What a session is told
+
+With repo locks on, a session that starts in a checkout of a repository with
+a declared lock - any checkout or worktree of it, on any machine - is told in
+its briefing, before it does anything:
+
+- one `LOCK` line per lock it may see: `free`, or who holds it, for how long
+  and until when, with the queue's length while anyone waits;
+- `LOCK hooks off` when its checkout runs no lock hook;
+- the other live sessions in a checkout of the repository, by name with their
+  idle minutes, counting the ones it may not see.
+
+Its prompts then repeat a lock's line once whenever the lock's holder
+changes, so a session waiting for a lock learns when it is free. A lock
+outside the session's reach, and a declaration still waiting for the owner,
+get no line. The lines and their rules are in
+[the hooks reference](/reference/hooks/#repo-locks).
+
+## Who may see and hold a lock
+
+A lock has no project, so no project fence judges it:
+
+- **The owner** sees and holds every lock, from any conversation on any host:
+  a lock's state carries no content.
+- **A [restricted account](/guides/peer-auth/#repo-locks)**, on this machine or
+  through a relay, sees and holds (and waits for) a lock only when one of its
+  listed projects is a project the account may write, judged on every request.
+  The owner alone sets the listed projects. Outside that reach the lock does not
+  exist for it: not listed, and refused in a missing lock's words.
+- **A holder or a waiter is named** only to a reader who may see that session;
+  anyone else reads "another session". A restricted reader sees no repository
+  identity at all, and no agent sees the identities of a lock a restricted
+  account declared; the console shows them to the owner.
 
 A lock is a coordination signal between cooperating agents: holding one tells
 every other agent that the refs it guards are being landed. It does not, by
@@ -9363,6 +9435,45 @@ example-desk (confidential))`. The mapping form is new after v0.8.5: an
 earlier release refuses it when the config loads, so update the daemon before
 you write one.
 
+### Repo locks {#repo-locks}
+
+A [repo lock](/concepts/repo-locks/) belongs to a repository, not to a
+project, so no project fence judges it. With the feature on, peer_auth decides
+who sees and holds one instead:
+
+- **You hold every lock**, from any conversation on any machine: over the
+  socket, over TCP, through a relay mapped to you, from a session in a
+  confidential project, from one confined by `isolation.requests`, and from a
+  session in a project locked to it (holding a lock files no access request).
+  A lock's state carries no content: its guarded refs, its holder, since and
+  until.
+- **A restricted account sees and holds a lock only through a listed project
+  it may write.** The listed projects are yours to set: your declaration lists
+  them, or an account's waiting declaration does once you approve it on the
+  console's Locks page. Nothing the account says about its checkout widens
+  them. It is judged on every request, as its reach is. A relay's restricted
+  account is judged the same way, and its reach is the open projects that
+  are not locked.
+- **Outside that reach a lock does not exist for it.** It is not listed, and an
+  acquire or a release by id or by checkout, or a declaration of the same
+  repository, is refused in the words a missing lock gets.
+- **A restricted holder has bounds.** Its lease has the same 4-hour ceiling as
+  every hold, it waits its turn in the lock's queue, you can force-release its
+  hold on the Locks page, and every acquire and release it makes is recorded
+  with its account, which the Locks page shows beside its session.
+- **A restricted reader sees a lock's label, refs, state and times.** It sees
+  the holding (or next waiting) session's name only for its own sessions, and
+  "another session" otherwise. It sees no repository identity (alias) at all.
+- **A declaration is text.** Its refs, and the checkout's origin and path, are
+  written where every caller reads them. So a conversation of yours that may
+  not write the global scope (one bound to a confidential project, or confined
+  by `isolation.requests`) is refused a declaration in the fence's own words,
+  and its acquire records no repository identity; it still lists, acquires,
+  heartbeats and releases. A restricted account's declaration must list a
+  project the account may write, and it waits for you. No agent, yours
+  included, sees the repository identities of a lock a restricted account
+  declared; the console shows them to you.
+
 ## Verify
 
 ```bash
@@ -12469,9 +12580,45 @@ whether it is `held`, `since` and `until` for a hold, its `aliases` and its
 `projects`. A holder is named (`holder`, `holder_session`) only to a caller who
 may read that session; a project is listed only where the caller may list it.
 
+Every lock also answers with:
+
+- `held_by_caller` - true when the lock is held, and by the session this
+  connection is bound to: by the agent-process identity its requests carry, or
+  by a `session_start` on it. A connection bound to no session reads false,
+  whatever session an unbound call would act as.
+- `waiting` - how many sessions wait for the lock.
+- `next_waiter_session` - the session first in the queue, only where the caller
+  may read that session (as for the holder).
+
+`locks_list` adds `caller_bound` beside `locks`: whether this connection is
+bound to an active session at all, the same binding `held_by_caller` reads.
+
+A [restricted account](/guides/peer-auth/#repo-locks) sees no `aliases` (the
+list is empty), and no caller sees the aliases of a lock a restricted account
+declared. A lock a restricted account may not reach is not listed for it, and
+by id, by checkout or through `locks_declare` it reads exactly as a lock that
+does not exist.
+
+## Waiting for a lock
+
+`locks_acquire` with `wait: true` joins the lock's queue when the lock cannot
+be yours now, or keeps your place in it, and answers `acquired: false`,
+`queued: true`, your `position` (1 is next) and `place_until`, when your place
+lapses unless you ask again. Ask again within two minutes to keep the place;
+`seam lock acquire --wait` does so every few seconds. While anyone waits, only
+the session first in the queue takes the lock; anyone else's acquire is
+refused with the next waiter and their own place. A `locks_release` from a
+session that waits and does not hold the lock leaves the queue and answers
+`released: false`, `left_queue: true`.
+
+A declaration from a conversation that may not write the global scope (bound
+to a confidential project, or confined by `isolation.requests`) is refused in
+the fence's own words, and such a conversation's `locks_acquire` records no new
+repository identity on the lock.
+
 ## locks_list {#locks_list}
 
-List repo locks: each lock's repository and name, the refs it guards, whether it is held, by which session (when you may see that session), since and until when, the repository identities that resolve to it, and the projects whose restricted accounts the declaration lists. Pass a checkout's identity (cwd, or repo_root and repo_origin) to list only that repository's locks. A declaration waiting for the owner's approval is listed with state requested. Read-only.
+List repo locks: each lock's repository and name, the refs it guards, whether it is held, by which session (when you may see that session), since and until when, whether you hold it, how many sessions wait for it and which is next, the repository identities that resolve to it, and the projects whose restricted accounts the declaration lists. Pass a checkout's identity (cwd, or repo_root and repo_origin) to list only that repository's locks. A declaration waiting for the owner's approval is listed with state requested. Read-only.
 
 **Optional** - part of *Repo locks*, hidden when the `repo_locks` feature is disabled: the tool leaves `tools/list` and a call to it is refused as an unknown tool, while its stored data stays exactly where it was. See [Optional features](/reference/console/#optional-features).
 
@@ -12505,7 +12652,7 @@ Declare a lock on a repository's refs, once per repository and name: the lock ag
 
 ## locks_acquire {#locks_acquire}
 
-Take a repo lock for the current session, with a lease, before landing changes on the refs it guards. Re-acquiring a lock you hold refreshes the lease: the heartbeat for a long landing. A lock another session holds under a live lease is refused, naming the holder when you may see that session, since and until; a lapsed lease is taken over. A declaration still waiting for the owner cannot be held. Name the lock by id, or by the checkout and name (default main). Release it with locks_release once the refs have landed; a hold also lapses at the end of its lease.
+Take a repo lock for the current session, with a lease, before landing changes on the refs it guards. Re-acquiring a lock you hold refreshes the lease: the heartbeat for a long landing. A lock another session holds under a live lease is refused, naming the holder when you may see that session, since and until; a lapsed lease is taken over. Sessions waiting for a lock take it first come, first served: while any wait, only the next one may take it, and anyone else is refused with the next waiter and their own place. With wait, a refusal joins the queue instead (or keeps your place) and answers queued, with your position; ask again within two minutes to keep the place, or run `seam lock acquire --wait` in the background, which asks every few seconds and returns once you hold the lock. A declaration still waiting for the owner cannot be held. Name the lock by id, or by the checkout and name (default main). Release it with locks_release once the refs have landed; a hold also lapses at the end of its lease.
 
 **Optional** - part of *Repo locks*, hidden when the `repo_locks` feature is disabled: the tool leaves `tools/list` and a call to it is refused as an unknown tool, while its stored data stays exactly where it was. See [Optional features](/reference/console/#optional-features).
 
@@ -12521,10 +12668,11 @@ Take a repo lock for the current session, with a lease, before landing changes o
 | `repo_root` | string | no | Absolute root of the checkout, resolved on its own machine |
 | `session` | string | no | the acting agent's session: the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, another session name, or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- then a sole active ambient. Pass it when a call reports the agent as ambiguous: the bare call then fails rather than guesses. |
 | `session_id` | string | no | the acting agent's session ULID; takes precedence over session and the bound session |
+| `wait` | boolean | no | join the lock's queue, or keep your place in it, when the lock cannot be yours now; the answer is queued with your position instead of a refusal (default false) |
 
 ## locks_release {#locks_release}
 
-Release a repo lock the current session holds, live or lapsed, so another session can take it. Only the holder may release; the owner can force-release any hold from the console. Name the lock by id, or by the checkout and name (default main).
+Release a repo lock the current session holds, live or lapsed, so another session can take it: the next waiter, when sessions wait for it. A session that waits for the lock and does not hold it leaves the queue instead. Only the holder may release; the owner can force-release any hold from the console. Name the lock by id, or by the checkout and name (default main).
 
 **Optional** - part of *Repo locks*, hidden when the `repo_locks` feature is disabled: the tool leaves `tools/list` and a call to it is refused as an unknown tool, while its stored data stays exactly where it was. See [Optional features](/reference/console/#optional-features).
 
@@ -13139,8 +13287,10 @@ seam lock list [--cwd DIR] [--here] [--json]
 
 Calls `locks_list` and prints one line per lock: `LOCK <repo> <name>`, whether
 it is free, held (by which session, when you may see it, and until when) or
-waiting for the owner's approval, and its guarded refs. `--here` (or `--cwd`)
-lists only the locks of the repository the directory is in.
+waiting for the owner's approval, its guarded refs, and, when sessions wait for
+it, how many and which is next (`2 waiting, next cc/...`, the name only when you
+may see that session). `--here` (or `--cwd`) lists only the locks of the
+repository the directory is in.
 
 ### seam lock declare {#seam_lock_declare}
 
@@ -13158,14 +13308,25 @@ owner's approval on the console's Locks page.
 ### seam lock acquire {#seam_lock_acquire}
 
 ```bash
-seam lock acquire [--cwd DIR] [--id ID] [--json] [--lease SECONDS] [--name NAME] [--session NAME]
+seam lock acquire [--cwd DIR] [--id ID] [--json] [--lease SECONDS] [--name NAME] [--session NAME] [--timeout D] [--wait]
 ```
 
 Calls `locks_acquire` and prints the lease's end. Acquiring a lock you already
 hold refreshes its lease: that is the heartbeat for a long landing. A lock
-another session holds is refused, naming the holder where you may see it.
+another session holds is refused, naming the holder where you may see it, and
+so is a free lock while other sessions wait for it, naming the next waiter.
 `--lease` overrides the server's default (900 seconds) and is only sent when
 greater than zero; `--id` names the lock instead of the checkout.
+
+`--wait` joins the lock's queue instead, and asks again every few seconds until
+the lock is yours: it prints `queued for LOCK <repo> <name>: number N of M` on
+stderr whenever its place changes, and once it holds the lock it prints the
+acquire line and exits 0. It is made for an agent's background mode, so the
+agent is re-invoked when the lock is its own. `--timeout D` (a duration such as
+`90s` or `10m`; default no limit) gives up after D: it leaves the queue and exits
+1, and an interrupt leaves the queue too. A refusal that is no place in the
+queue (no such lock, a declaration the owner has not approved) ends the wait at
+once. `--timeout` without `--wait` is refused.
 
 ### seam lock release {#seam_lock_release}
 
@@ -13173,7 +13334,8 @@ greater than zero; `--id` names the lock instead of the checkout.
 seam lock release [--cwd DIR] [--force] [--id ID] [--json] [--name NAME] [--session NAME]
 ```
 
-Without `--force`, calls `locks_release`, which only releases a hold you have.
+Without `--force`, calls `locks_release`, which releases a hold you have, or
+gives up your place in the lock's queue when you wait for it and hold nothing.
 `--force` is the owner override: it POSTs to the console's force-release route,
 which ends any hold, live or lapsed, and is refused from an agent's process on
 the peer_auth socket.
@@ -18218,11 +18380,14 @@ says the item is there and links back once you unlock it.
 Only while the **Repo locks** [optional feature](#optional-features) is on; a
 Standard screen. Every [repo lock](/concepts/repo-locks/), shown with its
 repository and its name (**LOCK seamless main**): the refs it guards, whether it
-is free, held or lapsed, the session that holds it with since and until, the
-repository identities that resolve to it, and the projects whose restricted
-accounts may hold it. A lock belongs to no project, so the page lists every
-one; a holder in a project this browser has not unlocked reads "a session this
-console does not show", and such a listed project is left out.
+is free, held or lapsed, the session that holds it with since and until (and
+the restricted account that session belongs to, when it is one), the lock's
+queue while sessions wait for it (how many, and the next one, with its account
+when it is a restricted account's), the repository identities that resolve to
+it, and the projects whose restricted accounts may hold it. A lock belongs to
+no project, so the page lists every one; a holder or a next waiter in a project
+this browser has not unlocked reads "a session this console does not show",
+and such a listed project is left out.
 
 - **Waiting for your approval** - the declarations restricted accounts filed:
   nobody can hold one until you **Approve** it, and **Discard** leaves the
@@ -19220,13 +19385,15 @@ so losing `seam.db` loses them:
   agent process that owns an ambient session (what binds the agent's tool calls
   to it).
 - `tasks` and `task_deps` - the ready-queue, plan slugs, claims, and leases.
-- `repo_locks`, `repo_lock_aliases` and `repo_lock_projects` - the
-  [repo locks](/concepts/repo-locks/): each lock's name, guarded refs, state,
-  holder, since and until; the repository identities that resolve to it (a
-  normalized origin URL, or a host and a checkout root); and the projects whose
-  restricted accounts may hold it. An archive carries them, but a merge into
+- `repo_locks`, `repo_lock_aliases`, `repo_lock_projects` and
+  `repo_lock_waiters` - the [repo locks](/concepts/repo-locks/): each lock's
+  name, guarded refs, state, holder, since and until; the repository
+  identities that resolve to it (a normalized origin URL, or a host and a
+  checkout root); the projects whose restricted accounts may hold it; and its
+  queue, one row per waiting session with when it joined and when its place
+  lapses unless it asks again. An archive carries them, but a merge into
   another instance does not: a lock is that server's declaration, and its
-  holder that server's session.
+  holder and its waiters that server's sessions.
 - `trials` - research lab records with queryable JSON metrics.
 - `events` - the append-only log behind telemetry, the console feed, and
   retrieval stats.
@@ -19519,8 +19686,9 @@ injected on prompt match - see the disambiguation below.
 **Repo lock** - a Seamless lock on a repository's refs (its main branch, or a
 tag pattern), declared once per repository and name and held with a lease by
 one session while it lands changes. It belongs to the repository, never to a
-project, and is always named with it: `LOCK seamless main`. An optional
-feature, off by default.
+project, and is always named with it: `LOCK seamless main`. Sessions waiting
+for a busy one queue for it and take it first come, first served
+(`seam lock acquire --wait`). An optional feature, off by default.
 
 **Reproject** - moving a Seamless memory to a different project that **already
 exists**; moving it to one that does not is a *split*.

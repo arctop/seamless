@@ -208,9 +208,12 @@ var registry = []Feature{
 		Tools:         []string{"locks_list", "locks_declare", "locks_acquire", "locks_release"},
 		NavIDs:        []string{"locks"},
 		RoutePrefixes: []string{"/console/locks"},
-		Default:       false,
-		get:           func(c config.Features) bool { return c.RepoLocks },
-		set:           func(c *config.Features, on bool) { c.RepoLocks = on },
+		Surfaces: []string{
+			"the LOCK and live-peer lines in session-start briefings, and the prompt's lock-holder notices",
+		},
+		Default: false,
+		get:     func(c config.Features) bool { return c.RepoLocks },
+		set:     func(c *config.Features, on bool) { c.RepoLocks = on },
 	},
 }
 

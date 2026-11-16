@@ -58,7 +58,16 @@ default the project the checkout maps to).
 
 A declaration from a [restricted account](/guides/peer-auth/) waits for the
 owner: it is stored as requested, nobody can hold it, and the owner approves
-or discards it on the console's Locks page. Everyone else declares directly.
+or discards it on the console's Locks page. It must list a project the account
+may write, or the account could not see its own lock. Everyone else declares
+directly.
+
+A declaration writes its refs and the checkout's identity where every caller
+reads them, so it is a write into the global scope: a conversation that may not
+write there (one bound to a confidential project, or confined by
+`isolation.requests`) is refused a declaration, and records no new identity of
+a checkout when it acquires a lock. It still lists, acquires, heartbeats and
+releases locks.
 
 ## Holding a lock
 
@@ -85,6 +94,69 @@ does, with the same compare-and-set:
   session took, whose hold the owner force-released, or whose lapsed hold the
   reaper freed is told once, as for a [lost claim](/reference/hooks/#claim-notices):
   a `Lock lost: ...` line naming the lock by id and name.
+
+## Waiting for a lock
+
+A busy lock is taken first come, first served. `seam lock acquire --wait` (or
+`locks_acquire` with `wait`) joins the lock's queue instead of being refused,
+and asks again every few seconds until the lock is the session's:
+
+- **No barging.** While anyone waits, only the head of the queue may take the
+  lock, the moment it is free or its hold lapses. Anyone else is refused with
+  the next waiter and their own place in the queue (or that they are not in
+  it). The holder's own heartbeat is never refused.
+- **A place lasts while its waiter keeps asking.** A waiter that has not asked
+  again within two minutes loses its place, and so does one whose session ended
+  or is no longer live, so a killed or interrupted wait never blocks the
+  sessions behind it. A waiter that asks again after losing its place joins at
+  the back.
+- **The grant is an ordinary hold.** The head takes the lock with its next
+  attempt, with a lease of its own, and leaves the queue; every other surface
+  sees an ordinary holder.
+- **Leaving.** `locks_release` from a session that waits and does not hold the
+  lock leaves the queue. `seam lock acquire --wait --timeout 10m` gives up after
+  ten minutes: it leaves the queue and exits 1. Interrupting it leaves the queue
+  too. A session's places end with the session, as its holds do.
+
+`seam lock acquire --wait` is made for an agent harness's background mode: it
+prints its place on stderr when the place changes, and exits 0 once the
+session holds the lock, so the agent is re-invoked then. `seam lock list` and
+the console's Locks page show each lock's queue: how many sessions wait, and
+which is next (named where the reader may see that session).
+
+## What a session is told
+
+With repo locks on, a session that starts in a checkout of a repository with
+a declared lock - any checkout or worktree of it, on any machine - is told in
+its briefing, before it does anything:
+
+- one `LOCK` line per lock it may see: `free`, or who holds it, for how long
+  and until when, with the queue's length while anyone waits;
+- `LOCK hooks off` when its checkout runs no lock hook;
+- the other live sessions in a checkout of the repository, by name with their
+  idle minutes, counting the ones it may not see.
+
+Its prompts then repeat a lock's line once whenever the lock's holder
+changes, so a session waiting for a lock learns when it is free. A lock
+outside the session's reach, and a declaration still waiting for the owner,
+get no line. The lines and their rules are in
+[the hooks reference](/reference/hooks/#repo-locks).
+
+## Who may see and hold a lock
+
+A lock has no project, so no project fence judges it:
+
+- **The owner** sees and holds every lock, from any conversation on any host:
+  a lock's state carries no content.
+- **A [restricted account](/guides/peer-auth/#repo-locks)**, on this machine or
+  through a relay, sees and holds (and waits for) a lock only when one of its
+  listed projects is a project the account may write, judged on every request.
+  The owner alone sets the listed projects. Outside that reach the lock does not
+  exist for it: not listed, and refused in a missing lock's words.
+- **A holder or a waiter is named** only to a reader who may see that session;
+  anyone else reads "another session". A restricted reader sees no repository
+  identity at all, and no agent sees the identities of a lock a restricted
+  account declared; the console shows them to the owner.
 
 A lock is a coordination signal between cooperating agents: holding one tells
 every other agent that the refs it guards are being landed. It does not, by

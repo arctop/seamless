@@ -85,6 +85,11 @@ type RepoLock struct {
 	// arrival order with the head first; empty when nobody waits. A surface
 	// shows len(Waiters) as the queue's length and Waiters[0] as the next
 	// waiter, naming a waiter only where it may name a holder.
+	//
+	// It holds only the waiters a grant could still reach: a waiter keeps its
+	// place only while it asks again within RepoLockWaitLease, so one whose
+	// place lapsed leaves the list, as does one whose session ended or is no
+	// longer live (Session.LiveAsOf).
 	Waiters []string `json:"waiters,omitempty"`
 	// CreatedBy is the declaring session's ULID, "" when the declaration named
 	// no session; Account is the restricted account that declared it, "" for
@@ -147,6 +152,22 @@ func (l RepoLock) Label() string {
 // DefaultRepoLockName is the lock a declaration or a hold names when it names
 // none: the one that guards the main branch.
 const DefaultRepoLockName = "main"
+
+// RepoLockWaitLease is how long a waiter keeps its place in a lock's queue
+// after it last asked for the lock. A waiter that asks again in time keeps its
+// place (`seam lock acquire --wait` asks every few seconds); one that stopped
+// asking -- a killed wait, an agent that moved on -- is skipped, so it never
+// blocks a free lock for the sessions behind it.
+const RepoLockWaitLease = 2 * time.Minute
+
+// NextWaiter is the head of the lock's queue, the one session that may take
+// the lock next while anyone waits; "" when nobody waits.
+func (l RepoLock) NextWaiter() string {
+	if len(l.Waiters) == 0 {
+		return ""
+	}
+	return l.Waiters[0]
+}
 
 // maxRepoLockName bounds a lock's name.
 const maxRepoLockName = 64
@@ -319,7 +340,10 @@ func FollowLocalOrigin(origin, base string, read func(path string) (mainRoot, or
 // lock; session_id: the session that acted, or the holder a release freed;
 // payload: action -- one of the RepoLockAction words -- and name, plus
 // lease_seconds, reclaimed and prior_holder for a hold, aliases for an alias
-// record, and by for the console's own actions). Never a path or a free word.
+// record, position for a place in the queue, and by for the console's own
+// actions; account names the restricted account that acted, on an acquire, a
+// heartbeat, a release and a queue change, and is absent for the owner
+// principal). Never a path or a free word.
 const EventRepoLockChanged EventKind = "repo_lock.changed"
 
 // The RepoLockAction words, the action of an EventRepoLockChanged.
@@ -333,4 +357,6 @@ const (
 	RepoLockActionForceReleased = "force_released" // the owner let it go, from the console
 	RepoLockActionApproved      = "approved"       // the owner approved a waiting declaration
 	RepoLockActionDiscarded     = "discarded"      // the owner discarded a waiting declaration
+	RepoLockActionQueued        = "queued"         // a session joined the lock's queue
+	RepoLockActionLeftQueue     = "left_queue"     // a waiting session left the queue (released its place)
 )

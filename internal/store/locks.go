@@ -96,15 +96,24 @@ type RepoLockDeclared struct {
 	Added []core.RepoLockAlias
 }
 
-// RepoLockAcquired reports a successful AcquireRepoLock. Heartbeat is true when
-// the session already held the lock and refreshed its lease. Reclaimed is true
+// RepoLockAcquired reports an AcquireRepoLock. Heartbeat is true when the
+// session already held the lock and refreshed its lease. Reclaimed is true
 // when a different session's lapsed hold was taken; PriorHolder then names that
 // session (ClaimResult's Reclaimed and PriorHolder).
+//
+// Queued is true when the session did not take the lock and holds a place in
+// its queue instead (an acquire that waits, AcquireRepoLockWaiting), its place
+// lapsing at PlaceUntil unless it asks again. Position is the session's place,
+// 1 for the head and 0 for none: on a queued answer, and on a refusal
+// (ErrRepoLockHeld, ErrRepoLockQueued) too, so the refusal can name it.
 type RepoLockAcquired struct {
 	Lock        core.RepoLock
 	Heartbeat   bool
 	Reclaimed   bool
 	PriorHolder string
+	Queued      bool
+	Position    int
+	PlaceUntil  *time.Time
 }
 
 // RepoLockForceReleased reports a force-release: the lock as it now stands,
@@ -295,7 +304,7 @@ type lkQuerier interface {
 // ListRepoLocks returns every lock, waiting declarations included, oldest
 // first, each with its aliases (origins first) and its listed projects.
 func ListRepoLocks(ctx context.Context, db *sql.DB) ([]core.RepoLock, error) {
-	locks, err := lkLocks(ctx, db, `SELECT `+lkLockCols+` FROM repo_locks ORDER BY created_at, id`)
+	locks, err := lkLocks(ctx, db, time.Now().UTC(), `SELECT `+lkLockCols+` FROM repo_locks ORDER BY created_at, id`)
 	if err != nil {
 		return nil, fmt.Errorf("store.ListRepoLocks: %w", err)
 	}
@@ -305,23 +314,24 @@ func ListRepoLocks(ctx context.Context, db *sql.DB) ([]core.RepoLock, error) {
 // RepoLockByID returns one lock with its aliases and projects; found is false
 // when the id names none.
 func RepoLockByID(ctx context.Context, db *sql.DB, id string) (core.RepoLock, bool, error) {
-	l, ok, err := lkLockByID(ctx, db, id)
+	l, ok, err := lkLockByID(ctx, db, id, time.Now().UTC())
 	if err != nil {
 		return core.RepoLock{}, false, fmt.Errorf("store.RepoLockByID: %w", err)
 	}
 	return l, ok, nil
 }
 
-func lkLockByID(ctx context.Context, q lkQuerier, id string) (core.RepoLock, bool, error) {
-	locks, err := lkLocks(ctx, q, `SELECT `+lkLockCols+` FROM repo_locks WHERE id = ?`, id)
+func lkLockByID(ctx context.Context, q lkQuerier, id string, now time.Time) (core.RepoLock, bool, error) {
+	locks, err := lkLocks(ctx, q, now, `SELECT `+lkLockCols+` FROM repo_locks WHERE id = ?`, id)
 	if err != nil || len(locks) == 0 {
 		return core.RepoLock{}, false, err
 	}
 	return locks[0], true, nil
 }
 
-// lkLocks runs a locks query and attaches each row's aliases and projects.
-func lkLocks(ctx context.Context, q lkQuerier, query string, args ...any) ([]core.RepoLock, error) {
+// lkLocks runs a locks query and attaches each row's aliases, its projects and
+// the waiters a grant could still reach at now (lqAttachWaiters).
+func lkLocks(ctx context.Context, q lkQuerier, now time.Time, query string, args ...any) ([]core.RepoLock, error) {
 	out, err := lkLockRows(ctx, q, query, args...)
 	if err != nil || len(out) == 0 {
 		return out, err
@@ -373,6 +383,9 @@ func lkLocks(ctx context.Context, q lkQuerier, query string, args ...any) ([]cor
 	if err := prows.Err(); err != nil {
 		return nil, err
 	}
+	if err := lqAttachWaiters(ctx, q, out, ids, in, now); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -406,14 +419,14 @@ func lkLockRows(ctx context.Context, q lkQuerier, query string, args ...any) ([]
 // host and path only where none is (owner decision D5). found is false when no
 // alias resolves.
 func ResolveRepoLock(ctx context.Context, db *sql.DB, aliases []core.RepoLockAlias, name string) (core.RepoLock, bool, error) {
-	l, ok, err := lkResolve(ctx, db, aliases, name)
+	l, ok, err := lkResolve(ctx, db, aliases, name, time.Now().UTC())
 	if err != nil {
 		return core.RepoLock{}, false, fmt.Errorf("store.ResolveRepoLock: %w", err)
 	}
 	return l, ok, nil
 }
 
-func lkResolve(ctx context.Context, q lkQuerier, aliases []core.RepoLockAlias, name string) (core.RepoLock, bool, error) {
+func lkResolve(ctx context.Context, q lkQuerier, aliases []core.RepoLockAlias, name string, now time.Time) (core.RepoLock, bool, error) {
 	for _, a := range aliases {
 		var id string
 		err := q.QueryRowContext(ctx, `SELECT lock_id FROM repo_lock_aliases WHERE alias = ? AND name = ?`, a.Alias, name).Scan(&id)
@@ -423,7 +436,7 @@ func lkResolve(ctx context.Context, q lkQuerier, aliases []core.RepoLockAlias, n
 		if err != nil {
 			return core.RepoLock{}, false, err
 		}
-		l, ok, err := lkLockByID(ctx, q, id)
+		l, ok, err := lkLockByID(ctx, q, id, now)
 		if err != nil {
 			return core.RepoLock{}, false, err
 		}
@@ -445,7 +458,7 @@ func RepoLocksFor(ctx context.Context, db *sql.DB, aliases []core.RepoLockAlias)
 		args = append(args, a.Alias)
 	}
 	in := "(" + strings.TrimSuffix(strings.Repeat("?,", len(args)), ",") + ")"
-	locks, err := lkLocks(ctx, db, `SELECT `+lkLockCols+` FROM repo_locks
+	locks, err := lkLocks(ctx, db, time.Now().UTC(), `SELECT `+lkLockCols+` FROM repo_locks
 		WHERE id IN (SELECT lock_id FROM repo_lock_aliases WHERE alias IN `+in+`) ORDER BY created_at, id`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store.RepoLocksFor: %w", err)
@@ -547,7 +560,7 @@ func lkDeclare(ctx context.Context, db *sql.DB, d RepoLockDeclaration, refs []st
 	defer func() { _ = tx.Rollback() }() // no-op after Commit
 	nowStr := core.FormatTime(now.UTC())
 
-	existing, found, err := lkResolve(ctx, tx, d.Aliases, d.Name)
+	existing, found, err := lkResolve(ctx, tx, d.Aliases, d.Name, now)
 	if err != nil {
 		return RepoLockDeclared{}, err
 	}
@@ -567,7 +580,7 @@ func lkDeclare(ctx context.Context, db *sql.DB, d RepoLockDeclaration, refs []st
 				}
 			}
 		}
-		l, ok, err := lkLockByID(ctx, tx, existing.ID)
+		l, ok, err := lkLockByID(ctx, tx, existing.ID, now)
 		if err != nil {
 			return RepoLockDeclared{}, err
 		}
@@ -607,7 +620,7 @@ func lkDeclare(ctx context.Context, db *sql.DB, d RepoLockDeclaration, refs []st
 			return RepoLockDeclared{}, err
 		}
 	}
-	l, ok, err := lkLockByID(ctx, tx, id)
+	l, ok, err := lkLockByID(ctx, tx, id, now)
 	if err != nil {
 		return RepoLockDeclared{}, err
 	}
@@ -656,7 +669,7 @@ func RecordRepoLockAliases(ctx context.Context, db *sql.DB, lockID string, alias
 		return nil, fmt.Errorf("store.RecordRepoLockAliases: begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }() // no-op after Commit
-	l, ok, err := lkLockByID(ctx, tx, lockID)
+	l, ok, err := lkLockByID(ctx, tx, lockID, now)
 	if err != nil {
 		return nil, fmt.Errorf("store.RecordRepoLockAliases: %w", err)
 	}
@@ -681,6 +694,14 @@ func RecordRepoLockAliases(ctx context.Context, db *sql.DB, lockID string, alias
 
 // AcquireRepoLock takes the lock for sessionID, or refreshes the lease of the
 // session already holding it (a heartbeat), stamping a lease that lapses at
+// now+lease: AcquireRepoLockWaiting without a wait. A session the lock's queue
+// does not put first is refused (ErrRepoLockQueued), and keeps no place.
+func AcquireRepoLock(ctx context.Context, db *sql.DB, id, sessionID string, lease time.Duration, now time.Time) (RepoLockAcquired, error) {
+	return AcquireRepoLockWaiting(ctx, db, id, sessionID, lease, now, false)
+}
+
+// AcquireRepoLockWaiting takes the lock for sessionID, or refreshes the lease of
+// the session already holding it (a heartbeat), stamping a lease that lapses at
 // now+lease. It is ClaimTask's compare-and-set: the write lands only on an
 // active lock that is
 //
@@ -692,11 +713,21 @@ func RecordRepoLockAliases(ctx context.Context, db *sql.DB, lockID string, alias
 // (b) and (c) are exactly core.RepoLock.HoldLive's negation, as ClaimTask's
 // branches are Task.ClaimLive's: After is strict, so a lease expiring at
 // exactly now is already dead, and the SQL takes it with <=. Expiry is lazy --
-// there is no sweeper. Otherwise it returns ErrRepoLockHeld (another session's
-// live hold, with the lock as it stands), ErrRepoLockRequested (a declaration
-// waiting for the owner), or ErrRepoLockNotFound. lease must be positive and
-// at most the ceiling (ErrRepoLockLease).
-func AcquireRepoLock(ctx context.Context, db *sql.DB, id, sessionID string, lease time.Duration, now time.Time) (RepoLockAcquired, error) {
+// there is no sweeper.
+//
+// The queue comes first, first come, first served (no barging): while the lock
+// has waiters a grant could still reach (core.RepoLock.Waiters), only the head
+// takes a free or lapsed lock, and it leaves the queue as it does. The holder's
+// own heartbeat is never a barge: it refreshes its hold whoever waits, until
+// another session takes the lock. Anyone else is refused, with its own place
+// in Position: ErrRepoLockHeld at another session's live hold, ErrRepoLockQueued
+// at a lock the head may take next. With wait, that refusal is a place in the
+// queue instead: the session joins at the back, or keeps its place and
+// refreshes it for core.RepoLockWaitLease, and the answer is Queued (no
+// error). Otherwise it returns ErrRepoLockRequested (a declaration waiting for
+// the owner, which nobody queues for) or ErrRepoLockNotFound. lease must be
+// positive and at most the ceiling (ErrRepoLockLease).
+func AcquireRepoLockWaiting(ctx context.Context, db *sql.DB, id, sessionID string, lease time.Duration, now time.Time, wait bool) (RepoLockAcquired, error) {
 	if sessionID == "" {
 		return RepoLockAcquired{}, errors.New("store.AcquireRepoLock: empty session id")
 	}
@@ -704,20 +735,34 @@ func AcquireRepoLock(ctx context.Context, db *sql.DB, id, sessionID string, leas
 		return RepoLockAcquired{}, fmt.Errorf("store.AcquireRepoLock: %w: %s, and a lease is at least a second and at most %s",
 			ErrRepoLockLease, lease, core.MaxClaimLease)
 	}
-	// One transaction, as ClaimTask's: the prior holder's read, the
+	// One transaction, as ClaimTask's: the prior holder's read, the queue, the
 	// compare-and-set and the lost-hold notice land together, so a reclaim
-	// names exactly the hold this write ended.
+	// names exactly the hold this write ended, and the head that takes the lock
+	// is exactly the one the queue put first.
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return RepoLockAcquired{}, fmt.Errorf("store.AcquireRepoLock: begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	prior, ok, err := lkLockByID(ctx, tx, id)
+	if err := lqPrune(ctx, tx, id, now); err != nil {
+		return RepoLockAcquired{}, fmt.Errorf("store.AcquireRepoLock: %w", err)
+	}
+	prior, ok, err := lkLockByID(ctx, tx, id, now)
 	if err != nil {
 		return RepoLockAcquired{}, fmt.Errorf("store.AcquireRepoLock: %w", err)
 	}
 	if !ok {
 		return RepoLockAcquired{}, fmt.Errorf("store.AcquireRepoLock: %w: %q", ErrRepoLockNotFound, id)
+	}
+	if prior.State == core.RepoLockRequested {
+		return RepoLockAcquired{Lock: prior}, fmt.Errorf("store.AcquireRepoLock: %w: lock %q", ErrRepoLockRequested, id)
+	}
+	position := slices.Index(prior.Waiters, sessionID) + 1
+	if prior.Holder != sessionID {
+		held := prior.HoldLive(now)
+		if held || (len(prior.Waiters) > 0 && prior.Waiters[0] != sessionID) {
+			return lqRefuseOrQueue(ctx, tx, prior, sessionID, position, held, wait, now)
+		}
 	}
 	nowStr := core.FormatTime(now.UTC())
 	expStr := core.FormatTime(now.Add(lease).UTC())
@@ -748,6 +793,11 @@ func AcquireRepoLock(ctx context.Context, db *sql.DB, id, sessionID string, leas
 		_ = tx.Rollback()
 		return lkAcquireRefusal(ctx, db, id, now)
 	}
+	// The head that took the lock leaves the queue: a grant is an ordinary
+	// hold, and its holder waits for nothing.
+	if err := lqLeave(ctx, tx, id, sessionID); err != nil {
+		return RepoLockAcquired{}, fmt.Errorf("store.AcquireRepoLock: %w", err)
+	}
 	// Only a take from a real prior holder counts as a reclaim: a free lock
 	// was taken from nobody. The holder it was taken from hears of it once
 	// (ClaimLostReclaimed), as a task claim's does.
@@ -760,7 +810,7 @@ func AcquireRepoLock(ctx context.Context, db *sql.DB, id, sessionID string, leas
 			return RepoLockAcquired{}, fmt.Errorf("store.AcquireRepoLock: %w", err)
 		}
 	}
-	updated, ok, err := lkLockByID(ctx, tx, id)
+	updated, ok, err := lkLockByID(ctx, tx, id, now)
 	if err != nil {
 		return RepoLockAcquired{}, fmt.Errorf("store.AcquireRepoLock: %w", err)
 	}
@@ -781,7 +831,7 @@ func AcquireRepoLock(ctx context.Context, db *sql.DB, id, sessionID string, leas
 // row as it stands now (the snapshot before the write is what a racing winner
 // just invalidated). HoldLive stays the one held/not-held authority here.
 func lkAcquireRefusal(ctx context.Context, db *sql.DB, id string, now time.Time) (RepoLockAcquired, error) {
-	cur, ok, err := lkLockByID(ctx, db, id)
+	cur, ok, err := lkLockByID(ctx, db, id, now)
 	switch {
 	case err != nil:
 		return RepoLockAcquired{}, fmt.Errorf("store.AcquireRepoLock: %w", err)
@@ -799,13 +849,20 @@ func lkAcquireRefusal(ctx context.Context, db *sql.DB, id string, now time.Time)
 }
 
 // ReleaseRepoLock lets go of a lock sessionID holds, live or lapsed, leaving it
-// free. Only the holder may (ErrRepoLockNotHolder); ErrRepoLockNotFound when
-// the id names no lock.
+// free; the head of its queue takes it next. Only the holder may
+// (ErrRepoLockNotHolder: a session that only waits for the lock leaves its
+// queue with LeaveRepoLockQueue instead); ErrRepoLockNotFound when the id
+// names no lock.
 func ReleaseRepoLock(ctx context.Context, db *sql.DB, id, sessionID string, now time.Time) (core.RepoLock, error) {
 	if sessionID == "" {
 		return core.RepoLock{}, errors.New("store.ReleaseRepoLock: empty session id")
 	}
-	res, err := db.ExecContext(ctx, `
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return core.RepoLock{}, fmt.Errorf("store.ReleaseRepoLock: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }() // no-op after Commit
+	res, err := tx.ExecContext(ctx, `
 		UPDATE repo_locks SET holder = '', held_since = NULL, lease_expires_at = NULL, updated_at = ?
 		 WHERE id = ? AND holder = ? AND state = 'active'`,
 		core.FormatTime(now.UTC()), id, sessionID)
@@ -816,12 +873,22 @@ func ReleaseRepoLock(ctx context.Context, db *sql.DB, id, sessionID string, now 
 	if err != nil {
 		return core.RepoLock{}, fmt.Errorf("store.ReleaseRepoLock: rows affected: %w", err)
 	}
-	cur, ok, err := lkLockByID(ctx, db, id)
+	if n > 0 {
+		// A holder waits for nothing: a place it kept would put it in the
+		// queue behind its own release.
+		if err := lqLeave(ctx, tx, id, sessionID); err != nil {
+			return core.RepoLock{}, fmt.Errorf("store.ReleaseRepoLock: %w", err)
+		}
+	}
+	cur, ok, err := lkLockByID(ctx, tx, id, now)
 	if err != nil {
 		return core.RepoLock{}, fmt.Errorf("store.ReleaseRepoLock: %w", err)
 	}
 	if !ok {
 		return core.RepoLock{}, fmt.Errorf("store.ReleaseRepoLock: %w: %q", ErrRepoLockNotFound, id)
+	}
+	if err := tx.Commit(); err != nil {
+		return core.RepoLock{}, fmt.Errorf("store.ReleaseRepoLock: commit: %w", err)
 	}
 	if n == 0 {
 		return cur, fmt.Errorf("store.ReleaseRepoLock: %w: lock %q, session %q", ErrRepoLockNotHolder, id, sessionID)
@@ -859,7 +926,7 @@ func lkForceReleaseOnce(ctx context.Context, db *sql.DB, id string, now time.Tim
 		return RepoLockForceReleased{}, false, fmt.Errorf("store.ForceReleaseRepoLock: begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	cur, ok, err := lkLockByID(ctx, tx, id)
+	cur, ok, err := lkLockByID(ctx, tx, id, now)
 	if err != nil {
 		return RepoLockForceReleased{}, false, fmt.Errorf("store.ForceReleaseRepoLock: %w", err)
 	}
@@ -890,7 +957,7 @@ func lkForceReleaseOnce(ctx context.Context, db *sql.DB, id string, now time.Tim
 	}); err != nil {
 		return RepoLockForceReleased{}, false, fmt.Errorf("store.ForceReleaseRepoLock: %w", err)
 	}
-	freed, ok, err := lkLockByID(ctx, tx, id)
+	freed, ok, err := lkLockByID(ctx, tx, id, now)
 	if err != nil {
 		return RepoLockForceReleased{}, false, fmt.Errorf("store.ForceReleaseRepoLock: %w", err)
 	}
@@ -903,14 +970,20 @@ func lkForceReleaseOnce(ctx context.Context, db *sql.DB, id string, now time.Tim
 	return RepoLockForceReleased{Lock: freed, PriorHolder: cur.Holder}, true, nil
 }
 
-// ReleaseRepoLocksForSession frees every lock sessionID holds, live or lapsed:
-// a departing session's locks return, as its task claims do
-// (ReleaseClaimsForSession). It returns how many it freed.
+// ReleaseRepoLocksForSession frees every lock sessionID holds, live or lapsed,
+// and gives up every place it holds in a lock's queue: a departing session's
+// locks return, as its task claims do (ReleaseClaimsForSession), and it waits
+// for nothing any more. It returns how many locks it freed.
 func ReleaseRepoLocksForSession(ctx context.Context, db *sql.DB, sessionID string, now time.Time) (int, error) {
 	if sessionID == "" {
 		return 0, nil
 	}
-	res, err := db.ExecContext(ctx, `
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("store.ReleaseRepoLocksForSession: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }() // no-op after Commit
+	res, err := tx.ExecContext(ctx, `
 		UPDATE repo_locks SET holder = '', held_since = NULL, lease_expires_at = NULL, updated_at = ?
 		 WHERE holder = ?`, core.FormatTime(now.UTC()), sessionID)
 	if err != nil {
@@ -921,6 +994,12 @@ func ReleaseRepoLocksForSession(ctx context.Context, db *sql.DB, sessionID strin
 	n, err := res.RowsAffected()
 	if err != nil {
 		return 0, fmt.Errorf("store.ReleaseRepoLocksForSession: rows affected: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM repo_lock_waiters WHERE session_id = ?`, sessionID); err != nil {
+		return 0, fmt.Errorf("store.ReleaseRepoLocksForSession: places: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("store.ReleaseRepoLocksForSession: commit: %w", err)
 	}
 	return int(n), nil
 }
@@ -934,7 +1013,8 @@ const lkLapsedHoldOf = `holder = ? AND (lease_expires_at IS NULL OR lease_expire
 // ReleaseReapedClaims is of task claims: it frees every lock sessionID still
 // holds under a lapsed lease -- the session the reaper just expired, which it
 // expires only once no hold of its is live -- and records a notice for each
-// (ClaimLostReaped), in one transaction. Without the notice the holder would
+// (ClaimLostReaped), in one transaction. The expired session's places in the
+// locks' queues go with it: a session that is not live waits for nothing. Without the notice the holder would
 // never hear of it: a later acquire takes a free lock, which is no reclaim. A
 // hold live at now is left alone: one the holder took after the reap, through
 // a call that revived its session, is its own again. It returns how many
@@ -977,6 +1057,9 @@ func ReleaseReapedRepoLocks(ctx context.Context, db *sql.DB, sessionID string, n
 		}
 		released++
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM repo_lock_waiters WHERE session_id = ?`, sessionID); err != nil {
+		return 0, fmt.Errorf("%s: places: %w", op, err)
+	}
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("%s: commit: %w", op, err)
 	}
@@ -996,7 +1079,7 @@ func ApproveRepoLock(ctx context.Context, db *sql.DB, id string, now time.Time) 
 	if err != nil {
 		return core.RepoLock{}, fmt.Errorf("store.ApproveRepoLock: rows affected: %w", err)
 	}
-	cur, ok, err := lkLockByID(ctx, db, id)
+	cur, ok, err := lkLockByID(ctx, db, id, now)
 	if err != nil {
 		return core.RepoLock{}, fmt.Errorf("store.ApproveRepoLock: %w", err)
 	}
@@ -1019,7 +1102,7 @@ func DiscardRepoLock(ctx context.Context, db *sql.DB, id string) (core.RepoLock,
 		return core.RepoLock{}, fmt.Errorf("store.DiscardRepoLock: begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }() // no-op after Commit
-	cur, ok, err := lkLockByID(ctx, tx, id)
+	cur, ok, err := lkLockByID(ctx, tx, id, time.Now().UTC())
 	if err != nil {
 		return core.RepoLock{}, fmt.Errorf("store.DiscardRepoLock: %w", err)
 	}
@@ -1037,7 +1120,8 @@ func DiscardRepoLock(ctx context.Context, db *sql.DB, id string) (core.RepoLock,
 	if n == 0 {
 		return cur, fmt.Errorf("store.DiscardRepoLock: %w: lock %q is %s", ErrRepoLockNotRequested, id, cur.State)
 	}
-	for _, q := range []string{`DELETE FROM repo_lock_aliases WHERE lock_id = ?`, `DELETE FROM repo_lock_projects WHERE lock_id = ?`} {
+	for _, q := range []string{`DELETE FROM repo_lock_aliases WHERE lock_id = ?`, `DELETE FROM repo_lock_projects WHERE lock_id = ?`,
+		`DELETE FROM repo_lock_waiters WHERE lock_id = ?`} {
 		if _, err := tx.ExecContext(ctx, q, id); err != nil {
 			return core.RepoLock{}, fmt.Errorf("store.DiscardRepoLock: %w", err)
 		}

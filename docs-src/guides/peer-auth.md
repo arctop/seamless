@@ -1166,6 +1166,45 @@ example-desk (confidential))`. The mapping form is new after v0.8.5: an
 earlier release refuses it when the config loads, so update the daemon before
 you write one.
 
+### Repo locks {#repo-locks}
+
+A [repo lock](/concepts/repo-locks/) belongs to a repository, not to a
+project, so no project fence judges it. With the feature on, peer_auth decides
+who sees and holds one instead:
+
+- **You hold every lock**, from any conversation on any machine: over the
+  socket, over TCP, through a relay mapped to you, from a session in a
+  confidential project, from one confined by `isolation.requests`, and from a
+  session in a project locked to it (holding a lock files no access request).
+  A lock's state carries no content: its guarded refs, its holder, since and
+  until.
+- **A restricted account sees and holds a lock only through a listed project
+  it may write.** The listed projects are yours to set: your declaration lists
+  them, or an account's waiting declaration does once you approve it on the
+  console's Locks page. Nothing the account says about its checkout widens
+  them. It is judged on every request, as its reach is. A relay's restricted
+  account is judged the same way, and its reach is the open projects that
+  are not locked.
+- **Outside that reach a lock does not exist for it.** It is not listed, and an
+  acquire or a release by id or by checkout, or a declaration of the same
+  repository, is refused in the words a missing lock gets.
+- **A restricted holder has bounds.** Its lease has the same 4-hour ceiling as
+  every hold, it waits its turn in the lock's queue, you can force-release its
+  hold on the Locks page, and every acquire and release it makes is recorded
+  with its account, which the Locks page shows beside its session.
+- **A restricted reader sees a lock's label, refs, state and times.** It sees
+  the holding (or next waiting) session's name only for its own sessions, and
+  "another session" otherwise. It sees no repository identity (alias) at all.
+- **A declaration is text.** Its refs, and the checkout's origin and path, are
+  written where every caller reads them. So a conversation of yours that may
+  not write the global scope (one bound to a confidential project, or confined
+  by `isolation.requests`) is refused a declaration in the fence's own words,
+  and its acquire records no repository identity; it still lists, acquires,
+  heartbeats and releases. A restricted account's declaration must list a
+  project the account may write, and it waits for you. No agent, yours
+  included, sees the repository identities of a lock a restricted account
+  declared; the console shows them to you.
+
 ## Verify
 
 ```bash

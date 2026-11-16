@@ -320,11 +320,19 @@ func TestLocksTools_RestrictedDeclarationWaitsForTheOwner(t *testing.T) {
 
 	// The project a checkout maps to is the repo map's answer, not the
 	// caller's: one the account may not reach is not listed, and not named.
-	isErr, text = callErr(t, ctx, r.agent, "locks_declare", map[string]any{"repo_root": "/work/ops", "name": "release"})
-	require.False(t, isErr, text)
-	require.NotContains(t, text, "example-ops", "a mapped path reads as an unmapped one")
-	unmapped := callJSON(t, ctx, r.agent, "locks_declare", map[string]any{"repo_root": "/work/nothere", "name": "release"})
-	require.Empty(t, unmapped["lock"].(map[string]any)["projects"])
+	// A declaration that lists no project the account may write would be a
+	// lock its own declarer could not see (RL3), so it is refused, and a path
+	// mapped to an unreachable project reads exactly as an unmapped one.
+	isErr, mapped := callErr(t, ctx, r.agent, "locks_declare", map[string]any{"repo_root": "/work/ops", "name": "release"})
+	require.True(t, isErr, mapped)
+	require.NotContains(t, mapped, "example-ops", "a mapped path reads as an unmapped one")
+	isErr, unmapped := callErr(t, ctx, r.agent, "locks_declare", map[string]any{"repo_root": "/work/nothere", "name": "release"})
+	require.True(t, isErr, unmapped)
+	require.Equal(t, mapped, unmapped, "one text for both")
+	require.Contains(t, unmapped, "this declaration cannot be filed from account _example_agent")
+	n, _, err := store.CountRepoLocks(ctx, r.db)
+	require.NoError(t, err)
+	require.Equal(t, 1, n, "neither refusal stored a declaration")
 }
 
 // lkSession creates an active session of account in project.

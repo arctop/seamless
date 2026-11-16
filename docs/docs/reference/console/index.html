@@ -1625,11 +1625,14 @@ says the item is there and links back once you unlock it.</p>
 <p>Only while the <strong>Repo locks</strong> <a href="#optional-features">optional feature</a> is on; a
 Standard screen. Every <a href="../../concepts/repo-locks/">repo lock</a>, shown with its
 repository and its name (<strong>LOCK seamless main</strong>): the refs it guards, whether it
-is free, held or lapsed, the session that holds it with since and until, the
-repository identities that resolve to it, and the projects whose restricted
-accounts may hold it. A lock belongs to no project, so the page lists every
-one; a holder in a project this browser has not unlocked reads &quot;a session this
-console does not show&quot;, and such a listed project is left out.</p>
+is free, held or lapsed, the session that holds it with since and until (and
+the restricted account that session belongs to, when it is one), the lock's
+queue while sessions wait for it (how many, and the next one, with its account
+when it is a restricted account's), the repository identities that resolve to
+it, and the projects whose restricted accounts may hold it. A lock belongs to
+no project, so the page lists every one; a holder or a next waiter in a project
+this browser has not unlocked reads &quot;a session this console does not show&quot;,
+and such a listed project is left out.</p>
 <ul>
 <li><strong>Waiting for your approval</strong> - the declarations restricted accounts filed:
 nobody can hold one until you <strong>Approve</strong> it, and <strong>Discard</strong> leaves the

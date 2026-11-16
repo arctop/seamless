@@ -5,7 +5,30 @@ package mcp
 // (internal/core/locks.go), so these tools take none and pass through no
 // project fence: what they must never do instead is echo another project's
 // content, so an answer names a project only where the caller may list it
-// (access.View.Listed) and a holder only where the caller may read its session.
+// (access.View.Listed) and a holder or a waiter only where the caller may read
+// its session.
+//
+// Who may see and hold a lock is store.RepoLockReachable's one answer: the
+// owner principal every lock, on any host and from any conversation (a lock's
+// state carries no content, owner decision D2); a restricted account, local or
+// a relay's, a lock one of whose listed projects it may write. A lock a caller
+// may not reach reads exactly like a missing one: listed nowhere, not found by
+// id or by checkout. A restricted reader sees no alias at all, and no reader
+// sees the aliases of a lock a restricted account declared: an alias is a
+// caller's free text.
+//
+// A declaration and an alias record write a caller's text into the registry
+// every caller reads, so they meet the clearance rule a write into the global
+// scope does (fenceWriteQuiet with the global target): an owner conversation
+// that may not write the global scope -- bound to a confidential project, or
+// confined by isolation.requests -- declares nothing and records no alias, and
+// still lists, acquires, heartbeats and releases. A restricted account is
+// never judged by clearance (its reach holds one fenced project alone, or open
+// ones): its declaration waits for the owner, and it records no alias.
+//
+// A lock with waiters is taken first come, first served (store.
+// AcquireRepoLockWaiting): locks_acquire with wait joins the queue, or keeps
+// the caller's place, and locks_release from a waiting session leaves it.
 //
 // A lock is named by the checkout's git identity -- the arguments session_start
 // takes (cwd, host, repo_root, main_worktree_root, repo_origin) -- or by its id.
@@ -97,10 +120,11 @@ func lkNameOpt() mcp.ToolOption {
 func lkListTool() mcp.Tool {
 	opts := []mcp.ToolOption{hintRead(),
 		mcp.WithDescription("List repo locks: each lock's repository and name, the refs it guards, whether it is held, " +
-			"by which session (when you may see that session), since and until when, the repository identities that " +
-			"resolve to it, and the projects whose restricted accounts the declaration lists. Pass a checkout's identity " +
-			"(cwd, or repo_root and repo_origin) to list only that repository's locks. A declaration waiting for the " +
-			"owner's approval is listed with state requested. Read-only."),
+			"by which session (when you may see that session), since and until when, whether you hold it, how many " +
+			"sessions wait for it and which is next, the repository identities that resolve to it, and the projects " +
+			"whose restricted accounts the declaration lists. Pass a checkout's identity (cwd, or repo_root and " +
+			"repo_origin) to list only that repository's locks. A declaration waiting for the owner's approval is listed " +
+			"with state requested. Read-only."),
 	}
 	return mcp.NewTool("locks_list", append(opts, lkIdentityOpts()...)...)
 }
@@ -133,11 +157,17 @@ func lkAcquireTool() mcp.Tool {
 		mcp.WithDescription("Take a repo lock for the current session, with a lease, before landing changes on the refs " +
 			"it guards. Re-acquiring a lock you hold refreshes the lease: the heartbeat for a long landing. A lock another " +
 			"session holds under a live lease is refused, naming the holder when you may see that session, since and " +
-			"until; a lapsed lease is taken over. A declaration still waiting for the owner cannot be held. Name the lock " +
-			"by id, or by the checkout and name (default main). Release it with locks_release once the refs have landed; " +
-			"a hold also lapses at the end of its lease."),
+			"until; a lapsed lease is taken over. Sessions waiting for a lock take it first come, first served: while any " +
+			"wait, only the next one may take it, and anyone else is refused with the next waiter and their own place. " +
+			"With wait, a refusal joins the queue instead (or keeps your place) and answers queued, with your position; " +
+			"ask again within two minutes to keep the place, or run `seam lock acquire --wait` in the background, which " +
+			"asks every few seconds and returns once you hold the lock. A declaration still waiting for the owner cannot " +
+			"be held. Name the lock by id, or by the checkout and name (default main). Release it with locks_release once " +
+			"the refs have landed; a hold also lapses at the end of its lease."),
 		mcp.WithString("id", mcp.Description("lock id (from locks_list or locks_declare); or name the checkout instead")),
 		lkNameOpt(),
+		mcp.WithBoolean("wait", mcp.Description("join the lock's queue, or keep your place in it, when the lock cannot be "+
+			"yours now; the answer is queued with your position instead of a refusal (default false)")),
 		// No Min/Max, as tasks_claim: the handler owns the range, whose upper end
 		// is a task claim's ceiling too (core.MaxClaimLease).
 		mcp.WithNumber("lease_seconds", mcp.Description(fmt.Sprintf("lease duration in seconds before the hold lapses (default 900, at most %d)",
@@ -151,8 +181,9 @@ func lkAcquireTool() mcp.Tool {
 func lkReleaseTool() mcp.Tool {
 	opts := []mcp.ToolOption{hintSet(),
 		mcp.WithDescription("Release a repo lock the current session holds, live or lapsed, so another session can take " +
-			"it. Only the holder may release; the owner can force-release any hold from the console. Name the lock by id, " +
-			"or by the checkout and name (default main)."),
+			"it: the next waiter, when sessions wait for it. A session that waits for the lock and does not hold it " +
+			"leaves the queue instead. Only the holder may release; the owner can force-release any hold from the " +
+			"console. Name the lock by id, or by the checkout and name (default main)."),
 		mcp.WithString("id", mcp.Description("lock id (from locks_list or locks_acquire); or name the checkout instead")),
 		lkNameOpt(),
 		mcp.WithString("session", mcp.Description(actorSessionArgDesc)),
@@ -257,7 +288,9 @@ func (s *Server) lkTarget(ctx context.Context, req mcp.CallToolRequest) (core.Re
 		if err != nil {
 			return core.RepoLock{}, nil, err
 		}
-		if !ok {
+		// A lock the caller may not reach is no lock at all: the same words as
+		// an id that names none.
+		if !ok || !store.RepoLockReachable(ctx, l) {
 			return core.RepoLock{}, nil, fmt.Errorf("%w: no lock with id %q", store.ErrRepoLockNotFound, byID)
 		}
 		return l, nil, nil
@@ -276,7 +309,7 @@ func (s *Server) lkTarget(ctx context.Context, req mcp.CallToolRequest) (core.Re
 	if err != nil {
 		return core.RepoLock{}, nil, err
 	}
-	if !ok {
+	if !ok || !store.RepoLockReachable(ctx, l) {
 		return core.RepoLock{}, nil, fmt.Errorf("%w: no lock named %s is declared for this repository (%s): declare it "+
 			"with locks_declare, or `seam lock declare`", store.ErrRepoLockNotFound, name, aliases[0].Alias)
 	}
@@ -292,6 +325,9 @@ type lkSeer struct {
 	scoped   bool
 	readable map[string]bool
 	sessions map[string]lkSession
+	// bound is the session this connection is bound to (lkBound), read once.
+	bound      string
+	boundKnown bool
 }
 
 // lkSession is a holder as an answer may name it: shown is false when the
@@ -344,12 +380,34 @@ func (v *lkSeer) session(id string) (lkSession, error) {
 	return out, nil
 }
 
+// boundSession is the session this connection is bound to (lkBound),
+// memoized for the call; "" when it is bound to none.
+func (v *lkSeer) boundSession() string {
+	if !v.boundKnown {
+		v.bound, _ = v.s.lkBound(v.ctx)
+		v.boundKnown = true
+	}
+	return v.bound
+}
+
+// lkShowsAliases reports whether an answer to the caller in ctx may show l's
+// aliases: never to a restricted reader, and to nobody for a lock a restricted
+// account declared. An alias is the declaring caller's free text (an origin
+// URL, a host and a path), and a restricted account whose reach is one fenced
+// project would otherwise write it where every owner agent reads it.
+func lkShowsAliases(ctx context.Context, l core.RepoLock) bool {
+	return access.AccountOf(ctx) == "" && l.Account == ""
+}
+
 // lkJSON renders a lock for an answer: no free text, a project only where the
-// caller may list it, a holder only where it may read the holder's session.
+// caller may list it, a holder or the next waiter only where it may read that
+// session, and aliases only where lkShowsAliases allows.
 func (v *lkSeer) lkJSON(l core.RepoLock, now time.Time) (map[string]any, error) {
 	aliases := make([]map[string]any, 0, len(l.Aliases))
-	for _, a := range l.Aliases {
-		aliases = append(aliases, map[string]any{"kind": string(a.Kind), "alias": a.Alias})
+	if lkShowsAliases(v.ctx, l) {
+		for _, a := range l.Aliases {
+			aliases = append(aliases, map[string]any{"kind": string(a.Kind), "alias": a.Alias})
+		}
 	}
 	projects := make([]string, 0, len(l.Projects))
 	for _, p := range l.Projects {
@@ -361,9 +419,23 @@ func (v *lkSeer) lkJSON(l core.RepoLock, now time.Time) (map[string]any, error) 
 	if refs == nil {
 		refs = []string{}
 	}
+	held := l.HoldLive(now)
 	j := map[string]any{
 		"id": l.ID, "label": l.Label(), "repo": l.Repo(), "name": l.Name, "refs": refs, "state": string(l.State),
-		"held": l.HoldLive(now), "aliases": aliases, "projects": projects,
+		"held": held, "aliases": aliases, "projects": projects,
+		// held_by_caller is this connection's own bound session (lkBound),
+		// never an inference: a caller bound to no session reads false.
+		"held_by_caller": held && l.Holder != "" && l.Holder == v.boundSession(),
+		"waiting":        len(l.Waiters),
+	}
+	if next := l.NextWaiter(); next != "" {
+		who, err := v.session(next)
+		if err != nil {
+			return nil, err
+		}
+		if who.shown {
+			j["next_waiter_session"] = who.name
+		}
 	}
 	if l.Holder != "" {
 		if !l.HoldLive(now) {
@@ -387,19 +459,116 @@ func (v *lkSeer) lkJSON(l core.RepoLock, now time.Time) (map[string]any, error) 
 	return j, nil
 }
 
+// sessionWords names a session for a sentence: "session <name>" where the
+// caller may read it, else "another session".
+func (v *lkSeer) sessionWords(id string) string {
+	if who, err := v.session(id); err == nil && who.shown {
+		return "session " + who.name
+	}
+	return "another session"
+}
+
+// lkPlaceWords is the caller's own place in a lock's queue, for a refusal.
+func lkPlaceWords(position int) string {
+	if position > 0 {
+		return fmt.Sprintf("you are number %d in its queue (acquire with wait, or `seam lock acquire --wait`, to keep "+
+			"your place)", position)
+	}
+	return "you are not in its queue: acquire with wait, or run `seam lock acquire --wait`, to join it"
+}
+
 // lkHeldRefusal is an acquire refused at another session's live hold, in words
 // naming the holder only where the caller may read its session.
-func (v *lkSeer) lkHeldRefusal(l core.RepoLock) error {
-	by := "another session"
-	if who, err := v.session(l.Holder); err == nil && who.shown {
-		by = "session " + who.name
-	}
+func (v *lkSeer) lkHeldRefusal(l core.RepoLock, position int) error {
 	when := ""
 	if l.HeldSince != nil && l.LeaseExpiresAt != nil {
 		when = fmt.Sprintf(" since %s, until %s", core.FormatTime(*l.HeldSince), core.FormatTime(*l.LeaseExpiresAt))
 	}
-	return fmt.Errorf("%w: LOCK %s is held by %s%s; wait for its release or for the lease to lapse",
-		store.ErrRepoLockHeld, l.Label(), by, when)
+	queue := ""
+	if len(l.Waiters) > 0 {
+		queue = fmt.Sprintf("; %d %s for it and %s", len(l.Waiters), lkSessionsWait(len(l.Waiters)), lkPlaceWords(position))
+	}
+	return fmt.Errorf("%w: LOCK %s is held by %s%s; wait for its release or for the lease to lapse%s",
+		store.ErrRepoLockHeld, l.Label(), v.sessionWords(l.Holder), when, queue)
+}
+
+// lkQueuedRefusal is an acquire refused because the lock's queue puts another
+// session first, naming the next waiter only where the caller may read its
+// session, and the caller's own place.
+func (v *lkSeer) lkQueuedRefusal(l core.RepoLock, position int) error {
+	return fmt.Errorf("%w: LOCK %s is queued: %d %s for it, %s is next, and %s",
+		store.ErrRepoLockQueued, l.Label(), len(l.Waiters), lkSessionsWait(len(l.Waiters)), v.sessionWords(l.NextWaiter()),
+		lkPlaceWords(position))
+}
+
+// lkSessionsWait is "session waits" or "sessions wait" for n.
+func lkSessionsWait(n int) string {
+	if n == 1 {
+		return "session waits"
+	}
+	return "sessions wait"
+}
+
+// lkBound is the session this connection is bound to, by the session= handle
+// a call names, a session_start on this connection, or the agent-process
+// identity its requests carry (resolveBinding): never the sole-active-ambient
+// fallback resolveActor has, and never a (host, cwd) guess. A binding to a
+// session in a project locked to the caller counts (lockedBinding): the lock
+// tools act through it (lkActor). It must name an active session.
+func (s *Server) lkBound(ctx context.Context) (string, bool) {
+	b, ok := s.resolveBinding(ctx)
+	if !ok || b.sessionID == "" {
+		return "", false
+	}
+	sess, found, err := store.SessionByID(ctx, s.cfg.DB, b.sessionID)
+	if err != nil {
+		s.logger.Warn("locks: bound session lookup", "session_id", b.sessionID, "error", err)
+		return "", false
+	}
+	if !found || sess.Status != core.SessionActive {
+		return "", false
+	}
+	return sess.ID, true
+}
+
+// lkActor is the session a hold, a heartbeat, a place in the queue or a
+// release acts as: resolveActor's, except that a binding to the caller's own
+// session in a project locked to it is that session rather than a refusal at
+// the lock. A lock's state carries no content (owner decision D2), so holding
+// one reads and writes nothing of the locked project, and files no request
+// for it. A session the call names (session=, session_id=) is resolveActor's
+// to judge, locked or not.
+func (s *Server) lkActor(ctx context.Context, req mcp.CallToolRequest) (string, bool, error) {
+	if argString(req, "session_id") == "" && argString(req, "session") == "" {
+		if _, ok := s.getBinding(ctx); !ok {
+			if b, ok := s.lockedBinding(ctx); ok {
+				return b.sessionID, true, nil
+			}
+		}
+	}
+	return s.resolveActor(ctx, req)
+}
+
+// lkRegistryRefusal is the refusal for a call that would write the caller's
+// own text into the lock registry -- a declaration, or an alias record -- that
+// the conversation may not write into the global scope: the fence's own
+// refusal, nil when it may. A restricted account is judged by its reach
+// instead (lkProjects, and its declaration waits for the owner): clearance
+// never judges one.
+func (s *Server) lkRegistryRefusal(ctx context.Context) error {
+	if access.AccountOf(ctx) != "" {
+		return nil
+	}
+	return s.fenceWriteQuiet(ctx, "")
+}
+
+// lkEvent records a lock change, with the restricted account that acted (none
+// for the owner principal).
+func (s *Server) lkEvent(ctx context.Context, sessionID, lockID string, payload map[string]any) {
+	if account := access.AccountOf(ctx); account != "" {
+		payload["account"] = account
+	}
+	s.record(ctx, core.EventRepoLockChanged, sessionID, "", lockID, payload)
 }
 
 func (s *Server) lkHandleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -420,13 +589,19 @@ func (s *Server) lkHandleList(ctx context.Context, req mcp.CallToolRequest) (*mc
 	seer := s.lkSeer(ctx)
 	out := make([]map[string]any, 0, len(locks))
 	for _, l := range locks {
+		// A lock the caller may not reach is not listed at all: a missing one.
+		if !store.RepoLockReachable(ctx, l) {
+			continue
+		}
 		j, err := seer.lkJSON(l, now)
 		if err != nil {
 			return errResult("locks_list", err)
 		}
 		out = append(out, j)
 	}
-	return jsonResult(map[string]any{"locks": out})
+	// caller_bound says whether this connection is bound to a session at all
+	// (lkBound), so a client tells "not held by me" from "nobody to be".
+	return jsonResult(map[string]any{"locks": out, "caller_bound": seer.boundSession() != ""})
 }
 
 // lkDeclarer is the session a declaration records as its declarer: one the
@@ -522,6 +697,12 @@ func (s *Server) lkHandleDeclare(ctx context.Context, req mcp.CallToolRequest) (
 	if err != nil {
 		return errResult("locks_declare", err)
 	}
+	// A declaration writes the caller's text (its refs and aliases) where every
+	// caller reads it: the clearance rule of a write into the global scope.
+	if err := s.lkRegistryRefusal(ctx); err != nil {
+		s.noteRefusal(ctx, err, "")
+		return errResult("locks_declare", err)
+	}
 	// The owner principal declares directly; a restricted account's
 	// declaration waits for the owner, and records no alias on a lock it
 	// resolves to (judged per request, from the transport's View).
@@ -529,6 +710,12 @@ func (s *Server) lkHandleDeclare(ctx context.Context, req mcp.CallToolRequest) (
 	state := core.RepoLockActive
 	if !owner {
 		state = core.RepoLockRequested
+		// A lock reaches a restricted account only through a listed project
+		// it may write: a declaration listing none would be a lock its own
+		// declarer could not see. Unmapped and mapped-elsewhere read alike.
+		if len(projects) == 0 {
+			return errResult("locks_declare", errLkRestrictedDeclaration(ctx))
+		}
 	}
 	res, err := store.DeclareRepoLock(ctx, s.cfg.DB, store.RepoLockDeclaration{
 		Name: name, Refs: argStrings(req, "refs"), Aliases: aliases, Projects: projects, State: state,
@@ -541,6 +728,12 @@ func (s *Server) lkHandleDeclare(ctx context.Context, req mcp.CallToolRequest) (
 	if err != nil {
 		return errResult("locks_declare", err)
 	}
+	// A declaration that resolved to a lock the caller may not reach changed
+	// nothing (a restricted account records no alias), and must not confirm
+	// that lock exists: the same words as a declaration that lists no project.
+	if !store.RepoLockReachable(ctx, res.Lock) {
+		return errResult("locks_declare", errLkRestrictedDeclaration(ctx))
+	}
 	action := ""
 	switch {
 	case res.Created && state == core.RepoLockActive:
@@ -551,16 +744,17 @@ func (s *Server) lkHandleDeclare(ctx context.Context, req mcp.CallToolRequest) (
 		action = core.RepoLockActionAliased
 	}
 	if action != "" {
-		s.record(ctx, core.EventRepoLockChanged, declarer, "", res.Lock.ID,
-			map[string]any{"action": action, "name": res.Lock.Name, "aliases": len(res.Added)})
+		s.lkEvent(ctx, declarer, res.Lock.ID, map[string]any{"action": action, "name": res.Lock.Name, "aliases": len(res.Added)})
 	}
 	j, err := s.lkSeer(ctx).lkJSON(res.Lock, time.Now().UTC())
 	if err != nil {
 		return errResult("locks_declare", err)
 	}
 	recorded := make([]map[string]any, 0, len(res.Added))
-	for _, a := range res.Added {
-		recorded = append(recorded, map[string]any{"kind": string(a.Kind), "alias": a.Alias})
+	if lkShowsAliases(ctx, res.Lock) {
+		for _, a := range res.Added {
+			recorded = append(recorded, map[string]any{"kind": string(a.Kind), "alias": a.Alias})
+		}
 	}
 	out := map[string]any{"lock": j, "declared": res.Created, "recorded_aliases": recorded}
 	switch {
@@ -600,7 +794,8 @@ func (s *Server) lkHandleAcquire(ctx context.Context, req mcp.CallToolRequest) (
 	if err != nil {
 		return errResult("locks_acquire", err)
 	}
-	sessionID, ok, err := s.resolveActor(ctx, req)
+	wait := argBool(req, "wait", false)
+	sessionID, ok, err := s.lkActor(ctx, req)
 	if err != nil {
 		return errResult("locks_acquire", err)
 	}
@@ -609,27 +804,41 @@ func (s *Server) lkHandleAcquire(ctx context.Context, req mcp.CallToolRequest) (
 			"(session_start), or name yourself with session=<cc/... or cx/... or ULID>"))
 	}
 	now := time.Now().UTC()
+	if wait {
+		// Asking for the lock is proof the session is alive, and a place counts
+		// only for a live session: the heartbeat every call gets, made before
+		// the queue reads it rather than after.
+		if err := store.TouchSession(ctx, s.cfg.DB, sessionID, now); err != nil {
+			s.logger.Warn("locks_acquire: session heartbeat", "session_id", sessionID, "error", err)
+		}
+	}
 	seer := s.lkSeer(ctx)
-	got, err := store.AcquireRepoLock(ctx, s.cfg.DB, target.ID, sessionID, lease, now)
+	got, err := store.AcquireRepoLockWaiting(ctx, s.cfg.DB, target.ID, sessionID, lease, now, wait)
 	switch {
 	case errors.Is(err, store.ErrRepoLockHeld) && got.Lock.Holder != "":
-		return errResult("locks_acquire", seer.lkHeldRefusal(got.Lock))
+		return errResult("locks_acquire", seer.lkHeldRefusal(got.Lock, got.Position))
+	case errors.Is(err, store.ErrRepoLockQueued):
+		return errResult("locks_acquire", seer.lkQueuedRefusal(got.Lock, got.Position))
 	case errors.Is(err, store.ErrRepoLockRequested):
 		return errResult("locks_acquire", fmt.Errorf("%w: LOCK %s is a declaration the owner has not approved yet",
 			store.ErrRepoLockRequested, target.Label()))
 	case err != nil:
 		return errResult("locks_acquire", err)
 	}
+	if got.Queued {
+		return s.lkQueuedAnswer(ctx, seer, target, got, sessionID, now)
+	}
 	// Every checkout seen is recorded on the lock it holds, so it keeps the
 	// lock when its origin changes -- the owner principal's checkouts only, as
-	// with a declaration.
-	if len(aliases) > 0 && access.OwnerOnly(ctx) {
+	// with a declaration, and only from a conversation that may write the
+	// global scope: an alias is the caller's text.
+	if len(aliases) > 0 && access.OwnerOnly(ctx) && s.lkRegistryRefusal(ctx) == nil {
 		added, aerr := store.RecordRepoLockAliases(ctx, s.cfg.DB, got.Lock.ID, aliases, now)
 		if aerr != nil {
 			s.logger.Warn("locks_acquire: record aliases", "lock", got.Lock.ID, "error", aerr)
 		} else if len(added) > 0 {
 			got.Lock.Aliases = append(got.Lock.Aliases, added...)
-			s.record(ctx, core.EventRepoLockChanged, sessionID, "", got.Lock.ID,
+			s.lkEvent(ctx, sessionID, got.Lock.ID,
 				map[string]any{"action": core.RepoLockActionAliased, "name": got.Lock.Name, "aliases": len(added)})
 		}
 	}
@@ -641,7 +850,7 @@ func (s *Server) lkHandleAcquire(ctx context.Context, req mcp.CallToolRequest) (
 	if got.Reclaimed {
 		payload["reclaimed"] = true
 	}
-	s.record(ctx, core.EventRepoLockChanged, sessionID, "", got.Lock.ID, payload)
+	s.lkEvent(ctx, sessionID, got.Lock.ID, payload)
 	j, err := seer.lkJSON(got.Lock, now)
 	if err != nil {
 		return errResult("locks_acquire", err)
@@ -656,12 +865,33 @@ func (s *Server) lkHandleAcquire(ctx context.Context, req mcp.CallToolRequest) (
 	return jsonResult(out)
 }
 
+// lkQueuedAnswer is an acquire with wait that did not take the lock: the
+// session holds a place in its queue, at position, until place_until unless it
+// asks again. Joining is an event; keeping a place is not (a waiter asks every
+// few seconds).
+func (s *Server) lkQueuedAnswer(ctx context.Context, seer *lkSeer, target core.RepoLock, got store.RepoLockAcquired, sessionID string,
+	now time.Time) (*mcp.CallToolResult, error) {
+	if !slices.Contains(target.Waiters, sessionID) {
+		s.lkEvent(ctx, sessionID, got.Lock.ID,
+			map[string]any{"action": core.RepoLockActionQueued, "name": got.Lock.Name, "position": got.Position})
+	}
+	j, err := seer.lkJSON(got.Lock, now)
+	if err != nil {
+		return errResult("locks_acquire", err)
+	}
+	out := map[string]any{"lock": j, "acquired": false, "queued": true, "position": got.Position}
+	if got.PlaceUntil != nil {
+		out["place_until"] = core.FormatTime(*got.PlaceUntil)
+	}
+	return jsonResult(out)
+}
+
 func (s *Server) lkHandleRelease(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	target, _, err := s.lkTarget(ctx, req)
 	if err != nil {
 		return errResult("locks_release", err)
 	}
-	sessionID, ok, err := s.resolveActor(ctx, req)
+	sessionID, ok, err := s.lkActor(ctx, req)
 	if err != nil {
 		return errResult("locks_release", err)
 	}
@@ -671,17 +901,42 @@ func (s *Server) lkHandleRelease(ctx context.Context, req mcp.CallToolRequest) (
 	now := time.Now().UTC()
 	freed, err := store.ReleaseRepoLock(ctx, s.cfg.DB, target.ID, sessionID, now)
 	if errors.Is(err, store.ErrRepoLockNotHolder) {
-		return errResult("locks_release", fmt.Errorf("%w: LOCK %s is not held by this session", store.ErrRepoLockNotHolder,
-			target.Label()))
+		// A session that waits for the lock and does not hold it leaves the
+		// queue: what `seam lock acquire --wait` does when its timeout ends.
+		cur, left, lerr := store.LeaveRepoLockQueue(ctx, s.cfg.DB, target.ID, sessionID, now)
+		if lerr != nil {
+			return errResult("locks_release", lerr)
+		}
+		if !left {
+			return errResult("locks_release", fmt.Errorf("%w: LOCK %s is not held by this session, which does not wait "+
+				"for it either", store.ErrRepoLockNotHolder, target.Label()))
+		}
+		s.lkEvent(ctx, sessionID, cur.ID, map[string]any{"action": core.RepoLockActionLeftQueue, "name": cur.Name})
+		j, err := s.lkSeer(ctx).lkJSON(cur, now)
+		if err != nil {
+			return errResult("locks_release", err)
+		}
+		return jsonResult(map[string]any{"lock": j, "released": false, "left_queue": true})
 	}
 	if err != nil {
 		return errResult("locks_release", err)
 	}
-	s.record(ctx, core.EventRepoLockChanged, sessionID, "", freed.ID,
-		map[string]any{"action": core.RepoLockActionReleased, "name": freed.Name})
+	s.lkEvent(ctx, sessionID, freed.ID, map[string]any{"action": core.RepoLockActionReleased, "name": freed.Name})
 	j, err := s.lkSeer(ctx).lkJSON(freed, now)
 	if err != nil {
 		return errResult("locks_release", err)
 	}
 	return jsonResult(map[string]any{"lock": j, "released": true})
+}
+
+// errLkRestrictedDeclaration is a restricted account's declaration that cannot
+// be filed: it lists no project the account may write, or the repository's
+// lock of that name is one the account may not reach. One text for both, which
+// names no lock, project, holder or alias, so a refusal never confirms that a
+// lock the account cannot reach exists.
+func errLkRestrictedDeclaration(ctx context.Context) error {
+	return fmt.Errorf("this declaration cannot be filed from account %s: a restricted account's declaration lists a "+
+		"project the account may write (projects=, or a checkout that maps to one; project_list) and names a lock "+
+		"the account may hold; ask the owner to declare the repository's lock, or to list your project on it",
+		access.AccountOf(ctx))
 }

@@ -86,6 +86,9 @@ func seedViewFixture(t *testing.T, db *sql.DB) (hiddenMem, shownMem, hiddenTask,
 	ins(`INSERT INTO repo_locks (id, name, refs, state, holder, created_at, updated_at) VALUES ('lk-1','main','["refs/heads/main"]','active','s-hidden',?,?)`, ts, ts)
 	ins(`INSERT INTO repo_lock_aliases (lock_id, name, kind, alias, created_at) VALUES ('lk-1','main','origin','example.com/acme/app',?), ('lk-1','main','path','example-host:/work/fin',?)`, ts, ts)
 	ins(`INSERT INTO repo_lock_projects (lock_id, project_slug) VALUES ('lk-1','example-finance'), ('lk-1','example-ops')`)
+	// Its queue is no project's either: a waiter in the hidden project stays,
+	// as its holder does (the console names neither).
+	ins(`INSERT INTO repo_lock_waiters (lock_id, session_id, queued_at, place_until) VALUES ('lk-1','s-hidden',?,?), ('lk-1','s-shown',?,?)`, ts, ts, ts, ts)
 	ph, err := CreateProposal(ctx, db, ProposalArchive, map[string]any{"id": "m-hidden", "project": "example-finance"})
 	require.NoError(t, err)
 	_, err = CreateProposal(ctx, db, ProposalMerge, map[string]any{"keep": map[string]any{"id": "m-shown"}, "drop": map[string]any{"id": "m-hidden"}})
@@ -137,6 +140,7 @@ func TestOpenView_HidesTheSealedProjectEverywhere(t *testing.T) {
 		{`SELECT COUNT(*) FROM repo_lock_aliases`, 2},
 		{`SELECT COUNT(*) FROM repo_lock_projects`, 1}, // the hidden project's listing is hidden
 		{`SELECT COUNT(*) FROM repo_lock_projects WHERE project_slug = 'example-finance'`, 0},
+		{`SELECT COUNT(*) FROM repo_lock_waiters`, 2}, // the queue is no project's
 	} {
 		require.Equal(t, c.want, count(c.q), c.q)
 	}

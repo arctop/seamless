@@ -27,9 +27,45 @@ whether it is `held`, `since` and `until` for a hold, its `aliases` and its
 `projects`. A holder is named (`holder`, `holder_session`) only to a caller who
 may read that session; a project is listed only where the caller may list it.
 
+Every lock also answers with:
+
+- `held_by_caller` - true when the lock is held, and by the session this
+  connection is bound to: by the agent-process identity its requests carry, or
+  by a `session_start` on it. A connection bound to no session reads false,
+  whatever session an unbound call would act as.
+- `waiting` - how many sessions wait for the lock.
+- `next_waiter_session` - the session first in the queue, only where the caller
+  may read that session (as for the holder).
+
+`locks_list` adds `caller_bound` beside `locks`: whether this connection is
+bound to an active session at all, the same binding `held_by_caller` reads.
+
+A [restricted account](https://thereisnospoon.org/docs/guides/peer-auth/#repo-locks) sees no `aliases` (the
+list is empty), and no caller sees the aliases of a lock a restricted account
+declared. A lock a restricted account may not reach is not listed for it, and
+by id, by checkout or through `locks_declare` it reads exactly as a lock that
+does not exist.
+
+## Waiting for a lock
+
+`locks_acquire` with `wait: true` joins the lock's queue when the lock cannot
+be yours now, or keeps your place in it, and answers `acquired: false`,
+`queued: true`, your `position` (1 is next) and `place_until`, when your place
+lapses unless you ask again. Ask again within two minutes to keep the place;
+`seam lock acquire --wait` does so every few seconds. While anyone waits, only
+the session first in the queue takes the lock; anyone else's acquire is
+refused with the next waiter and their own place. A `locks_release` from a
+session that waits and does not hold the lock leaves the queue and answers
+`released: false`, `left_queue: true`.
+
+A declaration from a conversation that may not write the global scope (bound
+to a confidential project, or confined by `isolation.requests`) is refused in
+the fence's own words, and such a conversation's `locks_acquire` records no new
+repository identity on the lock.
+
 ## locks_list {#locks_list}
 
-List repo locks: each lock's repository and name, the refs it guards, whether it is held, by which session (when you may see that session), since and until when, the repository identities that resolve to it, and the projects whose restricted accounts the declaration lists. Pass a checkout's identity (cwd, or repo_root and repo_origin) to list only that repository's locks. A declaration waiting for the owner's approval is listed with state requested. Read-only.
+List repo locks: each lock's repository and name, the refs it guards, whether it is held, by which session (when you may see that session), since and until when, whether you hold it, how many sessions wait for it and which is next, the repository identities that resolve to it, and the projects whose restricted accounts the declaration lists. Pass a checkout's identity (cwd, or repo_root and repo_origin) to list only that repository's locks. A declaration waiting for the owner's approval is listed with state requested. Read-only.
 
 **Optional** - part of *Repo locks*, hidden when the `repo_locks` feature is disabled: the tool leaves `tools/list` and a call to it is refused as an unknown tool, while its stored data stays exactly where it was. See [Optional features](https://thereisnospoon.org/docs/reference/console/#optional-features).
 
@@ -63,7 +99,7 @@ Declare a lock on a repository's refs, once per repository and name: the lock ag
 
 ## locks_acquire {#locks_acquire}
 
-Take a repo lock for the current session, with a lease, before landing changes on the refs it guards. Re-acquiring a lock you hold refreshes the lease: the heartbeat for a long landing. A lock another session holds under a live lease is refused, naming the holder when you may see that session, since and until; a lapsed lease is taken over. A declaration still waiting for the owner cannot be held. Name the lock by id, or by the checkout and name (default main). Release it with locks_release once the refs have landed; a hold also lapses at the end of its lease.
+Take a repo lock for the current session, with a lease, before landing changes on the refs it guards. Re-acquiring a lock you hold refreshes the lease: the heartbeat for a long landing. A lock another session holds under a live lease is refused, naming the holder when you may see that session, since and until; a lapsed lease is taken over. Sessions waiting for a lock take it first come, first served: while any wait, only the next one may take it, and anyone else is refused with the next waiter and their own place. With wait, a refusal joins the queue instead (or keeps your place) and answers queued, with your position; ask again within two minutes to keep the place, or run `seam lock acquire --wait` in the background, which asks every few seconds and returns once you hold the lock. A declaration still waiting for the owner cannot be held. Name the lock by id, or by the checkout and name (default main). Release it with locks_release once the refs have landed; a hold also lapses at the end of its lease.
 
 **Optional** - part of *Repo locks*, hidden when the `repo_locks` feature is disabled: the tool leaves `tools/list` and a call to it is refused as an unknown tool, while its stored data stays exactly where it was. See [Optional features](https://thereisnospoon.org/docs/reference/console/#optional-features).
 
@@ -79,10 +115,11 @@ Take a repo lock for the current session, with a lease, before landing changes o
 | `repo_root` | string | no | Absolute root of the checkout, resolved on its own machine |
 | `session` | string | no | the acting agent's session: the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, another session name, or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- then a sole active ambient. Pass it when a call reports the agent as ambiguous: the bare call then fails rather than guesses. |
 | `session_id` | string | no | the acting agent's session ULID; takes precedence over session and the bound session |
+| `wait` | boolean | no | join the lock's queue, or keep your place in it, when the lock cannot be yours now; the answer is queued with your position instead of a refusal (default false) |
 
 ## locks_release {#locks_release}
 
-Release a repo lock the current session holds, live or lapsed, so another session can take it. Only the holder may release; the owner can force-release any hold from the console. Name the lock by id, or by the checkout and name (default main).
+Release a repo lock the current session holds, live or lapsed, so another session can take it: the next waiter, when sessions wait for it. A session that waits for the lock and does not hold it leaves the queue instead. Only the holder may release; the owner can force-release any hold from the console. Name the lock by id, or by the checkout and name (default main).
 
 **Optional** - part of *Repo locks*, hidden when the `repo_locks` feature is disabled: the tool leaves `tools/list` and a call to it is refused as an unknown tool, while its stored data stays exactly where it was. See [Optional features](https://thereisnospoon.org/docs/reference/console/#optional-features).
 

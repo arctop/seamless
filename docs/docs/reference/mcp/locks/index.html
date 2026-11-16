@@ -242,7 +242,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#naming-the-repository">Naming the repository</a></li><li class="lvl-2"><a href="#what-an-answer-shows">What an answer shows</a></li><li class="lvl-2"><a href="#locks_list">locks_list</a></li><li class="lvl-2"><a href="#locks_declare">locks_declare</a></li><li class="lvl-2"><a href="#locks_acquire">locks_acquire</a></li><li class="lvl-2"><a href="#locks_release">locks_release</a></li>
+      <li class="lvl-2"><a href="#naming-the-repository">Naming the repository</a></li><li class="lvl-2"><a href="#what-an-answer-shows">What an answer shows</a></li><li class="lvl-2"><a href="#waiting-for-a-lock">Waiting for a lock</a></li><li class="lvl-2"><a href="#locks_list">locks_list</a></li><li class="lvl-2"><a href="#locks_declare">locks_declare</a></li><li class="lvl-2"><a href="#locks_acquire">locks_acquire</a></li><li class="lvl-2"><a href="#locks_release">locks_release</a></li>
     </ul>
   </details>
   <p>A repo lock guards a repository's refs, so agents on several machines land
@@ -264,8 +264,39 @@ or <code>locks_declare</code>) in place of the checkout and the name.</p>
 whether it is <code>held</code>, <code>since</code> and <code>until</code> for a hold, its <code>aliases</code> and its
 <code>projects</code>. A holder is named (<code>holder</code>, <code>holder_session</code>) only to a caller who
 may read that session; a project is listed only where the caller may list it.</p>
+<p>Every lock also answers with:</p>
+<ul>
+<li><code>held_by_caller</code> - true when the lock is held, and by the session this
+connection is bound to: by the agent-process identity its requests carry, or
+by a <code>session_start</code> on it. A connection bound to no session reads false,
+whatever session an unbound call would act as.</li>
+<li><code>waiting</code> - how many sessions wait for the lock.</li>
+<li><code>next_waiter_session</code> - the session first in the queue, only where the caller
+may read that session (as for the holder).</li>
+</ul>
+<p><code>locks_list</code> adds <code>caller_bound</code> beside <code>locks</code>: whether this connection is
+bound to an active session at all, the same binding <code>held_by_caller</code> reads.</p>
+<p>A <a href="../../../guides/peer-auth/#repo-locks">restricted account</a> sees no <code>aliases</code> (the
+list is empty), and no caller sees the aliases of a lock a restricted account
+declared. A lock a restricted account may not reach is not listed for it, and
+by id, by checkout or through <code>locks_declare</code> it reads exactly as a lock that
+does not exist.</p>
+<h2 id="waiting-for-a-lock">Waiting for a lock</h2>
+<p><code>locks_acquire</code> with <code>wait: true</code> joins the lock's queue when the lock cannot
+be yours now, or keeps your place in it, and answers <code>acquired: false</code>,
+<code>queued: true</code>, your <code>position</code> (1 is next) and <code>place_until</code>, when your place
+lapses unless you ask again. Ask again within two minutes to keep the place;
+<code>seam lock acquire --wait</code> does so every few seconds. While anyone waits, only
+the session first in the queue takes the lock; anyone else's acquire is
+refused with the next waiter and their own place. A <code>locks_release</code> from a
+session that waits and does not hold the lock leaves the queue and answers
+<code>released: false</code>, <code>left_queue: true</code>.</p>
+<p>A declaration from a conversation that may not write the global scope (bound
+to a confidential project, or confined by <code>isolation.requests</code>) is refused in
+the fence's own words, and such a conversation's <code>locks_acquire</code> records no new
+repository identity on the lock.</p>
 <h2 id="locks_list">locks_list</h2>
-<p>List repo locks: each lock's repository and name, the refs it guards, whether it is held, by which session (when you may see that session), since and until when, the repository identities that resolve to it, and the projects whose restricted accounts the declaration lists. Pass a checkout's identity (cwd, or repo_root and repo_origin) to list only that repository's locks. A declaration waiting for the owner's approval is listed with state requested. Read-only.</p>
+<p>List repo locks: each lock's repository and name, the refs it guards, whether it is held, by which session (when you may see that session), since and until when, whether you hold it, how many sessions wait for it and which is next, the repository identities that resolve to it, and the projects whose restricted accounts the declaration lists. Pass a checkout's identity (cwd, or repo_root and repo_origin) to list only that repository's locks. A declaration waiting for the owner's approval is listed with state requested. Read-only.</p>
 <p><strong>Optional</strong> - part of <em>Repo locks</em>, hidden when the <code>repo_locks</code> feature is disabled: the tool leaves <code>tools/list</code> and a call to it is refused as an unknown tool, while its stored data stays exactly where it was. See <a href="../../../reference/console/#optional-features">Optional features</a>.</p>
 <div class="table-wrap">
 <table>
@@ -395,7 +426,7 @@ may read that session; a project is listed only where the caller may list it.</p
 </table>
 </div>
 <h2 id="locks_acquire">locks_acquire</h2>
-<p>Take a repo lock for the current session, with a lease, before landing changes on the refs it guards. Re-acquiring a lock you hold refreshes the lease: the heartbeat for a long landing. A lock another session holds under a live lease is refused, naming the holder when you may see that session, since and until; a lapsed lease is taken over. A declaration still waiting for the owner cannot be held. Name the lock by id, or by the checkout and name (default main). Release it with locks_release once the refs have landed; a hold also lapses at the end of its lease.</p>
+<p>Take a repo lock for the current session, with a lease, before landing changes on the refs it guards. Re-acquiring a lock you hold refreshes the lease: the heartbeat for a long landing. A lock another session holds under a live lease is refused, naming the holder when you may see that session, since and until; a lapsed lease is taken over. Sessions waiting for a lock take it first come, first served: while any wait, only the next one may take it, and anyone else is refused with the next waiter and their own place. With wait, a refusal joins the queue instead (or keeps your place) and answers queued, with your position; ask again within two minutes to keep the place, or run <code>seam lock acquire --wait</code> in the background, which asks every few seconds and returns once you hold the lock. A declaration still waiting for the owner cannot be held. Name the lock by id, or by the checkout and name (default main). Release it with locks_release once the refs have landed; a hold also lapses at the end of its lease.</p>
 <p><strong>Optional</strong> - part of <em>Repo locks</em>, hidden when the <code>repo_locks</code> feature is disabled: the tool leaves <code>tools/list</code> and a call to it is refused as an unknown tool, while its stored data stays exactly where it was. See <a href="../../../reference/console/#optional-features">Optional features</a>.</p>
 <div class="table-wrap">
 <table>
@@ -468,11 +499,17 @@ may read that session; a project is listed only where the caller may list it.</p
 <td>no</td>
 <td>the acting agent's session ULID; takes precedence over session and the bound session</td>
 </tr>
+<tr>
+<td><code>wait</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>join the lock's queue, or keep your place in it, when the lock cannot be yours now; the answer is queued with your position instead of a refusal (default false)</td>
+</tr>
 </tbody>
 </table>
 </div>
 <h2 id="locks_release">locks_release</h2>
-<p>Release a repo lock the current session holds, live or lapsed, so another session can take it. Only the holder may release; the owner can force-release any hold from the console. Name the lock by id, or by the checkout and name (default main).</p>
+<p>Release a repo lock the current session holds, live or lapsed, so another session can take it: the next waiter, when sessions wait for it. A session that waits for the lock and does not hold it leaves the queue instead. Only the holder may release; the owner can force-release any hold from the console. Name the lock by id, or by the checkout and name (default main).</p>
 <p><strong>Optional</strong> - part of <em>Repo locks</em>, hidden when the <code>repo_locks</code> feature is disabled: the tool leaves <code>tools/list</code> and a call to it is refused as an unknown tool, while its stored data stays exactly where it was. See <a href="../../../reference/console/#optional-features">Optional features</a>.</p>
 <div class="table-wrap">
 <table>
@@ -559,7 +596,7 @@ may read that session; a project is listed only where the caller may list it.</p
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#naming-the-repository">Naming the repository</a></li><li class="lvl-2"><a href="#what-an-answer-shows">What an answer shows</a></li><li class="lvl-2"><a href="#locks_list">locks_list</a></li><li class="lvl-2"><a href="#locks_declare">locks_declare</a></li><li class="lvl-2"><a href="#locks_acquire">locks_acquire</a></li><li class="lvl-2"><a href="#locks_release">locks_release</a></li>
+      <li class="lvl-2"><a href="#naming-the-repository">Naming the repository</a></li><li class="lvl-2"><a href="#what-an-answer-shows">What an answer shows</a></li><li class="lvl-2"><a href="#waiting-for-a-lock">Waiting for a lock</a></li><li class="lvl-2"><a href="#locks_list">locks_list</a></li><li class="lvl-2"><a href="#locks_declare">locks_declare</a></li><li class="lvl-2"><a href="#locks_acquire">locks_acquire</a></li><li class="lvl-2"><a href="#locks_release">locks_release</a></li>
     </ul>
   </aside>
   

@@ -173,6 +173,10 @@ func TestLocksPage_ReadsThroughTheFilteredHandle(t *testing.T) {
 	hiddenSess := lkSeedSession(t, db, "cc/lk-fin-agent", "example-finance")
 	_, err = store.AcquireRepoLock(ctx, db, l.ID, hiddenSess, time.Minute, time.Now().UTC())
 	require.NoError(t, err)
+	// A waiter in the hidden project counts in the queue, and is not named.
+	hiddenWaiter := lkSeedSession(t, db, "cc/lk-fin-waiter", "example-finance")
+	_, err = store.AcquireRepoLockWaiting(ctx, db, l.ID, hiddenWaiter, time.Minute, time.Now().UTC(), true)
+	require.NoError(t, err)
 
 	view, err := store.OpenView(path, []string{"example-finance"})
 	require.NoError(t, err)
@@ -191,6 +195,13 @@ func TestLocksPage_ReadsThroughTheFilteredHandle(t *testing.T) {
 	require.NotContains(t, page, hiddenSess)
 	require.NotContains(t, page, "example-finance")
 	require.Contains(t, page, `href="/console/projects/example-ops"`)
+	require.Contains(t, page, "1 waiting, next a session this console does not show")
+	require.NotContains(t, page, "cc/lk-fin-waiter")
+	var d lkPageData
+	getJSON(t, mux, "/console/locks", &d)
+	require.Equal(t, 1, d.Locks[0].Waiting)
+	require.True(t, d.Locks[0].NextWaiterHidden)
+	require.Empty(t, d.Locks[0].NextWaiter, "a hidden waiter's id is not handed out")
 
 	rr := lkPost(mux, "/console/locks/"+l.ID+"/release", true)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
@@ -268,4 +279,41 @@ func regexpNav(page string) string {
 		return flat[start:]
 	}
 	return flat[start : start+end]
+}
+
+// The Locks page shows a lock's queue -- how many sessions wait, and the next
+// one -- and the restricted account a holding or waiting session belongs to,
+// so the owner sees which account holds what.
+func TestLocksPage_ShowsTheQueueAndTheAccount(t *testing.T) {
+	db, mux := lkConsole(t)
+	ctx := context.Background()
+	l := lkSeedLock(t, db, "main", "/work/app", core.RepoLockActive, "example-ops")
+	holder := lkSeedSession(t, db, "_example_agent:cc/lk-agent", "example-ops")
+	_, err := db.ExecContext(ctx, `UPDATE sessions SET account = '_example_agent' WHERE id = ?`, holder)
+	require.NoError(t, err)
+	next := lkSeedSession(t, db, "cc/lk-next", "example-ops")
+	third := lkSeedSession(t, db, "cc/lk-third", "example-ops")
+	now := time.Now().UTC()
+	_, err = store.AcquireRepoLock(ctx, db, l.ID, holder, time.Minute, now)
+	require.NoError(t, err)
+	for _, s := range []string{next, third} {
+		_, err := store.AcquireRepoLockWaiting(ctx, db, l.ID, s, time.Minute, now, true)
+		require.NoError(t, err)
+	}
+
+	page := lkGet(t, mux, "/console/locks")
+	require.Contains(t, page, `>_example_agent:cc/lk-agent</a> (account _example_agent)`)
+	require.Contains(t, page, `2 waiting, next <a href="/console/sessions/`+next+`">cc/lk-next</a>`)
+	var d lkPageData
+	getJSON(t, mux, "/console/locks", &d)
+	require.Equal(t, "_example_agent", d.Locks[0].HolderAccount)
+	require.Equal(t, 2, d.Locks[0].Waiting)
+	require.Equal(t, next, d.Locks[0].NextWaiter)
+	require.Equal(t, "cc/lk-next", d.Locks[0].NextWaiterName)
+	require.Empty(t, d.Locks[0].NextWaiterAccount, "the owner's own session carries no account")
+
+	// Nobody waiting, no queue words.
+	free := lkSeedLock(t, db, "release", "/work/app", core.RepoLockActive)
+	one := lkGet(t, mux, "/console/locks/"+free.ID)
+	require.Equal(t, 1, strings.Count(one, "data-lock-queue"), "only the lock with a queue shows one")
 }

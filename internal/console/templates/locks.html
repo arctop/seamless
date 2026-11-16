@@ -37,7 +37,7 @@
     <li class="access-item" id="lock-{{.ID}}" data-lock="{{.ID}}"{{if eq .ID $.Data.Focus}} aria-current="true"{{end}}>
       {{if .Held}}<span class="badge">held</span>{{else if .Lapsed}}<span class="badge">lapsed</span>{{else}}<span class="badge">free</span>{{end}}
       <strong>LOCK {{.Label}}</strong>
-      <small>guards <code>{{range $i, $r := .Refs}}{{if $i}}, {{end}}{{$r}}{{end}}</code>{{if .Holder}} &middot; {{if .Held}}held{{else}}last held{{end}} by {{if .HolderHidden}}a session this console does not show{{else}}<a href="/console/sessions/{{.Holder}}">{{.HolderName}}</a>{{end}}{{with .Since}} since {{clockDate .}}{{end}}{{with .Until}}, until {{clock .}}{{end}}{{end}}</small>
+      <small>guards <code>{{range $i, $r := .Refs}}{{if $i}}, {{end}}{{$r}}{{end}}</code>{{if .Holder}} &middot; {{if .Held}}held{{else}}last held{{end}} by {{if .HolderHidden}}a session this console does not show{{else}}<a href="/console/sessions/{{.Holder}}">{{.HolderName}}</a>{{with .HolderAccount}} (account {{.}}){{end}}{{end}}{{with .Since}} since {{clockDate .}}{{end}}{{with .Until}}, until {{clock .}}{{end}}{{end}}{{if .Waiting}} &middot; <span data-lock-queue>{{.Waiting}} waiting, next {{if .NextWaiterHidden}}a session this console does not show{{else}}<a href="/console/sessions/{{.NextWaiter}}">{{.NextWaiterName}}</a>{{with .NextWaiterAccount}} (account {{.}}){{end}}{{end}}</span>{{end}}</small>
       {{template "lock-identity" .}}
       {{if .Holder}}
       <form method="post" action="/console/locks/{{.ID}}/release">

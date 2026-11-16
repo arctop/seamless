@@ -126,8 +126,9 @@ injected on prompt match - see the disambiguation below.
 **Repo lock** - a Seamless lock on a repository's refs (its main branch, or a
 tag pattern), declared once per repository and name and held with a lease by
 one session while it lands changes. It belongs to the repository, never to a
-project, and is always named with it: `LOCK seamless main`. An optional
-feature, off by default.
+project, and is always named with it: `LOCK seamless main`. Sessions waiting
+for a busy one queue for it and take it first come, first served
+(`seam lock acquire --wait`). An optional feature, off by default.
 
 **Reproject** - moving a Seamless memory to a different project that **already
 exists**; moving it to one that does not is a *split*.

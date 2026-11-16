@@ -663,6 +663,8 @@ func TestImport_MergeAnArchiveFromBefore039(t *testing.T) {
 		`DROP TABLE claim_notices`,
 		// What 047 added (repo locks).
 		`DROP TABLE repo_locks`, `DROP TABLE repo_lock_aliases`, `DROP TABLE repo_lock_projects`,
+		// What 048 added (the repo lock queue).
+		`DROP TABLE repo_lock_waiters`,
 		`DELETE FROM schema_migrations WHERE version >= 39`,
 	} {
 		_, err := db.ExecContext(ctx, q)

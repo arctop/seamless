@@ -184,7 +184,7 @@ func TestLock_SynopsesAndTheBareFamily(t *testing.T) {
 	require.Equal(t, "seam lock list [--cwd DIR] [--here] [--json]", synopsis(lockListCmd))
 	require.Equal(t, "seam lock declare [--cwd DIR] [--json] [--name NAME] [--projects SLUGS] [--refs REFS] [--session NAME]",
 		synopsis(lockDeclareCmd))
-	require.Equal(t, "seam lock acquire [--cwd DIR] [--id ID] [--json] [--lease SECONDS] [--name NAME] [--session NAME]",
+	require.Equal(t, "seam lock acquire [--cwd DIR] [--id ID] [--json] [--lease SECONDS] [--name NAME] [--session NAME] [--timeout D] [--wait]",
 		synopsis(lockAcquireCmd))
 	require.Equal(t, "seam lock release [--cwd DIR] [--force] [--id ID] [--json] [--name NAME] [--session NAME]",
 		synopsis(lockReleaseCmd))

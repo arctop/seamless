@@ -30,7 +30,7 @@ var (
 		noArgs(), bindLockList, runLockList)
 	lockDeclareCmd = spec("lock declare", groupLocks, "declare this repository's lock, once per repository and name",
 		noArgs(), bindLockDeclare, runLockDeclare)
-	lockAcquireCmd = spec("lock acquire", groupLocks, "take this repository's lock, or refresh the lease you hold",
+	lockAcquireCmd = spec("lock acquire", groupLocks, "take this repository's lock, or refresh the lease you hold (--wait: queue for it)",
 		noArgs(), bindLockAcquire, runLockAcquire)
 	lockReleaseCmd = spec("lock release", groupLocks, "release a repo lock you hold (--force: the owner's override)",
 		noArgs(), bindLockRelease, runLockRelease)
@@ -133,7 +133,16 @@ func lkLine(l map[string]any) string {
 	case l["lapsed"] == true:
 		state = "free (a lapsed hold)"
 	}
-	return fmt.Sprintf("LOCK %s  %s  %s", str(l["label"]), state, strings.Join(strs(l["refs"]), ","))
+	line := fmt.Sprintf("LOCK %s  %s  %s", str(l["label"]), state, strings.Join(strs(l["refs"]), ","))
+	// The queue, when anyone waits: its length, and the next waiter where the
+	// server named that session.
+	if n := int(num(l["waiting"])); n > 0 {
+		line += fmt.Sprintf("  %d waiting", n)
+		if next := str(l["next_waiter_session"]); next != "" {
+			line += ", next " + next
+		}
+	}
+	return line
 }
 
 // lkWhen renders a stored timestamp to the second, in UTC; "" for none.
@@ -260,6 +269,8 @@ type lockAcquireOpts struct {
 	session *string
 	cwd     *string
 	asJSON  *bool
+	wait    *bool
+	timeout *time.Duration
 }
 
 func bindLockAcquire(fs *flag.FlagSet) *lockAcquireOpts {
@@ -271,6 +282,10 @@ func bindLockAcquire(fs *flag.FlagSet) *lockAcquireOpts {
 		session: actorSessionFlag(fs),
 		cwd:     fs.String("cwd", "", "the checkout `DIR` (default: the working directory)"),
 		asJSON:  jsonFlag(fs, jsonUsage),
+		wait: fs.Bool("wait", false, "when the lock is not yours now, join its queue and ask again every few seconds "+
+			"until you hold it (for an agent's background mode)"),
+		timeout: lqDurationFlag(fs, "timeout", "with --wait, give up after `D` (a duration: 90s, 10m), leave the queue "+
+			"and exit 1 (default: no limit)"),
 	}
 }
 
@@ -294,6 +309,9 @@ func lkTargetArgs(id, name, cwd string) (map[string]any, error) {
 }
 
 func runLockAcquire(ctx context.Context, e *env, o *lockAcquireOpts, _ []string) error {
+	if *o.timeout > 0 && !*o.wait {
+		return errors.New("--timeout bounds a wait: pass --wait with it")
+	}
 	args, err := lkTargetArgs(*o.id, *o.name, *o.cwd)
 	if err != nil {
 		return err
@@ -309,6 +327,9 @@ func runLockAcquire(ctx context.Context, e *env, o *lockAcquireOpts, _ []string)
 		return err
 	}
 	defer func() { _ = cli.Close() }()
+	if *o.wait {
+		return lqWait(ctx, e, cli, args, *o.timeout, *o.asJSON)
+	}
 	out, text, err := lkCall(ctx, cli, "locks_acquire", args)
 	if err != nil {
 		return err
@@ -316,6 +337,12 @@ func runLockAcquire(ctx context.Context, e *env, o *lockAcquireOpts, _ []string)
 	if *o.asJSON {
 		return writeRaw(e.stdout, []byte(text))
 	}
+	fmt.Fprintln(e.stdout, lkAcquiredLine(out))
+	return nil
+}
+
+// lkAcquiredLine is the line an acquire that holds the lock prints.
+func lkAcquiredLine(out map[string]any) string {
 	l, _ := out["lock"].(map[string]any)
 	verb := "acquired"
 	if out["heartbeat"] == true {
@@ -325,8 +352,7 @@ func runLockAcquire(ctx context.Context, e *env, o *lockAcquireOpts, _ []string)
 	if out["reclaimed"] == true {
 		line += " (taken over from a lapsed hold)"
 	}
-	fmt.Fprintln(e.stdout, line)
-	return nil
+	return line
 }
 
 // --- lock release ---

@@ -531,8 +531,10 @@ subcommands and exits 2.</p>
 </span></span></code></pre></div>
 <p>Calls <code>locks_list</code> and prints one line per lock: <code>LOCK &lt;repo&gt; &lt;name&gt;</code>, whether
 it is free, held (by which session, when you may see it, and until when) or
-waiting for the owner's approval, and its guarded refs. <code>--here</code> (or <code>--cwd</code>)
-lists only the locks of the repository the directory is in.</p>
+waiting for the owner's approval, its guarded refs, and, when sessions wait for
+it, how many and which is next (<code>2 waiting, next cc/...</code>, the name only when you
+may see that session). <code>--here</code> (or <code>--cwd</code>) lists only the locks of the
+repository the directory is in.</p>
 <h3 id="seam_lock_declare">seam lock declare</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam lock <span class="nb">declare</span> <span class="o">[</span>--cwd DIR<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>--name NAME<span class="o">]</span> <span class="o">[</span>--projects SLUGS<span class="o">]</span> <span class="o">[</span>--refs REFS<span class="o">]</span> <span class="o">[</span>--session NAME<span class="o">]</span>
 </span></span></code></pre></div>
@@ -543,17 +545,28 @@ names or one-<code>*</code> patterns) to <code>refs/heads/&lt;name&gt;</code>, a
 project the checkout maps to. A restricted account's declaration waits for the
 owner's approval on the console's Locks page.</p>
 <h3 id="seam_lock_acquire">seam lock acquire</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam lock acquire <span class="o">[</span>--cwd DIR<span class="o">]</span> <span class="o">[</span>--id ID<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>--lease SECONDS<span class="o">]</span> <span class="o">[</span>--name NAME<span class="o">]</span> <span class="o">[</span>--session NAME<span class="o">]</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam lock acquire <span class="o">[</span>--cwd DIR<span class="o">]</span> <span class="o">[</span>--id ID<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>--lease SECONDS<span class="o">]</span> <span class="o">[</span>--name NAME<span class="o">]</span> <span class="o">[</span>--session NAME<span class="o">]</span> <span class="o">[</span>--timeout D<span class="o">]</span> <span class="o">[</span>--wait<span class="o">]</span>
 </span></span></code></pre></div>
 <p>Calls <code>locks_acquire</code> and prints the lease's end. Acquiring a lock you already
 hold refreshes its lease: that is the heartbeat for a long landing. A lock
-another session holds is refused, naming the holder where you may see it.
+another session holds is refused, naming the holder where you may see it, and
+so is a free lock while other sessions wait for it, naming the next waiter.
 <code>--lease</code> overrides the server's default (900 seconds) and is only sent when
 greater than zero; <code>--id</code> names the lock instead of the checkout.</p>
+<p><code>--wait</code> joins the lock's queue instead, and asks again every few seconds until
+the lock is yours: it prints <code>queued for LOCK &lt;repo&gt; &lt;name&gt;: number N of M</code> on
+stderr whenever its place changes, and once it holds the lock it prints the
+acquire line and exits 0. It is made for an agent's background mode, so the
+agent is re-invoked when the lock is its own. <code>--timeout D</code> (a duration such as
+<code>90s</code> or <code>10m</code>; default no limit) gives up after D: it leaves the queue and exits
+1, and an interrupt leaves the queue too. A refusal that is no place in the
+queue (no such lock, a declaration the owner has not approved) ends the wait at
+once. <code>--timeout</code> without <code>--wait</code> is refused.</p>
 <h3 id="seam_lock_release">seam lock release</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam lock release <span class="o">[</span>--cwd DIR<span class="o">]</span> <span class="o">[</span>--force<span class="o">]</span> <span class="o">[</span>--id ID<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>--name NAME<span class="o">]</span> <span class="o">[</span>--session NAME<span class="o">]</span>
 </span></span></code></pre></div>
-<p>Without <code>--force</code>, calls <code>locks_release</code>, which only releases a hold you have.
+<p>Without <code>--force</code>, calls <code>locks_release</code>, which releases a hold you have, or
+gives up your place in the lock's queue when you wait for it and hold nothing.
 <code>--force</code> is the owner override: it POSTs to the console's force-release route,
 which ends any hold, live or lapsed, and is refused from an agent's process on
 the peer_auth socket.</p>

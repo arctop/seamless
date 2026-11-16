@@ -395,8 +395,10 @@ seam lock list [--cwd DIR] [--here] [--json]
 
 Calls `locks_list` and prints one line per lock: `LOCK <repo> <name>`, whether
 it is free, held (by which session, when you may see it, and until when) or
-waiting for the owner's approval, and its guarded refs. `--here` (or `--cwd`)
-lists only the locks of the repository the directory is in.
+waiting for the owner's approval, its guarded refs, and, when sessions wait for
+it, how many and which is next (`2 waiting, next cc/...`, the name only when you
+may see that session). `--here` (or `--cwd`) lists only the locks of the
+repository the directory is in.
 
 ### seam lock declare {#seam_lock_declare}
 
@@ -414,14 +416,25 @@ owner's approval on the console's Locks page.
 ### seam lock acquire {#seam_lock_acquire}
 
 ```bash
-seam lock acquire [--cwd DIR] [--id ID] [--json] [--lease SECONDS] [--name NAME] [--session NAME]
+seam lock acquire [--cwd DIR] [--id ID] [--json] [--lease SECONDS] [--name NAME] [--session NAME] [--timeout D] [--wait]
 ```
 
 Calls `locks_acquire` and prints the lease's end. Acquiring a lock you already
 hold refreshes its lease: that is the heartbeat for a long landing. A lock
-another session holds is refused, naming the holder where you may see it.
+another session holds is refused, naming the holder where you may see it, and
+so is a free lock while other sessions wait for it, naming the next waiter.
 `--lease` overrides the server's default (900 seconds) and is only sent when
 greater than zero; `--id` names the lock instead of the checkout.
+
+`--wait` joins the lock's queue instead, and asks again every few seconds until
+the lock is yours: it prints `queued for LOCK <repo> <name>: number N of M` on
+stderr whenever its place changes, and once it holds the lock it prints the
+acquire line and exits 0. It is made for an agent's background mode, so the
+agent is re-invoked when the lock is its own. `--timeout D` (a duration such as
+`90s` or `10m`; default no limit) gives up after D: it leaves the queue and exits
+1, and an interrupt leaves the queue too. A refusal that is no place in the
+queue (no such lock, a declaration the owner has not approved) ends the wait at
+once. `--timeout` without `--wait` is refused.
 
 ### seam lock release {#seam_lock_release}
 
@@ -429,7 +442,8 @@ greater than zero; `--id` names the lock instead of the checkout.
 seam lock release [--cwd DIR] [--force] [--id ID] [--json] [--name NAME] [--session NAME]
 ```
 
-Without `--force`, calls `locks_release`, which only releases a hold you have.
+Without `--force`, calls `locks_release`, which releases a hold you have, or
+gives up your place in the lock's queue when you wait for it and hold nothing.
 `--force` is the owner override: it POSTs to the console's force-release route,
 which ends any hold, live or lapsed, and is refused from an agent's process on
 the peer_auth socket.

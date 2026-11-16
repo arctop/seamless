@@ -2,10 +2,11 @@ package console
 
 // The Locks page (plan repo-locks): every repo lock -- a lock on a
 // repository's refs that agents declare once and hold while they land changes
-// -- with its holder, since and until, the repository identities that resolve
-// to it, and the projects its declaration lists; the declarations restricted
-// accounts filed, waiting for the owner; and the owner's three decisions,
-// force-release, approve and discard.
+// -- with its holder (and the restricted account it belongs to, if any), since
+// and until, its queue (how many sessions wait, and which is next), the
+// repository identities that resolve to it, and the projects its declaration
+// lists; the declarations restricted accounts filed, waiting for the owner;
+// and the owner's three decisions, force-release, approve and discard.
 //
 // A lock belongs to no project, so the page reads every lock whatever this
 // request's handle hides (store.viewExempt); what the handle hides it hides
@@ -36,17 +37,28 @@ type lkRow struct {
 	Holder string   `json:"holder,omitempty"`
 	// HolderName and HolderProject are the holder's session as this
 	// request's handle shows it; HolderHidden is a holder it does not show.
-	HolderName    string               `json:"holder_session,omitempty"`
-	HolderProject string               `json:"holder_project,omitempty"`
-	HolderHidden  bool                 `json:"holder_hidden,omitempty"`
-	Since         *time.Time           `json:"since,omitempty"`
-	Until         *time.Time           `json:"until,omitempty"`
-	Aliases       []core.RepoLockAlias `json:"aliases"`
-	Projects      []string             `json:"projects"`
-	Account       string               `json:"account,omitempty"`
-	CreatedBy     string               `json:"created_by,omitempty"`
-	CreatedByName string               `json:"created_by_session,omitempty"`
-	CreatedAt     time.Time            `json:"created_at"`
+	HolderName    string `json:"holder_session,omitempty"`
+	HolderProject string `json:"holder_project,omitempty"`
+	HolderHidden  bool   `json:"holder_hidden,omitempty"`
+	// HolderAccount is the restricted account the holding session belongs
+	// to, "" for the owner's own sessions.
+	HolderAccount string `json:"holder_account,omitempty"`
+	// Waiting is how many sessions wait for the lock; NextWaiter is the head
+	// of its queue, named only where this request's handle shows its session
+	// (NextWaiterHidden otherwise).
+	Waiting           int                  `json:"waiting"`
+	NextWaiter        string               `json:"next_waiter,omitempty"`
+	NextWaiterName    string               `json:"next_waiter_session,omitempty"`
+	NextWaiterAccount string               `json:"next_waiter_account,omitempty"`
+	NextWaiterHidden  bool                 `json:"next_waiter_hidden,omitempty"`
+	Since             *time.Time           `json:"since,omitempty"`
+	Until             *time.Time           `json:"until,omitempty"`
+	Aliases           []core.RepoLockAlias `json:"aliases"`
+	Projects          []string             `json:"projects"`
+	Account           string               `json:"account,omitempty"`
+	CreatedBy         string               `json:"created_by,omitempty"`
+	CreatedByName     string               `json:"created_by_session,omitempty"`
+	CreatedAt         time.Time            `json:"created_at"`
 }
 
 // lkPageData is the Locks page's payload, and its JSON.
@@ -61,14 +73,17 @@ type lkPageData struct {
 // lkSessionName is a session's name and project as this request's handle
 // shows them; ok is false for one it does not show (or none at all).
 func (s *Service) lkSessionName(ctx context.Context, id string) (name, project string, ok bool, err error) {
+	sess, ok, err := s.lkSession(ctx, id)
+	return sess.Name, sess.ProjectSlug, ok, err
+}
+
+// lkSession is a session as this request's handle shows it; ok is false for
+// one it does not show (or none at all).
+func (s *Service) lkSession(ctx context.Context, id string) (core.Session, bool, error) {
 	if id == "" {
-		return "", "", false, nil
+		return core.Session{}, false, nil
 	}
-	sess, found, err := store.SessionByID(ctx, s.db(ctx), id)
-	if err != nil || !found {
-		return "", "", false, err
-	}
-	return sess.Name, sess.ProjectSlug, true, nil
+	return store.SessionByID(ctx, s.db(ctx), id)
 }
 
 // lkRowFor renders one lock for the page.
@@ -76,15 +91,25 @@ func (s *Service) lkRowFor(ctx context.Context, l core.RepoLock, now time.Time) 
 	row := lkRow{
 		ID: l.ID, Label: l.Label(), Repo: l.Repo(), Name: l.Name, Refs: l.Refs, State: string(l.State),
 		Held: l.HoldLive(now), Aliases: l.Aliases, Projects: l.Projects, Account: l.Account,
-		CreatedBy: l.CreatedBy, CreatedAt: l.CreatedAt,
+		CreatedBy: l.CreatedBy, CreatedAt: l.CreatedAt, Waiting: len(l.Waiters),
 	}
 	if l.Holder != "" {
 		row.Holder, row.Since, row.Until, row.Lapsed = l.Holder, l.HeldSince, l.LeaseExpiresAt, !row.Held
-		name, project, ok, err := s.lkSessionName(ctx, l.Holder)
+		sess, ok, err := s.lkSession(ctx, l.Holder)
 		if err != nil {
 			return lkRow{}, err
 		}
-		row.HolderName, row.HolderProject, row.HolderHidden = name, project, !ok
+		row.HolderName, row.HolderProject, row.HolderAccount, row.HolderHidden = sess.Name, sess.ProjectSlug, sess.Account, !ok
+	}
+	if next := l.NextWaiter(); next != "" {
+		sess, ok, err := s.lkSession(ctx, next)
+		if err != nil {
+			return lkRow{}, err
+		}
+		if ok {
+			row.NextWaiter, row.NextWaiterName, row.NextWaiterAccount = next, sess.Name, sess.Account
+		}
+		row.NextWaiterHidden = !ok
 	}
 	if name, _, ok, err := s.lkSessionName(ctx, l.CreatedBy); err != nil {
 		return lkRow{}, err

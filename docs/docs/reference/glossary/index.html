@@ -336,8 +336,9 @@ injected on prompt match - see the disambiguation below.</p>
 <p><strong>Repo lock</strong> - a Seamless lock on a repository's refs (its main branch, or a
 tag pattern), declared once per repository and name and held with a lease by
 one session while it lands changes. It belongs to the repository, never to a
-project, and is always named with it: <code>LOCK seamless main</code>. An optional
-feature, off by default.</p>
+project, and is always named with it: <code>LOCK seamless main</code>. Sessions waiting
+for a busy one queue for it and take it first come, first served
+(<code>seam lock acquire --wait</code>). An optional feature, off by default.</p>
 <p><strong>Reproject</strong> - moving a Seamless memory to a different project that <strong>already
 exists</strong>; moving it to one that does not is a <em>split</em>.</p>
 <p><strong>RRF (reciprocal rank fusion)</strong> - the method Seamless recall uses to combine

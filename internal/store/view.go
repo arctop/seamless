@@ -156,6 +156,12 @@ var viewExempt = map[string]string{
 	// names no hidden session.
 	"repo_locks":        "repo locks: a token name, guarded ref names and patterns, a state, the holding and declaring sessions' ids, an account label and times; no project column and no free text, about no project",
 	"repo_lock_aliases": "the repository identities a repo lock answers to: normalized origin URLs and host plus checkout-root pairs, and the lock's name; about no project, no corpus content",
+	// The repo lock queue (migration 048): a waiter is a session id, as a
+	// holder is, and the owner sees every lock's queue whatever this request's
+	// handle hides. A waiter in a hidden project is a session id the console
+	// resolves through the filtered sessions view, which names no hidden
+	// session, and it is judged by its place alone (store.lqLapsedWaiter).
+	"repo_lock_waiters": "the sessions queued for a repo lock: a lock id, a session id and two times; no project column and no free text, about no project",
 }
 
 const (
