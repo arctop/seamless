@@ -26,8 +26,9 @@ import (
 //     build that is not a published release, so a source build never reports
 //     an updater wired (Status.CanApply) and never installs anything;
 //   - LiveSessions and SessionIdle, the sessions store.LiveSessionCount finds
-//     heartbeating within gardener.session_idle_minutes -- the threshold the
-//     console's live badge and the session reaper use;
+//     live: heartbeating within gardener.session_idle_minutes, or holding a
+//     live claim -- the rule the console's live badge and the session reaper
+//     use (core.Session.LiveAsOf);
 //   - Activity, the snapshot of the request tracker that wraps the daemon's
 //     routes (daemonHandler), so pass the same tracker; nil leaves activity
 //     unknown, and only the overdue deadline applies;

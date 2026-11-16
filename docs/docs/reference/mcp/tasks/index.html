@@ -250,16 +250,29 @@ itself.</p>
 will both try to take it, and exactly one wins:</p>
 <ol>
 <li><code>tasks_claim</code> atomically moves a ready task to <code>in_progress</code> and stamps a
-lease (default 900 seconds). The loser gets an error naming the holder.</li>
+lease: 900 seconds by default, and <code>lease_seconds</code> may ask for up to 14400
+(four hours). A longer lease is refused, and the refusal names the ceiling.
+The loser gets an error naming the holder.</li>
 <li>Re-claiming a task you already hold <strong>refreshes</strong> the lease - that is the
-heartbeat for long work.</li>
+heartbeat for long work. While its lease is live, a claim also keeps its
+session live: the idle reaper does not end a session that holds one, however
+long its work goes quiet (see <a href="../../../concepts/sessions/#liveness">Liveness</a>).</li>
 <li>An <strong>expired</strong> lease is reclaimable <em>by id</em> - but the task stays
 <code>in_progress</code>, so <code>tasks_ready</code> does not show it. Only releasing it (by hand,
-or by the gardener's session reaper expiring the dead holder's session) sets
-the status back to <code>open</code> and returns it to the queue. See <a href="../../../concepts/tasks-and-plans/">the two
-clocks</a>.</li>
+or by the gardener's session reaper expiring the holder's session once none
+of its claims is live) sets the status back to <code>open</code> and returns it to the
+queue. See <a href="../../../concepts/tasks-and-plans/">the two clocks</a>.</li>
 <li><code>tasks_release</code>, closing the task (<code>tasks_update</code> to <code>done</code>/<code>dropped</code>), or
 <code>session_end</code> frees the claim.</li>
+<li>A session that <strong>loses</strong> a claim it held - another session claims the task
+after its lease lapsed, the owner releases it, or the reaper releases it from
+the idle session after the lease lapsed - is told once. Its next tool result
+carries a <code>Claim lost:</code> notice as an extra text item after the answer: the
+task, when, the session that took it when this one may see that session
+(<code>another session</code> otherwise), and what to do. Through the hooks the same
+notice can lead the next prompt or session-start injection instead;
+whichever comes first carries it. A call from the <code>seam</code> CLI, which prints
+only the answer, never carries one.</li>
 </ol>
 <p>A lease is not a lock on the files - it is a coordination signal between
 cooperating agents. Nothing stops a determined agent from working on a task it
@@ -358,7 +371,7 @@ withholds, gets the generic words.</p>
 </tr>
 <tr>
 <td><code>tasks_claim</code></td>
-<td>The task is blocked, gated (a gate task, or a step whose own gate is open: <code>task gated</code>, naming who and what), closed, or held by another live claimant; each error names the actual cause</td>
+<td>The task is blocked, gated (a gate task, or a step whose own gate is open: <code>task gated</code>, naming who and what), closed, or held by another live claimant; each error names the actual cause. Also <code>lease_seconds</code> that is not positive, or above the 14400-second ceiling (the refusal names it)</td>
 </tr>
 <tr>
 <td><code>tasks_release</code></td>
@@ -689,7 +702,7 @@ sealed sends none. Off, the argument does not exist. See
 </table>
 </div>
 <h2 id="tasks_claim">tasks_claim</h2>
-<p>Atomically claim a task for the current session, moving it to in_progress with a lease. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), waiting on people ('task gated': a task of kind gate is never claimed, and a step whose own gate is open waits until it is cleared), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims.</p>
+<p>Atomically claim a task for the current session, moving it to in_progress with a lease: 900 seconds unless lease_seconds sets another, at most 14400 seconds (4 hours). While its lease is live a claim keeps its session live: the idle reaper does not end a session that holds one, however long its work goes quiet. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), waiting on people ('task gated': a task of kind gate is never claimed, and a step whose own gate is open waits until it is cleared), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed, and a session that loses a claim that way, or by the owner's release, is told once, in its next Seamless tool result or prompt. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims.</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -711,7 +724,7 @@ sealed sends none. Off, the argument does not exist. See
 <td><code>lease_seconds</code></td>
 <td>number</td>
 <td>no</td>
-<td>lease duration in seconds before the claim lapses and the task becomes reclaimable (default 900)</td>
+<td>lease duration in seconds before the claim lapses and the task becomes reclaimable (default 900, at most 14400)</td>
 </tr>
 <tr>
 <td><code>session</code></td>

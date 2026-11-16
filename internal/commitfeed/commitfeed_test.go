@@ -408,3 +408,45 @@ func TestBuild_AnIdleSessionHasEnded(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, trusting.Sessions, 3, "no threshold: the status alone decides")
 }
+
+// The snapshot keeps the reaper's rule: a session quiet past the threshold
+// while it holds a live claim is still open, and once its last lease lapses it
+// has ended at its last activity, as the reaper will end it. The boundary is
+// the claim's: a lease lapsing exactly at taken keeps nothing open.
+func TestBuild_AQuietHolderOfALiveClaimIsStillOpen(t *testing.T) {
+	ctx := context.Background()
+	db := feedDB(t)
+	day := 24 * time.Hour
+	quiet := taken.Add(-2 * time.Hour)
+	holder := addSession(t, db, "cc/0001-gates", "", "", core.SessionActive, taken.Add(-day), quiet)
+	lapsed := addSession(t, db, "cc/0002-lapsed", "", "", core.SessionActive, taken.Add(-day), quiet)
+	edge := addSession(t, db, "cc/0003-edge", "", "", core.SessionActive, taken.Add(-day), quiet)
+	claim := func(session string, until time.Time) {
+		t.Helper()
+		id, err := core.NewID()
+		require.NoError(t, err)
+		require.NoError(t, store.CreateTask(ctx, db, core.Task{ID: id, ProjectSlug: "app", Title: "gates",
+			Status: core.TaskOpen, CreatedAt: quiet, UpdatedAt: quiet}))
+		_, err = store.ClaimTask(ctx, db, id, session, 15*time.Minute, until.Add(-15*time.Minute))
+		require.NoError(t, err)
+	}
+	claim(holder, taken.Add(time.Hour))
+	claim(lapsed, taken.Add(-time.Minute))
+	claim(edge, taken)
+
+	snap, _, err := Build(ctx, db, Options{Host: "h", Window: 2 * day, Now: taken, Idle: 45 * time.Minute})
+	require.NoError(t, err)
+	byID := map[string]Session{}
+	for _, s := range snap.Sessions {
+		byID[s.ID] = s
+	}
+	require.Len(t, byID, 3)
+	require.Nil(t, byID["cc/0001-gates"].EndedAt, "its live claim keeps it open")
+	for _, ended := range []string{"cc/0002-lapsed", "cc/0003-edge"} {
+		require.NotNil(t, byID[ended].EndedAt, ended)
+		require.Equal(t, "2026-10-31T10:00:00.000Z", *byID[ended].EndedAt, "%s: ended at its last activity", ended)
+	}
+	raw := encode(t, snap)
+	require.NoError(t, CheckJSON(raw, taken))
+	require.NotContains(t, string(raw), "held", "the snapshot never carries the claim")
+}

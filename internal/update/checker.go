@@ -93,12 +93,16 @@ type Deps struct {
 	// Spawner starts the updater for one attempt (cmd/seamlessd wires one
 	// per OS). nil: never apply.
 	Spawner Spawner
-	// LiveSessions counts the agent sessions live at cutoff: active and
-	// heartbeating on or after it (store.LiveSessionCount). The checker
-	// passes now minus SessionIdle. nil, or an error, is never idle.
+	// LiveSessions counts the agent sessions live now by the one liveness
+	// rule (core.Session.LiveAsOf; store.LiveSessionCount): active, and
+	// heartbeating on or after cutoff or holding a claim that is still live.
+	// A quiet agent running a long gate under a live claim keeps the update
+	// waiting, as it keeps the reaper away. The checker passes now minus
+	// SessionIdle. nil, or an error, is never idle.
 	LiveSessions func(ctx context.Context, cutoff time.Time) (int, error)
 	// SessionIdle is gardener.session_idle_minutes, the age past which a
-	// session no longer counts as live; zero falls back to config's default.
+	// session that holds no live claim no longer counts as live; zero falls
+	// back to config's default.
 	SessionIdle time.Duration
 	// Activity is the request tracker's snapshot: how many counted requests
 	// are in flight, and when the last one finished (the tracker's start

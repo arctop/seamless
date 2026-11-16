@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 	"time"
@@ -17,8 +16,22 @@ import (
 )
 
 // defaultClaimLease is how long a task claim holds before it lapses and the task
-// becomes reclaimable, unless the caller overrides it via lease_seconds.
+// becomes reclaimable, unless the caller overrides it via lease_seconds (at most
+// core.MaxClaimLease).
 const defaultClaimLease = 15 * time.Minute
+
+// maxClaimLeaseSeconds is core.MaxClaimLease as lease_seconds counts it.
+const maxClaimLeaseSeconds = int64(core.MaxClaimLease / time.Second)
+
+// claimLeaseCeiling words the ceiling for the refusal and the tool's
+// description: the seconds lease_seconds takes, and the hours they make.
+func claimLeaseCeiling() string {
+	words := fmt.Sprintf("%d seconds", maxClaimLeaseSeconds)
+	if h := core.MaxClaimLease / time.Hour; core.MaxClaimLease%time.Hour == 0 {
+		words += fmt.Sprintf(" (%d hours)", h)
+	}
+	return words
+}
 
 // actorSessionArgDesc documents the `session` argument on the identity-sensitive
 // task tools (claim/release/update). It carries the one fact an agent stuck behind
@@ -389,13 +402,12 @@ func (s *Server) handleTasksList(ctx context.Context, req mcp.CallToolRequest) (
 
 func tasksClaimTool() mcp.Tool {
 	return mcp.NewTool("tasks_claim", hintAdd(),
-		mcp.WithDescription("Atomically claim a task for the current session, moving it to in_progress with a lease. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), waiting on people ('task gated': a task of kind gate is never claimed, and a step whose own gate is open waits until it is cleared), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims."),
+		mcp.WithDescription("Atomically claim a task for the current session, moving it to in_progress with a lease: 900 seconds unless lease_seconds sets another, at most "+claimLeaseCeiling()+". While its lease is live a claim keeps its session live: the idle reaper does not end a session that holds one, however long its work goes quiet. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), waiting on people ('task gated': a task of kind gate is never claimed, and a step whose own gate is open waits until it is cleared), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed, and a session that loses a claim that way, or by the owner's release, is told once, in its next Seamless tool result or prompt. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims."),
 		mcp.WithString("id", mcp.Required(), mcp.Description("task id to claim")),
-		// No Min/Max: the handler owns this parameter's range, because its upper
-		// bound is an int64-overflow hazard in the seconds->Duration conversion
-		// rather than a domain limit a schema could state. The validator owns the
-		// type; the handler owns range and domain.
-		mcp.WithNumber("lease_seconds", mcp.Description("lease duration in seconds before the claim lapses and the task becomes reclaimable (default 900)")),
+		// No Min/Max: the handler owns this parameter's range, so its refusal can
+		// name the ceiling (core.MaxClaimLease) and say how to hold a task longer.
+		// The validator owns the type; the handler owns range and domain.
+		mcp.WithNumber("lease_seconds", mcp.Description(fmt.Sprintf("lease duration in seconds before the claim lapses and the task becomes reclaimable (default 900, at most %d)", maxClaimLeaseSeconds))),
 		mcp.WithString("session", mcp.Description(actorSessionArgDesc)),
 		mcp.WithString("session_id", mcp.Description(actorSessionIDArgDesc)),
 	)
@@ -430,11 +442,18 @@ func (s *Server) handleTasksClaim(ctx context.Context, req mcp.CallToolRequest) 
 	lease := defaultClaimLease
 	if argPresent(req, "lease_seconds") {
 		secs := argInt(req, "lease_seconds", 0)
-		// The upper bound guards int64 overflow in the seconds->Duration
-		// conversion: an overflowed lease goes negative, so the claim would
-		// report success while being instantly expired (silently reclaimable).
-		if secs <= 0 || int64(secs) > int64(math.MaxInt64/time.Second) {
+		if secs <= 0 {
 			return errResult("tasks_claim", fmt.Errorf("invalid lease_seconds %d", secs))
+		}
+		// The ceiling (core.MaxClaimLease) bounds how long a claim keeps its
+		// session live after its holder goes quiet. It also keeps the
+		// seconds->Duration conversion far from int64 overflow, where a lease
+		// would go negative and the claim report success while being instantly
+		// expired (silently reclaimable).
+		if int64(secs) > maxClaimLeaseSeconds {
+			return errResult("tasks_claim", fmt.Errorf(
+				"invalid lease_seconds %d: a claim's lease is at most %s; to hold the task longer, re-claim it (tasks_claim again) before the lease lapses",
+				secs, claimLeaseCeiling()))
 		}
 		lease = time.Duration(secs) * time.Second
 	}

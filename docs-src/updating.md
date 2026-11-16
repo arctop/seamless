@@ -239,8 +239,9 @@ holds wins:
 
 1. No live agent session and no request in flight: it installs now. A session is
    live while it is active and has sent a heartbeat within
-   `gardener.session_idle_minutes` (45 minutes by default), on any machine that
-   shares the daemon.
+   `gardener.session_idle_minutes` (45 minutes by default) or holds a live task
+   claim, on any machine that shares the daemon - the rule the idle reaper
+   applies (see [Liveness](/concepts/sessions/#liveness)).
 2. Waiting for `update.max_defer` (default `24h`): it installs at the next 90
    seconds without a request.
 3. Waiting for 1.5 times `max_defer`: it installs as soon as no request is in

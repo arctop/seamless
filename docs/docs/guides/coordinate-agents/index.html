@@ -406,13 +406,13 @@ re-queues it, because nothing is scanning for it.</p>
 <tbody>
 <tr>
 <td><strong>The lease</strong></td>
-<td><code>lease_seconds</code>, default 900s</td>
+<td><code>lease_seconds</code>, default 900s, at most 14400s</td>
 <td>The task becomes stealable <strong>by id</strong> - a worker that knows the id can <code>tasks_claim</code> it and win. It is still not in the ready queue</td>
 </tr>
 <tr>
 <td><strong>The session idle reap</strong></td>
-<td><code>gardener.session_idle_minutes</code> (45), on the gardener's tick</td>
-<td>The reaper expires the dead session and <strong>releases its claims</strong> - status back to <code>open</code>, and the task is genuinely back in the queue</td>
+<td><code>gardener.session_idle_minutes</code> (45) after the last lease lapses, on the gardener's tick</td>
+<td>The reaper expires the dead session and <strong>releases its claims</strong> - status back to <code>open</code>, and the task is genuinely back in the queue. A live claim keeps its session live, so the reap never comes while a lease runs</td>
 </tr>
 </tbody>
 </table>

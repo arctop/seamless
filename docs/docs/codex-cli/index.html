@@ -433,8 +433,8 @@ findings from that turn's final assistant message. The harvest is idempotent -
 an empty turn leaves the prior findings intact - so the findings converge on
 the last substantive turn's summary.</li>
 <li><strong>The session is never explicitly closed.</strong> It sits active until
-<code>gardener.session_idle_minutes</code> of silence, at which point the idle reaper marks
-it <code>expired</code>. A Codex session therefore only ever reaches <code>expired</code>, never
+<code>gardener.session_idle_minutes</code> of silence with no live task claim, at which
+point the idle reaper marks it <code>expired</code>. A Codex session therefore only ever reaches <code>expired</code>, never
 <code>completed</code>.</li>
 </ul>
 <p>Those expired-but-harvested findings still surface in the next agent's briefing:

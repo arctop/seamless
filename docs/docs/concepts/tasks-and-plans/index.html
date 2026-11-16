@@ -360,8 +360,8 @@ them is how a fleet quietly stalls.</p>
 <tbody>
 <tr>
 <td>Controls</td>
-<td><code>lease_seconds</code> (default 900)</td>
-<td><code>gardener.session_idle_minutes</code> (default 45)</td>
+<td><code>lease_seconds</code> (default 900, at most 14400)</td>
+<td><code>gardener.session_idle_minutes</code> (default 45), counted only once none of the session's claims is live</td>
 </tr>
 <tr>
 <td>Enforced</td>
@@ -386,7 +386,13 @@ is still <code>in_progress</code>, so it is <strong>invisible to the queue</stro
 <code>tasks_ready</code> will never see it, even though a <code>tasks_claim</code> on that specific id
 would now succeed.</p>
 <p>What actually puts it back in the queue is the reaper: it expires the dead
-agent's idle session and releases its claims, flipping the task back to <code>open</code>.</p>
+agent's idle session and releases its claims, flipping the task back to <code>open</code>.
+The clocks run in that order: a live claim keeps its session
+<a href="../../concepts/sessions/#liveness">live</a>, so the reaper never ends a session while
+one of its leases runs, and ends it on its first pass after the last lease
+lapses and the session has been quiet past <code>session_idle_minutes</code>. The holder
+is told once, on its next call or prompt, of each claim it lost that way, to
+another session's claim, or to the owner's release.</p>
 <p>Two consequences worth internalizing:</p>
 <ul>
 <li>The lease is not the recovery mechanism; the reaper is. The lease only decides

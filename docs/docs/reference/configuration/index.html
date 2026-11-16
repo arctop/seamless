@@ -1462,9 +1462,11 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># 0 disables the pass.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_GARDENER_STALE_STAGE_DAYS</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">stale_stage_days</span><span class="p">:</span><span class="w"> </span><span class="m">14</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Minutes of no activity before an active session counts as dead: the reaper</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># expires it and the console stops showing it as live. One knob drives both,</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># so they never drift. Must comfortably exceed a long single agent turn.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Minutes of no activity before an active session that holds no live task</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># claim counts as dead: the reaper expires it and the console stops showing it</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># as live. One knob drives both, so they never drift. Work that goes quiet for</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># longer (a long test run, a wait on CI) keeps its session live by holding a</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># claim, whose lease is at most 4 hours.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Must be positive; omit the key to retain the built-in 45m default.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_GARDENER_SESSION_IDLE_MINUTES</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">session_idle_minutes</span><span class="p">:</span><span class="w"> </span><span class="m">45</span><span class="w">

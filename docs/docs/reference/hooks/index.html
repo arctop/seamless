@@ -238,7 +238,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </details>
   <p>Seamless installs hooks for two clients: seven for Claude Code (including
@@ -332,7 +332,7 @@ install order:</p>
 <td>command (<code>seam hook session-start</code>)</td>
 <td>10s</td>
 <td><code>/api/hooks/session-start</code></td>
-<td>Registers the agent's cwd in the repo→project map, assembles the <code>&lt;seam-briefing&gt;</code>, and creates or resumes an opaque <code>cc/&lt;prefix&gt;-&lt;digest&gt;</code> ambient handle keyed by the full external ID, stamped with the <a href="#what-rides-on-the-query-string">agent process</a> that ran the hook.</td>
+<td>Registers the agent's cwd in the repo→project map, assembles the <code>&lt;seam-briefing&gt;</code>, and creates or resumes an opaque <code>cc/&lt;prefix&gt;-&lt;digest&gt;</code> ambient handle keyed by the full external ID, stamped with the <a href="#what-rides-on-the-query-string">agent process</a> that ran the hook. A <a href="#claim-notices">claim the conversation lost</a> leads the briefing.</td>
 </tr>
 <tr>
 <td><code>UserPromptSubmit</code></td>
@@ -340,7 +340,7 @@ install order:</p>
 <td>http</td>
 <td>5s</td>
 <td><code>/api/hooks/user-prompt-submit</code></td>
-<td>Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block. A miss is logged as a <code>hook.prompt</code> event.</td>
+<td>Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a <a href="#claim-notices">claim the conversation lost</a> when there is one. A miss is logged as a <code>hook.prompt</code> event.</td>
 </tr>
 <tr>
 <td><code>SessionEnd</code></td>
@@ -356,7 +356,7 @@ install order:</p>
 <td>command (<code>seam hook post-tool-use</code>)</td>
 <td>10s</td>
 <td><code>/api/hooks/post-tool-use</code></td>
-<td>Heartbeats the ambient session. Captures plan-file iterations (<code>Write</code>/<code>Edit</code>/<code>MultiEdit</code> under the plans dir) and plan approvals (<code>ExitPlanMode</code>).</td>
+<td>Captures plan-file iterations (<code>Write</code>/<code>Edit</code>/<code>MultiEdit</code> under the plans dir) and plan approvals (<code>ExitPlanMode</code>), and heartbeats the ambient session for those calls only: <code>seam hook</code> drops every other file's write before it leaves the machine, so ordinary edits and shell commands heartbeat nothing.</td>
 </tr>
 <tr>
 <td><code>SubagentStart</code></td>
@@ -458,13 +458,13 @@ lifecycle.</p>
 <td><code>SessionStart</code></td>
 <td>command (<code>seam hook session-start --client codex</code>)</td>
 <td><code>/api/hooks/session-start</code></td>
-<td>Registers the cwd's project, assembles the <code>&lt;seam-briefing&gt;</code>, and creates or resumes an opaque <code>cx/&lt;prefix&gt;-&lt;digest&gt;</code> ambient handle keyed by the full external ID, stamped with the <a href="#what-rides-on-the-query-string">agent process</a> that ran the hook.</td>
+<td>Registers the cwd's project, assembles the <code>&lt;seam-briefing&gt;</code>, and creates or resumes an opaque <code>cx/&lt;prefix&gt;-&lt;digest&gt;</code> ambient handle keyed by the full external ID, stamped with the <a href="#what-rides-on-the-query-string">agent process</a> that ran the hook. A <a href="#claim-notices">claim the conversation lost</a> leads the briefing.</td>
 </tr>
 <tr>
 <td><code>UserPromptSubmit</code></td>
 <td>command (<code>seam hook user-prompt-submit --client codex</code>)</td>
 <td><code>/api/hooks/user-prompt-submit</code></td>
-<td>Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block.</td>
+<td>Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a <a href="#claim-notices">claim the conversation lost</a> when there is one.</td>
 </tr>
 <tr>
 <td><code>Stop</code></td>
@@ -576,6 +576,16 @@ writes the status to stderr and nothing to stdout, which a client reads as
 continue too.</p>
 <p>Nothing clears a mark through a hook, a flag or an MCP tool: only the owner,
 on the console's Held screen.</p>
+<h2 id="claim-notices">Claim notices</h2>
+<p>A session that loses a task claim it held - another session claims the task
+after its lease lapsed, the owner releases the claim, or the idle reaper
+releases a lapsed one - is told once. The next <code>SessionStart</code> (not a
+subagent's) or <code>UserPromptSubmit</code> of its conversation leads its injection with
+a <code>Seamless: Claim lost: ...</code> line naming the task, when, the session that took
+it when this one may see it, and what to do; a Seamless tool result may carry
+it first instead, and whichever does carries it alone. The conversation's
+sessions are its ambient session and every explicit session <code>session_start</code>
+linked to it. See <a href="../../concepts/lease-based-task-claiming/">lease-based task claiming</a>.</p>
 <h2 id="what-rides-on-the-query-string">What rides on the query string</h2>
 <p>A hook body is the agent client's schema, not Seamless's, so everything
 Seamless needs <em>about</em> the call travels beside it as query parameters on the
@@ -871,7 +881,7 @@ live/schema evidence and the recapture procedure.</li>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </aside>
   

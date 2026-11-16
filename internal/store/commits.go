@@ -178,6 +178,11 @@ type FeedSession struct {
 	// stamp it as they complete the row, and the idle reaper leaves it at the
 	// last sign of life when it expires one.
 	UpdatedAt time.Time
+	// HeldUntil is when the furthest of the session's claims lapses
+	// (core.Session.HeldUntil, read from the column every session read fills
+	// it from, sessionHeldUntil), nil when it holds none: what the liveness
+	// rule reads beside UpdatedAt. The snapshot never carries it.
+	HeldUntil *time.Time
 }
 
 // FeedSessions returns every session that was live at some point between
@@ -185,13 +190,15 @@ type FeedSession struct {
 // after since. Oldest first.
 func FeedSessions(ctx context.Context, db *sql.DB, since, until time.Time) ([]FeedSession, error) {
 	var out []FeedSession
-	err := eachRow(ctx, db, `SELECT id, name, project_slug, account, status, cwd, host, created_at, updated_at
+	err := eachRow(ctx, db, `SELECT id, name, project_slug, account, status, cwd, host, created_at, updated_at,
+		       `+sessionHeldUntil+`
 		FROM sessions
 		WHERE created_at <= ? AND (status = 'active' OR updated_at >= ?)
 		ORDER BY created_at, id`, []any{core.FormatTime(until), core.FormatTime(since)}, func(rows *sql.Rows) error {
 		var s FeedSession
 		var status, created, updated string
-		if err := rows.Scan(&s.ID, &s.Name, &s.ProjectSlug, &s.Account, &status, &s.CWD, &s.Host, &created, &updated); err != nil {
+		var held sql.NullString
+		if err := rows.Scan(&s.ID, &s.Name, &s.ProjectSlug, &s.Account, &status, &s.CWD, &s.Host, &created, &updated, &held); err != nil {
 			return err
 		}
 		s.Active = core.SessionStatus(status) == core.SessionActive
@@ -201,6 +208,13 @@ func FeedSessions(ctx context.Context, db *sql.DB, since, until time.Time) ([]Fe
 		}
 		if s.UpdatedAt, err = core.ParseTime(updated); err != nil {
 			return fmt.Errorf("session %s updated_at: %w", s.ID, err)
+		}
+		if held.Valid {
+			lapses, err := core.ParseTime(held.String)
+			if err != nil {
+				return fmt.Errorf("session %s held until: %w", s.ID, err)
+			}
+			s.HeldUntil = &lapses
 		}
 		out = append(out, s)
 		return nil

@@ -165,3 +165,90 @@ func postAuthed(path string) *http.Request {
 	req.Header.Set("Authorization", "Bearer "+testKey)
 	return req
 }
+
+// The owner's release from the console tells the session that held the claim:
+// one notice waits for its next hook injection or tool result.
+func TestTaskRelease_TellsTheHolder(t *testing.T) {
+	db, mux := newConsole(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	id, err := core.NewID()
+	require.NoError(t, err)
+	require.NoError(t, store.CreateTask(ctx, db, core.Task{ID: id, ProjectSlug: "seamless", Title: "held task",
+		Status: core.TaskOpen, CreatedAt: now, UpdatedAt: now}))
+	_, err = store.ClaimTask(ctx, db, id, "01CLHOLDERAAAAAAAAAAAAAAAA", time.Hour, now)
+	require.NoError(t, err)
+
+	rr := do(mux, postAuthed("/console/tasks/"+id+"/release"))
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+
+	pending, err := store.PendingClaimNotices(ctx, db, "01CLHOLDERAAAAAAAAAAAAAAAA")
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	require.Equal(t, store.ClaimLostReleased, pending[0].Reason)
+	require.Equal(t, id, pending[0].ResourceID)
+}
+
+// A session idle past the threshold while it holds a live claim is live on the
+// console's session surfaces: the Sessions screen, its own page, and the Now
+// page, where its claim rides its card rather than the loose ends. Once the
+// lease lapses it reads idle again.
+func TestConsole_AQuietHolderOfALiveClaimIsLive(t *testing.T) {
+	db, mux := newConsole(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	idle := now.Add(-2 * time.Hour)
+	mk := func(name string) string {
+		t.Helper()
+		id, err := core.NewID()
+		require.NoError(t, err)
+		require.NoError(t, store.CreateSession(ctx, db, core.Session{ID: id, Name: name, ProjectSlug: "seamless",
+			Status: core.SessionActive, CreatedAt: idle, UpdatedAt: idle}))
+		return id
+	}
+	holder, quiet := mk("cc/gates"), mk("cc/quiet")
+	task, err := core.NewID()
+	require.NoError(t, err)
+	require.NoError(t, store.CreateTask(ctx, db, core.Task{ID: task, ProjectSlug: "seamless", Title: "run the gates",
+		Status: core.TaskOpen, CreatedAt: idle, UpdatedAt: idle}))
+	_, err = store.ClaimTask(ctx, db, task, holder, time.Hour, now)
+	require.NoError(t, err)
+
+	liveOf := func() (active, idleN int, live map[string]bool) {
+		t.Helper()
+		var list sessionsData
+		getJSON(t, mux, "/console/sessions?format=json", &list)
+		live = map[string]bool{}
+		for _, r := range list.Sessions {
+			live[r.ID] = r.Live
+		}
+		return list.Active, list.Idle, live
+	}
+	active, idleN, live := liveOf()
+	require.Equal(t, 1, active)
+	require.Equal(t, 1, idleN)
+	require.True(t, live[holder], "its live claim keeps the quiet holder live")
+	require.False(t, live[quiet])
+
+	var detail struct {
+		Live bool `json:"live"`
+	}
+	getJSON(t, mux, "/console/sessions/"+holder+"?format=json", &detail)
+	require.True(t, detail.Live)
+
+	var page nowData
+	getJSON(t, mux, "/console/now?format=json", &page)
+	require.Equal(t, 1, page.AgentsLive)
+	require.Equal(t, holder, page.Agents[0].ID)
+	require.Len(t, page.Agents[0].Claims, 1)
+	require.Equal(t, task, page.Agents[0].Claims[0].ID)
+	require.Empty(t, page.Loose, "a live holder's claim is no loose end")
+
+	_, err = db.ExecContext(ctx, `UPDATE tasks SET lease_expires_at = ? WHERE id = ?`,
+		core.FormatTime(now.Add(-time.Minute)), task)
+	require.NoError(t, err)
+	active, idleN, live = liveOf()
+	require.Zero(t, active, "the lease lapsed: nothing keeps it live")
+	require.Equal(t, 2, idleN)
+	require.False(t, live[holder])
+}

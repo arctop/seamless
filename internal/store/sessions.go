@@ -12,10 +12,47 @@ import (
 	"github.com/arctop/seamless/internal/core"
 )
 
+// sessionCols is every column a session read scans (scanSession), the
+// held-until column last. It reads the table by its own name, sessions, which
+// the held-until subquery correlates on: a statement that aliases the table
+// cannot use it.
 const sessionCols = `id, name, project_slug, status, findings, claude_session_id,
 	external_client, cwd, host, source, model, ambient, favorite, metadata, created_at, updated_at,
 	input_tokens, cached_input_tokens, cache_creation_tokens, output_tokens, total_tokens, account,
-	parent_session_id`
+	parent_session_id, ` + sessionHeldUntil
+
+// The liveness rule in SQL (core.Session.LiveAsOf is the rule; these are its
+// SQL form, for the readers that judge or count sessions in the database).
+//
+// sessionHolds lists the holds of the sessions row a statement reads, one row
+// per hold with the instant it lapses (expires_at, a core.TimeFormat string, so
+// text order is time order and equality is exact). Today a hold is a task
+// claim, read as core.Task.ClaimLive reads one: an in_progress task the
+// session claimed, with a lease. It is the one place the holds are listed: a
+// second kind of hold joins here as a UNION ALL arm, and every reader follows
+// -- the held-until column each session read fills core.Session.HeldUntil
+// from (sessionHeldUntil), and the rule itself (sessionLive).
+const sessionHolds = `SELECT lease_expires_at AS expires_at FROM tasks
+	WHERE claimed_by = sessions.id AND status = 'in_progress' AND lease_expires_at IS NOT NULL`
+
+// sessionHeldUntil is the column core.Session.HeldUntil is read from: the
+// latest expiry among the session's holds, lapsed or not; NULL when it holds
+// none.
+const sessionHeldUntil = `(SELECT MAX(expires_at) FROM (` + sessionHolds + `))`
+
+// sessionHoldsLive is true when the session holds something live at the bound
+// instant: an expiry strictly after it, core.Session.HoldsAt's boundary and
+// core.Task.ClaimLive's, so a lease lapsing exactly then keeps nothing live.
+// One bind: now.
+const sessionHoldsLive = `EXISTS (SELECT 1 FROM (` + sessionHolds + `) WHERE expires_at > ?)`
+
+// sessionLive is core.Session.LiveAsOf over the sessions row a statement
+// reads: active, and either updated at or after the idle cutoff or holding
+// something live at now. Two binds: the cutoff (now minus the idle threshold),
+// then now. The reaper expires the active rows it rejects (ExpireIdleSessions,
+// and its re-check); LiveSessionCount and ProjectsWithCounts count the rows it
+// accepts.
+const sessionLive = `(sessions.status = 'active' AND (sessions.updated_at >= ? OR ` + sessionHoldsLive + `))`
 
 // ErrSessionNameExists is returned by CreateSession when the name is already
 // taken (sessions.name is UNIQUE). It mirrors ErrSlugExists so a caller racing
@@ -381,24 +418,45 @@ func UpdateAmbientFindings(
 	return n > 0, nil
 }
 
-// ExpireStaleSessions reaps active sessions whose last activity predates cutoff,
-// flipping each to SessionExpired. It leaves updated_at untouched so the row still
-// records when the session was last alive (the console orders and dates by it),
-// which also keeps the flip idempotent: a reaped session no longer matches the
-// active filter. It returns only the sessions it actually flipped (id + project)
-// so the caller can release their task claims and record telemetry -- a session
-// that was heartbeated or gracefully completed between the candidate read and the
-// flip is skipped, never falsely reaped. Passing updated_at unchanged means a
-// later graceful session_end/resume can still upgrade the row (its guards key off
-// completed/active, not expired).
+// ExpireIdleSessions reaps the active sessions that are not live at now
+// (core.Session.LiveAsOf with idle as the threshold, <= 0 falling back to
+// core.SessionIdleTTL): quiet since before now minus idle, and holding no claim
+// live at now. A session idle past the threshold while it holds a live claim
+// stays active, and the first pass after its last lease lapses reaps it.
+//
+// Each reaped session flips to SessionExpired. It leaves updated_at untouched so
+// the row still records when the session was last alive (the console orders and
+// dates by it), which also keeps the flip idempotent: a reaped session no longer
+// matches the active filter. It returns only the sessions it actually flipped
+// (id + project) so the caller can release their task claims and record
+// telemetry -- a session that was heartbeated, took a claim, or was gracefully
+// completed between the candidate read and the flip is skipped, never falsely
+// reaped. Passing updated_at unchanged means a later graceful session_end/resume
+// can still upgrade the row (its guards key off completed/active, not expired).
+func ExpireIdleSessions(ctx context.Context, db *sql.DB, now time.Time, idle time.Duration) ([]core.Session, error) {
+	if idle <= 0 {
+		idle = core.SessionIdleTTL
+	}
+	return expireSessions(ctx, db, now.Add(-idle), now)
+}
+
+// ExpireStaleSessions is ExpireIdleSessions for a caller holding a cutoff rather
+// than a clock and a threshold: it reaps the active sessions last updated before
+// cutoff that hold no claim live at the wall clock.
 func ExpireStaleSessions(ctx context.Context, db *sql.DB, cutoff time.Time) ([]core.Session, error) {
-	candidates, err := staleActiveSessions(ctx, db, cutoff)
+	return expireSessions(ctx, db, cutoff, time.Now().UTC())
+}
+
+// expireSessions reaps the active sessions sessionLive rejects for cutoff and
+// now.
+func expireSessions(ctx context.Context, db *sql.DB, cutoff, now time.Time) ([]core.Session, error) {
+	candidates, err := staleActiveSessions(ctx, db, cutoff, now)
 	if err != nil {
 		return nil, err
 	}
 	var reaped []core.Session
 	for _, s := range candidates {
-		flipped, err := expireSessionIfStillStale(ctx, db, s.ID, cutoff)
+		flipped, err := expireSessionIfStillStale(ctx, db, s.ID, cutoff, now)
 		if err != nil {
 			return nil, err
 		}
@@ -410,15 +468,16 @@ func ExpireStaleSessions(ctx context.Context, db *sql.DB, cutoff time.Time) ([]c
 }
 
 // expireSessionIfStillStale flips one session to expired iff it is STILL an
-// active session idle past cutoff at flip time, reporting whether it did. The
-// re-check closes the window between the candidate SELECT and this UPDATE: a
-// heartbeat (TouchSession bumping updated_at) or a graceful completion (status
+// active session that is not live (sessionLive) at flip time, reporting whether
+// it did. The re-check closes the window between the candidate SELECT and this
+// UPDATE: a heartbeat (TouchSession bumping updated_at), a claim (tasks_claim,
+// or a holder's re-claim refreshing its lease) or a graceful completion (status
 // leaving 'active') that lands in between wins, and the session is not reaped.
-func expireSessionIfStillStale(ctx context.Context, db *sql.DB, id string, cutoff time.Time) (bool, error) {
+func expireSessionIfStillStale(ctx context.Context, db *sql.DB, id string, cutoff, now time.Time) (bool, error) {
 	res, err := db.ExecContext(ctx,
 		`UPDATE sessions SET status = 'expired'
-		  WHERE id = ? AND status = 'active' AND updated_at < ?`,
-		id, core.FormatTime(cutoff.UTC()))
+		  WHERE id = ? AND status = 'active' AND NOT `+sessionLive,
+		id, core.FormatTime(cutoff.UTC()), core.FormatTime(now.UTC()))
 	if err != nil {
 		return false, fmt.Errorf("store.ExpireStaleSessions: %w", err)
 	}
@@ -429,14 +488,14 @@ func expireSessionIfStillStale(ctx context.Context, db *sql.DB, id string, cutof
 	return n == 1, nil
 }
 
-// staleActiveSessions returns the active sessions whose last activity predates
-// cutoff, oldest first -- the reap candidate set. Split out so the read (with its
-// deferred Close) is done before ExpireStaleSessions issues its UPDATEs.
-func staleActiveSessions(ctx context.Context, db *sql.DB, cutoff time.Time) ([]core.Session, error) {
+// staleActiveSessions returns the active sessions that are not live at now
+// (sessionLive), oldest first -- the reap candidate set. Split out so the read
+// (with its deferred Close) is done before expireSessions issues its UPDATEs.
+func staleActiveSessions(ctx context.Context, db *sql.DB, cutoff, now time.Time) ([]core.Session, error) {
 	rows, err := db.QueryContext(ctx, `SELECT `+sessionCols+`
 		FROM sessions
-		WHERE status = 'active' AND updated_at < ?
-		ORDER BY updated_at ASC`, core.FormatTime(cutoff.UTC()))
+		WHERE status = 'active' AND NOT `+sessionLive+`
+		ORDER BY updated_at ASC`, core.FormatTime(cutoff.UTC()), core.FormatTime(now.UTC()))
 	if err != nil {
 		return nil, fmt.Errorf("store.staleActiveSessions: %w", err)
 	}
@@ -767,7 +826,13 @@ func LatestSessionProject(ctx context.Context, db *sql.DB) (string, error) {
 
 // ListSessions returns sessions newest-updated first, optionally filtered by
 // status and to those updated since a cutoff (a zero `since` means all time),
-// capped at limit (default 100). It backs the console Sessions list.
+// capped at limit (default 100). It backs the console Sessions list, and the
+// live lists that read it with the idle cutoff and confirm each row with
+// core.Session.LiveAsOf.
+//
+// The cutoff keeps every active session that holds a claim live at the wall
+// clock as well, however long ago it was last updated: such a session is live
+// (core.Session.LiveAsOf), so a list of the recent ones must not drop it.
 func ListSessions(ctx context.Context, db *sql.DB, status core.SessionStatus, since time.Time, limit int) ([]core.Session, error) {
 	if limit <= 0 {
 		limit = 100
@@ -775,19 +840,20 @@ func ListSessions(ctx context.Context, db *sql.DB, status core.SessionStatus, si
 	query := `SELECT ` + sessionCols + ` FROM sessions`
 	args := []any{}
 	where := ""
-	add := func(cond string, val any) {
+	add := func(cond string, vals ...any) {
 		if where == "" {
 			where = " WHERE " + cond
 		} else {
 			where += " AND " + cond
 		}
-		args = append(args, val)
+		args = append(args, vals...)
 	}
 	if status != "" {
 		add(`status = ?`, string(status))
 	}
 	if !since.IsZero() {
-		add(`updated_at >= ?`, core.FormatTime(since))
+		add(`(updated_at >= ? OR (status = 'active' AND `+sessionHoldsLive+`))`,
+			core.FormatTime(since), core.FormatTime(time.Now().UTC()))
 	}
 	query += where + ` ORDER BY updated_at DESC, id DESC LIMIT ?`
 	args = append(args, limit)
@@ -807,15 +873,16 @@ func ListSessions(ctx context.Context, db *sql.DB, status core.SessionStatus, si
 	return out, rows.Err()
 }
 
-// LiveSessionCount counts the sessions live right now: active and heartbeating
-// on or after the cutoff -- the same predicate as ProjectsWithCounts' live
-// column and Session.LiveAsOf. It backs the console's Now nav badge, so it is
-// one scalar query, safe on every page load.
+// LiveSessionCount counts the sessions live right now (core.Session.LiveAsOf,
+// in SQL: sessionLive): active, and heartbeating on or after the cutoff or
+// holding a claim live at the wall clock -- the same rule as ProjectsWithCounts'
+// live column and the reaper's. It backs the console's Now nav badge and the
+// automatic-update idle gate, so it is one scalar query, safe on every page load.
 func LiveSessionCount(ctx context.Context, db *sql.DB, cutoff time.Time) (int, error) {
 	var n int
 	err := db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM sessions WHERE status = 'active' AND updated_at >= ?`,
-		core.FormatTime(cutoff)).Scan(&n)
+		`SELECT COUNT(*) FROM sessions WHERE `+sessionLive,
+		core.FormatTime(cutoff), core.FormatTime(time.Now().UTC())).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("store.LiveSessionCount: %w", err)
 	}
@@ -1003,15 +1070,22 @@ func scanSession(rows interface{ Scan(dest ...any) error }) (core.Session, error
 		status, meta     string
 		ambient          int
 		created, updated string
-		parent           sql.NullString
+		parent, held     sql.NullString
 	)
 	if err := rows.Scan(
 		&s.ID, &s.Name, &s.ProjectSlug, &status, &s.Findings, &s.ExternalSessionID,
 		&s.ExternalClient, &s.CWD, &s.Host, &s.Source, &s.Model, &ambient, &s.Favorite, &meta, &created, &updated,
 		&s.Tokens.Input, &s.Tokens.Cached, &s.Tokens.CacheCreation, &s.Tokens.Output, &s.Tokens.Total, &s.Account,
-		&parent,
+		&parent, &held,
 	); err != nil {
 		return core.Session{}, err
+	}
+	if held.Valid {
+		until, err := core.ParseTime(held.String)
+		if err != nil {
+			return core.Session{}, fmt.Errorf("held until: %w", err)
+		}
+		s.HeldUntil = &until
 	}
 	s.ParentSessionID = parent.String
 	s.Status = core.SessionStatus(status)

@@ -659,6 +659,8 @@ func TestImport_MergeAnArchiveFromBefore039(t *testing.T) {
 		`ALTER TABLE tasks DROP COLUMN gate_what`, `ALTER TABLE tasks DROP COLUMN gate_decision`,
 		`ALTER TABLE tasks DROP COLUMN gate_ready_when`, `ALTER TABLE tasks DROP COLUMN gate_cleared_at`,
 		`ALTER TABLE tasks DROP COLUMN gate_cleared_by`, `ALTER TABLE tasks DROP COLUMN gate_note`,
+		// What 046 added (claim notices).
+		`DROP TABLE claim_notices`,
 		`DELETE FROM schema_migrations WHERE version >= 39`,
 	} {
 		_, err := db.ExecContext(ctx, q)

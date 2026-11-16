@@ -114,7 +114,7 @@ them is how a fleet quietly stalls.
 
 | | Lease expiry | Session reaper |
 |---|---|---|
-| Controls | `lease_seconds` (default 900) | `gardener.session_idle_minutes` (default 45) |
+| Controls | `lease_seconds` (default 900, at most 14400) | `gardener.session_idle_minutes` (default 45), counted only once none of the session's claims is live |
 | Enforced | Lazily, inside `tasks_claim` | By the gardener's periodic pass |
 | Effect | The task becomes **stealable by id** | The task's status returns to `open` |
 | Visible in `tasks_ready`? | **No** | **Yes** |
@@ -126,6 +126,12 @@ would now succeed.
 
 What actually puts it back in the queue is the reaper: it expires the dead
 agent's idle session and releases its claims, flipping the task back to `open`.
+The clocks run in that order: a live claim keeps its session
+[live](/concepts/sessions/#liveness), so the reaper never ends a session while
+one of its leases runs, and ends it on its first pass after the last lease
+lapses and the session has been quiet past `session_idle_minutes`. The holder
+is told once, on its next call or prompt, of each claim it lost that way, to
+another session's claim, or to the owner's release.
 
 Two consequences worth internalizing:
 

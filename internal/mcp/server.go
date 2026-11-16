@@ -454,10 +454,16 @@ func New(cfg Config) *Server {
 		//   - the client's capabilities (client_caps.go) just outside it, so
 		//     after a daemon restart the dialog and the remedies read what the
 		//     connection declared. Off, as for the dialog, it adds nothing.
+		//   - the claim notices (claim_notice.go) just inside log, whose slots
+		//     name the session a call is credited to: they tell that session of
+		//     a claim it lost, in ids, a slug and times as the grant notices
+		//     do, so the tool.call event may keep them. None pending, nothing
+		//     added.
 		mcpserver.WithToolHandlerMiddleware(s.authMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.leaseNoticeMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.moveNoticeMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.logMiddleware),
+		mcpserver.WithToolHandlerMiddleware(s.claimNoticeMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.validateMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.sessionHandleMiddleware),
 		mcpserver.WithToolHandlerMiddleware(s.clientCapsMiddleware),

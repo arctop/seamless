@@ -321,7 +321,7 @@ is the contract's name; this file is not the metadata feed.)
 | `sessions[].id` | The session's name - the `cc/...` or `cx/...` on a briefing's `Seam session` line, or a `sess/*` name, and for a restricted account's session its qualified name (`_example_agent:cc/...`) - so a commit message that mentions it matches. A name outside the contract's pattern, or one another listed session already took, is replaced by the session's ULID |
 | `sessions[].account` | The restricted account that started the session; left out for yours |
 | `sessions[].repo` | The repository the session's working directory is in, or `null` |
-| `sessions[].started_at`, `ended_at` | When it started, and when it ended - `null` while it is active. A session idle longer than `gardener.session_idle_minutes` has ended at its last activity, the end the idle reaper gives it: never at the moment it was reaped, and whether or not the reaper runs |
+| `sessions[].started_at`, `ended_at` | When it started, and when it ended - `null` while it is active. A session idle longer than `gardener.session_idle_minutes` and holding no live task claim has ended at its last activity, the end the idle reaper gives it: never at the moment it was reaped, and whether or not the reaper runs. One holding a live claim is still active, as the reaper keeps it |
 | `tasks[].id` | A task's ULID, for a commit message that names one |
 | `tasks[].account` | The restricted account behind the task: the one whose session recorded one of its commits (the earliest such record), else the one that created it, else the one whose words its text carries. Left out when none is, as for your own tasks |
 | `tasks[].repo` | Its project's repository, when the project maps exactly one; left out otherwise |

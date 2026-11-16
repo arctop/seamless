@@ -34,9 +34,10 @@ func sessionStatusNames() []string {
 	return out
 }
 
-// sessionRow is a display projection of a session for the list page. Live is true
-// only for an active session whose last activity is within core.SessionIdleTTL;
-// an active-but-stale (idle) row has Live false and is awaiting the reaper.
+// sessionRow is a display projection of a session for the list page. Live is
+// core.Session.LiveAsOf: true for an active session whose last activity is
+// within the idle TTL, or that holds a live claim; an active row that is
+// neither (idle) has Live false and is awaiting the reaper.
 type sessionRow struct {
 	ID       string    `json:"id"`
 	Name     string    `json:"name"`
@@ -55,9 +56,10 @@ type sessionRow struct {
 }
 
 // sessionsData is the payload for the sessions list page. Active counts genuinely
-// live sessions (active + heartbeated within the idle TTL); Idle counts active
-// sessions gone quiet past it (the reaper will expire them); Completed and Expired
-// count those terminal states. All are windowed; Total is the all-time count.
+// live sessions (core.Session.LiveAsOf: heartbeated within the idle TTL, or
+// holding a live claim); Idle counts active sessions gone quiet past it with no
+// live claim (the reaper will expire them); Completed and Expired count those
+// terminal states. All are windowed; Total is the all-time count.
 type sessionsData struct {
 	Filter      string         `json:"filter"`
 	Query       string         `json:"query,omitempty"`
@@ -331,7 +333,7 @@ func sessionSortName(row sessionRow) string {
 type sessionDetail struct {
 	Session      core.Session     `json:"session"`
 	Harness      string           `json:"harness,omitempty"` // client discriminator (claude-code|codex)
-	Live         bool             `json:"live"`              // active and heartbeated within the configured idle window
+	Live         bool             `json:"live"`              // core.Session.LiveAsOf: heartbeated within the configured idle window, or holding a live claim
 	Duration     string           `json:"duration"`          // compact wall-clock span for review surfaces
 	Findings     string           `json:"findings"`
 	FindingsHTML template.HTML    `json:"-"`

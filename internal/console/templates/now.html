@@ -35,7 +35,7 @@
   <section class="now-zone" aria-label="Agents on duty">
     <header class="now-zone-head">
       <h2>On duty<strong>{{.AgentsLive}}</strong></h2>
-      <span class="now-zone-note">{{.InFlight}} task{{if ne .InFlight 1}}s{{end}} in flight &middot; heartbeats within the idle window</span>
+      <span class="now-zone-note">{{.InFlight}} task{{if ne .InFlight 1}}s{{end}} in flight &middot; live: a heartbeat within the idle window, or a live claim</span>
       <a href="/console/sessions">All sessions {{icon "arrow-right"}}</a>
     </header>
     {{if .Agents}}
@@ -89,7 +89,7 @@
       {{end}}
     </div>
     {{else}}
-    <div class="now-empty">{{icon "radar"}}<span>All quiet &mdash; no agent has heartbeat inside the idle window.
+    <div class="now-empty">{{icon "radar"}}<span>All quiet &mdash; no agent is live: none has a heartbeat inside the idle window or a live claim.
       Sessions appear here the moment one starts working.</span></div>
     {{end}}
   </section>

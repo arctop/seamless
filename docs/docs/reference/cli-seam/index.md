@@ -347,7 +347,10 @@ seam task claim [--lease SECS] [--session NAME] <id>
 
 Calls `tasks_claim` to atomically take a ready task, printing the new status and
 the lease expiry. `--lease` overrides the server's default lease (900 seconds);
-it is only sent when greater than zero.
+it is only sent when greater than zero, and the server refuses one above 14400
+seconds (four hours), naming the ceiling. While the lease is live the claim
+keeps this session live: the idle reaper does not end it, however long the work
+goes quiet.
 
 ### seam task heartbeat {#seam_task_heartbeat}
 
@@ -357,7 +360,8 @@ seam task heartbeat [--lease SECS] [--session NAME] <id>
 
 The same `tasks_claim` call as `claim`. Re-claiming a task you already hold
 refreshes its lease, so `heartbeat` is that path under a name that says what it
-is for during long work. There is no separate heartbeat tool.
+is for during long work: run it before the lease lapses to keep the claim, and
+with it the session. There is no separate heartbeat tool.
 
 ### seam task release {#seam_task_release}
 

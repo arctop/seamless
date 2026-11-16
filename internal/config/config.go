@@ -570,9 +570,10 @@ type Gardener struct {
 	// proposed regardless of age. 0 disables the pass.
 	StaleStageDays int `yaml:"stale_stage_days"`
 	// SessionIdleMinutes is the no-activity age beyond which an active session
-	// is considered dead: the gardener reaper expires it and the console stops
-	// counting it as live. It is the single liveness threshold shared by both,
-	// so the reaper cutoff and the console "live" window never drift.
+	// that holds no live task claim is considered dead: the gardener reaper
+	// expires it and the console stops counting it as live
+	// (core.Session.LiveAsOf). It is the single liveness threshold shared by
+	// both, so the reaper cutoff and the console "live" window never drift.
 	// Must be positive. The fully resolved config already supplies 45 when the
 	// key is absent, so zero is an explicit invalid value rather than a second,
 	// silent spelling of the default.

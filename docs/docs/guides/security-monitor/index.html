@@ -836,7 +836,7 @@ is the contract's name; this file is not the metadata feed.)</p>
 </tr>
 <tr>
 <td><code>sessions[].started_at</code>, <code>ended_at</code></td>
-<td>When it started, and when it ended - <code>null</code> while it is active. A session idle longer than <code>gardener.session_idle_minutes</code> has ended at its last activity, the end the idle reaper gives it: never at the moment it was reaped, and whether or not the reaper runs</td>
+<td>When it started, and when it ended - <code>null</code> while it is active. A session idle longer than <code>gardener.session_idle_minutes</code> and holding no live task claim has ended at its last activity, the end the idle reaper gives it: never at the moment it was reaped, and whether or not the reaper runs. One holding a live claim is still active, as the reaper keeps it</td>
 </tr>
 <tr>
 <td><code>tasks[].id</code></td>

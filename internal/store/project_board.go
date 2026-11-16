@@ -27,7 +27,7 @@ type ProjectBoardRow struct {
 	Project      string    `json:"project"`      // slug; "" is the global scope
 	Memories     int       `json:"memories"`     // active memories, project = slug (strict, matches GetProjectCounts.Memories)
 	Sessions     int       `json:"sessions"`     // all sessions project_slug = slug (matches GetProjectCounts.Sessions)
-	LiveSessions int       `json:"liveSessions"` // live sessions: active AND updated within core.SessionIdleTTL (matches the Sessions screen)
+	LiveSessions int       `json:"liveSessions"` // live sessions (core.Session.LiveAsOf): active AND updated within the idle TTL or holding a live claim (matches the Sessions screen)
 	OpenTasks    int       `json:"openTasks"`    // status IN ('open','in_progress') (matches GetProjectCounts.OpenTasks)
 	Blocked      int       `json:"blocked"`      // open tasks that are not ready: an open/in_progress blocker, or waiting on people (a gate, an open gate of its own)
 	Notes        int       `json:"notes"`        // notes project = slug (matches GetProjectCounts.Notes)
@@ -44,10 +44,12 @@ type ProjectBoardRow struct {
 // the projects table -- with strict per-slug counts, liveness, blocked-task
 // backpressure, and last-active recency computed in SQL, then retrieval reach
 // (ReachRate/Surfaced/Active) joined by slug from BuildRetrievalReport over the
-// given window. LiveSessions counts sessions that are active AND updated within
-// idleTTL of now (<= 0 falls back to core.SessionIdleTTL), matching the
-// Sessions screen's live bucket, so an active-but-idle session awaiting the
-// reaper never inflates the board.
+// given window. LiveSessions counts the sessions live at now by the one rule
+// (core.Session.LiveAsOf, in SQL: sessionLive): active, and updated within
+// idleTTL of now (<= 0 falls back to core.SessionIdleTTL) or holding a claim
+// live at now. That matches the Sessions screen's live bucket, so an
+// active-but-idle session awaiting the reaper never inflates the board, and a
+// quiet holder of a live claim, which the reaper keeps, still counts.
 //
 // The counts mirror GetProjectCounts exactly (same strict per-slug predicates),
 // so a single row equals the single-project peek. The global scope ("") is its
@@ -73,7 +75,7 @@ func ProjectsWithCounts(ctx context.Context, db *sql.DB, window RetrievalWindow,
 	}
 
 	// Sessions per project: all statuses (matches GetProjectCounts.Sessions),
-	// plus live count (active within the idle TTL) and MAX(updated_at) for
+	// plus live count (the liveness rule at now) and MAX(updated_at) for
 	// recency, in one pass. LastActive deliberately ignores the cutoff: it
 	// reflects last activity regardless of live/idle.
 	if idleTTL <= 0 {
@@ -82,10 +84,10 @@ func ProjectsWithCounts(ctx context.Context, db *sql.DB, window RetrievalWindow,
 	liveCutoff := core.FormatTime(now.UTC().Add(-idleTTL))
 	sessRows, err := db.QueryContext(ctx, `
 		SELECT project_slug, COUNT(*),
-		       SUM(CASE WHEN status = 'active' AND updated_at >= ? THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN `+sessionLive+` THEN 1 ELSE 0 END),
 		       MAX(updated_at),
 		       COALESCE(SUM(total_tokens), 0)
-		FROM sessions GROUP BY project_slug`, liveCutoff)
+		FROM sessions GROUP BY project_slug`, liveCutoff, core.FormatTime(now.UTC()))
 	if err != nil {
 		return nil, fmt.Errorf("store.ProjectsWithCounts: sessions: %w", err)
 	}

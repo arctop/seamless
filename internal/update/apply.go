@@ -183,8 +183,9 @@ func (c *Checker) stale(now time.Time) bool {
 	return c.lastGood.IsZero() || since < 0 || since >= recheckFresh
 }
 
-// liveSessions counts the live agent sessions at now; no counter is an error,
-// which Decide treats as not idle.
+// liveSessions counts the live agent sessions at now, by the one liveness rule
+// (Deps.LiveSessions: heartbeating within the idle threshold, or holding a live
+// claim); no counter is an error, which Decide treats as not idle.
 func (c *Checker) liveSessions(ctx context.Context, now time.Time) (int, error) {
 	if c.d.LiveSessions == nil {
 		return 0, errNoSessionCounter

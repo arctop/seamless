@@ -80,7 +80,7 @@ func TestExpireStaleSessions_HeartbeatBetweenSelectAndFlip(t *testing.T) {
 	}))
 
 	// Reaper step 1: the candidate read sees the session as stale.
-	candidates, err := staleActiveSessions(ctx, db, cutoff)
+	candidates, err := staleActiveSessions(ctx, db, cutoff, now)
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 
@@ -88,7 +88,7 @@ func TestExpireStaleSessions_HeartbeatBetweenSelectAndFlip(t *testing.T) {
 	require.NoError(t, TouchSession(ctx, db, id, now))
 
 	// Reaper step 2: the flip must observe the heartbeat and decline.
-	flipped, err := expireSessionIfStillStale(ctx, db, id, cutoff)
+	flipped, err := expireSessionIfStillStale(ctx, db, id, cutoff, now)
 	require.NoError(t, err)
 	require.False(t, flipped, "a heartbeated session must not be reaped")
 
@@ -117,7 +117,7 @@ func TestExpireStaleSessions_GracefulEndBetweenSelectAndFlip(t *testing.T) {
 	}
 	require.NoError(t, CreateSession(ctx, db, sess))
 
-	candidates, err := staleActiveSessions(ctx, db, cutoff)
+	candidates, err := staleActiveSessions(ctx, db, cutoff, now)
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 
@@ -127,7 +127,7 @@ func TestExpireStaleSessions_GracefulEndBetweenSelectAndFlip(t *testing.T) {
 	sess.UpdatedAt = now
 	require.NoError(t, UpdateSession(ctx, db, sess))
 
-	flipped, err := expireSessionIfStillStale(ctx, db, id, cutoff)
+	flipped, err := expireSessionIfStillStale(ctx, db, id, cutoff, now)
 	require.NoError(t, err)
 	require.False(t, flipped, "a completed session must not be reported as reaped")
 
@@ -177,4 +177,57 @@ func TestTouchSession(t *testing.T) {
 	// Empty id/name are safe no-ops.
 	require.NoError(t, TouchSession(ctx, db, "", beat))
 	require.NoError(t, TouchAmbientSession(ctx, db, "", "", beat))
+}
+
+// A session idle past the threshold while it holds a live claim is not reaped;
+// the first pass at or after its last lease lapses reaps it. The boundary is
+// ClaimLive's: a lease lapsing exactly at the pass's now keeps nothing live.
+func TestExpireIdleSessions_ALiveClaimKeepsItsSession(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+	idle := now.Add(-2 * time.Hour)
+	holder := clSession(t, db, "cc/holder", "example-ops", core.SessionActive, idle)
+	later := clSession(t, db, "cc/later", "example-ops", core.SessionActive, idle)
+	clClaim(t, db, "example-ops", holder, 30*time.Minute, now)                // lapses at now+30m
+	clClaim(t, db, "example-ops", later, 30*time.Minute+time.Nanosecond, now) // a nanosecond later
+
+	reaped, err := ExpireIdleSessions(ctx, db, now, core.SessionIdleTTL)
+	require.NoError(t, err)
+	require.Empty(t, reaped, "idle, but holding live claims: both stay")
+
+	reaped, err = ExpireIdleSessions(ctx, db, now.Add(30*time.Minute), core.SessionIdleTTL)
+	require.NoError(t, err)
+	require.Len(t, reaped, 1, "the lease lapsing exactly now keeps nothing live")
+	require.Equal(t, holder, reaped[0].ID)
+
+	reaped, err = ExpireIdleSessions(ctx, db, now.Add(30*time.Minute+time.Nanosecond), core.SessionIdleTTL)
+	require.NoError(t, err)
+	require.Len(t, reaped, 1)
+	require.Equal(t, later, reaped[0].ID)
+}
+
+// A claim the session takes between the reaper's candidate read and its flip
+// wins, as a heartbeat does: the session holds a live claim at flip time, so it
+// is live and is not reaped.
+func TestExpireIdleSessions_ClaimBetweenSelectAndFlip(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+	cutoff := now.Add(-core.SessionIdleTTL)
+	id := clSession(t, db, "cc/claiming", "example-ops", core.SessionActive, now.Add(-2*time.Hour))
+
+	candidates, err := staleActiveSessions(ctx, db, cutoff, now)
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+
+	clClaim(t, db, "example-ops", id, 15*time.Minute, now)
+
+	flipped, err := expireSessionIfStillStale(ctx, db, id, cutoff, now)
+	require.NoError(t, err)
+	require.False(t, flipped, "a session that just took a claim is live")
+	got, ok, err := SessionByID(ctx, db, id)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, core.SessionActive, got.Status)
 }

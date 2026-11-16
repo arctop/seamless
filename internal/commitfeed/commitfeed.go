@@ -27,8 +27,9 @@
 //	          or its ULID when the name is outside the contract's pattern;
 //	          account the restricted account that started it; repo the
 //	          repository its working directory is in, or null; ended_at null
-//	          while it is active, and a session idle past the liveness
-//	          threshold ended at its last activity
+//	          while it is active, and a session no longer live -- idle past
+//	          the liveness threshold and holding no live claim -- ended at its
+//	          last activity
 //	tasks     [{id, account?, repo?, commits?}]: every open or in-progress
 //	          task and every task changed since since; account the restricted
 //	          account that had a hand in it (taskAccount); repo its project's
@@ -140,9 +141,10 @@ type Options struct {
 	// Now is when the snapshot is taken.
 	Now time.Time
 	// Idle is the liveness threshold (gardener.session_idle_minutes): a
-	// session still marked active but idle longer than this is reported ended
-	// at its last activity, as the idle reaper would expire it, whether or not
-	// the reaper runs. 0 trusts the status alone.
+	// session still marked active that is no longer live (core.Session.LiveAsOf:
+	// idle longer than this and holding no live claim) is reported ended at
+	// its last activity, as the idle reaper would expire it, whether or not the
+	// reaper runs. 0 trusts the status alone.
 	Idle time.Duration
 	// Locked reports whether peer_auth locks a project; its repository is
 	// never named. nil means none.
@@ -320,17 +322,21 @@ func accountRef(account string) string {
 	return "h:" + hex.EncodeToString(sum[:])[:24]
 }
 
-// settleIdle applies the liveness threshold: a session still marked active
-// but idle past idle has ended at its last activity -- the end the reaper
-// would give it -- so a dead agent's session never reads as open forever, and
-// one that ended so before since leaves the window.
+// settleIdle applies the liveness rule the reaper applies
+// (core.Session.LiveAsOf, idle as the threshold): a session still marked
+// active that is no longer live -- idle past idle and holding no live claim --
+// has ended at its last activity, the end the reaper gives it, so a dead
+// agent's session never reads as open forever, and one that ended so before
+// since leaves the window. A quiet session holding a live claim, which the
+// reaper keeps, is still open.
 func settleIdle(sessions []store.FeedSession, since, until time.Time, idle time.Duration) []store.FeedSession {
 	if idle <= 0 {
 		return sessions
 	}
 	kept := sessions[:0]
 	for _, s := range sessions {
-		if s.Active && until.Sub(s.UpdatedAt) > idle {
+		live := core.Session{Status: core.SessionActive, UpdatedAt: s.UpdatedAt, HeldUntil: s.HeldUntil}
+		if s.Active && !live.LiveAsOf(until, idle) {
 			s.Active = false
 		}
 		if !s.Active && s.UpdatedAt.Before(since) {

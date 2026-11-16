@@ -13,16 +13,29 @@ Claiming is the concurrency control. Two agents that both see the same ready tas
 will both try to take it, and exactly one wins:
 
 1. `tasks_claim` atomically moves a ready task to `in_progress` and stamps a
-   lease (default 900 seconds). The loser gets an error naming the holder.
+   lease: 900 seconds by default, and `lease_seconds` may ask for up to 14400
+   (four hours). A longer lease is refused, and the refusal names the ceiling.
+   The loser gets an error naming the holder.
 2. Re-claiming a task you already hold **refreshes** the lease - that is the
-   heartbeat for long work.
+   heartbeat for long work. While its lease is live, a claim also keeps its
+   session live: the idle reaper does not end a session that holds one, however
+   long its work goes quiet (see [Liveness](https://thereisnospoon.org/docs/concepts/sessions/#liveness)).
 3. An **expired** lease is reclaimable *by id* - but the task stays
    `in_progress`, so `tasks_ready` does not show it. Only releasing it (by hand,
-   or by the gardener's session reaper expiring the dead holder's session) sets
-   the status back to `open` and returns it to the queue. See [the two
-   clocks](https://thereisnospoon.org/docs/concepts/tasks-and-plans/).
+   or by the gardener's session reaper expiring the holder's session once none
+   of its claims is live) sets the status back to `open` and returns it to the
+   queue. See [the two clocks](https://thereisnospoon.org/docs/concepts/tasks-and-plans/).
 4. `tasks_release`, closing the task (`tasks_update` to `done`/`dropped`), or
    `session_end` frees the claim.
+5. A session that **loses** a claim it held - another session claims the task
+   after its lease lapsed, the owner releases it, or the reaper releases it from
+   the idle session after the lease lapsed - is told once. Its next tool result
+   carries a `Claim lost:` notice as an extra text item after the answer: the
+   task, when, the session that took it when this one may see that session
+   (`another session` otherwise), and what to do. Through the hooks the same
+   notice can lead the next prompt or session-start injection instead;
+   whichever comes first carries it. A call from the `seam` CLI, which prints
+   only the answer, never carries one.
 
 A lease is not a lock on the files - it is a coordination signal between
 cooperating agents. Nothing stops a determined agent from working on a task it
@@ -121,7 +134,7 @@ withholds, gets the generic words.
 |---|---|
 | `tasks_add` | A blocker is missing, the new dependency would create a cycle, or the gate breaks the [gate rules](#gates) |
 | `tasks_update` | Nothing was supplied to change, a new dependency is invalid, one id is both added and removed, a `commits` entry is not a full commit id, the gate would break the [gate rules](#gates), one call both edits and clears the gate, `gate_clear` finds no open gate, `gate_note` comes without `gate_clear`, or another live session holds the task; with `isolation.requests` on, a [receipt](#receipts) that breaks its rule |
-| `tasks_claim` | The task is blocked, gated (a gate task, or a step whose own gate is open: `task gated`, naming who and what), closed, or held by another live claimant; each error names the actual cause |
+| `tasks_claim` | The task is blocked, gated (a gate task, or a step whose own gate is open: `task gated`, naming who and what), closed, or held by another live claimant; each error names the actual cause. Also `lease_seconds` that is not positive, or above the 14400-second ceiling (the refusal names it) |
 | `tasks_release` | The acting session is not the holder; force release exists only on the owner console/CLI surface |
 
 An expired claim is not reported as live. Claiming that task by id succeeds at
@@ -221,12 +234,12 @@ List a project's tasks, optionally filtered by status, newest first. A task that
 
 ## tasks_claim {#tasks_claim}
 
-Atomically claim a task for the current session, moving it to in_progress with a lease. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), waiting on people ('task gated': a task of kind gate is never claimed, and a step whose own gate is open waits until it is cleared), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims.
+Atomically claim a task for the current session, moving it to in_progress with a lease: 900 seconds unless lease_seconds sets another, at most 14400 seconds (4 hours). While its lease is live a claim keeps its session live: the idle reaper does not end a session that holds one, however long its work goes quiet. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), waiting on people ('task gated': a task of kind gate is never claimed, and a step whose own gate is open waits until it is cleared), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed, and a session that loses a claim that way, or by the owner's release, is told once, in its next Seamless tool result or prompt. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `id` | string | **yes** | task id to claim |
-| `lease_seconds` | number | no | lease duration in seconds before the claim lapses and the task becomes reclaimable (default 900) |
+| `lease_seconds` | number | no | lease duration in seconds before the claim lapses and the task becomes reclaimable (default 900, at most 14400) |
 | `session` | string | no | the acting agent's session: the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, another session name, or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- then a sole active ambient. Pass it when a call reports the agent as ambiguous: the bare call then fails rather than guesses. |
 | `session_id` | string | no | the acting agent's session ULID; takes precedence over session and the bound session |
 

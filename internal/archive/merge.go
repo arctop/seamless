@@ -71,6 +71,10 @@ import (
 //     server and the codes that pair them. A relay pinned that server's
 //     certificate, and a key device's key was issued by it; merging either
 //     would admit a computer nobody paired here, and a code would pair one.
+//   - claim_notices: one-time notices to this machine's sessions of the
+//     claims they lost here, each read once by its session's next hook or
+//     tool result. Merged, a notice would tell a session of a claim it never
+//     held on the destination.
 //   - schema_migrations: the destination's own migration history.
 //
 // A host-local table (one keyed by which machine a row came from) does not

@@ -468,8 +468,9 @@ is still <code>in_progress</code>, and <code>tasks_ready</code> returns only <co
 surfaces it. Lease expiry is enforced lazily inside <code>tasks_claim</code>; there is no
 sweeper watching leases.</p>
 <p>What <em>does</em> re-queue it is the session reaper: it expires sessions idle past
-<code>gardener.session_idle_minutes</code> (default 45) and releases their claims back to
-<code>open</code>.</p>
+<code>gardener.session_idle_minutes</code> (default 45) that hold no live claim, and
+releases their claims back to <code>open</code>. A live lease keeps its holder's session
+live, so the reap comes on the first pass after the last lease lapses.</p>
 <p><strong>Fix.</strong></p>
 <ol>
 <li>Confirm the diagnosis: <code>seam task list --status in_progress</code>, or

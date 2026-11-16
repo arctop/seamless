@@ -22,16 +22,29 @@ Claiming is the concurrency control. Two agents that both see the same ready tas
 will both try to take it, and exactly one wins:
 
 1. `tasks_claim` atomically moves a ready task to `in_progress` and stamps a
-   lease (default 900 seconds). The loser gets an error naming the holder.
+   lease: 900 seconds by default, and `lease_seconds` may ask for up to 14400
+   (four hours). A longer lease is refused, and the refusal names the ceiling.
+   The loser gets an error naming the holder.
 2. Re-claiming a task you already hold **refreshes** the lease - that is the
-   heartbeat for long work.
+   heartbeat for long work. While its lease is live, a claim also keeps its
+   session live: the idle reaper does not end a session that holds one, however
+   long its work goes quiet (see [Liveness](/concepts/sessions/#liveness)).
 3. An **expired** lease is reclaimable *by id* - but the task stays
    `in_progress`, so `tasks_ready` does not show it. Only releasing it (by hand,
-   or by the gardener's session reaper expiring the dead holder's session) sets
-   the status back to `open` and returns it to the queue. See [the two
-   clocks](/concepts/tasks-and-plans/).
+   or by the gardener's session reaper expiring the holder's session once none
+   of its claims is live) sets the status back to `open` and returns it to the
+   queue. See [the two clocks](/concepts/tasks-and-plans/).
 4. `tasks_release`, closing the task (`tasks_update` to `done`/`dropped`), or
    `session_end` frees the claim.
+5. A session that **loses** a claim it held - another session claims the task
+   after its lease lapsed, the owner releases it, or the reaper releases it from
+   the idle session after the lease lapsed - is told once. Its next tool result
+   carries a `Claim lost:` notice as an extra text item after the answer: the
+   task, when, the session that took it when this one may see that session
+   (`another session` otherwise), and what to do. Through the hooks the same
+   notice can lead the next prompt or session-start injection instead;
+   whichever comes first carries it. A call from the `seam` CLI, which prints
+   only the answer, never carries one.
 
 A lease is not a lock on the files - it is a coordination signal between
 cooperating agents. Nothing stops a determined agent from working on a task it
@@ -130,7 +143,7 @@ withholds, gets the generic words.
 |---|---|
 | `tasks_add` | A blocker is missing, the new dependency would create a cycle, or the gate breaks the [gate rules](#gates) |
 | `tasks_update` | Nothing was supplied to change, a new dependency is invalid, one id is both added and removed, a `commits` entry is not a full commit id, the gate would break the [gate rules](#gates), one call both edits and clears the gate, `gate_clear` finds no open gate, `gate_note` comes without `gate_clear`, or another live session holds the task; with `isolation.requests` on, a [receipt](#receipts) that breaks its rule |
-| `tasks_claim` | The task is blocked, gated (a gate task, or a step whose own gate is open: `task gated`, naming who and what), closed, or held by another live claimant; each error names the actual cause |
+| `tasks_claim` | The task is blocked, gated (a gate task, or a step whose own gate is open: `task gated`, naming who and what), closed, or held by another live claimant; each error names the actual cause. Also `lease_seconds` that is not positive, or above the 14400-second ceiling (the refusal names it) |
 | `tasks_release` | The acting session is not the holder; force release exists only on the owner console/CLI surface |
 
 An expired claim is not reported as live. Claiming that task by id succeeds at

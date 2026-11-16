@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/arctop/seamless/internal/core"
 )
@@ -277,8 +278,8 @@ func taskClaimSpec(sub, summary string) cmd {
 }
 
 var (
-	taskClaimCmd     = taskClaimSpec("claim", "claim a ready task, leasing it for this session")
-	taskHeartbeatCmd = taskClaimSpec("heartbeat", "refresh the lease on a task you already hold")
+	taskClaimCmd     = taskClaimSpec("claim", "claim a ready task, leasing it for this session (a live claim keeps the session live)")
+	taskHeartbeatCmd = taskClaimSpec("heartbeat", "refresh the lease on a task you already hold, before it lapses")
 )
 
 type taskClaimOpts struct {
@@ -286,12 +287,25 @@ type taskClaimOpts struct {
 	session *string
 }
 
+// taskLeaseUsage is the --lease help: how long a claim lasts, the server's
+// ceiling (core.MaxClaimLease), and what a live claim does for its session.
+var taskLeaseUsage = func() string {
+	ceiling := core.MaxClaimLease.String()
+	if core.MaxClaimLease%time.Hour == 0 {
+		ceiling = fmt.Sprintf("%d hours", core.MaxClaimLease/time.Hour)
+	}
+	return fmt.Sprintf("lease `SECONDS` before the claim lapses (default: the server's 900; at most %d, %s); "+
+		"while the lease is live the claim keeps its session live, so the idle reaper leaves it alone",
+		int64(core.MaxClaimLease/time.Second), ceiling)
+}()
+
 func bindTaskClaim(fs *flag.FlagSet) *taskClaimOpts {
 	// posIntFlag, so --lease 0 and --lease -5 are parse errors rather than a
 	// silent fall-through to the server's 900s default. That is what makes the 0
-	// default unambiguous below: 0 can now only mean absent.
+	// default unambiguous below: 0 can now only mean absent. A lease above the
+	// ceiling is the server's to refuse, in words that name it.
 	return &taskClaimOpts{
-		lease:   posIntFlag(fs, "lease", 0, "lease `SECONDS` before the claim lapses (default: the server's 900)"),
+		lease:   posIntFlag(fs, "lease", 0, taskLeaseUsage),
 		session: actorSessionFlag(fs),
 	}
 }

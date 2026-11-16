@@ -495,13 +495,17 @@ releases it.</p>
 </span></span></code></pre></div>
 <p>Calls <code>tasks_claim</code> to atomically take a ready task, printing the new status and
 the lease expiry. <code>--lease</code> overrides the server's default lease (900 seconds);
-it is only sent when greater than zero.</p>
+it is only sent when greater than zero, and the server refuses one above 14400
+seconds (four hours), naming the ceiling. While the lease is live the claim
+keeps this session live: the idle reaper does not end it, however long the work
+goes quiet.</p>
 <h3 id="seam_task_heartbeat">seam task heartbeat</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam task heartbeat <span class="o">[</span>--lease SECS<span class="o">]</span> <span class="o">[</span>--session NAME<span class="o">]</span> &lt;id&gt;
 </span></span></code></pre></div>
 <p>The same <code>tasks_claim</code> call as <code>claim</code>. Re-claiming a task you already hold
 refreshes its lease, so <code>heartbeat</code> is that path under a name that says what it
-is for during long work. There is no separate heartbeat tool.</p>
+is for during long work: run it before the lease lapses to keep the claim, and
+with it the session. There is no separate heartbeat tool.</p>
 <h3 id="seam_task_release">seam task release</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam task release <span class="o">[</span>--force<span class="o">]</span> <span class="o">[</span>--session NAME<span class="o">]</span> &lt;id&gt;
 </span></span></code></pre></div>

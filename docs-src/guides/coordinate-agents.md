@@ -182,8 +182,8 @@ So when an agent dies holding a task, two different clocks are running:
 
 | Clock | Length | What it changes |
 |---|---|---|
-| **The lease** | `lease_seconds`, default 900s | The task becomes stealable **by id** - a worker that knows the id can `tasks_claim` it and win. It is still not in the ready queue |
-| **The session idle reap** | `gardener.session_idle_minutes` (45), on the gardener's tick | The reaper expires the dead session and **releases its claims** - status back to `open`, and the task is genuinely back in the queue |
+| **The lease** | `lease_seconds`, default 900s, at most 14400s | The task becomes stealable **by id** - a worker that knows the id can `tasks_claim` it and win. It is still not in the ready queue |
+| **The session idle reap** | `gardener.session_idle_minutes` (45) after the last lease lapses, on the gardener's tick | The reaper expires the dead session and **releases its claims** - status back to `open`, and the task is genuinely back in the queue. A live claim keeps its session live, so the reap never comes while a lease runs |
 
 The reaper is the backstop that makes crashes self-healing, and it is the only one
 that re-queues. A clean `session_end` does the same thing immediately, which is

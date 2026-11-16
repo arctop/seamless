@@ -58,8 +58,9 @@ type Config struct {
 	// without an update. 0 disables the pass -- same contract as StalePlanDays.
 	StaleStageDays int
 	// SessionIdle is the no-activity age past which the reaper expires an
-	// active session. Non-positive falls back to core.SessionIdleTTL, keeping
-	// the reaper cutoff aligned with the console's live/idle derivation.
+	// active session that holds no live claim. Non-positive falls back to
+	// core.SessionIdleTTL, keeping the reaper aligned with the console's
+	// live/idle derivation (core.Session.LiveAsOf).
 	SessionIdle time.Duration
 	// LocalHost is this daemon's own machine name (config.Hostname). The
 	// stale-plan pass opens repositories on disk for its ship evidence, so it
@@ -253,17 +254,20 @@ func (s *Service) pruneToolEvents(ctx context.Context) {
 	}
 }
 
-// reapStaleSessions closes sessions idle past the configured SessionIdle
-// threshold (gardener.session_idle_minutes): it flips each
-// to expired, returns any task claims it still held to the queue, and records a
-// session.ended event stamped reason=expired. Best-effort: a failure is logged,
-// not returned, so a reap problem never aborts the pass. This is the backstop for
-// the fact that an active session is only otherwise cleared by an explicit
-// session_end or the SessionEnd hook, neither of which fires on a crash/kill.
+// reapStaleSessions closes the sessions that are no longer live
+// (core.Session.LiveAsOf): quiet past the configured SessionIdle threshold
+// (gardener.session_idle_minutes) and holding no live claim. A session idle
+// past the threshold while it holds a live claim is left alone; the first pass
+// after its last lease lapses reaps it. It flips each to expired, returns the
+// lapsed task claims it still held to the queue with a notice to the session
+// for each (store.ReleaseReapedClaims), and records a session.ended event
+// stamped reason=expired. Best-effort: a failure is logged, not returned, so a
+// reap problem never aborts the pass. This is the backstop for the fact that an
+// active session is only otherwise cleared by an explicit session_end or the
+// SessionEnd hook, neither of which fires on a crash/kill.
 func (s *Service) reapStaleSessions(ctx context.Context) {
 	now := s.now().UTC()
-	cutoff := now.Add(-s.cfg.SessionIdle)
-	stale, err := store.ExpireStaleSessions(ctx, s.db, cutoff)
+	stale, err := store.ExpireIdleSessions(ctx, s.db, now, s.cfg.SessionIdle)
 	if err != nil {
 		s.logger.Warn("gardener: reap stale sessions", "error", err)
 		return
@@ -272,7 +276,7 @@ func (s *Service) reapStaleSessions(ctx context.Context) {
 		return
 	}
 	for _, sess := range stale {
-		released, rerr := store.ReleaseClaimsForSession(ctx, s.db, sess.ID, now)
+		released, rerr := store.ReleaseReapedClaims(ctx, s.db, sess.ID, now)
 		if rerr != nil {
 			s.logger.Warn("gardener: reap release claims", "session", sess.ID, "error", rerr)
 		}

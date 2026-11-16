@@ -644,3 +644,172 @@ func TestActivePlansOrderByLastActivity(t *testing.T) {
 	require.Equal(t, []string{"alpha", "zeta", "mid"}, slugs(plans))
 	require.Equal(t, time.Date(2026, 7, 10, 14, 0, 0, 0, time.UTC), plans[0].LastActivity)
 }
+
+// clNoticeRows counts every claim notice, delivered or not.
+func clNoticeRows(t *testing.T, db *sql.DB) int {
+	t.Helper()
+	var n int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM claim_notices`).Scan(&n))
+	return n
+}
+
+// clPending is the notices waiting for session.
+func clPending(t *testing.T, db *sql.DB, session string) []ClaimNotice {
+	t.Helper()
+	pending, err := PendingClaimNotices(context.Background(), db, session)
+	require.NoError(t, err)
+	return pending
+}
+
+// A claim taken after the holder's lease lapsed records exactly one notice for
+// the holder, in the claim's own transaction: what it held, who took it, when,
+// and the lease that lapsed. The new holder is told nothing, and its heartbeat
+// records nothing more.
+func TestClaimTask_ReclaimRecordsOneNoticeForThePriorHolder(t *testing.T) {
+	db := newTaskDB(t)
+	id := addTask(t, db, "example-ops", "A", 1)
+	now := time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)
+
+	_, err := ClaimTask(context.Background(), db, id, "sessA", time.Minute, now)
+	require.NoError(t, err)
+	_, err = ClaimTask(context.Background(), db, id, "sessA", time.Minute, now.Add(30*time.Second))
+	require.NoError(t, err, "the holder's heartbeat")
+	require.Zero(t, clNoticeRows(t, db), "a heartbeat loses nothing")
+
+	stolenAt := now.Add(3 * time.Minute)
+	res, err := ClaimTask(context.Background(), db, id, "sessB", time.Minute, stolenAt)
+	require.NoError(t, err)
+	require.True(t, res.Reclaimed)
+
+	pending := clPending(t, db, "sessA")
+	require.Len(t, pending, 1)
+	n := pending[0]
+	require.NotEmpty(t, n.ID)
+	require.Equal(t, ClaimResourceTask, n.Kind)
+	require.Equal(t, id, n.ResourceID)
+	require.Empty(t, n.Label, "a task is named by its id")
+	require.Equal(t, "example-ops", n.Project)
+	require.Equal(t, "sessB", n.NewHolder)
+	require.Equal(t, ClaimLostReclaimed, n.Reason)
+	require.NotNil(t, n.LeaseExpiresAt)
+	require.True(t, now.Add(30*time.Second+time.Minute).Equal(*n.LeaseExpiresAt), "the lease that lapsed")
+	require.True(t, stolenAt.Equal(n.LostAt))
+	require.Nil(t, n.DeliveredAt)
+
+	_, err = ClaimTask(context.Background(), db, id, "sessB", time.Minute, stolenAt.Add(time.Second))
+	require.NoError(t, err)
+	require.Empty(t, clPending(t, db, "sessB"))
+	require.Equal(t, 1, clNoticeRows(t, db), "exactly one notice")
+}
+
+// A claim that takes the task from nobody records no notice: the first claim,
+// a claimless in_progress row (`seam task start`), stale residue on an open
+// row, and a refused claim.
+func TestClaimTask_NoNoticeWithoutAPriorHolder(t *testing.T) {
+	db := newTaskDB(t)
+	now := time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)
+
+	first := addTask(t, db, "demo", "first", 1)
+	_, err := ClaimTask(context.Background(), db, first, "sessA", time.Minute, now)
+	require.NoError(t, err)
+	_, err = ClaimTask(context.Background(), db, first, "sessB", time.Minute, now.Add(time.Second))
+	require.ErrorIs(t, err, ErrTaskClaimConflict, "a refused claim takes nothing")
+
+	claimless := addTask(t, db, "demo", "claimless", 2)
+	_, err = UpdateTask(context.Background(), db, claimless, TaskPatch{Status: statusPtr(core.TaskInProgress)}, "", now)
+	require.NoError(t, err)
+	_, err = ClaimTask(context.Background(), db, claimless, "sessB", time.Minute, now)
+	require.NoError(t, err)
+
+	residue := addTask(t, db, "demo", "residue", 3)
+	_, err = db.Exec(`UPDATE tasks SET claimed_by = 'deadsess', lease_expires_at = ? WHERE id = ?`,
+		core.FormatTime(now.Add(-time.Hour)), residue)
+	require.NoError(t, err)
+	_, err = ClaimTask(context.Background(), db, residue, "sessB", time.Minute, now)
+	require.NoError(t, err)
+
+	require.Zero(t, clNoticeRows(t, db))
+}
+
+// The owner's force release records one notice for the holder, whether its
+// lease was live or had lapsed; a claimless in_progress row has no holder to
+// tell, and a refused release records nothing.
+func TestForceReleaseTask_RecordsANoticeForTheHolder(t *testing.T) {
+	db := newTaskDB(t)
+	now := time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)
+
+	live := addTask(t, db, "example-ops", "live", 1)
+	_, err := ClaimTask(context.Background(), db, live, "sessA", time.Hour, now)
+	require.NoError(t, err)
+	releasedAt := now.Add(time.Minute)
+	_, err = ForceReleaseTask(context.Background(), db, live, releasedAt)
+	require.NoError(t, err)
+	pending := clPending(t, db, "sessA")
+	require.Len(t, pending, 1)
+	require.Equal(t, ClaimLostReleased, pending[0].Reason)
+	require.Equal(t, live, pending[0].ResourceID)
+	require.Empty(t, pending[0].NewHolder, "nobody holds it after the release")
+	require.True(t, releasedAt.Equal(pending[0].LostAt))
+
+	lapsed := addTask(t, db, "example-ops", "lapsed", 2)
+	_, err = ClaimTask(context.Background(), db, lapsed, "sessB", time.Minute, now.Add(-time.Hour))
+	require.NoError(t, err)
+	_, err = ForceReleaseTask(context.Background(), db, lapsed, now)
+	require.NoError(t, err)
+	require.Len(t, clPending(t, db, "sessB"), 1, "a lapsed claim still named its holder")
+
+	claimless := addTask(t, db, "example-ops", "claimless", 3)
+	_, err = UpdateTask(context.Background(), db, claimless, TaskPatch{Status: statusPtr(core.TaskInProgress)}, "", now)
+	require.NoError(t, err)
+	_, err = ForceReleaseTask(context.Background(), db, claimless, now)
+	require.NoError(t, err)
+
+	open := addTask(t, db, "example-ops", "open", 4)
+	_, err = ForceReleaseTask(context.Background(), db, open, now)
+	require.ErrorIs(t, err, ErrTaskClaimConflict)
+	_, err = ForceReleaseTask(context.Background(), db, "nope", now)
+	require.ErrorIs(t, err, ErrTaskNotFound)
+
+	require.Equal(t, 2, clNoticeRows(t, db), "one notice per holder told, none for the rest")
+}
+
+// The reaper's release reopens the session's lapsed claims with a notice each,
+// and leaves a live claim alone: one taken after the reap is its holder's own.
+func TestReleaseReapedClaims_LapsedOnlyWithANoticeEach(t *testing.T) {
+	db := newTaskDB(t)
+	now := time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)
+	lapsed := addTask(t, db, "example-ops", "lapsed", 1)
+	_, err := ClaimTask(context.Background(), db, lapsed, "sessA", time.Minute, now.Add(-time.Hour))
+	require.NoError(t, err)
+	live := addTask(t, db, "example-ops", "live", 2)
+	_, err = ClaimTask(context.Background(), db, live, "sessA", time.Hour, now)
+	require.NoError(t, err)
+	others := addTask(t, db, "example-ops", "others", 3)
+	_, err = ClaimTask(context.Background(), db, others, "sessB", time.Minute, now.Add(-time.Hour))
+	require.NoError(t, err)
+
+	n, err := ReleaseReapedClaims(context.Background(), db, "sessA", now)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	got, err := TaskByID(context.Background(), db, lapsed)
+	require.NoError(t, err)
+	require.Equal(t, core.TaskOpen, got.Status)
+	require.Empty(t, got.ClaimedBy)
+	got, err = TaskByID(context.Background(), db, live)
+	require.NoError(t, err)
+	require.Equal(t, "sessA", got.ClaimedBy, "a live claim is not the reaper's to release")
+	got, err = TaskByID(context.Background(), db, others)
+	require.NoError(t, err)
+	require.Equal(t, "sessB", got.ClaimedBy, "another session's claim is untouched")
+
+	pending := clPending(t, db, "sessA")
+	require.Len(t, pending, 1)
+	require.Equal(t, ClaimLostReaped, pending[0].Reason)
+	require.Equal(t, lapsed, pending[0].ResourceID)
+	require.True(t, now.Add(-time.Hour+time.Minute).Equal(*pending[0].LeaseExpiresAt))
+
+	n, err = ReleaseReapedClaims(context.Background(), db, "", now)
+	require.NoError(t, err)
+	require.Zero(t, n)
+}

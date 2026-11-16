@@ -208,9 +208,10 @@ type SessionStatus string
 const (
 	SessionActive    SessionStatus = "active"
 	SessionCompleted SessionStatus = "completed"
-	// SessionExpired is a session the reaper closed after it went idle past
-	// SessionIdleTTL without a graceful session_end (a crashed/killed agent, or an
-	// explicit session_start whose agent never called session_end). Distinct from
+	// SessionExpired is a session the reaper closed once it was no longer live
+	// (Session.LiveAsOf: idle past SessionIdleTTL and holding no live claim)
+	// without a graceful session_end (a crashed/killed agent, or an explicit
+	// session_start whose agent never called session_end). Distinct from
 	// completed so the console can tell a harvested session from an abandoned one.
 	SessionExpired SessionStatus = "expired"
 )
@@ -230,23 +231,43 @@ var SessionSources = []string{"startup", "resume", "clear", "compact", "explicit
 func ValidSessionSource(s string) bool { return slices.Contains(SessionSources, s) }
 
 // SessionIdleTTL is the default no-activity age beyond which an active session
-// is considered dead: heartbeats (MCP tool calls for bound sessions, the ambient
-// hooks for cc/* or cx/* sessions) bump updated_at, and anything quiet past this is
-// reaped to SessionExpired and shown as idle in the console. It is the canonical
-// liveness threshold shared by the gardener reaper and the console; it must
-// comfortably exceed a long single agent turn so live work is never reaped.
+// that holds no live claim is considered dead. What Seamless sees bumps
+// updated_at: a tool call credited to the session, and the ambient hooks of a
+// cc/* or cx/* session (a prompt, a session start, a subagent's start or stop,
+// a Codex turn's end, a plan capture). A shell command is not among them, nor
+// is an edit outside the plans directory. A session quiet past this and holding
+// no live claim is reaped to SessionExpired and shown as idle in the console
+// (LiveAsOf). It does not bound how long work may go quiet: a holder running a
+// long gate or waiting on CI keeps its session live by holding a claim, whose
+// lease is at most MaxClaimLease. It is the liveness threshold shared by the
+// gardener reaper, the console and the update gate.
 // gardener.session_idle_minutes overrides it; every consumer takes the
 // configured duration and falls back to this const when given <= 0.
 const SessionIdleTTL = 45 * time.Minute
 
-// LiveAsOf reports whether an active session counts as live at now: still
-// active and updated within ttl (<= 0 falls back to SessionIdleTTL).
-// Completed/expired sessions are never live.
+// LiveAsOf reports whether a session counts as live at now. It is the one
+// liveness rule: the reaper expires exactly the active sessions it calls dead,
+// and the console and the update gate count exactly the ones it calls live. A
+// session is live while it is active and either updated within ttl (<= 0 falls
+// back to SessionIdleTTL; updated exactly ttl ago still counts) or holding a
+// claim that is live at now (HoldsAt). Completed and expired sessions are never
+// live. Its SQL form, for the readers that count in the database, is the
+// store's sessionLive, which must stay its exact equivalent.
 func (s Session) LiveAsOf(now time.Time, ttl time.Duration) bool {
 	if ttl <= 0 {
 		ttl = SessionIdleTTL
 	}
-	return s.Status == SessionActive && now.Sub(s.UpdatedAt) < ttl
+	if s.Status != SessionActive {
+		return false
+	}
+	return !s.UpdatedAt.Before(now.Add(-ttl)) || s.HoldsAt(now)
+}
+
+// HoldsAt reports whether the session holds a claim that is live at now:
+// HeldUntil strictly after now, Task.ClaimLive's boundary, so a lease that
+// lapses exactly at now keeps nothing live.
+func (s Session) HoldsAt(now time.Time) bool {
+	return s.HeldUntil != nil && s.HeldUntil.After(now)
 }
 
 // Session is one agent work session. Ambient sessions are created by a hook
@@ -312,6 +333,12 @@ type Session struct {
 	Metadata  map[string]any `json:"metadata"`
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
+	// HeldUntil is when the furthest of the claims the session holds lapses:
+	// the latest lease among the in_progress tasks it claimed, lapsed or not;
+	// nil when it holds none. Every store read of a session fills it in the
+	// same statement as the row, and LiveAsOf reads it. It is derived, never
+	// written, and stays out of every JSON surface.
+	HeldUntil *time.Time `json:"-"`
 }
 
 // TokenUsage is a session's cumulative model token consumption, normalized across
@@ -478,11 +505,19 @@ func (t Task) HeldByGate() bool { return t.IsGate() || t.Gate.Open() }
 
 // ClaimLive reports whether the task is actively claimed as of now: in_progress,
 // a non-empty holder, and an unexpired lease. An expired lease is not live (the
-// task is reclaimable), matching ClaimTask's lazy expiry.
+// task is reclaimable), matching ClaimTask's lazy expiry. A live claim also
+// keeps its holder's session live, at the same boundary (Session.HoldsAt).
 func (t Task) ClaimLive(now time.Time) bool {
 	return t.ClaimedBy != "" && t.Status == TaskInProgress &&
 		t.LeaseExpiresAt != nil && t.LeaseExpiresAt.After(now)
 }
+
+// MaxClaimLease is the ceiling on one claim's lease: a tasks_claim whose
+// lease_seconds asks for more is refused, and the refusal names the ceiling.
+// Work that needs longer re-claims (heartbeats) before the lease lapses. A live
+// claim keeps its holder's session live (Session.LiveAsOf), so the ceiling also
+// bounds how long the session of a holder that crashed outlives its last claim.
+const MaxClaimLease = 4 * time.Hour
 
 // ---------------------------------------------------------------------------
 // Trial (research lab)

@@ -1115,8 +1115,8 @@ Claude Code harvests findings and completes its session on SessionEnd. Codex
   an empty turn leaves the prior findings intact - so the findings converge on
   the last substantive turn's summary.
 - **The session is never explicitly closed.** It sits active until
-  `gardener.session_idle_minutes` of silence, at which point the idle reaper marks
-  it `expired`. A Codex session therefore only ever reaches `expired`, never
+  `gardener.session_idle_minutes` of silence with no live task claim, at which
+  point the idle reaper marks it `expired`. A Codex session therefore only ever reaches `expired`, never
   `completed`.
 
 Those expired-but-harvested findings still surface in the next agent's briefing:
@@ -1809,8 +1809,9 @@ holds wins:
 
 1. No live agent session and no request in flight: it installs now. A session is
    live while it is active and has sent a heartbeat within
-   `gardener.session_idle_minutes` (45 minutes by default), on any machine that
-   shares the daemon.
+   `gardener.session_idle_minutes` (45 minutes by default) or holds a live task
+   claim, on any machine that shares the daemon - the rule the idle reaper
+   applies (see [Liveness](/concepts/sessions/#liveness)).
 2. Waiting for `update.max_defer` (default `24h`): it installs at the next 90
    seconds without a request.
 3. Waiting for 1.5 times `max_defer`: it installs as soon as no request is in
@@ -3697,10 +3698,20 @@ ambient handle. Claude Code does not use this additional cap.
 ## Liveness
 
 Sessions heartbeat. A session that ends cleanly cascades immediately; one that is
-abandoned is caught by an idle reaper after `gardener.session_idle_minutes` and
-marked `expired`. The TTL only applies when there was no end signal at all - a
-crashed agent's session does not sit "live" forever, and a slow one is not
-reaped out from under itself. An agent that was only idle gets its session
+abandoned is caught by an idle reaper and marked `expired`. One rule says which
+is which: a session is **live** while it is active and either Seamless saw it
+within `gardener.session_idle_minutes` (a Seamless tool call, a prompt, a
+session start; never a shell command, nor an edit outside the plans directory)
+or it holds a live [task claim](/concepts/lease-based-task-claiming/). The
+reaper ends exactly the active sessions that are neither, and the console's
+live counts and the automatic-update idle gate count exactly the ones that are.
+The rule only matters when there was no end signal at all - a crashed agent's
+session does not sit "live" forever (at most until its last claim's lease
+lapses, four hours at the longest), and a slow one is not reaped out from under
+itself: an agent running a long test run or waiting on CI keeps its session by
+holding the claim for that work. A claim the reaper releases once its lease
+lapsed is news to its holder, which is told once on its next call or prompt.
+An agent that was only idle gets its session
 back: the next Seamless tool call from the same live agent process reactivates
 the expired ambient session (recorded as a `session.started` event marked
 `revived`) and binds to it again. A session ended on purpose - by `session_end`
@@ -3982,7 +3993,7 @@ them is how a fleet quietly stalls.
 
 | | Lease expiry | Session reaper |
 |---|---|---|
-| Controls | `lease_seconds` (default 900) | `gardener.session_idle_minutes` (default 45) |
+| Controls | `lease_seconds` (default 900, at most 14400) | `gardener.session_idle_minutes` (default 45), counted only once none of the session's claims is live |
 | Enforced | Lazily, inside `tasks_claim` | By the gardener's periodic pass |
 | Effect | The task becomes **stealable by id** | The task's status returns to `open` |
 | Visible in `tasks_ready`? | **No** | **Yes** |
@@ -3994,6 +4005,12 @@ would now succeed.
 
 What actually puts it back in the queue is the reaper: it expires the dead
 agent's idle session and releases its claims, flipping the task back to `open`.
+The clocks run in that order: a live claim keeps its session
+[live](/concepts/sessions/#liveness), so the reaper never ends a session while
+one of its leases runs, and ends it on its first pass after the last lease
+lapses and the session has been quiet past `session_idle_minutes`. The holder
+is told once, on its next call or prompt, of each claim it lost that way, to
+another session's claim, or to the owner's release.
 
 Two consequences worth internalizing:
 
@@ -5226,8 +5243,9 @@ clock.
 
 - **Ready, then claimed.** Tasks declare dependencies; a task is *ready* when
   every blocker is done. `tasks_claim` atomically moves a ready task to
-  `in_progress` with a holder and a lease (900 seconds by default), so the
-  race is only ever between tasks that genuinely could both proceed.
+  `in_progress` with a holder and a lease (900 seconds by default, at most
+  14400 - four hours; a longer one is refused), so the race is only ever
+  between tasks that genuinely could both proceed.
 - **The bounce names the holder.** A refused claim says *why*: held by a live
   claim (and by whom), blocked by unfinished dependencies (and which), or
   already closed. The losing agent picks the next ready step instead.
@@ -5235,6 +5253,20 @@ clock.
   claim that stops being refreshed eventually expires, at which point the
   task - and everything that was blocked behind it stays consistent - is
   reclaimable by anyone.
+- **A claim keeps its session live.** While its lease is live, a claim keeps
+  the holder's [session](/concepts/sessions/#liveness) live: the idle reaper
+  does not end a session that holds one, however long its work goes quiet - a
+  long test run, a wait on CI. Once the last lease lapses, the next reaper
+  pass ends the session as usual, so a crashed holder's session outlives it by
+  one lease at most.
+- **A holder hears when it loses a claim.** When another session claims the
+  task after its lease lapsed, when the owner releases the claim (the console,
+  `seam task release --force`), or when the reaper releases a lapsed claim from
+  a session gone idle, the session that held it is told once. Its next
+  Seamless tool result, prompt injection or session-start briefing carries a
+  `Claim lost:` notice: the task, when, and the session that took it when the
+  holder may see that session (another session otherwise), with what to do
+  next.
 - **Release follows the work.** Finishing or dropping the task frees it,
   `tasks_release` frees it explicitly, and ending a session frees every claim
   the session held.
@@ -6388,8 +6420,8 @@ So when an agent dies holding a task, two different clocks are running:
 
 | Clock | Length | What it changes |
 |---|---|---|
-| **The lease** | `lease_seconds`, default 900s | The task becomes stealable **by id** - a worker that knows the id can `tasks_claim` it and win. It is still not in the ready queue |
-| **The session idle reap** | `gardener.session_idle_minutes` (45), on the gardener's tick | The reaper expires the dead session and **releases its claims** - status back to `open`, and the task is genuinely back in the queue |
+| **The lease** | `lease_seconds`, default 900s, at most 14400s | The task becomes stealable **by id** - a worker that knows the id can `tasks_claim` it and win. It is still not in the ready queue |
+| **The session idle reap** | `gardener.session_idle_minutes` (45) after the last lease lapses, on the gardener's tick | The reaper expires the dead session and **releases its claims** - status back to `open`, and the task is genuinely back in the queue. A live claim keeps its session live, so the reap never comes while a lease runs |
 
 The reaper is the backstop that makes crashes self-healing, and it is the only one
 that re-queues. A clean `session_end` does the same thing immediately, which is
@@ -10396,7 +10428,7 @@ is the contract's name; this file is not the metadata feed.)
 | `sessions[].id` | The session's name - the `cc/...` or `cx/...` on a briefing's `Seam session` line, or a `sess/*` name, and for a restricted account's session its qualified name (`_example_agent:cc/...`) - so a commit message that mentions it matches. A name outside the contract's pattern, or one another listed session already took, is replaced by the session's ULID |
 | `sessions[].account` | The restricted account that started the session; left out for yours |
 | `sessions[].repo` | The repository the session's working directory is in, or `null` |
-| `sessions[].started_at`, `ended_at` | When it started, and when it ended - `null` while it is active. A session idle longer than `gardener.session_idle_minutes` has ended at its last activity, the end the idle reaper gives it: never at the moment it was reaped, and whether or not the reaper runs |
+| `sessions[].started_at`, `ended_at` | When it started, and when it ended - `null` while it is active. A session idle longer than `gardener.session_idle_minutes` and holding no live task claim has ended at its last activity, the end the idle reaper gives it: never at the moment it was reaped, and whether or not the reaper runs. One holding a live claim is still active, as the reaper keeps it |
 | `tasks[].id` | A task's ULID, for a commit message that names one |
 | `tasks[].account` | The restricted account behind the task: the one whose session recorded one of its commits (the earliest such record), else the one that created it, else the one whose words its text carries. Left out when none is, as for your own tasks |
 | `tasks[].repo` | Its project's repository, when the project maps exactly one; left out otherwise |
@@ -10783,8 +10815,9 @@ surfaces it. Lease expiry is enforced lazily inside `tasks_claim`; there is no
 sweeper watching leases.
 
 What *does* re-queue it is the session reaper: it expires sessions idle past
-`gardener.session_idle_minutes` (default 45) and releases their claims back to
-`open`.
+`gardener.session_idle_minutes` (default 45) that hold no live claim, and
+releases their claims back to `open`. A live lease keeps its holder's session
+live, so the reap comes on the first pass after the last lease lapses.
 
 **Fix.**
 
@@ -12057,16 +12090,29 @@ Claiming is the concurrency control. Two agents that both see the same ready tas
 will both try to take it, and exactly one wins:
 
 1. `tasks_claim` atomically moves a ready task to `in_progress` and stamps a
-   lease (default 900 seconds). The loser gets an error naming the holder.
+   lease: 900 seconds by default, and `lease_seconds` may ask for up to 14400
+   (four hours). A longer lease is refused, and the refusal names the ceiling.
+   The loser gets an error naming the holder.
 2. Re-claiming a task you already hold **refreshes** the lease - that is the
-   heartbeat for long work.
+   heartbeat for long work. While its lease is live, a claim also keeps its
+   session live: the idle reaper does not end a session that holds one, however
+   long its work goes quiet (see [Liveness](/concepts/sessions/#liveness)).
 3. An **expired** lease is reclaimable *by id* - but the task stays
    `in_progress`, so `tasks_ready` does not show it. Only releasing it (by hand,
-   or by the gardener's session reaper expiring the dead holder's session) sets
-   the status back to `open` and returns it to the queue. See [the two
-   clocks](/concepts/tasks-and-plans/).
+   or by the gardener's session reaper expiring the holder's session once none
+   of its claims is live) sets the status back to `open` and returns it to the
+   queue. See [the two clocks](/concepts/tasks-and-plans/).
 4. `tasks_release`, closing the task (`tasks_update` to `done`/`dropped`), or
    `session_end` frees the claim.
+5. A session that **loses** a claim it held - another session claims the task
+   after its lease lapsed, the owner releases it, or the reaper releases it from
+   the idle session after the lease lapsed - is told once. Its next tool result
+   carries a `Claim lost:` notice as an extra text item after the answer: the
+   task, when, the session that took it when this one may see that session
+   (`another session` otherwise), and what to do. Through the hooks the same
+   notice can lead the next prompt or session-start injection instead;
+   whichever comes first carries it. A call from the `seam` CLI, which prints
+   only the answer, never carries one.
 
 A lease is not a lock on the files - it is a coordination signal between
 cooperating agents. Nothing stops a determined agent from working on a task it
@@ -12165,7 +12211,7 @@ withholds, gets the generic words.
 |---|---|
 | `tasks_add` | A blocker is missing, the new dependency would create a cycle, or the gate breaks the [gate rules](#gates) |
 | `tasks_update` | Nothing was supplied to change, a new dependency is invalid, one id is both added and removed, a `commits` entry is not a full commit id, the gate would break the [gate rules](#gates), one call both edits and clears the gate, `gate_clear` finds no open gate, `gate_note` comes without `gate_clear`, or another live session holds the task; with `isolation.requests` on, a [receipt](#receipts) that breaks its rule |
-| `tasks_claim` | The task is blocked, gated (a gate task, or a step whose own gate is open: `task gated`, naming who and what), closed, or held by another live claimant; each error names the actual cause |
+| `tasks_claim` | The task is blocked, gated (a gate task, or a step whose own gate is open: `task gated`, naming who and what), closed, or held by another live claimant; each error names the actual cause. Also `lease_seconds` that is not positive, or above the 14400-second ceiling (the refusal names it) |
 | `tasks_release` | The acting session is not the holder; force release exists only on the owner console/CLI surface |
 
 An expired claim is not reported as live. Claiming that task by id succeeds at
@@ -12265,12 +12311,12 @@ List a project's tasks, optionally filtered by status, newest first. A task that
 
 ## tasks_claim {#tasks_claim}
 
-Atomically claim a task for the current session, moving it to in_progress with a lease. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), waiting on people ('task gated': a task of kind gate is never claimed, and a step whose own gate is open waits until it is cleared), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims.
+Atomically claim a task for the current session, moving it to in_progress with a lease: 900 seconds unless lease_seconds sets another, at most 14400 seconds (4 hours). While its lease is live a claim keeps its session live: the idle reaper does not end a session that holds one, however long its work goes quiet. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), waiting on people ('task gated': a task of kind gate is never claimed, and a step whose own gate is open waits until it is cleared), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed, and a session that loses a claim that way, or by the owner's release, is told once, in its next Seamless tool result or prompt. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `id` | string | **yes** | task id to claim |
-| `lease_seconds` | number | no | lease duration in seconds before the claim lapses and the task becomes reclaimable (default 900) |
+| `lease_seconds` | number | no | lease duration in seconds before the claim lapses and the task becomes reclaimable (default 900, at most 14400) |
 | `session` | string | no | the acting agent's session: the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, another session name, or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- then a sole active ambient. Pass it when a call reports the agent as ambiguous: the bare call then fails rather than guesses. |
 | `session_id` | string | no | the acting agent's session ULID; takes precedence over session and the bound session |
 
@@ -12836,7 +12882,10 @@ seam task claim [--lease SECS] [--session NAME] <id>
 
 Calls `tasks_claim` to atomically take a ready task, printing the new status and
 the lease expiry. `--lease` overrides the server's default lease (900 seconds);
-it is only sent when greater than zero.
+it is only sent when greater than zero, and the server refuses one above 14400
+seconds (four hours), naming the ceiling. While the lease is live the claim
+keeps this session live: the idle reaper does not end it, however long the work
+goes quiet.
 
 ### seam task heartbeat {#seam_task_heartbeat}
 
@@ -12846,7 +12895,8 @@ seam task heartbeat [--lease SECS] [--session NAME] <id>
 
 The same `tasks_claim` call as `claim`. Re-claiming a task you already hold
 refreshes its lease, so `heartbeat` is that path under a name that says what it
-is for during long work. There is no separate heartbeat tool.
+is for during long work: run it before the lease lapses to keep the claim, and
+with it the session. There is no separate heartbeat tool.
 
 ### seam task release {#seam_task_release}
 
@@ -15640,9 +15690,11 @@ gardener:
   # 0 disables the pass.
   # env: SEAMLESS_GARDENER_STALE_STAGE_DAYS
   stale_stage_days: 14
-  # Minutes of no activity before an active session counts as dead: the reaper
-  # expires it and the console stops showing it as live. One knob drives both,
-  # so they never drift. Must comfortably exceed a long single agent turn.
+  # Minutes of no activity before an active session that holds no live task
+  # claim counts as dead: the reaper expires it and the console stops showing it
+  # as live. One knob drives both, so they never drift. Work that goes quiet for
+  # longer (a long test run, a wait on CI) keeps its session live by holding a
+  # claim, whose lease is at most 4 hours.
   # Must be positive; omit the key to retain the built-in 45m default.
   # env: SEAMLESS_GARDENER_SESSION_IDLE_MINUTES
   session_idle_minutes: 45
@@ -15924,10 +15976,10 @@ install order:
 
 | Event | Matcher | Transport | Timeout | Endpoint | Effect |
 |---|---|---|---|---|---|
-| `SessionStart` | `startup\|resume\|clear\|compact` | command (`seam hook session-start`) | 10s | `/api/hooks/session-start` | Registers the agent's cwd in the repo→project map, assembles the `<seam-briefing>`, and creates or resumes an opaque `cc/<prefix>-<digest>` ambient handle keyed by the full external ID, stamped with the [agent process](#what-rides-on-the-query-string) that ran the hook. |
-| `UserPromptSubmit` | none | http | 5s | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block. A miss is logged as a `hook.prompt` event. |
+| `SessionStart` | `startup\|resume\|clear\|compact` | command (`seam hook session-start`) | 10s | `/api/hooks/session-start` | Registers the agent's cwd in the repo→project map, assembles the `<seam-briefing>`, and creates or resumes an opaque `cc/<prefix>-<digest>` ambient handle keyed by the full external ID, stamped with the [agent process](#what-rides-on-the-query-string) that ran the hook. A [claim the conversation lost](#claim-notices) leads the briefing. |
+| `UserPromptSubmit` | none | http | 5s | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) when there is one. A miss is logged as a `hook.prompt` event. |
 | `SessionEnd` | none | command (`seam hook session-end`) | 10s | `/api/hooks/session-end` | Harvests findings and completes the agent's sessions. Bare ack - Claude Code's schema has no `hookSpecificOutput` for `SessionEnd`. |
-| `PostToolUse` | `Write\|Edit\|MultiEdit\|ExitPlanMode` | command (`seam hook post-tool-use`) | 10s | `/api/hooks/post-tool-use` | Heartbeats the ambient session. Captures plan-file iterations (`Write`/`Edit`/`MultiEdit` under the plans dir) and plan approvals (`ExitPlanMode`). |
+| `PostToolUse` | `Write\|Edit\|MultiEdit\|ExitPlanMode` | command (`seam hook post-tool-use`) | 10s | `/api/hooks/post-tool-use` | Captures plan-file iterations (`Write`/`Edit`/`MultiEdit` under the plans dir) and plan approvals (`ExitPlanMode`), and heartbeats the ambient session for those calls only: `seam hook` drops every other file's write before it leaves the machine, so ordinary edits and shell commands heartbeat nothing. |
 | `SubagentStart` | none | command (`seam hook subagent-start`) | 10s | `/api/hooks/subagent-start` | Injects the child briefing - pinned constraints, up to three `RELEVANT:` memories matched from the child's spawn prompt, and a recall/memory_read footer - into every Task subagent and heartbeats the parent. It never creates, reactivates, or re-scopes an ambient session. |
 | `SubagentStop` | none | command (`seam hook subagent-stop`) | 10s | `/api/hooks/subagent-stop` | Caches a planning subagent's prompt and final report as a `cc-agent-<agent_id>` note in the plan composition. |
 | `PermissionRequest` | `ExitPlanMode` | command (`seam hook permission-request`) | 10s | `/api/hooks/permission-request` | Marks the session's draft plan as presented when the user is prompted to review an `ExitPlanMode` call. |
@@ -16001,8 +16053,8 @@ lifecycle.
 
 | Event | Transport | Endpoint | Effect |
 |---|---|---|---|
-| `SessionStart` | command (`seam hook session-start --client codex`) | `/api/hooks/session-start` | Registers the cwd's project, assembles the `<seam-briefing>`, and creates or resumes an opaque `cx/<prefix>-<digest>` ambient handle keyed by the full external ID, stamped with the [agent process](#what-rides-on-the-query-string) that ran the hook. |
-| `UserPromptSubmit` | command (`seam hook user-prompt-submit --client codex`) | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block. |
+| `SessionStart` | command (`seam hook session-start --client codex`) | `/api/hooks/session-start` | Registers the cwd's project, assembles the `<seam-briefing>`, and creates or resumes an opaque `cx/<prefix>-<digest>` ambient handle keyed by the full external ID, stamped with the [agent process](#what-rides-on-the-query-string) that ran the hook. A [claim the conversation lost](#claim-notices) leads the briefing. |
+| `UserPromptSubmit` | command (`seam hook user-prompt-submit --client codex`) | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) when there is one. |
 | `Stop` | command (`seam hook stop --client codex`) | `/api/hooks/stop` | Heartbeats and harvests findings from the turn's final assistant message. No injection - Codex's `Stop` has no `hookSpecificOutput`. Fires at every turn end. |
 | `SubagentStart` | command (`seam hook subagent-start --client codex`) | `/api/hooks/subagent-start` | Injects the child briefing (constraints, spawn-prompt-matched `RELEVANT:` memories, recall footer) under the Codex output cap and heartbeats the parent. It never creates, reactivates, or re-scopes an ambient session. |
 | `SubagentStop` | command (`seam hook subagent-stop --client codex`) | `/api/hooks/subagent-stop` | Heartbeats the parent only. It does not apply the child's model/final message to parent state or create Claude-style plan notes. |
@@ -16114,6 +16166,18 @@ continue too.
 
 Nothing clears a mark through a hook, a flag or an MCP tool: only the owner,
 on the console's Held screen.
+
+## Claim notices {#claim-notices}
+
+A session that loses a task claim it held - another session claims the task
+after its lease lapsed, the owner releases the claim, or the idle reaper
+releases a lapsed one - is told once. The next `SessionStart` (not a
+subagent's) or `UserPromptSubmit` of its conversation leads its injection with
+a `Seamless: Claim lost: ...` line naming the task, when, the session that took
+it when this one may see it, and what to do; a Seamless tool result may carry
+it first instead, and whichever does carries it alone. The conversation's
+sessions are its ambient session and every explicit session `session_start`
+linked to it. See [lease-based task claiming](/concepts/lease-based-task-claiming/).
 
 ## What rides on the query string
 

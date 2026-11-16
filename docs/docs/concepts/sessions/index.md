@@ -395,10 +395,20 @@ ambient handle. Claude Code does not use this additional cap.
 ## Liveness
 
 Sessions heartbeat. A session that ends cleanly cascades immediately; one that is
-abandoned is caught by an idle reaper after `gardener.session_idle_minutes` and
-marked `expired`. The TTL only applies when there was no end signal at all - a
-crashed agent's session does not sit "live" forever, and a slow one is not
-reaped out from under itself. An agent that was only idle gets its session
+abandoned is caught by an idle reaper and marked `expired`. One rule says which
+is which: a session is **live** while it is active and either Seamless saw it
+within `gardener.session_idle_minutes` (a Seamless tool call, a prompt, a
+session start; never a shell command, nor an edit outside the plans directory)
+or it holds a live [task claim](https://thereisnospoon.org/docs/concepts/lease-based-task-claiming/). The
+reaper ends exactly the active sessions that are neither, and the console's
+live counts and the automatic-update idle gate count exactly the ones that are.
+The rule only matters when there was no end signal at all - a crashed agent's
+session does not sit "live" forever (at most until its last claim's lease
+lapses, four hours at the longest), and a slow one is not reaped out from under
+itself: an agent running a long test run or waiting on CI keeps its session by
+holding the claim for that work. A claim the reaper releases once its lease
+lapsed is news to its holder, which is told once on its next call or prompt.
+An agent that was only idle gets its session
 back: the next Seamless tool call from the same live agent process reactivates
 the expired ambient session (recorded as a `session.started` event marked
 `revived`) and binds to it again. A session ended on purpose - by `session_end`

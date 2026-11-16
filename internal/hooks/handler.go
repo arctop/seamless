@@ -415,6 +415,12 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 	// briefing says when, and how to ask again (only while a project is
 	// locked; otherwise nothing is looked up).
 	briefing = injectNotice(briefing, h.expiryNotice(ctx, sessionID))
+	// A claim the conversation lost since it was last told (claimNotice): the
+	// briefing leads with it, once. Only the main session's start carries it;
+	// a subagent's would spend it on the child.
+	if p.AgentType == "" {
+		briefing = injectNotice(briefing, h.claimNotice(ctx, client, p.SessionID, reach))
+	}
 	// Cap after the ambient line is appended, then record and serialize the same
 	// prepared bytes. A SessionStart carries no user prompt (prompt="").
 	h.writeContextResponse(ctx, w, "SessionStart", "session-start", client,
@@ -1385,7 +1391,8 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 	// A session in a locked project is kept for what this hook does to it --
 	// the heartbeat, the model, the injection's attribution -- all metadata;
 	// the recall below reads by cwd, and a locked cwd recalls nothing.
-	if reach, _ := h.sessionReachOf(ctx, client, p.SessionID); reach == reachForeign {
+	reach, _ := h.sessionReachOf(ctx, client, p.SessionID)
+	if reach == reachForeign {
 		p.SessionID = ""
 	}
 
@@ -1422,9 +1429,13 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 		h.recordHookPrompt(ctx, client, p.SessionID, p.UserPrompt)
 	}
 	recalled := out != ""
-	// A lease of this session's ending within access.ExpiryWarning: the
-	// injection leads with when, and how to ask again.
-	if notice := h.expiryNotice(ctx, h.ambientSessionID(ctx, client, p.SessionID)); notice != "" {
+	// A claim the conversation lost since it was last told (claimNotice, once),
+	// and a lease of this session's ending within access.ExpiryWarning: the
+	// injection leads with them -- what was lost, or when access ends and how
+	// to ask again.
+	notice := joinNotices(h.claimNotice(ctx, client, p.SessionID, reach),
+		h.expiryNotice(ctx, h.ambientSessionID(ctx, client, p.SessionID)))
+	if notice != "" {
 		block := injectNotice("", notice)
 		if out != "" {
 			block += "\n" + out

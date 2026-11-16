@@ -239,8 +239,8 @@ Claude Code harvests findings and completes its session on SessionEnd. Codex
   an empty turn leaves the prior findings intact - so the findings converge on
   the last substantive turn's summary.
 - **The session is never explicitly closed.** It sits active until
-  `gardener.session_idle_minutes` of silence, at which point the idle reaper marks
-  it `expired`. A Codex session therefore only ever reaches `expired`, never
+  `gardener.session_idle_minutes` of silence with no live task claim, at which
+  point the idle reaper marks it `expired`. A Codex session therefore only ever reaches `expired`, never
   `completed`.
 
 Those expired-but-harvested findings still surface in the next agent's briefing:

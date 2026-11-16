@@ -947,7 +947,7 @@ type overviewData struct {
 	Memories         int
 	MemByKind        []kindCount
 	Notes            int
-	SessActive       int // live sessions: active AND within core.SessionIdleTTL, per the board query
+	SessActive       int // live sessions (core.Session.LiveAsOf: within the idle TTL or holding a live claim), per the board query
 	SessTotal        int
 	TasksOpen        int
 	TasksInProg      int

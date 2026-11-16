@@ -1067,7 +1067,7 @@
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Atomically claim a task for the current session, moving it to in_progress with a lease. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), waiting on people ('task gated': a task of kind gate is never claimed, and a step whose own gate is open waits until it is cleared), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims.",
+      "description": "Atomically claim a task for the current session, moving it to in_progress with a lease: 900 seconds unless lease_seconds sets another, at most 14400 seconds (4 hours). While its lease is live a claim keeps its session live: the idle reaper does not end a session that holds one, however long its work goes quiet. A refused claim names its cause: held by another live claim ('task already claimed'), waiting on unfinished dependencies ('task blocked', naming the blockers -- finish those first), waiting on people ('task gated': a task of kind gate is never claimed, and a step whose own gate is open waits until it is cleared), or already done/dropped ('task closed'). Re-claiming a task you already hold refreshes (heartbeats) the lease; a task whose lease has expired can be reclaimed, and a session that loses a claim that way, or by the owner's release, is told once, in its next Seamless tool result or prompt. Release it with tasks_release or by closing it (tasks_update done/dropped); session_end releases all of a session's claims.",
       "inputSchema": {
         "properties": {
           "id": {
@@ -1075,7 +1075,7 @@
             "type": "string"
           },
           "lease_seconds": {
-            "description": "lease duration in seconds before the claim lapses and the task becomes reclaimable (default 900)",
+            "description": "lease duration in seconds before the claim lapses and the task becomes reclaimable (default 900, at most 14400)",
             "type": "number"
           },
           "session": {

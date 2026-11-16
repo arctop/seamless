@@ -218,6 +218,9 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		ttl = core.SessionIdleTTL
 	}
 
+	// The live fleet: every session the one rule calls live
+	// (core.Session.LiveAsOf), a quiet holder of a live claim included -- the
+	// list's idle cutoff keeps those too.
 	sessions, err := store.ListSessions(ctx, s.db(ctx), core.SessionActive, now.Add(-ttl), 200)
 	if err != nil {
 		return nowData{}, fmt.Errorf("now: sessions: %w", err)
@@ -280,7 +283,10 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		case t.ClaimedBy == "":
 			loose.State = "claimless"
 		case t.ClaimLive(now):
-			loose.State = "quiet-holder" // lease live, holder no longer heartbeating
+			// Lease live, but its holder is not among the live sessions above. A
+			// live claim keeps its session live, so the holder has ended, is not
+			// active, or lies outside this view or the list's cap.
+			loose.State = "quiet-holder"
 		default:
 			loose.State = "lapsed"
 			loose.Releasable = true

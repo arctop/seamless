@@ -222,8 +222,9 @@ surfaces it. Lease expiry is enforced lazily inside `tasks_claim`; there is no
 sweeper watching leases.
 
 What *does* re-queue it is the session reaper: it expires sessions idle past
-`gardener.session_idle_minutes` (default 45) and releases their claims back to
-`open`.
+`gardener.session_idle_minutes` (default 45) that hold no live claim, and
+releases their claims back to `open`. A live lease keeps its holder's session
+live, so the reap comes on the first pass after the last lease lapses.
 
 **Fix.**
 

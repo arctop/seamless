@@ -824,9 +824,11 @@ gardener:
   # 0 disables the pass.
   # env: SEAMLESS_GARDENER_STALE_STAGE_DAYS
   stale_stage_days: 14
-  # Minutes of no activity before an active session counts as dead: the reaper
-  # expires it and the console stops showing it as live. One knob drives both,
-  # so they never drift. Must comfortably exceed a long single agent turn.
+  # Minutes of no activity before an active session that holds no live task
+  # claim counts as dead: the reaper expires it and the console stops showing it
+  # as live. One knob drives both, so they never drift. Work that goes quiet for
+  # longer (a long test run, a wait on CI) keeps its session live by holding a
+  # claim, whose lease is at most 4 hours.
   # Must be positive; omit the key to retain the built-in 45m default.
   # env: SEAMLESS_GARDENER_SESSION_IDLE_MINUTES
   session_idle_minutes: 45

@@ -91,6 +91,10 @@ var viewTables = []struct {
 	// and with the project it is in. The project whose content it may hold is
 	// named, never hidden: a slug is no content.
 	{"item_provenance", "project_slug NOT IN %[1]s AND item_id NOT IN %[3]s"},
+	// A claim notice names the task (an item of one project) a session lost,
+	// the session that held it and the one that took it: hidden with the
+	// project, either session, or the item.
+	{"claim_notices", "project_slug NOT IN %[1]s AND session_id NOT IN %[2]s AND new_holder NOT IN %[2]s AND resource_id NOT IN %[3]s"},
 }
 
 // payloadVisible keeps a row whose JSON payload mentions no hidden slug and no

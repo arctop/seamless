@@ -256,8 +256,9 @@ clock.</p>
 <ul>
 <li><strong>Ready, then claimed.</strong> Tasks declare dependencies; a task is <em>ready</em> when
 every blocker is done. <code>tasks_claim</code> atomically moves a ready task to
-<code>in_progress</code> with a holder and a lease (900 seconds by default), so the
-race is only ever between tasks that genuinely could both proceed.</li>
+<code>in_progress</code> with a holder and a lease (900 seconds by default, at most
+14400 - four hours; a longer one is refused), so the race is only ever
+between tasks that genuinely could both proceed.</li>
 <li><strong>The bounce names the holder.</strong> A refused claim says <em>why</em>: held by a live
 claim (and by whom), blocked by unfinished dependencies (and which), or
 already closed. The losing agent picks the next ready step instead.</li>
@@ -265,6 +266,20 @@ already closed. The losing agent picks the next ready step instead.</li>
 claim that stops being refreshed eventually expires, at which point the
 task - and everything that was blocked behind it stays consistent - is
 reclaimable by anyone.</li>
+<li><strong>A claim keeps its session live.</strong> While its lease is live, a claim keeps
+the holder's <a href="../../concepts/sessions/#liveness">session</a> live: the idle reaper
+does not end a session that holds one, however long its work goes quiet - a
+long test run, a wait on CI. Once the last lease lapses, the next reaper
+pass ends the session as usual, so a crashed holder's session outlives it by
+one lease at most.</li>
+<li><strong>A holder hears when it loses a claim.</strong> When another session claims the
+task after its lease lapsed, when the owner releases the claim (the console,
+<code>seam task release --force</code>), or when the reaper releases a lapsed claim from
+a session gone idle, the session that held it is told once. Its next
+Seamless tool result, prompt injection or session-start briefing carries a
+<code>Claim lost:</code> notice: the task, when, and the session that took it when the
+holder may see that session (another session otherwise), with what to do
+next.</li>
 <li><strong>Release follows the work.</strong> Finishing or dropping the task frees it,
 <code>tasks_release</code> frees it explicitly, and ending a session frees every claim
 the session held.</li>

@@ -1,9 +1,13 @@
-// Lease-based task claiming: the compare-and-set claim and the four ways a claim
-// ends (holder release, owner force-release, session teardown, lease expiry).
-// Expiry is enforced lazily inside ClaimTask -- there is no background sweeper.
-// None of them writes updated_account: a claim or release changes no text, so
-// it neither labels an owner's task with the claimant's account nor clears the
-// label of an account whose words the task still carries (taskTextAccount).
+// Lease-based task claiming: the compare-and-set claim and the ways a claim ends
+// (holder release, owner force-release, session teardown, the reaper's release
+// of a lapsed claim, lease expiry). Expiry is enforced lazily inside ClaimTask
+// -- there is no background sweeper. A claim taken from its holder without its
+// say -- a reclaim of its lapsed lease, the owner's force release, the reaper's
+// release -- records a notice for the holder in the same transaction
+// (claim_notices.go). None of them writes updated_account: a claim or release
+// changes no text, so it neither labels an owner's task with the claimant's
+// account nor clears the label of an account whose words the task still
+// carries (taskTextAccount).
 package store
 
 import (
@@ -74,7 +78,8 @@ var ErrTaskClosed = errors.New("task closed")
 
 // ClaimResult reports the outcome of a successful ClaimTask. Reclaimed is true
 // when a different session's lapsed lease was stolen; PriorHolder then names that
-// session so the caller can record a reclaim event.
+// session so the caller can record a reclaim event. The prior holder's notice
+// (ClaimLostReclaimed) is already recorded.
 type ClaimResult struct {
 	Task        core.Task
 	Reclaimed   bool
@@ -116,11 +121,22 @@ type ClaimResult struct {
 // status='open' clears the claim fields, so a claim value on an open row can
 // only be stale residue (rows written before reopen released claims). Claiming
 // such a row overwrites the residue, self-healing it.
+//
+// The read of the prior holder, the compare-and-set and a reclaim's notice to
+// that holder run in one transaction (the pool has one connection), so the
+// notice says exactly what the claim did: a holder that released, re-claimed or
+// closed its task between a separate read and the write is never told it lost
+// a claim it gave up or still holds.
 func ClaimTask(ctx context.Context, db *sql.DB, id, sessionID string, lease time.Duration, now time.Time) (ClaimResult, error) {
 	if sessionID == "" {
 		return ClaimResult{}, errors.New("store.ClaimTask: empty session id")
 	}
-	prior, ok, err := taskByIDTx(ctx, db, id)
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return ClaimResult{}, fmt.Errorf("store.ClaimTask: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	prior, ok, err := taskByIDTx(ctx, tx, id)
 	if err != nil {
 		return ClaimResult{}, err
 	}
@@ -130,7 +146,7 @@ func ClaimTask(ctx context.Context, db *sql.DB, id, sessionID string, lease time
 
 	nowStr := core.FormatTime(now.UTC())
 	expStr := core.FormatTime(now.Add(lease).UTC())
-	res, err := db.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, `
 		UPDATE tasks
 		   SET status = 'in_progress', claimed_by = ?, lease_expires_at = ?, updated_at = ?
 		 WHERE id = ? AND kind <> 'gate'
@@ -154,12 +170,10 @@ func ClaimTask(ctx context.Context, db *sql.DB, id, sessionID string, lease time
 		return ClaimResult{}, fmt.Errorf("store.ClaimTask: rows affected: %w", err)
 	}
 	if n == 0 {
+		// Give the one connection back before the diagnosis reads on the pool.
+		_ = tx.Rollback()
 		cur, err := claimRefusal(ctx, db, id, now)
 		return ClaimResult{Task: cur}, err
-	}
-	updated, err := TaskByID(ctx, db, id)
-	if err != nil {
-		return ClaimResult{}, err
 	}
 	// Only a steal from a real prior holder counts as a reclaim. Overwriting a
 	// stale claim left on an open row (branch (a)), or picking up a claimless
@@ -171,6 +185,19 @@ func ClaimTask(ctx context.Context, db *sql.DB, id, sessionID string, lease time
 	holder := ""
 	if reclaimed {
 		holder = prior.ClaimedBy
+		if err := RecordClaimNotice(ctx, tx, ClaimNotice{
+			SessionID: prior.ClaimedBy, Kind: ClaimResourceTask, ResourceID: id, Project: prior.ProjectSlug,
+			NewHolder: sessionID, Reason: ClaimLostReclaimed, LeaseExpiresAt: prior.LeaseExpiresAt, LostAt: now,
+		}); err != nil {
+			return ClaimResult{}, fmt.Errorf("store.ClaimTask: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return ClaimResult{}, fmt.Errorf("store.ClaimTask: commit: %w", err)
+	}
+	updated, err := TaskByID(ctx, db, id)
+	if err != nil {
+		return ClaimResult{}, err
 	}
 	return ClaimResult{Task: updated, Reclaimed: reclaimed, PriorHolder: holder}, nil
 }
@@ -256,8 +283,26 @@ func ReleaseTask(ctx context.Context, db *sql.DB, id, sessionID string, now time
 // reachable from the agent MCP surface. Unlike ReleaseTask it does not check the
 // holder. Returns ErrTaskClaimConflict when the task is not in_progress (nothing
 // to release) and ErrTaskNotFound when the id is unknown.
+//
+// A task that had a holder records a notice for it (ClaimLostReleased) in the
+// same transaction, whether its lease was live or had lapsed: either way its
+// name was on the claim, and its next re-claim would otherwise take the task
+// back without a word. A claimless in_progress row (`seam task start`) had no
+// holder to tell.
 func ForceReleaseTask(ctx context.Context, db *sql.DB, id string, now time.Time) (core.Task, error) {
-	res, err := db.ExecContext(ctx, `
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return core.Task{}, fmt.Errorf("store.ForceReleaseTask: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	prior, ok, err := taskByIDTx(ctx, tx, id)
+	if err != nil {
+		return core.Task{}, err
+	}
+	if !ok {
+		return core.Task{}, fmt.Errorf("store.ForceReleaseTask: %w: %q", ErrTaskNotFound, id)
+	}
+	res, err := tx.ExecContext(ctx, `
 		UPDATE tasks SET status = 'open', claimed_by = '', lease_expires_at = NULL, updated_at = ?
 		 WHERE id = ? AND status = 'in_progress'`,
 		core.FormatTime(now.UTC()), id)
@@ -269,20 +314,104 @@ func ForceReleaseTask(ctx context.Context, db *sql.DB, id string, now time.Time)
 		return core.Task{}, fmt.Errorf("store.ForceReleaseTask: rows affected: %w", err)
 	}
 	if n == 0 {
-		if _, ok, err := taskByIDTx(ctx, db, id); err != nil {
-			return core.Task{}, err
-		} else if !ok {
-			return core.Task{}, fmt.Errorf("store.ForceReleaseTask: %w: %q", ErrTaskNotFound, id)
-		}
 		return core.Task{}, fmt.Errorf("store.ForceReleaseTask: %w: task %q is not claimed",
 			ErrTaskClaimConflict, id)
+	}
+	if prior.ClaimedBy != "" {
+		if err := RecordClaimNotice(ctx, tx, ClaimNotice{
+			SessionID: prior.ClaimedBy, Kind: ClaimResourceTask, ResourceID: id, Project: prior.ProjectSlug,
+			Reason: ClaimLostReleased, LeaseExpiresAt: prior.LeaseExpiresAt, LostAt: now,
+		}); err != nil {
+			return core.Task{}, fmt.Errorf("store.ForceReleaseTask: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return core.Task{}, fmt.Errorf("store.ForceReleaseTask: commit: %w", err)
 	}
 	return TaskByID(ctx, db, id)
 }
 
+// ReleaseReapedClaims is the reaper's release: it reopens every task sessionID
+// still holds a lapsed claim on -- the session the reaper just expired, which
+// it expires only once no claim of its is live -- and records a notice for each
+// (ClaimLostReaped), in one transaction. Without the notice the holder would
+// never hear of it: a later claimant takes an open task, which is no reclaim. A
+// claim live at now is left alone: one the holder took after the reap, through
+// a call that revived its session, is its own again. It returns how many claims
+// it released.
+func ReleaseReapedClaims(ctx context.Context, db *sql.DB, sessionID string, now time.Time) (int, error) {
+	const op = "store.ReleaseReapedClaims"
+	if sessionID == "" {
+		return 0, nil
+	}
+	nowStr := core.FormatTime(now.UTC())
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("%s: begin: %w", op, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	held, err := lapsedClaimsTx(ctx, tx, sessionID, nowStr)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+	released := 0
+	for _, t := range held {
+		res, err := tx.ExecContext(ctx, `
+			UPDATE tasks SET status = 'open', claimed_by = '', lease_expires_at = NULL, updated_at = ?
+			 WHERE id = ? AND `+lapsedClaimOf, nowStr, t.ID, sessionID, nowStr)
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", op, err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return 0, fmt.Errorf("%s: rows affected: %w", op, err)
+		}
+		if n == 0 {
+			continue
+		}
+		if err := RecordClaimNotice(ctx, tx, ClaimNotice{
+			SessionID: sessionID, Kind: ClaimResourceTask, ResourceID: t.ID, Project: t.ProjectSlug,
+			Reason: ClaimLostReaped, LeaseExpiresAt: t.LeaseExpiresAt, LostAt: now,
+		}); err != nil {
+			return 0, fmt.Errorf("%s: %w", op, err)
+		}
+		released++
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("%s: commit: %w", op, err)
+	}
+	return released, nil
+}
+
+// lapsedClaimOf matches a task the bound session holds a claim on that is not
+// live at the bound instant: core.Task.ClaimLive's negation for a row whose
+// holder is that session. Two binds: the session id, then now.
+const lapsedClaimOf = `claimed_by = ? AND status = 'in_progress' AND (lease_expires_at IS NULL OR lease_expires_at <= ?)`
+
+// lapsedClaimsTx reads the tasks sessionID holds a lapsed claim on, inside tx;
+// the rows are closed before it returns, so the caller's writes never wait on
+// this read.
+func lapsedClaimsTx(ctx context.Context, tx *sql.Tx, sessionID, now string) ([]core.Task, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT `+taskCols+` FROM tasks WHERE `+lapsedClaimOf, sessionID, now)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var held []core.Task
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		held = append(held, t)
+	}
+	return held, rows.Err()
+}
+
 // ReleaseClaimsForSession reopens every in_progress task currently claimed by
 // sessionID (called on session_end so a departing agent's work returns to the
-// queue). It returns the number of tasks released.
+// queue). It returns the number of tasks released. The holder is ending its own
+// session, so no notice is recorded.
 func ReleaseClaimsForSession(ctx context.Context, db *sql.DB, sessionID string, now time.Time) (int, error) {
 	if sessionID == "" {
 		return 0, nil

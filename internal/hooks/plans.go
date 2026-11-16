@@ -49,9 +49,13 @@ func (h *Handler) postToolUse(w http.ResponseWriter, r *http.Request) {
 		p.SessionID = "" // foreignSession: another principal's, or locked
 	}
 
-	// Heartbeat the ambient session on any tool activity, so a long turn that never
-	// calls a seamless MCP tool still keeps its cc/* session live for the reaper.
-	// Plan/tool-capture hooks are Claude Code-only (Codex registers none).
+	// Heartbeat the ambient session. Only plan-file writes (Write/Edit/MultiEdit
+	// under the plans dir) and ExitPlanMode reach this hook: the matcher names
+	// those tools, and `seam hook` drops every other file's write before it
+	// leaves the agent's machine. So this is no heartbeat for a long turn in a
+	// shell or an editor; such work keeps its session live by holding a claim
+	// (core.Session.LiveAsOf). Plan/tool-capture hooks are Claude Code-only
+	// (Codex registers none).
 	hbCtx, hbCancel := context.WithTimeout(r.Context(), hookTimeout)
 	h.touchAmbient(hbCtx, ClientClaudeCode, p.SessionID)
 	hbCancel()
