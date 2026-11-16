@@ -10,6 +10,14 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](https://thereisnospoon.org/docs/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.10.1 {#v0-10-1}
+
+Released 2026-11-16 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.1)
+
+### Fixes
+
+- fix(locks): the lock hooks name the agent behind a wrapper, so a landing through node or make is checked as that agent's
+
 ## v0.10.0 {#v0-10-0}
 
 Released 2026-11-16 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.0)
