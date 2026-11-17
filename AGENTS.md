@@ -433,6 +433,18 @@ any of it.
   through the policy, or `lockedProjects` in cmd/seamlessd for a one-shot
   command; `peer_auth.force_locked` alone is not the whole set. `locked` is the
   key's earlier name and keeps loading (`foldLegacyLocked`).
+- **A begin never waits for room.** Every ceremony a caller can begin in a loop
+  waits under a cap per scope and one in all, and a begin past a cap displaces
+  the oldest of its scope, or past the overall cap the oldest of the fullest
+  scope, rather than refusing: a refusal let one burst hold the owner off until
+  the entries expired. The in-memory ones go through `approval.makeRoom` (lock
+  changes per project and direction, restore approvals per backup digest and
+  mode, Approvers-page enrollments per stage, so a begin loop never reaches a
+  passkey waiting for its code); console unlocks through `makeRoomForUnlock`
+  (per project and kind); the Add a passkey page's rows through
+  `passkeyEnrollmentDisplaced` (per address, loopback apart). Key a new cap on a
+  scope the server controls, never on caller text a loop can vary. Terminal
+  sign-ins still refuse per address (`ErrTerminalSignInBusyFrom`).
 - **A backup carries its locks, and an import never drops one silently**
   (`archive.Manifest.Locks`, `archive/locks.go`, `cmd/seamlessd/import_locks.go`).
   The manifest names every locked project, the config's force locks and a
@@ -891,7 +903,12 @@ any of it.
   through `store.ApprovePasskeyEnrollment`, which `seamlessd approvers approve`
   runs as the daemon's account: the Add a passkey page is public and enrolls
   nothing, its code names a waiting row and carries no key, and no route
-  approves. Every sign-in route is a 404 while the key signs browsers in, and
+  approves. Its waiting rows record the address each came from (`remote_addr`,
+  migration 049, handed from the console through `approval.WithEnrollmentFrom`)
+  and are capped by it as a terminal sign-in's codes are (`peerSource`, 4 per
+  address, 32 from every address but loopback, whose 4 are its own), except
+  that a new one displaces instead of being refused. Every sign-in route is a
+  404 while the key signs browsers in, and
   refuses a restricted account first. A restore ends every sign-in and waiting
   passkey (`ResetRestoredAccess`); a merge carries neither.
 - **The terminal sign-in is an unlock's terminal pattern, for the sign-in**
@@ -905,7 +922,7 @@ any of it.
   `Clean`), handed from the
   console through `approval.WithTerminalSignInBrowser` (`SignInView` is
   unchanged). The begin caps the waiting codes per address
-  (`maxWaitingTerminalSignInsFrom`, 4; `terminalSignInSource`: IPv4 by itself,
+  (`maxWaitingTerminalSignInsFrom`, 4; `peerSource`: IPv4 by itself,
   IPv6 by its /64, every loopback address one, anything else by its text) and
   from every address but loopback (`maxWaitingTerminalSignIns`, 32): loopback is
   held to its own 4 alone, so hosts that fill the 32 never hold off a browser on

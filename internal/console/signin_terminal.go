@@ -53,11 +53,17 @@ func (s *Service) terminalSignInCommand(code string) string {
 // and the User-Agent it sent. The store keeps both as bounded printable ASCII
 // (store.TerminalSignInBrowser).
 func terminalSignInBrowser(r *http.Request) store.TerminalSignInBrowser {
+	return store.TerminalSignInBrowser{Addr: requestPeer(r), UserAgent: r.UserAgent()}
+}
+
+// requestPeer is the address a request came from: its connection's peer,
+// without the port, as the console trusts no forwarding header.
+func requestPeer(r *http.Request) string {
 	addr := r.RemoteAddr
 	if peer, err := netip.ParseAddrPort(addr); err == nil {
 		addr = peer.Addr().Unmap().String()
 	}
-	return store.TerminalSignInBrowser{Addr: addr, UserAgent: r.UserAgent()}
+	return addr
 }
 
 // terminalSignInBegin begins a terminal sign-in for the browser whose key the

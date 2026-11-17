@@ -447,12 +447,12 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Begin a passkey enrollment</td>
 <td><code>POST /console/approvers/passkey/begin</code></td>
-<td>Only under peer_auth: <code>name=</code> the passkey (1 to 64 characters on one line). Returns the WebAuthn creation options, excluding every passkey already <a href="../../guides/peer-auth/#enroll-an-approver">enrolled</a>. Holds the enrollment in memory and stores nothing. Refused over the peer_auth socket and from a paired device, since a passkey is created in a browser.</td>
+<td>Only under peer_auth: <code>name=</code> the passkey (1 to 64 characters on one line). Returns the WebAuthn creation options, excluding every passkey already <a href="../../guides/peer-auth/#enroll-an-approver">enrolled</a>. Holds the enrollment in memory and stores nothing. Refused over the peer_auth socket and from a paired device, since a passkey is created in a browser. A begin never waits for room: at most 16 enrollments wait at once for their browser, and 16 more whose passkey exists and waits for its code, so a begin past 16 displaces the oldest still waiting for its browser, and never one waiting for its code. A displaced enrollment's next step says it expired.</td>
 </tr>
 <tr>
 <td>Create the passkey</td>
 <td><code>POST /console/approvers/passkey/finish</code></td>
-<td>Verifies the browser's new passkey and returns its key's fingerprint with the <code>seamlessd approvers enroll-code</code> command that mints its code. Still stores nothing: the passkey waits for that code. Refused from a paired device.</td>
+<td>Verifies the browser's new passkey and returns its key's fingerprint with the <code>seamlessd approvers enroll-code</code> command that mints its code. Still stores nothing: the passkey waits for that code. Past 16 waiting for their code, it displaces the oldest of them. Refused from a paired device.</td>
 </tr>
 <tr>
 <td>Enroll the passkey</td>
@@ -482,7 +482,7 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Add a passkey, waiting</td>
 <td><code>POST /console/passkeys/add/finish</code></td>
-<td>Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: <code>seamlessd approvers approve --code</code>, on the server, adds exactly that passkey. At most 32 wait at once.</td>
+<td>Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: <code>seamlessd approvers approve --code</code>, on the server, adds exactly that passkey. It never waits for room: at most 4 wait at once from one address (an IPv6 address counts by its /64, and every loopback address is one), and 32 from every address but loopback, whose 4 are its own. One past its address's 4 displaces that address's oldest, and one past the 32 the oldest of the address holding the most; a displaced passkey's code names nothing, and its page says to add it again. So someone looping on the page from one computer crowds out only their own, and no number of other hosts reaches a passkey added on the server itself. Behind a proxy every request comes from the proxy's address.</td>
 </tr>
 <tr>
 <td>Begin a terminal sign-in</td>
@@ -617,7 +617,7 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Begin a restore's passkey ceremony</td>
 <td><code>POST /console/settings/backups/restore/begin</code></td>
-<td>Only while <a href="../../guides/peer-auth/#restore">peer_auth</a> locks a project, and only from a signed-in browser. Returns a WebAuthn challenge bound to the backup file's SHA-256, which the server reads from the file itself, and to the mode. Writes nothing.</td>
+<td>Only while <a href="../../guides/peer-auth/#restore">peer_auth</a> locks a project, and only from a signed-in browser. Returns a WebAuthn challenge bound to the backup file's SHA-256, which the server reads from the file itself, and to the mode. Writes nothing. A begin never waits for room: at most 4 ceremonies wait at once for one backup and mode, and 32 in all, so a begin past 4 displaces the oldest for its backup and mode, and one past 32 the oldest of the backup and mode holding the most. A displaced ceremony's finish says it expired.</td>
 </tr>
 <tr>
 <td>Restore a backup</td>

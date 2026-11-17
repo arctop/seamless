@@ -57,12 +57,10 @@ const (
 const lockChangeTTL = ConsoleUnlockTTL
 
 // maxPendingPerProject caps the ceremonies one project and direction keep
-// waiting at once. A begin never waits for room: past this cap the oldest of
-// its project and direction goes, and past maxPending in all the oldest of the
-// fullest project and direction goes. So a caller looping on begin crowds out
-// only the project and direction it loops on, and only while it keeps
-// looping: no burst can hold every lock change off until its ceremonies
-// expire.
+// waiting at once (makeRoom): past it a begin displaces the oldest of its
+// project and direction, and past maxPending in all the oldest of the fullest
+// project and direction. So a caller looping on begin crowds out only the
+// project and direction it loops on, and only while it keeps looping.
 const maxPendingPerProject = 4
 
 var (
@@ -91,6 +89,16 @@ type pendingLockChange struct {
 	challenge []byte
 	expires   time.Time
 }
+
+// lockChangeScope is what maxPendingPerProject counts a ceremony under: its
+// project and direction.
+type lockChangeScope struct {
+	project string
+	action  LockAction
+}
+
+func (p *pendingLockChange) scope() lockChangeScope { return lockChangeScope{p.project, p.action} }
+func (p *pendingLockChange) deadline() time.Time    { return p.expires }
 
 // lockChangeChallenge is the 32-byte challenge a passkey signs to approve a
 // change: it names this ceremony, the project and the direction.
@@ -145,50 +153,9 @@ func (s *Service) BeginLockChange(ctx context.Context, project string, action Lo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.gc(now)
-	s.makeRoomForLockChange(project, action)
+	makeRoom(s.lockChanges, lockChangeScope{project, action}, maxPendingPerProject)
 	s.lockChanges[id] = &pendingLockChange{project: project, action: action, challenge: challenge, expires: now.Add(lockChangeTTL)}
 	return Begun{ID: id, Options: opts}, nil
-}
-
-// makeRoomForLockChange drops, under s.mu, the ceremony a new one for project
-// and action displaces (maxPendingPerProject): the oldest of its own project
-// and direction when they hold the cap, else, when maxPending wait in all, the
-// oldest of the fullest project and direction, the one with the oldest
-// ceremony on a tie.
-func (s *Service) makeRoomForLockChange(project string, action LockAction) {
-	type bucket struct {
-		project string
-		action  LockAction
-	}
-	older := func(a, b string) bool {
-		pa, pb := s.lockChanges[a], s.lockChanges[b]
-		return pa.expires.Before(pb.expires) || (pa.expires.Equal(pb.expires) && a < b)
-	}
-	sizes := map[bucket]int{}
-	oldest := map[bucket]string{}
-	for id, p := range s.lockChanges {
-		b := bucket{p.project, p.action}
-		sizes[b]++
-		if o, ok := oldest[b]; !ok || older(id, o) {
-			oldest[b] = id
-		}
-	}
-	own := bucket{project, action}
-	if sizes[own] >= maxPendingPerProject {
-		delete(s.lockChanges, oldest[own])
-		return
-	}
-	if len(s.lockChanges) < maxPending {
-		return
-	}
-	var victim bucket
-	found := false
-	for b, n := range sizes {
-		if !found || n > sizes[victim] || (n == sizes[victim] && older(oldest[b], oldest[victim])) {
-			victim, found = b, true
-		}
-	}
-	delete(s.lockChanges, oldest[victim])
 }
 
 // lockChangeAllowed refuses a change the current state rules out. The store

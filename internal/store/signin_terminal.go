@@ -26,9 +26,9 @@ package store
 // it showed.
 //
 // For the same reason the waiting codes are capped twice: at most
-// maxWaitingTerminalSignInsFrom from one address (terminalSignInSource), so
-// someone looping on the begin from one host holds a few codes, not every one,
-// and the owner's own begin from another address still finds room; and at
+// maxWaitingTerminalSignInsFrom from one address (peerSource), so someone
+// looping on the begin from one host holds a few codes, not every one, and
+// the owner's own begin from another address still finds room; and at
 // most maxWaitingTerminalSignIns from every address but loopback, so many
 // hosts together still hold a bounded queue. Loopback is outside that cap,
 // held to its own share alone: however many hosts fill the cap, a browser on
@@ -69,7 +69,7 @@ const TerminalSignInTTL = 10 * time.Minute
 const terminalSignInWaiting = "terminal-code:"
 
 // maxWaitingTerminalSignIns caps the terminal sign-ins waiting at once from
-// every address but loopback (terminalSignInLoopback): a caller looping on the
+// every address but loopback (peerSourceLoopback): a caller looping on the
 // begin route, which needs no credential, from however many hosts cannot grow
 // the table without bound. Loopback is held to its own
 // maxWaitingTerminalSignInsFrom alone, so hosts that fill this cap never hold
@@ -77,19 +77,20 @@ const terminalSignInWaiting = "terminal-code:"
 const maxWaitingTerminalSignIns = 32
 
 // maxWaitingTerminalSignInsFrom caps the terminal sign-ins waiting at once
-// from one address (terminalSignInSource): a caller looping on the begin from
-// one host holds this many, not all maxWaitingTerminalSignIns. A browser that
+// from one address (peerSource): a caller looping on the begin from one host
+// holds this many, not all maxWaitingTerminalSignIns. A browser that
 // begins again ends its own waiting code (the console's begin route signs its
 // earlier cookie out), so the owner needs one.
 const maxWaitingTerminalSignInsFrom = 4
 
-// terminalSignInLoopback is the address terminalSignInSource counts every
-// loopback address as: this computer, outside maxWaitingTerminalSignIns.
-const terminalSignInLoopback = "loopback"
+// peerSourceLoopback is the address peerSource counts every loopback address
+// as: this computer, outside maxWaitingTerminalSignIns and
+// maxPendingEnrollments.
+const peerSourceLoopback = "loopback"
 
-// terminalSignInSourceBits is the prefix an IPv6 address counts by: one host
-// may hold a whole /64 and pick a fresh address from it for every request.
-const terminalSignInSourceBits = 64
+// peerSourceIPv6Bits is the prefix an IPv6 address counts by: one host may
+// hold a whole /64 and pick a fresh address from it for every request.
+const peerSourceIPv6Bits = 64
 
 var (
 	// ErrTerminalSignInBusy is a terminal sign-in begun from an address other
@@ -222,15 +223,17 @@ var (
 // can force the re-roll.
 var newTerminalSignInCode = func() (string, error) { return newUnlockCode() }
 
-// terminalSignInSource is the address a terminal sign-in's begin counts
-// against (maxWaitingTerminalSignInsFrom), from the address it recorded
-// (TerminalSignInBrowser.Addr, as kept): an IPv4 address by itself (an
+// peerSource is the address a request that anyone who reaches the console
+// can make counts against, from the address it recorded: a terminal
+// sign-in's begin (maxWaitingTerminalSignInsFrom, TerminalSignInBrowser.Addr)
+// and a passkey added on the Add a passkey page (maxPendingEnrollmentsFrom,
+// passkey_enrollments.remote_addr), each as kept: an IPv4 address by itself (an
 // IPv4-mapped IPv6 address as its IPv4 address, an address with a port as
 // the address), every loopback address as one (they are all this computer),
 // an IPv6 address by its /64 without its zone, and anything else -- no
 // address at all included -- by its text, under a prefix no address's form
 // has.
-func terminalSignInSource(addr string) string {
+func peerSource(addr string) string {
 	ip, err := netip.ParseAddr(addr)
 	if err != nil {
 		ap, perr := netip.ParseAddrPort(addr)
@@ -242,11 +245,11 @@ func terminalSignInSource(addr string) string {
 	ip = ip.Unmap()
 	switch {
 	case ip.IsLoopback():
-		return terminalSignInLoopback
+		return peerSourceLoopback
 	case ip.Is4():
 		return ip.String()
 	}
-	p, err := ip.WithZone("").Prefix(terminalSignInSourceBits)
+	p, err := ip.WithZone("").Prefix(peerSourceIPv6Bits)
 	if err != nil {
 		return "text " + addr
 	}
@@ -255,8 +258,8 @@ func terminalSignInSource(addr string) string {
 
 // terminalSignInsWaiting counts the terminal sign-ins waiting past floor that
 // were begun from an address other than loopback (elsewhere: what
-// maxWaitingTerminalSignIns caps), and those begun from source
-// (terminalSignInSource), loopback included. The caps keep what it reads to
+// maxWaitingTerminalSignIns caps), and those begun from source (peerSource),
+// loopback included. The caps keep what it reads to
 // maxWaitingTerminalSignIns rows and loopback's share.
 func terminalSignInsWaiting(ctx context.Context, tx *sql.Tx, floor, source string) (elsewhere, from int, err error) {
 	rows, err := tx.QueryContext(ctx, `SELECT remote_addr FROM console_signins WHERE `+waitingTerminalSignIn, floor)
@@ -269,8 +272,8 @@ func terminalSignInsWaiting(ctx context.Context, tx *sql.Tx, floor, source strin
 		if err := rows.Scan(&addr); err != nil {
 			return 0, 0, err
 		}
-		s := terminalSignInSource(addr)
-		if s != terminalSignInLoopback {
+		s := peerSource(addr)
+		if s != peerSourceLoopback {
 			elsewhere++
 		}
 		if s == source {
@@ -285,8 +288,8 @@ func terminalSignInsWaiting(ctx context.Context, tx *sql.Tx, floor, source strin
 // approve its code, with what the begin request showed of that browser (from,
 // kept Clean), and returns the row and the code. Waiting rows past their
 // deadline are purged first; then at most maxWaitingTerminalSignInsFrom wait
-// from from's address (terminalSignInSource; ErrTerminalSignInBusyFrom), and
-// at most maxWaitingTerminalSignIns from every address but loopback
+// from from's address (peerSource; ErrTerminalSignInBusyFrom), and at most
+// maxWaitingTerminalSignIns from every address but loopback
 // (ErrTerminalSignInBusy), a cap a begin from loopback is not held to: one
 // from this computer begins while fewer than maxWaitingTerminalSignInsFrom
 // wait from loopback, however many other hosts wait.
@@ -313,7 +316,7 @@ func BeginTerminalSignIn(ctx context.Context, db *sql.DB, cookie, browserKey str
 		floor); err != nil {
 		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: purge: %w", op, err)
 	}
-	source := terminalSignInSource(from.Addr)
+	source := peerSource(from.Addr)
 	elsewhere, fromHere, err := terminalSignInsWaiting(ctx, tx, floor, source)
 	if err != nil {
 		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: %w", op, err)
@@ -321,7 +324,7 @@ func BeginTerminalSignIn(ctx context.Context, db *sql.DB, cookie, browserKey str
 	switch {
 	case fromHere >= maxWaitingTerminalSignInsFrom:
 		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: %w", op, ErrTerminalSignInBusyFrom)
-	case source != terminalSignInLoopback && elsewhere >= maxWaitingTerminalSignIns:
+	case source != peerSourceLoopback && elsewhere >= maxWaitingTerminalSignIns:
 		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: %w", op, ErrTerminalSignInBusy)
 	}
 	code := ""

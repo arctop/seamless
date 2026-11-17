@@ -48,7 +48,7 @@ func signinWaiting(t *testing.T, db *sql.DB, name string, key byte, now time.Tim
 	_, code, err := store.BeginPasskeyEnrollment(context.Background(), db, store.ApproverCredential{
 		Kind: store.ApproverPasskey, CredentialID: []byte{key, key}, PublicKey: []byte{0xa5, key}, Alg: -7,
 		Name: name, RPID: "localhost", BackupEligible: true, BackupState: true,
-	}, store.PasskeyEnrollmentTTL, now)
+	}, "", store.PasskeyEnrollmentTTL, now)
 	require.NoError(t, err)
 	return code
 }

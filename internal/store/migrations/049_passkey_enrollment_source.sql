@@ -1,0 +1,30 @@
+-- A passkey a device adds on the console's Add a passkey page (console.sign_in:
+-- passkey, off by default; store/signin.go) records the address its request
+-- came from, so the passkeys waiting for the owner are capped per address as a
+-- terminal sign-in's codes are (migration 044, store/signin_terminal.go).
+-- Anyone who reaches the console can add one: someone looping on the page from
+-- one host then crowds out only that host's, and a browser on the server
+-- itself (loopback) keeps a share of its own however many hosts loop.
+--
+-- Additive only: one column on passkey_enrollments, with a default. Nothing is
+-- dropped, renamed or retyped, and no CHECK or index changes. The previous
+-- release names its columns in every statement over passkey_enrollments, so it
+-- reads and writes a database this one migrated exactly as before, and its
+-- inserts take the default. Metadata about a device's request only, about no
+-- project; no corpus content.
+--
+--   remote_addr  the address the request that stored the passkey came from:
+--                the connection's peer as the console saw it. The console
+--                trusts no forwarding header, so behind a proxy this is the
+--                proxy's address. Printable ASCII, at most 64 characters. ''
+--                when not recorded: every row from before this migration, and
+--                every row the previous release adds, which count together as
+--                one address of their own.
+--
+-- RESTORE AND ROLLBACK. Nothing new: a restore ends every passkey still
+-- waiting that it brings back (store.ResetRestoredAccess). An update rollback
+-- to the previous release leaves the column in place, unread.
+--
+-- ARCHIVE MERGE. passkey_enrollments is never merged (internal/archive/merge.go).
+-- A backup carries the column with the rest of the table.
+ALTER TABLE passkey_enrollments ADD COLUMN remote_addr TEXT NOT NULL DEFAULT '';

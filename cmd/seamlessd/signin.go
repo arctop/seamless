@@ -161,9 +161,9 @@ func approveEnrollment(ctx context.Context, db *sql.DB, cfg config.Config, tty u
 	shown := store.FormatUnlockCode(code)
 	e, err := store.PasskeyEnrollmentByCode(ctx, db, code, now)
 	if errors.Is(err, store.ErrEnrollmentNotFound) {
-		return &ownerError{msg: fmt.Sprintf("no passkey is waiting for code %s: it may be mistyped, already approved, or expired "+
-			"(a code lasts %s). Nothing changed. Create the passkey again on %s.", shown,
-			minutesWords(store.PasskeyEnrollmentTTL), passkeyAddAddress(cfg)), cause: err}
+		return &ownerError{msg: fmt.Sprintf("no passkey is waiting for code %s: it may be mistyped, already approved, expired "+
+			"(a code lasts %s), or crowded out by newer passkeys added from the same address. Nothing changed. "+
+			"Create the passkey again on %s.", shown, minutesWords(store.PasskeyEnrollmentTTL), passkeyAddAddress(cfg)), cause: err}
 	}
 	if err != nil {
 		return err
@@ -187,7 +187,8 @@ func approveEnrollment(ctx context.Context, db *sql.DB, cfg config.Config, tty u
 	}
 	cred, _, err := store.ApprovePasskeyEnrollment(ctx, db, code, now)
 	if errors.Is(err, store.ErrEnrollmentNotFound) {
-		return &ownerError{msg: fmt.Sprintf("the passkey for code %s stopped waiting before it was added (approved meanwhile, or expired). Nothing changed.", shown), cause: err}
+		return &ownerError{msg: fmt.Sprintf("the passkey for code %s stopped waiting before it was added (approved meanwhile, expired, "+
+			"or crowded out by newer passkeys added from the same address). Nothing changed.", shown), cause: err}
 	}
 	if err != nil {
 		return err

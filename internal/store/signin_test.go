@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -95,12 +94,12 @@ func TestPasskeyEnrollment_ACodeEnrollsThePasskeyItNamesAlone(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
 	mine, theirs := signinCred("phone"), signinCred("attacker")
-	e, code, err := BeginPasskeyEnrollment(ctx, db, mine, PasskeyEnrollmentTTL, apNow)
+	e, code, err := BeginPasskeyEnrollment(ctx, db, mine, "", PasskeyEnrollmentTTL, apNow)
 	require.NoError(t, err)
 	require.Equal(t, EnrollmentPending, e.Status)
 	require.Equal(t, apNow.Add(PasskeyEnrollmentTTL), e.PendingUntil)
 	require.Regexp(t, `^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$`, code)
-	_, theirCode, err := BeginPasskeyEnrollment(ctx, db, theirs, PasskeyEnrollmentTTL, apNow)
+	_, theirCode, err := BeginPasskeyEnrollment(ctx, db, theirs, "", PasskeyEnrollmentTTL, apNow)
 	require.NoError(t, err)
 
 	var stored string
@@ -153,14 +152,14 @@ func TestPasskeyEnrollment_ACodeEnrollsThePasskeyItNamesAlone(t *testing.T) {
 }
 
 // A waiting passkey goes with its deadline; the same passkey waits once; an
-// enrolled one is not offered again; the queue is capped.
-func TestPasskeyEnrollment_DeadlineDuplicatesAndCap(t *testing.T) {
+// enrolled one is not offered again. The caps are signin_enroll_caps_test.go's.
+func TestPasskeyEnrollment_DeadlineAndDuplicates(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
 	c := signinCred("phone")
-	_, code, err := BeginPasskeyEnrollment(ctx, db, c, PasskeyEnrollmentTTL, apNow)
+	_, code, err := BeginPasskeyEnrollment(ctx, db, c, "", PasskeyEnrollmentTTL, apNow)
 	require.NoError(t, err)
-	_, _, err = BeginPasskeyEnrollment(ctx, db, c, PasskeyEnrollmentTTL, apNow)
+	_, _, err = BeginPasskeyEnrollment(ctx, db, c, "", PasskeyEnrollmentTTL, apNow)
 	require.ErrorIs(t, err, ErrEnrollmentWaiting)
 
 	late := apNow.Add(PasskeyEnrollmentTTL)
@@ -169,21 +168,12 @@ func TestPasskeyEnrollment_DeadlineDuplicatesAndCap(t *testing.T) {
 	_, err = PasskeyEnrollmentByCode(ctx, db, code, late)
 	require.ErrorIs(t, err, ErrEnrollmentNotFound)
 
-	_, code, err = BeginPasskeyEnrollment(ctx, db, c, PasskeyEnrollmentTTL, late)
+	_, code, err = BeginPasskeyEnrollment(ctx, db, c, "", PasskeyEnrollmentTTL, late)
 	require.NoError(t, err, "an expired wait is purged, so the passkey can wait again")
 	_, _, err = ApprovePasskeyEnrollment(ctx, db, code, late)
 	require.NoError(t, err)
-	_, _, err = BeginPasskeyEnrollment(ctx, db, c, PasskeyEnrollmentTTL, late)
+	_, _, err = BeginPasskeyEnrollment(ctx, db, c, "", PasskeyEnrollmentTTL, late)
 	require.ErrorIs(t, err, ErrApproverExists, "an enrolled passkey")
-
-	for i := range maxPendingEnrollments {
-		_, _, err := BeginPasskeyEnrollment(ctx, db, signinCred(fmt.Sprintf("d%02d", i)), PasskeyEnrollmentTTL, late)
-		require.NoError(t, err)
-	}
-	_, _, err = BeginPasskeyEnrollment(ctx, db, signinCred("one-too-many"), PasskeyEnrollmentTTL, late)
-	require.ErrorIs(t, err, ErrEnrollmentBusy)
-	_, _, err = BeginPasskeyEnrollment(ctx, db, signinCred("after-the-wait"), PasskeyEnrollmentTTL, late.Add(PasskeyEnrollmentTTL))
-	require.NoError(t, err, "a full queue empties with its deadline")
 }
 
 // The code is re-rolled while another waiting passkey shows it.
@@ -198,9 +188,9 @@ func TestPasskeyEnrollment_CodeReRolled(t *testing.T) {
 		codes = codes[1:]
 		return c, nil
 	}
-	_, first, err := BeginPasskeyEnrollment(ctx, db, signinCred("one"), PasskeyEnrollmentTTL, apNow)
+	_, first, err := BeginPasskeyEnrollment(ctx, db, signinCred("one"), "", PasskeyEnrollmentTTL, apNow)
 	require.NoError(t, err)
-	_, second, err := BeginPasskeyEnrollment(ctx, db, signinCred("two"), PasskeyEnrollmentTTL, apNow)
+	_, second, err := BeginPasskeyEnrollment(ctx, db, signinCred("two"), "", PasskeyEnrollmentTTL, apNow)
 	require.NoError(t, err)
 	require.Equal(t, "AAAA-AAAA", first)
 	require.Equal(t, "BBBB-BBBB", second)
@@ -214,18 +204,18 @@ func TestPasskeyEnrollment_NamesAreText(t *testing.T) {
 	for _, name := range []string{"", "   ", "phone\x1b[2J", "phone\u202eenohp", "line\nbreak", "tab\tbed", string(make([]rune, 65))} {
 		c := signinCred("x")
 		c.Name = name
-		_, _, err := BeginPasskeyEnrollment(ctx, db, c, PasskeyEnrollmentTTL, apNow)
+		_, _, err := BeginPasskeyEnrollment(ctx, db, c, "", PasskeyEnrollmentTTL, apNow)
 		require.ErrorIs(t, err, ErrInvalidApprover, "%q", name)
 	}
 	c := signinCred("y")
 	c.Name = "  Telefon von Zoë  "
-	e, _, err := BeginPasskeyEnrollment(ctx, db, c, PasskeyEnrollmentTTL, apNow)
+	e, _, err := BeginPasskeyEnrollment(ctx, db, c, "", PasskeyEnrollmentTTL, apNow)
 	require.NoError(t, err)
 	require.Equal(t, "Telefon von Zoë", e.Credential.Name)
 
 	touch := signinCred("z")
 	touch.Kind = ApproverTouchID
-	_, _, err = BeginPasskeyEnrollment(ctx, db, touch, PasskeyEnrollmentTTL, apNow)
+	_, _, err = BeginPasskeyEnrollment(ctx, db, touch, "", PasskeyEnrollmentTTL, apNow)
 	require.ErrorIs(t, err, ErrInvalidEnrollment, "only a passkey is enrolled this way")
 }
 
@@ -263,7 +253,7 @@ func TestApprovers_RemoveAndResetEndSignIns(t *testing.T) {
 	_, err = RemoveApproverSigningOut(ctx, db, a.ID, apNow)
 	require.ErrorIs(t, err, ErrApproverNotFound)
 
-	_, code, err := BeginPasskeyEnrollment(ctx, db, signinCred("waiting"), PasskeyEnrollmentTTL, apNow)
+	_, code, err := BeginPasskeyEnrollment(ctx, db, signinCred("waiting"), "", PasskeyEnrollmentTTL, apNow)
 	require.NoError(t, err)
 	r, err := ResetApproversAll(ctx, db, apNow.Add(time.Minute))
 	require.NoError(t, err)
@@ -288,7 +278,7 @@ func TestResetRestoredAccess_EndsSignInsAndWaitingPasskeys(t *testing.T) {
 	ctx := context.Background()
 	_, err := CreateConsoleSignIn(ctx, db, "cookie", "key", "01CRED", time.Hour, apNow)
 	require.NoError(t, err)
-	_, code, err := BeginPasskeyEnrollment(ctx, db, signinCred("phone"), PasskeyEnrollmentTTL, apNow)
+	_, code, err := BeginPasskeyEnrollment(ctx, db, signinCred("phone"), "", PasskeyEnrollmentTTL, apNow)
 	require.NoError(t, err)
 
 	got, err := ResetRestoredAccess(ctx, db, apNow.Add(time.Minute))

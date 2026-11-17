@@ -1651,8 +1651,16 @@ and console unlock the backup held.</p>
 until you sign out; locked projects still need an unlock or a lease. A program
 running as you can still drive the signed-in browser. The Add a passkey page is
 open to anyone who reaches the console: creating a passkey there adds nothing,
-but at most 32 wait at once, so someone looping on it can hold yours off for up
-to 10 minutes.</li>
+and at most 4 wait at once from one address (an IPv6 address counts by its
+/64, and every loopback address is one) and 32 from every address but
+loopback. A new one never waits: it displaces the oldest from its own
+address, or past the 32 the oldest of the address holding the most. So
+someone looping on the page from another computer crowds out only their own,
+and hosts that fill the 32 never reach a passkey added on the server itself
+(at a loopback address); someone looping from your own address - every
+request through a proxy in front of the console comes from the proxy's -
+crowds yours out while they keep at it, and the code it showed then names
+nothing.</li>
 <li><strong>A key device is a TCP caller.</strong> A computer paired with a key of its own
 (the console's Devices page) is you, as the bearer key is, but the daemon
 reads no process chain behind it, so it never holds a lease and never opens a

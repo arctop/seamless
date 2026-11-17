@@ -784,7 +784,7 @@ func TestImport_MergeLeavesTablesOutsideTheContractAlone(t *testing.T) {
 	_, err = store.CreateConsoleSignIn(ctx, srcDB, "sig-cookie", "sig-browser-key", "01PASSKEYALPHA", time.Hour, signedAt)
 	require.NoError(t, err)
 	_, _, err = store.BeginPasskeyEnrollment(ctx, srcDB, store.ApproverCredential{Kind: store.ApproverPasskey,
-		CredentialID: []byte{7, 7}, PublicKey: []byte{9, 9}, Alg: -7, Name: "phone"}, store.PasskeyEnrollmentTTL, signedAt)
+		CredentialID: []byte{7, 7}, PublicKey: []byte{9, 9}, Alg: -7, Name: "phone"}, "", store.PasskeyEnrollmentTTL, signedAt)
 	require.NoError(t, err)
 	// A computer paired with the exporting server, and a code that would pair
 	// another: a merge carries neither, or it would admit a computer nobody
@@ -1224,7 +1224,7 @@ func TestImport_FreshEndsRestoredSignIns(t *testing.T) {
 	_, err = store.CreateConsoleSignIn(ctx, srcDB, "sig-cookie", "sig-browser-key", "01PASSKEYALPHA", 24*time.Hour, now)
 	require.NoError(t, err)
 	_, code, err := store.BeginPasskeyEnrollment(ctx, srcDB, store.ApproverCredential{Kind: store.ApproverPasskey,
-		CredentialID: []byte{7, 7}, PublicKey: []byte{9, 9}, Alg: -7, Name: "phone"}, store.PasskeyEnrollmentTTL, now)
+		CredentialID: []byte{7, 7}, PublicKey: []byte{9, 9}, Alg: -7, Name: "phone"}, "", store.PasskeyEnrollmentTTL, now)
 	require.NoError(t, err)
 	require.NoError(t, srcDB.Close())
 

@@ -178,8 +178,6 @@ func (s *Service) approverError(w http.ResponseWriter, r *http.Request, err erro
 		msg = "that passkey is already enrolled"
 	case errors.Is(err, approval.ErrNoEnrollment):
 		msg = "this enrollment expired or was already used; start again"
-	case errors.Is(err, approval.ErrTooManyEnrollments):
-		msg, status = "too many passkey enrollments are waiting; try again in a few minutes", http.StatusTooManyRequests
 	case errors.Is(err, approval.ErrPasskeysOff):
 		msg, status = "passkeys are not configured on this daemon", http.StatusConflict
 	case errors.Is(err, passkey.ErrUserVerification):

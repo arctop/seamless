@@ -460,8 +460,6 @@ func (s *Service) restoreApprovalError(w http.ResponseWriter, r *http.Request, e
 		msg = "passkeys are not configured on this daemon: restore from a terminal with the command this section shows"
 	case errors.Is(err, approval.ErrInvalidRestoreMode):
 		msg, status = err.Error(), http.StatusBadRequest
-	case errors.Is(err, approval.ErrTooManyRestores):
-		msg, status = "too many restore approvals are waiting; try again in a few minutes", http.StatusTooManyRequests
 	case errors.Is(err, approval.ErrRestricted):
 		msg, status = "forbidden: a restricted local account restores nothing", http.StatusForbidden
 	}

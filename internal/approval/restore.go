@@ -40,6 +40,16 @@ const (
 // restoreTTL is how long a begun restore ceremony waits for its assertion.
 const restoreTTL = ConsoleUnlockTTL
 
+// maxPendingPerBackup caps the ceremonies waiting at once for one backup and
+// mode (makeRoom): past it a begin displaces the oldest for that backup and
+// mode, and past maxPending in all the oldest of the backup and mode holding
+// the most. A backup is named by the digest the server read from its file, so
+// the scopes are the backups in the list, never a caller's text: a caller
+// looping on begin over another backup, or the other mode, never reaches the
+// owner's ceremony, and one looping on the same crowds it out only while it
+// keeps looping.
+const maxPendingPerBackup = 4
+
 var (
 	// ErrNoRestore is a finish that names no ceremony in progress for this
 	// backup and mode: expired, already used, or never begun.
@@ -48,8 +58,6 @@ var (
 	ErrInvalidRestoreMode = errors.New("invalid restore mode: valid values are replace, merge")
 	// ErrInvalidRestoreDigest is a digest that is not a lowercase hex SHA-256.
 	ErrInvalidRestoreDigest = errors.New("invalid backup digest: want a lowercase hex SHA-256")
-	// ErrTooManyRestores is a begin refused because maxPending wait already.
-	ErrTooManyRestores = errors.New("too many restore approvals are in progress")
 )
 
 // ParseRestoreMode reads a restore mode from a request.
@@ -94,6 +102,16 @@ type pendingRestore struct {
 	challenge []byte
 	expires   time.Time
 }
+
+// restoreScope is what maxPendingPerBackup counts a ceremony under: its
+// backup's digest and its mode.
+type restoreScope struct {
+	digest string
+	mode   RestoreMode
+}
+
+func (p *pendingRestore) scope() restoreScope { return restoreScope{p.digest, p.mode} }
+func (p *pendingRestore) deadline() time.Time { return p.expires }
 
 // restoreChallenge is the 32-byte challenge a passkey signs to approve a
 // restore: it names this ceremony, the backup's digest and the mode.
@@ -149,9 +167,7 @@ func (s *Service) BeginRestore(ctx context.Context, digest string, mode RestoreM
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.gc(now)
-	if len(s.restores) >= maxPending {
-		return Begun{}, fmt.Errorf("%s: %w", op, ErrTooManyRestores)
-	}
+	makeRoom(s.restores, restoreScope{digest, mode}, maxPendingPerBackup)
 	s.restores[id] = &pendingRestore{digest: digest, mode: mode, challenge: challenge, expires: now.Add(restoreTTL)}
 	return Begun{ID: id, Options: opts}, nil
 }

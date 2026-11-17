@@ -102,7 +102,7 @@
           return;
         default:
           stop();
-          say('The code expired before it was approved. Nothing was added: create the passkey again for a new code.');
+          say('The code stopped waiting before it was approved: it expired, or newer passkeys added from this address took its place. Nothing was added: create the passkey again for a new code.');
       }
     }).catch(function () {
       if (!waiting || waiting.url !== url) return;

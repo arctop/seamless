@@ -265,10 +265,23 @@ const (
 // command.
 const PasskeyEnrollmentTTL = 10 * time.Minute
 
-// maxPendingEnrollments caps the passkeys waiting at once, so a caller looping
-// on the Add a passkey page cannot grow the table without bound. A full queue
-// refuses the next until one is approved or its time runs out.
-const maxPendingEnrollments = 32
+// The Add a passkey page is open to anyone who reaches the console, so the
+// passkeys waiting at once are capped twice, by the address each came from
+// (peerSource; migration 049), as a terminal sign-in's codes are: at most
+// maxPendingEnrollmentsFrom from one address, and maxPendingEnrollments from
+// every address but loopback, which keeps its own maxPendingEnrollmentsFrom
+// alone. A new passkey never waits for room: past its address's cap it
+// displaces that address's oldest, and past maxPendingEnrollments the oldest
+// of the address holding the most (passkeyEnrollmentDisplaced). So someone
+// looping on the page from one host crowds out only that host's, and only
+// while they keep looping; hosts that fill the cap never reach a passkey a
+// browser on the server added; and no burst holds the owner's off until its
+// rows expire, as a refusal once full did. Behind a proxy every request comes
+// from the proxy's address, which then holds one share for everyone.
+const (
+	maxPendingEnrollments     = 32
+	maxPendingEnrollmentsFrom = 4
+)
 
 var (
 	// ErrEnrollmentNotFound is a code that names no passkey still waiting:
@@ -276,9 +289,6 @@ var (
 	ErrEnrollmentNotFound = errors.New("no passkey is waiting for that code")
 	// ErrEnrollmentWaiting is a passkey already waiting for approval.
 	ErrEnrollmentWaiting = errors.New("that passkey is already waiting for approval")
-	// ErrEnrollmentBusy is an enrollment refused while maxPendingEnrollments
-	// wait.
-	ErrEnrollmentBusy = errors.New("too many passkeys are waiting for approval")
 	// ErrInvalidEnrollment is a malformed enrollment argument.
 	ErrInvalidEnrollment = errors.New("invalid passkey enrollment")
 )
@@ -295,6 +305,9 @@ type PasskeyEnrollment struct {
 	EnrolledAs   string
 	EndedAt      *time.Time
 	EndedReason  string
+	// From is the address the request that stored it came from (printable
+	// ASCII, at most MaxTerminalSignInAddr characters); "" when not recorded.
+	From string
 }
 
 // Fingerprint names the enrollment's key the way the device's page shows it
@@ -344,7 +357,8 @@ var newEnrollmentCode = func() (string, error) {
 }
 
 const passkeyEnrollmentCols = `id, status, name, credential_id, public_key, alg, sign_count, backup_eligible, backup_state, aaguid,
-	transports, attachment, attestation_format, user_handle, rp_id, created_at, pending_until, enrolled_as, ended_at, ended_reason`
+	transports, attachment, attestation_format, user_handle, rp_id, created_at, pending_until, enrolled_as, ended_at, ended_reason,
+	remote_addr`
 
 func scanPasskeyEnrollment(row interface{ Scan(...any) error }) (PasskeyEnrollment, error) {
 	var (
@@ -359,7 +373,7 @@ func scanPasskeyEnrollment(row interface{ Scan(...any) error }) (PasskeyEnrollme
 	c := &e.Credential
 	if err := row.Scan(&e.ID, &e.Status, &c.Name, &c.CredentialID, &c.PublicKey, &c.Alg, &count, &be, &bs, &aaguid,
 		&transports, &c.Attachment, &c.AttestationFormat, &userHand, &c.RPID, &created, &pending, &e.EnrolledAs,
-		&ended, &e.EndedReason); err != nil {
+		&ended, &e.EndedReason, &e.From); err != nil {
 		return PasskeyEnrollment{}, err
 	}
 	if count < 0 || count > int64(^uint32(0)) {
@@ -389,12 +403,17 @@ func scanPasskeyEnrollment(row interface{ Scan(...any) error }) (PasskeyEnrollme
 }
 
 // BeginPasskeyEnrollment records cred, a passkey a device just created, as
-// waiting for the owner's approval for ttl, and returns the row and the code
-// the device shows, printed XXXX-XXXX. Enrollments past their deadline are
-// purged first; at most maxPendingEnrollments wait at once. A passkey already
-// enrolled is ErrApproverExists, one already waiting ErrEnrollmentWaiting.
-func BeginPasskeyEnrollment(ctx context.Context, db *sql.DB, cred ApproverCredential, ttl time.Duration, now time.Time) (PasskeyEnrollment, string, error) {
+// waiting for the owner's approval for ttl, with the address its request came
+// from (from, kept as printable ASCII), and returns the row and the code the
+// device shows, printed XXXX-XXXX. Enrollments past their deadline are purged
+// first; then the one the new passkey displaces goes, if any
+// (maxPendingEnrollmentsFrom, maxPendingEnrollments): a begin never waits for
+// room. A passkey already enrolled is ErrApproverExists, one already waiting
+// ErrEnrollmentWaiting.
+func BeginPasskeyEnrollment(ctx context.Context, db *sql.DB, cred ApproverCredential, from string, ttl time.Duration,
+	now time.Time) (PasskeyEnrollment, string, error) {
 	const op = "store.BeginPasskeyEnrollment"
+	from = printableASCII(from, MaxTerminalSignInAddr)
 	cred.Name = strings.TrimSpace(cred.Name)
 	if cred.Kind != ApproverPasskey {
 		return PasskeyEnrollment{}, "", fmt.Errorf("%s: %w: only a passkey is enrolled this way", op, ErrInvalidEnrollment)
@@ -422,9 +441,9 @@ func BeginPasskeyEnrollment(ctx context.Context, db *sql.DB, cred ApproverCreden
 	if _, err := tx.ExecContext(ctx, `DELETE FROM passkey_enrollments WHERE status = ? AND pending_until <= ?`, EnrollmentPending, at); err != nil {
 		return PasskeyEnrollment{}, "", fmt.Errorf("%s: purge: %w", op, err)
 	}
-	var waiting, sameKey, enrolled int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(credential_id = ?), 0) FROM passkey_enrollments WHERE status = ?`,
-		cred.CredentialID, EnrollmentPending).Scan(&waiting, &sameKey); err != nil {
+	var sameKey, enrolled int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM passkey_enrollments WHERE status = ? AND credential_id = ?`,
+		EnrollmentPending, cred.CredentialID).Scan(&sameKey); err != nil {
 		return PasskeyEnrollment{}, "", fmt.Errorf("%s: %w", op, err)
 	}
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM approver_credentials WHERE kind = ? AND credential_id = ?`,
@@ -436,8 +455,16 @@ func BeginPasskeyEnrollment(ctx context.Context, db *sql.DB, cred ApproverCreden
 		return PasskeyEnrollment{}, "", fmt.Errorf("%s: %w", op, ErrApproverExists)
 	case sameKey > 0:
 		return PasskeyEnrollment{}, "", fmt.Errorf("%s: %w", op, ErrEnrollmentWaiting)
-	case waiting >= maxPendingEnrollments:
-		return PasskeyEnrollment{}, "", fmt.Errorf("%s: %w", op, ErrEnrollmentBusy)
+	}
+	displaced, err := passkeyEnrollmentDisplaced(ctx, tx, peerSource(from))
+	if err != nil {
+		return PasskeyEnrollment{}, "", fmt.Errorf("%s: %w", op, err)
+	}
+	if displaced != "" {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM passkey_enrollments WHERE id = ? AND status = ?`,
+			displaced, EnrollmentPending); err != nil {
+			return PasskeyEnrollment{}, "", fmt.Errorf("%s: displace: %w", op, err)
+		}
 	}
 	code := ""
 	for range unlockCodeTries {
@@ -460,11 +487,11 @@ func BeginPasskeyEnrollment(ctx context.Context, db *sql.DB, cred ApproverCreden
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO passkey_enrollments (id, status, code_hash, name, credential_id, public_key,
 		alg, sign_count, backup_eligible, backup_state, aaguid, transports, attachment, attestation_format, user_handle, rp_id,
-		created_at, pending_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		created_at, pending_until, remote_addr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, EnrollmentPending, enrollmentCodeHash(code), cred.Name, cred.CredentialID, cred.PublicKey, cred.Alg,
 		int64(cred.SignCount), boolInt(cred.BackupEligible), boolInt(cred.BackupState), cred.AAGUID,
 		strings.Join(cred.Transports, ","), cred.Attachment, cred.AttestationFormat, cred.UserHandle, cred.RPID,
-		at, core.FormatTime(now.Add(ttl))); err != nil {
+		at, core.FormatTime(now.Add(ttl)), from); err != nil {
 		return PasskeyEnrollment{}, "", fmt.Errorf("%s: %w", op, err)
 	}
 	e, err := scanPasskeyEnrollment(tx.QueryRowContext(ctx, `SELECT `+passkeyEnrollmentCols+` FROM passkey_enrollments WHERE id = ?`, id))
@@ -475,6 +502,57 @@ func BeginPasskeyEnrollment(ctx context.Context, db *sql.DB, cred ApproverCreden
 		return PasskeyEnrollment{}, "", fmt.Errorf("%s: %w", op, err)
 	}
 	return e, code, nil
+}
+
+// passkeyEnrollmentDisplaced returns the id of the waiting passkey a new one
+// from source (peerSource) displaces, or "" when it fits: source's oldest when
+// source holds maxPendingEnrollmentsFrom, else, for a source other than
+// loopback while maxPendingEnrollments wait from every address but loopback,
+// the oldest of the source holding the most of those, the one whose oldest is
+// oldest on a tie. The caller purged the expired ones, and the caps keep what
+// it reads to maxPendingEnrollments rows and loopback's share.
+func passkeyEnrollmentDisplaced(ctx context.Context, tx *sql.Tx, source string) (string, error) {
+	// created_at is fixed width (core.TimeFormat), so it sorts as text.
+	rows, err := tx.QueryContext(ctx, `SELECT id, remote_addr FROM passkey_enrollments WHERE status = ? ORDER BY created_at, id`,
+		EnrollmentPending)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = rows.Close() }()
+	sizes, oldest := map[string]int{}, map[string]string{}
+	var bySource []string // each source once, in the order of its oldest row
+	elsewhere := 0
+	for rows.Next() {
+		var id, addr string
+		if err := rows.Scan(&id, &addr); err != nil {
+			return "", err
+		}
+		s := peerSource(addr)
+		if sizes[s] == 0 {
+			oldest[s] = id
+			bySource = append(bySource, s)
+		}
+		sizes[s]++
+		if s != peerSourceLoopback {
+			elsewhere++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	switch {
+	case sizes[source] >= maxPendingEnrollmentsFrom:
+		return oldest[source], nil
+	case source == peerSourceLoopback || elsewhere < maxPendingEnrollments:
+		return "", nil
+	}
+	victim := ""
+	for _, s := range bySource {
+		if s != peerSourceLoopback && (victim == "" || sizes[s] > sizes[victim]) {
+			victim = s
+		}
+	}
+	return oldest[victim], nil
 }
 
 // pendingByCode reads the enrollment code names, still waiting at at.

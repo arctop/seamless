@@ -39,9 +39,14 @@ import (
 // for the owner to mint the code for the new key.
 const EnrollTTL = 10 * time.Minute
 
-// maxPending caps the passkey enrollments in flight, so a caller looping on
-// begin cannot grow the table without bound.
-const maxPending = 32
+// maxPendingPerStage caps the passkey enrollments waiting at once in each
+// stage (enrollStage), so maxPending hold in all. Past it a begin displaces
+// the oldest enrollment still waiting for its browser, and a finish the
+// oldest waiting for its code (makeRoom): a caller looping on begin, which
+// needs no passkey, crowds out only enrollments still waiting for their
+// browser, never one whose passkey exists and waits for the owner to mint its
+// code at a terminal, and only while it keeps looping.
+const maxPendingPerStage = maxPending / 2
 
 var (
 	// ErrNoEnrollment is a finish or approve step naming an enrollment that was
@@ -123,10 +128,6 @@ func (s *Service) PasskeysOn() bool { return s != nil && s.cfg.Passkeys != nil }
 // Origins returns the relying party's origins.
 func (s *Service) Origins() []string { return slices.Clone(s.cfg.Origins) }
 
-// ErrTooManyEnrollments is a passkey enrollment refused because maxPending are
-// already waiting.
-var ErrTooManyEnrollments = errors.New("too many passkey enrollments in progress")
-
 // pendingEnroll is one passkey enrollment between its requests.
 type pendingEnroll struct {
 	name    string
@@ -136,6 +137,18 @@ type pendingEnroll struct {
 	// code minted for its key.
 	cred *passkey.Credential
 }
+
+// enrollStage is what maxPendingPerStage counts an enrollment under: whether
+// its passkey exists yet.
+type enrollStage bool
+
+const (
+	enrollBegun   enrollStage = false // waiting for the browser to create the passkey
+	enrollCreated enrollStage = true  // the passkey exists; waiting for its code
+)
+
+func (p *pendingEnroll) scope() enrollStage  { return enrollStage(p.cred != nil) }
+func (p *pendingEnroll) deadline() time.Time { return p.expires }
 
 // Begun is a started passkey enrollment: its id and the creation options for
 // navigator.credentials.create.
@@ -246,9 +259,7 @@ func (s *Service) BeginPasskey(ctx context.Context, name string) (Begun, error) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.gc(now)
-	if len(s.pending) >= maxPending {
-		return Begun{}, fmt.Errorf("approval.BeginPasskey: %w", ErrTooManyEnrollments)
-	}
+	makeRoom(s.pending, enrollBegun, maxPendingPerStage)
 	s.pending[id] = &pendingEnroll{name: name, state: state, expires: now.Add(EnrollTTL)}
 	return Begun{ID: id, Options: opts}, nil
 }
@@ -279,6 +290,7 @@ func (s *Service) FinishPasskey(ctx context.Context, id string, response []byte)
 	p.cred = &cred
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	makeRoom(s.pending, enrollCreated, maxPendingPerStage)
 	s.pending[id] = p
 	return Finished{Fingerprint: store.ApproverKeyFingerprint(cred.PublicKey)}, nil
 }
@@ -310,6 +322,7 @@ func (s *Service) ConfirmPasskeyCode(ctx context.Context, id, code string) (stor
 	if err != nil {
 		if errors.Is(err, store.ErrEnrollCode) || errors.Is(err, store.ErrEnrollProof) {
 			s.mu.Lock()
+			makeRoom(s.pending, enrollCreated, maxPendingPerStage)
 			s.pending[id] = p
 			s.mu.Unlock()
 		}

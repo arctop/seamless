@@ -705,3 +705,34 @@ func signinAuthenticator(t *testing.T) *passkeytest.Authenticator {
 	require.NoError(t, err)
 	return a
 }
+
+// The Add a passkey page records the address each passkey came from, which
+// the store caps the waiting ones by: the connection's peer without its port
+// (an IPv4-mapped one as IPv4), never a forwarding header.
+func TestSignIn_AddPasskeyRecordsTheAddress(t *testing.T) {
+	sc := signinNewConsole(t, nil)
+	for _, tc := range []struct{ remote, want string }{
+		{"192.0.2.1:1234", "192.0.2.1"},
+		{"[2001:db8::5]:443", "2001:db8::5"},
+		{"[::ffff:198.51.100.3]:50000", "198.51.100.3"},
+		{"[::1]:50001", "::1"},
+	} {
+		device := signinNewBrowser(t)
+		begin := device.request(t, http.MethodPost, "/console/passkeys/add/begin", url.Values{"name": {"phone"}})
+		begin.RemoteAddr = tc.remote
+		rr := sc.do(device, begin)
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		begun := signinJSON(t, rr)
+		created, err := signinAuthenticator(t).Create(begun["options"], approverOrigin)
+		require.NoError(t, err)
+		finish := device.request(t, http.MethodPost, "/console/passkeys/add/finish", url.Values{
+			"ticket": {signinString(t, begun, "ticket")}, "name": {"phone"}, "response": {string(created)}})
+		finish.RemoteAddr = tc.remote
+		finish.Header.Set("X-Forwarded-For", "203.0.113.77")
+		rr = sc.do(device, finish)
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		e, err := store.PasskeyEnrollmentByID(context.Background(), sc.db, signinString(t, signinJSON(t, rr), "id"))
+		require.NoError(t, err)
+		require.Equal(t, tc.want, e.From, tc.remote)
+	}
+}

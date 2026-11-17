@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -190,21 +191,87 @@ func TestRestore_SingleUse(t *testing.T) {
 	require.ErrorIs(t, err, ErrNoRestore)
 }
 
-// A caller looping on begin cannot grow the waiting ceremonies without bound;
-// expired ones make room again.
-func TestRestore_PendingIsCapped(t *testing.T) {
-	f, _, _ := restoreFixture(t)
+// Waiting restore ceremonies are capped per backup and mode, and in all, and
+// a begin never waits for room: past a backup and mode's cap it displaces
+// that one's oldest, past maxPending the oldest of the fullest. A loop over
+// other backups, or the other mode of the owner's, never displaces the
+// owner's ceremony, which still finishes; the control is a loop on the
+// owner's own backup and mode, which does.
+func TestRestore_PendingCaps(t *testing.T) {
+	f, key, _ := restoreFixture(t)
 	ctx := context.Background()
-	for i := range maxPending {
-		_, err := f.svc.BeginRestore(ctx, digestA, RestoreReplace)
-		require.NoError(t, err, i)
+	var loop []restoreScope
+	for i := range maxPending / maxPendingPerBackup {
+		loop = append(loop, restoreScope{fileDigest(fmt.Sprintf("loop backup %d", i)), RestoreReplace})
 	}
-	_, err := f.svc.BeginRestore(ctx, digestA, RestoreReplace)
-	require.ErrorIs(t, err, ErrTooManyRestores)
+	begin := func(sc restoreScope) Begun {
+		t.Helper()
+		f.now = f.now.Add(time.Second)
+		b, err := f.svc.BeginRestore(ctx, sc.digest, sc.mode)
+		require.NoError(t, err, "a begin never waits for room")
+		return b
+	}
+	waiting := func(sc *restoreScope) int {
+		f.svc.mu.Lock()
+		defer f.svc.mu.Unlock()
+		n := 0
+		for _, p := range f.svc.restores {
+			if sc == nil || p.scope() == *sc {
+				n++
+			}
+		}
+		return n
+	}
+	held := func(id string) bool {
+		f.svc.mu.Lock()
+		defer f.svc.mu.Unlock()
+		_, ok := f.svc.restores[id]
+		return ok
+	}
 
-	f.now = f.now.Add(restoreTTL)
-	_, err = f.svc.BeginRestore(ctx, digestA, RestoreReplace)
+	// One backup and mode: the fifth begin displaces the first.
+	first := begin(loop[0])
+	for range maxPendingPerBackup {
+		begin(loop[0])
+	}
+	require.False(t, held(first.ID))
+	require.Equal(t, maxPendingPerBackup, waiting(&loop[0]))
+
+	// Every slot taken across backups: the owner's begin fits, and the
+	// fullest backup and mode with the oldest ceremony gives one up.
+	for _, sc := range loop[1:] {
+		for range maxPendingPerBackup {
+			begin(sc)
+		}
+	}
+	require.Equal(t, maxPending, waiting(nil))
+	mine := restoreScope{digestA, RestoreMerge}
+	owners := begin(mine)
+	require.Equal(t, maxPending, waiting(nil), "the overall cap holds")
+	require.Equal(t, maxPendingPerBackup-1, waiting(&loop[0]))
+
+	// The loop goes on over its own backups and the owner's backup in the
+	// other mode; the owner's ceremony stays, and finishes.
+	for range 3 {
+		for _, sc := range loop {
+			begin(sc)
+		}
+		begin(restoreScope{digestA, RestoreReplace})
+	}
+	require.True(t, held(owners.ID), "a loop over other backups and modes never displaces the owner's ceremony")
+	require.Equal(t, maxPending, waiting(nil))
+	resp, err := key.Get(owners.Options, origin)
 	require.NoError(t, err)
+	_, err = f.svc.FinishRestore(ctx, owners.ID, digestA, RestoreMerge, resp)
+	require.NoError(t, err)
+
+	// The control: a loop on the owner's own backup and mode displaces it.
+	owners = begin(mine)
+	for range maxPendingPerBackup {
+		begin(mine)
+	}
+	require.False(t, held(owners.ID), "a loop on the same backup and mode crowds the owner's ceremony out")
+	require.Equal(t, maxPendingPerBackup, waiting(&mine))
 }
 
 // A restricted local account approves no restore: it can neither begin a

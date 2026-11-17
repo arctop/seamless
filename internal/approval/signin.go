@@ -363,11 +363,24 @@ func (s *SignIn) BeginEnrollment(ctx context.Context, name string) (Ticketed, er
 	return Ticketed{Ticket: ticket, Options: opts}, nil
 }
 
+// enrollmentFromKey carries in a context the address an Add a passkey request
+// came from.
+type enrollmentFromKey struct{}
+
+// WithEnrollmentFrom returns ctx carrying the address the request finishing an
+// Add a passkey enrollment came from, which the store caps the waiting
+// passkeys by (store.BeginPasskeyEnrollment). The console sets it from the
+// request; a finish without it records no address, and its passkey counts
+// with every other such one as one address.
+func WithEnrollmentFrom(ctx context.Context, addr string) context.Context {
+	return context.WithValue(ctx, enrollmentFromKey{}, addr)
+}
+
 // FinishEnrollment verifies the device's new passkey for ticket and name (the
 // name the ticket was begun for: another one fails the challenge) and records
-// the passkey as waiting for the owner with a fresh code.
-// It enrolls nothing: store.ApprovePasskeyEnrollment does, run as the
-// daemon's account.
+// the passkey as waiting for the owner with a fresh code, under the address
+// ctx carries (WithEnrollmentFrom). It enrolls nothing:
+// store.ApprovePasskeyEnrollment does, run as the daemon's account.
 func (s *SignIn) FinishEnrollment(ctx context.Context, ticket, name string, response []byte) (PasskeyAdded, error) {
 	const op = "approval.SignIn.FinishEnrollment"
 	if err := refuseRestricted(ctx); err != nil {
@@ -399,7 +412,8 @@ func (s *SignIn) FinishEnrollment(ctx context.Context, ticket, name string, resp
 	// recorded, so a later change of rp_id names the passkeys it strands.
 	row := FromPasskey(cred, name)
 	row.RPID = s.cfg.Passkeys.RPID()
-	e, code, err := store.BeginPasskeyEnrollment(ctx, s.cfg.DB, row, store.PasskeyEnrollmentTTL, now)
+	from, _ := ctx.Value(enrollmentFromKey{}).(string)
+	e, code, err := store.BeginPasskeyEnrollment(ctx, s.cfg.DB, row, from, store.PasskeyEnrollmentTTL, now)
 	if err != nil {
 		return PasskeyAdded{}, fmt.Errorf("%s: %w", op, err)
 	}

@@ -39,7 +39,7 @@ func TestTerminalSignInSource(t *testing.T) {
 		{"2001:db8:1:2::/64", "text 2001:db8:1:2::/64"},
 		{"192.0.2.44?]0;owned?", "text 192.0.2.44?]0;owned?"},
 	} {
-		require.Equal(t, tc.want, terminalSignInSource(tc.addr), "%q", tc.addr)
+		require.Equal(t, tc.want, peerSource(tc.addr), "%q", tc.addr)
 	}
 }
 
