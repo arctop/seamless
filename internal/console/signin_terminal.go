@@ -100,11 +100,18 @@ func (s *Service) terminalSignInBegin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// terminalSignInGone is what a page waiting on a code it no longer has hears:
+// its code expired, or newer codes shown from the same address took its place
+// (store.BeginTerminalSignIn), or the browser began none.
+const terminalSignInGone = "this browser has no sign-in code still waiting: it expired, or newer codes shown from this address " +
+	"took its place. Show a new code."
+
 // terminalSignInStatus answers the page waiting on its code with the state of
 // the terminal sign-in it began (?id=), read with its own cookie and proof:
-// another browser, or this cookie without its key, finds nothing. Once the code
-// is approved the answer carries the cookie again, valid until the sign-in
-// expires, and where to go.
+// another browser, or this cookie without its key, finds nothing, as does a
+// page whose code newer ones from its address crowded out (the begin deleted
+// its row). Once the code is approved the answer carries the cookie again,
+// valid until the sign-in expires, and where to go.
 func (s *Service) terminalSignInStatus(w http.ResponseWriter, r *http.Request) {
 	key, ok := s.signInKeyOf(w, r)
 	if !ok {
@@ -118,7 +125,7 @@ func (s *Service) terminalSignInStatus(w http.ResponseWriter, r *http.Request) {
 	row, state, err := s.cfg.SignIn.TerminalSignInState(r.Context(), r.URL.Query().Get("id"), cookie, key)
 	if errors.Is(err, store.ErrTerminalSignInNotFound) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"state": string(store.TerminalSignInExpired),
-			"error": "this browser began no terminal sign-in that is still waiting: start again for a new code"})
+			"error": terminalSignInGone})
 		return
 	}
 	if err != nil {

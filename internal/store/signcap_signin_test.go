@@ -24,16 +24,15 @@ var signcapOtherHosts = []struct {
 	{"8 /64s of one /56", func(i int) string { return fmt.Sprintf("2001:db8:0:%x::1", i) }},
 }
 
-// signcapFillOtherHosts begins maxWaitingTerminalSignIns terminal sign-ins at
-// now, fstorePerAddress from each of addr(0), addr(1), ..., each of which must
-// begin.
-func signcapFillOtherHosts(t *testing.T, db *sql.DB, addr func(i int) string, now time.Time) {
+// signcapFillOtherHosts begins maxWaitingTerminalSignIns terminal sign-ins,
+// a second apart (*at), fstorePerAddress from each of addr(0), addr(1), ...
+func signcapFillOtherHosts(t *testing.T, db *sql.DB, at *time.Time, addr func(i int) string) []fstoreBegun {
 	t.Helper()
+	out := make([]fstoreBegun, 0, maxWaitingTerminalSignIns)
 	for i := range maxWaitingTerminalSignIns {
-		from := addr(i / fstorePerAddress)
-		_, err := fstoreBegin(t, db, from, now)
-		require.NoError(t, err, "begin %d, from %s", i+1, from)
+		out = append(out, fstoreBegin(t, db, at, addr(i/fstorePerAddress)))
 	}
+	return out
 }
 
 // signcapWaiting counts the terminal sign-ins waiting at now.
@@ -45,73 +44,78 @@ func signcapWaiting(t *testing.T, db *sql.DB, now time.Time) int {
 	return n
 }
 
-// signcapBusyForAll asserts err is the refusal of the cap the addresses other
-// than loopback share, not the one of an address's own share.
-func signcapBusyForAll(t *testing.T, err error, from string) {
-	t.Helper()
-	require.ErrorIs(t, err, ErrTerminalSignInBusy, "from %s", from)
-	require.NotErrorIs(t, err, ErrTerminalSignInBusyFrom, "from %s: refused for the whole queue, not for its own share", from)
-}
-
 // Hosts other than this computer that fill the cap they share -- eight IPv4
-// addresses, or eight /64s of one /56, at their share each -- never hold off a
-// begin from loopback: a browser on the server, the owner's way back in when
-// every passkey is lost, still gets a code while loopback holds fewer than its
-// share, and loopback holds no more than that.
-func TestTerminalSignIn_OtherHostsLeaveLoopbackItsShare(t *testing.T) {
+// addresses, or eight /64s of one /56, at their share each -- and go on
+// looping across it never reach a code a browser on the server showed, the
+// owner's way back in when every passkey is lost, though those are the oldest
+// of all: loopback keeps its own share. It is held to that share alone, so a
+// fifth from loopback displaces loopback's oldest, not another host's.
+func TestTerminalSignIn_OtherHostsNeverReachLoopback(t *testing.T) {
 	for _, hosts := range signcapOtherHosts {
 		t.Run(hosts.name, func(t *testing.T) {
 			db := leaseDB(t)
-			signcapFillOtherHosts(t, db, hosts.addr, apNow)
-			_, err := fstoreBegin(t, db, "203.0.113.9", apNow)
-			signcapBusyForAll(t, err, "another host")
-
-			for i, addr := range []string{"127.0.0.1", "::1", "127.0.0.2", "::ffff:127.0.0.1"} {
-				_, err := fstoreBegin(t, db, addr, apNow)
-				require.NoError(t, err, "loopback begin %d, from %s, while loopback holds %d", i+1, addr, i)
+			at := apNow
+			var server []fstoreBegun
+			for _, addr := range []string{"127.0.0.1", "::1", "127.0.0.2", "::ffff:127.0.0.1"} {
+				server = append(server, fstoreBegin(t, db, &at, addr))
 			}
-			_, err = fstoreBegin(t, db, "127.0.0.1", apNow)
-			fstoreBusyFrom(t, err, "loopback, its share taken")
-			_, err = fstoreBegin(t, db, "203.0.113.9", apNow)
-			signcapBusyForAll(t, err, "another host, still")
-			require.Equal(t, maxWaitingTerminalSignIns+fstorePerAddress, signcapWaiting(t, db, apNow),
+			signcapFillOtherHosts(t, db, &at, hosts.addr)
+			for round := range 3 {
+				for h := range maxWaitingTerminalSignIns / fstorePerAddress {
+					fstoreBegin(t, db, &at, hosts.addr(h))
+				}
+				fstoreBegin(t, db, &at, fmt.Sprintf("203.0.113.%d", 9+round))
+			}
+			for i, b := range server {
+				require.True(t, fstoreWaits(t, db, b, at), "hosts never reach loopback's share: code %d", i)
+			}
+			require.Equal(t, maxWaitingTerminalSignIns, fstoreWaiting(t, db, at, ""), "the other hosts hold their cap, no more")
+			require.Equal(t, fstorePerAddress, fstoreWaiting(t, db, at, peerSourceLoopback))
+
+			fstoreBegin(t, db, &at, "::1")
+			require.False(t, fstoreWaits(t, db, server[0], at), "loopback past its share displaces its own oldest")
+			require.Equal(t, fstorePerAddress, fstoreWaiting(t, db, at, peerSourceLoopback))
+			require.Equal(t, maxWaitingTerminalSignIns+fstorePerAddress, signcapWaiting(t, db, at),
 				"the queue holds the other hosts' cap and loopback's share, no more")
 		})
 	}
 }
 
 // Loopback's codes take no room from the other hosts: with loopback's share
-// waiting, they still fill their whole cap, and past their deadline every code
-// makes room again.
+// waiting, they still fill their whole cap without displacing a code, and
+// past their deadline every code makes room.
 func TestTerminalSignIn_LoopbackTakesNoRoomFromOtherHosts(t *testing.T) {
 	db := leaseDB(t)
-	fstoreFill(t, db, "127.0.0.1", fstorePerAddress, apNow)
-	signcapFillOtherHosts(t, db, func(i int) string { return fmt.Sprintf("198.51.100.%d", 1+i) }, apNow)
-	_, err := fstoreBegin(t, db, "203.0.113.9", apNow)
-	signcapBusyForAll(t, err, "another host")
-	_, err = fstoreBegin(t, db, "::1", apNow)
-	fstoreBusyFrom(t, err, "loopback, its share taken")
-	require.Equal(t, maxWaitingTerminalSignIns+fstorePerAddress, signcapWaiting(t, db, apNow))
+	at := apNow
+	fstoreFill(t, db, &at, "127.0.0.1", fstorePerAddress)
+	hosts := signcapFillOtherHosts(t, db, &at, func(i int) string { return fmt.Sprintf("198.51.100.%d", 1+i) })
+	for i, b := range hosts {
+		require.True(t, fstoreWaits(t, db, b, at), "code %d: loopback's share left the other hosts their whole cap", i)
+	}
+	require.Equal(t, maxWaitingTerminalSignIns+fstorePerAddress, signcapWaiting(t, db, at))
 
-	later := apNow.Add(TerminalSignInTTL)
-	_, err = fstoreBegin(t, db, "::1", later)
-	require.NoError(t, err, "loopback's codes expired")
-	_, err = fstoreBegin(t, db, "203.0.113.9", later)
-	require.NoError(t, err, "the other hosts' codes expired")
+	later := at.Add(TerminalSignInTTL)
+	fstoreBegin(t, db, &later, "::1")
+	fstoreBegin(t, db, &later, "203.0.113.9")
+	require.Equal(t, 2, signcapWaiting(t, db, later), "past their deadline every code made room")
 }
 
 // Only a loopback address begins outside the shared cap: no address recorded,
 // one that does not parse, the text of loopback's own key, and an unspecified
-// address are other hosts, held to it.
+// address are other hosts, held to it, and each displaces one of theirs.
 func TestTerminalSignIn_OnlyLoopbackBeginsOutsideTheCap(t *testing.T) {
 	db := leaseDB(t)
-	signcapFillOtherHosts(t, db, func(i int) string { return fmt.Sprintf("198.51.100.%d", 1+i) }, apNow)
+	at := apNow
+	signcapFillOtherHosts(t, db, &at, func(i int) string { return fmt.Sprintf("198.51.100.%d", 1+i) })
 	for _, addr := range []string{"", "loopback", "localhost", "127.0.0.1.example", "::2", "0.0.0.0", "::"} {
-		_, err := fstoreBegin(t, db, addr, apNow)
-		signcapBusyForAll(t, err, fmt.Sprintf("%q", addr))
+		b := fstoreBegin(t, db, &at, addr)
+		require.True(t, fstoreWaits(t, db, b, at), "%q", addr)
+		require.Equal(t, maxWaitingTerminalSignIns, fstoreWaiting(t, db, at, ""), "%q is held to the shared cap", addr)
+		require.Zero(t, fstoreWaiting(t, db, at, peerSourceLoopback), "%q is not loopback", addr)
 	}
-	_, err := fstoreBegin(t, db, "[::1]:50000", apNow)
-	require.NoError(t, err, "loopback with a port is loopback")
+	fstoreBegin(t, db, &at, "[::1]:50000")
+	require.Equal(t, 1, fstoreWaiting(t, db, at, peerSourceLoopback), "loopback with a port is loopback")
+	require.Equal(t, maxWaitingTerminalSignIns+1, signcapWaiting(t, db, at))
 }
 
 // signcapBrowserLine is the line console-open --sign-in prints a User-Agent on

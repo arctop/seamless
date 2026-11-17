@@ -21,141 +21,197 @@ type fstoreBegun struct {
 	row    WaitingTerminalSignIn
 	code   string
 	cookie string
+	key    string
 }
 
-// fstoreBegin begins a terminal sign-in from addr at now, for a browser of its
-// own (a fresh cookie and key), and returns what began and the begin's error.
-func fstoreBegin(t *testing.T, db *sql.DB, addr string, now time.Time) (fstoreBegun, error) {
+// fstoreBegin begins a terminal sign-in from addr one second after the one
+// before it (*at), for a browser of its own (a fresh cookie and key), so the
+// rows' order is their beginning's. A begin never waits for room: every one
+// begins.
+func fstoreBegin(t *testing.T, db *sql.DB, at *time.Time, addr string) fstoreBegun {
 	t.Helper()
 	id, err := core.NewID()
 	require.NoError(t, err)
-	cookie := "fstore-cookie-" + id
-	row, code, err := BeginTerminalSignIn(context.Background(), db, cookie, "fstore-key-"+id,
-		TerminalSignInBrowser{Addr: addr, UserAgent: "Mozilla/5.0 Example/1.0"}, now)
-	return fstoreBegun{row: row, code: code, cookie: cookie}, err
+	*at = at.Add(time.Second)
+	cookie, key := "fstore-cookie-"+id, "fstore-key-"+id
+	row, code, err := BeginTerminalSignIn(context.Background(), db, cookie, key,
+		TerminalSignInBrowser{Addr: addr, UserAgent: "Mozilla/5.0 Example/1.0"}, *at)
+	require.NoError(t, err, "a begin from %q never waits for room", addr)
+	return fstoreBegun{row: row, code: code, cookie: cookie, key: key}
 }
 
-// fstoreFill begins n terminal sign-ins from addr at now, each of which must
-// begin.
-func fstoreFill(t *testing.T, db *sql.DB, addr string, n int, now time.Time) []fstoreBegun {
+// fstoreFill begins n terminal sign-ins from addr, each a second after the
+// one before it.
+func fstoreFill(t *testing.T, db *sql.DB, at *time.Time, addr string, n int) []fstoreBegun {
 	t.Helper()
 	out := make([]fstoreBegun, 0, n)
-	for i := range n {
-		b, err := fstoreBegin(t, db, addr, now)
-		require.NoError(t, err, "begin %d from %s", i+1, addr)
-		out = append(out, b)
+	for range n {
+		out = append(out, fstoreBegin(t, db, at, addr))
 	}
 	return out
 }
 
-// fstoreBusyFrom asserts err is the per-address refusal: a busy answer that
-// says it is this address's, and what to do.
-func fstoreBusyFrom(t *testing.T, err error, addr string) {
+// fstoreWaits reports whether b's code still waits at now, and asserts that
+// the page that showed it sees the same.
+func fstoreWaits(t *testing.T, db *sql.DB, b fstoreBegun, now time.Time) bool {
 	t.Helper()
-	require.ErrorIs(t, err, ErrTerminalSignInBusy, "from %s", addr)
-	require.ErrorContains(t, err, "from this address", "from %s", addr)
-	require.ErrorContains(t, err, "use a code a page already shows, or wait until one expires", "from %s", addr)
+	ctx := context.Background()
+	_, state, perr := TerminalSignInFor(ctx, db, b.row.ID, HashConsoleSignIn(b.cookie, b.key), now)
+	w, err := TerminalSignInByCode(ctx, db, b.code, now)
+	if err != nil {
+		require.ErrorIs(t, err, ErrTerminalSignInNotFound)
+		require.ErrorIs(t, perr, ErrTerminalSignInNotFound, "the page finds nothing waiting either")
+		return false
+	}
+	require.NoError(t, perr)
+	require.Equal(t, TerminalSignInWaiting, state)
+	require.Equal(t, b.row.ID, w.ID)
+	return true
 }
 
-// One address holds a few waiting codes, not every one: the next begin from it
-// is refused and says why, and a begin from another address -- the owner's --
-// still finds room.
-func TestTerminalSignIn_CappedPerAddress(t *testing.T) {
+// fstoreWaiting counts the terminal sign-ins waiting at now from source
+// (peerSource), or, with source "", from every address but loopback.
+func fstoreWaiting(t *testing.T, db *sql.DB, now time.Time, source string) int {
+	t.Helper()
+	rows, err := db.Query(`SELECT remote_addr FROM console_signins WHERE `+waitingTerminalSignIn,
+		core.FormatTime(now.Add(-TerminalSignInTTL)))
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+	n := 0
+	for rows.Next() {
+		var addr string
+		require.NoError(t, rows.Scan(&addr))
+		s := peerSource(addr)
+		if s == source || (source == "" && s != peerSourceLoopback) {
+			n++
+		}
+	}
+	require.NoError(t, rows.Err())
+	return n
+}
+
+// One address holds at most a few waiting codes, and a begin past that
+// displaces the address's oldest -- however the address is written -- whose
+// code then approves nothing and whose page finds nothing waiting. Someone
+// looping on the begin from one host, however long, never displaces the
+// owner's code shown from another address, which the owner still approves.
+// The control is a loop from the owner's own address -- a proxy in front of
+// the console makes every request one -- which does.
+func TestTerminalSignIn_PerAddressDisplacesItsOwn(t *testing.T) {
 	db := leaseDB(t)
-	fstoreFill(t, db, "192.0.2.10", fstorePerAddress, apNow)
-	_, err := fstoreBegin(t, db, "192.0.2.10", apNow)
-	fstoreBusyFrom(t, err, "192.0.2.10")
-	_, err = fstoreBegin(t, db, "::ffff:192.0.2.10", apNow)
-	fstoreBusyFrom(t, err, "the same address, IPv4-mapped")
-	_, err = fstoreBegin(t, db, "192.0.2.10:51234", apNow)
-	fstoreBusyFrom(t, err, "the same address with a port")
+	ctx := context.Background()
+	at := apNow
+	owners := fstoreBegin(t, db, &at, "198.51.100.7")
+	loop := fstoreFill(t, db, &at, "192.0.2.10", fstorePerAddress)
 
-	_, err = fstoreBegin(t, db, "192.0.2.11", apNow)
-	require.NoError(t, err, "another address still begins one")
-	_, err = fstoreBegin(t, db, "2001:db8::10", apNow)
-	require.NoError(t, err, "an IPv6 address is another address")
+	fstoreBegin(t, db, &at, "::ffff:192.0.2.10")
+	require.False(t, fstoreWaits(t, db, loop[0], at), "the address's oldest made room, IPv4-mapped")
+	_, err := ApproveTerminalSignIn(ctx, db, loop[0].row.ID, loop[0].code, time.Hour, at)
+	require.ErrorIs(t, err, ErrTerminalSignInNotFound, "a displaced code approves nothing")
+	fstoreBegin(t, db, &at, "192.0.2.10:51234")
+	require.False(t, fstoreWaits(t, db, loop[1], at), "the address's next oldest made room, with a port")
+	require.True(t, fstoreWaits(t, db, loop[2], at))
+	require.Equal(t, fstorePerAddress, fstoreWaiting(t, db, at, "192.0.2.10"))
 
-	var waiting int
-	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM console_signins WHERE `+waitingTerminalSignIn,
-		core.FormatTime(apNow.Add(-TerminalSignInTTL))).Scan(&waiting))
-	require.Equal(t, fstorePerAddress+2, waiting, "a refused begin stores nothing")
+	fstoreFill(t, db, &at, "192.0.2.10", 3*maxWaitingTerminalSignIns)
+	require.True(t, fstoreWaits(t, db, owners, at), "a loop from another address never displaces the owner's code")
+	require.Equal(t, fstorePerAddress, fstoreWaiting(t, db, at, "192.0.2.10"))
+	require.Equal(t, fstorePerAddress+1, signcapWaiting(t, db, at), "the table holds the loop's share and the owner's")
+	_, err = ApproveTerminalSignIn(ctx, db, owners.row.ID, owners.code, time.Hour, at)
+	require.NoError(t, err)
+
+	// The control: from the owner's own address the loop does displace it.
+	owners = fstoreBegin(t, db, &at, "198.51.100.7")
+	fstoreFill(t, db, &at, "198.51.100.7", fstorePerAddress)
+	require.False(t, fstoreWaits(t, db, owners, at), "a loop from the same address crowds it out")
 }
 
 // One host may hold a whole IPv6 /64 and pick a fresh address from it for
-// every request, so an IPv6 address counts by its /64; the next /64 is
-// another address.
-func TestTerminalSignIn_CappedPerIPv6Slash64(t *testing.T) {
+// every request, so an IPv6 address counts by its /64 and displaces its /64's
+// oldest; the next /64 is another address.
+func TestTerminalSignIn_PerIPv6Slash64DisplacesItsOwn(t *testing.T) {
 	db := leaseDB(t)
+	at := apNow
+	var slash64 []fstoreBegun
 	for i := range fstorePerAddress {
-		_, err := fstoreBegin(t, db, fmt.Sprintf("2001:db8:1:2::%x", 0xa+i), apNow)
-		require.NoError(t, err, "begin %d", i+1)
+		slash64 = append(slash64, fstoreBegin(t, db, &at, fmt.Sprintf("2001:db8:1:2::%x", 0xa+i)))
 	}
-	for _, addr := range []string{"2001:db8:1:2:ffff:ffff:ffff:ffff", "2001:db8:1:2::1", "[2001:db8:1:2::77]:443"} {
-		_, err := fstoreBegin(t, db, addr, apNow)
-		fstoreBusyFrom(t, err, addr)
+	next := fstoreBegin(t, db, &at, "2001:db8:1:3::a")
+	for i, addr := range []string{"2001:db8:1:2:ffff:ffff:ffff:ffff", "2001:db8:1:2::1", "[2001:db8:1:2::77]:443"} {
+		fstoreBegin(t, db, &at, addr)
+		require.False(t, fstoreWaits(t, db, slash64[i], at), "from %s: the /64's oldest made room", addr)
+		require.Equal(t, fstorePerAddress, fstoreWaiting(t, db, at, "2001:db8:1:2::/64"))
 	}
-	_, err := fstoreBegin(t, db, "2001:db8:1:3::a", apNow)
-	require.NoError(t, err, "the next /64 is another address")
-	_, err = fstoreBegin(t, db, "2001:db8:1:2::a", apNow.Add(TerminalSignInTTL))
-	require.NoError(t, err, "the /64's codes expired")
+	require.True(t, fstoreWaits(t, db, next, at), "the next /64 is another address")
+	require.True(t, fstoreWaits(t, db, slash64[3], at))
 }
 
 // Every loopback address is this computer: one address, however many of
 // 127.0.0.0/8 and ::1 a caller uses.
 func TestTerminalSignIn_LoopbackIsOneAddress(t *testing.T) {
 	db := leaseDB(t)
+	at := apNow
+	var server []fstoreBegun
 	for _, addr := range []string{"127.0.0.1", "127.0.0.2", "::1", "127.9.9.9"} {
-		_, err := fstoreBegin(t, db, addr, apNow)
-		require.NoError(t, err, addr)
+		server = append(server, fstoreBegin(t, db, &at, addr))
 	}
-	_, err := fstoreBegin(t, db, "127.0.0.3", apNow)
-	fstoreBusyFrom(t, err, "127.0.0.3")
-	_, err = fstoreBegin(t, db, "::1", apNow)
-	fstoreBusyFrom(t, err, "::1")
+	fstoreBegin(t, db, &at, "127.0.0.3")
+	require.False(t, fstoreWaits(t, db, server[0], at))
+	fstoreBegin(t, db, &at, "::1")
+	require.False(t, fstoreWaits(t, db, server[1], at))
+	require.True(t, fstoreWaits(t, db, server[2], at))
+	require.Equal(t, fstorePerAddress, fstoreWaiting(t, db, at, peerSourceLoopback))
 }
 
 // The global cap still holds: codes from many addresses, each within its
-// share, fill it, and then a begin from an address with none waiting is
-// refused as busy, not as that address's.
-func TestTerminalSignIn_GlobalCapStillHolds(t *testing.T) {
+// share, fill it, and then a begin from an address with none waiting
+// displaces the oldest code of the address holding the most -- the one whose
+// oldest is oldest on a tie -- never the owner's, the oldest of all but alone
+// at its address. Past their deadline the codes make room.
+func TestTerminalSignIn_GlobalCapDisplacesTheFullest(t *testing.T) {
 	db := leaseDB(t)
-	for i := range maxWaitingTerminalSignIns {
-		addr := fmt.Sprintf("198.51.100.%d", 1+i/fstorePerAddress)
-		_, err := fstoreBegin(t, db, addr, apNow)
-		require.NoError(t, err, "begin %d from %s", i+1, addr)
+	at := apNow
+	owners := fstoreBegin(t, db, &at, "203.0.113.200")
+	var fullest fstoreBegun
+	for i := range maxWaitingTerminalSignIns - 1 {
+		b := fstoreBegin(t, db, &at, fmt.Sprintf("198.51.100.%d", 1+i/fstorePerAddress))
+		if i == 0 {
+			fullest = b
+		}
 	}
-	_, err := fstoreBegin(t, db, "203.0.113.200", apNow)
-	require.ErrorIs(t, err, ErrTerminalSignInBusy)
-	require.NotContains(t, err.Error(), "from this address", "an address with none waiting is refused for the whole queue")
-	_, err = fstoreBegin(t, db, "203.0.113.200", apNow.Add(TerminalSignInTTL))
-	require.NoError(t, err, "past their deadline the codes make room")
+	require.Equal(t, maxWaitingTerminalSignIns, fstoreWaiting(t, db, at, ""))
+
+	fstoreBegin(t, db, &at, "203.0.113.201")
+	require.False(t, fstoreWaits(t, db, fullest, at), "the fullest address with the oldest code gave one up")
+	require.True(t, fstoreWaits(t, db, owners, at), "an address holding fewer keeps its code, however old")
+	require.Equal(t, maxWaitingTerminalSignIns, fstoreWaiting(t, db, at, ""), "the cap holds")
+
+	later := at.Add(TerminalSignInTTL)
+	fstoreBegin(t, db, &later, "203.0.113.202")
+	require.Equal(t, 1, signcapWaiting(t, db, later), "past their deadline the codes make room")
 }
 
-// Only codes still waiting count against an address: not one past its
-// deadline (purged at the next begin), not one ended (its browser began again
-// or signed out), and not one approved (a live sign-in now).
+// Only codes still waiting count against an address: not one ended (its
+// browser began again or signed out), and not one approved (a live sign-in
+// now, which no begin displaces).
 func TestTerminalSignIn_PerAddressCountsOnlyWaiting(t *testing.T) {
 	db := leaseDB(t)
 	ctx := context.Background()
+	at := apNow
 	const addr = "192.0.2.20"
-	fstoreFill(t, db, addr, fstorePerAddress, apNow)
-	_, err := fstoreBegin(t, db, addr, apNow.Add(TerminalSignInTTL-time.Second))
-	fstoreBusyFrom(t, err, "a second before the deadline")
-	fresh := fstoreFill(t, db, addr, fstorePerAddress, apNow.Add(TerminalSignInTTL))
-	_, err = fstoreBegin(t, db, addr, apNow.Add(TerminalSignInTTL))
-	fstoreBusyFrom(t, err, "full again")
-
-	later := apNow.Add(TerminalSignInTTL + time.Minute)
-	n, err := EndConsoleSignInByCookie(ctx, db, fresh[0].cookie, later)
+	codes := fstoreFill(t, db, &at, addr, fstorePerAddress)
+	n, err := EndConsoleSignInByCookie(ctx, db, codes[0].cookie, at)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	_, err = fstoreBegin(t, db, addr, later)
-	require.NoError(t, err, "an ended code makes room")
-
-	_, err = ApproveTerminalSignIn(ctx, db, fresh[1].row.ID, fresh[1].code, time.Hour, later)
+	_, err = ApproveTerminalSignIn(ctx, db, codes[1].row.ID, codes[1].code, time.Hour, at)
 	require.NoError(t, err)
-	_, err = fstoreBegin(t, db, addr, later)
-	require.NoError(t, err, "an approved code is a sign-in now, and makes room")
-	_, err = fstoreBegin(t, db, addr, later)
-	fstoreBusyFrom(t, err, "full once more")
+
+	more := fstoreFill(t, db, &at, addr, 2)
+	for i, b := range []fstoreBegun{codes[2], codes[3], more[0], more[1]} {
+		require.True(t, fstoreWaits(t, db, b, at), "code %d: the ended and the approved ones made room", i)
+	}
+	fstoreBegin(t, db, &at, addr)
+	require.False(t, fstoreWaits(t, db, codes[2], at), "full again: the oldest still waiting makes room")
+	_, err = LiveConsoleSignIn(ctx, db, HashConsoleSignIn(codes[1].cookie, codes[1].key), at)
+	require.NoError(t, err, "the approved one is a sign-in, never displaced")
 }

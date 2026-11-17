@@ -288,7 +288,9 @@ func TestConsoleOpenSignIn_Refusals(t *testing.T) {
 
 	tty := unlockTerminal{in: strings.NewReader("y\ny\n"), out: &said, interactive: true}
 	require.ErrorContains(t, consoleSignIn(cfg, "bad!", "", tty, time.Now), "is not a sign-in code")
-	require.ErrorContains(t, consoleSignIn(cfg, "ZZZZ-ZZZZ", "", tty, time.Now), "no sign-in is waiting for code ZZZZ-ZZZZ")
+	err = consoleSignIn(cfg, "ZZZZ-ZZZZ", "", tty, time.Now)
+	require.ErrorContains(t, err, "no sign-in is waiting for code ZZZZ-ZZZZ")
+	require.ErrorContains(t, err, "or crowded out by newer codes shown from the same address", "a displaced code is one reason")
 	require.Empty(t, said.String(), "a bad code is refused before anything is asked")
 
 	db, err := store.OpenExisting(dbPath)

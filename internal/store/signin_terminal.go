@@ -26,19 +26,21 @@ package store
 // it showed.
 //
 // For the same reason the waiting codes are capped twice: at most
-// maxWaitingTerminalSignInsFrom from one address (peerSource), so someone
-// looping on the begin from one host holds a few codes, not every one, and
-// the owner's own begin from another address still finds room; and at
-// most maxWaitingTerminalSignIns from every address but loopback, so many
-// hosts together still hold a bounded queue. Loopback is outside that cap,
-// held to its own share alone: however many hosts fill the cap, a browser on
-// this computer -- the owner's way back in -- still gets a code while loopback
-// holds fewer than its share. Behind a proxy every request comes from the
-// proxy's address, and that one address may then hold only the per-address
-// share: someone looping through the proxy still holds the owner's begin off,
-// as the single global cap let them before, and no longer. A proxy on this
-// computer comes from loopback, so behind one a browser on this computer
-// shares the proxy's share.
+// maxWaitingTerminalSignInsFrom from one address (peerSource), and at most
+// maxWaitingTerminalSignIns from every address but loopback, which keeps its
+// own maxWaitingTerminalSignInsFrom alone. A begin never waits for room: past
+// its address's cap it deletes that address's oldest code, and past
+// maxWaitingTerminalSignIns the oldest of the address holding the most
+// (peerSourceDisplaced); the page that showed a deleted code finds nothing
+// waiting and shows a new one. So someone looping on the begin from one host
+// crowds out only that host's codes, and only while they keep looping; hosts
+// that fill the cap never reach a code a browser on this computer -- the
+// owner's way back in -- showed; and no burst holds the owner's begin off
+// until its codes expire, as a refusal once full did. Behind a proxy every
+// request comes from the proxy's address, which then holds one share for
+// everyone: someone looping through the proxy crowds out the owner's code
+// while they loop, and no longer. A proxy on this computer comes from
+// loopback, so behind one a browser on this computer shares the proxy's share.
 
 import (
 	"context"
@@ -71,16 +73,19 @@ const terminalSignInWaiting = "terminal-code:"
 // maxWaitingTerminalSignIns caps the terminal sign-ins waiting at once from
 // every address but loopback (peerSourceLoopback): a caller looping on the
 // begin route, which needs no credential, from however many hosts cannot grow
-// the table without bound. Loopback is held to its own
-// maxWaitingTerminalSignInsFrom alone, so hosts that fill this cap never hold
-// off a browser on this computer, and the table holds at most the two.
+// the table without bound. Past it a begin from such an address deletes the
+// oldest code of the address holding the most. Loopback is held to its own
+// maxWaitingTerminalSignInsFrom alone, so hosts that fill this cap never reach
+// a code a browser on this computer showed, and the table holds at most the
+// two.
 const maxWaitingTerminalSignIns = 32
 
 // maxWaitingTerminalSignInsFrom caps the terminal sign-ins waiting at once
-// from one address (peerSource): a caller looping on the begin from one host
-// holds this many, not all maxWaitingTerminalSignIns. A browser that
-// begins again ends its own waiting code (the console's begin route signs its
-// earlier cookie out), so the owner needs one.
+// from one address (peerSource): past it a begin deletes that address's
+// oldest, so a caller looping on the begin from one host crowds out only that
+// host's codes. A browser that begins again ends its own waiting code (the
+// console's begin route signs its earlier cookie out), so the owner needs
+// one.
 const maxWaitingTerminalSignInsFrom = 4
 
 // peerSourceLoopback is the address peerSource counts every loopback address
@@ -92,21 +97,10 @@ const peerSourceLoopback = "loopback"
 // hold a whole /64 and pick a fresh address from it for every request.
 const peerSourceIPv6Bits = 64
 
-var (
-	// ErrTerminalSignInBusy is a terminal sign-in begun from an address other
-	// than loopback while maxWaitingTerminalSignIns wait already from such
-	// addresses.
-	ErrTerminalSignInBusy = errors.New("too many terminal sign-ins are waiting")
-	// ErrTerminalSignInBusyFrom is a terminal sign-in begun while
-	// maxWaitingTerminalSignInsFrom wait already from its address. It is an
-	// ErrTerminalSignInBusy too, so a surface that words only that one still
-	// answers it as busy.
-	ErrTerminalSignInBusyFrom = fmt.Errorf("%w from this address: use a code a page already shows, or wait until one expires",
-		ErrTerminalSignInBusy)
-	// ErrTerminalSignInNotFound is a code that names no terminal sign-in still
-	// waiting: mistyped, already approved, past its deadline, or never shown.
-	ErrTerminalSignInNotFound = errors.New("no terminal sign-in is waiting for that code")
-)
+// ErrTerminalSignInNotFound is a code that names no terminal sign-in still
+// waiting: mistyped, already approved, past its deadline, crowded out by newer
+// codes from its address, or never shown.
+var ErrTerminalSignInNotFound = errors.New("no terminal sign-in is waiting for that code")
 
 // TerminalSignInState is a terminal sign-in as the browser that began it
 // sees it.
@@ -256,43 +250,71 @@ func peerSource(addr string) string {
 	return p.String()
 }
 
-// terminalSignInsWaiting counts the terminal sign-ins waiting past floor that
-// were begun from an address other than loopback (elsewhere: what
-// maxWaitingTerminalSignIns caps), and those begun from source (peerSource),
-// loopback included. The caps keep what it reads to
-// maxWaitingTerminalSignIns rows and loopback's share.
-func terminalSignInsWaiting(ctx context.Context, tx *sql.Tx, floor, source string) (elsewhere, from int, err error) {
-	rows, err := tx.QueryContext(ctx, `SELECT remote_addr FROM console_signins WHERE `+waitingTerminalSignIn, floor)
+// peerSourceDisplaced returns the id of the waiting row a new one from source
+// (peerSource) displaces, or "" when it fits: source's oldest when source
+// holds perSource; else, for a source other than loopback while overall wait
+// from every address but loopback, the oldest of the source holding the most
+// of those, the one whose oldest is oldest on a tie. Loopback is held to its
+// perSource alone. query selects every row still waiting, as its id and the
+// address it recorded, oldest first: ORDER BY created_at, id (created_at is
+// fixed width, core.TimeFormat, so it sorts as text). A terminal sign-in's
+// codes and the Add a passkey page's passkeys make room this way; each caller
+// purges its expired rows first, and the caps keep what it reads to overall
+// rows and loopback's share.
+func peerSourceDisplaced(ctx context.Context, tx *sql.Tx, source string, perSource, overall int,
+	query string, args ...any) (string, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
-		return 0, 0, err
+		return "", err
 	}
 	defer func() { _ = rows.Close() }()
+	sizes, oldest := map[string]int{}, map[string]string{}
+	var bySource []string // each source once, in the order of its oldest row
+	elsewhere := 0
 	for rows.Next() {
-		var addr string
-		if err := rows.Scan(&addr); err != nil {
-			return 0, 0, err
+		var id, addr string
+		if err := rows.Scan(&id, &addr); err != nil {
+			return "", err
 		}
 		s := peerSource(addr)
+		if sizes[s] == 0 {
+			oldest[s] = id
+			bySource = append(bySource, s)
+		}
+		sizes[s]++
 		if s != peerSourceLoopback {
 			elsewhere++
 		}
-		if s == source {
-			from++
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	switch {
+	case sizes[source] >= perSource:
+		return oldest[source], nil
+	case source == peerSourceLoopback || elsewhere < overall:
+		return "", nil
+	}
+	victim := ""
+	for _, s := range bySource {
+		if s != peerSourceLoopback && (victim == "" || sizes[s] > sizes[victim]) {
+			victim = s
 		}
 	}
-	return elsewhere, from, rows.Err()
+	return oldest[victim], nil
 }
 
 // BeginTerminalSignIn records a terminal sign-in for the browser that holds
 // cookie and browserKey, waiting TerminalSignInTTL for the daemon's account to
 // approve its code, with what the begin request showed of that browser (from,
 // kept Clean), and returns the row and the code. Waiting rows past their
-// deadline are purged first; then at most maxWaitingTerminalSignInsFrom wait
-// from from's address (peerSource; ErrTerminalSignInBusyFrom), and at most
-// maxWaitingTerminalSignIns from every address but loopback
-// (ErrTerminalSignInBusy), a cap a begin from loopback is not held to: one
-// from this computer begins while fewer than maxWaitingTerminalSignInsFrom
-// wait from loopback, however many other hosts wait.
+// deadline are purged first. A begin never waits for room: with
+// maxWaitingTerminalSignInsFrom waiting from from's address (peerSource) it
+// deletes that address's oldest code, and with maxWaitingTerminalSignIns
+// waiting from every address but loopback, a cap a begin from loopback is not
+// held to, the oldest of the address holding the most (peerSourceDisplaced).
+// The browser whose code it deleted finds nothing waiting
+// (ErrTerminalSignInNotFound), as one whose code expired does.
 func BeginTerminalSignIn(ctx context.Context, db *sql.DB, cookie, browserKey string, from TerminalSignInBrowser,
 	now time.Time) (WaitingTerminalSignIn, string, error) {
 	const op = "store.BeginTerminalSignIn"
@@ -316,16 +338,16 @@ func BeginTerminalSignIn(ctx context.Context, db *sql.DB, cookie, browserKey str
 		floor); err != nil {
 		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: purge: %w", op, err)
 	}
-	source := peerSource(from.Addr)
-	elsewhere, fromHere, err := terminalSignInsWaiting(ctx, tx, floor, source)
+	displaced, err := peerSourceDisplaced(ctx, tx, peerSource(from.Addr), maxWaitingTerminalSignInsFrom, maxWaitingTerminalSignIns,
+		`SELECT id, remote_addr FROM console_signins WHERE `+waitingTerminalSignIn+` ORDER BY created_at, id`, floor)
 	if err != nil {
 		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: %w", op, err)
 	}
-	switch {
-	case fromHere >= maxWaitingTerminalSignInsFrom:
-		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: %w", op, ErrTerminalSignInBusyFrom)
-	case source != peerSourceLoopback && elsewhere >= maxWaitingTerminalSignIns:
-		return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: %w", op, ErrTerminalSignInBusy)
+	if displaced != "" {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM console_signins WHERE id = ? AND `+waitingTerminalSignIn,
+			displaced, floor); err != nil {
+			return WaitingTerminalSignIn{}, "", fmt.Errorf("%s: displace: %w", op, err)
+		}
 	}
 	code := ""
 	for range unlockCodeTries {

@@ -442,9 +442,9 @@ any of it.
   mode, Approvers-page enrollments per stage, so a begin loop never reaches a
   passkey waiting for its code); console unlocks through `makeRoomForUnlock`
   (per project and kind); the Add a passkey page's rows through
-  `passkeyEnrollmentDisplaced` (per address, loopback apart). Key a new cap on a
-  scope the server controls, never on caller text a loop can vary. Terminal
-  sign-ins still refuse per address (`ErrTerminalSignInBusyFrom`).
+  `peerSourceDisplaced` (per address, loopback apart), and so do terminal
+  sign-ins' codes, deleting the row it names. Key a new cap on a scope the
+  server controls, never on caller text a loop can vary.
 - **A backup carries its locks, and an import never drops one silently**
   (`archive.Manifest.Locks`, `archive/locks.go`, `cmd/seamlessd/import_locks.go`).
   The manifest names every locked project, the config's force locks and a
@@ -925,9 +925,11 @@ any of it.
   (`maxWaitingTerminalSignInsFrom`, 4; `peerSource`: IPv4 by itself,
   IPv6 by its /64, every loopback address one, anything else by its text) and
   from every address but loopback (`maxWaitingTerminalSignIns`, 32): loopback is
-  held to its own 4 alone, so hosts that fill the 32 never hold off a browser on
-  the server; `ErrTerminalSignInBusyFrom` is an
-  `ErrTerminalSignInBusy`, so a surface words it first. `console-open --sign-in`
+  held to its own 4 alone, so hosts that fill the 32 never reach a code a browser
+  on the server showed. A begin past a cap deletes the address's oldest code, or
+  past the 32 the fullest address's (`peerSourceDisplaced`, shared with the Add a
+  passkey page), rather than refusing; that page's poll then finds nothing
+  waiting. `console-open --sign-in`
   shows them with the begin time
   (`store.TerminalSignInByCode`) and asks y/N before it approves exactly the row
   it showed (`ApproveTerminalSignIn` takes the id and the code). It runs only at

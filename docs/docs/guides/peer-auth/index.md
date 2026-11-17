@@ -1537,17 +1537,20 @@ and console unlock the backup held.
 - **A terminal sign-in's code queue is open to anyone who reaches the console.**
   At most 4 codes wait at once from one address (an IPv6 address counts by its
   /64, and every loopback address is one), and 32 from every address but
-  loopback, so someone looping on **Show a code** from one computer holds 4 of
-  them and yours, from another address, still gets a code; from 8 addresses or
-  more they can hold yours off for up to 10 minutes, but not on the server
-  itself: loopback's 4 are its own, so a browser there that opens the console
-  at a loopback address (`127.0.0.1` or `localhost`, where the daemon listens
-  on loopback) still gets a code. Behind a proxy every request comes from the
-  proxy's address (the console trusts no forwarding header), so there the limit
-  is one queue of 4 for everyone, and someone looping through the proxy holds
-  yours off as before; a proxy on the server comes from loopback, so there it
-  holds off a browser on the server too. The code itself signs in only the
-  browser that showed it.
+  loopback. A new one never waits: it displaces the oldest from its own
+  address, or past the 32 the oldest of the address holding the most. So
+  someone looping on **Show a code** from another computer crowds out only
+  their own, and yours, from another address, keeps waiting; hosts that fill
+  the 32 never reach a code shown on the server itself, as loopback's 4 are its
+  own, so a browser there that opens the console at a loopback address
+  (`127.0.0.1` or `localhost`, where the daemon listens on loopback) always
+  gets one that stays. Behind a proxy every request comes from the proxy's
+  address (the console trusts no forwarding header), so there the limit is one
+  queue of 4 for everyone, and someone looping through the proxy crowds yours
+  out while they keep at it, and no longer: the page then says to show a new
+  code. A proxy on the server comes from loopback, so there it reaches a
+  browser on the server too. The code itself signs in only the browser that
+  showed it.
 
 ## Move an existing install over
 

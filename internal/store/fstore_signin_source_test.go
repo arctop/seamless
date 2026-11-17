@@ -1,7 +1,6 @@
 package store
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -41,26 +40,4 @@ func TestTerminalSignInSource(t *testing.T) {
 	} {
 		require.Equal(t, tc.want, peerSource(tc.addr), "%q", tc.addr)
 	}
-}
-
-// The per-address refusal is its own error, and a busy one: a surface that
-// words only ErrTerminalSignInBusy still answers it as busy. The global
-// refusal is not the per-address one.
-func TestTerminalSignIn_BusyFromIsBusy(t *testing.T) {
-	require.ErrorIs(t, ErrTerminalSignInBusyFrom, ErrTerminalSignInBusy)
-	require.NotErrorIs(t, ErrTerminalSignInBusy, ErrTerminalSignInBusyFrom)
-	require.Equal(t, "too many terminal sign-ins are waiting from this address: use a code a page already shows, "+
-		"or wait until one expires", ErrTerminalSignInBusyFrom.Error())
-
-	db := leaseDB(t)
-	fstoreFill(t, db, "192.0.2.30", fstorePerAddress, apNow)
-	_, err := fstoreBegin(t, db, "192.0.2.30", apNow)
-	require.ErrorIs(t, err, ErrTerminalSignInBusyFrom)
-	for i := range maxWaitingTerminalSignIns - fstorePerAddress {
-		_, err := fstoreBegin(t, db, fmt.Sprintf("198.51.100.%d", 1+i/fstorePerAddress), apNow)
-		require.NoError(t, err)
-	}
-	_, err = fstoreBegin(t, db, "203.0.113.1", apNow)
-	require.ErrorIs(t, err, ErrTerminalSignInBusy)
-	require.NotErrorIs(t, err, ErrTerminalSignInBusyFrom)
 }

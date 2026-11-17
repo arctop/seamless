@@ -354,8 +354,9 @@ func approveConsoleSignIn(ctx context.Context, cfg config.Config, db *sql.DB, tt
 			cause: store.ErrInvalidSignIn}
 	}
 	notWaiting := func(err error) error {
-		return &ownerError{msg: fmt.Sprintf("no sign-in is waiting for code %s: it may be mistyped, already used, or expired (a code lasts %s). "+
-			"Nothing changed. Start again on %s.", shown, minutesWords(store.TerminalSignInTTL), signInPageFor(cfg)), cause: err}
+		return &ownerError{msg: fmt.Sprintf("no sign-in is waiting for code %s: it may be mistyped, already used, expired (a code lasts %s), "+
+			"or crowded out by newer codes shown from the same address. Nothing changed. Start again on %s.",
+			shown, minutesWords(store.TerminalSignInTTL), signInPageFor(cfg)), cause: err}
 	}
 	w, err := store.TerminalSignInByCode(ctx, db, code, now())
 	switch {

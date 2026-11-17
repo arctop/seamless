@@ -88,21 +88,26 @@ func TestTerminalSignIn_Refusals(t *testing.T) {
 }
 
 // The waiting sign-ins are capped, so a caller looping on the begin route
-// cannot grow the table; ones past their deadline make room. Each begin here
+// cannot grow the table, and a begin never waits for room. Each begin here
 // comes from an address of its own, so only the global cap applies
-// (signin_terminal_from_test.go caps one address).
+// (signin_terminal_from_test.go caps one address), and with every address
+// holding one, a begin displaces the oldest of all. Ones past their deadline
+// are purged first.
 func TestTerminalSignIn_Capped(t *testing.T) {
 	db := leaseDB(t)
-	ctx := context.Background()
-	from := func(i int) TerminalSignInBrowser { return TerminalSignInBrowser{Addr: "198.51.100." + strconv.Itoa(i)} }
+	at := apNow
+	var begun []fstoreBegun
 	for i := range maxWaitingTerminalSignIns {
-		_, _, err := BeginTerminalSignIn(ctx, db, "cookie-"+string(rune('a'+i%26))+string(rune('a'+i/26)), "key", from(i), apNow)
-		require.NoError(t, err)
+		begun = append(begun, fstoreBegin(t, db, &at, "198.51.100."+strconv.Itoa(i)))
 	}
-	_, _, err := BeginTerminalSignIn(ctx, db, "one-more", "key", from(200), apNow)
-	require.ErrorIs(t, err, ErrTerminalSignInBusy)
-	_, _, err = BeginTerminalSignIn(ctx, db, "one-more", "key", from(200), apNow.Add(TerminalSignInTTL))
-	require.NoError(t, err, "the expired ones are purged first")
+	fstoreBegin(t, db, &at, "198.51.100.200")
+	require.False(t, fstoreWaits(t, db, begun[0], at), "the oldest of all made room")
+	require.True(t, fstoreWaits(t, db, begun[1], at))
+	require.Equal(t, maxWaitingTerminalSignIns, signcapWaiting(t, db, at))
+
+	later := at.Add(TerminalSignInTTL)
+	fstoreBegin(t, db, &later, "198.51.100.201")
+	require.Equal(t, 1, signcapWaiting(t, db, later), "the expired ones are purged first")
 }
 
 // The proof setup waits for counts a passkey's sign-ins made since a time,

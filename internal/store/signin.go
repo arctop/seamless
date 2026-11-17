@@ -272,7 +272,7 @@ const PasskeyEnrollmentTTL = 10 * time.Minute
 // every address but loopback, which keeps its own maxPendingEnrollmentsFrom
 // alone. A new passkey never waits for room: past its address's cap it
 // displaces that address's oldest, and past maxPendingEnrollments the oldest
-// of the address holding the most (passkeyEnrollmentDisplaced). So someone
+// of the address holding the most (peerSourceDisplaced). So someone
 // looping on the page from one host crowds out only that host's, and only
 // while they keep looping; hosts that fill the cap never reach a passkey a
 // browser on the server added; and no burst holds the owner's off until its
@@ -456,7 +456,8 @@ func BeginPasskeyEnrollment(ctx context.Context, db *sql.DB, cred ApproverCreden
 	case sameKey > 0:
 		return PasskeyEnrollment{}, "", fmt.Errorf("%s: %w", op, ErrEnrollmentWaiting)
 	}
-	displaced, err := passkeyEnrollmentDisplaced(ctx, tx, peerSource(from))
+	displaced, err := peerSourceDisplaced(ctx, tx, peerSource(from), maxPendingEnrollmentsFrom, maxPendingEnrollments,
+		`SELECT id, remote_addr FROM passkey_enrollments WHERE status = ? ORDER BY created_at, id`, EnrollmentPending)
 	if err != nil {
 		return PasskeyEnrollment{}, "", fmt.Errorf("%s: %w", op, err)
 	}
@@ -502,57 +503,6 @@ func BeginPasskeyEnrollment(ctx context.Context, db *sql.DB, cred ApproverCreden
 		return PasskeyEnrollment{}, "", fmt.Errorf("%s: %w", op, err)
 	}
 	return e, code, nil
-}
-
-// passkeyEnrollmentDisplaced returns the id of the waiting passkey a new one
-// from source (peerSource) displaces, or "" when it fits: source's oldest when
-// source holds maxPendingEnrollmentsFrom, else, for a source other than
-// loopback while maxPendingEnrollments wait from every address but loopback,
-// the oldest of the source holding the most of those, the one whose oldest is
-// oldest on a tie. The caller purged the expired ones, and the caps keep what
-// it reads to maxPendingEnrollments rows and loopback's share.
-func passkeyEnrollmentDisplaced(ctx context.Context, tx *sql.Tx, source string) (string, error) {
-	// created_at is fixed width (core.TimeFormat), so it sorts as text.
-	rows, err := tx.QueryContext(ctx, `SELECT id, remote_addr FROM passkey_enrollments WHERE status = ? ORDER BY created_at, id`,
-		EnrollmentPending)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = rows.Close() }()
-	sizes, oldest := map[string]int{}, map[string]string{}
-	var bySource []string // each source once, in the order of its oldest row
-	elsewhere := 0
-	for rows.Next() {
-		var id, addr string
-		if err := rows.Scan(&id, &addr); err != nil {
-			return "", err
-		}
-		s := peerSource(addr)
-		if sizes[s] == 0 {
-			oldest[s] = id
-			bySource = append(bySource, s)
-		}
-		sizes[s]++
-		if s != peerSourceLoopback {
-			elsewhere++
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return "", err
-	}
-	switch {
-	case sizes[source] >= maxPendingEnrollmentsFrom:
-		return oldest[source], nil
-	case source == peerSourceLoopback || elsewhere < maxPendingEnrollments:
-		return "", nil
-	}
-	victim := ""
-	for _, s := range bySource {
-		if s != peerSourceLoopback && (victim == "" || sizes[s] > sizes[victim]) {
-			victim = s
-		}
-	}
-	return oldest[victim], nil
 }
 
 // pendingByCode reads the enrollment code names, still waiting at at.
