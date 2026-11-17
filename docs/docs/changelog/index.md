@@ -10,6 +10,15 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](https://thereisnospoon.org/docs/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.10.2 {#v0-10-2}
+
+Released 2026-11-17 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.2)
+
+### Fixes
+
+- fix(console): terminal sign-ins never refuse a begin when full; past a cap a begin displaces the oldest waiting code
+- fix(console): passkey enrollments and restore approvals never refuse a begin when full; the Add a passkey page caps its waiting passkeys per address
+
 ## v0.10.1 {#v0-10-1}
 
 Released 2026-11-16 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.1)
