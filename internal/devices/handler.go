@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/netip"
@@ -11,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -27,12 +29,18 @@ const (
 const maxPairBody = 4 << 10
 
 // pairRequest is a pairing endpoint's JSON body. Unknown fields are refused:
-// a misspelled name is present, and never silently becomes an absent one.
+// a misspelled name is present, and never silently becomes an absent one. So
+// a server of an earlier release refuses a relay's owner_uid (reason input,
+// `unknown field "owner_uid"`) before it uses the code, and the relay tells
+// the owner to upgrade the server first (ErrServerTooOld).
 type pairRequest struct {
 	Code   string `json:"code"`
 	Kind   string `json:"kind"`
 	Name   string `json:"name"`
 	Secret string `json:"secret"`
+	// OwnerUID is a relay's owner's uid on its computer (PairInput.OwnerUID),
+	// absent for a key device and from a relay of an earlier release.
+	OwnerUID uint32 `json:"owner_uid,omitempty"`
 }
 
 // pairError is a refused pairing's JSON answer. Reason is a fixed word a
@@ -82,6 +90,12 @@ func clearPairing(r *http.Request) bool {
 //     certificate alone, never by a key it also sends: the certificate's key
 //     must be an active relay's, else the request is refused (401) and the
 //     connection closed. A pending, revoked or never-paired relay is refused.
+//   - Without peer_auth, a relay whose pairing recorded the owner's uid on its
+//     computer is served for that uid alone (refusedNotOwner): another uid
+//     is refused (403, naming peer_auth's restricted accounts as the remedy),
+//     and a request that forwards no caller is refused (400). The health
+//     check is not judged, and a relay whose pairing recorded no uid is
+//     served as before. Under peer_auth the daemon's relay judge decides.
 //   - A bearer token shaped like a device key is matched against the active
 //     key devices. A key that matches none passes on unmarked, and every
 //     route refuses it exactly as it refuses a wrong key.
@@ -168,12 +182,67 @@ func (s *Service) edge(next http.Handler, lookedUp func(Credential)) http.Handle
 			next.ServeHTTP(w, r)
 			return
 		}
+		if s.refusedNotOwner(w, r, cred, attrs, forwarded) {
+			return
+		}
 		ctx = WithCredential(ctx, cred)
 		if forwarded {
 			ctx = withRelayAttributes(ctx, attrs)
 		}
 		next.ServeHTTP(w, speakFor(r.Clone(ctx), cred.Name))
 	})
+}
+
+// HealthPath is the daemon's health check, the one route the edge judges no
+// relay's caller on: a relay probing the server for itself forwards none.
+const HealthPath = "/healthz"
+
+// refusedPeerUnknown is write screening's code for a caller no account rule
+// names (screening.RefusedPeerUnknown, test-pinned; this package cannot import
+// screening's).
+const refusedPeerUnknown = "peer.unknown"
+
+// refusedNotOwner judges, while peer_auth is off, a request of a relay whose
+// pairing recorded the owner's uid on its computer (Credential.OwnerUID;
+// owner decision R-D1): that uid is the owner, as every caller of a relay
+// was before, and no other uid there is served, since without peer_auth this
+// server has no account to serve it as. It refuses, and answers, a request
+// that forwards another uid (403, naming the remedy: peer_auth, with the
+// account mapped as restricted) or none at all (400: a relay of this release
+// forwards its caller with every request), and reports whether it did. The
+// health check is not judged. Under peer_auth, and for a relay whose pairing
+// recorded no uid (store.Device.OwnerUnbound), nothing is judged here: the
+// daemon's relay judge, or nothing, as before.
+func (s *Service) refusedNotOwner(w http.ResponseWriter, r *http.Request, cred Credential, attrs RelayAttributes, forwarded bool) bool {
+	if s.cfg.PeerAuth || cred.Kind != KindRelay || cred.OwnerUID == 0 || r.URL.Path == HealthPath {
+		return false
+	}
+	switch {
+	case !forwarded:
+		s.cfg.Logger.Warn("devices: a relay request forwarded no caller", "relay", cred.Name, "device", cred.DeviceID, "path", r.URL.Path)
+		access.NoteRefusal(r.Context(), refusedPeerUnknown)
+		http.Error(w, fmt.Sprintf("bad request: %s: relay %s forwards its caller's %s, %s and %s with every request, and this one "+
+			"carries none: this server serves uid %d there, the owner's, and no one else through it", ErrRelayAttributes, cred.Name,
+			RelayVersionHeader, RelayUIDHeader, RelayChainHeader, cred.OwnerUID), http.StatusBadRequest)
+		return true
+	case attrs.UID != cred.OwnerUID:
+		s.cfg.Logger.Warn("devices: refused a relay's caller that is not the owner", "relay", cred.Name, "device", cred.DeviceID,
+			"uid", attrs.UID, "owner_uid", cred.OwnerUID)
+		access.NoteRefusal(r.Context(), refusedPeerUnknown)
+		http.Error(w, NotOwnerRefusal(cred.Name, attrs.UID, cred.OwnerUID), http.StatusForbidden)
+		return true
+	}
+	return false
+}
+
+// NotOwnerRefusal is the edge's answer to a relayed request, on a server
+// without peer_auth, whose uid is not the owner's uid the relay's pairing
+// recorded: the rule, then the remedy.
+func NotOwnerRefusal(relay string, uid, ownerUID uint32) string {
+	return fmt.Sprintf("forbidden: uid %d on relay %s is not the owner's uid there (%d, recorded when the relay paired). This "+
+		"server runs without peer_auth, so through a relay it serves the owner's account alone: to give that account access of "+
+		"its own, turn peer_auth on and map it as restricted (peer_auth.relays: {%s: {owner_uid: %d, restricted: {<its name>: %d}}}), "+
+		"then restart the server", uid, relay, ownerUID, relay, ownerUID, uid)
 }
 
 // authenticate matches r's own paired credential: ok is false for a request
@@ -195,7 +264,7 @@ func (s *Service) authenticate(r *http.Request) (Credential, bool, error) {
 		}
 		switch d.Status {
 		case store.DeviceActive:
-			return Credential{DeviceID: d.ID, Kind: d.Kind, Name: d.Name, Approved: d.ApprovedBy != ""}, true, nil
+			return Credential{DeviceID: d.ID, Kind: d.Kind, Name: d.Name, Approved: d.ApprovedBy != "", OwnerUID: d.OwnerUID}, true, nil
 		case store.DevicePending:
 			return Credential{}, false, ErrRelayPending
 		case store.DeviceRevoked:
@@ -268,7 +337,8 @@ func decodePair(w http.ResponseWriter, r *http.Request) (pairRequest, bool) {
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPairBody))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&in); err != nil {
-		writePairJSON(w, http.StatusBadRequest, pairError{Error: "the request must be one JSON object of code, kind, name and secret: " + err.Error(), Reason: "input"})
+		writePairJSON(w, http.StatusBadRequest, pairError{Error: "the request must be one JSON object of code, kind, name, secret and, " +
+			"for a relay, owner_uid: " + err.Error(), Reason: "input"})
 		return in, false
 	}
 	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
@@ -278,8 +348,8 @@ func decodePair(w http.ResponseWriter, r *http.Request) (pairRequest, bool) {
 	return in, true
 }
 
-// servePair is POST /api/pair: {code, kind, name, secret}. A relay's key is
-// the certificate its TLS connection presented.
+// servePair is POST /api/pair: {code, kind, name, secret}, and a relay's
+// owner_uid. A relay's key is the certificate its TLS connection presented.
 func (s *Service) servePair(w http.ResponseWriter, r *http.Request) {
 	in, ok := decodePair(w, r)
 	if !ok {
@@ -290,7 +360,8 @@ func (s *Service) servePair(w http.ResponseWriter, r *http.Request) {
 		s.pairRefused(w, r, err)
 		return
 	}
-	answer, err := s.Pair(r.Context(), PairInput{Code: in.Code, Kind: in.Kind, Name: in.Name, Secret: in.Secret, RelayKey: spki})
+	answer, err := s.Pair(r.Context(), PairInput{Code: in.Code, Kind: in.Kind, Name: in.Name, Secret: in.Secret, RelayKey: spki,
+		OwnerUID: in.OwnerUID})
 	if err != nil {
 		s.pairRefused(w, r, err)
 		return
@@ -305,7 +376,7 @@ func (s *Service) serveStatus(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if in.Code != "" || in.Kind != "" || in.Name != "" {
+	if in.Code != "" || in.Kind != "" || in.Name != "" || in.OwnerUID != 0 {
 		writePairJSON(w, http.StatusBadRequest, pairError{Error: "a status request carries the secret alone", Reason: "input"})
 		return
 	}
@@ -335,6 +406,8 @@ func (s *Service) pairRefused(w http.ResponseWriter, r *http.Request, err error)
 		status, reason, msg = http.StatusConflict, "secret", store.ErrDeviceSecretUsed.Error()
 	case errors.Is(err, ErrKind):
 		reason, msg = "kind", ErrKind.Error()
+	case errors.Is(err, ErrKeyOwnerUID):
+		msg = ErrKeyOwnerUID.Error()
 	case errors.Is(err, ErrRelayNeedsCertificate), errors.Is(err, ErrKeyWithCertificate), errors.Is(err, ErrRelayCertificate):
 		reason = "certificate"
 	case errors.Is(err, ErrUnknownPairing):

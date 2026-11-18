@@ -88,14 +88,16 @@
     <li class="access-item" data-device="{{.ID}}">
       <span class="badge">{{.KindLabel}}</span>
       <strong>{{.Name}}</strong>
-      <small>{{if eq .Kind "key"}}key {{else}}fingerprint {{end}}<code>{{.Ident}}</code> &middot; paired {{with .EnrolledAt}}{{clockDate .}}{{end}} by {{.ApprovedHow}} &middot; {{if .LastUsedAt}}last seen {{clockDate .LastUsedAt}}{{else}}not seen yet{{end}}{{if and (eq .Kind "key") (not .HasKey)}} &middot; its key is not collected yet{{end}}</small>
+      <small>{{if eq .Kind "key"}}key {{else}}fingerprint {{end}}<code>{{.Ident}}</code> &middot; paired {{with .EnrolledAt}}{{clockDate .}}{{end}} by {{.ApprovedHow}} &middot; {{if .LastUsedAt}}last seen {{clockDate .LastUsedAt}}{{else}}not seen yet{{end}}{{if and (eq .Kind "key") (not .HasKey)}} &middot; its key is not collected yet{{end}}{{if and (eq .Kind "relay") .OwnerUID}} &middot; {{if $.Data.PeerAuth}}it named uid {{.OwnerUID}} there as yours{{else}}serves uid {{.OwnerUID}} there alone, yours{{end}}{{end}}</small>
+      {{if and (not $.Data.PeerAuth) .OwnerUnbound}}<p class="held-sub" data-device-unbound="{{.ID}}">{{icon "triangle-alert"}} Paired before this server recorded the owner's uid on that computer (or through a relay of an earlier release), so every account there that reaches its socket is you here. Re-pair it to bind the owner's uid: revoke it, then on that computer pair it again with a relay of this release, <code>seamlessd relay pair --replace --owner-uid &lt;your uid there&gt;</code>.</p>{{end}}
       <form method="post" action="/console/devices/{{.ID}}/revoke">
         <button class="btn" type="submit">Revoke</button>
       </form>
     </li>
     {{end}}
   </ul>
-  {{if $.Data.PeerAuth}}<p class="held-sub">A key device is you, as the bearer key is: it never holds a lease, so it never opens a locked project. A relay is refused until you map it in <code>peer_auth.relays</code>; through a mapped relay its agents are judged as this computer's socket judges them.</p>{{end}}
+  {{if $.Data.PeerAuth}}<p class="held-sub">A key device is you, as the bearer key is: it never holds a lease, so it never opens a locked project. A relay is refused until you map it in <code>peer_auth.relays</code>; through a mapped relay its agents are judged as this computer's socket judges them.</p>
+  {{else}}<p class="held-sub" id="devices-owner-only">Without peer_auth, a relay is served for one account on its computer: yours, by the uid it named when it paired. Every other account there is refused; to give one access of its own, turn peer_auth on and map it as restricted in <code>peer_auth.relays</code>.</p>{{end}}
   {{else}}
   <p class="held-sub">No computer is paired yet.</p>
   {{end}}

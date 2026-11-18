@@ -188,6 +188,8 @@ Its transport rows are the ones to read:
 | `tailscale` | **info** when the tailnet issues certificates for the host: then the bind holding every address of the name, not the TLS key, keeps another page off the console's origin. |
 | `device pairing` | How a computer pairs here, and how many are paired or waiting. No TLS is a **warn**: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http `server_url` to another host no computer can pair, and no code is minted. An address of this computer's loopback (`server_url` unset on a wildcard bind derives `http://127.0.0.1:8081`) is a **warn** too: the one-liners carry it, so another computer cannot use them. A `server_url` that names a user is a **warn**: no code is minted and no one-liner printed until it is taken out. |
 | `peer_auth devices` | Under peer_auth only: a **warn** for each key device paired with a one-time code alone, before peer_auth, which is still you over TCP though no passkey approved it: revoke it and pair it again, so a passkey approves it. |
+| `relay owners` | Without peer_auth only: an **info** listing each relay with the uid its pairing recorded as yours, the one uid served through it, and a **warn** for each relay whose pairing recorded none (paired before, or by a relay of an earlier release), every caller of which is you: re-pair it to bind the owner's uid ([why](#who-a-relay-serves-without-peer-auth)). |
+| `peer_auth relays` | Under peer_auth only: each relay `peer_auth.relays` maps, and whether it is paired and approved with a passkey. A **warn** when the uid its pairing recorded is not the mapping's `owner_uid`: the mapping judges, but one of the two is wrong. |
 
 Every row is in [the doctor reference](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_doctor).
 
@@ -311,7 +313,7 @@ so none is found on your `PATH`, and every value is quoted for the shell:
 3. **The pairing, as its account:**
 
    ```bash
-   /usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://<server name>:8081 --fingerprint <fingerprint> --code -
+   /usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://<server name>:8081 --fingerprint <fingerprint> --owner-uid 501 --code -
    ```
 
    with `--ca-file /opt/seamless/etc/server-ca.crt` for a certificate you
@@ -319,7 +321,10 @@ so none is found on your `PATH`, and every value is quoted for the shell:
    command line, where other accounts and your shell history would keep it, and
    shows it again only when you typed it at its question: a code you set in
    `SEAMLESS_PAIR_CODE` is yours already. The key it makes stays in
-   `/opt/seamless/relay`.
+   `/opt/seamless/relay`. `--owner-uid` is your uid on this computer, which
+   setup fills in: the Server records it with the pairing, and without
+   peer_auth serves that uid alone through this relay
+   ([below](#who-a-relay-serves-without-peer-auth)).
    Under peer_auth it waits again, until you approve it on the Devices page.
 4. **Its service**: on macOS the LaunchDaemon `com.arctop.seamless.relay`, on
    Linux the system unit `seamless-relay.service`, each running
@@ -348,9 +353,47 @@ peer_auth:
       owner_uid: 501    # your uid on this computer
 ```
 
+On a Server with peer_auth, an account on this computer that runs restricted
+agents joins `_seamlessowner` too and gets a line of its own there,
+`restricted: {<its name>: <its uid here>}`. Without peer_auth that does not
+apply: the Server serves your uid alone through the relay.
+
 On Linux, log out and back in once: your agents join `_seamlessowner` at your
 next login. Approvals then happen in the Server's console, with a passkey, from
 any browser ([below](#approve-from-another-computer)).
+
+### Who a relay serves without peer_auth {#who-a-relay-serves-without-peer-auth}
+
+A Server without peer_auth has no account to serve anyone but you as. So a
+relay's pairing records your uid on its computer (`seamlessd relay pair
+--owner-uid`), and the Server serves that uid alone through it. A request the
+relay forwards for another uid is refused (403), in words that name the remedy:
+
+```text
+forbidden: uid 502 on relay example-laptop is not the owner's uid there (501, recorded when the relay paired). This server runs without peer_auth, so through a relay it serves the owner's account alone: to give that account access of its own, turn peer_auth on and map it as restricted (peer_auth.relays: {example-laptop: {owner_uid: 501, restricted: {<its name>: 502}}}), then restart the server
+```
+
+A request that forwards no caller at all is refused too (400): a relay of this
+release forwards its caller with every request. The Server's `/healthz` is
+not judged, since the relay probes it for itself.
+
+`seamlessd relay pair` takes the uid from `--owner-uid`, which always wins, and
+without it from `SUDO_UID`, the account that ran `sudo -u _seamless`. With
+neither it refuses, and it refuses uid 0: root is never the owner. The setup
+root step's line always carries `--owner-uid`.
+
+A relay paired before the Server recorded the owner's uid, or by a relay of an
+earlier release, has none recorded. It keeps working exactly as before, every
+caller it forwards being you, and the Server's `seamlessd doctor` (`relay
+owners`, a **warn**) and Devices page say to re-pair it to bind the owner's
+uid: revoke it, then pair it again with a relay of this release
+([below](#revoke-a-computer)). A relay of this release pairing with a Server of
+an earlier release is refused before the code is used, and says to upgrade the
+Server first: that release does not record the uid.
+
+Under peer_auth nothing of this applies: `peer_auth.relays.<relay>.owner_uid`
+judges, and the Server's `seamlessd doctor` warns when the uid the pairing
+recorded is another one.
 
 ### Windows is always a key client {#windows-is-always-a-key-client}
 
@@ -432,7 +475,10 @@ neither exists.
   is missing. Without peer_auth nothing waits: the code is the approval.
 - **Paired**: each relay with its key's fingerprint and each key device with the
   start of its key, when it paired and whether your passkey or its one-time
-  code approved it, and when it was last seen.
+  code approved it, and when it was last seen. A relay also shows the uid its
+  pairing recorded as yours there; without peer_auth, one that recorded none
+  carries a warning to re-pair it to bind the owner's uid
+  ([why](#who-a-relay-serves-without-peer-auth)).
 - **Revoked and expired**: what ended, and how.
 
 `seamlessd devices list` prints the same list in the terminal. Without TLS on
@@ -479,7 +525,7 @@ pairing line plus `--replace`, once its old pairing is revoked (the Server
 refuses a second live device of the same name), and then restarts:
 
 ```bash
-sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --replace --server https://<server name>:8081 --fingerprint <fingerprint> --code -
+sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --replace --server https://<server name>:8081 --fingerprint <fingerprint> --owner-uid <your uid here> --code -
 ```
 
 The same goes for a renewed certificate: a relay pins the exact certificate it
@@ -894,19 +940,24 @@ Linux.
    `--ca-file /opt/seamless/etc/server-ca.crt` for the certificate above:
 
    ```bash
-   /usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://<server name>:8081 --fingerprint <fingerprint> --code -
+   /usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://<server name>:8081 --fingerprint <fingerprint> --owner-uid <your uid> --code -
    ```
 
-   `--fingerprint` makes sure the code goes only to that certificate. Under
+   `--fingerprint` makes sure the code goes only to that certificate.
+   `--owner-uid` is your uid on this computer (`id -u`), which the Server
+   records: without peer_auth it serves that uid alone through the relay
+   ([why](#who-a-relay-serves-without-peer-auth)). Under
    peer_auth the command waits until you approve the relay on the Devices page,
    and prints the key fingerprint the page shows for it. Once paired, it prints
-   the certificate it pinned and the name it speaks for.
+   the certificate it pinned, the name it speaks for and the uid it recorded as
+   yours.
 5. **Run it as a service**, as its account, never as root:
    `/opt/seamless/bin/seamlessd relay serve --socket-mode 0660 --socket-group _seamlessowner`,
    from the LaunchDaemon or the systemd unit in
    [the service reference](https://thereisnospoon.org/docs/reference/service/#relay). Without the socket flags
-   every local account may connect, and a Server without peer_auth takes each
-   one for you.
+   every local account may connect; a Server without peer_auth refuses every
+   one but yours, and a relay paired with an earlier release, which recorded no
+   uid, takes each one for you.
 6. **Point your agents at it.** Your config on the Client names the socket and
    holds no key:
 

@@ -120,7 +120,7 @@ func TestSetupClient_RelayUnattended(t *testing.T) {
 					"echo '" + st.binarySHA + "  /opt/seamless/bin/.seamlessd.new' | /usr/bin/sudo " + sum + " -c &&\n",
 				"/usr/bin/sudo /bin/mv -f /opt/seamless/bin/.seamlessd.new /opt/seamless/bin/seamlessd &&\n",
 				"\n/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://box.example:8081 --fingerprint " +
-					clientFP + " --code -\n",
+					clientFP + " --owner-uid 501 --code -\n",
 				"seamless_uid=$(/usr/bin/id -u _seamless) &&\n" +
 					`printf '%s %s\n' _seamless "$seamless_uid" | /usr/bin/sudo /usr/bin/tee /opt/seamless/etc/daemon-account >/dev/null &&` + "\n" +
 					"/usr/bin/sudo /bin/chmod 0644 /opt/seamless/etc/daemon-account\n",
@@ -349,14 +349,21 @@ func TestSetupClient_TheServersKeyPairsNothing(t *testing.T) {
 // pairing, and the code never appears.
 func TestClientRelayRootStep(t *testing.T) {
 	pemText := "-----BEGIN CERTIFICATE-----\nQUJD\n-----END CERTIFICATE-----\n"
-	p := clientRelayPlan{goos: "darwin", owner: "example-owner", server: "https://box.example:8081", fingerprint: clientFP,
+	p := clientRelayPlan{goos: "darwin", owner: "example-owner", ownerUID: 501, server: "https://box.example:8081", fingerprint: clientFP,
 		caPEM: pemText, source: "/h/.local/bin/seamlessd", sha256: strings.Repeat("a", 64), uid: 480, gid: 479}
 	require.Empty(t, p.problem())
 	text := clientRootText(clientRelayRootStep(p))
 	require.Contains(t, text, "/usr/bin/sudo /usr/bin/tee "+clientRelayCAFile+" >/dev/null <<'EOF' &&\n"+pemText+"EOF\n"+
 		"/usr/bin/sudo /bin/chmod 0644 "+clientRelayCAFile+" &&\n")
 	require.NotContains(t, text, "/h/.config", "root reads no copy of the owner's")
-	require.Contains(t, text, "--ca-file "+clientRelayCAFile+" --code -")
+	require.Contains(t, text, "--ca-file "+clientRelayCAFile+" --owner-uid 501 --code -",
+		"the pairing names the owner's uid, which the server records")
+	q := p
+	q.ownerUID = -1
+	require.Contains(t, q.problem(), "is not a uid")
+	q.ownerUID = 0
+	require.Empty(t, q.problem(), "setupRelayStep refuses root before it builds a plan")
+	require.NotContains(t, clientRootText(clientRelayRootStep(q)), "--owner-uid", "never --owner-uid 0: root is never the owner")
 	require.Contains(t, text, "/usr/bin/sudo /usr/bin/dscl . -create /Groups/_seamlessowner PrimaryGroupID 479 &&")
 	require.Contains(t, text, "/usr/bin/sudo /usr/sbin/chown root:wheel /opt/seamless/bin/.seamlessd.new &&")
 	require.Contains(t, text, "<key>UserName</key>          <string>_seamless</string>")

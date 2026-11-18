@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -156,8 +157,33 @@ func (d *deviceDaemon) devicePairKey(t *testing.T, name string) (store.Device, s
 	return dev, paired.Key
 }
 
-// devicePairRelay pairs a relay named name (peer_auth off) and returns it with
-// its identity.
+// deviceRelayOwner is the owner's uid on a test relay's computer, which its
+// pairing names: without peer_auth the edge serves that uid alone through it.
+const deviceRelayOwner = 501
+
+// deviceRelayCaller is the headers a relay forwards for a local caller of
+// uid: wire version 1, one process.
+func deviceRelayCaller(uid uint32) http.Header {
+	return http.Header{devices.RelayVersionHeader: {devices.RelayWireVersion}, devices.RelayUIDHeader: {strconv.FormatUint(uint64(uid), 10)},
+		devices.RelayChainHeader: {(access.ProcessToken{PID: 2200, Version: 7, Boot: "example-boot"}).Key()}}
+}
+
+// withHeaders is p with h's headers added to its own.
+func (p devicePlace) withHeaders(h http.Header) devicePlace {
+	out := p
+	out.header = p.header.Clone()
+	if out.header == nil {
+		out.header = http.Header{}
+	}
+	for k, v := range h {
+		out.header[k] = v
+	}
+	return out
+}
+
+// devicePairRelay pairs a relay named name (peer_auth off), naming
+// deviceRelayOwner as the owner's uid there, and returns it with its
+// identity.
 func (d *deviceDaemon) devicePairRelay(t *testing.T, name string) (store.Device, *devices.RelayIdentity) {
 	t.Helper()
 	ctx := context.Background()
@@ -165,7 +191,8 @@ func (d *deviceDaemon) devicePairRelay(t *testing.T, name string) (store.Device,
 	require.NoError(t, err)
 	code, err := d.pairing.MintCode(ctx, store.DeviceByConsole)
 	require.NoError(t, err)
-	paired, err := devices.Pair(ctx, d.deviceHTTP(nil), d.srv.URL, devices.PairRequest{Code: code.Code, Name: name, Relay: id})
+	paired, err := devices.Pair(ctx, d.deviceHTTP(nil), d.srv.URL, devices.PairRequest{Code: code.Code, Name: name, Relay: id,
+		OwnerUID: deviceRelayOwner})
 	require.NoError(t, err)
 	dev, err := store.DeviceByID(ctx, d.db, paired.DeviceID)
 	require.NoError(t, err)
@@ -244,26 +271,28 @@ func TestPairDeviceKey_EveryBearerPlace(t *testing.T) {
 	}
 }
 
-// A paired relay is the owner in every place, with no key at all; revoked,
-// it is refused in every place, its connection closed, and an unpaired relay
-// certificate is refused before any route.
+// A paired relay is the owner in every place, with no key at all, for the
+// owner's uid its pairing named; revoked, it is refused in every place, its
+// connection closed, and an unpaired relay certificate is refused before any
+// route.
 func TestPairRelay_EveryBearerPlace(t *testing.T) {
 	d := deviceNewDaemon(t, false)
 	dev, id := d.devicePairRelay(t, "example-laptop")
 	relay := d.deviceHTTP(id)
+	owner := deviceRelayCaller(deviceRelayOwner)
 	for _, p := range devicePlaces() {
-		require.Equal(t, http.StatusOK, d.deviceDo(t, relay, p, ""), "%s: a paired relay needs no key", p.name)
+		require.Equal(t, http.StatusOK, d.deviceDo(t, relay, p.withHeaders(owner), ""), "%s: a paired relay needs no key", p.name)
 	}
 	stranger, err := devices.NewRelayIdentity("example-laptop")
 	require.NoError(t, err)
 	for _, p := range devicePlaces() {
-		require.Equal(t, http.StatusUnauthorized, d.deviceDo(t, d.deviceHTTP(stranger), p, "Bearer "+deviceSharedKey),
+		require.Equal(t, http.StatusUnauthorized, d.deviceDo(t, d.deviceHTTP(stranger), p.withHeaders(owner), "Bearer "+deviceSharedKey),
 			"%s: a relay certificate without an enrollment is refused, key or no key", p.name)
 	}
 	_, err = d.pairing.Revoke(context.Background(), dev.ID, store.DeviceByConsole)
 	require.NoError(t, err)
 	for _, p := range devicePlaces() {
-		require.Equal(t, http.StatusUnauthorized, d.deviceDo(t, relay, p, ""), "%s: a revoked relay is refused", p.name)
+		require.Equal(t, http.StatusUnauthorized, d.deviceDo(t, relay, p.withHeaders(owner), ""), "%s: a revoked relay is refused", p.name)
 	}
 	// A TLS connection with no client certificate is still judged by the
 	// bearer key, as today.
@@ -340,7 +369,7 @@ func TestPairPeerAuth_ACodeAloneOpensNothing(t *testing.T) {
 	result := make(chan error, 1)
 	go func() {
 		_, err := devices.Pair(ctx, d.deviceHTTP(nil), d.srv.URL, devices.PairRequest{Code: code.Code, Name: "example-laptop",
-			Relay: id, Poll: 20 * time.Millisecond, Waiting: func(fp string) { waiting <- fp }})
+			Relay: id, OwnerUID: deviceRelayOwner, Poll: 20 * time.Millisecond, Waiting: func(fp string) { waiting <- fp }})
 		result <- err
 	}()
 	var fp string

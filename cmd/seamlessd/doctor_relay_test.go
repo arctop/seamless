@@ -146,7 +146,7 @@ func TestRelayDoctor_ReportsThePairingTheSocketAndTheServer(t *testing.T) {
 	code, err := d.pairing.MintCode(context.Background(), store.DeviceByConsole)
 	require.NoError(t, err)
 	require.NoError(t, relayPair(context.Background(), relayPairOptions{dataDir: l.DataDir, env: env,
-		pair: relay.PairOptions{Server: d.srv.URL, Code: code.Code, Name: "example-laptop", CA: relayCmdServerPEM(t, d.srv.URL, d.pool)}},
+		pair: relay.PairOptions{OwnerUID: relayCmdOwner, Server: d.srv.URL, Code: code.Code, Name: "example-laptop", CA: relayCmdServerPEM(t, d.srv.URL, d.pool)}},
 		io.Discard, io.Discard))
 	st, err := relay.LoadState(l.DataDir)
 	require.NoError(t, err)
@@ -163,9 +163,11 @@ func TestRelayDoctor_ReportsThePairingTheSocketAndTheServer(t *testing.T) {
 	require.Contains(t, layout.detail, "and this binary", "doctor as the relay's account checks the binary too")
 	pairing := relayDoctorOne(t, rows, "relay.pairing")
 	require.Equal(t, statusOK, pairing.status)
-	for _, want := range []string{d.srv.URL, st.ServerFingerprint, st.DeviceID, "example-laptop", st.Fingerprint} {
+	for _, want := range []string{d.srv.URL, st.ServerFingerprint, st.DeviceID, "example-laptop", st.Fingerprint,
+		"the owner here is uid " + strconv.FormatUint(uint64(relayCmdOwner), 10)} {
 		require.Contains(t, pairing.detail, want)
 	}
+	require.Empty(t, rows["relay.owner"], "a pairing that names the owner's uid earns no warning")
 	require.Equal(t, statusOK, relayDoctorOne(t, rows, "relay.socket").status)
 	server := relayDoctorOne(t, rows, "relay.server")
 	require.Equal(t, statusOK, server.status, server.detail)

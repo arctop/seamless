@@ -56,22 +56,27 @@ func TestClientPair_KeyDeviceWithoutPeerAuth(t *testing.T) {
 	require.ErrorIs(t, err, ErrCodeRefused, "a used code fails")
 }
 
-// A relay pairs over TLS with its certificate, and is then accepted.
+// A relay pairs over TLS with its certificate, naming the owner's uid on its
+// computer, which the server records, and is then accepted for that uid.
 func TestClientPair_RelayWithoutPeerAuth(t *testing.T) {
 	f := pairNewFixture(t, false)
 	seen := make(chan deviceProbe, 2)
 	ts, pool, certFP := f.deviceServer(t, seen, nil)
 	id := pairIdentity(t, "example-laptop")
 	paired, err := Pair(context.Background(), deviceClient(pool, nil), ts.URL, PairRequest{Code: f.pairCode(t),
-		Name: "example-laptop", Relay: id, ServerFingerprint: certFP})
+		Name: "example-laptop", Relay: id, OwnerUID: 501, ServerFingerprint: certFP})
 	require.NoError(t, err)
 	require.Equal(t, KindRelay, paired.Kind)
 	require.Equal(t, id.Fingerprint(), paired.Fingerprint, "both ends show the key's fingerprint")
 	require.Empty(t, paired.Key, "a relay holds no bearer key")
-	status, _, p, ok := deviceGet(t, deviceClient(pool, id), ts.URL+"/api/mcp", nil, seen)
+	d, err := store.DeviceByID(context.Background(), f.db, paired.DeviceID)
+	require.NoError(t, err)
+	require.Equal(t, uint32(501), d.OwnerUID, "the server recorded the owner's uid the relay named")
+	status, _, p, ok := deviceGet(t, deviceClient(pool, id), ts.URL+"/api/mcp", judgeHeaders("1", "501", judgeChainHeader), seen)
 	require.Equal(t, http.StatusOK, status)
 	require.True(t, ok)
 	require.Equal(t, paired.DeviceID, p.cred.DeviceID)
+	require.Equal(t, uint32(501), p.cred.OwnerUID)
 }
 
 // A relay cannot pair without presenting its certificate, nor a key device
@@ -90,7 +95,7 @@ func TestClientPair_KindsAndCertificates(t *testing.T) {
 	_, err = f.svc.Pair(context.Background(), PairInput{Code: f.pairCode(t), Kind: KindKey, Name: "Example-Server", Secret: pairSecret(t)})
 	require.ErrorIs(t, err, ErrServerName, "no device pairs under the server's own name")
 	_, err = Pair(context.Background(), deviceClient(pool, nil), "http"+ts.URL[len("https"):], PairRequest{Code: f.pairCode(t),
-		Name: "example-laptop", Relay: id})
+		Name: "example-laptop", Relay: id, OwnerUID: 501})
 	require.ErrorIs(t, err, ErrRelayNeedsCertificate, "a relay pairs over https only")
 	devices, _ := f.pairCount(t)
 	require.Zero(t, devices)

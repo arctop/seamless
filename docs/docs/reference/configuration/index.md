@@ -240,6 +240,10 @@ behavior of every earlier release. The guide is
   disables that account alone. New after v0.10.2: an earlier release refuses
   the mapping form when it loads. Any other uid is refused, and so is every
   request of an unmapped relay. Refused while `enabled` is false. File-only.
+  A relay's pairing also records the uid it named as yours there (`seamlessd
+  relay pair --owner-uid`): `owner_uid` here is what judges, and doctor warns
+  when the two differ. Without peer_auth the recorded uid alone is served
+  through the relay ([who a relay serves](https://thereisnospoon.org/docs/guides/network-install/#who-a-relay-serves-without-peer-auth)).
 - `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
   the owner's approver passkeys ([seamlessd approvers](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_approvers)).
   Unset, a TLS install whose `server_url` names a host uses that exact host as

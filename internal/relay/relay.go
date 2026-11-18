@@ -105,7 +105,8 @@ var (
 	// is false): there, no kernel call names a socket's peer.
 	ErrUnsupported = errors.New("the relay runs on macOS and Linux only: a computer on another platform pairs with the server as a key device (seamlessd setup)")
 	// ErrNotPaired is a data directory with no pairing in it.
-	ErrNotPaired = errors.New("this relay is not paired with a server: pair it with `seamlessd relay pair --server URL --code CODE`, as the relay's account")
+	ErrNotPaired = errors.New("this relay is not paired with a server: pair it with `seamlessd relay pair --server URL --owner-uid UID " +
+		"--code -`, as the relay's account")
 	// ErrState is a pairing that does not load.
 	ErrState = errors.New("the relay's pairing does not load")
 )
@@ -126,10 +127,15 @@ type State struct {
 	// DeviceID, Name and Fingerprint are the device the server enrolled: its
 	// id, the host name it speaks for, and the relay key's fingerprint the
 	// Devices page shows.
-	DeviceID    string    `json:"device_id"`
-	Name        string    `json:"name"`
-	Fingerprint string    `json:"fingerprint"`
-	PairedAt    time.Time `json:"paired_at"`
+	DeviceID    string `json:"device_id"`
+	Name        string `json:"name"`
+	Fingerprint string `json:"fingerprint"`
+	// OwnerUID is the owner's uid on this computer the pairing named, which
+	// the server recorded on its device: without peer_auth there, the one uid
+	// served through this relay. 0 for a pairing from an earlier release,
+	// which named none.
+	OwnerUID uint32    `json:"owner_uid,omitempty"`
+	PairedAt time.Time `json:"paired_at"`
 	// Certificate and Key are the relay's identity (devices.RelayIdentity
 	// MarshalPEM). Key is the secret.
 	Certificate string `json:"certificate"`

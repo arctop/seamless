@@ -1054,7 +1054,10 @@ relay you map, in the daemon's config, followed by a restart:</p>
 </span></span></span></code></pre></div>
 <p><code>seamlessd doctor</code>, run as the daemon's account, checks each mapping: a name no
 paired relay holds, or a relay no passkey approved, is a <strong>warn</strong>, and a
-mapping that holds names the restricted accounts there. It warns too for each
+mapping that holds names the restricted accounts there. A relay's pairing also
+records the uid it named as yours there (<code>seamlessd relay pair --owner-uid</code>,
+which setup fills in); the mapping's <code>owner_uid</code> is what judges, and doctor
+warns when the two differ, since one of them is wrong. It warns too for each
 key device paired with a one-time code alone, before peer_auth (<code>peer_auth devices</code>): it is still you over TCP, though no passkey approved it, so revoke
 it and pair it again, so a passkey approves it.</p>
 <p>Through a mapped relay, your uid there is you, judged as this socket judges
@@ -1702,7 +1705,10 @@ your uid there and the restricted accounts you listed get anything. Setup's
 <a href="../../guides/network-install/#the-relays-root-step">root step</a> restricts the
 socket anyway, to a group of you and the relay alone
 (<code>--socket-mode 0660 --socket-group _seamlessowner</code>); a relay you run by hand
-on a computer with other accounts needs the same.</li>
+on a computer with other accounts needs the same. A server without peer_auth
+serves through a relay only the uid its pairing recorded as yours, and
+refuses every other, naming peer_auth and a restricted mapping as the remedy
+(<a href="../../guides/network-install/#who-a-relay-serves-without-peer-auth">who a relay serves</a>).</li>
 <li><strong>A relay pins the daemon's exact certificate.</strong> Renewing the certificate (a
 tailnet certificate lasts 90 days) refuses every relay until it pairs again.
 It fails closed: no relay forwards to a certificate it did not pin.</li>

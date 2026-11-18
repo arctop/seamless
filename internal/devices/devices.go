@@ -436,6 +436,11 @@ type Credential struct {
 	// (store.Device.ApprovedBy): every pairing under peer_auth. A device paired
 	// while peer_auth was off has the one-time code alone behind it.
 	Approved bool
+	// OwnerUID is the owner's uid on a relay's computer, recorded when it
+	// paired (store.Device.OwnerUID): while peer_auth is off the edge serves
+	// that uid alone through the relay. 0 for a key device, and for a relay
+	// whose pairing recorded none, which is served as before.
+	OwnerUID uint32
 }
 
 type credentialKey struct{}

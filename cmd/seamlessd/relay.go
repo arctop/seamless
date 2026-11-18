@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -46,12 +47,15 @@ const relayUsage = `usage:
       uid once the owner maps this relay in peer_auth.relays, and refuses it until then; without
       peer_auth every caller is the owner. So restrict the socket: --socket-mode 0660 and a
       --socket-group holding the owner alone (and this account), as seamlessd setup installs it
-  seamlessd relay pair --server URL --code CODE [--fingerprint SHA256] [--ca-file PEM] [--name NAME]
-                       [--replace] [--json] [--data-dir DIR]
+  seamlessd relay pair --server URL --code CODE [--owner-uid UID] [--fingerprint SHA256] [--ca-file PEM]
+                       [--name NAME] [--replace] [--json] [--data-dir DIR]
       pair this relay with a server, as the relay's account, running this binary by its root-owned path
       (%[3]s): CODE comes from the server's Devices page or seamlessd devices code; give
       --code - to paste it, so it stays out of the process list and your shell history; --fingerprint is
-      the server certificate's SHA-256 as the server shows it, compared before the code is sent
+      the server certificate's SHA-256 as the server shows it, compared before the code is sent;
+      --owner-uid is the uid of the account your agents run as on this computer (id -u; default: the
+      account that ran sudo, SUDO_UID), which the server records: without peer_auth it serves that uid
+      alone through this relay. A renewed server certificate means pairing again with --replace
   The data directory defaults to %[1]s (0700, the relay's account's).
 `
 
@@ -221,6 +225,49 @@ type relayPairOptions struct {
 	env     relay.Env
 	pair    relay.PairOptions
 	json    bool
+	// ownerFrom says where pair.OwnerUID came from, for the output:
+	// relayOwnerFlag or relayOwnerSudo.
+	ownerFrom string
+}
+
+// Where a pairing's owner uid came from (relayOwnerUID).
+const (
+	relayOwnerFlag = "--owner-uid"
+	relayOwnerSudo = "the account that ran sudo (SUDO_UID)"
+)
+
+// relayOwnerUID settles the owner's uid a pairing records: --owner-uid as
+// given, which always wins, else sudo's SUDO_UID, a hint that names the
+// account that ran the printed `sudo -u <relay account>` command, else none,
+// which is refused. Root (0) is never the owner, as peer_auth.relays says.
+// It returns the uid and where it came from.
+func relayOwnerUID(flagValue, sudoUID string) (uint32, string, error) {
+	parse := func(s string) (uint32, error) {
+		n, err := strconv.ParseUint(strings.TrimSpace(s), 10, 32)
+		if err != nil {
+			return 0, fmt.Errorf("%q is not a uid", s)
+		}
+		if n == 0 {
+			return 0, errors.New("uid 0 is root, which is never the owner")
+		}
+		return uint32(n), nil
+	}
+	if strings.TrimSpace(flagValue) != "" {
+		uid, err := parse(flagValue)
+		if err != nil {
+			return 0, "", fmt.Errorf("--owner-uid: %w: give the uid of the account your agents run as on this computer (id -u)", err)
+		}
+		return uid, relayOwnerFlag, nil
+	}
+	if strings.TrimSpace(sudoUID) != "" {
+		uid, err := parse(sudoUID)
+		if err != nil {
+			return 0, "", fmt.Errorf("SUDO_UID: %w: name the owner's uid with --owner-uid (id -u, as the account your agents run as)", err)
+		}
+		return uid, relayOwnerSudo, nil
+	}
+	return 0, "", errors.New("--owner-uid is required: the uid of the account your agents run as on this computer (id -u), " +
+		"which the server records; without peer_auth it serves that uid alone through this relay")
 }
 
 // runRelayPair parses `seamlessd relay pair` and pairs, waiting for the
@@ -232,6 +279,7 @@ func runRelayPair(args []string) error {
 	fingerprint := fs.String("fingerprint", "", "the server certificate's SHA-256 fingerprint, as the server shows it")
 	caFile := fs.String("ca-file", "", "the root certificate the server's certificate chains to, when the system does not trust it")
 	name := fs.String("name", "", "the host name this relay speaks for (default: this computer's)")
+	ownerUID := fs.String("owner-uid", "", "the uid of the account your agents run as on this computer (default: SUDO_UID)")
 	replace := fs.Bool("replace", false, "replace the pairing this relay holds")
 	asJSON := fs.Bool("json", false, "print the pairing as JSON")
 	dataDir := fs.String("data-dir", relay.DefaultDataDir, "the relay's data directory (0700)")
@@ -244,8 +292,13 @@ func runRelayPair(args []string) error {
 	if strings.TrimSpace(*server) == "" || strings.TrimSpace(*code) == "" {
 		return errors.New("seamlessd relay pair: --server and --code are required")
 	}
-	o := relayPairOptions{dataDir: filepath.Clean(*dataDir), env: relay.HostEnv(), json: *asJSON,
-		pair: relay.PairOptions{Server: *server, Code: *code, Name: *name, ServerFingerprint: *fingerprint, Replace: *replace}}
+	owner, ownerFrom, err := relayOwnerUID(*ownerUID, os.Getenv("SUDO_UID"))
+	if err != nil {
+		return fmt.Errorf("seamlessd relay pair: %w", err)
+	}
+	o := relayPairOptions{dataDir: filepath.Clean(*dataDir), env: relay.HostEnv(), json: *asJSON, ownerFrom: ownerFrom,
+		pair: relay.PairOptions{Server: *server, Code: *code, Name: *name, OwnerUID: owner, ServerFingerprint: *fingerprint,
+			Replace: *replace}}
 	if *code == "-" {
 		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
@@ -312,6 +365,7 @@ type relayPairJSON struct {
 	DeviceID          string    `json:"device_id"`
 	Name              string    `json:"name"`
 	Fingerprint       string    `json:"fingerprint"`
+	OwnerUID          uint32    `json:"owner_uid"`
 	PairedAt          time.Time `json:"paired_at"`
 }
 
@@ -343,12 +397,18 @@ func relayPair(ctx context.Context, o relayPairOptions, out, notes io.Writer) er
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
 		return enc.Encode(relayPairJSON{ServerURL: st.ServerURL, ServerFingerprint: st.ServerFingerprint, DeviceID: st.DeviceID,
-			Name: st.Name, Fingerprint: st.Fingerprint, PairedAt: st.PairedAt})
+			Name: st.Name, Fingerprint: st.Fingerprint, OwnerUID: st.OwnerUID, PairedAt: st.PairedAt})
 	}
 	fmt.Fprintf(out, "Paired: this relay speaks for %s (device %s) on %s.\n", st.Name, st.DeviceID, st.ServerURL)
 	fmt.Fprintf(out, "  The server's certificate: SHA-256 %s.\n", st.ServerFingerprint)
 	fmt.Fprintln(out, "  The relay forwards to that certificate alone: compare it with the one the server shows (seamlessd devices code prints it).")
 	fmt.Fprintf(out, "  This relay's key: %s, as the server's Devices page shows it.\n", st.Fingerprint)
+	from := o.ownerFrom
+	if from == "" {
+		from = relayOwnerFlag
+	}
+	fmt.Fprintf(out, "  The owner here: uid %d (from %s). Without peer_auth the server serves that uid alone through this relay;\n"+
+		"    if your agents run as another account, pair again with --replace --owner-uid <its uid>.\n", st.OwnerUID, from)
 	fmt.Fprintln(out, "Start the relay, or restart it, to serve this pairing: seamlessd relay serve, as this account.")
 	return nil
 }

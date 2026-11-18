@@ -61,7 +61,10 @@ const clientRelayStaged = "/opt/seamless/bin/.seamlessd.new"
 type clientRelayPlan struct {
 	goos string
 	// owner is the account the agents run as: the socket group's member.
-	owner string
+	// ownerUID is its uid, which the pairing records (relay pair --owner-uid):
+	// a server without peer_auth serves that uid alone through the relay.
+	owner    string
+	ownerUID int
 	// server and fingerprint are the pairing's: the server's https address and
 	// the certificate fingerprint the owner compared.
 	server, fingerprint string
@@ -91,6 +94,8 @@ func (p clientRelayPlan) problem() string {
 		return "the relay runs on macOS and Linux only"
 	case p.owner == "" || strings.HasPrefix(p.owner, "-") || strings.ContainsFunc(p.owner, setupControl) || strings.ContainsAny(p.owner, " \t"):
 		return fmt.Sprintf("%q is not an account name", p.owner)
+	case p.ownerUID < 0 || uint64(p.ownerUID) > uint64(^uint32(0)):
+		return fmt.Sprintf("uid %d is not a uid", p.ownerUID)
 	case !strings.HasPrefix(p.server, "https://"):
 		return fmt.Sprintf("the server address %q is not an https address", config.RedactedURL(p.server))
 	}
@@ -181,9 +186,17 @@ func clientRelayRootStep(p clientRelayPlan) [][]string {
 	if p.caPEM != "" {
 		pair = append(pair, "--ca-file", clientRelayCAFile)
 	}
+	why := "pair it, as its own account, pasting the code when it waits: the key it makes stays in " + relay.DefaultDataDir +
+		", which no other account reads"
+	if p.ownerUID > 0 {
+		// 0 is root, never the owner: setupRelayStep refuses it, and relay
+		// pair would refuse it too. Without the flag relay pair takes sudo's
+		// caller (SUDO_UID).
+		pair = append(pair, "--owner-uid", strconv.Itoa(p.ownerUID))
+		why += ", and the server records your uid here (" + strconv.Itoa(p.ownerUID) + ") as the owner's"
+	}
 	pair = append(pair, "--code", "-")
-	out = append(out, []string{"pair it, as its own account, pasting the code when it waits: the key it makes stays in " + relay.DefaultDataDir +
-		", which no other account reads", strings.Join(pair, " ")})
+	out = append(out, []string{why, strings.Join(pair, " ")})
 
 	if p.goos == "darwin" {
 		out = append(out, []string{"its service, a LaunchDaemon that runs it as that account",

@@ -46,6 +46,9 @@ var (
 	ErrRelayRevoked = errors.New("this relay's pairing was revoked: pair it again")
 	// ErrKind is a pairing of a kind the server does not know.
 	ErrKind = errors.New("invalid device kind: valid kinds are relay, key")
+	// ErrKeyOwnerUID is a key device's pairing that names an owner's uid:
+	// only a relay forwards its callers' uids, so only a relay records one.
+	ErrKeyOwnerUID = errors.New("a key device names no owner's uid: only a relay forwards its callers' uids")
 )
 
 // ServerFacts are what a client needs from this server to pair with it.
@@ -186,6 +189,13 @@ type PairInput struct {
 	// request's TLS connection presented, nil for none: a relay's key comes
 	// from the handshake that proved the relay holds it, never from the body.
 	RelayKey []byte
+	// OwnerUID is the owner's uid on a relay's computer, as the relay names
+	// it (`seamlessd relay pair --owner-uid`): recorded on the device, it is
+	// the one uid the edge serves through the relay while peer_auth is off. 0
+	// names none, as a relay of an earlier release pairs: that pairing is
+	// recorded unbound (store.Device.OwnerUnbound), served as before. A key
+	// device names none (ErrKeyOwnerUID).
+	OwnerUID uint32
 }
 
 // PairAnswer is a pairing's state, as the device is told it.
@@ -235,9 +245,13 @@ func (s *Service) Pair(ctx context.Context, in PairInput) (PairAnswer, error) {
 			return PairAnswer{}, fmt.Errorf("%s: %w", op, err)
 		}
 		nd.PublicKey, nd.KeyHash, nd.Fingerprint = in.RelayKey, PublicKeyHash(in.RelayKey), PublicKeyFingerprint(in.RelayKey)
+		nd.OwnerUID = in.OwnerUID
 	case KindKey:
 		if len(in.RelayKey) != 0 {
 			return PairAnswer{}, fmt.Errorf("%s: %w", op, ErrKeyWithCertificate)
+		}
+		if in.OwnerUID != 0 {
+			return PairAnswer{}, fmt.Errorf("%s: %w", op, ErrKeyOwnerUID)
 		}
 		if nd.Fingerprint, err = SecretFingerprint(in.Secret); err != nil {
 			return PairAnswer{}, fmt.Errorf("%s: %w", op, err)

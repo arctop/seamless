@@ -150,8 +150,9 @@ func relayHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger,
 }
 
 // healthzPath is the daemon's health check (daemonRoutes), the one route that
-// answers every caller the same.
-const healthzPath = "/healthz"
+// answers every caller the same: the one the device edge's own judge of a
+// relay's caller skips too (devices.HealthPath).
+const healthzPath = devices.HealthPath
 
 // relayLeasedView attaches the leases live on a relay view's chain at now. It
 // fails closed as leasedView does: no chain, or a lookup that fails, leaves
@@ -219,9 +220,25 @@ func relayMappingChecks(ctx context.Context, cfg config.Config, db *sql.DB) []ch
 				line += "; restricted there: " + restricted
 			}
 			out = append(out, check{statusOK, name, line})
+			if mismatch, ok := relayOwnerMismatch(*dev, p.Relays[n].OwnerUID); ok {
+				out = append(out, check{statusWarn, name, mismatch})
+			}
 		}
 	}
 	return out
+}
+
+// relayOwnerMismatch is doctor's word, under peer_auth, on a mapped relay
+// whose pairing recorded another owner's uid there than peer_auth.relays maps
+// (owner decision R-D1): the mapping judges, so nothing changes, but one of the
+// two is wrong. ok is false when they agree, or the pairing recorded none.
+func relayOwnerMismatch(d store.Device, mapped uint32) (string, bool) {
+	if d.OwnerUID == 0 || d.OwnerUID == mapped {
+		return "", false
+	}
+	return fmt.Sprintf("relay %s paired naming uid %d there as the owner, and peer_auth.relays maps owner_uid %d: one of them is "+
+		"wrong. This server judges by owner_uid, so correct it there if %d is the account your agents run as on that computer "+
+		"(id -u there), or pair the relay again with --replace --owner-uid <the right uid>", d.Name, d.OwnerUID, mapped, d.OwnerUID), true
 }
 
 // relayRestrictedWords lists a relay's restricted accounts for doctor: each

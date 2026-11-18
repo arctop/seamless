@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -68,6 +69,11 @@ func relayCmdServerPEM(t *testing.T, base string, pool *x509.CertPool) []byte {
 // the test's own, since here the relay and its callers run as one uid, where
 // a real relay runs as its own account.
 const relayCmdOtherUID = ^uint32(0) - 1
+
+// relayCmdOwner is the owner's uid a test's pairing names: the test's own,
+// the uid the relay's kernel reports for every local caller here, so a server
+// without peer_auth serves them.
+var relayCmdOwner = uint32(os.Getuid())
 
 // relayCmdStart runs `seamlessd relay serve` (relayServe) in the background
 // until the test ends, and returns a client of its socket built as seam
@@ -143,8 +149,12 @@ func TestRelayCmd_SettlesItsArguments(t *testing.T) {
 	require.ErrorContains(t, runRelayPair(nil), "--server and --code are required")
 	require.ErrorContains(t, runRelayPair([]string{"--server", "https://example-server:8081"}), "--server and --code are required")
 	require.ErrorContains(t, runRelayPair([]string{"--server", "https://example-server:8081", "--code", "AAAA", "extra"}), `unexpected argument "extra"`)
-	require.ErrorContains(t, runRelayPair([]string{"--server", "https://example-server:8081", "--code", "AAAA", "--ca-file", filepath.Join(t.TempDir(), "none.pem")}),
-		"--ca-file")
+	t.Setenv("SUDO_UID", "")
+	require.ErrorContains(t, runRelayPair([]string{"--server", "https://example-server:8081", "--code", "AAAA"}), "--owner-uid is required")
+	require.ErrorContains(t, runRelayPair([]string{"--server", "https://example-server:8081", "--code", "AAAA", "--owner-uid", "0"}),
+		"uid 0 is root, which is never the owner")
+	require.ErrorContains(t, runRelayPair([]string{"--server", "https://example-server:8081", "--code", "AAAA", "--owner-uid", "501",
+		"--ca-file", filepath.Join(t.TempDir(), "none.pem")}), "--ca-file")
 	require.Contains(t, relayUsageText(), relay.DefaultSocketPath)
 	require.Contains(t, relayUsageText(), relay.DefaultDataDir)
 }
@@ -173,7 +183,7 @@ func TestRelayCmd_ServeRefusesAnUnsafeLayoutAndAnUnpairedRelay(t *testing.T) {
 	require.ErrorIs(t, err, errRelayPreflight)
 	require.ErrorContains(t, err, "not a system account")
 	err = relayPair(context.Background(), relayPairOptions{dataDir: l.DataDir, env: notSystem,
-		pair: relay.PairOptions{Server: "https://127.0.0.1:1", Code: "AAAA-BBBB-CCCC-DDDD"}}, io.Discard, io.Discard)
+		pair: relay.PairOptions{OwnerUID: relayCmdOwner, Server: "https://127.0.0.1:1", Code: "AAAA-BBBB-CCCC-DDDD"}}, io.Discard, io.Discard)
 	require.ErrorIs(t, err, errRelayPreflight, "a key never lands where the account rule fails")
 }
 
@@ -189,10 +199,11 @@ func TestRelayCmd_PairThenServe(t *testing.T) {
 	var out, notes bytes.Buffer
 	ca := relayCmdServerPEM(t, d.srv.URL, d.pool)
 	require.NoError(t, relayPair(context.Background(), relayPairOptions{dataDir: l.DataDir, env: env, json: true,
-		pair: relay.PairOptions{Server: d.srv.URL, Code: code.Code, Name: "example-laptop", CA: ca}}, &out, &notes))
+		pair: relay.PairOptions{OwnerUID: relayCmdOwner, Server: d.srv.URL, Code: code.Code, Name: "example-laptop", CA: ca}}, &out, &notes))
 	var paired relayPairJSON
 	require.NoError(t, json.Unmarshal(out.Bytes(), &paired))
 	require.Equal(t, "example-laptop", paired.Name)
+	require.Equal(t, relayCmdOwner, paired.OwnerUID, "--json names the owner's uid the pairing recorded")
 	require.NotContains(t, out.String(), "PRIVATE KEY", "--json prints the public facts alone")
 	dev, err := store.DeviceByID(context.Background(), d.db, paired.DeviceID)
 	require.NoError(t, err)
@@ -209,7 +220,7 @@ func TestRelayCmd_PairThenServe(t *testing.T) {
 
 	// Paired already: a second pairing is refused unless asked to replace.
 	err = relayPair(context.Background(), relayPairOptions{dataDir: l.DataDir, env: env,
-		pair: relay.PairOptions{Server: d.srv.URL, Code: code.Code, Name: "example-laptop", CA: ca}}, io.Discard, io.Discard)
+		pair: relay.PairOptions{OwnerUID: relayCmdOwner, Server: d.srv.URL, Code: code.Code, Name: "example-laptop", CA: ca}}, io.Discard, io.Discard)
 	require.ErrorIs(t, err, relay.ErrPaired)
 
 	out.Reset()
@@ -218,9 +229,10 @@ func TestRelayCmd_PairThenServe(t *testing.T) {
 	code, err = d.pairing.MintCode(context.Background(), store.DeviceByConsole)
 	require.NoError(t, err)
 	require.NoError(t, relayPair(context.Background(), relayPairOptions{dataDir: l.DataDir, env: env,
-		pair: relay.PairOptions{Server: d.srv.URL, Code: code.Code, Name: "example-laptop", CA: ca, Replace: true}}, &out, &notes))
+		pair: relay.PairOptions{OwnerUID: relayCmdOwner, Server: d.srv.URL, Code: code.Code, Name: "example-laptop", CA: ca, Replace: true}}, &out, &notes))
 	for _, want := range []string{"Paired: this relay speaks for example-laptop", "The server's certificate: SHA-256 ",
-		"This relay's key: ", "restart it"} {
+		"This relay's key: ", "restart it",
+		"The owner here: uid " + strconv.FormatUint(uint64(relayCmdOwner), 10) + " (from --owner-uid)"} {
 		require.Contains(t, out.String(), want)
 	}
 }
@@ -241,7 +253,7 @@ func TestRelayCmd_PairRefusesABinaryOthersCanReplace(t *testing.T) {
 	require.NoError(t, os.WriteFile(other, []byte("#!/bin/sh\n"), 0o755))
 	env.Exe = func() (string, error) { return other, nil }
 	err = relayPair(context.Background(), relayPairOptions{dataDir: l.DataDir, env: env,
-		pair: relay.PairOptions{Server: "https://127.0.0.1:1", Code: "AAAA-BBBB-CCCC-DDDD"}}, io.Discard, io.Discard)
+		pair: relay.PairOptions{OwnerUID: relayCmdOwner, Server: "https://127.0.0.1:1", Code: "AAAA-BBBB-CCCC-DDDD"}}, io.Discard, io.Discard)
 	require.ErrorIs(t, err, errRelayPreflight)
 	require.ErrorContains(t, err, "writable by other accounts -- pair with "+relay.DefaultBinary)
 	_, serr := os.Stat(filepath.Join(l.DataDir, relay.StateName))
@@ -262,7 +274,7 @@ func TestRelayCmd_ServeRefusesItsOwnAccount(t *testing.T) {
 	code, err := d.pairing.MintCode(context.Background(), store.DeviceByConsole)
 	require.NoError(t, err)
 	require.NoError(t, relayPair(context.Background(), relayPairOptions{dataDir: l.DataDir, env: env,
-		pair: relay.PairOptions{Server: d.srv.URL, Code: code.Code, Name: "example-laptop", CA: relayCmdServerPEM(t, d.srv.URL, d.pool)}},
+		pair: relay.PairOptions{OwnerUID: relayCmdOwner, Server: d.srv.URL, Code: code.Code, Name: "example-laptop", CA: relayCmdServerPEM(t, d.srv.URL, d.pool)}},
 		io.Discard, io.Discard))
 
 	client := relayCmdStartAs(t, l, env, nil)

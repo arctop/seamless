@@ -31,6 +31,11 @@ type PairOptions struct {
 	// Name is the host name the relay's requests speak for; "" is this
 	// machine's (config.Hostname).
 	Name string
+	// OwnerUID is the owner's uid on this computer, the account the agents
+	// run as (`seamlessd relay pair --owner-uid`): required, and recorded on
+	// the server's device and in the pairing. A server without peer_auth
+	// serves that uid alone through the relay.
+	OwnerUID uint32
 	// ServerFingerprint, when set, is the server certificate's SHA-256 the
 	// owner compared (devices.CertFingerprint's form): the code goes only over
 	// a connection presenting it.
@@ -63,6 +68,9 @@ func Pair(ctx context.Context, dataDir string, o PairOptions) (State, error) {
 	}
 	if o.ServerFingerprint != "" && !devices.ValidCertFingerprint(o.ServerFingerprint) {
 		return State{}, fmt.Errorf("%s: %q is not a certificate's SHA-256 fingerprint (AB:CD:..., 32 bytes)", op, o.ServerFingerprint)
+	}
+	if o.OwnerUID == 0 {
+		return State{}, fmt.Errorf("%s: %w", op, devices.ErrNoOwnerUID)
 	}
 	name := o.Name
 	if name == "" {
@@ -111,7 +119,7 @@ func Pair(ctx context.Context, dataDir string, o PairOptions) (State, error) {
 		return fail(err)
 	}
 	paired, err := devices.Pair(ctx, client, server.String(), devices.PairRequest{Code: o.Code, Name: name, Relay: id,
-		ServerFingerprint: o.ServerFingerprint, Poll: o.Poll, Waiting: o.Waiting})
+		OwnerUID: o.OwnerUID, ServerFingerprint: o.ServerFingerprint, Poll: o.Poll, Waiting: o.Waiting})
 	if err != nil {
 		return fail(err)
 	}
@@ -123,7 +131,7 @@ func Pair(ctx context.Context, dataDir string, o PairOptions) (State, error) {
 		return fail(lostPairing(paired, err))
 	}
 	st := State{Version: stateVersion, ServerURL: server.String(), ServerFingerprint: paired.ServerFingerprint, CAFile: caName,
-		DeviceID: paired.DeviceID, Name: paired.Name, Fingerprint: paired.Fingerprint, PairedAt: time.Now().UTC(),
+		DeviceID: paired.DeviceID, Name: paired.Name, Fingerprint: paired.Fingerprint, OwnerUID: o.OwnerUID, PairedAt: time.Now().UTC(),
 		Certificate: string(certPEM), Key: string(keyPEM)}
 	if err := SaveState(dataDir, st); err != nil {
 		return fail(lostPairing(paired, err))

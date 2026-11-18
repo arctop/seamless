@@ -156,6 +156,7 @@ func doctorOn(args []string, m doctorMachine) error {
 	checks = append(checks, devicePairingChecks(ctx, cfg, d.current)...)
 	checks = append(checks, relayMappingChecks(ctx, cfg, d.current)...)
 	checks = append(checks, codeOnlyDeviceChecks(ctx, cfg, d.current)...)
+	checks = append(checks, relayOwnerDeviceChecks(ctx, cfg, d.current)...)
 	checks = append(checks, d.needsCurrent("repo map", repoMapCheck))
 	checks = append(checks, d.needsCurrent("remote sessions", remoteSessionsCheck))
 	// mcp_tools compares a count with itself under either answer to "does it lock

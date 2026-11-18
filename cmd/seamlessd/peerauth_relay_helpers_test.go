@@ -350,7 +350,7 @@ func (d *relayvDaemon) pair(t *testing.T, name string) (store.Device, *devices.R
 	go func() {
 		var err error
 		paired, err = devices.Pair(ctx, d.httpClient(nil), d.tcp.URL, devices.PairRequest{Code: code.Code, Name: name, Relay: id,
-			Poll: 10 * time.Millisecond, Waiting: func(fp string) { waiting <- fp }})
+			OwnerUID: relayvOwnerUID, Poll: 10 * time.Millisecond, Waiting: func(fp string) { waiting <- fp }})
 		done <- err
 	}()
 	var fp string

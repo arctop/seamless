@@ -135,7 +135,7 @@ func relayE2EPair(t *testing.T) relayE2EPaired {
 	srv := relayE2EServe(t)
 	l, env := relayCmdLayout(t)
 	require.NoError(t, relayPair(context.Background(), relayPairOptions{dataDir: l.DataDir, env: env,
-		pair: relay.PairOptions{Server: srv.base, Code: srv.relayCode(t), Name: "example-laptop", CA: srv.certPEM}},
+		pair: relay.PairOptions{OwnerUID: relayCmdOwner, Server: srv.base, Code: srv.relayCode(t), Name: "example-laptop", CA: srv.certPEM}},
 		&strings.Builder{}, &strings.Builder{}))
 	st, err := relay.LoadState(l.DataDir)
 	require.NoError(t, err)

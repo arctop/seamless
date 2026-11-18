@@ -261,7 +261,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-topology">The topology</a></li><li class="lvl-2"><a href="#set-up-the-server">Set up the Server</a></li><li class="lvl-3"><a href="#a-new-computer">A new computer</a></li><li class="lvl-3"><a href="#a-computer-already-running-seamless">A computer already running Seamless</a></li><li class="lvl-3"><a href="#check-the-server">Check the Server</a></li><li class="lvl-2"><a href="#step-3-pair-a-client">Connect each Client</a></li><li class="lvl-3"><a href="#the-relays-root-step">The relay&#39;s root step</a></li><li class="lvl-3"><a href="#windows-is-always-a-key-client">Windows is always a key client</a></li><li class="lvl-3"><a href="#check-a-client">Check a Client</a></li><li class="lvl-2"><a href="#devices">Pair computers on the Devices page</a></li><li class="lvl-3"><a href="#revoke-a-computer">Revoke a computer</a></li><li class="lvl-2"><a href="#console-sign-in">Sign in to the console from another computer</a></li><li class="lvl-2"><a href="#approve-from-another-computer">Approve from another computer</a></li><li class="lvl-2"><a href="#locked-projects-and-agents-on-other-computers">Locked projects and agents on other computers</a></li><li class="lvl-2"><a href="#when-the-server-is-out-of-reach">When the Server is out of reach</a></li><li class="lvl-2"><a href="#what-a-remote-device-does-not-get">What a remote device does not get</a></li><li class="lvl-3"><a href="#how-doctor-reports-it">How doctor reports it</a></li><li class="lvl-2"><a href="#updates-on-a-shared-daemon">Updates on a shared daemon</a></li><li class="lvl-2"><a href="#windows-a-second-user-on-one-box">Windows: a second user on one box</a></li><li class="lvl-2"><a href="#step-1-widen-the-server">By hand: widen the Server</a></li><li class="lvl-2"><a href="#step-2-tls">By hand: TLS</a></li><li class="lvl-3"><a href="#mkcert-the-friction-free-path">mkcert (the friction-free path)</a></li><li class="lvl-3"><a href="#openssl-no-extra-tool">openssl (no extra tool)</a></li><li class="lvl-3"><a href="#why-https-changes-the-claude-code-wiring">Why https changes the Claude Code wiring</a></li><li class="lvl-2"><a href="#pair-with-the-servers-key">By hand: connect a Client with the Server&#39;s key</a></li><li class="lvl-2"><a href="#install-a-relay">By hand: install a relay</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-topology">The topology</a></li><li class="lvl-2"><a href="#set-up-the-server">Set up the Server</a></li><li class="lvl-3"><a href="#a-new-computer">A new computer</a></li><li class="lvl-3"><a href="#a-computer-already-running-seamless">A computer already running Seamless</a></li><li class="lvl-3"><a href="#check-the-server">Check the Server</a></li><li class="lvl-2"><a href="#step-3-pair-a-client">Connect each Client</a></li><li class="lvl-3"><a href="#the-relays-root-step">The relay&#39;s root step</a></li><li class="lvl-3"><a href="#who-a-relay-serves-without-peer-auth">Who a relay serves without peer_auth</a></li><li class="lvl-3"><a href="#windows-is-always-a-key-client">Windows is always a key client</a></li><li class="lvl-3"><a href="#check-a-client">Check a Client</a></li><li class="lvl-2"><a href="#devices">Pair computers on the Devices page</a></li><li class="lvl-3"><a href="#revoke-a-computer">Revoke a computer</a></li><li class="lvl-2"><a href="#console-sign-in">Sign in to the console from another computer</a></li><li class="lvl-2"><a href="#approve-from-another-computer">Approve from another computer</a></li><li class="lvl-2"><a href="#locked-projects-and-agents-on-other-computers">Locked projects and agents on other computers</a></li><li class="lvl-2"><a href="#when-the-server-is-out-of-reach">When the Server is out of reach</a></li><li class="lvl-2"><a href="#what-a-remote-device-does-not-get">What a remote device does not get</a></li><li class="lvl-3"><a href="#how-doctor-reports-it">How doctor reports it</a></li><li class="lvl-2"><a href="#updates-on-a-shared-daemon">Updates on a shared daemon</a></li><li class="lvl-2"><a href="#windows-a-second-user-on-one-box">Windows: a second user on one box</a></li><li class="lvl-2"><a href="#step-1-widen-the-server">By hand: widen the Server</a></li><li class="lvl-2"><a href="#step-2-tls">By hand: TLS</a></li><li class="lvl-3"><a href="#mkcert-the-friction-free-path">mkcert (the friction-free path)</a></li><li class="lvl-3"><a href="#openssl-no-extra-tool">openssl (no extra tool)</a></li><li class="lvl-3"><a href="#why-https-changes-the-claude-code-wiring">Why https changes the Claude Code wiring</a></li><li class="lvl-2"><a href="#pair-with-the-servers-key">By hand: connect a Client with the Server&#39;s key</a></li><li class="lvl-2"><a href="#install-a-relay">By hand: install a relay</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </details>
   <p>The default install is <strong>Standalone</strong>: one daemon per computer, bound to
@@ -511,6 +511,14 @@ that is <a href="#step-1-widen-the-server">by hand</a>.</p>
 <td><code>peer_auth devices</code></td>
 <td>Under peer_auth only: a <strong>warn</strong> for each key device paired with a one-time code alone, before peer_auth, which is still you over TCP though no passkey approved it: revoke it and pair it again, so a passkey approves it.</td>
 </tr>
+<tr>
+<td><code>relay owners</code></td>
+<td>Without peer_auth only: an <strong>info</strong> listing each relay with the uid its pairing recorded as yours, the one uid served through it, and a <strong>warn</strong> for each relay whose pairing recorded none (paired before, or by a relay of an earlier release), every caller of which is you: re-pair it to bind the owner's uid (<a href="#who-a-relay-serves-without-peer-auth">why</a>).</td>
+</tr>
+<tr>
+<td><code>peer_auth relays</code></td>
+<td>Under peer_auth only: each relay <code>peer_auth.relays</code> maps, and whether it is paired and approved with a passkey. A <strong>warn</strong> when the uid its pairing recorded is not the mapping's <code>owner_uid</code>: the mapping judges, but one of the two is wrong.</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -625,14 +633,17 @@ pins the daemon's.</p>
 </li>
 <li>
 <p><strong>The pairing, as its account:</strong></p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://&lt;server name&gt;:8081 --fingerprint &lt;fingerprint&gt; --code -
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://&lt;server name&gt;:8081 --fingerprint &lt;fingerprint&gt; --owner-uid <span class="m">501</span> --code -
 </span></span></code></pre></div>
 <p>with <code>--ca-file /opt/seamless/etc/server-ca.crt</code> for a certificate you
 compared. It waits for you to paste the code. Setup never puts it in a
 command line, where other accounts and your shell history would keep it, and
 shows it again only when you typed it at its question: a code you set in
 <code>SEAMLESS_PAIR_CODE</code> is yours already. The key it makes stays in
-<code>/opt/seamless/relay</code>.
+<code>/opt/seamless/relay</code>. <code>--owner-uid</code> is your uid on this computer, which
+setup fills in: the Server records it with the pairing, and without
+peer_auth serves that uid alone through this relay
+(<a href="#who-a-relay-serves-without-peer-auth">below</a>).
 Under peer_auth it waits again, until you approve it on the Devices page.</p>
 </li>
 <li>
@@ -660,9 +671,36 @@ and restart the daemon (<a href="../../guides/peer-auth/#agents-on-another-compu
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">&lt;this computer&#39;s name&gt;</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">owner_uid</span><span class="p">:</span><span class="w"> </span><span class="m">501</span><span class="w">    </span><span class="c"># your uid on this computer</span><span class="w">
 </span></span></span></code></pre></div>
+<p>On a Server with peer_auth, an account on this computer that runs restricted
+agents joins <code>_seamlessowner</code> too and gets a line of its own there,
+<code>restricted: {&lt;its name&gt;: &lt;its uid here&gt;}</code>. Without peer_auth that does not
+apply: the Server serves your uid alone through the relay.</p>
 <p>On Linux, log out and back in once: your agents join <code>_seamlessowner</code> at your
 next login. Approvals then happen in the Server's console, with a passkey, from
 any browser (<a href="#approve-from-another-computer">below</a>).</p>
+<h3 id="who-a-relay-serves-without-peer-auth">Who a relay serves without peer_auth</h3>
+<p>A Server without peer_auth has no account to serve anyone but you as. So a
+relay's pairing records your uid on its computer (<code>seamlessd relay pair --owner-uid</code>), and the Server serves that uid alone through it. A request the
+relay forwards for another uid is refused (403), in words that name the remedy:</p>
+<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">forbidden: uid 502 on relay example-laptop is not the owner&#39;s uid there (501, recorded when the relay paired). This server runs without peer_auth, so through a relay it serves the owner&#39;s account alone: to give that account access of its own, turn peer_auth on and map it as restricted (peer_auth.relays: {example-laptop: {owner_uid: 501, restricted: {&lt;its name&gt;: 502}}}), then restart the server
+</span></span></code></pre></div>
+<p>A request that forwards no caller at all is refused too (400): a relay of this
+release forwards its caller with every request. The Server's <code>/healthz</code> is
+not judged, since the relay probes it for itself.</p>
+<p><code>seamlessd relay pair</code> takes the uid from <code>--owner-uid</code>, which always wins, and
+without it from <code>SUDO_UID</code>, the account that ran <code>sudo -u _seamless</code>. With
+neither it refuses, and it refuses uid 0: root is never the owner. The setup
+root step's line always carries <code>--owner-uid</code>.</p>
+<p>A relay paired before the Server recorded the owner's uid, or by a relay of an
+earlier release, has none recorded. It keeps working exactly as before, every
+caller it forwards being you, and the Server's <code>seamlessd doctor</code> (<code>relay owners</code>, a <strong>warn</strong>) and Devices page say to re-pair it to bind the owner's
+uid: revoke it, then pair it again with a relay of this release
+(<a href="#revoke-a-computer">below</a>). A relay of this release pairing with a Server of
+an earlier release is refused before the code is used, and says to upgrade the
+Server first: that release does not record the uid.</p>
+<p>Under peer_auth nothing of this applies: <code>peer_auth.relays.&lt;relay&gt;.owner_uid</code>
+judges, and the Server's <code>seamlessd doctor</code> warns when the uid the pairing
+recorded is another one.</p>
 <h3 id="windows-is-always-a-key-client">Windows is always a key client</h3>
 <p>Setup offers a Windows computer Standalone and Client only:</p>
 <div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">How will you use Seamless?
@@ -732,7 +770,10 @@ is missing. Without peer_auth nothing waits: the code is the approval.</p>
 <li>
 <p><strong>Paired</strong>: each relay with its key's fingerprint and each key device with the
 start of its key, when it paired and whether your passkey or its one-time
-code approved it, and when it was last seen.</p>
+code approved it, and when it was last seen. A relay also shows the uid its
+pairing recorded as yours there; without peer_auth, one that recorded none
+carries a warning to re-pair it to bind the owner's uid
+(<a href="#who-a-relay-serves-without-peer-auth">why</a>).</p>
 </li>
 <li>
 <p><strong>Revoked and expired</strong>: what ended, and how.</p>
@@ -772,7 +813,7 @@ that waits is denied instead.</p>
 <p>To pair it again, get a new code. A relay pairs again with the root step's
 pairing line plus <code>--replace</code>, once its old pairing is revoked (the Server
 refuses a second live device of the same name), and then restarts:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --replace --server https://&lt;server name&gt;:8081 --fingerprint &lt;fingerprint&gt; --code -
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --replace --server https://&lt;server name&gt;:8081 --fingerprint &lt;fingerprint&gt; --owner-uid &lt;your uid here&gt; --code -
 </span></span></code></pre></div>
 <p>The same goes for a renewed certificate: a relay pins the exact certificate it
 paired with, so a new one refuses it until it pairs again.</p>
@@ -1154,20 +1195,25 @@ which.</p>
 <p><strong>Pair it, as its account</strong>, pasting the code when it waits (<code>--code -</code>
 keeps it out of the process list and your shell history), and adding
 <code>--ca-file /opt/seamless/etc/server-ca.crt</code> for the certificate above:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://&lt;server name&gt;:8081 --fingerprint &lt;fingerprint&gt; --code -
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://&lt;server name&gt;:8081 --fingerprint &lt;fingerprint&gt; --owner-uid &lt;your uid&gt; --code -
 </span></span></code></pre></div>
-<p><code>--fingerprint</code> makes sure the code goes only to that certificate. Under
+<p><code>--fingerprint</code> makes sure the code goes only to that certificate.
+<code>--owner-uid</code> is your uid on this computer (<code>id -u</code>), which the Server
+records: without peer_auth it serves that uid alone through the relay
+(<a href="#who-a-relay-serves-without-peer-auth">why</a>). Under
 peer_auth the command waits until you approve the relay on the Devices page,
 and prints the key fingerprint the page shows for it. Once paired, it prints
-the certificate it pinned and the name it speaks for.</p>
+the certificate it pinned, the name it speaks for and the uid it recorded as
+yours.</p>
 </li>
 <li>
 <p><strong>Run it as a service</strong>, as its account, never as root:
 <code>/opt/seamless/bin/seamlessd relay serve --socket-mode 0660 --socket-group _seamlessowner</code>,
 from the LaunchDaemon or the systemd unit in
 <a href="../../reference/service/#relay">the service reference</a>. Without the socket flags
-every local account may connect, and a Server without peer_auth takes each
-one for you.</p>
+every local account may connect; a Server without peer_auth refuses every
+one but yours, and a relay paired with an earlier release, which recorded no
+uid, takes each one for you.</p>
 </li>
 <li>
 <p><strong>Point your agents at it.</strong> Your config on the Client names the socket and
@@ -1231,7 +1277,7 @@ daemon does with it.</li>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-topology">The topology</a></li><li class="lvl-2"><a href="#set-up-the-server">Set up the Server</a></li><li class="lvl-3"><a href="#a-new-computer">A new computer</a></li><li class="lvl-3"><a href="#a-computer-already-running-seamless">A computer already running Seamless</a></li><li class="lvl-3"><a href="#check-the-server">Check the Server</a></li><li class="lvl-2"><a href="#step-3-pair-a-client">Connect each Client</a></li><li class="lvl-3"><a href="#the-relays-root-step">The relay&#39;s root step</a></li><li class="lvl-3"><a href="#windows-is-always-a-key-client">Windows is always a key client</a></li><li class="lvl-3"><a href="#check-a-client">Check a Client</a></li><li class="lvl-2"><a href="#devices">Pair computers on the Devices page</a></li><li class="lvl-3"><a href="#revoke-a-computer">Revoke a computer</a></li><li class="lvl-2"><a href="#console-sign-in">Sign in to the console from another computer</a></li><li class="lvl-2"><a href="#approve-from-another-computer">Approve from another computer</a></li><li class="lvl-2"><a href="#locked-projects-and-agents-on-other-computers">Locked projects and agents on other computers</a></li><li class="lvl-2"><a href="#when-the-server-is-out-of-reach">When the Server is out of reach</a></li><li class="lvl-2"><a href="#what-a-remote-device-does-not-get">What a remote device does not get</a></li><li class="lvl-3"><a href="#how-doctor-reports-it">How doctor reports it</a></li><li class="lvl-2"><a href="#updates-on-a-shared-daemon">Updates on a shared daemon</a></li><li class="lvl-2"><a href="#windows-a-second-user-on-one-box">Windows: a second user on one box</a></li><li class="lvl-2"><a href="#step-1-widen-the-server">By hand: widen the Server</a></li><li class="lvl-2"><a href="#step-2-tls">By hand: TLS</a></li><li class="lvl-3"><a href="#mkcert-the-friction-free-path">mkcert (the friction-free path)</a></li><li class="lvl-3"><a href="#openssl-no-extra-tool">openssl (no extra tool)</a></li><li class="lvl-3"><a href="#why-https-changes-the-claude-code-wiring">Why https changes the Claude Code wiring</a></li><li class="lvl-2"><a href="#pair-with-the-servers-key">By hand: connect a Client with the Server&#39;s key</a></li><li class="lvl-2"><a href="#install-a-relay">By hand: install a relay</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-topology">The topology</a></li><li class="lvl-2"><a href="#set-up-the-server">Set up the Server</a></li><li class="lvl-3"><a href="#a-new-computer">A new computer</a></li><li class="lvl-3"><a href="#a-computer-already-running-seamless">A computer already running Seamless</a></li><li class="lvl-3"><a href="#check-the-server">Check the Server</a></li><li class="lvl-2"><a href="#step-3-pair-a-client">Connect each Client</a></li><li class="lvl-3"><a href="#the-relays-root-step">The relay&#39;s root step</a></li><li class="lvl-3"><a href="#who-a-relay-serves-without-peer-auth">Who a relay serves without peer_auth</a></li><li class="lvl-3"><a href="#windows-is-always-a-key-client">Windows is always a key client</a></li><li class="lvl-3"><a href="#check-a-client">Check a Client</a></li><li class="lvl-2"><a href="#devices">Pair computers on the Devices page</a></li><li class="lvl-3"><a href="#revoke-a-computer">Revoke a computer</a></li><li class="lvl-2"><a href="#console-sign-in">Sign in to the console from another computer</a></li><li class="lvl-2"><a href="#approve-from-another-computer">Approve from another computer</a></li><li class="lvl-2"><a href="#locked-projects-and-agents-on-other-computers">Locked projects and agents on other computers</a></li><li class="lvl-2"><a href="#when-the-server-is-out-of-reach">When the Server is out of reach</a></li><li class="lvl-2"><a href="#what-a-remote-device-does-not-get">What a remote device does not get</a></li><li class="lvl-3"><a href="#how-doctor-reports-it">How doctor reports it</a></li><li class="lvl-2"><a href="#updates-on-a-shared-daemon">Updates on a shared daemon</a></li><li class="lvl-2"><a href="#windows-a-second-user-on-one-box">Windows: a second user on one box</a></li><li class="lvl-2"><a href="#step-1-widen-the-server">By hand: widen the Server</a></li><li class="lvl-2"><a href="#step-2-tls">By hand: TLS</a></li><li class="lvl-3"><a href="#mkcert-the-friction-free-path">mkcert (the friction-free path)</a></li><li class="lvl-3"><a href="#openssl-no-extra-tool">openssl (no extra tool)</a></li><li class="lvl-3"><a href="#why-https-changes-the-claude-code-wiring">Why https changes the Claude Code wiring</a></li><li class="lvl-2"><a href="#pair-with-the-servers-key">By hand: connect a Client with the Server&#39;s key</a></li><li class="lvl-2"><a href="#install-a-relay">By hand: install a relay</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </aside>
   

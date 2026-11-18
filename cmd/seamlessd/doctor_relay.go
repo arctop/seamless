@@ -106,6 +106,11 @@ func relayDoctorChecks(ctx context.Context, e relayDoctorEnv) []check {
 	}
 	st, pairing := relayPairingRow(dir, acct, e.account(acct))
 	out = append(out, pairing)
+	if st != nil {
+		if row, ok := relayOwnerRow(*st); ok {
+			out = append(out, row)
+		}
+	}
 	out = append(out, relaySocketRow(ctx, e, acct, asRelay))
 	if row, ok := relayAccessRow(e); ok {
 		out = append(out, row)
@@ -212,9 +217,26 @@ func relayPairingRow(dir string, uid uint32, account string) (*relay.State, chec
 	case err != nil:
 		return nil, check{statusFail, name, err.Error() + " -- pair it again with seamlessd relay pair --replace"}
 	}
+	owner := ""
+	if st.OwnerUID != 0 {
+		owner = fmt.Sprintf("; the owner here is uid %d, the one uid a server without peer_auth serves through it", st.OwnerUID)
+	}
 	return &st, check{statusOK, name, fmt.Sprintf("paired with %s as %s (device %s) on %s; the server's certificate is pinned "+
-		"(SHA-256 %s); this relay's key is %s", st.ServerURL, st.Name, st.DeviceID, st.PairedAt.Format("2006-01-02"),
-		st.ServerFingerprint, st.Fingerprint)}
+		"(SHA-256 %s); this relay's key is %s%s", st.ServerURL, st.Name, st.DeviceID, st.PairedAt.Format("2006-01-02"),
+		st.ServerFingerprint, st.Fingerprint, owner)}
+}
+
+// relayOwnerRow warns about a pairing that names no owner's uid here (owner
+// decision R-D1): an earlier release made it, so the server recorded none,
+// and one without peer_auth serves every caller of this relay as the owner.
+// ok is false for a pairing that names one; the pairing row shows it.
+func relayOwnerRow(st relay.State) (check, bool) {
+	if st.OwnerUID != 0 {
+		return check{}, false
+	}
+	return check{statusWarn, "relay.owner", "this pairing names no owner's uid here (an earlier release made it): a server " +
+		"without peer_auth serves every account that reaches the socket as you -- re-pair to bind the owner's uid: revoke " +
+		"device " + st.DeviceID + " on the server's Devices page, then seamlessd relay pair --replace --owner-uid <your uid here>"}, true
 }
 
 // relaySocketRow checks the socket agents dial: the relay's own, and

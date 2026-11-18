@@ -99,11 +99,18 @@ that account, labeled with the computer's name, and any other uid is refused
 ([how](/guides/peer-auth/#agents-on-another-computer-relays)). Root, or the
 relay's account, on the Client can report any uid and chain, so every lease is
 keyed on the relay: a forged report reaches only what that relay's agents were
-approved. Without peer_auth on the Server, every request a relay forwards is
-you, whatever uid it names, so the socket's mode and group are the only gate on
-that computer. Setup's root step hands the socket to a group of you and the
-relay alone (mode `0660`); `seamlessd doctor` on the Client warns when every
-local account may connect (`relay.access`).
+approved. Without peer_auth on the Server, a relay is served for one account on
+its computer: yours. Its pairing records your uid there (`seamlessd relay pair
+--owner-uid`, which setup's root step fills in), and the Server refuses a
+request the relay forwards for any other uid, naming the remedy: turn peer_auth
+on and map that account as restricted. The socket's mode and group still keep
+other accounts out on that computer: setup's root step hands the socket to a
+group of you and the relay alone (mode `0660`), and `seamlessd doctor` on the
+Client warns when every local account may connect (`relay.access`). A relay
+paired before the Server recorded the owner's uid, or by a relay of an earlier
+release, records none: it is served as before, every caller as you, and
+`seamlessd doctor` and the Devices page on the Server say to re-pair it to bind
+the owner's uid.
 
 ## Pairing {#pairing}
 
@@ -134,8 +141,9 @@ Client that uses the Server's own key has not paired.
   the request says. No two live devices share a name, and none takes the
   Server's own.
 - **A paired computer is you, at most.** A key device reaches what the bearer
-  key reaches. A relay does too without peer_auth; under it, the Server judges
-  a relay you map as its own socket judges a request, and refuses one you have
+  key reaches. A relay does too without peer_auth, for the uid its pairing
+  recorded as yours on its computer alone; under peer_auth, the Server judges a
+  relay you map as its own socket judges a request, and refuses one you have
   not mapped.
 
 A relay needs TLS on the daemon's own listener. It proves itself with a client

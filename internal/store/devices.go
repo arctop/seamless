@@ -158,6 +158,20 @@ type Device struct {
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
 	RevokedBy  string     `json:"revoked_by,omitempty"`
+	// OwnerUID is a relay's owner's uid on its computer, as the relay named
+	// it when it paired (migration 050): without peer_auth the edge serves
+	// that uid alone through the relay. 0 when none is recorded: a key
+	// device, a pairing from before migration 050, or one a relay of an
+	// earlier release made (OwnerUnbound).
+	OwnerUID uint32 `json:"owner_uid,omitempty"`
+}
+
+// OwnerUnbound reports a relay whose pairing recorded no owner's uid: one
+// paired before migration 050, or by a relay of an earlier release. Without
+// peer_auth every caller it forwards is the owner, as before; pairing it again
+// with a relay of this release binds it.
+func (d Device) OwnerUnbound() bool {
+	return d.Kind == DeviceRelayKind && d.OwnerUID == 0
 }
 
 // Live reports whether the device is pending or active at now: a pending one
@@ -203,6 +217,10 @@ type NewDevice struct {
 	// (ErrDeviceNameReserved); "" reserves none. It is judged after the code,
 	// so a caller without one learns nothing of it.
 	Reserved string
+	// OwnerUID is a relay's owner's uid on its computer (Device.OwnerUID); 0
+	// records none, as a relay of an earlier release pairs. A key device
+	// names none.
+	OwnerUID uint32
 }
 
 // ValidDeviceName checks a device's name: a host name as config.Hostname
@@ -283,6 +301,9 @@ func (d NewDevice) validate() error {
 	case DeviceKeyKind:
 		if len(d.PublicKey) != 0 {
 			return fmt.Errorf("%w: a key device has no public key", ErrInvalidDevice)
+		}
+		if d.OwnerUID != 0 {
+			return fmt.Errorf("%w: a key device names no owner's uid: only a relay forwards its callers' uids", ErrInvalidDevice)
 		}
 		if d.Pending && (d.KeyHash != "" || d.KeyPrefix != "") {
 			return fmt.Errorf("%w: a key device that waits for approval collects its key later", ErrInvalidDevice)
@@ -407,7 +428,7 @@ func CountOpenPairingCodes(ctx context.Context, db *sql.DB, now time.Time) (int,
 }
 
 const deviceCols = `id, kind, name, status, fingerprint, public_key, key_hash, key_prefix, code_id, created_at, pending_until,
-	enrolled_at, approved_by, last_used_at, revoked_at, revoked_by`
+	enrolled_at, approved_by, last_used_at, revoked_at, revoked_by, owner_uid`
 
 func scanDevice(row interface{ Scan(...any) error }) (Device, error) {
 	var (
@@ -416,11 +437,18 @@ func scanDevice(row interface{ Scan(...any) error }) (Device, error) {
 		created, pending          string
 		enrolled, used, revokedAt sql.NullString
 		publicKey                 []byte
+		ownerUID                  int64
 	)
 	if err := row.Scan(&d.ID, &d.Kind, &d.Name, &d.Status, &d.Fingerprint, &publicKey, &keyHash, &d.KeyPrefix, &d.CodeID,
-		&created, &pending, &enrolled, &d.ApprovedBy, &used, &revokedAt, &d.RevokedBy); err != nil {
+		&created, &pending, &enrolled, &d.ApprovedBy, &used, &revokedAt, &d.RevokedBy, &ownerUID); err != nil {
 		return Device{}, err
 	}
+	if ownerUID < 0 || ownerUID > int64(^uint32(0)) {
+		// The column's CHECK holds it to a uid; a row that is not one is no
+		// pairing to serve.
+		return Device{}, fmt.Errorf("device %s owner_uid %d is not a uid", d.ID, ownerUID)
+	}
+	d.OwnerUID = uint32(ownerUID)
 	d.PublicKey = publicKey
 	d.HasKey = keyHash.Valid && keyHash.String != ""
 	var err error
@@ -552,9 +580,9 @@ func PairDevice(ctx context.Context, db *sql.DB, code string, d NewDevice, now t
 		publicKey = d.PublicKey
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO devices (id, kind, name, status, fingerprint, public_key, key_hash, key_prefix,
-		secret_hash, code_id, created_at, pending_until, enrolled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		secret_hash, code_id, created_at, pending_until, enrolled_at, owner_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, d.Kind, d.Name, status, d.Fingerprint, publicKey, keyHash, d.KeyPrefix, d.SecretHash, codeID, at,
-		core.FormatTime(pendingUntil), enrolled); err != nil {
+		core.FormatTime(pendingUntil), enrolled, int64(d.OwnerUID)); err != nil {
 		return Device{}, fmt.Errorf("%s: %w", op, err)
 	}
 	out, err := deviceWhere(ctx, tx, `id = ?`, id)

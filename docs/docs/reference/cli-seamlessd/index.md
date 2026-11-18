@@ -1074,7 +1074,7 @@ The computers paired with this server: relays (macOS and Linux clients) and key 
 
 ```bash
 seamlessd relay serve [--data-dir DIR] [--socket PATH] [--socket-mode MODE] [--socket-group GROUP]
-seamlessd relay pair --server URL --code CODE [--fingerprint SHA256] [--ca-file FILE] [--name NAME] [--replace] [--json] [--data-dir DIR]
+seamlessd relay pair --server URL --code CODE [--owner-uid UID] [--fingerprint SHA256] [--ca-file FILE] [--name NAME] [--replace] [--json] [--data-dir DIR]
 ```
 
 The relay serves the socket agents dial beside a peer_auth daemon and forwards
@@ -1086,8 +1086,10 @@ account, and any layout another account could change.
   0666. It refuses while unpaired, and answers 502 with the reason when the
   server is unreachable or presents another certificate, never from memory.
   Under peer_auth the server judges each uid once you map this relay in
-  `peer_auth.relays`, and refuses it until then; without peer_auth every caller
-  is you. Restrict the socket: `--socket-mode 0660 --socket-group
+  `peer_auth.relays`, and refuses it until then; without peer_auth the server
+  serves the uid the pairing recorded as yours alone, and refuses every other
+  (a relay paired by an earlier release recorded none, and every caller is
+  you). Restrict the socket: `--socket-mode 0660 --socket-group
   _seamlessowner` (you and the relay's account), as `seamlessd setup` installs
   it.
 - `pair`: the code comes from the server's Devices page or `seamlessd devices
@@ -1097,9 +1099,16 @@ account, and any layout another account could change.
   waits for your passkey on the Devices page, which shows the same key
   fingerprint. `--name` is the name the relay speaks for, which the Devices page
   shows and `peer_auth.relays` maps (this computer's host name by default).
-  `--replace` pairs again after you revoked the old device;
-  `--json` prints the public facts. Run it by its root-owned path,
-  `/opt/seamless/bin/seamlessd`, with `--code -`, and paste the code.
+  `--owner-uid` is the uid of the account your agents run as on this computer
+  (`id -u`), which the server records with the pairing: without peer_auth it
+  serves that uid alone through the relay. It defaults to `SUDO_UID`, the
+  account that ran `sudo -u`, and with neither the command refuses; uid 0 is
+  refused (root is never the owner). A server of an earlier release refuses
+  the pairing before it uses the code, and the command says to upgrade the
+  server first. `--replace` pairs again after you revoked the old device;
+  `--json` prints the public facts, the owner's uid among them. Run it by its
+  root-owned path, `/opt/seamless/bin/seamlessd`, with `--code -`, and paste
+  the code.
 
 Its data dir is `/opt/seamless/relay` (the relay's account, 0700; `--data-dir`
 names another): `relay.json` (0600) holds the pairing and the relay's key.

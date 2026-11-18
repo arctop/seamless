@@ -784,7 +784,10 @@ peer_auth:
 
 `seamlessd doctor`, run as the daemon's account, checks each mapping: a name no
 paired relay holds, or a relay no passkey approved, is a **warn**, and a
-mapping that holds names the restricted accounts there. It warns too for each
+mapping that holds names the restricted accounts there. A relay's pairing also
+records the uid it named as yours there (`seamlessd relay pair --owner-uid`,
+which setup fills in); the mapping's `owner_uid` is what judges, and doctor
+warns when the two differ, since one of them is wrong. It warns too for each
 key device paired with a one-time code alone, before peer_auth (`peer_auth
 devices`): it is still you over TCP, though no passkey approved it, so revoke
 it and pair it again, so a passkey approves it.
@@ -1502,7 +1505,10 @@ and console unlock the backup held.
   [root step](https://thereisnospoon.org/docs/guides/network-install/#the-relays-root-step) restricts the
   socket anyway, to a group of you and the relay alone
   (`--socket-mode 0660 --socket-group _seamlessowner`); a relay you run by hand
-  on a computer with other accounts needs the same.
+  on a computer with other accounts needs the same. A server without peer_auth
+  serves through a relay only the uid its pairing recorded as yours, and
+  refuses every other, naming peer_auth and a restricted mapping as the remedy
+  ([who a relay serves](https://thereisnospoon.org/docs/guides/network-install/#who-a-relay-serves-without-peer-auth)).
 - **A relay pins the daemon's exact certificate.** Renewing the certificate (a
   tailnet certificate lasts 90 days) refuses every relay until it pairs again.
   It fails closed: no relay forwards to a certificate it did not pin.

@@ -80,6 +80,10 @@ func (s *relayPairServer) relayUnusedCodes(t *testing.T) int {
 	return n
 }
 
+// relayTestOwner is the owner's uid these pairings name: the test's own, the
+// uid the relay's kernel reports for every local caller here.
+var relayTestOwner = uint32(os.Getuid())
+
 // relayMode is path's permission bits.
 func relayMode(t *testing.T, path string) os.FileMode {
 	t.Helper()
@@ -94,7 +98,7 @@ func relayMode(t *testing.T, path string) os.FileMode {
 func TestRelayPair_PairsPinsAndForwardsAsThePairedDevice(t *testing.T) {
 	s := relayNewPairServer(t, false)
 	l := relayLayoutAt(t)
-	st, err := Pair(context.Background(), l.DataDir, PairOptions{Server: s.ts.URL + "/", Code: s.relayCode(t), Name: "Example-Laptop",
+	st, err := Pair(context.Background(), l.DataDir, PairOptions{OwnerUID: relayTestOwner, Server: s.ts.URL + "/", Code: s.relayCode(t), Name: "Example-Laptop",
 		ServerFingerprint: s.cert.fp, CA: s.cert.pem})
 	require.NoError(t, err)
 	require.Equal(t, s.ts.URL, st.ServerURL)
@@ -105,6 +109,8 @@ func TestRelayPair_PairsPinsAndForwardsAsThePairedDevice(t *testing.T) {
 	require.Equal(t, store.DeviceActive, d.Status, "without peer_auth the code is the approval")
 	require.Equal(t, devices.KindRelay, d.Kind)
 	require.Equal(t, d.Fingerprint, st.Fingerprint, "both ends show the relay key's fingerprint")
+	require.Equal(t, relayTestOwner, d.OwnerUID, "the server recorded the owner's uid the pairing named")
+	require.Equal(t, relayTestOwner, st.OwnerUID, "and so did the relay")
 
 	require.Equal(t, os.FileMode(0o600), relayMode(t, filepath.Join(l.DataDir, StateName)), "the pairing holds the private key")
 	require.NotEmpty(t, st.CAFile)
@@ -141,7 +147,7 @@ func TestRelayPair_WaitsForTheOwnersApproval(t *testing.T) {
 	var st State
 	go func() {
 		var err error
-		st, err = Pair(context.Background(), l.DataDir, PairOptions{Server: s.ts.URL, Code: s.relayCode(t), Name: "example-laptop",
+		st, err = Pair(context.Background(), l.DataDir, PairOptions{OwnerUID: relayTestOwner, Server: s.ts.URL, Code: s.relayCode(t), Name: "example-laptop",
 			CA: s.cert.pem, Poll: 20 * time.Millisecond, Waiting: func(fp string) { waiting <- fp }})
 		done <- err
 	}()
@@ -178,7 +184,7 @@ func TestRelayPair_AnotherFingerprintSendsNothing(t *testing.T) {
 	s := relayNewPairServer(t, false)
 	l := relayLayoutAt(t)
 	other := relayNewCert(t, "example-server")
-	_, err := Pair(context.Background(), l.DataDir, PairOptions{Server: s.ts.URL, Code: s.relayCode(t), Name: "example-laptop",
+	_, err := Pair(context.Background(), l.DataDir, PairOptions{OwnerUID: relayTestOwner, Server: s.ts.URL, Code: s.relayCode(t), Name: "example-laptop",
 		ServerFingerprint: other.fp, CA: s.cert.pem})
 	require.ErrorIs(t, err, devices.ErrServerFingerprint)
 	_, err = LoadState(l.DataDir)
@@ -194,18 +200,18 @@ func TestRelayPair_AnotherFingerprintSendsNothing(t *testing.T) {
 func TestRelayPair_ReplacesOnlyWhenAsked(t *testing.T) {
 	s := relayNewPairServer(t, false)
 	l := relayLayoutAt(t)
-	first, err := Pair(context.Background(), l.DataDir, PairOptions{Server: s.ts.URL, Code: s.relayCode(t), Name: "example-laptop", CA: s.cert.pem})
+	first, err := Pair(context.Background(), l.DataDir, PairOptions{OwnerUID: relayTestOwner, Server: s.ts.URL, Code: s.relayCode(t), Name: "example-laptop", CA: s.cert.pem})
 	require.NoError(t, err)
 
 	code := s.relayCode(t)
-	_, err = Pair(context.Background(), l.DataDir, PairOptions{Server: s.ts.URL, Code: code, Name: "example-laptop", CA: s.cert.pem})
+	_, err = Pair(context.Background(), l.DataDir, PairOptions{OwnerUID: relayTestOwner, Server: s.ts.URL, Code: code, Name: "example-laptop", CA: s.cert.pem})
 	require.ErrorIs(t, err, ErrPaired)
 	require.Contains(t, err.Error(), first.DeviceID, "the refusal names the pairing that stands")
 	require.Equal(t, 1, s.relayUnusedCodes(t), "a refused pairing sends nothing")
 
 	// The server refuses a second device of the same name while the first is
 	// live, and the pairing that stands is untouched.
-	_, err = Pair(context.Background(), l.DataDir, PairOptions{Server: s.ts.URL, Code: code, Name: "example-laptop", CA: s.cert.pem, Replace: true})
+	_, err = Pair(context.Background(), l.DataDir, PairOptions{OwnerUID: relayTestOwner, Server: s.ts.URL, Code: code, Name: "example-laptop", CA: s.cert.pem, Replace: true})
 	require.ErrorIs(t, err, devices.ErrNameTaken)
 	kept, err := LoadState(l.DataDir)
 	require.NoError(t, err)
@@ -214,7 +220,7 @@ func TestRelayPair_ReplacesOnlyWhenAsked(t *testing.T) {
 	_, err = s.svc.Revoke(context.Background(), first.DeviceID, store.DeviceByConsole)
 	require.NoError(t, err)
 	// The same root, written another way, is another copy.
-	second, err := Pair(context.Background(), l.DataDir, PairOptions{Server: s.ts.URL, Code: s.relayCode(t), Name: "example-laptop",
+	second, err := Pair(context.Background(), l.DataDir, PairOptions{OwnerUID: relayTestOwner, Server: s.ts.URL, Code: s.relayCode(t), Name: "example-laptop",
 		CA: append(append([]byte{}, s.cert.pem...), '\n'), Replace: true})
 	require.NoError(t, err)
 	require.NotEqual(t, first.DeviceID, second.DeviceID)
@@ -238,7 +244,7 @@ func TestRelayPair_RefusesWhatItCannotUse(t *testing.T) {
 		"no certificate": {Server: s.ts.URL, Code: s.relayCode(t), CA: []byte("not a certificate")},
 		"a wrong code":   {Server: s.ts.URL, Code: "AAAA-BBBB-CCCC-DDDD", CA: s.cert.pem},
 	} {
-		o.Name = "example-laptop"
+		o.Name, o.OwnerUID = "example-laptop", relayTestOwner
 		_, err := Pair(context.Background(), l.DataDir, o)
 		require.Error(t, err, name)
 		_, lerr := LoadState(l.DataDir)
@@ -247,12 +253,18 @@ func TestRelayPair_RefusesWhatItCannotUse(t *testing.T) {
 		require.NoError(t, cerr)
 		require.Empty(t, cas, name)
 	}
-	_, err := Pair(context.Background(), l.DataDir, PairOptions{Server: s.ts.URL, Code: "AAAA-BBBB-CCCC-DDDD", Name: "example-laptop", CA: s.cert.pem})
+	_, err := Pair(context.Background(), l.DataDir, PairOptions{OwnerUID: relayTestOwner, Server: s.ts.URL, Code: "AAAA-BBBB-CCCC-DDDD", Name: "example-laptop", CA: s.cert.pem})
 	require.True(t, errors.Is(err, devices.ErrCodeRefused), "%v", err)
+	// A pairing that names no owner's uid is refused before anything is sent:
+	// the server would serve every caller of the relay as the owner.
+	before := s.relayUnusedCodes(t)
+	_, err = Pair(context.Background(), l.DataDir, PairOptions{Server: s.ts.URL, Code: s.relayCode(t), Name: "example-laptop", CA: s.cert.pem})
+	require.ErrorIs(t, err, devices.ErrNoOwnerUID)
+	require.Equal(t, before+1, s.relayUnusedCodes(t), "the code was never sent")
 	// Without the server's root the system's roots do not trust it, and the
 	// code is never sent.
-	before := s.relayUnusedCodes(t)
-	_, err = Pair(context.Background(), l.DataDir, PairOptions{Server: s.ts.URL, Code: s.relayCode(t), Name: "example-laptop"})
+	before = s.relayUnusedCodes(t)
+	_, err = Pair(context.Background(), l.DataDir, PairOptions{OwnerUID: relayTestOwner, Server: s.ts.URL, Code: s.relayCode(t), Name: "example-laptop"})
 	require.Error(t, err)
 	require.Equal(t, before+1, s.relayUnusedCodes(t))
 }

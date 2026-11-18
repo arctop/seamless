@@ -54,7 +54,24 @@ var (
 	// another computer, through a forwarded port) is this error too.
 	ErrPlainHTTP = errors.New("pairing with a server on another computer needs https: over plain http the code and this computer's key " +
 		"would cross the network in the clear. Give the server TLS, then pair with its https address")
+	// ErrServerTooOld is a server of an earlier release, which refuses the
+	// owner's uid a relay pairs with as a field it does not know (its
+	// pairing request admits none it does not know, and it judges no uid
+	// without peer_auth). It refused before it used the code; nothing was
+	// paired, and nothing is retried without the uid.
+	ErrServerTooOld = errors.New("the server runs an earlier release of seamlessd, which does not record the owner's uid a relay " +
+		"pairs with, so it refused the pairing before using the code: nothing was paired. Upgrade seamlessd on the server first, " +
+		"then pair again (the code stays good for the rest of its 10 minutes)")
+	// ErrNoOwnerUID is a relay pairing that names no owner's uid on this
+	// computer (PairRequest.OwnerUID).
+	ErrNoOwnerUID = errors.New("a relay pairs naming the owner's uid on this computer (the account the agents run as): " +
+		"without peer_auth the server serves that uid alone through the relay")
 )
+
+// oldServerRefusal is how a server of an earlier release words its refusal
+// of the owner's uid (decodePair there: reason input, from encoding/json's
+// DisallowUnknownFields).
+const oldServerRefusal = `unknown field "owner_uid"`
 
 // PairRequest is one pairing, as a device asks for it.
 type PairRequest struct {
@@ -65,6 +82,12 @@ type PairRequest struct {
 	Name string
 	// Relay is the relay's identity; nil pairs a key device.
 	Relay *RelayIdentity
+	// OwnerUID is, for a relay, the owner's uid on this computer: the
+	// account the owner's agents run as. Required for a relay (0 is root,
+	// never the owner), and recorded on the device: without peer_auth the
+	// server serves that uid alone through the relay. A key device names
+	// none.
+	OwnerUID uint32
 	// ServerFingerprint, when set, is the server certificate's fingerprint
 	// the owner compared (CertFingerprint): the code goes only over a
 	// connection whose certificate has it, on top of the usual verification.
@@ -115,6 +138,12 @@ func Pair(ctx context.Context, client *http.Client, serverURL string, req PairRe
 	if req.Relay != nil && base.Scheme != "https" {
 		return Paired{}, fmt.Errorf("%s: %w: the server's address must be https", op, ErrRelayNeedsCertificate)
 	}
+	switch {
+	case req.Relay != nil && req.OwnerUID == 0:
+		return Paired{}, fmt.Errorf("%s: %w", op, ErrNoOwnerUID)
+	case req.Relay == nil && req.OwnerUID != 0:
+		return Paired{}, fmt.Errorf("%s: %w", op, ErrKeyOwnerUID)
+	}
 	if base.Scheme == "http" && !loopbackHost(base.Hostname()) {
 		return Paired{}, fmt.Errorf("%s: %w", op, ErrPlainHTTP)
 	}
@@ -132,7 +161,8 @@ func Pair(ctx context.Context, client *http.Client, serverURL string, req PairRe
 	} else if want, err = SecretFingerprint(secret); err != nil {
 		return Paired{}, fmt.Errorf("%s: %w", op, err)
 	}
-	answer, serverFP, err := postPair(ctx, hc, base.String()+PairPath, pairRequest{Code: code, Kind: kind, Name: name, Secret: secret})
+	answer, serverFP, err := postPair(ctx, hc, base.String()+PairPath, pairRequest{Code: code, Kind: kind, Name: name, Secret: secret,
+		OwnerUID: req.OwnerUID})
 	var transport *transportError
 	if errors.As(err, &transport) {
 		// The request may have arrived and its answer been lost: the secret
@@ -147,6 +177,13 @@ func Pair(ctx context.Context, client *http.Client, serverURL string, req PairRe
 	}
 	if answer.Device.Fingerprint != want {
 		return Paired{}, fmt.Errorf("%s: the server shows fingerprint %s for this pairing, and this machine %s", op, answer.Device.Fingerprint, want)
+	}
+	if answer.Device.OwnerUID != req.OwnerUID {
+		// A server that took the pairing without the uid would serve every
+		// caller of this relay as the owner: never kept as a pairing.
+		return Paired{}, fmt.Errorf("%s: the server recorded owner uid %d for this pairing (device %s), and this relay named %d: "+
+			"revoke that device on the server's Devices page, upgrade seamlessd on the server, then pair again", op,
+			answer.Device.OwnerUID, answer.Device.ID, req.OwnerUID)
 	}
 	told := false
 	poll := req.Poll
@@ -364,6 +401,12 @@ func postPair(ctx context.Context, hc *http.Client, target string, body pairRequ
 			// is the server's ("this server refuses ..."), which under the
 			// generic wording below would read "refused ... refuses".
 			return PairAnswer{}, fp, ErrPlainHTTP
+		case "input":
+			if body.OwnerUID != 0 && strings.Contains(refused.Error, oldServerRefusal) {
+				// A server of an earlier release, refusing the field it does not
+				// know before it reads the code: the owner upgrades it first.
+				return PairAnswer{}, fp, ErrServerTooOld
+			}
 		}
 		return PairAnswer{}, fp, fmt.Errorf("the server refused the pairing (%s): %s", refused.Reason, refused.Error)
 	}

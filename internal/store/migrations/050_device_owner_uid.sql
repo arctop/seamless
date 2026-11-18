@@ -1,0 +1,35 @@
+-- A relay's pairing records the owner's uid on the relay's computer (plan
+-- networked-relay; owner decision R-D1, 2026-11-15): the uid of the account
+-- the owner's agents run as there, as `seamlessd relay pair --owner-uid` named
+-- it (the client setup prints that step with the number filled in). On a
+-- server without peer_auth, a request such a relay forwards for any other uid
+-- is refused at the device edge (devices.Service.Edge), so another account on
+-- the relay's computer is never served as the owner. Under peer_auth nothing
+-- changes: peer_auth.relays.<relay>.owner_uid judges, and doctor says when the
+-- two differ.
+--
+-- Additive only: one column on devices, with a default. Nothing is dropped,
+-- renamed or retyped, and no index changes. The previous release names its
+-- columns in every statement over devices, so it reads and writes a database
+-- this one migrated exactly as before, and its inserts take the default.
+-- Metadata about a paired computer only, about no project; no corpus content.
+--
+--   owner_uid  the owner's uid on the relay's computer, as the relay named it
+--              when it paired: 1 to 4294967295 (0 is root, which is never the
+--              owner, as peer_auth.relays says). 0 when none is recorded: a
+--              key device, every row from before this migration, and a
+--              pairing a relay of an earlier release made, which names none.
+--              Such a relay is served as before -- every caller it forwards
+--              is the owner -- and doctor and the Devices page say to pair it
+--              again.
+--
+-- RESTORE AND ROLLBACK. A restore keeps today's devices, this column with
+-- them (store.keptTables, over the columns both databases have). An update
+-- rollback to the previous release leaves the column in place, unread: that
+-- release serves every caller of a relay as the owner, as it always did.
+--
+-- ARCHIVE MERGE AND IMPORT. devices is never merged (internal/archive/merge.go).
+-- A fresh import migrates a snapshot from before this migration forward, so
+-- its devices read owner_uid 0, and then revokes every one of them
+-- (store.RevokeAllDevices): none is served until it pairs again here.
+ALTER TABLE devices ADD COLUMN owner_uid INTEGER NOT NULL DEFAULT 0 CHECK (owner_uid BETWEEN 0 AND 4294967295);

@@ -147,7 +147,7 @@ var viewExempt = map[string]string{
 	// Device pairing (plan networked-relay): the computers paired with this
 	// server and the one-time codes that pair them. The edge reads them
 	// before a request reaches any route, and they are about no project.
-	"devices":              "computers paired with this server (relays and key devices): a host name, a public key, key and secret hashes, an approver credential id and times, about no project; no corpus content",
+	"devices":              "computers paired with this server (relays and key devices): a host name, a public key, key and secret hashes, an approver credential id, a relay's owner's uid on its own computer (migration 050) and times, about no project; no corpus content",
 	"device_pairing_codes": "one-time pairing code hashes and their expiry and use, about no project; no corpus content",
 	// Repo locks (migration 047): a lock guards a repository's refs and
 	// belongs to no project, so the owner sees and force-releases every one

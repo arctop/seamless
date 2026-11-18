@@ -1616,7 +1616,7 @@ denied move answers <code>Denied R-7F3K: the agent stays in example-ops, and exa
 </ul>
 <h2 id="seamlessd_relay">seamlessd relay</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd relay serve <span class="o">[</span>--data-dir DIR<span class="o">]</span> <span class="o">[</span>--socket PATH<span class="o">]</span> <span class="o">[</span>--socket-mode MODE<span class="o">]</span> <span class="o">[</span>--socket-group GROUP<span class="o">]</span>
-</span></span><span class="line"><span class="cl">seamlessd relay pair --server URL --code CODE <span class="o">[</span>--fingerprint SHA256<span class="o">]</span> <span class="o">[</span>--ca-file FILE<span class="o">]</span> <span class="o">[</span>--name NAME<span class="o">]</span> <span class="o">[</span>--replace<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>--data-dir DIR<span class="o">]</span>
+</span></span><span class="line"><span class="cl">seamlessd relay pair --server URL --code CODE <span class="o">[</span>--owner-uid UID<span class="o">]</span> <span class="o">[</span>--fingerprint SHA256<span class="o">]</span> <span class="o">[</span>--ca-file FILE<span class="o">]</span> <span class="o">[</span>--name NAME<span class="o">]</span> <span class="o">[</span>--replace<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>--data-dir DIR<span class="o">]</span>
 </span></span></code></pre></div>
 <p>The relay serves the socket agents dial beside a peer_auth daemon and forwards
 each request to the paired server, so the computer holds no key. macOS and
@@ -1627,8 +1627,10 @@ account, and any layout another account could change.</p>
 0666. It refuses while unpaired, and answers 502 with the reason when the
 server is unreachable or presents another certificate, never from memory.
 Under peer_auth the server judges each uid once you map this relay in
-<code>peer_auth.relays</code>, and refuses it until then; without peer_auth every caller
-is you. Restrict the socket: <code>--socket-mode 0660 --socket-group _seamlessowner</code> (you and the relay's account), as <code>seamlessd setup</code> installs
+<code>peer_auth.relays</code>, and refuses it until then; without peer_auth the server
+serves the uid the pairing recorded as yours alone, and refuses every other
+(a relay paired by an earlier release recorded none, and every caller is
+you). Restrict the socket: <code>--socket-mode 0660 --socket-group _seamlessowner</code> (you and the relay's account), as <code>seamlessd setup</code> installs
 it.</li>
 <li><code>pair</code>: the code comes from the server's Devices page or <code>seamlessd devices code</code> (<code>--code -</code> reads it from stdin). <code>--fingerprint</code> makes sure the code
 goes only to that certificate; <code>--ca-file</code> names the root the server's
@@ -1636,9 +1638,16 @@ certificate chains to, copied into the data dir. Under peer_auth the pairing
 waits for your passkey on the Devices page, which shows the same key
 fingerprint. <code>--name</code> is the name the relay speaks for, which the Devices page
 shows and <code>peer_auth.relays</code> maps (this computer's host name by default).
-<code>--replace</code> pairs again after you revoked the old device;
-<code>--json</code> prints the public facts. Run it by its root-owned path,
-<code>/opt/seamless/bin/seamlessd</code>, with <code>--code -</code>, and paste the code.</li>
+<code>--owner-uid</code> is the uid of the account your agents run as on this computer
+(<code>id -u</code>), which the server records with the pairing: without peer_auth it
+serves that uid alone through the relay. It defaults to <code>SUDO_UID</code>, the
+account that ran <code>sudo -u</code>, and with neither the command refuses; uid 0 is
+refused (root is never the owner). A server of an earlier release refuses
+the pairing before it uses the code, and the command says to upgrade the
+server first. <code>--replace</code> pairs again after you revoked the old device;
+<code>--json</code> prints the public facts, the owner's uid among them. Run it by its
+root-owned path, <code>/opt/seamless/bin/seamlessd</code>, with <code>--code -</code>, and paste
+the code.</li>
 </ul>
 <p>Its data dir is <code>/opt/seamless/relay</code> (the relay's account, 0700; <code>--data-dir</code>
 names another): <code>relay.json</code> (0600) holds the pairing and the relay's key.

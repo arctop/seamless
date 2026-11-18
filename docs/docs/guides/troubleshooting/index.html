@@ -697,6 +697,16 @@ call or <code>seam</code> command carries the reason:</p>
 <td>an agent runs as <code>_seamless</code>, the account that holds the relay's key</td>
 <td>run agents as your own account</td>
 </tr>
+<tr>
+<td><code>forbidden: uid &lt;n&gt; on relay &lt;name&gt; is not the owner's uid there (&lt;uid&gt;, recorded when the relay paired)</code></td>
+<td>the Server runs without peer_auth, and an account on that computer other than the one the relay's pairing named reached it</td>
+<td>run the agent as your own account there; to give that account access of its own, turn peer_auth on and map it under the relay's <code>restricted</code> (<a href="../../guides/network-install/#who-a-relay-serves-without-peer-auth">who a relay serves</a>). A pairing that named the wrong uid pairs again with <code>--replace --owner-uid &lt;your uid there&gt;</code></td>
+</tr>
+<tr>
+<td><code>bad request: malformed relay attributes: relay &lt;name&gt; forwards its caller's ... and this one carries none</code></td>
+<td>a request came with the relay's certificate but named no caller: the relay itself forwards one with every request</td>
+<td>send it through the relay's socket</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -776,6 +786,14 @@ the computer.</p>
 <tr>
 <td><code>this relay is already paired with &lt;address&gt; as &lt;name&gt; (device &lt;id&gt;)</code></td>
 <td>revoke that device on the Devices page, then pair with <code>--replace</code></td>
+</tr>
+<tr>
+<td><code>--owner-uid is required</code></td>
+<td>name your uid on that computer, the account your agents run as: from your own shell, <code>sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair ... --owner-uid &quot;$(id -u)&quot; --code -</code> (setup's root step fills it in)</td>
+</tr>
+<tr>
+<td><code>the server runs an earlier release of seamlessd, which does not record the owner's uid a relay pairs with</code></td>
+<td>upgrade seamlessd on the Server first, then pair again: the Server refused before it used the code</td>
 </tr>
 <tr>
 <td><code>the relay runs as root</code>, <code>the relay runs as uid &lt;n&gt;, which is not a system account</code></td>

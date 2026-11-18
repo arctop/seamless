@@ -505,7 +505,10 @@ which shapes that account's reach as a mapping under <code>restricted</code> doe
 the same checks; an <code>exclude</code> that names a project that does not exist
 disables that account alone. New after v0.10.2: an earlier release refuses
 the mapping form when it loads. Any other uid is refused, and so is every
-request of an unmapped relay. Refused while <code>enabled</code> is false. File-only.</p>
+request of an unmapped relay. Refused while <code>enabled</code> is false. File-only.
+A relay's pairing also records the uid it named as yours there (<code>seamlessd relay pair --owner-uid</code>): <code>owner_uid</code> here is what judges, and doctor warns
+when the two differ. Without peer_auth the recorded uid alone is served
+through the relay (<a href="../../guides/network-install/#who-a-relay-serves-without-peer-auth">who a relay serves</a>).</p>
 </li>
 <li>
 <p><code>passkeys.rp_id</code> and <code>passkeys.origins</code> name the WebAuthn relying party of

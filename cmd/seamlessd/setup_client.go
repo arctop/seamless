@@ -508,11 +508,18 @@ func setupRelayStep(r *setupRun, st *setupState) error {
 		}
 	}
 	acc := r.client.accounts()
-	plan := clientRelayPlan{goos: r.goos, owner: r.client.owner(), server: st.pairServer, fingerprint: st.fingerprint, caPEM: caPEM,
+	plan := clientRelayPlan{goos: r.goos, owner: r.client.owner(), ownerUID: r.client.ownerUID(), server: st.pairServer,
+		fingerprint: st.fingerprint, caPEM: caPEM,
 		source: filepath.Join(setupInstallDir(r), "seamlessd"), sha256: st.binarySHA,
 		accountExists: acc.accountExists, groupExists: acc.groupExists, uid: acc.uid, gid: acc.gid, pinned: acc.pinned}
 	if why := plan.problem(); why != "" {
 		return setupRefusal("setup prints no root step from these values: %s. Run the installer again", why)
+	}
+	if plan.ownerUID <= 0 {
+		// The pairing records this uid as the owner's on this computer: root
+		// is never the owner, as peer_auth.relays says.
+		return setupRefusal("setup runs as root here, and the relay's pairing records the account it runs as for the owner's: " +
+			"run the installer as the account your agents run as")
 	}
 	fmt.Fprintln(r.out)
 	setupRow(r.out, "relay", setupText("the relay forwards your agents' requests to the {server}, naming each caller by the uid this computer's"))
@@ -540,8 +547,9 @@ func setupRelayStep(r *setupRun, st *setupState) error {
 	setupRow(r.out, "mapping", setupTextf("under locked projects (peer_auth), the {server} judges each caller this relay names once you map it, "+
 		"and refuses it until then: in its config (%s), then restart it:", setupPeerAuthConfig))
 	fmt.Fprintf(r.out, "%s  peer_auth.relays: {%s: {owner_uid: %d}}\n", setupRowCont, r.host, r.client.ownerUID())
-	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, dim("an account here that runs restricted agents joins "+clientRelayGroup+
-		" and gets a line of its own there, restricted: {<its name>: <its uid here>}; the relay's own account is refused as a caller"))
+	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, dim(setupText("on a {server} with peer_auth, an account here that runs restricted agents joins "+
+		clientRelayGroup+" and gets a line of its own there, restricted: {<its name>: <its uid here>}; without peer_auth the {server} "+
+		"serves your uid alone through this relay and refuses every other. The relay's own account is refused as a caller")))
 	if r.goos == "linux" {
 		fmt.Fprintf(r.out, "%s%s\n", setupRowCont, dim("log out and back in once: your agents join "+clientRelayGroup+" at your next login"))
 	}

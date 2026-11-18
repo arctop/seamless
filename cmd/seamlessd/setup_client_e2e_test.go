@@ -13,6 +13,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -98,7 +99,7 @@ func TestSetupClientE2E_RelayRootStepPairsAndServes(t *testing.T) {
 	require.Empty(t, cfg.MCP.APIKey, "a relay's Client holds no key")
 	require.Contains(t, out, "skipped (client of "+config.RelaySocketURL+")")
 	pair := "\n/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server " + srv.base + " --fingerprint " + fp +
-		" --ca-file " + clientRelayCAFile + " --code -\n"
+		" --ca-file " + clientRelayCAFile + " --owner-uid " + strconv.Itoa(os.Getuid()) + " --code -\n"
 	require.Contains(t, out, pair)
 	require.Contains(t, out, "code         the one you set in SEAMLESS_PAIR_CODE")
 	require.NotContains(t, out, code, "the code from the environment is not printed back")
@@ -119,7 +120,7 @@ func TestSetupClientE2E_RelayRootStepPairsAndServes(t *testing.T) {
 	// The root step's pairing and service, as the relay's account runs them.
 	l, env := relayCmdLayout(t)
 	require.NoError(t, relayPair(context.Background(), relayPairOptions{dataDir: l.DataDir, env: env,
-		pair: relay.PairOptions{Server: srv.base, Code: code, Name: "example-laptop", ServerFingerprint: fp, CA: []byte(ca)}},
+		pair: relay.PairOptions{OwnerUID: relayCmdOwner, Server: srv.base, Code: code, Name: "example-laptop", ServerFingerprint: fp, CA: []byte(ca)}},
 		&strings.Builder{}, &strings.Builder{}))
 	relayCmdStart(t, l, env)
 
