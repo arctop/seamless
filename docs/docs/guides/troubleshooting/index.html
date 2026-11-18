@@ -688,6 +688,11 @@ call or <code>seam</code> command carries the reason:</p>
 <td>run the agent as your own account there, or list that account under the relay's <code>restricted</code></td>
 </tr>
 <tr>
+<td><code>forbidden: uid &lt;n&gt; on relay &lt;name&gt;: its peer_auth.relays restricted entry is disabled until the owner corrects it</code></td>
+<td>that account's entry under the relay's <code>restricted</code> has an <code>exclude</code> naming a project that does not exist, so the Server refuses that account alone</td>
+<td>correct the slug (<code>seamlessd doctor</code> on the Server names it under <code>peer_auth.relays.restricted</code>) and restart the daemon (<a href="../../guides/peer-auth/#shaping-an-accounts-reach">how</a>)</td>
+</tr>
+<tr>
 <td><code>seamless relay: the caller runs as the relay's own account</code></td>
 <td>an agent runs as <code>_seamless</code>, the account that holds the relay's key</td>
 <td>run agents as your own account</td>

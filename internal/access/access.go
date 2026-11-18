@@ -165,6 +165,11 @@ type View struct {
 	// scope, read-only.
 	acct  Account
 	reach map[string]bool
+	// relayName is, for a restricted account on a relay's computer, the
+	// relay's enrolled name: the key of its entry in peer_auth.relays, under
+	// which its uid there finds its reach rule (View.rule). "" for every
+	// other view. who.Relay is the relay's device id, which names no entry.
+	relayName string
 }
 
 // Principal returns who the view speaks for.

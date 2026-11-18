@@ -76,8 +76,10 @@ type Policy struct {
 	// uid (restricted.go).
 	restricted map[uint32]Account
 	// rules is the shape of each restricted account's reach that has one (an
-	// exclude or only list), by uid; an account with no entry here has the
-	// plain reach. A relay's accounts never have one (RelayChainViewNamed).
+	// exclude or only list), by uid on this machine; an account with no entry
+	// here has the plain reach. A relay's accounts' rules are the relay's own
+	// (relayPolicy.rules): a uid there is another computer's, and may equal
+	// one of this machine's.
 	rules map[uint32]reachRule
 	// disabled is the restricted accounts serve refuses at the door: an entry
 	// whose exclude names a project that does not exist (WithDisabled).
@@ -89,10 +91,15 @@ type Policy struct {
 
 // relayPolicy is one mapped relay's computer: the owner's uid there, and the
 // restricted accounts there (peer_auth.relays' restricted), by uid, each
-// labeled with its name and the relay's (RelayAccountLabel).
+// labeled with its name and the relay's (RelayAccountLabel). rules and
+// disabled are what Policy.rules and Policy.disabled are for this machine's
+// accounts, keyed by the uid on that computer: so a rule is found by the
+// relay and the uid together, never by a uid alone.
 type relayPolicy struct {
 	owner      uint32
 	restricted map[uint32]Account
+	rules      map[uint32]reachRule
+	disabled   map[uint32]bool
 }
 
 // RelayAccountLabel is the label a restricted account on a relay's computer
@@ -146,8 +153,9 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 		if name == "" || name != strings.ToLower(strings.TrimSpace(name)) || strings.ContainsAny(name, "@:") || r.OwnerUID == 0 {
 			return nil, fmt.Errorf("%w: peer_auth.relays %q: a relay's enrolled name, and the owner's uid there (never root)", ErrInvalidPolicy, name)
 		}
-		rp := relayPolicy{owner: r.OwnerUID, restricted: map[uint32]Account{}}
-		for acct, uid := range r.Restricted {
+		rp := relayPolicy{owner: r.OwnerUID, restricted: map[uint32]Account{}, rules: map[uint32]reachRule{}}
+		for acct, e := range r.Restricted {
+			uid := e.UID
 			switch prev, dup := rp.restricted[uid]; {
 			case !validRelayAccount(acct):
 				return nil, fmt.Errorf("%w: peer_auth.relays %q restricted %q is not an OS account name", ErrInvalidPolicy, name, acct)
@@ -160,8 +168,14 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 			case dup:
 				return nil, fmt.Errorf("%w: peer_auth.relays %q restricted lists uid %d twice (%s and %s): name each account once",
 					ErrInvalidPolicy, name, uid, prev.Name, RelayAccountLabel(acct, name))
+			case wideningShape(e.Exclude, e.Only):
+				return nil, fmt.Errorf("%w: peer_auth.relays %q restricted %s: an entry sets exclude or only, never both, and an "+
+					"only list names a project", ErrInvalidPolicy, name, acct)
 			}
 			rp.restricted[uid] = Account{UID: uid, Name: RelayAccountLabel(acct, name)}
+			if e.Shaped() {
+				rp.rules[uid] = newReachRule(e.Exclude, e.Only)
+			}
 		}
 		p.relays[name] = rp
 	}
@@ -202,7 +216,7 @@ func New(cfg config.PeerAuth, resolve Resolver) (*Policy, error) {
 func (p *Policy) resolveRestricted(cfg config.PeerAuth, resolve Resolver) error {
 	for _, e := range cfg.Restricted {
 		name := e.Account
-		if len(e.Exclude) > 0 && len(e.Only) > 0 || e.Only != nil && len(e.Only) == 0 {
+		if wideningShape(e.Exclude, e.Only) {
 			return fmt.Errorf("%w: peer_auth.restricted %s: an entry sets exclude or only, never both, and an only list names a project",
 				ErrInvalidPolicy, name)
 		}
@@ -218,10 +232,17 @@ func (p *Policy) resolveRestricted(cfg config.PeerAuth, resolve Resolver) error 
 		}
 		p.restricted[acct.UID] = acct
 		if e.Shaped() {
-			p.rules[acct.UID] = newReachRule(e)
+			p.rules[acct.UID] = newReachRule(e.Exclude, e.Only)
 		}
 	}
 	return nil
+}
+
+// wideningShape reports the two shapes a config load refuses and whose breach
+// would widen an account: exclude and only together, and an only list that is
+// set and names nothing (which would read as the plain reach).
+func wideningShape(exclude, only []string) bool {
+	return len(exclude) > 0 && len(only) > 0 || only != nil && len(only) == 0
 }
 
 // Owner returns the owner account.
@@ -300,11 +321,12 @@ func (p *Policy) RelayChainView(relay, name string, uid uint32, chain []ProcessT
 // on a socket (Principal.Socket) a relay authenticated (Principal.Relay). A
 // uid the relay's restricted list names is that restricted account, labeled
 // with its name and the relay's (RelayAccountLabel), with no reach until the
-// transport fills it per request (WithReach), and no chain: like a
-// restricted account on this machine's socket, it holds no lease, grant or
-// request. ok is false for a relay the policy does not map and for any other
-// uid: such a request is refused before any route runs, never served as the
-// owner.
+// transport fills it per request (WithReach, under the rule its entry there
+// sets), and no chain: like a restricted account on this machine's socket, it
+// holds no lease, grant or request. ok is false for a relay the policy does
+// not map, for an account serve disabled (WithRelayDisabled) and for any
+// other uid: such a request is refused before any route runs, never served
+// as the owner.
 //
 // Every token of the owner's chain is the relay's (ProcessToken.Relay is set
 // here), so a lease, grant or request keyed on one of its processes names the
@@ -317,8 +339,11 @@ func (p *Policy) RelayChainViewNamed(relay, name string, uid uint32, chain []Pro
 		return View{}, false
 	}
 	if acct, ok := r.restricted[uid]; ok {
-		return View{policy: p, acct: acct, who: Principal{Kind: KindRestricted, UID: uid, HasUID: true, User: acct.Name,
-			Socket: true, Relay: relay}}, true
+		if r.disabled[uid] {
+			return View{}, false
+		}
+		return View{policy: p, acct: acct, relayName: name, who: Principal{Kind: KindRestricted, UID: uid, HasUID: true,
+			User: acct.Name, Socket: true, Relay: relay}}, true
 	}
 	if uid != r.owner {
 		return View{}, false

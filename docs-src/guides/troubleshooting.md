@@ -412,6 +412,7 @@ call or `seam` command carries the reason:
 | `forbidden: relay <name> is paired, but peer_auth.relays does not map it` | the Server runs peer_auth and refuses a relay you have not mapped | map it in the daemon's config, by the name the Devices page shows, then restart the daemon ([how](/guides/peer-auth/#agents-on-another-computer-relays)) |
 | `forbidden: relay <name> was paired with a one-time code alone, before peer_auth` | the Server maps it in `peer_auth.relays`, and no passkey ever approved it | revoke it, pair it again, and approve it with your passkey |
 | `forbidden: uid <n> on relay <name> is neither the owner nor a restricted account peer_auth.relays maps there` | another account on that computer, through a relay the Server maps | run the agent as your own account there, or list that account under the relay's `restricted` |
+| `forbidden: uid <n> on relay <name>: its peer_auth.relays restricted entry is disabled until the owner corrects it` | that account's entry under the relay's `restricted` has an `exclude` naming a project that does not exist, so the Server refuses that account alone | correct the slug (`seamlessd doctor` on the Server names it under `peer_auth.relays.restricted`) and restart the daemon ([how](/guides/peer-auth/#shaping-an-accounts-reach)) |
 | `seamless relay: the caller runs as the relay's own account` | an agent runs as `_seamless`, the account that holds the relay's key | run agents as your own account |
 
 With no answer at all, nothing serves the socket: `relay.socket` says the relay

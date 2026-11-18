@@ -124,7 +124,13 @@ type PeerRelay struct {
 	// read another computer's account names, so each is named here; a uid
 	// listed nowhere is refused. Optional; never root (0), never owner_uid,
 	// no uid twice, no name with '@'. File only (no env).
-	Restricted map[string]uint32 `yaml:"restricted"`
+	//
+	// A value may also be a mapping that shapes the account's reach, as an
+	// entry of peer_auth.restricted may: {uid, exclude: [...]} leaves those
+	// projects out, and {uid, only: [...]} reaches only those -- any number
+	// of open projects, or one confidential or sealed project on its own
+	// (RelayRestricted).
+	Restricted map[string]RelayRestricted `yaml:"restricted"`
 }
 
 // PeerPasskeys is the WebAuthn relying party of the approver passkeys. A
@@ -205,8 +211,8 @@ func (s PeerSocket) SocketFileMode() (uint32, error) {
 }
 
 // ReferencedProjects returns every project slug the block names -- the
-// force-locked projects and every restricted entry's exclude and only --
-// sorted and de-duplicated.
+// force-locked projects and every restricted entry's exclude and only, a
+// relay's restricted accounts' included -- sorted and de-duplicated.
 func (p PeerAuth) ReferencedProjects() []string {
 	var out []string
 	add := func(slugs []string) {
@@ -220,6 +226,12 @@ func (p PeerAuth) ReferencedProjects() []string {
 	for _, e := range p.Restricted {
 		add(e.Exclude)
 		add(e.Only)
+	}
+	for _, r := range p.Relays {
+		for _, e := range r.Restricted {
+			add(e.Exclude)
+			add(e.Only)
+		}
 	}
 	slices.Sort(out)
 	return out
@@ -586,12 +598,14 @@ func validatePeerRelays(p PeerAuth) error {
 // validateRelayRestricted is one relay's restricted map's shape: every name an
 // OS account name with no '@' (its label is "<name>@<relay>"), every uid
 // neither root's -- root on that computer reads the relay's key, so it could
-// forward any uid -- nor the owner's there, and no uid twice. Whether the
-// account exists there is that computer's to know.
+// forward any uid -- nor the owner's there, no uid twice, and each exclude or
+// only list valid (validateReachShape, the rules of a peer_auth.restricted
+// entry). Whether the account exists there is that computer's to know.
 func validateRelayRestricted(relay string, r PeerRelay) error {
 	seen := map[uint32]string{}
 	for _, name := range slices.Sorted(maps.Keys(r.Restricted)) {
-		uid := r.Restricted[name]
+		e := r.Restricted[name]
+		uid := e.UID
 		if err := validateAccount(fmt.Sprintf("peer_auth.relays %q restricted entry", relay), name); err != nil {
 			return err
 		}
@@ -609,6 +623,9 @@ func validateRelayRestricted(relay string, r PeerRelay) error {
 				relay, uid, prev, name)
 		}
 		seen[uid] = name
+		if err := validateReachShape(fmt.Sprintf("peer_auth.relays %q restricted %q", relay, name), e.Exclude, e.Only); err != nil {
+			return err
+		}
 	}
 	return nil
 }

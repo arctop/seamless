@@ -302,9 +302,11 @@ any of it.
   project alone. KEEP THE INVARIANT: a reach holding a fenced project holds
   nothing else -- that is why clearance never judges a restricted account, and
   a mixed reach needs clearance first. The rule lives in `WithReach` only, keyed
-  on this socket's uid (a relay's account never has a rule); an `exclude` slug
-  that names no project disables that entry at serve start
-  (`applyRestrictedReach`, `Policy.WithDisabled`), never the daemon. Shaped
+  on this socket's uid, or for a relay's account on the relay's enrolled name
+  and its uid there (`View.rule`; a uid there may equal one here); an
+  `exclude` slug that names no project disables that entry at serve start
+  (`applyRestrictedReach`, `Policy.WithDisabled`, `Policy.WithRelayDisabled`),
+  never the daemon. Shaped
   entries read the neutral texts (`access.ReachShaped`), bare ones today's
   word for word. It
   reads and writes those, reads global, and nothing else: one refusal text for
@@ -998,7 +1000,8 @@ any of it.
   (`approval.programNamer`); no request is filed for a v1 relay's process or an
   anchor its relay did not name (`approval.ErrRelayUnnamed`). The approve core
   refuses a stored relay row with no program in `prove`, so grants and moves are
-  covered too. A relay's restricted map (`PeerRelay.Restricted`) makes a uid
+  covered too. A relay's restricted map (`PeerRelay.Restricted`, each value a
+  uid or a `config.RelayRestricted` shape) makes a uid
   there `KindRestricted`, labeled `access.RelayAccountLabel`, and the approve
   core refuses a stored relay row with
   no program. A relay's chain counts as an agent's (`FromAgent`).

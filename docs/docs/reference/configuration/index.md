@@ -223,16 +223,22 @@ behavior of every earlier release. The guide is
   project but those, and `{account: <name>, only: [<slug>, ...]}` reaches only
   those - any number of open projects, or one confidential or sealed project on
   its own, which the account then reads and writes. `exclude` and `only` never
-  appear together, and an unknown key is refused with its name and line. An
-  `exclude` that names a project that does not exist disables that entry alone
-  (serve starts, refuses that account, and doctor fails the row). New after
-  v0.8.5: an earlier release refuses the mapping form when it loads. The
-  restricted accounts a relay maps keep the plain reach.
+  appear together, and an unknown key, or a key given twice, is refused with
+  its name and line. An `exclude` that names a project that does not exist
+  disables that entry alone (serve starts, refuses that account, and doctor
+  fails the row). New after v0.8.5: an earlier release refuses the mapping
+  form when it loads. A relay's restricted accounts take the same shapes
+  (`relays` below).
 - `relays` maps paired relays ([the guide](https://thereisnospoon.org/docs/guides/peer-auth/#agents-on-another-computer-relays)):
   each relay's name as the Devices page shows it, to `owner_uid`, your uid on
   that computer. Through a mapped relay that uid is you, judged as the socket
   is. An optional `restricted: {<name>: <uid>}` names that computer's restricted
-  accounts, labeled `<name>@<relay>`. Any other uid is refused, and so is every
+  accounts, labeled `<name>@<relay>`. A value there may instead be a mapping,
+  `{uid: <uid>, exclude: [<slug>, ...]}` or `{uid: <uid>, only: [<slug>, ...]}`,
+  which shapes that account's reach as a mapping under `restricted` does, with
+  the same checks; an `exclude` that names a project that does not exist
+  disables that account alone. New after v0.10.2: an earlier release refuses
+  the mapping form when it loads. Any other uid is refused, and so is every
   request of an unmapped relay. Refused while `enabled` is false. File-only.
 - `passkeys.rp_id` and `passkeys.origins` name the WebAuthn relying party of
   the owner's approver passkeys ([seamlessd approvers](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_approvers)).
@@ -434,7 +440,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `peer_auth.passkeys.origins` | []string | - |
 | `peer_auth.users` | map of string to any | - |
 | `peer_auth.restricted` | []config.RestrictedAccount | - |
-| `peer_auth.relays` | map of string to {owner_uid uint32, restricted map of string to uint32} | - |
+| `peer_auth.relays` | map of string to {owner_uid uint32, restricted map of string to {}} | - |
 | `isolation.requests` | bool | - |
 
 ## Annotated example
@@ -1042,6 +1048,14 @@ update:
 #   # name (as the Devices page shows it) to your uid on that computer
 #   # (owner_uid, never 0), and optionally its restricted accounts there
 #   # (restricted: {<account name>: <uid there>}, labeled <name>@<relay>).
+#   # An account there may instead shape its reach as an entry of restricted
+#   # does (an earlier release than the one that added this refuses the form
+#   # at load):
+#   #   example-laptop:
+#   #     owner_uid: 501
+#   #     restricted:
+#   #       _example_agent: 502
+#   #       _example_desk: {uid: 503, only: [example-desk]}
 #   # Any other uid there is refused, and so is every request of a relay not
 #   # listed. Refused while peer_auth is disabled. File only (no env).
 #   relays: {}

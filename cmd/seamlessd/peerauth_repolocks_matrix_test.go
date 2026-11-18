@@ -12,8 +12,8 @@ package main
 //     may write; outside that reach the lock reads exactly like a missing one,
 //     by list, by id, by checkout and through a declaration. Its declaration
 //     waits for the owner.
-//   - A relay's restricted account is judged the same way, with the open-only
-//     reach decision B-D11 keeps it to.
+//   - A relay's restricted account is judged the same way, within the reach
+//     its entry there gives it (here a plain entry: the open projects).
 
 import (
 	"context"

@@ -59,23 +59,30 @@ func peerAuthChecks(ctx context.Context, cfg config.Config, db *sql.DB, env peer
 	for _, e := range policy.RestrictedEntries() {
 		row, rerr := restrictedRow(ctx, db, policy, e)
 		if rerr != nil {
-			out = append(out, check{statusFail, "peer_auth.restricted", "projects: " + rerr.Error()})
+			out = append(out, check{statusFail, restrictedCheckName, "projects: " + rerr.Error()})
 			continue
 		}
 		out = append(out, row)
 	}
+	// A relay's restricted accounts that shape their reach: one row each. The
+	// plain ones are named in the relay's own row (relayMappingChecks).
+	relayRows, rerr := relayRestrictedRows(ctx, db, policy)
+	out = append(out, relayRows...)
+	if rerr != nil {
+		out = append(out, check{statusFail, relayRestrictedCheckName, "projects: " + rerr.Error()})
+	}
 	if db != nil {
 		findings, ferr := restrictedReachFindings(ctx, db, policy)
 		if ferr != nil {
-			out = append(out, check{statusFail, "peer_auth.restricted", "projects: " + ferr.Error()})
+			out = append(out, check{statusFail, restrictedCheckName, "projects: " + ferr.Error()})
 		}
 		for _, f := range findings {
-			out = append(out, check{f.status, "peer_auth.restricted", f.text})
+			out = append(out, check{f.status, reachCheckName(f.relay), f.text})
 		}
 	}
 	rt := &peerAuthRuntime{policy: policy, cfg: pa, env: env}
 	for _, w := range rt.restrictedReachWarnings() {
-		out = append(out, check{statusWarn, "peer_auth.restricted", w})
+		out = append(out, check{statusWarn, restrictedCheckName, w})
 	}
 	if row, ok := rt.daemonAccountRow(); ok {
 		out = append(out, row)
@@ -164,9 +171,11 @@ func approverCheck(ctx context.Context, db *sql.DB, goos string) check {
 // cannot traverse), or a directory on the way to it that other accounts cannot
 // search. They are warnings, not preflight failures -- a socket group the
 // account belongs to can open a 0750 directory, and the owner may add the
-// account to it later -- and they say nothing while no account is restricted.
+// account to it later -- and they say nothing while no account on this machine
+// is restricted. A relay's restricted accounts never dial this socket: their
+// relay forwards them over the TCP listener.
 func (rt *peerAuthRuntime) restrictedReachWarnings() []string {
-	if !rt.policy.HasRestricted() {
+	if len(rt.policy.RestrictedAccounts()) == 0 {
 		return nil
 	}
 	var out []string

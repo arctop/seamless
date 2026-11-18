@@ -543,10 +543,11 @@ type peerLeases struct {
 	// read grants (isolation.requests) under peer_auth are keyed on it.
 	chains bool
 	// reach loads the projects a restricted account's reach is drawn from for
-	// one request (store.ReachProjects): the open ones, and the confidential
-	// or sealed ones a single-project only entry may name. The View applies
-	// the account's rule and drops the locked ones. Nil loads none, so such an
-	// account reaches only the global scope, read-only.
+	// one request (store.ReachProjects), on this socket or through a relay:
+	// the open ones, and the confidential or sealed ones a single-project
+	// only entry may name. The View applies the account's rule and drops the
+	// locked ones. Nil loads none, so such an account reaches only the global
+	// scope, read-only.
 	reach func(ctx context.Context) (store.RestrictedReachStates, error)
 }
 
@@ -702,8 +703,20 @@ func (rt *peerAuthRuntime) logPolicy(logger *slog.Logger) {
 	}
 	for _, name := range slices.Sorted(maps.Keys(rt.cfg.Relays)) {
 		logger.Info("peer_auth relay mapped", "relay", name, "owner_uid", rt.cfg.Relays[name].OwnerUID)
-		for _, a := range rt.policy.RelayRestrictedAccounts(name) {
-			logger.Info("peer_auth relay restricted account", "relay", name, "user", a.Name, "uid", a.UID)
+		for _, e := range rt.policy.RelayRestrictedEntries(name) {
+			attrs := []any{"relay", name, "user", e.Account.Name, "uid", e.Account.UID}
+			if len(e.Exclude) > 0 {
+				attrs = append(attrs, "exclude", strings.Join(e.Exclude, ","))
+			}
+			if len(e.Only) > 0 {
+				attrs = append(attrs, "only", strings.Join(e.Only, ","))
+			}
+			if e.Disabled {
+				logger.Error("peer_auth relay restricted account disabled: its exclude names a project that does not exist, so "+
+					"serve refuses it until the entry is corrected (seamlessd doctor names it)", attrs...)
+				continue
+			}
+			logger.Info("peer_auth relay restricted account", attrs...)
 		}
 	}
 	switch pin, pinned, err := rt.env.daemonPin(); {

@@ -210,7 +210,10 @@ type relayvDaemon struct {
 	finMem, openMem string // the planted memories' names
 }
 
-func newRelayvDaemon(t *testing.T) *relayvDaemon {
+// newRelayvDaemon builds the matrix's daemon. Each tweak may change the
+// peer_auth block (a relay's restricted accounts, say) before it is validated
+// and resolved; the projects and the routes are the same either way.
+func newRelayvDaemon(t *testing.T, tweaks ...func(*config.PeerAuth)) *relayvDaemon {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -231,8 +234,11 @@ func newRelayvDaemon(t *testing.T) *relayvDaemon {
 		Socket:      config.PeerSocket{Path: "/opt/seamless/run/seamlessd.sock"},
 		ForceLocked: []string{relayvFin},
 		Relays: map[string]config.PeerRelay{
-			relayvLaptop: {OwnerUID: relayvOwnerUID, Restricted: map[string]uint32{"example-agent": relay2RestrictedUID}},
+			relayvLaptop: {OwnerUID: relayvOwnerUID, Restricted: config.BareRelayRestricted(map[string]uint32{"example-agent": relay2RestrictedUID})},
 			relayvDesk:   {OwnerUID: relayvOwnerUID}, relayvOld: {OwnerUID: relayvOwnerUID}},
+	}
+	for _, tweak := range tweaks {
+		tweak(&cfg.PeerAuth)
 	}
 	require.NoError(t, cfg.Validate())
 	policy, err := access.New(cfg.PeerAuth, func(name string) (access.Account, error) {

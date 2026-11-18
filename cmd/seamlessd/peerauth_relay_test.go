@@ -176,7 +176,7 @@ func TestRelayMappingChecks_V2NameTheRestrictedAccounts(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Addr = "0.0.0.0:8081"
 	cfg.PeerAuth = config.PeerAuth{Enabled: true, Owner: "owner", Socket: config.PeerSocket{Path: "/opt/seamless/run/s.sock"},
-		Relays: map[string]config.PeerRelay{relayvLaptop: {OwnerUID: 501, Restricted: map[string]uint32{"example-ci": 503, "_example_agent": 480}}}}
+		Relays: map[string]config.PeerRelay{relayvLaptop: {OwnerUID: 501, Restricted: config.BareRelayRestricted(map[string]uint32{"example-ci": 503, "_example_agent": 480})}}}
 	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })

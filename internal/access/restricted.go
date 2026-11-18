@@ -6,8 +6,6 @@ import (
 	"maps"
 	"slices"
 	"strings"
-
-	"github.com/arctop/seamless/internal/config"
 )
 
 // Restricted local accounts (peer_auth.restricted, 2026-11-07).
@@ -44,7 +42,10 @@ import (
 // uid on the relay's socket, the mapping names the account, and its label --
 // on every write, and as its session namespace -- is "<name>@<relay>"
 // (RelayAccountLabel), the account and the host, so no two computers'
-// accounts share one.
+// accounts share one. Its entry there may shape its reach with the same
+// exclude and only, under the same rule and the same invariant; its rule is
+// found by the relay and the uid together (View.rule), since a uid there is
+// another computer's and may equal one of this machine's.
 //
 // It files no access requests (View.Locked is the owner's alone), gets no read
 // grants (JudgeGrants keeps owner grants only) and holds no leases
@@ -60,15 +61,15 @@ type reachRule struct {
 	only    []string
 }
 
-func newReachRule(e config.RestrictedAccount) reachRule {
+func newReachRule(exclude, only []string) reachRule {
 	r := reachRule{}
-	if len(e.Exclude) > 0 {
-		r.exclude = make(map[string]bool, len(e.Exclude))
-		for _, slug := range e.Exclude {
+	if len(exclude) > 0 {
+		r.exclude = make(map[string]bool, len(exclude))
+		for _, slug := range exclude {
 			r.exclude[strings.TrimSpace(slug)] = true
 		}
 	}
-	for _, slug := range e.Only {
+	for _, slug := range only {
 		if s := strings.TrimSpace(slug); !slices.Contains(r.only, s) {
 			r.only = append(r.only, s)
 		}
@@ -80,14 +81,25 @@ func newReachRule(e config.RestrictedAccount) reachRule {
 // shaped reports whether the rule is an exclude or only rule.
 func (r reachRule) shaped() bool { return len(r.exclude) > 0 || len(r.only) > 0 }
 
-// rule is the reach rule of the restricted account v speaks for. A restricted
-// account on a relay's computer has none (decision B-D11): its uid is that
-// computer's, and may equal one this machine's config shapes.
-func (v View) rule() reachRule {
-	if v.policy == nil || v.who.Kind != KindRestricted || v.who.Relay != "" {
-		return reachRule{}
+// rule is the reach rule of the restricted account v speaks for, and whether
+// the policy holds that account at all. An account on this machine is found by
+// its uid; one on a relay's computer by the relay's enrolled name and its uid
+// there, in that relay's own entry: its uid is that computer's, and may equal
+// one this machine's config shapes, or another relay's. known is false for a
+// view the policy never built -- no policy, or a relay's account its relay's
+// entry does not list -- which WithReach then gives no project.
+func (v View) rule() (rule reachRule, known bool) {
+	if v.policy == nil || v.who.Kind != KindRestricted {
+		return reachRule{}, false
 	}
-	return v.policy.rules[v.who.UID]
+	if v.who.Relay == "" {
+		return v.policy.rules[v.who.UID], true
+	}
+	r, mapped := v.policy.relays[v.relayName]
+	if _, listed := r.restricted[v.who.UID]; !mapped || !listed {
+		return reachRule{}, false
+	}
+	return r.rules[v.who.UID], true
 }
 
 // WithOpenProjects is WithReach with no fenced project: the reach of a view
@@ -108,7 +120,10 @@ func (v View) WithReach(open, fenced []string) View {
 	}
 	reach := map[string]bool{}
 	keep := func(slug string) bool { return slug != "" && v.policy != nil && !v.policy.ownerLocked[slug] }
-	switch rule := v.rule(); {
+	rule, known := v.rule()
+	switch {
+	case !known:
+		// No entry to read a rule from: nothing is reached.
 	case len(rule.only) == 1:
 		if d := rule.only[0]; keep(d) && (slices.Contains(open, d) || slices.Contains(fenced, d)) {
 			reach[d] = true
@@ -134,7 +149,10 @@ func (v View) WithReach(open, fenced []string) View {
 // reach (exclude or only): its texts then name the projects project_list
 // shows, never "open projects" (decision B-D9). A plain entry's texts are
 // today's, word for word.
-func (v View) ReachShaped() bool { return v.rule().shaped() }
+func (v View) ReachShaped() bool {
+	rule, _ := v.rule()
+	return rule.shaped()
+}
 
 // ReachShaped is View.ReachShaped for the View in ctx.
 func ReachShaped(ctx context.Context) bool {
@@ -323,14 +341,27 @@ func (p *Policy) HasRestricted() bool {
 	return false
 }
 
-// RestrictedEntry is one restricted account on this machine as the policy
-// holds it, for doctor and the startup log: the account, its entry's shape,
-// and whether serve refuses it (WithDisabled).
+// RestrictedEntry is one restricted account as the policy holds it, for doctor
+// and the startup log: the account, its entry's shape, and whether serve
+// refuses it (WithDisabled, WithRelayDisabled). Relay is "" for an account on
+// this machine (peer_auth.restricted) and, for one on a relay's computer
+// (peer_auth.relays' restricted), the relay's enrolled name; Account.Name is
+// then its label (RelayAccountLabel) and Account.UID its uid there.
 type RestrictedEntry struct {
 	Account  Account
+	Relay    string
 	Exclude  []string // sorted
 	Only     []string // sorted
 	Disabled bool
+}
+
+// NameThere is the account's name on its own computer: Account.Name for an
+// account on this machine, and the name before "@<relay>" for a relay's.
+func (e RestrictedEntry) NameThere() string {
+	if e.Relay == "" {
+		return e.Account.Name
+	}
+	return strings.TrimSuffix(e.Account.Name, "@"+e.Relay)
 }
 
 // Shaped reports whether the entry narrows or names its reach.
@@ -342,12 +373,31 @@ func (p *Policy) RestrictedEntries() []RestrictedEntry {
 	accts := p.RestrictedAccounts()
 	out := make([]RestrictedEntry, 0, len(accts))
 	for _, a := range accts {
-		rule := p.rules[a.UID]
-		e := RestrictedEntry{Account: a, Only: slices.Clone(rule.only), Disabled: p.disabled[a.UID]}
-		if len(rule.exclude) > 0 {
-			e.Exclude = slices.Sorted(maps.Keys(rule.exclude))
-		}
-		out = append(out, e)
+		out = append(out, restrictedEntry(a, "", p.rules[a.UID], p.disabled[a.UID]))
+	}
+	return out
+}
+
+func restrictedEntry(a Account, relay string, rule reachRule, disabled bool) RestrictedEntry {
+	e := RestrictedEntry{Account: a, Relay: relay, Only: slices.Clone(rule.only), Disabled: disabled}
+	if len(rule.exclude) > 0 {
+		e.Exclude = slices.Sorted(maps.Keys(rule.exclude))
+	}
+	return e
+}
+
+// Relays returns the enrolled names of the relays peer_auth.relays maps,
+// sorted.
+func (p *Policy) Relays() []string { return slices.Sorted(maps.Keys(p.relays)) }
+
+// RelayRestrictedEntries returns the restricted accounts peer_auth.relays
+// maps on the relay enrolled as name, by uid there, each with its shape.
+func (p *Policy) RelayRestrictedEntries(name string) []RestrictedEntry {
+	r := p.relays[name]
+	accts := p.RelayRestrictedAccounts(name)
+	out := make([]RestrictedEntry, 0, len(accts))
+	for _, a := range accts {
+		out = append(out, restrictedEntry(a, name, r.rules[a.UID], r.disabled[a.UID]))
 	}
 	return out
 }
@@ -361,6 +411,22 @@ func (p *Policy) ReachOf(uid uint32, open, fenced []string) []string {
 		return nil
 	}
 	v := View{policy: p, acct: acct, who: Principal{Kind: KindRestricted, UID: uid, HasUID: true, User: acct.Name, Socket: true}}
+	reach, _ := v.WithReach(open, fenced).Allowed()
+	return reach
+}
+
+// RelayReachOf is ReachOf for a restricted account on the computer of the
+// relay enrolled as name: the reach its entry there would give uid, sorted;
+// nil for a relay or a uid the policy does not hold.
+func (p *Policy) RelayReachOf(name string, uid uint32, open, fenced []string) []string {
+	acct, ok := p.relays[name].restricted[uid]
+	if !ok {
+		return nil
+	}
+	// The device id only marks the view as a relay's: the rule is found by
+	// the enrolled name.
+	v := View{policy: p, acct: acct, relayName: name, who: Principal{Kind: KindRestricted, UID: uid, HasUID: true,
+		User: acct.Name, Socket: true, Relay: name}}
 	reach, _ := v.WithReach(open, fenced).Allowed()
 	return reach
 }
@@ -385,6 +451,37 @@ func (p *Policy) WithDisabled(uids []uint32) *Policy {
 // RestrictedDisabled reports whether serve refuses the restricted account uid
 // at the door (WithDisabled).
 func (p *Policy) RestrictedDisabled(uid uint32) bool { return p.disabled[uid] }
+
+// WithRelayDisabled is WithDisabled for the restricted accounts uids names on
+// the computer of the relay enrolled as name: a copy of p that refuses them
+// (RelayChainViewNamed), as serve does for an entry there whose exclude names
+// a project that does not exist. A uid that relay's entry does not list is
+// ignored, and no other relay's account of the same uid is touched.
+func (p *Policy) WithRelayDisabled(name string, uids []uint32) *Policy {
+	out := *p
+	r, mapped := p.relays[name]
+	if !mapped {
+		return &out
+	}
+	disabled := make(map[uint32]bool, len(r.disabled)+len(uids))
+	maps.Copy(disabled, r.disabled)
+	for _, uid := range uids {
+		if _, ok := r.restricted[uid]; ok {
+			disabled[uid] = true
+		}
+	}
+	r.disabled = disabled
+	out.relays = maps.Clone(p.relays)
+	out.relays[name] = r
+	return &out
+}
+
+// RelayRestrictedDisabled reports whether serve refuses the restricted
+// account uid on the computer of the relay enrolled as name
+// (WithRelayDisabled).
+func (p *Policy) RelayRestrictedDisabled(name string, uid uint32) bool {
+	return p.relays[name].disabled[uid]
+}
 
 // RestrictedAccounts returns the restricted accounts, by uid, for doctor and
 // the startup log.

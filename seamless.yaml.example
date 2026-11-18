@@ -598,6 +598,14 @@ update:
 #   # name (as the Devices page shows it) to your uid on that computer
 #   # (owner_uid, never 0), and optionally its restricted accounts there
 #   # (restricted: {<account name>: <uid there>}, labeled <name>@<relay>).
+#   # An account there may instead shape its reach as an entry of restricted
+#   # does (an earlier release than the one that added this refuses the form
+#   # at load):
+#   #   example-laptop:
+#   #     owner_uid: 501
+#   #     restricted:
+#   #       _example_agent: 502
+#   #       _example_desk: {uid: 503, only: [example-desk]}
 #   # Any other uid there is refused, and so is every request of a relay not
 #   # listed. Refused while peer_auth is disabled. File only (no env).
 #   relays: {}

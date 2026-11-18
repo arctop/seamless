@@ -213,14 +213,16 @@ func TestRestricted_ShapedTexts(t *testing.T) {
 	require.False(t, ReachShaped(WithView(context.Background(), p.OwnerView())))
 }
 
-// A relay's restricted account has no shape (B-D11) even when its uid there
-// is one this machine's config shapes: the rule is this socket's alone.
+// A relay's plain restricted account has no shape even when its uid there is
+// one this machine's config shapes: a rule under peer_auth.restricted is this
+// socket's alone, and a relay's account reads its own entry
+// (relay_reach_shapes_test.go).
 func TestRestricted_RelayAccountHasNoShape(t *testing.T) {
 	p, err := New(config.PeerAuth{
 		Enabled: true, Owner: "owner",
 		Restricted: []config.RestrictedAccount{{Account: "_example_desk", Only: []string{rsDesk}}},
 		Relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 700,
-			Restricted: map[string]uint32{"helper": rsAccounts["_example_desk"].UID}}},
+			Restricted: config.BareRelayRestricted(map[string]uint32{"helper": rsAccounts["_example_desk"].UID})}},
 	}, func(n string) (Account, error) {
 		if a, ok := rsAccounts[n]; ok {
 			return a, nil

@@ -55,6 +55,16 @@ func TestPeerAuth_RestrictedShapes(t *testing.T) {
 		{"a mistyped only", entry("    - account: _example_agent\n      onyl: [example-desk]\n"), `unknown key "onyl"`},
 		{"exclude with only", entry("    - account: _example_agent\n      exclude: [example-vault]\n      only: [example-ops]\n"),
 			"sets both exclude and only"},
+		// A key twice: the decoder's own refusal of a repeated key never sees a
+		// node a custom UnmarshalYAML reads, so without the explicit check the
+		// second exclude replaced the first and the first's projects were
+		// reached; a second account renamed the entry.
+		{"exclude twice", entry("    - account: _example_agent\n      exclude: [example-vault]\n      exclude: [example-pipeline]\n"),
+			"(line 11) sets exclude twice (first on line 10)"},
+		{"only twice", entry("    - account: _example_agent\n      only: [example-vault]\n      only: [example-vault, example-ops]\n"),
+			"sets only twice"},
+		{"account twice", entry("    - account: _example_agent\n      account: _example_other\n      only: [example-desk]\n"),
+			"sets account twice"},
 		{"an empty only", entry("    - account: _example_agent\n      only: []\n"), "only is empty"},
 		{"an empty exclude", entry("    - account: _example_agent\n      exclude: []\n"), "exclude is empty"},
 		{"only as a scalar", entry("    - account: _example_agent\n      only: example-desk\n"), "only is a list of project slugs"},

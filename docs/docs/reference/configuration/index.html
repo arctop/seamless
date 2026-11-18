@@ -487,18 +487,24 @@ Refused while <code>enabled</code> is false, and for the owner. File-only.</p>
 project but those, and <code>{account: &lt;name&gt;, only: [&lt;slug&gt;, ...]}</code> reaches only
 those - any number of open projects, or one confidential or sealed project on
 its own, which the account then reads and writes. <code>exclude</code> and <code>only</code> never
-appear together, and an unknown key is refused with its name and line. An
-<code>exclude</code> that names a project that does not exist disables that entry alone
-(serve starts, refuses that account, and doctor fails the row). New after
-v0.8.5: an earlier release refuses the mapping form when it loads. The
-restricted accounts a relay maps keep the plain reach.</p>
+appear together, and an unknown key, or a key given twice, is refused with
+its name and line. An <code>exclude</code> that names a project that does not exist
+disables that entry alone (serve starts, refuses that account, and doctor
+fails the row). New after v0.8.5: an earlier release refuses the mapping
+form when it loads. A relay's restricted accounts take the same shapes
+(<code>relays</code> below).</p>
 </li>
 <li>
 <p><code>relays</code> maps paired relays (<a href="../../guides/peer-auth/#agents-on-another-computer-relays">the guide</a>):
 each relay's name as the Devices page shows it, to <code>owner_uid</code>, your uid on
 that computer. Through a mapped relay that uid is you, judged as the socket
 is. An optional <code>restricted: {&lt;name&gt;: &lt;uid&gt;}</code> names that computer's restricted
-accounts, labeled <code>&lt;name&gt;@&lt;relay&gt;</code>. Any other uid is refused, and so is every
+accounts, labeled <code>&lt;name&gt;@&lt;relay&gt;</code>. A value there may instead be a mapping,
+<code>{uid: &lt;uid&gt;, exclude: [&lt;slug&gt;, ...]}</code> or <code>{uid: &lt;uid&gt;, only: [&lt;slug&gt;, ...]}</code>,
+which shapes that account's reach as a mapping under <code>restricted</code> does, with
+the same checks; an <code>exclude</code> that names a project that does not exist
+disables that account alone. New after v0.10.2: an earlier release refuses
+the mapping form when it loads. Any other uid is refused, and so is every
 request of an unmapped relay. Refused while <code>enabled</code> is false. File-only.</p>
 </li>
 <li>
@@ -1075,7 +1081,7 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </tr>
 <tr>
 <td><code>peer_auth.relays</code></td>
-<td>map of string to {owner_uid uint32, restricted map of string to uint32}</td>
+<td>map of string to {owner_uid uint32, restricted map of string to {}}</td>
 <td>-</td>
 </tr>
 <tr>
@@ -1688,6 +1694,14 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # name (as the Devices page shows it) to your uid on that computer</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # (owner_uid, never 0), and optionally its restricted accounts there</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # (restricted: {&lt;account name&gt;: &lt;uid there&gt;}, labeled &lt;name&gt;@&lt;relay&gt;).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # An account there may instead shape its reach as an entry of restricted</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # does (an earlier release than the one that added this refuses the form</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   # at load):</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   #   example-laptop:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   #     owner_uid: 501</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   #     restricted:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   #       _example_agent: 502</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c">#   #       _example_desk: {uid: 503, only: [example-desk]}</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # Any other uid there is refused, and so is every request of a relay not</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   # listed. Refused while peer_auth is disabled. File only (no env).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c">#   relays: {}</span><span class="w">

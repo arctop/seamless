@@ -21,7 +21,7 @@ func relay2Policy(t *testing.T) *Policy {
 	p, err := New(config.PeerAuth{
 		Enabled: true, Owner: "owner", ForceLocked: []string{lockFin}, Restricted: config.BareRestricted("_example_agent"),
 		Relays: map[string]config.PeerRelay{
-			"example-laptop": {OwnerUID: judgeRelayUID, Restricted: map[string]uint32{"example-agent": 502}},
+			"example-laptop": {OwnerUID: judgeRelayUID, Restricted: config.BareRelayRestricted(map[string]uint32{"example-agent": 502})},
 			"example-desk":   {OwnerUID: judgeRelayUID},
 		},
 	}, restrictedResolve)
@@ -154,16 +154,16 @@ func TestRelayV2_RestrictedShape(t *testing.T) {
 		relays     map[string]config.PeerRelay
 		restricted []string
 	}{
-		"root":              {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: map[string]uint32{"x": 0}}}},
-		"the owner's uid":   {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: map[string]uint32{"x": 501}}}},
-		"one uid twice":     {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: map[string]uint32{"x": 502, "y": 502}}}},
-		"a name with @":     {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: map[string]uint32{"x@y": 502}}}},
-		"a name with :":     {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: map[string]uint32{"x:y": 502}}}},
-		"a name with space": {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: map[string]uint32{"x y": 502}}}},
-		"no name":           {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: map[string]uint32{"": 502}}}},
-		"a dash first":      {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: map[string]uint32{"-x": 502}}}},
+		"root":              {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: config.BareRelayRestricted(map[string]uint32{"x": 0})}}},
+		"the owner's uid":   {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: config.BareRelayRestricted(map[string]uint32{"x": 501})}}},
+		"one uid twice":     {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: config.BareRelayRestricted(map[string]uint32{"x": 502, "y": 502})}}},
+		"a name with @":     {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: config.BareRelayRestricted(map[string]uint32{"x@y": 502})}}},
+		"a name with :":     {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: config.BareRelayRestricted(map[string]uint32{"x:y": 502})}}},
+		"a name with space": {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: config.BareRelayRestricted(map[string]uint32{"x y": 502})}}},
+		"no name":           {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: config.BareRelayRestricted(map[string]uint32{"": 502})}}},
+		"a dash first":      {relays: map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: config.BareRelayRestricted(map[string]uint32{"-x": 502})}}},
 		"a local account labeled like it": {
-			relays:     map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: map[string]uint32{"x": 502}}},
+			relays:     map[string]config.PeerRelay{"example-laptop": {OwnerUID: 501, Restricted: config.BareRelayRestricted(map[string]uint32{"x": 502})}},
 			restricted: []string{"x@example-laptop"},
 		},
 	} {

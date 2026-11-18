@@ -552,8 +552,9 @@ computer behind a relay the Server maps:
   holds a lease, so it never opens a locked project. A Windows computer is
   always this case.
 
-Mapping a relay, its restricted accounts, and what the Server then does with
-their requests are in
+Mapping a relay, its restricted accounts (each with the plain reach, or one its
+entry shapes as an entry on the Server does), and what the Server then does
+with their requests are in
 [Agents on another computer: relays](/guides/peer-auth/#agents-on-another-computer-relays).
 
 ## When the Server is out of reach {#when-the-server-is-out-of-reach}

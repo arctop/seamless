@@ -83,7 +83,8 @@ func TestPeerAuth_RelayRestricted(t *testing.T) {
         example-ci: 502
 `)
 	require.NoError(t, err)
-	require.Equal(t, map[string]uint32{"_example_agent": 480, "example-ci": 502}, cfg.PeerAuth.Relays["example-laptop"].Restricted)
+	require.Equal(t, BareRelayRestricted(map[string]uint32{"_example_agent": 480, "example-ci": 502}),
+		cfg.PeerAuth.Relays["example-laptop"].Restricted)
 
 	cfg, err = loadYAML(t, peerBase+"  relays:\n    example-laptop: {owner_uid: 501}\n")
 	require.NoError(t, err)

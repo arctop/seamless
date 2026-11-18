@@ -57,8 +57,11 @@ import (
 //   - a restricted account there (the mapping's restricted list) gets that
 //     account's view, labeled "<name>@<relay>", with its reach loaded per
 //     request as peerHandler loads a restricted account's on this socket: the
-//     open projects that are not locked (View.WithOpenProjects); a lookup that
-//     fails answers 503.
+//     projects' states now, of which the View keeps what the account's entry
+//     there reaches (View.WithReach) -- the open projects that are not locked
+//     for a plain entry, less or other for one that sets exclude or only; a
+//     lookup that fails answers 503. An account whose entry serve disabled
+//     (an exclude naming a project that does not exist) is refused (403);
 //
 // A relay the policy does not map is refused (403), whatever it forwards: its
 // local callers are every account on its computer that reaches its socket,
@@ -101,6 +104,14 @@ func relayHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger,
 			return
 		}
 		view, known := policy.RelayChainViewNamed(cred.DeviceID, cred.Name, attrs.UID, attrs.Chain, attrs.Programs)
+		if !known && policy.RelayRestrictedDisabled(cred.Name, attrs.UID) {
+			logger.Error("peer_auth: refused a relay's restricted account whose entry is disabled: its exclude names a project "+
+				"that does not exist (seamlessd doctor names it)", "relay", cred.Name, "uid", attrs.UID)
+			access.NoteRefusal(r.Context(), screening.RefusedPeerUnknown)
+			http.Error(w, fmt.Sprintf("forbidden: uid %d on relay %s: its peer_auth.relays restricted entry is disabled until the "+
+				"owner corrects it (seamlessd doctor on the server names the cause)", attrs.UID, cred.Name), http.StatusForbidden)
+			return
+		}
 		if !known {
 			logger.Warn("peer_auth: refused a relay's caller", "relay", cred.Name, "uid", attrs.UID)
 			access.NoteRefusal(r.Context(), screening.RefusedPeerUnknown)
@@ -111,10 +122,11 @@ func relayHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger,
 		ctx := r.Context()
 		switch view.Principal().Kind {
 		case access.KindRestricted:
-			// A restricted account's reach is the projects open right now,
-			// judged per request like a lease, as on this machine's socket. A
-			// relay's account has no shape (decision B-D11), so only the open
-			// projects count. A lookup that fails refuses the request rather
+			// A restricted account's reach is drawn from the projects' states
+			// right now, judged per request like a lease, as on this machine's
+			// socket: the open ones, and the confidential or sealed ones an
+			// entry's single only project may name. The View applies the
+			// account's rule. A lookup that fails refuses the request rather
 			// than serving it a reach it would misread as "no projects".
 			var states store.RestrictedReachStates
 			if leases.reach != nil {
@@ -126,7 +138,7 @@ func relayHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger,
 					return
 				}
 			}
-			ctx = access.WithView(ctx, view.WithOpenProjects(states.Open))
+			ctx = access.WithView(ctx, view.WithReach(states.Open, states.Fenced))
 		default:
 			if policy.HasLocked() {
 				view = relayLeasedView(ctx, view, leases, logger)
@@ -213,12 +225,14 @@ func relayMappingChecks(ctx context.Context, cfg config.Config, db *sql.DB) []ch
 }
 
 // relayRestrictedWords lists a relay's restricted accounts for doctor: each
-// "<name> (uid N)", sorted by name; "" for none.
+// "<name> (uid N)", sorted by name; "" for none. An account whose entry
+// shapes its reach is listed the same way: its shape, and what it reaches
+// now, are its own row (relayRestrictedRows).
 func relayRestrictedWords(r config.PeerRelay) string {
 	names := slices.Sorted(maps.Keys(r.Restricted))
 	words := make([]string, 0, len(names))
 	for _, n := range names {
-		words = append(words, fmt.Sprintf("%s (uid %d)", n, r.Restricted[n]))
+		words = append(words, fmt.Sprintf("%s (uid %d)", n, r.Restricted[n].UID))
 	}
 	return strings.Join(words, ", ")
 }

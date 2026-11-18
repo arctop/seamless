@@ -23,7 +23,7 @@ import (
 // A relay's restricted account (peer_auth.relays.<relay>.restricted) is
 // judged as a local one: it holds a lock listing a project open to it, and a
 // lock listing only a fenced project is missing to it -- its reach is the open
-// projects alone (B-D11), here over the real TLS path of a paired relay.
+// projects alone (a plain entry), here over the real TLS path of a paired relay.
 func TestPeerAuthMatrix_RepoLocksRelay(t *testing.T) {
 	ctx := context.Background()
 	d := newRelayvDaemon(t)

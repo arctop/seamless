@@ -421,10 +421,15 @@ way in.</p>
 real projects, never the global scope, and none twice; <code>restricted</code> is listed
 only with <code>enabled</code> set, and never names the owner or the same account twice,
 and an entry's <code>exclude</code> or <code>only</code> (never both) names real projects, never the
-global scope, and none twice, with no key the entry does not have;
-<code>max_lease</code> and <code>passkeys</code> are well formed. With <code>enabled</code> set, also: the owner
-is named, the socket path is absolute and outside <code>data_dir</code>, and the mode is
-octal and keeps owner read and write. <code>relays</code> is listed only with <code>enabled</code> set; each key is a relay's name as the Devices page shows it, and each <code>owner_uid</code> is a uid other than 0.</p>
+global scope, and none twice, with no key the entry does not have and none
+given twice; <code>max_lease</code> and <code>passkeys</code> are well formed. With <code>enabled</code> set,
+also: the owner is named, the socket path is absolute and outside <code>data_dir</code>,
+and the mode is octal and keeps owner read and write. <code>relays</code> is listed only
+with <code>enabled</code> set; each key is a relay's name as the Devices page shows it,
+and each <code>owner_uid</code> is a uid other than 0. A relay's <code>restricted</code> names each
+account by an OS account name with no <code>@</code>, with a uid other than 0 and
+<code>owner_uid</code>, and no uid twice; a value that is a mapping holds <code>uid</code> and at
+most one of <code>exclude</code> and <code>only</code>, checked as an entry of <code>restricted</code> is.</p>
 <p>Checked when <code>serve</code> starts, and refused if any fails:</p>
 <ul>
 <li>every account resolves on this machine (macOS role accounts live in the
@@ -1043,6 +1048,9 @@ relay you map, in the daemon's config, followed by a restart:</p>
 </span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">owner_uid</span><span class="p">:</span><span class="w"> </span><span class="m">501</span><span class="w">      </span><span class="c"># your uid on that computer (id -u there)</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">restricted</span><span class="p">:</span><span class="w">         </span><span class="c"># optional: restricted accounts there, name to uid</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nt">_example_agent</span><span class="p">:</span><span class="w"> </span><span class="m">502</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nt">_example_desk</span><span class="p">:</span><span class="w">    </span><span class="c"># or to a mapping that shapes the account&#39;s reach</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="nt">uid</span><span class="p">:</span><span class="w"> </span><span class="m">503</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="nt">only</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">example-desk]</span><span class="w">
 </span></span></span></code></pre></div>
 <p><code>seamlessd doctor</code>, run as the daemon's account, checks each mapping: a name no
 paired relay holds, or a relay no passkey approved, is a <strong>warn</strong>, and a
@@ -1064,7 +1072,9 @@ one: it never runs the relay, and its agents never open a locked project.</p>
 <p>A second account on that computer can be a
 <a href="#restricted-local-accounts">restricted account</a>, as on this one: map it under
 the relay, by its name and uid there (<code>restricted</code> above). It reaches the open
-projects that are not locked, reads the global scope, and files no requests.
+projects that are not locked, reads the global scope, and files no requests;
+a mapping in place of the uid shapes that reach as an entry here does
+(<a href="#shaping-an-accounts-reach">Shaping an account's reach</a>).
 Its writes carry the label <code>_example_agent@example-laptop</code>, the account and the
 host, and its constraints, conventions, protocols and stages wait on the Held
 screen for you. Root and your own uid there are never restricted, and the relay
@@ -1355,14 +1365,16 @@ holds a fenced project holds nothing else, so there is nowhere the account
 could carry its content: a confidential or sealed project listed beside others
 is not reached, and doctor warns. A sealed project's fence also closes the
 global scope to the sessions there, the account's included.</li>
-<li>One entry never sets both, and a key an entry does not have is refused when
-the file loads, with its name and line, so a typo can never widen an account.</li>
+<li>One entry never sets both, and a key an entry does not have, or one it gives
+twice, is refused when the file loads, with its name and line, so a typo can
+never widen an account.</li>
 <li>The reach is judged on every request, from the projects' isolation and locks
 at that moment. A lock closes even an <code>only</code> project to the account, since a
 restricted account holds no leases.</li>
 <li>An <code>exclude</code> that names a project that does not exist disables that entry:
-<code>serve</code> logs an error, refuses that account at the socket (403), and serves
-everyone else, and <code>seamlessd doctor</code> fails the row. Correct the slug and
+<code>serve</code> logs an error, refuses that account at the socket, or through its
+relay (403), and serves everyone else, and <code>seamlessd doctor</code> fails the row.
+Correct the slug and
 restart. An <code>only</code> that names a project that does not exist is a warning: the
 account reaches nothing there until you create it.</li>
 <li>Two accounts may name the same project. Naming a project never takes it from
@@ -1375,13 +1387,22 @@ in that project, its writes labeled and its binding rules waiting for you.</li>
 shows&quot; instead of naming open projects, and its refusals still read the same
 for an excluded, closed or unregistered project. A plain entry's texts are
 unchanged.</li>
-<li>The restricted accounts a relay maps (<code>peer_auth.relays.&lt;relay&gt;.restricted</code>)
-keep the plain reach: shapes are entries under <code>peer_auth.restricted</code> only.</li>
+<li>A restricted account on another computer
+(<code>peer_auth.relays.&lt;relay&gt;.restricted</code>, <a href="#agents-on-another-computer-relays">relays</a>)
+takes the same shapes: in place of its uid, a mapping of <code>uid</code> and <code>exclude</code>
+or <code>only</code>, such as <code>_example_desk: {uid: 503, only: [example-desk]}</code>, under
+the same rule and the same checks. Its rule is the one its relay's entry
+names: a uid there is that computer's, so the same uid on this computer, or
+through another relay, is another account under its own entry. The repo map
+keeps each computer's paths apart, and <code>seamlessd map-repo</code> maps paths on
+this computer only, so such a desk binds to its project with <code>session_start</code>
+(<code>project=example-desk</code>), and its writes land there.</li>
 </ul>
 <p>Doctor prints each shaped entry with what it reaches now, for example
-<code>_example_desk (uid 502): restricted, only [example-desk] -- ... (now example-desk (confidential))</code>. The mapping form is new after v0.8.5: an
-earlier release refuses it when the config loads, so update the daemon before
-you write one.</p>
+<code>_example_desk (uid 502): restricted, only [example-desk] -- ... (now example-desk (confidential))</code>, and a relay's under the row name
+<code>peer_auth.relays.restricted</code>, as <code>_example_desk@example-laptop (uid 503 there): restricted, only [example-desk] -- through relay example-laptop only; ...</code>. The mapping form is new after v0.8.5 under <code>restricted</code>, and after
+v0.10.2 under a relay's <code>restricted</code>: an earlier release refuses it when the
+config loads, so update the daemon before you write one.</p>
 <h3 id="repo-locks">Repo locks</h3>
 <p>A <a href="../../concepts/repo-locks/">repo lock</a> belongs to a repository, not to a
 project, so no project fence judges it. With the feature on, peer_auth decides
@@ -1398,8 +1419,7 @@ it may write.</strong> The listed projects are yours to set: your declaration li
 them, or an account's waiting declaration does once you approve it on the
 console's Locks page. Nothing the account says about its checkout widens
 them. It is judged on every request, as its reach is. A relay's restricted
-account is judged the same way, and its reach is the open projects that
-are not locked.</li>
+account is judged the same way, within the reach its entry there gives it.</li>
 <li><strong>Outside that reach a lock does not exist for it.</strong> It is not listed, and an
 acquire or a release by id or by checkout, or a declaration of the same
 repository, is refused in the words a missing lock gets.</li>
