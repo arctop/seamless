@@ -529,10 +529,49 @@ func TestRelayForward_RefusesAnotherCertificateThanThePinnedOne(t *testing.T) {
 	status, _, body := relayDo(t, client, http.MethodPost, "/api/mcp", http.Header{"Content-Type": {"application/json"}}, `{"jsonrpc":"2.0"}`)
 	require.Equal(t, http.StatusBadGateway, status)
 	msg := relayErr(t, body)
-	require.Contains(t, msg, "a certificate other than the one this relay pinned at pairing (SHA-256 "+pinned.fp+")")
-	require.Contains(t, msg, "nothing was sent")
-	require.Contains(t, msg, "seamlessd relay pair --replace")
+	require.Contains(t, msg, "a certificate other than the one this relay pinned at pairing, so nothing was sent")
+	require.Contains(t, msg, "pinned SHA-256 "+pinned.fp)
+	leaf := other.tls.Leaf
+	require.Contains(t, msg, "offered SHA-256 "+other.fp+", valid "+leaf.NotBefore.UTC().Format(time.DateOnly)+" to "+
+		leaf.NotAfter.UTC().Format(time.DateOnly), "the offered certificate, for the owner to compare")
+	require.Contains(t, msg, "A renewed server certificate means pairing every relay again")
+	require.Contains(t, msg, "never the one offered here, since a changed certificate is also what an interception looks like")
+	require.Contains(t, msg, "revoke this relay on the server's Devices page")
+	require.NotContains(t, msg, "--fingerprint "+other.fp, "never the offered fingerprint as the one to pin")
+	require.NotContains(t, msg, "--fingerprint "+strings.ToLower(other.fp))
+	again := st.PairAgainCommand(l.DataDir)
+	require.True(t, strings.HasSuffix(msg, again), "the refusal ends with the command that pairs again: %s", msg)
+	require.Contains(t, again, "/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server "+ts.URL+
+		" --fingerprint <the fingerprint the server shows> --ca-file "+st.CAPath(l.DataDir))
+	require.Contains(t, again, " --replace --code -")
 	relayRequireNoUpstream(t, seen)
+}
+
+// The command that pairs a relay again is the root step's pairing line, for
+// this pairing: its server, its CA copy, the owner's uid it named (else a
+// placeholder), the data dir when it is not the layout's, and --replace; the
+// fingerprint is the one the server shows, for the owner to fill in.
+func TestPRPairAgainCommand(t *testing.T) {
+	st := State{ServerURL: "https://example-server.example.ts.net:8081", ServerFingerprint: strings.Repeat("AB:", 31) + "AB"}
+	require.Equal(t, "/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://example-server.example.ts.net:8081 "+
+		"--fingerprint <the fingerprint the server shows> --owner-uid <your uid here> --replace --code -", st.PairAgainCommand(DefaultDataDir))
+	st.OwnerUID, st.CAFile = 501, "server-ca-0123456789abcdef.pem"
+	require.Equal(t, "/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://example-server.example.ts.net:8081 "+
+		"--fingerprint <the fingerprint the server shows> --ca-file /opt/seamless/relay/server-ca-0123456789abcdef.pem --owner-uid 501 "+
+		"--replace --code -", st.PairAgainCommand(DefaultDataDir+"/"))
+	require.Contains(t, st.PairAgainCommand("/example/relay"), "--owner-uid 501 --data-dir /example/relay --replace --code -")
+	require.NotContains(t, st.PairAgainCommand(DefaultDataDir), st.ServerFingerprint, "never the fingerprint pinned before either")
+}
+
+// A refusal without the offered certificate (none was presented) still names
+// the pin and the command; one without a command names the bare one.
+func TestPRCertificateChanged_Words(t *testing.T) {
+	msg := CertificateChanged("https://example-server:8081", "AB:CD", &devices.ServerCertificateError{}, "the command")
+	require.Contains(t, msg, "pinned SHA-256 AB:CD.")
+	require.NotContains(t, msg, "offered SHA-256")
+	require.True(t, strings.HasSuffix(msg, "run here, as an administrator: the command"))
+	require.True(t, strings.HasSuffix(CertificateChanged("https://example-server:8081", "AB:CD", devices.ErrServerFingerprint, ""),
+		"seamlessd relay pair --replace, as the relay's account"))
 }
 
 // A certificate the relay's roots do not trust is refused the same way, with

@@ -113,7 +113,7 @@ Checks stop early if config or the database cannot be loaded at all.
 | `bind` | Loopback is OK. Non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication; non-loopback *without* TLS is a warning naming what travels in the clear. |
 | `bind.addresses` | Dials the bind and each IPv6 address `serve` listens on beside it, and reads the instance id `/healthz` names at each. One daemon at all of them is OK; another process answering beside it is a **fail** (stop it, then restart the daemon), as is one answering there while the daemon is not; nothing answering beside a daemon that answers is a **warn** (it could not listen there when it started, and another process can take it). The `server_url.addresses` and passkey rows read the same dial: an address another process answers at is not held, and on a passkey origin a **fail**. No row for a wildcard bind, a bind with nothing beside it, or while nothing answers. |
 | `server_url` | Fetches `/healthz` through the advertised URL. Not answering is **info** (the daemon is often stopped while doctor runs); a `421` is a **fail** naming the Host header it just refused, which means the allowlist and the advertised name disagree. A derived URL says so. A `server_url` that names a user (`https://user:password@host`) is a **warn** instead, and is not fetched: the fetch would send the user and password as Basic auth. Every other row, and serve's log, names the address without its user. |
-| `tls` | Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of `server_url` - the one that fails at the client's handshake with a message that names no file on the server. |
+| `tls` | Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of `server_url` - the one that fails at the client's handshake with a message that names no file on the server. From 14 days out, on a server with relays paired, `relay renewal` warns too, naming each relay: a renewal means re-pairing each. |
 | `tls.key_file` | Without peer_auth, on a server other computers reach: who can read the TLS key. Your account alone is **info** (the daemon runs as you, so every process of yours can read it and serve the daemon's name on any port; locked projects move it out of their reach); group- or world-readable is a **warn** with the `chmod 600`. Under peer_auth the `peer_auth` rows judge it, as `serve` does. |
 | `server_url.addresses` | Every address the configured `server_url` host resolves to, against what the daemon listens on (bind plus `serve`'s paired IPv6, each dialed: `bind.addresses`): all held is OK; one this machine holds and the daemon does not is a **warn** (another local process could answer for the name); one this machine does not hold is a **warn**. No row for a derived, loopback or proxied URL, or a host the passkey rows judge. |
 | `tailscale` | **info** when the tailnet issues certificates for the `server_url` host: an account allowed to run `tailscale cert` can serve the name with a valid certificate, so the daemon holding every address of the name is what keeps its pages off the origin. |
@@ -1106,15 +1106,24 @@ account, and any layout another account could change.
   refused (root is never the owner). A server of an earlier release refuses
   the pairing before it uses the code, and the command says to upgrade the
   server first. `--replace` pairs again after you revoked the old device;
-  `--json` prints the public facts, the owner's uid among them. Run it by its
-  root-owned path, `/opt/seamless/bin/seamlessd`, with `--code -`, and paste
-  the code.
+  `--json` prints the public facts, the owner's uid and the pinned
+  certificate's expiry among them. Run it by its root-owned path,
+  `/opt/seamless/bin/seamlessd`, with `--code -`, and paste the code.
+- A renewal means re-pairing each relay: a relay pins the server
+  certificate's exact SHA-256, and a renewed certificate is another one, so
+  every call through the relay fails until it pairs again. The refusal names
+  the pinned fingerprint, the one offered and its dates, and prints the
+  command that pairs it again, whose `--fingerprint` you fill in from the
+  server (its Devices page, or `seamlessd doctor` there), never from the
+  offered one ([how](https://thereisnospoon.org/docs/guides/network-install/#renewal-means-re-pairing)).
 
 Its data dir is `/opt/seamless/relay` (the relay's account, 0700; `--data-dir`
 names another): `relay.json` (0600) holds the pairing and the relay's key.
 Doctor reports the relay, and warns when root's copy of seamlessd is not the one
 you run (`relay.binary`); run it as the relay's account to see the pairing
-too. [The relay's root step](https://thereisnospoon.org/docs/guides/network-install/#the-relays-root-step)
+too, the uid it recorded as yours (`relay.owner` warns for a pairing that
+recorded none) and the pinned certificate's expiry (`relay.certificate`, a
+warn from 14 days before it). [The relay's root step](https://thereisnospoon.org/docs/guides/network-install/#the-relays-root-step)
 has the account, the layout and every step.
 
 ## seamlessd console-open {#seamlessd_console_open}

@@ -198,7 +198,8 @@ func relayServe(ctx context.Context, o relayServeOptions) error {
 		self = *o.self
 	}
 	// The relay's own account (the pinned one, which holds its key) is never a caller it vouches for.
-	fwd := relay.NewForwarder(server, st.ServerFingerprint, rt, logger).RefusingAccount(self)
+	fwd := relay.NewForwarder(server, st.ServerFingerprint, rt, logger).RefusingAccount(self).
+		PairingAgainWith(st.PairAgainCommand(o.layout.DataDir))
 	return relay.Serve(ctx, ln, fwd, logger)
 }
 
@@ -360,13 +361,14 @@ func relayBinaryProblem(env relay.Env) string {
 // relayPairJSON is what --json prints: the pairing's public facts, never its
 // key.
 type relayPairJSON struct {
-	ServerURL         string    `json:"server_url"`
-	ServerFingerprint string    `json:"server_fingerprint"`
-	DeviceID          string    `json:"device_id"`
-	Name              string    `json:"name"`
-	Fingerprint       string    `json:"fingerprint"`
-	OwnerUID          uint32    `json:"owner_uid"`
-	PairedAt          time.Time `json:"paired_at"`
+	ServerURL         string     `json:"server_url"`
+	ServerFingerprint string     `json:"server_fingerprint"`
+	DeviceID          string     `json:"device_id"`
+	Name              string     `json:"name"`
+	Fingerprint       string     `json:"fingerprint"`
+	ServerNotAfter    *time.Time `json:"server_not_after,omitempty"`
+	OwnerUID          uint32     `json:"owner_uid"`
+	PairedAt          time.Time  `json:"paired_at"`
 }
 
 // relayPair pairs the relay as o says, after the account and data directory
@@ -396,12 +398,17 @@ func relayPair(ctx context.Context, o relayPairOptions, out, notes io.Writer) er
 	if o.json {
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
-		return enc.Encode(relayPairJSON{ServerURL: st.ServerURL, ServerFingerprint: st.ServerFingerprint, DeviceID: st.DeviceID,
-			Name: st.Name, Fingerprint: st.Fingerprint, OwnerUID: st.OwnerUID, PairedAt: st.PairedAt})
+		return enc.Encode(relayPairJSON{ServerURL: st.ServerURL, ServerFingerprint: st.ServerFingerprint, ServerNotAfter: st.ServerNotAfter,
+			DeviceID: st.DeviceID, Name: st.Name, Fingerprint: st.Fingerprint, OwnerUID: st.OwnerUID, PairedAt: st.PairedAt})
 	}
 	fmt.Fprintf(out, "Paired: this relay speaks for %s (device %s) on %s.\n", st.Name, st.DeviceID, st.ServerURL)
-	fmt.Fprintf(out, "  The server's certificate: SHA-256 %s.\n", st.ServerFingerprint)
+	until := ""
+	if st.ServerNotAfter != nil {
+		until = ", valid until " + st.ServerNotAfter.UTC().Format(time.DateOnly)
+	}
+	fmt.Fprintf(out, "  The server's certificate: SHA-256 %s%s.\n", st.ServerFingerprint, until)
 	fmt.Fprintln(out, "  The relay forwards to that certificate alone: compare it with the one the server shows (seamlessd devices code prints it).")
+	fmt.Fprintln(out, "  A renewed certificate is another one: once the server renews it, pair this relay again (seamlessd doctor names the command).")
 	fmt.Fprintf(out, "  This relay's key: %s, as the server's Devices page shows it.\n", st.Fingerprint)
 	from := o.ownerFrom
 	if from == "" {

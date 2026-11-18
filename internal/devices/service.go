@@ -60,6 +60,11 @@ type ServerFacts struct {
 	CertFingerprint string `json:"cert_fingerprint,omitempty"`
 	// TLS says the listener is https: a relay can pair only then.
 	TLS bool `json:"tls"`
+	// CertNotAfter is the served certificate's notAfter, read with its
+	// fingerprint when serve starts (zero without TLS): the renewal after it
+	// means pairing every relay again (RenewalDue). Surfaces word it
+	// themselves; it is not sent as a fact a client pairs by.
+	CertNotAfter time.Time `json:"-"`
 }
 
 // Ceremony is a begun passkey approval: the ticket the browser sends back

@@ -116,10 +116,15 @@ type devicesData struct {
 	// (devices.ServerFacts.PairingLoopbackOnly): the one-liners carry it, so
 	// no other computer can use them. The page says so, and still offers a
 	// code, for a client on this computer.
-	Loopback bool        `json:"loopback,omitempty"`
-	Pending  []deviceRow `json:"pending"`
-	Paired   []deviceRow `json:"paired"`
-	Ended    []deviceRow `json:"ended"`
+	Loopback bool `json:"loopback,omitempty"`
+	// Renewal says, from devices.RelayRenewalWarning before the served
+	// certificate's notAfter, that every relay paired here must pair again
+	// once it is renewed, and names them (owner decision R-D2); nil
+	// otherwise.
+	Renewal *devices.Renewal `json:"renewal,omitempty"`
+	Pending []deviceRow      `json:"pending"`
+	Paired  []deviceRow      `json:"paired"`
+	Ended   []deviceRow      `json:"ended"`
 	// Code is a code just minted, for a browser that posted the form without
 	// the page's script; nil otherwise. It is never in a URL.
 	Code *devices.Code `json:"code,omitempty"`
@@ -167,6 +172,7 @@ func (s *Service) devicesFor(r *http.Request, code *devices.Code) (devicesData, 
 			d.Ended = append(d.Ended, row)
 		}
 	}
+	d.Renewal = devices.RenewalDue(server.CertNotAfter, list, now)
 	shown := devicesCodePlaceholder
 	if code != nil {
 		shown = code.Code

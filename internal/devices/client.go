@@ -68,6 +68,35 @@ var (
 		"without peer_auth the server serves that uid alone through the relay")
 )
 
+// ServerCertificateError is ErrServerFingerprint with what the server
+// offered: its certificate is not the one pinned at pairing (or the one the
+// owner compared), and nothing was sent. errors.Is(err, ErrServerFingerprint)
+// holds for it, and its text is that error's. The offered fingerprint and
+// dates are for a refusal to show, beside the pinned one, so the owner can
+// compare them with what the server itself shows: never a value to pin, since
+// a changed certificate is also what an interception looks like (owner
+// decision R-D2).
+type ServerCertificateError struct {
+	// Offered is the offered leaf's CertFingerprint; "" when the server
+	// offered no certificate.
+	Offered string
+	// NotBefore and NotAfter are the offered leaf's validity.
+	NotBefore, NotAfter time.Time
+}
+
+func (e *ServerCertificateError) Error() string { return ErrServerFingerprint.Error() }
+func (e *ServerCertificateError) Unwrap() error { return ErrServerFingerprint }
+
+// OfferedCertificate returns what err says of the certificate a server offered
+// in place of the pinned one, when err carries a ServerCertificateError.
+func OfferedCertificate(err error) (*ServerCertificateError, bool) {
+	var e *ServerCertificateError
+	if errors.As(err, &e) {
+		return e, true
+	}
+	return nil, false
+}
+
 // oldServerRefusal is how a server of an earlier release words its refusal
 // of the owner's uid (decodePair there: reason input, from encoding/json's
 // DisallowUnknownFields).
@@ -112,6 +141,15 @@ type Paired struct {
 	// ServerFingerprint is the certificate the server presented
 	// (CertFingerprint), "" over plain http: a relay pins it.
 	ServerFingerprint string
+	// ServerNotAfter is that certificate's notAfter, zero over plain http: a
+	// relay records it, since the renewal after it means pairing again.
+	ServerNotAfter time.Time
+}
+
+// presented is what postPair saw of the certificate a server presented.
+type presented struct {
+	fingerprint string
+	notAfter    time.Time
 }
 
 // Pair pairs this machine with the server at serverURL, through client: an
@@ -225,7 +263,7 @@ func Pair(ctx context.Context, client *http.Client, serverURL string, req PairRe
 		return Paired{}, fmt.Errorf("%s: %w", op, ErrKeyLost)
 	}
 	return Paired{DeviceID: answer.Device.ID, Kind: answer.Device.Kind, Name: answer.Device.Name,
-		Fingerprint: answer.Device.Fingerprint, Key: answer.Key, ServerFingerprint: serverFP}, nil
+		Fingerprint: answer.Device.Fingerprint, Key: answer.Key, ServerFingerprint: serverFP.fingerprint, ServerNotAfter: serverFP.notAfter}, nil
 }
 
 // loopbackHost reports whether host names this computer's loopback alone:
@@ -335,8 +373,12 @@ func pinnedTransport(client *http.Client, relay *RelayIdentity, fingerprint stri
 					return err
 				}
 			}
-			if len(cs.PeerCertificates) == 0 || !sameCertFingerprint(CertFingerprint(cs.PeerCertificates[0].Raw), want) {
-				return ErrServerFingerprint
+			if len(cs.PeerCertificates) == 0 {
+				return &ServerCertificateError{}
+			}
+			leaf := cs.PeerCertificates[0]
+			if offered := CertFingerprint(leaf.Raw); !sameCertFingerprint(offered, want) {
+				return &ServerCertificateError{Offered: offered, NotBefore: leaf.NotBefore, NotAfter: leaf.NotAfter}
 			}
 			return nil
 		}
@@ -354,35 +396,39 @@ func (e *transportError) Unwrap() error { return e.err }
 
 // postPair sends one pairing request and reads its answer, with the
 // fingerprint of the certificate the server presented.
-func postPair(ctx context.Context, hc *http.Client, target string, body pairRequest) (PairAnswer, string, error) {
+func postPair(ctx context.Context, hc *http.Client, target string, body pairRequest) (PairAnswer, presented, error) {
 	raw, err := json.Marshal(body)
 	if err != nil {
-		return PairAnswer{}, "", err
+		return PairAnswer{}, presented{}, err
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(raw))
 	if err != nil {
-		return PairAnswer{}, "", err
+		return PairAnswer{}, presented{}, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
 	resp, err := hc.Do(httpReq)
 	if err != nil {
+		if offered, ok := OfferedCertificate(err); ok {
+			return PairAnswer{}, presented{}, offered
+		}
 		if errors.Is(err, ErrServerFingerprint) {
-			return PairAnswer{}, "", ErrServerFingerprint
+			return PairAnswer{}, presented{}, ErrServerFingerprint
 		}
 		if ctx.Err() != nil {
-			return PairAnswer{}, "", ctx.Err()
+			return PairAnswer{}, presented{}, ctx.Err()
 		}
-		return PairAnswer{}, "", &transportError{err: err}
+		return PairAnswer{}, presented{}, &transportError{err: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxPairAnswer))
 	if err != nil {
-		return PairAnswer{}, "", &transportError{err: err}
+		return PairAnswer{}, presented{}, &transportError{err: err}
 	}
-	fp := ""
+	var fp presented
 	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
-		fp = CertFingerprint(resp.TLS.PeerCertificates[0].Raw)
+		leaf := resp.TLS.PeerCertificates[0]
+		fp = presented{fingerprint: CertFingerprint(leaf.Raw), notAfter: leaf.NotAfter}
 	}
 	if resp.StatusCode != http.StatusOK {
 		var refused pairError

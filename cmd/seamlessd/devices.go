@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"crypto/x509"
 	"database/sql"
 	"encoding/json"
 	"encoding/pem"
@@ -51,31 +52,46 @@ func pairingOn(cfg config.Config) bool {
 // whether the TLS stack can serve the certificate is the key pair load's
 // question, and its error says so.
 func certFingerprintFile(path string) (string, error) {
+	fp, _, err := certFactsFile(path)
+	return fp, err
+}
+
+// certFactsFile is certFingerprintFile with the certificate's notAfter, which
+// the renewal after it means pairing every relay again (owner decision R-D2).
+// A certificate that does not parse has no notAfter (zero), and the key pair
+// load names that.
+func certFactsFile(path string) (string, time.Time, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("read tls.cert_file: %w", err)
+		return "", time.Time{}, fmt.Errorf("read tls.cert_file: %w", err)
 	}
 	for {
 		var block *pem.Block
 		block, raw = pem.Decode(raw)
 		if block == nil {
-			return "", fmt.Errorf("tls.cert_file %s holds no certificate", path)
+			return "", time.Time{}, fmt.Errorf("tls.cert_file %s holds no certificate", path)
 		}
 		if block.Type == "CERTIFICATE" {
-			return devices.CertFingerprint(block.Bytes), nil
+			var notAfter time.Time
+			if c, err := x509.ParseCertificate(block.Bytes); err == nil {
+				notAfter = c.NotAfter
+			}
+			return devices.CertFingerprint(block.Bytes), notAfter, nil
 		}
 	}
 }
 
-// pairingFacts are what a client needs from this server to pair.
+// pairingFacts are what a client needs from this server to pair, and the
+// served certificate's notAfter, read once as serve starts, as serve loads the
+// key pair once.
 func pairingFacts(cfg config.Config) (devices.ServerFacts, error) {
 	facts := devices.ServerFacts{URL: cfg.ServerURL(), TLS: cfg.TLSEnabled()}
 	if facts.TLS {
-		fp, err := certFingerprintFile(cfg.TLS.CertFile)
+		fp, notAfter, err := certFactsFile(cfg.TLS.CertFile)
 		if err != nil {
 			return devices.ServerFacts{}, err
 		}
-		facts.CertFingerprint = fp
+		facts.CertFingerprint, facts.CertNotAfter = fp, notAfter
 	}
 	return facts, nil
 }

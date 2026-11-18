@@ -5040,8 +5040,13 @@ A Client keeps no data of its own, so nothing on it works without the Server.
   tools and `seam` commands fail with the reason.
 
 **A renewed certificate is a new certificate.** A relay pins the exact
-certificate the Server presented at pairing, so renewing it (a tailnet
-certificate lasts 90 days) refuses every relay until it pairs again.
+certificate the Server presented at pairing, its SHA-256, so renewing it (a
+tailnet certificate lasts 90 days) refuses every relay until it pairs again: a
+renewal means re-pairing each relay. A pin on the key alone would not help,
+since `tailscale cert`, and certbot unless told otherwise, issue a new key at
+each renewal. From 14 days before the expiry, the Server's doctor and Devices
+page name every relay that will need it, and the relay's refusal afterwards
+prints the command ([how](/guides/network-install/#renewal-means-re-pairing)).
 [Troubleshooting](/guides/troubleshooting/#an-agent-on-another-computer-gets-no-briefing)
 has the fix.
 
@@ -7737,6 +7742,7 @@ Its transport rows are the ones to read:
 | `peer_auth devices` | Under peer_auth only: a **warn** for each key device paired with a one-time code alone, before peer_auth, which is still you over TCP though no passkey approved it: revoke it and pair it again, so a passkey approves it. |
 | `relay owners` | Without peer_auth only: an **info** listing each relay with the uid its pairing recorded as yours, the one uid served through it, and a **warn** for each relay whose pairing recorded none (paired before, or by a relay of an earlier release), every caller of which is you: re-pair it to bind the owner's uid ([why](#who-a-relay-serves-without-peer-auth)). |
 | `peer_auth relays` | Under peer_auth only: each relay `peer_auth.relays` maps, and whether it is paired and approved with a passkey. A **warn** when the uid its pairing recorded is not the mapping's `owner_uid`: the mapping judges, but one of the two is wrong. |
+| `relay renewal` | From 14 days before the TLS certificate's expiry, and past it, a **warn** naming every relay paired here: each pins this exact certificate, so after the renewal each must pair again, and the row prints the command ([why](#renewal-means-re-pairing)). Nothing while no relay is paired. |
 
 Every row is in [the doctor reference](/reference/cli-seamlessd/#seamlessd_doctor).
 
@@ -7988,8 +7994,11 @@ Linux) and how to start it, or, with none installed yet,
 
 On a computer with a relay, it adds the relay's rows: the account the relay
 runs as, its layout, whether root's copy of `seamlessd` is the one you run
-(`relay.binary`, a **warn** after an update until you update it), its pairing,
-its socket, who may connect to it
+(`relay.binary`, a **warn** after an update until you update it), its pairing
+and the uid it recorded as yours (`relay.owner`, a **warn** for a pairing an
+earlier release made, which recorded none), the pinned certificate's expiry
+(`relay.certificate`, a **warn** from 14 days before it: a renewal means
+re-pairing the relay), its socket, who may connect to it
 (`relay.access`, a **warn** when every local account can), and whether the
 Server answers it. The pairing is readable by the relay's account alone, so
 run doctor as that account to see it
@@ -8072,11 +8081,36 @@ pairing line plus `--replace`, once its old pairing is revoked (the Server
 refuses a second live device of the same name), and then restarts:
 
 ```bash
-sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --replace --server https://<server name>:8081 --fingerprint <fingerprint> --owner-uid <your uid here> --code -
+/usr/bin/sudo -u _seamless -H /opt/seamless/bin/seamlessd relay pair --server https://<server name>:8081 --fingerprint <fingerprint> --owner-uid <your uid here> --replace --code -
 ```
 
-The same goes for a renewed certificate: a relay pins the exact certificate it
-paired with, so a new one refuses it until it pairs again.
+### A renewal means re-pairing each relay {#renewal-means-re-pairing}
+
+A relay pins the exact certificate the Server presented when it paired, its
+SHA-256, and nothing looser: `tailscale cert` issues a new key at every
+renewal, and certbot does too unless told to reuse it, so a pin on the key
+would not survive a renewal either. A renewed certificate is another
+certificate, and every relay refuses it until it pairs again.
+
+- **Ahead of time.** From 14 days before the served certificate's expiry,
+  the Server's `seamlessd doctor` (`relay renewal`, a **warn**) and its
+  Devices page say that every relay paired there must pair again after the
+  renewal, and name them. Doctor's `tls` row warns from 30 days out that the
+  certificate is due; the relay row comes inside that. On each Client,
+  `seamlessd doctor` as the relay's account shows the pinned certificate's
+  expiry (`relay.certificate`), a **warn** from the same 14 days.
+- **After the renewal.** Restart the Server so it serves the new
+  certificate. Every call through a relay then fails, and the relay's refusal
+  says why: the pinned fingerprint, the one offered and its dates, and the
+  command that pairs it again, the one above. Compare the offered fingerprint
+  with the one the Server itself shows (its Devices page, or `seamlessd doctor`
+  there), and pin that one: a changed certificate is also what an interception
+  looks like, so the command never fills in the offered fingerprint for you.
+  Revoke the relay on the Devices page, get a code, and run the command with
+  the Server's fingerprint.
+
+A relay paired with an earlier release recorded no expiry: its doctor says so
+(`relay.certificate`, **info**), and re-pairing records it.
 
 ## Sign in to the console from another computer {#console-sign-in}
 
@@ -8376,8 +8410,9 @@ mcp:
 
 Renewal is manual on both paths - nothing auto-renews - which is why doctor's
 `tls` line warns from 30 days out. A renewed certificate is a new one to every
-relay, which pins the exact certificate it paired with: pair each relay again
-([how](#revoke-a-computer)).
+relay, which pins the exact certificate it paired with: a renewal means
+re-pairing each relay, and from 14 days out doctor's `relay renewal` row names
+them ([how](#renewal-means-re-pairing)).
 
 ### Why https changes the Claude Code wiring
 
@@ -10066,8 +10101,11 @@ and console unlock the backup held.
   refuses every other, naming peer_auth and a restricted mapping as the remedy
   ([who a relay serves](/guides/network-install/#who-a-relay-serves-without-peer-auth)).
 - **A relay pins the daemon's exact certificate.** Renewing the certificate (a
-  tailnet certificate lasts 90 days) refuses every relay until it pairs again.
-  It fails closed: no relay forwards to a certificate it did not pin.
+  tailnet certificate lasts 90 days) refuses every relay until it pairs again:
+  a renewal means re-pairing each relay. It fails closed: no relay forwards to
+  a certificate it did not pin. From 14 days before the expiry, doctor
+  (`relay renewal`) and the Devices page name the relays a renewal will refuse
+  ([how](/guides/network-install/#renewal-means-re-pairing)).
 - **The transcript holds what a session read.** Once you approve an agent, its
   project's content is in that session's transcript and any tool result it kept.
   A lease ending does not unread it.
@@ -11542,7 +11580,7 @@ call or `seam` command carries the reason:
 | The answer | What it means | Fix |
 |---|---|---|
 | `seamless relay: the server at <address> could not be reached (...)` | the relay runs, and the Server does not answer it | start the Server, or mend the route to it: the relay forwards again as soon as it answers |
-| `seamless relay: the server at <address> presented a certificate other than the one this relay pinned at pairing` | the Server's certificate changed, most often at a renewal | [pair the relay again](/guides/network-install/#revoke-a-computer): revoke it on the Devices page, get a new code, run `sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --replace --server <address> --fingerprint <the new fingerprint> --code -`, and restart the relay |
+| `seamless relay: the server at <address> presented a certificate other than the one this relay pinned at pairing, so nothing was sent: pinned SHA-256 <pinned>; offered SHA-256 <offered>, valid <from> to <until>` | the Server's certificate changed, most often at a renewal: a renewal means re-pairing each relay. A change you did not make is also what an interception looks like | compare the offered fingerprint with the one the Server itself shows (its Devices page, or `seamlessd doctor` there). If they match, [pair the relay again](/guides/network-install/#renewal-means-re-pairing): revoke it on the Devices page, get a new code, and run the command the refusal ends with, filling in `--fingerprint` with the Server's fingerprint, then restart the relay |
 | `seamless relay: the server at <address> presented a certificate that does not verify` | the relay does not trust the certificate's issuer | pair again with `--ca-file` naming its root |
 | `unauthorized: this relay's pairing was revoked: pair it again` | you revoked it | pair it again, with a new code |
 | `forbidden: relay <name> is paired, but peer_auth.relays does not map it` | the Server runs peer_auth and refuses a relay you have not mapped | map it in the daemon's config, by the name the Devices page shows, then restart the daemon ([how](/guides/peer-auth/#agents-on-another-computer-relays)) |
@@ -14495,7 +14533,7 @@ Checks stop early if config or the database cannot be loaded at all.
 | `bind` | Loopback is OK. Non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication; non-loopback *without* TLS is a warning naming what travels in the clear. |
 | `bind.addresses` | Dials the bind and each IPv6 address `serve` listens on beside it, and reads the instance id `/healthz` names at each. One daemon at all of them is OK; another process answering beside it is a **fail** (stop it, then restart the daemon), as is one answering there while the daemon is not; nothing answering beside a daemon that answers is a **warn** (it could not listen there when it started, and another process can take it). The `server_url.addresses` and passkey rows read the same dial: an address another process answers at is not held, and on a passkey origin a **fail**. No row for a wildcard bind, a bind with nothing beside it, or while nothing answers. |
 | `server_url` | Fetches `/healthz` through the advertised URL. Not answering is **info** (the daemon is often stopped while doctor runs); a `421` is a **fail** naming the Host header it just refused, which means the allowlist and the advertised name disagree. A derived URL says so. A `server_url` that names a user (`https://user:password@host`) is a **warn** instead, and is not fetched: the fetch would send the user and password as Basic auth. Every other row, and serve's log, names the address without its user. |
-| `tls` | Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of `server_url` - the one that fails at the client's handshake with a message that names no file on the server. |
+| `tls` | Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of `server_url` - the one that fails at the client's handshake with a message that names no file on the server. From 14 days out, on a server with relays paired, `relay renewal` warns too, naming each relay: a renewal means re-pairing each. |
 | `tls.key_file` | Without peer_auth, on a server other computers reach: who can read the TLS key. Your account alone is **info** (the daemon runs as you, so every process of yours can read it and serve the daemon's name on any port; locked projects move it out of their reach); group- or world-readable is a **warn** with the `chmod 600`. Under peer_auth the `peer_auth` rows judge it, as `serve` does. |
 | `server_url.addresses` | Every address the configured `server_url` host resolves to, against what the daemon listens on (bind plus `serve`'s paired IPv6, each dialed: `bind.addresses`): all held is OK; one this machine holds and the daemon does not is a **warn** (another local process could answer for the name); one this machine does not hold is a **warn**. No row for a derived, loopback or proxied URL, or a host the passkey rows judge. |
 | `tailscale` | **info** when the tailnet issues certificates for the `server_url` host: an account allowed to run `tailscale cert` can serve the name with a valid certificate, so the daemon holding every address of the name is what keeps its pages off the origin. |
@@ -15488,15 +15526,24 @@ account, and any layout another account could change.
   refused (root is never the owner). A server of an earlier release refuses
   the pairing before it uses the code, and the command says to upgrade the
   server first. `--replace` pairs again after you revoked the old device;
-  `--json` prints the public facts, the owner's uid among them. Run it by its
-  root-owned path, `/opt/seamless/bin/seamlessd`, with `--code -`, and paste
-  the code.
+  `--json` prints the public facts, the owner's uid and the pinned
+  certificate's expiry among them. Run it by its root-owned path,
+  `/opt/seamless/bin/seamlessd`, with `--code -`, and paste the code.
+- A renewal means re-pairing each relay: a relay pins the server
+  certificate's exact SHA-256, and a renewed certificate is another one, so
+  every call through the relay fails until it pairs again. The refusal names
+  the pinned fingerprint, the one offered and its dates, and prints the
+  command that pairs it again, whose `--fingerprint` you fill in from the
+  server (its Devices page, or `seamlessd doctor` there), never from the
+  offered one ([how](/guides/network-install/#renewal-means-re-pairing)).
 
 Its data dir is `/opt/seamless/relay` (the relay's account, 0700; `--data-dir`
 names another): `relay.json` (0600) holds the pairing and the relay's key.
 Doctor reports the relay, and warns when root's copy of seamlessd is not the one
 you run (`relay.binary`); run it as the relay's account to see the pairing
-too. [The relay's root step](/guides/network-install/#the-relays-root-step)
+too, the uid it recorded as yours (`relay.owner` warns for a pairing that
+recorded none) and the pinned certificate's expiry (`relay.certificate`, a
+warn from 14 days before it). [The relay's root step](/guides/network-install/#the-relays-root-step)
 has the account, the layout and every step.
 
 ## seamlessd console-open {#seamlessd_console_open}
@@ -19120,7 +19167,12 @@ exist. The computers paired with this server, and how to pair another
   passkey; the page says which is missing.
 - **Paired** - each relay and key device: its key's fingerprint or the start
   of its key, when it paired, whether your passkey or its one-time code
-  approved it, when it was last seen, and **Revoke**.
+  approved it, when it was last seen, and **Revoke**. A relay shows the uid its
+  pairing recorded as yours on its computer; without peer_auth one that
+  recorded none (paired before, or by a relay of an earlier release) is warned
+  about: re-pair it to bind the owner's uid. From 14 days before this server's
+  certificate expires, and past it, the section names every relay paired here:
+  a renewal means re-pairing each relay.
 - **Revoked and expired** - what ended, when, and from where.
 
 It shows at every [level](#choose-how-much-you-see), in the sidebar's Server

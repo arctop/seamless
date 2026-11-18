@@ -376,7 +376,7 @@ Checks stop early if config or the database cannot be loaded at all.</p>
 </tr>
 <tr>
 <td><code>tls</code></td>
-<td>Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of <code>server_url</code> - the one that fails at the client's handshake with a message that names no file on the server.</td>
+<td>Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of <code>server_url</code> - the one that fails at the client's handshake with a message that names no file on the server. From 14 days out, on a server with relays paired, <code>relay renewal</code> warns too, naming each relay: a renewal means re-pairing each.</td>
 </tr>
 <tr>
 <td><code>tls.key_file</code></td>
@@ -1645,15 +1645,24 @@ account that ran <code>sudo -u</code>, and with neither the command refuses; uid
 refused (root is never the owner). A server of an earlier release refuses
 the pairing before it uses the code, and the command says to upgrade the
 server first. <code>--replace</code> pairs again after you revoked the old device;
-<code>--json</code> prints the public facts, the owner's uid among them. Run it by its
-root-owned path, <code>/opt/seamless/bin/seamlessd</code>, with <code>--code -</code>, and paste
-the code.</li>
+<code>--json</code> prints the public facts, the owner's uid and the pinned
+certificate's expiry among them. Run it by its root-owned path,
+<code>/opt/seamless/bin/seamlessd</code>, with <code>--code -</code>, and paste the code.</li>
+<li>A renewal means re-pairing each relay: a relay pins the server
+certificate's exact SHA-256, and a renewed certificate is another one, so
+every call through the relay fails until it pairs again. The refusal names
+the pinned fingerprint, the one offered and its dates, and prints the
+command that pairs it again, whose <code>--fingerprint</code> you fill in from the
+server (its Devices page, or <code>seamlessd doctor</code> there), never from the
+offered one (<a href="../../guides/network-install/#renewal-means-re-pairing">how</a>).</li>
 </ul>
 <p>Its data dir is <code>/opt/seamless/relay</code> (the relay's account, 0700; <code>--data-dir</code>
 names another): <code>relay.json</code> (0600) holds the pairing and the relay's key.
 Doctor reports the relay, and warns when root's copy of seamlessd is not the one
 you run (<code>relay.binary</code>); run it as the relay's account to see the pairing
-too. <a href="../../guides/network-install/#the-relays-root-step">The relay's root step</a>
+too, the uid it recorded as yours (<code>relay.owner</code> warns for a pairing that
+recorded none) and the pinned certificate's expiry (<code>relay.certificate</code>, a
+warn from 14 days before it). <a href="../../guides/network-install/#the-relays-root-step">The relay's root step</a>
 has the account, the layout and every step.</p>
 <h2 id="seamlessd_console_open">seamlessd console-open</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd console-open <span class="o">[</span>--browser APP<span class="o">]</span>

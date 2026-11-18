@@ -225,8 +225,13 @@ A Client keeps no data of its own, so nothing on it works without the Server.
   tools and `seam` commands fail with the reason.
 
 **A renewed certificate is a new certificate.** A relay pins the exact
-certificate the Server presented at pairing, so renewing it (a tailnet
-certificate lasts 90 days) refuses every relay until it pairs again.
+certificate the Server presented at pairing, its SHA-256, so renewing it (a
+tailnet certificate lasts 90 days) refuses every relay until it pairs again: a
+renewal means re-pairing each relay. A pin on the key alone would not help,
+since `tailscale cert`, and certbot unless told otherwise, issue a new key at
+each renewal. From 14 days before the expiry, the Server's doctor and Devices
+page name every relay that will need it, and the relay's refusal afterwards
+prints the command ([how](/guides/network-install/#renewal-means-re-pairing)).
 [Troubleshooting](/guides/troubleshooting/#an-agent-on-another-computer-gets-no-briefing)
 has the fix.
 

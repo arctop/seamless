@@ -658,9 +658,9 @@ call or <code>seam</code> command carries the reason:</p>
 <td>start the Server, or mend the route to it: the relay forwards again as soon as it answers</td>
 </tr>
 <tr>
-<td><code>seamless relay: the server at &lt;address&gt; presented a certificate other than the one this relay pinned at pairing</code></td>
-<td>the Server's certificate changed, most often at a renewal</td>
-<td><a href="../../guides/network-install/#revoke-a-computer">pair the relay again</a>: revoke it on the Devices page, get a new code, run <code>sudo -u _seamless /opt/seamless/bin/seamlessd relay pair --replace --server &lt;address&gt; --fingerprint &lt;the new fingerprint&gt; --code -</code>, and restart the relay</td>
+<td><code>seamless relay: the server at &lt;address&gt; presented a certificate other than the one this relay pinned at pairing, so nothing was sent: pinned SHA-256 &lt;pinned&gt;; offered SHA-256 &lt;offered&gt;, valid &lt;from&gt; to &lt;until&gt;</code></td>
+<td>the Server's certificate changed, most often at a renewal: a renewal means re-pairing each relay. A change you did not make is also what an interception looks like</td>
+<td>compare the offered fingerprint with the one the Server itself shows (its Devices page, or <code>seamlessd doctor</code> there). If they match, <a href="../../guides/network-install/#renewal-means-re-pairing">pair the relay again</a>: revoke it on the Devices page, get a new code, and run the command the refusal ends with, filling in <code>--fingerprint</code> with the Server's fingerprint, then restart the relay</td>
 </tr>
 <tr>
 <td><code>seamless relay: the server at &lt;address&gt; presented a certificate that does not verify</code></td>

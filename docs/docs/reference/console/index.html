@@ -1929,7 +1929,12 @@ passkey</strong> and <strong>Deny</strong>. Approving needs a signed-in browser 
 passkey; the page says which is missing.</li>
 <li><strong>Paired</strong> - each relay and key device: its key's fingerprint or the start
 of its key, when it paired, whether your passkey or its one-time code
-approved it, when it was last seen, and <strong>Revoke</strong>.</li>
+approved it, when it was last seen, and <strong>Revoke</strong>. A relay shows the uid its
+pairing recorded as yours on its computer; without peer_auth one that
+recorded none (paired before, or by a relay of an earlier release) is warned
+about: re-pair it to bind the owner's uid. From 14 days before this server's
+certificate expires, and past it, the section names every relay paired here:
+a renewal means re-pairing each relay.</li>
 <li><strong>Revoked and expired</strong> - what ended, when, and from where.</li>
 </ul>
 <p>It shows at every <a href="#choose-how-much-you-see">level</a>, in the sidebar's Server

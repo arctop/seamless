@@ -47,6 +47,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,7 +66,45 @@ const (
 	DefaultDataDir = "/opt/seamless/relay"
 	// DefaultBinary is where the layout keeps seamlessd.
 	DefaultBinary = "/opt/seamless/bin/seamlessd"
+	// DefaultAccount is the relay's own account in that layout, as the
+	// client setup's root step makes it.
+	DefaultAccount = "_seamless"
 )
+
+// sudoPath is sudo as the client setup's root step names it: by its full
+// path, never one found on the owner's PATH.
+const sudoPath = "/usr/bin/sudo"
+
+// PairAgainFingerprint stands in PairAgainCommand where the fingerprint the
+// server itself shows goes (its Devices page, or seamlessd doctor there):
+// never the one a refusal saw offered, which is also what an interception
+// would offer.
+const PairAgainFingerprint = "<the fingerprint the server shows>"
+
+// PairAgainCommand is the command that pairs this relay again, as the client
+// setup's root step pairs it (relay pair as the relay's account, by root's
+// copy of seamlessd, the code pasted, --replace): this pairing's server, the
+// CA copy it trusts, the owner's uid it named (a placeholder for a pairing
+// from an earlier release, which named none), and PairAgainFingerprint for
+// the owner to fill in from the server. A renewed server certificate means
+// running it on every relay (owner decision R-D2), once the old device is
+// revoked on the server: no two live devices share a name.
+func (s State) PairAgainCommand(dataDir string) string {
+	words := []string{sudoPath, "-u", DefaultAccount, "-H", DefaultBinary, "relay", "pair", "--server", s.ServerURL,
+		"--fingerprint", PairAgainFingerprint}
+	if s.CAFile != "" {
+		words = append(words, "--ca-file", s.CAPath(dataDir))
+	}
+	owner := "<your uid here>"
+	if s.OwnerUID != 0 {
+		owner = strconv.FormatUint(uint64(s.OwnerUID), 10)
+	}
+	words = append(words, "--owner-uid", owner)
+	if dataDir = filepath.Clean(dataDir); dataDir != DefaultDataDir {
+		words = append(words, "--data-dir", dataDir)
+	}
+	return strings.Join(append(words, "--replace", "--code", "-"), " ")
+}
 
 // The files in the data directory.
 const (
@@ -120,6 +159,10 @@ type State struct {
 	// server presented at pairing (devices.CertFingerprint, openssl's form):
 	// the only certificate the relay forwards to.
 	ServerFingerprint string `json:"server_fingerprint"`
+	// ServerNotAfter is that certificate's notAfter, as the relay saw it at
+	// pairing: the renewal after it means pairing again. nil for a pairing
+	// from an earlier release, which recorded none.
+	ServerNotAfter *time.Time `json:"server_not_after,omitempty"`
 	// CAFile names the copy of the root the server's certificate chains to,
 	// beside the state, when the owner gave one at pairing; "" trusts the
 	// system's roots.

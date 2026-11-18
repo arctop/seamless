@@ -1710,8 +1710,11 @@ serves through a relay only the uid its pairing recorded as yours, and
 refuses every other, naming peer_auth and a restricted mapping as the remedy
 (<a href="../../guides/network-install/#who-a-relay-serves-without-peer-auth">who a relay serves</a>).</li>
 <li><strong>A relay pins the daemon's exact certificate.</strong> Renewing the certificate (a
-tailnet certificate lasts 90 days) refuses every relay until it pairs again.
-It fails closed: no relay forwards to a certificate it did not pin.</li>
+tailnet certificate lasts 90 days) refuses every relay until it pairs again:
+a renewal means re-pairing each relay. It fails closed: no relay forwards to
+a certificate it did not pin. From 14 days before the expiry, doctor
+(<code>relay renewal</code>) and the Devices page name the relays a renewal will refuse
+(<a href="../../guides/network-install/#renewal-means-re-pairing">how</a>).</li>
 <li><strong>The transcript holds what a session read.</strong> Once you approve an agent, its
 project's content is in that session's transcript and any tool result it kept.
 A lease ending does not unread it.</li>

@@ -82,6 +82,7 @@
 
 <section aria-labelledby="devices-paired-title">
   <h2 id="devices-paired-title">Paired</h2>
+  {{with .Renewal}}<p class="held-sub" id="devices-renewal">{{icon "triangle-alert"}} This server's certificate {{if .Expired}}expired on {{clockDate .NotAfter}}{{else}}expires on {{clockDate .NotAfter}}, in {{.Days}} day{{if ne .Days 1}}s{{end}}{{end}}. A relay pins the exact certificate it paired with, and a renewal is another certificate, so once this server serves the renewed one, every relay paired here must pair again: {{range $i, $r := .Relays}}{{if $i}}, {{end}}<strong>{{$r}}</strong>{{end}}. Revoke each here, get a code, and on its computer run the command its refusal prints, with the new fingerprint this page then shows (<a href="https://thereisnospoon.org/docs/guides/network-install/#revoke-a-computer" target="_blank" rel="noopener">how &nearr;</a>).</p>{{end}}
   {{if .Paired}}
   <ul class="access-list">
     {{range .Paired}}

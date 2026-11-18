@@ -28,7 +28,7 @@ import (
 // gives the daemon's, pinned as the daemon's on this computer, where no
 // daemon runs), the group its socket is handed to, and its service.
 const (
-	clientRelayAccount = "_seamless"
+	clientRelayAccount = relay.DefaultAccount
 	clientRelayGroup   = "_seamlessowner"
 	clientRelayLabel   = launchdLabel + ".relay"
 	clientRelayUnit    = "seamless-relay.service"

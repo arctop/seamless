@@ -504,8 +504,13 @@ what its hooks would have sent is lost: nothing is queued for later. MCP
 tools and <code>seam</code> commands fail with the reason.</li>
 </ul>
 <p><strong>A renewed certificate is a new certificate.</strong> A relay pins the exact
-certificate the Server presented at pairing, so renewing it (a tailnet
-certificate lasts 90 days) refuses every relay until it pairs again.
+certificate the Server presented at pairing, its SHA-256, so renewing it (a
+tailnet certificate lasts 90 days) refuses every relay until it pairs again: a
+renewal means re-pairing each relay. A pin on the key alone would not help,
+since <code>tailscale cert</code>, and certbot unless told otherwise, issue a new key at
+each renewal. From 14 days before the expiry, the Server's doctor and Devices
+page name every relay that will need it, and the relay's refusal afterwards
+prints the command (<a href="../../guides/network-install/#renewal-means-re-pairing">how</a>).
 <a href="../../guides/troubleshooting/#an-agent-on-another-computer-gets-no-briefing">Troubleshooting</a>
 has the fix.</p>
 <h2 id="related">Related</h2>

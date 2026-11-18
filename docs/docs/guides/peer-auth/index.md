@@ -1510,8 +1510,11 @@ and console unlock the backup held.
   refuses every other, naming peer_auth and a restricted mapping as the remedy
   ([who a relay serves](https://thereisnospoon.org/docs/guides/network-install/#who-a-relay-serves-without-peer-auth)).
 - **A relay pins the daemon's exact certificate.** Renewing the certificate (a
-  tailnet certificate lasts 90 days) refuses every relay until it pairs again.
-  It fails closed: no relay forwards to a certificate it did not pin.
+  tailnet certificate lasts 90 days) refuses every relay until it pairs again:
+  a renewal means re-pairing each relay. It fails closed: no relay forwards to
+  a certificate it did not pin. From 14 days before the expiry, doctor
+  (`relay renewal`) and the Devices page name the relays a renewal will refuse
+  ([how](https://thereisnospoon.org/docs/guides/network-install/#renewal-means-re-pairing)).
 - **The transcript holds what a session read.** Once you approve an agent, its
   project's content is in that session's transcript and any tool result it kept.
   A lease ending does not unread it.

@@ -110,6 +110,7 @@ func relayDoctorChecks(ctx context.Context, e relayDoctorEnv) []check {
 		if row, ok := relayOwnerRow(*st); ok {
 			out = append(out, row)
 		}
+		out = append(out, relayCertificateRow(*st, e.layout.DataDir, time.Now()))
 	}
 	out = append(out, relaySocketRow(ctx, e, acct, asRelay))
 	if row, ok := relayAccessRow(e); ok {
@@ -239,6 +240,32 @@ func relayOwnerRow(st relay.State) (check, bool) {
 		"device " + st.DeviceID + " on the server's Devices page, then seamlessd relay pair --replace --owner-uid <your uid here>"}, true
 }
 
+// relayCertificateRow shows the pinned certificate's notAfter (owner decision
+// R-D2): a relay pins the server's exact certificate, so once the server
+// renews it the relay refuses it until it pairs again. From
+// devices.RelayRenewalWarning before it, and past it, a warn naming the
+// command that pairs again (relay.State.PairAgainCommand); before, info. A
+// pairing from an earlier release recorded none: info, unknown, re-pair to
+// record it.
+func relayCertificateRow(st relay.State, dataDir string, now time.Time) check {
+	const name = "relay.certificate"
+	if st.ServerNotAfter == nil {
+		return check{statusInfo, name, "the pinned certificate's expiry is unknown: this pairing is from an earlier release, which " +
+			"recorded none -- re-pair to record it (it is the command a renewal needs anyway): " + st.PairAgainCommand(dataDir)}
+	}
+	until := st.ServerNotAfter.UTC().Format(time.DateOnly)
+	switch left := st.ServerNotAfter.Sub(now); {
+	case left <= 0:
+		return check{statusWarn, name, fmt.Sprintf("the pinned certificate expired on %s: once the server serves its renewal, pair "+
+			"this relay again (revoke it on the server's Devices page first): %s", until, st.PairAgainCommand(dataDir))}
+	case left <= devices.RelayRenewalWarning:
+		return check{statusWarn, name, fmt.Sprintf("the pinned certificate is valid until %s, in %d day(s): a renewal is another "+
+			"certificate, so once the server renews it, pair this relay again (revoke it on the server's Devices page first): %s",
+			until, int(left/(24*time.Hour)), st.PairAgainCommand(dataDir))}
+	}
+	return check{statusInfo, name, fmt.Sprintf("the pinned certificate is valid until %s; a renewal means pairing this relay again", until)}
+}
+
 // relaySocketRow checks the socket agents dial: the relay's own, and
 // answering. Doctor run as another account (the owner) also sends /healthz
 // through it, which the relay forwards: an answer is the whole path working.
@@ -326,9 +353,7 @@ func relayServerRow(ctx context.Context, e relayDoctorEnv, st relay.State) check
 	accepted, why := relayProbeVerdict(status, err)
 	switch {
 	case errors.Is(err, devices.ErrServerFingerprint):
-		return check{statusFail, name, fmt.Sprintf("%s presents a certificate other than the one pinned at pairing (SHA-256 %s), so the "+
-			"relay refuses it: if the server's certificate was renewed, pair the relay again (seamlessd relay pair --replace)",
-			st.ServerURL, st.ServerFingerprint)}
+		return check{statusFail, name, relay.CertificateChanged(st.ServerURL, st.ServerFingerprint, err, st.PairAgainCommand(e.layout.DataDir))}
 	case err != nil:
 		return check{statusFail, name, fmt.Sprintf("%s does not answer (%v): every agent call through the relay fails until it does", st.ServerURL, err)}
 	case accepted:

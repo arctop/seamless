@@ -133,6 +133,10 @@ func Pair(ctx context.Context, dataDir string, o PairOptions) (State, error) {
 	st := State{Version: stateVersion, ServerURL: server.String(), ServerFingerprint: paired.ServerFingerprint, CAFile: caName,
 		DeviceID: paired.DeviceID, Name: paired.Name, Fingerprint: paired.Fingerprint, OwnerUID: o.OwnerUID, PairedAt: time.Now().UTC(),
 		Certificate: string(certPEM), Key: string(keyPEM)}
+	if !paired.ServerNotAfter.IsZero() {
+		notAfter := paired.ServerNotAfter.UTC()
+		st.ServerNotAfter = &notAfter
+	}
 	if err := SaveState(dataDir, st); err != nil {
 		return fail(lostPairing(paired, err))
 	}

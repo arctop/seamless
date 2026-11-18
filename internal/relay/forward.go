@@ -67,6 +67,18 @@ type Forwarder struct {
 	// that uid is refused. hasSelf is false until then.
 	self    uint32
 	hasSelf bool
+	// again is the command that pairs this relay again
+	// (State.PairAgainCommand), set by PairingAgainWith, for the words of a
+	// refusal of another server certificate than the pinned one.
+	again string
+}
+
+// PairingAgainWith makes f's refusal of a server certificate other than the
+// pinned one print again, the command that pairs this relay again
+// (State.PairAgainCommand). It returns f.
+func (f *Forwarder) PairingAgainWith(again string) *Forwarder {
+	f.again = again
+	return f
 }
 
 type attrKey struct{}
@@ -133,7 +145,7 @@ func (s State) Forwarder(dataDir string, logger *slog.Logger) (*Forwarder, error
 	if err != nil {
 		return nil, fmt.Errorf("relay: %w", err)
 	}
-	return NewForwarder(u, s.ServerFingerprint, rt, logger), nil
+	return NewForwarder(u, s.ServerFingerprint, rt, logger).PairingAgainWith(s.PairAgainCommand(dataDir)), nil
 }
 
 // Transport is the relay's transport to the server it paired with: the one
@@ -261,8 +273,7 @@ func (f *Forwarder) reason(err error) string {
 	var verify *tls.CertificateVerificationError
 	switch {
 	case errors.Is(err, devices.ErrServerFingerprint):
-		return fmt.Sprintf("the server at %s presented a certificate other than the one this relay pinned at pairing (SHA-256 %s), "+
-			"so nothing was sent: if the server's certificate was renewed, pair the relay again (seamlessd relay pair --replace)", server, f.pin)
+		return CertificateChanged(server, f.pin, err, f.again)
 	case errors.As(err, &verify):
 		return fmt.Sprintf("the server at %s presented a certificate that does not verify (%v), so nothing was sent", server, verify.Err)
 	case errors.Is(err, errUpgradeAnswer):
@@ -270,6 +281,34 @@ func (f *Forwarder) reason(err error) string {
 			"was closed and nothing more was sent", server)
 	}
 	return fmt.Sprintf("the server at %s could not be reached (%v); nothing is answered from memory, so every call fails until it answers", server, err)
+}
+
+// CertificateChanged words the refusal of a server whose certificate is not
+// the one this relay pinned at pairing (devices.ErrServerFingerprint; owner
+// decision R-D2, which keeps the exact pin): the pinned fingerprint, the
+// offered one and its dates when the handshake saw them
+// (devices.OfferedCertificate), that a renewal means pairing every relay
+// again, and again, the command that pairs this one again
+// (State.PairAgainCommand). That command pins the fingerprint the server
+// itself shows, never the one offered here: a changed certificate is also
+// what an interception looks like. An empty again names the bare command.
+func CertificateChanged(server, pin string, err error, again string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "the server at %s presented a certificate other than the one this relay pinned at pairing, so nothing was "+
+		"sent: pinned SHA-256 %s", server, pin)
+	if offered, ok := devices.OfferedCertificate(err); ok && offered.Offered != "" {
+		fmt.Fprintf(&b, "; offered SHA-256 %s, valid %s to %s", offered.Offered, offered.NotBefore.UTC().Format(time.DateOnly),
+			offered.NotAfter.UTC().Format(time.DateOnly))
+	}
+	b.WriteString(". A renewed server certificate means pairing every relay again: compare the offered fingerprint with the " +
+		"one the server itself shows (its Devices page, or seamlessd doctor there) and pin that one, never the one offered " +
+		"here, since a changed certificate is also what an interception looks like. Then revoke this relay on the server's " +
+		"Devices page, get a pairing code there, and run here, as an administrator: ")
+	if again == "" {
+		again = "seamlessd relay pair --replace, as the relay's account"
+	}
+	b.WriteString(again)
+	return b.String()
 }
 
 // writeRefusal answers with the relay's own refusal: a JSON error, the shape

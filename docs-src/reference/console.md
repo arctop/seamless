@@ -1087,7 +1087,12 @@ exist. The computers paired with this server, and how to pair another
   passkey; the page says which is missing.
 - **Paired** - each relay and key device: its key's fingerprint or the start
   of its key, when it paired, whether your passkey or its one-time code
-  approved it, when it was last seen, and **Revoke**.
+  approved it, when it was last seen, and **Revoke**. A relay shows the uid its
+  pairing recorded as yours on its computer; without peer_auth one that
+  recorded none (paired before, or by a relay of an earlier release) is warned
+  about: re-pair it to bind the owner's uid. From 14 days before this server's
+  certificate expires, and past it, the section names every relay paired here:
+  a renewal means re-pairing each relay.
 - **Revoked and expired** - what ended, when, and from where.
 
 It shows at every [level](#choose-how-much-you-see), in the sidebar's Server

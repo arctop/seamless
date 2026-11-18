@@ -232,7 +232,8 @@ func TestRelayCmd_PairThenServe(t *testing.T) {
 		pair: relay.PairOptions{OwnerUID: relayCmdOwner, Server: d.srv.URL, Code: code.Code, Name: "example-laptop", CA: ca, Replace: true}}, &out, &notes))
 	for _, want := range []string{"Paired: this relay speaks for example-laptop", "The server's certificate: SHA-256 ",
 		"This relay's key: ", "restart it",
-		"The owner here: uid " + strconv.FormatUint(uint64(relayCmdOwner), 10) + " (from --owner-uid)"} {
+		"The owner here: uid " + strconv.FormatUint(uint64(relayCmdOwner), 10) + " (from --owner-uid)",
+		", valid until ", "once the server renews it, pair this relay again"} {
 		require.Contains(t, out.String(), want)
 	}
 }

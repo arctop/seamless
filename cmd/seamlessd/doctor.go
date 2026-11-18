@@ -157,6 +157,7 @@ func doctorOn(args []string, m doctorMachine) error {
 	checks = append(checks, relayMappingChecks(ctx, cfg, d.current)...)
 	checks = append(checks, codeOnlyDeviceChecks(ctx, cfg, d.current)...)
 	checks = append(checks, relayOwnerDeviceChecks(ctx, cfg, d.current)...)
+	checks = append(checks, relayRenewalChecks(ctx, cfg, d.current, time.Now())...)
 	checks = append(checks, d.needsCurrent("repo map", repoMapCheck))
 	checks = append(checks, d.needsCurrent("remote sessions", remoteSessionsCheck))
 	// mcp_tools compares a count with itself under either answer to "does it lock
@@ -715,7 +716,9 @@ func serverURLUserCheck() check {
 
 // tlsExpiryWarning is how close to expiry a certificate earns a warning. A
 // month is enough notice to renew a mkcert/private-CA certificate by hand, which
-// is the documented setup and has no auto-renewal behind it.
+// is the documented setup and has no auto-renewal behind it. Inside it, from
+// devices.RelayRenewalWarning (14 days), the relay renewal row names every
+// relay a renewal will refuse until it pairs again (relayRenewalChecks).
 const tlsExpiryWarning = 30 * 24 * time.Hour
 
 // tlsCheck parses the configured pair and reports what a client will actually

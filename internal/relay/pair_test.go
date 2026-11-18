@@ -103,6 +103,8 @@ func TestRelayPair_PairsPinsAndForwardsAsThePairedDevice(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, s.ts.URL, st.ServerURL)
 	require.Equal(t, s.cert.fp, st.ServerFingerprint, "the certificate the server presented is the one pinned")
+	require.NotNil(t, st.ServerNotAfter, "and its notAfter is recorded: the renewal after it means pairing again")
+	require.True(t, s.cert.tls.Leaf.NotAfter.Equal(*st.ServerNotAfter))
 	require.Equal(t, "example-laptop", st.Name)
 	d, err := store.DeviceByID(context.Background(), s.db, st.DeviceID)
 	require.NoError(t, err)
