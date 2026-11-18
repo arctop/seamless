@@ -100,7 +100,9 @@ func (s State) PairAgainCommand(dataDir string) string {
 		owner = strconv.FormatUint(uint64(s.OwnerUID), 10)
 	}
 	words = append(words, "--owner-uid", owner)
-	if dataDir = filepath.Clean(dataDir); dataDir != DefaultDataDir {
+	// Both sides cleaned alike: on Windows, where tests build this, Clean
+	// turns the slashes of DefaultDataDir into backslashes.
+	if dataDir = filepath.Clean(dataDir); dataDir != filepath.Clean(DefaultDataDir) {
 		words = append(words, "--data-dir", dataDir)
 	}
 	return strings.Join(append(words, "--replace", "--code", "-"), " ")
