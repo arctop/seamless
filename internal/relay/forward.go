@@ -203,6 +203,17 @@ func (f *Forwarder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.logger.Debug("relay: forwarding", "method", r.Method, "path", r.URL.Path, "uid", a.UID, "hops", len(a.Chain))
+	// The request's body belongs to the transport until the transport is done
+	// with it, which can be after the answer's headers went back: the
+	// transport reads a body once more past its last byte, to see it end, and
+	// a server that has the bytes may answer first (an MCP tool call's SSE
+	// stream starts at once). By default net/http's server consumes and closes
+	// the body when the answer's headers go out; that last read then fails,
+	// and the transport closes the connection the answer is streaming on, so
+	// the call's stream breaks mid-call. Full duplex leaves the body alone.
+	if err := http.NewResponseController(w).EnableFullDuplex(); err != nil {
+		f.logger.Debug("relay: the local connection has no full duplex", "path", r.URL.Path, "error", err)
+	}
 	f.proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), attrKey{}, a)))
 }
 

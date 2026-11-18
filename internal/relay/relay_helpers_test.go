@@ -136,15 +136,22 @@ func relayLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard
 // socket server_url (config.Config.HTTPClient).
 func relayRun(t *testing.T, l Layout, st State) *http.Client {
 	t.Helper()
-	env := relayTestEnv(t, l)
-	require.Empty(t, env.Problems(l, false))
 	fwd, err := st.Forwarder(l.DataDir, relayLogger())
 	require.NoError(t, err)
+	return relayRunHandler(t, l, fwd)
+}
+
+// relayRunHandler serves h on l's socket as relayRun serves the relay's
+// forwarder, and returns a client of the socket.
+func relayRunHandler(t *testing.T, l Layout, h http.Handler) *http.Client {
+	t.Helper()
+	env := relayTestEnv(t, l)
+	require.Empty(t, env.Problems(l, false))
 	ln, err := env.Listen(l.Socket)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- Serve(ctx, ln, fwd, relayLogger()) }()
+	go func() { done <- Serve(ctx, ln, h, relayLogger()) }()
 	t.Cleanup(func() {
 		cancel()
 		select {

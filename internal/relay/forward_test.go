@@ -363,6 +363,124 @@ func TestRelayForward_StreamsEachEventAsItIsSent(t *testing.T) {
 	}
 }
 
+// relayFlushedKey carries, on a forwarded request's context, the channel
+// relayFlushNoter closes once the relay has flushed the answer's headers to
+// the local caller.
+type relayFlushedKey struct{}
+
+// relayFlushNoter is h, noting on each request's context when the answer's
+// headers went out to the local caller.
+func relayFlushNoter(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		flushed := make(chan struct{})
+		h.ServeHTTP(&relayFlushWriter{ResponseWriter: w, flushed: flushed},
+			r.WithContext(context.WithValue(r.Context(), relayFlushedKey{}, flushed)))
+	})
+}
+
+// relayFlushWriter closes flushed after its first flush. It unwraps, so the
+// relay's full duplex reaches the connection's own writer.
+type relayFlushWriter struct {
+	http.ResponseWriter
+	flushed chan struct{}
+	once    sync.Once
+}
+
+func (w *relayFlushWriter) FlushError() error {
+	err := http.NewResponseController(w.ResponseWriter).Flush()
+	w.once.Do(func() { close(w.flushed) })
+	return err
+}
+
+func (w *relayFlushWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// relayLateBodyEnd is the relay's transport with its last read of a request's
+// body -- the read past the last byte, which sees the body end -- held until
+// the relay has flushed the answer's headers (relayFlushNoter): an order a
+// loaded computer gives the two at random, made certain.
+type relayLateBodyEnd struct{ rt http.RoundTripper }
+
+func (l relayLateBodyEnd) RoundTrip(r *http.Request) (*http.Response, error) {
+	flushed, _ := r.Context().Value(relayFlushedKey{}).(chan struct{})
+	if r.Body == nil || flushed == nil {
+		return l.rt.RoundTrip(r)
+	}
+	out := r.Clone(r.Context())
+	out.Body = &relayLateEOF{ReadCloser: r.Body, left: r.ContentLength, flushed: flushed}
+	return l.rt.RoundTrip(out)
+}
+
+// relayLateEOF reads a body of left bytes, and waits for flushed before any
+// read past them.
+type relayLateEOF struct {
+	io.ReadCloser
+	left    int64
+	flushed <-chan struct{}
+}
+
+func (b *relayLateEOF) Read(p []byte) (int, error) {
+	if b.left <= 0 {
+		select {
+		case <-b.flushed:
+		case <-time.After(10 * time.Second):
+		}
+	}
+	n, err := b.ReadCloser.Read(p)
+	b.left -= int64(n)
+	return n, err
+}
+
+// A stream outlives the transport's last read of its request's body. The
+// transport reads a body once more past its last byte, to see it end, and a
+// server that has the bytes can answer first -- an MCP tool call's stream
+// starts at once, and the relay passes its headers on at once. The relay
+// leaves the body to the transport until then: were the body consumed and
+// closed when the headers went out (net/http's default), that read would fail
+// and the transport would close the connection the answer streams on, and the
+// call would end mid-stream (TestRelayForward_ElicitationRoundTrip's flake
+// under load). relayLateBodyEnd makes that order certain.
+func TestRelayForward_AStreamOutlivesTheBodysLastRead(t *testing.T) {
+	cert := relayNewCert(t, "example-server")
+	release := make(chan struct{})
+	ts := relayUpstream(t, cert, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "data: "+string(b)+"\n\n")
+		w.(http.Flusher).Flush()
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
+		_, _ = io.WriteString(w, "data: two\n\n")
+	}))
+	l := relayLayoutAt(t)
+	st := relayWriteState(t, l, ts.URL, cert.fp, cert.pem)
+	tr, err := st.Transport(l.DataDir)
+	require.NoError(t, err)
+	u, err := ServerURLOf(st.ServerURL)
+	require.NoError(t, err)
+	client := relayRunHandler(t, l, relayFlushNoter(NewForwarder(u, st.ServerFingerprint, relayLateBodyEnd{tr}, relayLogger())))
+
+	resp, err := client.Post(config.SocketBaseURL+"/api/mcp", "application/json", strings.NewReader(`{"method":"tools/call"}`))
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	br := bufio.NewReader(resp.Body)
+	first, err := br.ReadString('\n')
+	require.NoError(t, err, "the stream broke before its first event")
+	require.Equal(t, `data: {"method":"tools/call"}`+"\n", first)
+	close(release)
+	rest, err := io.ReadAll(br)
+	require.NoError(t, err, "the stream broke before the server ended it")
+	require.Equal(t, "\ndata: two\n\n", string(rest))
+}
+
 // With the server down, every request answers the relay's own refusal at once:
 // 502 and the reason, never anything from memory.
 func TestRelayForward_FailsClosedWhenTheServerIsDown(t *testing.T) {
