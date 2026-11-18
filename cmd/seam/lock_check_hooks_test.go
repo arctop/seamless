@@ -175,16 +175,27 @@ func lcNewHarness(t *testing.T) *lcHarness {
 	return h
 }
 
-// lcCleanEnv drops every SEAMLESS_* and GIT_* variable, and PATH, from env.
+// lcCleanEnv drops every SEAMLESS_*, GIT_* and CODEX_* variable, PATH, and
+// Claude Code's CLAUDECODE and CLAUDE_PID from env: the agent markers
+// (lcAgentMarker) of an agent running the tests would otherwise make every
+// row an agent's.
 func lcCleanEnv(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")
-		if !strings.HasPrefix(k, "SEAMLESS_") && !strings.HasPrefix(k, "GIT_") && k != "PATH" {
+		switch {
+		case strings.HasPrefix(k, "SEAMLESS_"), strings.HasPrefix(k, "GIT_"), strings.HasPrefix(k, "CODEX_"):
+		case k == "PATH", k == "CLAUDECODE", k == "CLAUDE_PID":
+		default:
 			out = append(out, kv)
 		}
 	}
 	return out
+}
+
+// withEnv returns a copy of h's environment with kv (name=value) added.
+func (h *lcHarness) withEnv(kv ...string) []string {
+	return append(append([]string{}, h.env...), kv...)
 }
 
 func (h *lcHarness) writeConfig(t *testing.T, serverURL string) {
@@ -222,8 +233,14 @@ func (h *lcHarness) lastArg(key string) any {
 // git runs git in dir and returns its exit code and combined output.
 func (h *lcHarness) git(t *testing.T, dir string, args ...string) (int, string) {
 	t.Helper()
+	return h.gitWith(t, h.env, dir, args...)
+}
+
+// gitWith is git with env in place of h's environment.
+func (h *lcHarness) gitWith(t *testing.T, env []string, dir string, args ...string) (int, string) {
+	t.Helper()
 	cmd := exec.Command(filepath.Join(h.gitDir, "git"), args...)
-	cmd.Env = h.env
+	cmd.Env = env
 	return h.run(t, cmd, dir)
 }
 
@@ -590,5 +607,102 @@ func TestLockCheckHooks_AnAgentsGitThroughAWrapper(t *testing.T) {
 		answer(lcLockOpts{held: true, holder: "cc/lc-holder", refs: refs}, nobody)
 		code, out, _ := h.wrappedGit(t, main, "commit", "--allow-empty", "-m", "the owner, through a wrapper")
 		lcRequireRefused(t, code, out)
+	})
+}
+
+// lcRequireNoSession asserts a refused git command whose output says the
+// caller is an agent bound to no session, by its marker, and that it is to
+// resume or start one before it takes the lock.
+func lcRequireNoSession(t *testing.T, code int, out, marker string) {
+	t.Helper()
+	require.NotEqual(t, 0, code, "refused: %s", out)
+	for _, w := range []string{"LOCK example-app main", "the lock is free", "an agent (" + marker + " is set)",
+		"no live Seamless session is bound to", "Resume your session, or start one: session_start",
+		"Then take the lock: seam lock acquire"} {
+		require.Contains(t, out, w)
+	}
+}
+
+// An agent whose session ended, or that no session-start hook ever stamped,
+// is bound to no session, so the daemon answers for it as for the owner at a
+// terminal (caller_bound false). git hands the hook the agent's environment,
+// and that says it is an agent: with the lock free, its commit, merge, tag and
+// push of a guarded ref are refused, and the refusal says to resume or start
+// a session first. The owner's shape -- the same answer with no marker -- still
+// lands, as does a marker whose agent process is not above git, and a marked
+// agent the daemon binds to a session that holds the lock.
+func TestLockCheckHooks_AnAgentWithNoSession(t *testing.T) {
+	h := lcNewHarness(t)
+	main := h.clone(t, "main")
+	remote := filepath.Join(h.base, "remotes", "example-app.git")
+	h.mustGit(t, main, "checkout", "-q", "-b", "topic")
+	h.mustGit(t, main, "commit", "-q", "--allow-empty", "-m", "topic work")
+	h.mustGit(t, main, "checkout", "-q", "main")
+	refs := []string{"refs/heads/main", "refs/tags/v*"}
+	free := lcAnswer(lcTerminal, lcLock(lcLockOpts{refs: refs}))
+	h.setAnswer(free)
+	// This test process runs git, so it stands in for the agent: the process
+	// Claude Code names in CLAUDE_PID is the one whose shell ran git.
+	self := strconv.Itoa(os.Getpid())
+
+	for _, tc := range []struct {
+		name   string
+		env    []string
+		marker string
+	}{
+		{name: "Claude Code", env: []string{"CLAUDECODE=1"}, marker: "CLAUDECODE"},
+		{name: "Claude Code, its own process named", env: []string{"CLAUDECODE=1", "CLAUDE_PID=" + self}, marker: "CLAUDECODE"},
+		{name: "Codex", env: []string{"CODEX_THREAD_ID=019a0000-0000-7000-8000-000000000000"}, marker: "CODEX_THREAD_ID"},
+		{name: "Codex in its sandbox", env: []string{"CODEX_SANDBOX=seatbelt"}, marker: "CODEX_SANDBOX"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := h.withEnv(tc.env...)
+			at := h.rev(t, main, "refs/heads/main")
+
+			code, out := h.gitWith(t, env, main, "commit", "--allow-empty", "-m", "an agent with no session")
+			lcRequireNoSession(t, code, out, tc.marker)
+			code, out = h.gitWith(t, env, main, "merge", "--ff-only", "topic")
+			lcRequireNoSession(t, code, out, tc.marker)
+			require.Equal(t, at, h.rev(t, main, "refs/heads/main"), "main did not move")
+
+			code, out = h.gitWith(t, env, main, "tag", "v2.0")
+			lcRequireNoSession(t, code, out, tc.marker)
+			code, _ = h.git(t, main, "rev-parse", "--verify", "-q", "refs/tags/v2.0")
+			require.NotEqual(t, 0, code, "no tag was made")
+
+			code, out = h.gitWith(t, env, main, "push", "origin", "topic:main")
+			lcRequireNoSession(t, code, out, tc.marker)
+			require.Contains(t, out, "this push moves refs/heads/main on origin")
+			require.Equal(t, at, h.rev(t, remote, "refs/heads/main"), "the remote's main did not move")
+		})
+	}
+
+	// The control for every row above: the owner at a terminal, no marker, and
+	// the same answer from the daemon.
+	t.Run("the owner at a terminal", func(t *testing.T) {
+		h.mustGit(t, main, "merge", "-q", "--ff-only", "topic")
+		h.mustGit(t, main, "commit", "-q", "--allow-empty", "-m", "the owner")
+		h.mustGit(t, main, "tag", "v2.0")
+		h.mustGit(t, main, "push", "-q", "origin", "main", "v2.0")
+		require.Equal(t, h.rev(t, main, "refs/heads/main"), h.rev(t, remote, "refs/heads/main"))
+	})
+
+	// A marker that outlived its agent, such as a tmux server an agent started
+	// passes on to every later pane: the process CLAUDE_PID names is not above
+	// git (pid 1 never is), so the caller is the owner.
+	t.Run("a marker whose agent is not above git", func(t *testing.T) {
+		code, out := h.gitWith(t, h.withEnv("CLAUDECODE=1", "CLAUDE_PID=1"), main,
+			"commit", "--allow-empty", "-m", "a leftover marker")
+		require.Equal(t, 0, code, out)
+	})
+
+	t.Run("a marked agent bound to the session that holds the lock", func(t *testing.T) {
+		h.setAnswer(lcAnswer(lcAgent, lcLock(lcLockOpts{held: true, mine: true, holder: "cc/lc-me", refs: refs})))
+		t.Cleanup(func() { h.setAnswer(free) })
+		env := h.withEnv("CLAUDECODE=1", "CLAUDE_PID="+self)
+		code, out := h.gitWith(t, env, main, "commit", "--allow-empty", "-m", "the holder")
+		require.Equal(t, 0, code, out)
+		code, out = h.gitWith(t, env, main, "push", "-q", "origin", "main")
+		require.Equal(t, 0, code, out)
 	})
 }

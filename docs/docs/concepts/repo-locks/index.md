@@ -168,8 +168,10 @@ moves: reference-transaction, for every ref update in the checkout (a commit, a
 merge, a rebase, a reset, a tag), and pre-push, for the refs a push updates on
 the remote. Each runs `seam lock check`, which refuses an update that moves a
 guarded ref unless the caller may move it: an agent session only while it holds
-the lock, anyone else, such as the owner at a terminal, unless another session
-holds it. The refusal names the lock, the holder, since and until. A missing
+the lock, an agent with no live session (its environment says it is Claude
+Code or Codex) never, anyone else, such as the owner at a terminal, unless
+another session holds it. The refusal names the lock, the holder, since and
+until. A missing
 `seam` or an unreachable daemon warns and lets the update through. See
 [commit-time lock checks](https://thereisnospoon.org/docs/guides/coordinate-agents/#commit-time-lock-checks)
 for the hook lines and what each refusal means, and `seam doctor` for a

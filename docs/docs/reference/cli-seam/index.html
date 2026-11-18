@@ -579,8 +579,10 @@ hook, <code>reference-transaction</code> or <code>pre-push</code>, and the argum
 the ones git passed it: the transaction's state (only <code>prepared</code> checks), or the
 remote's name and URL. It reads the ref updates on stdin as git sends them, and
 exits 77 to refuse one that moves a ref this repository's locks guard unless
-the caller may move it: an agent session only while it holds the lock, any
-other caller unless another session holds it. Every other outcome exits 0: no
+the caller may move it: an agent session only while it holds the lock, an
+agent with no live session (Claude Code's <code>CLAUDECODE</code>, or Codex's
+<code>CODEX_THREAD_ID</code> or <code>CODEX_SANDBOX</code>, in its environment) never, any other
+caller unless another session holds it. Every other outcome exits 0: no
 update a lock could guard, repo locks off on the server, no lock declared, and,
 with a warning, a daemon it cannot reach.</p>
 <h2 id="captured-plans">Captured plans</h2>

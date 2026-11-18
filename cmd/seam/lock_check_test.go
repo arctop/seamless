@@ -196,6 +196,24 @@ func TestLockCheck_TheRule(t *testing.T) {
 	}
 }
 
+// The unit tests run as a caller with no agent markers, whatever runs them: CI
+// sets none, and an agent running make check carries its own (lcAgentMarker).
+// A row that needs one sets it with lcStubEnv.
+func init() { lcGetenv = func(string) string { return "" } }
+
+// lcStubEnv stands in for the caller's environment: kv is name, value pairs.
+func lcStubEnv(t *testing.T, kv ...string) {
+	t.Helper()
+	require.Zero(t, len(kv)%2, "name, value pairs")
+	env := map[string]string{}
+	for i := 0; i < len(kv); i += 2 {
+		env[kv[i]] = kv[i+1]
+	}
+	prev := lcGetenv
+	lcGetenv = func(name string) string { return env[name] }
+	t.Cleanup(func() { lcGetenv = prev })
+}
+
 // lcStubChain stands in for the process table: the processes the check may
 // ask as, nearest first (agentproc.Chain).
 func lcStubChain(t *testing.T, chain ...string) {
@@ -317,6 +335,123 @@ func TestLockCheck_AnAgentBehindAWrapper(t *testing.T) {
 	})
 }
 
+// An agent the daemon binds to no session -- its session ended, or no
+// session-start hook ever stamped it -- reads to the daemon as the owner at a
+// terminal does (caller_bound false). Its environment says it is an agent, so
+// it gets the agent's rule, and its refusal says to resume or start a session
+// before taking the lock. The owner's shape, no marker, keeps the terminal
+// rule; so does a marker that outlived its agent, and a server too old to say
+// caller_bound.
+func TestLockCheck_AnAgentWithNoSession(t *testing.T) {
+	lcStubGit(t, "commit", true)
+	repo := lcFakeRepo(t, lcOrigin)
+	const agentPid = "4242"
+	chain := []string{"270.27", agentPid + ".42", "50.5"}
+	sessionRemedy := []string{"no live Seamless session is bound to", "Resume your session, or start one: session_start",
+		"name=<the cc/... or cx/... name your briefing printed>", "Then take the lock: seam lock acquire",
+		"--no-verify does not skip", "seam lock release --force"}
+	for _, tc := range []struct {
+		name    string
+		env     []string
+		chain   []string
+		bound   *bool
+		lock    lcLockOpts
+		refused []string // in the refusal; nil passes
+		absent  []string // not in the refusal
+	}{
+		{name: "Claude Code, the lock free", env: []string{"CLAUDECODE", "1"}, bound: lcTerminal,
+			refused: append([]string{"LOCK example-app main", "the lock is free", "an agent (CLAUDECODE is set)"}, sessionRemedy...),
+			absent:  []string{"this session does not hold it"}},
+		{name: "Claude Code, its own process named and an ancestor", env: []string{"CLAUDECODE", "1", "CLAUDE_PID", agentPid},
+			chain: chain, bound: lcTerminal, refused: []string{"CLAUDECODE is set"}},
+		{name: "Claude Code, its process named but no process table to read", env: []string{"CLAUDECODE", "1", "CLAUDE_PID", "999"},
+			bound: lcTerminal, refused: []string{"CLAUDECODE is set"}},
+		{name: "Codex", env: []string{"CODEX_THREAD_ID", "019a0000-0000-7000-8000-000000000000"}, bound: lcTerminal,
+			refused: append([]string{"CODEX_THREAD_ID is set"}, sessionRemedy...)},
+		{name: "Codex in its sandbox", env: []string{"CODEX_SANDBOX", "seatbelt"}, bound: lcTerminal,
+			refused: []string{"CODEX_SANDBOX is set"}},
+		{name: "a lapsed hold", env: []string{"CLAUDECODE", "1"}, bound: lcTerminal,
+			lock:    lcLockOpts{lapsed: true, holder: "cc/lc-me"},
+			refused: []string{"its last hold lapsed at 2026-11-15T18:15:00Z", "CLAUDECODE is set"}},
+		{name: "held by another session", env: []string{"CLAUDECODE", "1"}, bound: lcTerminal,
+			lock: lcLockOpts{held: true, holder: "cc/lc-holder"},
+			refused: append([]string{"session cc/lc-holder holds the lock (since 2026-11-15T18:00:00Z, until 2026-11-15T18:15:00Z)",
+				"CLAUDECODE is set"}, sessionRemedy...)},
+
+		// The owner's shape: no marker, the terminal rule.
+		{name: "no marker, the lock free", bound: lcTerminal},
+		{name: "no marker, the lock held", bound: lcTerminal, lock: lcLockOpts{held: true, holder: "cc/lc-holder"},
+			refused: []string{"session cc/lc-holder holds the lock", "Wait for its release"},
+			absent:  []string{"is set", "session_start"}},
+		// A marker that outlived its agent (a tmux server an agent started):
+		// the process CLAUDE_PID names is not above this one.
+		{name: "Claude Code's marker, its process not an ancestor", env: []string{"CLAUDECODE", "1", "CLAUDE_PID", "777"},
+			chain: chain, bound: lcTerminal},
+		{name: "a marker under a server that names no caller_bound", env: []string{"CLAUDECODE", "1"}, bound: nil},
+		{name: "a bound agent's own hold", env: []string{"CLAUDECODE", "1"}, bound: lcAgent,
+			lock: lcLockOpts{held: true, mine: true, holder: "cc/lc-me"}},
+		{name: "a bound agent, the lock free", env: []string{"CLAUDECODE", "1"}, bound: lcAgent,
+			refused: []string{"this session does not hold it"}, absent: []string{"is set", "session_start"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lcStubEnv(t, tc.env...)
+			lcStubChain(t, tc.chain...)
+			fx := newDaemonFixture(t, map[string]toolFunc{
+				"locks_list": fixedReply(lcAnswer(tc.bound, lcLock(tc.lock))),
+			}, nil, "")
+			stderr, err := lcRun(t, fx, lcCommitMain, lcRefTx(repo)...)
+			require.Empty(t, stderr)
+			if tc.refused == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			require.Equal(t, lcExitRefused, lcRefusedCode(err))
+			for _, w := range tc.refused {
+				require.Contains(t, err.Error(), w)
+			}
+			for _, w := range tc.absent {
+				require.NotContains(t, err.Error(), w)
+			}
+		})
+	}
+}
+
+// lcAgentMarker on its own: which variable counts, and when CLAUDE_PID vetoes
+// CLAUDECODE.
+func TestLockCheck_AgentMarker(t *testing.T) {
+	env := func(kv ...string) func(string) string {
+		m := map[string]string{}
+		for i := 0; i+1 < len(kv); i += 2 {
+			m[kv[i]] = kv[i+1]
+		}
+		return func(name string) string { return m[name] }
+	}
+	chain := []string{"270.27", "4242.42"}
+	for _, tc := range []struct {
+		name  string
+		env   func(string) string
+		chain []string
+		want  string
+	}{
+		{name: "nothing", env: env(), chain: chain},
+		{name: "CLAUDECODE alone", env: env("CLAUDECODE", "1"), chain: chain, want: "CLAUDECODE"},
+		{name: "CLAUDE_PID an ancestor", env: env("CLAUDECODE", "1", "CLAUDE_PID", "4242"), chain: chain, want: "CLAUDECODE"},
+		{name: "CLAUDE_PID a prefix of an ancestor's pid is not one", env: env("CLAUDECODE", "1", "CLAUDE_PID", "424"), chain: chain},
+		{name: "CLAUDE_PID not an ancestor", env: env("CLAUDECODE", "1", "CLAUDE_PID", "777"), chain: chain},
+		{name: "CLAUDE_PID with no chain", env: env("CLAUDECODE", "1", "CLAUDE_PID", "777"), want: "CLAUDECODE"},
+		{name: "CLAUDE_PID without CLAUDECODE", env: env("CLAUDE_PID", "4242"), chain: chain},
+		{name: "a leaked CLAUDECODE beside Codex's own", env: env("CLAUDECODE", "1", "CLAUDE_PID", "777", "CODEX_THREAD_ID", "t"),
+			chain: chain, want: "CODEX_THREAD_ID"},
+		{name: "CODEX_SANDBOX", env: env("CODEX_SANDBOX", "seatbelt"), chain: chain, want: "CODEX_SANDBOX"},
+		{name: "another CODEX_ variable is not a marker", env: env("CODEX_HOME", "/x"), chain: chain},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, lcAgentMarker(tc.env, tc.chain))
+		})
+	}
+}
+
 // The negative control the acceptance asks for: a refusal that says only
 // "refused" is not enough. Every refusal names the lock, the holder, since and
 // until, and the remedy, and an assertion on those words fails on a bare one.
@@ -325,7 +460,7 @@ func TestLockCheck_ARefusalNamesTheHolder(t *testing.T) {
 	for _, w := range []string{"LOCK example-app main", "cc/lc-holder", "since ", "until ", "seam lock acquire --wait"} {
 		require.NotContains(t, bare.Error(), w, "the control: a bare refusal names nothing")
 	}
-	got := lcRefusal(lcHookRefTx, "", map[string]any{
+	got := lcRefusal(lcHookRefTx, "", "", map[string]any{
 		"label": "example-app main", "held": true, "holder_session": "cc/lc-holder",
 		"since": "2026-11-15T18:00:00Z", "until": "2026-11-15T18:15:00Z",
 	}, []string{"refs/heads/main"})
@@ -333,7 +468,7 @@ func TestLockCheck_ARefusalNamesTheHolder(t *testing.T) {
 		"cc/lc-holder holds the lock (since 2026-11-15T18:00:00Z, until 2026-11-15T18:15:00Z).\n"+
 		hintIndent+"Wait for its release, or queue for the lock: seam lock acquire --wait", got)
 
-	push := lcRefusal(lcHookPrePush, "origin", map[string]any{"label": "example-app main"}, []string{"refs/tags/v1.2"})
+	push := lcRefusal(lcHookPrePush, "origin", "", map[string]any{"label": "example-app main"}, []string{"refs/tags/v1.2"})
 	require.Contains(t, push, "this push moves refs/tags/v1.2 on origin, which LOCK example-app main guards")
 }
 

@@ -216,6 +216,7 @@ may move it:
 | Caller | Lock held by the caller | Held by another session | Free |
 |---|---|---|---|
 | An agent session | moves the ref | refused | refused: take the lock first |
+| An agent with no live session | - | refused | refused: resume or start a session, then take the lock |
 | Anyone else, such as the owner at a terminal | - | refused | moves the ref |
 
 An agent session is one the daemon can name. `seam` sends the agent process
@@ -225,9 +226,22 @@ that process belongs to a live session and whether that session holds the
 lock. An agent may run git through a program of its own, such as a landing
 script under node or a make target. That program is then the nearest process
 above git, and no session belongs to it, so `seam lock check` asks again as
-each process further up and uses the first answer that names a session. A
-caller the daemon binds to no session all the way up is treated as anyone
-else.
+each process further up and uses the first answer that names a session.
+
+A caller the daemon binds to no session all the way up is still an agent when
+its environment says so. Claude Code and Codex mark every command their shell
+tool runs, and git hands a hook that environment unchanged. Claude Code sets
+`CLAUDECODE=1`; it also names its own process in `CLAUDE_PID`, and when that
+variable is set the process must be above git, so a marker that outlived its
+agent (a tmux server an agent started passes its environment to every later
+pane) does not count. Codex sets `CODEX_THREAD_ID`, and `CODEX_SANDBOX` in a
+sandboxed command. Such an agent has no session to hold the lock with: its
+session ended (`session_end`), or no session-start hook ever stamped it. The
+refusal says to resume the session, with `session_start` and the
+`name=cc/...` or `cx/...` its briefing printed, or to start one, and then to
+take the lock. A caller with no marker is treated as anyone else. The markers
+are a convention between cooperating agents, not a security boundary: an agent
+can unset them.
 
 The lock is found the way `seam lock` finds it: by the checkout's origin first,
 then its host and path. A second clone of the repository, on another machine,

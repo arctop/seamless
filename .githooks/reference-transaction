@@ -1,8 +1,9 @@
 #!/bin/sh
 # Repo-lock check at commit time: refuses a ref update that moves a ref one of
 # this repository's locks guards (refs/heads/main, a release tag) unless the
-# caller may move it -- an agent session only while it holds the lock, anyone
-# else unless another session holds it. See the coordinate-agents guide.
+# caller may move it -- an agent only while its own session holds the lock (an
+# agent with no live session, never), anyone else unless another session holds
+# it. See the coordinate-agents guide.
 #
 # git runs this hook for every ref transaction, in up to four states; only
 # "prepared" checks, once git has locked the refs. `seam lock check` reads the

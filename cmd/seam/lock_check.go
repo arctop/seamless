@@ -11,6 +11,10 @@ package main
 //   - an agent session (one the daemon binds this connection to through the
 //     agent process that ran git, directly or through a program of its own
 //     such as node or make: lcList) only while it holds the lock;
+//   - an agent the daemon binds to no live session -- its session ended, or
+//     none was ever stamped -- never: its environment says it is an agent
+//     (lcAgentMarker), and an agent moves a guarded ref only while its own
+//     session holds the lock;
 //   - any other caller, such as the owner at a terminal, unless another session
 //     holds the lock.
 //
@@ -76,9 +80,11 @@ const lockCheckLong = `Run by the reference-transaction and pre-push git hooks, 
 reads the hook's ref updates on stdin, as git sends them, and the hook's
 arguments after --. It exits 77 to refuse an update that moves a ref one of
 this repository's locks guards, unless this caller may move it: an agent
-session only while it holds the lock, any other caller unless another session
-holds it. Every other outcome exits 0, a failure to reach the daemon with a
-warning. See the coordinate-agents guide for the hook scripts.`
+session only while it holds the lock, an agent bound to no live session
+(Claude Code's or Codex's environment, with no session) never, any other
+caller unless another session holds it. Every other outcome exits 0, a failure
+to reach the daemon with a warning. See the coordinate-agents guide for the
+hook scripts.`
 
 type lockCheckOpts struct {
 	hook *string
@@ -120,6 +126,10 @@ var lcHookGit = lcGitCommand
 // lcAgentChain names the processes this check may ask as, nearest first
 // (agentproc.Chain); a variable so a test can stand in for the process table.
 var lcAgentChain = agentproc.Chain
+
+// lcGetenv reads the caller's environment for lcAgentMarker; a variable so a
+// test can stand in for it.
+var lcGetenv = os.Getenv
 
 func runLockCheck(ctx context.Context, e *env, o *lockCheckOpts, pos []string) error {
 	hook := *o.hook
@@ -261,15 +271,58 @@ func lcGuards(pattern, ref string) bool {
 	return len(ref) >= len(before)+len(after) && strings.HasPrefix(ref, before) && strings.HasSuffix(ref, after)
 }
 
-// lcAllowed is the rule: the holder passes; an agent session that does not
-// hold the lock is refused; any other caller is refused only while another
-// session holds it. agent is the daemon's caller_bound; a missing
-// held_by_caller reads as false.
+// lcAllowed is the rule: the holder passes; an agent that does not hold the
+// lock is refused; any other caller is refused only while another session
+// holds it. agent is the daemon's caller_bound, or an agent the daemon binds to
+// no session (lcAgentMarker); a missing held_by_caller reads as false.
 func lcAllowed(l map[string]any, agent bool) bool {
 	if l["held_by_caller"] == true {
 		return true
 	}
 	return !agent && l["held"] != true
+}
+
+// lcAgentMarker names the environment variable that shows this caller is an
+// agent, or "" for none. The daemon tells a session it binds from anyone else
+// (caller_bound), but an agent it binds to no session -- one whose session
+// ended, or that no session-start hook ever stamped -- reads to it exactly as
+// the owner at a terminal does, and would get the owner's rule: a free lock
+// lets it through. The agent's own environment tells the two apart, since each
+// client marks every command its shell tool runs, and git hands a hook its
+// environment unchanged:
+//
+//   - Claude Code sets CLAUDECODE=1. It also names its own process in
+//     CLAUDE_PID, and when that is set the process must be one of the
+//     caller's ancestors (chain, agentproc.Chain's "<pid>.<start>" names):
+//     a marker that outlived its agent -- a tmux server an agent started,
+//     whose every later pane inherits its environment -- is not an agent.
+//     With no chain to compare (a process table this OS cannot read), the
+//     marker stands.
+//   - Codex sets CODEX_THREAD_ID in every command its shell tool runs, and
+//     CODEX_SANDBOX in a sandboxed one.
+//
+// An agent can unset these; the check is coordination between agents that
+// keep to the protocol, not a security boundary.
+func lcAgentMarker(getenv func(string) string, chain []string) string {
+	if getenv("CLAUDECODE") != "" && lcClaudeIsAncestor(getenv("CLAUDE_PID"), chain) {
+		return "CLAUDECODE"
+	}
+	for _, name := range []string{"CODEX_THREAD_ID", "CODEX_SANDBOX"} {
+		if getenv(name) != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+// lcClaudeIsAncestor reports whether CLAUDE_PID's value, pid, names one of the
+// processes in chain, or there is nothing to compare: no pid, or no chain.
+func lcClaudeIsAncestor(pid string, chain []string) bool {
+	pid = strings.TrimSpace(pid)
+	if pid == "" || len(chain) == 0 {
+		return true
+	}
+	return slices.ContainsFunc(chain, func(id string) bool { return strings.HasPrefix(id, pid+".") })
 }
 
 // lcCheck asks the daemon for this repository's locks and refuses the updates
@@ -289,7 +342,8 @@ func lcCheck(ctx context.Context, e *env, hook, remote, dir string, candidates [
 		return nil
 	}
 	defer func() { _ = cli.Close() }()
-	out, err := lcList(ctx, cli, checkout, lcAgentChain())
+	chain := lcAgentChain()
+	out, err := lcList(ctx, cli, checkout, chain)
 	switch {
 	case errors.Is(err, errLkNotServed):
 		return nil // repo locks are off on this server: nothing to check
@@ -297,7 +351,14 @@ func lcCheck(ctx context.Context, e *env, hook, remote, dir string, candidates [
 		lcWarn(e, "locks_list failed (%v)", err)
 		return nil
 	}
-	agent := out["caller_bound"] == true
+	// unbound names the marker of an agent the daemon binds to no session. A
+	// server too old to say caller_bound keeps the rule it had.
+	bound, said := out["caller_bound"].(bool)
+	unbound := ""
+	if said && !bound {
+		unbound = lcAgentMarker(lcGetenv, chain)
+	}
+	agent := bound || unbound != ""
 	locks, _ := out["locks"].([]any)
 	var refusals []string
 	for _, item := range locks {
@@ -312,7 +373,7 @@ func lcCheck(ctx context.Context, e *env, hook, remote, dir string, candidates [
 			}
 		}
 		if len(moved) > 0 && !lcAllowed(l, agent) {
-			refusals = append(refusals, lcRefusal(hook, remote, l, moved))
+			refusals = append(refusals, lcRefusal(hook, remote, unbound, l, moved))
 		}
 	}
 	if len(refusals) == 0 {
@@ -363,8 +424,10 @@ const lcOverride = "--no-verify does not skip the reference-transaction hook, wh
 
 // lcRefusal says why one lock refuses: what moves, who holds the lock and
 // since and until when (a holder only as the daemon lets this caller see it),
-// and the remedy. A free lock refuses only an agent session (lcAllowed).
-func lcRefusal(hook, remote string, l map[string]any, refs []string) string {
+// and the remedy. A free lock refuses only an agent (lcAllowed). unbound is
+// the marker of an agent the daemon binds to no session (lcAgentMarker), ""
+// for any other caller: its remedy starts with a session.
+func lcRefusal(hook, remote, unbound string, l map[string]any, refs []string) string {
 	what := "this update moves " + strings.Join(refs, ", ")
 	if hook == lcHookPrePush {
 		if remote == "" {
@@ -373,17 +436,27 @@ func lcRefusal(hook, remote string, l map[string]any, refs []string) string {
 		what = "this push moves " + strings.Join(refs, ", ") + " on " + remote
 	}
 	head := fmt.Sprintf("refused: %s, which LOCK %s guards", what, str(l["label"]))
-	if l["held"] == true {
+	held := l["held"] == true
+	state := "the lock is free"
+	if held {
 		who := "another session"
 		if s := str(l["holder_session"]); s != "" {
 			who = "session " + s
 		}
-		return fmt.Sprintf("%s, and %s holds the lock%s.\n%sWait for its release, or queue for the lock: seam lock acquire --wait",
-			head, who, lcSpan(l), hintIndent)
-	}
-	state := "the lock is free"
-	if l["lapsed"] == true {
+		state = who + " holds the lock" + lcSpan(l)
+	} else if l["lapsed"] == true {
 		state = "the lock is free (its last hold lapsed" + lcAt(" at ", str(l["until"])) + ")"
+	}
+	if unbound != "" {
+		return fmt.Sprintf("%s, %s, and this caller is an agent (%s is set) that no live Seamless session is bound to: "+
+			"an agent moves a guarded ref only while its own session holds the lock.\n"+
+			"%sResume your session, or start one: session_start, with name=<the cc/... or cx/... name your briefing printed> "+
+			"to resume one that ended. Then take the lock: seam lock acquire (--wait queues behind a holder)",
+			head, state, unbound, hintIndent)
+	}
+	if held {
+		return fmt.Sprintf("%s, and %s.\n%sWait for its release, or queue for the lock: seam lock acquire --wait",
+			head, state, hintIndent)
 	}
 	return fmt.Sprintf("%s, %s, and this session does not hold it: an agent session moves a guarded ref only "+
 		"while it holds the lock.\n%sTake it first: seam lock acquire (--wait queues behind a holder)", head, state, hintIndent)

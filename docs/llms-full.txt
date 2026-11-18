@@ -5533,8 +5533,10 @@ moves: reference-transaction, for every ref update in the checkout (a commit, a
 merge, a rebase, a reset, a tag), and pre-push, for the refs a push updates on
 the remote. Each runs `seam lock check`, which refuses an update that moves a
 guarded ref unless the caller may move it: an agent session only while it holds
-the lock, anyone else, such as the owner at a terminal, unless another session
-holds it. The refusal names the lock, the holder, since and until. A missing
+the lock, an agent with no live session (its environment says it is Claude
+Code or Codex) never, anyone else, such as the owner at a terminal, unless
+another session holds it. The refusal names the lock, the holder, since and
+until. A missing
 `seam` or an unreachable daemon warns and lets the update through. See
 [commit-time lock checks](/guides/coordinate-agents/#commit-time-lock-checks)
 for the hook lines and what each refusal means, and `seam doctor` for a
@@ -6708,6 +6710,7 @@ may move it:
 | Caller | Lock held by the caller | Held by another session | Free |
 |---|---|---|---|
 | An agent session | moves the ref | refused | refused: take the lock first |
+| An agent with no live session | - | refused | refused: resume or start a session, then take the lock |
 | Anyone else, such as the owner at a terminal | - | refused | moves the ref |
 
 An agent session is one the daemon can name. `seam` sends the agent process
@@ -6717,9 +6720,22 @@ that process belongs to a live session and whether that session holds the
 lock. An agent may run git through a program of its own, such as a landing
 script under node or a make target. That program is then the nearest process
 above git, and no session belongs to it, so `seam lock check` asks again as
-each process further up and uses the first answer that names a session. A
-caller the daemon binds to no session all the way up is treated as anyone
-else.
+each process further up and uses the first answer that names a session.
+
+A caller the daemon binds to no session all the way up is still an agent when
+its environment says so. Claude Code and Codex mark every command their shell
+tool runs, and git hands a hook that environment unchanged. Claude Code sets
+`CLAUDECODE=1`; it also names its own process in `CLAUDE_PID`, and when that
+variable is set the process must be above git, so a marker that outlived its
+agent (a tmux server an agent started passes its environment to every later
+pane) does not count. Codex sets `CODEX_THREAD_ID`, and `CODEX_SANDBOX` in a
+sandboxed command. Such an agent has no session to hold the lock with: its
+session ended (`session_end`), or no session-start hook ever stamped it. The
+refusal says to resume the session, with `session_start` and the
+`name=cc/...` or `cx/...` its briefing printed, or to start one, and then to
+take the lock. A caller with no marker is treated as anyone else. The markers
+are a convention between cooperating agents, not a security boundary: an agent
+can unset them.
 
 The lock is found the way `seam lock` finds it: by the checkout's origin first,
 then its host and path. A second clone of the repository, on another machine,
@@ -13722,8 +13738,10 @@ hook, `reference-transaction` or `pre-push`, and the arguments after `--` are
 the ones git passed it: the transaction's state (only `prepared` checks), or the
 remote's name and URL. It reads the ref updates on stdin as git sends them, and
 exits 77 to refuse one that moves a ref this repository's locks guard unless
-the caller may move it: an agent session only while it holds the lock, any
-other caller unless another session holds it. Every other outcome exits 0: no
+the caller may move it: an agent session only while it holds the lock, an
+agent with no live session (Claude Code's `CLAUDECODE`, or Codex's
+`CODEX_THREAD_ID` or `CODEX_SANDBOX`, in its environment) never, any other
+caller unless another session holds it. Every other outcome exits 0: no
 update a lock could guard, repo locks off on the server, no lock declared, and,
 with a warning, a daemon it cannot reach.
 

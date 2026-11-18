@@ -464,6 +464,12 @@ may move it:</p>
 <td>refused: take the lock first</td>
 </tr>
 <tr>
+<td>An agent with no live session</td>
+<td>-</td>
+<td>refused</td>
+<td>refused: resume or start a session, then take the lock</td>
+</tr>
+<tr>
 <td>Anyone else, such as the owner at a terminal</td>
 <td>-</td>
 <td>refused</td>
@@ -479,9 +485,21 @@ that process belongs to a live session and whether that session holds the
 lock. An agent may run git through a program of its own, such as a landing
 script under node or a make target. That program is then the nearest process
 above git, and no session belongs to it, so <code>seam lock check</code> asks again as
-each process further up and uses the first answer that names a session. A
-caller the daemon binds to no session all the way up is treated as anyone
-else.</p>
+each process further up and uses the first answer that names a session.</p>
+<p>A caller the daemon binds to no session all the way up is still an agent when
+its environment says so. Claude Code and Codex mark every command their shell
+tool runs, and git hands a hook that environment unchanged. Claude Code sets
+<code>CLAUDECODE=1</code>; it also names its own process in <code>CLAUDE_PID</code>, and when that
+variable is set the process must be above git, so a marker that outlived its
+agent (a tmux server an agent started passes its environment to every later
+pane) does not count. Codex sets <code>CODEX_THREAD_ID</code>, and <code>CODEX_SANDBOX</code> in a
+sandboxed command. Such an agent has no session to hold the lock with: its
+session ended (<code>session_end</code>), or no session-start hook ever stamped it. The
+refusal says to resume the session, with <code>session_start</code> and the
+<code>name=cc/...</code> or <code>cx/...</code> its briefing printed, or to start one, and then to
+take the lock. A caller with no marker is treated as anyone else. The markers
+are a convention between cooperating agents, not a security boundary: an agent
+can unset them.</p>
 <p>The lock is found the way <code>seam lock</code> finds it: by the checkout's origin first,
 then its host and path. A second clone of the repository, on another machine,
 is checked against the same lock. A push is checked against the lock of the

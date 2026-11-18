@@ -1720,7 +1720,13 @@ repo-locks): with repo locks on and a lock declared for the repository, a
 commit, merge, reset, tag or push that moves a guarded ref is refused unless
 the calling agent session holds the lock. `--no-verify` does not skip
 reference-transaction. The scripts refuse only on exit 77, so a `seam` without
-`lock check`, or none on PATH, warns and lets git through.
+`lock check`, or none on PATH, warns and lets git through. An agent the daemon
+binds to no session is told from the owner at a terminal by its environment
+(`lcAgentMarker`: `CLAUDECODE`, vetoed by a `CLAUDE_PID` that is not an
+ancestor; `CODEX_THREAD_ID`; `CODEX_SANDBOX`), so a test that runs git through
+the hooks drops those variables (`lcCleanEnv`), and the unit tests read an
+empty environment unless a row stubs one (`lcStubEnv`): an agent running
+`make check` carries its own markers.
 
 `make lint` catches `ulid.MustNew`, `time.Sleep`, missing `rows.Err()`,
 `err ==` sentinel comparisons, and -- via `errcheck` with `check-blank` --

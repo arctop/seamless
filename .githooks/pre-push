@@ -1,10 +1,10 @@
 #!/bin/sh
 # Repo-lock check at push time: refuses a push that moves a ref one of this
 # repository's locks guards on the remote (refs/heads/main, a release tag)
-# unless the caller may move it -- an agent session only while it holds the
-# lock, anyone else unless another session holds it. The lock is the one this
-# checkout's repository declares, whatever URL the push goes to. See the
-# coordinate-agents guide.
+# unless the caller may move it -- an agent only while its own session holds
+# the lock (an agent with no live session, never), anyone else unless another
+# session holds it. The lock is the one this checkout's repository declares,
+# whatever URL the push goes to. See the coordinate-agents guide.
 #
 # seam lock check exits 77 to refuse, and only 77 refuses. Anything else -- no
 # seam on PATH, a seam too old to have `lock check`, a failure -- warns and lets
