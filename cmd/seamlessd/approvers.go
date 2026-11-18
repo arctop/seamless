@@ -50,7 +50,8 @@ With console sign-in by passkey (console.sign_in: passkey):
 
   add                             print the Add a passkey address to open on a new device,
                                   then approve the code its page shows
-  approve [--code <code>] [--yes] add the passkey whose page shows that code (asks to confirm)
+  approve [--code <code>]         show the passkey whose page shows that code, ask, and add it
+                                  (at a terminal only: no flag skips the question)
 `
 
 func runApprovers(args []string) error {
@@ -67,6 +68,12 @@ func runApprovers(args []string) error {
 	if err != nil {
 		return fmt.Errorf("seamlessd.approvers: %w", err)
 	}
+	// approve asks before it adds, so with no terminal there is no one to ask:
+	// settled here like a bad argument, before anything is opened.
+	tty := stdioUnlockTerminal()
+	if cmd.verb == "approve" && !tty.interactive {
+		return fmt.Errorf("seamlessd.approvers: %w", approveNoTerminal(cmd.code))
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("seamlessd.approvers: %w", err)
@@ -76,7 +83,7 @@ func runApprovers(args []string) error {
 		return fmt.Errorf("seamlessd.approvers: %w", err)
 	}
 	defer func() { _ = db.Close() }()
-	if err := cmd.runWith(context.Background(), db, cfg, stdioUnlockTerminal(), time.Now(), runtime.GOOS); err != nil {
+	if err := cmd.runWith(context.Background(), db, cfg, tty, time.Now(), runtime.GOOS); err != nil {
 		return fmt.Errorf("seamlessd.approvers: %w", err)
 	}
 	return nil
@@ -126,7 +133,6 @@ type approversCmd struct {
 	asJSON      bool   // list
 	id          string // remove
 	code        string // approve: the code the device's page shows
-	yes         bool   // approve: no question asked
 }
 
 // parseApprovers checks a verb and its arguments and touches nothing, so a bad
@@ -184,18 +190,21 @@ func parseApprovers(args []string) (approversCmd, error) {
 	case "approve":
 		fs := flag.NewFlagSet("approvers approve", flag.ContinueOnError)
 		fs.SetOutput(io.Discard)
+		// --code is its only flag. There is no --yes: the Add a passkey page
+		// is public, so a code someone sent the owner names their passkey,
+		// and a flag that skips the question would add it unseen (owner
+		// decision R-D7, 2026-11-15).
 		code := fs.String("code", "", "the code the device's Add a passkey page shows")
-		yes := fs.Bool("yes", false, "add it without asking")
 		if err := fs.Parse(rest); err != nil {
-			return cmd, fmt.Errorf("approve: %w", err)
+			return cmd, fmt.Errorf("approve takes --code alone (it shows the passkey and asks before it adds it): %w", err)
 		}
 		if fs.NArg() > 0 {
-			return cmd, fmt.Errorf("approve takes --code and --yes, got %q", fs.Arg(0))
+			return cmd, fmt.Errorf("approve takes --code alone, got %q", fs.Arg(0))
 		}
 		if *code != "" && store.FormatUnlockCode(*code) == "" {
 			return cmd, fmt.Errorf("invalid value %q for --code: the Add a passkey page shows a code as XXXX-XXXX, 8 letters and digits", *code)
 		}
-		cmd.code, cmd.yes = *code, *yes
+		cmd.code = *code
 	default:
 		return cmd, fmt.Errorf("unknown verb %q\n\n%s", cmd.verb, approversUsage)
 	}
@@ -203,7 +212,7 @@ func parseApprovers(args []string) (approversCmd, error) {
 }
 
 // run carries out a parsed verb against db on the platform goos, with no
-// terminal to ask at: what a script gets.
+// terminal to ask at: what a script gets, which for approve is a refusal.
 func (cmd approversCmd) run(ctx context.Context, db *sql.DB, cfg config.Config, out io.Writer, now time.Time, goos string) error {
 	return cmd.runWith(ctx, db, cfg, unlockTerminal{out: out}, now, goos)
 }
@@ -215,7 +224,7 @@ func (cmd approversCmd) runWith(ctx context.Context, db *sql.DB, cfg config.Conf
 	case "add":
 		return approversAdd(ctx, db, cfg, tty, now)
 	case "approve":
-		return approveEnrollment(ctx, db, cfg, tty, cmd.code, cmd.yes, now)
+		return approveEnrollment(ctx, db, cfg, tty, cmd.code, now)
 	case "enroll-code":
 		code, expires, err := store.MintEnrollCode(ctx, db, cmd.kind, cmd.fingerprint, now)
 		if err != nil {

@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -86,6 +88,7 @@ func TestRunApprovers_HelpAndBadArgumentsNeverTouchTheDatabase(t *testing.T) {
 		{name: "list with an unknown flag", args: []string{"list", "--nope"}, wantErr: "not defined"},
 		{name: "remove with no id", args: []string{"remove"}, wantErr: "takes one credential id"},
 		{name: "reset unconfirmed", args: []string{"reset"}, wantErr: "pass --yes"},
+		{name: "approve with --yes", args: []string{"approve", "--code", "ABCD-EFGH", "--yes"}, wantErr: "flag provided but not defined: -yes"},
 		{name: "unknown verb", args: []string{"bogus"}, wantErr: "unknown verb"},
 	}
 	check := func(t *testing.T, args []string, wantErr string) {
@@ -142,6 +145,84 @@ func TestRunApprovers_RefusesAMissingDatabaseWithoutCreatingIt(t *testing.T) {
 	writeDaemonConfig(t, dataDir)
 	require.ErrorContains(t, runApprovers([]string{"list"}), "no database at")
 	require.NoFileExists(t, filepath.Join(dataDir, "seam.db"))
+}
+
+// hdPipeStdin makes the process's stdin a pipe holding in, as a script's or a
+// cron job's is, for the test's duration. No test in this package runs in
+// parallel, so swapping os.Stdin is safe.
+func hdPipeStdin(t *testing.T, in string) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	_, err = w.WriteString(in)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	old := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = old; _ = r.Close() })
+}
+
+// `approvers approve` with a piped stdin -- a script, a cron job, `echo y |`
+// -- refuses before the config or the database is opened, with a code or
+// without, whatever the pipe would answer: no one is there to answer the
+// question it asks, and no flag skips it (owner decision R-D7, 2026-11-15). A
+// passkey waiting for the code stays waiting.
+func TestHDRunApprovers_ApproveRefusesAPipedStdin(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now()
+	for _, tc := range []struct {
+		name    string
+		code    bool
+		wantErr string
+	}{
+		{"with a code", true, "so it runs only at a terminal: run it in one (over ssh, ssh -t). Nothing changed"},
+		{"without a code", false, "approve needs --code, at a terminal"},
+	} {
+		args := []string{"approve"}
+		if tc.code {
+			args = append(args, "--code", "ABCD-EFGH")
+		}
+		t.Run(tc.name+"/older database", func(t *testing.T) {
+			behind := store.LatestSchemaVersion() - 1
+			dbPath := daemonDB(t, behind)
+			hdPipeStdin(t, "y\n")
+			err := runApprovers(args)
+			require.ErrorContains(t, err, tc.wantErr)
+			require.NotContains(t, err.Error(), "schema", "refused before the database was opened")
+			require.Equal(t, behind, appliedSchema(t, dbPath))
+		})
+		t.Run(tc.name+"/no database", func(t *testing.T) {
+			dataDir := filepath.Join(t.TempDir(), "data")
+			writeDaemonConfig(t, dataDir)
+			hdPipeStdin(t, "y\n")
+			err := runApprovers(args)
+			require.ErrorContains(t, err, tc.wantErr)
+			require.NoFileExists(t, filepath.Join(dataDir, "seam.db"))
+		})
+		t.Run(tc.name+"/a passkey waiting", func(t *testing.T) {
+			dbPath := daemonDB(t, store.LatestSchemaVersion())
+			db, err := store.OpenExisting(dbPath)
+			require.NoError(t, err)
+			code := signinWaiting(t, db, "someone else's key", 9, now)
+			require.NoError(t, db.Close())
+			run := []string{"approve"}
+			in := code + "\ny\n"
+			if tc.code {
+				run, in = append(run, "--code", code), "y\nyes\n"
+			}
+			hdPipeStdin(t, in)
+			require.ErrorContains(t, runApprovers(run), tc.wantErr)
+
+			db, err = store.OpenExisting(dbPath)
+			require.NoError(t, err)
+			defer func() { require.NoError(t, db.Close()) }()
+			n, err := store.CountApprovers(ctx, db)
+			require.NoError(t, err)
+			require.Zero(t, n, "nothing was added")
+			_, err = store.PasskeyEnrollmentByCode(ctx, db, code, now)
+			require.NoError(t, err, "the passkey still waits")
+		})
+	}
 }
 
 // The ordinary case still works, and so does a database ahead of this binary,

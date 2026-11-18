@@ -394,6 +394,10 @@ a release (<a href="#during-an-update">what happens during an update</a>).</p>
 and it is final: the console shows its toggle locked. With the key left out,
 <strong>Settings -&gt; Updates</strong> turns checks on and off at runtime, and
 <code>SEAMLESS_UPDATE_CHECK=false</code> does the same from the service's environment.
+Turning checks off there is your decision alone: an agent's process on the
+<a href="../guides/peer-auth/">peer_auth</a> socket, and a paired device, may turn them on
+but are refused off, and so is a <strong>Reset to the config file</strong> that would turn
+them off (<a href="../reference/console/#what-the-console-can-change">what the console can change</a>).
 <code>seamlessd update --check</code> and <code>seamlessd update</code> work either way - running
 them is you asking. The <code>update:</code> keys are new in v0.7.0: a seamlessd release
 from before them refuses a config that sets one, so setting it ties that file
@@ -692,8 +696,10 @@ bundle.</p>
 <code>seamlessd update</code>, or <strong>Update now</strong>. Like <code>check: false</code>, it is final: the
 console shows its switch locked. With the key left out, <strong>Turn automatic updates
 off</strong> in <strong>Settings -&gt; Updates</strong> does the same at runtime, and <strong>Reset to the
-config file</strong> hands both switches back to the file. <code>update.check: false</code> turns
-off the check and, with it, every automatic update.</p>
+config file</strong> hands both switches back to the file. As with checks, turning
+automatic updates off there is yours alone: an agent's process on the peer_auth
+socket and a paired device may turn them on, never off. <code>update.check: false</code>
+turns off the check and, with it, every automatic update.</p>
 <p>Set these keys in the file, not in the service's environment: any <code>SEAMLESS_*</code>
 variable besides <code>SEAMLESS_CONFIG</code> there makes the install notify-only, so
 <code>SEAMLESS_UPDATE_MAX_DEFER</code> or <code>SEAMLESS_UPDATE_MIN_AGE</code> would switch automatic

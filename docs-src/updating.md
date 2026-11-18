@@ -145,6 +145,10 @@ update:
 and it is final: the console shows its toggle locked. With the key left out,
 **Settings -> Updates** turns checks on and off at runtime, and
 `SEAMLESS_UPDATE_CHECK=false` does the same from the service's environment.
+Turning checks off there is your decision alone: an agent's process on the
+[peer_auth](/guides/peer-auth/) socket, and a paired device, may turn them on
+but are refused off, and so is a **Reset to the config file** that would turn
+them off ([what the console can change](/reference/console/#what-the-console-can-change)).
 `seamlessd update --check` and `seamlessd update` work either way - running
 them is you asking. The `update:` keys are new in v0.7.0: a seamlessd release
 from before them refuses a config that sets one, so setting it ties that file
@@ -457,8 +461,10 @@ The daemon still checks and tells you, and installing stays yours:
 `seamlessd update`, or **Update now**. Like `check: false`, it is final: the
 console shows its switch locked. With the key left out, **Turn automatic updates
 off** in **Settings -> Updates** does the same at runtime, and **Reset to the
-config file** hands both switches back to the file. `update.check: false` turns
-off the check and, with it, every automatic update.
+config file** hands both switches back to the file. As with checks, turning
+automatic updates off there is yours alone: an agent's process on the peer_auth
+socket and a paired device may turn them on, never off. `update.check: false`
+turns off the check and, with it, every automatic update.
 
 Set these keys in the file, not in the service's environment: any `SEAMLESS_*`
 variable besides `SEAMLESS_CONFIG` there makes the install notify-only, so

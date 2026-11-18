@@ -382,6 +382,26 @@ promise: only an install that updates itself acts on it (`Install.NotifyOnly`:
 the installer's, or a peer_auth system daemon's), and it is off whenever checks
 are.
 
+### Off is the owner's; on is anyone's
+
+Turning update checks or automatic updates off keeps an install on an old
+release, so that direction is the owner's own decision. The console's routes
+judge it after the form is parsed (`ownerHandsIf` in
+`internal/console/unlock.go`): `check=off` and `auto=off` (`switchedOff`, which
+reads the field exactly as the handler does) are refused to an agent's process
+on the peer_auth socket and to a paired device, with the words every
+`ownerHands` route answers, whatever the switch reads now: a stored off
+outlasts the state it changes nothing in today. `on` stays open to every
+caller. A reset is judged by what it would turn off (`updatesResetTurnsOff`):
+on a build that is not a release, whose default is no checks, dropping a stored
+`check: true` turns checks off, so it is refused unless the file or environment
+locks checks off already. The console holds no file/env update block, so it
+counts that reset as the owner's even where `update.check: true` in the file
+would keep checks on. A reset on a release build never turns either switch
+off, and automatic updates go off through a reset only when checks do. A new
+route that stores the override must judge the same way, and be named in
+`TestUpdates_TheConditionalOwnerHandsRoutes`.
+
 ### Never spawn without the record on disk
 
 `State.Spawn` is saved before `Spawner.Spawn`, and `update.started` is recorded

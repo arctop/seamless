@@ -956,7 +956,7 @@ registers it.
 ```bash
 seamlessd approvers enroll-code <passkey|touchid> --key <fingerprint>
 seamlessd approvers add
-seamlessd approvers approve [--code CODE] [--yes]
+seamlessd approvers approve [--code CODE]
 seamlessd approvers list [--json]
 seamlessd approvers remove <id>
 seamlessd approvers reset --yes
@@ -983,9 +983,14 @@ Touch ID key, which signs for it.
 - `add` prints the no-secret Add a passkey address (`/console/passkeys/add`,
   with `console.sign_in: passkey`), and at a terminal goes on to `approve`.
 - `approve` shows the waiting passkey's name, fingerprint and relying party,
-  asks `[y/N]`, and adds exactly that passkey. `--yes` is for scripts. A code
-  works once, for 10 minutes. Run it as the daemon's account under peer_auth,
-  else as yourself.
+  asks `[y/N]`, and adds exactly that passkey; any other answer, or the end of
+  input, adds nothing. Without `--code` it asks for the code first. The Add a
+  passkey page is open to anyone who reaches the console, so a code someone
+  sends you names their passkey: say yes only to one your own device shows.
+  Because it asks, it runs only at a terminal (over ssh, `ssh -t`): anywhere
+  else, a script or a pipe, it refuses before it opens anything, with or
+  without `--code`, and no flag skips the question. A code works once, for 10
+  minutes. Run it as the daemon's account under peer_auth, else as yourself.
 - `list` prints the enrolled credentials: id, kind, name, how each was enrolled
   and when it was last used. `--json` prints them as JSON. It also names waiting
   passkeys (`pending` in JSON, only while one waits).

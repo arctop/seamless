@@ -119,8 +119,9 @@ func TestApproversAdd_PrintsThePlainAddress(t *testing.T) {
 
 // The owner approves the code the device shows, in both tiers: as the
 // daemon's account under peer_auth, as the owner without it. Either way the
-// verb shows the passkey first, asks, and adds exactly it; a script must say
-// --yes, having checked.
+// verb shows the passkey first, asks, and adds exactly it. With no terminal to
+// ask at it refuses, code or not, and no flag skips the question (owner
+// decision R-D7, 2026-11-15).
 func TestApproversApprove_BothTiers(t *testing.T) {
 	now := time.Now()
 	for _, peerAuth := range []bool{false, true} {
@@ -129,11 +130,23 @@ func TestApproversApprove_BothTiers(t *testing.T) {
 		cfg.PeerAuth.Enabled = peerAuth
 		code := signinWaiting(t, db, "owner phone", 1, now)
 
-		tty, out := signinTTY("", false)
+		tty, out := signinTTY("y\n", false)
 		err := signinRun(t, db, cfg, tty, now, "approve", "--code", code)
-		require.ErrorContains(t, err, "pass --yes", "a script must say yes")
-		require.Contains(t, out.String(), `Passkey "owner phone", key `)
+		require.ErrorIs(t, err, errApproveNoTerminal, "no terminal, no approval")
+		require.ErrorContains(t, err, "runs only at a terminal")
+		require.ErrorContains(t, err, "Nothing changed")
+		require.Empty(t, out.String(), "refused before anything is shown or read")
 		n, err := store.CountApprovers(context.Background(), db)
+		require.NoError(t, err)
+		require.Zero(t, n)
+		_, err = store.PasskeyEnrollmentByCode(context.Background(), db, code, now)
+		require.NoError(t, err, "the passkey still waits")
+
+		// The end of input at the question adds nothing.
+		tty, out = signinTTY("", true)
+		require.ErrorContains(t, signinRun(t, db, cfg, tty, now, "approve", "--code", code), "no answer: nothing changed")
+		require.Contains(t, out.String(), `Passkey "owner phone", key `)
+		n, err = store.CountApprovers(context.Background(), db)
 		require.NoError(t, err)
 		require.Zero(t, n)
 
@@ -161,21 +174,39 @@ func TestApproversApprove_BothTiers(t *testing.T) {
 		require.Equal(t, []byte{1, 1}, creds[0].CredentialID)
 
 		// A code works once.
-		tty, _ = signinTTY("", false)
-		err = signinRun(t, db, cfg, tty, now, "approve", "--code", code, "--yes")
+		tty, _ = signinTTY("y\n", true)
+		err = signinRun(t, db, cfg, tty, now, "approve", "--code", code)
 		require.ErrorIs(t, err, store.ErrEnrollmentNotFound)
 		require.ErrorContains(t, err, "Nothing changed")
 
 		other := signinWaiting(t, db, "laptop", 2, now)
-		tty, _ = signinTTY("", false)
-		require.NoError(t, signinRun(t, db, cfg, tty, now, "approve", "--code", other, "--yes"))
+		tty, out = signinTTY("yes\n", true)
+		require.NoError(t, signinRun(t, db, cfg, tty, now, "approve", "--code", other))
+		require.Contains(t, out.String(), `Added passkey "laptop"`)
 	}
 
 	db := signinDB(t)
+	code := signinWaiting(t, db, "stranger key", 3, now)
 	for _, bad := range [][]string{{"approve", "--code", "nope"}, {"approve", "extra"}, {"approve", "--frob"}} {
 		tty, _ := signinTTY("", false)
 		require.Error(t, signinRun(t, db, signinConfig(), tty, now, bad...), "%v", bad)
 	}
+	// --yes is no flag of approve's, wherever it stands and whatever it says:
+	// the parse refuses it before any terminal or database is consulted.
+	for _, args := range [][]string{
+		{"approve", "--code", code, "--yes"}, {"approve", "--yes", "--code", code}, {"approve", "--yes"},
+		{"approve", "--code", code, "--yes=true"}, {"approve", "-yes", "--code", code},
+	} {
+		_, err := parseApprovers(args)
+		require.ErrorContains(t, err, "flag provided but not defined: -yes", "%v", args)
+		require.ErrorContains(t, err, "approve takes --code alone", "%v", args)
+		tty, out := signinTTY("y\n", true)
+		require.Error(t, signinRun(t, db, signinConfig(), tty, now, args...), "%v", args)
+		require.Empty(t, out.String(), "%v", args)
+	}
+	n, err := store.CountApprovers(context.Background(), db)
+	require.NoError(t, err)
+	require.Zero(t, n, "no --yes added the stranger's passkey")
 	tty, _ := signinTTY("", false)
 	require.ErrorContains(t, signinRun(t, db, signinConfig(), tty, now, "approve"), "needs --code")
 }

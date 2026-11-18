@@ -1526,7 +1526,7 @@ registers it.</p>
 <h2 id="seamlessd_approvers">seamlessd approvers</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd approvers enroll-code &lt;passkey<span class="p">|</span>touchid&gt; --key &lt;fingerprint&gt;
 </span></span><span class="line"><span class="cl">seamlessd approvers add
-</span></span><span class="line"><span class="cl">seamlessd approvers approve <span class="o">[</span>--code CODE<span class="o">]</span> <span class="o">[</span>--yes<span class="o">]</span>
+</span></span><span class="line"><span class="cl">seamlessd approvers approve <span class="o">[</span>--code CODE<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seamlessd approvers list <span class="o">[</span>--json<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seamlessd approvers remove &lt;id&gt;
 </span></span><span class="line"><span class="cl">seamlessd approvers reset --yes
@@ -1551,9 +1551,14 @@ vouches for a new one.</li>
 <li><code>add</code> prints the no-secret Add a passkey address (<code>/console/passkeys/add</code>,
 with <code>console.sign_in: passkey</code>), and at a terminal goes on to <code>approve</code>.</li>
 <li><code>approve</code> shows the waiting passkey's name, fingerprint and relying party,
-asks <code>[y/N]</code>, and adds exactly that passkey. <code>--yes</code> is for scripts. A code
-works once, for 10 minutes. Run it as the daemon's account under peer_auth,
-else as yourself.</li>
+asks <code>[y/N]</code>, and adds exactly that passkey; any other answer, or the end of
+input, adds nothing. Without <code>--code</code> it asks for the code first. The Add a
+passkey page is open to anyone who reaches the console, so a code someone
+sends you names their passkey: say yes only to one your own device shows.
+Because it asks, it runs only at a terminal (over ssh, <code>ssh -t</code>): anywhere
+else, a script or a pipe, it refuses before it opens anything, with or
+without <code>--code</code>, and no flag skips the question. A code works once, for 10
+minutes. Run it as the daemon's account under peer_auth, else as yourself.</li>
 <li><code>list</code> prints the enrolled credentials: id, kind, name, how each was enrolled
 and when it was last used. <code>--json</code> prints them as JSON. It also names waiting
 passkeys (<code>pending</code> in JSON, only while one waits).</li>

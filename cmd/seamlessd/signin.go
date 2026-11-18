@@ -121,28 +121,46 @@ func approversAdd(ctx context.Context, db *sql.DB, cfg config.Config, tty unlock
 	if !tty.interactive {
 		return nil
 	}
-	return approveEnrollment(ctx, db, cfg, tty, "", false, now)
+	return approveEnrollment(ctx, db, cfg, tty, "", now)
+}
+
+// errApproveNoTerminal refuses `seamlessd approvers approve` where no one can
+// answer its question. The Add a passkey page is public, so a code someone
+// sent the owner names their passkey: the approval shows the passkey a code
+// names and asks first, and a script that approves codes it was handed,
+// unseen, is the very risk the question is there for. So no flag skips it
+// (owner decision R-D7, 2026-11-15), as none skips console-open --sign-in's.
+var errApproveNoTerminal = errors.New("approvers approve shows the passkey a code would add and asks you before it adds it, " +
+	"so it runs only at a terminal: run it in one (over ssh, ssh -t). Nothing changed")
+
+// approveNoTerminal is approve's refusal with no terminal to ask at; without a
+// code it says that one is needed too.
+func approveNoTerminal(code string) error {
+	if strings.TrimSpace(code) == "" {
+		return errors.New("approve needs --code, at a terminal: the Add a passkey page shows one, as XXXX-XXXX. Nothing changed")
+	}
+	return errApproveNoTerminal
 }
 
 // approveEnrollment is `seamlessd approvers approve`: it shows the passkey the
-// code names, the owner's to compare with the device's page, asks to confirm
-// (unless yes), and enrolls exactly that passkey. Run as the daemon's account
-// under peer_auth -- opening the database directly is the proof, as for every
+// code names (its name, key fingerprint and relying party), the owner's to
+// compare with the device's page, asks, and on a yes enrolls exactly that
+// passkey. Any answer but yes -- no, Enter, the end of input -- changes
+// nothing, and so does no terminal at all (errApproveNoTerminal), settled
+// before anything is read or shown. Run as the daemon's account under
+// peer_auth -- opening the database directly is the proof, as for every
 // approvers verb -- and as the owner without it, whose every process is the
 // owner anyway. A code names a waiting passkey and carries no key, so the one
 // a device was handed by someone else adds their passkey only if the owner
 // approves it here, having seen it.
-func approveEnrollment(ctx context.Context, db *sql.DB, cfg config.Config, tty unlockTerminal, code string, yes bool, now time.Time) error {
+func approveEnrollment(ctx context.Context, db *sql.DB, cfg config.Config, tty unlockTerminal, code string, now time.Time) error {
+	if !tty.interactive {
+		return approveNoTerminal(code)
+	}
 	// One reader for both questions: a second one would lose what the first
 	// buffered past its line.
-	var in *bufio.Reader
-	if tty.interactive {
-		in = bufio.NewReader(tty.in)
-	}
+	in := bufio.NewReader(tty.in)
 	if strings.TrimSpace(code) == "" {
-		if !tty.interactive {
-			return errors.New("approve needs --code: the Add a passkey page shows one, as XXXX-XXXX")
-		}
 		fmt.Fprint(tty.out, "Code the page shows: ")
 		line, err := in.ReadString('\n')
 		if err != nil && line == "" {
@@ -171,19 +189,15 @@ func approveEnrollment(ctx context.Context, db *sql.DB, cfg config.Config, tty u
 	fmt.Fprintf(tty.out, "Passkey %q, key %s, made %s for %s%s; waits until %s.\n", e.Credential.Name, e.Fingerprint(),
 		e.CreatedAt.Local().Format("15:04"), passkeyFor(e.Credential.RPID), syncedWord(e.Credential.BackupState),
 		e.PendingUntil.Local().Format("15:04"))
-	if !yes {
-		if !tty.interactive {
-			return errors.New("approve asks before it adds a passkey: run it at a terminal, or pass --yes once you have checked the name and key above against the device's page")
-		}
-		fmt.Fprint(tty.out, "Is this the passkey your device's page shows? Add it [y/N]: ")
-		answer, err := in.ReadString('\n')
-		if err != nil && answer == "" {
-			return fmt.Errorf("no answer: nothing changed (%w)", err)
-		}
-		if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
-			fmt.Fprintln(tty.out, "Not added. Nothing changed.")
-			return nil
-		}
+	fmt.Fprint(tty.out, "Is this the passkey your device's page shows? Add it [y/N]: ")
+	answer, err := in.ReadString('\n')
+	if err != nil && answer == "" {
+		fmt.Fprintln(tty.out)
+		return fmt.Errorf("no answer: nothing changed (%w)", err)
+	}
+	if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
+		fmt.Fprintln(tty.out, "Not added. Nothing changed.")
+		return nil
 	}
 	cred, _, err := store.ApprovePasskeyEnrollment(ctx, db, code, now)
 	if errors.Is(err, store.ErrEnrollmentNotFound) {

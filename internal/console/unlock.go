@@ -452,6 +452,20 @@ func ownerHands(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// ownerHandsIf is ownerHands for the requests owners names, and next alone
+// for every other: for a route where only one direction is the owner's
+// decision (turning update checks or automatic updates off), so the other
+// stays open to any caller. owners reads the parsed form (post's parseForm
+// ran) and writes nothing.
+func ownerHandsIf(owners func(*http.Request) bool, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if owners(r) && refusedFromAgent(w, r) {
+			return
+		}
+		next(w, r)
+	}
+}
+
 // refusedFromAgent answers a request a paired device made (refusedFromDevice),
 // or one from a process an agent started, and reports that it did.
 func refusedFromAgent(w http.ResponseWriter, r *http.Request) bool {

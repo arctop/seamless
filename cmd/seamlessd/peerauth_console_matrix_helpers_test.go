@@ -148,8 +148,10 @@ type cmDaemon struct {
 }
 
 // cmNewDaemon builds the daemon with the owner (and the restricted account,
-// when given) resolved to the accounts named.
-func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account) *cmDaemon {
+// when given) resolved to the accounts named. Each tune changes the console's
+// config before the console is built (its WriteDB is the daemon's database):
+// how a test wires what this daemon runs without, an update check for one.
+func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account, tune ...func(*console.Config)) *cmDaemon {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -240,13 +242,17 @@ func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account)
 	backupCtx, stopBackups := context.WithCancel(context.Background())
 	backups.Start(backupCtx)
 	t.Cleanup(func() { stopBackups(); backups.Wait() })
-	consoleSrv, err := console.New(console.Config{
+	consoleCfg := console.Config{
 		DB: base, WriteDB: db, Files: mgr, Gardener: garden, Events: rec.ReadingFrom(base),
 		Screening: screen, Retrieve: ret, APIKey: cmKey, DataDir: dir, Features: feats, Level: "advanced",
 		Approvals: svc, Terminal: terminalApprover(cfg), Views: views, Backups: backups,
 		RestrictedAccounts: policy.HasRestricted(),
 		Logger:             slog.New(slog.NewTextHandler(consoleLog, nil)),
-	})
+	}
+	for _, fn := range tune {
+		fn(&consoleCfg)
+	}
+	consoleSrv, err := console.New(consoleCfg)
 	require.NoError(t, err)
 	mux := daemonRoutes{
 		healthz: healthzHandler(db, "instance", nil), mcp: mcpSrv.Handler(), a2a: a2aSrv.Handler(),
@@ -266,12 +272,19 @@ func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account)
 // connection whose process the kernel did not name.
 func (d *cmDaemon) socketAs(t *testing.T, uid uint32, chain ...access.ProcessToken) *httptest.Server {
 	t.Helper()
+	hops := make([]access.ChainHop, len(chain))
+	for i, c := range chain {
+		hops[i] = access.ChainHop{Token: c}
+	}
+	return d.socketHops(t, uid, hops...)
+}
+
+// socketHops is socketAs with each hop's program as the kernel names it: what
+// tells an agent's process (claude, codex) from the owner's own terminal.
+func (d *cmDaemon) socketHops(t *testing.T, uid uint32, hops ...access.ChainHop) *httptest.Server {
+	t.Helper()
 	cred := peerCred{uid: uid}
-	if len(chain) > 0 {
-		hops := make([]access.ChainHop, len(chain))
-		for i, c := range chain {
-			hops[i] = access.ChainHop{Token: c}
-		}
+	if len(hops) > 0 {
 		cred.chain = func() ([]access.ChainHop, error) { return hops, nil }
 	}
 	h := peerHandler(d.policy, storeLeases(d.db), d.logger, d.mux)

@@ -829,8 +829,8 @@ and approves through its relay, and the server verifies its signature.
 `seam approve`, a console unlock's code and `seamlessd approvers` run on this
 computer, in a terminal here or over SSH. Your own decisions (a pairing code,
 revoking, denying, approving without Touch ID or a passkey, held writes,
-features and backups) are refused through a relay or a device key, with or
-without peer_auth: make them in the console of the server you sign in to, or in
+features, turning updates off, and backups) are refused through a relay or a
+device key, with or without peer_auth: make them in the console of the server you sign in to, or in
 a terminal on the server.
 
 Revoking a relay ends its leases, read grants and waiting requests at once. A
@@ -1298,9 +1298,10 @@ until you turn them off. The layout above is all it needs:
 **Settings -> Updates** (its **Mode** row) reads "installs new releases by
 itself", or names what is missing. A daemon set up with root-owned binaries
 needs `sudo chown -R _seamless:_seamless /opt/seamless/bin`, on Linux the
-linger, and a restart. Turn automatic updates off with the toggle there, or for
-good with `update.auto: false` in its config, `/opt/seamless/etc/seamless.yaml`,
-which the console cannot override.
+linger, and a restart. Turn automatic updates off with the toggle there (your
+decision alone: an agent's process on the socket and a paired device may turn
+them on, never off), or for good with `update.auto: false` in its config,
+`/opt/seamless/etc/seamless.yaml`, which the console cannot override.
 
 The [usual rules](/updating/#automatic-updates) hold: the soak,
 the quiet moment, the backup, the confirmation and the rollback. Only the
@@ -1552,8 +1553,9 @@ and console unlock the backup held.
   replace a `seam` you own. Run `/opt/seamless/bin/seam approve`, which your
   account cannot write, by its full path if you doubt yours.
 - **Some decisions refuse a process an agent started**: bringing a fence down,
-  releasing or discarding a held write, clearing a session's mark, and changing
-  which features are on. Make them in your own terminal or the console. This stops
+  releasing or discarding a held write, clearing a session's mark, changing
+  which features are on, and turning update checks or automatic updates off
+  (turning them on stays open). Make them in your own terminal or the console. This stops
   an agent's ordinary tool calls, not one that detaches a process from its tree or
   reads the key in your `console.yaml`, until you
   [retire the key](/reference/cli-seamlessd/#seamlessd_setup_retire).

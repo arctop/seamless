@@ -21,7 +21,9 @@ import (
 // "Check now", "Update now" and "Resume automatic updates". The section and its
 // routes read and steer Config.Updates; with none (a process that runs no
 // update check) the section says so and every POST answers with an error
-// flash.
+// flash. Turning either switch off is the owner's own decision (switchedOff,
+// updatesResetTurnsOff): an agent's process and a paired device are refused
+// before anything else is judged, and may turn both on.
 
 // updatesNotRunning is the flash every Updates POST answers with when this
 // process runs no update check.
@@ -282,7 +284,9 @@ func checkErrorLine(ce update.CheckError) string {
 // settingsUpdatesSave stores the console's update-check switch: form field
 // check, "on" or "off". Anything else is an error naming the two, and "on"
 // while the config file or environment says update.check: false is refused
-// with nothing stored -- the file's false is final (update.Effective). The
+// with nothing stored -- the file's false is final (update.Effective). "off"
+// is the owner's own decision, refused at the route from an agent's process
+// and from a paired device (switchedOff); "on" is open to any caller. The
 // stored override keeps whatever else it carries (Auto). The checker then
 // re-reads it, so the section the redirect lands on shows the new state.
 func (s *Service) settingsUpdatesSave(w http.ResponseWriter, r *http.Request) {
@@ -335,7 +339,8 @@ func (s *Service) settingsUpdatesSave(w http.ResponseWriter, r *http.Request) {
 // with nothing stored while the config file or environment keeps automatic
 // updates off -- update.auto: false, or a locked update.check: false, since
 // nothing installs without checks (Settings.AutoLocked). With checks merely
-// off the choice is stored and applies once they are back on. The stored
+// off the choice is stored and applies once they are back on. "off" is the
+// owner's own decision, as the check switch's is (switchedOff). The stored
 // override keeps its Check, and the checker then re-reads it.
 func (s *Service) settingsUpdatesAuto(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Updates == nil {
@@ -400,6 +405,21 @@ func autoOnNote(st update.Status) string {
 	}
 }
 
+// switchedOff reports, for the route of the on|off switch named field, whether
+// a request asks for off: the direction that is the owner's own decision
+// (ownerHandsIf). Turning update checks or automatic updates off keeps an
+// install on an old release, so an agent's process on the peer_auth socket and
+// a paired device may not, whatever the switch reads now: a stored off also
+// outlasts the state it changes nothing in today. It reads the field as the
+// handler does (onOffField), so a form the handler would refuse or read as on
+// is not the owner's, and the two never disagree.
+func switchedOff(field string) func(*http.Request) bool {
+	return func(r *http.Request) bool {
+		on, refusal := onOffField(r.PostForm, field)
+		return refusal == "" && !on
+	}
+}
+
 // onOffField reads a required on|off form field: the value, or the flash that
 // refuses it, naming the valid values.
 func onOffField(form url.Values, name string) (on bool, refusal string) {
@@ -439,9 +459,43 @@ func undecodableOverride(err error) bool {
 	return errors.As(err, &syntax) || errors.As(err, &typ)
 }
 
+// updatesResetTurnsOff reports whether a reset is the owner's own decision
+// (ownerHandsIf): one that would turn update checks off, and automatic updates
+// with them. Clearing the override does that only where the override is what
+// keeps checks on: it stores check on, the config file and environment do not
+// lock checks off, and the build's own default is off -- a build that is not
+// a release. A release build checks by default, so a reset there turns nothing
+// off and stays open to any caller. Automatic updates go off through a reset
+// only when checks do: without the override they follow the file, where an
+// unset update.auto is on.
+//
+// It reads the stored override, not the status: a choice the checker has not
+// picked up yet is still the one a reset would drop. The console does not hold
+// the file's update block, so on such a build it cannot tell an unset
+// update.check from an explicit true, under which the reset would leave checks
+// on; it counts both as the owner's. An override that cannot be read counts
+// too. One that does not decode is no override (the checker ignores it), so
+// clearing it turns nothing off.
+func (s *Service) updatesResetTurnsOff(r *http.Request) bool {
+	if s.cfg.Updates == nil {
+		return false
+	}
+	st := s.cfg.Updates.Status()
+	if st.Release || st.Settings.CheckLocked {
+		return false
+	}
+	o, _, err := store.UpdateOverride(r.Context(), s.db(r.Context()))
+	if err != nil {
+		return !undecodableOverride(err)
+	}
+	return o.Check != nil && *o.Check
+}
+
 // settingsUpdatesReset clears the console's update override -- both switches
 // -- so the config file and environment (or, without either, the build)
-// decide again.
+// decide again. Where that would turn update checks off it is the owner's own
+// decision, refused at the route from an agent's process and from a paired
+// device (updatesResetTurnsOff).
 func (s *Service) settingsUpdatesReset(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Updates == nil {
 		settingsUpdatesFlash(w, r, updatesNotRunning)

@@ -432,10 +432,14 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/settings/level/welcome", formBodySmall, s.settingsLevelWelcome)
 	post("POST /console/settings/features", formBodySmall, ownerHands(s.settingsFeaturesSave))
 	post("POST /console/settings/features/reset", formBodySmall, ownerHands(s.settingsFeaturesReset))
-	post("POST /console/settings/updates", formBodySmall, s.settingsUpdatesSave)
-	post("POST /console/settings/updates/reset", formBodySmall, s.settingsUpdatesReset)
+	// Settings > Updates: turning update checks or automatic updates off keeps
+	// an install on an old release, so that direction is the owner's own
+	// decision (ownerHandsIf) -- a reset too, where it would turn checks off.
+	// Turning either on stays open to any caller (settings_updates.go).
+	post("POST /console/settings/updates", formBodySmall, ownerHandsIf(switchedOff("check"), s.settingsUpdatesSave))
+	post("POST /console/settings/updates/reset", formBodySmall, ownerHandsIf(s.updatesResetTurnsOff, s.settingsUpdatesReset))
 	post("POST /console/settings/updates/check", formBodySmall, s.settingsUpdatesCheck)
-	post("POST /console/settings/updates/auto", formBodySmall, s.settingsUpdatesAuto)
+	post("POST /console/settings/updates/auto", formBodySmall, ownerHandsIf(switchedOff("auto"), s.settingsUpdatesAuto))
 	post("POST /console/settings/updates/apply", formBodySmall, s.settingsUpdatesApply)
 	post("POST /console/settings/updates/resume", formBodySmall, s.settingsUpdatesResume)
 	// Settings > Backups: every route is the owner's own decision, the folder

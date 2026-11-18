@@ -1717,6 +1717,10 @@ update:
 and it is final: the console shows its toggle locked. With the key left out,
 **Settings -> Updates** turns checks on and off at runtime, and
 `SEAMLESS_UPDATE_CHECK=false` does the same from the service's environment.
+Turning checks off there is your decision alone: an agent's process on the
+[peer_auth](/guides/peer-auth/) socket, and a paired device, may turn them on
+but are refused off, and so is a **Reset to the config file** that would turn
+them off ([what the console can change](/reference/console/#what-the-console-can-change)).
 `seamlessd update --check` and `seamlessd update` work either way - running
 them is you asking. The `update:` keys are new in v0.7.0: a seamlessd release
 from before them refuses a config that sets one, so setting it ties that file
@@ -2027,8 +2031,10 @@ The daemon still checks and tells you, and installing stays yours:
 `seamlessd update`, or **Update now**. Like `check: false`, it is final: the
 console shows its switch locked. With the key left out, **Turn automatic updates
 off** in **Settings -> Updates** does the same at runtime, and **Reset to the
-config file** hands both switches back to the file. `update.check: false` turns
-off the check and, with it, every automatic update.
+config file** hands both switches back to the file. As with checks, turning
+automatic updates off there is yours alone: an agent's process on the peer_auth
+socket and a paired device may turn them on, never off. `update.check: false`
+turns off the check and, with it, every automatic update.
 
 Set these keys in the file, not in the service's environment: any `SEAMLESS_*`
 variable besides `SEAMLESS_CONFIG` there makes the install notify-only, so
@@ -9319,8 +9325,8 @@ and approves through its relay, and the server verifies its signature.
 `seam approve`, a console unlock's code and `seamlessd approvers` run on this
 computer, in a terminal here or over SSH. Your own decisions (a pairing code,
 revoking, denying, approving without Touch ID or a passkey, held writes,
-features and backups) are refused through a relay or a device key, with or
-without peer_auth: make them in the console of the server you sign in to, or in
+features, turning updates off, and backups) are refused through a relay or a
+device key, with or without peer_auth: make them in the console of the server you sign in to, or in
 a terminal on the server.
 
 Revoking a relay ends its leases, read grants and waiting requests at once. A
@@ -9788,9 +9794,10 @@ until you turn them off. The layout above is all it needs:
 **Settings -> Updates** (its **Mode** row) reads "installs new releases by
 itself", or names what is missing. A daemon set up with root-owned binaries
 needs `sudo chown -R _seamless:_seamless /opt/seamless/bin`, on Linux the
-linger, and a restart. Turn automatic updates off with the toggle there, or for
-good with `update.auto: false` in its config, `/opt/seamless/etc/seamless.yaml`,
-which the console cannot override.
+linger, and a restart. Turn automatic updates off with the toggle there (your
+decision alone: an agent's process on the socket and a paired device may turn
+them on, never off), or for good with `update.auto: false` in its config,
+`/opt/seamless/etc/seamless.yaml`, which the console cannot override.
 
 The [usual rules](/updating/#automatic-updates) hold: the soak,
 the quiet moment, the backup, the confirmation and the rollback. Only the
@@ -10042,8 +10049,9 @@ and console unlock the backup held.
   replace a `seam` you own. Run `/opt/seamless/bin/seam approve`, which your
   account cannot write, by its full path if you doubt yours.
 - **Some decisions refuse a process an agent started**: bringing a fence down,
-  releasing or discarding a held write, clearing a session's mark, and changing
-  which features are on. Make them in your own terminal or the console. This stops
+  releasing or discarding a held write, clearing a session's mark, changing
+  which features are on, and turning update checks or automatic updates off
+  (turning them on stays open). Make them in your own terminal or the console. This stops
   an agent's ordinary tool calls, not one that detaches a process from its tree or
   reads the key in your `console.yaml`, until you
   [retire the key](/reference/cli-seamlessd/#seamlessd_setup_retire).
@@ -15261,7 +15269,7 @@ registers it.
 ```bash
 seamlessd approvers enroll-code <passkey|touchid> --key <fingerprint>
 seamlessd approvers add
-seamlessd approvers approve [--code CODE] [--yes]
+seamlessd approvers approve [--code CODE]
 seamlessd approvers list [--json]
 seamlessd approvers remove <id>
 seamlessd approvers reset --yes
@@ -15288,9 +15296,14 @@ Touch ID key, which signs for it.
 - `add` prints the no-secret Add a passkey address (`/console/passkeys/add`,
   with `console.sign_in: passkey`), and at a terminal goes on to `approve`.
 - `approve` shows the waiting passkey's name, fingerprint and relying party,
-  asks `[y/N]`, and adds exactly that passkey. `--yes` is for scripts. A code
-  works once, for 10 minutes. Run it as the daemon's account under peer_auth,
-  else as yourself.
+  asks `[y/N]`, and adds exactly that passkey; any other answer, or the end of
+  input, adds nothing. Without `--code` it asks for the code first. The Add a
+  passkey page is open to anyone who reaches the console, so a code someone
+  sends you names their passkey: say yes only to one your own device shows.
+  Because it asks, it runs only at a terminal (over ssh, `ssh -t`): anywhere
+  else, a script or a pipe, it refuses before it opens anything, with or
+  without `--code`, and no flag skips the question. A code works once, for 10
+  minutes. Run it as the daemon's account under peer_auth, else as yourself.
 - `list` prints the enrolled credentials: id, kind, name, how each was enrolled
   and when it was last used. `--json` prints them as JSON. It also names waiting
   passkeys (`pending` in JSON, only while one waits).
@@ -17953,10 +17966,10 @@ nothing, and their rows say so.
 | Dismiss the welcome card | `POST /console/settings/level/welcome` | Records that the Home welcome card was seen, without choosing a level. With the card's write-screening box ticked, it also turns that feature on, as a level choice with the box ticked does. |
 | Save optional features | `POST /console/settings/features` | Writes the feature switches as a stored **override row** in the DB. It changes what is exposed - console screens and the matching agent tools - and deletes nothing. |
 | Reset optional features | `POST /console/settings/features/reset` | Clears the override row, reverting to the file/env configuration - which, unless you set the keys there, means every optional feature is off again. Still deletes nothing. |
-| Turn update checks on or off | `POST /console/settings/updates` | Stores the console's `update.check` override (`check=on` or `off`). It can always turn checks off; it cannot turn them on while the config file or environment says `update.check: false` - that is final, and the form says so. Installs nothing. |
-| Reset update checks | `POST /console/settings/updates/reset` | Clears that override - both switches - handing them back to the config file (or, without one, the build's default). |
+| Turn update checks on or off | `POST /console/settings/updates` | Stores the console's `update.check` override (`check=on` or `off`). It cannot turn checks on while the config file or environment says `update.check: false` - that is final, and the form says so. Off is your decision alone: refused (403) from an agent's process on the peer_auth socket and from a paired device, whatever checks are now; on is open to them. Installs nothing. |
+| Reset update checks | `POST /console/settings/updates/reset` | Clears that override - both switches - handing them back to the config file (or, without one, the build's default). A build that is not a published release does not check by default, so there a reset that drops this console's `check=on` turns checks off, and automatic updates with them: it is refused like turning them off, unless the file or environment locks checks off already. It is refused even where the file's `update.check: true` would keep them on, since the console cannot see the file's update block under its own override. Every other reset, and every reset on a release build, is open to any caller. |
 | Check for updates now | `POST /console/settings/updates/check` | Asks GitHub's release list once, right away - refused while checks are off or within a minute of the last check. Reads; installs nothing. |
-| Turn automatic updates on or off | `POST /console/settings/updates/auto` | Stores the console's `update.auto` override (`auto=on` or `off`), keeping its `update.check`. It can always turn automatic updates off; it cannot turn them on while the config file or environment says `update.auto: false`, or locks `update.check: false` (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Only an install that updates itself acts on it: the installer's, or a [peer_auth system daemon](/guides/peer-auth/#updates)'s. |
+| Turn automatic updates on or off | `POST /console/settings/updates/auto` | Stores the console's `update.auto` override (`auto=on` or `off`), keeping its `update.check`. It cannot turn automatic updates on while the config file or environment says `update.auto: false`, or locks `update.check: false` (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Off is your decision alone, refused as turning checks off is; on is open to any caller. Only an install that updates itself acts on it: the installer's, or a [peer_auth system daemon](/guides/peer-auth/#updates)'s. |
 | Update now | `POST /console/settings/updates/apply` | Installs the newest release at once, after a confirm: it skips the soak, the wait for idle agents, skipped releases and the backoff, and lifts a hold, whether automatic updates are on, off or paused. Refused while checks are off, on an install that does not update itself, while an update is under way, within a minute of a failed release check, when nothing newer is known, or when the release carries no signed checksums bundle. The daemon restarts to finish. |
 | Resume automatic updates | `POST /console/settings/updates/resume` | Lifts the pause automatic updates put on themselves after rollbacks, and the hold a deliberate downgrade set. Changes no setting; skipped releases stay skipped, and a running backoff runs out. |
 | Save the backup schedule and folder | `POST /console/settings/backups` | Stores the console's `backup:` override: only the values that differ from the settings in force. A new folder is created and tested with a write first. Applies from the next backup. |
@@ -17975,12 +17988,13 @@ nothing, and their rows say so.
 other computers, a request that comes with a paired device's credential - a
 relay's certificate or a device key - is refused (403) on every write that is
 yours to make: a pairing code and a device's revocation, Held's release, discard,
-session marks, lockdown and corpus marks, the optional features, every Backups
-route, bringing a project's fence down, a deny, a revoke, Lock again, a passkey's
-enrollment, and an approval with no passkey or Touch ID proof. That holds with
-peer_auth on or off. A paired computer carries its agents, never your hands: make
-these decisions in the console of the server you sign in to, or in a terminal on
-the server itself. The reads stay open to a device, and so do the writes an agent
+session marks, lockdown and corpus marks, the optional features, turning update
+checks or automatic updates off (and a reset that would turn checks off), every
+Backups route, bringing a project's fence down, a deny, a revoke, Lock again, a
+passkey's enrollment, and an approval with no passkey or Touch ID proof. That
+holds with peer_auth on or off. A paired computer carries its agents, never your
+hands: make these decisions in the console of the server you sign in to, or in a
+terminal on the server itself. The reads stay open to a device, and so do the writes an agent
 may make: `seam` on a client computer reads the console's JSON through its relay,
 and the Touch ID helper there approves through it with its own signature.
 
@@ -18084,8 +18098,9 @@ keeps sending the key.
   passkey; the page shows a short code and the key's fingerprint. Run
   `seamlessd approvers approve --code 7KQ2-M9XD` on the server (as the daemon's
   account under peer_auth; the page shows the exact command). It shows the same
-  name and key and asks before it adds. Approve only a code your own device
-  shows.
+  name and key and asks before it adds, so it runs only at a terminal (over
+  ssh, `ssh -t`), and no flag skips the question. Approve only a code your own
+  device shows.
 - **No passkey at hand.** Under **Sign in from a terminal on the server**, the
   login page's **Show a code** begins a terminal sign-in: the browser gets a
   cookie bound to its key and shows a code with the command that approves it,
@@ -19249,10 +19264,11 @@ next, including a streak of failed checks and why.
 The note at the top says who decided the switches: **Default for this build**,
 **Set in the config file or environment**, **Set in this console**, or
 **Automatic updates set in this console**, with **Reset to the config file**
-beside a console choice. Turning checks off from here always works. Turning them
-on does not when the config file or `SEAMLESS_UPDATE_CHECK` says `false`: that
-is final, the switch shows locked, and the form refuses - `false` promises no
-update traffic at all. **Check now** asks GitHub once, right away (not more than
+beside a console choice. Turning checks off from here always works for you; an
+agent's process on the peer_auth socket and a paired device may turn checks and
+automatic updates on, never off. Turning them on does not work when the config
+file or `SEAMLESS_UPDATE_CHECK` says `false`: that is final, the switch shows
+locked, and the form refuses - `false` promises no update traffic at all. **Check now** asks GitHub once, right away (not more than
 once a minute).
 
 On an install that updates itself, the section adds **Automatic updates** - on
@@ -21005,6 +21021,26 @@ neither may be one click away from untrue. `auto` is a permission, not a
 promise: only an install that updates itself acts on it (`Install.NotifyOnly`:
 the installer's, or a peer_auth system daemon's), and it is off whenever checks
 are.
+
+### Off is the owner's; on is anyone's
+
+Turning update checks or automatic updates off keeps an install on an old
+release, so that direction is the owner's own decision. The console's routes
+judge it after the form is parsed (`ownerHandsIf` in
+`internal/console/unlock.go`): `check=off` and `auto=off` (`switchedOff`, which
+reads the field exactly as the handler does) are refused to an agent's process
+on the peer_auth socket and to a paired device, with the words every
+`ownerHands` route answers, whatever the switch reads now: a stored off
+outlasts the state it changes nothing in today. `on` stays open to every
+caller. A reset is judged by what it would turn off (`updatesResetTurnsOff`):
+on a build that is not a release, whose default is no checks, dropping a stored
+`check: true` turns checks off, so it is refused unless the file or environment
+locks checks off already. The console holds no file/env update block, so it
+counts that reset as the owner's even where `update.check: true` in the file
+would keep checks on. A reset on a release build never turns either switch
+off, and automatic updates go off through a reset only when checks do. A new
+route that stores the override must judge the same way, and be named in
+`TestUpdates_TheConditionalOwnerHandsRoutes`.
 
 ### Never spawn without the record on disk
 

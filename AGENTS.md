@@ -361,9 +361,12 @@ any of it.
   `project=` behave as before. A memory or note whose content it changes loses
   its star.
 - **The owner's decisions are refused from an agent's process.** On the socket,
-  bringing a fence down, deciding held writes and changing features go through
+  bringing a fence down, deciding held writes, changing features and turning
+  update checks or automatic updates off go through
   `refusedFromAgent`/`ownerHands` (`access.FromAgent`, the kernel's process chain,
-  true when the chain cannot be read). It stops ordinary tool calls and is not a
+  true when the chain cannot be read). The update switches are judged after the
+  form is parsed (`ownerHandsIf`, `switchedOff`; a reset where it would turn
+  checks off, `updatesResetTurnsOff`), so turning them on stays open. It stops ordinary tool calls and is not a
   wall: a detached process or the TCP key passes. The lock is the wall. A paired
   device's credential is refused there too (`refusedFromDevice`).
 - **A session belongs to the principal that started it**

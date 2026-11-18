@@ -76,10 +76,10 @@ nothing, and their rows say so.
 | Dismiss the welcome card | `POST /console/settings/level/welcome` | Records that the Home welcome card was seen, without choosing a level. With the card's write-screening box ticked, it also turns that feature on, as a level choice with the box ticked does. |
 | Save optional features | `POST /console/settings/features` | Writes the feature switches as a stored **override row** in the DB. It changes what is exposed - console screens and the matching agent tools - and deletes nothing. |
 | Reset optional features | `POST /console/settings/features/reset` | Clears the override row, reverting to the file/env configuration - which, unless you set the keys there, means every optional feature is off again. Still deletes nothing. |
-| Turn update checks on or off | `POST /console/settings/updates` | Stores the console's `update.check` override (`check=on` or `off`). It can always turn checks off; it cannot turn them on while the config file or environment says `update.check: false` - that is final, and the form says so. Installs nothing. |
-| Reset update checks | `POST /console/settings/updates/reset` | Clears that override - both switches - handing them back to the config file (or, without one, the build's default). |
+| Turn update checks on or off | `POST /console/settings/updates` | Stores the console's `update.check` override (`check=on` or `off`). It cannot turn checks on while the config file or environment says `update.check: false` - that is final, and the form says so. Off is your decision alone: refused (403) from an agent's process on the peer_auth socket and from a paired device, whatever checks are now; on is open to them. Installs nothing. |
+| Reset update checks | `POST /console/settings/updates/reset` | Clears that override - both switches - handing them back to the config file (or, without one, the build's default). A build that is not a published release does not check by default, so there a reset that drops this console's `check=on` turns checks off, and automatic updates with them: it is refused like turning them off, unless the file or environment locks checks off already. It is refused even where the file's `update.check: true` would keep them on, since the console cannot see the file's update block under its own override. Every other reset, and every reset on a release build, is open to any caller. |
 | Check for updates now | `POST /console/settings/updates/check` | Asks GitHub's release list once, right away - refused while checks are off or within a minute of the last check. Reads; installs nothing. |
-| Turn automatic updates on or off | `POST /console/settings/updates/auto` | Stores the console's `update.auto` override (`auto=on` or `off`), keeping its `update.check`. It can always turn automatic updates off; it cannot turn them on while the config file or environment says `update.auto: false`, or locks `update.check: false` (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Only an install that updates itself acts on it: the installer's, or a [peer_auth system daemon](https://thereisnospoon.org/docs/guides/peer-auth/#updates)'s. |
+| Turn automatic updates on or off | `POST /console/settings/updates/auto` | Stores the console's `update.auto` override (`auto=on` or `off`), keeping its `update.check`. It cannot turn automatic updates on while the config file or environment says `update.auto: false`, or locks `update.check: false` (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Off is your decision alone, refused as turning checks off is; on is open to any caller. Only an install that updates itself acts on it: the installer's, or a [peer_auth system daemon](https://thereisnospoon.org/docs/guides/peer-auth/#updates)'s. |
 | Update now | `POST /console/settings/updates/apply` | Installs the newest release at once, after a confirm: it skips the soak, the wait for idle agents, skipped releases and the backoff, and lifts a hold, whether automatic updates are on, off or paused. Refused while checks are off, on an install that does not update itself, while an update is under way, within a minute of a failed release check, when nothing newer is known, or when the release carries no signed checksums bundle. The daemon restarts to finish. |
 | Resume automatic updates | `POST /console/settings/updates/resume` | Lifts the pause automatic updates put on themselves after rollbacks, and the hold a deliberate downgrade set. Changes no setting; skipped releases stay skipped, and a running backoff runs out. |
 | Save the backup schedule and folder | `POST /console/settings/backups` | Stores the console's `backup:` override: only the values that differ from the settings in force. A new folder is created and tested with a write first. Applies from the next backup. |
@@ -98,12 +98,13 @@ nothing, and their rows say so.
 other computers, a request that comes with a paired device's credential - a
 relay's certificate or a device key - is refused (403) on every write that is
 yours to make: a pairing code and a device's revocation, Held's release, discard,
-session marks, lockdown and corpus marks, the optional features, every Backups
-route, bringing a project's fence down, a deny, a revoke, Lock again, a passkey's
-enrollment, and an approval with no passkey or Touch ID proof. That holds with
-peer_auth on or off. A paired computer carries its agents, never your hands: make
-these decisions in the console of the server you sign in to, or in a terminal on
-the server itself. The reads stay open to a device, and so do the writes an agent
+session marks, lockdown and corpus marks, the optional features, turning update
+checks or automatic updates off (and a reset that would turn checks off), every
+Backups route, bringing a project's fence down, a deny, a revoke, Lock again, a
+passkey's enrollment, and an approval with no passkey or Touch ID proof. That
+holds with peer_auth on or off. A paired computer carries its agents, never your
+hands: make these decisions in the console of the server you sign in to, or in a
+terminal on the server itself. The reads stay open to a device, and so do the writes an agent
 may make: `seam` on a client computer reads the console's JSON through its relay,
 and the Touch ID helper there approves through it with its own signature.
 
@@ -207,8 +208,9 @@ keeps sending the key.
   passkey; the page shows a short code and the key's fingerprint. Run
   `seamlessd approvers approve --code 7KQ2-M9XD` on the server (as the daemon's
   account under peer_auth; the page shows the exact command). It shows the same
-  name and key and asks before it adds. Approve only a code your own device
-  shows.
+  name and key and asks before it adds, so it runs only at a terminal (over
+  ssh, `ssh -t`), and no flag skips the question. Approve only a code your own
+  device shows.
 - **No passkey at hand.** Under **Sign in from a terminal on the server**, the
   login page's **Show a code** begins a terminal sign-in: the browser gets a
   cookie bound to its key and shows a code with the command that approves it,
@@ -1372,10 +1374,11 @@ next, including a streak of failed checks and why.
 The note at the top says who decided the switches: **Default for this build**,
 **Set in the config file or environment**, **Set in this console**, or
 **Automatic updates set in this console**, with **Reset to the config file**
-beside a console choice. Turning checks off from here always works. Turning them
-on does not when the config file or `SEAMLESS_UPDATE_CHECK` says `false`: that
-is final, the switch shows locked, and the form refuses - `false` promises no
-update traffic at all. **Check now** asks GitHub once, right away (not more than
+beside a console choice. Turning checks off from here always works for you; an
+agent's process on the peer_auth socket and a paired device may turn checks and
+automatic updates on, never off. Turning them on does not work when the config
+file or `SEAMLESS_UPDATE_CHECK` says `false`: that is final, the switch shows
+locked, and the form refuses - `false` promises no update traffic at all. **Check now** asks GitHub once, right away (not more than
 once a minute).
 
 On an install that updates itself, the section adds **Automatic updates** - on

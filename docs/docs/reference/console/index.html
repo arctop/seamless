@@ -567,12 +567,12 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Turn update checks on or off</td>
 <td><code>POST /console/settings/updates</code></td>
-<td>Stores the console's <code>update.check</code> override (<code>check=on</code> or <code>off</code>). It can always turn checks off; it cannot turn them on while the config file or environment says <code>update.check: false</code> - that is final, and the form says so. Installs nothing.</td>
+<td>Stores the console's <code>update.check</code> override (<code>check=on</code> or <code>off</code>). It cannot turn checks on while the config file or environment says <code>update.check: false</code> - that is final, and the form says so. Off is your decision alone: refused (403) from an agent's process on the peer_auth socket and from a paired device, whatever checks are now; on is open to them. Installs nothing.</td>
 </tr>
 <tr>
 <td>Reset update checks</td>
 <td><code>POST /console/settings/updates/reset</code></td>
-<td>Clears that override - both switches - handing them back to the config file (or, without one, the build's default).</td>
+<td>Clears that override - both switches - handing them back to the config file (or, without one, the build's default). A build that is not a published release does not check by default, so there a reset that drops this console's <code>check=on</code> turns checks off, and automatic updates with them: it is refused like turning them off, unless the file or environment locks checks off already. It is refused even where the file's <code>update.check: true</code> would keep them on, since the console cannot see the file's update block under its own override. Every other reset, and every reset on a release build, is open to any caller.</td>
 </tr>
 <tr>
 <td>Check for updates now</td>
@@ -582,7 +582,7 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Turn automatic updates on or off</td>
 <td><code>POST /console/settings/updates/auto</code></td>
-<td>Stores the console's <code>update.auto</code> override (<code>auto=on</code> or <code>off</code>), keeping its <code>update.check</code>. It can always turn automatic updates off; it cannot turn them on while the config file or environment says <code>update.auto: false</code>, or locks <code>update.check: false</code> (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Only an install that updates itself acts on it: the installer's, or a <a href="../../guides/peer-auth/#updates">peer_auth system daemon</a>'s.</td>
+<td>Stores the console's <code>update.auto</code> override (<code>auto=on</code> or <code>off</code>), keeping its <code>update.check</code>. It cannot turn automatic updates on while the config file or environment says <code>update.auto: false</code>, or locks <code>update.check: false</code> (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Off is your decision alone, refused as turning checks off is; on is open to any caller. Only an install that updates itself acts on it: the installer's, or a <a href="../../guides/peer-auth/#updates">peer_auth system daemon</a>'s.</td>
 </tr>
 <tr>
 <td>Update now</td>
@@ -656,12 +656,13 @@ nothing, and their rows say so.</p>
 other computers, a request that comes with a paired device's credential - a
 relay's certificate or a device key - is refused (403) on every write that is
 yours to make: a pairing code and a device's revocation, Held's release, discard,
-session marks, lockdown and corpus marks, the optional features, every Backups
-route, bringing a project's fence down, a deny, a revoke, Lock again, a passkey's
-enrollment, and an approval with no passkey or Touch ID proof. That holds with
-peer_auth on or off. A paired computer carries its agents, never your hands: make
-these decisions in the console of the server you sign in to, or in a terminal on
-the server itself. The reads stay open to a device, and so do the writes an agent
+session marks, lockdown and corpus marks, the optional features, turning update
+checks or automatic updates off (and a reset that would turn checks off), every
+Backups route, bringing a project's fence down, a deny, a revoke, Lock again, a
+passkey's enrollment, and an approval with no passkey or Touch ID proof. That
+holds with peer_auth on or off. A paired computer carries its agents, never your
+hands: make these decisions in the console of the server you sign in to, or in a
+terminal on the server itself. The reads stay open to a device, and so do the writes an agent
 may make: <code>seam</code> on a client computer reads the console's JSON through its relay,
 and the Touch ID helper there approves through it with its own signature.</p>
 <p>Read the shape of that list. There is no &quot;create memory&quot;, no &quot;edit note&quot;, no
@@ -754,8 +755,9 @@ nothing is added until you approve. Open it on the device and create the
 passkey; the page shows a short code and the key's fingerprint. Run
 <code>seamlessd approvers approve --code 7KQ2-M9XD</code> on the server (as the daemon's
 account under peer_auth; the page shows the exact command). It shows the same
-name and key and asks before it adds. Approve only a code your own device
-shows.</li>
+name and key and asks before it adds, so it runs only at a terminal (over
+ssh, <code>ssh -t</code>), and no flag skips the question. Approve only a code your own
+device shows.</li>
 <li><strong>No passkey at hand.</strong> Under <strong>Sign in from a terminal on the server</strong>, the
 login page's <strong>Show a code</strong> begins a terminal sign-in: the browser gets a
 cookie bound to its key and shows a code with the command that approves it,
@@ -2148,10 +2150,11 @@ next, including a streak of failed checks and why.</p>
 <p>The note at the top says who decided the switches: <strong>Default for this build</strong>,
 <strong>Set in the config file or environment</strong>, <strong>Set in this console</strong>, or
 <strong>Automatic updates set in this console</strong>, with <strong>Reset to the config file</strong>
-beside a console choice. Turning checks off from here always works. Turning them
-on does not when the config file or <code>SEAMLESS_UPDATE_CHECK</code> says <code>false</code>: that
-is final, the switch shows locked, and the form refuses - <code>false</code> promises no
-update traffic at all. <strong>Check now</strong> asks GitHub once, right away (not more than
+beside a console choice. Turning checks off from here always works for you; an
+agent's process on the peer_auth socket and a paired device may turn checks and
+automatic updates on, never off. Turning them on does not work when the config
+file or <code>SEAMLESS_UPDATE_CHECK</code> says <code>false</code>: that is final, the switch shows
+locked, and the form refuses - <code>false</code> promises no update traffic at all. <strong>Check now</strong> asks GitHub once, right away (not more than
 once a minute).</p>
 <p>On an install that updates itself, the section adds <strong>Automatic updates</strong> - on
 or off, who decided, and <strong>Turn automatic updates off</strong> / <strong>on</strong>, which
