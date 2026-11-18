@@ -19,6 +19,10 @@
      - asks again when a page was drawn without one (a hard reload skips the
        worker; the layout marks such a page data-browser-proof="missing"): once
        the worker controls the page, the view is fetched again in place.
+   Both ask the console for the worker again first, and wait while a new one
+   takes the page: after an upgrade the old worker would sign with the old
+   daemon's code. The daemon serves this file and the worker no-cache, so a
+   new worker imports this file as the new daemon serves it.
    A browser that cannot hold the key (no service worker: an insecure page or
    some private windows) is told so, and nothing is unlocked. */
 (function (scope) {
@@ -89,21 +93,78 @@
     return !!(window.isSecureContext && navigator.serviceWorker && window.crypto && crypto.subtle && window.indexedDB);
   }
 
-  // controlled resolves true once the worker controls this page, asking an
-  // active worker to claim it, or false after ms.
-  function controlled(reg, ms) {
-    if (navigator.serviceWorker.controller) return Promise.resolve(true);
+  // WAIT bounds how long a page waits for the worker to sign its requests:
+  // long enough to fetch and install a new worker over a slow network.
+  var WAIT = 10000;
+
+  // current resolves true once this page is controlled by the newest worker
+  // the console serves, or false after ms. After an upgrade the worker still
+  // running is the old one, with the old daemon's copy of this file, so it
+  // first asks the console for the worker again (reg.update()). A newer worker
+  // installing, waiting or activating takes this page itself (sw.js:
+  // skipWaiting, then clients.claim), so the page waits for that
+  // controllerchange. With no newer worker, any controller is the newest. An
+  // active worker that does not control the page yet (a hard reload skips it)
+  // is asked to claim it. A newer worker that fails to install leaves the
+  // active one the newest. A failed update check changes nothing: the active
+  // worker is the newest the browser could get.
+  function current(reg, ms) {
+    var sw = navigator.serviceWorker;
     return new Promise(function (resolve) {
-      var settled = false;
-      function settle(ok) { if (!settled) { settled = true; resolve(ok); } }
-      navigator.serviceWorker.addEventListener('controllerchange', function () { settle(true); });
-      if (reg && reg.active) reg.active.postMessage({ type: 'claim' });
-      setTimeout(function () { settle(!!navigator.serviceWorker.controller); }, ms);
+      var settled = false, checked = false, asked = false, newer = null, taken = false, timer = null;
+      function settle(ok) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        sw.removeEventListener('controllerchange', changed);
+        resolve(ok);
+      }
+      // pending is the registration's worker that has not taken the page yet.
+      function pending() {
+        if (reg.installing || reg.waiting) return reg.installing || reg.waiting;
+        return reg.active && reg.active.state === 'activating' ? reg.active : null;
+      }
+      // taken records a controllerchange since the newer worker began to
+      // activate: one before then was some other worker's. The page's
+      // controller and reg.active are one object for one worker, so the
+      // comparison below also sees a change this page heard before it looked.
+      function check() {
+        if (settled || !checked) return;
+        var next = pending();
+        if (next) {
+          if (next !== newer) {
+            newer = next;
+            next.addEventListener('statechange', check);
+          }
+          if (next.state !== 'activating') taken = false;
+          return;
+        }
+        if (newer && newer.state === 'redundant') newer = null;
+        var ctl = sw.controller;
+        if (ctl && (!newer || taken || ctl === reg.active)) { settle(true); return; }
+        // No controller yet, or still the old one: the active worker is asked
+        // to take the page.
+        if (!asked && reg.active) {
+          asked = true;
+          reg.active.postMessage({ type: 'claim' });
+        }
+      }
+      function changed() {
+        if (newer) taken = true;
+        check();
+      }
+      sw.addEventListener('controllerchange', changed);
+      timer = setTimeout(function () { settle(false); }, ms);
+      reg.update().catch(function () {}).then(function () {
+        checked = true;
+        check();
+      });
     });
   }
 
   // ready sets up the key and the worker, and resolves once this page's
-  // requests carry proofs. It rejects with words for the owner.
+  // requests carry the newest worker's proofs. It rejects with words for the
+  // owner.
   function ready() {
     if (!supported()) {
       return Promise.reject(new Error('This browser cannot hold a console unlock here: it needs a secure page (https, or localhost) that allows service workers, which some private windows do not.'));
@@ -113,19 +174,20 @@
     }).then(function () {
       return navigator.serviceWorker.ready;
     }).then(function (reg) {
-      return controlled(reg, 5000);
+      return current(reg, WAIT);
     }).then(function (ok) {
       if (!ok) throw new Error('The console\'s service worker did not start in this browser: reload the page and try again.');
     });
   }
 
   // recover runs once per page load: a page drawn without a proof is fetched
-  // again in place once the worker can sign, and left as drawn otherwise.
+  // again in place once the newest worker can sign, and left as drawn
+  // otherwise.
   function recover() {
     if (document.documentElement.getAttribute('data-browser-proof') !== 'missing' || !supported()) return;
     navigator.serviceWorker.getRegistration('/console/').then(function (reg) {
       if (!reg || !reg.active) return false;
-      return load().then(function (k) { return k ? controlled(reg, 3000) : false; });
+      return load().then(function (k) { return k ? current(reg, WAIT) : false; });
     }).then(function (ok) {
       if (ok && window.SeamConsole && window.SeamConsole.load) {
         window.SeamConsole.load(location.href, { history: 'replace', source: 'query' });

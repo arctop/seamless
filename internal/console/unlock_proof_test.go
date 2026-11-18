@@ -191,10 +191,10 @@ func TestLockedConsole_NewKeyGetsAFreshCookie(t *testing.T) {
 // The worker and the key's script are public, like the console's other
 // static files: a browser fetches the worker for updates with whatever
 // cookie it has, and a worker answered with a login redirect would never
-// update.
+// update. Both are revalidated on every use (TestSKStatic_WorkerImportsAreRevalidated).
 func TestConsoleStatic_ServiceWorker(t *testing.T) {
 	_, mux := newConsole(t)
-	for path, want := range map[string]string{"/console/sw.js": "no-cache", "/console/static/browserkey.js": "public, max-age=300"} {
+	for path, want := range map[string]string{"/console/sw.js": "no-cache", "/console/static/browserkey.js": "no-cache"} {
 		rr := do(mux, httptest.NewRequest(http.MethodGet, path, nil))
 		require.Equal(t, http.StatusOK, rr.Code, path)
 		require.Equal(t, "text/javascript; charset=utf-8", rr.Header().Get("Content-Type"), path)

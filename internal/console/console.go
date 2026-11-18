@@ -871,10 +871,14 @@ func (s *Service) serveFavicon(w http.ResponseWriter, _ *http.Request) {
 }
 
 // serveBrowserKeyJS serves the browser key's script (browserproof), which the
-// page loads while a project is locked and the service worker imports.
+// page loads while a project is locked or a sign-in needs it, and the service
+// worker imports. It is revalidated on every use, as the worker is: a
+// worker's imports go through the browser's HTTP cache (the registration's
+// default updateViaCache, "imports"), so a copy kept for minutes would let the
+// new worker an upgrade installs run the old daemon's script.
 func (s *Service) serveBrowserKeyJS(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
+	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(browserKeyJS)
 }
 
@@ -898,6 +902,7 @@ func (s *Service) serveBackupsJS(w http.ResponseWriter, _ *http.Request) {
 // serveServiceWorker serves the console's service worker. It sits at
 // /console/sw.js so its scope is /console/, and is revalidated on every
 // update check, so a fixed worker reaches browsers that already run one.
+// Every script it imports is served no-cache too (serveBrowserKeyJS).
 func (s *Service) serveServiceWorker(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")

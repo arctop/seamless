@@ -180,6 +180,12 @@ is a passkey sign-in, so neither is just a cookie: each also needs a key the
 browser keeps for the console's own address, and a service worker signs each
 console request with that key. The service worker runs in a browser that has
 started an unlock, and under passkey sign-in in every signed-in browser.
+Before an unlock or a sign-in the page asks the daemon for the worker again,
+and when an upgrade brought a new one, it waits while the new worker takes
+over, so the old one never signs for the new daemon. The worker and its key script
+(`/console/static/browserkey.js`) are served `no-cache`, so the browser checks
+with the daemon each time it loads them; the other static files are cached
+for five minutes.
 
 ### Sign in with a passkey {#sign-in-with-a-passkey}
 
