@@ -49,12 +49,13 @@ func netRealListenErr(t *testing.T, addr string) error {
 
 // The PoC of review M1, turned around: another account holding [::1]:P before
 // serve stops the start, with an error naming the address, the cause and the
-// fix -- and nothing serve bound stays open.
+// fix -- and nothing serve bound stays open. Through serve's own listen
+// (pairedListen), which on Linux sets IP_FREEBIND.
 func TestListenPaired_SquattedLoopbackStopsTheStart(t *testing.T) {
 	ln4, squat := netDualLoopback(t)
 	port := ln4.Addr().(*net.TCPAddr).Port
 	ifaces := func() ([][]netip.Addr, error) { return [][]netip.Addr{addrs("127.0.0.1", "::1")}, nil }
-	paired, err := listenPaired(t.Context(), ln4, ifaces, net.Listen, pairedNeedFor(config.Defaults(), strconv.Itoa(port)))
+	paired, err := listenPaired(t.Context(), ln4, ifaces, pairedListen, pairedNeedFor(config.Defaults(), strconv.Itoa(port)))
 	require.Empty(t, paired)
 	var refusal *pairedListenError
 	require.ErrorAs(t, err, &refusal)
@@ -69,7 +70,7 @@ func TestListenPaired_SquattedLoopbackStopsTheStart(t *testing.T) {
 	require.NoError(t, squat.Close())
 
 	// Once the address is free, the same start holds it.
-	paired, err = listenPaired(t.Context(), ln4, ifaces, net.Listen, pairedNeed{})
+	paired, err = listenPaired(t.Context(), ln4, ifaces, pairedListen, pairedNeed{})
 	require.NoError(t, err)
 	require.Equal(t, []string{"::1"}, listenerHosts(paired))
 	for _, l := range paired {
@@ -164,9 +165,11 @@ func TestListenPaired_WhichFailuresStopTheStart(t *testing.T) {
 	require.ErrorContains(t, err, "cannot read this machine's interfaces")
 }
 
-// A real listen on an address this machine's kernel does not have fails as
+// A plain listen on an address this machine's kernel does not have fails as
 // no process can hold it, so even under peer_auth the start goes on: the CI
-// sandboxes without IPv6 loopback, and a tailnet address not up yet.
+// sandboxes without IPv6 loopback, and an address not up yet where serve's
+// listen is a plain one (every system but Linux, whose IP_FREEBIND listen
+// holds it instead: TestPairedListen_AnAddressNotUpYet).
 func TestListenPaired_AnAddressNoOneCanHoldIsNotFatal(t *testing.T) {
 	ifaces := func() ([][]netip.Addr, error) {
 		return [][]netip.Addr{addrs("10.255.255.1", "fd00:dead:beef::1")}, nil
@@ -174,6 +177,26 @@ func TestListenPaired_AnAddressNoOneCanHoldIsNotFatal(t *testing.T) {
 	got, err := listenPaired(context.Background(), tcpListener("10.255.255.1:43117"), ifaces, net.Listen, pairedNeed{all: true})
 	require.NoError(t, err)
 	require.Empty(t, got)
+}
+
+// serve's paired listen on an address this machine does not have, which is
+// how a tentative one answers a plain bind: Linux's sets IP_FREEBIND and holds
+// it (listen_pair_linux.go), so no other process can take it first; elsewhere
+// it is refused as one no process can hold now, and skipped.
+func TestPairedListen_AnAddressNotUpYet(t *testing.T) {
+	l, err := pairedListen("tcp", "[fd00:dead:beef::1]:0")
+	if runtime.GOOS != "linux" {
+		require.True(t, addrUnheld(err), "%v", err)
+		return
+	}
+	if err != nil && addrUnheld(err) {
+		t.Skipf("no IPv6 here: %v", err) // the socket itself is refused (EAFNOSUPPORT)
+	}
+	require.NoError(t, err)
+	defer func() { _ = l.Close() }()
+	ap, err := netip.ParseAddrPort(l.Addr().String())
+	require.NoError(t, err)
+	require.Equal(t, netip.MustParseAddr("fd00:dead:beef::1"), ap.Addr())
 }
 
 // pairedNeedFor names the hosts browsers and clients are sent to this port by.

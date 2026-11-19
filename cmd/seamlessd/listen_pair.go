@@ -40,7 +40,11 @@ import (
 // again, and it runs once the address is free. One no process can hold now
 // (not this machine's yet, or a family it lacks: addrUnheld) and, on an
 // install without peer_auth, one no name points at are logged and skipped as
-// before: nothing a browser or client is sent to answers there.
+// before: nothing a browser or client is sent to answers there. On Linux a
+// tentative address (duplicate address detection still running) is not one of
+// them: any process may bind it with IP_FREEBIND and answer there once it is
+// up, so serve binds with IP_FREEBIND too and holds it first (pairedListen,
+// listen_pair_linux.go).
 
 // ifaceAddrs lists the addresses of each interface that is up, one slice per
 // interface. Injected so tests never read this machine's interfaces.
@@ -127,13 +131,15 @@ func pairedIPv6(v4 netip.Addr, ifaces [][]netip.Addr) []netip.Addr {
 }
 
 // listenPaired listens on the IPv6 addresses paired with the IPv4 address ln
-// holds, on ln's port (its real one, so a ":0" bind pairs too). One it cannot
-// listen on is logged and skipped when no process can hold it now (addrUnheld)
-// or need does not require it: ln is the daemon's listener, and these close a
-// gap beside it. One need requires is the error (a *pairedListenError), with
-// every listener made here closed: another process holds it, or may take it,
-// and would answer there for this daemon. Interfaces it cannot read pair
-// nothing, which under peer_auth (need.all) is the error too.
+// holds, on ln's port (its real one, so a ":0" bind pairs too), with listen:
+// serve's is pairedListen, which on Linux holds a tentative address too. One
+// it cannot listen on is logged and skipped when no process can hold it now
+// (addrUnheld) or need does not require it: ln is the daemon's listener, and
+// these close a gap beside it. One need requires is the error (a
+// *pairedListenError), with every listener made here closed: another process
+// holds it, or may take it, and would answer there for this daemon.
+// Interfaces it cannot read pair nothing, which under peer_auth (need.all) is
+// the error too.
 func listenPaired(ctx context.Context, ln net.Listener, ifaces ifaceAddrs, listen func(network, address string) (net.Listener, error),
 	need pairedNeed) ([]net.Listener, error) {
 	ap, err := netip.ParseAddrPort(ln.Addr().String())

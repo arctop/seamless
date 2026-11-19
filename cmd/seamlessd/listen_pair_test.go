@@ -128,14 +128,15 @@ func TestListenPaired(t *testing.T) {
 	require.Empty(t, dialed)
 }
 
-// The pair really serves: a loopback listener's ::1 partner accepts on the
-// same port, where this machine has ::1 at all.
+// The pair really serves: a loopback listener's ::1 partner, bound by serve's
+// own listen (pairedListen), accepts on the same port, where this machine has
+// ::1 at all.
 func TestListenPaired_Loopback(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ln.Close() })
 	got, err := listenPaired(t.Context(), ln, func() ([][]netip.Addr, error) { return [][]netip.Addr{addrs("127.0.0.1", "::1")}, nil },
-		net.Listen, pairedNeed{})
+		pairedListen, pairedNeed{})
 	if err != nil || len(got) == 0 {
 		t.Skipf("no ::1 here, or its port is taken: %v", err)
 	}

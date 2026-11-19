@@ -189,7 +189,8 @@ func bindAddressesCheck(ctx context.Context, cfg config.Config, hn hostNet) (che
 			"listens there", at(held.taken), held.self.instance, bind, listenHint(port))}, true
 	case len(held.silent) > 0:
 		return check{statusWarn, name, fmt.Sprintf("nothing answers at %s, beside %s where this daemon does: it could not listen "+
-			"there when it started (its log says why), and another process can take the address -- restart the daemon",
+			"there when it started (its log says why), and another process can take the address -- restart the daemon. On Linux "+
+			"serve holds an address that is not up yet: if ip -6 addr shows it tentative or dadfailed, fix the address instead",
 			at(held.silent), bind)}, true
 	case !held.self.answered:
 		return check{}, false

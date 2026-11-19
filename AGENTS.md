@@ -501,7 +501,10 @@ any of it.
   (`pairedNeed`, review M1): ::1, an address a name browsers and clients dial
   resolves to (server_url's host, with passkeys on the origins'), and under
   peer_auth any; only one no process can hold now (`addrUnheld`) is skipped
-  everywhere. serve judges its origins against its own listeners (`heldBy`);
+  everywhere. On Linux serve binds them with IP_FREEBIND (`pairedListen`,
+  `listen_pair_linux.go`), so it holds an address still tentative (duplicate
+  address detection running) before another process can bind it the same way;
+  never pass a plain `net.Listen` there. serve judges its origins against its own listeners (`heldBy`);
   doctor's run dials what `boundAddrs` would infer (`withListenerProbe`,
   `doctor_net.go`). Never set the probe outside doctor, and never dial from
   setup.

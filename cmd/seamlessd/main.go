@@ -842,7 +842,7 @@ func runServe(args []string) error {
 	if _, p, perr := net.SplitHostPort(ln.Addr().String()); perr == nil {
 		lnPort = p
 	}
-	paired, err := listenPaired(ctx, ln, hostIfaceAddrs, net.Listen, pairedNeedFor(cfg, lnPort))
+	paired, err := listenPaired(ctx, ln, hostIfaceAddrs, pairedListen, pairedNeedFor(cfg, lnPort))
 	if err != nil {
 		_ = ln.Close()
 		stop()
