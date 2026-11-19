@@ -111,6 +111,9 @@ internal/sshsig/   OpenSSH SSHSIG + allowed_signers verification in pure Go
                    (sk-ssh-ed25519, sk-ecdsa with flags and counter, ed25519,
                    ecdsa): the owner's release signature; sshsigtest signs with
                    software keys for tests. Imports nothing internal
+internal/shellcmd/ commands printed or run for root or another account through
+                   sudo: sudo and env by absolute path, the per-OS tool table
+                   (ToolsFor), POSIX quoting (PosixArg). Imports nothing internal
 internal/archive/  instance archives: VACUUM INTO snapshot + corpus + manifest
                    out; guarded tar extract and restore-or-merge back in.
                    Never imports config
